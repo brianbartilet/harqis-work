@@ -33,6 +33,6 @@ ENV ENV_ROOT_DIRECTORY "/usr/src/app"
 ENV ENV "TEST"
 
 # RUN python get_started.py
-CMD ["pytest"]
+# CMD ["pytest"]
 
 
