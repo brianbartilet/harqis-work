@@ -1,17 +1,17 @@
-# HARQIS Demo Generic Framework
+# HARQIS Workflows
 
 ## Introduction
 
-- This is a demo project for [HARQIS-core](https://github.com/brianbartilet/harqis-core). 
-- This can be used as a template for creating new projects and provide knowledge of basic operations of fixtures and templates.
-- Please see the generated [README.md](demo/README.md) for detailed documentation of features and operations.
-
+- This is a real world project for [HARQIS-core](https://github.com/brianbartilet/harqis-core) utilizing various applications to automate workflows.
+- Provide RPA like capabilities but all in Python code.
+- Showcases a portfolio of automated applications for any business or personal process.
+- 
 ## Getting Started
 **Setup and Installation**:
    - Runs on Python 3.12
    - Clone the repository
       ```sh
-      git https://github.com/brianbartilet/harqis-core.git
+      git https://github.com/brianbartilet/harqis-work.git
       ```
    - Set up and activate the virtual environment.
       ```sh
@@ -23,28 +23,10 @@
       python -m pip install --upgrade pip
       pip install -r requirements.txt
       ```
+    
+**Setup Apps Configuration**:
+- To be documented.
 
-**Generate The Demo**:     
-- Run the `get_started.py` script, this will add the `demo` directory along with templates and docs.
-     ```sh
-     python get_started.py
-     ```
-- The `demo` directory is added in the `.gitignore` file.
-
-- Run all available tests.
-     ```sh
-     pytest
-     ```
-## Full Documentation
-- After successfully running `get_started.py` please see the generated [README.md](demo/README.md) for detailed documentation of features and operations.
-
-## Getting Updates
-
-- If you need to update the `harqis-core` package, run the following commands:
-   ```bash
-   pip uninstall harqis-core
-   pip install -r requirements.txt --force-reinstall
-   ```
 ## Contact
 
 For questions or feedback, please contact [brian.bartilet@gmail.com](mailto:brian.bartilet@gmail.com).
