@@ -1,24 +1,22 @@
-name: HARQIS-DEMO Execute Setup Flow
-# Trigger the workflow on push or pull request to the main branch
+name: HARQIS-WORK
+
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  repository_dispatch:
-    types: [ trigger-harqis-demo-test ]
 
 jobs:
-  run-demo-and-test:
+  run-tests:
     runs-on: ubuntu-latest
     steps:
     - name: Set Up Git Repository
       uses: actions/checkout@v2
 
     - name: Build Docker Image
-      run: docker build --no-cache -t harqis-demo .
+      run: docker build --no-cache -t harqis-work .
 
     - name: Run Tests
-      run: docker run harqis-demo
+      run: docker run harqis-work
       env:
         ENV_ROOT_DIRECTORY: /app
