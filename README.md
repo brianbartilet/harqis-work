@@ -1,11 +1,11 @@
-# HARQIS Workflows
+# HARQIS Doing Work
 
 ## Introduction
 
 - This is a real world project for [HARQIS-core](https://github.com/brianbartilet/harqis-core) utilizing various applications to automate workflows.
-- Provide RPA like capabilities but all in Python code.
+- Illustrate **RPA** like capabilities but all in Python code.
 - Showcases a portfolio of automated applications for any business or personal process.
-- 
+
 ## Getting Started
 **Setup and Installation**:
    - Runs on Python 3.12
