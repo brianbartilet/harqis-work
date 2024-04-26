@@ -1,4 +1,4 @@
-# HARQIS Doing Work
+# HARQIS Work
 
 ## Introduction
 
