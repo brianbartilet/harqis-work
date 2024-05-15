@@ -122,7 +122,9 @@ class PageAAATradingDeskOrders(BasePageAAAEquities):
 
     def select_year(self, year: str):
         xpath = "//span[contains(@class, 'year') and text()={0}]".format(year)
-        self.driver.find_element(By.XPATH, xpath).click()
+        year = self.driver.find_element(By.XPATH, xpath)
+        self.driver.wait_for_element_to_be_visible(year)
+        year.click()
 
     def select_month(self, month: str):
         xpath = "//span[contains(@class, 'month')]"
@@ -168,6 +170,8 @@ class PageAAATradingDeskOrders(BasePageAAAEquities):
         self.driver.wait_for_element_to_be_visible(self.input_stock_search)
         self.input_stock_search.clear()
         self.input_stock_search.send_keys('{0}{1}'.format(order_dto.stock_name, lot_type))
+        self.driver.wait_page_to_load(sleep=3)
+        self.driver.wait_for_element_to_be_visible(self.input_stock_search_top_result)
         self.input_stock_search_top_result.click()
         self.tab_order.click()
 
@@ -256,9 +260,7 @@ class PageAAATradingDeskOrders(BasePageAAAEquities):
         while True:
             self.wait_page_to_load()
             stock_basic = self.container_rows_orders.find_element(By.XPATH, container_table_left)
-            filtered_basic = (
-                QList(stock_basic.find_elements(By.XPATH, ".//div[contains(@class, 'panel-table-row')]"))
-                .where(lambda x: x.text != ''))
+            filtered_basic = stock_basic.find_elements(By.XPATH, ".//div[contains(@class, 'panel-table-row')]")
 
             for item in filtered_basic:
                 filter_mapping[item.text] = item
@@ -289,9 +291,9 @@ class PageAAATradingDeskOrders(BasePageAAAEquities):
                 values = []
                 filtered_detailed = (QList(stock_detailed.find_elements(
                     By.XPATH, ".//div[contains(@class, 'panel-table-row')]"))
-                    .where(lambda x: x.text != '').to_list())
+                    .where(lambda x: x.text != ''))
 
-                for j, row_j in enumerate(filtered_detailed):
+                for j, row_j in enumerate(list(filtered_detailed)):
                     if i == j:
                         for element in row_j.find_elements(By.XPATH, ".//span"):
                             self.driver.scroll_to_element(element)

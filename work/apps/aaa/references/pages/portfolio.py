@@ -8,7 +8,7 @@ CLEAN_CHARS = ['%', '(', ')', ',']
 class PageAAATradingDeskPortfolio(BasePageAAAEquities):
 
     @property
-    def container_rows_portfolio(self) -> WebElement:
+    def container_rows_portfolio(self):
         return self.driver.find_element(By.XPATH, "//div[@container-id='portfolio']"
                                                   "//div[@class='ember-table-table-scrollable-wrapper']")
 
@@ -21,12 +21,12 @@ class PageAAATradingDeskPortfolio(BasePageAAAEquities):
         self.navigate_to_account_widget(AccountWidgetLinks.PORTFOLIO)
 
         portfolio = []
-        self.driver.wait_for_page_to_load()
+        self.driver.wait_page_to_load()
 
         filter_mapping = {}
         last_keys_size = 0
         while True:
-            self.driver.wait_for_page_to_load()
+            self.driver.wait_page_to_load()
             stock_basic = self.container_rows_portfolio.find_element(By.XPATH, container_table_left)
             filtered_basic = QList(stock_basic.find_elements(By.XPATH, ".//div[contains(@class, 'panel-table-row')]")) \
                 .where(lambda x: x.text != '')
@@ -54,14 +54,14 @@ class PageAAATradingDeskPortfolio(BasePageAAAEquities):
 
             stock_detailed = self.container_rows_portfolio.find_element(By.XPATH, container_table_right)
             values = []
-            filtered_detailed = QList(stock_detailed.find_elements(By.XPATH,
-                                                                   ".//div[contains(@class, 'panel-table-row')]")) \
-                .where(lambda x: x.text != '').to_list()
-            for j, row_j in enumerate(filtered_detailed):
+            filtered_detailed = (QList(stock_detailed
+                                      .find_elements(By.XPATH, ".//div[contains(@class, 'panel-table-row')]"))
+                                 .where(lambda x: x.text != ''))
+            for j, row_j in enumerate(list(filtered_detailed)):
                 self.driver.scroll_to_element(row_j)
                 if i == j:
                     for element in row_j.find_elements(By.XPATH, ".//span"):
-                        self.driver.scroll_to_element_e(element)
+                        self.driver.scroll_to_element(element)
                         values.append(element.text)
                     break
                 else:
@@ -73,7 +73,6 @@ class PageAAATradingDeskPortfolio(BasePageAAAEquities):
                        'market_price', 'average_cost', 'cost_value', 'market_value', 'gain_loss_value',
                        'gain_loss_percentage', 'portfolio_percentage', 'exchange']
 
-            portfolio.append(
-                ModelPortfolioItemAAA(**dict(zip(headers, values)), convert_kwargs=True, clean_chars=CLEAN_CHARS))
+            portfolio.append(ModelPortfolioItemAAA(**dict(zip(headers, values))))
 
         return portfolio

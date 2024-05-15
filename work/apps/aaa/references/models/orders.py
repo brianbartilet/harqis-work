@@ -1,6 +1,7 @@
 from core.web.services.core.json import JsonObject
 from work.business.trading.models.order import Order, OrderType, OrderValidUntil
 from enum import Enum
+from dataclasses import dataclass
 
 
 class OrderStatusAAA(Enum):
@@ -20,6 +21,7 @@ class ConditionsOrderTriggerAAA(Enum):
     EQUAL = 'Equal'
 
 
+@dataclass
 class ModelCreateOrderAAA(JsonObject):
     stock_name: str = None
     transaction: str = Order.BUY.value
@@ -40,14 +42,17 @@ class ModelCreateOrderAAA(JsonObject):
     net_value: float = 0.0
 
 
+@dataclass
 class ModelOrderAAA(ModelCreateOrderAAA):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
     id: str = None
     status: int = 0
     filled_quantity: int = 0
     pending_quantity: int = 0
     average_price: float = 0.0
-    order_value: float = 0.0
-    net_value: float = 0.0
     order_date: str = None
     condition_order_id: int = 0
     exchange: str = None

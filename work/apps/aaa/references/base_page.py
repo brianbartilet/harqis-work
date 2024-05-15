@@ -10,21 +10,21 @@ class BasePageAAAEquities(BaseFixturePageObject):
         super().__init__(driver, **kwargs)
 
     @property
-    def sidebar_navigation_links(self) -> List[TElement]:
+    def sidebar_navigation_links(self):
         return self.driver.find_elements(By.XPATH, "//li[@data-ember-action]//a")
 
     @property
-    def button_logout(self) -> TElement:
+    def button_logout(self):
         return self.driver.find_element(By.XPATH, "//a[contains(@class, 'cursor-pointer') "
                                                   "and @data-hint='Log Out']")
 
     @property
-    def container_widget_account_controls(self) -> List[TElement]:
-        return self.driver.find_elements(By.XPATH, "//a[contains(@class, 'cursor-pointer') "
-                                                   "and @data-hint='Log Out']")
+    def container_widget_account_controls(self):
+        xpath = "//div[@data-id='inner-widget']//div[contains(@class, 'wdgttl-tab-item ')]"
+        return self.driver.find_elements(By.XPATH, xpath)
 
     @property
-    def modal_popup_links(self) -> List[TElement]:
+    def modal_popup_links(self):
         return self.driver.find_elements(By.XPATH, "//div[contains(@id, 'popupId')]//a")
 
     def get_table_text_value(self, key):

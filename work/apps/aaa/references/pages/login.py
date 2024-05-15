@@ -1,4 +1,4 @@
-from work.apps.aaa.references.base_page import *
+from work.apps.aaa.references.base_page import BasePageAAAEquities, Keys, By, WebDriverError
 
 
 class PageAAALogin(BasePageAAAEquities):
@@ -39,10 +39,10 @@ class PageAAALogin(BasePageAAAEquities):
         self.button_login.click()
         self.wait_page_to_load()
 
-        if len(self.dialog_password) > 0:
-            try:
+        try:
+            if self.button_dialog_password_ok.is_displayed():
                 self.button_dialog_password_ok.click()
-            except WebDriverError.NoSuchElementException:
-                self.log.error('Password dialog not found')
+        except WebDriverError.NoSuchElementException:
+            self.log.error('Password dialog not found')
 
         self.wait_page_to_load()
