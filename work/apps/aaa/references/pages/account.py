@@ -26,7 +26,7 @@ class PageAAATradingDeskAccount(BasePageAAAEquities):
         headers = ['cash_balance', 'available_cash', 'pending_cash', 'available_to_withdraw', 'unsettled_sales',
                    'payable_amount', 'od_limit', 'portfolio_value', 'total_portfolio_value']
 
-        dto = ModelAccountAAA(convert_kwargs=True, clean_chars=[','], **dict(zip(headers, account_details)))
+        dto = ModelAccountAAA(**dict(zip(headers, account_details)))
 
         return dto
 
