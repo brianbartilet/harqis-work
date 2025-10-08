@@ -11,7 +11,7 @@
    - Runs on Python 3.12
    - Clone the repository
       ```sh
-      git https://github.com/brianbartilet/harqis-work.git
+      git clone https://github.com/brianbartilet/harqis-work.git
       ```
    - Set up and activate the virtual environment.
       ```sh
