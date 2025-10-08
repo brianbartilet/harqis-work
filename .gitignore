@@ -1,4 +1,14 @@
 .idea
 *config.yaml
-demo
+.env/*
+!.env/.gitkeep
+.venv
+venv
+*pid.*
+*.bak*
+*.dat*
+*.dir*
+*.zip*
 *.log*
+*.egg
+*.egg-info/
