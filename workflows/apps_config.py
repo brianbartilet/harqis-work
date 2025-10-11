@@ -13,7 +13,6 @@ from core.config.app_config import AppConfigManager
 # that specify the name and location of the configuration file. The ConfigLoaderService is designed
 # to parse the YAML file specified by `ENV_APP_CONFIG_FILE` located in the directory specified by
 # `ENV_APP_CONFIG`.
-
 CONFIG_SERVICE = ConfigLoaderService(file_name=ENV_APP_CONFIG_FILE, base_path=ENV_APP_CONFIG)
 """
 CONFIG_SERVICE is an instance of ConfigLoaderService, initialized with environment-specific
