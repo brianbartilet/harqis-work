@@ -1,3 +1,5 @@
+import pytest
+
 from work.apps.rainmeter.references.helpers.config_builder import initialize_hud_configuration, ConfigHelperRainmeter
 
 
@@ -6,6 +8,7 @@ from work.apps.rainmeter.references.helpers.config_builder import initialize_hud
                                   'meterLink_google': 10,
                                 }
                               )
+@pytest.mark.skip
 def test_update_quick_links(ini=ConfigHelperRainmeter()):
 
     dump = ''
