@@ -1,6 +1,7 @@
-from core.web.services.core.json import JsonObject
 from dataclasses import dataclass
 from typing import Optional, List
+from dataclasses import dataclass, fields
+from typing import Optional, List, Any, Dict
 
 @dataclass
 class DtoAccountProperties:
@@ -8,19 +9,22 @@ class DtoAccountProperties:
     mt4AccountID: Optional[str] = None
     tags: Optional[List[str]] = None
 
-class DtoAccountDetails(JsonObject):
-    guaranteedStopLossOrderMode = None
-    id = None
-    balance = None
-    openTradeCount = None
-    openPositionCount = None
-    pendingOrderCount = None
-    trades = None
-    positions = None
-    orders = None
+@dataclass
+class DtoAccountDetails:
+    id: str
+    alias: Optional[str] = None
+    currency: Optional[str] = None
+    balance: Optional[float] = None
+    NAV: Optional[str] = None
+    marginRate: Optional[float] = None
+    openTradeCount: Optional[int] = None
+    openPositionCount: Optional[int] = None
+    pendingOrderCount: Optional[int] = None
+    hedgingEnabled: Optional[bool] = None
+    createdTime: Optional[str] = None
 
-
-class DtoAccountInstruments(JsonObject):
+@dataclass
+class DtoAccountInstruments:
     name = None
     type = None
     displayName = None

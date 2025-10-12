@@ -1,7 +1,7 @@
 from work.apps.oanda.references.web.base_api_service import BaseApiServiceAppOanda
 from work.apps.oanda.references.dto.user_account import DtoAccountProperties, DtoAccountDetails, DtoAccountInstruments
 from core.web.services.core.decorators.deserializer import deserialized
-
+from core.web.services.core.contracts.response import IResponse
 
 class ApiServiceOandaAccount(BaseApiServiceAppOanda):
 
@@ -13,13 +13,13 @@ class ApiServiceOandaAccount(BaseApiServiceAppOanda):
         self.request\
             .add_uri_parameter('v3/accounts')
 
-    @deserialized(list[DtoAccountProperties], child='accounts')
+    @deserialized(list[DtoAccountProperties], child='accounts', many=True)
     def get_account_info(self):
         self.request.get()
 
         return self.client.execute_request(self.request.build())
 
-    #@deserialized(DtoAccountDetails, child='account')
+    @deserialized(DtoAccountDetails, child='account')
     def get_account_details(self, account_id):
         self.request.get()\
             .add_uri_parameter(account_id)
