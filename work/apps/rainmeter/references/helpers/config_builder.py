@@ -8,10 +8,6 @@ import winsound
 from configparser import ConfigParser
 import os
 
-from work.apps.rainmeter.config import CONFIG
-
-from core.config.env_variables import ENV_ROOT_DIRECTORY
-
 import shlex
 
 WAIT_SECS_DEFAULT = 10
@@ -20,7 +16,8 @@ frequency = 1200
 duration = 300
 
 
-def initialize_hud_configuration(hud_item_name: str,
+def initialize_hud_configuration(config: dict,
+                                 hud_item_name: str,
                                  template_name='base.ini',
                                  include_notes_bin=True,
                                  notes_file='dump.txt',
@@ -40,9 +37,9 @@ def initialize_hud_configuration(hud_item_name: str,
             """
             try:
                 config_ini = ConfigHelperRainmeter()
-                skin_name = CONFIG['skin_name']
-                static_path = CONFIG['static_path']
-                write_skin_path = os.path.join(CONFIG['write_skin_to_path'], skin_name)
+                skin_name = config['skin_name']
+                static_path = config['static_path']
+                write_skin_path = os.path.join(config['write_skin_to_path'], skin_name)
 
                 if not os.path.exists(write_skin_path):
                     #  copy resources
@@ -109,10 +106,10 @@ def initialize_hud_configuration(hud_item_name: str,
                     winsound.Beep(frequency, duration)
 
                 cmd_act_cfg = '"{0}" !ActivateConfig "{1}\\{2}" "{3}"'\
-                    .format(CONFIG['bin_path'], skin_name, short_hud_name, file_ini_new)
+                    .format(config['bin_path'], skin_name, short_hud_name, file_ini_new)
                 subprocess.call(shlex.split(cmd_act_cfg))
 
-                cmd_refresh_app = '"{0}" !RefreshApp'.format(CONFIG['bin_path'])
+                cmd_refresh_app = '"{0}" !RefreshApp'.format(config['bin_path'])
                 subprocess.call(shlex.split(cmd_refresh_app))
 
                 wait = reset_alerts_secs if updated else WAIT_SECS_DEFAULT
@@ -126,10 +123,10 @@ def initialize_hud_configuration(hud_item_name: str,
                 reset_config_ini.save_to_new_file(new_ini)
 
                 cmd_act_cfg = '"{0}" !ActivateConfig "{1}\\{2}" "{3}"'\
-                    .format(CONFIG['bin_path'], skin_name, short_hud_name, file_ini_new)
+                    .format(config['bin_path'], skin_name, short_hud_name, file_ini_new)
                 subprocess.call(shlex.split(cmd_act_cfg))
 
-                cmd_refresh_app = '"{0}" !RefreshApp'.format(CONFIG['bin_path'])
+                cmd_refresh_app = '"{0}" !RefreshApp'.format(config['bin_path'])
                 subprocess.call(shlex.split(cmd_refresh_app))
 
             except Exception as e:
