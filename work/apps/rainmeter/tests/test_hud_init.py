@@ -66,14 +66,16 @@ def sandbox(tmp_path, monkeypatch):
     # Stub side effects
     calls = {"subprocess": [], "beeps": []}
 
-    def fake_call(argv):
+    def fake_run(argv, **kwargs):
+        # Capture calls so we can assert behavior
         calls["subprocess"].append(list(argv))
         return 0
 
     def fake_beep(freq, dur):
         calls["beeps"].append((freq, dur))
 
-    monkeypatch.setattr(hud.subprocess, "call", fake_call, raising=True)
+    # IMPORTANT: the implementation uses subprocess.run
+    monkeypatch.setattr(hud.subprocess, "run", fake_run, raising=True)
     monkeypatch.setattr(hud.winsound, "Beep", fake_beep, raising=True)
 
     return {"root": root, "static": static, "write_root": write_root, "calls": calls}
@@ -83,8 +85,8 @@ def sandbox(tmp_path, monkeypatch):
 
 def test_first_run_warn_then_reset(sandbox, monkeypatch):
     """
-    First run with include_notes_bin=True creates an empty dump.txt,
-    so comparing against the new tmp.txt yields updated=True
+    First run with include_notes_bin=True creates a new dump.txt,
+    so comparing against non-existent/old content yields updated=True
     => alertColor pre-reset, then reset back to darkColor.
     """
     root = sandbox["root"]
@@ -103,12 +105,13 @@ def test_first_run_warn_then_reset(sandbox, monkeypatch):
 
     monkeypatch.setattr(hud.time, "sleep", fake_sleep, raising=True)
 
-    @hud.initialize_hud_configuration(
+    @hud.init_config(
+        hud.CONFIG,
         hud_item_name="My HUD",
         template_name="base.ini",
         include_notes_bin=True,
         notes_file="dump.txt",
-        play_sound=False,       # updated is False on first run, but keep off anyway
+        play_sound=False,
         reset_alerts_secs=1,
     )
     def build_notes(ini: hud.ConfigHelperRainmeter):
@@ -131,7 +134,7 @@ def test_first_run_warn_then_reset(sandbox, monkeypatch):
     # Notes content saved
     assert notes_file.read_text(encoding="utf-8") == "hello world"
 
-    # Pre-reset had alertColor (empty original dump.txt vs new tmp.txt => updated=True)
+    # Pre-reset had alertColor (new write ⇒ updated=True)
     assert pre_reset_marker["seen"] is not None
     assert "Stroke Color [#alertColor]" in pre_reset_marker["seen"]
 
@@ -142,7 +145,7 @@ def test_first_run_warn_then_reset(sandbox, monkeypatch):
 
     # Two activate+refresh cycles (before + after reset) = 4 calls
     assert len(sandbox["calls"]["subprocess"]) == 4
-    # No beep on updated=False
+    # No beep since play_sound=False
     assert sandbox["calls"]["beeps"] == []
 
 
@@ -166,7 +169,8 @@ def test_updated_true_alert_and_beep(sandbox, monkeypatch):
 
     monkeypatch.setattr(hud.time, "sleep", fake_sleep, raising=True)
 
-    @hud.initialize_hud_configuration(
+    @hud.init_config(
+        hud.CONFIG,
         hud_item_name="My HUD",
         template_name="base.ini",
         include_notes_bin=True,
@@ -188,7 +192,7 @@ def test_updated_true_alert_and_beep(sandbox, monkeypatch):
     assert "Stroke Color [#darkColor]" in cp.get("MeterBackground", "shape")
 
     # Beep once
-    assert sandbox["calls"]["beeps"] == [(hud.frequency, hud.duration)]
+    assert sandbox["calls"]["beeps"] == [(hud.BEEP_FREQUENCY, hud.BEEP_DURATION_MS)]
     # 4 subprocess calls total
     assert len(sandbox["calls"]["subprocess"]) == 4
 
@@ -212,7 +216,8 @@ def test_always_alert_forces_alert_without_diff(sandbox, monkeypatch):
         raising=True,
     )
 
-    @hud.initialize_hud_configuration(
+    @hud.init_config(
+        hud.CONFIG,
         hud_item_name="HUD X",
         template_name="base.ini",
         include_notes_bin=False,
@@ -243,7 +248,8 @@ def test_include_notes_bin_false_skips_lua_copy(sandbox, monkeypatch):
     root = sandbox["root"]
     monkeypatch.setattr(hud.time, "sleep", lambda s: None, raising=True)
 
-    @hud.initialize_hud_configuration(
+    @hud.init_config(
+        hud.CONFIG,
         hud_item_name="HUD Y",
         template_name="base.ini",
         include_notes_bin=False,
@@ -262,12 +268,12 @@ def test_include_notes_bin_false_skips_lua_copy(sandbox, monkeypatch):
 def test_new_sections_are_added_to_ini(sandbox, monkeypatch):
     """
     Pass new_sections_dict and ensure sections are present in saved INI.
-    (The code only adds sections by name.)
     """
     root = sandbox["root"]
     monkeypatch.setattr(hud.time, "sleep", lambda s: None, raising=True)
 
-    @hud.initialize_hud_configuration(
+    @hud.init_config(
+        hud.CONFIG,
         hud_item_name="HUD Z",
         template_name="base.ini",
         include_notes_bin=False,
