@@ -3,17 +3,18 @@ import pytest
 from work.apps.rainmeter.references.helpers.config_builder import init_config, ConfigHelperRainmeter
 from work.apps.rainmeter.config import CONFIG
 
+sections_config = {
+        "meterLink_google": {
+            "Preset": "InjectedByTest",
+            "W": "181"  # values must be strings
+        }
+}
 
 @pytest.mark.skip
 @init_config(
     CONFIG,
     hud_item_name="TEST HUD",
-    new_sections_dict={
-        "meterLink_google": {
-            "Preset": "InjectedByTest",
-            "W": "181"  # values must be strings
-        }
-    },
+    new_sections_dict=sections_config
 )
 def test_update_quick_links(ini=ConfigHelperRainmeter()):
 
