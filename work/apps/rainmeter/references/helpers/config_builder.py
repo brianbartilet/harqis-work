@@ -1,164 +1,257 @@
-import shutil
+from __future__ import annotations
+
 import functools
-import filecmp
-import time
-import subprocess
-import winsound
-
-from configparser import ConfigParser
+import hashlib
 import os
-
-import shlex
+import subprocess
+import tempfile
+import time
+from configparser import ConfigParser
+from pathlib import Path
+from typing import Callable, Dict, Iterable, Mapping, Optional
+import winsound  # Windows only
 
 WAIT_SECS_DEFAULT = 10
+BEEP_FREQUENCY = 1200
+BEEP_DURATION_MS = 300
 
-frequency = 1200
-duration = 300
 
+def init_config(
+    config: Mapping[str, str],
+    hud_item_name: str,
+    template_name: str = "base.ini",
+    include_notes_bin: bool = True,
+    notes_file: str = "dump.txt",
+    new_sections_dict: Optional[Dict[str, Dict[str, str]]] = None,
+    reset_alerts_secs: int = 10,
+    play_sound: bool = True,
+    always_alert: bool = False,
+) -> Callable:
+    """
+    Decorator: prepares Rainmeter skin dirs, renders an INI from a template,
+    writes notes, toggles border color on change, beeps, activates & refreshes,
+    waits a bit, then resets the border.
 
-def initialize_hud_configuration(config: dict,
-                                 hud_item_name: str,
-                                 template_name='base.ini',
-                                 include_notes_bin=True,
-                                 notes_file='dump.txt',
-                                 new_sections_dict=None,
-                                 reset_alerts_secs=10,
-                                 play_sound=True,
-                                 always_alert=False
-                                 ):
-    def decorator(func):
+    Required config keys:
+      - skin_name: str
+      - static_path: str (folder containing @Resources, Options, template INIs, bin/LuaTextFile.lua)
+      - write_skin_to_path: str (Rainmeter Skins root, e.g. ~/Documents/Rainmeter/Skins)
+      - bin_path: str (path to Rainmeter.exe)
+    """
+
+    # --- Validate required config early
+    required = ("skin_name", "static_path", "write_skin_to_path", "bin_path")
+    missing = [k for k in required if k not in config or not config[k]]
+    if missing:
+        raise ValueError(f"Missing required config keys: {', '.join(missing)}")
+
+    skin_name = config["skin_name"]
+    static_path = Path(config["static_path"]).resolve()
+    skins_root = Path(config["write_skin_to_path"]).resolve()
+    rainmeter_exe = Path(config["bin_path"]).resolve()
+
+    skin_dir = skins_root / skin_name
+    hud_dirname = sanitize_name(hud_item_name)  # safer than only stripping spaces
+    ini_dir = skin_dir / hud_dirname
+    ini_filename = f"{hud_dirname}.ini"
+    ini_path = ini_dir / ini_filename
+    note_path = ini_dir / notes_file
+    template_path = static_path / template_name
+
+    def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            """
-            :param args:
-            :param kwargs:
-            :return:
-            https://betterprogramming.pub/python-celery-best-practices-ae182730bb81
-            """
             try:
-                config_ini = ConfigHelperRainmeter()
-                skin_name = config['skin_name']
-                static_path = config['static_path']
-                write_skin_path = os.path.join(config['write_skin_to_path'], skin_name)
+                # 1) Ensure skin folder structure/resources exist
+                _ensure_dirs_and_resources(
+                    static_path=static_path,
+                    skin_dir=skin_dir,
+                    ini_dir=ini_dir,
+                    include_notes_bin=include_notes_bin,
+                )
+                # 2) Load template config
+                cfg = ConfigHelperRainmeter(template_config_file=str(template_path))
+                cfg.read_template_configuration()
 
-                if not os.path.exists(write_skin_path):
-                    #  copy resources
-                    src = os.path.join(static_path, '@Resources')
-                    dest = os.path.join(write_skin_path, '@Resources')
-                    shutil.copytree(src, dest)
+                # 3) Add optional sections/keys
+                if new_sections_dict:
+                    for sect, kv in new_sections_dict.items():
+                        if not cfg.has_section(sect):
+                            cfg.add_section(sect)
+                        for k, v in (kv or {}).items():
+                            cfg.set(sect, k, v)
 
-                    #  copy options
-                    src = os.path.join(static_path, 'Options')
-                    dest = os.path.join(write_skin_path, 'Options')
-                    shutil.copytree(src, dest)
+                # 4) Let user function compute the notes text
+                notes_text: str = func(ini=cfg, *args, **kwargs)
+                if not isinstance(notes_text, str):
+                    notes_text = str(notes_text)
 
-                ini_path = os.path.join(write_skin_path, hud_item_name.replace(' ', ''))
-                note_file = os.path.join(ini_path, notes_file)
-                if not os.path.exists(ini_path):
-                    os.makedirs(ini_path)
-                    if include_notes_bin:
-                        src = os.path.join(static_path, 'bin', 'LuaTextFile.lua')
-                        dest = os.path.join(ini_path, 'LuaTextFile.lua')
-                        shutil.copyfile(src, dest)
-                        with open(note_file, 'w'):
-                            pass
+                # 5) Detect change vs. existing notes
+                changed = always_alert or _content_changed(note_path, notes_text)
 
-                short_hud_name = hud_item_name.replace(' ', '')
-                file_ini_new = '{0}.ini'.format(short_hud_name)
-                new_ini = os.path.join(ini_path, file_ini_new)
-                template_path_file = os.path.join(static_path, template_name)
-                config_ini.template_config_file = template_path_file
-                config_ini.read_template_configuration()
+                # 6) Write notes atomically
+                _atomic_write_text(note_path, notes_text, encoding="utf-8")
 
-                if new_sections_dict is not None:
-                    for section in new_sections_dict:
-                        file_ini_new = '{0}.ini'.format(short_hud_name)
-                        config_ini.add_section(section)
+                # 7) Update displayed title safely
+                set_config_value(cfg, "meterTitle", "text", hud_item_name)
 
-                notes_dump = func(ini=config_ini, *args, **kwargs)
-                tmp_note = os.path.join(ini_path, 'tmp.txt')
-                tmp = NotesTextHelperRainmeter(tmp_note)
-                tmp.write(notes_dump)
+                # 8) Flip border color in the INI if changed
+                border_from = "Stroke Color [#darkColor]"
+                border_to = "Stroke Color [#alertColor]" if changed else "Stroke Color [#warnColor]"
+                replace_ini_value(cfg, "MeterBackground", "shape", border_from, border_to)
 
-                #  check if notes_file = dump.txt had changed
-                try:
-                    updated = not filecmp.cmp(note_file, tmp_note)
-                    os.remove(tmp_note)
-                except Exception:
-                    updated = False
+                # 9) Save INI atomically
+                cfg.save_to_new_file(str(ini_path))
 
-                if always_alert:
-                    updated = True
+                # 10) Optional beep
+                if changed and play_sound:
+                    try:
+                        winsound.Beep(BEEP_FREQUENCY, BEEP_DURATION_MS)
+                    except RuntimeError:
+                        pass  # ignore if no sound device
 
-                note = NotesTextHelperRainmeter(note_file)
-                note.write(notes_dump)
+                # 11) Activate & refresh Rainmeter
+                _activate_config(rainmeter_exe, skin_name, hud_dirname, ini_filename)
+                _refresh_app(rainmeter_exe)
 
-                config_ini['meterTitle']['text'] = hud_item_name
+                # 12) Reset border after wait
+                time.sleep(reset_alerts_secs if changed else WAIT_SECS_DEFAULT)
+                cfg_reset = ConfigHelperRainmeter(template_config_file=str(ini_path))
+                cfg_reset.read_template_configuration()
+                replace_ini_value(cfg_reset, "MeterBackground", "shape", border_to, "Stroke Color [#darkColor]")
+                cfg_reset.save_to_new_file(str(ini_path))
 
-                replace_border_value = 'Stroke Color [#alertColor]' if updated else 'Stroke Color [#warnColor]'
-                replace_border = config_ini['MeterBackground']['shape'].replace('Stroke Color [#darkColor]',
-                                                                                replace_border_value)
-                config_ini['MeterBackground']['shape'] = replace_border
+                _activate_config(rainmeter_exe, skin_name, hud_dirname, ini_filename)
+                _refresh_app(rainmeter_exe)
 
-                config_ini.save_to_new_file(ini_file_name=new_ini)
-
-                if updated and play_sound:
-                    winsound.Beep(frequency, duration)
-
-                cmd_act_cfg = '"{0}" !ActivateConfig "{1}\\{2}" "{3}"'\
-                    .format(config['bin_path'], skin_name, short_hud_name, file_ini_new)
-                subprocess.call(shlex.split(cmd_act_cfg))
-
-                cmd_refresh_app = '"{0}" !RefreshApp'.format(config['bin_path'])
-                subprocess.call(shlex.split(cmd_refresh_app))
-
-                wait = reset_alerts_secs if updated else WAIT_SECS_DEFAULT
-                #  reset borders after some timeout
-                time.sleep(wait)
-                reset_config_ini = ConfigHelperRainmeter(new_ini)
-                reset_config_ini.read_template_configuration()
-                replace_border = reset_config_ini['MeterBackground']['shape'].replace(replace_border_value,
-                                                                                      'Stroke Color [#darkColor]')
-                reset_config_ini['MeterBackground']['shape'] = replace_border
-                reset_config_ini.save_to_new_file(new_ini)
-
-                cmd_act_cfg = '"{0}" !ActivateConfig "{1}\\{2}" "{3}"'\
-                    .format(config['bin_path'], skin_name, short_hud_name, file_ini_new)
-                subprocess.call(shlex.split(cmd_act_cfg))
-
-                cmd_refresh_app = '"{0}" !RefreshApp'.format(config['bin_path'])
-                subprocess.call(shlex.split(cmd_refresh_app))
+                # Return useful info for callers/tests
+                return {"updated": changed, "ini_path": str(ini_path), "notes_path": str(note_path)}
 
             except Exception as e:
-                raise Exception("Failed hud initialization! {0}".format(e))
+                # Keep the original traceback chain
+                raise RuntimeError(f"Failed HUD initialization: {e}") from e
 
         return wrapper
 
     return decorator
 
 
-class ConfigHelperRainmeter(ConfigParser):
+# ----------------------
+# Helpers
+# ----------------------
 
-    def __init__(self, template_config_file=None):
+def sanitize_name(name: str) -> str:
+    """Make a filesystem-friendly short name."""
+    import re
+    # Keep alnum, space, hyphen, underscore; replace others with underscore; then remove spaces.
+    cleaned = re.sub(r"[^A-Za-z0-9 _-]+", "_", name)
+    return cleaned.replace(" ", "")
+
+
+def _ensure_dirs_and_resources(
+    static_path: Path, skin_dir: Path, ini_dir: Path, include_notes_bin: bool
+) -> None:
+    skin_dir.mkdir(parents=True, exist_ok=True)
+    ini_dir.mkdir(parents=True, exist_ok=True)
+
+    # Copy @Resources and Options (idempotent)
+    _copytree(static_path / "@Resources", skin_dir / "@Resources")
+    _copytree(static_path / "Options", skin_dir / "Options")
+
+    if include_notes_bin:
+        src = static_path / "bin" / "LuaTextFile.lua"
+        dst = ini_dir / "LuaTextFile.lua"
+        if src.exists():
+            if not dst.exists() or src.stat().st_mtime > dst.stat().st_mtime:
+                dst.write_bytes(src.read_bytes())
+
+
+def _copytree(src: Path, dst: Path) -> None:
+    if not src.exists():
+        return
+    # Python ≥3.8
+    import shutil
+    shutil.copytree(src, dst, dirs_exist_ok=True)
+
+
+def _content_changed(path: Path, new_text: str, encoding: str = "utf-8") -> bool:
+    if not path.exists():
+        return True
+    try:
+        old = path.read_text(encoding=encoding)
+    except UnicodeDecodeError:
+        # Fallback to bytes comparison if encoding differs
+        return _hash_bytes(path.read_bytes()) != _hash_bytes(new_text.encode(encoding))
+    return old != new_text
+
+
+def _hash_bytes(b: bytes) -> str:
+    return hashlib.sha256(b).hexdigest()
+
+
+def _atomic_write_text(path: Path, text: str, encoding: str = "utf-8") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile("w", delete=False, dir=str(path.parent), encoding=encoding) as tmp:
+        tmp.write(text)
+        tmp_path = Path(tmp.name)
+    os.replace(tmp_path, path)  # atomic on Windows
+
+
+def _activate_config(rainmeter_exe: Path, skin_name: str, hud_dir: str, ini_filename: str) -> None:
+    # "!ActivateConfig" "<config>\<subfolder>" "<file.ini>"
+    args = [
+        str(rainmeter_exe),
+        "!ActivateConfig",
+        f"{skin_name}\\{hud_dir}",
+        ini_filename,
+    ]
+    subprocess.run(args, check=False)
+
+
+def _refresh_app(rainmeter_exe: Path) -> None:
+    subprocess.run([str(rainmeter_exe), "!RefreshApp"], check=False)
+
+
+def set_config_value(cfg: ConfigParser, section: str, key: str, value: str) -> None:
+    if not cfg.has_section(section):
+        cfg.add_section(section)
+    cfg.set(section, key, value)
+
+
+def replace_ini_value(cfg: ConfigParser, section: str, key: str, old: str, new: str) -> None:
+    """
+    Replaces substring `old` → `new` for a given key in a section if present.
+    No-op if section/key missing.
+    """
+    if cfg.has_section(section) and cfg.has_option(section, key):
+        cfg.set(section, key, cfg.get(section, key).replace(old, new))
+
+
+class ConfigHelperRainmeter(ConfigParser):
+    def __init__(self, template_config_file: Optional[str] = None):
         super().__init__()
         self.template_config_file = template_config_file
 
-    def read(self, filenames, encoding=None):
+    def read(self, filenames: Iterable[str] | str, encoding: Optional[str] = "utf-8"):
         super().read(filenames=filenames, encoding=encoding)
 
     def read_template_configuration(self):
+        if not self.template_config_file:
+            raise ValueError("template_config_file is not set")
         return self.read(self.template_config_file)
 
-    def save_to_new_file(self, ini_file_name):
-        with open(ini_file_name, 'w') as configfile:
-            self.write(configfile)
+    def save_to_new_file(self, ini_file_name: str, encoding: str = "utf-8") -> None:
+        # Atomic write
+        path = Path(ini_file_name)
+        with tempfile.NamedTemporaryFile("w", delete=False, dir=str(path.parent), encoding=encoding) as tmp:
+            self.write(tmp)
+            tmp_path = Path(tmp.name)
+        os.replace(tmp_path, path)
 
 
 class NotesTextHelperRainmeter:
+    def __init__(self, file_name_txt: str):
+        self.file_name_txt = Path(file_name_txt)
 
-    def __init__(self, file_name_txt):
-        self.file_name_txt = file_name_txt
-
-    def write(self, stream):
-        with open(self.file_name_txt, "w") as f:
-            f.write(stream)
+    def write(self, stream: str, encoding: str = "utf-8") -> None:
+        _atomic_write_text(self.file_name_txt, stream, encoding=encoding)
