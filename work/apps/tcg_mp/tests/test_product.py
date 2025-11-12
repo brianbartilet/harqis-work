@@ -1,9 +1,6 @@
 import pytest
-
 from hamcrest import greater_than, equal_to
-
 from work.apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
-
 from work.apps.tcg_mp.config import CONFIG
 
 
