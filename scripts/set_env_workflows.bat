@@ -9,6 +9,6 @@ set "PYTHONPATH=%path_git_root%;%path_core%;%path_demo%;%PYTHONPATH%"
 echo PYTHONPATH updated to %PYTHONPATH%.
 
 echo Set environment variable for workflow configuration
-set "WORKFLOW_CONFIG=demo.builder.config"
+set "WORKFLOW_CONFIG=workflows.config"
 
 echo Environment variable WORKFLOW_CONFIG set to %WORKFLOW_CONFIG%.
