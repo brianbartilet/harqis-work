@@ -18,5 +18,5 @@ class ApiServiceEchoMTGInventory(BaseApiServiceAppEchoMtg):
     def get_quick_stats(self):
         self.request.get()\
             .add_uri_parameter('quickstats')
-
-        return self.client.execute_request(self.request.build())
+        response = self.client.execute_request(self.request.build())
+        return response
