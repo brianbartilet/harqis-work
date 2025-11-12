@@ -3,14 +3,14 @@ from typing import List, Optional
 
 
 @dataclass
-class ChartPoint:
+class DtoChartPoint:
     """Represents a single data point in the card's price chart."""
     date: str
     avgr: str
 
 
 @dataclass
-class CardData:
+class DtoCardData:
     """Represents a single card record in the API response."""
     name: Optional[str] = None
     text: Optional[str] = None
@@ -30,11 +30,5 @@ class CardData:
     day7: Optional[str] = None
     day30: Optional[str] = None
     foiled: Optional[int] = None
-    chart: Optional[List[ChartPoint]] = None
+    chart: Optional[List[DtoChartPoint]] = None
     language: Optional[List[str]] = None
-
-
-@dataclass
-class CardResponse:
-    """Top-level response wrapper for card data."""
-    data: Optional[List[CardData]] = None

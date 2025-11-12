@@ -11,7 +11,7 @@ class ApiServiceOandaAccount(BaseApiServiceAppOanda):
 
     def initialize(self):
         self.request\
-            .add_uri_parameter('v3/accounts')
+            .set_base_uri('accounts')
 
     @deserialized(list[DtoAccountProperties], child='accounts', many=True)
     def get_account_info(self):

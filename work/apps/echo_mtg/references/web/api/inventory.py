@@ -12,7 +12,7 @@ class ApiServiceEchoMTGInventory(BaseApiServiceAppEchoMtg):
 
     def initialize(self):
         self.request\
-            .add_uri_parameter('inventory')
+            .set_base_uri('inventory')
 
     @deserialized(DtoPortfolioStats, child='stats')
     def get_quick_stats(self):
