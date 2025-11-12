@@ -3,7 +3,7 @@ from typing import Optional
 
 
 @dataclass
-class ListingItem:
+class DtoListingItem:
     """Represents a single card listing record."""
     listing_id: Optional[int] = None
     product_id: Optional[int] = None
