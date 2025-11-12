@@ -1,3 +1,6 @@
+from celery import Celery
+from celery import Task
+
 from core.config.env_variables import ENV_APP_CONFIG, ENV_APP_CONFIG_FILE
 from core.config.loader import ConfigLoaderService
 from core.config.app_config import AppConfigManager
@@ -35,3 +38,5 @@ allowing for structured and centralized configuration management within the appl
 # This script sets up the configuration management for the application by initializing the necessary
 # services and managers with appropriate environment settings. It is typically used at the startup
 # of the application to ensure all components have access to the configured settings.
+
+APP = Celery(apps_config['Celery']['application_name'], broker=apps_config['Celery']['broker'])
