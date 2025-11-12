@@ -18,6 +18,7 @@ def test_auth(given_service_account):
 
     token = str(when.data['token']).strip()
     then.assert_that(token, all_of(has_length(40), matches_regexp(r"^[0-9a-fA-F]{40}$")))
+    then.assert_that(given_service_account.token, all_of(has_length(40), matches_regexp(r"^[0-9a-fA-F]{40}$")))
 
 
 
