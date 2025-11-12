@@ -14,16 +14,17 @@ Known Issues:
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.sprout.settings import TIME_ZONE, USE_TZ
 
-from demo.builder.tasks.do_math import TASKS_DO_MATH
-from demo.builder.tasks.send_web_requests import TASKS_SEND_WEB_REQUESTS
+from workflows.purchases.tasks_config import WORKFLOW_PURCHASES
 
 # Set Celery to use the same timezone settings as the Django project.
 SPROUT.conf.enable_utc = USE_TZ
 SPROUT.conf.timezone = TIME_ZONE
 SPROUT.conf.broker_connection_retry_on_startup = True
+SPROUT.autodiscover_tasks(['workflows'])
 
 # Configuration dictionary mapping environment variable values to specific task mappings.
 # Be careful to use duplicate keys in the dictionary, as it will overwrite the previous key.
-CONFIG_DICTIONARY = TASKS_SEND_WEB_REQUESTS | TASKS_DO_MATH
+#CONFIG_DICTIONARY = TASKS_SEND_WEB_REQUESTS | TASKS_DO_MATH
+CONFIG_DICTIONARY = WORKFLOW_PURCHASES
 # Configure the Celery beat schedule based on the current environment's task mapping.
 SPROUT.conf.beat_schedule = CONFIG_DICTIONARY

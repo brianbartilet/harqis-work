@@ -1,8 +1,9 @@
 @echo off
 call ..\.venv\Scripts\activate.bat
-call set_env.bat
+call set_env_workflows.bat
 
-cd ..\demo
+cd ..
+
 
 echo Starting scheduler...
-python run_tasks.py scheduler
+python run_workflows.py scheduler
