@@ -1,6 +1,7 @@
 from typing import List
 
 from work.apps.tcg_mp.references.dto.search import DtoFilterResult
+from work.apps.tcg_mp.references.dto.product import DtoCardData
 from work.apps.tcg_mp.references.web.base_api_service import BaseApiServiceAppTcgMp
 
 from core.web.services.core.decorators.deserializer import deserialized
@@ -15,7 +16,7 @@ class ApiServiceTcgMpProducts(BaseApiServiceAppTcgMp):
 
     def initialize(self):
         self.request\
-            .add_uri_parameter('product')\
+            .set_base_uri('product')\
 
     @deserialized(List[DtoFilterResult], child='data', many=True)
     def search_card(self, card_name: str, page: int = 1, items: int = 100):
@@ -28,5 +29,13 @@ class ApiServiceTcgMpProducts(BaseApiServiceAppTcgMp):
         self.request.post()\
             .add_uri_parameter('filter')\
             .add_json_payload(payload)
+
+        return self.client.execute_request(self.request.build())
+
+    @deserialized(DtoCardData, child='data.data.0', many=False)
+    def get_single_card(self, card_id: str):
+        self.request.get()\
+            .add_uri_parameter('single')\
+            .add_uri_parameter(card_id)
 
         return self.client.execute_request(self.request.build())

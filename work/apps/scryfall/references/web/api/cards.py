@@ -12,7 +12,7 @@ class ApiServiceScryfallCards(BaseApiServiceAppScryfallMtg):
 
     def initialize(self):
         self.request\
-            .add_uri_parameter('cards')
+            .set_base_uri('cards')
 
     @deserialized(DtoScryFallCard)
     def get_card_metadata(self, card_guid: str):

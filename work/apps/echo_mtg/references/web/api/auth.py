@@ -13,11 +13,11 @@ class ApiServiceEchoMTGAuth(BaseApiServiceAppEchoMtg):
 
     def initialize(self):
         self.request\
-            .add_uri_parameter('user')\
-            .add_uri_parameter('auth')
+            .set_base_uri('user')
 
     @deserialized(dict)
     def authenticate(self, username: str = None, password: str = None):
+        self.request.add_uri_parameter('auth')
         payload = {
             'email': username if username is not None else self.username,
             'password': password if password is not None else self.password
