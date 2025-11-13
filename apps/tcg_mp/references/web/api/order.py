@@ -1,6 +1,6 @@
-from typing import List
+from typing import List, Any
 
-from apps.tcg_mp.references.dto.order import DtoOrderSummary
+from apps.tcg_mp.references.dto.order import DtoOrderSummaryByStatus
 from apps.tcg_mp.references.web.base_api_service import BaseApiServiceAppTcgMp
 from apps.tcg_mp.references.web.api.auth import ApiServiceTcgMpAuth
 
@@ -23,8 +23,8 @@ class ApiServiceTcgMpOrder(BaseApiServiceAppTcgMp):
         auth.authenticate()
         self.request.add_header(HttpHeaders.AUTHORIZATION, auth.token)
 
-    @deserialized(List[DtoOrderSummary], child='data.data.0', many=True)
-    def get_orders(self):
+    @deserialized(List[DtoOrderSummaryByStatus], child='data', many=True)
+    def get_orders(self, by_status: int = None):
         payload = {
             'date_range_from': None,
             'date_range_to': None,
@@ -34,10 +34,26 @@ class ApiServiceTcgMpOrder(BaseApiServiceAppTcgMp):
             'order_id': None,
             'page': None,
             'sort_by': None,
-            'status': None,
+            'status': by_status,
         }
         self.request.post() \
             .add_uri_parameter('filter') \
             .add_json_payload(payload)
 
         return self.client.execute_request(self.request.build())
+
+    @deserialized(dict[Any, Any], child='data.data.0')
+    def get_order_detail(self, order_id):
+        self.request.get() \
+            .add_uri_parameter(order_id)
+
+        return self.client.execute_request(self.request.build())
+
+    @deserialized(dict[Any, Any], child='data.data.0')
+    def get_order_qr_code(self, order_id):
+        self.request.get() \
+            .add_uri_parameter('show_qr') \
+            .add_uri_parameter(order_id)
+
+        return self.client.execute_request(self.request.build())
+
