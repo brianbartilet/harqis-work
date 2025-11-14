@@ -6,10 +6,10 @@ from apps.tcg_mp.references.web.base_api_service import BaseApiServiceAppTcgMp
 from core.web.services.core.decorators.deserializer import deserialized
 
 
-class ApiServiceTcgMpUser(BaseApiServiceAppTcgMp):
+class ApiServiceTcgMpUserView(BaseApiServiceAppTcgMp):
 
     def __init__(self, config, **kwargs):
-        super(ApiServiceTcgMpUser, self).__init__(config, **kwargs)
+        super(ApiServiceTcgMpUserView, self).__init__(config, **kwargs)
         self.user_id = config.app_data['user_id']
         self.initialize()
 

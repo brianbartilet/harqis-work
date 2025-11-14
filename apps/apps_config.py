@@ -3,7 +3,7 @@ from celery import Task
 
 from core.config.env_variables import ENV_APP_CONFIG, ENV_APP_CONFIG_FILE
 from core.config.loader import ConfigLoaderService
-from core.config.app_config import AppConfigManager
+from core.config.app_config_manager import AppConfigManager
 
 # ENV_APP_CONFIG and ENV_APP_CONFIG_FILE:
 # These variables are imported from core.config.env_variables module. They are expected to contain
@@ -33,10 +33,3 @@ CONFIG_MANAGER is an instance of AppConfigManager. It is responsible for managin
 configuration using the CONFIG_SERVICE. This manager facilitates access to configuration data,
 allowing for structured and centralized configuration management within the application.
 """
-
-# Usage:
-# This script sets up the configuration management for the application by initializing the necessary
-# services and managers with appropriate environment settings. It is typically used at the startup
-# of the application to ensure all components have access to the configured settings.
-
-APP = Celery(apps_config['Celery']['application_name'], broker=apps_config['Celery']['broker'])

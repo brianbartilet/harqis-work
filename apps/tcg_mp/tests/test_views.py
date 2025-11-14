@@ -1,12 +1,12 @@
 import pytest
 from hamcrest import greater_than, equal_to
-from apps.tcg_mp.references.web.api.view import ApiServiceTcgMpUser
+from apps.tcg_mp.references.web.api.view import ApiServiceTcgMpUserView
 from apps.tcg_mp.config import CONFIG
 
 
 @pytest.fixture()
 def given():
-    given_service = ApiServiceTcgMpUser(CONFIG)
+    given_service = ApiServiceTcgMpUserView(CONFIG)
     return given_service
 
 

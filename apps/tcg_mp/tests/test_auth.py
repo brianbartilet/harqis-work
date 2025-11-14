@@ -1,12 +1,12 @@
 import pytest
 from hamcrest import matches_regexp
-from apps.tcg_mp.references.web.api.auth import ApiServiceTcgMpAuth
+from apps.tcg_mp.references.web.base_api_service import BaseApiServiceAppTcgMp
 from apps.tcg_mp.config import CONFIG
 
 
 @pytest.fixture()
 def given():
-    given_service = ApiServiceTcgMpAuth(CONFIG)
+    given_service = BaseApiServiceAppTcgMp(CONFIG)
     return given_service
 
 
