@@ -2,7 +2,6 @@ from typing import List, Any
 
 from apps.tcg_mp.references.dto.order import DtoOrderSummaryByStatus
 from apps.tcg_mp.references.web.base_api_service import BaseApiServiceAppTcgMp
-from apps.tcg_mp.references.web.api.auth import ApiServiceTcgMpAuth
 
 from core.web.services.core.decorators.deserializer import deserialized
 from core.web.services.core.constants.http_headers import HttpHeaders
@@ -18,10 +17,6 @@ class ApiServiceTcgMpOrder(BaseApiServiceAppTcgMp):
     def initialize(self):
         self.request\
             .set_base_uri('order')
-
-        auth = ApiServiceTcgMpAuth(self.config)
-        auth.authenticate()
-        self.request.add_header(HttpHeaders.AUTHORIZATION, auth.token)
 
     @deserialized(List[DtoOrderSummaryByStatus], child='data', many=True)
     def get_orders(self, by_status: int = None):

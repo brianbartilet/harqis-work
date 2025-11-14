@@ -1,13 +1,13 @@
 import pytest
 from hamcrest import matches_regexp, all_of, has_length
 
-from apps.echo_mtg.references.web.api.auth import ApiServiceEchoMTGAuth
+from apps.echo_mtg.references.web.base_api_service import BaseApiServiceAppEchoMtg
 from apps.echo_mtg.config import CONFIG
 
 
 @pytest.fixture()
 def given_service_account():
-    given_service = ApiServiceEchoMTGAuth(CONFIG)
+    given_service = BaseApiServiceAppEchoMtg(CONFIG)
     return given_service
 
 
