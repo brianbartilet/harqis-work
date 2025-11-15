@@ -16,6 +16,7 @@ def test_get_orders(given):
     then = given.verify.common
     then.assert_that(len(when), greater_than_or_equal_to(0))
 
+
 @pytest.mark.smoke
 def test_get_order_detail(given):
     when = given.get_orders()
@@ -25,6 +26,7 @@ def test_get_order_detail(given):
 
     then = given.verify.common
     then.assert_that(when_order['order_id'], equal_to(order_id))
+
 
 @pytest.mark.smoke
 def test_get_order_qr(given):
