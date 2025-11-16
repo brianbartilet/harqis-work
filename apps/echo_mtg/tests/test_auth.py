@@ -16,7 +16,7 @@ def test_auth(given_service_account):
     when = given_service_account.authenticate()
     then = given_service_account.verify.common
 
-    token = str(when.data['token']).strip()
+    token = str(when['token']).strip()
     then.assert_that(token, all_of(has_length(40), matches_regexp(r"^[0-9a-fA-F]{40}$")))
     then.assert_that(given_service_account.token, all_of(has_length(40), matches_regexp(r"^[0-9a-fA-F]{40}$")))
 

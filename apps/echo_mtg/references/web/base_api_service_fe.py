@@ -2,7 +2,7 @@ from core.web.services.fixtures.rest import BaseFixtureServiceRest
 from core.web.services.core.constants.http_headers import HttpHeaders
 
 
-class BaseApiServiceAppScryfallMtg(BaseFixtureServiceRest):
+class BaseApiServiceAppEchoMtgFe(BaseFixtureServiceRest):
     """
        Extends the BaseFixtureServiceRest to provide additional services tailored for the application.
 
@@ -18,8 +18,12 @@ class BaseApiServiceAppScryfallMtg(BaseFixtureServiceRest):
             config: Configuration settings for the service application.
             **kwargs: Arbitrary keyword arguments that are passed to the parent class initializer.
         """
-        super(BaseApiServiceAppScryfallMtg, self).__init__(config=config, **kwargs)
+        super(BaseApiServiceAppEchoMtgFe, self).__init__(config=config, **kwargs)
+
+        self.username = config.app_data.get('username', None)
+        self.password = config.app_data.get('password', None)
+        self.token = config.app_data.get('token', None)
+
+
         self.request\
-            .add_header(HttpHeaders.CONTENT_TYPE, 'application/json') \
-            .add_header(HttpHeaders.ACCEPT, 'application/json') \
-            .add_header(HttpHeaders.USER_AGENT, config.app_data.get('app_name_header'))
+            .add_header(HttpHeaders.CONTENT_TYPE, 'application/json')

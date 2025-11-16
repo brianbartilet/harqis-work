@@ -16,7 +16,7 @@ def test_auth(given):
     then = given.verify.common
 
     jwt_pattern = r'^[A-Za-z0-9\-_]+?\.[A-Za-z0-9\-_]+?\.[A-Za-z0-9\-_]+$'
-    then.assert_that(when.data['accessToken'], matches_regexp(jwt_pattern))
+    then.assert_that(when['accessToken'], matches_regexp(jwt_pattern))
 
 
 
