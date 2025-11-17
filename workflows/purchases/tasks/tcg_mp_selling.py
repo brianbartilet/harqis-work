@@ -21,9 +21,11 @@ from workflows.purchases.dto.notes_jnfo import DtoNotesInformation
 
 
 @SPROUT.task()
-def add_random_numbers():
+def task_smoke():
     """Test function to add two numbers and return the result."""
-    return randint(1, 100) + randint(1, 100)
+    number = randint(1, 100) + randint(1, 100)
+    log.info("Running a test result {0}".format(number))
+    return number
 
 
 @SPROUT.task()
