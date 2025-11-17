@@ -1,5 +1,5 @@
 from workflows.hud.tasks.hud_oanda import show_account_information
 
 
-def test__update_dashboard_trello_current_cards_info_trading():
+def test__show_account_information():
     show_account_information("OANDA")
