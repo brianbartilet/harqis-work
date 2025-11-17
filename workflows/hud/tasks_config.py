@@ -35,7 +35,6 @@ Example task 'run-test-sample-workflow' is scheduled to run every 10 seconds, ex
 the 'run_sample_workflow_add' function with specified arguments.
 """
 WORKFLOWS_HUD = {
-    # region Tasks To Test
 
     'run-job--show_account_information': {
         'task': 'workflows.hud.tasks.hud_forex.show_account_information',
@@ -45,10 +44,9 @@ WORKFLOWS_HUD = {
 
     'run-job--show_pending_drop_off_orders': {
         'task': 'workflows.hud.tasks.hud_tcg.show_pending_drop_off_orders',
-        'schedule': timedelta(seconds=20),
+        'schedule': timedelta(minutes=30),
         'args': ["TCG_MP"],
     },
 
-    # endregion
 }
 
