@@ -3,7 +3,7 @@ version: 1
 disable_existing_loggers: true  # Disables all loggers created prior to this configuration
 
 # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
-level: DEBUG  # The root logger will log debug and higher-level messages
+level: INFO  # The root logger will log debug and higher-level messages
 
 # Formatter definitions
 formatters:
@@ -16,7 +16,7 @@ formatters:
 handlers:
   console:  # Console handler to output logs to stdout
     class: logging.StreamHandler  # Uses Python's built-in StreamHandler
-    level: DEBUG  # Captures debug and higher level messages
+    level: INFO  # Captures debug and higher level messages
     formatter: simple  # Uses the 'simple' formatter
     stream: ext://sys.stdout  # Specifies that the stream is standard output
 
@@ -46,12 +46,12 @@ loggers:
     propagate: no  # Prevents logs from propagating to the root logger
 
   debug:  # Custom logger for debugging purposes
-    level: DEBUG  # Captures all log messages
+    level: INFO  # Captures all log messages
     handlers: [console, debuglogfile]  # Uses console and debuglogfile handlers
     propagate: no  # Prevents logs from propagating to the root logger
 
 # Root logger configuration
 root:
-  level: DEBUG  # Captures debug and higher level messages
+  level: INFO  # Captures debug and higher level messages
   handlers: [console, logfile]  # Uses console and logfile handlers
   propagate: no  # Prevents logs from propagating further

@@ -34,19 +34,19 @@ This includes:
 Example task 'run-test-sample-workflow' is scheduled to run every 10 seconds, executing
 the 'run_sample_workflow_add' function with specified arguments.
 """
-WORKFLOW_HUD_OANDA = {
+WORKFLOWS_HUD = {
     # region Tasks To Test
 
-    'run-test--example-hud': {
-        'task': 'workflows.hud.tasks.hud_oanda.task_smoke',
-        'schedule': timedelta(seconds=5),
-        'args': [],
+    'run-job--show_account_information': {
+        'task': 'workflows.hud.tasks.hud_forex.show_account_information',
+        'schedule': timedelta(minutes=15),
+        'args': ["OANDA"],
     },
 
-    'run-job--show_account_information': {
-        'task': 'workflows.hud.tasks.hud_oanda.show_account_information',
+    'run-job--show_pending_drop_off_orders': {
+        'task': 'workflows.hud.tasks.hud_tcg.show_pending_drop_off_orders',
         'schedule': timedelta(seconds=20),
-        'args': ["OANDA"],
+        'args': ["TCG_MP"],
     },
 
     # endregion
