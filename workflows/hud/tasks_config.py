@@ -34,31 +34,15 @@ This includes:
 Example task 'run-test-sample-workflow' is scheduled to run every 10 seconds, executing
 the 'run_sample_workflow_add' function with specified arguments.
 """
-WORKFLOW_PURCHASES = {
+WORKFLOW_HUD_OANDA = {
     # region Tasks To Test
 
-    'run-test-example-run-tcg': {
-        'task': 'workflows.purchases.tasks.tcg_mp_selling.task_smoke',
+    'run-test-example-run-hud': {
+        'task': 'workflows.hud.tasks.hud_oanda.task_smoke',
         'schedule': timedelta(seconds=30),
         'args': [],
     },
 
-    'run-job--generate_tcg_mappings': {
-        'task': 'workflows.purchases.tasks.tcg_mp_selling.generate_tcg_mappings',
-        'schedule': timedelta(days=1),
-        'args': [
-            "TCG_MP",
-            "ECHO_MTG",
-            "ECHO_MTG_FE",
-            "SCRYFALL"
-        ],
-    },
-
-    'run-job--download_scryfall_bulk_data': {
-        'task': 'workflows.purchases.tasks.tcg_mp_selling.download_scryfall_bulk_data',
-        'schedule': timedelta(days=30),
-        'args': [],
-    },
     # endregion
 }
 
