@@ -1,5 +1,3 @@
-import time
-
 from apps.scryfall.references.dto.card import DtoScryFallCard
 from apps.scryfall.references.web.base_api_service import BaseApiServiceAppScryfallMtg
 
