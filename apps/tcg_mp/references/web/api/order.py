@@ -1,6 +1,6 @@
 from typing import List, Any
 
-from apps.tcg_mp.references.dto.order import DtoOrderSummaryByStatus
+from apps.tcg_mp.references.dto.order import DtoOrderSummaryByStatus, EnumTcgOrderStatus
 from apps.tcg_mp.references.web.base_api_service import BaseApiServiceAppTcgMp
 
 from core.web.services.core.decorators.deserializer import deserialized
@@ -19,7 +19,7 @@ class ApiServiceTcgMpOrder(BaseApiServiceAppTcgMp):
             .set_base_uri('order')
 
     @deserialized(List[DtoOrderSummaryByStatus], child='data', many=True)
-    def get_orders(self, by_status: int = None):
+    def get_orders(self, by_status: EnumTcgOrderStatus = EnumTcgOrderStatus.PENDING_DROP_OFF):
         payload = {
             'date_range_from': None,
             'date_range_to': None,
@@ -29,7 +29,7 @@ class ApiServiceTcgMpOrder(BaseApiServiceAppTcgMp):
             'order_id': None,
             'page': None,
             'sort_by': None,
-            'status': by_status,
+            'status': by_status.value[0],
         }
         self.request.post() \
             .add_uri_parameter('filter') \

@@ -1,4 +1,4 @@
-from workflows.hud.tasks.hud_oanda import show_account_information
+from workflows.hud.tasks.hud_forex import show_account_information
 
 
 def test__show_account_information():

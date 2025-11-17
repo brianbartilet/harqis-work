@@ -1,24 +1,12 @@
-from random import randint
-
 from core.apps.sprout.app.celery import SPROUT
-from core.utilities.logging.custom_logger import logger as log
 from core.utilities.data.qlist import QList
 
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_config
 
 from apps.oanda.references.web.api.account import ApiServiceOandaAccount
 from apps.oanda.references.web.api.open_trades import ApiServiceTrades
-
+from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
-RAINMETER_CONFIG = CONFIG_MANAGER.get("RAINMETER")
-
-
-@SPROUT.task()
-def task_smoke():
-    """Test function to add two numbers and return the result."""
-    number = randint(1, 100) + randint(1, 100)
-    log.info("Running a test result {0}".format(number))
-    return number
 
 
 _sections__account_oanda = {

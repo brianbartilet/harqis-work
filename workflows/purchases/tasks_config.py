@@ -36,12 +36,6 @@ the 'run_sample_workflow_add' function with specified arguments.
 WORKFLOW_PURCHASES = {
     # region Tasks To Test
 
-    'run-test--example-tcg': {
-        'task': 'workflows.purchases.tasks.tcg_mp_selling.task_smoke',
-        'schedule': timedelta(seconds=5),
-        'args': [],
-    },
-
     'run-job--generate_tcg_mappings': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.generate_tcg_mappings',
         'schedule': timedelta(days=1),
