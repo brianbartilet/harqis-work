@@ -45,7 +45,7 @@ WORKFLOW_HUD_OANDA = {
 
     'run-job--show_account_information': {
         'task': 'workflows.hud.tasks.hud_oanda.show_account_information',
-        'schedule': timedelta(minutes=20),
+        'schedule': timedelta(seconds=20),
         'args': ["OANDA"],
     },
 

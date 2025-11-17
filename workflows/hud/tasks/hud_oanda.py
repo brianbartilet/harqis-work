@@ -7,6 +7,7 @@ from core.utilities.data.qlist import QList
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_config
 
 from apps.oanda.references.web.api.account import ApiServiceOandaAccount
+from apps.oanda.references.web.api.open_trades import ApiServiceTrades
 
 from apps.apps_config import CONFIG_MANAGER
 RAINMETER_CONFIG = CONFIG_MANAGER.get("RAINMETER")
@@ -52,11 +53,11 @@ def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter()):
 
     account_details = service.get_account_details(account_use.id)
 
-    #service_trades = ApiServiceOandaAccount(oanda_id)
-    #open_trades = service_trades.get_trades_from_account(account_use.id)
-    open_trades = []  # some Y offset
+    service_trades = ApiServiceTrades(cfg__oanda)
+    open_trades = service_trades.get_trades_from_account(account_use.id)
 
     ini['Variables']['ItemLines'] = '{0}'.format(len(open_trades) + 2)
+
     ini['meterLink']['text'] = "Board"
     ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(board_url)
     ini['meterLink']['tooltiptext'] = board_url
@@ -67,11 +68,11 @@ def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter()):
     ini['meterLink_broker']['MeterStyle'] = 'sItemLink'
     ini['meterLink_broker']['X'] = '(40*#Scale#)'
     ini['meterLink_broker']['Y'] = '(38*#Scale#)'
-    ini['meterLink_broker']['W'] = '181'
-    ini['meterLink_broker']['H'] = '14'
-    ini['meterLink_broker']['StringStyle'] = 'Italic'
+    ini['meterLink_broker']['W'] = '60'
+    ini['meterLink_broker']['H'] = '55'
     ini['meterLink_broker']['Text'] = '|Broker'
     ini['meterLink_broker']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(broker_url)
+    ini['meterLink_broker']['tooltiptext'] = broker_url
     #  endregion
 
     #  region Section: meterLink_news
@@ -80,11 +81,11 @@ def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter()):
     ini['meterLink_news']['MeterStyle'] = 'sItemLink'
     ini['meterLink_news']['X'] = '(82*#Scale#)'
     ini['meterLink_news']['Y'] = '(38*#Scale#)'
-    ini['meterLink_news']['W'] = '181'
+    ini['meterLink_news']['W'] = '55'
     ini['meterLink_news']['H'] = '14'
-    ini['meterLink_news']['StringStyle'] = 'Italic'
     ini['meterLink_news']['Text'] = '|News'
     ini['meterLink_news']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(news_url)
+    ini['meterLink_news']['tooltiptext'] = news_url
     #  endregion
 
     #  region Section: meterlink_metrics
@@ -93,26 +94,25 @@ def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter()):
     ini['meterLink_metrics']['MeterStyle'] = 'sItemLink'
     ini['meterLink_metrics']['X'] = '(112*#Scale#)'
     ini['meterLink_metrics']['Y'] = '(38*#Scale#)'
-    ini['meterLink_metrics']['W'] = '181'
+    ini['meterLink_metrics']['W'] = '55'
     ini['meterLink_metrics']['H'] = '14'
-    ini['meterLink_metrics']['StringStyle'] = 'Italic'
     ini['meterLink_metrics']['Text'] = '|Metrics'
     ini['meterLink_metrics']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(url)
+    ini['meterLink_metrics']['tooltiptext'] = url
     #  endregion
 
     ini['MeterDisplay']['W'] = '180'
     ini['MeterDisplay']['H'] = '300'
 
-    #dump = '{0}  {1}  $ {2:>10}\n'.format("TOTAL:", "UPL ", round(float(account_details.unrealized_pl), 2))
-    dump = '{0}  {1}  $ {2:>10}\n'.format("TOTAL:", "UPL ", round(float(0), 2))
+    dump = '{0}  {1}  $ {2:>10}\n'.format("TOTAL:", "UPL ", round(float(account_details.NAV), 2))
     for trade in open_trades:
-        unrealized_profit_loss = round(float(trade.unrealized_pl), 2)
-        dump = dump + '{0}  {1}  $ {2:>10}\n'.format(str(trade.instrument).replace('_', ''),
-                                                     'SELL'if '-' in str(trade.current_units) else 'BUY ',
+        unrealized_profit_loss = round(float(trade['unrealizedPL']), 2)
+        dump = dump + '{0}  {1}  $ {2:>10}\n'.format(str(trade['instrument']).replace('_', ''),
+                                                     'SELL'if '-' in str(trade['currentUnits']) else 'BUY ',
                                                      '{0}{1}'.format('+' if '-' not in str(unrealized_profit_loss)
                                                                      else '',
                                                      str(round(unrealized_profit_loss, 2))),
                                                )
 
-    return
+    return dump
 

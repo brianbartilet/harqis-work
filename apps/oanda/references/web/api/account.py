@@ -3,7 +3,6 @@ from typing import List
 from apps.oanda.references.web.base_api_service import BaseApiServiceAppOanda
 from apps.oanda.references.dto.user_account import DtoAccountProperties, DtoAccountDetails, DtoAccountInstruments
 from core.web.services.core.decorators.deserializer import deserialized
-from core.web.services.core.contracts.response import IResponse
 
 
 class ApiServiceOandaAccount(BaseApiServiceAppOanda):
@@ -29,7 +28,7 @@ class ApiServiceOandaAccount(BaseApiServiceAppOanda):
 
         return self.client.execute_request(self.request.build())
 
-    #@deserialized(DtoAccountInstruments, child='instruments')
+    @deserialized(DtoAccountInstruments, child='instruments')
     def get_account_instrument_details(self, account_id, currency_name=None):
         self.request.get() \
             .add_uri_parameter(account_id)\
