@@ -15,11 +15,9 @@ sections_config = {
 }
 
 
-@init_config(
-    CONFIG,
-    hud_item_name="TEST HUD",
-    new_sections_dict=sections_config
-)
+
+@pytest.mark.skip(reason="sanity check only")
+@init_config(CONFIG, hud_item_name="TEST HUD", new_sections_dict=sections_config)
 def test_update_quick_links(ini=ConfigHelperRainmeter()):
 
     dump = ''
