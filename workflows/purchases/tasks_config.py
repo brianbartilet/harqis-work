@@ -21,6 +21,7 @@ References:
 
 from datetime import timedelta
 
+from future.backports.http.cookiejar import month
 
 """
 A dictionary mapping task identifiers to their configuration for scheduling.
@@ -42,6 +43,22 @@ WORKFLOW_PURCHASES = {
         'args': [],
     },
 
+    'run-job--generate_tcg_mappings': {
+        'task': 'workflows.purchases.tasks.tcg_mp_selling.generate_tcg_mappings',
+        'schedule': timedelta(days=1),
+        'args': [
+            "TCG_MP",
+            "ECHO_MTG",
+            "ECHO_MTG_FE",
+            "SCRYFALL"
+        ],
+    },
+
+    'run-job--download_scryfall_bulk_data': {
+        'task': 'workflows.purchases.tasks.tcg_mp_selling.download_scryfall_bulk_data',
+        'schedule': timedelta(days=30),
+        'args': [],
+    },
     # endregion
 }
 
