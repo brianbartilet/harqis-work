@@ -15,6 +15,7 @@ from apps.tcg_mp.references.web.api.view import ApiServiceTcgMpUserView
 from apps.tcg_mp.references.web.api.order import ApiServiceTcgMpOrder
 from apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
 from apps.scryfall.references.web.api.cards import ApiServiceScryfallCards
+from apps.scryfall.references.web.api.bulk import ApiServiceScryfallBulkData
 
 from workflows.purchases.dto.notes_jnfo import DtoNotesInformation
 
@@ -26,11 +27,7 @@ def add_random_numbers():
 
 
 @SPROUT.task()
-def generate_tcg_mappings(cfg_id__tcg_mp: str,
-                          cfg_id__echo_mtg: str,
-                          cfg_id__echo_mtg_fe: str,
-                          cfg_id__scryfall: str,
-                          scryfall_max_retries=10):
+def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__echo_mtg_fe: str, cfg_id__scryfall: str):
     """ ../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
 
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
@@ -41,8 +38,6 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str,
     api_service__echo_mtg_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
     api_service__echo_mtg_notes = ApiServiceEchoMTGNotes(cfg__echo_mtg)
     api_service__echo_mtg_cards_fe = ApiServiceEchoMTGCardItem(cfg__echo_mtg_fe)
-    api_service__tcg_mp_view = ApiServiceTcgMpUserView(cfg__tcg_mp)
-    api_service__tcg_mp_order = ApiServiceTcgMpOrder(cfg__tcg_mp)
     api_service__tcg_mp_products = ApiServiceTcgMpProducts(cfg__tcg_mp)
     api_service__scryfall_cards = ApiServiceScryfallCards(cfg__scryfall)
 
@@ -111,12 +106,16 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str,
     return
 
 
-def _get_scryfall_card_metadata(
-        api_service__scryfall_cards: ApiServiceScryfallCards,
-        guid: str,
-        card_name: str,
-        scryfall_max_retries: int = 10
-    ):
+@SPROUT.task()
+def download_scryfall_bulk_data(cfg_id__scryfall: str):
+    cfg__scryfall = CONFIG_MANAGER.get(cfg_id__scryfall)
+    api_service__scryfall_cards_bulk = ApiServiceScryfallBulkData(cfg__scryfall)
+    api_service__scryfall_cards_bulk.download_bulk_file()
+
+    return
+
+def _get_scryfall_card_metadata(api_service__scryfall_cards: ApiServiceScryfallCards, guid: str, card_name: str,
+                                scryfall_max_retries: int = 10):
     """ Helper function to get scryfall card metadata with retries. """
     scryfall_card = None
     for attempt in range(1, scryfall_max_retries + 1):
