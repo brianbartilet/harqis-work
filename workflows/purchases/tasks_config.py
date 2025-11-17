@@ -38,8 +38,8 @@ WORKFLOW_PURCHASES = {
     # region Tasks To Test
 
     'run-test-example-run': {
-        'task': 'workflows.purchases.tasks.tcg_mp_selling.add_random_numbers',
-        'schedule': timedelta(seconds=10),
+        'task': 'workflows.purchases.tasks.tcg_mp_selling.task_smoke',
+        'schedule': timedelta(seconds=30),
         'args': [],
     },
 
