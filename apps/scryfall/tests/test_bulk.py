@@ -12,7 +12,7 @@ def given_account():
     return given_service
 
 
-#@pytest.mark.skip(reason="sanity check only")
+@pytest.mark.skip(reason="sanity check only")
 def test_download(given_account):
     given_account.download_bulk_file()
 
