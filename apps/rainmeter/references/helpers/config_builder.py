@@ -25,7 +25,7 @@ def init_config(
     new_sections_dict: Optional[Dict[str, Dict[str, str]]] = None,
     reset_alerts_secs: int = 10,
     play_sound: bool = True,
-    always_alert: bool = False,
+    always_alert: bool = False
 ) -> Callable:
     """
     Decorator: prepares Rainmeter skin dirs, renders an INI from a template,

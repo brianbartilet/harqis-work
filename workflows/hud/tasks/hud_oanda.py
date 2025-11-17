@@ -20,7 +20,7 @@ def task_smoke():
     return number
 
 
-_sections_config__account_oanda = {
+_sections__account_oanda = {
     "meterLink_broker": {
         "Preset": "InjectedByTest",
     },
@@ -35,9 +35,8 @@ _sections_config__account_oanda = {
 @SPROUT.task()
 @init_config(RAINMETER_CONFIG,
              hud_item_name='OANDA ACCOUNT',
-             play_sound=True,
-             new_sections_dict=_sections_config__account_oanda
-             )
+             new_sections_dict=_sections__account_oanda,
+             play_sound=True)
 def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter()):
 
     cfg__oanda = CONFIG_MANAGER.get(cfg_id__oanda)
@@ -55,7 +54,7 @@ def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter()):
 
     #service_trades = ApiServiceOandaAccount(oanda_id)
     #open_trades = service_trades.get_trades_from_account(account_use.id)
-    open_trades = []
+    open_trades = []  # some Y offset
 
     ini['Variables']['ItemLines'] = '{0}'.format(len(open_trades) + 2)
     ini['meterLink']['text'] = "Board"
