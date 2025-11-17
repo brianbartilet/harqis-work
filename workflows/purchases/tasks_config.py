@@ -21,7 +21,6 @@ References:
 
 from datetime import timedelta
 
-from future.backports.http.cookiejar import month
 
 """
 A dictionary mapping task identifiers to their configuration for scheduling.
@@ -37,9 +36,9 @@ the 'run_sample_workflow_add' function with specified arguments.
 WORKFLOW_PURCHASES = {
     # region Tasks To Test
 
-    'run-test-example-run-tcg': {
+    'run-test--example-tcg': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.task_smoke',
-        'schedule': timedelta(seconds=30),
+        'schedule': timedelta(seconds=5),
         'args': [],
     },
 
