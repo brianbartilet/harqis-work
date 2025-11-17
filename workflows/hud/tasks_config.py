@@ -37,10 +37,16 @@ the 'run_sample_workflow_add' function with specified arguments.
 WORKFLOW_HUD_OANDA = {
     # region Tasks To Test
 
-    'run-test-example-run-hud': {
+    'run-test--example-hud': {
         'task': 'workflows.hud.tasks.hud_oanda.task_smoke',
-        'schedule': timedelta(seconds=30),
+        'schedule': timedelta(seconds=5),
         'args': [],
+    },
+
+    'run-job--show_account_information': {
+        'task': 'workflows.hud.tasks.hud_oanda.show_account_information',
+        'schedule': timedelta(minutes=20),
+        'args': ["OANDA"],
     },
 
     # endregion

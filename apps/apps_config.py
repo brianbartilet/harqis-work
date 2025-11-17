@@ -1,6 +1,3 @@
-from celery import Celery
-from celery import Task
-
 from core.config.env_variables import ENV_APP_CONFIG, ENV_APP_CONFIG_FILE
 from core.config.loader import ConfigLoaderService
 from core.config.app_config_manager import AppConfigManager

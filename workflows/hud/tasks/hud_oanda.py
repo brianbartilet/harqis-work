@@ -5,10 +5,11 @@ from core.utilities.logging.custom_logger import logger as log
 from core.utilities.data.qlist import QList
 
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_config
-from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
+
 from apps.oanda.references.web.api.account import ApiServiceOandaAccount
 
 from apps.apps_config import CONFIG_MANAGER
+RAINMETER_CONFIG = CONFIG_MANAGER.get("RAINMETER")
 
 
 @SPROUT.task()
@@ -100,8 +101,8 @@ def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter()):
     ini['meterLink_metrics']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(url)
     #  endregion
 
-    #ini['MeterDisplay']['W'] = '180'
-    #ini['MeterDisplay']['H'] = '300'
+    ini['MeterDisplay']['W'] = '180'
+    ini['MeterDisplay']['H'] = '300'
 
     #dump = '{0}  {1}  $ {2:>10}\n'.format("TOTAL:", "UPL ", round(float(account_details.unrealized_pl), 2))
     dump = '{0}  {1}  $ {2:>10}\n'.format("TOTAL:", "UPL ", round(float(0), 2))
@@ -114,5 +115,5 @@ def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter()):
                                                      str(round(unrealized_profit_loss, 2))),
                                                )
 
-    return dump
+    return
 

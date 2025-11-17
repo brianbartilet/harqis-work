@@ -31,3 +31,4 @@ APP_NAME = str(os.path.basename(os.path.dirname(os.path.abspath(__file__)))).upp
 # with the specific configuration for this application, fetched by keying into
 # the 'load_config' dictionary with 'APP_NAME'.
 CONFIG = AppConfigWSClient(**load_config[APP_NAME])
+
