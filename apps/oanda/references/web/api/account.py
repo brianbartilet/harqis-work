@@ -1,7 +1,10 @@
+from typing import List
+
 from apps.oanda.references.web.base_api_service import BaseApiServiceAppOanda
 from apps.oanda.references.dto.user_account import DtoAccountProperties, DtoAccountDetails, DtoAccountInstruments
 from core.web.services.core.decorators.deserializer import deserialized
 from core.web.services.core.contracts.response import IResponse
+
 
 class ApiServiceOandaAccount(BaseApiServiceAppOanda):
 
@@ -13,7 +16,7 @@ class ApiServiceOandaAccount(BaseApiServiceAppOanda):
         self.request\
             .set_base_uri('accounts')
 
-    @deserialized(list[DtoAccountProperties], child='accounts', many=True)
+    @deserialized(List[DtoAccountProperties], child='accounts', many=True)
     def get_account_info(self):
         self.request.get()
 

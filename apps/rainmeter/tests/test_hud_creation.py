@@ -4,13 +4,17 @@ from apps.rainmeter.references.helpers.config_builder import init_config, Config
 from apps.rainmeter.config import CONFIG
 
 sections_config = {
+        "meterLink": {
+            "Preset": "InjectedByTest",
+            "W": "181"  # values must be strings
+        },
         "meterLink_google": {
             "Preset": "InjectedByTest",
             "W": "181"  # values must be strings
         }
 }
 
-@pytest.mark.skip
+
 @init_config(
     CONFIG,
     hud_item_name="TEST HUD",
