@@ -59,7 +59,8 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
 
         return answer
 
-    screenshot.take_screenshot_all_monitors(prefix='screenshot-desktop-check')
+    path = os.path.join(os.getcwd(), 'screenshots')
+    screenshot.take_screenshot_all_monitors(save_dir=path, prefix='screenshot-desktop-check')
 
     answer_ = ask_check_desktop()
     screenshot.cleanup_screenshots()
