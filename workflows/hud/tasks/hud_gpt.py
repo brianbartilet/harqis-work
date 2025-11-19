@@ -43,9 +43,8 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
                             instructions='Can you analyze the screenshots and provide me with a summary of '
                                          'what is currently displayed on my desktop? '
                                          'Provide insights on any important details and suggest any actions I might '
-                                         'consider taking based on what you see. '
-                                         'Perform only direct analysis from what is displayed. '
-                                         'Be very concise in around 200 tokens or less. '
+                                         'consider taking based on what you see and what details I need to note. '
+                                         'Be very concise in 200 tokens or less. '
                                          'Provide a text-only response in one go as I would like to use this in a HUD.',
                             tools = [{"type": "code_interpreter"}],
                             tool_resources={
@@ -53,7 +52,7 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
                                                     "file_ids": ASSISTANT_CHAT.attachments
                                                 }
                                             },
-                            temperature=0.2
+                            temperature=0.4
                             )
         ASSISTANT_CHAT.run_thread(run=trigger)
         ASSISTANT_CHAT.wait_for_runs_to_complete()
