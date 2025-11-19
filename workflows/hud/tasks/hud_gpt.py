@@ -25,34 +25,33 @@ _sections__check_desktop = {
              new_sections_dict=_sections__check_desktop,
              play_sound=False)
 def get_helper_information(ini=ConfigHelperRainmeter()):
-    ASSISTANT_CHAT = BaseAssistant()
-    ASSISTANT_CHAT.load(assistant_id=ASSISTANT_CHAT.config.app_data['default_assistant_id_desktop'])
+    assistant_chat = BaseAssistant()
+    assistant_chat.load(assistant_id=assistant_chat.config.app_data['default_assistant_id_desktop'])
 
     def ask_check_desktop():
         messages = [
             MessageCreate(role='user',
-                          content='Analyze my desktop and try to understand what I am doing and possible tasks. '
+                          content='Analyze my desktop and try to understand what I am doing and possible tasks along '
+                                  'with screenshots of my desktop and open applications. '
                                   'Provide suggestions on how to improve my productivity based on what you see '
                                   'and if possible do some coding analysis and suggest other areas if I am consuming media.'
                                   'Make it in a few plain text bullet points (less than 8) and do not use markdown.'
-                                  'Be super concise do not explain yourself and but try to run an OCR on the desktop '
-                                  'to understand the context. ')
+                                  'Be super concise do not explain yourself and but try to be creative and relevant. '),
         ]
-        ASSISTANT_CHAT.add_messages_to_thread(messages)
+        assistant_chat.add_messages_to_thread(messages)
         path = os.path.join(os.getcwd(), 'screenshots')
-        ASSISTANT_CHAT.upload_files(path)
-        trigger = RunCreate(assistant_id=ASSISTANT_CHAT.properties.id,
+        assistant_chat.upload_files(path)
+        trigger = RunCreate(assistant_id=assistant_chat.properties.id,
                             tools = [{"type": "code_interpreter"}],
                             tool_resources={
                                                 "code_interpreter": {
-                                                    "file_ids": ASSISTANT_CHAT.attachments
+                                                    "file_ids": assistant_chat.attachments
                                                 }
-                                            },
-                            temperature=0.5
+                                            }
                             )
-        ASSISTANT_CHAT.run_thread(run=trigger)
-        ASSISTANT_CHAT.wait_for_runs_to_complete()
-        replies = ASSISTANT_CHAT.get_replies()
+        assistant_chat.run_thread(run=trigger)
+        assistant_chat.wait_for_runs_to_complete()
+        replies = assistant_chat.get_replies()
         answer = [x.content[0].text.value for x in replies]
         answer.sort(reverse=True)
 
@@ -60,6 +59,7 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
 
     path = os.path.join(os.getcwd(), 'screenshots')
     screenshot.take_screenshot_all_monitors(save_dir=path, prefix='screenshot-desktop-check')
+    screenshot.take_screenshot_all_windows(save_dir=path)
 
     answer_ = ask_check_desktop()
     screenshot.cleanup_screenshots()
