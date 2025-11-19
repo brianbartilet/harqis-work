@@ -35,7 +35,7 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
                           content='Analyze my desktop and try to understand what I am doing and possible tasks. '
                                   'Provide suggestions on how to improve my productivity based on what you see '
                                   'and if possible do some coding analysis and suggest other areas if I am consuming media.'
-                                  'Make it in a few plain text bullet points (less than 10) and do not use markdown.'
+                                  'Make it in a few plain text bullet points (less than 8) and do not use markdown.'
                                   'Be super concise do not explain yourself and but try to run an OCR on the desktop '
                                   'to understand the context. ')
         ]
