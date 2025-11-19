@@ -33,7 +33,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, ini=ConfigHelperRainmeter()):
     service = ApiServiceTcgMpOrder(cfg__tcg_mp)
     orders = service.get_orders()
 
-    ini['Variables']['ItemLines'] = '{0}'.format(len(orders[0].data))
+    ini['Variables']['ItemLines'] = '{0}'.format(len(orders[0].data) - 2)
 
     ini['meterLink']['text'] = "Collection"
     ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(collection_url)
