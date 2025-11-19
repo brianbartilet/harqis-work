@@ -52,7 +52,7 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
                                                     "file_ids": ASSISTANT_CHAT.attachments
                                                 }
                                             },
-                            temperature=0.3
+                            temperature=0.7
                             )
         ASSISTANT_CHAT.run_thread(run=trigger)
         ASSISTANT_CHAT.wait_for_runs_to_complete()
