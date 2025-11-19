@@ -13,7 +13,7 @@ from core.apps.gpt.models.assistants.message import MessageCreate
 from core.apps.gpt.models.assistants.run import RunCreate
 
 ASSISTANT_CHAT = BaseAssistant()
-ASSISTANT_CHAT.load()
+ASSISTANT_CHAT.load(create=False)
 
 _sections__check_desktop = {
     "meterLink_github": {
