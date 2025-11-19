@@ -12,9 +12,6 @@ from core.apps.gpt.assistants.base import BaseAssistant
 from core.apps.gpt.models.assistants.message import MessageCreate
 from core.apps.gpt.models.assistants.run import RunCreate
 
-ASSISTANT_CHAT = BaseAssistant()
-ASSISTANT_CHAT.load(assistant_id=ASSISTANT_CHAT.config.app_data['default_assistant_id_desktop'])
-
 _sections__check_desktop = {
     "meterLink_github": {
         "Preset": "InjectedByTest",
@@ -28,6 +25,8 @@ _sections__check_desktop = {
              new_sections_dict=_sections__check_desktop,
              play_sound=False)
 def get_helper_information(ini=ConfigHelperRainmeter()):
+    ASSISTANT_CHAT = BaseAssistant()
+    ASSISTANT_CHAT.load(assistant_id=ASSISTANT_CHAT.config.app_data['default_assistant_id_desktop'])
 
     def ask_check_desktop():
         messages = [
