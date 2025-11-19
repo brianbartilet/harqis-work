@@ -99,7 +99,7 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
 
     dump = wrap_text(answer_, width=65)
 
-    ini['Variables']['ItemLines'] = '{0}'.format(1+ len(re.findall(r'\r\n|\r|\n', dump)))
+    ini['Variables']['ItemLines'] = '{0}'.format(len(re.findall(r'\r\n|\r|\n', dump)))
 
     return dump
 
