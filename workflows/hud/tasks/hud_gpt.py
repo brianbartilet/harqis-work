@@ -41,7 +41,7 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
         ASSISTANT_CHAT.upload_files(path)
         trigger = RunCreate(assistant_id=ASSISTANT_CHAT.properties.id,
                             instructions='Analyze the desktop screenshots on what I am currently working on or doing. '
-                                         'Provide insights on any important details and suggest any actions I might '
+                                         'Provide direct insights on any important details and suggest any actions I might '
                                          'consider taking based on what you see and what details I need to note. '
                                          'Be very concise in 300 tokens or less. '
                                          'Provide a text-only response in one go as I would like to use this in a HUD.',
