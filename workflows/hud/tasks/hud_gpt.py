@@ -13,7 +13,7 @@ from core.apps.gpt.models.assistants.message import MessageCreate
 from core.apps.gpt.models.assistants.run import RunCreate
 
 ASSISTANT_CHAT = BaseAssistant()
-ASSISTANT_CHAT.load(create=False)
+ASSISTANT_CHAT.load(assistant_id=ASSISTANT_CHAT.config.app_data['default_assistant_id_desktop'])
 
 _sections__check_desktop = {
     "meterLink_github": {
@@ -31,20 +31,18 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
 
     def ask_check_desktop():
         messages = [
-            MessageCreate(role='user', content='You are an expert desktop analyst. You have access to screenshots of '
-                                               'my current desktop environment.  Please avoid mentioning screenshots '
-                                               'but instead make it desktop ')
+            MessageCreate(role='user',
+                          content='Analyze my desktop and try to understand what I am doing and possible tasks. '
+                                  'Provide suggestions on how to improve my productivity based on what you see '
+                                  'and if possible do some coding analysis and suggest other areas if I am consuming media.'
+                                  'Make it in plain text bullet points and do not use markdown.'
+                                  'Be concise do not explain yourself and but try to run an OCR on the desktop '
+                                  'to understand the context. ')
         ]
         ASSISTANT_CHAT.add_messages_to_thread(messages)
         path = os.path.join(os.getcwd(), 'screenshots')
         ASSISTANT_CHAT.upload_files(path)
         trigger = RunCreate(assistant_id=ASSISTANT_CHAT.properties.id,
-                            instructions='Analyze the desktop screenshots on what I am currently working on or doing. '
-                                         'Provide direct insights on any important details and suggest any actions I might '
-                                         'consider taking based on what you see and what details I need to note. '
-                                         'Be super concise and direct.'
-                                         'Do not provide explanations for you actions only suggestions'
-                                         'Provide a text-only response in one go as I would like to use this in a HUD.',
                             tools = [{"type": "code_interpreter"}],
                             tool_resources={
                                                 "code_interpreter": {
@@ -83,7 +81,7 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
     ini['meterLink_github']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(github_work_url)
     ini['meterLink_github']['tooltiptext'] = github_work_url
 
-    width_multiplier = 2.5
+    width_multiplier = 2.3
     ini['MeterDisplay']['W'] = '({0}*198*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '1000'
 
@@ -101,7 +99,7 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
 
     dump = wrap_text(answer_, width=65)
 
-    ini['Variables']['ItemLines'] = '{0}'.format(2 + len(re.findall(r'\r\n|\r|\n', dump)))
+    ini['Variables']['ItemLines'] = '{0}'.format(1+ len(re.findall(r'\r\n|\r|\n', dump)))
 
     return dump
 
