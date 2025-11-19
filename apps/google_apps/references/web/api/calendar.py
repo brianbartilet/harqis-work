@@ -10,6 +10,7 @@ import functools
 
 
 def holidays_aware(country_code='en.philippines'):
+
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -28,7 +29,6 @@ def holidays_aware(country_code='en.philippines'):
             except TypeError:
                 log.error("Invalid country code: '{0}'".format(country_code))
                 raise TypeError
-
 
         return wrapper
 

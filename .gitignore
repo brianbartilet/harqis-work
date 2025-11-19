@@ -12,3 +12,4 @@ venv
 *.log*
 *.egg
 *.egg-info/
+screenshots/

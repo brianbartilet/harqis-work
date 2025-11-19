@@ -48,5 +48,14 @@ WORKFLOWS_HUD = {
         'args': ["TCG_MP"],
     },
 
+    'run-job--get_helper_information': {
+        'task': 'workflows.hud.tasks.hud_gpt.get_helper_information',
+        'schedule': timedelta(minutes=2),
+        'args': ["TCG_MP"],
+    },
+
+
+
+
 }
 
