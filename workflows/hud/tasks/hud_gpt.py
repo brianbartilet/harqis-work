@@ -51,11 +51,7 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
                                                     "file_ids": ASSISTANT_CHAT.attachments
                                                 }
                                             },
-                            temperature=0.5,
-                            model={
-                                "name": "gpt-5.1",
-                                "max_output_tokens": 200
-                            }
+                            temperature=0.5
                             )
         ASSISTANT_CHAT.run_thread(run=trigger)
         ASSISTANT_CHAT.wait_for_runs_to_complete()
