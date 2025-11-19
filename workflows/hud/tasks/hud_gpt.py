@@ -2,7 +2,6 @@ import os
 import re
 
 from core.apps.sprout.app.celery import SPROUT
-from core.utilities.data.qlist import QList
 from core.utilities.screenshot import ScreenshotUtility as screenshot
 from core.utilities.data.strings import wrap_text
 
@@ -43,7 +42,7 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
                             instructions='Analyze the desktop screenshots on what I am currently working on or doing. '
                                          'Provide direct insights on any important details and suggest any actions I might '
                                          'consider taking based on what you see and what details I need to note. '
-                                         'Be super concise and direct in 200 tokens or less. '
+                                         'Be super concise and direct '
                                          'Do not provide explanations for you actions only suggestions'
                                          'Provide a text-only response in one go as I would like to use this in a HUD.',
                             tools = [{"type": "code_interpreter"}],
@@ -52,7 +51,8 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
                                                     "file_ids": ASSISTANT_CHAT.attachments
                                                 }
                                             },
-                            temperature=0.5
+                            temperature=0.5,
+                            max_output_tokens=200
                             )
         ASSISTANT_CHAT.run_thread(run=trigger)
         ASSISTANT_CHAT.wait_for_runs_to_complete()
