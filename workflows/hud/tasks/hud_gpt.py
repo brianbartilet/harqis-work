@@ -40,7 +40,7 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
         path = os.path.join(os.getcwd(), 'screenshots')
         ASSISTANT_CHAT.upload_files(path)
         trigger = RunCreate(assistant_id=ASSISTANT_CHAT.properties.id,
-                            instructions='Analyze the desktop screenshots on what I am currently working on. '
+                            instructions='Analyze the desktop screenshots on what I am currently working on or doing. '
                                          'Provide insights on any important details and suggest any actions I might '
                                          'consider taking based on what you see and what details I need to note. '
                                          'Be very concise in 300 tokens or less. '
@@ -51,7 +51,7 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
                                                     "file_ids": ASSISTANT_CHAT.attachments
                                                 }
                                             },
-                            temperature=0.7
+                            temperature=0.6
                             )
         ASSISTANT_CHAT.run_thread(run=trigger)
         ASSISTANT_CHAT.wait_for_runs_to_complete()
