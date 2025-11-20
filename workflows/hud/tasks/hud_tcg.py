@@ -89,7 +89,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
 
     width_multiplier = 2.5
     ini['MeterDisplay']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
-    ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*)*#Scale#)'
+    ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
 
     ini['Rainmeter']['SkinWidth'] = '({0}*198*#Scale#)'.format(width_multiplier)
     ini['Rainmeter']['SkinHeight'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
@@ -99,6 +99,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
                                        '| Scale #Scale#,#Scale#,0,0').format(width_multiplier)
     ini['MeterBackgroundTop']['Shape'] = ('Rectangle 3,3,({0}*187),25,2 | Fill Color #headerColor# | StrokeWidth 0 '
                                           '| Stroke Color [#darkColor] | Scale #Scale#,#Scale#,0,0').format(width_multiplier)
+
     ini['meterTitle']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
     ini['meterTitle']['X'] = '({0}*190*#Scale#)/2'.format(width_multiplier)
 
@@ -155,7 +156,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
         })
 
     sorted_data_single_card_name.sort(key=lambda r: sorted_mapping.index(r["color_identity"]))
-    ini['Variables']['ItemLines'] = '{0}'.format(len(sorted_data_single_card_name) + 3)
+
 
     total_amount = sum(safe_number(item["grand_total"]) for item in sorted_data_single_card_name)
     total_cards = sum(safe_number(item["quantity"]) for item in sorted_data_single_card_name)
