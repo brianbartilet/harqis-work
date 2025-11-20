@@ -31,11 +31,11 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
     def ask_check_desktop():
         messages = [
             MessageCreate(role='user',
-                          content='Analyze my desktop and try to understand what tasks am I doing based on the open windows,'
-                                  'Provide suggestions on how to improve my productivity based on what you see '
-                                  'and if possible do some analysis and suggest other areas of interest I could explore. '
-                                  'Make it in a few plain text bullet points (less than 10) and do not use markdown.'
-                                  'Be super concise do not explain yourself and but try to be creative and relevant. '),
+                          content='Analyze my desktop and try to understand what tasks am I doing based on the open applications,'
+                                  'Provide suggestions on how to improve my productivity based on what you see, '
+                                  'and do some analysis and suggest other areas of interest I could explore. '
+                                  'Make it in a few plain text paragraphs (less than 10) and do not use markdown.'
+                                  'Be super concise but try to be creative and relevant. '),
         ]
         assistant_chat.add_messages_to_thread(messages)
         path = os.path.join(os.getcwd(), 'screenshots')
@@ -60,7 +60,7 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
     screenshot.take_screenshot_all_monitors(save_dir=path, prefix='screenshot-desktop-check')
 
 
-    answer_ = ask_check_desktop()
+
     screenshot.cleanup_screenshots(save_dir=path, prefix='screenshot-desktop-check')
 
     chat_url = 'https://chatgpt.com/'
@@ -80,25 +80,31 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
     ini['meterLink_github']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(github_work_url)
     ini['meterLink_github']['tooltiptext'] = github_work_url
 
-    width_multiplier = 2.3
-    ini['MeterDisplay']['W'] = '({0}*198*#Scale#)'.format(width_multiplier)
-    ini['MeterDisplay']['H'] = '1000'
-
-    ini['Rainmeter']['SkinWidth'] = '({0}*198*#Scale#)'.format(width_multiplier)
-    ini['Rainmeter']['SkinHeight'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
+    width_multiplier = 2.32
+    ini['MeterDisplay']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
+    ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
+    ini['MeterDisplay']['X'] = '14'
+    ini['MeterDisplay']['MeasureName'] = 'MeasureLuaScriptScroll'
 
     ini['MeterBackground']['Shape'] = ('Rectangle 0,0,({0}*190),(36+(#ItemLines#*22)),2 | Fill Color #fillColor# '
                                        '| StrokeWidth (1*#Scale#) | Stroke Color [#darkColor] '
                                        '| Scale #Scale#,#Scale#,0,0').format(width_multiplier)
-    ini['MeterBackgroundTop']['Shape'] = ('Rectangle 3,3,({0}*187),25,2 | Fill Color #headerColor# | StrokeWidth 0 '
+
+    ini['MeterBackgroundTop']['Shape'] = ('Rectangle 3,3,({0}*186),25,2 | Fill Color #headerColor# | StrokeWidth 0 '
                                           '| Stroke Color [#darkColor] | Scale #Scale#,#Scale#,0,0').format(width_multiplier)
-    ini['MeterBackground']['H'] = ''
+    ini['Rainmeter']['SkinWidth'] = '({0}*198*#Scale#)'.format(width_multiplier)
+    ini['Rainmeter']['SkinHeight'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
     ini['meterTitle']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
-    ini['meterTitle']['X'] = '({0}*190*#Scale#)/2'.format(width_multiplier)
+    ini['meterTitle']['X'] = '({0}*198*#Scale#)/2'.format(width_multiplier)
 
-    dump = wrap_text(answer_, width=65)
+    #X = ((198 *  # Scale#)/2)
+    #      Y=(12 *  # Scale#)
+    #      W=(190 *  # Scale#)
 
-    ini['Variables']['ItemLines'] = '{0}'.format(len(re.findall(r'\r\n|\r|\n', dump)))
+    answer_ = ask_check_desktop()
+    dump = wrap_text(answer_, width=65, indent="\n")
+
+    ini['Variables']['ItemLines'] = '{0}'.format(len(re.findall(r'\r\n|\r|\n', dump))/4)
 
     return dump
 

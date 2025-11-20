@@ -159,11 +159,13 @@ def _ensure_dirs_and_resources(
     _copytree(static_path / "Options", skin_dir / "Options")
 
     if include_notes_bin:
-        src = static_path / "bin" / "LuaTextFile.lua"
-        dst = ini_dir / "LuaTextFile.lua"
-        if src.exists():
-            if not dst.exists() or src.stat().st_mtime > dst.stat().st_mtime:
-                dst.write_bytes(src.read_bytes())
+        bin_dir = static_path / "bin"
+        if bin_dir.exists():
+            # Copy ALL .lua files from bin → ini_dir
+            for src in bin_dir.glob("*.lua"):
+                dst = ini_dir / src.name
+                if not dst.exists() or src.stat().st_mtime > dst.stat().st_mtime:
+                    dst.write_bytes(src.read_bytes())
 
 
 def _copytree(src: Path, dst: Path) -> None:
