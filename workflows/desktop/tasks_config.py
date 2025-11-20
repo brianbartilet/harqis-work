@@ -37,7 +37,7 @@ WORKFLOWS_DESKTOP = {
 
     'run-job--git_pull_on_paths': {
         'task': 'workflows.hud.desktop.commands.git_pull_on_paths',
-        'schedule': timedelta(minutes=15),
+        'schedule': timedelta(minutes=30),
         'args': [],
     },
 
