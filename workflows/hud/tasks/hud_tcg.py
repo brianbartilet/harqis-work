@@ -145,6 +145,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
             order_detail = service.get_order_detail(order['order_id'])
             if len(order_detail['items']) > 1:
                 multiple_items_oder.append(order_detail)
+                continue
 
         # store for sorting
         sorted_data_single_card_name.append({
