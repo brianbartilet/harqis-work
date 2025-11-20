@@ -45,7 +45,7 @@ WORKFLOWS_HUD = {
     'run-job--show_pending_drop_off_orders': {
         'task': 'workflows.hud.tasks.hud_tcg.show_pending_drop_off_orders',
         'schedule': timedelta(minutes=30),
-        'args': ["TCG_MP"],
+        'args': ["TCG_MP", "SCRYFALL"],
     },
 
     'run-job--get_helper_information': {
