@@ -44,7 +44,7 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
     api_service__scryfall_cards = ApiServiceScryfallCards(cfg__scryfall)
 
     cards_echo = api_service__echo_mtg_inventory.get_collection(tradable_only=1)
-    cards_scryfall_bulk_data = _load_scryfall_bulk_data(
+    cards_scryfall_bulk_data = load_scryfall_bulk_data(
         api_service__scryfall_cards.config.app_data['path_folder_static_file'])
 
     for card_echo in cards_echo:
@@ -134,7 +134,7 @@ def _get_scryfall_card_metadata(api_service__scryfall_cards: ApiServiceScryfallC
     return scryfall_card
 
 
-def _load_scryfall_bulk_data(folder_path: str) -> Optional[dict]:
+def load_scryfall_bulk_data(folder_path: str) -> Optional[dict]:
     """
     Scans a folder for files following the pattern:
         all-cards-YYYYMMDDHHMMSS.json
