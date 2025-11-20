@@ -31,11 +31,10 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
     def ask_check_desktop():
         messages = [
             MessageCreate(role='user',
-                          content='Analyze my desktop and try to understand what I am doing and possible tasks along '
-                                  'with screenshots of my desktop and open applications. '
+                          content='Analyze my desktop and try to understand what tasks am I doing based on the open windows,'
                                   'Provide suggestions on how to improve my productivity based on what you see '
-                                  'and if possible do some coding analysis and suggest other areas if I am consuming media.'
-                                  'Make it in a few plain text bullet points (less than 8) and do not use markdown.'
+                                  'and if possible do some analysis and suggest other areas of interest I could explore. '
+                                  'Make it in a few plain text bullet points (less than 10) and do not use markdown.'
                                   'Be super concise do not explain yourself and but try to be creative and relevant. '),
         ]
         assistant_chat.add_messages_to_thread(messages)
@@ -59,7 +58,7 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
 
     path = os.path.join(os.getcwd(), 'screenshots')
     screenshot.take_screenshot_all_monitors(save_dir=path, prefix='screenshot-desktop-check')
-    screenshot.take_screenshot_all_windows(save_dir=path)
+
 
     answer_ = ask_check_desktop()
     screenshot.cleanup_screenshots()
