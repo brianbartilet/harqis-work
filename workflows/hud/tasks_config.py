@@ -50,7 +50,7 @@ WORKFLOWS_HUD = {
 
     'run-job--get_helper_information': {
         'task': 'workflows.hud.tasks.hud_gpt.get_helper_information',
-        'schedule': timedelta(minutes=5),
+        'schedule': timedelta(minutes=15),
         'args': [],
     },
 
