@@ -28,6 +28,8 @@ class DtoOrderSummaryByStatus:
 
 class EnumTcgOrderStatus(Enum):
     PENDING_DROP_OFF = (1, "Pending Drop Off")
-    ARRIVED_BRANCH = (4, "Arrived at Branch")
+    ARRIVED_BRANCH = (7, "Arrived_Branch")
     DROPPED = (6, "Dropped Off")
-    CANCELLED = (7, "Cancelled")
+    CANCELLED = (4, "Cancelled")
+    PICKED_UP = (2, "Picked Up")
+    SHIPPED = (3, "Shipped")

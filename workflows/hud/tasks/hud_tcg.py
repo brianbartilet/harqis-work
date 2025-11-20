@@ -6,6 +6,8 @@ from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmet
 
 from apps.tcg_mp.references.web.api.order import ApiServiceTcgMpOrder
 from apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
+from apps.tcg_mp.references.web.api.cart import ApiServiceTcgMpUserViewCart
+from apps.tcg_mp.references.dto.order import EnumTcgOrderStatus
 from apps.scryfall.references.web.api.cards import ApiServiceScryfallCards
 
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
@@ -47,16 +49,23 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
     api_service__scryfall_cards = ApiServiceScryfallCards(cfg__scryfall)
     service = ApiServiceTcgMpOrder(cfg__tcg_mp)
     products = ApiServiceTcgMpProducts(cfg__tcg_mp)
+    account = ApiServiceTcgMpUserViewCart(cfg__tcg_mp)
     orders = service.get_orders()
 
     cards_scryfall_bulk_data = load_scryfall_bulk_data(
         api_service__scryfall_cards.config.app_data['path_folder_static_file'])
 
+    orders_pending_drop_off = orders
+    all_pending = orders_pending_drop_off[0].data
+    for status in [EnumTcgOrderStatus.ARRIVED_BRANCH, EnumTcgOrderStatus.DROPPED, EnumTcgOrderStatus.PICKED_UP]:
+        fetch_orders =  service.get_orders(by_status=status)
+        if len(fetch_orders) > 0:
+           all_pending = all_pending + fetch_orders[0].data
+        else:
+            continue
 
     collection_url = 'https://www.echomtg.com/apps/collection/'
-
-
-    ini['meterLink']['text'] = "Collection"
+    ini['meterLink']['text'] = "EchoMTG"
     ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(collection_url)
     ini['meterLink']['tooltiptext'] = collection_url
     ini['meterLink']['W'] = '100'
@@ -65,7 +74,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
     orders_url = 'https://thetcgmarketplace.com/order-history'
     ini['meterLink_orders']['Meter'] = 'String'
     ini['meterLink_orders']['MeterStyle'] = 'sItemLink'
-    ini['meterLink_orders']['X'] = '(74*#Scale#)'
+    ini['meterLink_orders']['X'] = '(55*#Scale#)'
     ini['meterLink_orders']['Y'] = '(38*#Scale#)'
     ini['meterLink_orders']['W'] = '80'
     ini['meterLink_orders']['H'] = '55'
@@ -75,19 +84,25 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
     #  endregion
 
     #  region Section: meterLink_sales
+    account_summary = account.get_account_summary()
+    balance = account_summary['current_balance']
+    pending_balance = sum(safe_number(order['grand_total']) for order in all_pending)
     sales_url = 'https://thetcgmarketplace.com/sales-settlement'
     ini['meterLink_sales']['Meter'] = 'String'
     ini['meterLink_sales']['MeterStyle'] = 'sItemLink'
-    ini['meterLink_sales']['X'] = '(120*#Scale#)'
+    ini['meterLink_sales']['X'] = '(348*#Scale#)'
     ini['meterLink_sales']['Y'] = '(38*#Scale#)'
-    ini['meterLink_sales']['W'] = '60'
+    ini['meterLink_sales']['W'] = '250'
     ini['meterLink_sales']['H'] = '55'
-    ini['meterLink_sales']['Text'] = '|Sales'
+    ini['meterLink_sales']['Text'] = '[Balance: {0} Pending: {1}]'.format(
+        f"{balance:.2f}",
+        f"{pending_balance:.2f}"
+    )
     ini['meterLink_sales']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(sales_url)
     ini['meterLink_sales']['tooltiptext'] = sales_url
     #  endregion
 
-    width_multiplier = 2.5
+    width_multiplier = 3
     ini['MeterDisplay']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
 
@@ -117,17 +132,20 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
         guid = match.group(1)
         log.info("Found GUID: {0} for card: {1}".format(guid, _card))
         scryfall_card = cards_scryfall_bulk_data[guid]
-        colors = scryfall_card['color_identity']
 
-        if "land" in scryfall_card["type_line"].lower():
-            _color_identity = "L"
-        elif len(colors) == 1:
-            _color_identity =  colors[0]
-        elif len(colors) == 0:
-            _color_identity = 'C'
-        elif len(colors) > 1:
-            _color_identity = 'M'
-        else:
+        try:
+            colors = scryfall_card['color_identity']
+            if "land" in scryfall_card["type_line"].lower():
+                _color_identity = "L"
+            elif len(colors) == 1:
+                _color_identity =  colors[0]
+            elif len(colors) == 0:
+                _color_identity = 'C'
+            elif len(colors) > 1:
+                _color_identity = 'M'
+            else:
+                _color_identity = 'X'
+        except KeyError:
             _color_identity = 'X'
 
         return _color_identity
@@ -139,7 +157,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
         color_identity = get_color_identity(order['first_item'])
 
         # crop long names
-        name = (order['first_item'][:48] + '..') if len(order['first_item']) > 50 else order['first_item']
+        name = (order['first_item'][:50] + '..') if len(order['first_item']) > 50 else order['first_item']
 
         if safe_number(order['quantity']) > 1:
             order_detail = service.get_order_detail(order['order_id'])
@@ -162,29 +180,32 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
     total_amount = sum(safe_number(item["grand_total"]) for item in sorted_data_single_card_name)
     total_cards = sum(safe_number(item["quantity"]) for item in sorted_data_single_card_name)
 
-    ctr_lines = 4
+    ctr_lines = 3
     dump = ((
             "{0}\n"
             "ORDERS: {1}  CARDS: {2}  AMOUNT: {3}\n"
             "{0}\n")
-            .format(make_separator(70),  len(sorted_data_single_card_name), total_cards, total_amount))
+            .format(make_separator(85),  len(sorted_data_single_card_name), total_cards, total_amount))
 
     for r in sorted_data_single_card_name:
         ctr_lines += 1
-        add = " {0:<2} {1:<2} {2:<50} {3:>12}\n".format(
+        add = " {0:<2} {1:<2} {2:<60} {3:<4} {4:>8}\n".format(
             r["quantity"],
             r["color_identity"],
             r["name"],
-            f"{r['order_id'][4:]}"
+            f"{r['order_id'][4:]}",
+            f"{r['grand_total']}"
         )
         dump += add
 
     # append multiple orders
     for r in multiple_items_oder:
         ctr_lines += 2
-        add = "{0}\n>{1} ORDER ID: {2}\n".format(make_separator(70),
-                                                 make_separator(8, ">"),
-                                                 r['order_id'])
+        add = "{0}\n ORDER ID: {1} {2:>8}\n".format(
+            make_separator(85, "="),
+            r['order_id'],
+            r['grand_total']
+        )
         dump += add
 
         for item in r['items']:
@@ -195,6 +216,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
                 item["name"]
             )
             dump += add
+
 
     ini['Variables']['ItemLines'] = '{0}'.format(ctr_lines)
 
