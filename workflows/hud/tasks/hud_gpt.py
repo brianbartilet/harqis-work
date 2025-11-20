@@ -61,7 +61,7 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
 
 
     answer_ = ask_check_desktop()
-    screenshot.cleanup_screenshots(path)
+    screenshot.cleanup_screenshots(save_dir=path, prefix='screenshot-desktop-check')
 
     chat_url = 'https://chatgpt.com/'
     ini['meterLink']['text'] = "CheatGPT"
