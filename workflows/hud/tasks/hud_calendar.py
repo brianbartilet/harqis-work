@@ -89,6 +89,7 @@ def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
         for all_day_event in events_today_filtered:
             line_ctr += 1
             if event_now['calendarSummary'] == all_day_event['calendarSummary']:
+                match = 1
                 dump = dump + '* {0:<20}\n'.format(all_day_event['summary'])
         if match == 0:
             dump = dump + 'No events.\n\n'
