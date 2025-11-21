@@ -105,7 +105,7 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
     answer_ = ask_check_desktop()
     dump = wrap_text(answer_, width=65, indent="\n")
 
-    ini['Variables']['ItemLines'] = '{0}'.format(len(re.findall(r'\r\n|\r|\n', dump))/4)
+    ini['Variables']['ItemLines'] = '{0}'.format(len(re.findall(r'\r\n|\r|\n', dump))/3)
 
     return dump
 
