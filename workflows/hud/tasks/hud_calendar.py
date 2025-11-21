@@ -1,7 +1,6 @@
 from datetime import datetime
 
 from core.apps.sprout.app.celery import SPROUT
-from core.utilities.data.qlist import QList
 from core.utilities.data.strings import make_separator
 
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_config
@@ -36,8 +35,6 @@ def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
                 events_today_filtered.append(event)
             else:
                 continue
-
-
 
     calendar_url = "https://calendar.google.com/calendar/u/0/r"
     ini['meterLink']['text'] = "Calendar"
@@ -76,7 +73,12 @@ def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
     # endregion
 
     line_ctr = 0
-    dump = '{0}\nCURRENT TIME BLOCKS ENDS\n'.format(make_separator(48))
+    if len(events_today_now) == 0:
+        dump = 'No events. \nYou should be sleeping now...\n\n\n'
+
+    else:
+        dump = '{0}\nCURRENT TIME BLOCKS ENDS\n'.format(make_separator(48))
+
     for event_now in events_today_now:
         end_time = datetime.fromisoformat(event_now['end']['dateTime']).strftime('%I:%M %p')
         dump = dump + '> {0:>5} {1:>14}\n'.format(event_now['calendarSummary'], end_time)
