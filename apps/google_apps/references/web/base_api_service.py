@@ -8,10 +8,15 @@ TWebService = TypeVar("TWebService")
 
 class BaseApiServiceGoogle(BaseFixtureServiceRest):
 
-    def __init__(self, config, use_gclient=True, scopes_list=None, **kwargs):
+    def __init__(self, config, use_gclient=True, **kwargs):
+        self.client_discovery = None
         if use_gclient:
-            super(BaseApiServiceGoogle, self)\
-                .__init__(config, client=GoogleApiClient, scopes_list=scopes_list, **kwargs)
+            self.client_discovery = GoogleApiClient(
+                scopes_list=config.app_data.get("scopes"),
+                credentials=config.app_data.get("credentials"),
+                storage=config.app_data.get("storage"),
+                proxies=kwargs.get("proxies")
+            )
         else:
             super(BaseApiServiceGoogle, self) .__init__(config, **kwargs)
 

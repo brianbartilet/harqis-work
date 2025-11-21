@@ -2,13 +2,14 @@ import os
 from urllib.parse import urlparse
 
 from httplib2 import Http, ProxyInfo, socks
-from oauth2client import file, client, tools
+from core.config.env_variables import ENV_APP_SECRETS, ENV_ENABLE_PROXY
 
-from core.web.services.core.clients.rest import BaseWebClient
-from core.config.env_variables import ENV_APP_CONFIG, ENV_ENABLE_PROXY
+from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2.credentials import Credentials
 
 
-class GoogleApiClient(BaseWebClient):
+class GoogleApiClient():
     def __init__(
         self,
         scopes_list,
@@ -16,14 +17,13 @@ class GoogleApiClient(BaseWebClient):
         storage: str | None = None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
 
         self.scopes = list(scopes_list)
         self.credentials = (
-            credentials or os.path.join(ENV_APP_CONFIG, "credentials.json")
+            credentials or os.path.join(ENV_APP_SECRETS, "credentials.json")
         )
         self.storage = (
-            storage or os.path.join(ENV_APP_CONFIG, "storage.json")
+            storage or os.path.join(ENV_APP_SECRETS, "storage.json")
         )
 
         self._proxies = kwargs.get("proxies") or {}
@@ -44,11 +44,27 @@ class GoogleApiClient(BaseWebClient):
         # no proxy
         return Http()
 
-    def authorize(self) -> Http:
-        store = file.Storage(self.storage)
-        creds = store.get()
-        if not creds or creds.invalid:
-            flow = client.flow_from_clientsecrets(self.credentials, self.scopes)
-            creds = tools.run_flow(flow=flow, storage=store)
+    def authorize(self):
+        creds = None
 
-        return creds.authorize(self._http)
+        # Load existing token
+        if os.path.exists(self.storage):
+            creds = Credentials.from_authorized_user_file(self.storage, self.scopes)
+
+        # Refresh or re-auth if needed
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                # The SAFE alternative — does NOT parse pytest args
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    self.credentials,
+                    self.scopes,
+                )
+                creds = flow.run_local_server(port=0)
+
+            # save token
+            with open(self.storage, 'w') as token:
+                token.write(creds.to_json())
+
+        return creds
