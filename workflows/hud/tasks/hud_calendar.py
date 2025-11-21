@@ -37,6 +37,8 @@ def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
             else:
                 continue
 
+
+
     calendar_url = "https://calendar.google.com/calendar/u/0/r"
     ini['meterLink']['text'] = "Calendar"
     ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(calendar_url)
