@@ -54,6 +54,12 @@ WORKFLOWS_HUD = {
         'args': [],
     },
 
+    'run-job--show_calendar_information': {
+        'task': 'workflows.hud.tasks.hud_calendar.show_calendar_information',
+        'schedule': timedelta(minutes=15),
+        'args': [],
+    },
+
 
 
 
