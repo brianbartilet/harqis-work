@@ -1,61 +1,150 @@
-from apps.google_apps.references.web.base_api_service import BaseApiServiceGoogle
-from apiclient import discovery
+# apps/google_apps/references/web/api/sheets_service.py
 
+from __future__ import annotations
+
+from typing import List, Sequence, Any, Optional
 from enum import Enum
-from typing import Type, TypeVar
-T = TypeVar('T')
+
+from apps.google_apps.references.web.discovery import BaseGoogleDiscoveryService
 
 
-class SheetInputOption(Enum):
-    USER_ENTERED = 'USER_ENTERED'
-    RAW = 'RAW'
+class SheetInputOption(str, Enum):
+    RAW = "RAW"
+    USER_ENTERED = "USER_ENTERED"
 
 
-class ApiServiceGoogleSheets(BaseApiServiceGoogle):
+class ApiServiceGoogleSheets(BaseGoogleDiscoveryService):
+    """
+    Google Sheets API service wrapped around the discovery client.
 
-    def __init__(self, config, scopes_list):
-        super(ApiServiceGoogleSheets, self).__init__(config, scopes_list=scopes_list)
-        self.row_data = []
-        self.data = {
-            'values': self.row_data
-        }
-        self.sheet_id = self.config.app_data['sheet_id']
+    Usage pattern:
+        sheets = ApiServiceGoogleSheets(CONFIG, scopes_list=[...])
+        values = sheets.get_values("Sheet1!A1:C10")
+    """
 
-    def __new__(cls, kls: Type[T] = discovery.Resource, *args, **kwargs) -> T:
-        obj = BaseApiServiceGoogle(*args, **kwargs)
-        creds = obj.client.authorize()
+    SERVICE_NAME = "sheets"
+    SERVICE_VERSION = "v4"
 
-        cls.workbook = discovery.build('sheets', 'v4', http=creds).spreadsheets()
+    def __init__(self, config, scopes_list: Sequence[str], **kwargs) -> None:
+        super().__init__(config, scopes_list=scopes_list, **kwargs)
 
-        return super(ApiServiceGoogleSheets, cls).__new__(cls, *args, **kwargs)
+        # Convenience references
+        self.spreadsheets = self.service.spreadsheets()
 
-    def set_headers(self, headers, row_index=0):
-        self.row_data.insert(row_index, headers)
+        # Expecting this in your config (adjust key name if needed)
+        self.sheet_id: str = self.config.app_data["sheet_id"]
 
-    def set_row_data(self, data, sort_index=None, reverse=False):
+        # Optional in-memory buffer helpers
+        self.row_data: List[List[Any]] = []
+        self.data = {"values": self.row_data}
 
-        if sort_index is not None:
-            data = sorted(data, key=lambda x: x[sort_index], reverse=reverse)
+    # ─────────────────────────────────────────────────────────────
+    # Simple value helpers
+    # ─────────────────────────────────────────────────────────────
 
-        for item in data:
-            self.row_data.append(item)
+    def get_values(self, range_expression: str) -> List[List[Any]]:
+        """
+        Read values from a sheet range.
 
-    def update_sheet_data(self, range_expression='Sheet1!A1', value_input_option=SheetInputOption.USER_ENTERED.value):
+        Args:
+            range_expression: e.g. "Sheet1!A1:C10"
 
-        self.workbook.values()\
-            .update(spreadsheetId=self.sheet_id,
-                    range=range_expression,
-                    body=self.data,
-                    valueInputOption=value_input_option)\
+        Returns:
+            List of rows; each row is a list of cell values.
+        """
+        result = (
+            self.spreadsheets.values()
+            .get(spreadsheetId=self.sheet_id, range=range_expression)
             .execute()
+        )
+        return result.get("values", [])
 
-    def get_sheet_data(self, range_expression='Sheet1!A1'):
-        return self.workbook.values()\
-            .get(spreadsheetId=self.sheet_id, range=range_expression)\
-            .execute().get('values', [])
+    def clear_values(self, range_expression: str) -> dict:
+        """
+        Clear values in the given range.
 
-    def clear_sheet_data(self, range_expression='Sheet1!A1'):
-        return self.workbook.values()\
-            .clear(spreadsheetId=self.sheet_id, range=range_expression)\
+        Args:
+            range_expression: e.g. "Sheet1!A1:Z999"
+
+        Returns:
+            API response dict.
+        """
+        body = {}
+        return (
+            self.spreadsheets.values()
+            .clear(
+                spreadsheetId=self.sheet_id,
+                range=range_expression,
+                body=body,
+            )
             .execute()
+        )
 
+    def update_values(
+        self,
+        range_expression: str,
+        values: Sequence[Sequence[Any]],
+        input_option: SheetInputOption = SheetInputOption.RAW,
+    ) -> dict:
+        """
+        Write/update values in a given range.
+
+        Args:
+            range_expression: e.g. "Sheet1!A1"
+            values: 2D list of values [[...], [...], ...]
+            input_option: RAW or USER_ENTERED (see SheetInputOption)
+
+        Returns:
+            API response dict.
+        """
+        body = {"values": values}
+        return (
+            self.spreadsheets.values()
+            .update(
+                spreadsheetId=self.sheet_id,
+                range=range_expression,
+                valueInputOption=input_option.value,
+                body=body,
+            )
+            .execute()
+        )
+
+    # ─────────────────────────────────────────────────────────────
+    # Optional buffered helpers (similar to your existing pattern)
+    # ─────────────────────────────────────────────────────────────
+
+    def reset_buffer(self) -> None:
+        """Clear the in-memory row buffer."""
+        self.row_data.clear()
+
+    def set_headers(self, headers: Sequence[Any]) -> None:
+        """Set header row into the buffer (first row)."""
+        self.reset_buffer()
+        self.row_data.append(list(headers))
+
+    def add_row(self, row: Sequence[Any]) -> None:
+        """Append a single row to the buffer."""
+        self.row_data.append(list(row))
+
+    def set_rows(self, rows: Sequence[Sequence[Any]]) -> None:
+        """Replace buffer rows (excluding headers, if you want headers separate)."""
+        self.reset_buffer()
+        for r in rows:
+            self.row_data.append(list(r))
+
+    def flush_buffer(
+        self,
+        range_expression: str,
+        input_option: SheetInputOption = SheetInputOption.USER_ENTERED,
+    ) -> dict:
+        """
+        Push the current buffer `self.row_data` to the sheet.
+
+        Args:
+            range_expression: top-left cell to start writing, e.g. "Sheet1!A1"
+            input_option: RAW or USER_ENTERED
+
+        Returns:
+            API response dict.
+        """
+        return self.update_values(range_expression, self.row_data, input_option)
