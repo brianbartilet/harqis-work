@@ -1,5 +1,8 @@
+from datetime import datetime
+
 from core.apps.sprout.app.celery import SPROUT
 from core.utilities.data.qlist import QList
+from core.utilities.data.strings import make_separator
 
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_config
 
@@ -9,14 +12,8 @@ from apps.apps_config import CONFIG_MANAGER
 
 
 _sections__account_calendar = {
-    "meterLink_broker": {
+    "meterLink_google_keep": {
         "Preset": "InjectedByTest",
-    },
-    "meterLink_news": {
-        "Preset": "InjectedByTest" # values must be strings
-    },
-    "meterLink_metrics": {
-        "Preset": "InjectedByTest"# values must be strings
     }
 }
 
@@ -30,70 +27,72 @@ def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
     cfg__gsuite= CONFIG_MANAGER.get(cfg_id__gsuite)
     service = ApiServiceGoogleCalendarEvents(cfg__gsuite)
     events_today_all_day = service.get_all_events_today(EventType.ALL_DAY)
-    events_today_scheduled = service.get_all_events_today(EventType.SCHEDULED)
     events_today_now = service.get_all_events_today(EventType.NOW)
 
+    events_today_filtered = []
+    for event in events_today_all_day:
+        for current_block in events_today_now:
+            if event['calendarSummary'] == current_block['calendarSummary']:
+                events_today_filtered.append(event)
+            else:
+                continue
 
-    open_trades = []
-    board_url = ''
+    calendar_url = "https://calendar.google.com/calendar/u/0/r"
+    ini['meterLink']['text'] = "Calendar"
+    ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(calendar_url)
+    ini['meterLink']['tooltiptext'] = calendar_url
 
-    ini['Variables']['ItemLines'] = '{0}'.format(len(open_trades) + 2)
-
-    ini['meterLink']['text'] = "Board"
-    ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(board_url)
-    ini['meterLink']['tooltiptext'] = board_url
-
-    #  region Section: meterLink_broker
-    broker_url = 'https://trade.oanda.com/'
-    ini['meterLink_broker']['Meter'] = 'String'
-    ini['meterLink_broker']['MeterStyle'] = 'sItemLink'
-    ini['meterLink_broker']['X'] = '(40*#Scale#)'
-    ini['meterLink_broker']['Y'] = '(38*#Scale#)'
-    ini['meterLink_broker']['W'] = '60'
-    ini['meterLink_broker']['H'] = '55'
-    ini['meterLink_broker']['Text'] = '|Broker'
-    ini['meterLink_broker']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(broker_url)
-    ini['meterLink_broker']['tooltiptext'] = broker_url
+    #  region Section: meterLink_calendar
+    keep_url = 'https://keep.google.com/u/0/#home'
+    ini['meterLink_google_keep']['Meter'] = 'String'
+    ini['meterLink_google_keep']['MeterStyle'] = 'sItemLink'
+    ini['meterLink_google_keep']['X'] = '(58*#Scale#)'
+    ini['meterLink_google_keep']['Y'] = '(38*#Scale#)'
+    ini['meterLink_google_keep']['W'] = '60'
+    ini['meterLink_google_keep']['H'] = '55'
+    ini['meterLink_google_keep']['Text'] = '|Keep'
+    ini['meterLink_google_keep']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(keep_url)
+    ini['meterLink_google_keep']['tooltiptext'] = keep_url
     #  endregion
 
-    #  region Section: meterLink_news
-    news_url = 'https://www.myfxbook.com/forex-economic-calendar'
-    ini['meterLink_news']['Meter'] = 'String'
-    ini['meterLink_news']['MeterStyle'] = 'sItemLink'
-    ini['meterLink_news']['X'] = '(82*#Scale#)'
-    ini['meterLink_news']['Y'] = '(38*#Scale#)'
-    ini['meterLink_news']['W'] = '55'
-    ini['meterLink_news']['H'] = '14'
-    ini['meterLink_news']['Text'] = '|News'
-    ini['meterLink_news']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(news_url)
-    ini['meterLink_news']['tooltiptext'] = news_url
-    #  endregion
+    # region Render meter
+    width_multiplier = 1.7
+    ini['MeterDisplay']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
+    ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
+    ini['MeterDisplay']['X'] = '14'
 
-    #  region Section: meterlink_metrics
-    url = 'http://localhost:3001/'
-    ini['meterLink_metrics']['Meter'] = 'String'
-    ini['meterLink_metrics']['MeterStyle'] = 'sItemLink'
-    ini['meterLink_metrics']['X'] = '(112*#Scale#)'
-    ini['meterLink_metrics']['Y'] = '(38*#Scale#)'
-    ini['meterLink_metrics']['W'] = '55'
-    ini['meterLink_metrics']['H'] = '14'
-    ini['meterLink_metrics']['Text'] = '|Metrics'
-    ini['meterLink_metrics']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(url)
-    ini['meterLink_metrics']['tooltiptext'] = url
-    #  endregion
+    ini['MeterBackground']['Shape'] = ('Rectangle 0,0,({0}*190),(36+(#ItemLines#*22)),2 | Fill Color #fillColor# '
+                                       '| StrokeWidth (1*#Scale#) | Stroke Color [#darkColor] '
+                                       '| Scale #Scale#,#Scale#,0,0').format(width_multiplier)
 
-    ini['MeterDisplay']['W'] = '180'
-    ini['MeterDisplay']['H'] = '300'
+    ini['MeterBackgroundTop']['Shape'] = ('Rectangle 3,3,({0}*186),25,2 | Fill Color #headerColor# | StrokeWidth 0 '
+                                          '| Stroke Color [#darkColor] | Scale #Scale#,#Scale#,0,0').format(width_multiplier)
+    ini['Rainmeter']['SkinWidth'] = '({0}*198*#Scale#)'.format(width_multiplier)
+    ini['Rainmeter']['SkinHeight'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
+    ini['meterTitle']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
+    ini['meterTitle']['X'] = '({0}*198*#Scale#)/2'.format(width_multiplier)
+    # endregion
 
-    dump = '{0}  {1}  $ {2:>10}\n'.format("TOTAL:", "UPL ", "")
-    for trade in open_trades:
-        unrealized_profit_loss = round(float(trade['unrealizedPL']), 2)
-        dump = dump + '{0}  {1}  $ {2:>10}\n'.format(str(trade['instrument']).replace('_', ''),
-                                                     'SELL'if '-' in str(trade['currentUnits']) else 'BUY ',
-                                                     '{0}{1}'.format('+' if '-' not in str(unrealized_profit_loss)
-                                                                     else '',
-                                                     str(round(unrealized_profit_loss, 2))),
-                                               )
+    line_ctr = 0
+    dump = '{0}\nCURRENT TIME BLOCKS ENDS\n'.format(make_separator(48))
+    for event_now in events_today_now:
+        end_time = datetime.fromisoformat(event_now['end']['dateTime']).strftime('%I:%M %p')
+        dump = dump + '> {0:>5} {1:>14}\n'.format(event_now['calendarSummary'], end_time)
+    if len(events_today_now) == 0:
+        line_ctr += 1
+        dump = dump + 'No events. \nYou should be sleeping now...\n\n\n'
+    dump = dump + make_separator(48) + '\n'
+
+    for event_now in events_today_now:
+        dump = dump + "{0}\n".format(event_now['calendarSummary'])
+        for all_day_event in events_today_filtered:
+            line_ctr += 1
+            if event_now['calendarSummary'] == all_day_event['calendarSummary']:
+                dump = dump + '* {0:<20}\n'.format(all_day_event['summary'])
+        dump = dump + "{0}\n".format(make_separator(48))
+
+    ini['Variables']['ItemLines'] = '{0}'.format(line_ctr)
+
 
     return dump
 
