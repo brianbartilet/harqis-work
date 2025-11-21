@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import functools
 from zoneinfo import ZoneInfo
-from datetime import datetime, timedelta, timezone
-from typing import Sequence, Optional, Dict, Any, List
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any
+from enum import Enum, auto
 
 from apps.google_apps.references.web.base_api_service import BaseApiServiceGoogle
 from apps.google_apps.config import CONFIG
@@ -14,6 +15,12 @@ from core.web.services.core.decorators.deserializer import deserialized
 
 from apps.google_apps.references.web.discovery import BaseGoogleDiscoveryService
 
+
+class EventType(Enum):
+    ALL = auto()
+    ALL_DAY = auto()
+    NOW = auto()
+    SCHEDULED = auto()
 
 
 def holidays_aware(country_code='en.philippines'):
@@ -74,14 +81,8 @@ class ApiServiceGoogleCalendarEvents(BaseGoogleDiscoveryService):
     SERVICE_NAME = "calendar"
     SERVICE_VERSION = "v3"
 
-    def __init__(
-        self,
-        config,
-        scopes_list: Sequence[str],
-        calendar_id: str = "primary",
-        **kwargs,
-    ) -> None:
-        super().__init__(config, scopes_list=scopes_list, **kwargs)
+    def __init__(self, config, calendar_id: str = "primary", **kwargs,) -> None:
+        super().__init__(config, **kwargs)
         self.calendar_id = calendar_id
         self.events_resource = self.service.events()
 
@@ -124,36 +125,59 @@ class ApiServiceGoogleCalendarEvents(BaseGoogleDiscoveryService):
 
         return self.events_resource.list(**params).execute()
 
-    def get_all_events_today(self, max_results=2500):
-        """
-        Fetch ALL events from ALL calendars for today,
-        combined into a single unified list.
-        """
+    def get_all_events_today(
+            self,
+            event_type: EventType = EventType.ALL,
+            max_results: int = 2500,
+    ):
+        def is_all_day(event):
+            return (
+                    "date" in event.get("start", {})
+                    and "dateTime" not in event.get("start", {})
+            )
+
+        def is_scheduled(event):
+            return "dateTime" in event.get("start", {})
+
+        def extract_event_bounds(event, tz):
+            start_raw = event["start"]
+
+            # NEW — exclude all-day events entirely for NOW
+            if "dateTime" not in start_raw:
+                return None, None
+
+            end_raw = event.get("end", {})
+            start = datetime.fromisoformat(start_raw["dateTime"])
+            end = datetime.fromisoformat(end_raw["dateTime"])
+            return start, end
+
+        def is_happening_now(event, now_dt, tz):
+            start, end = extract_event_bounds(event, tz)
+
+            if start is None:  # All-day event — skip
+                return False
+
+            return start <= now_dt < end
+
         all_events = []
 
-        # 1. List calendars
         cal_list = self.service.calendarList().list().execute()
         calendars = cal_list.get("items", [])
 
         for cal in calendars:
             cal_id = cal["id"]
             cal_tz = cal.get("timeZone", "UTC")
-
-            # 2. Compute "today" using each calendar's timezone
             tz = ZoneInfo(cal_tz)
 
             now = datetime.now(tz)
+
             start = datetime(now.year, now.month, now.day, tzinfo=tz)
             end = start + timedelta(days=1)
 
-            time_min = start.replace(microsecond=0).isoformat()
-            time_max = end.replace(microsecond=0).isoformat()
-
-            # 3. Query events for this calendar
             resp = self.service.events().list(
                 calendarId=cal_id,
-                timeMin=time_min,
-                timeMax=time_max,
+                timeMin=start.isoformat(),
+                timeMax=end.isoformat(),
                 maxResults=max_results,
                 singleEvents=True,
                 orderBy="startTime",
@@ -162,10 +186,19 @@ class ApiServiceGoogleCalendarEvents(BaseGoogleDiscoveryService):
 
             events = resp.get("items", [])
 
-            # 4. Annotate events so you know where they came from
             for e in events:
                 e["calendarId"] = cal_id
                 e["calendarSummary"] = cal.get("summary", "")
+
+                if event_type == EventType.ALL_DAY and not is_all_day(e):
+                    continue
+
+                if event_type == EventType.SCHEDULED and not is_scheduled(e):
+                    continue
+
+                if event_type == EventType.NOW and not is_happening_now(e, now, tz):
+                    continue
+
                 all_events.append(e)
 
         return all_events

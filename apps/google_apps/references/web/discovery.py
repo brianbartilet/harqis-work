@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import httplib2
-from typing import Sequence
 from googleapiclient.discovery import build
 from google_auth_httplib2 import AuthorizedHttp
 
@@ -26,16 +25,11 @@ class BaseGoogleDiscoveryService(BaseApiServiceGoogle):
     SERVICE_NAME: str = ""
     SERVICE_VERSION: str = "v3"
 
-    def __init__(
-        self,
-        config,
-        scopes_list: Sequence[str],
-        **kwargs,
-    ) -> None:
+    def __init__(self, config, **kwargs,) -> None:
         if not self.SERVICE_NAME:
             raise ValueError("SERVICE_NAME must be set on subclasses of BaseGoogleDiscoveryService")
 
-        super().__init__(config, use_gclient=True, scopes_list=scopes_list, **kwargs)
+        super().__init__(config, use_gclient=True, **kwargs)
 
         # Authorize via GoogleApiClient and build the discovery service
         creds = self.client_discovery.authorize()
