@@ -36,7 +36,7 @@ the 'run_sample_workflow_add' function with specified arguments.
 WORKFLOWS_DESKTOP = {
 
     'run-job--git_pull_on_paths': {
-        'task': 'workflows.hud.desktop.commands.git_pull_on_paths',
+        'task': 'workflows.hud.desktop.tasks.commands.git_pull_on_paths',
         'schedule': timedelta(minutes=30),
         'args': [],
     },
