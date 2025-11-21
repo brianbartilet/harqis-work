@@ -19,8 +19,8 @@ _sections__account_calendar = {
 @SPROUT.task()
 @init_config(RAINMETER_CONFIG,
              hud_item_name='CALENDAR PEEK',
-             new_sections_dict=_sections__account_calendar,
-             play_sound=True)
+             new_sections_dict=_sections__account_calendar
+             )
 def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
 
     cfg__gsuite= CONFIG_MANAGER.get(cfg_id__gsuite)
@@ -73,20 +73,15 @@ def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
     # endregion
 
     line_ctr = 0
-    if len(events_today_now) == 0:
-        dump = 'No events. \nYou should be sleeping now...\n\n\n'
-
-    else:
-        dump = '{0}\nCURRENT TIME BLOCKS ENDS\n'.format(make_separator(48))
+    dump = '{0}\nCURRENT TIME BLOCKS ENDS\n'.format(make_separator(48))
 
     for event_now in events_today_now:
         end_time = datetime.fromisoformat(event_now['end']['dateTime']).strftime('%I:%M %p')
         dump = dump + '> {0:>5} {1:>14}\n'.format(event_now['calendarSummary'], end_time)
-    if len(events_today_now) == 0:
-        line_ctr += 1
-        dump = dump + 'No events. \nYou should be sleeping now...\n\n\n'
     dump = dump + make_separator(48) + '\n'
-
+    if len(events_today_now) == 0:
+        line_ctr += 5
+        dump = 'No events. \nYou should be sleeping now...\n\n\n'
     for event_now in events_today_now:
         dump = dump + "{0}\n".format(event_now['calendarSummary'])
         match = 0
