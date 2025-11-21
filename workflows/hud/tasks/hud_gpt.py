@@ -33,9 +33,10 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
             MessageCreate(role='user',
                           content='Analyze my desktop and try to understand what tasks am I doing based on the open applications,'
                                   'Provide suggestions on how to improve my productivity based on what you see, '
-                                  'and do some analysis and suggest other areas of interest I could explore. '
-                                  'Make it in a few plain text paragraphs (less than 10) and do not use markdown.'
-                                  'Be super concise but try to be creative and relevant. '),
+                                  'and do some analysis and suggest other areas of interest I could explore. Perform a check and'
+                                  'do OCR from the desktop images. '
+                                  'Make your reply in a plain text paragraphs and do not use markdown.'
+                                  'Be concise but be creative and relevant. '),
         ]
         assistant_chat.add_messages_to_thread(messages)
         path = os.path.join(os.getcwd(), 'screenshots')
