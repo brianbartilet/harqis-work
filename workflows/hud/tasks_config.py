@@ -72,6 +72,13 @@ WORKFLOWS_HUD = {
         'args': ["GOOGLE_APPS"]
     },
 
+    'run-job--get_failed_jobs': {
+        'task': 'workflows.hud.tasks.hud_logs.get_failed_jobs',
+        'schedule': crontab(minute='*/15'),
+        'args': []
+    },
+
+
 
 
 
