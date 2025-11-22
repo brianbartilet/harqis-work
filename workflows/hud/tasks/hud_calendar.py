@@ -1,8 +1,8 @@
 from datetime import datetime
 
 from core.apps.sprout.app.celery import SPROUT
+from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.data.strings import make_separator
-
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
 
 from apps.google_apps.references.web.api.calendar import ApiServiceGoogleCalendarEvents, EventType
@@ -17,10 +17,8 @@ _sections__calendar = {
 }
 
 @SPROUT.task()
-@init_meter(RAINMETER_CONFIG,
-            hud_item_name='CALENDAR PEEK',
-            new_sections_dict=_sections__calendar,
-            play_sound=False)
+@log_result()
+@init_meter(RAINMETER_CONFIG, hud_item_name='CALENDAR PEEK', new_sections_dict=_sections__calendar, play_sound=False)
 def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
 
     # region Fetch events and filter

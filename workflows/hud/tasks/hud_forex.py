@@ -1,4 +1,5 @@
 from core.apps.sprout.app.celery import SPROUT
+from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.data.qlist import QList
 from core.utilities.logging.custom_logger import logger as log
 
@@ -24,10 +25,8 @@ _sections__oanda = {
 }
 
 @SPROUT.task()
-@init_meter(RAINMETER_CONFIG,
-            hud_item_name='OANDA ACCOUNT',
-            new_sections_dict=_sections__oanda,
-            play_sound=True,
+@log_result()
+@init_meter(RAINMETER_CONFIG, hud_item_name='OANDA ACCOUNT', new_sections_dict=_sections__oanda, play_sound=True,
             schedule_categories=[ScheduleCategory.FINANCE, ]
             )
 def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter(), **kwargs):
