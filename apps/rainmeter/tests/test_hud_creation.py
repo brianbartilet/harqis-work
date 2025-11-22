@@ -1,6 +1,6 @@
 import pytest
 
-from apps.rainmeter.references.helpers.config_builder import init_config, ConfigHelperRainmeter
+from apps.rainmeter.references.helpers.config_builder import init_meter, ConfigHelperRainmeter
 from apps.rainmeter.config import CONFIG
 
 sections_config = {
@@ -17,7 +17,7 @@ sections_config = {
 
 
 @pytest.mark.skip(reason="sanity check only")
-@init_config(CONFIG, hud_item_name="TEST HUD", new_sections_dict=sections_config)
+@init_meter(CONFIG, hud_item_name="TEST HUD", new_sections_dict=sections_config)
 def test_update_quick_links(ini=ConfigHelperRainmeter()):
 
     dump = ''

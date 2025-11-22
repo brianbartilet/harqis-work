@@ -1,11 +1,12 @@
 import os
 import re
+from mimetypes import inited
 
 from core.apps.sprout.app.celery import SPROUT
 from core.utilities.screenshot import ScreenshotUtility as screenshot
 from core.utilities.data.strings import wrap_text
 
-from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_config
+from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 
 from core.apps.gpt.assistants.base import BaseAssistant
@@ -20,11 +21,13 @@ _sections__check_desktop = {
 
 
 @SPROUT.task()
-@init_config(RAINMETER_CONFIG,
-             hud_item_name='GPT DESK CHECK',
-             new_sections_dict=_sections__check_desktop,
-             play_sound=False)
+@init_meter(RAINMETER_CONFIG,
+            hud_item_name='GPT DESK CHECK',
+            new_sections_dict=_sections__check_desktop,
+            play_sound=False)
 def get_helper_information(ini=ConfigHelperRainmeter()):
+
+    # region Assistant Chat Setup
     assistant_chat = BaseAssistant()
     assistant_chat.load(assistant_id=assistant_chat.config.app_data['default_assistant_id_desktop'])
 
@@ -59,11 +62,10 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
 
     path = os.path.join(os.getcwd(), 'screenshots')
     screenshot.take_screenshot_all_monitors(save_dir=path, prefix='screenshot-desktop-check')
-
-
-
     screenshot.cleanup_screenshots(save_dir=path, prefix='screenshot-desktop-check')
+    # endregion
 
+    # region Set links
     chat_url = 'https://chatgpt.com/'
     ini['meterLink']['text'] = "CheatGPT"
     ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(chat_url)
@@ -80,7 +82,9 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
     ini['meterLink_github']['Text'] = '|GitHub'
     ini['meterLink_github']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(github_work_url)
     ini['meterLink_github']['tooltiptext'] = github_work_url
+    # endregion
 
+    # region Set dimensions
     width_multiplier = 2.32
     ini['MeterDisplay']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
@@ -97,13 +101,14 @@ def get_helper_information(ini=ConfigHelperRainmeter()):
     ini['Rainmeter']['SkinHeight'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
     ini['meterTitle']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
     ini['meterTitle']['X'] = '({0}*198*#Scale#)/2'.format(width_multiplier)
+    # endregion
 
-    #X = ((198 *  # Scale#)/2)
-    #      Y=(12 *  # Scale#)
-    #      W=(190 *  # Scale#)
+    # region Dump data
 
     answer_ = ask_check_desktop()
     dump = wrap_text(answer_, width=65, indent="\n")
+
+    # endregion
 
     ini['Variables']['ItemLines'] = '{0}'.format(len(re.findall(r'\r\n|\r|\n', dump))/3)
 
