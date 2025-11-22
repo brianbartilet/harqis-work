@@ -228,7 +228,6 @@ def _atomic_write_text(path: Path, text: str, encoding: str = "utf-8") -> None:
         tmp_path = Path(tmp.name)
     os.replace(tmp_path, path)  # atomic on Windows
 
-
 def _activate_config(rainmeter_exe: Path, skin_name: str, hud_dir: str, ini_filename: str) -> None:
     # "!ActivateConfig" "<config>\<subfolder>" "<file.ini>"
     args = [
@@ -237,7 +236,22 @@ def _activate_config(rainmeter_exe: Path, skin_name: str, hud_dir: str, ini_file
         f"{skin_name}\\{hud_dir}",
         ini_filename,
     ]
-    subprocess.run(args, check=False)
+
+    # Prevent Rainmeter.exe call from creating a window or stealing focus
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    SW_HIDE = 0
+    startupinfo.wShowWindow = SW_HIDE
+
+    CREATE_NO_WINDOW = 0x08000000
+
+    subprocess.run(
+        args,
+        check=False,
+        startupinfo=startupinfo,
+        creationflags=CREATE_NO_WINDOW,
+    )
+
 
 def _deactivate_config(rainmeter_exe: Path, skin_name: str, hud_dir: str) -> None:
     # "!DeactivateConfig" "<config>\<subfolder>"
