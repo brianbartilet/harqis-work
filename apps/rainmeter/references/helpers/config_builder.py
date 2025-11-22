@@ -7,10 +7,15 @@ if TYPE_CHECKING:
 import functools
 import hashlib
 import os
-import subprocess
 import tempfile
-import time
 import winsound  # Windows only
+import subprocess
+import time
+from pathlib import Path
+import ctypes
+from ctypes import wintypes
+user32 = ctypes.windll.user32
+WM_COPYDATA = 0x004A
 
 from configparser import ConfigParser
 from pathlib import Path
@@ -130,7 +135,7 @@ def init_meter(
                             pass
                         else:
                             log.warn("No matching schedule categories found; deactivating HUD until next check.")
-                            _deactivate_config(rainmeter_exe, skin_name, hud_dirname)
+                            _deactivate_config(skin_name, hud_dirname)
                             return {"updated": changed, "ini_path": str(ini_path), "notes_path": note_path}
 
                 # 11) Optional beep
@@ -141,8 +146,8 @@ def init_meter(
                         pass  # ignore if no sound device
 
                 # 12) Activate & refresh Rainmeter
-                _activate_config(rainmeter_exe, skin_name, hud_dirname, ini_filename)
-                _refresh_app(rainmeter_exe)
+                _activate_config(skin_name, hud_dirname, ini_filename)
+                _refresh_app()
 
                 # 13) Reset border after wait
                 time.sleep(reset_alerts_secs if changed else WAIT_SECS_DEFAULT)
@@ -151,8 +156,8 @@ def init_meter(
                 replace_ini_value(cfg_reset, "MeterBackground", "shape", border_to, "Stroke Color [#darkColor]")
                 cfg_reset.save_to_new_file(str(ini_path))
 
-                _activate_config(rainmeter_exe, skin_name, hud_dirname, ini_filename)
-                _refresh_app(rainmeter_exe)
+                _activate_config(skin_name, hud_dirname, ini_filename)
+                _refresh_app()
 
                 # Return useful info for callers/tests
                 return {"updated": changed, "ini_path": str(ini_path), "notes_path": str(note_path)}
@@ -228,42 +233,61 @@ def _atomic_write_text(path: Path, text: str, encoding: str = "utf-8") -> None:
         tmp_path = Path(tmp.name)
     os.replace(tmp_path, path)  # atomic on Windows
 
-def _activate_config(rainmeter_exe: Path, skin_name: str, hud_dir: str, ini_filename: str) -> None:
-    # "!ActivateConfig" "<config>\<subfolder>" "<file.ini>"
-    args = [
-        str(rainmeter_exe),
-        "!ActivateConfig",
-        f"{skin_name}\\{hud_dir}",
-        ini_filename,
+
+
+
+class COPYDATASTRUCT(ctypes.Structure):
+    _fields_ = [
+        ("dwData",  wintypes.LPARAM),
+        ("cbData",  wintypes.DWORD),
+        ("lpData",  ctypes.c_void_p),
     ]
 
-    # Prevent Rainmeter.exe call from creating a window or stealing focus
-    startupinfo = subprocess.STARTUPINFO()
-    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    SW_HIDE = 0
-    startupinfo.wShowWindow = SW_HIDE
+def _get_rainmeter_hwnd() -> int:
+    """
+    Get the main Rainmeter window handle.
 
-    CREATE_NO_WINDOW = 0x08000000
+    Tries the tray window class first, then falls back to the "Rainmeter"
+    window title. Adjust if your setup is different.
+    """
+    hwnd = user32.FindWindowW("RainmeterTrayClass", None)
+    if not hwnd:
+        hwnd = user32.FindWindowW(None, "Rainmeter")
+    if not hwnd:
+        raise RuntimeError("Rainmeter window not found. Is it running?")
+    return hwnd
 
-    subprocess.run(
-        args,
-        check=False,
-        startupinfo=startupinfo,
-        creationflags=CREATE_NO_WINDOW,
-    )
+
+def _send_rainmeter_bang(bang: str) -> None:
+    """
+    Send a Rainmeter bang via WM_COPYDATA without stealing focus.
+    Example bang: '!ActivateConfig \"Suite\\Skin\" \"Skin.ini\"'
+    """
+    hwnd = _get_rainmeter_hwnd()
+
+    # Unicode buffer including terminating null
+    buf = ctypes.create_unicode_buffer(bang)
+    cds = COPYDATASTRUCT()
+    # According to Rainmeter’s Window Message API, dwData=1 means “execute bang”
+    cds.dwData = 1
+    cds.cbData = ctypes.sizeof(buf)
+    cds.lpData = ctypes.cast(buf, ctypes.c_void_p)
+
+    user32.SendMessageW(hwnd, WM_COPYDATA, 0, ctypes.byref(cds))
 
 
-def _deactivate_config(rainmeter_exe: Path, skin_name: str, hud_dir: str) -> None:
-    # "!DeactivateConfig" "<config>\<subfolder>"
-    args = [
-        str(rainmeter_exe),
-        "!DeactivateConfig",
-        f"{skin_name}\\{hud_dir}",
-    ]
-    subprocess.run(args, check=False)
+def _activate_config(skin_name: str, hud_dir: str, ini_filename: str) -> None:
+    bang = f'!ActivateConfig "{skin_name}\\{hud_dir}" "{ini_filename}"'
+    _send_rainmeter_bang(bang)
 
-def _refresh_app(rainmeter_exe: Path) -> None:
-    subprocess.run([str(rainmeter_exe), "!RefreshApp"], check=False)
+
+def _deactivate_config(skin_name: str, hud_dir: str) -> None:
+    bang = f'!DeactivateConfig "{skin_name}\\{hud_dir}"'
+    _send_rainmeter_bang(bang)
+
+
+def _refresh_app() -> None:
+    _send_rainmeter_bang("!RefreshApp")
 
 
 def set_config_value(cfg: ConfigParser, section: str, key: str, value: str) -> None:
