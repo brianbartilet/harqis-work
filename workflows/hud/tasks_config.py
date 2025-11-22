@@ -74,7 +74,7 @@ WORKFLOWS_HUD = {
 
     'run-job--get_failed_jobs': {
         'task': 'workflows.hud.tasks.hud_logs.get_failed_jobs',
-        'schedule': crontab(minute='*/15'),
+        'schedule': crontab(minute='*/5'),
         'args': []
     },
 
