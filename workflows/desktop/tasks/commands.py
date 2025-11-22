@@ -1,8 +1,10 @@
 import os, subprocess
 from core.apps.sprout.app.celery import SPROUT
+from core.apps.es_logging.app.elasticsearch import log_result
 
 
 @SPROUT.task()
+@log_result()
 def git_pull_on_paths() -> str:
 
     def git_pull_all(paths: list[str]) -> dict:

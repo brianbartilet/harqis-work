@@ -1,8 +1,7 @@
 import os
-import re
-from mimetypes import inited
 
 from core.apps.sprout.app.celery import SPROUT
+from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.screenshot import ScreenshotUtility as screenshot
 from core.utilities.data.strings import wrap_text
 
@@ -24,10 +23,8 @@ _sections__check_desktop = {
 
 
 @SPROUT.task()
-@init_meter(RAINMETER_CONFIG,
-            hud_item_name='GPT DESK CHECK',
-            new_sections_dict=_sections__check_desktop,
-            play_sound=False,
+@log_result()
+@init_meter(RAINMETER_CONFIG, hud_item_name='GPT DESK CHECK', new_sections_dict=_sections__check_desktop, play_sound=False,
             schedule_categories=[ScheduleCategory.WORK, ])
 def get_helper_information(ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
@@ -126,10 +123,9 @@ _sections__check_world_checks = {
 }
 
 @SPROUT.task()
+@log_result()
 @init_meter(RAINMETER_CONFIG,
-            hud_item_name='GPT INFO',
-            new_sections_dict=_sections__check_world_checks,
-            play_sound=False,
+            hud_item_name='GPT INFO', new_sections_dict=_sections__check_world_checks, play_sound=False,
             schedule_categories=[ScheduleCategory.WORK, ])
 def get_events_world_check(countries_list=None, utc_tz="UTC+8", ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))

@@ -4,15 +4,13 @@ from datetime import datetime
 from typing import Optional
 
 from core.apps.sprout.app.celery import SPROUT
-from core.utilities.data.qlist import QList
+from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import logger as log
 
 from apps.apps_config import CONFIG_MANAGER
 from apps.echo_mtg.references.web.api.inventory import ApiServiceEchoMTGInventory
 from apps.echo_mtg.references.web.api.item import ApiServiceEchoMTGCardItem
 from apps.echo_mtg.references.web.api.notes import ApiServiceEchoMTGNotes
-from apps.tcg_mp.references.web.api.view import ApiServiceTcgMpUserView
-from apps.tcg_mp.references.web.api.order import ApiServiceTcgMpOrder
 from apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
 from apps.scryfall.references.web.api.cards import ApiServiceScryfallCards
 from apps.scryfall.references.web.api.bulk import ApiServiceScryfallBulkData
@@ -21,6 +19,7 @@ from workflows.purchases.dto.notes_jnfo import DtoNotesInformation
 
 
 @SPROUT.task()
+@log_result()
 def task_smoke():
     """Test function to add two numbers and return the result."""
     number = randint(1, 100) + randint(1, 100)
@@ -29,6 +28,7 @@ def task_smoke():
 
 
 @SPROUT.task()
+@log_result()
 def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__echo_mtg_fe: str, cfg_id__scryfall: str):
     """ ../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
 

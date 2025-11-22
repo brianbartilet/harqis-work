@@ -1,6 +1,7 @@
 import re
 
 from core.apps.sprout.app.celery import SPROUT
+from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import  logger as log
 from core.utilities.data.numbers import  safe_number
 from core.utilities.data.strings import  make_separator
@@ -34,10 +35,8 @@ _sections__tcg_mp_sections = {
 
 
 @SPROUT.task()
-@init_meter(RAINMETER_CONFIG,
-            hud_item_name='TCG ORDERS DROP',
-            new_sections_dict=_sections__tcg_mp_sections,
-            play_sound=True,
+@log_result()
+@init_meter(RAINMETER_CONFIG, hud_item_name='TCG ORDERS DROP', new_sections_dict=_sections__tcg_mp_sections, play_sound=True,
             schedule_categories=[ScheduleCategory.PLAY, ]
 )
 def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHelperRainmeter(), **kwargs):
