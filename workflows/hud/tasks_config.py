@@ -39,19 +39,22 @@ WORKFLOWS_HUD = {
     'run-job--show_account_information': {
         'task': 'workflows.hud.tasks.hud_forex.show_account_information',
         'schedule': timedelta(minutes=15),
-        'args': ["OANDA", {"calendar_cfg_id": "GOOGLE_APPS"}],
+        'args': ["OANDA"],
+        'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
     },
 
     'run-job--show_pending_drop_off_orders': {
         'task': 'workflows.hud.tasks.hud_tcg.show_pending_drop_off_orders',
         'schedule': timedelta(minutes=30),
         'args': ["TCG_MP", "SCRYFALL"],
+        'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
     },
 
     'run-job--get_helper_information': {
         'task': 'workflows.hud.tasks.hud_gpt.get_helper_information',
         'schedule': timedelta(minutes=15),
         'args': [],
+        'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
     },
 
     'run-job--show_calendar_information': {
