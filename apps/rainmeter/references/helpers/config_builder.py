@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from workflows.hud.dto.constants import ScheduleCategory
+
 import functools
 import hashlib
 import os
@@ -13,7 +17,7 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, Mapping, Optional, List
 
 from core.utilities.logging.custom_logger import logger as log
-from workflows.hud.dto.constants import ScheduleCategory
+
 from apps.google_apps.references.web.api.calendar import ApiServiceGoogleCalendarEvents, EventType
 from apps.apps_config import CONFIG_MANAGER
 
@@ -32,7 +36,7 @@ def init_meter(
     reset_alerts_secs: int = 10,
     play_sound: bool = True,
     always_alert: bool = False,
-    schedule_categories: Optional[List[ScheduleCategory]] = None
+    schedule_categories: List[ScheduleCategory] = None
 ) -> Callable:
     """
     Decorator: prepares Rainmeter skin dirs, renders an INI from a template,
