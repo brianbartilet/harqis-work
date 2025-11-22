@@ -112,19 +112,22 @@ def init_meter(
 
                 # 10) Process schedule categories if and break process
                 if schedule_categories:
-                    google_cfg_id = kwargs.get("calendar_cfg_id", None)
-                    if not google_cfg_id:
-                        raise ValueError("'calendar_cfg_id' is required in kwargs when schedule_categories is set")
-                    config_calendar = CONFIG_MANAGER.get(google_cfg_id)
-                    service = ApiServiceGoogleCalendarEvents(config_calendar)
-                    now_blocks = service.get_all_events_today(EventType.NOW)
-                    matches = any([c.value in {b['calendarSummary'] for b in now_blocks} for c in schedule_categories])
-                    if matches:
-                        pass
+                    if ScheduleCategory.PINNED in schedule_categories:
+                        log.info("ScheduleCategory.PINNED found; keeping HUD active.")
                     else:
-                        log.warn("No matching schedule categories found; deactivating HUD until next check.")
-                        _deactivate_config(rainmeter_exe, skin_name, hud_dirname)
-                        return {"updated": changed, "ini_path": str(ini_path), "notes_path": note_path}
+                        google_cfg_id = kwargs.get("calendar_cfg_id", None)
+                        if not google_cfg_id:
+                            raise ValueError("'calendar_cfg_id' is required in kwargs when schedule_categories is set")
+                        config_calendar = CONFIG_MANAGER.get(google_cfg_id)
+                        service = ApiServiceGoogleCalendarEvents(config_calendar)
+                        now_blocks = service.get_all_events_today(EventType.NOW)
+                        matches = any([c.value in {b['calendarSummary'] for b in now_blocks} for c in schedule_categories])
+                        if matches:
+                            pass
+                        else:
+                            log.warn("No matching schedule categories found; deactivating HUD until next check.")
+                            _deactivate_config(rainmeter_exe, skin_name, hud_dirname)
+                            return {"updated": changed, "ini_path": str(ini_path), "notes_path": note_path}
 
                 # 11) Optional beep
                 if changed and play_sound:
