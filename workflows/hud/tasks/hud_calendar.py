@@ -3,26 +3,27 @@ from datetime import datetime
 from core.apps.sprout.app.celery import SPROUT
 from core.utilities.data.strings import make_separator
 
-from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_config
+from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
 
 from apps.google_apps.references.web.api.calendar import ApiServiceGoogleCalendarEvents, EventType
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
 
-_sections__account_calendar = {
+_sections__calendar = {
     "meterLink_google_keep": {
         "Preset": "InjectedByTest",
     }
 }
 
 @SPROUT.task()
-@init_config(RAINMETER_CONFIG,
-             hud_item_name='CALENDAR PEEK',
-             new_sections_dict=_sections__account_calendar
-             )
+@init_meter(RAINMETER_CONFIG,
+            hud_item_name='CALENDAR PEEK',
+            new_sections_dict=_sections__calendar,
+            play_sound=False)
 def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
 
+    # region Fetch events and filter
     cfg__gsuite= CONFIG_MANAGER.get(cfg_id__gsuite)
     service = ApiServiceGoogleCalendarEvents(cfg__gsuite)
     events_today_all_day = service.get_all_events_today(EventType.ALL_DAY)
@@ -35,13 +36,14 @@ def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
                 events_today_filtered.append(event)
             else:
                 continue
+    # endregion
 
+    # region Build Links
     calendar_url = "https://calendar.google.com/calendar/u/0/r"
     ini['meterLink']['text'] = "Calendar"
     ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(calendar_url)
     ini['meterLink']['tooltiptext'] = calendar_url
 
-    #  region Section: meterLink_calendar
     keep_url = 'https://keep.google.com/u/0/#home'
     ini['meterLink_google_keep']['Meter'] = 'String'
     ini['meterLink_google_keep']['MeterStyle'] = 'sItemLink'
@@ -52,9 +54,10 @@ def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
     ini['meterLink_google_keep']['Text'] = '|Keep'
     ini['meterLink_google_keep']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(keep_url)
     ini['meterLink_google_keep']['tooltiptext'] = keep_url
+
     #  endregion
 
-    # region Render meter
+    # region Render dimensions
     width_multiplier = 1.7
     ini['MeterDisplay']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
@@ -72,30 +75,34 @@ def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
     ini['meterTitle']['X'] = '({0}*198*#Scale#)/2'.format(width_multiplier)
     # endregion
 
-    line_ctr = 0
-    dump = '{0}\nCURRENT TIME BLOCKS ENDS\n'.format(make_separator(48))
+    # region Build Dump
+    line_ctr = 2
+    separator_count = 48
+    dump = '{0}\nCURRENT TIME BLOCKS ENDS\n'.format(make_separator(separator_count))
 
     for event_now in events_today_now:
+        line_ctr += 1
         end_time = datetime.fromisoformat(event_now['end']['dateTime']).strftime('%I:%M %p')
-        dump = dump + '> {0:>5} {1:>14}\n'.format(event_now['calendarSummary'], end_time)
-    dump = dump + make_separator(48) + '\n'
+        dump = dump + '> {0:<35} {1:>10}\n'.format(event_now['calendarSummary'], end_time)
+    dump = dump + make_separator(separator_count) + '\n'
     if len(events_today_now) == 0:
-        line_ctr += 5
+        line_ctr = 5
         dump = 'No events. \nYou should be sleeping now...\n\n\n'
     for event_now in events_today_now:
         dump = dump + "{0}\n".format(event_now['calendarSummary'])
         match = 0
+        line_ctr += 1
         for all_day_event in events_today_filtered:
-            line_ctr += 1
             if event_now['calendarSummary'] == all_day_event['calendarSummary']:
+                line_ctr += 1
                 match = 1
                 dump = dump + '* {0:<20}\n'.format(all_day_event['summary'])
         if match == 0:
             dump = dump + 'No events.\n\n'
-        dump = dump + "{0}\n".format(make_separator(48))
+        dump = dump + "{0}\n".format(make_separator(separator_count))
+    # endregion
 
     ini['Variables']['ItemLines'] = '{0}'.format(line_ctr)
-
 
     return dump
 

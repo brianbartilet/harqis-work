@@ -6,17 +6,23 @@ import os
 import subprocess
 import tempfile
 import time
+import winsound  # Windows only
+
 from configparser import ConfigParser
 from pathlib import Path
-from typing import Callable, Dict, Iterable, Mapping, Optional
-import winsound  # Windows only
+from typing import Callable, Dict, Iterable, Mapping, Optional, List
+
+from core.utilities.logging.custom_logger import logger as log
+from workflows.hud.dto.constants import ScheduleCategory
+from apps.google_apps.references.web.api.calendar import ApiServiceGoogleCalendarEvents, EventType
+from apps.apps_config import CONFIG_MANAGER
 
 WAIT_SECS_DEFAULT = 10
 BEEP_FREQUENCY = 1200
 BEEP_DURATION_MS = 300
 
 
-def init_config(
+def init_meter(
     config: Mapping[str, str],
     hud_item_name: str,
     template_name: str = "base.ini",
@@ -25,7 +31,8 @@ def init_config(
     new_sections_dict: Optional[Dict[str, Dict[str, str]]] = None,
     reset_alerts_secs: int = 10,
     play_sound: bool = True,
-    always_alert: bool = False
+    always_alert: bool = False,
+    schedule_categories: Optional[List[ScheduleCategory]] = None
 ) -> Callable:
     """
     Decorator: prepares Rainmeter skin dirs, renders an INI from a template,
@@ -103,18 +110,34 @@ def init_config(
                 # 9) Save INI atomically
                 cfg.save_to_new_file(str(ini_path))
 
-                # 10) Optional beep
+                # 10) Process schedule categories if and break process
+                if schedule_categories:
+                    google_cfg_id = kwargs.get("calendar_cfg_id", None)
+                    if not google_cfg_id:
+                        raise ValueError("'calendar_cfg_id' is required in kwargs when schedule_categories is set")
+                    config_calendar = CONFIG_MANAGER.get(google_cfg_id)
+                    service = ApiServiceGoogleCalendarEvents(config_calendar)
+                    now_blocks = service.get_all_events_today(EventType.NOW)
+                    matches = any([c.value in {b['calendarSummary'] for b in now_blocks} for c in schedule_categories])
+                    if matches:
+                        pass
+                    else:
+                        log.warn("No matching schedule categories found; deactivating HUD until next check.")
+                        _deactivate_config(rainmeter_exe, skin_name, hud_dirname)
+                        return {"updated": changed, "ini_path": str(ini_path), "notes_path": note_path}
+
+                # 11) Optional beep
                 if changed and play_sound:
                     try:
                         winsound.Beep(BEEP_FREQUENCY, BEEP_DURATION_MS)
                     except RuntimeError:
                         pass  # ignore if no sound device
 
-                # 11) Activate & refresh Rainmeter
+                # 12) Activate & refresh Rainmeter
                 _activate_config(rainmeter_exe, skin_name, hud_dirname, ini_filename)
                 _refresh_app(rainmeter_exe)
 
-                # 12) Reset border after wait
+                # 13) Reset border after wait
                 time.sleep(reset_alerts_secs if changed else WAIT_SECS_DEFAULT)
                 cfg_reset = ConfigHelperRainmeter(template_config_file=str(ini_path))
                 cfg_reset.read_template_configuration()
@@ -209,6 +232,14 @@ def _activate_config(rainmeter_exe: Path, skin_name: str, hud_dir: str, ini_file
     ]
     subprocess.run(args, check=False)
 
+def _deactivate_config(rainmeter_exe: Path, skin_name: str, hud_dir: str) -> None:
+    # "!DeactivateConfig" "<config>\<subfolder>"
+    args = [
+        str(rainmeter_exe),
+        "!DeactivateConfig",
+        f"{skin_name}\\{hud_dir}",
+    ]
+    subprocess.run(args, check=False)
 
 def _refresh_app(rainmeter_exe: Path) -> None:
     subprocess.run([str(rainmeter_exe), "!RefreshApp"], check=False)

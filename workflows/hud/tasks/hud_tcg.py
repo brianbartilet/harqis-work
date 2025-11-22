@@ -1,8 +1,11 @@
+import re
+
 from core.apps.sprout.app.celery import SPROUT
 from core.utilities.logging.custom_logger import  logger as log
 from core.utilities.data.numbers import  safe_number
+from core.utilities.data.strings import  make_separator
 
-from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_config
+from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
 
 from apps.tcg_mp.references.web.api.order import ApiServiceTcgMpOrder
 from apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
@@ -14,8 +17,8 @@ from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
 from workflows.purchases.tasks.tcg_mp_selling import load_scryfall_bulk_data
+from workflows.hud.dto.constants import ScheduleCategory
 
-import re
 
 _sections__tcg_mp_sections = {
     "meterLink_orders": {
@@ -29,20 +32,18 @@ _sections__tcg_mp_sections = {
     }
 }
 
-def make_separator(count=100, char="="):
-    """
-    Creates a string separator consisting of a specified number of '=' characters."""
-    s = ""
-    for _ in range(count):
-        s += char
-    return s
 
 @SPROUT.task()
-@init_config(RAINMETER_CONFIG,
-             hud_item_name='TCG ORDERS DROP',
-             new_sections_dict=_sections__tcg_mp_sections,
-             play_sound=True)
-def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHelperRainmeter()):
+@init_meter(RAINMETER_CONFIG,
+            hud_item_name='TCG ORDERS DROP',
+            new_sections_dict=_sections__tcg_mp_sections,
+            play_sound=True,
+            schedule_categories=[ScheduleCategory.PLAY, ]
+)
+def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHelperRainmeter(), **kwargs):
+    log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
+
+    # region Fetch and filter data
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
     cfg__scryfall = CONFIG_MANAGER.get(cfg_id__scryfall)
 
@@ -63,14 +64,15 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
            all_pending = all_pending + fetch_orders[0].data
         else:
             continue
+    # endregion
 
+    #  region Build links
     collection_url = 'https://www.echomtg.com/apps/collection/'
     ini['meterLink']['text'] = "EchoMTG"
     ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(collection_url)
     ini['meterLink']['tooltiptext'] = collection_url
     ini['meterLink']['W'] = '100'
 
-    #  region Section: meterLink_orders
     orders_url = 'https://thetcgmarketplace.com/order-history'
     ini['meterLink_orders']['Meter'] = 'String'
     ini['meterLink_orders']['MeterStyle'] = 'sItemLink'
@@ -83,7 +85,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
     ini['meterLink_orders']['tooltiptext'] = orders_url
     #  endregion
 
-    #  region Section: meterLink_sales
+    #  region Build link for account balance and pending sales
     account_summary = account.get_account_summary()
     balance = account_summary['current_balance']
     pending_balance = sum(safe_number(order['grand_total']) for order in all_pending)
@@ -102,6 +104,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
     ini['meterLink_sales']['tooltiptext'] = sales_url
     #  endregion
 
+    # region Set dimensions
     width_multiplier = 3
     ini['MeterDisplay']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
@@ -117,7 +120,9 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
 
     ini['meterTitle']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
     ini['meterTitle']['X'] = '({0}*190*#Scale#)/2'.format(width_multiplier)
+    # endregion
 
+    # region Process card details
     multiple_items_oder = []
     sorted_data_single_card_name = []
     sorted_mapping = ["W", "B", "U", "R", "G", "C", "M", "L", "X"]
@@ -176,13 +181,13 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
 
     sorted_data_single_card_name.sort(key=lambda r: sorted_mapping.index(r["color_identity"]))
 
-
     total_amount = sum(safe_number(item["grand_total"]) for item in sorted_data_single_card_name)
     total_cards = sum(safe_number(item["quantity"]) for item in sorted_data_single_card_name)
+    #  endregion
 
+    # region Build dump
     ctr_lines = 3
-    dump = ((
-            "{0}\n"
+    dump = (("{0}\n"
             "ORDERS: {1}  CARDS: {2}  AMOUNT: {3}\n"
             "{0}\n")
             .format(make_separator(85),  len(sorted_data_single_card_name), total_cards, total_amount))
@@ -217,6 +222,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
             )
             dump += add
 
+    # endregion
 
     ini['Variables']['ItemLines'] = '{0}'.format(ctr_lines)
 

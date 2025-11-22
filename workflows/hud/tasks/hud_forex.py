@@ -1,15 +1,17 @@
 from core.apps.sprout.app.celery import SPROUT
 from core.utilities.data.qlist import QList
+from core.utilities.logging.custom_logger import logger as log
 
-from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_config
+from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
 
 from apps.oanda.references.web.api.account import ApiServiceOandaAccount
 from apps.oanda.references.web.api.open_trades import ApiServiceTrades
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
+from workflows.hud.dto.constants import ScheduleCategory
 
-_sections__account_oanda = {
+_sections__oanda = {
     "meterLink_broker": {
         "Preset": "InjectedByTest",
     },
@@ -22,12 +24,16 @@ _sections__account_oanda = {
 }
 
 @SPROUT.task()
-@init_config(RAINMETER_CONFIG,
-             hud_item_name='OANDA ACCOUNT',
-             new_sections_dict=_sections__account_oanda,
-             play_sound=True)
-def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter()):
+@init_meter(RAINMETER_CONFIG,
+            hud_item_name='OANDA ACCOUNT',
+            new_sections_dict=_sections__oanda,
+            play_sound=True,
+            schedule_categories=[ScheduleCategory.FINANCE, ]
+            )
+def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter(), **kwargs):
+    log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 
+    # region Fetch OANDA data
     cfg__oanda = CONFIG_MANAGER.get(cfg_id__oanda)
 
     board_url = "https://trello.com/b/351MWTYe/daily-dashboard-trading"
@@ -43,14 +49,13 @@ def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter()):
 
     service_trades = ApiServiceTrades(cfg__oanda)
     open_trades = service_trades.get_trades_from_account(account_use.id)
+    # endregion
 
-    ini['Variables']['ItemLines'] = '{0}'.format(len(open_trades) + 2)
-
+    # region Build links
     ini['meterLink']['text'] = "Board"
     ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(board_url)
     ini['meterLink']['tooltiptext'] = board_url
 
-    #  region Section: meterLink_broker
     broker_url = 'https://trade.oanda.com/'
     ini['meterLink_broker']['Meter'] = 'String'
     ini['meterLink_broker']['MeterStyle'] = 'sItemLink'
@@ -61,9 +66,7 @@ def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter()):
     ini['meterLink_broker']['Text'] = '|Broker'
     ini['meterLink_broker']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(broker_url)
     ini['meterLink_broker']['tooltiptext'] = broker_url
-    #  endregion
 
-    #  region Section: meterLink_news
     news_url = 'https://www.myfxbook.com/forex-economic-calendar'
     ini['meterLink_news']['Meter'] = 'String'
     ini['meterLink_news']['MeterStyle'] = 'sItemLink'
@@ -74,9 +77,7 @@ def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter()):
     ini['meterLink_news']['Text'] = '|News'
     ini['meterLink_news']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(news_url)
     ini['meterLink_news']['tooltiptext'] = news_url
-    #  endregion
 
-    #  region Section: meterlink_metrics
     url = 'http://localhost:3001/'
     ini['meterLink_metrics']['Meter'] = 'String'
     ini['meterLink_metrics']['MeterStyle'] = 'sItemLink'
@@ -87,11 +88,16 @@ def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter()):
     ini['meterLink_metrics']['Text'] = '|Metrics'
     ini['meterLink_metrics']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(url)
     ini['meterLink_metrics']['tooltiptext'] = url
-    #  endregion
 
+    # endregion
+
+    # region Set dimensions
     ini['MeterDisplay']['W'] = '180'
     ini['MeterDisplay']['H'] = '300'
+    ini['Variables']['ItemLines'] = '{0}'.format(len(open_trades) + 2)
+    # endregion
 
+    # region Build Dump
     dump = '{0}  {1}  $ {2:>10}\n'.format("TOTAL:", "UPL ", round(float(account_details.NAV), 2))
     for trade in open_trades:
         unrealized_profit_loss = round(float(trade['unrealizedPL']), 2)
@@ -101,6 +107,7 @@ def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter()):
                                                                      else '',
                                                      str(round(unrealized_profit_loss, 2))),
                                                )
+    # endregion
 
     return dump
 
