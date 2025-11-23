@@ -155,10 +155,13 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
 
         return _color_identity
 
-    for order in orders[0].data:
-        if order['first_item'] is None:
-            continue
+    # remove invalid items
+    orders[0].data = [
+        order for order in orders[0].data
+        if order['first_item'] is not None
+    ]
 
+    for order in orders[0].data:
         color_identity = get_color_identity(order['first_item'])
 
         # crop long names
@@ -192,9 +195,12 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
             "ORDERS: {1}  CARDS: {2}  AMOUNT: {3}\n"
             "{0}\n")
             .format(make_separator(85),  len(sorted_data_single_card_name), total_cards, total_amount))
+    if len(orders[0].data) == 0:
+        ctr_lines += 1
+        dump += "No orders to drop.\n"
 
     for r in sorted_data_single_card_name:
-        ctr_lines += 1
+        ctr_lines += 2
         foil = "F" if r['foil'] is not None else "N"
 
         add = " {0:<2} {1:<2} {5:<1} {2:<60} {3:<4} {4:>7}\n".format(
