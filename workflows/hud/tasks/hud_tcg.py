@@ -5,7 +5,8 @@ from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import  logger as log
 from core.utilities.data.numbers import  safe_number
 from core.utilities.data.strings import  make_separator
-
+from core.utilities.files import move_files_any, remove_files_with_patterns, sanitize_filename
+from core.utilities.resources.download_file import ServiceDownloadFile
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
 
 from apps.tcg_mp.references.web.api.order import ApiServiceTcgMpOrder
@@ -58,6 +59,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
 
     orders_pending_drop_off = orders
     all_pending = orders_pending_drop_off[0].data
+
     for status in [EnumTcgOrderStatus.ARRIVED_BRANCH, EnumTcgOrderStatus.DROPPED, EnumTcgOrderStatus.PICKED_UP]:
         fetch_orders =  service.get_orders(by_status=status)
         if len(fetch_orders) > 0:
@@ -167,9 +169,11 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
         # crop long names
         name = (order['first_item'][:50] + '..') if len(order['first_item']) > 50 else order['first_item']
 
+        order_detail = service.get_order_detail(order['order_id'])
         if safe_number(order['quantity']) > 1:
-            order_detail = service.get_order_detail(order['order_id'])
             if len(order_detail['items']) > 1:
+                order_detail['quantity'] = safe_number(order['quantity'])
+                order_detail['name'] = name
                 multiple_items_oder.append(order_detail)
                 continue
 
@@ -185,22 +189,23 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
 
     sorted_data_single_card_name.sort(key=lambda r: sorted_mapping.index(r["color_identity"]))
 
-    total_amount = sum(safe_number(item["grand_total"]) for item in sorted_data_single_card_name)
-    total_cards = sum(safe_number(item["quantity"]) for item in sorted_data_single_card_name)
+    total_amount = sum(safe_number(item["grand_total"]) for item in (sorted_data_single_card_name + multiple_items_oder))
+    total_cards = sum(safe_number(item["quantity"]) for item in (sorted_data_single_card_name + multiple_items_oder))
     #  endregion
 
-    # region Build dump
+
     ctr_lines = 3
     dump = (("{0}\n"
             "ORDERS: {1}  CARDS: {2}  AMOUNT: {3}\n"
             "{0}\n")
-            .format(make_separator(85),  len(sorted_data_single_card_name), total_cards, total_amount))
+            .format(make_separator(85),  len(sorted_data_single_card_name + multiple_items_oder),
+                    total_cards, total_amount))
     if len(orders[0].data) == 0:
         ctr_lines += 3
         dump += "No orders to drop.\n"
 
     for r in sorted_data_single_card_name:
-        ctr_lines += 2
+        ctr_lines += 1
         foil = "F" if r['foil'] is not None else "N"
 
         add = " {0:<2} {1:<2} {5:<1} {2:<60} {3:<4} {4:>7}\n".format(
@@ -214,9 +219,11 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
         )
         dump += add
 
+    # region Process orders with multiple cards
+
     # append multiple orders
     for r in multiple_items_oder:
-        ctr_lines += 2
+        ctr_lines += 1
         add = "{0}\n ORDER ID: {1} {2:>8}\n".format(
             make_separator(85, "="),
             r['order_id'],
@@ -235,7 +242,28 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
 
     # endregion
 
-    ini['Variables']['ItemLines'] = '{0}'.format(ctr_lines)
+    ini['Variables']['ItemLines'] = '{0}'.format(ctr_lines + 1)
+
+    # region generate QR and move to remote drive force overwrite
+    def download_qr_codes_to_drive(to_path: str):
+        index = 0
+        downloads_list = sorted_data_single_card_name + multiple_items_oder
+        # start clean
+        ext = "*.png"
+        remove_files_with_patterns(to_path, [ext, ])
+        for item in downloads_list:
+            index += 1
+            qr_link = service.get_order_qr_code(item['order_id'])
+            download_service = ServiceDownloadFile(qr_link['qr'])
+            name_write = str(item['name']).strip()
+            file_name = sanitize_filename("{0}-{1}-{2}.png".format(index, item['order_id'][4:], name_write))
+            download_service.download_file(file_name)
+            move_files_any({file_name: to_path})
+
+    if path := kwargs.get("path_to_qr"):
+        download_qr_codes_to_drive(path)
+
+    # endregion
 
     return dump
 
