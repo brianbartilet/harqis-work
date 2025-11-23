@@ -1,5 +1,8 @@
-from workflows.desktop.tasks.commands import git_pull_on_paths
+from workflows.desktop.tasks.commands import git_pull_on_paths, set_desktop_hud_to_back
 
 
 def test__git_pull_on_paths():
     git_pull_on_paths()
+
+def test__set_desktop_hud_to_back():
+    set_desktop_hud_to_back()
