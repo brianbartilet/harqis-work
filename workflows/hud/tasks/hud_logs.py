@@ -21,10 +21,6 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
     gte = f"{today}T00:00"
     lte = f"{today}T23:59"
 
-    print("Today Errors:")
-    print("From:", gte)
-    print("To:  ", lte)
-
     # region Get failed jobs from elasticsearch
     query = {
         "bool": {
