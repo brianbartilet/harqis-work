@@ -196,7 +196,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
             "{0}\n")
             .format(make_separator(85),  len(sorted_data_single_card_name), total_cards, total_amount))
     if len(orders[0].data) == 0:
-        ctr_lines += 1
+        ctr_lines += 3
         dump += "No orders to drop.\n"
 
     for r in sorted_data_single_card_name:

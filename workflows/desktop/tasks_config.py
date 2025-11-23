@@ -20,7 +20,7 @@ References:
 """
 
 from datetime import timedelta
-
+from celery.schedules import crontab
 
 """
 A dictionary mapping task identifiers to their configuration for scheduling.
@@ -37,19 +37,19 @@ WORKFLOWS_DESKTOP = {
 
     'run-job--git_pull_on_paths': {
         'task': 'workflows.hud.desktop.tasks.commands.git_pull_on_paths',
-        'schedule': timedelta(minutes=30),
+        'schedule':  crontab(minute='*/10'),
         'args': [],
     },
 
     'run-job--set_desktop_hud_to_back': {
         'task': 'workflows.hud.desktop.tasks.commands.set_desktop_hud_to_back',
-        'schedule': timedelta(minutes=30),
+        'schedule': crontab(minute='*/30'),
         'args': [],
     },
 
     'run-job--copy_files_targeted': {
         'task': 'workflows.hud.desktop.tasks.commands.copy_files_targeted',
-        'schedule': timedelta(minutes=10),
+        'schedule': crontab(minute='*/30'),
         'args': [],
     },
 
