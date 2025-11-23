@@ -64,6 +64,7 @@ def move_files_any(
 
     return {"moved": moved, "skipped": skipped}
 
+
 @SPROUT.task()
 @log_result()
 def git_pull_on_paths() -> str:
@@ -110,7 +111,7 @@ def git_pull_on_paths() -> str:
         return results
 
     pull_list = [
-        'C:/Users/brian/GIT/un\harqis-work'
+        'C:/Users/brian/GIT/run/harqis-work'
     ]
 
     git_pull_all(pull_list)
