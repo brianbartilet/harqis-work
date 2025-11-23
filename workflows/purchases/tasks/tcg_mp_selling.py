@@ -119,9 +119,3 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
         api_service__echo_mtg_notes.create_note(card_echo['inventory_id'], note_json_string)
 
     return 0
-
-
-@SPROUT.task()
-@log_result()
-def download_qr_codes_to_drive(cfg_id__tcg_mp: str):
-    drive_path_local = "G:\My Drive\TCGMP"
