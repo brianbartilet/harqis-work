@@ -10,7 +10,7 @@ from apps.oanda.references.web.api.open_trades import ApiServiceTrades
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
-from workflows.hud.dto.constants import ScheduleCategory
+from apps.google_apps.references.constants import ScheduleCategory
 
 _sections__oanda = {
     "meterLink_broker": {

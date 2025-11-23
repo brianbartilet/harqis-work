@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from workflows.hud.dto.constants import ScheduleCategory
+
+from apps.google_apps.references.constants import ScheduleCategory
 
 import functools
 import hashlib
 import os
 import tempfile
-import winsound  # Windows only
-import subprocess
+import winsound
 import time
-from pathlib import Path
 import ctypes
-from ctypes import wintypes
+
+from .bangs import _refresh_app, _activate_config, _deactivate_config
+
 user32 = ctypes.windll.user32
 WM_COPYDATA = 0x004A
 
@@ -234,60 +233,6 @@ def _atomic_write_text(path: Path, text: str, encoding: str = "utf-8") -> None:
     os.replace(tmp_path, path)  # atomic on Windows
 
 
-
-
-class COPYDATASTRUCT(ctypes.Structure):
-    _fields_ = [
-        ("dwData",  wintypes.LPARAM),
-        ("cbData",  wintypes.DWORD),
-        ("lpData",  ctypes.c_void_p),
-    ]
-
-def _get_rainmeter_hwnd() -> int:
-    """
-    Get the main Rainmeter window handle.
-
-    Tries the tray window class first, then falls back to the "Rainmeter"
-    window title. Adjust if your setup is different.
-    """
-    hwnd = user32.FindWindowW("RainmeterTrayClass", None)
-    if not hwnd:
-        hwnd = user32.FindWindowW(None, "Rainmeter")
-    if not hwnd:
-        raise RuntimeError("Rainmeter window not found. Is it running?")
-    return hwnd
-
-
-def _send_rainmeter_bang(bang: str) -> None:
-    """
-    Send a Rainmeter bang via WM_COPYDATA without stealing focus.
-    Example bang: '!ActivateConfig \"Suite\\Skin\" \"Skin.ini\"'
-    """
-    hwnd = _get_rainmeter_hwnd()
-
-    # Unicode buffer including terminating null
-    buf = ctypes.create_unicode_buffer(bang)
-    cds = COPYDATASTRUCT()
-    # According to Rainmeter’s Window Message API, dwData=1 means “execute bang”
-    cds.dwData = 1
-    cds.cbData = ctypes.sizeof(buf)
-    cds.lpData = ctypes.cast(buf, ctypes.c_void_p)
-
-    user32.SendMessageW(hwnd, WM_COPYDATA, 0, ctypes.byref(cds))
-
-
-def _activate_config(skin_name: str, hud_dir: str, ini_filename: str) -> None:
-    bang = f'!ActivateConfig "{skin_name}\\{hud_dir}" "{ini_filename}"'
-    _send_rainmeter_bang(bang)
-
-
-def _deactivate_config(skin_name: str, hud_dir: str) -> None:
-    bang = f'!DeactivateConfig "{skin_name}\\{hud_dir}"'
-    _send_rainmeter_bang(bang)
-
-
-def _refresh_app() -> None:
-    _send_rainmeter_bang("!RefreshApp")
 
 
 def set_config_value(cfg: ConfigParser, section: str, key: str, value: str) -> None:

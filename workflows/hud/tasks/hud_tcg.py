@@ -13,12 +13,12 @@ from apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
 from apps.tcg_mp.references.web.api.cart import ApiServiceTcgMpUserViewCart
 from apps.tcg_mp.references.dto.order import EnumTcgOrderStatus
 from apps.scryfall.references.web.api.cards import ApiServiceScryfallCards
+from apps.google_apps.references.constants import ScheduleCategory
 
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
 from workflows.purchases.tasks.tcg_mp_selling import load_scryfall_bulk_data
-from workflows.hud.dto.constants import ScheduleCategory
 
 
 _sections__tcg_mp_sections = {
@@ -36,7 +36,8 @@ _sections__tcg_mp_sections = {
 
 @SPROUT.task()
 @log_result()
-@init_meter(RAINMETER_CONFIG, hud_item_name='TCG ORDERS DROP', new_sections_dict=_sections__tcg_mp_sections, play_sound=True,
+@init_meter(RAINMETER_CONFIG, hud_item_name='TCG ORDERS DROP', new_sections_dict=_sections__tcg_mp_sections,
+            play_sound=True,
             schedule_categories=[ScheduleCategory.PLAY, ]
 )
 def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHelperRainmeter(), **kwargs):
@@ -95,7 +96,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
     ini['meterLink_sales']['Y'] = '(38*#Scale#)'
     ini['meterLink_sales']['W'] = '250'
     ini['meterLink_sales']['H'] = '55'
-    ini['meterLink_sales']['Text'] = '[Balance: {0} Pending: {1}]'.format(
+    ini['meterLink_sales']['Text'] = 'Balance: {0} Pending: {1}'.format(
         f"{balance:.2f}",
         f"{pending_balance:.2f}"
     )
@@ -104,7 +105,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
     #  endregion
 
     # region Set dimensions
-    width_multiplier = 3
+    width_multiplier = 2.9
     ini['MeterDisplay']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
 
@@ -223,7 +224,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
 
     # endregion
 
-    ini['Variables']['ItemLines'] = '{0}'.format(ctr_lines)
+    ini['Variables']['ItemLines'] = '{0}'.format(ctr_lines + 1)
 
     return dump
 

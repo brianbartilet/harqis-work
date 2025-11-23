@@ -41,5 +41,21 @@ WORKFLOWS_DESKTOP = {
         'args': [],
     },
 
+    'run-job--set_desktop_hud_to_back': {
+        'task': 'workflows.hud.desktop.tasks.commands.set_desktop_hud_to_back',
+        'schedule': timedelta(minutes=5),
+        'args': [],
+    },
+
+    'run-job--move_files_targeted': {
+        'task': 'workflows.hud.desktop.tasks.commands.set_desktop_hud_to_back',
+        'schedule': timedelta(minutes=5),
+        'args': [],
+    },
+
+
 }
+
+
+
 

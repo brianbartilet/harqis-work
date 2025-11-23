@@ -13,7 +13,7 @@ from core.apps.gpt.models.assistants.message import MessageCreate
 from core.apps.gpt.models.assistants.run import RunCreate
 from core.utilities.logging.custom_logger import logger as log
 
-from workflows.hud.dto.constants import ScheduleCategory
+from apps.google_apps.references.constants import ScheduleCategory
 
 _sections__check_desktop = {
     "meterLink_github": {
