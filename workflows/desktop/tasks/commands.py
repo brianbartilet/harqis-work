@@ -123,9 +123,9 @@ def git_pull_on_paths() -> str:
 @log_result()
 def move_files_targeted() -> str:
     files = [
-        (r"C:\Users\brian\GIT\harqis-work\.env", r"C:\Users\brian\GIT\run\harqis-work\.env"),
-        (r"C:\Users\brian\GIT\harqis-work\.env", r"C:\Users\brian\GIT\run\\harqis-work\.env"),
-        (r"C:\Users\brian\GIT\harqis-work", r"D:\Media\Videos"),
+        (r"C:\Users\brian\GIT\harqis-work\.env\credentials.json", r"C:\Users\brian\GIT\run\harqis-work\.env"),
+        (r"C:\Users\brian\GIT\harqis-work\.env\storage.json", r"C:\Users\brian\GIT\run\harqis-work\.env"),
+        (r"C:\Users\brian\GIT\harqis-work\apps_config.yaml", r"C:\Users\brian\GIT\run"),
     ]
     move_files_any(files)
 

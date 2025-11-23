@@ -43,7 +43,7 @@ WORKFLOWS_DESKTOP = {
 
     'run-job--set_desktop_hud_to_back': {
         'task': 'workflows.hud.desktop.tasks.commands.set_desktop_hud_to_back',
-        'schedule': timedelta(minutes=5),
+        'schedule': timedelta(minutes=30),
         'args': [],
     },
 
