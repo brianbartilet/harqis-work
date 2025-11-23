@@ -47,9 +47,9 @@ WORKFLOWS_DESKTOP = {
         'args': [],
     },
 
-    'run-job--move_files_targeted': {
-        'task': 'workflows.hud.desktop.tasks.commands.s',
-        'schedule': timedelta(minutes=5),
+    'run-job--copy_files_targeted': {
+        'task': 'workflows.hud.desktop.tasks.commands.copy_files_targeted',
+        'schedule': timedelta(minutes=10),
         'args': [],
     },
 
