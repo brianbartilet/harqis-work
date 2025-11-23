@@ -1,7 +1,7 @@
 from random import randint
-import os, re, time, json
+import re
+import json
 from datetime import datetime
-from typing import Optional
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
@@ -15,7 +15,8 @@ from apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
 from apps.scryfall.references.web.api.cards import ApiServiceScryfallCards
 from apps.scryfall.references.web.api.bulk import ApiServiceScryfallBulkData
 
-from workflows.purchases.dto.notes_jnfo import DtoNotesInformation
+from apps.echo_mtg.references.dto.notes_jnfo import DtoNotesInformation
+from workflows.purchases.helpers.helper import load_scryfall_bulk_data
 
 
 @SPROUT.task()
@@ -25,6 +26,14 @@ def task_smoke():
     number = randint(1, 100) + randint(1, 100)
     log.info("Running a test result {0}".format(number))
     return number
+
+@SPROUT.task()
+def download_scryfall_bulk_data(cfg_id__scryfall: str):
+    cfg__scryfall = CONFIG_MANAGER.get(cfg_id__scryfall)
+    api_service__scryfall_cards_bulk = ApiServiceScryfallBulkData(cfg__scryfall)
+    api_service__scryfall_cards_bulk.download_bulk_file()
+
+    return
 
 
 @SPROUT.task()
@@ -66,12 +75,16 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
             continue
 
         for item in search_results:
-            log.info("Extracting guid on tcg mp from image url: {0}".format(card_name))
-            url = item.image
-            pattern = r"\b([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\b"
-            match = re.search(pattern, url)
-            guid = match.group(1)
-            log.info("Found GUID: {0} for card: {1}".format(guid, card_name))
+            log.info("Attempting to extract guid on tcg mp from image url: {0}".format(card_name))
+            try:
+                log.info("Extracting guid on tcg mp from image url: {0}".format(card_name))
+                url = item.image
+                pattern = r"\b([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\b"
+                match = re.search(pattern, url)
+                guid = match.group(1)
+                log.info("Found GUID: {0} for card: {1}".format(guid, card_name))
+            except TypeError:
+                log.warn("No guid found for card skipping: {0}".format(card_name))
 
             log.info("Attempting to find card on scryfall: id: {0} name: {1}".format(card_tcg_id, card_name))
             try:
@@ -105,77 +118,4 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
         log.info("Updating note for card: {0}".format(card_name))
         api_service__echo_mtg_notes.create_note(card_echo['inventory_id'], note_json_string)
 
-    return
-
-
-@SPROUT.task()
-def download_scryfall_bulk_data(cfg_id__scryfall: str):
-    cfg__scryfall = CONFIG_MANAGER.get(cfg_id__scryfall)
-    api_service__scryfall_cards_bulk = ApiServiceScryfallBulkData(cfg__scryfall)
-    api_service__scryfall_cards_bulk.download_bulk_file()
-
-    return
-
-def _get_scryfall_card_metadata(api_service__scryfall_cards: ApiServiceScryfallCards, guid: str, card_name: str,
-                                scryfall_max_retries: int = 10):
-    """ Helper function to get scryfall card metadata with retries. """
-    scryfall_card = None
-    for attempt in range(1, scryfall_max_retries + 1):
-        try:
-            scryfall_card = api_service__scryfall_cards.get_card_metadata(guid, rate_limit_delay=5)
-        except Exception:
-            scryfall_card = None
-            if attempt == scryfall_max_retries:
-                log.warn("Stopped after {0} attempts for {1}".format(scryfall_max_retries, card_name))
-            time.sleep(10)
-
-            log.warn("Retrying attempt {0}".format(attempt))
-
-    return scryfall_card
-
-
-def load_scryfall_bulk_data(folder_path: str) -> Optional[dict]:
-    """
-    Scans a folder for files following the pattern:
-        all-cards-YYYYMMDDHHMMSS.json
-    Finds the most recent (largest timestamp) and loads it as JSON.
-
-    Args:
-        folder_path (str): Path to the directory containing the JSON dump files.
-
-    Returns:
-        dict | None: JSON content from the most recent file, or None if none exist.
-    """
-
-    def build_card_index(_cards: list) -> dict:
-        return {c["id"]: c for c in _cards if "id" in c}
-
-    timestamp_pattern = re.compile(r"all-cards-(\d{14})\.json$")
-    candidates = []
-
-    for filename in os.listdir(folder_path):
-        match = timestamp_pattern.search(filename)
-        if match:
-            timestamp_str = match.group(1)
-
-            # Validate / parse timestamp
-            try:
-                timestamp = datetime.strptime(timestamp_str, "%Y%m%d%H%M%S")
-            except ValueError:
-                continue  # skip malformed timestamps
-
-            full_path = os.path.join(folder_path, filename)
-            candidates.append((timestamp, full_path))
-
-    if not candidates:
-        return None  # no matching files found
-
-    # Sort by newest timestamp
-    candidates.sort(key=lambda x: x[0], reverse=True)
-    latest_file = candidates[0][1]
-
-    with open(latest_file, "r", encoding="utf-8") as f:
-        raw =  json.load(f)
-        cards = build_card_index(raw)
-        return cards
-
+    return 0

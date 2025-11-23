@@ -18,7 +18,7 @@ from apps.google_apps.references.constants import ScheduleCategory
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
-from workflows.purchases.tasks.tcg_mp_selling import load_scryfall_bulk_data
+from workflows.purchases.helpers.helper import load_scryfall_bulk_data
 
 
 _sections__tcg_mp_sections = {
@@ -176,7 +176,8 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
             "quantity": order['quantity'],
             "name": name,
             "grand_total": order['grand_total'],
-            "order_id": order['order_id']
+            "order_id": order['order_id'],
+            "foil": order['crd_foil_type'],
         })
 
     sorted_data_single_card_name.sort(key=lambda r: sorted_mapping.index(r["color_identity"]))
@@ -194,12 +195,16 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
 
     for r in sorted_data_single_card_name:
         ctr_lines += 1
-        add = " {0:<2} {1:<2} {2:<60} {3:<4} {4:>8}\n".format(
+        foil = "F" if r['foil'] is not None else "N"
+
+        add = " {0:<2} {1:<2} {5:<1} {2:<60} {3:<4} {4:>7}\n".format(
             r["quantity"],
             r["color_identity"],
             r["name"],
             f"{r['order_id'][4:]}",
-            f"{r['grand_total']}"
+            f"{r['grand_total']}",
+            foil
+
         )
         dump += add
 
@@ -224,7 +229,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
 
     # endregion
 
-    ini['Variables']['ItemLines'] = '{0}'.format(ctr_lines + 1)
+    ini['Variables']['ItemLines'] = '{0}'.format(ctr_lines)
 
     return dump
 
