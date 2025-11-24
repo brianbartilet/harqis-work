@@ -105,7 +105,7 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
         log.info("Creating json information as note for {0}".format(card_name))
         notes_dto = DtoNotesInformation(
             scryfall_gui=guid,
-            tcgplayer_id=scryfall_card['tcgplayer_id'],
+            tcgplayer_id=scryfall_card.get('tcgplayer_id', "None"),
             tcg_mp_card_id=0,
             tcg_mp_listing_id=0,
             tcg_mp_selling_price=0,
