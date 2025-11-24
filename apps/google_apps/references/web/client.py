@@ -20,10 +20,12 @@ class GoogleApiClient():
 
         self.scopes = list(scopes_list)
         self.credentials = (
-            credentials or os.path.join(ENV_APP_SECRETS, "credentials.json")
+            os.path.join(ENV_APP_SECRETS, credentials)
+            or os.path.join(ENV_APP_SECRETS, "credentials.json")
         )
         self.storage = (
-            storage or os.path.join(ENV_APP_SECRETS, "storage.json")
+            os.path.join(ENV_APP_SECRETS, storage)
+            or os.path.join(ENV_APP_SECRETS, "storage.json")
         )
 
         self._proxies = kwargs.get("proxies") or {}
