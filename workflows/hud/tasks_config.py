@@ -57,6 +57,7 @@ WORKFLOWS_HUD = {
         'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
     },
 
+    """
     'run-job--get_events_world_check': {
         'task': 'workflows.hud.tasks.hud_gpt.get_events_world_check',
         'schedule': crontab(
@@ -65,7 +66,8 @@ WORKFLOWS_HUD = {
         'args': [],
         'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
     },
-
+    """
+    
     'run-job--show_calendar_information': {
         'task': 'workflows.hud.tasks.hud_calendar.show_calendar_information',
         'schedule': crontab(minute='*/15'),

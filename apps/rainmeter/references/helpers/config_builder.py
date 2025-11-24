@@ -162,8 +162,8 @@ def init_meter(
                 return {"updated": changed, "ini_path": str(ini_path), "notes_path": str(note_path)}
 
             except Exception as e:
-                # Keep the original traceback chain
-                raise RuntimeError(f"Failed HUD initialization: {e}") from e
+                log.error(f"Failed HUD initialization: {e}")
+                raise e
 
         return wrapper
 
