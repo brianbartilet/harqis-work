@@ -1,5 +1,3 @@
-@echo off
-setlocal ENABLEDELAYEDEXPANSION
 REM ──────────────────────────────────────────────────────────────
 REM Load variables from .env (KEY=VALUE per line)
 REM Adjust this path if your .env is somewhere else
@@ -30,7 +28,7 @@ echo PYTHONPATH updated to %PYTHONPATH%.
 
 echo Set environment variable for workflow configuration
 echo Override this to not clash with test runners
-set "WORKFLOW_CONFIG=%path_git_root%\workflows.config"
+set "WORKFLOW_CONFIG=workflows.config"
 echo Environment variable WORKFLOW_CONFIG set to %WORKFLOW_CONFIG%.
 
 echo Set environment variable apps config
