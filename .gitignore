@@ -13,3 +13,4 @@ venv
 *.egg
 *.egg-info/
 screenshots/
+*.tgz

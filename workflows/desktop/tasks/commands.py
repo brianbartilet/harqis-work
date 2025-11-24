@@ -85,3 +85,66 @@ def set_desktop_hud_to_back() -> str:
 
     return str(rainmeter_ini)
 
+
+import os
+import subprocess
+
+@SPROUT.task()
+@log_result()
+def run_n8n_sequence() -> str:
+    def run_bats_in_sequence(bat_files: list[str]) -> dict:
+        """
+        Runs each .bat file in the list sequentially.
+
+        Args:
+            bat_files (list[str]): List of full paths to .bat files.
+
+        Returns:
+            dict: {bat_path: (success: bool, output: str)}
+        """
+        results: dict[str, tuple[bool, str]] = {}
+
+        for bat_path in bat_files:
+            if not os.path.isfile(bat_path):
+                msg = "BAT file not found"
+                results[bat_path] = (False, msg)
+                print(f"\n=== {bat_path} ===")
+                print(msg)
+                continue
+
+            try:
+                # Run the .bat file via cmd.exe
+                result = subprocess.run(
+                    ["cmd", "/c", bat_path],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+
+                success = result.returncode == 0
+                output = result.stdout if success else result.stderr
+
+                results[bat_path] = (success, output)
+
+                print(f"\n=== {bat_path} (exit={result.returncode}) ===")
+                print(output)
+
+            except Exception as e:
+                results[bat_path] = (False, str(e))
+                print(f"\nError running {bat_path}: {e}")
+
+        return results
+
+    # Adjust these paths as needed
+    bat_list = [
+        r"C:\Users\brian\GIT\harqis-work\workflows\n8n\deploy\deploy.bat",
+        r"C:\Users\brian\GIT\harqis-work\workflows\n8n\deploy\backup.bat",
+        r"C:\Users\brian\GIT\harqis-work\workflows\n8n\deploy\restore.bat",
+    ]
+
+    run_bats_in_sequence(bat_list)
+
+    # Simple summary for the task result
+    return " | ".join(bat_list)
+
+

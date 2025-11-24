@@ -53,6 +53,13 @@ WORKFLOWS_DESKTOP = {
         'args': [],
     },
 
+    'run-job--run_n8n_sequence': {
+        'task': 'workflows.hud.desktop.tasks.commands.run_n8n_sequence',
+        'schedule': crontab(hour='0', minute='0'),
+        'args': [],
+    },
+
+
 
 }
 
