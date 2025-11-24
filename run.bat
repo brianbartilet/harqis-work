@@ -14,9 +14,6 @@ echo.
 echo Installing Python requirements...
 REM .\.venv\Scripts\pip.exe install -r requirements.txt --force-reinstall
 
-echo Activate environment
-.\.venv\Scripts\activate
-
 echo.
 echo ================================
 echo   Starting Processes
