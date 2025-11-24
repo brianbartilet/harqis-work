@@ -30,7 +30,7 @@ echo PYTHONPATH updated to %PYTHONPATH%.
 
 echo Set environment variable for workflow configuration
 echo Override this to not clash with test runners
-set "WORKFLOW_CONFIG=workflows.config"
+set "WORKFLOW_CONFIG=%path_git_root%\workflows.config"
 echo Environment variable WORKFLOW_CONFIG set to %WORKFLOW_CONFIG%.
 
 echo Set environment variable apps config
