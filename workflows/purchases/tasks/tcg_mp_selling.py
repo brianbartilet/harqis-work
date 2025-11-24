@@ -105,12 +105,12 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
         log.info("Creating json information as note for {0}".format(card_name))
         notes_dto = DtoNotesInformation(
             scryfall_gui=guid,
-            tcgplayer_id=scryfall_card.get('tcgplayer_id', "None"),
+            tcgplayer_id="None" if scryfall_card is None else scryfall_card['tcgplayer_id'],
             tcg_mp_card_id=0,
             tcg_mp_listing_id=0,
             tcg_mp_selling_price=0,
             tcg_mp_smart_pricing=0,
-            tcg_price=scryfall_card['prices']['usd'],
+            tcg_price = "None" if scryfall_card is None else scryfall_card['prices']['usd'],
             last_updated=datetime.now().isoformat()
         )
         note_json_string = notes_dto.get_json()
