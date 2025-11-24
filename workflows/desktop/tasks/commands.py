@@ -86,9 +86,6 @@ def set_desktop_hud_to_back() -> str:
     return str(rainmeter_ini)
 
 
-import os
-import subprocess
-
 @SPROUT.task()
 @log_result()
 def run_n8n_sequence() -> str:
