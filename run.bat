@@ -12,7 +12,7 @@ git pull
 
 echo.
 echo Installing Python requirements...
-.\.venv\Scripts\pip.exe install -r requirements.txt --force-reinstall
+REM .\.venv\Scripts\pip.exe install -r requirements.txt --force-reinstall
 
 echo Activate environment
 .\.venv\Scripts\activate
@@ -24,10 +24,12 @@ echo ================================
 echo.
 
 echo Starting celery scheduler in new window...
-start "scheduler" cmd /k ".\scripts\run_workflow_scheduler.bat"
+cd .\scripts
+start "scheduler" cmd /k "run_workflow_scheduler.bat"
 
 echo Starting celery worker in new window...
-start "worker" cmd /k ".\scripts\run_workflow_worker.bat"
+cd .\scripts
+start "worker" cmd /k "run_workflow_worker.bat"
 
 echo.
 echo All processes started in separate windows.
