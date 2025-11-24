@@ -1,3 +1,5 @@
+@echo off
+setlocal ENABLEDELAYEDEXPANSION
 REM ──────────────────────────────────────────────────────────────
 REM Load variables from .env (KEY=VALUE per line)
 REM Adjust this path if your .env is somewhere else
