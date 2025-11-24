@@ -68,7 +68,7 @@ def copy_files_targeted() -> str:
     files = [
         (r"C:\Users\brian\GIT\harqis-work\.env\credentials.json", r"C:\Users\brian\GIT\run\harqis-work\.env"),
         (r"C:\Users\brian\GIT\harqis-work\.env\storage.json", r"C:\Users\brian\GIT\run\harqis-work\.env"),
-        (r"C:\Users\brian\GIT\harqis-work\apps_config.yaml", r"C:\Users\brian\GIT\run"),
+        (r"C:\Users\brian\GIT\harqis-work\apps_config.yaml", r"C:\Users\brian\GIT\run\harqis-work"),
     ]
     copy_files_any(files)
 
