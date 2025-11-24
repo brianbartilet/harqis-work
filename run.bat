@@ -1,0 +1,34 @@
+@echo off
+setlocal
+
+echo.
+echo ================================
+echo   Updating Codebase
+echo ================================
+echo.
+
+echo Running git pull...
+git pull
+
+echo.
+echo Installing Python requirements...
+.\.venv\Scripts\pip.exe install -r requirements.txt --force-reinstall
+
+echo Activate environment
+.\.venv\Scripts\activate
+
+echo.
+echo ================================
+echo   Starting Processes
+echo ================================
+echo.
+
+echo Starting celery scheduler in new window...
+start "scheduler" cmd /k ".\scripts\run_workflow_scheduler.bat"
+
+echo Starting celery worker in new window...
+start "worker" cmd /k ".\scripts\run_workflow_worker.bat"
+
+echo.
+echo All processes started in separate windows.
+endlocal
