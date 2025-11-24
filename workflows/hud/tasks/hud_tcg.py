@@ -260,7 +260,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
             download_service.download_file(file_name)
             move_files_any({file_name: to_path})
 
-    if path := kwargs.get("path_to_qr"):
+    if path := kwargs.get("path_to_qr", cfg__tcg_mp.app_data['save_path']):
         download_qr_codes_to_drive(path)
 
     # endregion

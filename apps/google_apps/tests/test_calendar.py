@@ -4,12 +4,12 @@ from hamcrest import greater_than
 from core.utilities.logging.custom_logger import logger as log
 
 from apps.google_apps.references.web.api.calendar import ApiServiceGoogleCalendar, holidays_aware
-from apps.google_apps.config import CONFIG
+from apps.apps_config import CONFIG_MANAGER
 
 
 @pytest.fixture()
 def given():
-    given_service = ApiServiceGoogleCalendar(CONFIG)
+    given_service = ApiServiceGoogleCalendar(CONFIG_MANAGER.get("GOOGLE_APPS"))
     return given_service
 
 
