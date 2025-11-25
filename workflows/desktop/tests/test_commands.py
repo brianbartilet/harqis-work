@@ -9,7 +9,7 @@ def test__set_desktop_hud_to_back():
     set_desktop_hud_to_back()
 
 def test__copy_files_targeted():
-    copy_files_targeted()
+    copy_files_targeted("DESKTOP_JOBS")
 
 def test__run_n8n_sequence():
     run_n8n_sequence()
