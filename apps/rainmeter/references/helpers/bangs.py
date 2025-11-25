@@ -7,37 +7,34 @@ from pathlib import Path
 RAINMETER_EXE = Path(r"C:\Program Files\Rainmeter\Rainmeter.exe")
 
 
-def _send_rainmeter_bang_no_focus(bang: str) -> None:
+def _send_rainmeter_cmd_no_focus(*args: str) -> None:
     """
-    Send a bang to Rainmeter using its native command-line interface,
-    without opening a visible console window.
+    Call Rainmeter.exe with native command-line arguments, without
+    opening a visible console window.
 
-    Example bang values:
-        '!ActivateConfig "MySkin\\HUD" "HUD.ini"'
-        '!DeactivateConfig "MySkin\\HUD"'
-        '!RefreshApp'
+    Example:
+        _send_rainmeter_cmd_no_focus("!ActivateConfig", "MySkin\\HUD", "HUD.ini")
+        _send_rainmeter_cmd_no_focus("!DeactivateConfig", "MySkin\\HUD")
+        _send_rainmeter_cmd_no_focus("!RefreshApp")
     """
     if not RAINMETER_EXE.exists():
         raise RuntimeError(f"Rainmeter.exe not found at: {RAINMETER_EXE}")
 
-    # Hide console window
     startupinfo = subprocess.STARTUPINFO()
     startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     startupinfo.wShowWindow = 0  # SW_HIDE
 
     CREATE_NO_WINDOW = 0x08000000
 
-    # Pass the bang as a single argument; Rainmeter will parse it.
-    # Equivalent to: Rainmeter.exe !ActivateConfig "Config" "Skin.ini"
     try:
         subprocess.run(
-            [str(RAINMETER_EXE), bang],
+            [str(RAINMETER_EXE), *args],
             check=False,
             startupinfo=startupinfo,
             creationflags=CREATE_NO_WINDOW,
         )
     except Exception as e:
-        raise RuntimeError(f"Failed to send bang to Rainmeter: {bang!r}") from e
+        raise RuntimeError(f"Failed to call Rainmeter with args={args!r}") from e
 
 
 # -------------------------------------------------
@@ -46,33 +43,25 @@ def _send_rainmeter_bang_no_focus(bang: str) -> None:
 def _activate_config(skin_name: str, hud_dir: str, ini_filename: str) -> None:
     """
     Activate a Rainmeter config.
-
-    Args:
-        skin_name: Top-level skin folder name.
-        hud_dir:   Subfolder config ('' for none).
-        ini_filename: Name of the .ini file to load.
     """
-    config = f'{skin_name}\\{hud_dir}' if hud_dir else skin_name
-    bang = f'!ActivateConfig "{config}" "{ini_filename}"'
-    _send_rainmeter_bang_no_focus(bang)
+    config = f"{skin_name}\\{hud_dir}" if hud_dir else skin_name
+    # No extra quotes needed; each arg is its own parameter.
+    _send_rainmeter_cmd_no_focus("!ActivateConfig", config, ini_filename)
 
 
 def _deactivate_config(skin_name: str, hud_dir: str) -> None:
     """
     Deactivate a Rainmeter config.
-
-    Args:
-        skin_name: Top-level skin folder name.
-        hud_dir:   Subfolder config ('' for none).
     """
-    config = f'{skin_name}\\{hud_dir}' if hud_dir else skin_name
-    bang = f'!DeactivateConfig "{config}"'
-    _send_rainmeter_bang_no_focus(bang)
+    config = f"{skin_name}\\{hud_dir}" if hud_dir else skin_name
+    _send_rainmeter_cmd_no_focus("!DeactivateConfig", config)
 
 
 def _refresh_app() -> None:
-    """Refresh the entire Rainmeter application."""
-    _send_rainmeter_bang_no_focus("!RefreshApp")
+    """
+    Refresh the entire Rainmeter application.
+    """
+    _send_rainmeter_cmd_no_focus("!RefreshApp")
 
 
 # endregion
