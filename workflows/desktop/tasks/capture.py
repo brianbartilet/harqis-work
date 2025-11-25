@@ -8,8 +8,6 @@ from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
 from apps.apps_config import CONFIG_MANAGER
 
-from core.utilities.capture.actions import run_capture
-
 SCREENREADER_MARKER = "--desktop-screenreader"
 
 # Windows flags
