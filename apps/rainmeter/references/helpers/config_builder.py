@@ -63,7 +63,6 @@ def init_meter(
     skin_name = config["skin_name"]
     static_path = Path(config["static_path"]).resolve()
     skins_root = Path(config["write_skin_to_path"]).resolve()
-    rainmeter_exe = Path(config["bin_path"]).resolve()
 
     skin_dir = skins_root / skin_name
     hud_dirname = sanitize_name(hud_item_name)  # safer than only stripping spaces
@@ -120,22 +119,25 @@ def init_meter(
 
                 # 10) Process schedule categories if and break process
                 if schedule_categories:
-                    if ScheduleCategory.PINNED in schedule_categories:
-                        log.info("ScheduleCategory.PINNED found; keeping HUD active.")
-                    else:
-                        google_cfg_id = kwargs.get("calendar_cfg_id", None)
-                        if not google_cfg_id:
-                            raise ValueError("'calendar_cfg_id' is required in kwargs when schedule_categories is set")
-                        config_calendar = CONFIG_MANAGER.get(google_cfg_id)
-                        service = ApiServiceGoogleCalendarEvents(config_calendar)
-                        now_blocks = service.get_all_events_today(EventType.NOW)
-                        matches = any([c.value in {b['calendarSummary'] for b in now_blocks} for c in schedule_categories])
-                        if matches:
-                            pass
+                    try:
+                        if ScheduleCategory.PINNED in schedule_categories:
+                            log.info("ScheduleCategory.PINNED found; keeping HUD active.")
                         else:
-                            log.warn("No matching schedule categories found; deactivating HUD until next check.")
-                            _deactivate_config(skin_name, hud_dirname)
-                            return {"updated": changed, "ini_path": str(ini_path), "notes_path": note_path}
+                            google_cfg_id = kwargs.get("calendar_cfg_id", None)
+                            if not google_cfg_id:
+                                raise ValueError("'calendar_cfg_id' is required in kwargs when schedule_categories is set")
+                            config_calendar = CONFIG_MANAGER.get(google_cfg_id)
+                            service = ApiServiceGoogleCalendarEvents(config_calendar)
+                            now_blocks = service.get_all_events_today(EventType.NOW)
+                            matches = any([c.value in {b['calendarSummary'] for b in now_blocks} for c in schedule_categories])
+                            if matches:
+                                pass
+                            else:
+                                log.warn("No matching schedule categories found; deactivating HUD until next check.")
+                                _deactivate_config(skin_name, hud_dirname)
+                                return {"updated": changed, "ini_path": str(ini_path), "notes_path": note_path}
+                    except ConnectionError:
+                        log.warn("Calendar service is not working as expected.  Please check settings.")
 
                 # 11) Optional beep
                 if changed and play_sound:
