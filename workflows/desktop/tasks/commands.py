@@ -7,6 +7,7 @@ from core.utilities.files import copy_files_any
 from apps.rainmeter.references.helpers.settings import set_rainmeter_always_on_top
 from apps.rainmeter.references.helpers.config_builder import _refresh_app
 
+from apps.apps_config import CONFIG_MANAGER
 
 @SPROUT.task()
 @log_result()
@@ -64,11 +65,16 @@ def git_pull_on_paths() -> str:
 
 @SPROUT.task()
 @log_result()
-def copy_files_targeted() -> str:
+def copy_files_targeted(cfg_id__desktop_jobs: str) -> str:
+    cfg = CONFIG_MANAGER.get(cfg_id__desktop_jobs)
+    p_from = cfg['copy_files']['path_dev_files']
+    p_to = cfg['copy_files']['path_run_files']
+
     files = [
-        (r"C:\Users\brian\GIT\harqis-work\.env\credentials.json", r"C:\Users\brian\GIT\run\harqis-work\.env"),
-        (r"C:\Users\brian\GIT\harqis-work\.env\storage.json", r"C:\Users\brian\GIT\run\harqis-work\.env"),
-        (r"C:\Users\brian\GIT\harqis-work\apps_config.yaml", r"C:\Users\brian\GIT\run\harqis-work"),
+        (rf"{p_from}\.env\credentials.json", rf"{p_to}\.env"),
+        (rf"{p_from}\.env\storage.json", rf"{p_to}\.env"),
+        (rf"{p_from}\.env\apps.env", rf"{p_to}\.env"),
+        (rf"{p_from}\apps_config.yaml", rf"{p_to}"),
     ]
     copy_files_any(files)
 
