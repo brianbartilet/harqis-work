@@ -13,23 +13,13 @@ from apps.apps_config import CONFIG_MANAGER
 
 from apps.google_apps.references.constants import ScheduleCategory
 
-_sections__oanda = {
-    "meterLink_broker": {
-        "Preset": "InjectedByTest",
-    },
-    "meterLink_news": {
-        "Preset": "InjectedByTest" # values must be strings
-    },
-    "meterLink_metrics": {
-        "Preset": "InjectedByTest"# values must be strings
-    }
-}
+from workflows.hud.tasks.sections import _sections__oanda
+
 
 @SPROUT.task()
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='OANDA ACCOUNT', new_sections_dict=_sections__oanda, play_sound=True,
-            schedule_categories=[ScheduleCategory.FINANCE, ]
-            )
+            schedule_categories=[ScheduleCategory.FINANCE, ])
 @feed()
 def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))

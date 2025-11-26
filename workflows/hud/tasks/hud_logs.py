@@ -5,12 +5,7 @@ from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.desktop.helpers.feed import feed
 from datetime import  datetime
 
-
-_sections__check_logs = {
-    "meterLink_elastic": {
-        "Preset": "InjectedByTest",
-    },
-}
+from workflows.hud.tasks.sections import _sections__check_logs
 
 
 @SPROUT.task()
@@ -73,7 +68,6 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
     # endregion
 
     # region Dump data
-
     dump = ""
     line_ctr = 1
     for hit in results:
@@ -84,10 +78,13 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
         target_error = str(details['exception_message']).strip()
         dump += f"{target_name:<{42}} {target_error:>{8}}\n"
 
-    # endregion
+
+
     if len(results) == 0:
         dump = dump + "Nothing to see here.\n"
 
     ini['Variables']['ItemLines'] = '{0}'.format(6)
     dump = dump + "\n"
+    # endregion
+
     return dump
