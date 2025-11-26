@@ -56,7 +56,7 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
     ini['MeterDisplay']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
     ini['MeterDisplay']['X'] = '14'
-    ini['MeterDisplay']['MeasureName'] = 'MeasureLuaScriptScroll'
+    #ini['MeterDisplay']['MeasureName'] = 'MeasureLuaScriptScroll'
 
     ini['MeterBackground']['Shape'] = ('Rectangle 0,0,({0}*190),(36+(#ItemLines#*22)),2 | Fill Color #fillColor# '
                                        '| StrokeWidth (1*#Scale#) | Stroke Color [#darkColor] '
@@ -72,7 +72,7 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
 
     # region Dump data
 
-    dump = "{0}\n".format(make_separator(57, char="="))
+    dump = ""
     line_ctr = 1
     for hit in results:
         line_ctr += 1
@@ -84,7 +84,7 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
 
     # endregion
     if len(results) == 0:
-        dump = dump + "No failed jobs today!\n"
+        dump = dump + "Nothing to see here.\n"
 
     ini['Variables']['ItemLines'] = '{0}'.format(6)
     dump = dump + "\n"
