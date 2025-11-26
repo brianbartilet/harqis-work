@@ -8,6 +8,7 @@ from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import logger as log
 
 from apps.apps_config import CONFIG_MANAGER
+from apps.desktop.helpers.feed import feed
 from apps.echo_mtg.references.web.api.inventory import ApiServiceEchoMTGInventory
 from apps.echo_mtg.references.web.api.item import ApiServiceEchoMTGCardItem
 from apps.echo_mtg.references.web.api.notes import ApiServiceEchoMTGNotes
@@ -28,16 +29,18 @@ def task_smoke():
     return number
 
 @SPROUT.task()
+@feed()
 def download_scryfall_bulk_data(cfg_id__scryfall: str):
     cfg__scryfall = CONFIG_MANAGER.get(cfg_id__scryfall)
     api_service__scryfall_cards_bulk = ApiServiceScryfallBulkData(cfg__scryfall)
     api_service__scryfall_cards_bulk.download_bulk_file()
 
-    return
+    return "SUCCESS"
 
 
 @SPROUT.task()
 @log_result()
+@feed()
 def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__echo_mtg_fe: str, cfg_id__scryfall: str):
     """ ../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
 
@@ -118,4 +121,4 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
         log.info("Updating note for card: {0}".format(card_name))
         api_service__echo_mtg_notes.create_note(card_echo['inventory_id'], note_json_string)
 
-    return 0
+    return "SUCCESS"
