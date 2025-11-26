@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+
+  recorder:
+    image: owntracks/recorder:latest
+    container_name: owntracks-recorder
+    restart: unless-stopped
+    # HTTP API port
+    ports:
+      - "8083:8083"
+    environment:
+      # Tell recorder where the MQTT broker is
+      OTR_HOST: mosquitto
+      OTR_PORT: 1883
+      OTR_USER: ""          # fill if you add auth
+      OTR_PASS: ""          # fill if you add auth
+      OTR_HTTP_PORT: 8083   # REST API
+    volumes:
+      - ./recorder_store:/store
