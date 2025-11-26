@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.screenshot import ScreenshotUtility as screenshot
-from core.utilities.data.strings import wrap_text
+from core.utilities.data.strings import wrap_text, make_separator
 
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
@@ -59,8 +59,8 @@ _sections__check_desktop = {
 
 @SPROUT.task()
 @log_result()
-@init_meter(RAINMETER_CONFIG, hud_item_name='GPT DESK CHECK', new_sections_dict=_sections__check_desktop, play_sound=False,
-            schedule_categories=[ScheduleCategory.PINNED, ])
+@init_meter(RAINMETER_CONFIG, hud_item_name='GPT DESK CHECK', new_sections_dict=_sections__check_desktop,
+            play_sound=False, schedule_categories=[ScheduleCategory.PINNED, ], prepend_if_exists=True)
 def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
     # region Assistant Chat Setup
@@ -169,11 +169,11 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
 
     first_ts, last_ts = extract_first_last_timestamp(file)
 
-    dump = "START: {0}\n".format(first_ts)
+    dump = "{0}\nSTART: {1}\n".format(make_separator(64), first_ts)
 
     answer_ = ask_check_desktop()
     dump += wrap_text(answer_, width=65, indent="\n")
-    dump += "\nEND: {0}\n\n\n".format(last_ts)
+    dump += "\n\nEND: {0}\n\n\n".format(last_ts)
     # endregion
 
     ini['Variables']['ItemLines'] = '{0}'.format(10)

@@ -40,7 +40,8 @@ def init_meter(
     reset_alerts_secs: int = 10,
     play_sound: bool = True,
     always_alert: bool = False,
-    schedule_categories: List[ScheduleCategory] = None
+    schedule_categories: List[ScheduleCategory] = None,
+    prepend_if_exists: bool = False
 ) -> Callable:
     """
     Decorator: prepares Rainmeter skin dirs, renders an INI from a template,
@@ -104,7 +105,7 @@ def init_meter(
                 changed = always_alert or _content_changed(note_path, notes_text)
 
                 # 6) Write notes atomically
-                _atomic_write_text(note_path, notes_text, encoding="utf-8")
+                _atomic_write_text(note_path, notes_text, encoding="utf-8", prepend_if_exists=prepend_if_exists)
 
                 # 7) Update displayed title safely
                 set_config_value(cfg, "meterTitle", "text", hud_item_name)
@@ -227,14 +228,41 @@ def _hash_bytes(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
 
-def _atomic_write_text(path: Path, text: str, encoding: str = "utf-8") -> None:
+def _atomic_write_text(
+    path: Path,
+    text: str,
+    encoding: str = "utf-8",
+    prepend_if_exists: bool = False,
+) -> None:
+    """
+    Atomically write text to `path`.
+
+    - Default: overwrite existing file.
+    - If `prepend_if_exists=True` and file exists, new text is written
+      BEFORE the existing contents (prepend).
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile("w", delete=False, dir=str(path.parent), encoding=encoding) as tmp:
-        tmp.write(text)
+
+    if prepend_if_exists and path.exists():
+        try:
+            existing = path.read_text(encoding=encoding)
+        except UnicodeDecodeError:
+            # Fallback if encoding is weird – just best-effort decode
+            existing = path.read_bytes().decode(encoding, errors="ignore")
+        text_to_write = text + existing
+    else:
+        text_to_write = text
+
+    with tempfile.NamedTemporaryFile(
+        "w",
+        delete=False,
+        dir=str(path.parent),
+        encoding=encoding,
+    ) as tmp:
+        tmp.write(text_to_write)
         tmp_path = Path(tmp.name)
+
     os.replace(tmp_path, path)  # atomic on Windows
-
-
 
 
 def set_config_value(cfg: ConfigParser, section: str, key: str, value: str) -> None:
@@ -278,5 +306,15 @@ class NotesTextHelperRainmeter:
     def __init__(self, file_name_txt: str):
         self.file_name_txt = Path(file_name_txt)
 
-    def write(self, stream: str, encoding: str = "utf-8") -> None:
-        _atomic_write_text(self.file_name_txt, stream, encoding=encoding)
+    def write(
+        self,
+        stream: str,
+        encoding: str = "utf-8",
+        prepend_if_exists: bool = False,
+    ) -> None:
+        _atomic_write_text(
+            self.file_name_txt,
+            stream,
+            encoding=encoding,
+            prepend_if_exists=prepend_if_exists,
+        )
