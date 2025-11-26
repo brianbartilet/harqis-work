@@ -1,9 +1,10 @@
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result, get_index_data, LOGGING_INDEX
-from core.utilities.data.strings import make_separator
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
+from apps.desktop.helpers.feed import feed
 from datetime import  datetime
+
 
 _sections__check_logs = {
     "meterLink_elastic": {
@@ -15,6 +16,7 @@ _sections__check_logs = {
 @SPROUT.task()
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='FAILED TASKS TODAY', new_sections_dict=_sections__check_logs, play_sound=False)
+@feed()
 def get_failed_jobs(ini=ConfigHelperRainmeter()):
     today = datetime.now().strftime("%Y-%m-%d")
 
