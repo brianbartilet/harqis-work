@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from apps.desktop.config import CONFIG
+from core.utilities.data.strings import make_separator
 
 
 def _atomic_write_text(
@@ -131,7 +132,7 @@ def _safe_stringify(obj: Any) -> str:
         return repr(obj)
 
 
-def feed(filename_prefix: str = "desktop-feed",
+def feed(filename_prefix: str = "hud-logs",
          encoding: str = "utf-8",
          lock_timeout_secs: int | None = None):
     """
@@ -163,8 +164,9 @@ def feed(filename_prefix: str = "desktop-feed",
 
             # Build header block
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            header = f"=== {timestamp} :: {func.__name__} ===\n"
-            block = f"{header}{dump}\n\n"
+            header = f">> Start\n{timestamp} :: {func.__name__}\n"
+            footer = f"\n{make_separator(48, '>')}"
+            block = f"{header}{dump}\n\n{footer}\n\n"
 
             # Prepend with locking
             _prepend_with_lock(
