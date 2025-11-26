@@ -61,7 +61,7 @@ WORKFLOWS_DESKTOP = {
 
     'run-job--run_capture_logging': {
         'task': 'workflows.desktop.tasks.capture.run_capture_logging',
-        'schedule': crontab(minute='44,46,48,50'),
+        'schedule': crontab(minute='0,15,30,45'),
         'args': ["DESKTOP_JOBS", ],
     },
 
