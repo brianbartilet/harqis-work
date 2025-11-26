@@ -7,7 +7,9 @@ from core.utilities.data.numbers import  safe_number
 from core.utilities.data.strings import  make_separator
 from core.utilities.files import move_files_any, remove_files_with_patterns, sanitize_filename
 from core.utilities.resources.download_file import ServiceDownloadFile
+
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
+from apps.desktop.helpers.feed import feed
 
 from apps.tcg_mp.references.web.api.order import ApiServiceTcgMpOrder
 from apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
@@ -41,6 +43,7 @@ _sections__tcg_mp_sections = {
             play_sound=True,
             schedule_categories=[ScheduleCategory.PLAY, ]
 )
+@feed()
 def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 

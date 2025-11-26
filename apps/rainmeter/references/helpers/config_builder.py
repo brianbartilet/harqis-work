@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-
-from apps.google_apps.references.constants import ScheduleCategory
-
 import functools
 import hashlib
 import os
@@ -22,12 +19,20 @@ from typing import Callable, Dict, Iterable, Mapping, Optional, List
 
 from core.utilities.logging.custom_logger import logger as log
 
+from apps.google_apps.references.constants import ScheduleCategory
 from apps.google_apps.references.web.api.calendar import ApiServiceGoogleCalendarEvents, EventType
 from apps.apps_config import CONFIG_MANAGER
+from apps.desktop.helpers.feed import _atomic_write_text
+
 
 WAIT_SECS_DEFAULT = 10
 BEEP_FREQUENCY = 1200
 BEEP_DURATION_MS = 300
+
+
+# ----------------------
+# Decorators
+# ----------------------
 
 
 def init_meter(
@@ -172,11 +177,9 @@ def init_meter(
 
     return decorator
 
-
 # ----------------------
 # Helpers
 # ----------------------
-
 def sanitize_name(name: str) -> str:
     """Make a filesystem-friendly short name."""
     import re
@@ -226,44 +229,6 @@ def _content_changed(path: Path, new_text: str, encoding: str = "utf-8") -> bool
 
 def _hash_bytes(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
-
-
-def _atomic_write_text(
-    path: Path,
-    text: str,
-    encoding: str = "utf-8",
-    prepend_if_exists: bool = False,
-) -> None:
-    """
-    Atomically write text to `path`.
-
-    - Default: overwrite existing file.
-    - If `prepend_if_exists=True` and file exists, new text is written
-      BEFORE the existing contents (prepend).
-    """
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    if prepend_if_exists and path.exists():
-        try:
-            existing = path.read_text(encoding=encoding)
-        except UnicodeDecodeError:
-            # Fallback if encoding is weird – just best-effort decode
-            existing = path.read_bytes().decode(encoding, errors="ignore")
-        text_to_write = text + existing
-    else:
-        text_to_write = text
-
-    with tempfile.NamedTemporaryFile(
-        "w",
-        delete=False,
-        dir=str(path.parent),
-        encoding=encoding,
-    ) as tmp:
-        tmp.write(text_to_write)
-        tmp_path = Path(tmp.name)
-
-    os.replace(tmp_path, path)  # atomic on Windows
-
 
 def set_config_value(cfg: ConfigParser, section: str, key: str, value: str) -> None:
     if not cfg.has_section(section):

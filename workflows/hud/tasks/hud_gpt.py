@@ -9,6 +9,7 @@ from core.utilities.data.strings import wrap_text, make_separator
 
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
+from apps.desktop.helpers.feed import feed
 
 from core.apps.gpt.assistants.base import BaseAssistant
 from core.apps.gpt.models.assistants.message import MessageCreate
@@ -61,6 +62,7 @@ _sections__check_desktop = {
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='GPT DESK CHECK', new_sections_dict=_sections__check_desktop,
             play_sound=False, schedule_categories=[ScheduleCategory.PINNED, ], prepend_if_exists=True)
+@feed()
 def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
     # region Assistant Chat Setup

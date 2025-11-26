@@ -7,6 +7,7 @@ import psutil
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
 from apps.apps_config import CONFIG_MANAGER
+from apps.desktop.helpers.feed import feed
 
 SCREENREADER_MARKER = "--desktop-screenreader"
 
@@ -41,6 +42,7 @@ def _kill_existing_screenreader_processes():
 
 @SPROUT.task()
 @log_result()
+@feed()
 def run_capture_logging(cfg_id__desktop_utils):
     """
     Creates today's logfile and starts the run_capture loop
