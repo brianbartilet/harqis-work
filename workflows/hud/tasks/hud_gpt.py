@@ -171,7 +171,7 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
 
     first_ts, last_ts = extract_first_last_timestamp(file)
 
-    dump = "{0}\nSTART: {1}\n".format(make_separator(64), first_ts)
+    dump = "\n\n{0}\nSTART: {1}\n".format(make_separator(64), first_ts)
 
     answer_ = ask_check_desktop()
     dump += wrap_text(answer_, width=65, indent="\n")
