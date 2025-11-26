@@ -19,6 +19,7 @@ from core.utilities.logging.custom_logger import logger as log
 from apps.google_apps.references.constants import ScheduleCategory
 from apps.apps_config import CONFIG_MANAGER
 
+from workflows.hud.tasks.sections import _sections__check_desktop, _sections__check_world_checks
 
 TIMESTAMP_RE = re.compile(r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]")
 
@@ -51,13 +52,6 @@ def extract_first_last_timestamp(file_path: str):
     return first_ts, last_ts
 
 
-_sections__check_desktop = {
-    "meterLink_github": {
-        "Preset": "InjectedByTest",
-    },
-}
-
-
 @SPROUT.task()
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='GPT DESK CHECK', new_sections_dict=_sections__check_desktop,
@@ -88,7 +82,7 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
                                   'Also, also provide suggestions on how to improve my productivity from the provided data, '
                                   'do some analysis and suggest other areas of interest I could explore. '
                                   'Perform code analysis or review if there are some code data present.'
-                                  'Make your replies in plain text paragraphs and do not use any markdown.'
+                                  'Make your replies in plain text paragraphs, there is no need for header introduction and do not use any markdown.'
                                   "Provide only chat box style replies"
                                   'Try to also skip sensitive data and information.'
                                   'Be insightful, detailed and be technical if possible, but still being succinct and relevant.'
@@ -182,12 +176,6 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
 
     return dump
 
-
-_sections__check_world_checks = {
-    "meterLink_github": {
-        "Preset": "InjectedByTest",
-    },
-}
 
 @SPROUT.task()
 @log_result()

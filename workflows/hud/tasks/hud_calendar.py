@@ -10,12 +10,8 @@ from apps.google_apps.references.web.api.calendar import ApiServiceGoogleCalenda
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
+from workflows.hud.tasks.sections import _sections__calendar
 
-_sections__calendar = {
-    "meterLink_google_keep": {
-        "Preset": "InjectedByTest",
-    }
-}
 
 @SPROUT.task()
 @log_result()

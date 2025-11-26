@@ -22,19 +22,7 @@ from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
 from workflows.purchases.helpers.helper import load_scryfall_bulk_data
-
-
-_sections__tcg_mp_sections = {
-    "meterLink_orders": {
-        "Preset": "InjectedByTest",
-    },
-    "meterLink_sales": {
-        "Preset": "InjectedByTest" # values must be strings
-    },
-    "meterLink_metrics": {
-        "Preset": "InjectedByTest"# values must be strings
-    }
-}
+from workflows.hud.tasks.sections import _sections__tcg_mp_sections
 
 
 @SPROUT.task()
