@@ -72,7 +72,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
     ini['meterLink_orders']['X'] = '(55*#Scale#)'
     ini['meterLink_orders']['Y'] = '(38*#Scale#)'
     ini['meterLink_orders']['W'] = '80'
-    ini['meterLink_orders']['H'] = '55'
+    ini['meterLink_orders']['H'] = '52'
     ini['meterLink_orders']['Text'] = '|Orders'
     ini['meterLink_orders']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(orders_url)
     ini['meterLink_orders']['tooltiptext'] = orders_url
@@ -99,6 +99,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
 
     # region Set dimensions
     width_multiplier = 2.9
+    ini['meterSeperator']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
 

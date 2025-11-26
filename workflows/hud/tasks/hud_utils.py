@@ -10,15 +10,100 @@ from apps.google_apps.references.web.api.calendar import ApiServiceGoogleCalenda
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
-from workflows.hud.tasks.sections import _sections__utilities_desktop
+# from workflows.hud.tasks.sections import _sections__utilities_desktop
 
+
+
+_sections__utilities_desktop = {
+    "meterLink_home": {
+        "Preset": "InjectedByTest",
+    },
+    "meterSeperator_home": {
+        "Preset": "InjectedByTest",
+    },
+    "meterLink_office": {
+        "Preset": "InjectedByTest",
+    },
+    "meterLink_office_save": {
+        "Preset": "InjectedByTest",
+    },
+    "meterSeperator_office": {
+        "Preset": "InjectedByTest",
+    },
+}
 
 
 
 @SPROUT.task()
 @log_result()
-@init_meter(RAINMETER_CONFIG, hud_item_name='UTILITIES', new_sections_dict=_sections__utilities_desktop, play_sound=False)
-def generate_utilities(cfg_id__desktop, ini=ConfigHelperRainmeter()):
+@init_meter(RAINMETER_CONFIG, hud_item_name='HUD PROFILES', new_sections_dict=_sections__utilities_desktop, play_sound=False)
+def generate_utils_profiles(ini=ConfigHelperRainmeter()):
+
+    # region Build profiles home
+    profile_base = "home"
+    ini['meterLink']['Text'] = "SAVE"
+    ini['meterLink']['LeftMouseUpAction'] = '!Manage Layouts'.format(profile_base)
+    ini['meterLink']['tooltiptext'] = "Save layout changes for {0}".format(profile_base)
+
+    ini['meterLink_home']['Meter'] = 'String'
+    ini['meterLink_home']['MeterStyle'] = 'sItemLink'
+    ini['meterLink_home']['X'] = '(36*#Scale#)'
+    ini['meterLink_home']['Y'] = '(38*#Scale#)'
+    ini['meterLink_home']['W'] = '100'
+    ini['meterLink_home']['H'] = '55'
+    ini['meterLink_home']['Text'] = '| LOAD {0}'.format(profile_base.capitalize())
+    ini['meterLink_home']['LeftMouseUpAction'] = '!LoadLayout "{0}"'.format(profile_base)
+    ini['meterLink_home']['tooltiptext'] = "Switch hud to {0}".format(profile_base)
+
+    ini['meterSeperator_home']['Meter'] = 'Image'
+    ini['meterSeperator_home']['MeterStyle'] = 'styleSeperator'
+    ini['meterSeperator_home']['Y'] = '(54*#Scale#)'
+
+
+    # region Build profiles home
+    profile_office = "office"
+    ini['meterLink_office_save']['Text'] = "SAVE"
+    ini['meterLink_office_save']['LeftMouseUpAction'] = '!Manage Layouts'.format(profile_office)
+    ini['meterLink_office_save']['tooltiptext'] = "Save layout changes for {0}".format(profile_office)
+    ini['meterLink_office_save']['Meter'] = 'String'
+    ini['meterLink_office_save']['MeterStyle'] = 'sItemLink'
+    ini['meterLink_office_save']['X'] = '(9*#Scale#)'
+    ini['meterLink_office_save']['Y'] = '(58*#Scale#)'
+    ini['meterLink_office_save']['W'] = '60'
+    ini['meterLink_office_save']['H'] = '55'
+
+    ini['meterLink_office']['Meter'] = 'String'
+    ini['meterLink_office']['MeterStyle'] = 'sItemLink'
+    ini['meterLink_office']['X'] = '(36*#Scale#)'
+    ini['meterLink_office']['Y'] = '(58*#Scale#)'
+    ini['meterLink_office']['W'] = '100'
+    ini['meterLink_office']['H'] = '55'
+    ini['meterLink_office']['Text'] = '| LOAD {0}'.format(profile_office.capitalize())
+    ini['meterLink_office']['LeftMouseUpAction'] = '!LoadLayout "{0}"'.format(profile_office)
+    ini['meterLink_office']['tooltiptext'] = "Switch hud to {0}".format(profile_office)
+
+    ini['meterSeperator_office']['Meter'] = 'Image'
+    ini['meterSeperator_office']['MeterStyle'] = 'styleSeperator'
+    ini['meterSeperator_office']['Y'] = '(74*#Scale#)'
+
+    # endregion
+
+    # region Set dimensions
+    ini['MeterDisplay']['W'] = '180'
+    ini['MeterDisplay']['H'] = '300'
+    ini['Variables']['ItemLines'] = '{0}'.format(3)
+    # endregion
+
+    # region Build Dump
+    dump = ""
+
+    return dump
+
+
+@SPROUT.task()
+@log_result()
+@init_meter(RAINMETER_CONFIG, hud_item_name='LINKS - ', new_sections_dict=_sections__utilities_desktop, play_sound=False)
+def generate_utilities2(cfg_id__desktop, ini=ConfigHelperRainmeter()):
 
     # region Fetch OANDA data
     cfg__desktop = CONFIG_MANAGER.get(cfg_id__desktop)
@@ -55,4 +140,3 @@ def generate_utilities(cfg_id__desktop, ini=ConfigHelperRainmeter()):
     dump = ""
 
     return dump
-

@@ -1,5 +1,5 @@
-from workflows.hud.tasks.hud_utils import generate_utilities
+from workflows.hud.tasks.hud_utils import generate_utils_profiles
 
 
 def test__generate_utilities_hud():
-    generate_utilities("DESKTOP")
+    generate_utils_profiles()
