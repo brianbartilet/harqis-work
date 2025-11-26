@@ -99,7 +99,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
 
     # region Set dimensions
     width_multiplier = 2.9
-    ini['meterSeperator']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
+    ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
 
