@@ -69,6 +69,11 @@ WORKFLOWS_HUD = {
         'args': []
     },
 
+    'run-job--generate_utilities_hud': {
+        'task': 'workflows.hud.tasks.hud_utils.generate_utilities',
+        'schedule': crontab(hour='0'),
+        'args': ["DESKTOP"]
+    },
 
 
 

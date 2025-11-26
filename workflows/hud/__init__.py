@@ -4,3 +4,4 @@ import workflows.hud.tasks.hud_tcg
 import workflows.hud.tasks.hud_gpt
 import workflows.hud.tasks.hud_calendar
 import workflows.hud.tasks.hud_logs
+import workflows.hud.tasks.hud_utils
