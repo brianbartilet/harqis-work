@@ -80,18 +80,18 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
         messages = [
             MessageCreate(role='user',
                           content='Analyze my desktop and try to understand what tasks am I doing based on the logs '
-                                  'attached for the last hour containing information about focused and clicked items, open applications,'
-                                  'ocr dump, clipboard data. Attached also are screenshots of of desktop monitors.'
-                                  'Can you transcribe the information, provide a timeline of actions performed '
-                                  'and then create an overall summary of tasks done for the past last hour.'
-                                  'On the other hand, also provide suggestions on how to improve my productivity from the provided data,'
+                                  'attached are items from the previous hour containing information about desktop actions with'
+                                  'focusing/clicking items, opened applications,'
+                                  'ocr dump from clicking and clipboard data. Attached also are screenshots of my desktop monitors.'
+                                  'Can you transcribe the information sequentially but do not mention any timestamps.  '
+                                  'Then create an overall summary of tasks done'
+                                  'Also, also provide suggestions on how to improve my productivity from the provided data, '
                                   'do some analysis and suggest other areas of interest I could explore. '
-                                  'Perform some code analysis or review if there are some code data present.'
+                                  'Perform code analysis or review if there are some code data present.'
                                   'Make your replies in plain text paragraphs and do not use any markdown.'
-                                  "Refrain from adding statement like here is your summary and do not provide a title, "
-                                  "just chat box style replies"
+                                  "Provide only chat box style replies"
                                   'Try to also skip sensitive data and information.'
-                                  'Be insightful, detailed and be technical if possible, but still being be creative and relevant.'
+                                  'Be insightful, detailed and be technical if possible, but still being succinct and relevant.'
 
                           ),
         ]
