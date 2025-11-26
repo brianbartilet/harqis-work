@@ -50,3 +50,10 @@ _sections__tcg_mp_sections = {
         "Preset": "InjectedByTest"# values must be strings
     }
 }
+
+
+_sections__utilities_desktop = {
+    "meterLink_office": {
+        "Preset": "InjectedByTest",
+    },
+}
