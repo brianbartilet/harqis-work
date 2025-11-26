@@ -6,8 +6,10 @@ from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.files import copy_files_any
 from apps.rainmeter.references.helpers.settings import set_rainmeter_always_on_top
 from apps.rainmeter.references.helpers.config_builder import _refresh_app
+from apps.desktop.helpers.feed import feed
 
 from apps.apps_config import CONFIG_MANAGER
+
 
 @SPROUT.task()
 @log_result()
@@ -65,6 +67,7 @@ def git_pull_on_paths() -> str:
 
 @SPROUT.task()
 @log_result()
+@feed()
 def copy_files_targeted(cfg_id__desktop_jobs: str) -> str:
     cfg = CONFIG_MANAGER.get(cfg_id__desktop_jobs)
     p_from = cfg['copy_files']['path_dev_files']
@@ -83,6 +86,7 @@ def copy_files_targeted(cfg_id__desktop_jobs: str) -> str:
 
 @SPROUT.task()
 @log_result()
+@feed()
 def set_desktop_hud_to_back() -> str:
     # Resolve %APPDATA%\Rainmeter\Rainmeter.ini
     rainmeter_ini = Path(os.environ["APPDATA"]) / "Rainmeter" / "Rainmeter.ini"
@@ -94,6 +98,7 @@ def set_desktop_hud_to_back() -> str:
 
 @SPROUT.task()
 @log_result()
+@feed()
 def run_n8n_sequence() -> str:
     def run_bats_in_sequence(bat_files: list[str]) -> dict:
         """
