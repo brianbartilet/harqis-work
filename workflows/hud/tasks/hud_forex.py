@@ -83,6 +83,7 @@ def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter(), **kwarg
     # endregion
 
     # region Set dimensions
+    ini['meterSeperator']['W'] = '214'
     ini['MeterDisplay']['W'] = '180'
     ini['MeterDisplay']['H'] = '300'
     ini['Variables']['ItemLines'] = '{0}'.format(len(open_trades) + 2)

@@ -49,7 +49,8 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
     # endregion
 
     # region Set dimensions
-    width_multiplier = 2
+    width_multiplier = 2.1
+    ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
     ini['MeterDisplay']['X'] = '14'

@@ -80,7 +80,7 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
                           content="Analyze the attached desktop activity logs immediately and produce the final answer in one response. "
                                   "Assume the logs contain all necessary information and do not ask for clarification. "
                                   "Process only the most recent hour found in the files. "
-                                  "Add details from used and opened applications or from focus or click actions"
+                                  "Add details from used and opened applications or from focus or click actions, you can mention application names"
                                   "Read all events such as focus changes, clicks, clipboard activity, OCR text, and opened application entries."
                                   "Generate a clear, third-person bullet-point summary describing the desktop activity during that hour. "
                                   "Do not use timestamps."
@@ -148,6 +148,7 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
 
     # region Set dimensions
     width_multiplier = 2.25
+    ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
     ini['MeterDisplay']['X'] = '14'

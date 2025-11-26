@@ -55,6 +55,7 @@ def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
 
     # region Render dimensions
     width_multiplier = 1.7
+    ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
     ini['MeterDisplay']['X'] = '14'
