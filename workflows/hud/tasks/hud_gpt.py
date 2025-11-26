@@ -15,41 +15,12 @@ from core.apps.gpt.assistants.base import BaseAssistant
 from core.apps.gpt.models.assistants.message import MessageCreate
 from core.apps.gpt.models.assistants.run import RunCreate
 from core.utilities.logging.custom_logger import logger as log
+from core.utilities.files import zip_folder
 
 from apps.google_apps.references.constants import ScheduleCategory
 from apps.apps_config import CONFIG_MANAGER
 
 from workflows.hud.tasks.sections import _sections__check_desktop, _sections__check_world_checks
-
-TIMESTAMP_RE = re.compile(r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]")
-
-
-def extract_first_last_timestamp(file_path: str):
-    if not os.path.exists(file_path):
-        return None, None
-
-    first_ts = None
-    last_ts = None
-
-    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-        for line in f:
-            match = TIMESTAMP_RE.search(line)
-            if not match:
-                continue
-
-            ts_str = match.group(1)  # now "2025-11-26 10:04:28"
-
-            try:
-                ts = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
-            except ValueError:
-                continue
-
-            if first_ts is None:
-                first_ts = ts
-
-            last_ts = ts
-
-    return first_ts, last_ts
 
 
 @SPROUT.task()
@@ -59,53 +30,93 @@ def extract_first_last_timestamp(file_path: str):
 @feed()
 def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
-    # region Assistant Chat Setup
+    # region Assistant Chat Setup Functions
     assistant_chat = BaseAssistant()
     assistant_chat.load(assistant_id=assistant_chat.config.app_data['assistant_id_desktop'])
 
     cfg_id__desktop = CONFIG_MANAGER.get(cfg_id__desktop)
 
+    def extract_first_last_timestamp(file_path: str):
+        timestamp_re = re.compile(r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})]")
+        first = None
+        last = None
+
+        if not os.path.exists(file_path):
+            return None, None
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                match = timestamp_re.search(line)
+                if not match:
+                    continue
+
+                ts_str = match.group(1)
+
+                try:
+                    ts = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    continue
+
+                if first is None:
+                    first = ts
+
+                last = ts
+
+        return first, last
+
     def get_last_hour_pattern_actions_file():
-        last_hour = datetime.now() - timedelta(hours=1)
+        # Get local time
+        now = datetime.now()
+
+        # Always subtract one hour — automatically handles midnight rollover
+        last_hour = now - timedelta(hours=1)
+
+        # Format using the actual date of that hour
         ts = last_hour.strftime("%Y%m%d_%H")
-        return f"actions-{ts}.log"
+        return f"actions-{ts}"
 
     def ask_check_desktop():
         messages = [
             MessageCreate(role='user',
-                          content='Analyze my desktop and try to understand what tasks am I doing based on the logs '
-                                  'attached are items from the previous hour containing information about desktop actions with'
-                                  'focusing/clicking items, opened applications,'
-                                  'ocr dump from clicking and clipboard data. Attached also are screenshots of my desktop monitors.'
-                                  'Can you transcribe the information sequentially but do not mention any timestamps.  '
-                                  'Then create an overall summary of tasks done'
-                                  'Also, also provide suggestions on how to improve my productivity from the provided data, '
-                                  'do some analysis and suggest other areas of interest I could explore. '
-                                  'Perform code analysis or review if there are some code data present.'
-                                  'Make your replies in plain text paragraphs, there is no need for header introduction and do not use any markdown.'
-                                  "Provide only chat box style replies"
-                                  'Try to also skip sensitive data and information.'
-                                  'Be insightful, detailed and be technical if possible, but still being succinct and relevant.'
-
-                          ),
+                          content="Analyze the attached desktop activity logs immediately and produce the final answer in one response. "
+                                  "Assume the logs contain all necessary information and do not ask for clarification. "
+                                  "Process only the most recent hour found in the files. "
+                                  "Add details from used and opened applications or from focus or click actions"
+                                  "Read all events such as focus changes, clicks, clipboard activity, OCR text, and opened application entries."
+                                  "Generate a clear, third-person bullet-point summary describing the desktop activity during that hour. "
+                                  "Do not use timestamps."
+                                  "Detect and explicitly note any periods of AFK, idle behaviour, or lack of interaction "
+                                  "based on patterns such as missing focus changes, absence of clicks, or long gaps in activity."
+                                  "Summarize paths, filenames, and application names in a generic, non-identifying way. "
+                                  "Focus on behaviour, patterns, window movements, files interacted with, tools accessed, "
+                                  "and what tasks the person was likely performing."
+                                  "Add optional details on how can I improve productivity from activities from last hour."
+                                  "Do not add headers, markdown, introductions, or conclusions."
+                                  "Do not ask any questions."
+                                  "Produce exactly one uninterrupted answer. Base everything strictly on the logs, "
+                                  "but make reasonable assumptions to fill in missing context where helpful."
+                                  "Write only clean bullet points that read like an observer’s highlights of the hour’s activity."
+                          )
         ]
+        # upload capture data
+        pattern_item = get_last_hour_pattern_actions_file()
+        capture_path = cfg_id__desktop['capture']['actions_log_path']
+        archive_path = cfg_id__desktop['capture']['archive_path']
+        zip_file = os.path.join(archive_path, f'{pattern_item}.zip')
+        zip_folder(capture_path, zip_file)
+
+        assistant_chat.upload_files(capture_path, [f'{pattern_item}.log', ])
+        assistant_chat.upload_files(archive_path, [f'{pattern_item}.zip', ])
+
         # upload screenshots
-        assistant_chat.add_messages_to_thread(messages)
         images_path = os.path.join(os.getcwd(), 'screenshots')
         assistant_chat.upload_files(images_path)
-        # upload capture data
-        capture_path = cfg_id__desktop['capture']['actions_log_path']
-        patterns = [get_last_hour_pattern_actions_file(), ]
-        assistant_chat.upload_files(capture_path, patterns)
 
-        trigger = RunCreate(assistant_id=assistant_chat.properties.id,
-                            tools = [{"type": "code_interpreter"}],
-                            tool_resources={
-                                                "code_interpreter": {
-                                                    "file_ids": assistant_chat.attachments
-                                                }
-                                            }
-                            )
+        assistant_chat.add_messages_to_thread(messages)
+        trigger = RunCreate(
+            assistant_id=assistant_chat.properties.id,
+            tools = [{"type": "code_interpreter"}],
+            tool_resources={ "code_interpreter": { "file_ids": assistant_chat.attachments }}
+        )
         assistant_chat.run_thread(run=trigger)
         assistant_chat.wait_for_runs_to_complete()
         replies = assistant_chat.get_replies()
@@ -114,9 +125,6 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
 
         return answer
 
-    path = os.path.join(os.getcwd(), 'screenshots')
-    screenshot.take_screenshot_all_monitors(save_dir=path, prefix='screenshot-desktop-check')
-    screenshot.cleanup_screenshots(save_dir=path, prefix='screenshot-desktop-check')
     # endregion
 
     # region Set links
@@ -158,9 +166,12 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
     # endregion
 
     # region Dump data
-    file = os.path.join(
-        cfg_id__desktop['capture']['actions_log_path'],
-        get_last_hour_pattern_actions_file()
+
+    path = os.path.join(os.getcwd(), 'screenshots')
+    screenshot.take_screenshot_all_monitors(save_dir=path, prefix='screenshot-desktop-check')
+
+    file = os.path.join(cfg_id__desktop['capture']['actions_log_path'],
+        f'{get_last_hour_pattern_actions_file()}.log'
     )
 
     first_ts, last_ts = extract_first_last_timestamp(file)
@@ -173,6 +184,8 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
     # endregion
 
     ini['Variables']['ItemLines'] = '{0}'.format(8)
+
+    screenshot.cleanup_screenshots(save_dir=path, prefix='screenshot-desktop-check')
 
     return dump
 
