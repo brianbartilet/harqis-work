@@ -2,6 +2,7 @@ from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result, get_index_data, LOGGING_INDEX
 from core.utilities.data.schedulers import friendly_schedule
 from core.utilities.data.strings import make_separator
+from core.utilities.logging.custom_logger import logger as log
 
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
@@ -13,6 +14,8 @@ from workflows.hud.tasks.sections import _sections__check_logs
 from workflows.desktop.tasks_config import WORKFLOWS_DESKTOP
 from workflows.hud.tasks_config import WORKFLOWS_HUD
 from workflows.purchases.tasks_config import WORKFLOW_PURCHASES
+
+from apps.google_apps.references.constants import ScheduleCategory
 
 
 @SPROUT.task()
@@ -98,10 +101,11 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
 
 @SPROUT.task()
 @log_result()
-@init_meter(RAINMETER_CONFIG, hud_item_name='CELERY SPROUTS', new_sections_dict=_sections__check_logs, play_sound=False)
+@init_meter(RAINMETER_CONFIG, hud_item_name='CELERY SPROUTS', new_sections_dict=_sections__check_logs,
+            play_sound=False, schedule_categories=[ScheduleCategory.ORGANIZE, ])
 @feed()
-def get_schedules(ini=ConfigHelperRainmeter()):
-
+def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
+    log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
     workflow_mapping = [
         WORKFLOWS_DESKTOP,
         WORKFLOWS_HUD,
