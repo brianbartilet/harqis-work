@@ -24,6 +24,7 @@ def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
     service = ApiServiceGoogleCalendarEvents(cfg__gsuite)
     events_today_all_day = service.get_all_events_today(EventType.ALL_DAY)
     events_today_now = service.get_all_events_today(EventType.NOW)
+    events_today_upcoming = service.get_all_events_today(EventType.SCHEDULED)
 
     events_today_filtered = []
     for event in events_today_all_day:
@@ -32,6 +33,7 @@ def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
                 events_today_filtered.append(event)
             else:
                 continue
+
     # endregion
 
     # region Build Links
@@ -76,27 +78,34 @@ def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
     line_ctr = 2
     separator_count = 48
     dump = '{0}\nCURRENT TIME BLOCKS ENDS\n'.format(make_separator(separator_count))
-
     for event_now in events_today_now:
         line_ctr += 1
         end_time = datetime.fromisoformat(event_now['end']['dateTime']).strftime('%I:%M %p')
-        dump = dump + '> {0:<35} {1:>10}\n'.format(event_now['calendarSummary'], end_time)
-    dump = dump + make_separator(separator_count) + '\n'
+        dump += '> {0:<35} {1:>10}\n'.format(event_now['calendarSummary'], end_time)
+
+    dump += '{0}\nUPCOMING TIME BLOCKS STARTS\n'.format(make_separator(separator_count))
+    for event_upcoming in events_today_upcoming:
+        line_ctr += 1
+        end_time = datetime.fromisoformat(event_upcoming['start']['dateTime']).strftime('%I:%M %p')
+        dump += '> {0:<35} {1:>10}\n'.format(event_upcoming['calendarSummary'], end_time)
+
+    dump += make_separator(separator_count) + '\n'
+
     if len(events_today_now) == 0:
         line_ctr = 5
         dump = 'No events. \nYou should be sleeping now...\n\n\n'
     for event_now in events_today_now:
-        dump = dump + "{0}\n".format(event_now['calendarSummary'])
+        dump += "{0}\n".format(event_now['calendarSummary'])
         match = 0
         line_ctr += 1
         for all_day_event in events_today_filtered:
             if event_now['calendarSummary'] == all_day_event['calendarSummary']:
                 line_ctr += 1
                 match = 1
-                dump = dump + '* {0:<20}\n'.format(all_day_event['summary'])
+                dump += '* {0:<20}\n'.format(all_day_event['summary'])
         if match == 0:
-            dump = dump + 'No events.\n\n'
-        dump = dump + "{0}\n".format(make_separator(separator_count))
+            dump += 'No events.\n\n'
+        dump += "{0}\n".format(make_separator(separator_count))
     # endregion
 
     ini['Variables']['ItemLines'] = '{0}'.format(line_ctr)
