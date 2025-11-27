@@ -1,37 +1,12 @@
-from datetime import datetime
-
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
-from core.utilities.data.strings import make_separator
-from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
-from apps.desktop.helpers.feed import feed
 
-from apps.google_apps.references.web.api.calendar import ApiServiceGoogleCalendarEvents, EventType
+from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
+
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
-# from workflows.hud.tasks.sections import _sections__utilities_desktop
-
-
-
-_sections__utilities_desktop = {
-    "meterLink_home": {
-        "Preset": "InjectedByTest",
-    },
-    "meterSeperator_home": {
-        "Preset": "InjectedByTest",
-    },
-    "meterLink_office": {
-        "Preset": "InjectedByTest",
-    },
-    "meterLink_office_save": {
-        "Preset": "InjectedByTest",
-    },
-    "meterSeperator_office": {
-        "Preset": "InjectedByTest",
-    },
-}
-
+from workflows.hud.tasks.sections import _sections__utilities_desktop
 
 
 @SPROUT.task()
@@ -85,6 +60,34 @@ def generate_utils_profiles(ini=ConfigHelperRainmeter()):
     ini['meterSeperator_office']['Meter'] = 'Image'
     ini['meterSeperator_office']['MeterStyle'] = 'styleSeperator'
     ini['meterSeperator_office']['Y'] = '(74*#Scale#)'
+
+    # endregion
+
+    # region Build profiles custom
+    profile_custom = "custom"
+    ini['meterLink_custom_save']['Text'] = "SAVE"
+    ini['meterLink_custom_save']['LeftMouseUpAction'] = '!Manage Layouts'.format(profile_custom)
+    ini['meterLink_custom_save']['tooltiptext'] = "Save layout changes for {0}".format(profile_custom)
+    ini['meterLink_custom_save']['Meter'] = 'String'
+    ini['meterLink_custom_save']['MeterStyle'] = 'sItemLink'
+    ini['meterLink_custom_save']['X'] = '(9*#Scale#)'
+    ini['meterLink_custom_save']['Y'] = '(78*#Scale#)'
+    ini['meterLink_custom_save']['W'] = '60'
+    ini['meterLink_custom_save']['H'] = '55'
+
+    ini['meterLink_custom']['Meter'] = 'String'
+    ini['meterLink_custom']['MeterStyle'] = 'sItemLink'
+    ini['meterLink_custom']['X'] = '(36*#Scale#)'
+    ini['meterLink_custom']['Y'] = '(78*#Scale#)'
+    ini['meterLink_custom']['W'] = '100'
+    ini['meterLink_custom']['H'] = '55'
+    ini['meterLink_custom']['Text'] = '| LOAD {0}'.format(profile_custom.capitalize())
+    ini['meterLink_custom']['LeftMouseUpAction'] = '!LoadLayout "{0}"'.format(profile_custom)
+    ini['meterLink_custom']['tooltiptext'] = "Switch hud to {0}".format(profile_custom)
+
+    ini['meterSeperator_custom']['Meter'] = 'Image'
+    ini['meterSeperator_custom']['MeterStyle'] = 'styleSeperator'
+    ini['meterSeperator_custom']['Y'] = '(94*#Scale#)'
 
     # endregion
 
