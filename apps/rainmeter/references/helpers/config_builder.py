@@ -78,9 +78,9 @@ def init_meter(
     note_path = ini_dir / notes_file
     template_path = static_path / template_name
 
-    def decorator(func: Callable) -> Callable:
+    def wrapper(func: Callable) -> Callable:
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def inner(*args, **kwargs):
             try:
                 # 1) Ensure skin folder structure/resources exist
                 _ensure_dirs_and_resources(
@@ -173,9 +173,12 @@ def init_meter(
                 log.error(f"Failed HUD initialization: {e}")
                 raise e
 
-        return wrapper
+        inner._hud_item_name = hud_item_name
+        inner._hud_config = config
 
-    return decorator
+        return inner
+
+    return wrapper
 
 # ----------------------
 # Helpers
