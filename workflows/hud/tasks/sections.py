@@ -22,6 +22,9 @@ _sections__check_desktop = {
     "meterLink_github": {
         "Preset": "InjectedByTest",
     },
+    "meterLink_dump": {
+        "Preset": "InjectedByTest",
+    },
 }
 
 

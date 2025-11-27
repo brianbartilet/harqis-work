@@ -4,18 +4,19 @@ from datetime import datetime, timedelta
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
-from core.utilities.screenshot import ScreenshotUtility as screenshot
-from core.utilities.data.strings import wrap_text, make_separator
-
-from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
-from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
-from apps.desktop.helpers.feed import feed
 
 from core.apps.gpt.assistants.base import BaseAssistant
 from core.apps.gpt.models.assistants.message import MessageCreate
 from core.apps.gpt.models.assistants.run import RunCreate
 from core.utilities.logging.custom_logger import logger as log
 from core.utilities.files import zip_folder
+from core.utilities.resources.decorators import get_decorator_attrs
+from core.utilities.screenshot import ScreenshotUtility as screenshot
+from core.utilities.data.strings import wrap_text, make_separator
+
+from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
+from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
+from apps.desktop.helpers.feed import feed
 
 from apps.google_apps.references.constants import ScheduleCategory
 from apps.apps_config import CONFIG_MANAGER
@@ -26,7 +27,7 @@ from workflows.hud.tasks.sections import _sections__check_desktop, _sections__ch
 @SPROUT.task()
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='GPT DESK CHECK', new_sections_dict=_sections__check_desktop,
-            play_sound=False, schedule_categories=[ScheduleCategory.PINNED, ], prepend_if_exists=True)
+            play_sound=True, schedule_categories=[ScheduleCategory.PINNED, ], prepend_if_exists=True)
 @feed()
 def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
@@ -77,19 +78,21 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
     def ask_check_desktop():
         messages = [
             MessageCreate(role='user',
-                          content="Analyze the attached desktop activity logs immediately and produce the final answer in one response. "
-                                  "Assume the logs contain all necessary information and do not ask for clarification. "
+                          content="Analyze the attached desktop activity logs and screenshots."
+                                  "The attached files all necessary information and please do not ask for any further clarifications. "
                                   "Process only the most recent hour found in the files. "
-                                  "Add details from used and opened applications or from focus or click actions, you can mention application names"
-                                  "Read all events such as focus changes, clicks, clipboard activity, OCR text, and opened application entries."
-                                  "Generate a clear, third-person bullet-point summary describing the desktop activity during that hour. "
-                                  "Do not use timestamps."
-                                  "Detect and explicitly note any periods of AFK, idle behaviour, or lack of interaction "
-                                  "based on patterns such as missing focus changes, absence of clicks, or long gaps in activity."
-                                  "Summarize paths, filenames, and application names in a generic, non-identifying way. "
+                                  "Please explicitly add details from used and opened applications or from focus or click actions, "
+                                  "mention the application interacted with and figure out what I was doing."
                                   "Focus on behaviour, patterns, window movements, files interacted with, tools accessed, "
-                                  "and what tasks the person was likely performing."
-                                  "Add optional details on how can I improve productivity from activities from last hour."
+                                  "and what tasks I'm like performing."
+                                  "The logs contain all events such as focus changes, clicks, clipboard activity, OCR text, "
+                                  "and opened application entries."
+                                  "Generate a clear, third-person bullet-point summary describing the desktop activity. "
+                                  "Do not use timestamps."
+                                  "Detect and explicitly note any periods of AFK, idle behaviour, or lack of interaction."
+                                  "Also figure out if I'm already out for the day or asleep based on my timezone, "
+                                  "based on patterns such as missing focus changes, absence of clicks, or long gaps in activity."
+                                  "Add optional details on how can I improve productivity from analyzed activities"
                                   "Do not add headers, markdown, introductions, or conclusions."
                                   "Do not ask any questions."
                                   "Produce exactly one uninterrupted answer. Base everything strictly on the logs, "
@@ -137,18 +140,36 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
     github_work_url = 'https://github.com/brianbartilet/harqis-work'
     ini['meterLink_github']['Meter'] = 'String'
     ini['meterLink_github']['MeterStyle'] = 'sItemLink'
-    ini['meterLink_github']['X'] = '(58*#Scale#)'
+    ini['meterLink_github']['X'] = '(60*#Scale#)'
     ini['meterLink_github']['Y'] = '(38*#Scale#)'
     ini['meterLink_github']['W'] = '80'
     ini['meterLink_github']['H'] = '55'
     ini['meterLink_github']['Text'] = '|GitHub'
     ini['meterLink_github']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(github_work_url)
     ini['meterLink_github']['tooltiptext'] = github_work_url
+
+    meta = get_decorator_attrs(get_helper_information, prefix='')
+    hud = str(meta['_hud_item_name']).replace(" ", "").upper()
+    dump_path = '{0}'.format(os.path.join(RAINMETER_CONFIG['write_skin_to_path'],
+                                          RAINMETER_CONFIG['skin_name'],
+                                          hud, "dump.txt"
+                                          ))
+    ini['meterLink_dump']['Meter'] = 'String'
+    ini['meterLink_dump']['MeterStyle'] = 'sItemLink'
+    ini['meterLink_dump']['X'] = '(106*#Scale#)'
+    ini['meterLink_dump']['Y'] = '(38*#Scale#)'
+    ini['meterLink_dump']['W'] = '80'
+    ini['meterLink_dump']['H'] = '55'
+    ini['meterLink_dump']['Text'] = '|Dump'
+    ini['meterLink_dump']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(dump_path)
+    ini['meterLink_dump']['tooltiptext'] = dump_path
+
     # endregion
 
     # region Set dimensions
     width_multiplier = 2.25
     ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
+
     ini['MeterDisplay']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
     ini['MeterDisplay']['X'] = '14'

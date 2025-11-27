@@ -13,7 +13,7 @@ function Initialize()
     -- Read options / variables
     filePath = SELF:GetOption("FileToRead", SKIN:GetVariable("TextFile", "dump.txt"))
     maxLines = tonumber(SKIN:GetVariable("MaxLines", "16")) or 16
-    scrollDelay = tonumber(SKIN:GetVariable("ScrollDelay", "4")) or 4
+    scrollDelay = tonumber(SKIN:GetVariable("ScrollDelay", "2")) or 2
 
     readFile()
 end
