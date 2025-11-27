@@ -205,7 +205,7 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
     dump += "\n\nEND: {0}\n\n\n".format(last_ts)
     # endregion
 
-    ini['Variables']['ItemLines'] = '{0}'.format(8)
+    ini['Variables']['ItemLines'] = '{0}'.format(7)
 
     screenshot.cleanup_screenshots(save_dir=path, prefix='screenshot-desktop-check')
 

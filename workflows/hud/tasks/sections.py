@@ -55,8 +55,36 @@ _sections__tcg_mp_sections = {
 }
 
 
+
 _sections__utilities_desktop = {
+    "meterLink_home": {
+        "Preset": "InjectedByTest",
+    },
+    "meterLink_home_save": {
+        "Preset": "InjectedByTest",
+    },
+    "meterSeperator_home": {
+        "Preset": "InjectedByTest",
+    },
+
     "meterLink_office": {
         "Preset": "InjectedByTest",
     },
+    "meterLink_office_save": {
+        "Preset": "InjectedByTest",
+    },
+    "meterSeperator_office": {
+        "Preset": "InjectedByTest",
+    },
+
+    "meterLink_custom": {
+        "Preset": "InjectedByTest",
+    },
+    "meterLink_custom_save": {
+        "Preset": "InjectedByTest",
+    },
+    "meterSeperator_custom": {
+        "Preset": "InjectedByTest",
+    },
 }
+
