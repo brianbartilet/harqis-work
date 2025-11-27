@@ -21,6 +21,7 @@ class EventType(Enum):
     ALL_DAY = auto()
     NOW = auto()
     SCHEDULED = auto()
+    UPCOMING_UNTIL_EOD = auto()
 
 
 def holidays_aware(country_code='en.philippines'):
@@ -137,12 +138,13 @@ class ApiServiceGoogleCalendarEvents(BaseGoogleDiscoveryService):
             )
 
         def is_scheduled(event):
+            # scheduled == has a dateTime start (not all-day)
             return "dateTime" in event.get("start", {})
 
         def extract_event_bounds(event, tz):
-            start_raw = event["start"]
+            start_raw = event.get("start", {})
 
-            # NEW — exclude all-day events entirely for NOW
+            # Exclude all-day events from time-based checks
             if "dateTime" not in start_raw:
                 return None, None
 
@@ -153,11 +155,44 @@ class ApiServiceGoogleCalendarEvents(BaseGoogleDiscoveryService):
 
         def is_happening_now(event, now_dt, tz):
             start, end = extract_event_bounds(event, tz)
+            if start is None:  # All-day or invalid -> skip for NOW
+                return False
+            return start <= now_dt < end
 
-            if start is None:  # All-day event — skip
+        def is_upcoming_scheduled(event, now_dt, tz):
+            if not is_scheduled(event):
+                return False
+            start, _ = extract_event_bounds(event, tz)
+            if start is None:
+                return False
+            # only events starting at or after "now"
+            return start >= now_dt
+
+        def is_upcoming_scheduled_eod(event, now_dt, tz):
+            if not is_scheduled(event):
                 return False
 
-            return start <= now_dt < end
+            start, end = extract_event_bounds(event, tz)
+            if start is None:
+                return False
+
+            # Define end of the current day in the event's timezone
+            end_of_day = datetime(
+                now_dt.year, now_dt.month, now_dt.day, 23, 59, 59, tzinfo=tz
+            )
+
+            # Must start after now
+            if start < now_dt:
+                return False
+
+            # Must start before midnight AND end before midnight
+            if start > end_of_day:
+                return False
+
+            if end > end_of_day:
+                return False
+
+            return True
 
         all_events = []
 
@@ -170,14 +205,22 @@ class ApiServiceGoogleCalendarEvents(BaseGoogleDiscoveryService):
             tz = ZoneInfo(cal_tz)
 
             now = datetime.now(tz)
+            start_of_day = datetime(now.year, now.month, now.day, tzinfo=tz)
+            end_of_day = start_of_day + timedelta(days=1)
 
-            start = datetime(now.year, now.month, now.day, tzinfo=tz)
-            end = start + timedelta(days=1)
+            # For SCHEDULED and NOW we only need from "now" to end-of-day;
+            # for ALL / ALL_DAY we keep the full day.
+            if event_type in (EventType.SCHEDULED, EventType.NOW):
+                time_min = now
+            else:
+                time_min = start_of_day
+
+            time_max = end_of_day
 
             resp = self.service.events().list(
                 calendarId=cal_id,
-                timeMin=start.isoformat(),
-                timeMax=end.isoformat(),
+                timeMin=time_min.isoformat(),
+                timeMax=time_max.isoformat(),
                 maxResults=max_results,
                 singleEvents=True,
                 orderBy="startTime",
@@ -190,15 +233,24 @@ class ApiServiceGoogleCalendarEvents(BaseGoogleDiscoveryService):
                 e["calendarId"] = cal_id
                 e["calendarSummary"] = cal.get("summary", "")
 
-                if event_type == EventType.ALL_DAY and not is_all_day(e):
-                    continue
+                if event_type == EventType.ALL_DAY:
+                    if not is_all_day(e):
+                        continue
 
-                if event_type == EventType.SCHEDULED and not is_scheduled(e):
-                    continue
+                elif event_type == EventType.SCHEDULED:
+                    # upcoming, non all-day, from now to end-of-day
+                    if not is_upcoming_scheduled(e, now, tz):
+                        continue
 
-                if event_type == EventType.NOW and not is_happening_now(e, now, tz):
-                    continue
+                elif event_type == EventType.NOW:
+                    if not is_happening_now(e, now, tz):
+                        continue
 
+                elif event_type == EventType.UPCOMING_UNTIL_EOD:
+                    if not is_upcoming_scheduled_eod(e, now, tz):
+                        continue
+
+                # EventType.ALL falls through with no extra filtering
                 all_events.append(e)
 
         return all_events
