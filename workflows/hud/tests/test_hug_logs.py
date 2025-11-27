@@ -5,4 +5,4 @@ def test__get_failed_jobs():
     get_failed_jobs()
 
 def test__get_schedules():
-    get_schedules()
+    get_schedules(calendar_cfg_id="GOOGLE_APPS")

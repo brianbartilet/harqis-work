@@ -69,13 +69,18 @@ WORKFLOWS_HUD = {
         'args': []
     },
 
+    'run-job--get_schedules': {
+        'task': 'workflows.hud.tasks.hud_utils.get_schedules',
+        'schedule': crontab(hour='0'),
+        'args': [],
+        'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
+    },
+
     'run-job--generate_utils_profiles': {
         'task': 'workflows.hud.tasks.hud_utils.generate_utils_profiles',
         'schedule': crontab(hour='0'),
         'args': []
     },
-
-
 
 
 }
