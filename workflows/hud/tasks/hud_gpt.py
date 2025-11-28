@@ -113,6 +113,7 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
                                   "Produce exactly one uninterrupted answer. Base everything strictly on the logs as all info is in a zip file, "
                                   "but make reasonable assumptions to fill in missing context where helpful."
                                   "Write only clean paragraphs for each item points that read like an observer’s highlights of the past hour’s activity."
+                                  "Be direct and immediately provide analysis and avoid doing introductions."
                           )
         ]
 
@@ -192,13 +193,12 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
     # region Dump data
     log_file = setup_files()
     file = os.path.join(cfg_id__desktop['capture']['actions_log_path'],
-        f'{log_file}.log'
+        f'{log_file}'
     )
 
     first_ts, last_ts = extract_first_last_timestamp(file)
 
     dump = "\n\n{0}\nSTART: {1}\n".format(make_separator(64), first_ts)
-
 
     answer_ = ask_check_desktop()
     dump += wrap_text(answer_, width=65, indent="\n")
