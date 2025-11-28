@@ -162,6 +162,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
         name = (order['first_item'][:50] + '..') if len(order['first_item']) > 50 else order['first_item']
 
         order_detail = service.get_order_detail(order['order_id'])
+        foil = order_detail['items'][0]['crd_foil']
         if safe_number(order['quantity']) > 1:
             if len(order_detail['items']) > 1:
                 order_detail['quantity'] = safe_number(order['quantity'])
@@ -176,7 +177,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
             "name": name,
             "grand_total": order['grand_total'],
             "order_id": order['order_id'],
-            "foil": order['crd_foil_type'],
+            "foil": foil,
         })
 
     sorted_data_single_card_name.sort(key=lambda r: sorted_mapping.index(r["color_identity"]))
@@ -198,7 +199,7 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
 
     for r in sorted_data_single_card_name:
         ctr_lines += 1
-        foil = "F" if r['foil'] is not None else "N"
+        foil = "F" if str(r['foil']) == "1" else "N"
 
         add = " {0:<2} {1:<2} {5:<1} {2:<60} {3:<4} {4:>7}\n".format(
             r["quantity"],
@@ -207,7 +208,6 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
             f"{r['order_id'][4:]}",
             f"{r['grand_total']}",
             foil
-
         )
         dump += add
 
@@ -216,19 +216,22 @@ def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHel
     # append multiple orders
     for r in multiple_items_oder:
         ctr_lines += 1
-        add = "{0}\n ORDER ID: {1} {2:>8}\n".format(
+        add = "{0}\n ORDER ID: {1}\n{2}\n".format(
             make_separator(85, "="),
             r['order_id'],
-            r['grand_total']
+            make_separator(85, '-')
         )
         dump += add
 
         for item in r['items']:
+            foil = "F" if str(item['crd_foil']) == "1" else "N"
             ctr_lines += 1
-            add = " {0:<2} {1:<2} {2:<50}\n".format(
+            add = " {0:<2} {1:<2} {3:<1} {2:<65} {4:>9}\n".format(
                 item["quantity"],
                 get_color_identity(item['name']),
-                item["name"]
+                item["name"],
+                foil,
+                item['price'],
             )
             dump += add
 
