@@ -8,7 +8,7 @@ import winsound
 import time
 import ctypes
 
-from .bangs import _refresh_app, _activate_config, _deactivate_config
+from .bangs import _refresh_app, _activate_config, _deactivate_config, _refresh_skin
 
 user32 = ctypes.windll.user32
 WM_COPYDATA = 0x004A
@@ -154,7 +154,7 @@ def init_meter(
 
                 # 12) Activate & refresh Rainmeter
                 _activate_config(skin_name, hud_dirname, ini_filename)
-                _refresh_app()
+                _refresh_skin(skin_name, hud_dirname)
 
                 # 13) Reset border after wait
                 time.sleep(reset_alerts_secs if changed else WAIT_SECS_DEFAULT)
@@ -164,7 +164,7 @@ def init_meter(
                 cfg_reset.save_to_new_file(str(ini_path))
 
                 _activate_config(skin_name, hud_dirname, ini_filename)
-                _refresh_app()
+                _refresh_skin(skin_name, hud_dirname)
 
                 # Return useful info for callers/tests
                 return {"updated": changed, "ini_path": str(ini_path), "notes_path": str(note_path)}
