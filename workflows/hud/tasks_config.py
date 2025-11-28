@@ -57,6 +57,12 @@ WORKFLOWS_HUD = {
         'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
     },
 
+    'run-job--take_screenshots_for_gpt_capture': {
+        'task': 'workflows.hud.tasks.hud_gpt.take_screenshots_for_gpt_capture',
+        'schedule': crontab(minute='10,20,30,40,50,00'),
+        'args': ["DESKTOP"],
+    },
+    
     'run-job--show_calendar_information': {
         'task': 'workflows.hud.tasks.hud_calendar.show_calendar_information',
         'schedule': crontab(minute='*/15'),

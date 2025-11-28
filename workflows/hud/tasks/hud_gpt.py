@@ -9,7 +9,7 @@ from core.apps.gpt.assistants.base import BaseAssistant
 from core.apps.gpt.models.assistants.message import MessageCreate
 from core.apps.gpt.models.assistants.run import RunCreate
 from core.utilities.logging.custom_logger import logger as log
-from core.utilities.files import zip_folder
+from core.utilities.files import zip_folder, copy_files_to_folder, get_all_files
 from core.utilities.resources.decorators import get_decorator_attrs
 from core.utilities.screenshot import ScreenshotUtility as screenshot
 from core.utilities.data.strings import wrap_text, make_separator
@@ -64,55 +64,57 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
 
         return first, last
 
-    def get_last_hour_pattern_actions_file():
-        # Get local time
-        now = datetime.now()
+    def setup_files():
+        capture_path = cfg_id__desktop['capture']['actions_log_path']
+        archive_path = cfg_id__desktop['capture']['archive_path']
 
-        # Always subtract one hour — automatically handles midnight rollover
-        last_hour = now - timedelta(hours=1)
+        # generate, gather and archive screenshots, there should be a separate task taking desktop at an interval
+        last_hour = datetime.now() - timedelta(hours=1)
+        path = cfg_id__desktop['capture'].get('screenshots_path', os.path.join(os.getcwd(), 'screenshots'))
+        ts_last_hour = last_hour.strftime("%Y-%m-%d-%H")
+        files_last_hour = get_all_files(path, ts_last_hour)
+        folder_to_zip = f'sc-archive-{ts_last_hour}'
+        zip_file_name = f'sc-archive-{ts_last_hour}.zip'
+        copy_files_to_folder(archive_path, folder_name=folder_to_zip, file_names_list=files_last_hour)
 
+        # find actions file and move to archive folder
         # Format using the actual date of that hour
         ts = last_hour.strftime("%Y%m%d_%H")
-        return f"actions-{ts}"
+        actions_file = f"actions-{ts}.log"
+        move_action_file_path = os.path.join(capture_path, actions_file)
+        copy_files_to_folder(archive_path, folder_name=folder_to_zip, file_names_list=[move_action_file_path, ])
+
+        zip_file = os.path.join(archive_path, zip_file_name)
+        zip_folder(os.path.join(archive_path, folder_to_zip), zip_file)
+
+        assistant_chat.upload_files(archive_path, [f'{zip_file_name}', ])
+
+        return move_action_file_path
 
     def ask_check_desktop():
         messages = [
             MessageCreate(role='user',
-                          content="Analyze the attached desktop activity logs and screenshots."
+                          content="Provide deep analysis of the attached desktop activity logs and screenshots."
                                   "The attached files all necessary information and please do not ask for any further clarifications. "
-                                  "Process only the most recent hour found in the files. "
-                                  "Please explicitly add details from used and opened applications or from focus or click actions, "
-                                  "mention the application interacted with and figure out what I was doing."
+                                  "Process only the most recent hour found in the files and take note of its metadata to determine "
+                                  "timestamps and sequence. Please explicitly add details from used and opened applications or from focus "
+                                  "or click actions, mention the application interacted with and figure out what I was doing."
                                   "Focus on behaviour, patterns, window movements, files interacted with, tools accessed, "
-                                  "and what tasks I'm like performing."
+                                  "and what tasks I'm likely performing."
                                   "The logs contain all events such as focus changes, clicks, clipboard activity, OCR text, "
                                   "and opened application entries."
-                                  "Generate a clear, third-person bullet-point summary describing the desktop activity. "
-                                  "Do not use timestamps."
+                                  "You can use timestamps sparingly."
                                   "Detect and explicitly note any periods of AFK, idle behaviour, or lack of interaction."
-                                  "Also figure out if I'm already out for the day or asleep based on my timezone, "
+                                  "Also, figure out if I'm already out for the day or asleep based on my timezone, "
                                   "based on patterns such as missing focus changes, absence of clicks, or long gaps in activity."
                                   "Add optional details on how can I improve productivity from analyzed activities"
                                   "Do not add headers, markdown, introductions, or conclusions."
                                   "Do not ask any questions."
-                                  "Produce exactly one uninterrupted answer. Base everything strictly on the logs, "
+                                  "Produce exactly one uninterrupted answer. Base everything strictly on the logs as all info is in a zip file, "
                                   "but make reasonable assumptions to fill in missing context where helpful."
-                                  "Write only clean bullet points that read like an observer’s highlights of the hour’s activity."
+                                  "Write only clean paragraphs for each item points that read like an observer’s highlights of the past hour’s activity."
                           )
         ]
-        # upload capture data
-        pattern_item = get_last_hour_pattern_actions_file()
-        capture_path = cfg_id__desktop['capture']['actions_log_path']
-        archive_path = cfg_id__desktop['capture']['archive_path']
-        zip_file = os.path.join(archive_path, f'{pattern_item}.zip')
-        zip_folder(capture_path, zip_file)
-
-        assistant_chat.upload_files(capture_path, [f'{pattern_item}.log', ])
-        assistant_chat.upload_files(archive_path, [f'{pattern_item}.zip', ])
-
-        # upload screenshots
-        images_path = os.path.join(os.getcwd(), 'screenshots')
-        assistant_chat.upload_files(images_path)
 
         assistant_chat.add_messages_to_thread(messages)
         trigger = RunCreate(
@@ -188,17 +190,15 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
     # endregion
 
     # region Dump data
-
-    path = os.path.join(os.getcwd(), 'screenshots')
-    screenshot.take_screenshot_all_monitors(save_dir=path, prefix='screenshot-desktop-check')
-
+    log_file = setup_files()
     file = os.path.join(cfg_id__desktop['capture']['actions_log_path'],
-        f'{get_last_hour_pattern_actions_file()}.log'
+        f'{log_file}.log'
     )
 
     first_ts, last_ts = extract_first_last_timestamp(file)
 
     dump = "\n\n{0}\nSTART: {1}\n".format(make_separator(64), first_ts)
+
 
     answer_ = ask_check_desktop()
     dump += wrap_text(answer_, width=65, indent="\n")
@@ -206,8 +206,6 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
     # endregion
 
     ini['Variables']['ItemLines'] = '{0}'.format(7)
-
-    screenshot.cleanup_screenshots(save_dir=path, prefix='screenshot-desktop-check')
 
     return dump
 
@@ -298,4 +296,18 @@ def get_events_world_check(countries_list=None, utc_tz="UTC+8", ini=ConfigHelper
     ini['Variables']['ItemLines'] = '{0}'.format(8)
 
     return dump
+
+
+@SPROUT.task()
+@log_result()
+@feed()
+def take_screenshots_for_gpt_capture(cfg_id__desktop):
+    cfg = CONFIG_MANAGER.get(cfg_id__desktop)
+    path = cfg['capture']['screenshots_path']
+    now = datetime.now()
+    ts = now.strftime(cfg['capture']['strf_time'])
+    screenshot.take_screenshot_all_monitors(save_dir=path, prefix=f'{ts}-sc-desktop-check')
+
+    return "SUCCESS"
+
 
