@@ -94,7 +94,7 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
     def ask_check_desktop():
         messages = [
             MessageCreate(role='user',
-                          content="Provide deep analysis of the attached desktop activity logs and screenshots, bundled in a zip file."
+                          content="Provide deep accurate analysis of the attached desktop activity logs and screenshots, bundled in a zip file."
                                   "Unpack the files, all necessary information and please do not ask for any further clarifications. "
                                   "Process only items from the previous hour found in the files and take note of its metadata to determine "
                                   "timestamps and sequence. Please explicitly add details from used and opened applications or from focus "
