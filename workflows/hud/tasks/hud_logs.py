@@ -1,9 +1,10 @@
+import os
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result, get_index_data, LOGGING_INDEX
 from core.utilities.data.schedulers import friendly_schedule
 from core.utilities.data.strings import make_separator
 from core.utilities.logging.custom_logger import logger as log
-
+from core.utilities.resources.decorators import get_decorator_attrs
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.desktop.helpers.feed import feed
@@ -113,17 +114,25 @@ def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
     ]
 
     # region Set links
-    kibana_url = 'http://localhost:5601/app/dev_tools#/console'
-    ini['meterLink']['text'] = "Kibana"
-    ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(kibana_url)
-    ini['meterLink']['tooltiptext'] = kibana_url
+    meta = get_decorator_attrs(get_schedules, prefix='')
+    hud = str(meta['_hud_item_name']).replace(" ", "").upper()
+    dump_path = '{0}'.format(os.path.join(RAINMETER_CONFIG['write_skin_to_path'],
+                                          RAINMETER_CONFIG['skin_name'],
+                                          hud, "dump.txt"
+                                          ))
+    ini['meterLink']['text'] = "Dump"
+    ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]''!Execute ["{0}"]'.format(dump_path)
+    ini['meterLink']['tooltiptext'] = dump_path
     ini['meterLink']['W'] = '100'
+
+
     # endregion
 
     # region Set dimensions
-    width_multiplier = 2.1
+    width_multiplier = 1.5
+
     ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
-    ini['MeterDisplay']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
+    ini['MeterDisplay']['W'] = '({0}*155*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
     ini['MeterDisplay']['X'] = '14'
     ini['MeterDisplay']['MeasureName'] = 'MeasureLuaScriptScroll'
@@ -143,14 +152,13 @@ def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
     # region Dump data
     dump = "\n"
     for wfd in workflow_mapping:
-        dump += "\n"
         for name, cfg in wfd.items():
             schedule = cfg.get("schedule")
             if schedule:
                 human = friendly_schedule(schedule)
                 task = cfg.get("task")
                 wf, group, tasks, file, func = task.split('.')
-                dump += f'{make_separator(62, "-")}\n{file}.{func:}\n > Triggers {human.lower()}\n'
+                dump += f'{make_separator(43, "-")}\n{file}.{func:}\n > Triggers {human.lower()}\n'
 
     # endregion
 
