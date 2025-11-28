@@ -91,7 +91,7 @@ WORKFLOWS_HUD = {
 
     'run-job--generate_utils_profiles': {
         'task': 'workflows.hud.tasks.hud_utils.generate_utils_profiles',
-        'schedule': crontab(hour='0'),
+        'schedule': crontab(hour='00'),
         'args': []
     },
 

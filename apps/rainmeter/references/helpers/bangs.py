@@ -64,4 +64,11 @@ def _refresh_app() -> None:
     _send_rainmeter_cmd_no_focus("!RefreshApp")
 
 
+def _refresh_skin(skin_name, hud_dirname) -> None: #
+    """ skin_name, hud_dirname
+    Refresh only the skin
+    """
+    config = f"{skin_name}\\{hud_dirname}"
+    _send_rainmeter_cmd_no_focus("!Refresh", config)
+
 # endregion

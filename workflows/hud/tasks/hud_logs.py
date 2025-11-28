@@ -129,7 +129,7 @@ def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
     # endregion
 
     # region Set dimensions
-    width_multiplier = 1.5
+    width_multiplier = 1.3
 
     ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['W'] = '({0}*155*#Scale#)'.format(width_multiplier)
@@ -158,7 +158,7 @@ def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
                 human = friendly_schedule(schedule)
                 task = cfg.get("task")
                 wf, group, tasks, file, func = task.split('.')
-                dump += f'{make_separator(43, "-")}\n{file}.{func:}\n > Triggers {human.lower()}\n'
+                dump += f'{make_separator(36, "-")}\n{file}.{func:}\n > Triggers {human.lower()}\n'
 
     # endregion
 
