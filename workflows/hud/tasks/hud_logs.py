@@ -93,7 +93,7 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
     if len(results) == 0:
         dump = dump + "Nothing to see here.\n"
 
-    ini['Variables']['ItemLines'] = '{0}'.format(6)
+    ini['Variables']['ItemLines'] = '{0}'.format(7)
     dump = dump + "\n"
     # endregion
 
