@@ -140,7 +140,7 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
     github_work_url = 'https://github.com/brianbartilet/harqis-work'
     ini['meterLink_github']['Meter'] = 'String'
     ini['meterLink_github']['MeterStyle'] = 'sItemLink'
-    ini['meterLink_github']['X'] = '(60*#Scale#)'
+    ini['meterLink_github']['X'] = '(58*#Scale#)'
     ini['meterLink_github']['Y'] = '(38*#Scale#)'
     ini['meterLink_github']['W'] = '80'
     ini['meterLink_github']['H'] = '55'
@@ -156,7 +156,7 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
                                           ))
     ini['meterLink_dump']['Meter'] = 'String'
     ini['meterLink_dump']['MeterStyle'] = 'sItemLink'
-    ini['meterLink_dump']['X'] = '(106*#Scale#)'
+    ini['meterLink_dump']['X'] = '(100*#Scale#)'
     ini['meterLink_dump']['Y'] = '(38*#Scale#)'
     ini['meterLink_dump']['W'] = '80'
     ini['meterLink_dump']['H'] = '55'
