@@ -55,7 +55,6 @@ _sections__tcg_mp_sections = {
 }
 
 
-
 _sections__utilities_desktop = {
     "meterLink_home": {
         "Preset": "InjectedByTest",
@@ -88,3 +87,9 @@ _sections__utilities_desktop = {
     },
 }
 
+
+_sections__utilities_i_cue = {
+    "meterLink_dump": {
+        "Preset": "InjectedByTest",
+    },
+}

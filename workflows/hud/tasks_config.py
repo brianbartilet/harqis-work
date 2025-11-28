@@ -65,20 +65,27 @@ WORKFLOWS_HUD = {
     
     'run-job--show_calendar_information': {
         'task': 'workflows.hud.tasks.hud_calendar.show_calendar_information',
-        'schedule': crontab(minute='*/15'),
+        'schedule': crontab(minute='15,30,45,00'),
         'args': ["GOOGLE_APPS"]
     },
 
     'run-job--get_failed_jobs': {
         'task': 'workflows.hud.tasks.hud_logs.get_failed_jobs',
-        'schedule': crontab(minute='*/5'),
+        'schedule': crontab(minute='*/15'),
         'args': []
     },
 
     'run-job--get_schedules': {
-        'task': 'workflows.hud.tasks.hud_utils.get_schedules',
-        'schedule': crontab(minute='*/30'),
+        'task': 'workflows.hud.tasks.hud_logs.get_schedules',
+        'schedule': crontab(minute='00,30'),
         'args': [],
+        'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
+    },
+
+    'run-job--generate_i_cue_profiles': {
+        'task': 'workflows.hud.tasks.hud_utils.generate_i_cue_profiles',
+        'schedule': crontab(minute='00,30'),
+        'args': ["DESKTOP"],
         'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
     },
 
