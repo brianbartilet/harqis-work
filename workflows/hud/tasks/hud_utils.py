@@ -1,17 +1,26 @@
+import os
+from pathlib import Path
+
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
+from core.utilities.resources.decorators import get_decorator_attrs
+from core.utilities.logging.custom_logger import logger as log
 
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
-
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
+from apps.desktop.corsair.profiles_mapping import build_summary
+from apps.google_apps.references.constants import ScheduleCategory
 from apps.apps_config import CONFIG_MANAGER
 
-from workflows.hud.tasks.sections import _sections__utilities_desktop
+from workflows.hud.tasks.sections import _sections__utilities_desktop, _sections__utilities_i_cue
 
 
 @SPROUT.task()
 @log_result()
-@init_meter(RAINMETER_CONFIG, hud_item_name='HUD PROFILES', new_sections_dict=_sections__utilities_desktop, play_sound=False)
+@init_meter(RAINMETER_CONFIG,
+            hud_item_name='HUD PROFILES',
+            new_sections_dict=_sections__utilities_desktop,
+            play_sound=False)
 def generate_utils_profiles(ini=ConfigHelperRainmeter()):
 
     # region Build profiles home
@@ -35,7 +44,7 @@ def generate_utils_profiles(ini=ConfigHelperRainmeter()):
     ini['meterSeperator_home']['Y'] = '(54*#Scale#)'
 
 
-    # region Build profiles home
+    # region Build profiles office
     profile_office = "office"
     ini['meterLink_office_save']['Text'] = "SAVE"
     ini['meterLink_office_save']['LeftMouseUpAction'] = '!Manage Layouts'.format(profile_office)
@@ -102,3 +111,66 @@ def generate_utils_profiles(ini=ConfigHelperRainmeter()):
 
     return dump
 
+
+@SPROUT.task()
+@log_result()
+@init_meter(RAINMETER_CONFIG,
+            hud_item_name='ICUE BINDINGS',
+            new_sections_dict=_sections__utilities_i_cue,
+            play_sound=False,
+            schedule_categories=[ScheduleCategory.ORGANIZE, ScheduleCategory.WORK])
+def generate_i_cue_profiles(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
+    log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
+
+    # region Corsair
+    path = 'C:\Program Files\Corsair\Corsair iCUE5 Software\iCUE.exe'
+    ini['meterLink']['Text'] = "ICue"
+    ini['meterLink']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(path)
+    ini['meterLink']['tooltiptext'] = path
+
+    meta = get_decorator_attrs(generate_i_cue_profiles, prefix='')
+    hud = str(meta['_hud_item_name']).replace(" ", "").upper()
+    dump_path = '{0}'.format(os.path.join(RAINMETER_CONFIG['write_skin_to_path'],
+                                          RAINMETER_CONFIG['skin_name'],
+                                          hud, "dump.txt"
+                                          ))
+    ini['meterLink_dump']['Meter'] = 'String'
+    ini['meterLink_dump']['MeterStyle'] = 'sItemLink'
+    ini['meterLink_dump']['X'] = '(33*#Scale#)'
+    ini['meterLink_dump']['Y'] = '(38*#Scale#)'
+    ini['meterLink_dump']['W'] = '80'
+    ini['meterLink_dump']['H'] = '55'
+    ini['meterLink_dump']['Text'] = '|Dump'
+    ini['meterLink_dump']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(dump_path)
+    ini['meterLink_dump']['tooltiptext'] = dump_path
+
+    # region Set dimensions
+    width_multiplier = 1.75
+    ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
+
+    ini['MeterDisplay']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
+    ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
+    ini['MeterDisplay']['X'] = '14'
+    ini['MeterDisplay']['MeasureName'] = 'MeasureScrollableText'
+
+    ini['MeterBackground']['Shape'] = ('Rectangle 0,0,({0}*190),(36+(#ItemLines#*22)),2 | Fill Color #fillColor# '
+                                       '| StrokeWidth (1*#Scale#) | Stroke Color [#darkColor] '
+                                       '| Scale #Scale#,#Scale#,0,0').format(width_multiplier)
+
+    ini['MeterBackgroundTop']['Shape'] = ('Rectangle 3,3,({0}*186),25,2 | Fill Color #headerColor# | StrokeWidth 0 '
+                                          '| Stroke Color [#darkColor] | Scale #Scale#,#Scale#,0,0').format(width_multiplier)
+    ini['Rainmeter']['SkinWidth'] = '({0}*198*#Scale#)'.format(width_multiplier)
+    ini['Rainmeter']['SkinHeight'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
+    ini['meterTitle']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
+    ini['meterTitle']['X'] = '({0}*198*#Scale#)/2'.format(width_multiplier)
+
+    ini['Variables']['ItemLines'] = '{0}'.format(15)
+    # endregion
+
+    # region Build Dump
+    cfg = CONFIG_MANAGER.get(cfg_id__desktop)
+    path = Path(cfg['corsair']['path_profiles'])
+    output, dump = build_summary(path)
+
+
+    return dump
