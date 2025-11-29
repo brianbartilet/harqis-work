@@ -94,26 +94,48 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
     def ask_check_desktop():
         messages = [
             MessageCreate(role='user',
-                          content="Provide deep accurate analysis of the attached desktop activity logs and screenshots, bundled in a zip file."
-                                  "Unpack the files, all necessary information and please do not ask for any further clarifications. "
-                                  "Process only items from the previous hour found in the files and take note of its metadata to determine "
-                                  "timestamps and sequence. Please explicitly add details from used and opened applications or from focus "
-                                  "or click actions, mention the application interacted with and figure out what I was doing."
-                                  "Focus on behaviour, patterns, window movements, files interacted with, tools accessed, "
-                                  "and what tasks I'm likely performing."
-                                  "The logs contain all events such as focus changes, clicks, clipboard activity, OCR text, "
-                                  "and opened application entries."
-                                  "You can use timestamps sparingly."
-                                  "Detect and explicitly note any periods of AFK, idle behaviour, or lack of interaction."
-                                  "Also, figure out if I'm already out for the day or asleep based on my timezone, "
-                                  "based on patterns such as missing focus changes, absence of clicks, or long gaps in activity."
-                                  "Add optional details on how can I improve productivity from analyzed activities"
-                                  "Do not add headers, markdown, introductions, or conclusions."
-                                  "Do not ask any questions."
-                                  "Produce exactly one uninterrupted answer. Base everything strictly on the logs as all info is in a zip file, "
-                                  "but make reasonable assumptions to fill in missing context where helpful."
-                                  "Write only clean paragraphs for each item points that read like an observer’s highlights of the past hour’s activity."
-                                  "Be direct and immediately provide analysis and avoid doing introductions."
+                          content=
+                          """
+                          You are an analysis assistant.
+                          Your task is to read and analyze ONLY the contents of the provided ZIP file.
+                          Never use outside knowledge or create any details that are not explicitly present in the logs or screenshots.
+                          1. Data Handling Rules
+                            - Unpack and read every file in the ZIP.
+                            - Treat the activity log as the authoritative source of truth.
+                            - Use screenshots only to supplement the logs through OCR or visible UI context.
+                            - If a detail is missing, ambiguous, unreadable, or incomplete, explicitly state that instead of inventing information.
+                          2. Allowed Reasoning
+                          You may:
+                            - Extract facts explicitly present in the logs.
+                            - Use screenshots to confirm or enrich the log data.
+                            - Make minimal, cautious, evidence-based inferences only when a clear pattern exists (e.g., long inactivity = idle/AFK).
+                            - Consider the user’s timezone when evaluating inactivity patterns.
+                          You may NOT:
+                            - Invent applications, actions, windows, text, or timestamps.
+                            - Guess file names or metadata that are not present.
+                            - Fill gaps with imagined activity.
+                            - Describe processes or instructions; focus only on analysis.
+                          3. Required Analysis
+                          Using only evidence from the ZIP contents:
+                            - Reconstruct desktop behaviour: focus changes, clicks, clipboard events, OCR text, opened apps, 
+                            window titles, and interaction sequences.
+                            - Identify the likely tasks the user is performing only when strongly supported by the logs or screenshots.
+                            - Detect and describe periods of AFK or idle time based on event gaps.
+                            - Determine whether the user is likely offline, out for the day, or asleep by analyzing long inactivity in relation to the user’s timezone.
+                            - Provide optional productivity improvement suggestions based strictly on observed activity patterns.
+                          4. Output Requirements
+                            - Do not use headers, bullet points, titles, lists, or markdown formatting.
+                            - Write clean, continuous paragraphs, each reflecting a meaningful cluster of activity.
+                            - Use timestamps sparingly and only when necessary to explain inactivity or transitions.
+                            - Do not provide introductions, disclaimers, or conclusions.
+                            - Do not ask questions or seek clarification.
+                            - The response must be a single uninterrupted output.
+                          5. Accuracy Enforcement
+                            - If any behavior, interaction, or interpretation cannot be confirmed from the logs or screenshots, 
+                            explicitly say it cannot be determined.
+                            - Always prefer omission over invention.
+                            - All statements must be traceable to evidence inside the ZIP file.
+                          """
                           )
         ]
 
