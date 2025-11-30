@@ -9,6 +9,7 @@ services:
       - n8n_data:/home/node/.n8n
     environment:
       TZ: Asia/Singapore
+      N8N_TIMEZONE: Asia/Singapore
 
 volumes:
   n8n_data:
