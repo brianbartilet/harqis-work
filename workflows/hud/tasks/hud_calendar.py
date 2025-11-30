@@ -139,7 +139,7 @@ def show_calendar_information(cfg_id__gsuite, cfg_id__elevenlabs, ini=ConfigHelp
                 match = 1
                 dump += '  * {0:<20}\n'.format(all_day_event['summary'])
         if match == 0:
-            dump += 'No events.\n\n'
+            dump += '  * No events.\n\n'
         dump += "{0}\n".format(make_separator(separator_count))
     # endregion
 
