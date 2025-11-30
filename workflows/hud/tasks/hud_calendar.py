@@ -28,21 +28,32 @@ def show_calendar_information(cfg_id__gsuite, cfg_id__elevenlabs, ini=ConfigHelp
     events_today_upcoming = service.get_all_events_today(EventType.SCHEDULED)
 
     events_today_filtered = []
+    added_ids = set()  # store unique keys (summary or event id)
+
     for event in events_today_all_day:
         for current_block in events_today_now:
             if event['calendarSummary'] == current_block['calendarSummary']:
-                events_today_filtered.append(event)
-            else:
-                continue
+                key = event['summary']  # or event['id'] if available
+
+                if key not in added_ids:
+                    added_ids.add(key)
+                    events_today_filtered.append(event)
+
+                break  # stop checking other current_block entries
 
     # endregion
 
     # region Build Links
-    assistant_url = ("https://elevenlabs.io/app/talk-to?agent_id={0}"
-                     .format(cfg__eleven['data']['assistants']['agent_n8n_automation']))
-    ini['meterLink']['text'] = "ASSISTANT"
-    ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(assistant_url)
-    ini['meterLink']['tooltiptext'] = assistant_url
+    assistant_url = (
+        "https://elevenlabs.io/app/talk-to?agent_id={0}"
+        .format(cfg__eleven['data']['assistants']['agent_n8n_automation'])
+    )
+    ini['meterLink']['Text'] = "ASSISTANT"
+    ini['meterLink']['LeftMouseUpAction'] = (
+        '["{exe}" "--new-window" "{url}"]'
+        .format(exe="chrome.exe", url=assistant_url)
+    )
+    ini['meterLink']['TooltipText'] = assistant_url
     ini['meterLink']['W'] = '100'
 
     calendar_url = "https://calendar.google.com/calendar/u/0/r"
@@ -108,15 +119,25 @@ def show_calendar_information(cfg_id__gsuite, cfg_id__elevenlabs, ini=ConfigHelp
     if len(events_today_now) == 0:
         line_ctr = 5
         dump = 'No events. \nYou should be sleeping now...\n\n\n'
+
+    seen_summaries = set()
+
     for event_now in events_today_now:
-        dump += "{0}\n".format(event_now['calendarSummary'])
+        cal_summary = event_now['calendarSummary']
+        if cal_summary in seen_summaries:
+            continue
+        seen_summaries.add(cal_summary)
+
+        line_ctr += 1
+        dump += "[TASKS]\n{0}\n".format(event_now['calendarSummary'])
+
         match = 0
         line_ctr += 1
         for all_day_event in events_today_filtered:
             if event_now['calendarSummary'] == all_day_event['calendarSummary']:
                 line_ctr += 1
                 match = 1
-                dump += '* {0:<20}\n'.format(all_day_event['summary'])
+                dump += '  * {0:<20}\n'.format(all_day_event['summary'])
         if match == 0:
             dump += 'No events.\n\n'
         dump += "{0}\n".format(make_separator(separator_count))
