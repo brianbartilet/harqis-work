@@ -148,7 +148,15 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
         assistant_chat.run_thread(run=trigger)
         assistant_chat.wait_for_runs_to_complete()
         replies = assistant_chat.get_replies()
-        answer = [x.content[0].text.value for x in replies]
+        answer = []
+        for x in replies:
+            try:
+                answer.append(x.content[0].text.value)
+            except (AttributeError, IndexError, KeyError):
+                last_hour = datetime.now() - timedelta(hours=1)
+                ts_last_hour = last_hour.strftime("%Y-%m-%d-%H")
+                answer.append(f'AFK {ts_last_hour}\n\n')
+                continue
         answer.sort(reverse=True)
 
         return answer
