@@ -1,7 +1,10 @@
 _sections__calendar = {
     "meterLink_google_keep": {
         "Preset": "InjectedByTest",
-    }
+    },
+    "meterLink_google_calendar": {
+        "Preset": "InjectedByTest",
+    },
 }
 
 

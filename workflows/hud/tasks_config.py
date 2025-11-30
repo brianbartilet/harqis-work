@@ -66,7 +66,7 @@ WORKFLOWS_HUD = {
     'run-job--show_calendar_information': {
         'task': 'workflows.hud.tasks.hud_calendar.show_calendar_information',
         'schedule': crontab(minute='15,30,45,00'),
-        'args': ["GOOGLE_APPS"]
+        'args': ["GOOGLE_APPS", "ELEVEN_LABS"]
     },
 
     'run-job--get_failed_jobs': {

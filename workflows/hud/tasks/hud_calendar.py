@@ -17,10 +17,11 @@ from workflows.hud.tasks.sections import _sections__calendar
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='CALENDAR PEEK', new_sections_dict=_sections__calendar, play_sound=False)
 @feed()
-def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
+def show_calendar_information(cfg_id__gsuite, cfg_id__elevenlabs, ini=ConfigHelperRainmeter()):
 
     # region Fetch events and filter
     cfg__gsuite= CONFIG_MANAGER.get(cfg_id__gsuite)
+    cfg__eleven = CONFIG_MANAGER.get(cfg_id__elevenlabs)
     service = ApiServiceGoogleCalendarEvents(cfg__gsuite)
     events_today_all_day = service.get_all_events_today(EventType.ALL_DAY)
     events_today_now = service.get_all_events_today(EventType.NOW)
@@ -37,19 +38,32 @@ def show_calendar_information(cfg_id__gsuite, ini=ConfigHelperRainmeter()):
     # endregion
 
     # region Build Links
+    assistant_url = ("https://elevenlabs.io/app/talk-to?agent_id={0}"
+                     .format(cfg__eleven['data']['assistants']['agent_n8n_automation']))
+    ini['meterLink']['text'] = "ASSISTANT"
+    ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(assistant_url)
+    ini['meterLink']['tooltiptext'] = assistant_url
+    ini['meterLink']['W'] = '100'
+
     calendar_url = "https://calendar.google.com/calendar/u/0/r"
-    ini['meterLink']['text'] = "Calendar"
-    ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(calendar_url)
-    ini['meterLink']['tooltiptext'] = calendar_url
+    ini['meterLink_google_calendar']['Meter'] = 'String'
+    ini['meterLink_google_calendar']['MeterStyle'] = 'sItemLink'
+    ini['meterLink_google_calendar']['X'] = '(64*#Scale#)'
+    ini['meterLink_google_calendar']['Y'] = '(38*#Scale#)'
+    ini['meterLink_google_calendar']['W'] = '60'
+    ini['meterLink_google_calendar']['H'] = '55'
+    ini['meterLink_google_calendar']['Text'] = '|CALENDAR'
+    ini['meterLink_google_calendar']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(calendar_url)
+    ini['meterLink_google_calendar']['tooltiptext'] = calendar_url
 
     keep_url = 'https://keep.google.com/u/0/#home'
     ini['meterLink_google_keep']['Meter'] = 'String'
     ini['meterLink_google_keep']['MeterStyle'] = 'sItemLink'
-    ini['meterLink_google_keep']['X'] = '(58*#Scale#)'
+    ini['meterLink_google_keep']['X'] = '(120*#Scale#)'
     ini['meterLink_google_keep']['Y'] = '(38*#Scale#)'
     ini['meterLink_google_keep']['W'] = '60'
     ini['meterLink_google_keep']['H'] = '55'
-    ini['meterLink_google_keep']['Text'] = '|Keep'
+    ini['meterLink_google_keep']['Text'] = '|KEEP'
     ini['meterLink_google_keep']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(keep_url)
     ini['meterLink_google_keep']['tooltiptext'] = keep_url
 
