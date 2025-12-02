@@ -18,7 +18,7 @@ services:
     container_name: command_runner
     restart: unless-stopped
     volumes:
-      - ./command_runner.py:/app/command_runner.py
+      - ../utilities/command_runner.py:/app/command_runner.py
     working_dir: /app
     command: >
       sh -c "pip install flask &&
