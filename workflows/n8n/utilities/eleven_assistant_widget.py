@@ -1,4 +1,7 @@
 import sys
+import ctypes
+from ctypes import wintypes
+
 from PySide6.QtCore import Qt, QPoint, QUrl
 from PySide6.QtWidgets import (
     QApplication,
@@ -40,6 +43,78 @@ def build_html(agent_id: str, script_url: str) -> str:
 </body>
 </html>
 """
+
+
+# =======================
+# Windows desktop helpers
+# =======================
+
+_is_windows = sys.platform.startswith("win")
+
+if _is_windows:
+    user32 = ctypes.windll.user32
+
+    EnumWindowsProc = ctypes.WINFUNCTYPE(
+        wintypes.BOOL,
+        wintypes.HWND,
+        wintypes.LPARAM,
+    )
+
+    def _get_workerw_hwnd() -> int | None:
+        """
+        Find the WorkerW window where we can parent our widget to behave
+        like a desktop gadget.
+        """
+        progman = user32.FindWindowW("Progman", None)
+        if not progman:
+            return None
+
+        # Ask Progman to spawn a WorkerW
+        user32.SendMessageTimeoutW(
+            progman,
+            0x052C,  # 0x052C = "Progman, create WorkerW"
+            0,
+            0,
+            0,
+            1000,
+            None,
+        )
+
+        workerw_out = ctypes.c_void_p(0)
+
+        def _enum_windows(hwnd, lparam):
+            # Look for a SHELLDLL_DefView child; its parent has a WorkerW sibling
+            shell_dll_defview = user32.FindWindowExW(
+                hwnd, 0, "SHELLDLL_DefView", None
+            )
+            if shell_dll_defview:
+                # The WorkerW is a sibling of the window that owns SHELLDLL_DefView
+                workerw = user32.FindWindowExW(
+                    0, hwnd, "WorkerW", None
+                )
+                if workerw:
+                    workerw_out.value = workerw
+                    return False  # stop enumeration
+            return True  # continue
+
+        user32.EnumWindows(EnumWindowsProc(_enum_windows), 0)
+
+        return workerw_out.value or None
+
+    def _set_parent_to_workerw(hwnd: int, enable: bool):
+        """
+        If enable=True, parent hwnd to WorkerW; else reset parent to desktop.
+        """
+        if not hwnd:
+            return
+
+        if enable:
+            workerw = _get_workerw_hwnd()
+            if workerw:
+                user32.SetParent(hwnd, workerw)
+        else:
+            # 0 = desktop / no explicit parent (back to top-level)
+            user32.SetParent(hwnd, 0)
 
 
 class DragBar(QFrame):
@@ -95,10 +170,10 @@ class DragBar(QFrame):
     def update_pin_visual(self, pinned: bool):
         if pinned:
             self.setStyleSheet("background-color: rgba(20,20,20,230);")
-            self.pin_btn.setText("📎")   # GRAY pin icon
+            self.pin_btn.setText("📎")   # pin icon
         else:
             self.setStyleSheet("background-color: rgba(80,80,80,220);")
-            self.pin_btn.setText("📎")   # same icon, different color via CSS
+            self.pin_btn.setText("📎")   # same icon, diff color via CSS
 
     # -------- drag behaviour --------
     def mousePressEvent(self, event):
@@ -138,7 +213,9 @@ class ElevenWidget(QWidget):
     def __init__(self, agent_id: str, script_url: str, width=270, height=430):
         super().__init__()
 
+        # Start pinned-to-desktop
         self.pinned = True
+
         self._apply_window_flags()
 
         self.setStyleSheet("background-color: #111111;")
@@ -147,8 +224,10 @@ class ElevenWidget(QWidget):
         self.resize(width, height)
 
         screen = QApplication.primaryScreen().geometry()
-        self.move(screen.width() - width - 40,
-                  (screen.height() - height) // 2)
+        self.move(
+            screen.width() - width - 40,
+            (screen.height() - height) // 2,
+        )
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -166,18 +245,49 @@ class ElevenWidget(QWidget):
 
         layout.addWidget(self.view)
 
+        # After we have a native handle, pin/unpin appropriately
+        self._update_desktop_pinning()
+
     def _apply_window_flags(self):
-        flags = Qt.FramelessWindowHint | Qt.Tool
+        """
+        When pinned: behave like a gadget (no taskbar, not always-on-top).
+        When unpinned: normal window (shows in Alt+Tab / taskbar).
+        """
         if self.pinned:
-            flags |= Qt.WindowStaysOnTopHint
+            flags = Qt.FramelessWindowHint | Qt.Tool
+        else:
+            flags = Qt.FramelessWindowHint | Qt.Window
+
         self.setWindowFlags(flags)
         self.show()
+
+    def _update_desktop_pinning(self):
+        """
+        Actually reparent to WorkerW on Windows when pinned.
+        """
+        if not _is_windows:
+            return
+
+        hwnd = int(self.winId()) if self.winId() is not None else 0
+        if not hwnd:
+            return
+
+        if self.pinned:
+            _set_parent_to_workerw(hwnd, True)
+        else:
+            _set_parent_to_workerw(hwnd, False)
 
     def set_pinned(self, pinned: bool):
         if self.pinned == pinned:
             return
         self.pinned = pinned
+
+        # Re-apply flags (changes Tool/Window etc.)
         self._apply_window_flags()
+
+        # Re-parent to desktop WorkerW or back to normal
+        self._update_desktop_pinning()
+
         if hasattr(self, "drag_bar"):
             self.drag_bar.set_pin_state(self.pinned)
 
