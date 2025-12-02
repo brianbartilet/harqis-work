@@ -145,7 +145,6 @@ def run_n8n_sequence() -> str:
 
     # Adjust these paths as needed
     bat_list = [
-        r"C:\Users\brian\GIT\harqis-work\workflows\n8n\deploy\deploy.bat",
         r"C:\Users\brian\GIT\harqis-work\workflows\n8n\deploy\backup.bat",
         r"C:\Users\brian\GIT\harqis-work\workflows\n8n\deploy\restore.bat",
     ]

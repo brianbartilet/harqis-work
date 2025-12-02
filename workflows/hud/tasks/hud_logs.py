@@ -1,4 +1,6 @@
 import os
+import pprint
+from pathlib import Path
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result, get_index_data, LOGGING_INDEX
 from core.utilities.data.schedulers import friendly_schedule
@@ -112,6 +114,11 @@ def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
         WORKFLOWS_HUD,
         WORKFLOW_PURCHASES,
     ]
+    # save to repo for some other use cases
+    output_path = Path(os.path.join(os.getcwd(), "workflows.mapping"))
+    # Use pprint to make it readable
+    text = pprint.pformat(workflow_mapping, indent=4, width=120)
+    output_path.write_text(text, encoding="utf-8")
 
     # region Set links
     meta = get_decorator_attrs(get_schedules, prefix='')
