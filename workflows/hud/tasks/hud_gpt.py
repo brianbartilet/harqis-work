@@ -130,6 +130,8 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
                             - Do not provide introductions, disclaimers, or conclusions.
                             - Do not ask questions or seek clarification.
                             - The response must be a single uninterrupted output.
+                            - Avoid statements explaining your process like "I will begin by unpacking and analyzing the contents of the
+                              provided ZIP file to extract and reconstruct your recent desktop activity according to your instructions.
                           5. Accuracy Enforcement
                             - If any behavior, interaction, or interpretation cannot be confirmed from the logs or screenshots, 
                             explicitly say it cannot be determined.
