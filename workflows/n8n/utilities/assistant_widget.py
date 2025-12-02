@@ -131,35 +131,62 @@ class DragBar(QFrame):
         layout.setSpacing(4)
         layout.addStretch(1)
 
-        self.pin_btn = QPushButton(self)
+        # -------- PIN BUTTON (GRAY) --------
+        self.pin_btn = QPushButton("📎", self)
         self.pin_btn.setCheckable(True)
         self.pin_btn.setFlat(True)
         self.pin_btn.setFixedSize(22, 22)
 
-        # GRAY PIN BUTTON (text color applies to glyph)
-        self.pin_btn.setStyleSheet(
-            """
+        # ORIGINAL COLOR STYLE
+        self.pin_btn.setStyleSheet("""
             QPushButton {
                 border: none;
-                color: #C0C0C0;        /* gray */
+                color: #C0C0C0;            /* gray */
                 font-size: 15px;
             }
             QPushButton:hover {
-                color: #E0E0E0;        /* lighter gray */
+                color: #E0E0E0;            /* lighter gray */
             }
             QPushButton:checked {
-                color: #FFFFFF;        /* white when pinned */
+                color: #FFFFFF;            /* white when pinned */
             }
-            """
-        )
+        """)
 
         self.pin_btn.toggled.connect(self._on_pin_toggled)
         layout.addWidget(self.pin_btn)
 
+        # -------- CLOSE BUTTON (X) --------
+        self.close_btn = QPushButton("✖", self)
+        self.close_btn.setFlat(True)
+        self.close_btn.setFixedSize(22, 22)
+        self.close_btn.setStyleSheet("""
+            QPushButton {
+                border: none;
+                color: #C0C0C0;
+                font-size: 15px;
+            }
+            QPushButton:hover {
+                color: #FF6666;            /* soft red */
+            }
+        """)
+        self.close_btn.clicked.connect(self._on_close_clicked)
+        layout.addWidget(self.close_btn)
+
+        # Set initial pinned-state visuals
         self.update_pin_visual(getattr(self.parent_window, "pinned", True))
 
+    # ======================================================
+    # Close action
+    # ======================================================
+    def _on_close_clicked(self):
+        QApplication.quit()
+
+    # ======================================================
+    # Pin toggle event handler
+    # ======================================================
     def _on_pin_toggled(self, checked: bool):
         self.parent_window.set_pinned(checked)
+        self.update_pin_visual(checked)
 
     def set_pin_state(self, pinned: bool):
         self.pin_btn.blockSignals(True)
@@ -168,14 +195,17 @@ class DragBar(QFrame):
         self.pin_btn.blockSignals(False)
 
     def update_pin_visual(self, pinned: bool):
+        """Keep background same style you used originally."""
         if pinned:
+            # Darker background when pinned
             self.setStyleSheet("background-color: rgba(20,20,20,230);")
-            self.pin_btn.setText("📎")   # pin icon
         else:
+            # Slightly brighter gray when unpinned
             self.setStyleSheet("background-color: rgba(80,80,80,220);")
-            self.pin_btn.setText("📎")   # same icon, diff color via CSS
 
-    # -------- drag behaviour --------
+    # ======================================================
+    # Drag behavior
+    # ======================================================
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.setCursor(Qt.ClosedHandCursor)
