@@ -1,6 +1,7 @@
 import sys
 import ctypes
 from ctypes import wintypes
+import signal  # <-- NEW
 
 from PySide6.QtCore import Qt, QPoint, QUrl
 from PySide6.QtWidgets import (
@@ -338,10 +339,20 @@ def main():
     print(f"  Agent ID : {agent_id}")
     print(f"  Script   : {script_url}")
 
+    # Ensure Ctrl+C (SIGINT) is delivered so we can catch KeyboardInterrupt
+    signal.signal(signal.SIGINT, signal.SIG_DFL)  # <-- NEW
+
     app = QApplication(sys.argv)
     widget = ElevenWidget(agent_id, script_url)
     widget.show()
-    sys.exit(app.exec())
+
+    try:
+        sys.exit(app.exec())
+    except KeyboardInterrupt:
+        # Graceful shutdown on Ctrl+C
+        print("\nKeyboardInterrupt received, closing widget...")
+        widget.close()
+        sys.exit(0)
 
 
 if __name__ == "__main__":
