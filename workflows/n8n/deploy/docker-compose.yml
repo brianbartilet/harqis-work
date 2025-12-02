@@ -10,6 +10,21 @@ services:
     environment:
       TZ: Asia/Singapore
       N8N_TIMEZONE: Asia/Singapore
+    depends_on:
+      - command_runner
+
+  command_runner:
+    image: python:3.11-slim
+    container_name: command_runner
+    restart: unless-stopped
+    volumes:
+      - ./command_runner.py:/app/command_runner.py
+    working_dir: /app
+    command: >
+      sh -c "pip install flask &&
+             python command_runner.py"
+    ports:
+      - "5151:5151"
 
 volumes:
   n8n_data:
