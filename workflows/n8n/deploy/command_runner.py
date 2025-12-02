@@ -13,4 +13,7 @@ def run_cmd():
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
 
-app.run(host="0.0.0.0", port=5151)
+app.run(host="0.0.0.0", port=5252)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5252, debug=True)
