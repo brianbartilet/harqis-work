@@ -7,6 +7,7 @@ class ScheduleCategory(str, Enum):
     FINANCE = "Finance | Investing | Business"
     WORK = "Career | Work"
     ORGANIZE = "Organization | Everyman Skills"
+    DEACTIVATED = "Deactivated"
 
     def __str__(self) -> str:
         return self.value

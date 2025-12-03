@@ -26,6 +26,48 @@ from apps.google_apps.references.constants import ScheduleCategory
 @init_meter(RAINMETER_CONFIG, hud_item_name='FAILED TASKS TODAY', new_sections_dict=_sections__check_logs, play_sound=False)
 @feed()
 def get_failed_jobs(ini=ConfigHelperRainmeter()):
+
+    # region Get schedule configs
+    workflow_mapping = [
+        WORKFLOWS_DESKTOP,
+        WORKFLOWS_HUD,
+        WORKFLOW_PURCHASES,
+    ]
+    # save to repo for some other use cases
+    def format_block(block: dict) -> str:
+        lines = ["{"]
+
+        for job_key, data in block.items():
+            lines.append(f"    '{job_key}': {{")
+            for field_key, field_value in data.items():
+                lines.append(f"        '{field_key}': {field_value!r},")
+            # remove trailing comma from last entry
+            lines[-1] = lines[-1].rstrip(',')
+            lines.append("    },")
+            lines.append("")  # blank line after each job
+
+        # remove last blank line + trailing comma
+        if lines[-1] == "":
+            lines = lines[:-1]
+        if lines[-1].endswith(","):
+            lines[-1] = lines[-1].rstrip(",")
+
+        lines.append("}")
+        return "\n".join(lines)
+
+    output_path = Path(os.path.join(os.getcwd(), "workflows.mapping"))
+
+    blocks_formatted = []
+    for block in workflow_mapping:
+        blocks_formatted.append(format_block(block))
+        blocks_formatted.append("")  # blank line between outer dicts
+
+    text = "\n".join(blocks_formatted).rstrip() + "\n"
+
+    output_path.write_text(text, encoding="utf-8")
+
+    #  endregion
+
     today = datetime.now().strftime("%Y-%m-%d")
 
     gte = f"{today}T00:00"
@@ -55,10 +97,22 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
 
     # region Set links
     kibana_url = 'http://localhost:5601/app/dev_tools#/console'
-    ini['meterLink']['text'] = "Kibana"
+    ini['meterLink']['text'] = "KIBANA"
     ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(kibana_url)
     ini['meterLink']['tooltiptext'] = kibana_url
     ini['meterLink']['W'] = '100'
+
+    mapping_file = os.path.join(os.getcwd(), "workflows.mapping")
+    ini['meterLink_schedule']['Meter'] = 'String'
+    ini['meterLink_schedule']['MeterStyle'] = 'sItemLink'
+    ini['meterLink_schedule']['X'] = '(46*#Scale#)'
+    ini['meterLink_schedule']['Y'] = '(38*#Scale#)'
+    ini['meterLink_schedule']['W'] = '80'
+    ini['meterLink_schedule']['H'] = '55'
+    ini['meterLink_schedule']['Text'] = '|SCHEDULES'
+    ini['meterLink_schedule']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(mapping_file)
+    ini['meterLink_schedule']['tooltiptext'] = mapping_file
+
     # endregion
 
     # region Set dimensions
@@ -105,7 +159,7 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
 @SPROUT.task()
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='CELERY SPROUTS', new_sections_dict=_sections__check_logs,
-            play_sound=False, schedule_categories=[ScheduleCategory.ORGANIZE, ])
+            play_sound=False, schedule_categories=[ScheduleCategory.DEACTIVATED])
 @feed()
 def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
@@ -128,7 +182,7 @@ def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
                                           hud, "dump.txt"
                                           ))
     ini['meterLink']['text'] = "Dump"
-    ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]''!Execute ["{0}"]'.format(dump_path)
+    ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}"]'.format(dump_path)
     ini['meterLink']['tooltiptext'] = dump_path
     ini['meterLink']['W'] = '100'
 

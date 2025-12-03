@@ -128,6 +128,10 @@ def init_meter(
                     try:
                         if ScheduleCategory.PINNED in schedule_categories:
                             log.info("ScheduleCategory.PINNED found; keeping HUD active.")
+                        elif ScheduleCategory.DEACTIVATED in schedule_categories:
+                            log.warn("schedule is DEACTIVATED; HUD is hiddem.")
+                            _deactivate_config(skin_name, hud_dirname)
+                            return {"updated": changed, "ini_path": str(ini_path), "notes_path": note_path}
                         else:
                             google_cfg_id = kwargs.get("calendar_cfg_id", None)
                             if not google_cfg_id:

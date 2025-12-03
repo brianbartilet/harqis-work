@@ -42,6 +42,9 @@ _sections__check_logs = {
     "meterLink_elastic": {
         "Preset": "InjectedByTest",
     },
+    "meterLink_schedule": {
+        "Preset": "InjectedByTest",
+    },
 }
 
 
