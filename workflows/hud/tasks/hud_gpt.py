@@ -26,7 +26,7 @@ from workflows.hud.tasks.sections import _sections__check_desktop, _sections__ch
 
 @SPROUT.task()
 @log_result()
-@init_meter(RAINMETER_CONFIG, hud_item_name='GPT DESK CHECK', new_sections_dict=_sections__check_desktop,
+@init_meter(RAINMETER_CONFIG, hud_item_name='ACTIVITY LOG', new_sections_dict=_sections__check_desktop,
             play_sound=True, schedule_categories=[ScheduleCategory.PINNED, ], prepend_if_exists=True)
 @feed()
 def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
@@ -133,7 +133,7 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
 
     # region Set links
     chat_url = 'https://chatgpt.com/'
-    ini['meterLink']['text'] = "CheatGPT"
+    ini['meterLink']['text'] = "CHEATGPT"
     ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(chat_url)
     ini['meterLink']['tooltiptext'] = chat_url
     ini['meterLink']['W'] = '100'
@@ -145,7 +145,7 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
     ini['meterLink_github']['Y'] = '(38*#Scale#)'
     ini['meterLink_github']['W'] = '80'
     ini['meterLink_github']['H'] = '55'
-    ini['meterLink_github']['Text'] = '|GitHub'
+    ini['meterLink_github']['Text'] = '|GITHUB'
     ini['meterLink_github']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(github_work_url)
     ini['meterLink_github']['tooltiptext'] = github_work_url
 
@@ -161,7 +161,7 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
     ini['meterLink_dump']['Y'] = '(38*#Scale#)'
     ini['meterLink_dump']['W'] = '80'
     ini['meterLink_dump']['H'] = '55'
-    ini['meterLink_dump']['Text'] = '|Dump'
+    ini['meterLink_dump']['Text'] = '|DUMP'
     ini['meterLink_dump']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(dump_path)
     ini['meterLink_dump']['tooltiptext'] = dump_path
 
