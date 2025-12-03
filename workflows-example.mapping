@@ -1,0 +1,31 @@
+{
+    'run-job--git_pull_on_paths': {
+        'task': 'workflows.desktop.tasks.commands.git_pull_on_paths',
+        'schedule': <crontab: */10 * * * * (m/h/dM/MY/d)>,
+        'args': []
+    },
+
+    'run-job--set_desktop_hud_to_back': {
+        'task': 'workflows.desktop.tasks.commands.set_desktop_hud_to_back',
+        'schedule': <crontab: */30 * * * * (m/h/dM/MY/d)>,
+        'args': []
+    },
+
+    'run-job--copy_files_targeted': {
+        'task': 'workflows.desktop.tasks.commands.copy_files_targeted',
+        'schedule': <crontab: */30 * * * * (m/h/dM/MY/d)>,
+        'args': ['DESKTOP_CONFIG']
+    },
+
+    'run-job--run_n8n_sequence': {
+        'task': 'workflows.desktop.tasks.commands.run_n8n_sequence',
+        'schedule': <crontab: 0 0 * * * (m/h/dM/MY/d)>,
+        'args': []
+    },
+
+    'run-job--run_capture_logging': {
+        'task': 'workflows.desktop.tasks.capture.run_capture_logging',
+        'schedule': <crontab: 0,15,30,45 * * * * (m/h/dM/MY/d)>,
+        'args': ['DESKTOP_CONFIG']
+    }
+}
