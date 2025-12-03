@@ -8,6 +8,7 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
       - ../../../workflows.mapping:/data/workflows.mapping:ro
+      - ../../../scripts.mapping:/data/scripts.mapping:ro
     environment:
       TZ: Asia/Singapore
       N8N_TIMEZONE: Asia/Singapore
