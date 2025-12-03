@@ -15,3 +15,4 @@ venv
 screenshots/
 *.tgz
 /workflows.mapping
+/scripts.mapping

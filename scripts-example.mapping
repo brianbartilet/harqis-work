@@ -1,0 +1,101 @@
+{
+    "command-run--show-calculator": {
+        "cmd": "calc"
+    },
+
+    "command-run--open-notepad": {
+        "cmd": "notepad"
+    },
+
+    "command-run--open-paint": {
+        "cmd": "mspaint"
+    },
+
+    "command-run--open-explorer": {
+        "cmd": "explorer.exe"
+    },
+
+    "command-run--open-control-panel": {
+        "cmd": "control"
+    },
+
+    "command-run--open-task-manager": {
+        "cmd": "taskmgr"
+    },
+
+    "command-run--open-command-prompt": {
+        "cmd": "cmd"
+    },
+
+    "command-run--open-powershell": {
+        "cmd": "powershell"
+    },
+
+    "command-run--lock-workstation": {
+        "cmd": "rundll32.exe user32.dll,LockWorkStation"
+    },
+
+    "command-run--open-device-manager": {
+        "cmd": "devmgmt.msc"
+    },
+
+    "command-run--open-services": {
+        "cmd": "services.msc"
+    },
+
+    "command-run--open-registry-editor": {
+        "cmd": "regedit"
+    },
+
+    "command-run--open-system-info": {
+        "cmd": "msinfo32"
+    },
+
+    "command-run--open-event-viewer": {
+        "cmd": "eventvwr"
+    },
+
+    "command-run--open-disk-management": {
+        "cmd": "diskmgmt.msc"
+    },
+
+    "command-run--open-task-scheduler": {
+        "cmd": "taskschd.msc"
+    },
+
+    "command-run--open-snipping-tool": {
+        "cmd": "snippingtool"
+    },
+
+    "command-run--open-windows-settings": {
+        "cmd": "start ms-settings:"
+    },
+
+    "command-run--open-edge": {
+        "cmd": "start microsoft-edge:"
+    },
+
+    "command-run--open-chrome": {
+        "cmd": "\"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\""
+    },
+
+    "command-run--open-vscode": {
+        "cmd": "\"C:\\Users\\%USERNAME%\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\""
+    },
+
+    "command-run--open-notepad-plus-plus": {
+        "cmd": "\"C:\\Program Files\\Notepad++\\notepad++.exe\""
+    },
+
+    "command-run--open-python": {
+        "cmd": "python"
+    },
+
+    "command-run--open-pip-list": {
+        "cmd": "cmd /c \"pip list\""
+    },
+
+    "command-run--run-custom-script": {
+        "cmd": "\"C:\\path\\to\\script.py\""
+    }
+}
