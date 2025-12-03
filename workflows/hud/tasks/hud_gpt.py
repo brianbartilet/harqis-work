@@ -96,48 +96,14 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
             MessageCreate(role='user',
                           content=
                           """
-                          You are an analysis assistant.
-                          Your task is to read and analyze ONLY the contents of the provided ZIP file.
-                          Never use outside knowledge or create any details that are not explicitly present in the logs or screenshots.
-                          1. Data Handling Rules
-                            - Unpack and read every file in the ZIP.
-                            - Treat the activity log as the authoritative source of truth.
-                            - Use screenshots only to supplement the logs through OCR or visible UI context.
-                            - If a detail is missing, ambiguous, unreadable, or incomplete, explicitly state that instead of inventing information.
-                          2. Allowed Reasoning
-                          You may:
-                            - Extract facts explicitly present in the logs.
-                            - Use screenshots to confirm or enrich the log data.
-                            - Make minimal, cautious, evidence-based inferences only when a clear pattern exists (e.g., long inactivity = idle/AFK).
-                            - Consider the user’s timezone when evaluating inactivity patterns.
-                          You may NOT:
-                            - Invent applications, actions, windows, text, or timestamps.
-                            - Guess file names or metadata that are not present.
-                            - Fill gaps with imagined activity.
-                            - Describe processes or instructions; focus only on analysis.
-                          3. Required Analysis
-                          Using only evidence from the ZIP contents:
-                            - Reconstruct desktop behaviour: focus changes, clicks, clipboard events, OCR text, opened apps, 
-                            window titles, and interaction sequences.
-                            - Identify the likely tasks the user is performing only when strongly supported by the logs or screenshots.
-                            - Detect and describe periods of AFK or idle time based on event gaps.
-                            - Determine whether the user is likely offline, out for the day, or asleep by analyzing long inactivity in relation to the user’s timezone.
-                            - Provide optional productivity improvement suggestions based strictly on observed activity patterns.
-                          4. Output Requirements
-                            - Do not use headers, bullet points, titles, lists, or markdown formatting.
-                            - Write clean, continuous paragraphs, each reflecting a meaningful cluster of activity.
-                            - Use timestamps sparingly and only when necessary to explain inactivity or transitions.
-                            - Do not provide introductions, disclaimers, or conclusions.
-                            - Do not ask questions or seek clarification.
-                            - The response must be a single uninterrupted output.
-                            - Avoid statements explaining your process like "I will begin by unpacking and analyzing the contents of the
-                              provided ZIP file to extract and reconstruct your recent desktop activity according to your instructions."
-                          5. Accuracy Enforcement
-                            - If any behavior, interaction, or interpretation cannot be confirmed from the logs or screenshots, 
-                            explicitly say it cannot be determined.
-                            - Always prefer omission over invention.
-                            - All statements must be traceable to evidence inside the ZIP file.
-                          """
+                            Analyze the ZIP using the clustered-activity mode.
+                            Use only the evidence inside the ZIP.
+                            Group related actions into short paragraphs with no headers or lists.
+                            Do not describe your process or mention the ZIP.
+                            Redact any credentials with [REDACTED].
+                            If I appear idle, AFK, or asleep for most of the period, keep the response brief.
+                            Do not invent or guess anything not explicitly supported by the logs or screenshots.
+                         """
                           )
         ]
 
