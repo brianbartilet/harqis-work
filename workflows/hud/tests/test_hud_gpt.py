@@ -1,7 +1,7 @@
 from workflows.hud.tasks.hud_gpt import get_activity_logs, get_events_world_check, take_screenshots_for_gpt_capture
 
 
-def test__get_helper_information():
+def test__get_activity_logs():
     get_activity_logs("DESKTOP", calendar_cfg_id="GOOGLE_APPS")
 
 def test__get_events_world_check():
