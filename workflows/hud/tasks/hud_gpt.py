@@ -29,7 +29,7 @@ from workflows.hud.tasks.sections import _sections__check_desktop, _sections__ch
 @init_meter(RAINMETER_CONFIG, hud_item_name='ACTIVITY LOG', new_sections_dict=_sections__check_desktop,
             play_sound=True, schedule_categories=[ScheduleCategory.PINNED, ], prepend_if_exists=True)
 @feed()
-def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
+def get_activity_logs(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
     # region Assistant Chat Setup Functions
     assistant_chat = BaseAssistant()
@@ -96,6 +96,8 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
             MessageCreate(role='user',
                           content=
                           """
+                            Please follow your system instructions explicitly.  Provided below are supplementary items 
+                            to check.
                             Analyze the ZIP using the clustered-activity mode.
                             Use only the evidence inside the ZIP.
                             Group related actions into short paragraphs with no headers or lists.
@@ -149,7 +151,7 @@ def get_helper_information(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwarg
     ini['meterLink_github']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(github_work_url)
     ini['meterLink_github']['tooltiptext'] = github_work_url
 
-    meta = get_decorator_attrs(get_helper_information, prefix='')
+    meta = get_decorator_attrs(get_activity_logs, prefix='')
     hud = str(meta['_hud_item_name']).replace(" ", "").upper()
     dump_path = '{0}'.format(os.path.join(RAINMETER_CONFIG['write_skin_to_path'],
                                           RAINMETER_CONFIG['skin_name'],
