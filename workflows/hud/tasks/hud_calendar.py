@@ -102,13 +102,13 @@ def show_calendar_information(cfg_id__gsuite, cfg_id__elevenlabs, ini=ConfigHelp
     # region Build Dump
     line_ctr = 2
     separator_count = 48
-    dump = '{0}\nCURRENT TIME BLOCKS ENDS\n'.format(make_separator(separator_count))
+    dump = '{0}\n[HAPPENING NOW ENDS]\n'.format(make_separator(separator_count))
     for event_now in events_today_now:
         line_ctr += 1
         end_time = datetime.fromisoformat(event_now['end']['dateTime']).strftime('%I:%M %p')
-        dump += '> {0:<35} {1:>10}\n'.format(event_now['calendarSummary'], end_time)
+        dump += '> {0:<35} {1:>10}\n'.format(event_now['summary'], end_time)
 
-    dump += '{0}\nUPCOMING TIME BLOCKS STARTS\n'.format(make_separator(separator_count))
+    dump += '{0}\n[UPCOMING TIME BLOCKS STARTS]\n'.format(make_separator(separator_count))
     for event_upcoming in events_today_upcoming:
         line_ctr += 1
         end_time = datetime.fromisoformat(event_upcoming['start']['dateTime']).strftime('%I:%M %p')
@@ -129,7 +129,8 @@ def show_calendar_information(cfg_id__gsuite, cfg_id__elevenlabs, ini=ConfigHelp
         seen_summaries.add(cal_summary)
 
         line_ctr += 1
-        dump += "[TASKS]\n{0}\n".format(event_now['calendarSummary'])
+        dump += ("[TASKS]\n"
+                 "> {0}\n").format(event_now['calendarSummary'])
 
         match = 0
         line_ctr += 1
