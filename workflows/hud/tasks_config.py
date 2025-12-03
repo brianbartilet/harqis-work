@@ -50,8 +50,8 @@ WORKFLOWS_HUD = {
         'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
     },
 
-    'run-job--get_helper_information': {
-        'task': 'workflows.hud.tasks.hud_gpt.get_helper_information',
+    'run-job--get_activity_logs': {
+        'task': 'workflows.hud.tasks.hud_gpt.get_activity_logs',
         'schedule': crontab(minute='5'),
         'args': ["DESKTOP"],
         'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
