@@ -29,11 +29,16 @@ from workflows.hud.tasks.sections import _sections__check_desktop, _sections__ch
 @init_meter(RAINMETER_CONFIG, hud_item_name='GPT ACTIVITY LOGS', new_sections_dict=_sections__check_desktop,
             play_sound=True, schedule_categories=[ScheduleCategory.PINNED, ], prepend_if_exists=True)
 @feed()
-def get_activity_logs(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
+def get_activity_logs(cfg_id__desktop, timedelta_previous_hours = 1, ini=ConfigHelperRainmeter(), **kwargs):
+
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
     # region Assistant Chat Setup Functions
-    assistant_chat = BaseAssistant()
-    assistant_chat.load(assistant_id=assistant_chat.config.app_data['assistant_id_desktop'])
+    no_connection = False
+    try:
+        assistant_chat = BaseAssistant()
+        assistant_chat.load(assistant_id=assistant_chat.config.app_data['assistant_id_desktop'])
+    except Exception:
+        no_connection = True
 
     cfg_id__desktop = CONFIG_MANAGER.get(cfg_id__desktop)
 
@@ -64,12 +69,16 @@ def get_activity_logs(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
 
         return first, last
 
-    def setup_files():
+    def collect_files(timedelta_hours = 1):
+        """
+        :param timedelta_hours: hours behind to check
+        :return:
+        """
         capture_path = cfg_id__desktop['capture']['actions_log_path']
         archive_path = cfg_id__desktop['capture']['archive_path']
 
         # generate, gather and archive screenshots, there should be a separate task taking desktop at an interval
-        last_hour = datetime.now() - timedelta(hours=1)
+        last_hour = datetime.now() - timedelta(hours=timedelta_hours)
         path = cfg_id__desktop['capture'].get('screenshots_path', os.path.join(os.getcwd(), 'screenshots'))
         ts_last_hour = last_hour.strftime("%Y-%m-%d-%H")
         files_last_hour = get_all_files(path, ts_last_hour)
@@ -224,18 +233,39 @@ def get_activity_logs(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
     # endregion
 
     # region Dump data
-    log_file = setup_files()
+    log_file = None
+    try:
+        log_file = collect_files(timedelta_previous_hours)
+    except Exception:
+        no_connection = True
+
     file = os.path.join(cfg_id__desktop['capture']['actions_log_path'],
         f'{log_file}'
     )
 
-    first_ts, last_ts = extract_first_last_timestamp(file)
+    if log_file:
+        first_ts, last_ts = extract_first_last_timestamp(file)
+    else:
+        now = datetime.now()
+        last_hour = datetime.now() - timedelta(hours=timedelta_previous_hours)
+        ts_last_hour = last_hour.strftime("%Y-%m-%d-%H")
+        ts_now = now.strftime("%Y-%m-%d-%H")
 
-    dump = "\n\n{0}\nSTART: {1}\n".format(make_separator(64), first_ts)
+        first_ts, last_ts = ts_now, ts_last_hour
+    dump = ""
+    dump += "\n\n{0}\n[START] {1}\n".format(make_separator(64), first_ts)
 
-    answer_ = ask_check_desktop()
+    answer_ = []
+    try:
+        answer_ = ask_check_desktop()
+    except Exception:
+        no_connection = True
+
+    if no_connection:
+        dump += "\nCannot process logs. No connection.\n\n"
+
     dump += wrap_text(answer_, width=65, indent="\n")
-    dump += "\n\nEND: {0}\n\n\n".format(last_ts)
+    dump += "\n\n[END]   {0}\n\n\n".format(last_ts)
     # endregion
 
     ini['Variables']['ItemLines'] = '{0}'.format(7)
