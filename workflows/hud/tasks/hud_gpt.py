@@ -26,10 +26,10 @@ from workflows.hud.tasks.sections import _sections__check_desktop, _sections__ch
 
 @SPROUT.task()
 @log_result()
-@init_meter(RAINMETER_CONFIG, hud_item_name='GPT ACTIVITY LOGS', new_sections_dict=_sections__check_desktop,
+@init_meter(RAINMETER_CONFIG, hud_item_name='DESKTOP LOGS', new_sections_dict=_sections__check_desktop,
             play_sound=True, schedule_categories=[ScheduleCategory.PINNED, ], prepend_if_exists=True)
 @feed()
-def get_activity_logs(cfg_id__desktop, timedelta_previous_hours = 1, ini=ConfigHelperRainmeter(), **kwargs):
+def get_desktop_logs(cfg_id__desktop, timedelta_previous_hours = 1, ini=ConfigHelperRainmeter(), **kwargs):
 
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
     # region Assistant Chat Setup Functions
@@ -193,7 +193,7 @@ def get_activity_logs(cfg_id__desktop, timedelta_previous_hours = 1, ini=ConfigH
     ini['meterLink_github']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(github_work_url)
     ini['meterLink_github']['tooltiptext'] = github_work_url
 
-    meta = get_decorator_attrs(get_activity_logs, prefix='')
+    meta = get_decorator_attrs(get_desktop_logs, prefix='')
     hud = str(meta['_hud_item_name']).replace(" ", "").upper()
     dump_path = '{0}'.format(os.path.join(RAINMETER_CONFIG['write_skin_to_path'],
                                           RAINMETER_CONFIG['skin_name'],

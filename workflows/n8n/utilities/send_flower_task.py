@@ -7,7 +7,7 @@ def main():
     parser = argparse.ArgumentParser(description='Send task to Flower API')
 
     parser.add_argument('--task', required=True,
-                        help='Celery task full name, e.g. workflows.hud.tasks.hud_forex.show_account_information')
+                        help='Celery task full name, e.g. workflows.hud.tasks.hud_forex.show_forex_account')
 
     parser.add_argument('--args', nargs='*', default=[],
                         help='Positional arguments (space-separated).')

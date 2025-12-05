@@ -23,7 +23,7 @@ from apps.google_apps.references.constants import ScheduleCategory
 
 @SPROUT.task()
 @log_result()
-@init_meter(RAINMETER_CONFIG, hud_item_name='FAILED TASKS TODAY', new_sections_dict=_sections__check_logs, play_sound=False)
+@init_meter(RAINMETER_CONFIG, hud_item_name='FAILED JOBS TODAY', new_sections_dict=_sections__check_logs, play_sound=False)
 @feed()
 def get_failed_jobs(ini=ConfigHelperRainmeter()):
 

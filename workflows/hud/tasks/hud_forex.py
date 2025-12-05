@@ -21,7 +21,7 @@ from workflows.hud.tasks.sections import _sections__oanda
 @init_meter(RAINMETER_CONFIG, hud_item_name='OANDA ACCOUNT', new_sections_dict=_sections__oanda, play_sound=True,
             schedule_categories=[ScheduleCategory.FINANCE, ])
 @feed()
-def show_account_information(cfg_id__oanda, ini=ConfigHelperRainmeter(), **kwargs):
+def show_forex_account(cfg_id__oanda, ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 
     # region Fetch OANDA data

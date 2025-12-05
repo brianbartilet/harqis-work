@@ -15,7 +15,7 @@ from workflows.hud.tasks.sections import _sections__calendar
 
 @SPROUT.task()
 @log_result()
-@init_meter(RAINMETER_CONFIG, hud_item_name='CALENDAR PEEK', new_sections_dict=_sections__calendar, play_sound=False)
+@init_meter(RAINMETER_CONFIG, hud_item_name='CALENDAR INFO', new_sections_dict=_sections__calendar, play_sound=False)
 @feed()
 def show_calendar_information(cfg_id__gsuite, cfg_id__elevenlabs, ini=ConfigHelperRainmeter()):
 
