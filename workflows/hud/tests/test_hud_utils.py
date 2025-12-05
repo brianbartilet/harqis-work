@@ -6,4 +6,4 @@ def test__show_hud_profiles():
 
 
 def test__show_mouse_bindings():
-    show_mouse_bindings("DESKTOP", calendar_cfg_id="GOOGLE_APPS")
+    show_mouse_bindings("DESKTOP")

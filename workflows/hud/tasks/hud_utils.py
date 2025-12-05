@@ -85,7 +85,7 @@ def get_profile_for_process_name(proc_name: str) -> Profile:
     return Profile.BASE
 
 
-def get_active_window_app():
+def get_active_window_app(print_all=False):
     # get active window handle
     hwnd = win32gui.GetForegroundWindow()
 
@@ -96,23 +96,24 @@ def get_active_window_app():
     active_name = proc.name()
 
     # --- NEW: list all open applications ---
-    open_apps = set()  # avoid duplicates
+    if print_all:
+        open_apps = set()  # avoid duplicates
 
-    for p in psutil.process_iter(['pid', 'name']):
-        try:
-            name = p.info['name']
-            # Only include apps with a visible window
-            hwnd = win32gui.FindWindow(None, None)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
+        for p in psutil.process_iter(['pid', 'name']):
+            try:
+                name = p.info['name']
+                # Only include apps with a visible window
+                hwnd = win32gui.FindWindow(None, None)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
 
-        if name:
-            open_apps.add(name)
+            if name:
+                open_apps.add(name)
 
-    print("Active application:", active_name)
-    print("Open applications:")
-    for app in sorted(open_apps):
-        print(" -", app)
+        print("Active application:", active_name)
+        print("Open applications:")
+        for app in sorted(open_apps):
+            print(" -", app)
 
     return active_name
 
@@ -219,8 +220,8 @@ def show_hud_profiles(ini=ConfigHelperRainmeter()):
 @init_meter(RAINMETER_CONFIG,
             hud_item_name='MOUSE BINDINGS',
             new_sections_dict=_sections__utilities_i_cue,
-            play_sound=False,
-            schedule_categories=[ScheduleCategory.ORGANIZE, ScheduleCategory.WORK])
+            play_sound=False
+            )
 def show_mouse_bindings(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
 
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
