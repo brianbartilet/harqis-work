@@ -85,8 +85,9 @@ WORKFLOWS_HUD = {
 
     'run-job--show_mouse_bindings': {
         'task': 'workflows.hud.tasks.hud_utils.show_mouse_bindings',
-        'schedule': timedelta(seconds=30),
-        'args': ["DESKTOP"]
+        'schedule': timedelta(minutes=1),
+        'args': ["DESKTOP"],
+        'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
     },
 
     'run-job--show_hud_profiles': {

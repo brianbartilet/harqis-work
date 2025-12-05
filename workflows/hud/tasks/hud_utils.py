@@ -220,7 +220,8 @@ def show_hud_profiles(ini=ConfigHelperRainmeter()):
 @init_meter(RAINMETER_CONFIG,
             hud_item_name='MOUSE BINDINGS',
             new_sections_dict=_sections__utilities_i_cue,
-            play_sound=False
+            play_sound=False,
+            schedule_categories=[ScheduleCategory.ORGANIZE, ScheduleCategory.WORK]
             )
 def show_mouse_bindings(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
 
