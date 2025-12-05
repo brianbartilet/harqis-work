@@ -28,5 +28,18 @@ services:
     ports:
       - "5151:5151"
 
+  ngrok:
+    image: ngrok/ngrok:latest
+    restart: unless-stopped
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    command:
+      - "http"
+      - "n8n:5678"
+      - "--log=stdout"
+      - "--log-format=json"
+    ports:
+      - "4040:4040"  # expose ngrok API/UI
+
 volumes:
   n8n_data:
