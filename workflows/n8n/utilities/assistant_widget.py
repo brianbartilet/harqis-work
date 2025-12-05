@@ -254,11 +254,15 @@ class ElevenWidget(QWidget):
 
         self.resize(width, height)
 
-        screen = QApplication.primaryScreen().geometry()
-        self.move(
-            screen.width() - width - 40,
-            (screen.height() - height) // 2,
-        )
+        # ---- Position at bottom-right of primary monitor ----
+        screen_geom = QApplication.primaryScreen().availableGeometry()
+        margin = 20  # distance from screen edges
+
+        x = screen_geom.x() + screen_geom.width() - width - margin
+        y = screen_geom.y() + screen_geom.height() - height - margin
+
+        self.move(x, y)
+        # ------------------------------------------------------
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
