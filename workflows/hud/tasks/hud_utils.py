@@ -21,7 +21,7 @@ from workflows.hud.tasks.sections import _sections__utilities_desktop, _sections
             hud_item_name='HUD PROFILES',
             new_sections_dict=_sections__utilities_desktop,
             play_sound=False)
-def generate_utils_profiles(ini=ConfigHelperRainmeter()):
+def show_hud_profiles(ini=ConfigHelperRainmeter()):
 
     # region Build profiles home
     profile_base = "home"
@@ -115,11 +115,11 @@ def generate_utils_profiles(ini=ConfigHelperRainmeter()):
 @SPROUT.task()
 @log_result()
 @init_meter(RAINMETER_CONFIG,
-            hud_item_name='ICUE BINDINGS',
+            hud_item_name='MOUSE BINDINGS',
             new_sections_dict=_sections__utilities_i_cue,
             play_sound=False,
             schedule_categories=[ScheduleCategory.ORGANIZE, ScheduleCategory.WORK])
-def generate_i_cue_profiles(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
+def show_mouse_bindings(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 
     # region Corsair
@@ -128,7 +128,7 @@ def generate_i_cue_profiles(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwar
     ini['meterLink']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(path)
     ini['meterLink']['tooltiptext'] = path
 
-    meta = get_decorator_attrs(generate_i_cue_profiles, prefix='')
+    meta = get_decorator_attrs(show_mouse_bindings, prefix='')
     hud = str(meta['_hud_item_name']).replace(" ", "").upper()
     dump_path = '{0}'.format(os.path.join(RAINMETER_CONFIG['write_skin_to_path'],
                                           RAINMETER_CONFIG['skin_name'],

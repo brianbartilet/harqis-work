@@ -34,8 +34,8 @@ the 'run_sample_workflow_add' function with specified arguments.
 """
 WORKFLOWS_HUD = {
 
-    'run-job--show_account_information': {
-        'task': 'workflows.hud.tasks.hud_forex.show_account_information',
+    'run-job--show_forex_account': {
+        'task': 'workflows.hud.tasks.hud_forex.show_forex_account',
         'schedule': crontab(
             day_of_week="mon,tue,wed,thu,fri",
             minute='*/15'),
@@ -43,8 +43,8 @@ WORKFLOWS_HUD = {
         'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
     },
 
-    'run-job--show_pending_drop_off_orders': {
-        'task': 'workflows.hud.tasks.hud_tcg.show_pending_drop_off_orders',
+    'run-job--show_tcg_orders': {
+        'task': 'workflows.hud.tasks.hud_tcg.show_tcg_orders',
         'schedule': crontab(minute='*/30'),
         'args': ["TCG_MP", "SCRYFALL"],
         'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},

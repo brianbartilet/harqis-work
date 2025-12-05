@@ -27,12 +27,12 @@ from workflows.hud.tasks.sections import _sections__tcg_mp_sections
 
 @SPROUT.task()
 @log_result()
-@init_meter(RAINMETER_CONFIG, hud_item_name='TCG ORDERS DROP', new_sections_dict=_sections__tcg_mp_sections,
+@init_meter(RAINMETER_CONFIG, hud_item_name='TCG ORDERS', new_sections_dict=_sections__tcg_mp_sections,
             play_sound=True,
             schedule_categories=[ScheduleCategory.PLAY, ]
 )
 @feed()
-def show_pending_drop_off_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHelperRainmeter(), **kwargs):
+def show_tcg_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 
     # region Fetch and filter data
