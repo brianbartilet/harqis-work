@@ -20,6 +20,7 @@ References:
 """
 
 from celery.schedules import crontab
+from datetime import timedelta
 
 """
 A dictionary mapping task identifiers to their configuration for scheduling.
@@ -84,7 +85,7 @@ WORKFLOWS_HUD = {
 
     'run-job--show_mouse_bindings': {
         'task': 'workflows.hud.tasks.hud_utils.show_mouse_bindings',
-        'schedule': crontab(minute='00,30'),
+        'schedule': timedelta(seconds=30),
         'args': ["DESKTOP"],
         'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
     },

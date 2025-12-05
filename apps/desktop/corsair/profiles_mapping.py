@@ -127,12 +127,22 @@ def build_summary(
     profiles_dir: Path,
     output_filename: str = "icue_keymap_summary_detailed.txt",
     output_dir: str = None,
-) -> (Path, str):
+    per_profile_prefix: str = None,  # optional prefix for per-profile filenames
+):
+    """
+    Build a keymap summary from all .cueprofile / .cueprofiledata files.
 
+    Returns:
+        (
+            combined_out_path,          # Path
+            combined_dump,              # str
+            per_profile_outputs         # dict: profile_name -> (path, text)
+        )
+    """
     profiles_dir = profiles_dir.resolve()
     all_profile_files = sorted(
-        list(profiles_dir.glob("*.cueprofiledata")) +
-        list(profiles_dir.glob("*.cueprofile"))
+        list(profiles_dir.glob("*.cueprofiledata"))
+        + list(profiles_dir.glob("*.cueprofile"))
     )
 
     if not all_profile_files:
@@ -145,81 +155,66 @@ def build_summary(
         profile_name, actions = parse_profile_actions(path)
         parsed_profiles.append((profile_name.lower(), profile_name, path, actions))
 
-    # sort alphabetically by profile name
     parsed_profiles.sort(key=lambda x: x[0])
 
-    lines = []
+    combined_lines = []
+    per_profile_chunks = []
 
     for _, profile_name, _path, actions in parsed_profiles:
-
         filtered_actions = [a for a in actions if a.get("key") and a["key"].strip()]
 
-        lines.append("=" * 50)
-        lines.append(f"Profile: {profile_name}")
-        lines.append("=" * 50)
+        block_lines = []
+        block_lines.append("=" * 50)
+        block_lines.append(f"Profile: {profile_name}")
+        block_lines.append("=" * 50)
 
         if not filtered_actions:
-            lines.append("  (No actions with assigned keys/buttons found)")
-            lines.append("")
-            continue
+            block_lines.append("  (No actions with assigned keys/buttons found)")
+            block_lines.append("")
+        else:
+            block_lines.append("  Key / Button         >  Action Name")
+            block_lines.append("  -----------------------------------------------")
 
-        lines.append("  Key / Button         >  Action Name")
-        lines.append("  -----------------------------------------------")
+            for a in filtered_actions:
+                src = a["key"].strip()
+                name_text = a["name"] or a["action_type"] or "(no name)"
+                name_text = _re.sub(r"\s+\[[^\]]+\]\s*$", "", name_text).strip()
+                block_lines.append(f"  {src:<15} >  {name_text}")
 
-        for a in filtered_actions:
-            src = a["key"].strip()
-            name_text = a["name"] or a["action_type"] or "(no name)"
-            name_text = _re.sub(r"\s+\[[^\]]+\]\s*$", "", name_text).strip()
-            lines.append(f"  {src:<15} >  {name_text}")
+            block_lines.append("")
+            block_lines.append("")
 
-        lines.append("")
-        lines.append("")
+        combined_lines.extend(block_lines)
+        per_profile_chunks.append((profile_name, block_lines))
 
-    # determine output directory
+    # determine output target directory
     if output_dir is None:
         target_dir = profiles_dir
     else:
         target_dir = Path(output_dir).expanduser().resolve()
         target_dir.mkdir(parents=True, exist_ok=True)
 
-    out_path = target_dir / output_filename
-    dump = "\n".join(lines)
-    out_path.write_text(dump, encoding="utf-8")
-    return out_path, dump
+    # write combined summary
+    combined_out_path = target_dir / output_filename
+    combined_dump = "\n".join(combined_lines)
+    combined_out_path.write_text(combined_dump, encoding="utf-8")
+
+    # store per-profile results here
+    per_profile_outputs = {}
+
+    # write per-profile files if enabled
+    if per_profile_prefix is not None:
+        for profile_name, block_lines in per_profile_chunks:
+            safe_name = profile_name.strip()
+            safe_name = _re.sub(r"[^\w.-]+", "_", safe_name) or "profile"
+
+            filename = f"{per_profile_prefix}{safe_name}.txt"
+            per_path = target_dir / filename
+            per_text = "\n".join(block_lines)
+
+            per_path.write_text(per_text, encoding="utf-8")
+            per_profile_outputs[profile_name] = (per_path, per_text)
+
+    return combined_out_path, combined_dump, per_profile_outputs
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Extract iCUE key mappings into a readable text file."
-    )
-    parser.add_argument(
-        "path",
-        nargs="?",
-        default=".",
-        help="Folder containing .cueprofile/.cueprofiledata files",
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        default="icue_keymap_summary_detailed.txt",
-        help="Output filename",
-    )
-    parser.add_argument(
-        "--output-dir",
-        default=None,
-        help="Directory to write output file (default: same as profile folder)",
-    )
-
-    args = parser.parse_args()
-    profiles_dir = Path(args.path)
-
-    out_path = build_summary(
-        profiles_dir,
-        output_filename=args.output,
-        output_dir=args.output_dir
-    )
-    print(f"Written summary to: {out_path}")
-
-
-if __name__ == "__main__":
-    main()
