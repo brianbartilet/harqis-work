@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import win32gui, win32process, psutil
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
@@ -13,6 +14,107 @@ from apps.google_apps.references.constants import ScheduleCategory
 from apps.apps_config import CONFIG_MANAGER
 
 from workflows.hud.tasks.sections import _sections__utilities_desktop, _sections__utilities_i_cue
+
+
+from enum import Enum
+from typing import Optional
+
+
+class AppExe(str, Enum):
+    DOCKER = "docker.exe"
+    DOCKER_DESKTOP = "Docker Desktop.exe"
+    DOCKER_BACKEND = "com.docker.backend.exe"
+    DOCKER_BUILD = "com.docker.build.exe"
+
+    CHROME = "chrome.exe"
+    PYCHARM = "pycharm64.exe"
+    SUBLIME_TEXT = "sublime_text.exe"
+    RAINMETER = "Rainmeter.exe"
+    MATTERMOST = "Mattermost.exe"
+    SPOTIFY = "Spotify.exe"
+    WEBEX = "WebexHost.exe"
+    ICUE = "iCUE.exe"
+    CELERY = "celery.exe"
+    PYTHON = "python.exe"
+    TERMINAL = "OpenConsole.exe"
+    CMD = "cmd.exe"
+    EXPLORER = "explorer.exe"
+    # add more as needed...
+
+
+# Example: profile names (iCUE / macros / HUD profiles etc.)
+class Profile(str, Enum):
+    BASE_MACROS_TO_COPY = "BASE_MACROS_TO_COPY_"
+    BASE = "BASE_TO_COPY_"
+    BROWSER = "Chrome"
+    MARKDOWN = "Markdown"
+    NAVIGATION = "Navigation"
+    TEXT_EDITOR = "Notes"
+    CODING = "PyCharm"
+    CALL = "WEBEX"
+
+
+# Map applications → profiles
+APP_TO_PROFILE: dict[AppExe, Profile] = {
+
+    # some sensible defaults (tweak however you want)
+    AppExe.PYCHARM: Profile.CODING,
+    AppExe.SUBLIME_TEXT: Profile.TEXT_EDITOR,
+    AppExe.CELERY: Profile.NAVIGATION,
+    AppExe.PYTHON: Profile.NAVIGATION,
+    AppExe.CHROME: Profile.BROWSER,
+    AppExe.EXPLORER: Profile.BROWSER,
+    AppExe.WEBEX: Profile.CALL,
+    AppExe.RAINMETER: Profile.BASE,
+    AppExe.TERMINAL: Profile.BASE,
+    AppExe.CMD: Profile.BASE,
+}
+
+
+def get_profile_for_process_name(proc_name: str) -> Profile:
+    """
+    Given a process exe name like 'docker.exe', return the mapped Profile.
+    Falls back to Profile.DEFAULT if not mapped.
+    """
+    proc_name = proc_name.strip().lower()
+
+    for app in AppExe:
+        if app.value.lower() == proc_name:
+            return APP_TO_PROFILE.get(app, Profile.BASE)
+
+    return Profile.BASE
+
+
+def get_active_window_app():
+    # get active window handle
+    hwnd = win32gui.GetForegroundWindow()
+
+    # get PID
+    pid = win32process.GetWindowThreadProcessId(hwnd)[1]
+    proc = psutil.Process(pid)
+
+    active_name = proc.name()
+
+    # --- NEW: list all open applications ---
+    open_apps = set()  # avoid duplicates
+
+    for p in psutil.process_iter(['pid', 'name']):
+        try:
+            name = p.info['name']
+            # Only include apps with a visible window
+            hwnd = win32gui.FindWindow(None, None)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+
+        if name:
+            open_apps.add(name)
+
+    print("Active application:", active_name)
+    print("Open applications:")
+    for app in sorted(open_apps):
+        print(" -", app)
+
+    return active_name
 
 
 @SPROUT.task()
@@ -120,6 +222,7 @@ def show_hud_profiles(ini=ConfigHelperRainmeter()):
             play_sound=False,
             schedule_categories=[ScheduleCategory.ORGANIZE, ScheduleCategory.WORK])
 def show_mouse_bindings(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
+
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 
     # region Corsair
@@ -170,7 +273,12 @@ def show_mouse_bindings(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
     # region Build Dump
     cfg = CONFIG_MANAGER.get(cfg_id__desktop)
     path = Path(cfg['corsair']['path_profiles'])
-    output, dump = build_summary(path)
+    skin_dir = str(os.path.join(RAINMETER_CONFIG['write_skin_to_path'], RAINMETER_CONFIG['skin_name'], hud))
 
+    combined_out_path, combined_dump, per_profile_outputs = build_summary(path, output_dir=skin_dir, per_profile_prefix="dump-")
+    active_window_app = get_active_window_app()
+    profile = get_profile_for_process_name(active_window_app).value
 
-    return dump
+    ini['Variables']['TextFile'] = '#CURRENTPATH#dump-{0}.txt'.format(profile)
+
+    return combined_dump
