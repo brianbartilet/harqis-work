@@ -250,7 +250,7 @@ class ElevenWidget(QWidget):
         self._apply_window_flags()
 
         self.setStyleSheet("background-color: #111111;")
-        self.setWindowOpacity(0.80)
+        self.setWindowOpacity(0.70)
 
         self.resize(width, height)
 
