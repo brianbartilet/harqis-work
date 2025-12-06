@@ -1,6 +1,9 @@
-import os
 from pathlib import Path
-import win32gui, win32process, psutil
+from enum import Enum
+import os
+import win32gui
+import win32process
+import psutil
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
@@ -16,8 +19,7 @@ from apps.apps_config import CONFIG_MANAGER
 from workflows.hud.tasks.sections import _sections__utilities_desktop, _sections__utilities_i_cue
 
 
-from enum import Enum
-from typing import Optional
+HUD_NAME_MOUSE_BINDINGS = 'MOUSE BINDINGS'
 
 
 class AppExe(str, Enum):
@@ -117,11 +119,11 @@ def get_active_window_app(print_all=False):
 
     return active_name
 
-
+    
 @SPROUT.task()
 @log_result()
 @init_meter(RAINMETER_CONFIG,
-            hud_item_name='HUD PROFILES',
+            hud_item_name="HUD PROFILES",
             new_sections_dict=_sections__utilities_desktop,
             play_sound=False)
 def show_hud_profiles(ini=ConfigHelperRainmeter()):
@@ -209,21 +211,18 @@ def show_hud_profiles(ini=ConfigHelperRainmeter()):
     ini['Variables']['ItemLines'] = '{0}'.format(3)
     # endregion
 
-    # region Build Dump
-    dump = ""
-
-    return dump
+    return "SUCCESS"
 
 
 @SPROUT.task()
 @log_result()
 @init_meter(RAINMETER_CONFIG,
-            hud_item_name='MOUSE BINDINGS',
+            hud_item_name=HUD_NAME_MOUSE_BINDINGS,
             new_sections_dict=_sections__utilities_i_cue,
             play_sound=False,
             schedule_categories=[ScheduleCategory.ORGANIZE, ScheduleCategory.WORK]
             )
-def show_mouse_bindings(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
+def show_mouse_bindings(ini=ConfigHelperRainmeter(), **kwargs):
 
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 
@@ -233,8 +232,7 @@ def show_mouse_bindings(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
     ini['meterLink']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(path)
     ini['meterLink']['tooltiptext'] = path
 
-    meta = get_decorator_attrs(show_mouse_bindings, prefix='')
-    hud = str(meta['_hud_item_name']).replace(" ", "").upper()
+    hud = str(HUD_NAME_MOUSE_BINDINGS).replace(" ", "").upper()
     dump_path = '{0}'.format(os.path.join(RAINMETER_CONFIG['write_skin_to_path'],
                                           RAINMETER_CONFIG['skin_name'],
                                           hud, "dump.txt"
@@ -272,15 +270,22 @@ def show_mouse_bindings(cfg_id__desktop, ini=ConfigHelperRainmeter(), **kwargs):
     ini['Variables']['ItemLines'] = '{0}'.format(15)
     # endregion
 
-    # region Build Dump
-    cfg = CONFIG_MANAGER.get(cfg_id__desktop)
-    path = Path(cfg['corsair']['path_profiles'])
-    skin_dir = str(os.path.join(RAINMETER_CONFIG['write_skin_to_path'], RAINMETER_CONFIG['skin_name'], hud))
-
-    combined_out_path, combined_dump, per_profile_outputs = build_summary(path, output_dir=skin_dir, per_profile_prefix="dump-")
     active_window_app = get_active_window_app()
     profile = get_profile_for_process_name(active_window_app).value
 
     ini['Variables']['TextFile'] = '#CURRENTPATH#dump-{0}.txt'.format(profile)
+
+    return "SUCCESS"
+
+
+@SPROUT.task()
+@log_result()
+def build_summary_mouse_bindings(cfg_id__desktop):
+    cfg = CONFIG_MANAGER.get(cfg_id__desktop)
+    path = Path(cfg['corsair']['path_profiles'])
+    skin_dir = str(os.path.join(RAINMETER_CONFIG['write_skin_to_path'], RAINMETER_CONFIG['skin_name'], HUD_NAME_MOUSE_BINDINGS
+                                .replace(" ", "").upper()))
+
+    combined_out_path, combined_dump, per_profile_outputs = build_summary(path, output_dir=skin_dir, per_profile_prefix="dump-")
 
     return combined_dump
