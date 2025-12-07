@@ -9,6 +9,7 @@ from typing import Any, Mapping
 
 from apps.desktop.config import CONFIG
 from core.utilities.data.strings import make_separator
+from core.utilities.logging.custom_logger import logger as log
 
 
 def _atomic_write_text(
@@ -144,10 +145,14 @@ def feed(filename_prefix: str = "hud-logs",
     - Uses file lock to prevent concurrency corruption
     - Returns original returned value converted to string
     """
+    try:
+        root = Path(CONFIG["feed"]["path_to_feed"]).resolve()
+        feed_dir = root
+        feed_dir.mkdir(parents=True, exist_ok=True)
+    except FileNotFoundError:
+        log.warn("The location for the feed is unavailable.  Skipping this entry.")
 
-    root = Path(CONFIG["feed"]["path_to_feed"]).resolve()
-    feed_dir = root
-    feed_dir.mkdir(parents=True, exist_ok=True)
+        return None
 
     def decorator(func):
         @functools.wraps(func)
