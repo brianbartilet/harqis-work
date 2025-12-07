@@ -211,7 +211,7 @@ def show_hud_profiles(ini=ConfigHelperRainmeter()):
     ini['Variables']['ItemLines'] = '{0}'.format(3)
     # endregion
 
-    return "SUCCESS"
+    return ""
 
 
 @SPROUT.task()
