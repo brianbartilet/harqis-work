@@ -20,9 +20,9 @@ else:
     SHOW_WINDOW   = 0
 
 
-def _kill_existing_screenreader_processes():
+def _kill_existing_screen_reader_processes():
     """
-    Find and terminate any existing background screenreader processes.
+    Find and terminate any existing background screen reader processes.
     """
     for proc in psutil.process_iter(["pid", "name", "cmdline"]):
         try:
@@ -30,7 +30,7 @@ def _kill_existing_screenreader_processes():
             cmdline = proc.info.get("cmdline") or []
 
             if name in ("python.exe", "pythonw.exe") and SCREENREADER_MARKER in cmdline:
-                print(f"[screenreader] Killing old PID={proc.pid}")
+                print(f"[screen reader] Killing old PID={proc.pid}")
                 proc.terminate()
                 try:
                     proc.wait(timeout=3)
@@ -59,7 +59,7 @@ def run_capture_logging(cfg_id__desktop_utils):
     show_console = bool(cfg.get("show_console", console))
 
     # Kill old instances first
-    _kill_existing_screenreader_processes()
+    _kill_existing_screen_reader_processes()
 
     # Choose the correct Windows creation flag
     creation_flag = SHOW_WINDOW if show_console else HIDDEN_WINDOW

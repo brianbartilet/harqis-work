@@ -78,7 +78,7 @@ WORKFLOWS_HUD = {
 
     'run-job--get_schedules': {
         'task': 'workflows.hud.tasks.hud_logs.get_schedules',
-        'schedule': crontab(hour='1'),
+        'schedule': crontab(minute='*/15'),
         'args': [],
         'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
     },
