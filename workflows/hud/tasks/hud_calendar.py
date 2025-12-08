@@ -145,7 +145,7 @@ def show_calendar_information(cfg_id__gsuite, cfg_id__elevenlabs, ini=ConfigHelp
         dump += "{0}\n".format(make_separator(separator_count))
     # endregion
 
-    ini['Variables']['ItemLines'] = '{0}'.format(line_ctr)
+    ini['Variables']['ItemLines'] = '{0}'.format(line_ctr + 1)
 
     return dump
 
