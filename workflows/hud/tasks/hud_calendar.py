@@ -10,12 +10,12 @@ from apps.google_apps.references.web.api.calendar import ApiServiceGoogleCalenda
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
-from workflows.hud.tasks.sections import _sections__calendar
+from workflows.hud.dto.sections import sections__calendar
 
 
 @SPROUT.task()
 @log_result()
-@init_meter(RAINMETER_CONFIG, hud_item_name='CALENDAR INFO', new_sections_dict=_sections__calendar, play_sound=False)
+@init_meter(RAINMETER_CONFIG, hud_item_name='CALENDAR INFO', new_sections_dict=sections__calendar, play_sound=False)
 @feed()
 def show_calendar_information(cfg_id__gsuite, cfg_id__elevenlabs, ini=ConfigHelperRainmeter()):
 

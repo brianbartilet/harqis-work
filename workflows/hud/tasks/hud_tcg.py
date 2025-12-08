@@ -22,12 +22,12 @@ from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
 from workflows.purchases.helpers.helper import load_scryfall_bulk_data
-from workflows.hud.tasks.sections import _sections__tcg_mp_sections
+from workflows.hud.dto.sections import sections__tcg_mp_sections
 
 
 @SPROUT.task()
 @log_result()
-@init_meter(RAINMETER_CONFIG, hud_item_name='TCG ORDERS', new_sections_dict=_sections__tcg_mp_sections,
+@init_meter(RAINMETER_CONFIG, hud_item_name='TCG ORDERS', new_sections_dict=sections__tcg_mp_sections,
             play_sound=True,
             schedule_categories=[ScheduleCategory.PLAY, ]
 )
