@@ -228,14 +228,14 @@ def show_mouse_bindings(ini=ConfigHelperRainmeter(), **kwargs):
 
     # region Corsair
     path = 'C:\Program Files\Corsair\Corsair iCUE5 Software\iCUE.exe'
-    ini['meterLink']['Text'] = "ICue"
+    ini['meterLink']['Text'] = "ICUE"
     ini['meterLink']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(path)
     ini['meterLink']['tooltiptext'] = path
 
     hud = str(HUD_NAME_MOUSE_BINDINGS).replace(" ", "").upper()
     dump_path = '{0}'.format(os.path.join(RAINMETER_CONFIG['write_skin_to_path'],
                                           RAINMETER_CONFIG['skin_name'],
-                                          hud, "dump.txt"
+                                          hud
                                           ))
     ini['meterLink_dump']['Meter'] = 'String'
     ini['meterLink_dump']['MeterStyle'] = 'sItemLink'
@@ -243,7 +243,7 @@ def show_mouse_bindings(ini=ConfigHelperRainmeter(), **kwargs):
     ini['meterLink_dump']['Y'] = '(38*#Scale#)'
     ini['meterLink_dump']['W'] = '80'
     ini['meterLink_dump']['H'] = '55'
-    ini['meterLink_dump']['Text'] = '|Dump'
+    ini['meterLink_dump']['Text'] = '|DUMP'
     ini['meterLink_dump']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(dump_path)
     ini['meterLink_dump']['tooltiptext'] = dump_path
 
