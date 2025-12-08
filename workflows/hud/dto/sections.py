@@ -93,6 +93,33 @@ sections__utilities_desktop = {
     },
 }
 
+sections__utilities_ai = {
+    "meterSeperator_n8n": {
+        "Preset": "InjectedByTest",
+    },
+
+    "meterLink_agent_chat": {
+        "Preset": "InjectedByTest",
+    },
+    "meterSeperator_agent_chat": {
+        "Preset": "InjectedByTest",
+    },
+
+    "meterLink_agent_chat_tests": {
+        "Preset": "InjectedByTest",
+    },
+    "meterSeperator_agent_chat_tests": {
+        "Preset": "InjectedByTest",
+    },
+
+    "meterLink_agent_voice": {
+        "Preset": "InjectedByTest",
+    },
+    "meterSeperator_agent_voice": {
+        "Preset": "InjectedByTest",
+    },
+}
+
 
 sections__utilities_i_cue = {
     "meterLink_dump": {
