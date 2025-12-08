@@ -159,7 +159,7 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
 @SPROUT.task()
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='CELERY SPROUTS', new_sections_dict=sections__check_logs,
-            play_sound=False, schedule_categories=[ScheduleCategory.DEACTIVATED])
+            play_sound=False, schedule_categories=[ScheduleCategory.ORGANIZE])
 @feed()
 def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
@@ -181,7 +181,7 @@ def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
                                           RAINMETER_CONFIG['skin_name'],
                                           hud, "dump.txt"
                                           ))
-    ini['meterLink']['text'] = "Dump"
+    ini['meterLink']['text'] = "DUMP"
     ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}"]'.format(dump_path)
     ini['meterLink']['tooltiptext'] = dump_path
     ini['meterLink']['W'] = '100'
@@ -196,7 +196,8 @@ def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
     ini['MeterDisplay']['W'] = '({0}*155*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
     ini['MeterDisplay']['X'] = '14'
-    ini['MeterDisplay']['MeasureName'] = 'MeasureLuaScriptScroll'
+    ini['MeterDisplay']['MeasureName'] = 'MeasureScrollableText'
+
 
     ini['MeterBackground']['Shape'] = ('Rectangle 0,0,({0}*190),(36+(#ItemLines#*22)),2 | Fill Color #fillColor# '
                                        '| StrokeWidth (1*#Scale#) | Stroke Color [#darkColor] '
