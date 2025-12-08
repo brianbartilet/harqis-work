@@ -16,7 +16,7 @@ from apps.desktop.corsair.profiles_mapping import build_summary
 from apps.google_apps.references.constants import ScheduleCategory
 from apps.apps_config import CONFIG_MANAGER
 
-from workflows.hud.tasks.sections import _sections__utilities_desktop, _sections__utilities_i_cue
+from workflows.hud.dto.sections import sections__utilities_desktop, sections__utilities_i_cue
 from workflows.hud.dto.constants import Profile, AppExe, HUD_NAME_MOUSE_BINDINGS, APP_TO_PROFILE
 
 
@@ -71,7 +71,7 @@ def get_active_window_app(print_all=False):
 @log_result()
 @init_meter(RAINMETER_CONFIG,
             hud_item_name="HUD PROFILES",
-            new_sections_dict=_sections__utilities_desktop,
+            new_sections_dict=sections__utilities_desktop,
             play_sound=False)
 def show_hud_profiles(ini=ConfigHelperRainmeter()):
 
@@ -165,7 +165,7 @@ def show_hud_profiles(ini=ConfigHelperRainmeter()):
 @log_result()
 @init_meter(RAINMETER_CONFIG,
             hud_item_name=HUD_NAME_MOUSE_BINDINGS,
-            new_sections_dict=_sections__utilities_i_cue,
+            new_sections_dict=sections__utilities_i_cue,
             play_sound=False,
             schedule_categories=[ScheduleCategory.ORGANIZE, ScheduleCategory.WORK]
             )
