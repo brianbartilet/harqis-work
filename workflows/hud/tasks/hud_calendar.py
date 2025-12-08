@@ -135,7 +135,6 @@ def show_calendar_information(cfg_id__gsuite, cfg_id__elevenlabs, ini=ConfigHelp
         match = 0
         line_ctr += 1
         for all_day_event in events_today_filtered:
-            line_ctr += 1
             if event_now['calendarSummary'] == all_day_event['calendarSummary']:
                 line_ctr += 1
                 match = 1
