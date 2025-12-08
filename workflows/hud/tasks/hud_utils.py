@@ -7,7 +7,6 @@ import psutil
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
-from core.utilities.resources.decorators import get_decorator_attrs
 from core.utilities.logging.custom_logger import logger as log
 
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
@@ -16,7 +15,7 @@ from apps.desktop.corsair.profiles_mapping import build_summary
 from apps.google_apps.references.constants import ScheduleCategory
 from apps.apps_config import CONFIG_MANAGER
 
-from workflows.hud.dto.sections import sections__utilities_desktop, sections__utilities_i_cue
+from workflows.hud.dto.sections import sections__utilities_desktop, sections__utilities_i_cue, sections__utilities_ai
 from workflows.hud.dto.constants import Profile, AppExe, HUD_NAME_MOUSE_BINDINGS, APP_TO_PROFILE
 
 
@@ -236,3 +235,103 @@ def build_summary_mouse_bindings(cfg_id__desktop):
     combined_out_path, combined_dump, per_profile_outputs = build_summary(path, output_dir=skin_dir, per_profile_prefix="dump-")
 
     return combined_dump
+
+
+@SPROUT.task()
+@log_result()
+@init_meter(RAINMETER_CONFIG,
+            hud_item_name="AGENTS CORE",
+            new_sections_dict=sections__utilities_ai,
+            play_sound=False)
+def show_ai_helper(cfg_id__n8n, cfg_id__eleven, cfg_id__py, ini=ConfigHelperRainmeter()):
+    cfg_py = CONFIG_MANAGER.get(cfg_id__py)
+    exe = cfg_py['bin']
+    root = cfg_py['root']
+
+    cfg_eleven = CONFIG_MANAGER.get(cfg_id__eleven)
+    agent_voice = cfg_eleven['data']['assistants']['agent_n8n_automation']
+    agent_chat_testing = cfg_eleven['data']['assistants']['agent_n8n_automation_chat_tests']
+    agent_chat = cfg_eleven['data']['assistants']['agent_n8n_automation_chat']
+
+    cfg_n8n = CONFIG_MANAGER.get(cfg_id__n8n)
+    base_url = cfg_n8n.get('base_url', "http://localhost:5678")
+
+    # region Build n8n link
+
+    n8n_executions_url = "{0}/home/executions".format(base_url)
+    ini['meterLink']['Text'] = "N8N EXECUTIONS"
+    ini['meterLink']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(n8n_executions_url)
+    ini['meterLink']['tooltiptext'] = n8n_executions_url
+    ini['meterLink']['W'] = '200'
+
+    ini['meterSeperator_n8n']['Meter'] = 'Image'
+    ini['meterSeperator_n8n']['MeterStyle'] = 'styleSeperator'
+    ini['meterSeperator_n8n']['Y'] = '(54*#Scale#)'
+
+    # endregion
+
+    # region Build link desktop chat agent
+    ini['meterLink_agent_chat']['Text'] = "DESKTOP CHAT"
+    cmd_chat = f'"{exe}" "{root}\\workflows\\n8n\\utilities\\assistant_widget.py" "{agent_chat}"'
+    ini['meterLink_agent_chat']['LeftMouseUpAction'] = f'!Execute [{cmd_chat}]'
+
+    ini['meterLink_agent_chat']['tooltiptext'] = "Run agent {0}".format(agent_chat)
+    ini['meterLink_agent_chat']['Meter'] = 'String'
+    ini['meterLink_agent_chat']['MeterStyle'] = 'sItemLink'
+    ini['meterLink_agent_chat']['X'] = '(9*#Scale#)'
+    ini['meterLink_agent_chat']['Y'] = '(58*#Scale#)'
+    ini['meterLink_agent_chat']['W'] = '200'
+    ini['meterLink_agent_chat']['H'] = '55'
+
+    ini['meterSeperator_agent_chat']['Meter'] = 'Image'
+    ini['meterSeperator_agent_chat']['MeterStyle'] = 'styleSeperator'
+    ini['meterSeperator_agent_chat']['Y'] = '(74*#Scale#)'
+
+    # endregion
+
+    # region Build link desktop chat test agent
+    ini['meterLink_agent_chat_tests']['Text'] = "DESKTOP CHAT TESTS"
+    cmd_chat_tests = f'"{exe}" "{root}\\workflows\\n8n\\utilities\\assistant_widget.py" "{agent_chat_testing}"'
+    ini['meterLink_agent_chat_tests']['LeftMouseUpAction'] = f'!Execute [{cmd_chat_tests}]'
+
+    ini['meterLink_agent_chat_tests']['tooltiptext'] = "Run agent {0}".format(agent_chat_testing)
+    ini['meterLink_agent_chat_tests']['Meter'] = 'String'
+    ini['meterLink_agent_chat_tests']['MeterStyle'] = 'sItemLink'
+    ini['meterLink_agent_chat_tests']['X'] = '(9*#Scale#)'
+    ini['meterLink_agent_chat_tests']['Y'] = '(78*#Scale#)'
+    ini['meterLink_agent_chat_tests']['W'] = '200'
+    ini['meterLink_agent_chat_tests']['H'] = '55'
+
+    ini['meterSeperator_agent_chat_tests']['Meter'] = 'Image'
+    ini['meterSeperator_agent_chat_tests']['MeterStyle'] = 'styleSeperator'
+    ini['meterSeperator_agent_chat_tests']['Y'] = '(94*#Scale#)'
+
+    # endregion
+
+    # region Build link desktop voice agent
+    ini['meterLink_agent_voice']['Text'] = "DESKTOP VOICE"
+    cmd_voice = f'"{exe}" "{root}\\workflows\\n8n\\utilities\\assistant_widget.py" "{agent_voice}"'
+    ini['meterLink_agent_voice']['LeftMouseUpAction'] = f'!Execute [{cmd_voice}]'
+
+    ini['meterLink_agent_voice']['tooltiptext'] = "Run agent {0}".format(agent_chat_testing)
+    ini['meterLink_agent_voice']['Meter'] = 'String'
+    ini['meterLink_agent_voice']['MeterStyle'] = 'sItemLink'
+    ini['meterLink_agent_voice']['X'] = '(9*#Scale#)'
+    ini['meterLink_agent_voice']['Y'] = '(98*#Scale#)'
+    ini['meterLink_agent_voice']['W'] = '200'
+    ini['meterLink_agent_voice']['H'] = '55'
+
+    ini['meterSeperator_agent_voice']['Meter'] = 'Image'
+    ini['meterSeperator_agent_voice']['MeterStyle'] = 'styleSeperator'
+    ini['meterSeperator_agent_voice']['Y'] = '(114*#Scale#)'
+
+    # endregion
+
+
+    # region Set dimensions
+    ini['MeterDisplay']['W'] = '180'
+    ini['MeterDisplay']['H'] = '350'
+    ini['Variables']['ItemLines'] = '{0}'.format(4)
+    # endregion
+
+    return ""
