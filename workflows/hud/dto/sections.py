@@ -1,4 +1,4 @@
-_sections__calendar = {
+sections__calendar = {
     "meterLink_google_keep": {
         "Preset": "InjectedByTest",
     },
@@ -8,7 +8,7 @@ _sections__calendar = {
 }
 
 
-_sections__oanda = {
+sections__oanda = {
     "meterLink_broker": {
         "Preset": "InjectedByTest",
     },
@@ -21,7 +21,7 @@ _sections__oanda = {
 }
 
 
-_sections__check_desktop = {
+sections__check_desktop = {
     "meterLink_github": {
         "Preset": "InjectedByTest",
     },
@@ -31,14 +31,14 @@ _sections__check_desktop = {
 }
 
 
-_sections__check_world_checks = {
+sections__check_world_checks = {
     "meterLink_github": {
         "Preset": "InjectedByTest",
     },
 }
 
 
-_sections__check_logs = {
+sections__check_logs = {
     "meterLink_elastic": {
         "Preset": "InjectedByTest",
     },
@@ -48,7 +48,7 @@ _sections__check_logs = {
 }
 
 
-_sections__tcg_mp_sections = {
+sections__tcg_mp_sections = {
     "meterLink_orders": {
         "Preset": "InjectedByTest",
     },

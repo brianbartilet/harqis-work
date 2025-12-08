@@ -21,12 +21,12 @@ from apps.desktop.helpers.feed import feed
 from apps.google_apps.references.constants import ScheduleCategory
 from apps.apps_config import CONFIG_MANAGER
 
-from workflows.hud.tasks.sections import _sections__check_desktop, _sections__check_world_checks
+from workflows.hud.dto.sections import sections__check_desktop, sections__check_world_checks
 
 
 @SPROUT.task()
 @log_result()
-@init_meter(RAINMETER_CONFIG, hud_item_name='DESKTOP LOGS', new_sections_dict=_sections__check_desktop,
+@init_meter(RAINMETER_CONFIG, hud_item_name='DESKTOP LOGS', new_sections_dict=sections__check_desktop,
             play_sound=True, schedule_categories=[ScheduleCategory.PINNED, ], prepend_if_exists=True)
 @feed()
 def get_desktop_logs(cfg_id__desktop, timedelta_previous_hours = 1, ini=ConfigHelperRainmeter(), **kwargs):
@@ -276,7 +276,7 @@ def get_desktop_logs(cfg_id__desktop, timedelta_previous_hours = 1, ini=ConfigHe
 @SPROUT.task()
 @log_result()
 @init_meter(RAINMETER_CONFIG,
-            hud_item_name='GPT INFO', new_sections_dict=_sections__check_world_checks, play_sound=False,
+            hud_item_name='GPT INFO', new_sections_dict=sections__check_world_checks, play_sound=False,
             schedule_categories=[ScheduleCategory.WORK, ])
 def get_events_world_check(countries_list=None, utc_tz="UTC+8", ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))

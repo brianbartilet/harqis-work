@@ -12,7 +12,7 @@ from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.desktop.helpers.feed import feed
 from datetime import  datetime
 
-from workflows.hud.tasks.sections import _sections__check_logs
+from workflows.hud.dto.sections import sections__check_logs
 
 from workflows.desktop.tasks_config import WORKFLOWS_DESKTOP
 from workflows.hud.tasks_config import WORKFLOWS_HUD
@@ -23,7 +23,7 @@ from apps.google_apps.references.constants import ScheduleCategory
 
 @SPROUT.task()
 @log_result()
-@init_meter(RAINMETER_CONFIG, hud_item_name='FAILED JOBS TODAY', new_sections_dict=_sections__check_logs, play_sound=False)
+@init_meter(RAINMETER_CONFIG, hud_item_name='FAILED JOBS TODAY', new_sections_dict=sections__check_logs, play_sound=False)
 @feed()
 def get_failed_jobs(ini=ConfigHelperRainmeter()):
 
@@ -158,7 +158,7 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
 
 @SPROUT.task()
 @log_result()
-@init_meter(RAINMETER_CONFIG, hud_item_name='CELERY SPROUTS', new_sections_dict=_sections__check_logs,
+@init_meter(RAINMETER_CONFIG, hud_item_name='CELERY SPROUTS', new_sections_dict=sections__check_logs,
             play_sound=False, schedule_categories=[ScheduleCategory.DEACTIVATED])
 @feed()
 def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
