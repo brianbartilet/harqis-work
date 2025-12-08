@@ -1,6 +1,6 @@
-<mxfile host="drawio-plugin" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" modified="2025-11-11T16:58:33.545Z" version="22.1.22" etag="hEmdCBGzT5raZhCC9gA_" type="embed">
+<mxfile host="drawio-plugin" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" modified="2025-12-07T17:54:22.597Z" etag="WliZQLeyyRPUKmEfFCZS" version="22.1.22" type="embed">
   <diagram name="Page-1" id="mAsLLm8A2lYVM7ViB4nz">
-    <mxGraphModel dx="1279" dy="752" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" background="none" math="0" shadow="0">
+    <mxGraphModel dx="1259" dy="668" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" background="none" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -55,6 +55,12 @@
         <mxCell id="vQR-fwfMznhzyoA6hrax-47" value="&lt;font face=&quot;Lucida Console&quot;&gt;Is in trade binder?&lt;/font&gt;" style="rhombus;whiteSpace=wrap;html=1;labelBackgroundColor=none;fillColor=#B2C9AB;strokeColor=#788AA3;fontColor=#46495D;" parent="vQR-fwfMznhzyoA6hrax-2" vertex="1">
           <mxGeometry x="40" y="400" width="80" height="80" as="geometry" />
         </mxCell>
+        <mxCell id="2" value="DAILY Move main to bulk below 5USD/marked as tradable" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Lucida Console;labelBackgroundColor=none;fillColor=#B2C9AB;strokeColor=#788AA3;fontColor=#46495D;" vertex="1" parent="vQR-fwfMznhzyoA6hrax-2">
+          <mxGeometry x="30" y="920" width="170" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="3" value="DAILY Move from bulk to main if price becomes 5USD, marked as spiking" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Lucida Console;labelBackgroundColor=none;fillColor=#B2C9AB;strokeColor=#788AA3;fontColor=#46495D;" vertex="1" parent="vQR-fwfMznhzyoA6hrax-2">
+          <mxGeometry x="30" y="1040" width="170" height="80" as="geometry" />
+        </mxCell>
         <mxCell id="vQR-fwfMznhzyoA6hrax-17" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;labelBackgroundColor=none;strokeColor=#788AA3;fontColor=default;" parent="1" source="vQR-fwfMznhzyoA6hrax-11" target="vQR-fwfMznhzyoA6hrax-16" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
@@ -74,7 +80,9 @@
           <mxGeometry y="30" width="120" height="30" as="geometry" />
         </mxCell>
         <mxCell id="vQR-fwfMznhzyoA6hrax-39" value="Generate Mappings Job" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;fillColor=#B2C9AB;strokeColor=#788AA3;fontColor=#46495D;" parent="1" vertex="1">
-          <mxGeometry x="20" y="70" width="1130" height="330" as="geometry" />
+          <mxGeometry x="20" y="70" width="1130" height="330" as="geometry">
+            <mxRectangle x="20" y="70" width="40" height="170" as="alternateBounds" />
+          </mxGeometry>
         </mxCell>
         <mxCell id="vQR-fwfMznhzyoA6hrax-37" value="Store to notes" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Lucida Console;labelBackgroundColor=none;fillColor=#B2C9AB;strokeColor=#788AA3;fontColor=#46495D;" parent="vQR-fwfMznhzyoA6hrax-39" vertex="1">
           <mxGeometry x="220" y="250" width="120" height="60" as="geometry" />
@@ -89,7 +97,9 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="vQR-fwfMznhzyoA6hrax-48" value="Create\Update Sell Post" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;fillColor=#B2C9AB;strokeColor=#788AA3;fontColor=#46495D;" parent="1" vertex="1">
-          <mxGeometry x="20" y="420" width="1130" height="300" as="geometry" />
+          <mxGeometry x="20" y="420" width="1130" height="300" as="geometry">
+            <mxRectangle x="20" y="420" width="40" height="170" as="alternateBounds" />
+          </mxGeometry>
         </mxCell>
         <mxCell id="vQR-fwfMznhzyoA6hrax-60" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=none;strokeColor=#788AA3;fontColor=default;" parent="vQR-fwfMznhzyoA6hrax-48" source="vQR-fwfMznhzyoA6hrax-49" edge="1">
           <mxGeometry relative="1" as="geometry">

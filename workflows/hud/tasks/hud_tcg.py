@@ -129,10 +129,10 @@ def show_tcg_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHelperRainmeter(
         pattern = r"\b([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\b"
         match = re.search(pattern, url)
         guid = match.group(1)
-        log.info("Found GUID: {0} for card: {1}".format(guid, _card))
-        scryfall_card = cards_scryfall_bulk_data[guid]
 
         try:
+            log.info("Found GUID: {0} for card: {1}".format(guid, _card))
+            scryfall_card = cards_scryfall_bulk_data[guid]
             colors = scryfall_card['color_identity']
             if "land" in scryfall_card["type_line"].lower():
                 _color_identity = "L"
