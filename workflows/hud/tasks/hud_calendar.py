@@ -135,6 +135,7 @@ def show_calendar_information(cfg_id__gsuite, cfg_id__elevenlabs, ini=ConfigHelp
         match = 0
         line_ctr += 1
         for all_day_event in events_today_filtered:
+            line_ctr += 1
             if event_now['calendarSummary'] == all_day_event['calendarSummary']:
                 line_ctr += 1
                 match = 1
@@ -145,7 +146,7 @@ def show_calendar_information(cfg_id__gsuite, cfg_id__elevenlabs, ini=ConfigHelp
         dump += "{0}\n".format(make_separator(separator_count))
     # endregion
 
-    ini['Variables']['ItemLines'] = '{0}'.format(line_ctr + 1)
+    ini['Variables']['ItemLines'] = '{0}'.format(line_ctr)
 
     return dump
 
