@@ -20,7 +20,7 @@ References:
 """
 
 from datetime import timedelta
-
+from celery.schedules import crontab
 
 """
 A dictionary mapping task identifiers to their configuration for scheduling.
@@ -37,7 +37,7 @@ WORKFLOW_PURCHASES = {
 
     'run-job--generate_tcg_mappings': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.generate_tcg_mappings',
-        'schedule': timedelta(days=1),
+        'schedule': crontab(hour='3,12'),
         'args': [
             "TCG_MP",
             "ECHO_MTG",
@@ -48,7 +48,7 @@ WORKFLOW_PURCHASES = {
 
     'run-job--download_scryfall_bulk_data': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.download_scryfall_bulk_data',
-        'schedule': timedelta(days=30),
+        'schedule': crontab(hour='2'),
         'args': [],
     },
 }
