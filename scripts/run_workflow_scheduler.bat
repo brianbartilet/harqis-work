@@ -6,4 +6,4 @@ cd ..
 
 
 echo Starting scheduler...
-python run_workflows.py scheduler >> scheduler.log 2>&1
+python run_workflows.py scheduler
