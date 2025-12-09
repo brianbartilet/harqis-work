@@ -6,4 +6,4 @@ cd ..
 
 
 echo Starting worker...
-python run_workflows.py worker >> worker.log 2>&1
+python run_workflows.py worker
