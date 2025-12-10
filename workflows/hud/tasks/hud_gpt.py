@@ -261,8 +261,8 @@ def get_desktop_logs(cfg_id__desktop, timedelta_previous_hours = 1, ini=ConfigHe
     except Exception:
         no_connection = True
 
-    if no_connection:
-        dump += "\nCannot process logs. No connection.\n\n"
+    if no_connection or len(answer_) == 0:
+        dump += "\nCannot process logs. No connection or no data collected.\n\n"
 
     dump += wrap_text(answer_, width=65, indent="\n")
     dump += "\n\n[END]   {0}\n\n\n".format(last_ts)
