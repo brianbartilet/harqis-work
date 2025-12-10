@@ -42,6 +42,7 @@ WORKFLOWS_HUD = {
             minute='*/15'),
         'args': ["OANDA"],
         'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
+        "options": {"queue": "hud"},
     },
 
     'run-job--show_tcg_orders': {
@@ -49,6 +50,7 @@ WORKFLOWS_HUD = {
         'schedule': crontab(minute='*/30'),
         'args': ["TCG_MP", "SCRYFALL"],
         'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
+        "options": {"queue": "tcg"},
     },
 
     'run-job--get_desktop_logs': {
@@ -56,24 +58,28 @@ WORKFLOWS_HUD = {
         'schedule': crontab(minute='5'),
         'args': ["DESKTOP"],
         'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
+        "options": {"queue": "default"},
     },
 
     'run-job--take_screenshots_for_gpt_capture': {
         'task': 'workflows.hud.tasks.hud_gpt.take_screenshots_for_gpt_capture',
         'schedule': crontab(minute='10,20,30,40,50,00'),
         'args': ["DESKTOP"],
+        "options": {"queue": "default"},
     },
     
     'run-job--show_calendar_information': {
         'task': 'workflows.hud.tasks.hud_calendar.show_calendar_information',
         'schedule': crontab(minute='15,30,45,00'),
-        'args': ["GOOGLE_APPS", "ELEVEN_LABS"]
+        'args': ["GOOGLE_APPS", "ELEVEN_LABS"],
+        "options": {"queue": "hud"},
     },
 
     'run-job--get_failed_jobs': {
         'task': 'workflows.hud.tasks.hud_logs.get_failed_jobs',
         'schedule': crontab(minute='*/15'),
-        'args': []
+        'args': [],
+        "options": {"queue": "hud"},
     },
 
     'run-job--get_schedules': {
@@ -81,6 +87,7 @@ WORKFLOWS_HUD = {
         'schedule': crontab(minute='*/15'),
         'args': [],
         'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
+        "options": {"queue": "hud"},
     },
 
     'run-job--show_mouse_bindings': {
@@ -88,18 +95,21 @@ WORKFLOWS_HUD = {
         'schedule': timedelta(minutes=1),
         'args': [],
         'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
+        "options": {"queue": "hud"},
     },
 
     'run-job--build_summary_mouse_bindings': {
         'task': 'workflows.hud.tasks.hud_utils.build_summary_mouse_bindings',
         'schedule': crontab(hour='1'),
-        'args': ["DESKTOP"]
+        'args': ["DESKTOP"],
+        "options": {"queue": "default"},
     },
 
     'run-job--show_hud_profiles': {
         'task': 'workflows.hud.tasks.hud_utils.show_hud_profiles',
         'schedule': crontab(hour='00'),
-        'args': []
+        'args': [],
+        "options": {"queue": "hud"},
     },
 
 
