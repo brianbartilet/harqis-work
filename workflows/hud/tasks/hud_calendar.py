@@ -13,7 +13,7 @@ from apps.apps_config import CONFIG_MANAGER
 from workflows.hud.dto.sections import sections__calendar
 
 
-@SPROUT.task()
+@SPROUT.task(queue='hud')
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='CALENDAR INFO', new_sections_dict=sections__calendar, play_sound=False)
 @feed()

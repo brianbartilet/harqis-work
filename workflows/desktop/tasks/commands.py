@@ -11,7 +11,7 @@ from apps.desktop.helpers.feed import feed
 from apps.apps_config import CONFIG_MANAGER
 
 
-@SPROUT.task()
+@SPROUT.task(queue='default')
 @log_result()
 def git_pull_on_paths() -> str:
 
@@ -65,7 +65,7 @@ def git_pull_on_paths() -> str:
     return " ".join(x for x in pull_list)
 
 
-@SPROUT.task()
+@SPROUT.task(queue='default')
 @log_result()
 @feed()
 def copy_files_targeted(cfg_id__desktop_jobs: str) -> str:
@@ -84,7 +84,7 @@ def copy_files_targeted(cfg_id__desktop_jobs: str) -> str:
     return " ".join(x[0] for x in files)
 
 
-@SPROUT.task()
+@SPROUT.task(queue='default')
 @log_result()
 @feed()
 def set_desktop_hud_to_back() -> str:
@@ -96,7 +96,7 @@ def set_desktop_hud_to_back() -> str:
     return str(rainmeter_ini)
 
 
-@SPROUT.task()
+@SPROUT.task(ueue='default')
 @log_result()
 @feed()
 def run_n8n_sequence() -> str:

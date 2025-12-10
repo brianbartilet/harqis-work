@@ -40,7 +40,7 @@ def _kill_existing_screen_reader_processes():
             continue
 
 
-@SPROUT.task()
+@SPROUT.task(queue='default')
 @log_result()
 @feed()
 def run_capture_logging(cfg_id__desktop_utils):

@@ -66,7 +66,7 @@ def get_active_window_app(print_all=False):
     return active_name
 
     
-@SPROUT.task()
+@SPROUT.task(queue='hud')
 @log_result()
 @init_meter(RAINMETER_CONFIG,
             hud_item_name="HUD PROFILES",
@@ -160,7 +160,7 @@ def show_hud_profiles(ini=ConfigHelperRainmeter()):
     return ""
 
 
-@SPROUT.task()
+@SPROUT.task(queue='hud')
 @log_result()
 @init_meter(RAINMETER_CONFIG,
             hud_item_name=HUD_NAME_MOUSE_BINDINGS,
@@ -224,7 +224,7 @@ def show_mouse_bindings(ini=ConfigHelperRainmeter(), **kwargs):
     return "SUCCESS"
 
 
-@SPROUT.task()
+@SPROUT.task(queue='hud')
 @log_result()
 def build_summary_mouse_bindings(cfg_id__desktop):
     cfg = CONFIG_MANAGER.get(cfg_id__desktop)
@@ -237,7 +237,7 @@ def build_summary_mouse_bindings(cfg_id__desktop):
     return combined_dump
 
 
-@SPROUT.task()
+@SPROUT.task(queue='hud')
 @log_result()
 @init_meter(RAINMETER_CONFIG,
             hud_item_name="AGENTS CORE",

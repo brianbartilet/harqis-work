@@ -24,7 +24,7 @@ from apps.apps_config import CONFIG_MANAGER
 from workflows.hud.dto.sections import sections__check_desktop, sections__check_world_checks
 
 
-@SPROUT.task()
+@SPROUT.task(queue='hud')
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='DESKTOP LOGS', new_sections_dict=sections__check_desktop,
             play_sound=True, schedule_categories=[ScheduleCategory.PINNED, ], prepend_if_exists=True)
@@ -273,7 +273,7 @@ def get_desktop_logs(cfg_id__desktop, timedelta_previous_hours = 1, ini=ConfigHe
     return dump
 
 
-@SPROUT.task()
+@SPROUT.task(queue='hud')
 @log_result()
 @init_meter(RAINMETER_CONFIG,
             hud_item_name='GPT INFO', new_sections_dict=sections__check_world_checks, play_sound=False,
@@ -361,7 +361,7 @@ def get_events_world_check(countries_list=None, utc_tz="UTC+8", ini=ConfigHelper
     return dump
 
 
-@SPROUT.task()
+@SPROUT.task(queue='default')
 @log_result()
 @feed()
 def take_screenshots_for_gpt_capture(cfg_id__desktop):
