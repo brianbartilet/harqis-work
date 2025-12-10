@@ -3,7 +3,7 @@ from core.apps.sprout.manage import main as sprout_main
 
 from core.apps.sprout.settings import APP_PACKAGE
 from core.config.env_variables import ENV_WORKFLOW_CONFIG
-from core.config.env_variables import ENV_WORKFLOW_CONCURRENCY
+#from core.config.env_variables import ENV_WORKFLOW_CONCURRENCY
 from core.config.env_variables import ENV_WORKFLOW_QUEUE
 print('====================================================================================')
 print(f'{APP_PACKAGE}')
