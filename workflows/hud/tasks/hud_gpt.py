@@ -158,7 +158,7 @@ def get_desktop_logs(cfg_id__desktop, timedelta_previous_hours = 1, ini=ConfigHe
             tool_resources={ "code_interpreter": { "file_ids": assistant_chat.attachments }}
         )
         assistant_chat.run_thread(run=trigger)
-        assistant_chat.wait_for_runs_to_complete()
+        assistant_chat.wait_for_runs_to_complete(wait_secs=30, retries=20)
         replies = assistant_chat.get_replies()
         answer = []
         for x in replies:
