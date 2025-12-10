@@ -44,12 +44,14 @@ WORKFLOW_PURCHASES = {
             "ECHO_MTG_FE",
             "SCRYFALL"
         ],
+        "options": {"queue": "tcg"},
     },
 
     'run-job--download_scryfall_bulk_data': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.download_scryfall_bulk_data',
         'schedule': crontab(hour='2'),
         'args': [],
+        "options": {"queue": "tcg"},
     },
 }
 

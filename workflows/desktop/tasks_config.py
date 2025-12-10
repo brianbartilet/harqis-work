@@ -39,30 +39,35 @@ WORKFLOWS_DESKTOP = {
         'task': 'workflows.desktop.tasks.commands.git_pull_on_paths',
         'schedule':  crontab(minute='*/10'),
         'args': [],
+        "options": {"queue": "default"},
     },
 
     'run-job--set_desktop_hud_to_back': {
         'task': 'workflows.desktop.tasks.commands.set_desktop_hud_to_back',
         'schedule': crontab(minute='*/30'),
         'args': [],
+        "options": {"queue": "default"},
     },
 
     'run-job--copy_files_targeted': {
         'task': 'workflows.desktop.tasks.commands.copy_files_targeted',
         'schedule': crontab(minute='*/30'),
         'args': ["DESKTOP", ],
+        "options": {"queue": "default"},
     },
 
     'run-job--run_n8n_sequence': {
         'task': 'workflows.desktop.tasks.commands.run_n8n_sequence',
         'schedule': crontab(hour='0', minute='0'),
         'args': [],
+        "options": {"queue": "default"},
     },
 
     'run-job--run_capture_logging': {
         'task': 'workflows.desktop.tasks.capture.run_capture_logging',
         'schedule': crontab(minute='0,15,30,45'),
         'args': ["DESKTOP", ],
+        "options": {"queue": "default"},
     },
 
 
