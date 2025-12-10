@@ -4,7 +4,7 @@ call set_env_workflows.bat
 
 cd ..
 
-set "WORKFLOW_QUEUE=default"
+set "WORKFLOW_QUEUE=hud"
 
 echo Starting worker...
 python run_workflows.py worker

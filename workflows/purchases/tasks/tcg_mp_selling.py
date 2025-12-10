@@ -20,7 +20,7 @@ from apps.echo_mtg.references.dto.notes_jnfo import DtoNotesInformation
 from workflows.purchases.helpers.helper import load_scryfall_bulk_data
 
 
-@SPROUT.task()
+@SPROUT.task(queue='tcg')
 @log_result()
 def task_smoke():
     """Test function to add two numbers and return the result."""
@@ -28,7 +28,7 @@ def task_smoke():
     log.info("Running a test result {0}".format(number))
     return number
 
-@SPROUT.task()
+@SPROUT.task(queue='tcg')
 @feed()
 def download_scryfall_bulk_data(cfg_id__scryfall: str):
     cfg__scryfall = CONFIG_MANAGER.get(cfg_id__scryfall)
@@ -38,7 +38,7 @@ def download_scryfall_bulk_data(cfg_id__scryfall: str):
     return "SUCCESS"
 
 
-@SPROUT.task()
+@SPROUT.task(queue='tcg')
 @log_result()
 @feed()
 def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__echo_mtg_fe: str, cfg_id__scryfall: str):
