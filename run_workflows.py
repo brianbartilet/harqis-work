@@ -8,7 +8,7 @@ from core.config.env_variables import ENV_WORKFLOW_QUEUE
 print('====================================================================================')
 print(f'{APP_PACKAGE}')
 print(f'{ENV_WORKFLOW_CONFIG}')
-print(f'{ENV_WORKFLOW_CONCURRENCY}')
+#print(f'{ENV_WORKFLOW_CONCURRENCY}')
 print(f'{ENV_WORKFLOW_QUEUE}')
 print('====================================================================================')
 
