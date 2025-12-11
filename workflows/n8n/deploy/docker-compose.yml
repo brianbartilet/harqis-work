@@ -20,6 +20,8 @@ services:
     restart: unless-stopped
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    env_file:
+      - ../../../.env/apps.env
     command:
       - "http"
       - "n8n:5678"
