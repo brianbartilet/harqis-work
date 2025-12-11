@@ -142,8 +142,19 @@ def generate_audit_for_tcg_orders(cfg_id__tcg_mp: str) -> None:
 
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
     service = ApiServiceTcgMpOrder(cfg__tcg_mp)
-    orders = service.get_orders()  # iterable of order dicts / page objects
+    orders_1 = service.get_orders(by_status=EnumTcgOrderStatus.PENDING_DROP_OFF)
+    orders_2 = service.get_orders(by_status=EnumTcgOrderStatus.ARRIVED_BRANCH)
+    orders_3 = service.get_orders(by_status=EnumTcgOrderStatus.DROPPED)
+    orders_4 = service.get_orders(by_status=EnumTcgOrderStatus.CANCELLED)
+    orders_5 = service.get_orders(by_status=EnumTcgOrderStatus.PICKED_UP)
+    orders_6 = service.get_orders(by_status=EnumTcgOrderStatus.SHIPPED)
 
+    orders = [
+        order
+        for page in [orders_1, orders_2, orders_3, orders_4, orders_5, orders_6]
+        if page
+        for order in (page[0].data or [])
+    ]
     # ----- helpers ---------------------------------------------------------
 
     def now_utc_iso() -> str:
@@ -281,7 +292,7 @@ def generate_audit_for_tcg_orders(cfg_id__tcg_mp: str) -> None:
 
     # Adjust depending on what get_orders() returns in your service.
     # If it's a simple list of order dicts, change to: `for order in orders:`
-    for order in orders[0].data:
+    for order in orders:
         external_id = order.get("id")          # numeric id (108792)
         order_id = order.get("order_id")       # e.g. "0000108792"
 
