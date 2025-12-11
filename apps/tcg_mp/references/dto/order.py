@@ -33,3 +33,18 @@ class EnumTcgOrderStatus(Enum):
     CANCELLED = (4, "Cancelled")
     PICKED_UP = (2, "Picked Up")
     SHIPPED = (3, "Shipped")
+
+    @property
+    def code(self):
+        return self.value[0]
+
+    @property
+    def label(self):
+        return self.value[1]
+
+    @classmethod
+    def from_code(cls, code: int):
+        for status in cls:
+            if status.code == code:
+                return status
+        return None  # or raise ValueError

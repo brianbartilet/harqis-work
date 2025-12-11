@@ -1,11 +1,12 @@
 from random import randint
 import re
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import logger as log
+from core.apps.es_logging.app.elasticsearch import post, get_index_data
 
 from apps.apps_config import CONFIG_MANAGER
 from apps.desktop.helpers.feed import feed
@@ -13,6 +14,8 @@ from apps.echo_mtg.references.web.api.inventory import ApiServiceEchoMTGInventor
 from apps.echo_mtg.references.web.api.item import ApiServiceEchoMTGCardItem
 from apps.echo_mtg.references.web.api.notes import ApiServiceEchoMTGNotes
 from apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
+from apps.tcg_mp.references.web.api.order import ApiServiceTcgMpOrder
+from apps.tcg_mp.references.dto.order import EnumTcgOrderStatus
 from apps.scryfall.references.web.api.cards import ApiServiceScryfallCards
 from apps.scryfall.references.web.api.bulk import ApiServiceScryfallBulkData
 
@@ -122,3 +125,185 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
         api_service__echo_mtg_notes.create_note(card_echo['inventory_id'], note_json_string)
 
     return "SUCCESS"
+
+
+@SPROUT.task(queue='tcg')
+@log_result()
+@feed()
+def generate_audit_for_tcg_orders(cfg_id__tcg_mp: str) -> None:
+    """
+    Poll TCG MP orders, compare against ES 'current' index, and
+    write changes into:
+      - CURRENT_INDEX: latest status per order (1 doc per external_id)
+      - AUDIT_INDEX: append-only change log (1 doc per change event)
+    """
+    CURRENT_INDEX = "tcg-mp-audit-current"
+    AUDIT_INDEX = "external-status-audit"
+
+    cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
+    service = ApiServiceTcgMpOrder(cfg__tcg_mp)
+    orders = service.get_orders()  # iterable of order dicts / page objects
+
+    # ----- helpers ---------------------------------------------------------
+
+    def now_utc_iso() -> str:
+        """Return ISO-8601 UTC string with Z suffix."""
+        return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    def _unique_audit_id(external_id: int | str) -> str:
+        """
+        Build a stable-but-unique ES _id for audit docs so we never overwrite.
+        Example: audit-108792-20251211T090142664482
+        """
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+        return f"audit-{external_id}-{ts}"
+
+    def _current_doc_id(external_id: int | str) -> str:
+        """
+        ES _id for current-state docs. One per order.
+        Example: order-108792
+        """
+        return f"order-{external_id}"
+
+    def log_status_change_es(external_id, old_status, new_status, source, raw_payload):
+        """
+        Append-only audit log entry in external-status-audit.
+        """
+        doc = {
+            "external_id": external_id,
+            "old_status": old_status,
+            "new_status": new_status,
+            "changed_at": now_utc_iso(),
+            "source": source,
+            "raw_payload": raw_payload,
+        }
+
+        post(
+            json_dump=doc,
+            index_name=AUDIT_INDEX,
+            # unique per change → never overwritten
+            location_key=_unique_audit_id(external_id),
+            use_interval_map=False,
+        )
+
+    def set_current_state(external_id, new_status, raw_payload):
+        """
+        Upsert a single current-state doc per order in tcg-mp-audit-current.
+        """
+        doc = {
+            "external_id": external_id,
+            "current_status": new_status,
+            "last_updated_at": now_utc_iso(),
+            "last_raw_payload": raw_payload,
+        }
+
+        post(
+            json_dump=doc,
+            index_name=CURRENT_INDEX,
+            # 1 doc per order → "order-<external_id>"
+            location_key=_current_doc_id(external_id),
+            use_interval_map=False,
+        )
+
+    def get_current_state(external_id):
+        """
+        Fetch the current-state doc (if any) for a given order.
+        Returns a dict or None.
+        """
+        query = {
+            "term": {
+                "external_id": external_id
+            }
+        }
+
+        states = get_index_data(
+            index_name=CURRENT_INDEX,
+            type_hook=dict,   # get_index_data will do dict(**_source)
+            query=query,
+            fetch_docs=1,
+        )
+
+        if not states:
+            return None
+        return states[0]
+
+    def sync_external_item_status(
+        external_id: str | int,
+        new_status: str,
+        raw_payload,
+        source: str = "poller",
+    ) -> bool:
+        """
+        Compare ES current state vs new_status and:
+          - write audit log if changed
+          - update current index
+
+        Returns True if a change was logged, False otherwise.
+        """
+        try:
+            state = get_current_state(external_id)
+        except RuntimeError:
+            # network / ES error → treat as "no state", but don't crash the whole task
+            state = None
+
+        # First time seen → seed current + audit
+        if state is None:
+            set_current_state(external_id, new_status, raw_payload)
+            log_status_change_es(
+                external_id=external_id,
+                old_status=None,
+                new_status=new_status,
+                source=source,
+                raw_payload=raw_payload,
+            )
+            return True
+
+        old_status = state.get("current_status")
+
+        # No change → nothing to do
+        if old_status == new_status:
+            # If you want a heartbeat, you could uncomment:
+            # set_current_state(external_id, new_status, raw_payload)
+            return False
+
+        # Status changed → log + update current
+        log_status_change_es(
+            external_id=external_id,
+            old_status=old_status,
+            new_status=new_status,
+            source=source,
+            raw_payload=raw_payload,
+        )
+        set_current_state(external_id, new_status, raw_payload)
+        return True
+
+    # ----- main loop over orders -------------------------------------------
+
+    # Adjust depending on what get_orders() returns in your service.
+    # If it's a simple list of order dicts, change to: `for order in orders:`
+    for order in orders[0].data:
+        external_id = order.get("id")          # numeric id (108792)
+        order_id = order.get("order_id")       # e.g. "0000108792"
+
+        if not external_id or not order_id:
+            # skip malformed orders; or log error if you prefer
+            continue
+
+        order_detail = service.get_order_detail(order_id)
+        status_value = order_detail.get("status")  # numeric status (1, 2, 3...)
+
+        status_enum = EnumTcgOrderStatus.from_code(status_value) if status_value is not None else None
+        new_status = status_enum.label if status_enum else None
+
+        if new_status is None:
+            # Could not resolve status → skip or log a warning
+            continue
+
+        # raw_payload can just be the full detail for debugging
+        sync_external_item_status(
+            external_id=external_id,
+            new_status=new_status,
+            raw_payload=order_detail,
+            source="tcg_mp_poll",
+        )
+
