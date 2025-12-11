@@ -21,7 +21,7 @@ services:
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
     env_file:
-      - ../../../.env/apps.env
+      - ./../../../.env/apps.env
     command:
       - "http"
       - "n8n:5678"
