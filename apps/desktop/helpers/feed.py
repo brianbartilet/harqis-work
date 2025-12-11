@@ -55,12 +55,14 @@ def _prepend_with_lock(
     encoding: str = "utf-8",
     lock_timeout_secs: int | None = None,
     lock_sleep_secs: float = 0.1,
+    stale_lock_max_age_secs: float | None = 300.0,  # 5 minutes default
 ) -> None:
     """
     Prepend `block_text` to `path` in a process-safe way using a lock file.
 
     - Creates `<path>.lock` as a mutual exclusion primitive.
-    - Blocks (and optionally times out) if another process is writing.
+    - Waits (with optional timeout) if another process is writing.
+    - Optionally treats very old locks as "stale" and removes them.
     - Uses `_atomic_write_text` to ensure the final write is atomic.
     """
     lock_path = path.with_suffix(path.suffix + ".lock")
@@ -69,12 +71,32 @@ def _prepend_with_lock(
     # Acquire lock (spin until available)
     while True:
         try:
+            # Try to create the lock file exclusively
             fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             os.close(fd)
             break  # lock acquired
         except FileExistsError:
+            # Check for stale lock (too old -> remove and retry)
+            if stale_lock_max_age_secs is not None and lock_path.exists():
+                try:
+                    mtime = lock_path.stat().st_mtime
+                    age = time.time() - mtime
+                    if age > stale_lock_max_age_secs:
+                        # Stale lock; remove and retry acquiring
+                        try:
+                            os.remove(lock_path)
+                            continue  # go back and try to acquire again
+                        except FileNotFoundError:
+                            # Someone else removed it; just loop again
+                            continue
+                except FileNotFoundError:
+                    # Lock disappeared between exists() and stat(); loop again
+                    continue
+
+            # Regular timeout handling
             if lock_timeout_secs is not None and (time.time() - start) > lock_timeout_secs:
                 raise TimeoutError(f"Timed out waiting for lock on {path}")
+
             time.sleep(lock_sleep_secs)
 
     try:
@@ -90,6 +112,7 @@ def _prepend_with_lock(
         new_text = block_text + existing
         _atomic_write_text(path, new_text, encoding=encoding)
     finally:
+        # Best-effort lock cleanup
         try:
             os.remove(lock_path)
         except FileNotFoundError:
