@@ -138,7 +138,7 @@ def generate_audit_for_tcg_orders(cfg_id__tcg_mp: str) -> None:
       - AUDIT_INDEX: append-only change log (1 doc per change event)
     """
     CURRENT_INDEX = "tcg-mp-audit-current"
-    AUDIT_INDEX = "external-status-audit"
+    AUDIT_INDEX = "tcg-mp-status-audit"
 
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
     service = ApiServiceTcgMpOrder(cfg__tcg_mp)
@@ -301,7 +301,7 @@ def generate_audit_for_tcg_orders(cfg_id__tcg_mp: str) -> None:
 
         # raw_payload can just be the full detail for debugging
         sync_external_item_status(
-            external_id=external_id,
+            external_id=f"{external_id}",
             new_status=new_status,
             raw_payload=order_detail,
             source="tcg_mp_poll",
