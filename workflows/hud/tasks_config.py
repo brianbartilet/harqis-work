@@ -55,7 +55,7 @@ WORKFLOWS_HUD = {
 
     'run-job--get_desktop_logs': {
         'task': 'workflows.hud.tasks.hud_gpt.get_desktop_logs',
-        'schedule': crontab(minute='5'),
+        'schedule': crontab(minute='5,10,15,20,25,30,35,40,45,50,55,00'),
         'args': ["DESKTOP"],
         'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
         "options": {"queue": "default"},
