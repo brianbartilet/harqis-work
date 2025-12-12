@@ -79,7 +79,7 @@ def get_desktop_logs(cfg_id__desktop, timedelta_previous_hours = 1, ini=ConfigHe
 
         # generate, gather and archive screenshots, there should be a separate task taking desktop at an interval
         last_hour = datetime.now() - timedelta(hours=timedelta_hours)
-        path = cfg_id__desktop['capture'].get('screenshots_path', os.path.join(os.getcwd(), 'screenshots'))
+        path = cfg_id__desktop['capture']['screenshots_path']
         ts_last_hour = last_hour.strftime("%Y-%m-%d-%H")
         files_last_hour = get_all_files(path, ts_last_hour)
         folder_to_zip = f'sc-archive-{ts_last_hour}'
