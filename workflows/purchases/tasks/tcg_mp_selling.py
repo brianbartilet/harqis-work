@@ -145,13 +145,11 @@ def generate_audit_for_tcg_orders(cfg_id__tcg_mp: str) -> None:
     orders_1 = service.get_orders(by_status=EnumTcgOrderStatus.PENDING_DROP_OFF)
     orders_2 = service.get_orders(by_status=EnumTcgOrderStatus.ARRIVED_BRANCH)
     orders_3 = service.get_orders(by_status=EnumTcgOrderStatus.DROPPED)
-    orders_4 = service.get_orders(by_status=EnumTcgOrderStatus.CANCELLED)
     orders_5 = service.get_orders(by_status=EnumTcgOrderStatus.PICKED_UP)
-    orders_6 = service.get_orders(by_status=EnumTcgOrderStatus.SHIPPED)
 
     orders = [
         order
-        for page in [orders_1, orders_2, orders_3, orders_4, orders_5, orders_6]
+        for page in [orders_1, orders_2, orders_3, orders_5,]
         if page
         for order in (page[0].data or [])
     ]
