@@ -61,7 +61,7 @@ def show_tcg_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHelperRainmeter(
 
     #  region Build links
     collection_url = 'https://www.echomtg.com/apps/collection/'
-    ini['meterLink']['text'] = "EchoMTG"
+    ini['meterLink']['text'] = "ECHOMTG"
     ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(collection_url)
     ini['meterLink']['tooltiptext'] = collection_url
     ini['meterLink']['W'] = '100'
@@ -69,13 +69,25 @@ def show_tcg_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHelperRainmeter(
     orders_url = 'https://thetcgmarketplace.com/order-history'
     ini['meterLink_orders']['Meter'] = 'String'
     ini['meterLink_orders']['MeterStyle'] = 'sItemLink'
-    ini['meterLink_orders']['X'] = '(55*#Scale#)'
+    ini['meterLink_orders']['X'] = '(52*#Scale#)'
     ini['meterLink_orders']['Y'] = '(38*#Scale#)'
     ini['meterLink_orders']['W'] = '80'
     ini['meterLink_orders']['H'] = '52'
-    ini['meterLink_orders']['Text'] = '|Orders'
+    ini['meterLink_orders']['Text'] = '|ORDERS'
     ini['meterLink_orders']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(orders_url)
     ini['meterLink_orders']['tooltiptext'] = orders_url
+
+    audit_url = 'http://localhost:5601/app/dashboards#/view/1d4a6453-0cea-41ed-9139-bc418ec643f8?_g=(refreshInterval:(pause:!t,value:60000),time:(from:now-1M,to:now))'
+    ini['meterLink_audit']['Meter'] = 'String'
+    ini['meterLink_audit']['MeterStyle'] = 'sItemLink'
+    ini['meterLink_audit']['X'] = '(96*#Scale#)'
+    ini['meterLink_audit']['Y'] = '(38*#Scale#)'
+    ini['meterLink_audit']['W'] = '80'
+    ini['meterLink_audit']['H'] = '52'
+    ini['meterLink_audit']['Text'] = '|AUDIT'
+    ini['meterLink_audit']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(audit_url)
+    ini['meterLink_audit']['tooltiptext'] = "Kibana audit"
+
     #  endregion
 
     #  region Build link for account balance and pending sales

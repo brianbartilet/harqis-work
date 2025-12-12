@@ -57,7 +57,11 @@ sections__tcg_mp_sections = {
     },
     "meterLink_metrics": {
         "Preset": "InjectedByTest"# values must be strings
-    }
+    },
+    "meterLink_audit": {
+        "Preset": "InjectedByTest"  # values must be strings
+    },
+
 }
 
 
