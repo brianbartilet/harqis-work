@@ -1,7 +1,7 @@
 from random import randint
 import re
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
@@ -140,16 +140,27 @@ def generate_audit_for_tcg_orders(cfg_id__tcg_mp: str) -> None:
     CURRENT_INDEX = "tcg-mp-audit-current"
     AUDIT_INDEX = "tcg-mp-status-audit"
 
+    # completed orders for lasts 30 days only
+    today = datetime.today().date()
+    date_range_from = today - timedelta(days=15)
+    date_range_to = today
+
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
     service = ApiServiceTcgMpOrder(cfg__tcg_mp)
     orders_1 = service.get_orders(by_status=EnumTcgOrderStatus.PENDING_DROP_OFF)
     orders_2 = service.get_orders(by_status=EnumTcgOrderStatus.ARRIVED_BRANCH)
     orders_3 = service.get_orders(by_status=EnumTcgOrderStatus.DROPPED)
+    orders_4 = service.get_orders(by_status=EnumTcgOrderStatus.COMPLETED,
+                                  date_range_from=date_range_from.isoformat(),
+                                  date_range_to=date_range_to.isoformat())
+    orders_4 = service.get_orders(by_status=EnumTcgOrderStatus.COMPLETED,
+                                  date_range_from=date_range_from.isoformat(),
+                                  date_range_to=date_range_to.isoformat())
     orders_5 = service.get_orders(by_status=EnumTcgOrderStatus.PICKED_UP)
 
     orders = [
         order
-        for page in [orders_1, orders_2, orders_3, orders_5,]
+        for page in [orders_1, orders_2, orders_3, orders_4, orders_5,]
         if page
         for order in (page[0].data or [])
     ]

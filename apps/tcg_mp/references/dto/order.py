@@ -28,12 +28,15 @@ class DtoOrderSummaryByStatus:
 
 class EnumTcgOrderStatus(Enum):
     ALL=(-2, ""),
-    PENDING_DROP_OFF = (1, "Pending Drop Off")
-    ARRIVED_BRANCH = (7, "Arrived_Branch")
-    DROPPED = (6, "Dropped Off")
-    CANCELLED = (4, "Cancelled")
-    PICKED_UP = (2, "Picked Up")
-    SHIPPED = (3, "Shipped")
+    PENDING_DROP_OFF =      (1,  "Pending Drop Off")
+    SHIPPED =               (2,  "Pending Drop Off")
+    COMPLETED =             (3,  "Completed")
+    CANCELLED =             (4,  "Cancelled")
+    NOT_RECEIVED =          (5,  "Not Received")
+    DROPPED =               (6,  "Dropped Off")
+    ARRIVED_BRANCH =        (7,  "Arrived Branch")
+    PICKED_UP =             (8,  "Picked Up")
+    PENDING_PAYMENT =       (11, "Pending Payment")
 
     @property
     def code(self):
