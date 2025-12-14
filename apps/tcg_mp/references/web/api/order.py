@@ -19,23 +19,24 @@ class ApiServiceTcgMpOrder(BaseApiServiceAppTcgMp):
             .set_base_uri('order')
 
     @deserialized(List[DtoOrderSummaryByStatus], child='data', many=True)
-    def get_orders(self, by_status: EnumTcgOrderStatus = EnumTcgOrderStatus.PENDING_DROP_OFF):
+    def get_orders(self, by_status: EnumTcgOrderStatus = EnumTcgOrderStatus.PENDING_DROP_OFF, **kwargs):
         payload = {
-            'date_range_from': None,
-            'date_range_to': None,
-            'is_buyer': "0",
-            'item': None,
-            'name': None,
-            'order_id': None,
-            'page': None,
-            'sort_by': None,
+            'date_range_from': kwargs.get('date_range_from', None),
+            'date_range_to': kwargs.get('date_range_to', None),
+            'is_buyer': kwargs.get('is_buyer', "0"),
+            'item': kwargs.get('item', ''),
+            'name': kwargs.get('name', ''),
+            'order_id': kwargs.get('order_id', ''),
+            'page': kwargs.get('page', ''),
+            'sort_by': kwargs.get('sort_by', ''),
             'status': by_status.value[0],
         }
         self.request.post() \
             .add_uri_parameter('filter') \
             .add_json_payload(payload)
 
-        return self.client.execute_request(self.request.build())
+        response = self.client.execute_request(self.request.build())
+        return response
 
     @deserialized(dict[Any, Any], child='data.data.0')
     def get_order_detail(self, order_id):
