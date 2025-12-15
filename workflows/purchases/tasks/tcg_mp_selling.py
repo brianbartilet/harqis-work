@@ -153,9 +153,6 @@ def generate_audit_for_tcg_orders(cfg_id__tcg_mp: str) -> None:
     orders_4 = service.get_orders(by_status=EnumTcgOrderStatus.COMPLETED,
                                   date_range_from=date_range_from.isoformat(),
                                   date_range_to=date_range_to.isoformat())
-    orders_4 = service.get_orders(by_status=EnumTcgOrderStatus.COMPLETED,
-                                  date_range_from=date_range_from.isoformat(),
-                                  date_range_to=date_range_to.isoformat())
     orders_5 = service.get_orders(by_status=EnumTcgOrderStatus.PICKED_UP)
 
     orders = [
