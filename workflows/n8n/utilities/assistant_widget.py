@@ -257,7 +257,7 @@ class DragBar(QFrame):
 
 
 class ElevenWidget(QWidget):
-    def __init__(self, agent_id: str, script_url: str, width=270, height=435):
+    def __init__(self, agent_id: str, script_url: str, width=280, height=450):
         super().__init__()
 
         # Start pinned-to-desktop
