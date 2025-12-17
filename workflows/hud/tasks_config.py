@@ -82,14 +82,6 @@ WORKFLOWS_HUD = {
         "options": {"queue": "hud"},
     },
 
-    'run-job--get_schedules': {
-        'task': 'workflows.hud.tasks.hud_logs.get_schedules',
-        'schedule': crontab(minute='*/15'),
-        'args': [],
-        'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
-        "options": {"queue": "hud"},
-    },
-
     'run-job--show_mouse_bindings': {
         'task': 'workflows.hud.tasks.hud_utils.show_mouse_bindings',
         'schedule': timedelta(minutes=1),
