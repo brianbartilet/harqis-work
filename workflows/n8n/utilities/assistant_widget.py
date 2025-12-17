@@ -1,7 +1,7 @@
 import sys
 import ctypes
 from ctypes import wintypes
-import signal  # <-- NEW
+import signal
 
 from PySide6.QtCore import Qt, QPoint, QUrl
 from PySide6.QtWidgets import (
@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWebEngineCore import QWebEnginePage
 
 
 def build_html(agent_id: str, script_url: str) -> str:
@@ -47,6 +48,45 @@ def build_html(agent_id: str, script_url: str) -> str:
 
 
 # =======================
+# QtWebEngine permissions
+# =======================
+
+class PermissivePage(QWebEnginePage):
+    """
+    Grants mic permission requests from embedded web content.
+    Also prints JS console messages to help diagnose issues.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.featurePermissionRequested.connect(self.on_feature_permission_requested)
+
+    def on_feature_permission_requested(self, origin, feature):
+        # Grant microphone / media capture permissions
+        if feature in (
+            QWebEnginePage.Feature.MediaAudioCapture,
+            QWebEnginePage.Feature.MediaVideoCapture,
+            QWebEnginePage.Feature.MediaAudioVideoCapture,
+        ):
+            print(f"[PERM] Granting {feature} for origin: {origin.toString()}")
+            self.setFeaturePermission(
+                origin,
+                feature,
+                QWebEnginePage.PermissionPolicy.PermissionGrantedByUser,
+            )
+        else:
+            print(f"[PERM] Denying {feature} for origin: {origin.toString()}")
+            self.setFeaturePermission(
+                origin,
+                feature,
+                QWebEnginePage.PermissionPolicy.PermissionDeniedByUser,
+            )
+
+    def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
+        print(f"[JS:{level}] {sourceID}:{lineNumber} {message}")
+
+
+# =======================
 # Windows desktop helpers
 # =======================
 
@@ -73,7 +113,7 @@ if _is_windows:
         # Ask Progman to spawn a WorkerW
         user32.SendMessageTimeoutW(
             progman,
-            0x052C,  # 0x052C = "Progman, create WorkerW"
+            0x052C,  # "Progman, create WorkerW"
             0,
             0,
             0,
@@ -84,22 +124,15 @@ if _is_windows:
         workerw_out = ctypes.c_void_p(0)
 
         def _enum_windows(hwnd, lparam):
-            # Look for a SHELLDLL_DefView child; its parent has a WorkerW sibling
-            shell_dll_defview = user32.FindWindowExW(
-                hwnd, 0, "SHELLDLL_DefView", None
-            )
+            shell_dll_defview = user32.FindWindowExW(hwnd, 0, "SHELLDLL_DefView", None)
             if shell_dll_defview:
-                # The WorkerW is a sibling of the window that owns SHELLDLL_DefView
-                workerw = user32.FindWindowExW(
-                    0, hwnd, "WorkerW", None
-                )
+                workerw = user32.FindWindowExW(0, hwnd, "WorkerW", None)
                 if workerw:
                     workerw_out.value = workerw
-                    return False  # stop enumeration
-            return True  # continue
+                    return False
+            return True
 
         user32.EnumWindows(EnumWindowsProc(_enum_windows), 0)
-
         return workerw_out.value or None
 
     def _set_parent_to_workerw(hwnd: int, enable: bool):
@@ -114,7 +147,6 @@ if _is_windows:
             if workerw:
                 user32.SetParent(hwnd, workerw)
         else:
-            # 0 = desktop / no explicit parent (back to top-level)
             user32.SetParent(hwnd, 0)
 
 
@@ -132,31 +164,28 @@ class DragBar(QFrame):
         layout.setSpacing(4)
         layout.addStretch(1)
 
-        # -------- PIN BUTTON (GRAY) --------
+        # PIN BUTTON
         self.pin_btn = QPushButton("📎", self)
         self.pin_btn.setCheckable(True)
         self.pin_btn.setFlat(True)
         self.pin_btn.setFixedSize(22, 22)
-
-        # ORIGINAL COLOR STYLE
         self.pin_btn.setStyleSheet("""
             QPushButton {
                 border: none;
-                color: #C0C0C0;            /* gray */
+                color: #C0C0C0;
                 font-size: 15px;
             }
             QPushButton:hover {
-                color: #E0E0E0;            /* lighter gray */
+                color: #E0E0E0;
             }
             QPushButton:checked {
-                color: #FFFFFF;            /* white when pinned */
+                color: #FFFFFF;
             }
         """)
-
         self.pin_btn.toggled.connect(self._on_pin_toggled)
         layout.addWidget(self.pin_btn)
 
-        # -------- CLOSE BUTTON (X) --------
+        # CLOSE BUTTON
         self.close_btn = QPushButton("✖", self)
         self.close_btn.setFlat(True)
         self.close_btn.setFixedSize(22, 22)
@@ -167,24 +196,17 @@ class DragBar(QFrame):
                 font-size: 15px;
             }
             QPushButton:hover {
-                color: #FF6666;            /* soft red */
+                color: #FF6666;
             }
         """)
         self.close_btn.clicked.connect(self._on_close_clicked)
         layout.addWidget(self.close_btn)
 
-        # Set initial pinned-state visuals
         self.update_pin_visual(getattr(self.parent_window, "pinned", True))
 
-    # ======================================================
-    # Close action
-    # ======================================================
     def _on_close_clicked(self):
         QApplication.quit()
 
-    # ======================================================
-    # Pin toggle event handler
-    # ======================================================
     def _on_pin_toggled(self, checked: bool):
         self.parent_window.set_pinned(checked)
         self.update_pin_visual(checked)
@@ -196,17 +218,11 @@ class DragBar(QFrame):
         self.pin_btn.blockSignals(False)
 
     def update_pin_visual(self, pinned: bool):
-        """Keep background same style you used originally."""
         if pinned:
-            # Darker background when pinned
             self.setStyleSheet("background-color: rgba(20,20,20,230);")
         else:
-            # Slightly brighter gray when unpinned
             self.setStyleSheet("background-color: rgba(80,80,80,220);")
 
-    # ======================================================
-    # Drag behavior
-    # ======================================================
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.setCursor(Qt.ClosedHandCursor)
@@ -251,18 +267,14 @@ class ElevenWidget(QWidget):
 
         self.setStyleSheet("background-color: #111111;")
         self.setWindowOpacity(0.70)
-
         self.resize(width, height)
 
-        # ---- Position at bottom-right of primary monitor ----
+        # Position at bottom-right of primary monitor
         screen_geom = QApplication.primaryScreen().availableGeometry()
-        margin = 20  # distance from screen edges
-
+        margin = 20
         x = screen_geom.x() + screen_geom.width() - width - margin
         y = screen_geom.y() + screen_geom.height() - height - margin
-
         self.move(x, y)
-        # ------------------------------------------------------
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -275,9 +287,12 @@ class ElevenWidget(QWidget):
         self.view = QWebEngineView(self)
         self.view.page().setBackgroundColor(Qt.black)
 
+        # ✅ Use permissive page to allow mic + log JS console messages
+        page = PermissivePage(self.view)
+        self.view.setPage(page)
+
         html = build_html(agent_id, script_url)
         self.view.setHtml(html, QUrl("https://unpkg.com/"))
-
         layout.addWidget(self.view)
 
         # After we have a native handle, pin/unpin appropriately
@@ -297,9 +312,6 @@ class ElevenWidget(QWidget):
         self.show()
 
     def _update_desktop_pinning(self):
-        """
-        Actually reparent to WorkerW on Windows when pinned.
-        """
         if not _is_windows:
             return
 
@@ -315,12 +327,9 @@ class ElevenWidget(QWidget):
     def set_pinned(self, pinned: bool):
         if self.pinned == pinned:
             return
+
         self.pinned = pinned
-
-        # Re-apply flags (changes Tool/Window etc.)
         self._apply_window_flags()
-
-        # Re-parent to desktop WorkerW or back to normal
         self._update_desktop_pinning()
 
         if hasattr(self, "drag_bar"):
@@ -333,18 +342,18 @@ class ElevenWidget(QWidget):
 def main():
     default_script_url = "https://unpkg.com/@elevenlabs/convai-widget-embed@beta"
 
-    try:
-        agent_id = sys.argv[1]
-        script_url = sys.argv[2] if len(sys.argv) > 2 else default_script_url
-    except IndexError:
-        sys.exit(f"Usage: {sys.argv[0]} <agent_id>")
+    if len(sys.argv) < 2:
+        sys.exit(f"Usage: {sys.argv[0]} <agent_id> [script_url]")
+
+    agent_id = sys.argv[1]
+    script_url = sys.argv[2] if len(sys.argv) > 2 else default_script_url
 
     print("Using:")
     print(f"  Agent ID : {agent_id}")
     print(f"  Script   : {script_url}")
 
     # Ensure Ctrl+C (SIGINT) is delivered so we can catch KeyboardInterrupt
-    signal.signal(signal.SIGINT, signal.SIG_DFL)  # <-- NEW
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     app = QApplication(sys.argv)
     widget = ElevenWidget(agent_id, script_url)
@@ -353,7 +362,6 @@ def main():
     try:
         sys.exit(app.exec())
     except KeyboardInterrupt:
-        # Graceful shutdown on Ctrl+C
         print("\nKeyboardInterrupt received, closing widget...")
         widget.close()
         sys.exit(0)
