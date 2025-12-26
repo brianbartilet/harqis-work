@@ -50,7 +50,7 @@ WORKFLOW_PURCHASES = {
     'run-job--download_scryfall_bulk_data': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.download_scryfall_bulk_data',
         'schedule': crontab(hour='2'),
-        'args': [],
+        'args': ["SCRYFALL"],
         "options": {"queue": "tcg"},
     },
 

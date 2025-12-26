@@ -20,6 +20,9 @@ class ApiServiceTcgMpProducts(BaseApiServiceAppTcgMp):
 
     @deserialized(List[DtoFilterResult], child='data', many=True)
     def search_card(self, card_name: str, page: int = 1, items: int = 100):
+        if " - " in card_name:
+            card_name = card_name.split("-")[1].strip()
+
         payload = {
             'category_id': self.category_id,
             'name': card_name,
