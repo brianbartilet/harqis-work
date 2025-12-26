@@ -14,6 +14,7 @@ from apps.echo_mtg.references.web.api.inventory import ApiServiceEchoMTGInventor
 from apps.echo_mtg.references.web.api.item import ApiServiceEchoMTGCardItem
 from apps.echo_mtg.references.web.api.notes import ApiServiceEchoMTGNotes
 from apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
+from apps.tcg_mp.references.web.api.publish import ApiServiceTcgMpPublish
 from apps.tcg_mp.references.web.api.order import ApiServiceTcgMpOrder
 from apps.tcg_mp.references.dto.order import EnumTcgOrderStatus
 from apps.scryfall.references.web.api.cards import ApiServiceScryfallCards
@@ -44,7 +45,8 @@ def download_scryfall_bulk_data(cfg_id__scryfall: str):
 @SPROUT.task(queue='tcg')
 @log_result()
 @feed()
-def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__echo_mtg_fe: str, cfg_id__scryfall: str):
+def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__echo_mtg_fe: str, cfg_id__scryfall: str,
+                          force_generate=False):
     """ ../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
 
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
@@ -73,8 +75,15 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
         guid = None
         scryfall_card = None
 
-        log.info("Checking if notes exist and skipping if so.")
-        if card_echo['note_id'] != 0:
+        if force_generate:
+            log.warn("Try to delete existing note")
+            try:
+                api_service__echo_mtg_notes.delete_note(card_echo['note_id'])
+            except Exception:
+                log.warn("Error deleting existing note. Skipping...")
+                continue
+        else:
+            log.info("Checking if notes exist and skipping if so.")
             log.warn("Note already exists for: {0} {1}".format(card_name, card_echo['inventory_id']))
             notes_fetch = api_service__echo_mtg_notes.get_note(card_echo['note_id'])
             log.info("Showing value:\n%s", json.dumps(notes_fetch['note']['note'], indent=4))
@@ -109,20 +118,79 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
             continue
 
         log.info("Creating json information as note for {0}".format(card_name))
+        tcg_price = 0
+        tcgplayer_id = "None"
+        function = generate_tcg_mappings.__name__
+        error=""
+        try:
+            tcgplayer_id = "None" if scryfall_card is None else scryfall_card['tcgplayer_id']
+            tcg_price = "None" if scryfall_card is None else scryfall_card['prices']['usd']
+        except Exception as e:
+            error = f"{type(e).__name__}: {e}"
         notes_dto = DtoNotesInformation(
             scryfall_gui=guid,
-            tcgplayer_id="None" if scryfall_card is None else scryfall_card['tcgplayer_id'],
+            tcgplayer_id=tcgplayer_id,
             tcg_mp_card_id=0,
             tcg_mp_listing_id=0,
             tcg_mp_selling_price=0,
             tcg_mp_smart_pricing=0,
-            tcg_price = "None" if scryfall_card is None else scryfall_card['prices']['usd'],
-            last_updated=datetime.now().isoformat()
+            tcg_price=tcg_price,
+            last_updated=datetime.now().isoformat(),
+            function=function,
+            error=error
         )
         note_json_string = notes_dto.get_json()
 
-        log.info("Updating note for card: {0}".format(card_name))
+        log.info("Create note for card: {0}".format(card_name))
         api_service__echo_mtg_notes.create_note(card_echo['inventory_id'], note_json_string)
+
+    return "SUCCESS"
+
+
+@SPROUT.task(queue='tcg')
+@log_result()
+@feed()
+def generate_tcg_listings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__echo_mtg_fe: str, cfg_id__scryfall: str,
+                          force_generate=False):
+    """ ../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
+
+    cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
+    cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
+    cfg__echo_mtg_fe = CONFIG_MANAGER.get(cfg_id__echo_mtg_fe)
+    cfg__scryfall = CONFIG_MANAGER.get(cfg_id__scryfall)
+
+    api_service__echo_mtg_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
+    api_service__echo_mtg_notes = ApiServiceEchoMTGNotes(cfg__echo_mtg)
+    api_service__echo_mtg_cards_fe = ApiServiceEchoMTGCardItem(cfg__echo_mtg_fe)
+    api_service__tcg_mp_products = ApiServiceTcgMpProducts(cfg__tcg_mp)
+    api_service__tcg_mp_listings = ApiServiceTcgMpProducts(cfg__tcg_mp)
+    api_service__scryfall_cards = ApiServiceScryfallCards(cfg__scryfall)
+
+    cards_echo = api_service__echo_mtg_inventory.get_collection(tradable_only=1)
+    cards_scryfall_bulk_data = load_scryfall_bulk_data(
+        api_service__scryfall_cards.config.app_data['path_folder_static_file'])
+
+    for card_echo in cards_echo:
+        log.info("Retrieve echo mtg card meta data.")
+        card_meta = api_service__echo_mtg_cards_fe.get_card_meta(card_echo['emid'])
+        card_name = card_meta['name_clean']
+        card_tcg_id = card_meta['tcgplayer_id']
+
+        log.info("Retrieve echo mtg card note from mappings generation.")
+        json_note = None
+        try:
+            note = api_service__echo_mtg_notes.get_note(card_echo['note_id'])
+            json_note = json.loads(note['note']['note'])
+        except Exception:
+            log.warn("Error encountered on processing note. Skipping...")
+            continue
+
+        if json_note['tcg_mp_listing_id'] == 0:
+            log.info("If listing does not exist create")
+
+        log.info("Get listing to update details.")
+
+
 
     return "SUCCESS"
 
