@@ -12,4 +12,7 @@ class DtoNotesInformation(JsonObject):
     tcg_mp_smart_pricing: float = 0
     tcg_price: float = 0
     last_updated: str = ''
+    message: str = ''
+    error: str = ''
+    function: str = ''
 
