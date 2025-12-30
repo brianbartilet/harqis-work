@@ -4,7 +4,7 @@ from hamcrest import greater_than_or_equal_to
 
 from apps.echo_mtg.references.web.api.inventory import ApiServiceEchoMTGInventory
 from apps.echo_mtg.config import CONFIG
-from core.utilities.data.qlist import QList
+
 
 @pytest.fixture()
 def given_account():

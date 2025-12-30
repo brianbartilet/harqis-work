@@ -42,3 +42,15 @@ class ApiServiceTcgMpProducts(BaseApiServiceAppTcgMp):
             .add_uri_parameter(card_id)
 
         return self.client.execute_request(self.request.build())
+
+    @deserialized(dict, child='data.data', many=False)
+    def search_single_card_listings(self, product_id: str, foil=0):
+        payload = {
+            'foil': str(foil),
+            'product_id': product_id
+        }
+        self.request.post()\
+            .add_uri_parameter('listed_item_filter')\
+            .add_json_payload(payload)
+
+        return self.client.execute_request(self.request.build())

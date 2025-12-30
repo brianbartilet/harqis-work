@@ -22,6 +22,7 @@ class ApiServiceTcgMpPublish(BaseApiServiceAppTcgMp):
         self.request.clear_headers()
         self.request.add_header(HttpHeaders.AUTHORIZATION, f'{self.token}')
 
+    @deserialized(dict, child='data.data')
     def add_listing(self, product_id: int, price: float, quantity=1, foil=0, language="EN", condition="NM", signed=0):
         data = {
             'price': price,
@@ -35,6 +36,23 @@ class ApiServiceTcgMpPublish(BaseApiServiceAppTcgMp):
 
         self.request.post()\
             .add_uri_parameter('add')\
+            .add_payload(data, PayloadType.DICT)
+
+        return self.client.execute_request(self.request.build())
+
+    def edit_listing(self, listing_id: int, price: float, quantity=1, foil=0, language="EN", condition="NM", signed=0):
+        data = {
+            'price': price,
+            'quantity': quantity,
+            'language': language,
+            'condition': condition,
+            'foil': foil,
+            'signed': signed,
+            'id': listing_id,
+        }
+
+        self.request.post()\
+            .add_uri_parameter('edit')\
             .add_payload(data, PayloadType.DICT)
 
         return self.client.execute_request(self.request.build())
