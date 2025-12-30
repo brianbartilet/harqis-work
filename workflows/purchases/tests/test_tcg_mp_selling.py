@@ -1,5 +1,6 @@
 from workflows.purchases.tasks.tcg_mp_selling import (generate_tcg_mappings, generate_audit_for_tcg_orders,
-                                                      download_scryfall_bulk_data, generate_tcg_listings)
+                                                      download_scryfall_bulk_data, generate_tcg_listings,
+                                                      update_tcg_listings_prices)
 
 
 def test__generate_tcg_mappings():
@@ -11,6 +12,9 @@ def test__generate_tcg_mappings_bulk():
 
 def test__generate_tcg_listings():
     generate_tcg_listings("TCG_MP","ECHO_MTG_BULK","ECHO_MTG_FE_BULK")
+
+def test__update_tcg_listings_prices():
+    update_tcg_listings_prices("TCG_MP","ECHO_MTG_BULK","ECHO_MTG_FE_BULK")
 
 def test__generate_audit_for_tcg_orders():
     generate_audit_for_tcg_orders("TCG_MP")

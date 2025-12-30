@@ -2,6 +2,8 @@ import time
 import re
 import json
 import psutil
+from dataclasses import dataclass
+from typing import Optional
 from random import randint
 from datetime import datetime, timezone, timedelta
 
@@ -10,6 +12,7 @@ from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import logger as log
 from core.apps.es_logging.app.elasticsearch import post, get_index_data
 from core.utilities.multiprocess import MultiProcessingClient
+from core.utilities.logging.custom_logger import create_logger
 
 from apps.apps_config import CONFIG_MANAGER
 from apps.desktop.helpers.feed import feed
@@ -17,7 +20,6 @@ from apps.echo_mtg.references.web.api.inventory import ApiServiceEchoMTGInventor
 from apps.echo_mtg.references.web.api.item import ApiServiceEchoMTGCardItem
 from apps.echo_mtg.references.web.api.notes import ApiServiceEchoMTGNotes
 from apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
-from apps.tcg_mp.references.web.api.publish import ApiServiceTcgMpPublish
 from apps.tcg_mp.references.web.api.order import ApiServiceTcgMpOrder
 from apps.tcg_mp.references.dto.order import EnumTcgOrderStatus
 from apps.scryfall.references.web.api.cards import ApiServiceScryfallCards
@@ -45,6 +47,7 @@ def download_scryfall_bulk_data(cfg_id__scryfall: str):
     return "SUCCESS"
 
 
+# region task: generate_tcg_mappings, do not multiprocess because of bulk file
 @SPROUT.task(queue='tcg')
 @log_result()
 @feed()
@@ -83,7 +86,7 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
             try:
                 api_service__echo_mtg_notes.delete_note(card_echo['note_id'])
             except Exception:
-                log.warn("Error deleting existing note. Skipping...")
+                log.exception("Error deleting existing note. Skipping...")
                 continue
         else:
             log.info("Checking if notes exist and skipping if so.")
@@ -100,17 +103,19 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
                 tcg_mp_card_id = item.id
                 url = item.image
                 pattern = r"\b([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\b"
-                match = re.search(pattern, url)
+                match = re.search(pattern, url or "")
+                if not match:
+                    log.warning("No guid found in image url. card=%s url=%s", card_name, url)
+                    continue
                 guid = match.group(1)
                 log.info("Found GUID: {0} for card: {1}".format(guid, card_name))
             except TypeError:
-                log.warn("No guid found for card skipping: {0}".format(card_name))
+                log.exception("No guid found for card skipping: {0}".format(card_name))
 
             log.info("Attempting to find card on scryfall: id: {0} name: {1}".format(card_tcg_id, card_name))
             try:
                 scryfall_card = cards_scryfall_bulk_data[guid]
                 match_found = True
-                log.info("Card json:\n%s", json.dumps(scryfall_card, indent=4))
             except KeyError:
                 scryfall_card = None
 
@@ -150,12 +155,17 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
         api_service__echo_mtg_notes.create_note(card_echo['inventory_id'], note_json_string)
 
     return "SUCCESS"
+# endregion
 
 
-def process_echo_card(task: dict):
+# region task: generate_tcg_listings
+_log_worker_generate_tcg_listings = create_logger("generate_tcg_listings.worker")
+
+def _worker_generate_tcg_listings(task: dict):
     """
     Worker executed in a separate process.
     """
+    card_name = ""
     try:
         # --- unpack task ---
         card_echo = task["card_echo"]
@@ -184,25 +194,34 @@ def process_echo_card(task: dict):
             note = api_notes.get_note(card_echo["note_id"])
             json_note = json.loads(note["note"]["note"])
         except Exception:
-            log.warning(f"Skipping {card_name}: invalid note")
+            _log_worker_generate_tcg_listings.warning(f"Skipping {card_name}: invalid note")
             return {"status": "skipped", "card": card_name}
 
         if json_note["tcg_mp_listing_id"] == 0:
             try:
-                api_publish.add_listing(
+                response = api_publish.add_listing(
                     price=card_echo["tcg_market"],
                     quantity=1,
                     foil=card_echo["foil"],
                     product_id=json_note["tcg_mp_card_id"],
                 )
+                tcg_mp_listing_id_create = response['insertId']
+                json_note["tcg_mp_listing_id"] = tcg_mp_listing_id_create
+                json_note["function"] = generate_tcg_listings.__name__
                 created = True
+                _log_worker_generate_tcg_listings.warning(f"Created listing for {card_name}: {json_note["tcg_mp_card_id"]}")
             except Exception:
-                log.warning(f"Failed to create listing for {card_name}")
+                _log_worker_generate_tcg_listings.warning(f"Failed to create listing for {card_name}")
                 created = False
         else:
             created = False
 
+        #add tcg listing id to echo mtg card
         time.sleep(5)
+        note_json_string = json.dumps(json_note)
+
+        log.info("Create note for card: {0}".format(card_name))
+        api_notes.update_note(card_echo['note_id'], note_json_string)
 
         return {
             "status": "ok",
@@ -211,8 +230,8 @@ def process_echo_card(task: dict):
         }
 
     except Exception as e:
-        log.exception("Unhandled worker error")
-        return {"status": "error", "error": str(e)}
+        _log_worker_generate_tcg_listings.exception("Unhandled worker error")
+        return {"card": card_name, "status": "error", "error": str(e)}
 
 
 @SPROUT.task(queue='tcg')
@@ -246,7 +265,7 @@ def generate_tcg_listings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
     )
 
     # BLOCKING call — waits for all workers to complete
-    mp_client.execute_tasks(process_echo_card)
+    mp_client.execute_tasks(_worker_generate_tcg_listings, timeout_secs=60 * 30)
 
     results = mp_client.get_tasks_output()
 
@@ -265,6 +284,174 @@ def generate_tcg_listings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
             log.error(f"Worker failure: {r}")
 
     return "SUCCESS"
+
+# endregion
+
+
+# region task: update_tcg_listings
+
+@dataclass
+class PricingDecision:
+    price: Optional[float] = None
+    needs_lowest_seller: bool = False
+
+
+def _update_pricing_calc(
+    change_7_day: float,
+    price: float,
+    conversion_multiplier: float = 1.10,
+    threshold_pct: float = 10.0,
+) -> PricingDecision:
+    change = float(change_7_day)
+
+    # Rule 2: stable upward
+    if 0 < change <= threshold_pct:
+        return PricingDecision(price=round(price * conversion_multiplier, 2))
+
+    # Rule 1: down / flat → need lowest seller
+    if change <= 0:
+        return PricingDecision(needs_lowest_seller=True)
+
+    # Rule 3: strong upward
+    extra_pct = change - threshold_pct
+    final_price = price * conversion_multiplier * (1.0 + extra_pct / 100.0)
+    return PricingDecision(price=round(final_price, 2))
+
+
+
+def _worker_update_tcg_listings_prices(task: dict):
+    """
+    Worker executed in a separate process.
+    """
+    card_name = ""
+    try:
+        # --- unpack task ---
+        card_echo = task["card_echo"]
+        cfg_id__tcg_mp = task["cfg_id__tcg_mp"]
+        cfg_id__echo_mtg = task["cfg_id__echo_mtg"]
+        cfg_id__echo_mtg_fe = task["cfg_id__echo_mtg_fe"]
+
+        # --- imports inside process ---
+        from apps.apps_config import CONFIG_MANAGER
+        from apps.echo_mtg.references.web.api.notes import ApiServiceEchoMTGNotes
+        from apps.echo_mtg.references.web.api.item import ApiServiceEchoMTGCardItem
+        from apps.tcg_mp.references.web.api.publish import ApiServiceTcgMpPublish
+        from apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
+
+        cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
+        cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
+        cfg__echo_mtg_fe = CONFIG_MANAGER.get(cfg_id__echo_mtg_fe)
+
+        api_publish = ApiServiceTcgMpPublish(cfg__tcg_mp)
+        api_notes = ApiServiceEchoMTGNotes(cfg__echo_mtg)
+        api_cards_fe = ApiServiceEchoMTGCardItem(cfg__echo_mtg_fe)
+        api_product = ApiServiceTcgMpProducts(cfg__tcg_mp)
+
+        # --- original logic ---
+        card_meta = api_cards_fe.get_card_meta(card_echo["emid"])
+        card_name = card_meta["name_clean"]
+        try:
+            note = api_notes.get_note(card_echo["note_id"])
+            json_note = json.loads(note["note"]["note"])
+            json_note["function"] = update_tcg_listings_prices.__name__
+        except Exception:
+            _log_worker_generate_tcg_listings.exception(f"Skipping {card_name}: invalid note")
+            return {"status": "skipped", "card": card_name}
+
+        decision = _update_pricing_calc(
+            change_7_day=card_echo["price_change"],
+            price=card_echo["tcg_market"]
+        )
+        fallback_price = round(card_echo["tcg_market"] * 1.10, 2)
+        if decision.needs_lowest_seller:
+            try:
+                listings = api_product.search_single_card_listings(json_note["tcg_mp_card_id"], foil=card_echo['foil'])
+                post_price = listings[0]['price']
+            except IndexError:
+                post_price = fallback_price
+        else:
+            post_price = decision.price
+        json_note["tcg_mp_selling_price"] = post_price
+
+        try:
+            api_publish.edit_listing(
+                price=post_price,
+                quantity=1,
+                foil=card_echo["foil"],
+                listing_id=json_note["tcg_mp_listing_id"],
+            )
+            updated = True
+        except Exception:
+            _log_worker_generate_tcg_listings.exception(f"Failed to create listing for {card_name}")
+            updated = False
+
+        time.sleep(5)
+        note_json_string = json.dumps(json_note)
+
+        log.info("Create note for card: {0}".format(card_name))
+        api_notes.update_note(card_echo['note_id'], note_json_string)
+
+        return {
+            "status": "ok",
+            "card": card_name,
+            "updated": updated,
+        }
+
+    except Exception as e:
+        _log_worker_generate_tcg_listings.exception("Unhandled worker error")
+        return {"card": card_name, "status": "error", "error": str(e)}
+
+
+@SPROUT.task(queue='tcg')
+@log_result()
+@feed()
+def update_tcg_listings_prices(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__echo_mtg_fe: str, worker_count=4):
+    """../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
+    cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
+    api_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
+
+    cards_echo = api_inventory.get_collection(tradable_only=1) or []
+    if not cards_echo:
+        log.info("No tradable cards found.")
+        return "SUCCESS"
+
+    # Build multiprocessing task payloads
+    tasks = [
+        {
+            "card_echo": card,
+            "cfg_id__tcg_mp": cfg_id__tcg_mp,
+            "cfg_id__echo_mtg": cfg_id__echo_mtg,
+            "cfg_id__echo_mtg_fe": cfg_id__echo_mtg_fe,
+        }
+        for card in cards_echo
+    ]
+
+    mp_client = MultiProcessingClient(
+        tasks=tasks,
+        worker_count=worker_count or min(4, psutil.cpu_count()),
+    )
+
+    # BLOCKING call — waits for all workers to complete
+    mp_client.execute_tasks(_worker_update_tcg_listings_prices, timeout_secs=60 * 30)
+
+    results = mp_client.get_tasks_output()
+
+    # ---- Summary logging ----
+    created = sum(1 for r in results if r.get("created"))
+    skipped = sum(1 for r in results if r.get("status") == "skipped")
+    failed = [r for r in results if r.get("status") == "error"]
+
+    log.info(
+        f"TCG listing generation completed | "
+        f"total={len(results)} created={created} skipped={skipped} failed={len(failed)}"
+    )
+
+    if failed:
+        for r in failed[:10]:
+            log.error(f"Worker failure: {r}")
+
+    return "SUCCESS"
+# endregion
 
 
 @SPROUT.task(queue='tcg')

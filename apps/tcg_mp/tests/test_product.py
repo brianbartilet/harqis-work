@@ -27,6 +27,12 @@ def test_product(given):
 
     then.assert_that(when_get_card.name, equal_to('Underground River'))
 
+@pytest.mark.smoke
+def test_product_listed(given):
+    when_search = given.search_card('Underground River')
+    card_id = when_search[0].id
+    then = given.verify.common
+    response = given.search_single_card_listings(card_id)
 
 
 
