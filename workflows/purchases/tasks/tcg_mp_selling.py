@@ -1,12 +1,15 @@
-from random import randint
+import time
 import re
 import json
+import psutil
+from random import randint
 from datetime import datetime, timezone, timedelta
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import logger as log
 from core.apps.es_logging.app.elasticsearch import post, get_index_data
+from core.utilities.multiprocess import MultiProcessingClient
 
 from apps.apps_config import CONFIG_MANAGER
 from apps.desktop.helpers.feed import feed
@@ -89,10 +92,12 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
             log.info("Showing value:\n%s", json.dumps(notes_fetch['note']['note'], indent=4))
             continue
 
+        tcg_mp_card_id = 0
         for item in search_results:
             log.info("Attempting to extract guid on tcg mp from image url: {0}".format(card_name))
             try:
                 log.info("Extracting guid on tcg mp from image url: {0}".format(card_name))
+                tcg_mp_card_id = item.id
                 url = item.image
                 pattern = r"\b([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\b"
                 match = re.search(pattern, url)
@@ -130,7 +135,7 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
         notes_dto = DtoNotesInformation(
             scryfall_gui=guid,
             tcgplayer_id=tcgplayer_id,
-            tcg_mp_card_id=0,
+            tcg_mp_card_id=tcg_mp_card_id,
             tcg_mp_listing_id=0,
             tcg_mp_selling_price=0,
             tcg_mp_smart_pricing=0,
@@ -147,50 +152,117 @@ def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__ec
     return "SUCCESS"
 
 
+def process_echo_card(task: dict):
+    """
+    Worker executed in a separate process.
+    """
+    try:
+        # --- unpack task ---
+        card_echo = task["card_echo"]
+        cfg_id__tcg_mp = task["cfg_id__tcg_mp"]
+        cfg_id__echo_mtg = task["cfg_id__echo_mtg"]
+        cfg_id__echo_mtg_fe = task["cfg_id__echo_mtg_fe"]
+
+        # --- imports inside process ---
+        from apps.apps_config import CONFIG_MANAGER
+        from apps.echo_mtg.references.web.api.notes import ApiServiceEchoMTGNotes
+        from apps.echo_mtg.references.web.api.item import ApiServiceEchoMTGCardItem
+        from apps.tcg_mp.references.web.api.publish import ApiServiceTcgMpPublish
+
+        cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
+        cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
+        cfg__echo_mtg_fe = CONFIG_MANAGER.get(cfg_id__echo_mtg_fe)
+
+        api_notes = ApiServiceEchoMTGNotes(cfg__echo_mtg)
+        api_cards_fe = ApiServiceEchoMTGCardItem(cfg__echo_mtg_fe)
+        api_publish = ApiServiceTcgMpPublish(cfg__tcg_mp)
+
+        # --- original logic ---
+        card_meta = api_cards_fe.get_card_meta(card_echo["emid"])
+        card_name = card_meta["name_clean"]
+        try:
+            note = api_notes.get_note(card_echo["note_id"])
+            json_note = json.loads(note["note"]["note"])
+        except Exception:
+            log.warning(f"Skipping {card_name}: invalid note")
+            return {"status": "skipped", "card": card_name}
+
+        if json_note["tcg_mp_listing_id"] == 0:
+            try:
+                api_publish.add_listing(
+                    price=card_echo["tcg_market"],
+                    quantity=1,
+                    foil=card_echo["foil"],
+                    product_id=json_note["tcg_mp_card_id"],
+                )
+                created = True
+            except Exception:
+                log.warning(f"Failed to create listing for {card_name}")
+                created = False
+        else:
+            created = False
+
+        time.sleep(5)
+
+        return {
+            "status": "ok",
+            "card": card_name,
+            "created": created,
+        }
+
+    except Exception as e:
+        log.exception("Unhandled worker error")
+        return {"status": "error", "error": str(e)}
+
+
 @SPROUT.task(queue='tcg')
 @log_result()
 @feed()
-def generate_tcg_listings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__echo_mtg_fe: str, cfg_id__scryfall: str,
-                          force_generate=False):
-    """ ../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
+def generate_tcg_listings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__echo_mtg_fe: str, worker_count=4):
+    """../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
 
-    cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
     cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
-    cfg__echo_mtg_fe = CONFIG_MANAGER.get(cfg_id__echo_mtg_fe)
-    cfg__scryfall = CONFIG_MANAGER.get(cfg_id__scryfall)
+    api_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
 
-    api_service__echo_mtg_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
-    api_service__echo_mtg_notes = ApiServiceEchoMTGNotes(cfg__echo_mtg)
-    api_service__echo_mtg_cards_fe = ApiServiceEchoMTGCardItem(cfg__echo_mtg_fe)
-    api_service__tcg_mp_products = ApiServiceTcgMpProducts(cfg__tcg_mp)
-    api_service__tcg_mp_listings = ApiServiceTcgMpProducts(cfg__tcg_mp)
-    api_service__scryfall_cards = ApiServiceScryfallCards(cfg__scryfall)
+    cards_echo = api_inventory.get_collection(tradable_only=1) or []
+    if not cards_echo:
+        log.info("No tradable cards found.")
+        return "SUCCESS"
 
-    cards_echo = api_service__echo_mtg_inventory.get_collection(tradable_only=1)
-    cards_scryfall_bulk_data = load_scryfall_bulk_data(
-        api_service__scryfall_cards.config.app_data['path_folder_static_file'])
+    # Build multiprocessing task payloads
+    tasks = [
+        {
+            "card_echo": card,
+            "cfg_id__tcg_mp": cfg_id__tcg_mp,
+            "cfg_id__echo_mtg": cfg_id__echo_mtg,
+            "cfg_id__echo_mtg_fe": cfg_id__echo_mtg_fe,
+        }
+        for card in cards_echo
+    ]
 
-    for card_echo in cards_echo:
-        log.info("Retrieve echo mtg card meta data.")
-        card_meta = api_service__echo_mtg_cards_fe.get_card_meta(card_echo['emid'])
-        card_name = card_meta['name_clean']
-        card_tcg_id = card_meta['tcgplayer_id']
+    mp_client = MultiProcessingClient(
+        tasks=tasks,
+        worker_count=worker_count or min(4, psutil.cpu_count()),
+    )
 
-        log.info("Retrieve echo mtg card note from mappings generation.")
-        json_note = None
-        try:
-            note = api_service__echo_mtg_notes.get_note(card_echo['note_id'])
-            json_note = json.loads(note['note']['note'])
-        except Exception:
-            log.warn("Error encountered on processing note. Skipping...")
-            continue
+    # BLOCKING call — waits for all workers to complete
+    mp_client.execute_tasks(process_echo_card)
 
-        if json_note['tcg_mp_listing_id'] == 0:
-            log.info("If listing does not exist create")
+    results = mp_client.get_tasks_output()
 
-        log.info("Get listing to update details.")
+    # ---- Summary logging ----
+    created = sum(1 for r in results if r.get("created"))
+    skipped = sum(1 for r in results if r.get("status") == "skipped")
+    failed = [r for r in results if r.get("status") == "error"]
 
+    log.info(
+        f"TCG listing generation completed | "
+        f"total={len(results)} created={created} skipped={skipped} failed={len(failed)}"
+    )
 
+    if failed:
+        for r in failed[:10]:
+            log.error(f"Worker failure: {r}")
 
     return "SUCCESS"
 
