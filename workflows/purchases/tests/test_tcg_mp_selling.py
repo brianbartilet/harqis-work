@@ -10,8 +10,7 @@ def test__generate_tcg_mappings_bulk():
                           "ECHO_MTG_FE_BULK","SCRYFALL", force_generate=True)
 
 def test__generate_tcg_listings():
-    generate_tcg_listings("TCG_MP","ECHO_MTG_BULK",
-                          "ECHO_MTG_FE_BULK","SCRYFALL", force_generate=True)
+    generate_tcg_listings("TCG_MP","ECHO_MTG_BULK","ECHO_MTG_FE_BULK")
 
 def test__generate_audit_for_tcg_orders():
     generate_audit_for_tcg_orders("TCG_MP")

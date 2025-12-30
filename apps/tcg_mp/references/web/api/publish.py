@@ -22,7 +22,6 @@ class ApiServiceTcgMpPublish(BaseApiServiceAppTcgMp):
         self.request.clear_headers()
         self.request.add_header(HttpHeaders.AUTHORIZATION, f'{self.token}')
 
-    #@deserialized(dict, child='data', many=True)
     def add_listing(self, product_id: int, price: float, quantity=1, foil=0, language="EN", condition="NM", signed=0):
         data = {
             'price': price,
