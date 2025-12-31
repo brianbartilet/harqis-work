@@ -1,5 +1,5 @@
 import pytest
-from hamcrest import greater_than, equal_to
+from hamcrest import greater_than
 from apps.tcg_mp.references.web.api.view import ApiServiceTcgMpUserView
 from apps.tcg_mp.config import CONFIG
 

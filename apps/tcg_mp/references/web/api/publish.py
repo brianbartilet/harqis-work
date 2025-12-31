@@ -1,7 +1,3 @@
-from typing import List
-
-from apps.tcg_mp.references.dto.search import DtoFilterResult
-from apps.tcg_mp.references.dto.product import DtoCardData
 from apps.tcg_mp.references.web.base_api_service import BaseApiServiceAppTcgMp
 
 from core.web.services.core.decorators.deserializer import deserialized
@@ -40,6 +36,7 @@ class ApiServiceTcgMpPublish(BaseApiServiceAppTcgMp):
 
         return self.client.execute_request(self.request.build())
 
+    @deserialized(dict, child='data.data')
     def edit_listing(self, listing_id: int, price: float, quantity=1, foil=0, language="EN", condition="NM", signed=0):
         data = {
             'price': price,
@@ -54,6 +51,19 @@ class ApiServiceTcgMpPublish(BaseApiServiceAppTcgMp):
         self.request.post()\
             .add_uri_parameter('edit')\
             .add_payload(data, PayloadType.DICT)
+
+        return self.client.execute_request(self.request.build())
+
+    #@deserialized(dict)
+    def remove_listings(self, items_listing_ids):
+        data = {
+            'list': items_listing_ids,
+            'collection': 0
+        }
+
+        self.request.post()\
+            .add_uri_parameter('delete-bulk')\
+            .add_json_payload(data)
 
         return self.client.execute_request(self.request.build())
 

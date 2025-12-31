@@ -1,5 +1,11 @@
 from dataclasses import dataclass
 from typing import Optional
+from enum import IntEnum
+
+
+class ListingStatus(IntEnum):
+    OFF = 0
+    ON = 1
 
 
 @dataclass

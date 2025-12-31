@@ -1,6 +1,7 @@
 import pytest
-from hamcrest import greater_than, equal_to
+from hamcrest import greater_than
 from apps.tcg_mp.references.web.api.publish import ApiServiceTcgMpPublish
+from apps.tcg_mp.references.web.api.view import ApiServiceTcgMpUserView
 from apps.tcg_mp.config import CONFIG
 
 
@@ -17,6 +18,16 @@ def test_add_listing(given):
 
     then.assert_that(len(when_add.data.keys()), greater_than(0))
 
+
+@pytest.mark.skip(reason="Smoke test only.")
+def test_remove_listings(given):
+    given_service_view = ApiServiceTcgMpUserView(CONFIG)
+    when_listings = given_service_view.get_listings()
+    try:
+        remove_list = [str(x.listing_id) for x in when_listings]
+        given.remove_listings(remove_list)
+    except TypeError:
+        return
 
 
 

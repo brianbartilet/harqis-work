@@ -1,6 +1,3 @@
-from typing import List
-
-from apps.tcg_mp.references.dto.listing import DtoListingItem
 from apps.tcg_mp.references.web.base_api_service import BaseApiServiceAppTcgMp
 
 from core.web.services.core.decorators.deserializer import deserialized
