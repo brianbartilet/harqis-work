@@ -7,8 +7,8 @@ def test__generate_tcg_mappings():
     generate_tcg_mappings("TCG_MP","ECHO_MTG","ECHO_MTG_FE","SCRYFALL")
 
 def test__generate_tcg_mappings_bulk():
-    generate_tcg_mappings("TCG_MP","ECHO_MTG_BULK",
-                          "ECHO_MTG_FE_BULK","SCRYFALL", force_generate=True)
+    generate_tcg_mappings("TCG_MP","ECHO_MTG_BULK","ECHO_MTG_FE_BULK","SCRYFALL",
+                          force_generate=True)
 
 def test__generate_tcg_listings():
     generate_tcg_listings("TCG_MP","ECHO_MTG_BULK","ECHO_MTG_FE_BULK")

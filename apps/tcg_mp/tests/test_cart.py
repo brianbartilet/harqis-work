@@ -1,5 +1,5 @@
 import pytest
-from hamcrest import greater_than_or_equal_to, equal_to, matches_regexp
+from hamcrest import greater_than_or_equal_to
 from apps.tcg_mp.references.web.api.cart import ApiServiceTcgMpUserViewCart
 from apps.tcg_mp.config import CONFIG
 

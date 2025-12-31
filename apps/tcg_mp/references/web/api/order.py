@@ -4,7 +4,6 @@ from apps.tcg_mp.references.dto.order import DtoOrderSummaryByStatus, EnumTcgOrd
 from apps.tcg_mp.references.web.base_api_service import BaseApiServiceAppTcgMp
 
 from core.web.services.core.decorators.deserializer import deserialized
-from core.web.services.core.constants.http_headers import HttpHeaders
 
 
 class ApiServiceTcgMpOrder(BaseApiServiceAppTcgMp):
