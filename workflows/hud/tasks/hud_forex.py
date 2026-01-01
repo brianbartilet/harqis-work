@@ -13,7 +13,7 @@ from apps.apps_config import CONFIG_MANAGER
 
 from apps.google_apps.references.constants import ScheduleCategory
 
-from workflows.hud.dto.sections import sections__oanda
+from workflows.hud.tasks.sections import sections__oanda
 
 
 @SPROUT.task(queue='hud')
@@ -43,7 +43,7 @@ def show_forex_account(cfg_id__oanda, ini=ConfigHelperRainmeter(), **kwargs):
     # endregion
 
     # region Build links
-    ini['meterLink']['text'] = "Board"
+    ini['meterLink']['text'] = "BOARD"
     ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(board_url)
     ini['meterLink']['tooltiptext'] = board_url
 
@@ -54,7 +54,7 @@ def show_forex_account(cfg_id__oanda, ini=ConfigHelperRainmeter(), **kwargs):
     ini['meterLink_broker']['Y'] = '(38*#Scale#)'
     ini['meterLink_broker']['W'] = '60'
     ini['meterLink_broker']['H'] = '55'
-    ini['meterLink_broker']['Text'] = '|Broker'
+    ini['meterLink_broker']['Text'] = '|BROKER'
     ini['meterLink_broker']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(broker_url)
     ini['meterLink_broker']['tooltiptext'] = broker_url
 
@@ -65,7 +65,7 @@ def show_forex_account(cfg_id__oanda, ini=ConfigHelperRainmeter(), **kwargs):
     ini['meterLink_news']['Y'] = '(38*#Scale#)'
     ini['meterLink_news']['W'] = '55'
     ini['meterLink_news']['H'] = '14'
-    ini['meterLink_news']['Text'] = '|News'
+    ini['meterLink_news']['Text'] = '|NEWS'
     ini['meterLink_news']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(news_url)
     ini['meterLink_news']['tooltiptext'] = news_url
 
@@ -76,7 +76,7 @@ def show_forex_account(cfg_id__oanda, ini=ConfigHelperRainmeter(), **kwargs):
     ini['meterLink_metrics']['Y'] = '(38*#Scale#)'
     ini['meterLink_metrics']['W'] = '55'
     ini['meterLink_metrics']['H'] = '14'
-    ini['meterLink_metrics']['Text'] = '|Metrics'
+    ini['meterLink_metrics']['Text'] = '|METRICS'
     ini['meterLink_metrics']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(url)
     ini['meterLink_metrics']['tooltiptext'] = url
 

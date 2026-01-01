@@ -22,7 +22,7 @@ from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
 from workflows.purchases.helpers.helper import load_scryfall_bulk_data
-from workflows.hud.dto.sections import sections__tcg_mp_sections
+from workflows.hud.tasks.sections import sections__tcg_mp_sections
 
 
 @SPROUT.task(queue='hud')

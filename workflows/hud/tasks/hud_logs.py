@@ -12,7 +12,7 @@ from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.desktop.helpers.feed import feed
 from datetime import  datetime
 
-from workflows.hud.dto.sections import sections__check_logs
+from workflows.hud.tasks.sections import sections__check_logs
 
 from workflows.desktop.tasks_config import WORKFLOWS_DESKTOP
 from workflows.hud.tasks_config import WORKFLOWS_HUD
@@ -149,7 +149,7 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
     if len(results) == 0:
         dump = dump + "Nothing to see here.\n"
 
-    ini['Variables']['ItemLines'] = '{0}'.format(7)
+    ini['Variables']['ItemLines'] = '{0}'.format(5)
     dump = dump + "\n"
     # endregion
 
@@ -224,6 +224,6 @@ def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
 
     # endregion
 
-    ini['Variables']['ItemLines'] = '{0}'.format(7)
+    ini['Variables']['ItemLines'] = '{0}'.format(5)
 
     return dump

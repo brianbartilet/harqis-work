@@ -10,7 +10,7 @@ from apps.google_apps.references.web.api.calendar import ApiServiceGoogleCalenda
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
-from workflows.hud.dto.sections import sections__calendar
+from workflows.hud.tasks.sections import sections__calendar
 
 
 @SPROUT.task(queue='hud')

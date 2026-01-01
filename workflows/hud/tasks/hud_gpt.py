@@ -21,7 +21,7 @@ from apps.desktop.helpers.feed import feed
 from apps.google_apps.references.constants import ScheduleCategory
 from apps.apps_config import CONFIG_MANAGER
 
-from workflows.hud.dto.sections import sections__check_desktop, sections__check_world_checks
+from workflows.hud.tasks.sections import sections__check_desktop, sections__check_world_checks
 
 
 @SPROUT.task(queue='hud')
