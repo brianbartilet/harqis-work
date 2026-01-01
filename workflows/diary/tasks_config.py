@@ -40,21 +40,21 @@ WORKFLOWS_HUD = {
             day_of_week="mon,tue,wed,thu,fri",
             minute='*/15'),
         'args': ["OANDA"],
-        'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
+        'kwargs': {"cfg_id__calendar": "GOOGLE_APPS"},
     },
 
     'run-job--show_tcg_orders': {
         'task': 'workflows.hud.tasks.hud_tcg.show_tcg_orders',
         'schedule': crontab(minute='*/30'),
         'args': ["TCG_MP", "SCRYFALL"],
-        'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
+        'kwargs': {"cfg_id__calendar": "GOOGLE_APPS"},
     },
 
     'run-job--get_helper_information': {
         'task': 'workflows.hud.tasks.hud_gpt.get_helper_information',
         'schedule': crontab(minute='5'),
         'args': ["DESKTOP"],
-        'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
+        'kwargs': {"cfg_id__calendar": "GOOGLE_APPS"},
     },
 
     'run-job--show_calendar_information': {

@@ -19,6 +19,8 @@ from apps.scryfall.references.web.api.cards import ApiServiceScryfallCards
 from apps.google_apps.references.constants import ScheduleCategory
 
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
+from apps.scryfall.config import APP_NAME as APP_NAME_SCRYFALL
+from apps.tcg_mp.config import APP_NAME as APP_NAME_TCG_MP
 from apps.apps_config import CONFIG_MANAGER
 
 from workflows.purchases.helpers.helper import load_scryfall_bulk_data
@@ -32,10 +34,12 @@ from workflows.hud.tasks.sections import sections__tcg_mp_sections
             schedule_categories=[ScheduleCategory.PLAY, ]
 )
 @feed()
-def show_tcg_orders(cfg_id__tcg_mp, cfg_id__scryfall, ini=ConfigHelperRainmeter(), **kwargs):
+def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 
     # region Fetch and filter data
+    cfg_id__tcg_mp = kwargs.get('cfg_id__tcg_mp', APP_NAME_SCRYFALL)
+    cfg_id__scryfall = kwargs.get('cfg_id__scryfall', APP_NAME_TCG_MP)
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
     cfg__scryfall = CONFIG_MANAGER.get(cfg_id__scryfall)
 

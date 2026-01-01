@@ -40,8 +40,10 @@ WORKFLOWS_HUD = {
         'schedule': crontab(
             day_of_week="mon,tue,wed,thu,fri",
             minute='*/15'),
-        'args': ["OANDA"],
-        'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
+        'kwargs': {
+            "cfg_id__oanda":"OANDA",
+            "cfg_id__calendar": "GOOGLE_APPS",
+            },
         "options": {"queue": "hud"},
     },
 
@@ -49,68 +51,88 @@ WORKFLOWS_HUD = {
         'task': 'workflows.hud.tasks.hud_tcg.show_tcg_orders',
         'schedule': crontab(minute='*/30'),
         'args': ["TCG_MP", "SCRYFALL"],
-        'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
+        'kwargs': {
+            "cfg_id__calendar": "GOOGLE_APPS"
+        },
         "options": {"queue": "tcg"},
     },
 
     'run-job--get_desktop_logs': {
         'task': 'workflows.hud.tasks.hud_gpt.get_desktop_logs',
         'schedule': crontab(minute='5'),
-        'args': ["DESKTOP"],
-        'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
+        'kwargs': {
+            "cfg_id__desktop": "DESKTOP",
+            "cfg_id__calendar": "GOOGLE_APPS"
+        },
         "options": {"queue": "default"},
     },
 
     'run-job--take_screenshots_for_gpt_capture': {
         'task': 'workflows.hud.tasks.hud_gpt.take_screenshots_for_gpt_capture',
         'schedule': crontab(minute='10,20,30,40,50,00'),
-        'args': ["DESKTOP"],
+        'kwargs': {
+            "cfg_id__desktop": "DESKTOP"
+        },
         "options": {"queue": "default"},
     },
     
     'run-job--show_calendar_information': {
         'task': 'workflows.hud.tasks.hud_calendar.show_calendar_information',
         'schedule': crontab(minute='15,30,45,00'),
-        'args': ["GOOGLE_APPS", "ELEVEN_LABS"],
+        'kwargs': {
+            "cfg_id__calendar": "GOOGLE_APPS",
+            "cfg_id__elevenlabs": "ELEVEN_LABS"},
         "options": {"queue": "hud"},
     },
 
     'run-job--get_failed_jobs': {
         'task': 'workflows.hud.tasks.hud_logs.get_failed_jobs',
         'schedule': crontab(minute='*/15'),
-        'args': [],
         "options": {"queue": "hud"},
     },
 
     'run-job--show_mouse_bindings': {
         'task': 'workflows.hud.tasks.hud_utils.show_mouse_bindings',
         'schedule': timedelta(minutes=1),
-        'args': [],
-        'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
+        'kwargs': {
+            "cfg_id__calendar": "GOOGLE_APPS"
+        },
         "options": {"queue": "hud"},
     },
 
     'run-job--build_summary_mouse_bindings': {
         'task': 'workflows.hud.tasks.hud_utils.build_summary_mouse_bindings',
         'schedule': crontab(hour='1'),
-        'args': ["DESKTOP"],
+        'kwargs': {
+            "cfg_id__desktop": "DESKTOP"
+        },
         "options": {"queue": "default"},
     },
 
     'run-job--show_hud_profiles': {
         'task': 'workflows.hud.tasks.hud_utils.show_hud_profiles',
         'schedule': crontab(hour='00'),
-        'args': [],
         "options": {"queue": "hud"},
     },
 
     'run-job--show_ynab_budgets_info': {
         'task': 'workflows.hud.tasks.hud_finance.show_ynab_budgets_info',
         'schedule': crontab(hour='0,4,8,12,16,20'),
-        'args': ["YNAB"],
-        'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
+        'kwargs': {
+            "cfg_id__ynab": "YNAB",
+            "cfg_id__calendar": "GOOGLE_APPS"},
         "options": {"queue": "hud"}
     },
 
+    'run-job--show_ai_helper': {
+        'task': 'workflows.hud.tasks.hud_utils.show_ai_helper',
+        'schedule': crontab(hour='0'),
+        'kwargs': {
+            "cfg_id__n8n": "N8N",
+            "cfg_id__eleven": "ELEVEN_LABS",
+            "cfg_id__py": "PYTHON_RUNNER"
+        },
+        "options": {"queue": "hud"}
+    },
 }
 

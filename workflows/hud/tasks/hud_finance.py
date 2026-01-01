@@ -7,6 +7,7 @@ from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmet
 from apps.desktop.helpers.feed import feed
 
 from apps.ynab.references.web.api.budgets import ApiServiceYNABBudgets
+from apps.ynab.config import APP_NAME as APP_NAME_YNAB
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
@@ -20,11 +21,12 @@ from workflows.hud.tasks.sections import sections__ynab
 @init_meter(RAINMETER_CONFIG, hud_item_name='BUDGETING INFO', new_sections_dict=sections__ynab, play_sound=True,
             schedule_categories=[ScheduleCategory.FINANCE, ])
 @feed()
-def show_ynab_budgets_info(cfg_id__ynab, ini=ConfigHelperRainmeter(), **kwargs):
+def show_ynab_budgets_info(ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
     budget_percent_warning = kwargs.get('budget_percent_warning', 20 / 100)
 
     # region Fetch YNAB data
+    cfg_id__ynab = kwargs.get('cfg_id__ynab', APP_NAME_YNAB)
     cfg__ynab = CONFIG_MANAGER.get(cfg_id__ynab)
 
     service = ApiServiceYNABBudgets(cfg__ynab)

@@ -7,12 +7,12 @@ def test__show_hud_profiles():
 
 
 def test__show_mouse_bindings():
-    show_mouse_bindings(calendar_cfg_id="GOOGLE_APPS")
+    show_mouse_bindings(cfg_id__calendar="GOOGLE_APPS")
 
 
 def test__build_summary_mouse_bindings():
-    build_summary_mouse_bindings("DESKTOP")
+    build_summary_mouse_bindings(cfg_id__desktop="DESKTOP")
 
 
 def test__show_ai_helper():
-    show_ai_helper("N8N", "ELEVEN_LABS", "PYTHON_RUNNER")
+    show_ai_helper(cfg_id__n8n="N8N", cfg_id__eleven="ELEVEN_LABS", cfg_id__py="PYTHON_RUNNER")

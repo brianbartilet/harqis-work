@@ -9,7 +9,9 @@ from apps.desktop.helpers.feed import feed
 from apps.oanda.references.web.api.account import ApiServiceOandaAccount
 from apps.oanda.references.web.api.open_trades import ApiServiceTrades
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
+
 from apps.apps_config import CONFIG_MANAGER
+from apps.oanda.config import APP_NAME as APP_NAME_OANDA
 
 from apps.google_apps.references.constants import ScheduleCategory
 
@@ -21,10 +23,11 @@ from workflows.hud.tasks.sections import sections__oanda
 @init_meter(RAINMETER_CONFIG, hud_item_name='OANDA ACCOUNT', new_sections_dict=sections__oanda, play_sound=True,
             schedule_categories=[ScheduleCategory.FINANCE, ])
 @feed()
-def show_forex_account(cfg_id__oanda, ini=ConfigHelperRainmeter(), **kwargs):
+def show_forex_account(ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 
     # region Fetch OANDA data
+    cfg_id__oanda = kwargs.get('cfg_id__oanda', APP_NAME_OANDA)
     cfg__oanda = CONFIG_MANAGER.get(cfg_id__oanda)
 
     board_url = "https://trello.com/b/351MWTYe/daily-dashboard-trading"
