@@ -2,10 +2,10 @@ from apps.ynab.references.web.base_api_service import BaseApiServiceYouNeedABudg
 from core.web.services.core.decorators.deserializer import deserialized
 
 
-class ApiServiceYNABAccounts(BaseApiServiceYouNeedABudget):
+class ApiServiceYNABBudgets(BaseApiServiceYouNeedABudget):
 
     def __init__(self, config, **kwargs):
-        super(ApiServiceYNABAccounts, self).__init__(config, **kwargs)
+        super(ApiServiceYNABBudgets, self).__init__(config, **kwargs)
         self.initialize()
 
     def initialize(self):

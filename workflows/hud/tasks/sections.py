@@ -130,3 +130,9 @@ sections__utilities_i_cue = {
         "Preset": "InjectedByTest",
     },
 }
+
+sections__ynab = {
+    "meterLink_php": {
+        "Preset": "InjectedByTest",
+    },
+}

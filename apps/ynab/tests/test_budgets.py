@@ -1,12 +1,12 @@
 import pytest
 from hamcrest import equal_to, greater_than_or_equal_to
-from apps.ynab.references.web.api.budgets import ApiServiceYNABAccounts
+from apps.ynab.references.web.api.budgets import ApiServiceYNABBudgets
 from apps.ynab.config import CONFIG
 
 
 @pytest.fixture()
 def given():
-    given_service = ApiServiceYNABAccounts(CONFIG)
+    given_service = ApiServiceYNABBudgets(CONFIG)
     return given_service
 
 

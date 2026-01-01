@@ -15,7 +15,7 @@ from apps.desktop.corsair.profiles_mapping import build_summary
 from apps.google_apps.references.constants import ScheduleCategory
 from apps.apps_config import CONFIG_MANAGER
 
-from workflows.hud.dto.sections import sections__utilities_desktop, sections__utilities_i_cue, sections__utilities_ai
+from workflows.hud.tasks.sections import sections__utilities_desktop, sections__utilities_i_cue, sections__utilities_ai
 from workflows.hud.dto.constants import Profile, AppExe, HUD_NAME_MOUSE_BINDINGS, APP_TO_PROFILE
 
 
@@ -172,7 +172,7 @@ def show_mouse_bindings(ini=ConfigHelperRainmeter(), **kwargs):
 
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 
-    # region Corsair
+    # region Set HUD elements
     path = 'C:\Program Files\Corsair\Corsair iCUE5 Software\iCUE.exe'
     ini['meterLink']['Text'] = "ICUE"
     ini['meterLink']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(path)
@@ -192,6 +192,8 @@ def show_mouse_bindings(ini=ConfigHelperRainmeter(), **kwargs):
     ini['meterLink_dump']['Text'] = '|DUMP'
     ini['meterLink_dump']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(dump_path)
     ini['meterLink_dump']['tooltiptext'] = dump_path
+
+    # endregion
 
     # region Set dimensions
     width_multiplier = 1.75
