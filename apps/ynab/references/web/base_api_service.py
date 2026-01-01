@@ -23,4 +23,4 @@ class BaseApiServiceYouNeedABudget(BaseFixtureServiceRest):
 
         self.request\
             .add_header(HttpHeaders.CONTENT_TYPE, 'application/json') \
-            .add_query_string('access_token', self.access_token)
+            .add_header(HttpHeaders.AUTHORIZATION, f'Bearer {self.access_token}')
