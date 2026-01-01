@@ -13,6 +13,8 @@ from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmet
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.desktop.corsair.profiles_mapping import build_summary
 from apps.google_apps.references.constants import ScheduleCategory
+
+from apps.desktop.config import APP_NAME as APP_NAME_DESKTOP
 from apps.apps_config import CONFIG_MANAGER
 
 from workflows.hud.tasks.sections import sections__utilities_desktop, sections__utilities_i_cue, sections__utilities_ai
@@ -228,7 +230,8 @@ def show_mouse_bindings(ini=ConfigHelperRainmeter(), **kwargs):
 
 @SPROUT.task(queue='hud')
 @log_result()
-def build_summary_mouse_bindings(cfg_id__desktop):
+def build_summary_mouse_bindings(**kwargs):
+    cfg_id__desktop = kwargs.get('cfg_id__desktop', APP_NAME_DESKTOP)
     cfg = CONFIG_MANAGER.get(cfg_id__desktop)
     path = Path(cfg['corsair']['path_profiles'])
     skin_dir = str(os.path.join(RAINMETER_CONFIG['write_skin_to_path'], RAINMETER_CONFIG['skin_name'], HUD_NAME_MOUSE_BINDINGS
@@ -245,7 +248,11 @@ def build_summary_mouse_bindings(cfg_id__desktop):
             hud_item_name="AGENTS CORE",
             new_sections_dict=sections__utilities_ai,
             play_sound=False)
-def show_ai_helper(cfg_id__n8n, cfg_id__eleven, cfg_id__py, ini=ConfigHelperRainmeter()):
+def show_ai_helper(ini=ConfigHelperRainmeter(), **kwargs):
+    cfg_id__n8n = kwargs.get('cfg_id__n8n', "N8N")
+    cfg_id__eleven = kwargs.get('cfg_id__eleven', "ELEVEN_LABS")
+    cfg_id__py = kwargs.get('cfg_id__py', "PYTHON_RUNNER")
+
     cfg_py = CONFIG_MANAGER.get(cfg_id__py)
     exe = cfg_py['bin']
     root = cfg_py['root']

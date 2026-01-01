@@ -133,9 +133,9 @@ def init_meter(
                             _deactivate_config(skin_name, hud_dirname)
                             return {"updated": changed, "ini_path": str(ini_path), "notes_path": note_path}
                         else:
-                            google_cfg_id = kwargs.get("calendar_cfg_id", None)
+                            google_cfg_id = kwargs.get("cfg_id__calendar", None)
                             if not google_cfg_id:
-                                raise ValueError("'calendar_cfg_id' is required in kwargs when schedule_categories is set")
+                                raise ValueError("'cfg_id__calendar' is required in kwargs when schedule_categories is set")
                             config_calendar = CONFIG_MANAGER.get(google_cfg_id)
                             service = ApiServiceGoogleCalendarEvents(config_calendar)
                             now_blocks = service.get_all_events_today(EventType.NOW)

@@ -7,6 +7,7 @@ from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmet
 from apps.desktop.helpers.feed import feed
 
 from apps.google_apps.references.web.api.calendar import ApiServiceGoogleCalendarEvents, EventType
+from apps.google_apps.config import APP_NAME as APP_NAME_GOOGLE_APPS
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
@@ -17,7 +18,9 @@ from workflows.hud.tasks.sections import sections__calendar
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='CALENDAR INFO', new_sections_dict=sections__calendar, play_sound=False)
 @feed()
-def show_calendar_information(cfg_id__gsuite, cfg_id__elevenlabs, ini=ConfigHelperRainmeter()):
+def show_calendar_information(ini=ConfigHelperRainmeter(), **kwargs):
+    cfg_id__gsuite = kwargs.get('cfg_id__gsuite', APP_NAME_GOOGLE_APPS)
+    cfg_id__elevenlabs = kwargs.get('cfg_id__elevenlabs', "ELEVEN_LABS")
 
     # region Fetch events and filter
     cfg__gsuite= CONFIG_MANAGER.get(cfg_id__gsuite)

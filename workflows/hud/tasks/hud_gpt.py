@@ -17,6 +17,7 @@ from core.utilities.data.strings import wrap_text, make_separator
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.desktop.helpers.feed import feed
+from apps.desktop.config import APP_NAME as APP_NAME_DESKTOP
 
 from apps.google_apps.references.constants import ScheduleCategory
 from apps.apps_config import CONFIG_MANAGER
@@ -29,9 +30,10 @@ from workflows.hud.tasks.sections import sections__check_desktop, sections__chec
 @init_meter(RAINMETER_CONFIG, hud_item_name='DESKTOP LOGS', new_sections_dict=sections__check_desktop,
             play_sound=True, schedule_categories=[ScheduleCategory.PINNED, ], prepend_if_exists=True)
 @feed()
-def get_desktop_logs(cfg_id__desktop, timedelta_previous_hours = 1, ini=ConfigHelperRainmeter(), **kwargs):
+def get_desktop_logs(timedelta_previous_hours = 1, ini=ConfigHelperRainmeter(), **kwargs):
 
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
+
     # region Assistant Chat Setup Functions
     no_connection = False
     try:
@@ -40,7 +42,8 @@ def get_desktop_logs(cfg_id__desktop, timedelta_previous_hours = 1, ini=ConfigHe
     except Exception:
         no_connection = True
 
-    cfg_id__desktop = CONFIG_MANAGER.get(cfg_id__desktop)
+    cfg_id__desktop = kwargs.get("cfg_id__desktop", APP_NAME_DESKTOP)
+    cfg__desktop = CONFIG_MANAGER.get(cfg_id__desktop)
 
     def extract_first_last_timestamp(file_path: str):
         timestamp_re = re.compile(r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})]")
@@ -74,12 +77,12 @@ def get_desktop_logs(cfg_id__desktop, timedelta_previous_hours = 1, ini=ConfigHe
         :param timedelta_hours: hours behind to check
         :return:
         """
-        capture_path = cfg_id__desktop['capture']['actions_log_path']
-        archive_path = cfg_id__desktop['capture']['archive_path']
+        capture_path = cfg__desktop['capture']['actions_log_path']
+        archive_path = cfg__desktop['capture']['archive_path']
 
         # generate, gather and archive screenshots, there should be a separate task taking desktop at an interval
         last_hour = datetime.now() - timedelta(hours=timedelta_hours)
-        path = cfg_id__desktop['capture']['screenshots_path']
+        path = cfg__desktop['capture']['screenshots_path']
         ts_last_hour = last_hour.strftime("%Y-%m-%d-%H")
         files_last_hour = get_all_files(path, ts_last_hour)
         folder_to_zip = f'sc-archive-{ts_last_hour}'
@@ -234,9 +237,9 @@ def get_desktop_logs(cfg_id__desktop, timedelta_previous_hours = 1, ini=ConfigHe
     except Exception:
         no_connection = True
 
-    file = os.path.join(cfg_id__desktop['capture']['actions_log_path'],
+    file = os.path.join(cfg__desktop['capture']['actions_log_path'],
         f'{log_file}'
-    )
+                        )
 
     if log_file:
         first_ts, last_ts = extract_first_last_timestamp(file)
@@ -359,7 +362,8 @@ def get_events_world_check(countries_list=None, utc_tz="UTC+8", ini=ConfigHelper
 @SPROUT.task(queue='default')
 @log_result()
 @feed()
-def take_screenshots_for_gpt_capture(cfg_id__desktop):
+def take_screenshots_for_gpt_capture(**kwargs):
+    cfg_id__desktop = kwargs.get('cfg_id__desktop', "DESKTOP")
     cfg = CONFIG_MANAGER.get(cfg_id__desktop)
     path = cfg['capture']['screenshots_path']
     now = datetime.now()
