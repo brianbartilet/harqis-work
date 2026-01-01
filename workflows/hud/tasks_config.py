@@ -104,6 +104,13 @@ WORKFLOWS_HUD = {
         "options": {"queue": "hud"},
     },
 
+    'run-job--show_ynab_budgets_info': {
+        'task': 'workflows.hud.tasks.hud_finance.show_ynab_budgets_info',
+        'schedule': crontab(hour='0,4,8,12,16,20'),
+        'args': ["YNAB"],
+        'kwargs': {"calendar_cfg_id": "GOOGLE_APPS"},
+        "options": {"queue": "hud"}
+    },
 
 }
 
