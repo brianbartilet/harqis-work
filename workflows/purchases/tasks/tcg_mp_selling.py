@@ -41,7 +41,8 @@ def task_smoke():
 
 @SPROUT.task(queue='tcg')
 @feed()
-def download_scryfall_bulk_data(cfg_id__scryfall: str):
+def download_scryfall_bulk_data(**kwargs):
+    cfg_id__scryfall = kwargs.get("cfg_id__scryfall", "SCRYFALL")
     cfg__scryfall = CONFIG_MANAGER.get(cfg_id__scryfall)
     api_service__scryfall_cards_bulk = ApiServiceScryfallBulkData(cfg__scryfall)
     api_service__scryfall_cards_bulk.download_bulk_file()
@@ -54,9 +55,12 @@ def download_scryfall_bulk_data(cfg_id__scryfall: str):
 @SPROUT.task(queue='tcg')
 @log_result()
 @feed()
-def generate_tcg_mappings(cfg_id__tcg_mp: str, cfg_id__echo_mtg: str, cfg_id__echo_mtg_fe: str, cfg_id__scryfall: str,
-                          force_generate=False):
+def generate_tcg_mappings(force_generate=False, **kwargs):
     """ ../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
+    cfg_id__tcg_mp = kwargs.get("cfg_id__tcg_mp", "TCG_MP")
+    cfg_id__echo_mtg = kwargs.get("cfg_id__echo_mtg", "ECHO_MTG")
+    cfg_id__echo_mtg_fe = kwargs.get("cfg_id__echo_mtg_fe", "ECHO_MTG_FE")
+    cfg_id__scryfall = kwargs.get("cfg_id__scryfall", "SCRYFALL")
 
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
     cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
@@ -458,7 +462,7 @@ def update_tcg_listings_prices(
 @SPROUT.task(queue='tcg')
 @log_result()
 @feed()
-def generate_audit_for_tcg_orders(cfg_id__tcg_mp: str) -> None:
+def generate_audit_for_tcg_orders(**kwargs) -> None:
     """
     Poll TCG MP orders, compare against ES 'current' index, and
     write changes into:
@@ -473,6 +477,7 @@ def generate_audit_for_tcg_orders(cfg_id__tcg_mp: str) -> None:
     date_range_from = today - timedelta(days=15)
     date_range_to = today
 
+    cfg_id__tcg_mp = kwargs.get("cfg_id__tcg_mp", "TCG_MP")
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
     service = ApiServiceTcgMpOrder(cfg__tcg_mp)
     orders_1 = service.get_orders(by_status=EnumTcgOrderStatus.PENDING_DROP_OFF)

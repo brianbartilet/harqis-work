@@ -38,26 +38,30 @@ WORKFLOW_PURCHASES = {
     'run-job--generate_tcg_mappings': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.generate_tcg_mappings',
         'schedule': crontab(hour='3,12'),
-        'args': [
-            "TCG_MP",
-            "ECHO_MTG",
-            "ECHO_MTG_FE",
-            "SCRYFALL"
-        ],
+        'kwargs': {
+            "cfg_id__tcg_mp": "TCG_MP",
+            "cfg_id__echo_mtg": "ECHO_MTG",
+            "cfg_id__echo_mtg_fe": "ECHO_MTG_FE",
+            "cfg_id__scryfall": "SCRYFALL"
+        },
         "options": {"queue": "tcg"},
     },
 
     'run-job--download_scryfall_bulk_data': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.download_scryfall_bulk_data',
         'schedule': crontab(hour='2'),
-        'args': ["SCRYFALL"],
+        'kwargs': {
+            "cfg_id__scryfall": "SCRYFALL"
+        },
         "options": {"queue": "tcg"},
     },
 
     'run-job--generate_audit_for_tcg_orders': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.generate_audit_for_tcg_orders',
         'schedule': crontab(minute=0, hour="*/1"),
-        'args': ["TCG_MP"],
+        'kwargs': {
+            "cfg_id__tcg_mp": "TCG_MP"
+        },
         "options": {"queue": "tcg"},
     },
 

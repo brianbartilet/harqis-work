@@ -32,7 +32,7 @@ This includes:
 Example task 'run-test-sample-workflow' is scheduled to run every 10 seconds, executing
 the 'run_sample_workflow_add' function with specified arguments.
 """
-WORKFLOWS_HUD = {
+WORKFLOWS_DIARY = {
 
     'run-job--show_forex_account': {
         'task': 'workflows.hud.tasks.hud_forex.show_forex_account',
@@ -42,36 +42,6 @@ WORKFLOWS_HUD = {
         'args': ["OANDA"],
         'kwargs': {"cfg_id__calendar": "GOOGLE_APPS"},
     },
-
-    'run-job--show_tcg_orders': {
-        'task': 'workflows.hud.tasks.hud_tcg.show_tcg_orders',
-        'schedule': crontab(minute='*/30'),
-        'args': ["TCG_MP", "SCRYFALL"],
-        'kwargs': {"cfg_id__calendar": "GOOGLE_APPS"},
-    },
-
-    'run-job--get_helper_information': {
-        'task': 'workflows.hud.tasks.hud_gpt.get_helper_information',
-        'schedule': crontab(minute='5'),
-        'args': ["DESKTOP"],
-        'kwargs': {"cfg_id__calendar": "GOOGLE_APPS"},
-    },
-
-    'run-job--show_calendar_information': {
-        'task': 'workflows.hud.tasks.hud_calendar.show_calendar_information',
-        'schedule': crontab(minute='*/15'),
-        'args': ["GOOGLE_APPS"]
-    },
-
-    'run-job--get_failed_jobs': {
-        'task': 'workflows.hud.tasks.hud_logs.get_failed_jobs',
-        'schedule': crontab(minute='*/5'),
-        'args': []
-    },
-
-
-
-
 
 }
 
