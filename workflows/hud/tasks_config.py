@@ -139,6 +139,9 @@ WORKFLOWS_HUD = {
     'run-job--get_schedules': {
         'task': 'workflows.hud.tasks.hud_logs.get_schedules',
         'schedule': crontab(hour='0,4,8,12,16,20'),
+        'kwargs': {
+            "cfg_id__calendar": "GOOGLE_APPS",
+        },
         "options": {"queue": "hud"}
     },
 
