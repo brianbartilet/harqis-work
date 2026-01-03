@@ -52,7 +52,9 @@ WORKFLOWS_DESKTOP = {
     'run-job--copy_files_targeted': {
         'task': 'workflows.desktop.tasks.commands.copy_files_targeted',
         'schedule': crontab(minute='*/30'),
-        'args': ["DESKTOP", ],
+        'kwargs': {
+            "cfg_id__desktop_jobs": "DESKTOP"
+        },
         "options": {"queue": "default"},
     },
 
@@ -66,7 +68,9 @@ WORKFLOWS_DESKTOP = {
     'run-job--run_capture_logging': {
         'task': 'workflows.desktop.tasks.capture.run_capture_logging',
         'schedule': crontab(minute='0,15,30,45'),
-        'args': ["DESKTOP", ],
+        'kwargs': {
+            "cfg_id__desktop_utils": "DESKTOP"
+        },
         "options": {"queue": "default"},
     },
 

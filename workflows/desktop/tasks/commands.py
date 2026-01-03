@@ -68,8 +68,8 @@ def git_pull_on_paths() -> str:
 @SPROUT.task(queue='default')
 @log_result()
 @feed()
-def copy_files_targeted(cfg_id__desktop_jobs: str) -> str:
-    cfg = CONFIG_MANAGER.get(cfg_id__desktop_jobs)
+def copy_files_targeted(**kwargs) -> str:
+    cfg = CONFIG_MANAGER.get(kwargs.get("cfg_id__desktop_jobs", "DESKTOP"))
     p_from = cfg['copy_files']['path_dev_files']
     p_to = cfg['copy_files']['path_run_files']
 

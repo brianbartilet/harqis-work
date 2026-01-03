@@ -43,12 +43,12 @@ def _kill_existing_screen_reader_processes():
 @SPROUT.task(queue='default')
 @log_result()
 @feed()
-def run_capture_logging(cfg_id__desktop_utils):
+def run_capture_logging(**kwargs):
     """
     Creates today's logfile and starts the run_capture loop
     either in a visible or hidden subprocess depending on config.
     """
-    cfg = CONFIG_MANAGER.get(cfg_id__desktop_utils)
+    cfg = CONFIG_MANAGER.get(kwargs.get("cfg_id__desktop_utils", "DESKTOP"))
 
     base_path = cfg['capture'].get('actions_log_path',  os.getcwd())
     base_path = Path(base_path)
