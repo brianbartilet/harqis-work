@@ -135,5 +135,13 @@ WORKFLOWS_HUD = {
         },
         "options": {"queue": "hud"}
     },
+
+    'run-job--get_schedules': {
+        'task': 'workflows.hud.tasks.hud_logs.get_schedules',
+        'schedule': crontab(hour='0,4,8,12,16,20'),
+        "options": {"queue": "hud"}
+    },
+
+
 }
 
