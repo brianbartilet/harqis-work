@@ -494,7 +494,6 @@ def generate_audit_for_tcg_orders(**kwargs) -> None:
         if page
         for order in (page[0].data or [])
     ]
-    # ----- helpers ---------------------------------------------------------
 
     def now_utc_iso() -> str:
         """Return ISO-8601 UTC string with Z suffix."""
