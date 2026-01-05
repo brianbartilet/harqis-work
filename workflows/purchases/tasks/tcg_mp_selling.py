@@ -255,12 +255,13 @@ def _worker_generate_tcg_listings(task: dict):
 @log_result()
 @feed()
 def generate_tcg_listings(
-    cfg_id__tcg_mp: str,
-    cfg_id__echo_mtg: str,
-    cfg_id__echo_mtg_fe: str,
     worker_count=4,
+    **kwargs
 ):
     """../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
+    cfg_id__tcg_mp = kwargs.pop("cfg_id__tcg_mp", "TCG_MP")
+    cfg_id__echo_mtg = kwargs.pop("cfg_id__echo_mtg", "ECHO_MTG")
+    cfg_id__echo_mtg_fe = kwargs.pop("cfg_id__echo_mtg_fe", "ECHO_MTG_FE")
 
     cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
     api_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
@@ -415,12 +416,13 @@ def _worker_update_tcg_listings_prices(task: dict):
 @log_result()
 @feed()
 def update_tcg_listings_prices(
-    cfg_id__tcg_mp: str,
-    cfg_id__echo_mtg: str,
-    cfg_id__echo_mtg_fe: str,
     worker_count=4,
+    **kwargs
 ):
     """../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
+    cfg_id__tcg_mp = kwargs.get("cfg_id__tcg_mp", "TCG_MP")
+    cfg_id__echo_mtg = kwargs.get("cfg_id__echo_mtg", "ECHO_MTG")
+    cfg_id__echo_mtg_fe = kwargs.get("cfg_id__echo_mtg_fe", "ECHO_MTG_FE")
 
     cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
     api_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
