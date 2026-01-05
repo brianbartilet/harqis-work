@@ -40,6 +40,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
     # region Fetch and filter data
     cfg_id__tcg_mp = kwargs.get('cfg_id__tcg_mp', APP_NAME_SCRYFALL)
     cfg_id__scryfall = kwargs.get('cfg_id__scryfall', APP_NAME_TCG_MP)
+
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
     cfg__scryfall = CONFIG_MANAGER.get(cfg_id__scryfall)
 
