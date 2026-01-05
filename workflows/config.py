@@ -30,3 +30,7 @@ CONFIG_DICTIONARY = WORKFLOW_PURCHASES | WORKFLOWS_HUD | WORKFLOWS_DESKTOP
 
 # Configure the Celery beat schedule based on the current environment's task mapping.
 SPROUT.conf.beat_schedule = CONFIG_DICTIONARY
+
+SPROUT.conf.task_routes = {
+  "workflows.hud.tasks.*": {"queue": "hud"},
+}
