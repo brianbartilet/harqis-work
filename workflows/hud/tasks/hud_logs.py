@@ -159,7 +159,7 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
 @SPROUT.task(queue='hud')
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='CELERY SPROUTS', new_sections_dict=sections__check_logs,
-            play_sound=False, schedule_categories=[ScheduleCategory.ORGANIZE])
+            play_sound=False, schedule_categories=[ScheduleCategory.DEACTIVATED])
 @feed()
 def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
