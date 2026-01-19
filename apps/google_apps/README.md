@@ -13,3 +13,4 @@
 ## How to Use
 
 ## Notes
+- delete `storage.json` for retrigger client flow
