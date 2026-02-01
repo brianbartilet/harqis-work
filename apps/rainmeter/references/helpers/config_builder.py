@@ -144,8 +144,10 @@ def init_meter(
                                 log.warn("No matching schedule categories found; deactivating HUD until next check.")
                                 _deactivate_config(skin_name, hud_dirname)
                                 return {"updated": changed, "ini_path": str(ini_path), "notes_path": note_path}
+                    except Exception:
+                        log.error("Token might be expired.  Rerun auth flow.")
                     except ConnectionError:
-                        log.warn("Calendar service is not working as expected.  Please check settings.")
+                        log.error("Calendar service is not working as expected.  Please check settings.")
 
                 # 11) Optional beep
                 if changed and play_sound:
