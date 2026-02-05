@@ -34,7 +34,7 @@ Example task 'run-test-sample-workflow' is scheduled to run every 10 seconds, ex
 the 'run_sample_workflow_add' function with specified arguments.
 """
 WORKFLOW_PURCHASES = {
-
+    """
     'run-job--generate_tcg_mappings': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.generate_tcg_mappings',
         'schedule': crontab(hour='3,12'),
@@ -46,7 +46,8 @@ WORKFLOW_PURCHASES = {
         },
         "options": {"queue": "tcg"},
     },
-
+    """
+    
     'run-job--download_scryfall_bulk_data': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.download_scryfall_bulk_data',
         'schedule': crontab(
