@@ -63,7 +63,7 @@ WORKFLOW_PURCHASES = {
 
     'run-job--generate_audit_for_tcg_orders': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.generate_audit_for_tcg_orders',
-        'schedule': crontab(minute=0, hour="*/1"),
+        'schedule': crontab(minute=0, hour="*/4"),
         'kwargs': {
             "cfg_id__tcg_mp": "TCG_MP"
         },
