@@ -115,7 +115,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
     #  endregion
 
     # region Set dimensions
-    width_multiplier = 2.9
+    width_multiplier = 3
     ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
@@ -138,8 +138,12 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
     sorted_data_single_card_name = []
     sorted_mapping = ["W", "B", "U", "R", "G", "C", "M", "L", "X"]
 
-    def get_color_identity(card_name: str):
-        search = products.search_card(card_name.strip())
+    def get_scryfall_info(card_name: str):
+        clean = re.compile(r'^(?:\s*\[[^\]]+\]\s*)?([^()]+)')
+        match = clean.search(card_name)
+        card_name = match.group(1).strip()
+
+        search = products.search_card(card_name)
         _card = search[0]
         log.info("Extracting guid on tcg mp from image url: {0}".format(_card))
         url = _card.image
@@ -151,6 +155,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
             log.info("Found GUID: {0} for card: {1}".format(guid, _card))
             scryfall_card = cards_scryfall_bulk_data[guid]
             colors = scryfall_card['color_identity']
+            _cmc = scryfall_card['cmc']
             if "land" in scryfall_card["type_line"].lower():
                 _color_identity = "L"
             elif len(colors) == 1:
@@ -163,8 +168,9 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
                 _color_identity = 'X'
         except KeyError:
             _color_identity = 'X'
+            _cmc = 0
 
-        return _color_identity
+        return _color_identity, int(_cmc)
 
     # remove invalid items
     orders[0].data = [
@@ -173,7 +179,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
     ]
 
     for order in orders[0].data:
-        color_identity = get_color_identity(order['first_item'])
+        color_identity, cmc = get_scryfall_info(order['first_item'])
 
         # crop long names
         name = (order['first_item'][:50] + '..') if len(order['first_item']) > 50 else order['first_item']
@@ -195,6 +201,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
             "grand_total": order['grand_total'],
             "order_id": order['order_id'],
             "foil": foil,
+            "cmc": cmc
         })
 
     sorted_data_single_card_name.sort(key=lambda r: sorted_mapping.index(r["color_identity"]))
@@ -204,11 +211,11 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
     #  endregion
 
 
-    ctr_lines = 3
+    ctr_lines = 0
     dump = (("{0}\n"
             "ORDERS: {1}  CARDS: {2}  AMOUNT: {3}\n"
             "{0}\n")
-            .format(make_separator(85),  len(sorted_data_single_card_name + multiple_items_oder),
+            .format(make_separator(88),  len(sorted_data_single_card_name + multiple_items_oder),
                     total_cards, total_amount))
     if len(orders[0].data) == 0:
         ctr_lines += 3
@@ -218,13 +225,14 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
         ctr_lines += 1
         foil = "F" if str(r['foil']) == "1" else "N"
 
-        add = " {0:<2} {1:<2} {5:<1} {2:<60} {3:<4} {4:>7}\n".format(
+        add = " {0:<2} {1:<2} {5:<2} {6:<2} {2:<60} {3:<4} {4:>7}\n".format(
             r["quantity"],
             r["color_identity"],
             r["name"],
             f"{r['order_id'][4:]}",
             f"{r['grand_total']}",
-            foil
+            foil,
+            r["cmc"]
         )
         dump += add
 
@@ -234,21 +242,26 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
     for r in multiple_items_oder:
         ctr_lines += 1
         add = "{0}\n ORDER ID: {1}\n{2}\n".format(
-            make_separator(85, "="),
+            make_separator(88, "="),
             r['order_id'],
-            make_separator(85, '-')
+            make_separator(88, '-')
         )
         dump += add
 
         for item in r['items']:
+            # crop long names
+            name = (item["name"][:50] + '..') if len(item["name"]) > 50 else item["name"]
+
+            color, cmc = get_scryfall_info(item['name'])
             foil = "F" if str(item['crd_foil']) == "1" else "N"
             ctr_lines += 1
-            add = " {0:<2} {1:<2} {3:<1} {2:<65} {4:>9}\n".format(
+            add = " {0:<2} {1:<2} {3:<2} {5:<2} {2:<60} {4:>14}\n".format(
                 item["quantity"],
-                get_color_identity(item['name']),
-                item["name"],
+                color,
+                name,
                 foil,
                 item['price'],
+                cmc
             )
             dump += add
 
