@@ -10,7 +10,6 @@ def log_mp_summary(
     created_key: str = "created",
     updated_key: str = "updated",
     status_key: str = "status",
-    ok_status: str = "ok",
     skipped_status: str = "skipped",
     error_status: str = "error",
     pid_key: str = "pid",
