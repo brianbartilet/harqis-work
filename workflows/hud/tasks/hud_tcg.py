@@ -95,6 +95,20 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
 
     #  endregion
 
+    #  region Build link screenshots folder
+
+    path = kwargs.get("path_to_qr", cfg__tcg_mp.app_data['save_path'])
+    ini['meterLink_sc']['Meter'] = 'String'
+    ini['meterLink_sc']['MeterStyle'] = 'sItemLink'
+    ini['meterLink_sc']['X'] = '(132*#Scale#)'
+    ini['meterLink_sc']['Y'] = '(38*#Scale#)'
+    ini['meterLink_sc']['W'] = '250'
+    ini['meterLink_sc']['H'] = '55'
+    ini['meterLink_sc']['Text'] = '|TCG_QR'
+    ini['meterLink_sc']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(path)
+    ini['meterLink_sc']['tooltiptext'] = path
+    #  endregion
+
     #  region Build link for account balance and pending sales
     account_summary = account.get_account_summary()
     balance = account_summary['current_balance']
@@ -102,7 +116,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
     sales_url = 'https://thetcgmarketplace.com/sales-settlement'
     ini['meterLink_sales']['Meter'] = 'String'
     ini['meterLink_sales']['MeterStyle'] = 'sItemLink'
-    ini['meterLink_sales']['X'] = '(348*#Scale#)'
+    ini['meterLink_sales']['X'] = '(362*#Scale#)'
     ini['meterLink_sales']['Y'] = '(38*#Scale#)'
     ini['meterLink_sales']['W'] = '250'
     ini['meterLink_sales']['H'] = '55'
@@ -113,6 +127,8 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
     ini['meterLink_sales']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(sales_url)
     ini['meterLink_sales']['tooltiptext'] = sales_url
     #  endregion
+
+
 
     # region Set dimensions
     width_multiplier = 3
