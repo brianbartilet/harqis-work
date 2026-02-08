@@ -1,4 +1,4 @@
-<mxfile host="drawio-plugin" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" modified="2026-02-06T23:37:03.012Z" etag="tOQwqb-pLkQmg4I9_JHS" version="22.1.22" type="embed">
+<mxfile host="drawio-plugin" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" modified="2026-02-08T12:46:29.311Z" etag="odmUwUWu-XX-5-NU8z3I" version="22.1.22" type="embed">
   <diagram name="Page-1" id="mAsLLm8A2lYVM7ViB4nz">
     <mxGraphModel dx="1259" dy="668" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" background="none" math="0" shadow="0">
       <root>
@@ -217,6 +217,12 @@
         </mxCell>
         <mxCell id="7" value="Get order details" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Lucida Console;labelBackgroundColor=none;fillColor=#B2C9AB;strokeColor=#788AA3;fontColor=#46495D;" vertex="1" parent="vQR-fwfMznhzyoA6hrax-58">
           <mxGeometry x="350" y="220" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="9" value="If not in order means removed reset listingId to 0" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Lucida Console;labelBackgroundColor=none;fillColor=#B2C9AB;strokeColor=#788AA3;fontColor=#46495D;" vertex="1" parent="vQR-fwfMznhzyoA6hrax-58">
+          <mxGeometry x="510" y="220" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="10" value="If in order from producId move to sold" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Lucida Console;labelBackgroundColor=none;fillColor=#B2C9AB;strokeColor=#788AA3;fontColor=#46495D;" vertex="1" parent="vQR-fwfMznhzyoA6hrax-58">
+          <mxGeometry x="510" y="300" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="3" value="DAILY Move from bulk to main if price becomes 5USD, marked as spiking" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Lucida Console;labelBackgroundColor=none;fillColor=#B2C9AB;strokeColor=#788AA3;fontColor=#46495D;" parent="1" vertex="1">
           <mxGeometry x="60" y="1210" width="170" height="80" as="geometry" />
