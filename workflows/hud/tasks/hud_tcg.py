@@ -129,9 +129,10 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
     #  endregion
 
 
-
     # region Set dimensions
+    max_hud_lines = 16
     width_multiplier = 3
+
     ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
@@ -283,7 +284,10 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
 
     # endregion
 
-    ini['Variables']['ItemLines'] = '{0}'.format(ctr_lines + 1)
+    dump = "[SCROLL FOR MORE]\n" + dump + "\n[END]"
+
+    ini['MeterDisplay']['MeasureName'] = 'MeasureScrollableText'
+    ini['Variables']['ItemLines'] = '{0}'.format(max_hud_lines)
 
     # region generate QR and move to remote drive force overwrite
     def download_qr_codes_to_drive(to_path: str):
