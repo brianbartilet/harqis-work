@@ -7,7 +7,7 @@ from core.config.env_variables import ENV_APP_SECRETS, ENV_ENABLE_PROXY
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
-
+from google.auth.exceptions import RefreshError
 
 class GoogleApiClient():
     def __init__(
@@ -56,7 +56,16 @@ class GoogleApiClient():
         # Refresh or re-auth if needed
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
+                try:
+                    creds.refresh(Request())
+                except RefreshError:
+                    print("Rerunning auth flow...")
+                finally:
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        self.credentials,
+                        self.scopes,
+                    )
+                    creds = flow.run_local_server(port=0)
             else:
                 # The SAFE alternative — does NOT parse pytest args
                 flow = InstalledAppFlow.from_client_secrets_file(
@@ -70,3 +79,7 @@ class GoogleApiClient():
                 token.write(creds.to_json())
 
         return creds
+
+    def remove_storage(self):
+        if os.path.exists(self.storage):
+            os.remove(self.storage)
