@@ -121,8 +121,8 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
     ini['meterLink_sales']['W'] = '250'
     ini['meterLink_sales']['H'] = '55'
     ini['meterLink_sales']['Text'] = 'Balance: {0} Pending: {1}'.format(
-        f"{balance:.2f}",
-        f"{pending_balance:.2f}"
+        f"{balance}",
+        f"{pending_balance}"
     )
     ini['meterLink_sales']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(sales_url)
     ini['meterLink_sales']['tooltiptext'] = sales_url
