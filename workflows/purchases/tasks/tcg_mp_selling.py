@@ -210,6 +210,7 @@ _log_worker_generate_tcg_listings = create_logger("generate_tcg_listings.worker"
 def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 + 0.10), commission_rate = 1.05):
     """
     Worker executed in a separate process.
+    conversion_multiplier = currency estimated rate + tcg/ck pricing diff
     """
     card_name = ""
     try:
@@ -397,6 +398,7 @@ def _retry_edit_listing(api_publish, *, max_attempts=10, base_delay=1.0, max_del
 def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1 + 0.20 + 0.10), commission_rate = 1.05):
     """
     Worker executed in a separate process.
+    conversion_multiplier = currency estimated rate + tcg/ck pricing diff
     """
     card_name = ""
     try:
