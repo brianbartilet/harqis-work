@@ -60,7 +60,6 @@ class GoogleApiClient():
                     creds.refresh(Request())
                 except RefreshError:
                     print("Rerunning auth flow...")
-                finally:
                     flow = InstalledAppFlow.from_client_secrets_file(
                         self.credentials,
                         self.scopes,
