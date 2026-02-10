@@ -1,210 +1,277 @@
 import functools
+import hashlib
 import json
 import os
-import time
 import tempfile
+import time
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Optional, TypeVar
 
 from apps.desktop.config import CONFIG
 from core.utilities.data.strings import make_separator
 from core.utilities.logging.custom_logger import logger as log
 
+T = TypeVar("T")
 
-def _atomic_write_text(
-    path: Path,
-    text: str,
-    encoding: str = "utf-8",
-    prepend_if_exists: bool = False,
-) -> None:
+
+# -----------------------------
+# Configuration / Defaults
+# -----------------------------
+
+DEFAULT_ENCODING = "utf-8"
+DEFAULT_LOCK_DIRNAME = "feed-locks"          # stored under %TEMP%
+DEFAULT_LOCK_SLEEP_SECS = 0.1
+DEFAULT_STALE_LOCK_MAX_AGE_SECS = 300.0      # 5 minutes
+
+
+@dataclass(frozen=True)
+class FeedLockConfig:
     """
-    Atomically write text to `path`.
+    Lock behavior config for feed file writes.
 
-    - Default: overwrite existing file.
-    - If `prepend_if_exists=True` and file exists, new text is written
-      BEFORE the existing contents (prepend).
+    Notes:
+    - lock files live in a local temp directory to avoid Google Drive locking/sync issues.
+    - stale locks are treated as best-effort removable; PermissionError is ignored and we wait.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_timeout_secs: Optional[int] = None
+    lock_sleep_secs: float = DEFAULT_LOCK_SLEEP_SECS
+    stale_lock_max_age_secs: Optional[float] = DEFAULT_STALE_LOCK_MAX_AGE_SECS
+    lock_dir: Optional[Path] = None
 
-    if prepend_if_exists and path.exists():
-        try:
-            existing = path.read_text(encoding=encoding)
-        except UnicodeDecodeError:
-            # Fallback if encoding is weird – just best-effort decode
-            existing = path.read_bytes().decode(encoding, errors="ignore")
-        text_to_write = text + existing
-    else:
-        text_to_write = text
+
+# -----------------------------
+# Helpers
+# -----------------------------
+
+def _ensure_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def _lock_path_for(target_path: Path, *, lock_dir: Optional[Path] = None) -> Path:
+    """
+    Create a stable, filesystem-safe lock filename for the given target file path.
+
+    We intentionally store lock files in %TEMP% (or provided lock_dir) so Google Drive
+    sync won't hold/deny-delete the lock file, which is common on Windows.
+    """
+    if lock_dir is None:
+        lock_dir = Path(tempfile.gettempdir()) / DEFAULT_LOCK_DIRNAME
+    _ensure_dir(lock_dir)
+
+    key = str(target_path.resolve()).encode(DEFAULT_ENCODING, errors="ignore")
+    digest = hashlib.sha1(key).hexdigest()
+    return lock_dir / f"{digest}.lock"
+
+
+def _read_text_best_effort(path: Path, *, encoding: str) -> str:
+    """
+    Read text from file with encoding fallback.
+    """
+    try:
+        return path.read_text(encoding=encoding)
+    except UnicodeDecodeError:
+        return path.read_bytes().decode(encoding, errors="ignore")
+
+
+def _atomic_write_text(path: Path, text: str, *, encoding: str = DEFAULT_ENCODING) -> None:
+    """
+    Atomically overwrite `path` with `text`.
+
+    Uses a temp file in the same directory and then os.replace (atomic on Windows).
+    """
+    _ensure_dir(path.parent)
 
     with tempfile.NamedTemporaryFile(
-        "w",
+        mode="w",
         delete=False,
         dir=str(path.parent),
         encoding=encoding,
     ) as tmp:
-        tmp.write(text_to_write)
+        tmp.write(text)
         tmp_path = Path(tmp.name)
 
-    os.replace(tmp_path, path)  # atomic on Windows
+    os.replace(tmp_path, path)
+
+
+def _acquire_lock(lock_path: Path, cfg: FeedLockConfig, *, target_path: Path) -> None:
+    """
+    Spin until we can create the lock file exclusively.
+    Handles stale locks and Windows PermissionError gracefully.
+    """
+    start = time.time()
+
+    while True:
+        try:
+            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            try:
+                # Debug metadata can help when diagnosing "stuck" locks
+                os.write(
+                    fd,
+                    f"pid={os.getpid()} time={time.time()} target={target_path}\n".encode(
+                        DEFAULT_ENCODING, errors="ignore"
+                    ),
+                )
+            finally:
+                os.close(fd)
+            return  # acquired
+
+        except FileExistsError:
+            # Stale lock handling
+            if cfg.stale_lock_max_age_secs is not None and lock_path.exists():
+                try:
+                    age = time.time() - lock_path.stat().st_mtime
+                    if age > cfg.stale_lock_max_age_secs:
+                        try:
+                            os.remove(lock_path)
+                            continue
+                        except FileNotFoundError:
+                            continue
+                        except PermissionError:
+                            # Windows/Drive sync might hold the file briefly; do not crash.
+                            pass
+                except FileNotFoundError:
+                    continue
+
+            # Timeout handling
+            if cfg.lock_timeout_secs is not None and (time.time() - start) > cfg.lock_timeout_secs:
+                raise TimeoutError(f"Timed out waiting for lock on {target_path}")
+
+            time.sleep(cfg.lock_sleep_secs)
+
+
+def _release_lock(lock_path: Path) -> None:
+    """
+    Best-effort lock cleanup. On Windows a lock file can be temporarily undeletable.
+    """
+    try:
+        os.remove(lock_path)
+    except (FileNotFoundError, PermissionError):
+        pass
 
 
 def _prepend_with_lock(
+    *,
     path: Path,
     block_text: str,
-    encoding: str = "utf-8",
-    lock_timeout_secs: int | None = None,
-    lock_sleep_secs: float = 0.1,
-    stale_lock_max_age_secs: float | None = 300.0,  # 5 minutes default
+    encoding: str = DEFAULT_ENCODING,
+    lock_cfg: Optional[FeedLockConfig] = None,
 ) -> None:
     """
-    Prepend `block_text` to `path` in a process-safe way using a lock file.
+    Prepend `block_text` to `path` using a temp-based lock file for process safety.
 
-    - Creates `<path>.lock` as a mutual exclusion primitive.
-    - Waits (with optional timeout) if another process is writing.
-    - Optionally treats very old locks as "stale" and removes them.
-    - Uses `_atomic_write_text` to ensure the final write is atomic.
+    - Lock file stored in %TEMP% to avoid Google Drive / sync lock contention.
+    - Stale lock cleanup is best-effort; PermissionError never crashes the task.
+    - Final write uses atomic replace.
     """
-    lock_path = path.with_suffix(path.suffix + ".lock")
-    start = time.time()
+    cfg = lock_cfg or FeedLockConfig()
+    lock_path = _lock_path_for(path, lock_dir=cfg.lock_dir)
 
-    # Acquire lock (spin until available)
-    while True:
-        try:
-            # Try to create the lock file exclusively
-            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            os.close(fd)
-            break  # lock acquired
-        except FileExistsError:
-            # Check for stale lock (too old -> remove and retry)
-            if stale_lock_max_age_secs is not None and lock_path.exists():
-                try:
-                    mtime = lock_path.stat().st_mtime
-                    age = time.time() - mtime
-                    if age > stale_lock_max_age_secs:
-                        # Stale lock; remove and retry acquiring
-                        try:
-                            os.remove(lock_path)
-                            continue  # go back and try to acquire again
-                        except FileNotFoundError:
-                            # Someone else removed it; just loop again
-                            continue
-                except FileNotFoundError:
-                    # Lock disappeared between exists() and stat(); loop again
-                    continue
-
-            # Regular timeout handling
-            if lock_timeout_secs is not None and (time.time() - start) > lock_timeout_secs:
-                raise TimeoutError(f"Timed out waiting for lock on {path}")
-
-            time.sleep(lock_sleep_secs)
-
+    _acquire_lock(lock_path, cfg, target_path=path)
     try:
-        # Read existing content (if any)
-        if path.exists():
-            try:
-                existing = path.read_text(encoding=encoding)
-            except UnicodeDecodeError:
-                existing = path.read_bytes().decode(encoding, errors="ignore")
-        else:
-            existing = ""
-
-        new_text = block_text + existing
-        _atomic_write_text(path, new_text, encoding=encoding)
+        existing = _read_text_best_effort(path, encoding=encoding) if path.exists() else ""
+        _atomic_write_text(path, block_text + existing, encoding=encoding)
     finally:
-        # Best-effort lock cleanup
-        try:
-            os.remove(lock_path)
-        except FileNotFoundError:
-            pass
+        _release_lock(lock_path)
 
 
 def _safe_stringify(obj: Any) -> str:
     """
     Convert ANY Python object to a clean string representation.
     Priority:
-        1) str(obj) if safe
-        2) JSON pretty-print if serializable
-        3) repr(obj) as fallback
-    Ensures returned value is always a valid string.
+        1) string as-is
+        2) bytes -> utf-8 decode best-effort
+        3) JSON pretty-print if serializable
+        4) str(obj) fallback
+        5) repr(obj) final fallback
     """
-    # None -> ""
     if obj is None:
         return ""
 
-    # Already a string
     if isinstance(obj, str):
         return obj
 
-    # Bytes -> decode best effort
     if isinstance(obj, bytes):
         try:
-            return obj.decode("utf-8", errors="replace")
+            return obj.decode(DEFAULT_ENCODING, errors="replace")
         except Exception:
             return repr(obj)
 
-    # Try JSON (for dicts, lists, dataclasses, simple objects)
     try:
         return json.dumps(obj, indent=2, default=str)
     except Exception:
         pass
 
-    # Fallback: repr
     try:
         return str(obj)
     except Exception:
         return repr(obj)
 
 
-def feed(filename_prefix: str = "hud-logs",
-         encoding: str = "utf-8",
-         lock_timeout_secs: int | None = None):
-    """
-    Decorator: captures ANY returned value from the wrapped function,
-    converts it to a safe string, and prepends it into a per-day master file.
+# -----------------------------
+# Public decorator
+# -----------------------------
 
-    - File: <write_skin_to_feed>/RainmeterFeeds/<prefix>-YYYYMMDD.txt
+def feed(
+    filename_prefix: str = "hud-logs",
+    *,
+    encoding: str = DEFAULT_ENCODING,
+    lock_timeout_secs: int | None = None,
+    lock_sleep_secs: float = DEFAULT_LOCK_SLEEP_SECS,
+    stale_lock_max_age_secs: float | None = DEFAULT_STALE_LOCK_MAX_AGE_SECS,
+) -> Callable[[Callable[..., T]], Callable[..., str]]:
+    """
+    Decorator: capture ANY return value from wrapped func, stringify it, and prepend
+    it into a per-day feed file.
+
+    - File: <CONFIG["feed"]["path_to_feed"]>/<prefix>-YYYYMMDD.txt
     - Prepends newest data at top
-    - Uses file lock to prevent concurrency corruption
-    - Returns original returned value converted to string
+    - Uses temp-based lock to prevent concurrent corruption (safe for GDrive logs)
+    - Returns the stringified dump
     """
     try:
-        root = Path(CONFIG["feed"]["path_to_feed"]).resolve()
-        feed_dir = root
-        feed_dir.mkdir(parents=True, exist_ok=True)
+        feed_dir = Path(CONFIG["feed"]["path_to_feed"]).resolve()
+        _ensure_dir(feed_dir)
     except FileNotFoundError:
-        log.warn("The location for the feed is unavailable.  Skipping this entry.")
+        log.warn("The location for the feed is unavailable. Skipping this entry.")
 
-        return None
+        def _noop_decorator(func: Callable[..., T]) -> Callable[..., str]:
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs) -> str:
+                return _safe_stringify(func(*args, **kwargs)).rstrip()
+            return wrapper
 
-    def decorator(func):
+        return _noop_decorator
+
+    lock_cfg = FeedLockConfig(
+        lock_timeout_secs=lock_timeout_secs,
+        lock_sleep_secs=lock_sleep_secs,
+        stale_lock_max_age_secs=stale_lock_max_age_secs,
+        lock_dir=None,  # keep lock files in %TEMP% by default
+    )
+
+    def decorator(func: Callable[..., T]) -> Callable[..., str]:
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            # Call target function
+        def wrapper(*args, **kwargs) -> str:
             raw_result = func(*args, **kwargs)
-
-            # Normalize ANY return type to a clean string
             dump = _safe_stringify(raw_result).rstrip()
 
-            # Build per-day feed file
             day = datetime.now().strftime("%Y%m%d")
             feed_path = feed_dir / f"{filename_prefix}-{day}.txt"
 
-            # Build header block
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             header = f">> Start\n{timestamp} :: {func.__name__}\n"
             footer = f"\n{make_separator(48, '>')}"
             block = f"{header}{dump}\n\n{footer}\n\n"
 
-            # Prepend with locking
             _prepend_with_lock(
                 path=feed_path,
                 block_text=block,
                 encoding=encoding,
-                lock_timeout_secs=lock_timeout_secs,
+                lock_cfg=lock_cfg,
             )
 
-            # Return the stringified dump to next decorator (init_meter)
             return dump
 
         return wrapper
