@@ -75,13 +75,26 @@ def _read_text_best_effort(path: Path, *, encoding: str) -> str:
         return path.read_bytes().decode(encoding, errors="ignore")
 
 
-def _atomic_write_text(path: Path, text: str, *, encoding: str = DEFAULT_ENCODING) -> None:
+def _atomic_write_text(
+    path: Path,
+    text: str,
+    *,
+    encoding: str = DEFAULT_ENCODING,
+    prepend_if_exists: bool = False,
+) -> None:
     """
-    Atomically overwrite `path` with `text`.
+    Atomically write text to `path`.
 
-    Uses a temp file in the same directory and then os.replace (atomic on Windows).
+    - Default: overwrite existing file.
+    - If `prepend_if_exists=True` and file exists, new text is written BEFORE the existing contents.
     """
     _ensure_dir(path.parent)
+
+    if prepend_if_exists and path.exists():
+        existing = _read_text_best_effort(path, encoding=encoding)
+        text_to_write = text + existing
+    else:
+        text_to_write = text
 
     with tempfile.NamedTemporaryFile(
         mode="w",
@@ -89,7 +102,7 @@ def _atomic_write_text(path: Path, text: str, *, encoding: str = DEFAULT_ENCODIN
         dir=str(path.parent),
         encoding=encoding,
     ) as tmp:
-        tmp.write(text)
+        tmp.write(text_to_write)
         tmp_path = Path(tmp.name)
 
     os.replace(tmp_path, path)
