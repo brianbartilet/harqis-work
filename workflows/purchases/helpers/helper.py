@@ -1,7 +1,7 @@
-import os, re, time, json
+import os, re, time, ijson
 from datetime import datetime
-from typing import Optional
-
+from typing import Optional, Dict, Any
+from pathlib import Path
 from core.utilities.logging.custom_logger import logger as log
 from apps.scryfall.references.web.api.cards import ApiServiceScryfallCards
 
@@ -24,47 +24,49 @@ def get_scryfall_card_metadata(api_service__scryfall_cards: ApiServiceScryfallCa
     return scryfall_card
 
 
-def load_scryfall_bulk_data(folder_path: str) -> Optional[dict]:
+def load_scryfall_bulk_data(folder_path: str) -> Optional[Dict[str, Any]]:
     """
-    Scans a folder for files following the pattern:
+    Scans `folder_path` for files matching:
         all-cards-YYYYMMDDHHMMSS.json
-    Finds the most recent (largest timestamp) and loads it as JSON.
 
-    Args:
-        folder_path (str): Path to the directory containing the JSON dump files.
+    Loads the newest file and returns an index: { card_id: card_object }.
 
-    Returns:
-        dict | None: JSON content from the most recent file, or None if none exist.
+    Uses streaming JSON parsing (ijson) to avoid MemoryError on huge files.
     """
-
-    def build_card_index(_cards: list) -> dict:
-        return {c["id"]: c for c in _cards if "id" in c}
+    folder = Path(folder_path)
+    if not folder.exists():
+        return None
 
     timestamp_pattern = re.compile(r"all-cards-(\d{14})\.json$")
-    candidates = []
 
-    for filename in os.listdir(folder_path):
-        match = timestamp_pattern.search(filename)
-        if match:
-            timestamp_str = match.group(1)
+    candidates: list[tuple[datetime, Path]] = []
+    for p in folder.iterdir():
+        if not p.is_file():
+            continue
 
-            # Validate / parse timestamp
-            try:
-                timestamp = datetime.strptime(timestamp_str, "%Y%m%d%H%M%S")
-            except ValueError:
-                continue  # skip malformed timestamps
+        m = timestamp_pattern.search(p.name)
+        if not m:
+            continue
 
-            full_path = os.path.join(folder_path, filename)
-            candidates.append((timestamp, full_path))
+        try:
+            ts = datetime.strptime(m.group(1), "%Y%m%d%H%M%S")
+        except ValueError:
+            continue
+
+        candidates.append((ts, p))
 
     if not candidates:
-        return None  # no matching files found
+        return None
 
-    # Sort by newest timestamp
     candidates.sort(key=lambda x: x[0], reverse=True)
     latest_file = candidates[0][1]
 
-    with open(latest_file, "r", encoding="utf-8") as f:
-        raw =  json.load(f)
-        cards = build_card_index(raw)
-        return cards
+    # Stream parse JSON array: [ {...}, {...}, ... ]
+    cards: Dict[str, Any] = {}
+    with latest_file.open("rb") as f:
+        for card in ijson.items(f, "item"):
+            card_id = card.get("id")
+            if card_id:
+                cards[card_id] = card
+
+    return cards

@@ -227,8 +227,8 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
     total_cards = sum(safe_number(item["quantity"]) for item in (sorted_data_single_card_name + multiple_items_oder))
     #  endregion
 
-
     ctr_lines = 0
+    last_color = None
     dump = (("{0}\n"
             "ORDERS: {1}  CARDS: {2}  AMOUNT: {3}\n"
             "{0}\n")
@@ -240,6 +240,10 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
 
     for r in sorted_data_single_card_name:
         ctr_lines += 1
+        color = r["color_identity"]
+        if last_color is not None and color != last_color:
+            dump += make_separator(88, '-') + "\n"
+
         foil = "F" if str(r['foil']) == "1" else "N"
 
         add = " {0:<2} {1:<2} {5:<2} {6:<2} {2:<60} {3:<4} {4:>7}\n".format(
@@ -252,24 +256,39 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
             r["cmc"]
         )
         dump += add
+        last_color = color
 
     # region Process orders with multiple cards
 
     # append multiple orders
     for r in multiple_items_oder:
         ctr_lines += 1
-        add = "{0}\n ORDER ID: {1}\n{2}\n".format(
+        add = "{0}\n ORDER ID: {1}\n".format(
             make_separator(88, "="),
-            r['order_id'],
-            make_separator(88, '-')
+            r['order_id']
         )
         dump += add
+
+        for item in r["items"]:
+            color, cmc = get_scryfall_info(item["name"])
+            item["_color"] = color
+            item["_cmc"] = cmc
+
+        order_index = {c: i for i, c in enumerate(sorted_mapping)}
+
+        r["items"].sort(
+            key=lambda item: order_index.get(item["_color"], len(order_index))
+        )
 
         for item in r['items']:
             # crop long names
             name = (item["name"][:50] + '..') if len(item["name"]) > 50 else item["name"]
 
             color, cmc = get_scryfall_info(item['name'])
+
+            if last_color is not None and color != last_color:
+                dump += make_separator(88, '-') + "\n"
+
             foil = "F" if str(item['crd_foil']) == "1" else "N"
             ctr_lines += 1
             add = " {0:<2} {1:<2} {3:<2} {5:<2} {2:<60} {4:>14}\n".format(
@@ -281,6 +300,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
                 cmc
             )
             dump += add
+            last_color = color
 
     # endregion
 
