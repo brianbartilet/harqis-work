@@ -163,7 +163,6 @@ def show_hud_profiles(ini=ConfigHelperRainmeter()):
 
 
 @SPROUT.task(queue='hud')
-@log_result()
 @init_meter(RAINMETER_CONFIG,
             hud_item_name=HUD_NAME_MOUSE_BINDINGS,
             new_sections_dict=sections__utilities_i_cue,
