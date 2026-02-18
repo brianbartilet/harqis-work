@@ -71,7 +71,10 @@ WORKFLOWS_DESKTOP = {
         'kwargs': {
             "cfg_id__desktop_utils": "DESKTOP"
         },
-        "options": {"queue": "default"},
+        "options": {
+            "queue": "default",
+            "expires": 60 * 60
+        },
     },
 
 
