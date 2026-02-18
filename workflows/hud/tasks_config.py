@@ -44,7 +44,10 @@ WORKFLOWS_HUD = {
             "cfg_id__oanda":"OANDA",
             "cfg_id__calendar": "GOOGLE_APPS",
             },
-        "options": {"queue": "hud"},
+        "options": {
+            "queue": "hud",
+            "expires": 60 * 5
+        },
     },
 
     'run-job--show_tcg_orders': {
@@ -55,7 +58,10 @@ WORKFLOWS_HUD = {
             "cfg_id__scryfall": "SCRYFALL",
             "cfg_id__calendar": "GOOGLE_APPS"
         },
-        "options": {"queue": "tcg"},
+        "options": {
+            "queue": "tcg",
+            "expires": 60 * 30
+        },
     },
 
     'run-job--get_desktop_logs': {
@@ -65,7 +71,10 @@ WORKFLOWS_HUD = {
             "cfg_id__desktop": "DESKTOP",
             "cfg_id__calendar": "GOOGLE_APPS"
         },
-        "options": {"queue": "default"},
+        "options": {
+            "queue": "default",
+            "expires": 60 * 5
+        },
     },
 
     'run-job--take_screenshots_for_gpt_capture': {
@@ -74,7 +83,10 @@ WORKFLOWS_HUD = {
         'kwargs': {
             "cfg_id__desktop": "DESKTOP"
         },
-        "options": {"queue": "default"},
+        "options": {
+            "queue": "default",
+            "expires": 60 * 10
+        },
     },
     
     'run-job--show_calendar_information': {
@@ -83,13 +95,19 @@ WORKFLOWS_HUD = {
         'kwargs': {
             "cfg_id__calendar": "GOOGLE_APPS",
             "cfg_id__elevenlabs": "ELEVEN_LABS"},
-        "options": {"queue": "hud"},
+        "options": {
+            "queue": "hud",
+            "expires": 60 * 30
+        },
     },
 
     'run-job--get_failed_jobs': {
         'task': 'workflows.hud.tasks.hud_logs.get_failed_jobs',
         'schedule': crontab(minute='*/15'),
-        "options": {"queue": "hud"},
+        "options": {
+            "queue": "hud",
+            "expires": 60 * 15
+        },
     },
 
     'run-job--show_mouse_bindings': {
@@ -98,7 +116,10 @@ WORKFLOWS_HUD = {
         'kwargs': {
             "cfg_id__calendar": "GOOGLE_APPS"
         },
-        "options": {"queue": "hud"},
+        "options": {
+            "queue": "hud",
+            "expires": 60 * 1
+        },
     },
 
     'run-job--build_summary_mouse_bindings': {
@@ -107,13 +128,19 @@ WORKFLOWS_HUD = {
         'kwargs': {
             "cfg_id__desktop": "DESKTOP"
         },
-        "options": {"queue": "default"},
+        "options": {
+            "queue": "default",
+            "expires": 60 * 60
+        },
     },
 
     'run-job--show_hud_profiles': {
         'task': 'workflows.hud.tasks.hud_utils.show_hud_profiles',
         'schedule': crontab(hour='00'),
-        "options": {"queue": "hud"},
+        "options": {
+            "queue": "hud",
+            "expires": 60 * 60
+        },
     },
 
     'run-job--show_ynab_budgets_info': {
@@ -122,7 +149,10 @@ WORKFLOWS_HUD = {
         'kwargs': {
             "cfg_id__ynab": "YNAB",
             "cfg_id__calendar": "GOOGLE_APPS"},
-        "options": {"queue": "hud"}
+        "options": {
+            "queue": "hud",
+            "expires": 60 * 60
+        }
     },
 
     'run-job--show_ai_helper': {
@@ -133,7 +163,10 @@ WORKFLOWS_HUD = {
             "cfg_id__eleven": "ELEVEN_LABS",
             "cfg_id__py": "PYTHON_RUNNER"
         },
-        "options": {"queue": "hud"}
+        "options": {
+            "queue": "hud",
+            "expires": 60 * 60
+        }
     },
 
     'run-job--get_schedules': {
@@ -142,7 +175,9 @@ WORKFLOWS_HUD = {
         'kwargs': {
             "cfg_id__calendar": "GOOGLE_APPS",
         },
-        "options": {"queue": "hud"}
+        "options": {
+            "queue": "hud",
+            "expires": 60 * 60}
     },
 
 

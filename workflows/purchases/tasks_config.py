@@ -58,7 +58,10 @@ WORKFLOW_PURCHASES = {
         'kwargs': {
             "cfg_id__scryfall": "SCRYFALL"
         },
-        "options": {"queue": "tcg"},
+        "options": {
+            "queue": "tcg",
+            "expires": 60 * 60 * 24
+        },
     },
 
     'run-job--generate_audit_for_tcg_orders': {
@@ -67,7 +70,10 @@ WORKFLOW_PURCHASES = {
         'kwargs': {
             "cfg_id__tcg_mp": "TCG_MP"
         },
-        "options": {"queue": "tcg"},
+        "options": {
+            "queue": "tcg",
+            "expires": 60 * 60 * 4
+        },
     },
 
     'run-job--update_tcg_listings_prices': {
@@ -78,7 +84,10 @@ WORKFLOW_PURCHASES = {
             "cfg_id__echo_mtg": "ECHO_MTG",
             "cfg_id__echo_mtg_fe": "ECHO_MTG_FE"
         },
-        "options": {"queue": "tcg"},
+        "options": {
+            "queue": "tcg",
+            "expires": 60 * 60 * 8
+        },
     },
 
 
