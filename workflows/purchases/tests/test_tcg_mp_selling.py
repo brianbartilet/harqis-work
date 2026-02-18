@@ -42,13 +42,15 @@ def test__generate_tcg_listings_bulk():
 def test__update_tcg_listings_prices():
     update_tcg_listings_prices(cfg_id__tcg_mp="TCG_MP",
                                cfg_id__echo_mtg="ECHO_MTG",
-                               cfg_id__echo_mtg_fe="ECHO_MTG_FE"
+                               cfg_id__echo_mtg_fe="ECHO_MTG_FE",
+                               worker_count=4
                                )
 
 def test__update_tcg_listings_prices_bulk():
     update_tcg_listings_prices(cfg_id__tcg_mp="TCG_MP",
                                cfg_id__echo_mtg="ECHO_MTG_BULK",
-                               cfg_id__echo_mtg_fe="ECHO_MTG_FE_BULK"
+                               cfg_id__echo_mtg_fe="ECHO_MTG_FE_BULK",
+                               worker_count=4
                                )
 
 def test__generate_audit_for_tcg_orders():

@@ -498,7 +498,7 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1 + 
 @SPROUT.task(queue="tcg")
 @log_result()
 @feed()
-def update_tcg_listings_prices(worker_count=4, **kwargs):
+def update_tcg_listings_prices(worker_count=2, **kwargs):
     """../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
     cfg_id__tcg_mp = kwargs.get("cfg_id__tcg_mp", "TCG_MP")
     cfg_id__echo_mtg = kwargs.get("cfg_id__echo_mtg", "ECHO_MTG")
