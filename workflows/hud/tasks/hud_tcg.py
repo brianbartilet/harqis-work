@@ -330,6 +330,8 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
     if path := kwargs.get("path_to_qr", cfg__tcg_mp.app_data['save_path']):
         today_folder = datetime.now().strftime("%d-%m-%Y")
         dated_path = os.path.join(path, today_folder)
+        # Create folder if it doesn't exist
+        os.makedirs(dated_path, exist_ok=True)
         download_qr_codes_to_drive(dated_path)
 
     # endregion
