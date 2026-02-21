@@ -223,10 +223,17 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
             "cmc": cmc
         })
 
-    sorted_data_single_card_name.sort(key=lambda r: sorted_mapping.index(r["color_identity"]))
-
     total_amount = sum(safe_number(item["grand_total"]) for item in (sorted_data_single_card_name + multiple_items_oder))
     total_cards = sum(safe_number(item["quantity"]) for item in (sorted_data_single_card_name + multiple_items_oder))
+
+    sorted_data_single_card_name.sort(
+        key=lambda r: (
+            sorted_mapping.index(r["color_identity"]),
+            r["cmc"],
+            -safe_number(r["quantity"]),
+        )
+    )
+
     #  endregion
 
     ctr_lines = 0
@@ -249,8 +256,8 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
         foil = "F" if str(r['foil']) == "1" else "N"
 
         add = " {0:<2} {1:<2} {5:<2} {6:<2} {2:<60} {3:<4} {4:>7}\n".format(
-            r["quantity"],
             r["color_identity"],
+            r["quantity"],
             r["name"],
             f"{r['order_id'][4:]}",
             f"{r['grand_total']}",
@@ -294,8 +301,8 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
             foil = "F" if str(item['crd_foil']) == "1" else "N"
             ctr_lines += 1
             add = " {0:<2} {1:<2} {3:<2} {5:<2} {2:<60} {4:>14}\n".format(
-                item["quantity"],
                 color,
+                item["quantity"],
                 name,
                 foil,
                 item['price'],
