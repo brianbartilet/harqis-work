@@ -1,4 +1,6 @@
 import re
+import os
+from datetime import datetime
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
@@ -326,7 +328,9 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
             move_files_any({file_name: to_path})
 
     if path := kwargs.get("path_to_qr", cfg__tcg_mp.app_data['save_path']):
-        download_qr_codes_to_drive(path)
+        today_folder = datetime.now().strftime("%d-%m-%Y")
+        dated_path = os.path.join(path, today_folder)
+        download_qr_codes_to_drive(dated_path)
 
     # endregion
 
