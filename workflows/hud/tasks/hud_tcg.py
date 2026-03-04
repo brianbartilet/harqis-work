@@ -242,7 +242,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
             "ORDERS: {1}  CARDS: {2}  AMOUNT: {3}\n"
             "{0}\n")
             .format(make_separator(88),  len(sorted_data_single_card_name + multiple_items_oder),
-                    total_cards, total_amount))
+                    total_cards, round(total_amount, 2)))
     if len(orders[0].data) == 0:
         ctr_lines += 3
         dump += "No orders to drop.\n"
