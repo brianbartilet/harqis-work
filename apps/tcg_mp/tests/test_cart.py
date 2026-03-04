@@ -14,7 +14,7 @@ def given():
 def test_get_orders(given):
     when = given.get_account_summary()
     then = given.verify.common
-    then.assert_that(when['current_balance'], greater_than_or_equal_to(0))
+    then.assert_that(float(when['current_balance']), greater_than_or_equal_to(0))
 
 
 
