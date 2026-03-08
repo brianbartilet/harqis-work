@@ -27,4 +27,11 @@ def test_get_collection(given_account):
     then.assert_that(len(when), greater_than_or_equal_to(0))
 
 
+@pytest.mark.smoke
+def test_search_card(given_account):
+    emid = 170415
+    when = given_account.search_card(emid, tradable_only=1)
+    then = given_account.verify.common
+    then.assert_that(len(when), greater_than_or_equal_to(0))
+
 

@@ -169,6 +169,7 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
             tcg_price = "None" if scryfall_card is None else scryfall_card['prices']['usd']
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
+
         notes_dto = DtoNotesInformation(
             scryfall_gui=guid,
             tcgplayer_id=tcgplayer_id,
@@ -230,6 +231,7 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         cfg__echo_mtg_fe = CONFIG_MANAGER.get(cfg_id__echo_mtg_fe)
 
         api_notes = ApiServiceEchoMTGNotes(cfg__echo_mtg)
+        api_search = ApiServiceEchoMTGInventory(cfg__echo_mtg)
         api_cards_fe = ApiServiceEchoMTGCardItem(cfg__echo_mtg_fe)
         api_publish = ApiServiceTcgMpPublish(cfg__tcg_mp)
 
@@ -251,18 +253,41 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
 
         if json_note["tcg_mp_listing_id"] == 0:
             try:
+                # try to check if card exists in listings then update it
+                existing = api_search.search_card(card_echo["emid"], tradable_only=1)
+                if len(existing) > 0:
+                    tcg_mp_listing_id = -1
+                    for existing_card in existing:
+                        note = api_notes.get_note(existing_card["note_id"])
+                        json_note = json.loads(note["note"]["note"])
+                        if json_note["tcg_mp_listing_id"] > 0:
+                            tcg_mp_listing_id = json_note["tcg_mp_listing_id"]
+                        else:
+                            continue
+                    api_publish.edit_listing(
+                        listing_id=tcg_mp_listing_id,
+                        quantity=1,
+                        foil=card_echo["foil"],
+                        product_id=json_note["tcg_mp_card_id"],
+                    )
+                    json_note["tcg_mp_listing_id"] = tcg_mp_listing_id
+                    json_note["function"] = generate_tcg_listings.__name__
+                    created = True
+                    _log_worker_generate_tcg_listings.info(f"Updated listing for {card_name}.")
 
-                response = api_publish.add_listing(
-                    price=post_price,
-                    quantity=1,
-                    foil=card_echo["foil"],
-                    product_id=json_note["tcg_mp_card_id"],
-                )
-                tcg_mp_listing_id_create = response['insertId']
-                json_note["tcg_mp_listing_id"] = tcg_mp_listing_id_create
-                json_note["function"] = generate_tcg_listings.__name__
-                created = True
-                _log_worker_generate_tcg_listings.info(f"Created listing for {card_name}.")
+                else:
+                    response = api_publish.add_listing(
+                        price=post_price,
+                        quantity=1,
+                        foil=card_echo["foil"],
+                        product_id=json_note["tcg_mp_card_id"],
+                    )
+                    tcg_mp_listing_id_create = response['insertId']
+                    json_note["tcg_mp_listing_id"] = tcg_mp_listing_id_create
+                    json_note["function"] = generate_tcg_listings.__name__
+                    created = True
+                    _log_worker_generate_tcg_listings.info(f"Created listing for {card_name}.")
+
             except Exception:
                 _log_worker_generate_tcg_listings.exception(f"Failed to create listing for {card_name}")
                 created = False
@@ -457,6 +482,9 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1 + 
 
         try:
             time.sleep(2)
+            # update the flow to remove the previous listing then add a new one to consolidate
+            # when updated pricing is run, if there are two or more listings (w/ different pricing), it would consolidate
+            # to one and an previous listing would remain causing the duplicates
             _retry_edit_listing(
                 api_publish,
                 max_attempts=10,

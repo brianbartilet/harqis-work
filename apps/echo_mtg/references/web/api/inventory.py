@@ -35,3 +35,12 @@ class ApiServiceEchoMTGInventory(BaseApiServiceAppEchoMtg):
 
         return self.client.execute_request(self.request.build())
 
+    @deserialized(List[dict], child='results')
+    def search_card(self, emid, tradable_only=1):
+        self.request.get() \
+            .add_uri_parameter('search')\
+            .add_query_string('emid', emid)\
+            .add_query_string('tradable', tradable_only)
+
+        return self.client.execute_request(self.request.build())
+
