@@ -174,15 +174,24 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
         # try to check if card exists in listings then update it
         tcg_mp_listing_id = 0
         existing = api_service__search.search_card(card_echo["emid"], tradable_only=1)
-        if len(existing) > 0:
-            for existing_card in existing:
-                note = api_service__echo_mtg_notes.get_note(existing_card["note_id"])
-                json_note = json.loads(note["note"]["note"])
-                if json_note["tcg_mp_listing_id"] > 0:
-                    tcg_mp_listing_id = json_note["tcg_mp_listing_id"]
-                    break
-                else:
-                    continue
+        if len(existing) > 1:
+            existing_sorted = sorted(
+                existing,
+                key=lambda x: datetime.strptime(x["date_acquired"], "%Y-%m-%d %H:%M:%S")
+            )
+            for existing_card in existing_sorted[:-1]:
+                if existing_card['foil'] == card_echo['foil']:
+                    try:
+                        note = api_service__echo_mtg_notes.get_note(existing_card["note_id"])
+                        json_note = json.loads(note["note"]["note"])
+                        if json_note["tcg_mp_listing_id"] > 0:
+                            tcg_mp_listing_id = json_note["tcg_mp_listing_id"]
+                            break
+                        else:
+                            continue
+                    except TypeError:
+                        log.warn("No existing listing found for card: {0}".format(card_name))
+                        continue
 
         notes_dto = DtoNotesInformation(
             scryfall_gui=guid,
