@@ -7,7 +7,7 @@ def test__generate_tcg_mappings():
                           cfg_id__echo_mtg="ECHO_MTG",
                           cfg_id__echo_mtg_fe="ECHO_MTG_FE",
                           cfg_id__scryfall="SCRYFALL",
-                          limit=100
+                          limit=10
                           )
 
 def test__generate_tcg_mappings_force():
@@ -30,7 +30,7 @@ def test__generate_tcg_listings():
     generate_tcg_listings(cfg_id__tcg_mp="TCG_MP",
                           cfg_id__echo_mtg="ECHO_MTG",
                           cfg_id__echo_mtg_fe="ECHO_MTG_FE",
-                          #limit=100
+                          limit=10
                           )
 
 def test__generate_tcg_listings_bulk():
