@@ -52,7 +52,7 @@ WORKFLOWS_HUD = {
 
     'run-job--show_tcg_orders': {
         'task': 'workflows.hud.tasks.hud_tcg.show_tcg_orders',
-        'schedule': crontab(minute='*/30'),
+        'schedule': crontab(minute=0),
         'kwargs': {
             "cfg_id__tcg_mp": "TCG_MP",
             "cfg_id__scryfall": "SCRYFALL",
