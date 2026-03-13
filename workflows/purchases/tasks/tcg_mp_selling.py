@@ -11,10 +11,12 @@ from datetime import datetime, timezone, timedelta
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
-from core.utilities.logging.custom_logger import logger as log
+
+from core.utilities.logging.custom_logger import create_logger
+
 from core.apps.es_logging.app.elasticsearch import post, get_index_data
 from core.utilities.multiprocess import MultiProcessingClient
-from core.utilities.logging.custom_logger import create_logger
+
 
 from apps.apps_config import CONFIG_MANAGER
 from apps.desktop.helpers.feed import feed
@@ -32,13 +34,15 @@ from apps.echo_mtg.references.dto.notes_jnfo import DtoNotesInformation
 from workflows.purchases.helpers.helper import load_scryfall_bulk_data
 from workflows.purchases.helpers.mp_logging import log_mp_summary
 
+tcg_mp_log = create_logger("tcg_mp_selling")
+
 
 @SPROUT.task(queue='tcg')
 @log_result()
 def task_smoke():
     """Test function to add two numbers and return the result."""
     number = randint(1, 100) + randint(1, 100)
-    log.info("Running a test result {0}".format(number))
+    tcg_mp_log.info("Running a test result {0}".format(number))
     return number
 
 @SPROUT.task(queue='tcg')
@@ -89,32 +93,32 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
     # region multiprocess here
     for card_echo in cards_echo:
         error=""
-        log.info("Retrieve echo mtg card meta data.")
+        tcg_mp_log.info("Retrieve echo mtg card meta data.")
         try:
             card_meta = api_service__echo_mtg_cards_fe.get_card_meta(card_echo['emid'])
             card_name = card_meta['name_clean']
             card_tcg_id = card_meta['tcgplayer_id']
-            log.info("Searching for card: {0}".format(card_name))
+            tcg_mp_log.info("Searching for card: {0}".format(card_name))
             search_results = api_service__tcg_mp_products.search_card(card_name)
             match_found = False
             guid = None
             scryfall_card = None
         except Exception as e:
-            log.warn("Error getting metadata: {0}".format(e))
+            tcg_mp_log.warn("Error getting metadata: {0}".format(e))
             continue
 
         if force_generate:
-            log.warn("Try to delete existing note")
+            tcg_mp_log.warn("Try to delete existing note")
             try:
                 api_service__echo_mtg_notes.delete_note(card_echo['note_id'])
             except Exception:
-                log.exception("Error deleting existing note. Skipping...")
+                tcg_mp_log.exception("Error deleting existing note. Skipping...")
                 continue
         else:
-            log.info("Checking if notes exist and skipping if so.")
+            tcg_mp_log.info("Checking if notes exist and skipping if so.")
             notes_fetch = api_service__echo_mtg_notes.get_note(card_echo['note_id'])
             if (notes_fetch['status'] == 'error') and (notes_fetch['note'] == 'not found'):
-                log.warn("Note already exists for: {0} {1}".format(card_name, card_echo['inventory_id']))
+                tcg_mp_log.warn("Note already exists for: {0} {1}".format(card_name, card_echo['inventory_id']))
             else:
                 # try to recreate invalid ones
                 try:
@@ -125,22 +129,22 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
 
         tcg_mp_card_id = 0
         for item in search_results:
-            log.info("Attempting to extract guid on tcg mp from image url: {0}".format(card_name))
+            tcg_mp_log.info("Attempting to extract guid on tcg mp from image url: {0}".format(card_name))
             try:
-                log.info("Extracting guid on tcg mp from image url: {0}".format(card_name))
+                tcg_mp_log.info("Extracting guid on tcg mp from image url: {0}".format(card_name))
                 tcg_mp_card_id = item.id
                 url = item.image
                 pattern = r"\b([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\b"
                 match = re.search(pattern, url or "")
                 if not match:
-                    log.warning("No guid found in image url. card=%s url=%s", card_name, url)
+                    tcg_mp_log.warning("No guid found in image url. card=%s url=%s", card_name, url)
                     continue
                 guid = match.group(1)
-                log.info("Found GUID: {0} for card: {1}".format(guid, card_name))
+                tcg_mp_log.info("Found GUID: {0} for card: {1}".format(guid, card_name))
             except TypeError:
-                log.exception("No guid found for card skipping: {0}".format(card_name))
+                tcg_mp_log.exception("No guid found for card skipping: {0}".format(card_name))
 
-            log.info("Attempting to find card on scryfall: id: {0} name: {1}".format(card_tcg_id, card_name))
+            tcg_mp_log.info("Attempting to find card on scryfall: id: {0} name: {1}".format(card_tcg_id, card_name))
             try:
                 scryfall_card = cards_scryfall_bulk_data[guid]
                 scryfall_card_tcg_id = scryfall_card['tcgplayer_id']
@@ -154,14 +158,14 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
                 scryfall_card = None
 
             if not scryfall_card:
-                log.warn("Scryfall unable to get card metadata skipping {0}".format(card_name))
+                tcg_mp_log.warn("Scryfall unable to get card metadata skipping {0}".format(card_name))
                 continue
 
         if not match_found:
-            log.warn("No match found for card: {0}".format(card_name))
+            tcg_mp_log.warn("No match found for card: {0}".format(card_name))
             continue
 
-        log.info("Creating json information as note for {0}".format(card_name))
+        tcg_mp_log.info("Creating json information as note for {0}".format(card_name))
         tcg_price = 0
         tcgplayer_id = "None"
         function = generate_tcg_mappings.__name__
@@ -173,25 +177,27 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
 
         # try to check if card exists in listings then update it
         tcg_mp_listing_id = 0
-        existing = api_service__search.search_card(card_echo["emid"], tradable_only=1)
-        if len(existing) > 1:
-            existing_sorted = sorted(
-                existing,
-                key=lambda x: datetime.strptime(x["date_acquired"], "%Y-%m-%d %H:%M:%S")
-            )
-            for existing_card in existing_sorted[:-1]:
-                if existing_card['foil'] == card_echo['foil']:
-                    try:
-                        note = api_service__echo_mtg_notes.get_note(existing_card["note_id"])
-                        json_note = json.loads(note["note"]["note"])
-                        if json_note["tcg_mp_listing_id"] > 0:
-                            tcg_mp_listing_id = json_note["tcg_mp_listing_id"]
-                            break
-                        else:
+        if not force_generate:
+            existing = api_service__search.search_card(card_echo["emid"], tradable_only=1)
+            if len(existing) > 1:
+                existing_sorted = sorted(
+                    existing,
+                    key=lambda x: datetime.strptime(x["date_acquired"], "%Y-%m-%d %H:%M:%S")
+                )
+                for existing_card in existing_sorted[:-1]:
+                    if existing_card['foil'] == card_echo['foil']:
+                        try:
+                            note = api_service__echo_mtg_notes.get_note(existing_card["note_id"])
+                            json_note = json.loads(note["note"]["note"])
+                            if json_note["tcg_mp_listing_id"] > 0:
+                                tcg_mp_listing_id = json_note["tcg_mp_listing_id"]
+                                break
+                            else:
+                                continue
+                        except Exception:
+                            tcg_mp_log.warn("No existing listing found for card: {0}".format(card_name))
                             continue
-                    except TypeError:
-                        log.warn("No existing listing found for card: {0}".format(card_name))
-                        continue
+
 
         notes_dto = DtoNotesInformation(
             scryfall_gui=guid,
@@ -208,11 +214,11 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
         note_json_string = notes_dto.get_json()
 
         try:
-            log.info("Create note for card: {0}".format(card_name))
+            tcg_mp_log.info("Create note for card: {0}".format(card_name))
             api_service__echo_mtg_notes.create_note(card_echo['inventory_id'], note_json_string)
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
-            log.warn("Error creating note: {0}".format(error))
+            tcg_mp_log.warn("Error creating note: {0}".format(error))
             continue
 
     # endregion
@@ -303,7 +309,7 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         time.sleep(2)
         note_json_string = json.dumps(json_note)
 
-        log.info("Create note for card: {0}".format(card_name))
+        tcg_mp_log.info("Create note for card: {0}".format(card_name))
         api_notes.update_note(card_echo['note_id'], note_json_string)
 
         return {
@@ -336,7 +342,7 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
 
     cards_echo = api_inventory.get_collection(tradable_only=1) or []
     if not cards_echo:
-        log.info("No tradable cards found.")
+        tcg_mp_log.info("No tradable cards found.")
         return "SUCCESS"
     cards_echo = cards_echo if limit is None else cards_echo[:limit]
     cards_echo.reverse()
@@ -363,7 +369,7 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
     log_mp_summary(
         results,
         title="TCG listing generation",
-        log=log,
+        log=_log_worker_generate_tcg_listings,
     )
 
     return "SUCCESS"
@@ -537,7 +543,7 @@ def update_tcg_listings_prices(worker_count=2, **kwargs):
 
     cards_echo = api_inventory.get_collection(tradable_only=1) or []
     if not cards_echo:
-        log.info("No tradable cards found.")
+        tcg_mp_log.info("No tradable cards found.")
         return "SUCCESS"
 
     tasks = [
@@ -561,7 +567,7 @@ def update_tcg_listings_prices(worker_count=2, **kwargs):
     log_mp_summary(
         results,
         title="TCG listing price update",
-        log=log,
+        log=tcg_mp_log,
     )
 
     return "SUCCESS"

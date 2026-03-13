@@ -29,8 +29,7 @@ def test__generate_tcg_mappings_bulk():
 def test__generate_tcg_listings():
     generate_tcg_listings(cfg_id__tcg_mp="TCG_MP",
                           cfg_id__echo_mtg="ECHO_MTG",
-                          cfg_id__echo_mtg_fe="ECHO_MTG_FE",
-                          limit=10
+                          cfg_id__echo_mtg_fe="ECHO_MTG_FE"
                           )
 
 def test__generate_tcg_listings_bulk():
