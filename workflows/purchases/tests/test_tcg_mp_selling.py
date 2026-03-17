@@ -7,7 +7,7 @@ def test__generate_tcg_mappings():
                           cfg_id__echo_mtg="ECHO_MTG",
                           cfg_id__echo_mtg_fe="ECHO_MTG_FE",
                           cfg_id__scryfall="SCRYFALL",
-                          limit=10
+                          limit=20
                           )
 
 def test__generate_tcg_mappings_force():
@@ -29,7 +29,8 @@ def test__generate_tcg_mappings_bulk():
 def test__generate_tcg_listings():
     generate_tcg_listings(cfg_id__tcg_mp="TCG_MP",
                           cfg_id__echo_mtg="ECHO_MTG",
-                          cfg_id__echo_mtg_fe="ECHO_MTG_FE"
+                          cfg_id__echo_mtg_fe="ECHO_MTG_FE",
+                          limit=20
                           )
 
 def test__generate_tcg_listings_bulk():
@@ -42,7 +43,7 @@ def test__update_tcg_listings_prices():
     update_tcg_listings_prices(cfg_id__tcg_mp="TCG_MP",
                                cfg_id__echo_mtg="ECHO_MTG",
                                cfg_id__echo_mtg_fe="ECHO_MTG_FE",
-                               worker_count=4
+                               worker_count=2
                                )
 
 def test__update_tcg_listings_prices_bulk():

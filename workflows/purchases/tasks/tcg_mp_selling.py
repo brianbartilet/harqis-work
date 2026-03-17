@@ -349,7 +349,7 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
 
     api_service__tcg_mp_merchant.set_listing_status(0)
 
-    tasks = [
+    tasks_generate = [
         {
             "card_echo": card,
             "cfg_id__tcg_mp": cfg_id__tcg_mp,
@@ -360,7 +360,7 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
     ]
 
     mp_client = MultiProcessingClient(
-        tasks=tasks,
+        tasks=tasks_generate,
         worker_count=worker_count or min(4, psutil.cpu_count()),
     )
 
@@ -451,6 +451,7 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1 + 
         api_publish = ApiServiceTcgMpPublish(cfg__tcg_mp)
         api_notes = ApiServiceEchoMTGNotes(cfg__echo_mtg)
         api_cards_fe = ApiServiceEchoMTGCardItem(cfg__echo_mtg_fe)
+        api_service__search = ApiServiceEchoMTGInventory(cfg__echo_mtg)
 
         # --- original logic ---
         try:
@@ -484,6 +485,9 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1 + 
 
         json_note["tcg_mp_selling_price"] = post_price
 
+        # add logic to update, since mapping already fixed id, get all same match count then update quantity and price
+        existing = api_service__search.search_card(card_echo["emid"], tradable_only=1)
+        quantity = len(existing) if len(existing) > 1 else 1
         try:
             time.sleep(2)
             # update the flow to remove the previous listing then add a new one to consolidate
@@ -495,18 +499,10 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1 + 
                 base_delay=1.0,
                 max_delay=20.0,
                 price=post_price * commission_rate,
-                quantity=1,
+                quantity=quantity,
                 foil=card_echo["foil"],
                 listing_id=json_note["tcg_mp_listing_id"],
             )
-            """
-            api_publish.edit_listing(
-                price=post_price,
-                quantity=1,
-                foil=card_echo["foil"],
-                listing_id=json_note["tcg_mp_listing_id"],
-            )
-            """
             updated = True
         except Exception:
             _log_worker_generate_tcg_listings.exception(f"Failed to update listing for {card_name}")
@@ -530,7 +526,7 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1 + 
 @SPROUT.task(queue="tcg")
 @log_result()
 @feed()
-def update_tcg_listings_prices(worker_count=2, **kwargs):
+def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kwargs):
     """../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
     cfg_id__tcg_mp = kwargs.get("cfg_id__tcg_mp", "TCG_MP")
     cfg_id__echo_mtg = kwargs.get("cfg_id__echo_mtg", "ECHO_MTG")
@@ -546,7 +542,9 @@ def update_tcg_listings_prices(worker_count=2, **kwargs):
         tcg_mp_log.info("No tradable cards found.")
         return "SUCCESS"
 
-    tasks = [
+    cards_echo = cards_echo if limit is None else cards_echo[:limit]
+
+    tasks_update = [
         {
             "card_echo": card,
             "cfg_id__tcg_mp": cfg_id__tcg_mp,
@@ -557,7 +555,7 @@ def update_tcg_listings_prices(worker_count=2, **kwargs):
     ]
 
     mp_client = MultiProcessingClient(
-        tasks=tasks,
+        tasks=tasks_update,
         worker_count=worker_count or min(4, psutil.cpu_count()),
     )
 
