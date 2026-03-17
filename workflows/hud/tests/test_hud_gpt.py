@@ -2,7 +2,7 @@ from workflows.hud.tasks.hud_gpt import get_desktop_logs, take_screenshots_for_g
 
 
 def test__get_desktop_logs():
-    get_desktop_logs("DESKTOP", cfg_id__calendar="GOOGLE_APPS")
+    get_desktop_logs(cfg_id__desktop="DESKTOP", cfg_id__calendar="GOOGLE_APPS")
 
 def test__take_screenshots_for_gpt_capture():
     take_screenshots_for_gpt_capture(cfg_id__desktop="DESKTOP")

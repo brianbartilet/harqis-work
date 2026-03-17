@@ -73,7 +73,7 @@ WORKFLOWS_HUD = {
         },
         "options": {
             "queue": "default",
-            "expires": 60 * 5
+            "expires": 60 * 60
         },
     },
 
