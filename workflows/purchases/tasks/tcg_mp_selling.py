@@ -338,9 +338,6 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
     cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
     api_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
 
-    cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
-    api_service__tcg_mp_merchant = ApiServiceTcgMpMerchant(cfg__tcg_mp)
-
     cards_echo = api_inventory.get_collection(tradable_only=1) or []
     if not cards_echo:
         tcg_mp_log.info("No tradable cards found.")
@@ -412,7 +409,7 @@ def _retry_edit_listing(api_publish, *, max_attempts=10, base_delay=1.0, max_del
             return r
         except (requests.exceptions.ConnectTimeout,
                 requests.exceptions.ReadTimeout,
-                requests.exceptions.ConnectionError) as e:
+                requests.exceptions.ConnectionError):
 
             # exponential backoff + jitter
             delay = min(max_delay, base_delay * (2 ** (attempt - 1)))
@@ -443,7 +440,6 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1 + 
         from apps.echo_mtg.references.web.api.notes import ApiServiceEchoMTGNotes
         from apps.echo_mtg.references.web.api.item import ApiServiceEchoMTGCardItem
         from apps.tcg_mp.references.web.api.publish import ApiServiceTcgMpPublish
-        from apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
 
         cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
         cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)

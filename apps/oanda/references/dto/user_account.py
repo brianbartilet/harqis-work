@@ -1,7 +1,5 @@
 from dataclasses import dataclass
 from typing import Optional, List
-from dataclasses import dataclass, fields
-from typing import Optional, List, Any, Dict
 
 @dataclass
 class DtoAccountProperties:
