@@ -26,6 +26,7 @@ from apps.tcg_mp.config import APP_NAME as APP_NAME_TCG_MP
 from apps.apps_config import CONFIG_MANAGER
 
 from workflows.purchases.helpers.helper import load_scryfall_bulk_data
+from workflows.purchases.helpers.constants import image_guid_pattern
 from workflows.hud.tasks.sections import sections__tcg_mp_sections
 
 
@@ -40,8 +41,8 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 
     # region Fetch and filter data
-    cfg_id__tcg_mp = kwargs.get('cfg_id__tcg_mp', APP_NAME_SCRYFALL)
-    cfg_id__scryfall = kwargs.get('cfg_id__scryfall', APP_NAME_TCG_MP)
+    cfg_id__tcg_mp = kwargs.get('cfg_id__tcg_mp', APP_NAME_TCG_MP)
+    cfg_id__scryfall = kwargs.get('cfg_id__scryfall', APP_NAME_SCRYFALL)
 
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
     cfg__scryfall = CONFIG_MANAGER.get(cfg_id__scryfall)
@@ -166,8 +167,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
         _card = search[0]
         log.info("Extracting guid on tcg mp from image url: {0}".format(_card))
         url = _card.image
-        pattern = r"\b([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\b"
-        match = re.search(pattern, url)
+        match = re.search(image_guid_pattern, url)
         guid = match.group(1)
 
         try:

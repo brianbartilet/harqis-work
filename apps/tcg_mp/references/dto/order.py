@@ -27,9 +27,9 @@ class DtoOrderSummaryByStatus:
     status: Optional[int] = None
 
 class EnumTcgOrderStatus(Enum):
-    ALL=(-2, ""),
+    ALL=(-2, "")
     PENDING_DROP_OFF =      (1,  "Pending Drop Off")
-    SHIPPED =               (2,  "Pending Drop Off")
+    SHIPPED =               (2,  "Shipped")
     COMPLETED =             (3,  "Completed")
     CANCELLED =             (4,  "Cancelled")
     NOT_RECEIVED =          (5,  "Not Received")

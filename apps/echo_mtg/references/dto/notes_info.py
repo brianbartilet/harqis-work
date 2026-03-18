@@ -4,7 +4,7 @@ from core.web.services.core.json import  JsonObject
 
 @dataclass
 class DtoNotesInformation(JsonObject):
-    scryfall_gui: str
+    scryfall_guid: str
     tcgplayer_id: int = 0
     tcg_mp_card_id: int = 0
     tcg_mp_listing_id: int = 0

@@ -247,7 +247,7 @@ def feed(
         feed_dir = Path(CONFIG["feed"]["path_to_feed"]).resolve()
         _ensure_dir(feed_dir)
     except FileNotFoundError:
-        log.warn("The location for the feed is unavailable. Skipping this entry.")
+        log.warning("The location for the feed is unavailable. Skipping this entry.")
 
         def _noop_decorator(func: Callable[..., T]) -> Callable[..., str]:
             @functools.wraps(func)

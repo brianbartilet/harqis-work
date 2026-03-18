@@ -8,6 +8,8 @@ from apps.desktop.helpers.feed import feed
 
 from apps.ynab.references.web.api.budgets import ApiServiceYNABBudgets
 from apps.ynab.config import APP_NAME as APP_NAME_YNAB
+from apps.ynab.references.constants import YNAB_MILLIUNITS
+
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
@@ -42,9 +44,9 @@ def show_ynab_budgets_info(ini=ConfigHelperRainmeter(), **kwargs):
     for category_group in category_groups['category_groups']:
         for category in category_group['categories']:
             category_name = category['name']
-            budgeted = category['budgeted'] / 1000
-            budgeted_warning = budgeted * budget_percent_warning / 1000
-            balance = category['balance'] / 1000
+            budgeted = category['budgeted'] / YNAB_MILLIUNITS
+            budgeted_warning = budgeted * budget_percent_warning
+            balance = category['balance'] / YNAB_MILLIUNITS
             if balance <= budgeted_warning and budgeted > 0:
                 categories_fetched.append((category_name, budgeted_warning, budgeted, balance))
 
