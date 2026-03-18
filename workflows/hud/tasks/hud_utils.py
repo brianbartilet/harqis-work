@@ -79,7 +79,7 @@ def show_hud_profiles(ini=ConfigHelperRainmeter()):
     # region Build profiles home
     profile_base = "home"
     ini['meterLink']['Text'] = "SAVE"
-    ini['meterLink']['LeftMouseUpAction'] = '!Manage Layouts'.format(profile_base)
+    ini['meterLink']['LeftMouseUpAction'] = '!Manage Layouts "{0}"'.format(profile_base)
     ini['meterLink']['tooltiptext'] = "Save layout changes for {0}".format(profile_base)
 
     ini['meterLink_home']['Meter'] = 'String'
@@ -100,7 +100,7 @@ def show_hud_profiles(ini=ConfigHelperRainmeter()):
     # region Build profiles office
     profile_office = "office"
     ini['meterLink_office_save']['Text'] = "SAVE"
-    ini['meterLink_office_save']['LeftMouseUpAction'] = '!Manage Layouts'.format(profile_office)
+    ini['meterLink_office_save']['LeftMouseUpAction'] = '!Manage Layouts "{0}"'.format(profile_office)
     ini['meterLink_office_save']['tooltiptext'] = "Save layout changes for {0}".format(profile_office)
     ini['meterLink_office_save']['Meter'] = 'String'
     ini['meterLink_office_save']['MeterStyle'] = 'sItemLink'
@@ -128,7 +128,7 @@ def show_hud_profiles(ini=ConfigHelperRainmeter()):
     # region Build profiles custom
     profile_custom = "custom"
     ini['meterLink_custom_save']['Text'] = "SAVE"
-    ini['meterLink_custom_save']['LeftMouseUpAction'] = '!Manage Layouts'.format(profile_custom)
+    ini['meterLink_custom_save']['LeftMouseUpAction'] = '!Manage Layouts "{0}"'.format(profile_custom)
     ini['meterLink_custom_save']['tooltiptext'] = "Save layout changes for {0}".format(profile_custom)
     ini['meterLink_custom_save']['Meter'] = 'String'
     ini['meterLink_custom_save']['MeterStyle'] = 'sItemLink'
@@ -174,7 +174,7 @@ def show_mouse_bindings(ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 
     # region Set HUD elements
-    path = 'C:\Program Files\Corsair\Corsair iCUE5 Software\iCUE.exe'
+    path = r'C:\Program Files\Corsair\Corsair iCUE5 Software\iCUE.exe'
     ini['meterLink']['Text'] = "ICUE"
     ini['meterLink']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(path)
     ini['meterLink']['tooltiptext'] = path
