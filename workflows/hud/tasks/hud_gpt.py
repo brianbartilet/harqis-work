@@ -35,13 +35,14 @@ def get_desktop_logs(timedelta_previous_hours = 1, ini=ConfigHelperRainmeter(), 
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 
     # region Assistant Chat Setup Functions
-    no_connection = False
+
     try:
         assistant_chat = BaseAssistant()
         assistant_chat.load(assistant_id=assistant_chat.config.app_data['assistant_id_desktop'])
     except Exception as e:
         log.error("Failed to initialize OpenAI client")
-        no_connection = True
+        raise e
+
 
     cfg_id__desktop = kwargs.get("cfg_id__desktop", APP_NAME_DESKTOP)
     cfg__desktop = CONFIG_MANAGER.get(cfg_id__desktop)
@@ -232,11 +233,8 @@ def get_desktop_logs(timedelta_previous_hours = 1, ini=ConfigHelperRainmeter(), 
     # endregion
 
     # region Dump data
-    log_file = None
-    try:
-        log_file = collect_files(timedelta_previous_hours)
-    except Exception:
-        no_connection = True
+
+    log_file = collect_files(timedelta_previous_hours)
 
     file = os.path.join(cfg__desktop['capture']['actions_log_path'],
         f'{log_file}'
@@ -254,13 +252,10 @@ def get_desktop_logs(timedelta_previous_hours = 1, ini=ConfigHelperRainmeter(), 
     dump = ""
     dump += "\n\n{0}\n[START] {1}\n".format(make_separator(64), first_ts)
 
-    answer_ = []
-    try:
-        answer_ = ask_check_desktop()
-    except Exception:
-        no_connection = True
+    answer_ = ask_check_desktop()
 
-    if no_connection or len(answer_) == 0:
+
+    if len(answer_) == 0:
         dump += "\nCannot process logs. No connection or no data collected.\n\n"
 
     dump += wrap_text(answer_, width=65, indent="\n")
