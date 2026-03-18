@@ -129,7 +129,7 @@ def init_meter(
                         if ScheduleCategory.PINNED in schedule_categories:
                             log.info("ScheduleCategory.PINNED found; keeping HUD active.")
                         elif ScheduleCategory.DEACTIVATED in schedule_categories:
-                            log.warn("schedule is DEACTIVATED; HUD is hiddem.")
+                            log.warning("schedule is DEACTIVATED; HUD is hidden.")
                             _deactivate_config(skin_name, hud_dirname)
                             return {"updated": changed, "ini_path": str(ini_path), "notes_path": note_path}
                         else:
@@ -141,13 +141,13 @@ def init_meter(
                             if matches:
                                 pass
                             else:
-                                log.warn("No matching schedule categories found; deactivating HUD until next check.")
+                                log.warning("No matching schedule categories found; deactivating HUD until next check.")
                                 _deactivate_config(skin_name, hud_dirname)
                                 return {"updated": changed, "ini_path": str(ini_path), "notes_path": note_path}
-                    except Exception:
-                        log.error("Token might be expired.  Rerun auth flow.")
                     except ConnectionError:
                         log.error("Calendar service is not working as expected.  Please check settings.")
+                    except Exception as e:
+                        log.error("Token might be expired.  Rerun auth flow. {0}".format(e))
 
                 # 11) Optional beep
                 if changed and play_sound:

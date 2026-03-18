@@ -96,3 +96,53 @@ Auto-generated JSON-like files that expose Celery tasks and shell commands to n8
 **Tests** use pytest fixtures returning service/page instances, with PyHamcrest assertions (`assert_that`, `equal_to`, etc.).
 
 **New app template**: Copy `workflows/.template/` for a new workflow, or follow the existing `apps/` structure for a new app integration.
+
+## App Inventory
+
+| App | Integration | Type |
+|-----|-------------|------|
+| `aaa` | Philippine stock exchange (PSEI) | Selenium |
+| `desktop` | Windows desktop automation | Local |
+| `echo_mtg` | MTG collection management | REST API |
+| `elastic` | Elasticsearch logging | REST API |
+| `google_apps` | Calendar, Sheets, Keep | REST API |
+| `investagrams` | Philippine stock analytics | Scraping |
+| `moo` | Stub — work in progress | — |
+| `oanda` | Forex trading | REST API |
+| `open_ai` | OpenAI GPT | REST API |
+| `own_tracks` | GPS tracking (Docker only, no Python API) | MQTT |
+| `rainmeter` | Windows desktop HUD skinning | Local |
+| `scryfall` | MTG card database | REST API |
+| `tcg_mp` | TCG Marketplace (most complex app) | REST API |
+| `trello` | Kanban — references only, no impl | REST API |
+| `ynab` | Personal budgeting | REST API |
+
+## Workflow Inventory
+
+Active Celery Beat schedules: `hud`, `purchases`, `desktop` (merged in `workflows/config.py`).
+
+| Workflow | Status | Description |
+|----------|--------|-------------|
+| `hud` | Active | 12 tasks: calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins |
+| `purchases` | Active | MTG card resale pipeline: Scryfall bulk download → card matching → listings → pricing → audit |
+| `desktop` | Active | Git pulls, window management, file sync, activity capture |
+| `mobile` | Active | Android screen capture |
+| `diary` | Dead | Defined but never merged into `workflows/config.py` |
+| `finance` | Stub | No tasks defined |
+| `n8n` | Utilities | Shell utilities only, no Celery tasks |
+
+## Test Coverage Notes
+
+All tests are **live integration tests** — no mocking. Requires valid `.env/apps.env` and `apps_config.yaml` credentials to run.
+
+- `aaa` tests use `unittest.TestCase` (not pytest-style), placed in `unit_tests.py` per the alternate `pytest.ini` pattern.
+- Apps with zero tests: `desktop`, `elastic`, `investagrams`, `moo`, `open_ai`, `own_tracks`, `trello`.
+- Workflow tests are excluded from default `pytest` run — must be run explicitly.
+
+## Known Issues
+
+- `logger.warn()` (deprecated) used in `tcg_mp_selling.py` — should be `logger.warning()`
+- `generate_tcg_mappings` task is commented out in `purchases/tasks_config.py` — must be triggered manually or via n8n
+- Worker functions in `tcg_mp_selling.py` re-import all dependencies inside the function body — required for `multiprocessing` on Windows (no `fork`)
+- `own_tracks` has no Python integration code — it's a Docker Compose runtime dependency only
+- `moo` app is a hollow stub with no services or tests

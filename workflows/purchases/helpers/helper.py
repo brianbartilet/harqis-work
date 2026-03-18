@@ -16,10 +16,10 @@ def get_scryfall_card_metadata(api_service__scryfall_cards: ApiServiceScryfallCa
         except Exception:
             scryfall_card = None
             if attempt == scryfall_max_retries:
-                log.warn("Stopped after {0} attempts for {1}".format(scryfall_max_retries, card_name))
+                log.warning("Stopped after {0} attempts for {1}".format(scryfall_max_retries, card_name))
             time.sleep(10)
 
-            log.warn("Retrying attempt {0}".format(attempt))
+            log.warning("Retrying attempt {0}".format(attempt))
 
     return scryfall_card
 

@@ -1,4 +1,5 @@
 .idea
+.claude
 *config.yaml
 .env/*
 !.env/.gitkeep
