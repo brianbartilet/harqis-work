@@ -39,7 +39,8 @@ def get_desktop_logs(timedelta_previous_hours = 1, ini=ConfigHelperRainmeter(), 
     try:
         assistant_chat = BaseAssistant()
         assistant_chat.load(assistant_id=assistant_chat.config.app_data['assistant_id_desktop'])
-    except Exception:
+    except Exception as e:
+        log.error("Failed to initialize OpenAI client")
         no_connection = True
 
     cfg_id__desktop = kwargs.get("cfg_id__desktop", APP_NAME_DESKTOP)
