@@ -262,7 +262,7 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
         first_ts, last_ts = ts_now, ts_last_hour
 
     dump = ""
-    dump += "\n\n{0}\n[START] {1}\n".format(make_separator(64), first_ts if first_ts is None else "")
+    dump += "\n\n{0}\n[START] {1}\n".format(make_separator(64), first_ts if first_ts is not None else "")
 
     answer_ = ask_check_desktop()
 
@@ -270,7 +270,7 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
         dump += "\nCannot process logs. No connection or no data collected.\n\n"
 
     dump += wrap_text(answer_, width=65, indent="\n")
-    dump += "\n\n[END]   {0}\n\n\n".format(last_ts if last_ts is None else "")
+    dump += "\n\n[END]   {0}\n\n\n".format(last_ts if last_ts is not None else "")
     # endregion
 
     ini['Variables']['ItemLines'] = '{0}'.format(7)
