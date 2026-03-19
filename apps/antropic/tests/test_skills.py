@@ -27,7 +27,11 @@ def test_list_skills_returns_list(given_service):
 
 @pytest.mark.sanity
 def test_create_skill_returns_dto(given_service):
-    result = given_service.create_skill(display_title="harqis-test-skill")
+    result = given_service.create_skill(
+        name='harqis-test-skill',
+        display_title='Harqis Test Skill',
+        description='Integration test skill for harqis-work.',
+    )
 
     assert_that(result, instance_of(DtoAnthropicSkill))
     assert_that(result.id, not_none())
