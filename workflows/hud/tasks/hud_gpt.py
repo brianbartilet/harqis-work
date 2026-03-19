@@ -5,9 +5,10 @@ from datetime import datetime, timedelta
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
 
-from core.apps.gpt.assistants.base import BaseAssistant
-from core.apps.gpt.models.assistants.message import MessageCreate
-from core.apps.gpt.models.assistants.run import RunCreate
+from apps.open_ai.references.assistants.base import BaseAssistant
+from apps.open_ai.references.models.assistants.message import MessageCreate
+from apps.open_ai.references.models.assistants.run import RunCreate
+
 from core.utilities.logging.custom_logger import logger as log
 from core.utilities.files import zip_folder, copy_files_to_folder, get_all_files
 from core.utilities.resources.decorators import get_decorator_attrs
