@@ -1,13 +1,10 @@
+import base64
 import os
 import re
 from datetime import datetime, timedelta
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
-
-from apps.open_ai.references.assistants.base import BaseAssistant
-from apps.open_ai.references.models.assistants.message import MessageCreate
-from apps.open_ai.references.models.assistants.run import RunCreate
 
 from core.utilities.logging.custom_logger import logger as log
 from core.utilities.files import zip_folder, copy_files_to_folder, get_all_files
@@ -23,7 +20,53 @@ from apps.desktop.config import APP_NAME as APP_NAME_DESKTOP
 from apps.google_apps.references.constants import ScheduleCategory
 from apps.apps_config import CONFIG_MANAGER
 
+from apps.antropic.config import CONFIG as ANTHROPIC_CONFIG
+from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
+
 from workflows.hud.tasks.sections import sections__check_desktop, sections__check_world_checks
+
+_DESKTOP_ANALYSIS_PROMPT = """
+You are an analysis assistant. Analyze ONLY the contents of the provided activity log and screenshots.
+Data handling:
+Read every line of the activity log.
+Treat the activity log as the authoritative source of truth.
+Use screenshots only to confirm or enrich log data with visible UI context; if text is unreadable, say it is unreadable.
+
+Allowed reasoning:
+Extract facts explicitly present in the logs and screenshots.
+You may label an "AFK/idle" period only when the log shows a clear event gap.
+You may use the user's timezone only to contextualize timestamps that already exist in the data.
+Do NOT infer what happened during gaps.
+
+You may NOT:
+Invent applications, actions, windows, text, or timestamps.
+Guess file names or metadata that are not present.
+Fill gaps with imagined activity.
+Attribute motivation, intent, or emotion.
+
+Required analysis (evidence only):
+Reconstruct desktop behavior: focus changes, clipboard events, OCR text (only if readable), opened apps, window titles, and interaction sequences.
+Identify likely tasks only when strongly supported by the artifacts; otherwise state "cannot be determined".
+Detect and describe idle/AFK periods from event gaps.
+Do not conclude "offline/out for the day/asleep" unless direct evidence exists; otherwise state "cannot be determined".
+Provide optional productivity improvement suggestions only if directly supported by observed patterns; otherwise omit.
+
+Output requirements:
+No headers, bullet points, titles, lists, or markdown formatting.
+Continuous paragraphs, each reflecting a meaningful activity cluster.
+Use timestamps sparingly and only when needed for transitions or inactivity.
+No introductions, disclaimers, conclusions, or process narration.
+Single uninterrupted output.
+Do not ask questions.
+
+Accuracy enforcement:
+If something cannot be confirmed from the data, explicitly say it cannot be determined.
+Prefer omission over invention.
+All statements must be traceable to evidence in the provided log and screenshots.
+"""
+
+_MAX_SCREENSHOTS = 5
+_CLAUDE_URL = 'https://claude.ai/'
 
 
 @SPROUT.task(queue='hud')
@@ -31,22 +74,21 @@ from workflows.hud.tasks.sections import sections__check_desktop, sections__chec
 @init_meter(RAINMETER_CONFIG, hud_item_name='DESKTOP LOGS', new_sections_dict=sections__check_desktop,
             play_sound=True, schedule_categories=[ScheduleCategory.PINNED, ], prepend_if_exists=True)
 @feed()
-def get_desktop_logs(timedelta_previous_hours = 1, ini=ConfigHelperRainmeter(), **kwargs):
+def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **kwargs):
 
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 
-    # region Assistant Chat Setup Functions
-
     try:
-        assistant_chat = BaseAssistant()
-        assistant_chat.load(assistant_id=assistant_chat.config.app_data['assistant_id_desktop'])
+        anthropic = BaseApiServiceAnthropic(ANTHROPIC_CONFIG)
     except Exception as e:
-        log.error("Failed to initialize OpenAI client")
+        log.error("Failed to initialize Anthropic client")
         raise e
-
 
     cfg_id__desktop = kwargs.get("cfg_id__desktop", APP_NAME_DESKTOP)
     cfg__desktop = CONFIG_MANAGER.get(cfg_id__desktop)
+
+    # Shared state between collect_files and ask_check_desktop
+    _collected = {'log_path': None, 'screenshots': []}
 
     def extract_first_last_timestamp(file_path: str):
         timestamp_re = re.compile(r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})]")
@@ -75,25 +117,18 @@ def get_desktop_logs(timedelta_previous_hours = 1, ini=ConfigHelperRainmeter(), 
 
         return first, last
 
-    def collect_files(timedelta_hours = 1):
-        """
-        :param timedelta_hours: hours behind to check
-        :return:
-        """
+    def collect_files(timedelta_hours=1):
         capture_path = cfg__desktop['capture']['actions_log_path']
         archive_path = cfg__desktop['capture']['archive_path']
+        sc_path = cfg__desktop['capture']['screenshots_path']
 
-        # generate, gather and archive screenshots, there should be a separate task taking desktop at an interval
         last_hour = datetime.now() - timedelta(hours=timedelta_hours)
-        path = cfg__desktop['capture']['screenshots_path']
         ts_last_hour = last_hour.strftime("%Y-%m-%d-%H")
-        files_last_hour = get_all_files(path, ts_last_hour)
+        files_last_hour = get_all_files(sc_path, ts_last_hour)
         folder_to_zip = f'sc-archive-{ts_last_hour}'
         zip_file_name = f'sc-archive-{ts_last_hour}.zip'
         copy_files_to_folder(archive_path, folder_name=folder_to_zip, file_names_list=files_last_hour)
 
-        # find actions file and move to archive folder
-        # Format using the actual date of that hour
         ts = last_hour.strftime("%Y%m%d_%H")
         actions_file = f"actions-{ts}.log"
         move_action_file_path = os.path.join(capture_path, actions_file)
@@ -102,91 +137,71 @@ def get_desktop_logs(timedelta_previous_hours = 1, ini=ConfigHelperRainmeter(), 
         zip_file = os.path.join(archive_path, zip_file_name)
         zip_folder(os.path.join(archive_path, folder_to_zip), zip_file)
 
-        assistant_chat.upload_files(archive_path, [f'{zip_file_name}', ])
+        _collected['log_path'] = move_action_file_path
+        _collected['screenshots'] = files_last_hour
 
         return move_action_file_path
 
     def ask_check_desktop():
-        messages = [
-            MessageCreate(role='user',
-                          content=
-                          """
-                          You are an analysis assistant. Analyze ONLY the contents of the provided ZIP file.
-                          Data handling:
-                          Unpack and read every file in the ZIP.
-                          Treat the activity log as the authoritative source of truth.
-                          Use screenshots only to confirm or enrich log data with visible UI context; if text is unreadable, say it is unreadable.
-                          
-                          Allowed reasoning:
-                          Extract facts explicitly present in the logs and screenshots.
-                          You may label an “AFK/idle” period only when the log shows a clear event gap.
-                          You may use the user’s timezone only to contextualize timestamps that already exist in the ZIP.
-                          Do NOT infer what happened during gaps.
-                          
-                          You may NOT:
-                          Invent applications, actions, windows, text, or timestamps.
-                          Guess file names or metadata that are not present.
-                          Fill gaps with imagined activity.
-                          Attribute motivation, intent, or emotion.
-                          
-                          Required analysis (evidence only):
-                          Reconstruct desktop behavior: focus changes, clipboard events, OCR text (only if readable), opened apps, window titles, and interaction sequences.
-                          Identify likely tasks only when strongly supported by the artifacts; otherwise state “cannot be determined”.
-                          Detect and describe idle/AFK periods from event gaps.
-                          Do not conclude “offline/out for the day/asleep” unless the ZIP includes direct evidence; otherwise state “cannot be determined”.
-                          Provide optional productivity improvement suggestions only if directly supported by observed patterns; otherwise omit.
-                          
-                          Output requirements:
-                          No headers, bullet points, titles, lists, or markdown formatting.
-                          Continuous paragraphs, each reflecting a meaningful activity cluster.
-                          Use timestamps sparingly and only when needed for transitions or inactivity.
-                          No introductions, disclaimers, conclusions, or process narration.
-                          Single uninterrupted output.
-                          Do not ask questions.
-                          
-                          Accuracy enforcement:
-                          If something cannot be confirmed from the ZIP, explicitly say it cannot be determined.
-                          Prefer omission over invention.
-                          All statements must be traceable to evidence inside the ZIP.
-                          """
-                          )
-        ]
+        log_path = _collected['log_path']
+        screenshot_files = _collected['screenshots']
+        sc_base = cfg__desktop['capture']['screenshots_path']
 
-        assistant_chat.add_messages_to_thread(messages)
-        trigger = RunCreate(
-            assistant_id=assistant_chat.properties.id,
-            tools = [{"type": "code_interpreter"}],
-            tool_resources={ "code_interpreter": { "file_ids": assistant_chat.attachments }}
-        )
-        assistant_chat.run_thread(run=trigger)
-        assistant_chat.wait_for_runs_to_complete(wait_secs=30, retries=20)
-        replies = assistant_chat.get_replies()
-        answer = []
-        for x in replies:
-            try:
-                answer.append(x.content[0].text.value)
-            except (AttributeError, IndexError, KeyError):
-                last_hour = datetime.now() - timedelta(hours=1)
-                ts_last_hour = last_hour.strftime("%Y-%m-%d-%H")
-                answer.append(f'AFK {ts_last_hour}\n\n')
+        content = []
+
+        # Embed action log as text
+        if log_path and os.path.exists(log_path):
+            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                log_content = f.read()
+            content.append({"type": "text", "text": f"Activity Log:\n```\n{log_content}\n```"})
+
+        # Attach the most recent screenshots as inline base64 images
+        recent_screenshots = sorted(screenshot_files)[-_MAX_SCREENSHOTS:]
+        for sc_name in recent_screenshots:
+            sc_full = sc_name if os.path.isabs(sc_name) else os.path.join(sc_base, sc_name)
+            if not os.path.exists(sc_full):
                 continue
-        answer.sort(reverse=True)
+            try:
+                with open(sc_full, 'rb') as f:
+                    img_b64 = base64.b64encode(f.read()).decode()
+                ext = os.path.splitext(sc_full)[1].lower()
+                media_type = 'image/png' if ext == '.png' else 'image/jpeg'
+                content.append({
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": media_type, "data": img_b64},
+                })
+            except Exception as sc_err:
+                log.warning(f"Skipping screenshot {sc_full}: {sc_err}")
+                continue
 
-        return answer
+        content.append({"type": "text", "text": _DESKTOP_ANALYSIS_PROMPT})
 
-    # endregion
+        if not content:
+            last_hour = datetime.now() - timedelta(hours=1)
+            return [f'AFK {last_hour.strftime("%Y-%m-%d-%H")}\n\n']
+
+        try:
+            response = anthropic.base_client.messages.create(
+                model=anthropic.model,
+                max_tokens=8192,
+                messages=[{"role": "user", "content": content}],
+            )
+            return [response.content[0].text]
+        except Exception as e:
+            log.error(f"Anthropic desktop analysis failed: {e}")
+            last_hour = datetime.now() - timedelta(hours=1)
+            return [f'AFK {last_hour.strftime("%Y-%m-%d-%H")}\n\n']
 
     # region Set links
-    chat_url = 'https://chatgpt.com/'
-    ini['meterLink']['text'] = "CHEATGPT"
-    ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(chat_url)
-    ini['meterLink']['tooltiptext'] = chat_url
-    ini['meterLink']['W'] = '100'
+    ini['meterLink']['text'] = "CLAUDE"
+    ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(_CLAUDE_URL)
+    ini['meterLink']['tooltiptext'] = _CLAUDE_URL
+    ini['meterLink']['W'] = '80'
 
     github_work_url = 'https://github.com/brianbartilet/harqis-work'
     ini['meterLink_github']['Meter'] = 'String'
     ini['meterLink_github']['MeterStyle'] = 'sItemLink'
-    ini['meterLink_github']['X'] = '(58*#Scale#)'
+    ini['meterLink_github']['X'] = '(46*#Scale#)'
     ini['meterLink_github']['Y'] = '(38*#Scale#)'
     ini['meterLink_github']['W'] = '80'
     ini['meterLink_github']['H'] = '55'
@@ -202,14 +217,13 @@ def get_desktop_logs(timedelta_previous_hours = 1, ini=ConfigHelperRainmeter(), 
                                           ))
     ini['meterLink_dump']['Meter'] = 'String'
     ini['meterLink_dump']['MeterStyle'] = 'sItemLink'
-    ini['meterLink_dump']['X'] = '(100*#Scale#)'
+    ini['meterLink_dump']['X'] = '(86*#Scale#)'
     ini['meterLink_dump']['Y'] = '(38*#Scale#)'
     ini['meterLink_dump']['W'] = '80'
     ini['meterLink_dump']['H'] = '55'
     ini['meterLink_dump']['Text'] = '|DUMP'
     ini['meterLink_dump']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(dump_path)
     ini['meterLink_dump']['tooltiptext'] = dump_path
-
     # endregion
 
     # region Set dimensions
@@ -234,12 +248,9 @@ def get_desktop_logs(timedelta_previous_hours = 1, ini=ConfigHelperRainmeter(), 
     # endregion
 
     # region Dump data
-
     log_file = collect_files(timedelta_previous_hours)
 
-    file = os.path.join(cfg__desktop['capture']['actions_log_path'],
-        f'{log_file}'
-                        )
+    file = os.path.join(cfg__desktop['capture']['actions_log_path'], f'{log_file}')
 
     if log_file:
         first_ts, last_ts = extract_first_last_timestamp(file)
@@ -248,19 +259,18 @@ def get_desktop_logs(timedelta_previous_hours = 1, ini=ConfigHelperRainmeter(), 
         last_hour = datetime.now() - timedelta(hours=timedelta_previous_hours)
         ts_last_hour = last_hour.strftime("%Y-%m-%d-%H")
         ts_now = now.strftime("%Y-%m-%d-%H")
-
         first_ts, last_ts = ts_now, ts_last_hour
+
     dump = ""
-    dump += "\n\n{0}\n[START] {1}\n".format(make_separator(64), first_ts)
+    dump += "\n\n{0}\n[START] {1}\n".format(make_separator(64), first_ts if first_ts is None else "")
 
     answer_ = ask_check_desktop()
-
 
     if len(answer_) == 0:
         dump += "\nCannot process logs. No connection or no data collected.\n\n"
 
     dump += wrap_text(answer_, width=65, indent="\n")
-    dump += "\n\n[END]   {0}\n\n\n".format(last_ts)
+    dump += "\n\n[END]   {0}\n\n\n".format(last_ts if last_ts is None else "")
     # endregion
 
     ini['Variables']['ItemLines'] = '{0}'.format(7)
@@ -278,38 +288,29 @@ def get_events_world_check(countries_list=None, utc_tz="UTC+8", ini=ConfigHelper
     if countries_list is None:
         return "No countries specified.\n\n\n"
 
-    # region Assistant Chat Setup
-    assistant_chat = BaseAssistant()
-    assistant_chat.load(assistant_id=assistant_chat.config.app_data['assistant_id_reporter'])
+    anthropic = BaseApiServiceAnthropic(ANTHROPIC_CONFIG)
 
     def ask_check_events():
-        messages = [
-            MessageCreate(role='user',
-                          content='Given the list of countries: {0}'
-                                  'Can you get the following information:'
-                                  '- Display their current time if my timezone is {1}'
-                                  '- Weather today from each country'
-                                  '- Notable events that happened today or this week'
-                                  'Make your reply in a plain text paragraphs no bullet points or numbers and do not use markdown.'
-                                  'Be accurate and relevant.'.format(", ".join(countries_list), utc_tz)),
-        ]
-        assistant_chat.add_messages_to_thread(messages)
-        trigger = RunCreate(assistant_id=assistant_chat.properties.id)
-        assistant_chat.run_thread(run=trigger)
-        assistant_chat.wait_for_runs_to_complete()
-        replies = assistant_chat.get_replies()
-        answer = [x.content[0].text.value for x in replies]
-        answer.sort(reverse=True)
-
-        return answer
-
-    # endregion
+        prompt = (
+            f"Given the list of countries: {', '.join(countries_list)} "
+            "Can you get the following information:"
+            f" - Display their current time if my timezone is {utc_tz}"
+            " - Weather today from each country"
+            " - Notable events that happened today or this week"
+            " Make your reply in a plain text paragraphs no bullet points or numbers and do not use markdown."
+            " Be accurate and relevant."
+        )
+        try:
+            response = anthropic.send_message(prompt=prompt, max_tokens=2048)
+            return [response.content[0].text]
+        except Exception as e:
+            log.error(f"Anthropic world check failed: {e}")
+            return []
 
     # region Set links
-    chat_url = 'https://chatgpt.com/'
-    ini['meterLink']['text'] = "CheatGPT"
-    ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(chat_url)
-    ini['meterLink']['tooltiptext'] = chat_url
+    ini['meterLink']['text'] = "Claude"
+    ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(_CLAUDE_URL)
+    ini['meterLink']['tooltiptext'] = _CLAUDE_URL
     ini['meterLink']['W'] = '100'
 
     github_work_url = 'https://github.com/brianbartilet/harqis-work'
@@ -344,10 +345,8 @@ def get_events_world_check(countries_list=None, utc_tz="UTC+8", ini=ConfigHelper
     # endregion
 
     # region Dump data
-
     answer_ = ask_check_events()
     dump = wrap_text(answer_, width=65, indent="\n")
-
     # endregion
 
     ini['Variables']['ItemLines'] = '{0}'.format(8)
@@ -367,5 +366,3 @@ def take_screenshots_for_gpt_capture(**kwargs):
     screenshot.take_screenshot_all_monitors(save_dir=path, prefix=f'{ts}-sc-desktop-check')
 
     return "SUCCESS"
-
-
