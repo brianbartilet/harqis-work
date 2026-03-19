@@ -183,7 +183,7 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
         try:
             response = anthropic.base_client.messages.create(
                 model=anthropic.model,
-                max_tokens=8192,
+                max_tokens=8192 * 2,
                 messages=[{"role": "user", "content": content}],
             )
             return [response.content[0].text]
@@ -217,7 +217,7 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
                                           ))
     ini['meterLink_dump']['Meter'] = 'String'
     ini['meterLink_dump']['MeterStyle'] = 'sItemLink'
-    ini['meterLink_dump']['X'] = '(86*#Scale#)'
+    ini['meterLink_dump']['X'] = '(90*#Scale#)'
     ini['meterLink_dump']['Y'] = '(38*#Scale#)'
     ini['meterLink_dump']['W'] = '80'
     ini['meterLink_dump']['H'] = '55'
