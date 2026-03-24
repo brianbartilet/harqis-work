@@ -1,4 +1,5 @@
-from workflows.hud.tasks.hud_gpt import get_desktop_logs, take_screenshots_for_gpt_capture, generate_daily_desktop_summary
+from workflows.hud.tasks.hud_gpt import (get_desktop_logs, take_screenshots_for_gpt_capture,
+                                         generate_daily_desktop_summary, generate_weekly_desktop_summary)
 
 
 def test__get_desktop_logs():
@@ -10,6 +11,5 @@ def test__take_screenshots_for_gpt_capture():
 def test__generate_daily_desktop_summary():
     generate_daily_desktop_summary(logs_output_path="logs/daily")
 
-@pytest.mark.skip(reason="Manual test only")
 def test__generate_weekly_desktop_summary():
     generate_weekly_desktop_summary(logs_daily_path="logs/daily", logs_output_path="logs/weekly")
