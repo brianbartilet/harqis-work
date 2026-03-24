@@ -105,6 +105,50 @@ Omit this section entirely if there is nothing evidence-based to note.
 Keep language concise and factual. All statements must be traceable to the log.
 """
 
+_WEEKLY_SUMMARY_PROMPT = """
+You are a personal productivity assistant. You will receive a collection of daily Markdown summary files covering one work week.
+
+Your task is to produce a well-structured Markdown weekly highlights report.
+
+Data handling:
+Read every daily summary provided.
+Treat the daily summaries as the authoritative source of truth.
+Extract facts explicitly present across the summaries.
+
+You may NOT:
+Invent activities, applications, or patterns not present in the daily summaries.
+Fill gaps with imagined activity.
+Attribute motivation, intent, or emotion.
+
+Output requirements — use valid Markdown throughout:
+Start with a level-1 heading: # Weekly Summary — Week {week} ({date_range})
+Use the following level-2 sections in order:
+
+## Overview
+3-5 sentence paragraph summarising the overall week's work. If insufficient data, write: *Not enough data to summarise.*
+
+## Daily Breakdown
+A brief sub-section per day (### Monday, ### Tuesday, etc.) with 1-3 bullet points of the main activities for that day.
+If a day has no data: *No data available.*
+
+## Top Activities This Week
+Ranked bullet list of the most frequently observed applications or task types across the week.
+
+## Focus vs Idle Balance
+Summary of productive focus periods versus AFK/idle time observed across the week.
+If not determinable: *Not determinable from available data.*
+
+## Weekly Patterns
+Observations on recurring behaviour, peak productivity windows, or context-switching frequency — evidence only.
+Omit this section entirely if there is nothing evidence-based to note.
+
+## Recommendations
+1-3 concise, actionable suggestions directly supported by the observed patterns.
+Omit this section entirely if there is insufficient evidence to make recommendations.
+
+Keep language concise and factual. All statements must be traceable to the provided daily summaries.
+"""
+
 _MAX_SCREENSHOTS = 5
 _CLAUDE_URL = 'https://claude.ai/'
 
@@ -468,4 +512,80 @@ def generate_daily_desktop_summary(logs_output_path='logs/daily', **kwargs):
         f.write(summary_md)
 
     log.info(f"Daily summary written to {output_file}")
+    return f"SUCCESS: {output_file}"
+
+
+@SPROUT.task(queue='default')
+@log_result()
+def generate_weekly_desktop_summary(logs_daily_path='logs/daily', logs_output_path='logs/weekly', **kwargs):
+    """
+    Reads all daily DESKTOP-LOGS-*.md files from the past 7 days and sends them
+    to Claude to produce a structured Markdown weekly highlights report.
+
+    Output: logs/weekly/DESKTOP-LOGS-WEEK-WW-YYYY.md
+    """
+    try:
+        anthropic = BaseApiServiceAnthropic(ANTHROPIC_CONFIG)
+    except Exception as e:
+        log.error("Failed to initialize Anthropic client for weekly summary")
+        raise e
+
+    today = datetime.now()
+    week_num = today.strftime("%W")
+    year = today.strftime("%Y")
+
+    daily_dir = os.path.abspath(logs_daily_path)
+    if not os.path.isdir(daily_dir):
+        log.warning(f"Daily logs directory not found at {daily_dir} — skipping weekly summary")
+        return "SKIPPED: daily logs directory not found"
+
+    daily_files = []
+    for i in range(7):
+        day = today - timedelta(days=i)
+        filename = f"DESKTOP-LOGS-{day.strftime('%d-%m-%Y')}.md"
+        filepath = os.path.join(daily_dir, filename)
+        if os.path.exists(filepath):
+            daily_files.append((day, filepath))
+
+    if not daily_files:
+        log.warning("No daily summary files found for the past 7 days — skipping weekly summary")
+        return "SKIPPED: no daily files found"
+
+    daily_files.sort(key=lambda x: x[0])
+    week_start = daily_files[0][0].strftime("%d %b")
+    week_end = daily_files[-1][0].strftime("%d %b %Y")
+
+    combined = []
+    for day, filepath in daily_files:
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            combined.append(f"<!-- {day.strftime('%A %d %b %Y')} -->\n{f.read()}")
+
+    combined_content = "\n\n---\n\n".join(combined)
+    prompt = (
+        f"{_WEEKLY_SUMMARY_PROMPT}\n\n"
+        f"Week number: {week_num}\n"
+        f"Date range: {week_start} – {week_end}\n\n"
+        f"Daily summaries:\n\n{combined_content}"
+    )
+
+    try:
+        response = anthropic._with_backoff(
+            anthropic.base_client.messages.create,
+            model=anthropic.model,
+            max_tokens=8192,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        summary_md = response.content[0].text
+    except Exception as e:
+        log.error(f"Anthropic weekly summary generation failed: {e}")
+        return f"FAILED: {e}"
+
+    output_dir = os.path.abspath(logs_output_path)
+    os.makedirs(output_dir, exist_ok=True)
+    output_file = os.path.join(output_dir, f"DESKTOP-LOGS-WEEK-{week_num}-{year}.md")
+
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(summary_md)
+
+    log.info(f"Weekly summary written to {output_file}")
     return f"SUCCESS: {output_file}"
