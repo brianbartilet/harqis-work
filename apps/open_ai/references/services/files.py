@@ -2,6 +2,15 @@ import os
 
 from apps.open_ai.base_service import BaseServiceHarqisGPT
 
+
+def _safe_join(base_path: str, file_name: str) -> str:
+    """Resolve path and raise if it escapes base_path."""
+    resolved = os.path.realpath(os.path.join(base_path, file_name))
+    base = os.path.realpath(base_path)
+    if not resolved.startswith(base + os.sep) and resolved != base:
+        raise ValueError(f"Path traversal detected: {file_name!r} escapes {base_path!r}")
+    return resolved
+
 from core.web.services.core.constants.http_methods import HttpMethod
 from apps.open_ai.references.models.file import File, FileStatus
 
@@ -41,7 +50,7 @@ class ServiceFiles(BaseServiceHarqisGPT):
         Returns:
             The created file as a AssistantFile object.
         """
-        file_path = os.path.join(base_path, file_name)
+        file_path = _safe_join(base_path, file_name)
         with open(file_path, 'rb') as file:
             response = self.native_client.files.create(file=file, purpose="assistants")
 
@@ -101,7 +110,7 @@ class ServiceFiles(BaseServiceHarqisGPT):
 
         response = self.client.execute_request(request)
         if file_name is not None:
-            file_path = os.path.join(base_path, file_name)
+            file_path = _safe_join(base_path, file_name)
             with open(file_path, 'wb') as file:
                 file.write(response.raw_bytes)
 
