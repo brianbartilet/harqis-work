@@ -181,16 +181,17 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
             return [f'AFK {last_hour.strftime("%Y-%m-%d-%H")}\n\n']
 
         try:
-            response = anthropic.base_client.messages.create(
+            response = anthropic._with_backoff(
+                anthropic.base_client.messages.create,
                 model=anthropic.model,
-                max_tokens=8192 * 2,
+                max_tokens=8192,
                 messages=[{"role": "user", "content": content}],
             )
             return [response.content[0].text]
         except Exception as e:
             log.error(f"Anthropic desktop analysis failed: {e}")
             last_hour = datetime.now() - timedelta(hours=1)
-            return [f'AFK {last_hour.strftime("%Y-%m-%d-%H")}\n\n']
+            return [f'Connection error  {last_hour.strftime("%Y-%m-%d-%H")}\n\n']
 
     # region Set links
     ini['meterLink']['text'] = "CLAUDE"
