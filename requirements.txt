@@ -1,1 +1,3 @@
 git+https://github.com/brianbartilet/harqis-core.git#egg=harqis-core
+# moomoo-api: install separately to avoid protobuf conflict
+# pip install moomoo-api --no-deps

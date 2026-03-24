@@ -19,7 +19,7 @@ class BaseApiServiceAnthropic(BaseFixtureServiceRest):
     flexibility in execution mode
     """
 
-    DEFAULT_MODEL = "claude-opus-4-6"
+    DEFAULT_MODEL = "claude-sonnet-4-6"
     DEFAULT_MAX_TOKENS = 1024
 
     def __init__(
