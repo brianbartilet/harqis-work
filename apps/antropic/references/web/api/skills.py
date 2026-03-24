@@ -19,7 +19,8 @@ class ApiServiceAnthropicSkills(BaseApiServiceAnthropic):
     in Messages API calls to extend Claude's behaviour.
 
     Uses httpx directly because the SDK's internal get/post deserialization
-    does not handle non-standard beta endpoints reliably.
+    does not handle non-standard beta endpoints reliably. All calls are wrapped
+    with exponential backoff via _httpx_with_backoff.
 
     Beta header: skills-2025-10-02
     """
@@ -57,7 +58,9 @@ class ApiServiceAnthropicSkills(BaseApiServiceAnthropic):
 
         Builds the required ZIP package in memory:
           {name}/
-            SKILL.md   ← YAML frontmatter + body
+            SKILL.md   <- YAML frontmatter + body
+
+        The ZIP buffer is rebuilt on each retry so the stream is always fresh.
 
         Args:
             name: Skill identifier — lowercase letters, numbers, and hyphens only.
@@ -69,17 +72,18 @@ class ApiServiceAnthropicSkills(BaseApiServiceAnthropic):
         """
         skill_md = f"---\nname: {name}\ndisplay_title: {display_title}\ndescription: {description}\n---\n# {display_title or name}\n"
 
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr(f'{name}/SKILL.md', skill_md)
-        buf.seek(0)
+        def _do_post():
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr(f'{name}/SKILL.md', skill_md)
+            buf.seek(0)
+            return httpx.post(
+                _SKILLS_BASE_URL,
+                headers=self._headers(),
+                files=[('files[]', ('skill.zip', buf, 'application/zip'))],
+            )
 
-        response = httpx.post(
-            _SKILLS_BASE_URL,
-            headers=self._headers(),
-            files=[('files[]', ('skill.zip', buf, 'application/zip'))],
-        )
-        response.raise_for_status()
+        response = self._httpx_with_backoff(_do_post)
         return self._parse_skill(response.json())
 
     def list_skills(self) -> list[DtoAnthropicSkill]:
@@ -89,8 +93,9 @@ class ApiServiceAnthropicSkills(BaseApiServiceAnthropic):
         Returns:
             List of DtoAnthropicSkill objects.
         """
-        response = httpx.get(_SKILLS_BASE_URL, headers=self._headers())
-        response.raise_for_status()
+        response = self._httpx_with_backoff(
+            httpx.get, _SKILLS_BASE_URL, headers=self._headers()
+        )
         return [self._parse_skill(s) for s in response.json().get('data', [])]
 
     def retrieve_skill(self, skill_id: str) -> DtoAnthropicSkill:
@@ -103,6 +108,7 @@ class ApiServiceAnthropicSkills(BaseApiServiceAnthropic):
         Returns:
             DtoAnthropicSkill with the skill's metadata.
         """
-        response = httpx.get(f'{_SKILLS_BASE_URL}/{skill_id}', headers=self._headers())
-        response.raise_for_status()
+        response = self._httpx_with_backoff(
+            httpx.get, f'{_SKILLS_BASE_URL}/{skill_id}', headers=self._headers()
+        )
         return self._parse_skill(response.json())

@@ -12,6 +12,9 @@ class ApiServiceAnthropicFiles(BaseApiServiceAnthropic):
     Supports uploading, listing, retrieving metadata, and deleting files.
     Files can be referenced in Messages API calls to avoid re-sending large content.
 
+    All calls are wrapped with exponential backoff — including uploads — so large
+    file transfers that hit rate limits will be retried automatically.
+
     Beta header: files-api-2025-04-14
     """
 
@@ -34,6 +37,9 @@ class ApiServiceAnthropicFiles(BaseApiServiceAnthropic):
         """
         Upload a file to Anthropic for use in subsequent API calls.
 
+        The upload is retried with exponential backoff on rate-limit or transient
+        errors. The file is re-opened on each retry attempt to ensure a clean stream.
+
         Args:
             file_path: Absolute or relative path to the file to upload.
             mime_type: MIME type override. Defaults to 'application/octet-stream'.
@@ -44,12 +50,13 @@ class ApiServiceAnthropicFiles(BaseApiServiceAnthropic):
         filename = os.path.basename(file_path)
         resolved_mime = mime_type or 'application/octet-stream'
 
-        with open(file_path, 'rb') as f:
-            response = self.base_client.beta.files.upload(
-                file=(filename, f, resolved_mime),
-            )
+        def _do_upload():
+            with open(file_path, 'rb') as f:
+                return self.base_client.beta.files.upload(
+                    file=(filename, f, resolved_mime),
+                )
 
-        return self._parse_file(response)
+        return self._parse_file(self._with_backoff(_do_upload))
 
     def list_files(self) -> list[DtoAnthropicFile]:
         """
@@ -58,7 +65,7 @@ class ApiServiceAnthropicFiles(BaseApiServiceAnthropic):
         Returns:
             List of DtoAnthropicFile objects.
         """
-        response = self.base_client.beta.files.list()
+        response = self._with_backoff(self.base_client.beta.files.list)
         return [self._parse_file(f) for f in response.data]
 
     def retrieve_file_metadata(self, file_id: str) -> DtoAnthropicFile:
@@ -71,7 +78,9 @@ class ApiServiceAnthropicFiles(BaseApiServiceAnthropic):
         Returns:
             DtoAnthropicFile with the file's metadata.
         """
-        response = self.base_client.beta.files.retrieve_metadata(file_id)
+        response = self._with_backoff(
+            self.base_client.beta.files.retrieve_metadata, file_id
+        )
         return self._parse_file(response)
 
     def delete_file(self, file_id: str) -> dict:
@@ -84,5 +93,7 @@ class ApiServiceAnthropicFiles(BaseApiServiceAnthropic):
         Returns:
             Deletion confirmation response as dict.
         """
-        response = self.base_client.beta.files.delete(file_id)
+        response = self._with_backoff(
+            self.base_client.beta.files.delete, file_id
+        )
         return vars(response) if hasattr(response, '__dict__') else {'id': file_id}
