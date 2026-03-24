@@ -65,6 +65,46 @@ Prefer omission over invention.
 All statements must be traceable to evidence in the provided log and screenshots.
 """
 
+_DAILY_SUMMARY_PROMPT = """
+You are a personal productivity assistant. You will receive a full day's desktop activity log dump from a monitoring system.
+
+Your task is to produce a well-structured Markdown daily highlights summary.
+
+Data handling:
+Read every entry in the provided log dump.
+Treat the log as the authoritative source of truth.
+Extract facts explicitly present in the log.
+
+You may NOT:
+Invent applications, actions, windows, text, or timestamps.
+Fill gaps with imagined activity.
+Attribute motivation, intent, or emotion.
+
+Output requirements — use valid Markdown throughout:
+Start with a level-1 heading using the date found in the log (e.g. # Daily Summary — DD MMM YYYY).
+Use the following level-2 sections in order:
+
+## Overview
+2-3 sentence paragraph summarising the overall day. If insufficient data, write: *Not enough data to summarise.*
+
+## Key Activities
+Bullet list of the main applications, windows, or tasks observed — evidence only.
+
+## Focus Periods
+Time blocks where sustained, uninterrupted activity is visible from the log.
+If not determinable: *Not determinable from available data.*
+
+## AFK / Idle Periods
+Gaps or periods of inactivity visible in the log.
+If none detected: *None detected.*
+
+## Productivity Notes
+Optional concise observations on work patterns directly supported by the log.
+Omit this section entirely if there is nothing evidence-based to note.
+
+Keep language concise and factual. All statements must be traceable to the log.
+"""
+
 _MAX_SCREENSHOTS = 5
 _CLAUDE_URL = 'https://claude.ai/'
 
@@ -367,3 +407,65 @@ def take_screenshots_for_gpt_capture(**kwargs):
     screenshot.take_screenshot_all_monitors(save_dir=path, prefix=f'{ts}-sc-desktop-check')
 
     return "SUCCESS"
+
+
+@SPROUT.task(queue='default')
+@log_result()
+def generate_daily_desktop_summary(logs_output_path='logs/daily', **kwargs):
+    """
+    Reads the current get_desktop_logs dump.txt and sends it to Claude to produce
+    a structured Markdown daily highlights file.
+
+    Output: logs/daily/DESKTOP-LOGS-DD-MM-YYYY.md
+    """
+    try:
+        anthropic = BaseApiServiceAnthropic(ANTHROPIC_CONFIG)
+    except Exception as e:
+        log.error("Failed to initialize Anthropic client for daily summary")
+        raise e
+
+    meta = get_decorator_attrs(get_desktop_logs, prefix='')
+    hud = str(meta['_hud_item_name']).replace(" ", "").upper()
+    dump_path = os.path.join(
+        RAINMETER_CONFIG['write_skin_to_path'],
+        RAINMETER_CONFIG['skin_name'],
+        hud,
+        "dump.txt",
+    )
+
+    if not os.path.exists(dump_path):
+        log.warning(f"dump.txt not found at {dump_path} — skipping daily summary")
+        return "SKIPPED: dump.txt not found"
+
+    with open(dump_path, 'r', encoding='utf-8', errors='ignore') as f:
+        dump_content = f.read()
+
+    if not dump_content.strip():
+        log.warning("dump.txt is empty — skipping daily summary")
+        return "SKIPPED: dump.txt is empty"
+
+    try:
+        response = anthropic._with_backoff(
+            anthropic.base_client.messages.create,
+            model=anthropic.model,
+            max_tokens=8192,
+            messages=[{
+                "role": "user",
+                "content": f"{_DAILY_SUMMARY_PROMPT}\n\nActivity log dump:\n```\n{dump_content}\n```",
+            }],
+        )
+        summary_md = response.content[0].text
+    except Exception as e:
+        log.error(f"Anthropic daily summary generation failed: {e}")
+        return f"FAILED: {e}"
+
+    today = datetime.now().strftime("%d-%m-%Y")
+    output_dir = os.path.abspath(logs_output_path)
+    os.makedirs(output_dir, exist_ok=True)
+    output_file = os.path.join(output_dir, f"DESKTOP-LOGS-{today}.md")
+
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(summary_md)
+
+    log.info(f"Daily summary written to {output_file}")
+    return f"SUCCESS: {output_file}"

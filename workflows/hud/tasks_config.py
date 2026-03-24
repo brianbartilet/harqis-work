@@ -180,6 +180,17 @@ WORKFLOWS_HUD = {
             "expires": 60 * 60}
     },
 
+    'run-job--generate_daily_desktop_summary': {
+        'task': 'workflows.hud.tasks.hud_gpt.generate_daily_desktop_summary',
+        'schedule': crontab(hour=23, minute=55),
+        'kwargs': {
+            "logs_output_path": "logs/daily",
+        },
+        "options": {
+            "queue": "default",
+            "expires": 60 * 60,
+        },
+    },
 
 }
 
