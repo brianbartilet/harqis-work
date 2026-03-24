@@ -17,6 +17,11 @@ from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.antropic.config import CONFIG as ANTHROPIC_CONFIG
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 
+from workflows.prompts import load_prompt
+
+_DAILY_SUMMARY_PROMPT = load_prompt('daily_summary')
+_WEEKLY_SUMMARY_PROMPT = load_prompt('weekly_summary')
+
 SCREENREADER_MARKER = "--desktop-screenreader"
 
 # Windows flags
@@ -26,90 +31,6 @@ if os.name == "nt":
 else:
     HIDDEN_WINDOW = 0
     SHOW_WINDOW   = 0
-
-_DAILY_SUMMARY_PROMPT = """
-You are a personal productivity assistant. You will receive a full day's desktop activity log dump from a monitoring system.
-
-Your task is to produce a well-structured Markdown daily highlights summary.
-
-Data handling:
-Read every entry in the provided log dump.
-Treat the log as the authoritative source of truth.
-Extract facts explicitly present in the log.
-
-You may NOT:
-Invent applications, actions, windows, text, or timestamps.
-Fill gaps with imagined activity.
-Attribute motivation, intent, or emotion.
-
-Output requirements — use valid Markdown throughout:
-Start with a level-1 heading using the date found in the log (e.g. # Daily Summary — DD MMM YYYY).
-Use the following level-2 sections in order:
-
-## Overview
-2-3 sentence paragraph summarising the overall day. If insufficient data, write: *Not enough data to summarise.*
-
-## Key Activities
-Bullet list of the main applications, windows, or tasks observed — evidence only.
-
-## Focus Periods
-Time blocks where sustained, uninterrupted activity is visible from the log.
-If not determinable: *Not determinable from available data.*
-
-## AFK / Idle Periods
-Gaps or periods of inactivity visible in the log.
-If none detected: *None detected.*
-
-## Productivity Notes
-Optional concise observations on work patterns directly supported by the log.
-Omit this section entirely if there is nothing evidence-based to note.
-
-Keep language concise and factual. All statements must be traceable to the log.
-"""
-
-_WEEKLY_SUMMARY_PROMPT = """
-You are a personal productivity assistant. You will receive a collection of daily Markdown summary files covering one work week.
-
-Your task is to produce a well-structured Markdown weekly highlights report.
-
-Data handling:
-Read every daily summary provided.
-Treat the daily summaries as the authoritative source of truth.
-Extract facts explicitly present across the summaries.
-
-You may NOT:
-Invent activities, applications, or patterns not present in the daily summaries.
-Fill gaps with imagined activity.
-Attribute motivation, intent, or emotion.
-
-Output requirements — use valid Markdown throughout:
-Start with a level-1 heading: # Weekly Summary — Week {week} ({date_range})
-Use the following level-2 sections in order:
-
-## Overview
-3-5 sentence paragraph summarising the overall week's work. If insufficient data, write: *Not enough data to summarise.*
-
-## Daily Breakdown
-A brief sub-section per day (### Monday, ### Tuesday, etc.) with 1-3 bullet points of the main activities for that day.
-If a day has no data: *No data available.*
-
-## Top Activities This Week
-Ranked bullet list of the most frequently observed applications or task types across the week.
-
-## Focus vs Idle Balance
-Summary of productive focus periods versus AFK/idle time observed across the week.
-If not determinable: *Not determinable from available data.*
-
-## Weekly Patterns
-Observations on recurring behaviour, peak productivity windows, or context-switching frequency — evidence only.
-Omit this section entirely if there is nothing evidence-based to note.
-
-## Recommendations
-1-3 concise, actionable suggestions directly supported by the observed patterns.
-Omit this section entirely if there is insufficient evidence to make recommendations.
-
-Keep language concise and factual. All statements must be traceable to the provided daily summaries.
-"""
 
 
 def _kill_existing_screen_reader_processes():

@@ -13,8 +13,9 @@ from core.utilities.logging.custom_logger import logger as log
 from typing import TypeVar, Any, Callable, Optional
 TWebService = TypeVar("TWebService")
 
-_RETRYABLE = (RateLimitError, APIConnectionError, InternalServerError)
-_HTTPX_RETRYABLE_STATUSES = {429, 500, 503, 529}
+_RETRYABLE = (RateLimitError, APIConnectionError, InternalServerError,
+              httpx.RemoteProtocolError, httpx.ConnectError, httpx.TimeoutException)
+_HTTPX_RETRYABLE_STATUSES = {413, 429, 500, 503, 529}
 
 
 class BaseApiServiceAnthropic(BaseFixtureServiceRest):

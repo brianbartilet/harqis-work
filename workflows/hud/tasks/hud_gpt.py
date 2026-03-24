@@ -24,46 +24,9 @@ from apps.antropic.config import CONFIG as ANTHROPIC_CONFIG
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 
 from workflows.hud.tasks.sections import sections__check_desktop, sections__check_world_checks
+from workflows.hud.prompts import load_prompt
 
-_DESKTOP_ANALYSIS_PROMPT = """
-You are an analysis assistant. Analyze ONLY the contents of the provided activity log and screenshots.
-Data handling:
-Read every line of the activity log.
-Treat the activity log as the authoritative source of truth.
-Use screenshots only to confirm or enrich log data with visible UI context; if text is unreadable, say it is unreadable.
-
-Allowed reasoning:
-Extract facts explicitly present in the logs and screenshots.
-You may label an "AFK/idle" period only when the log shows a clear event gap.
-You may use the user's timezone only to contextualize timestamps that already exist in the data.
-Do NOT infer what happened during gaps.
-
-You may NOT:
-Invent applications, actions, windows, text, or timestamps.
-Guess file names or metadata that are not present.
-Fill gaps with imagined activity.
-Attribute motivation, intent, or emotion.
-
-Required analysis (evidence only):
-Reconstruct desktop behavior: focus changes, clipboard events, OCR text (only if readable), opened apps, window titles, and interaction sequences.
-Identify likely tasks only when strongly supported by the artifacts; otherwise state "cannot be determined".
-Detect and describe idle/AFK periods from event gaps.
-Do not conclude "offline/out for the day/asleep" unless direct evidence exists; otherwise state "cannot be determined".
-Provide optional productivity improvement suggestions only if directly supported by observed patterns; otherwise omit.
-
-Output requirements:
-No headers, bullet points, titles, lists, or markdown formatting.
-Continuous paragraphs, each reflecting a meaningful activity cluster.
-Use timestamps sparingly and only when needed for transitions or inactivity.
-No introductions, disclaimers, conclusions, or process narration.
-Single uninterrupted output.
-Do not ask questions.
-
-Accuracy enforcement:
-If something cannot be confirmed from the data, explicitly say it cannot be determined.
-Prefer omission over invention.
-All statements must be traceable to evidence in the provided log and screenshots.
-"""
+_DESKTOP_ANALYSIS_PROMPT = load_prompt('desktop_analysis')
 
 _MAX_SCREENSHOTS = 5
 _CLAUDE_URL = 'https://claude.ai/'
@@ -149,10 +112,14 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
 
         content = []
 
-        # Embed action log as text
+        # Embed action log as text — truncate to last 50 KB to avoid oversized payloads
+        _MAX_LOG_CHARS = 50_000
         if log_path and os.path.exists(log_path):
             with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
                 log_content = f.read()
+            if len(log_content) > _MAX_LOG_CHARS:
+                log.warning(f"Activity log truncated from {len(log_content)} to {_MAX_LOG_CHARS} chars")
+                log_content = log_content[-_MAX_LOG_CHARS:]
             content.append({"type": "text", "text": f"Activity Log:\n```\n{log_content}\n```"})
 
         # Attach the most recent screenshots as inline base64 images
@@ -176,9 +143,20 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
 
         content.append({"type": "text", "text": _DESKTOP_ANALYSIS_PROMPT})
 
+        # Drop screenshots if payload is likely too large (>4 MB base64 per image × N images)
+        _MAX_IMAGE_BYTES = 4 * 1024 * 1024  # 4 MB base64 threshold
+        content = [
+            c for c in content
+            if c.get("type") != "image" or len(c["source"]["data"]) <= _MAX_IMAGE_BYTES
+        ]
+
         if not content:
             last_hour = datetime.now() - timedelta(hours=1)
             return [f'AFK {last_hour.strftime("%Y-%m-%d-%H")}\n\n']
+
+        n_images = sum(1 for c in content if c.get("type") == "image")
+        n_text_chars = sum(len(c.get("text", "")) for c in content if c.get("type") == "text")
+        log.info(f"Sending to Anthropic: {n_images} image(s), ~{n_text_chars // 1024} KB text")
 
         try:
             response = anthropic._with_backoff(
@@ -189,9 +167,13 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
             )
             return [response.content[0].text]
         except Exception as e:
-            log.error(f"Anthropic desktop analysis failed: {e}")
+            cause = e.__cause__ or e.__context__
+            log.error(
+                f"Anthropic desktop analysis failed [{type(e).__name__}]: {e}"
+                + (f" | caused by [{type(cause).__name__}]: {cause}" if cause else "")
+            )
             last_hour = datetime.now() - timedelta(hours=1)
-            return [f'Connection error  {last_hour.strftime("%Y-%m-%d-%H")}\n\n']
+            return [f'Connection error [{type(e).__name__}] {last_hour.strftime("%Y-%m-%d-%H")}\n\n']
 
     # region Set links
     ini['meterLink']['text'] = "CLAUDE"
