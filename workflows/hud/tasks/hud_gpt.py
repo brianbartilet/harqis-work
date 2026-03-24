@@ -66,7 +66,6 @@ All statements must be traceable to evidence in the provided log and screenshots
 """
 
 _MAX_SCREENSHOTS = 5
-_MAX_SCREENSHOTS = 5
 _CLAUDE_URL = 'https://claude.ai/'
 
 
