@@ -1,0 +1,82 @@
+# HUD Workflow
+
+## Description
+
+- Displays real-time data on a Windows desktop HUD via Rainmeter widgets.
+- Aggregates data from Google Calendar, OANDA forex, TCG Marketplace, YNAB budgets, and Elasticsearch logs.
+- 12 scheduled Celery tasks push data to the desktop feed at various intervals.
+- Tasks use the decorator chain: `@SPROUT.task` → `@log_result` → `@init_meter` → `@feed`.
+
+## Queue
+
+All tasks run on the `hud` queue (configured via `SPROUT.conf.task_routes`).
+
+## Scheduled Tasks
+
+| Task | Schedule | Description |
+|------|----------|-------------|
+| `show_forex_account` | Every 15 min (weekdays) | OANDA forex account summary |
+| `show_tcg_orders` | Every hour | TCG Marketplace open orders |
+| `get_desktop_logs` | Every 5 min | AI analysis of desktop activity logs |
+| `take_screenshots_for_gpt_capture` | Every 10 min | Desktop screenshot capture |
+| `show_calendar_information` | Every 15 min | Google Calendar events for today |
+| `get_failed_jobs` | Every 15 min | Failed Celery task list |
+| `show_mouse_bindings` | Every 15 sec | Mouse shortcut bindings display |
+| `build_summary_mouse_bindings` | Daily at 1am | Summary of daily mouse bindings |
+| `show_hud_profiles` | Daily at midnight | Active iCUE/Rainmeter HUD profiles |
+| `show_ynab_budgets_info` | Every 4 hours | YNAB budget balances |
+| `show_ai_helper` | Daily at midnight | AI helper widget initialization |
+| `get_schedules` | Every 4 hours | Upcoming calendar schedule |
+
+## Task Files
+
+| File | Tasks |
+|------|-------|
+| `tasks/hud_forex.py` | `show_forex_account` |
+| `tasks/hud_tcg.py` | `show_tcg_orders` |
+| `tasks/hud_logs.py` | `get_desktop_logs`, `take_screenshots_for_gpt_capture`, `get_failed_jobs` |
+| `tasks/hud_calendar.py` | `show_calendar_information`, `get_schedules` |
+| `tasks/hud_utils.py` | `show_mouse_bindings`, `build_summary_mouse_bindings`, `show_hud_profiles`, `show_ai_helper` |
+| `tasks/hud_finance.py` | `show_ynab_budgets_info` |
+| `tasks/sections.py` | HUD section layout helpers |
+
+## App Dependencies
+
+| App | Used For |
+|-----|---------|
+| `oanda` | Forex account balance and open trades |
+| `tcg_mp` | Open orders display |
+| `google_apps` | Calendar events and schedules |
+| `ynab` | Budget balances by currency (PHP, SGD) |
+| `rainmeter` | Desktop HUD skin rendering |
+| `desktop` | Screenshot capture, log reading |
+| `open_ai` / `antropic` | Log analysis and AI helper |
+
+## DTOs / Constants
+
+| Name | File | Description |
+|------|------|-------------|
+| `AppExe` | `constants.py` | Enum of Windows app executables (Docker, Chrome, PyCharm, etc.) |
+| `Profile` | `constants.py` | Enum of iCUE/HUD profiles (BASE, BROWSER, MARKDOWN, CODING, etc.) |
+| `APP_TO_PROFILE` | `constants.py` | Dict mapping `AppExe` to `Profile` |
+
+## Prompt Templates
+
+AI tasks use markdown prompts from `workflows/prompts/`:
+- `desktop_analysis.md` — Prompt for log analysis (`get_desktop_logs`)
+
+## Running
+
+```sh
+# Start a worker for the hud queue
+celery -A workflows.config worker --loglevel=info -Q hud
+
+# Trigger a task manually (via Celery CLI or Flower)
+celery -A workflows.config call workflows.hud.tasks.hud_calendar.show_calendar_information
+```
+
+## Notes
+
+- The `show_hud_profiles` task reads the active foreground window to set the appropriate iCUE/Rainmeter profile.
+- `get_desktop_logs` sends activity log content to GPT/Claude for summarization.
+- HUD feed data is written to `DESKTOP_PATH_FEED` (env var) and picked up by Rainmeter.
