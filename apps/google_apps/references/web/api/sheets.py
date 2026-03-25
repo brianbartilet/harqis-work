@@ -31,8 +31,9 @@ class ApiServiceGoogleSheets(BaseGoogleDiscoveryService):
         # Convenience references
         self.spreadsheets = self.service.spreadsheets()
 
-        # Expecting this in your config (adjust key name if needed)
-        self.sheet_id: str = self.config.app_data["sheet_id"]
+        # Use the local config param directly — self.config/_config is not set
+        # in this init path (BaseApiServiceGoogle skips super().__init__ when use_gclient=True)
+        self.sheet_id: str = config.app_data["sheet_id"]
 
         # Optional in-memory buffer helpers
         self.row_data: List[List[Any]] = []
