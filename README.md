@@ -359,23 +359,23 @@ def show_calendar_information(**kwargs):
 
 ## App Inventory
 
-| App | Integration | Type | Tests |
-|-----|-------------|------|-------|
-| `aaa` | Philippine stock exchange (PSEI) | Selenium | Yes |
-| `antropic` | Anthropic Claude API | REST (native SDK) | Yes |
-| `desktop` | Windows desktop automation | Local | No |
-| `echo_mtg` | MTG collection management | REST API | Yes |
-| `google_apps` | Calendar, Sheets, Keep | REST API (OAuth) | Yes |
-| `investagrams` | Philippine stock analytics | Web scraping | No |
-| `moo` | Futu/Moo trading stub | Stub | No |
-| `oanda` | Forex trading | REST API | Yes |
-| `open_ai` | OpenAI GPT | REST (native SDK) | No |
-| `own_tracks` | GPS tracking | Docker/MQTT only | No |
-| `rainmeter` | Windows desktop HUD skinning | Local | No |
-| `scryfall` | MTG card database | REST API | Yes |
-| `tcg_mp` | TCG Marketplace | REST API | Yes |
-| `trello` | Kanban board | REST (refs only) | No |
-| `ynab` | Personal budgeting | REST API | Yes |
+| App | Integration | Type | Tests | Links |
+|-----|-------------|------|-------|-------|
+| `aaa` | Philippine stock exchange (PSEI) | Selenium | Yes | [Site](https://aaa-equities.com.ph/) |
+| `antropic` | Anthropic Claude API | REST (native SDK) | Yes | [API Docs](https://docs.anthropic.com/en/api/) · [Console](https://console.anthropic.com/) |
+| `desktop` | Windows desktop automation | Local | No | — |
+| `echo_mtg` | MTG collection management | REST API | Yes | [API Docs](https://www.echomtg.com/api/) · [Site](https://www.echomtg.com/) |
+| `google_apps` | Calendar, Sheets, Keep | REST API (OAuth) | Yes | [API Docs](https://developers.google.com/workspace) · [Console](https://console.cloud.google.com/) |
+| `investagrams` | Philippine stock analytics | Web scraping | No | [Site](https://www.investagrams.com/) |
+| `moo` | Futu/Moo trading stub | Stub | No | [API Docs](https://openapi.futunn.com/futu-api-doc/en/) · [Site](https://www.futunn.com/) |
+| `oanda` | Forex trading | REST API | Yes | [API Docs](https://developer.oanda.com/rest-live-v20/introduction/) · [Site](https://www.oanda.com/) |
+| `open_ai` | OpenAI GPT | REST (native SDK) | No | [API Docs](https://platform.openai.com/docs/api-reference) · [Site](https://platform.openai.com/) |
+| `own_tracks` | GPS tracking | Docker/MQTT only | No | [Docs](https://owntracks.org/booklet/) · [Site](https://owntracks.org/) |
+| `rainmeter` | Windows desktop HUD skinning | Local | No | [Docs](https://docs.rainmeter.net/) · [Site](https://www.rainmeter.net/) |
+| `scryfall` | MTG card database | REST API | Yes | [API Docs](https://scryfall.com/docs/api) · [Site](https://scryfall.com/) |
+| `tcg_mp` | TCG Marketplace | REST API | Yes | [Site](https://thetcgmarketplace.com/) |
+| `trello` | Kanban board | REST (refs only) | No | [API Docs](https://developer.atlassian.com/cloud/trello/rest/api-group-actions/) · [Site](https://trello.com/) |
+| `ynab` | Personal budgeting | REST API | Yes | [API Docs](https://api.ynab.com/) · [Site](https://www.ynab.com/) |
 
 ---
 
