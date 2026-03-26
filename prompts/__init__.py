@@ -12,7 +12,7 @@ def load_prompt(name: str, prompts_dir: str = None) -> str:
     Args:
         name:        Filename without extension (e.g. 'daily_summary').
         prompts_dir: Absolute path to the prompts directory to search.
-                     Defaults to this shared workflows/prompts/ directory.
+                     Defaults to this shared prompts/ directory at the repo root.
 
     Returns:
         Prompt string ready to send to an LLM.

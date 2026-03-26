@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Run HARQIS agent prompts against the codebase using the Anthropic Claude API.
-Reads a prompt from workflows/prompts/, builds repo context, calls Claude,
+Reads a prompt from prompts/ (repo root), builds repo context, calls Claude,
 and writes the result to the appropriate output file.
 
 Usage:
@@ -165,7 +165,7 @@ def build_code_smells_context() -> str:
 
 AGENT_CONFIG = {
     "docs": {
-        "prompt_file": "workflows/prompts/docs_agent.md",
+        "prompt_file": "prompts/docs_agent.md",
         "output_file": "README.md",
         "context_fn": build_docs_context,
         "output_instruction": (
@@ -175,7 +175,7 @@ AGENT_CONFIG = {
         ),
     },
     "code_smells": {
-        "prompt_file": "workflows/prompts/code_smells.md",
+        "prompt_file": "prompts/code_smells.md",
         "output_file": "CODE_SMELLS.md",
         "context_fn": build_code_smells_context,
         "output_instruction": (

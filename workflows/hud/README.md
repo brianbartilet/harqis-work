@@ -62,7 +62,7 @@ All tasks run on the `hud` queue (configured via `SPROUT.conf.task_routes`).
 
 ## Prompt Templates
 
-AI tasks use markdown prompts from `workflows/prompts/`:
+AI tasks use markdown prompts from `prompts/` (repo root):
 - `desktop_analysis.md` — Prompt for log analysis (`get_desktop_logs`)
 
 ## Running

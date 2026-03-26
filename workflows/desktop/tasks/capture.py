@@ -17,7 +17,7 @@ from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.antropic.config import CONFIG as ANTHROPIC_CONFIG
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 
-from workflows.prompts import load_prompt
+from workflows.desktop.prompts import load_prompt
 
 _DAILY_SUMMARY_PROMPT = load_prompt('daily_summary')
 _WEEKLY_SUMMARY_PROMPT = load_prompt('weekly_summary')

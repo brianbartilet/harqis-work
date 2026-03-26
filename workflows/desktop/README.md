@@ -39,7 +39,7 @@ Tasks run on the `default` queue.
 
 ## Prompt Templates
 
-AI summary tasks use markdown prompts from `workflows/prompts/`:
+AI summary tasks use markdown prompts from `workflows/desktop/prompts/`:
 - `daily_summary.md` — Prompt for daily activity summarization
 - `weekly_summary.md` — Prompt for weekly activity summarization
 
