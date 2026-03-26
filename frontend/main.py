@@ -37,6 +37,13 @@ from registry import TASK_REGISTRY
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ── Auto-regenerate registry from tasks_config.py on every startup ────────────
+try:
+    import generate_registry
+    generate_registry.main()
+except Exception as _regen_err:
+    logger.warning("Registry regeneration failed: %s", _regen_err)
+
 # ── App setup ─────────────────────────────────────────────────────────────────
 settings = get_settings()
 warn_insecure_defaults(settings)

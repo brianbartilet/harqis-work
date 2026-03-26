@@ -78,6 +78,31 @@ Then set `FLOWER_URL=http://localhost:5555` in `frontend/.env`.
 | `PORT` | `8080` | Bind port |
 | `SESSION_MAX_AGE` | `28800` | Session lifetime in seconds (default: 8 hours) |
 
+## Keeping the Registry in Sync
+
+`frontend/registry.py` is the task registry that powers the dashboard. It is **generated** from `workflows/*/tasks_config.py` — run the generator whenever you add, remove, or change a task:
+
+```sh
+# From the repo root, with venv active
+python frontend/generate_registry.py
+```
+
+**What gets synced automatically:**
+
+| Field | Source |
+|---|---|
+| `task_path` | `tasks_config.py` — always overwritten |
+| `queue` | `tasks_config.py` — always overwritten |
+| `kwargs` | `tasks_config.py` — always overwritten |
+| `schedule` | `tasks_config.py` on first seen; preserved after that |
+| `label` | Preserved from existing `registry.py`; auto-generated for new tasks |
+| `description` | Preserved from existing `registry.py`; empty for new tasks |
+| `manual_only` | Preserved from existing `registry.py`; `False` for new tasks |
+
+**Manual-only tasks** (tasks in `registry.py` that have no beat schedule entry) are always preserved as-is.
+
+After running the generator, review the output for any new tasks and fill in their `label`, `description`, and `manual_only` fields directly in `registry.py` — those edits will be preserved on the next run.
+
 ## Architecture
 
 ```
