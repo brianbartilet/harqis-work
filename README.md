@@ -70,12 +70,12 @@ HARQIS drives a live desktop heads-up display using [Rainmeter](https://www.rain
 
 | Panel | Data source | Update frequency |
 |---|---|---|
+| **Calendar Info** | Google Calendar — today's events and upcoming schedule | Every 15 min |
 | **TCG Orders** | TCG Marketplace API — open/pending card orders with pricing | Every hour |
 | **Budgeting Info** | YNAB — budget balances in PHP and SGD | Every 4 hours |
-| **Mouse Bindings** | Desktop activity log — active shortcuts per foreground app | Every 15 sec |
-| **Calendar Info** | Google Calendar — today's events and upcoming schedule | Every 15 min |
-| **HUD Profiles** | iCUE + Rainmeter — activates the correct profile for the active app | Daily at midnight |
-| **Desktop Logs** | AI analysis (Claude/GPT) of captured activity screenshots | Every 5 min |
+| **Mouse Bindings** | ICue Corsair Scimitar - show macro mouse mappings from active application | Every 15 sec |
+| **HUD Profiles** | Rainmeter - load, save profiles and update from changes | Daily at midnight |
+| **Desktop Logs** | Claude - AI analysis of captured activity screenshots | Every 5 min |
 | **Failed Jobs Today** | Celery task history — any tasks that errored since midnight | Every 15 min |
 | **Agents Core** | n8n + ElevenLabs — running automation agents and voice assistant state | Daily at midnight |
 
