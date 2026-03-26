@@ -15,6 +15,8 @@ GET  /health                        → simple health check
 from pathlib import Path
 from typing import Optional
 
+import logging
+
 import uvicorn
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -22,14 +24,35 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import celery_client
-from auth import create_session_token, get_current_user
-from config import get_settings
+from auth import (
+    create_session_token,
+    get_current_user,
+    is_rate_limited,
+    record_failed_login,
+    clear_failed_logins,
+)
+from config import get_settings, warn_insecure_defaults
 from registry import TASK_REGISTRY
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # ── App setup ─────────────────────────────────────────────────────────────────
 settings = get_settings()
+warn_insecure_defaults(settings)
 
 app = FastAPI(title="HARQIS Dashboard", docs_url=None, redoc_url=None)
+
+
+# ── Security headers ──────────────────────────────────────────────────────────
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Frame-Options"]        = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"]        = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"]     = "geolocation=(), microphone=(), camera=()"
+    return response
 
 _here = Path(__file__).parent
 templates = Jinja2Templates(directory=str(_here / "templates"))
@@ -96,7 +119,18 @@ async def login(
     username: str = Form(...),
     password: str = Form(...),
 ):
+    ip = request.client.host if request.client else "unknown"
+
+    if is_rate_limited(ip):
+        logger.warning("Login rate limit hit for IP %s", ip)
+        return templates.TemplateResponse(
+            request, "login.html",
+            {"error": "Too many failed attempts — try again in 15 minutes."},
+            status_code=429,
+        )
+
     if username == settings.app_username and password == settings.app_password:
+        clear_failed_logins(ip)
         token = create_session_token(username)
         response = RedirectResponse("/dashboard", status_code=302)
         response.set_cookie(
@@ -105,8 +139,12 @@ async def login(
             max_age=settings.session_max_age,
             httponly=True,
             samesite="lax",
+            secure=settings.behind_proxy,
         )
         return response
+
+    record_failed_login(ip)
+    logger.warning("Failed login attempt for user %r from IP %s", username, ip)
     return templates.TemplateResponse(
         request, "login.html",
         {"error": "Invalid username or password."},

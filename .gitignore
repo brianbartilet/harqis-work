@@ -3,6 +3,8 @@
 *config.yaml
 .env/*
 !.env/.gitkeep
+**/.env
+**/.env.*
 .venv
 venv
 *pid.*

@@ -125,7 +125,29 @@ If Flower is not running, task dispatch still works — you'll see `PENDING` sta
 
 ## Security Notes
 
-- Change `SECRET_KEY` to a long random string in production.
-- Change `APP_PASSWORD` from the default.
-- The dashboard should not be exposed to the public internet without additional security (reverse proxy + HTTPS).
-- Session cookies are `httponly` and `samesite=lax`.
+### Before exposing to the network
+
+1. **Generate a strong `SECRET_KEY`:**
+   ```sh
+   python -c "import secrets; print(secrets.token_hex(32))"
+   ```
+   Set it in `frontend/.env` as `SECRET_KEY=<output>`.
+
+2. **Change `APP_PASSWORD`** from the default `changeme` to something strong.
+
+3. **Set `BEHIND_PROXY=true`** in `.env` when running behind Cloudflare Tunnel or any HTTPS reverse proxy. This enables the `Secure` flag on session cookies so they are never sent over plain HTTP.
+
+### What's enforced at runtime
+
+| Protection | Detail |
+|---|---|
+| Startup warnings | Logs a warning on boot if `SECRET_KEY` or `APP_PASSWORD` are still set to defaults |
+| Login rate limiting | Max 5 failed attempts per IP in a 15-minute window — returns HTTP 429 and blocks further attempts until the window expires |
+| Failed login logging | Every failed attempt logs the username and source IP |
+| Security headers | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy` on every response |
+| Session cookies | `httponly=True`, `samesite=lax`, `secure=True` when `BEHIND_PROXY=true` |
+
+### Additional recommendations
+
+- Run behind Cloudflare Tunnel (or Nginx + Let's Encrypt) — never expose port 8080 directly to the internet.
+- Session cookies are `httponly` and `samesite=lax` — not accessible from JavaScript.
