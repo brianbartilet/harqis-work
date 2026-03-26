@@ -1,0 +1,120 @@
+name: Agent Prompts
+
+on:
+  workflow_dispatch:
+    inputs:
+      agent:
+        description: "Agent to run"
+        required: true
+        type: choice
+        options:
+          - docs
+          - code_smells
+          - both
+        default: both
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  run-agent:
+    name: Run ${{ github.event.inputs.agent }} agent
+    runs-on: ubuntu-latest
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Checkout
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so the new branch can diverge from main
+
+      # -----------------------------------------------------------------------
+      # 2. Python + dependencies
+      # -----------------------------------------------------------------------
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install anthropic SDK
+        run: pip install --quiet anthropic
+
+      # -----------------------------------------------------------------------
+      # 3. Run the agent(s)
+      # -----------------------------------------------------------------------
+      - name: Run agent prompt(s)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python scripts/run_agent_prompt.py --agent ${{ github.event.inputs.agent }}
+
+      # -----------------------------------------------------------------------
+      # 4. Detect whether any files changed
+      # -----------------------------------------------------------------------
+      - name: Check for changes
+        id: diff
+        run: |
+          git diff --quiet && echo "changed=false" >> "$GITHUB_OUTPUT" || echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      # -----------------------------------------------------------------------
+      # 5. Create branch, commit, push, open PR
+      # -----------------------------------------------------------------------
+      - name: Create branch and open pull request
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="agent/${{ github.event.inputs.agent }}-$(date +%Y%m%d-%H%M%S)"
+          AGENT="${{ github.event.inputs.agent }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add README.md CODE_SMELLS.md
+          git commit -m "agent(${AGENT}): auto-update from Claude [run #${{ github.run_number }}]"
+          git push origin "$BRANCH"
+
+          # Build changed-files list for PR body
+          CHANGED=$(git diff origin/main --name-only | sed 's/^/- /')
+
+          gh pr create \
+            --title "agent(${AGENT}): auto-update [run #${{ github.run_number }}]" \
+            --base main \
+            --head "$BRANCH" \
+            --body "$(cat <<EOF
+          ## Agent Run
+
+          | Field | Value |
+          |-------|-------|
+          | **Agent** | \`${AGENT}\` |
+          | **Model** | \`claude-opus-4-6\` |
+          | **Triggered by** | @${{ github.actor }} |
+          | **Actions run** | [#${{ github.run_number }}](${RUN_URL}) |
+
+          ---
+
+          ## Changed files
+
+          ${CHANGED}
+
+          ---
+
+          ## Review checklist
+
+          - [ ] Changes are accurate and do not invent functionality
+          - [ ] No sensitive information included
+          - [ ] Formatting and structure look correct
+          - [ ] Approve and merge when satisfied
+          EOF
+          )"
+
+      # -----------------------------------------------------------------------
+      # 6. No-op if nothing changed
+      # -----------------------------------------------------------------------
+      - name: Nothing to commit
+        if: steps.diff.outputs.changed == 'false'
+        run: echo "Agent ran but produced no changes — no PR created."
