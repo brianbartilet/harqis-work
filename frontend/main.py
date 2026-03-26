@@ -16,6 +16,9 @@ from pathlib import Path
 from typing import Optional
 
 import logging
+import os
+import subprocess
+import sys
 
 import uvicorn
 from fastapi import FastAPI, Form, Request
@@ -246,6 +249,26 @@ async def task_status(request: Request, task_id: str):
             "polling": not celery_client.is_terminal(state),
         },
     )
+
+
+# ── Open local path (Windows) ─────────────────────────────────────────────────
+
+@app.get("/open-path")
+async def open_path(request: Request, p: str):
+    """Open a local file or directory using the OS default application."""
+    if not get_current_user(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    try:
+        if sys.platform == "win32":
+            os.startfile(p)
+        elif sys.platform == "darwin":
+            subprocess.run(["open", p], check=True)
+        else:
+            subprocess.run(["xdg-open", p], check=True)
+        return JSONResponse({"ok": True})
+    except Exception as exc:
+        logger.warning("open-path failed for %r: %s", p, exc)
+        return JSONResponse({"error": str(exc)}, status_code=500)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

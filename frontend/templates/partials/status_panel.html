@@ -111,29 +111,107 @@
 
 <script>
 (function () {
-  // Matches: http(s):// URLs, Windows paths (C:\...), UNC paths (\\server\share), Unix paths (/absolute/path)
-  const PATTERN = /(https?:\/\/[^\s"'<>]+)|([A-Za-z]:\\{1,2}[^\s"'<>]+)|(\\\\[^\s"'<>]+)|(\/(?:[^\s"'<>\/][^\s"'<>]*\/[^\s"'<>]+))/g;
 
-  function linkify(el) {
-    const text = el.textContent;
-    if (!PATTERN.test(text)) return;
-    PATTERN.lastIndex = 0;
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function esc(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
 
-    el.innerHTML = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(PATTERN, (match) => {
-      // For local paths use file:// protocol
-      const href = match.startsWith('http') ? match : 'file:///' + match.replace(/\\+/g, '/');
-      return `<a href="${href}" target="_blank" rel="noopener"
-                 class="underline underline-offset-2 decoration-dotted hover:decoration-solid opacity-80 hover:opacity-100"
-                 style="color:inherit">${match}</a>`;
-    });
+  // ── JSON pretty-printer + syntax highlighter ───────────────────────────────
+  // Returns syntax-highlighted HTML string, or null if the text isn't JSON.
+  function tryFormatJson(raw) {
+    let parsed;
+
+    // 1. Try native JSON
+    try { parsed = JSON.parse(raw); } catch (_) {}
+
+    // 2. Try Python repr → JSON (single quotes, True/False/None)
+    if (parsed === undefined && /^\s*[\[{]/.test(raw)) {
+      try {
+        parsed = JSON.parse(
+          raw.replace(/'/g, '"')
+             .replace(/\bTrue\b/g,  'true')
+             .replace(/\bFalse\b/g, 'false')
+             .replace(/\bNone\b/g,  'null')
+             .replace(/,\s*([\]}])/g, '$1')   // trailing commas
+        );
+      } catch (_) {}
+    }
+
+    if (parsed === undefined) return null;
+
+    // Syntax-colour the pretty-printed JSON
+    const pretty = JSON.stringify(parsed, null, 2);
+    return esc(pretty).replace(
+      /(&quot;(?:\\.|[^&])*&quot;(\s*:)?)|(\b(?:true|false|null)\b)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g,
+      (m, strToken, isKey, keyword, number) => {
+        if (strToken) {
+          const color = isKey ? '#7dd3fc' : '#fcd34d';   // blue key / amber string
+          return `<span style="color:${color}">${m}</span>`;
+        }
+        if (keyword) return `<span style="color:${keyword === 'null' ? '#f87171' : '#c084fc'}">${m}</span>`;
+        if (number)  return `<span style="color:#93c5fd">${m}</span>`;
+        return m;
+      }
+    );
+  }
+
+  // ── Link detection ─────────────────────────────────────────────────────────
+  // Matches http(s) URLs, Windows drive paths (C:\...), and UNC paths (\\server\...)
+  // Applied only to text nodes (content between > and <) to avoid matching inside HTML attributes.
+  const LINK_RE = /(https?:\/\/[^\s"'<>\])}]+)|([A-Za-z]:\\{1,2}[^\s"'<>]+)|(\\\\[^\s"'<>]+)/g;
+
+  function linkifyHtml(html) {
+    // Split on HTML tags so we only process text runs, never attribute values.
+    return html.split(/(<[^>]+>)/).map((chunk, i) => {
+      if (i % 2 === 1) return chunk;  // odd indices are tags — leave untouched
+      return chunk.replace(LINK_RE, (match, url) => {
+        if (url) {
+          // HTTP/HTTPS — open in a new tab in the same browser
+          return `<a href="${url}" target="_blank" rel="noopener"
+                     class="underline underline-offset-2 decoration-dotted hover:decoration-solid opacity-80 hover:opacity-100"
+                     style="color:inherit">${match}</a>`;
+        } else {
+          // Windows / UNC path — browsers block file:// from http://, so open
+          // via the backend which calls os.startfile() on the server machine.
+          return `<a onclick='harqisOpenPath(${JSON.stringify(match)})'
+                     title="Open with Windows Explorer"
+                     class="cursor-pointer underline underline-offset-2 decoration-dotted hover:decoration-solid opacity-80 hover:opacity-100"
+                     style="color:inherit">${match}</a>`;
+        }
+      });
+    }).join('');
+  }
+
+  // ── Process a single .linkify-output element ───────────────────────────────
+  function processEl(el) {
+    // Skip elements that were already processed this render cycle
+    if (el.dataset.processed === el.textContent) return;
+    const raw = el.textContent.trim();
+    if (!raw) return;
+
+    const jsonHtml = tryFormatJson(raw);
+    if (jsonHtml !== null) {
+      // JSON: highlight first, then linkify URLs/paths inside string values
+      el.innerHTML = linkifyHtml(jsonHtml);
+    } else {
+      // Plain text: escape then linkify
+      el.innerHTML = linkifyHtml(esc(raw));
+    }
+    el.dataset.processed = el.textContent;
   }
 
   function processAll() {
-    document.querySelectorAll('.linkify-output').forEach(linkify);
+    document.querySelectorAll('.linkify-output').forEach(processEl);
   }
 
-  // Run on initial load and after every HTMX swap
   processAll();
   document.addEventListener('htmx:afterSwap', processAll);
+  document.addEventListener('htmx:afterSettle', processAll);
 })();
+
+// Open a local path via the backend (available globally for onclick handlers)
+function harqisOpenPath(path) {
+  fetch('/open-path?p=' + encodeURIComponent(path)).catch(() => {});
+}
 </script>

@@ -267,6 +267,42 @@ celery -A workflows.config worker --beat --loglevel=info -Q hud,default,tcg
 
 ---
 
+## Desktop HUD
+
+HARQIS drives a live desktop heads-up display using [Rainmeter](https://www.rainmeter.net/) on Windows. Celery tasks in `workflows/hud/` continuously push data from connected services into Rainmeter skin files, which render as always-on overlay panels on the desktop.
+
+![HARQIS Desktop HUD](docs/windows-hud-sample.png)
+
+### Panels
+
+| Panel | Data source | Update frequency |
+|---|---|---|
+| **TCG Orders** | TCG Marketplace API — open/pending card orders with pricing | Every hour |
+| **Budgeting Info** | YNAB — budget balances in PHP and SGD | Every 4 hours |
+| **Mouse Bindings** | Desktop activity log — active shortcuts per foreground app | Every 15 sec |
+| **Calendar Info** | Google Calendar — today's events and upcoming schedule | Every 15 min |
+| **HUD Profiles** | iCUE + Rainmeter — activates the correct profile for the active app | Daily at midnight |
+| **Desktop Logs** | AI analysis (Claude/GPT) of captured activity screenshots | Every 5 min |
+| **Failed Jobs Today** | Celery task history — any tasks that errored since midnight | Every 15 min |
+| **Agents Core** | n8n + ElevenLabs — running automation agents and voice assistant state | Daily at midnight |
+
+### How it works
+
+1. A Celery Beat worker fires each task on its configured schedule.
+2. The task fetches data from the relevant service (OANDA, YNAB, Google, etc.).
+3. Data is written into Rainmeter `.ini` skin files via the `rainmeter` app helpers.
+4. Rainmeter detects the file change and re-renders the panel in place on the desktop.
+5. Results are also logged to Elasticsearch via the `@log_result()` decorator.
+
+### Requirements
+
+- **Windows** — Rainmeter is Windows-only
+- **Rainmeter** installed with skins deployed to the configured `RAINMETER_WRITE_SKINS_TO_PATH`
+- **iCUE** (optional) — for Corsair peripheral profile switching via `show_hud_profiles`
+- All `RAINMETER_*` environment variables set in `.env/apps.env`
+
+---
+
 ## Frontend Dashboard
 
 A lightweight web dashboard for manually triggering Celery tasks, monitoring run status, and customizing the layout.
@@ -340,7 +376,8 @@ harqis-work/
 │   └── requirements.txt
 │
 ├── docs/                       # Project documentation assets
-│   └── dashboard-sample.png   # Dashboard screenshot
+│   ├── dashboard-sample.png   # Frontend dashboard screenshot
+│   └── windows-hud-sample.png # Desktop HUD screenshot
 │
 ├── apps_config.yaml            # Central app configuration
 ├── pytest.ini                  # Test configuration
