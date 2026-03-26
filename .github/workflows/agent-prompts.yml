@@ -1,4 +1,4 @@
-name: Agent Prompts
+name: HARQIS-AGENTS
 
 on:
   workflow_dispatch:
