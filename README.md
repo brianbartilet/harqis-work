@@ -250,6 +250,8 @@ pytest -m smoke
 pytest -m sanity
 ```
 
+> **Note:** Workflow tests are excluded from the default `pytest` run and must be run explicitly (e.g. `pytest workflows/hud/tests/`).
+
 ---
 
 ## Running Celery Workers
@@ -264,6 +266,22 @@ celery -A workflows.config beat --loglevel=info
 # Run both together (development only)
 celery -A workflows.config worker --beat --loglevel=info -Q hud,default,tcg
 ```
+
+### Helper Scripts
+
+Convenience batch scripts are provided in the `scripts/` directory for common operations:
+
+| Script | Description |
+|--------|-------------|
+| `scripts/run_workflow_worker.bat` | Start a Celery worker (default queue) |
+| `scripts/run_workflow_worker_hud.bat` | Start a Celery worker for the `hud` queue |
+| `scripts/run_workflow_worker_tcg.bat` | Start a Celery worker for the `tcg` queue |
+| `scripts/run_workflow_scheduler.bat` | Start the Celery Beat scheduler |
+| `scripts/run_hud_tasks.bat` | Trigger HUD tasks manually |
+| `scripts/flower.bat` | Start the Flower monitoring dashboard |
+| `scripts/set_env.sh` | Set environment variables (Linux/macOS) |
+| `scripts/set_env_workflows.bat` | Set environment variables (Windows) |
+| `scripts/run_agent_prompt.py` | Run an AI agent prompt from the command line |
 
 ---
 
@@ -280,34 +298,52 @@ harqis-work/
 │   ├── desktop/                # Windows desktop automation
 │   ├── echo_mtg/               # MTG collection management (REST)
 │   ├── google_apps/            # Google Workspace (Calendar, Sheets, Keep)
-│   ├── investagrams/           # Philippine stock analytics (scraping)
-│   ├── moo/                    # Stub — work in progress
+│   ├── investagrams/           # Philippine stock analytics (scraping stub)
+│   ├── moo/                    # Futu/Moo trading (stub)
 │   ├── oanda/                  # Forex trading (REST)
-│   ├── open_ai/                # OpenAI GPT (REST)
+│   ├── open_ai/                # OpenAI GPT (REST, planned deprecation)
 │   ├── own_tracks/             # GPS tracking (Docker/MQTT only)
 │   ├── rainmeter/              # Windows desktop HUD skinning
 │   ├── scryfall/               # MTG card database (REST)
 │   ├── tcg_mp/                 # TCG Marketplace (REST, most complex)
 │   ├── trello/                 # Kanban (references only)
-│   └── ynab/                   # Personal budgeting (REST)
+│   ├── ynab/                   # Personal budgeting (REST)
+│   └── apps_config.py          # Shared config loader
 │
 ├── workflows/                  # Celery task definitions
 │   ├── .template/              # Template for new workflows
 │   ├── config.py               # Master Celery Beat schedule
-│   ├── desktop/                # Git pulls, window mgmt, file sync
+│   ├── desktop/                # Git pulls, window mgmt, file sync, activity capture
 │   ├── finance/                # Stub — no tasks yet
 │   ├── hud/                    # Desktop HUD display tasks (12 tasks)
-│   ├── mobile/                 # Android screen capture
+│   ├── mobile/                 # Android screen capture (standalone, not Celery)
 │   ├── n8n/                    # n8n utility helpers
-│   ├── prompts/                # AI prompt templates (markdown)
+│   ├── prompts/                # AI prompt templates (redirect stubs)
 │   └── purchases/              # TCG card resale pipeline
+│
+├── scripts/                    # Convenience batch/shell scripts
+│   ├── run_workflow_worker.bat
+│   ├── run_workflow_scheduler.bat
+│   ├── flower.bat
+│   ├── set_env.sh
+│   └── ...
+│
+├── .github/workflows/          # CI/CD pipelines
+│   ├── run_tests.yml           # Automated test runner
+│   └── agent-prompts.yml       # AI agent prompt workflow
 │
 ├── apps_config.yaml            # Central app configuration
 ├── pytest.ini                  # Test configuration
 ├── requirements.txt            # Python dependencies
 ├── logging.yaml                # Logging configuration
-├── workflows.mapping           # Auto-generated Celery task map (do not edit)
-└── conftest.py                 # Pytest session fixtures
+├── Dockerfile                  # Container build file
+├── workflows-example.mapping   # Example Celery task mapping
+├── scripts-example.mapping     # Example shell command mapping
+├── conftest.py                 # Pytest session fixtures
+├── run.bat                     # Quick-start script
+├── run_workflows.py            # Programmatic workflow runner
+├── CLAUDE.md                   # AI assistant guidance
+└── LICENSE                     # MIT License
 ```
 
 ### App Structure (Template)
@@ -340,6 +376,7 @@ CONFIG = AppConfigWSClient(**load_config[APP_NAME])
 workflows/<workflow>/
 ├── tasks_config.py             # Celery Beat schedule dict
 ├── tasks/                      # @SPROUT.task decorated functions
+├── prompts/                    # AI prompt templates (markdown)
 ├── dto/                        # Task parameter DTOs
 └── tests/
 ```
@@ -366,16 +403,18 @@ def show_calendar_information(**kwargs):
 | `desktop` | Windows desktop automation | Local | No | — |
 | `echo_mtg` | MTG collection management | REST API | Yes | [API Docs](https://www.echomtg.com/api/) · [Site](https://www.echomtg.com/) |
 | `google_apps` | Calendar, Sheets, Keep | REST API (OAuth) | Yes | [API Docs](https://developers.google.com/workspace) · [Console](https://console.cloud.google.com/) |
-| `investagrams` | Philippine stock analytics | Web scraping | No | [Site](https://www.investagrams.com/) |
+| `investagrams` | Philippine stock analytics | Web scraping (stub) | No | [Site](https://www.investagrams.com/) |
 | `moo` | Futu/Moo trading stub | Stub | No | [API Docs](https://openapi.futunn.com/futu-api-doc/en/) · [Site](https://www.futunn.com/) |
 | `oanda` | Forex trading | REST API | Yes | [API Docs](https://developer.oanda.com/rest-live-v20/introduction/) · [Site](https://www.oanda.com/) |
-| `open_ai` | OpenAI GPT | REST (native SDK) | No | [API Docs](https://platform.openai.com/docs/api-reference) · [Site](https://platform.openai.com/) |
+| `open_ai` | OpenAI GPT (Assistants v2) | REST (native SDK) | Yes | [API Docs](https://platform.openai.com/docs/api-reference) · [Site](https://platform.openai.com/) |
 | `own_tracks` | GPS tracking | Docker/MQTT only | No | [Docs](https://owntracks.org/booklet/) · [Site](https://owntracks.org/) |
-| `rainmeter` | Windows desktop HUD skinning | Local | No | [Docs](https://docs.rainmeter.net/) · [Site](https://www.rainmeter.net/) |
+| `rainmeter` | Windows desktop HUD skinning | Local | Yes | [Docs](https://docs.rainmeter.net/) · [Site](https://www.rainmeter.net/) |
 | `scryfall` | MTG card database | REST API | Yes | [API Docs](https://scryfall.com/docs/api) · [Site](https://scryfall.com/) |
 | `tcg_mp` | TCG Marketplace | REST API | Yes | [Site](https://thetcgmarketplace.com/) |
 | `trello` | Kanban board | REST (refs only) | No | [API Docs](https://developer.atlassian.com/cloud/trello/rest/api-group-actions/) · [Site](https://trello.com/) |
 | `ynab` | Personal budgeting | REST API | Yes | [API Docs](https://api.ynab.com/) · [Site](https://www.ynab.com/) |
+
+> **Note:** The `open_ai` app is planned for deprecation in favor of `antropic` (Claude API) for new AI-driven workflow tasks.
 
 ---
 
@@ -388,23 +427,23 @@ CONFIG_DICTIONARY = WORKFLOW_PURCHASES | WORKFLOWS_HUD | WORKFLOWS_DESKTOP
 SPROUT.conf.beat_schedule = CONFIG_DICTIONARY
 ```
 
-| Workflow | Status | Tasks | Description |
-|----------|--------|-------|-------------|
-| `hud` | Active | 12 | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins |
-| `purchases` | Active | 3 (+1 disabled) | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
-| `desktop` | Active | 7 | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
-| `mobile` | Active | 1 (unscheduled) | Android screen capture and OCR logging |
-| `finance` | Stub | 0 | No tasks defined |
-| `prompts` | Active | — | AI prompt templates used by hud/desktop workflows |
-| `n8n` | Utilities | — | Shell utilities and ngrok helpers for n8n integration |
+| Workflow | Status | Tasks | Queue | Description |
+|----------|--------|-------|-------|-------------|
+| `hud` | Active | 12 | `hud` | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins |
+| `purchases` | Active | 3 (+1 disabled) | `tcg` | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
+| `desktop` | Active | 7 | `default` | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
+| `mobile` | Standalone | 1 (unscheduled) | — | Android screen capture and OCR logging (runs on-device via Termux, not a Celery task) |
+| `finance` | Stub | 0 | — | No tasks defined |
+| `prompts` | Redirect | — | — | AI prompt templates (stubs redirecting to workflow-specific `prompts/` folders) |
+| `n8n` | Utilities | — | — | Shell utilities and ngrok helpers for n8n integration |
 
 ### Celery Task Queues
 
 | Queue | Used By |
 |-------|---------|
 | `hud` | All `workflows.hud.tasks.*` |
-| `tcg` | TCG card processing tasks |
-| `default` | Desktop and general tasks |
+| `tcg` | TCG card processing tasks (`workflows.purchases.tasks.*`) |
+| `default` | Desktop and general tasks (`workflows.desktop.tasks.*`) |
 
 ---
 
@@ -437,6 +476,18 @@ HARQIS uses lightweight JSON-like mapping files to expose Celery tasks and shell
 - Keys follow: `run-job--<name>` or `command-run--<name>`
 - `workflows.mapping` is **auto-generated** by a Celery management job — do not edit directly.
 - `scripts.mapping` may be manually maintained for shell command bindings.
+- Example mapping files (`workflows-example.mapping`, `scripts-example.mapping`) are included in the repo root for reference.
+
+---
+
+## CI/CD
+
+GitHub Actions workflows are defined in `.github/workflows/`:
+
+| Workflow | File | Description |
+|----------|------|-------------|
+| Run Tests | `run_tests.yml` | Automated test execution on push/PR |
+| Agent Prompts | `agent-prompts.yml` | AI agent prompt processing workflow |
 
 ---
 
@@ -447,7 +498,11 @@ HARQIS uses lightweight JSON-like mapping files to expose Celery tasks and shell
 - Worker functions in `tcg_mp_selling.py` re-import all dependencies inside the function body — required for `multiprocessing` on Windows (no `fork`)
 - `own_tracks` has no Python integration code — Docker Compose runtime dependency only
 - `moo` app is a hollow stub with no services or tests
+- `investagrams` app is a stub with no implementation
+- `trello` app contains only directory scaffolding with no services
 - `aaa` tests use `unittest.TestCase` (not pytest-style), placed in `unit_tests.py`
+- `open_ai` app is planned for deprecation in favor of `antropic` (Claude API)
+- The `antropic` directory name is a legacy typo (should be `anthropic`) — do not rename without updating all imports
 
 ---
 
