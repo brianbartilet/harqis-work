@@ -197,6 +197,14 @@ PYTHON_EXE=
 ENV_ROOT=
 
 # ---------------------------------------------------------------------------
+# Flower  —  Celery task monitoring web UI (http://127.0.0.1:5555)
+# FLOWER_USER : basic-auth username for Flower dashboard
+# FLOWER_PASS : basic-auth password for Flower dashboard
+# ---------------------------------------------------------------------------
+FLOWER_USER=
+FLOWER_PASS=
+
+# ---------------------------------------------------------------------------
 # YNAB  —  You Need A Budget (api.youneedabudget.com)
 # YNAB_ACCESS_TOKEN : personal access token from YNAB Account Settings
 # YNAB_BUDGET_PHP   : budget ID for PHP (Philippine Peso) budget
@@ -218,7 +226,7 @@ MOO_PWD_MD5=
 
 Central YAML file at the repo root. Each section corresponds to one app. Sensitive values use `${ENV_VAR}` interpolation. Config is loaded at import time via `ConfigLoaderService` from harqis-core.
 
-Key sections: `CELERY_TASKS`, `N8N`, `HARQIS_GPT`, `OANDA`, `ECHO_MTG`, `SCRYFALL`, `TCG_MP`, `RAINMETER`, `GOOGLE_APPS`, `GOOGLE_KEEP`, `ELASTIC_LOGGING`, `DESKTOP`, `YNAB`, `ANTHROPIC`, `MOO`.
+Key sections: `CELERY_TASKS`, `N8N`, `HARQIS_GPT`, `OANDA`, `ECHO_MTG`, `SCRYFALL`, `TCG_MP`, `RAINMETER`, `GOOGLE_APPS`, `GOOGLE_KEEP`, `ELASTIC_LOGGING`, `DESKTOP`, `YNAB`, `ANTHROPIC`, `MOO`, `ELEVEN_LABS`, `PYTHON_RUNNER`.
 
 ### Google Apps OAuth
 
@@ -265,6 +273,64 @@ celery -A workflows.config beat --loglevel=info
 celery -A workflows.config worker --beat --loglevel=info -Q hud,default,tcg
 ```
 
+### Windows Scripts (Quick Start)
+
+On Windows, use the helper scripts in `scripts/` (or `run.bat` from the repo root). They load `.env/apps.env` automatically, set `PYTHONPATH`, and invoke `run_workflows.py` instead of the `celery` CLI.
+
+```bat
+REM From the repo root — git pull, then start scheduler + default worker in separate windows
+run.bat
+
+REM Individual scripts (from inside scripts/)
+run_workflow_scheduler.bat          REM Celery Beat scheduler
+run_workflow_worker.bat             REM Worker — default queue
+run_workflow_worker_hud.bat         REM Worker — hud queue
+run_workflow_worker_tcg.bat         REM Worker — tcg queue
+```
+
+`run_workflows.py` is the Sprout entry point; it accepts `worker` or `scheduler` as its argument and reads `WORKFLOW_QUEUE` from the environment to bind the worker to the correct queue.
+
+### Flower (Task Monitoring)
+
+[Celery Flower](https://flower.readthedocs.io/) provides a web UI for monitoring tasks at `http://127.0.0.1:5555`. Requires `FLOWER_USER` and `FLOWER_PASS` in `.env/apps.env`.
+
+```bat
+REM Windows
+scripts\flower.bat
+```
+
+```sh
+# Linux/macOS
+python -m celery -A core.apps.sprout.app.celery:SPROUT flower \
+    --port=5555 --address=127.0.0.1 --basic-auth=$FLOWER_USER:$FLOWER_PASS
+```
+
+---
+
+## Docker
+
+A `Dockerfile` is provided for containerised deployments (e.g., running workers in CI or on a server without a full Windows setup).
+
+```sh
+# Build the image
+docker build -t harqis-work .
+
+# Run pytest inside the container
+docker run --env-file .env/apps.env harqis-work pytest
+
+# Start a Celery worker inside the container
+docker run --env-file .env/apps.env \
+    -e WORKFLOW_CONFIG=workflows.config \
+    -e WORKFLOW_QUEUE=default \
+    harqis-work python run_workflows.py worker
+```
+
+Mount `/app/data` for persistent output (logs, exports, Scryfall downloads):
+
+```sh
+docker run --env-file .env/apps.env -v $(pwd)/data:/app/data harqis-work python run_workflows.py worker
+```
+
 ---
 
 ## Architecture
@@ -302,10 +368,21 @@ harqis-work/
 │   ├── prompts/                # AI prompt templates (markdown)
 │   └── purchases/              # TCG card resale pipeline
 │
+├── scripts/                    # Windows helper scripts
+│   ├── set_env_workflows.bat   # Sets PYTHONPATH and env vars from .env/apps.env
+│   ├── run_workflow_worker.bat         # Starts default-queue worker
+│   ├── run_workflow_worker_hud.bat     # Starts hud-queue worker
+│   ├── run_workflow_worker_tcg.bat     # Starts tcg-queue worker
+│   ├── run_workflow_scheduler.bat      # Starts Celery Beat scheduler
+│   ├── run_hud_tasks.bat               # Triggers all HUD tasks via Flower
+│   └── flower.bat                      # Starts Celery Flower monitoring UI
+│
 ├── apps_config.yaml            # Central app configuration
 ├── pytest.ini                  # Test configuration
 ├── requirements.txt            # Python dependencies
 ├── logging.yaml                # Logging configuration
+├── run.bat                     # Windows one-click launcher (git pull + start all)
+├── run_workflows.py            # Sprout entry point (worker / scheduler)
 ├── workflows.mapping           # Auto-generated Celery task map (do not edit)
 └── conftest.py                 # Pytest session fixtures
 ```
