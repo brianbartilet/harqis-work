@@ -1,0 +1,139 @@
+{#
+  Status panel partial — returned by both /trigger and /tasks/status/{id}.
+  When polling=True the div polls itself every 2s via HTMX.
+  When polling=False (terminal state) the trigger is omitted and polling stops.
+
+  Context variables:
+    task_id : str | None
+    state   : str  (PENDING | RECEIVED | STARTED | SUCCESS | FAILURE | REVOKED | UNKNOWN | DISPATCH_ERROR)
+    info    : dict (Flower response or error dict)
+    polling : bool
+#}
+
+{%- set state_cfg = {
+  "PENDING":        {"dot": "bg-yellow-400",  "text": "text-yellow-300",  "label": "Pending",       "pulse": true},
+  "RECEIVED":       {"dot": "bg-blue-400",    "text": "text-blue-300",    "label": "Received",      "pulse": true},
+  "STARTED":        {"dot": "bg-blue-400",    "text": "text-blue-300",    "label": "Running",       "pulse": true},
+  "SUCCESS":        {"dot": "bg-emerald-400", "text": "text-emerald-300", "label": "Success",       "pulse": false},
+  "FAILURE":        {"dot": "bg-red-400",     "text": "text-red-300",     "label": "Failed",        "pulse": false},
+  "REVOKED":        {"dot": "bg-orange-400",  "text": "text-orange-300",  "label": "Revoked",       "pulse": false},
+  "UNKNOWN":        {"dot": "bg-slate-500",   "text": "text-slate-400",   "label": "Unknown",       "pulse": false},
+  "DISPATCH_ERROR": {"dot": "bg-red-500",     "text": "text-red-300",     "label": "Dispatch Error","pulse": false}
+} -%}
+{%- set cfg = state_cfg.get(state, state_cfg["UNKNOWN"]) -%}
+
+<div
+  {% if polling and task_id %}
+  hx-get="/tasks/status/{{ task_id }}"
+  hx-trigger="every 2s"
+  hx-swap="outerHTML"
+  {% endif %}
+  class="space-y-2 font-mono text-xs">
+
+  {# ── Status row ────────────────────────────────────────────────────────── #}
+  <div class="flex items-center justify-between gap-2">
+    <div class="flex items-center gap-2">
+      <span class="w-2 h-2 rounded-full shrink-0 {{ cfg.dot }}{% if cfg.pulse %} pulse-dot{% endif %}"></span>
+      <span class="font-semibold {{ cfg.text }}">{{ cfg.label }}</span>
+    </div>
+
+    {% if info.get("elapsed") is not none %}
+    <span class="text-slate-500">{{ info.elapsed }}s</span>
+    {% elif polling %}
+    <span class="text-slate-600">polling…</span>
+    {% endif %}
+  </div>
+
+  {# ── Task ID ───────────────────────────────────────────────────────────── #}
+  {% if task_id %}
+  <div class="text-slate-600 truncate">
+    id: <span class="text-slate-500">{{ task_id }}</span>
+  </div>
+  {% endif %}
+
+  {# ── Worker / queue ────────────────────────────────────────────────────── #}
+  {% if info.get("worker") %}
+  <div class="text-slate-600">
+    worker: <span class="text-slate-400">{{ info.worker }}</span>
+    {% if info.get("queue") %}
+    · <span class="text-slate-500">{{ info.queue }}</span>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# ── Note (no Flower / dispatch error) ────────────────────────────────── #}
+  {% if info.get("note") %}
+  <div class="text-slate-500 italic">{{ info.note }}</div>
+  {% endif %}
+
+  {# ── SUCCESS result ────────────────────────────────────────────────────── #}
+  {% if state == "SUCCESS" and info.get("result") %}
+  <div class="mt-1">
+    <div class="text-slate-600 mb-1">result:</div>
+    <pre class="whitespace-pre-wrap break-all text-emerald-300/80 max-h-48 overflow-y-auto
+                rounded bg-slate-950/60 ring-1 ring-emerald-900/40 p-2 leading-relaxed
+                linkify-output">{{ info.result }}</pre>
+  </div>
+  {% endif %}
+
+  {# ── FAILURE exception + traceback ────────────────────────────────────── #}
+  {% if state == "FAILURE" %}
+  {% if info.get("exception") %}
+  <div class="mt-1">
+    <div class="text-red-400/70 mb-1">exception:</div>
+    <pre class="whitespace-pre-wrap break-all text-red-300/80 bg-red-950/30
+                ring-1 ring-red-900/40 rounded p-2 leading-relaxed
+                linkify-output">{{ info.exception }}</pre>
+  </div>
+  {% endif %}
+  {% if info.get("traceback") %}
+  <details class="mt-1">
+    <summary class="cursor-pointer text-slate-500 hover:text-slate-300">traceback</summary>
+    <pre class="mt-1 whitespace-pre-wrap break-all text-red-300/60 bg-red-950/20
+                ring-1 ring-red-900/30 rounded p-2 max-h-64 overflow-y-auto leading-relaxed
+                linkify-output">{{ info.traceback }}</pre>
+  </details>
+  {% endif %}
+  {% endif %}
+
+  {# ── Terminal state data marker (read by htmx:afterSettle to persist history) #}
+  {% if not polling and task_id %}
+  <div id="terminal-{{ task_id }}"
+       data-state="{{ state }}"
+       data-elapsed="{{ info.get('elapsed', '') }}"
+       data-worker="{{ info.get('worker') or '' }}"
+       data-result="{{ (info.get('result') or '')[:500] }}"
+       data-exception="{{ (info.get('exception') or '')[:200] }}"
+       class="hidden"></div>
+  {% endif %}
+
+</div>
+
+<script>
+(function () {
+  // Matches: http(s):// URLs, Windows paths (C:\...), UNC paths (\\server\share), Unix paths (/absolute/path)
+  const PATTERN = /(https?:\/\/[^\s"'<>]+)|([A-Za-z]:\\{1,2}[^\s"'<>]+)|(\\\\[^\s"'<>]+)|(\/(?:[^\s"'<>\/][^\s"'<>]*\/[^\s"'<>]+))/g;
+
+  function linkify(el) {
+    const text = el.textContent;
+    if (!PATTERN.test(text)) return;
+    PATTERN.lastIndex = 0;
+
+    el.innerHTML = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(PATTERN, (match) => {
+      // For local paths use file:// protocol
+      const href = match.startsWith('http') ? match : 'file:///' + match.replace(/\\+/g, '/');
+      return `<a href="${href}" target="_blank" rel="noopener"
+                 class="underline underline-offset-2 decoration-dotted hover:decoration-solid opacity-80 hover:opacity-100"
+                 style="color:inherit">${match}</a>`;
+    });
+  }
+
+  function processAll() {
+    document.querySelectorAll('.linkify-output').forEach(linkify);
+  }
+
+  // Run on initial load and after every HTMX swap
+  processAll();
+  document.addEventListener('htmx:afterSwap', processAll);
+})();
+</script>

@@ -267,6 +267,36 @@ celery -A workflows.config worker --beat --loglevel=info -Q hud,default,tcg
 
 ---
 
+## Frontend Dashboard
+
+A lightweight web dashboard for manually triggering Celery tasks, monitoring run status, and customizing the layout.
+
+![HARQIS Dashboard](docs/dashboard-sample.png)
+
+> For full setup, configuration, and API reference, see [`frontend/README.md`](frontend/README.md).
+
+### Features
+
+- Login-protected — signed session cookie (no external auth required)
+- Tabbed workflow view — one tab per workflow (HUD, Purchases, Desktop)
+- One-click task triggering — dispatches directly to the Celery broker
+- Live status polling — HTMX polls every 2s, stops automatically on completion
+- Run history — last 20 runs per task, stored in browser localStorage
+- **Customizable layout** — drag-and-drop tab and card reordering, persisted across sessions
+- Flower link — header link to the Flower monitoring UI if configured
+
+### Quick Start
+
+```sh
+cd frontend
+pip install -r requirements.txt
+python main.py
+```
+
+Open: **http://localhost:8080**
+
+---
+
 ## Architecture
 
 ### Directory Structure
@@ -301,6 +331,16 @@ harqis-work/
 │   ├── n8n/                    # n8n utility helpers
 │   ├── prompts/                # AI prompt templates (markdown)
 │   └── purchases/              # TCG card resale pipeline
+│
+├── frontend/                   # Web dashboard (FastAPI + HTMX + Alpine.js)
+│   ├── main.py                 # FastAPI routes
+│   ├── registry.py             # Static task registry (24 tasks, 3 workflows)
+│   ├── templates/              # Jinja2 HTML templates
+│   ├── README.md               # Frontend setup and architecture docs
+│   └── requirements.txt
+│
+├── docs/                       # Project documentation assets
+│   └── dashboard-sample.png   # Dashboard screenshot
 │
 ├── apps_config.yaml            # Central app configuration
 ├── pytest.ini                  # Test configuration

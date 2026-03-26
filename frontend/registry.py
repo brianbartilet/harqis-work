@@ -1,0 +1,312 @@
+"""
+Static task registry built from workflows/*/tasks_config.py definitions.
+Each workflow maps to a dict of tasks with their Celery path, queue, schedule, and default kwargs.
+"""
+from typing import TypedDict
+
+
+class TaskDef(TypedDict):
+    key: str
+    label: str
+    task_path: str
+    queue: str
+    schedule: str
+    kwargs: dict
+    description: str
+    manual_only: bool
+
+
+class WorkflowDef(TypedDict):
+    label: str
+    color: str           # tailwind color name: blue | emerald | violet
+    description: str
+    tasks: list[TaskDef]
+
+
+TASK_REGISTRY: dict[str, WorkflowDef] = {
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # HUD  — Desktop heads-up display via Rainmeter
+    # ──────────────────────────────────────────────────────────────────────────
+    "hud": {
+        "label": "HUD",
+        "color": "blue",
+        "description": "Desktop heads-up display — Rainmeter widgets for forex, calendar, budgets, and TCG orders.",
+        "tasks": [
+            {
+                "key": "show_forex_account",
+                "label": "Forex Account",
+                "task_path": "workflows.hud.tasks.hud_forex.show_forex_account",
+                "queue": "hud",
+                "schedule": "Every 15 min (Mon–Fri)",
+                "kwargs": {"cfg_id__oanda": "OANDA", "cfg_id__calendar": "GOOGLE_APPS"},
+                "description": "Fetches OANDA forex account balance and open trades, renders to HUD widget.",
+                "manual_only": False,
+            },
+            {
+                "key": "show_tcg_orders",
+                "label": "TCG Orders",
+                "task_path": "workflows.hud.tasks.hud_tcg.show_tcg_orders",
+                "queue": "hud",
+                "schedule": "Every hour",
+                "kwargs": {"cfg_id__tcg_mp": "TCG_MP", "cfg_id__scryfall": "SCRYFALL", "cfg_id__calendar": "GOOGLE_APPS"},
+                "description": "Displays open TCG Marketplace orders with card artwork on the HUD.",
+                "manual_only": False,
+            },
+            {
+                "key": "get_desktop_logs",
+                "label": "Desktop Logs (AI)",
+                "task_path": "workflows.hud.tasks.hud_gpt.get_desktop_logs",
+                "queue": "default",
+                "schedule": "Every 5 min (at :05)",
+                "kwargs": {"cfg_id__desktop": "DESKTOP", "cfg_id__calendar": "GOOGLE_APPS"},
+                "description": "Sends desktop activity logs to Claude/GPT for analysis and displays summary on HUD.",
+                "manual_only": False,
+            },
+            {
+                "key": "take_screenshots_for_gpt_capture",
+                "label": "Screenshot Capture",
+                "task_path": "workflows.hud.tasks.hud_gpt.take_screenshots_for_gpt_capture",
+                "queue": "default",
+                "schedule": "Every 10 min",
+                "kwargs": {"cfg_id__desktop": "DESKTOP"},
+                "description": "Captures desktop screenshots for AI activity tracking.",
+                "manual_only": False,
+            },
+            {
+                "key": "show_calendar_information",
+                "label": "Calendar Events",
+                "task_path": "workflows.hud.tasks.hud_calendar.show_calendar_information",
+                "queue": "hud",
+                "schedule": "Every 15 min",
+                "kwargs": {"cfg_id__calendar": "GOOGLE_APPS", "cfg_id__elevenlabs": "ELEVEN_LABS"},
+                "description": "Fetches today's Google Calendar events and renders them on the HUD.",
+                "manual_only": False,
+            },
+            {
+                "key": "get_failed_jobs",
+                "label": "Failed Jobs",
+                "task_path": "workflows.hud.tasks.hud_logs.get_failed_jobs",
+                "queue": "hud",
+                "schedule": "Every 15 min",
+                "kwargs": {},
+                "description": "Lists recent failed Celery tasks on the HUD.",
+                "manual_only": False,
+            },
+            {
+                "key": "show_mouse_bindings",
+                "label": "Mouse Bindings",
+                "task_path": "workflows.hud.tasks.hud_utils.show_mouse_bindings",
+                "queue": "hud",
+                "schedule": "Every 15 sec",
+                "kwargs": {"cfg_id__calendar": "GOOGLE_APPS"},
+                "description": "Displays active mouse shortcut bindings on the HUD.",
+                "manual_only": False,
+            },
+            {
+                "key": "build_summary_mouse_bindings",
+                "label": "Bindings Summary",
+                "task_path": "workflows.hud.tasks.hud_utils.build_summary_mouse_bindings",
+                "queue": "default",
+                "schedule": "Daily at 1am",
+                "kwargs": {"cfg_id__desktop": "DESKTOP"},
+                "description": "Generates and logs the daily mouse binding usage summary.",
+                "manual_only": False,
+            },
+            {
+                "key": "show_hud_profiles",
+                "label": "HUD Profiles",
+                "task_path": "workflows.hud.tasks.hud_utils.show_hud_profiles",
+                "queue": "hud",
+                "schedule": "Daily at midnight",
+                "kwargs": {},
+                "description": "Activates the appropriate iCUE/Rainmeter profile for the active foreground app.",
+                "manual_only": False,
+            },
+            {
+                "key": "show_ynab_budgets_info",
+                "label": "YNAB Budgets",
+                "task_path": "workflows.hud.tasks.hud_finance.show_ynab_budgets_info",
+                "queue": "hud",
+                "schedule": "Every 4 hours",
+                "kwargs": {"cfg_id__ynab": "YNAB", "cfg_id__calendar": "GOOGLE_APPS"},
+                "description": "Displays YNAB budget balances (PHP + SGD) on the HUD.",
+                "manual_only": False,
+            },
+            {
+                "key": "show_ai_helper",
+                "label": "AI Helper",
+                "task_path": "workflows.hud.tasks.hud_utils.show_ai_helper",
+                "queue": "hud",
+                "schedule": "Daily at midnight",
+                "kwargs": {"cfg_id__n8n": "N8N", "cfg_id__eleven": "ELEVEN_LABS", "cfg_id__py": "PYTHON_RUNNER"},
+                "description": "Initializes the AI voice assistant widget on the HUD.",
+                "manual_only": False,
+            },
+            {
+                "key": "get_schedules",
+                "label": "Schedules",
+                "task_path": "workflows.hud.tasks.hud_logs.get_schedules",
+                "queue": "hud",
+                "schedule": "Every 4 hours",
+                "kwargs": {"cfg_id__calendar": "GOOGLE_APPS"},
+                "description": "Fetches and displays upcoming Google Calendar schedule on the HUD.",
+                "manual_only": False,
+            },
+        ],
+    },
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # PURCHASES  — MTG card resale pipeline
+    # ──────────────────────────────────────────────────────────────────────────
+    "purchases": {
+        "label": "Purchases",
+        "color": "emerald",
+        "description": "MTG card resale pipeline — Scryfall bulk data → listings → price updates → order audit.",
+        "tasks": [
+            {
+                "key": "download_scryfall_bulk_data",
+                "label": "Download Scryfall Data",
+                "task_path": "workflows.purchases.tasks.tcg_mp_selling.download_scryfall_bulk_data",
+                "queue": "tcg",
+                "schedule": "1st of month at 2am",
+                "kwargs": {"cfg_id__scryfall": "SCRYFALL"},
+                "description": "Downloads the full Scryfall card database JSON to local disk.",
+                "manual_only": False,
+            },
+            {
+                "key": "generate_audit_for_tcg_orders",
+                "label": "Audit TCG Orders",
+                "task_path": "workflows.purchases.tasks.tcg_mp_selling.generate_audit_for_tcg_orders",
+                "queue": "tcg",
+                "schedule": "Every 4 hours",
+                "kwargs": {"cfg_id__tcg_mp": "TCG_MP"},
+                "description": "Generates an audit report of open and pending TCG Marketplace orders.",
+                "manual_only": False,
+            },
+            {
+                "key": "update_tcg_listings_prices",
+                "label": "Update Listing Prices",
+                "task_path": "workflows.purchases.tasks.tcg_mp_selling.update_tcg_listings_prices",
+                "queue": "tcg",
+                "schedule": "Daily at 2am and noon",
+                "kwargs": {
+                    "cfg_id__tcg_mp": "TCG_MP",
+                    "cfg_id__echo_mtg": "ECHO_MTG",
+                    "cfg_id__echo_mtg_fe": "ECHO_MTG_FE",
+                },
+                "description": "Recalculates and updates card listing prices on TCG Marketplace.",
+                "manual_only": False,
+            },
+            {
+                "key": "generate_tcg_listings",
+                "label": "Generate Listings",
+                "task_path": "workflows.purchases.tasks.tcg_mp_selling.generate_tcg_listings",
+                "queue": "tcg",
+                "schedule": "Manual only",
+                "kwargs": {
+                    "cfg_id__tcg_mp": "TCG_MP",
+                    "cfg_id__echo_mtg": "ECHO_MTG",
+                    "cfg_id__scryfall": "SCRYFALL",
+                },
+                "description": "Creates new card listings from owned Echo MTG inventory. Long-running (uses 4 worker processes).",
+                "manual_only": True,
+            },
+            {
+                "key": "generate_tcg_mappings",
+                "label": "Generate TCG Mappings",
+                "task_path": "workflows.purchases.tasks.tcg_mp_selling.generate_tcg_mappings",
+                "queue": "tcg",
+                "schedule": "Manual only (disabled in beat)",
+                "kwargs": {
+                    "cfg_id__tcg_mp": "TCG_MP",
+                    "cfg_id__echo_mtg": "ECHO_MTG",
+                    "cfg_id__scryfall": "SCRYFALL",
+                },
+                "description": "Regenerates the TCG task mapping file. Must be run after adding new tasks.",
+                "manual_only": True,
+            },
+        ],
+    },
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # DESKTOP  — Windows desktop automation
+    # ──────────────────────────────────────────────────────────────────────────
+    "desktop": {
+        "label": "Desktop",
+        "color": "violet",
+        "description": "Windows desktop automation — git pulls, window management, file sync, and activity capture.",
+        "tasks": [
+            {
+                "key": "git_pull_on_paths",
+                "label": "Git Pull",
+                "task_path": "workflows.desktop.tasks.commands.git_pull_on_paths",
+                "queue": "default",
+                "schedule": "Every 10 min",
+                "kwargs": {},
+                "description": "Pulls the latest commits on all configured git repositories.",
+                "manual_only": False,
+            },
+            {
+                "key": "set_desktop_hud_to_back",
+                "label": "HUD to Background",
+                "task_path": "workflows.desktop.tasks.commands.set_desktop_hud_to_back",
+                "queue": "default",
+                "schedule": "Every 30 min",
+                "kwargs": {},
+                "description": "Sends Rainmeter HUD windows to the background z-order.",
+                "manual_only": False,
+            },
+            {
+                "key": "copy_files_targeted",
+                "label": "Sync Files",
+                "task_path": "workflows.desktop.tasks.commands.copy_files_targeted",
+                "queue": "default",
+                "schedule": "Every 30 min",
+                "kwargs": {"cfg_id__desktop_jobs": "DESKTOP"},
+                "description": "Syncs dev files to the configured run directory.",
+                "manual_only": False,
+            },
+            {
+                "key": "run_n8n_sequence",
+                "label": "Run n8n Sequence",
+                "task_path": "workflows.desktop.tasks.commands.run_n8n_sequence",
+                "queue": "default",
+                "schedule": "Daily at midnight",
+                "kwargs": {},
+                "description": "Executes the configured n8n automation workflow sequence.",
+                "manual_only": False,
+            },
+            {
+                "key": "run_capture_logging",
+                "label": "Capture Activity",
+                "task_path": "workflows.desktop.tasks.capture.run_capture_logging",
+                "queue": "default",
+                "schedule": "Every 15 min",
+                "kwargs": {"cfg_id__desktop_utils": "DESKTOP"},
+                "description": "Captures a desktop screenshot and logs the foreground application activity.",
+                "manual_only": False,
+            },
+            {
+                "key": "generate_daily_desktop_summary",
+                "label": "Daily Summary",
+                "task_path": "workflows.desktop.tasks.capture.generate_daily_desktop_summary",
+                "queue": "default",
+                "schedule": "Daily at 23:55",
+                "kwargs": {"hud_item_name": "DESKTOP LOGS", "logs_output_path": "logs/daily"},
+                "description": "Generates an AI-powered summary of today's desktop activity logs.",
+                "manual_only": False,
+            },
+            {
+                "key": "generate_weekly_desktop_summary",
+                "label": "Weekly Summary",
+                "task_path": "workflows.desktop.tasks.capture.generate_weekly_desktop_summary",
+                "queue": "default",
+                "schedule": "Sundays at 23:58",
+                "kwargs": {"logs_daily_path": "logs/daily", "logs_output_path": "logs/weekly"},
+                "description": "Generates an AI-powered weekly activity summary from daily log files.",
+                "manual_only": False,
+            },
+        ],
+    },
+}

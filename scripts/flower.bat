@@ -21,5 +21,4 @@ cd ..
 python -m celery -A core.apps.sprout.app.celery:SPROUT flower ^
     --port=5555 ^
     --address=127.0.0.1 ^
-    --basic-auth=%FLOWER_USER%:%FLOWER_PASS%
-
+    --basic-auth=%FLOWER_USER%:%FLOWER_PASSWORD%

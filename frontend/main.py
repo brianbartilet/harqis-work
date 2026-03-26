@@ -1,0 +1,214 @@
+"""
+HARQIS Dashboard — FastAPI entry point.
+
+Routes
+------
+GET  /                              → redirect to /dashboard
+GET  /login                         → login page
+POST /login                         → authenticate and set session cookie
+GET  /logout                        → clear session, redirect to /login
+GET  /dashboard                     → main dashboard (requires auth)
+POST /tasks/{workflow}/{key}/trigger → dispatch Celery task, return status HTML
+GET  /tasks/status/{task_id}        → poll task status (HTMX partial)
+GET  /health                        → simple health check
+"""
+from pathlib import Path
+from typing import Optional
+
+import uvicorn
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
+import celery_client
+from auth import create_session_token, get_current_user
+from config import get_settings
+from registry import TASK_REGISTRY
+
+# ── App setup ─────────────────────────────────────────────────────────────────
+settings = get_settings()
+
+app = FastAPI(title="HARQIS Dashboard", docs_url=None, redoc_url=None)
+
+_here = Path(__file__).parent
+templates = Jinja2Templates(directory=str(_here / "templates"))
+
+static_dir = _here / "static"
+static_dir.mkdir(exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _find_task(workflow: str, task_key: str) -> Optional[dict]:
+    wf = TASK_REGISTRY.get(workflow)
+    if not wf:
+        return None
+    return next((t for t in wf["tasks"] if t["key"] == task_key), None)
+
+
+def _require_auth(request: Request):
+    """Returns (user, None) or (None, RedirectResponse)."""
+    user = get_current_user(request)
+    if not user:
+        return None, RedirectResponse("/login", status_code=302)
+    return user, None
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@app.get("/", include_in_schema=False)
+async def root(request: Request):
+    user = get_current_user(request)
+    return RedirectResponse("/dashboard" if user else "/login", status_code=302)
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
+@app.get("/debug/config")
+async def debug_config():
+    """Verify loaded settings (passwords masked). Remove this route in production."""
+    from config import _ENV_FILE
+    return {
+        "env_file": str(_ENV_FILE),
+        "env_file_exists": _ENV_FILE.exists(),
+        "flower_url": settings.flower_url,
+        "flower_user": settings.flower_user or "(empty)",
+        "flower_password": "***" if settings.flower_password else "(empty)",
+        "celery_broker": settings.celery_broker,
+    }
+
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request, error: Optional[str] = None):
+    return templates.TemplateResponse(request, "login.html", {"error": error})
+
+
+@app.post("/login")
+async def login(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+):
+    if username == settings.app_username and password == settings.app_password:
+        token = create_session_token(username)
+        response = RedirectResponse("/dashboard", status_code=302)
+        response.set_cookie(
+            "session",
+            token,
+            max_age=settings.session_max_age,
+            httponly=True,
+            samesite="lax",
+        )
+        return response
+    return templates.TemplateResponse(
+        request, "login.html",
+        {"error": "Invalid username or password."},
+        status_code=401,
+    )
+
+
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse("/login", status_code=302)
+    response.delete_cookie("session")
+    return response
+
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    user, redirect = _require_auth(request)
+    if redirect:
+        return redirect
+    return templates.TemplateResponse(
+        request, "dashboard.html",
+        {
+            "user": user,
+            "workflows": TASK_REGISTRY,
+            "flower_url": settings.flower_url,
+        },
+    )
+
+
+# ── Task trigger ──────────────────────────────────────────────────────────────
+
+@app.post("/tasks/{workflow}/{task_key}/trigger", response_class=HTMLResponse)
+async def trigger_task(request: Request, workflow: str, task_key: str):
+    user = get_current_user(request)
+    if not user:
+        return HTMLResponse(
+            '<p class="text-red-400 text-xs">Session expired — please log in again.</p>'
+        )
+
+    task = _find_task(workflow, task_key)
+    if not task:
+        return HTMLResponse(
+            '<p class="text-red-400 text-xs">Task not found in registry.</p>'
+        )
+
+    try:
+        task_id = celery_client.dispatch(
+            task_path=task["task_path"],
+            kwargs=task.get("kwargs", {}),
+            queue=task["queue"],
+        )
+    except Exception as exc:
+        return templates.TemplateResponse(
+            request, "partials/status_panel.html",
+            {
+                "task_id": None,
+                "state": "DISPATCH_ERROR",
+                "info": {"note": str(exc)},
+                "polling": False,
+            },
+        )
+
+    return templates.TemplateResponse(
+        request, "partials/status_panel.html",
+        {
+            "task_id": task_id,
+            "state": "PENDING",
+            "info": {"note": "Waiting for a worker to pick up the task…"},
+            "polling": True,
+        },
+    )
+
+
+# ── Status poll ───────────────────────────────────────────────────────────────
+
+@app.get("/tasks/status/{task_id}", response_class=HTMLResponse)
+async def task_status(request: Request, task_id: str):
+    if not get_current_user(request):
+        return HTMLResponse("")
+
+    info = await celery_client.get_task_info(task_id)
+    state = info.get("state", "UNKNOWN")
+
+    return templates.TemplateResponse(
+        request, "partials/status_panel.html",
+        {
+            "task_id": task_id,
+            "state": state,
+            "info": info,
+            "polling": not celery_client.is_terminal(state),
+        },
+    )
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host=settings.host,
+        port=settings.port,
+        reload=True,
+    )
