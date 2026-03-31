@@ -82,7 +82,7 @@ WORKFLOWS_DESKTOP = {
         'schedule': crontab(hour=23, minute=55),
         'kwargs': {
             "hud_item_name": "DESKTOP LOGS",
-            "logs_output_path": "logs/daily",
+            "logs_output_path": "C:/Users/brian/GIT/harqis-work/logs/daily",
         },
         "options": {
             "queue": "default",
@@ -94,8 +94,8 @@ WORKFLOWS_DESKTOP = {
         'task': 'workflows.desktop.tasks.capture.generate_weekly_desktop_summary',
         'schedule': crontab(day_of_week='sun', hour=23, minute=58),
         'kwargs': {
-            "logs_daily_path": "logs/daily",
-            "logs_output_path": "logs/weekly",
+            "logs_daily_path": "C:/Users/brian/GIT/harqis-work/logs/daily",
+            "logs_output_path": "C:/Users/brian/GIT/harqis-work/logs/weekly",
         },
         "options": {
             "queue": "default",

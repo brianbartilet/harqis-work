@@ -142,12 +142,11 @@ def generate_daily_desktop_summary(hud_item_name='DESKTOP LOGS', logs_output_pat
         return f"FAILED: {e}"
 
     today = datetime.now().strftime("%d-%m-%Y")
-    output_dir = os.path.abspath(logs_output_path)
-    os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, f"DESKTOP-LOGS-{today}.md")
+    output_dir = Path(logs_output_path).expanduser()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_file = output_dir / f"DESKTOP-LOGS-{today}.md"
 
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(summary_md)
+    output_file.write_text(summary_md, encoding='utf-8')
 
     log.info(f"Daily summary written to {output_file}")
     return f"SUCCESS: {output_file}"
@@ -172,8 +171,8 @@ def generate_weekly_desktop_summary(logs_daily_path='logs/daily', logs_output_pa
     week_num = today.strftime("%W")
     year = today.strftime("%Y")
 
-    daily_dir = os.path.abspath(logs_daily_path)
-    if not os.path.isdir(daily_dir):
+    daily_dir = Path(logs_daily_path).expanduser()
+    if not daily_dir.is_dir():
         log.warning(f"Daily logs directory not found at {daily_dir} — skipping weekly summary")
         return "SKIPPED: daily logs directory not found"
 
@@ -181,8 +180,8 @@ def generate_weekly_desktop_summary(logs_daily_path='logs/daily', logs_output_pa
     for i in range(7):
         day = today - timedelta(days=i)
         filename = f"DESKTOP-LOGS-{day.strftime('%d-%m-%Y')}.md"
-        filepath = os.path.join(daily_dir, filename)
-        if os.path.exists(filepath):
+        filepath = daily_dir / filename
+        if filepath.exists():
             daily_files.append((day, filepath))
 
     if not daily_files:
@@ -218,12 +217,11 @@ def generate_weekly_desktop_summary(logs_daily_path='logs/daily', logs_output_pa
         log.error(f"Anthropic weekly summary generation failed: {e}")
         return f"FAILED: {e}"
 
-    output_dir = os.path.abspath(logs_output_path)
-    os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, f"DESKTOP-LOGS-WEEK-{week_num}-{year}.md")
+    output_dir = Path(logs_output_path).expanduser()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_file = output_dir / f"DESKTOP-LOGS-WEEK-{week_num}-{year}.md"
 
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(summary_md)
+    output_file.write_text(summary_md, encoding='utf-8')
 
     log.info(f"Weekly summary written to {output_file}")
     return f"SUCCESS: {output_file}"
