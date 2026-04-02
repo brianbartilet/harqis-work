@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "harqis-work": {
+      "command": "C:\Users\brian\GIT\harqis-work\.venv\Scripts\python.exe",
+      "args": [
+        "C:\Users\brian\GIT\harqis-work\apps\mcp\server.py"
+      ],
+      "env": {}
+    }
+  }
+}
