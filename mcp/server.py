@@ -7,6 +7,7 @@ from mcp.references.tools.google_apps import register_google_apps_tools
 from mcp.references.tools.tcg_mp import register_tcg_mp_tools
 from mcp.references.tools.echo_mtg import register_echo_mtg_tools
 from mcp.references.tools.scryfall import register_scryfall_tools
+from mcp.references.tools.telegram import register_telegram_tools
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,6 +34,9 @@ register_echo_mtg_tools(mcp)
 
 logger.info("Registering Scryfall tools")
 register_scryfall_tools(mcp)
+
+logger.info("Registering Telegram tools")
+register_telegram_tools(mcp)
 
 logger.info("MCP server ready — %d tool(s) registered", len(mcp._tool_manager._tools))
 

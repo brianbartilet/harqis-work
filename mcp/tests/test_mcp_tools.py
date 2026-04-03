@@ -252,3 +252,41 @@ def test_mcp_get_scryfall_card(scryfall_cards_service):
 def test_mcp_get_scryfall_bulk_data_info(scryfall_bulk_service):
     data = scryfall_bulk_service.get_card_data_bulk(bulk_data_type="all-cards")
     assert_that(data, not_none())
+
+
+# ── TELEGRAM ───────────────────────────────────────────────────────────────────
+
+from apps.telegram.references.web.api.bot import ApiServiceTelegramBot
+from apps.telegram.references.web.api.messages import ApiServiceTelegramMessages
+from apps.telegram.config import CONFIG as TELEGRAM_CONFIG
+
+
+@pytest.fixture()
+def telegram_bot_service():
+    return ApiServiceTelegramBot(TELEGRAM_CONFIG)
+
+
+@pytest.fixture()
+def telegram_messages_service():
+    return ApiServiceTelegramMessages(TELEGRAM_CONFIG)
+
+
+@pytest.mark.smoke
+def test_mcp_get_telegram_bot_info(telegram_bot_service):
+    me = telegram_bot_service.get_me()
+    assert_that(me, not_none())
+    assert_that(me.is_bot, not_none())
+
+
+@pytest.mark.smoke
+def test_mcp_get_telegram_updates(telegram_bot_service):
+    updates = telegram_bot_service.get_updates(limit=10)
+    assert_that(updates, instance_of(list))
+
+
+@pytest.mark.smoke
+def test_mcp_get_telegram_chat(telegram_messages_service):
+    chat_id = TELEGRAM_CONFIG.app_data['default_chat_id']
+    result = telegram_messages_service.get_chat(chat_id=chat_id)
+    assert_that(result, instance_of(dict))
+    assert_that(result.get('id'), not_none())

@@ -148,6 +148,7 @@ Auto-generated JSON-like files that expose Celery tasks and shell commands to n8
 | `rainmeter` | Windows desktop HUD skinning | Local |
 | `scryfall` | MTG card database | REST API |
 | `tcg_mp` | TCG Marketplace (most complex app) | REST API |
+| `telegram` | Telegram Bot — messaging and updates | REST API |
 | `trello` | Kanban — references only, no impl | REST API |
 | `ynab` | Personal budgeting | REST API |
 

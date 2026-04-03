@@ -167,6 +167,25 @@ Wraps `apps/echo_mtg/references/web/api/inventory`. Requires valid `ECHO_MTG` se
 
 ---
 
+### Telegram (`references/tools/telegram.py`)
+
+Wraps `apps/telegram/references/web/api/` services. Requires valid `TELEGRAM` section in `apps_config.yaml`.
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `get_telegram_bot_info` | — | Bot identity (id, username, first_name) |
+| `get_telegram_updates` | `limit?` | Latest pending updates received by the bot |
+| `send_telegram_message` | `chat_id`, `text`, `parse_mode?` | Send a message to any chat/user |
+| `send_telegram_message_to_default` | `text`, `parse_mode?` | Send to the default configured chat |
+| `get_telegram_chat` | `chat_id` | Chat/group/channel metadata |
+
+**Example prompts:**
+- *"Send a Telegram message to my default chat saying the build passed."*
+- *"What messages has the bot received recently?"*
+- *"Get info about my Telegram channel."*
+
+---
+
 ### Scryfall (`references/tools/scryfall.py`)
 
 Wraps `apps/scryfall/references/web/api/` services. Requires valid `SCRYFALL` section in `apps_config.yaml`.
