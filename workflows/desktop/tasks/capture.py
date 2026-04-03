@@ -141,7 +141,7 @@ def generate_daily_desktop_summary(hud_item_name='DESKTOP LOGS', logs_output_pat
         log.error(f"Anthropic daily summary generation failed: {e}")
         return f"FAILED: {e}"
 
-    today = datetime.now().strftime("%d-%m-%Y")
+    today = datetime.now().strftime("%m-%d-%Y")
     output_dir = Path(logs_output_path).expanduser()
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / f"DESKTOP-LOGS-{today}.md"
