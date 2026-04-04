@@ -1,23 +1,52 @@
-.idea
-.claude/settings.local.json
-*config.yaml
-.env/*
-!.env/.gitkeep
-**/.env
-**/.env.*
-.venv
-venv
-*pid.*
-*.bak*
-*.dat*
-*.dir*
-*.zip*
-*.log*
-*.egg
-*.egg-info/
-screenshots/
-logs/
-*.tgz
-/workflows.mapping
-/scripts.mapping
+# ── OpenClaw: ignore everything except workspace ──────────────────────────────
+.openclaw/*
+!.openclaw/workspace
+!.openclaw/workspace/**
 
+# ── Secrets & credentials ─────────────────────────────────────────────────────
+.env/
+*.env
+.env.*
+!.env.example
+**/credentials*.json
+**/storage*.json
+**/storage-*.json
+secrets/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+*.log.*
+logs/
+
+# ── n8n backups ───────────────────────────────────────────────────────────────
+workflows/n8n/backups/
+
+# ── Celery ────────────────────────────────────────────────────────────────────
+celerybeat-schedule.*
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.lock
+Thumbs.db
+.DS_Store
