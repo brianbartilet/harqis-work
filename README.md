@@ -519,6 +519,106 @@ HARQIS uses lightweight JSON-like mapping files to expose Celery tasks and shell
 
 ---
 
+## OpenClaw Integration
+
+HARQIS-Work includes an [OpenClaw](https://openclaw.ai) agent workspace. OpenClaw is a local AI agent runtime that hosts Claude (or other LLM) agents and connects them to messaging channels (WhatsApp, Telegram, Discord) with a persistent, file-based memory system.
+
+### What it does here
+
+The `.openclaw/workspace/` directory defines the agent's context and behavior for this repo. An OpenClaw agent pointed at this workspace can:
+
+- Maintain continuity across sessions via file-based memory (`memory/YYYY-MM-DD.md`, `MEMORY.md`)
+- Respond proactively via heartbeat polling (periodic email/calendar/notification checks)
+- Participate in WhatsApp, Telegram, or Discord conversations on behalf of the user
+- Use HARQIS workflows and tools as part of its available actions
+
+### Directory Structure
+
+```
+.openclaw/
+├── openclaw.json           # Runtime config — gitignored (local/machine-specific)
+├── .env                    # OpenClaw API keys — gitignored
+├── identity/               # Device identity and Ed25519 keypair — gitignored
+│   └── device.json
+├── credentials/            # Messaging platform credentials — gitignored
+│   └── whatsapp/default/   # WhatsApp Signal Protocol pre-keys
+├── flows/                  # Flow registry (SQLite) — gitignored
+│   └── registry.sqlite
+└── workspace/              # Agent workspace — versioned in git
+    ├── AGENTS.md           # Session startup, memory conventions, group chat rules
+    ├── SOUL.md             # Agent identity and core values
+    ├── TOOLS.md            # Machine-specific tool notes (cameras, SSH, TTS)
+    ├── HEARTBEAT.md        # Periodic background task checklist
+    └── BOOTSTRAP.md        # One-time first-run initialization script
+```
+
+Only `workspace/` is committed to git — credentials, device identity, and the flow registry are gitignored and machine-local.
+
+### Workspace Files
+
+| File | Purpose |
+|------|---------|
+| `SOUL.md` | Defines the agent's personality, values, and behavioral defaults |
+| `AGENTS.md` | Session startup sequence, memory system rules, group chat etiquette, heartbeat behavior |
+| `TOOLS.md` | Notes specific to this machine (SSH aliases, camera names, TTS preferences) |
+| `HEARTBEAT.md` | Short checklist of periodic tasks the agent runs proactively (email, calendar, etc.) |
+| `BOOTSTRAP.md` | One-time initialization — run on first session, then delete |
+
+### Configuration
+
+OpenClaw is configured via `openclaw.json` (stored at `~/.openclaw/openclaw.json` or local `.openclaw/openclaw.json`). Key settings for this repo:
+
+```json
+{
+  "gateway": { "mode": "local" },
+  "agents": {
+    "defaults": {
+      "workspace": "C:\\Users\\<user>\\.openclaw\\workspace",
+      "model": { "primary": "anthropic/claude-sonnet-4-6" }
+    }
+  },
+  "auth": {
+    "profiles": {
+      "anthropic:default": { "provider": "anthropic", "mode": "api_key" }
+    }
+  },
+  "tools": {
+    "web": { "search": { "provider": "brave", "enabled": true } }
+  }
+}
+```
+
+### Setup
+
+1. Install OpenClaw and run the configuration wizard:
+   ```sh
+   openclaw configure
+   ```
+
+2. Set `ANTHROPIC_API_KEY` in `.openclaw/.env` (or via the wizard):
+   ```env
+   ANTHROPIC_API_KEY=sk-ant-...
+   ```
+
+3. Point the agent workspace at `.openclaw/workspace/` in this repo (or copy the files to your global workspace at `~/.openclaw/workspace/`).
+
+4. On first run, `BOOTSTRAP.md` guides the agent through self-initialization. Once complete, delete it.
+
+5. To enable WhatsApp, Telegram, or Discord — configure the relevant channel in the OpenClaw wizard. Credentials are stored in `.openclaw/credentials/` (gitignored).
+
+### Heartbeat
+
+The `HEARTBEAT.md` file controls what the agent checks periodically (every ~30 min by default). Edit it to add or remove tasks:
+
+```markdown
+- Check email for urgent messages
+- Check calendar for events in the next 2 hours
+```
+
+Leave `HEARTBEAT.md` empty (or only comments) to disable proactive polling.
+
+---
+
 ## Known Issues
 
 - `logger.warn()` (deprecated) used in `tcg_mp_selling.py` — should be `logger.warning()`
