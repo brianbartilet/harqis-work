@@ -149,28 +149,77 @@ python apps/own_tracks/references/client.py
 
 ---
 
-## Integrating with HARQIS-CLAW
+## REST API Service (Python)
 
-To query your device location via the agent, the Recorder REST API is the easiest path:
+The integration includes a full Python service layer wrapping the Recorder REST API.
 
-```python
-import requests
+### Environment Variables (`.env/apps.env`)
 
-def get_last_location(user="brian", device=None):
-    params = {"user": user}
-    if device:
-        params["device"] = device
-    r = requests.get("http://localhost:8083/api/0/last", params=params)
-    return r.json()
+```env
+OWN_TRACKS_HOST=localhost          # Recorder hostname or IP
+OWN_TRACKS_PORT=8083               # Recorder HTTP port
+OWN_TRACKS_USERNAME=               # Leave blank if no HTTP Basic Auth
+OWN_TRACKS_PASSWORD=               # Leave blank if no HTTP Basic Auth
+OWN_TRACKS_DEFAULT_USER=brian      # Default user for tests/queries
+OWN_TRACKS_DEFAULT_DEVICE=iphone   # Default device for tests/queries
 ```
 
-Or just ask the agent: *"where is my phone?"* — once this is wired into a workflow or the agent knows the Recorder URL, it can query it directly.
+### Usage
+
+```python
+from apps.own_tracks.references.web.api.locations import ApiServiceOwnTracksLocations
+from apps.own_tracks.config import CONFIG
+
+svc = ApiServiceOwnTracksLocations(CONFIG)
+
+# Last known position — all devices
+locations = svc.get_last()
+
+# Filter by user
+locations = svc.get_last(user='brian')
+
+# Filter by user + device
+locations = svc.get_last(user='brian', device='iphone')
+
+# Location history (full)
+history = svc.get_history(user='brian', device='iphone')
+
+# Location history with time range (Unix timestamps)
+history = svc.get_history(user='brian', device='iphone', from_ts=1700000000, to_ts=1700086400)
+
+# List all registered devices
+devices = svc.list_devices()
+```
+
+### Tests
+
+```bash
+# Requires Recorder running at localhost:8083
+pytest apps/own_tracks/tests/ -m smoke
+pytest apps/own_tracks/tests/ -m sanity   # requires default_user/default_device set
+```
+
+---
+
+## MCP Tools
+
+Registered in `mcp/server.py`. Available to Claude via the HARQIS-Work MCP server.
+
+| Tool | Description |
+|---|---|
+| `get_last_location` | Last known GPS position — all devices or filtered by user/device |
+| `get_location_history` | Historical positions for a specific device with optional time range |
+| `list_tracked_devices` | All users and devices registered in the Recorder |
+
+Example prompts:
+- *"Where is my iPhone right now?"* → `get_last_location(user='brian', device='iphone')`
+- *"Show me all tracked devices"* → `list_tracked_devices()`
+- *"Where was my phone yesterday?"* → `get_location_history(user='brian', device='iphone', from_ts=..., to_ts=...)`
 
 ---
 
 ## TODO / Improvements
 
-- [ ] Move MQTT credentials to `apps_config.yaml` + `.env/apps.env`
 - [ ] Add Celery task for periodic location polling
 - [ ] Add `get_location` workflow task usable by HARQIS-CLAW
 - [ ] Enable MQTT authentication (add username/password to `mosquitto.conf`)
