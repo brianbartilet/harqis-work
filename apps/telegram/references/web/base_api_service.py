@@ -17,6 +17,8 @@ class BaseApiServiceTelegram(BaseFixtureServiceRest):
         super(BaseApiServiceTelegram, self).__init__(config=config, **kwargs)
         self.bot_token = kwargs.get('bot_token', config.app_data['bot_token'])
 
-        self.request \
-            .add_header(HttpHeaders.CONTENT_TYPE, 'application/json') \
-            .set_base_uri(f'bot{self.bot_token}')
+        # Append the bot token to the client's base_url so that urljoin
+        # in __get_raw_url__ doesn't misinterpret 'bot<digits>:<hash>' as a URL scheme.
+        self.client.base_url = f"{self.client.base_url}/bot{self.bot_token}"
+
+        self.request.add_header(HttpHeaders.CONTENT_TYPE, 'application/json')

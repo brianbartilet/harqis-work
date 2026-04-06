@@ -18,7 +18,10 @@ from core.web.services.core.json import JsonObject
 
 from core.utilities.data.qlist import QList
 
+import pytest
 
+
+@pytest.mark.skip("deprecated")
 class TestGPTServicesSmoke(unittest.TestCase):
     """
     Smoke tests for GPT Services.

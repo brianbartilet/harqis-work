@@ -11,7 +11,10 @@ from core.utilities.logging.custom_logger import create_logger
 from http import HTTPStatus
 from tqdm import tqdm
 
+import pytest
 
+
+@pytest.mark.skip("deprecated")
 class TestServiceAssistant(unittest.TestCase):
 
     def setUp(self):

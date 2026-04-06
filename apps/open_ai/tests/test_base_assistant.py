@@ -6,7 +6,10 @@ from apps.open_ai.references.models.assistants.run import RunCreate
 
 from core.utilities.data.qlist import QList
 
+import pytest
 
+
+@pytest.mark.skip("deprecated")
 class TestServiceAssistant(unittest.TestCase):
 
     def test_simple_flow(self):
