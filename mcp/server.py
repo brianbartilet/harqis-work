@@ -15,6 +15,7 @@ from apps.echo_mtg.mcp import register_echo_mtg_tools
 from apps.scryfall.mcp import register_scryfall_tools
 from apps.telegram.mcp import register_telegram_tools
 from apps.trello.mcp import register_trello_tools
+from apps.jira.mcp import register_jira_tools
 
 logging.basicConfig(
     level=logging.INFO,
@@ -47,6 +48,9 @@ register_telegram_tools(mcp)
 
 logger.info("Registering Trello tools")
 register_trello_tools(mcp)
+
+logger.info("Registering Jira tools")
+register_jira_tools(mcp)
 
 logger.info("MCP server ready — %d tool(s) registered", len(mcp._tool_manager._tools))
 
