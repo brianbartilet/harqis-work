@@ -1,13 +1,13 @@
 import logging
 
 from mcp.server.fastmcp import FastMCP
-from mcp.references.tools.oanda import register_oanda_tools
-from mcp.references.tools.ynab import register_ynab_tools
-from mcp.references.tools.google_apps import register_google_apps_tools
-from mcp.references.tools.tcg_mp import register_tcg_mp_tools
-from mcp.references.tools.echo_mtg import register_echo_mtg_tools
-from mcp.references.tools.scryfall import register_scryfall_tools
-from mcp.references.tools.telegram import register_telegram_tools
+from apps.oanda.mcp import register_oanda_tools
+from apps.ynab.mcp import register_ynab_tools
+from apps.google_apps.mcp import register_google_apps_tools
+from apps.tcg_mp.mcp import register_tcg_mp_tools
+from apps.echo_mtg.mcp import register_echo_mtg_tools
+from apps.scryfall.mcp import register_scryfall_tools
+from apps.telegram.mcp import register_telegram_tools
 
 logging.basicConfig(
     level=logging.INFO,

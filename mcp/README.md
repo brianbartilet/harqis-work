@@ -35,30 +35,33 @@ Claude (AI) ←──── MCP protocol ────→ MCP Server ←───
 ## This server
 
 `mcp/server.py` is the entry point. It creates a `FastMCP` instance named `harqis-work` and
-registers tool modules from `references/tools/`. Each module exposes a `register_<app>_tools(mcp)`
-function that decorates service methods as `@mcp.tool()`.
+registers tool modules from each app. Each app exposes a `register_<app>_tools(mcp)` function in
+`apps/<app>/mcp.py` that decorates service calls as `@mcp.tool()`.
 
 ```
 mcp/
 ├── server.py                         # Entry point — creates FastMCP, registers tools, runs server
 ├── claude_desktop_config.json        # Config snippet for Claude Desktop
-├── references/
-│   └── tools/
-│       ├── oanda.py                  # OANDA forex tools
-│       ├── ynab.py                   # YNAB budgeting tools
-│       ├── google_apps.py            # Google Calendar + Keep tools
-│       ├── tcg_mp.py                 # TCG Marketplace tools
-│       ├── echo_mtg.py               # Echo MTG inventory tools
-│       └── scryfall.py               # Scryfall card database tools
-└── tests/
-    └── test_mcp_tools.py             # Integration tests for all tool groups
+└── README.md                         # This file
+
+apps/
+├── oanda/mcp.py                      # OANDA forex tools
+├── ynab/mcp.py                       # YNAB budgeting tools
+├── google_apps/mcp.py                # Google Calendar, Keep, and Gmail tools
+├── tcg_mp/mcp.py                     # TCG Marketplace tools
+├── echo_mtg/mcp.py                   # Echo MTG inventory tools
+├── scryfall/mcp.py                   # Scryfall card database tools
+└── telegram/mcp.py                   # Telegram bot tools
 ```
+
+Tool bindings live alongside the app they wrap — each `apps/<app>/mcp.py` is self-contained and
+imports only from its own app's services and config.
 
 ---
 
 ## Available tools
 
-### OANDA (`references/tools/oanda.py`)
+### OANDA (`apps/oanda/mcp.py`)
 
 Wraps `apps/oanda/references/web/api/` services. Requires valid `OANDA` section in `apps_config.yaml`.
 
@@ -76,7 +79,7 @@ Wraps `apps/oanda/references/web/api/` services. Requires valid `OANDA` section 
 
 ---
 
-### YNAB (`references/tools/ynab.py`)
+### YNAB (`apps/ynab/mcp.py`)
 
 Wraps `apps/ynab/references/web/api/` services. Requires valid `YNAB` section in `apps_config.yaml`.
 
@@ -97,7 +100,7 @@ Wraps `apps/ynab/references/web/api/` services. Requires valid `YNAB` section in
 
 ---
 
-### Google Apps (`references/tools/google_apps.py`)
+### Google Apps (`apps/google_apps/mcp.py`)
 
 Wraps `apps/google_apps/references/web/api/` services.
 
@@ -130,7 +133,7 @@ flow and write the token to `storage-gmail.json`. Subsequent calls use the cache
 
 ---
 
-### TCG Marketplace (`references/tools/tcg_mp.py`)
+### TCG Marketplace (`apps/tcg_mp/mcp.py`)
 
 Wraps `apps/tcg_mp/references/web/api/` services. Requires valid `TCG_MP` section in `apps_config.yaml`.
 
@@ -151,7 +154,7 @@ Wraps `apps/tcg_mp/references/web/api/` services. Requires valid `TCG_MP` sectio
 
 ---
 
-### Echo MTG (`references/tools/echo_mtg.py`)
+### Echo MTG (`apps/echo_mtg/mcp.py`)
 
 Wraps `apps/echo_mtg/references/web/api/inventory`. Requires valid `ECHO_MTG` section in `apps_config.yaml`.
 
@@ -167,7 +170,22 @@ Wraps `apps/echo_mtg/references/web/api/inventory`. Requires valid `ECHO_MTG` se
 
 ---
 
-### Telegram (`references/tools/telegram.py`)
+### Scryfall (`apps/scryfall/mcp.py`)
+
+Wraps `apps/scryfall/references/web/api/` services. Requires valid `SCRYFALL` section in `apps_config.yaml`.
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `get_scryfall_card` | `card_guid` | Full card metadata (prices, legality, art, etc.) |
+| `get_scryfall_bulk_data_info` | — | Available Scryfall bulk data download metadata |
+
+**Example prompts:**
+- *"Get the Scryfall metadata for card UUID e3285e6b-3e79-4d7c-bf96-d920f973b122."*
+- *"What bulk data files does Scryfall offer?"*
+
+---
+
+### Telegram (`apps/telegram/mcp.py`)
 
 Wraps `apps/telegram/references/web/api/` services. Requires valid `TELEGRAM` section in `apps_config.yaml`.
 
@@ -183,21 +201,6 @@ Wraps `apps/telegram/references/web/api/` services. Requires valid `TELEGRAM` se
 - *"Send a Telegram message to my default chat saying the build passed."*
 - *"What messages has the bot received recently?"*
 - *"Get info about my Telegram channel."*
-
----
-
-### Scryfall (`references/tools/scryfall.py`)
-
-Wraps `apps/scryfall/references/web/api/` services. Requires valid `SCRYFALL` section in `apps_config.yaml`.
-
-| Tool | Args | Returns |
-|------|------|---------|
-| `get_scryfall_card` | `card_guid` | Full card metadata (prices, legality, art, etc.) |
-| `get_scryfall_bulk_data_info` | — | Available Scryfall bulk data download metadata |
-
-**Example prompts:**
-- *"Get the Scryfall metadata for card UUID e3285e6b-3e79-4d7c-bf96-d920f973b122."*
-- *"What bulk data files does Scryfall offer?"*
 
 ---
 
@@ -223,8 +226,8 @@ startup logs confirming which tools were registered.
 {
   "mcpServers": {
     "harqis-work": {
-      "command": "C:\Users\brian\GIT\harqis-work\.venv\Scripts\python.exe",
-      "args": ["C:\Users\brian\GIT\harqis-work\mcp\server.py"]
+      "command": "C:\\Users\\brian\\GIT\\harqis-work\\.venv\\Scripts\\python.exe",
+      "args": ["C:\\Users\\brian\\GIT\\harqis-work\\mcp\\server.py"]
     }
   }
 }
@@ -248,23 +251,9 @@ Or add it manually to `~/.claude/settings.json` under `mcpServers`.
 
 ---
 
-## Running the tests
-
-```sh
-# Run all MCP integration tests
-pytest mcp/tests/
-
-# Run only smoke tests
-pytest mcp/tests/ -m smoke
-```
-
-Tests are live integration tests — valid credentials in `.env/apps.env` and `apps_config.yaml` are required.
-
----
-
 ## Adding a new app's tools
 
-1. Create `mcp/references/tools/<app_name>.py`:
+1. Create `apps/<app_name>/mcp.py`:
 
 ```python
 import logging
@@ -284,15 +273,13 @@ def register_<app_name>_tools(mcp: FastMCP):
         return service.some_method(param)
 ```
 
-2. Import and register in `server.py`:
+2. Import and register in `mcp/server.py`:
 
 ```python
-from mcp.references.tools.<app_name> import register_<app_name>_tools
+from apps.<app_name>.mcp import register_<app_name>_tools
 
 register_<app_name>_tools(mcp)
 ```
-
-3. Add tests to `mcp/tests/test_mcp_tools.py` following the existing pattern.
 
 ---
 
@@ -300,13 +287,16 @@ register_<app_name>_tools(mcp)
 
 The server uses Python's standard `logging` module with logger hierarchy `harqis-mcp.*`:
 
-- `harqis-mcp` — server lifecycle (startup, tool count)
-- `harqis-mcp.oanda` — per-call logs for every OANDA tool invocation
-- `harqis-mcp.ynab` — per-call logs for every YNAB tool invocation
-- `harqis-mcp.google_apps` — per-call logs for every Google Apps tool invocation
-- `harqis-mcp.tcg_mp` — per-call logs for every TCG Marketplace tool invocation
-- `harqis-mcp.echo_mtg` — per-call logs for every Echo MTG tool invocation
-- `harqis-mcp.scryfall` — per-call logs for every Scryfall tool invocation
+| Logger | Covers |
+|--------|--------|
+| `harqis-mcp` | Server lifecycle (startup, tool count) |
+| `harqis-mcp.oanda` | Per-call logs for every OANDA tool invocation |
+| `harqis-mcp.ynab` | Per-call logs for every YNAB tool invocation |
+| `harqis-mcp.google_apps` | Per-call logs for every Google Apps tool invocation |
+| `harqis-mcp.tcg_mp` | Per-call logs for every TCG Marketplace tool invocation |
+| `harqis-mcp.echo_mtg` | Per-call logs for every Echo MTG tool invocation |
+| `harqis-mcp.scryfall` | Per-call logs for every Scryfall tool invocation |
+| `harqis-mcp.telegram` | Per-call logs for every Telegram tool invocation |
 
 Logs go to stderr (visible in Claude Desktop's MCP log viewer and in the terminal when running manually).
-To increase verbosity, change `logging.basicConfig(level=logging.INFO)` to `logging.DEBUG` in `server.py`.
+To increase verbosity, change `logging.basicConfig(level=logging.INFO)` to `logging.DEBUG` in `mcp/server.py`.
