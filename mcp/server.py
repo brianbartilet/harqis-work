@@ -1,4 +1,10 @@
 import logging
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+_repo_root = Path(__file__).resolve().parent.parent
+load_dotenv(_repo_root / ".env" / "apps.env")
 
 from mcp.server.fastmcp import FastMCP
 from apps.oanda.mcp import register_oanda_tools
