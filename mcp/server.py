@@ -14,6 +14,7 @@ from apps.tcg_mp.mcp import register_tcg_mp_tools
 from apps.echo_mtg.mcp import register_echo_mtg_tools
 from apps.scryfall.mcp import register_scryfall_tools
 from apps.telegram.mcp import register_telegram_tools
+from apps.trello.mcp import register_trello_tools
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,6 +44,9 @@ register_scryfall_tools(mcp)
 
 logger.info("Registering Telegram tools")
 register_telegram_tools(mcp)
+
+logger.info("Registering Trello tools")
+register_trello_tools(mcp)
 
 logger.info("MCP server ready — %d tool(s) registered", len(mcp._tool_manager._tools))
 
