@@ -2,7 +2,7 @@
 
 A lightweight web dashboard for manually triggering HARQIS Celery workflow tasks, built with FastAPI, HTMX, Alpine.js, and Tailwind CSS.
 
-![HARQIS Dashboard](../docs/dashboard-sample.png)
+![HARQIS Dashboard](../docs/images/dashboard-sample.png)
 
 ## Features
 

@@ -64,7 +64,7 @@ SPROUT.conf.beat_schedule = CONFIG_DICTIONARY
 
 HARQIS drives a live desktop heads-up display using [Rainmeter](https://www.rainmeter.net/) on Windows. Celery tasks in `workflows/hud/` continuously push data from connected services into Rainmeter skin files, which render as always-on overlay panels on the desktop.
 
-![HARQIS Desktop HUD](docs/windows-hud-sample.png)
+![HARQIS Desktop HUD](docs/images/windows-hud-sample.png)
 
 ### Panels
 
@@ -100,7 +100,7 @@ HARQIS drives a live desktop heads-up display using [Rainmeter](https://www.rain
 
 A lightweight web dashboard for manually triggering Celery tasks, monitoring run status, and customizing the layout.
 
-![HARQIS Dashboard](docs/dashboard-sample.png)
+![HARQIS Dashboard](docs/images/dashboard-sample.png)
 
 > For full setup, configuration, and API reference, see [`frontend/README.md`](frontend/README.md).
 

@@ -27,8 +27,10 @@ __pycache__/
 
 # ── OwnTracks ────────────────────────────────────────────────────────────────
 apps/own_tracks/recorder_store/
+/apps/own_tracks/mosquitto/data/mosquitto.db
 
 # ── OpenClaw ──────────────────────────────────────────────────────────────────
 .openclaw/*
 !.openclaw/workspace
 !.openclaw/workspace/**
+
