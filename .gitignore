@@ -25,6 +25,9 @@ logs/
 __pycache__/
 *.py[cod]
 
+# ── OwnTracks ────────────────────────────────────────────────────────────────
+apps/own_tracks/recorder_store/
+
 # ── OpenClaw ──────────────────────────────────────────────────────────────────
 .openclaw/*
 !.openclaw/workspace
