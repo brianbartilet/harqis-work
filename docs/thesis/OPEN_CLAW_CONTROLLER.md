@@ -269,9 +269,10 @@ The MCP server (`mcp/server.py`) exposes **55 tools** across 10 integrated servi
 | **Finance** | OANDA trades, YNAB budgets/accounts/transactions |
 | **Productivity** | Google Calendar, Gmail, Google Keep notes |
 | **Project Mgmt** | Jira issues/projects/users, Trello boards/cards/members |
-| **Messaging** | Telegram send/receive/chat info |
+| **Messaging** | Telegram send/receive/chat info; Discord messages, guilds, webhooks |
 | **Trading Cards** | Scryfall card lookup, Echo MTG collection, TCG Marketplace listings/orders |
 | **Location** | OwnTracks last position, location history, device list |
+| **Cloud VMs** | Orgo cloud computers — provision, screenshot, bash, control |
 
 ### Adding a New App
 

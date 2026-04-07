@@ -137,6 +137,7 @@ Auto-generated JSON-like files that expose Celery tasks and shell commands to n8
 |-----|-------------|------|
 | `aaa` | Philippine stock exchange (PSEI) | Selenium |
 | `desktop` | Windows desktop automation | Local |
+| `discord` | Discord bot — messaging, guilds, webhooks | REST API |
 | `echo_mtg` | MTG collection management | REST API |
 | `elastic` | Elasticsearch logging | REST API |
 | `google_apps` | Calendar, Sheets, Keep | REST API |

@@ -16,6 +16,7 @@
 | `aaa` | Philippine stock exchange (PSEI) | Selenium | Yes | [Site](https://aaa-equities.com.ph/) |
 | `antropic` | Anthropic Claude API | REST (native SDK) | Yes | [API Docs](https://docs.anthropic.com/en/api/) · [Console](https://console.anthropic.com/) |
 | `desktop` | Windows desktop automation | Local | No | — |
+| `discord` | Discord bot — messaging, guilds, webhooks | REST API | Yes | [API Docs](https://discord.com/developers/docs/reference) · [Portal](https://discord.com/developers/applications) |
 | `echo_mtg` | MTG collection management | REST API | Yes | [API Docs](https://www.echomtg.com/api/) · [Site](https://www.echomtg.com/) |
 | `google_apps` | Calendar, Sheets, Keep | REST API (OAuth) | Yes | [API Docs](https://developers.google.com/workspace) · [Console](https://console.cloud.google.com/) |
 | `investagrams` | Philippine stock analytics | Web scraping | No | [Site](https://www.investagrams.com/) |
