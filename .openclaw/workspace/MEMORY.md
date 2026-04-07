@@ -76,7 +76,7 @@ Account/credential details: see `memory/private.md`
 - **Auto-commit + push** any changes inside `.openclaw/workspace/` after every edit
 - Scope is strictly `C:\Users\brian\GIT\harqis-work\.openclaw\workspace\` — nothing else
 - All other repo changes are Brian's to commit manually
-- Commit message format: `workspace: <short description>`
+- Commit message format: `(openclaw-commit) <short description>`
 
 ---
 

@@ -215,7 +215,7 @@ The goal: Be helpful without being annoying. Check in a few times a day, do usef
   ```
   cd C:\Users\brian\GIT\harqis-work
   git add .openclaw/workspace/
-  git commit -m "workspace: <short description of what changed>"
+  git commit -m "(openclaw-commit) <short description of what changed>"
   git push origin main
   ```
 - Do this silently — no need to narrate unless it fails
