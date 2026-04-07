@@ -70,7 +70,11 @@ Since harqis-core Python isn't easily importable standalone, I call APIs directl
 
 ## OpenClaw Setup
 
-- Gateway config: `C:\Users\brian\.openclaw\openclaw.json`
+- **Primary config path:** `C:\Users\brian\GIT\harqis-work\.openclaw\openclaw.json`
+- **Always check:** `C:\**\harqis-work\.openclaw` first for configs, tokens, workspace files
+- Legacy path: `C:\Users\brian\.openclaw` (old location, still active until gateway restarts with new env)
+- Env vars set: `OPENCLAW_STATE_DIR` + `OPENCLAW_CONFIG_PATH` → `C:\Users\brian\GIT\harqis-work\.openclaw`
+- **Note:** Gateway needs a full restart from a new shell to pick up the new path
 - Workspace: `C:\Users\brian\GIT\harqis-work\.openclaw\workspace`
 - Active channels: **Telegram** (@harqis_bot), WhatsApp disabled
 - Model: `anthropic/claude-sonnet-4-6`
