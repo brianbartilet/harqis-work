@@ -21,6 +21,7 @@
 | `google_apps` | Calendar, Sheets, Keep | REST API (OAuth) | Yes | [API Docs](https://developers.google.com/workspace) · [Console](https://console.cloud.google.com/) |
 | `investagrams` | Philippine stock analytics | Web scraping | No | [Site](https://www.investagrams.com/) |
 | `jira` | Jira project management | REST API (DC/Bearer) | Yes | [API Docs](https://developer.atlassian.com/server/jira/platform/rest-apis/) · [Site](https://www.atlassian.com/software/jira) |
+| `linkedin` | LinkedIn — profile, posts, sharing | REST API (OAuth2) | Yes | [API Docs](https://learn.microsoft.com/en-gb/linkedin/shared/api-guide/concepts) · [Portal](https://www.linkedin.com/developers/apps) |
 | `moo` | Futu/Moo trading stub | Stub | No | [API Docs](https://openapi.futunn.com/futu-api-doc/en/) · [Site](https://www.futunn.com/) |
 | `oanda` | Forex trading | REST API | Yes | [API Docs](https://developer.oanda.com/rest-live-v20/introduction/) · [Site](https://www.oanda.com/) |
 | `open_ai` | OpenAI GPT | REST (native SDK) | No | [API Docs](https://platform.openai.com/docs/api-reference) · [Site](https://platform.openai.com/) |

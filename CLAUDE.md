@@ -143,6 +143,7 @@ Auto-generated JSON-like files that expose Celery tasks and shell commands to n8
 | `google_apps` | Calendar, Sheets, Keep | REST API |
 | `investagrams` | Philippine stock analytics | Scraping |
 | `jira` | Jira project management (Data Center, Bearer auth) | REST API |
+| `linkedin` | LinkedIn — profile, posts, sharing | REST API (OAuth2) |
 | `moo` | Stub — work in progress | — |
 | `oanda` | Forex trading | REST API |
 | `open_ai` | OpenAI GPT | REST API |
