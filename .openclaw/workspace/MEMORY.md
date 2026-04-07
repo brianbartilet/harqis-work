@@ -49,6 +49,20 @@ This is Brian's main automation platform. It's a code-first RPA framework with:
 | OpenAI | `apps/open_ai/` | API key |
 | Rainmeter | `apps/rainmeter/` | Local Windows binary |
 
+### How to Access Any App from HARQIS-Work
+
+Whenever I need to call an app integration:
+1. Check `apps_config.yaml` for the app's config block — it shows base URL and which env vars to use
+2. Load credentials from `.env/apps.env` — env vars are referenced as `${VAR_NAME}` in the config
+3. Call the API directly (Node.js or PowerShell) using those values
+
+Example — Trello:
+- `apps_config.yaml` → `TRELLO.credentials.api_key: ${TRELLO_API_KEY}` and `api_token: ${TRELLO_API_TOKEN}`
+- `.env/apps.env` → resolves the actual values
+- Call `https://api.trello.com/1/` with `?key=...&token=...`
+
+This pattern applies to all 16+ integrations. Always check config first, then env file.
+
 ### How to Call APIs Directly
 Since harqis-core Python isn't easily importable standalone, I call APIs directly:
 - **OANDA:** REST via `Invoke-RestMethod` or Node.js with Bearer token from `.env/apps.env`
