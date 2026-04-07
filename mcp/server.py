@@ -6,6 +6,9 @@ from dotenv import load_dotenv
 _repo_root = Path(__file__).resolve().parent.parent
 load_dotenv(_repo_root / ".env" / "apps.env")
 
+# Ensure the production config file is used regardless of ENV setting
+os.environ.setdefault("APP_CONFIG_FILE", "apps_config.yaml")
+
 from mcp.server.fastmcp import FastMCP
 from apps.oanda.mcp import register_oanda_tools
 from apps.ynab.mcp import register_ynab_tools
