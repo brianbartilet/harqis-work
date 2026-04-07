@@ -1,19 +1,18 @@
 # MEMORY.md — HARQIS-CLAW Long-Term Memory
 
+> Sensitive details (accounts, paths, PII) are in `memory/private.md` (gitignored).
+
 ## About Brian
 
-- Name: Brian (Brian)
-- Email: REDACTED_EMAIL
+- Name: Brian
 - Timezone: Asia/Singapore (GMT+8)
 - Primary use: automation tasks, querying services, monitoring via Telegram
-- Telegram ID: REDACTED_TELEGRAM_ID (@REDACTED)
-- WhatsApp: REDACTED_PHONE (currently disabled)
+- Contact details: see `memory/private.md`
 
 ---
 
 ## HARQIS-Work Repository
 
-**Path:** `C:\Users\brian\GIT\harqis-work`  
 **Repo:** https://github.com/brianbartilet/harqis-work  
 **Stack:** Python 3.12, Celery, harqis-core, n8n, Anthropic, Rainmeter, Docker
 
@@ -50,15 +49,6 @@ This is Brian's main automation platform. It's a code-first RPA framework with:
 | OpenAI | `apps/open_ai/` | API key |
 | Rainmeter | `apps/rainmeter/` | Local Windows binary |
 
-### OANDA Accounts
-- `REDACTED_OANDA_ACCOUNT_1` — Active, USD, as of Apr 6: Balance $11,817 / NAV $7,161 / 2 open trades (-$4,657 unrealized)
-- `REDACTED_OANDA_ACCOUNT_2` — Empty
-
-### TCG Marketplace
-- Username: DABIZT, UserID: REDACTED
-- Base URL: `https://thetcgmarketplace.com:3501/`
-- Auth: POST `/auth` → JWT accessToken
-
 ### How to Call APIs Directly
 Since harqis-core Python isn't easily importable standalone, I call APIs directly:
 - **OANDA:** REST via `Invoke-RestMethod` or Node.js with Bearer token from `.env/apps.env`
@@ -66,16 +56,13 @@ Since harqis-core Python isn't easily importable standalone, I call APIs directl
 - **Gmail:** Node.js HTTPS with Bearer token from `storage-gmail.json` (auto-refreshes via OAuth)
 - For Gmail token refresh: use `refresh_token` + client credentials from `credentials.json`
 
+Account/credential details: see `memory/private.md`
+
 ---
 
 ## OpenClaw Setup
 
-- **Primary config path:** `C:\Users\brian\GIT\harqis-work\.openclaw\openclaw.json`
-- **Always check:** `C:\**\harqis-work\.openclaw` first for configs, tokens, workspace files
-- Legacy path: `C:\Users\brian\.openclaw` (old location, still active until gateway restarts with new env)
-- Env vars set: `OPENCLAW_STATE_DIR` + `OPENCLAW_CONFIG_PATH` → `C:\Users\brian\GIT\harqis-work\.openclaw`
-- **Note:** Gateway needs a full restart from a new shell to pick up the new path
-- Workspace: `C:\Users\brian\GIT\harqis-work\.openclaw\workspace`
+- **Config and workspace paths:** see `memory/private.md`
 - Active channels: **Telegram** (@harqis_bot), WhatsApp disabled
 - Model: `anthropic/claude-sonnet-4-6`
 - Heartbeat: every 90 min, lightContext enabled
@@ -84,23 +71,12 @@ Since harqis-core Python isn't easily importable standalone, I call APIs directl
 
 ---
 
-## Machine Info
-
-- Hostname: JuliusBaer
-- OS: Windows 11 (x64)
-- CPU: i7-1365U
-- RAM: 64GB
-- Monitors: 3 (1920x1080 each — primary, one above, one to right)
-- Shell: PowerShell
-
----
-
 ## Lessons Learned
 
-- `OPENCLAW_STATE_DIR` env var only takes effect in new shell sessions — gateway currently still reads from `C:\Users\brian\.openclaw\` even though state was copied to `harqis-work\.openclaw\`
+- `OPENCLAW_STATE_DIR` env var only takes effect in new shell sessions — gateway currently still reads from old path even after state copy; needs full restart from new shell
 - PowerShell multi-variable assignment lines get flagged as "obfuscated" by exec security — use Node.js or Python for complex scripts
 - `python3` not on PATH — use `node` for scripting tasks
-- Gmail OAuth token in `storage-gmail.json` has a `refresh_token` — can refresh using `client_id`/`client_secret` from `credentials.json`
+- Gmail OAuth token has a `refresh_token` — can refresh using `client_id`/`client_secret` from `credentials.json`
 - TCG Marketplace SSL cert may cause issues with `Invoke-RestMethod` — use `System.Net.WebClient` or disable cert validation for local calls
 - `.openclaw/workspace` had a nested `.git` from a previous repo init — removed it to track under `harqis-work` repo
 - Exec approval policy set to allow-always for complex PowerShell analysis scripts
