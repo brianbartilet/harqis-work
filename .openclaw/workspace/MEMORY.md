@@ -118,14 +118,18 @@ Always use `.venv/Scripts/python.exe` when running harqis-work scripts, not syst
 C:\Users\brian\GIT\harqis-work\.venv\Scripts\python.exe script.py
 ```
 
-**Env Vars:** When running scripts directly (not via pytest), manually load `.env/apps.env` using `python-dotenv`:
+**Env Vars:** When running scripts directly (not via pytest), manually load `.env/apps.env`:
 ```python
 from dotenv import load_dotenv
-load_dotenv('.env/apps.env')
-os.environ['APP_CONFIG_FILE'] = 'apps_config.yaml'
+import os
+
+load_dotenv('.env/apps.env')  # Load all vars from .env/apps.env
+os.environ['APP_CONFIG_FILE'] = 'apps_config.yaml'  # Set config file
 ```
 
-Pytest auto-loads via `pytest.ini` but direct scripts do not.
+- **Pytest:** Auto-loads via `pytest.ini` (no manual loading needed)
+- **Direct scripts:** Must manually load with `python-dotenv`
+- **Batch files:** Run `set_env_workflows.bat` before scripts (but env doesn't persist across exec calls — better to load in Python)
 
 ---
 
