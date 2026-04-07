@@ -49,6 +49,10 @@ This is Brian's main automation platform. It's a code-first RPA framework with:
 | OpenAI | `apps/open_ai/` | API key |
 | Rainmeter | `apps/rainmeter/` | Local Windows binary |
 
+### General Rule
+
+Always check harqis-work apps first before using OpenClaw built-in tools or external services. If an integration exists in `apps_config.yaml`, use it.
+
 ### How to Access Any App from HARQIS-Work
 
 Whenever I need to call an app integration:
