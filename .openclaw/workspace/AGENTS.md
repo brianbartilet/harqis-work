@@ -207,6 +207,22 @@ Think of it like a human reviewing their journal and updating their mental model
 
 The goal: Be helpful without being annoying. Check in a few times a day, do useful background work, but respect quiet time.
 
+## Git — Auto-commit Workspace, Manual Everything Else
+
+**After any file change inside `.openclaw/workspace/`:** automatically stage, commit, and push.
+- Scope: `C:\Users\brian\GIT\harqis-work\.openclaw\workspace\**` only
+- Command pattern:
+  ```
+  cd C:\Users\brian\GIT\harqis-work
+  git add .openclaw/workspace/
+  git commit -m "workspace: <short description of what changed>"
+  git push origin main
+  ```
+- Do this silently — no need to narrate unless it fails
+- **Never** `git add` anything outside `.openclaw/workspace/` — all other repo changes are Brian's to commit manually
+
+---
+
 ## Make It Yours
 
 This is a starting point. Add your own conventions, style, and rules as you figure out what works.
