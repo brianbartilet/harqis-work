@@ -86,6 +86,20 @@ Account/credential details: see `memory/private.md`
 
 ---
 
+## Using Harqis-Work Apps / MCP Server
+
+When requesting data from harqis-work apps:
+1. Run `harqis-work/scripts/set_env_workflows.bat` to load env vars from `.env/apps.env`
+2. This populates `PYTHONPATH`, `WORKFLOW_CONFIG`, `APP_CONFIG_FILE`
+3. Then access the app via its MCP server (available services like `ApiServiceTcgMpOrder`, etc.)
+4. Env vars and secrets are auto-loaded from `.env/apps.env` via `apps_config.yaml` interpolation
+
+**Note:** Must use `.venv/Scripts/python.exe` (venv interpreter) not system Python — system Python doesn't have harqis-core installed.
+- Set env vars via `set_env_workflows.bat` before running Python scripts
+- Or set them inline in the script: `os.environ['WORKFLOW_CONFIG'] = 'workflows.config'`
+
+---
+
 ## OpenClaw Setup
 
 - **Config and workspace paths:** see `memory/private.md`
@@ -94,6 +108,15 @@ Account/credential details: see `memory/private.md`
 - Heartbeat: every 90 min, lightContext enabled
 - Compaction: safeguard mode with memory flush
 - Thinking: off (cost optimization)
+
+---
+
+## Important: Python Interpreter
+
+Always use `.venv/Scripts/python.exe` when running harqis-work scripts, not system `python`:
+```
+C:\Users\brian\GIT\harqis-work\.venv\Scripts\python.exe script.py
+```
 
 ---
 
