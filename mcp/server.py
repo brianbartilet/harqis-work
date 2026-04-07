@@ -19,6 +19,7 @@ from apps.jira.mcp import register_jira_tools
 from apps.own_tracks.mcp import register_own_tracks_tools
 from apps.orgo.mcp import register_orgo_tools
 from apps.discord.mcp import register_discord_tools
+from apps.reddit.mcp import register_reddit_tools
 
 logging.basicConfig(
     level=logging.INFO,
@@ -63,6 +64,9 @@ register_orgo_tools(mcp)
 
 logger.info("Registering Discord tools")
 register_discord_tools(mcp)
+
+logger.info("Registering Reddit tools")
+register_reddit_tools(mcp)
 
 logger.info("MCP server ready — %d tool(s) registered", len(mcp._tool_manager._tools))
 

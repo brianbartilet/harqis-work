@@ -149,6 +149,7 @@ Auto-generated JSON-like files that expose Celery tasks and shell commands to n8
 | `orgo` | Cloud VM desktop control for AI agents | REST API |
 | `own_tracks` | GPS location tracking via OwnTracks Recorder | REST API + Docker/MQTT |
 | `rainmeter` | Windows desktop HUD skinning | Local |
+| `reddit` | Reddit — subreddits, posts, comments, inbox | REST API (OAuth2) |
 | `scryfall` | MTG card database | REST API |
 | `tcg_mp` | TCG Marketplace (most complex app) | REST API |
 | `telegram` | Telegram Bot — messaging and updates | REST API |
