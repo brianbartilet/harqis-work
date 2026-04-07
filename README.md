@@ -19,14 +19,17 @@
 | `echo_mtg` | MTG collection management | REST API | Yes | [API Docs](https://www.echomtg.com/api/) · [Site](https://www.echomtg.com/) |
 | `google_apps` | Calendar, Sheets, Keep | REST API (OAuth) | Yes | [API Docs](https://developers.google.com/workspace) · [Console](https://console.cloud.google.com/) |
 | `investagrams` | Philippine stock analytics | Web scraping | No | [Site](https://www.investagrams.com/) |
+| `jira` | Jira project management | REST API (DC/Bearer) | Yes | [API Docs](https://developer.atlassian.com/server/jira/platform/rest-apis/) · [Site](https://www.atlassian.com/software/jira) |
 | `moo` | Futu/Moo trading stub | Stub | No | [API Docs](https://openapi.futunn.com/futu-api-doc/en/) · [Site](https://www.futunn.com/) |
 | `oanda` | Forex trading | REST API | Yes | [API Docs](https://developer.oanda.com/rest-live-v20/introduction/) · [Site](https://www.oanda.com/) |
 | `open_ai` | OpenAI GPT | REST (native SDK) | No | [API Docs](https://platform.openai.com/docs/api-reference) · [Site](https://platform.openai.com/) |
-| `own_tracks` | GPS tracking | Docker/MQTT only | No | [Docs](https://owntracks.org/booklet/) · [Site](https://owntracks.org/) |
+| `orgo` | Cloud VM desktop control for AI agents | REST API | Yes | [API Docs](https://docs.orgo.ai/api-reference/introduction) · [Site](https://orgo.ai/) |
+| `own_tracks` | GPS location tracking | REST API + Docker/MQTT | Yes | [API Docs](https://owntracks.org/booklet/tech/http/) · [Site](https://owntracks.org/) |
 | `rainmeter` | Windows desktop HUD skinning | Local | No | [Docs](https://docs.rainmeter.net/) · [Site](https://www.rainmeter.net/) |
 | `scryfall` | MTG card database | REST API | Yes | [API Docs](https://scryfall.com/docs/api) · [Site](https://scryfall.com/) |
 | `tcg_mp` | TCG Marketplace | REST API | Yes | [Site](https://thetcgmarketplace.com/) |
-| `trello` | Kanban board | REST (refs only) | No | [API Docs](https://developer.atlassian.com/cloud/trello/rest/api-group-actions/) · [Site](https://trello.com/) |
+| `telegram` | Telegram Bot messaging | REST API | Yes | [API Docs](https://core.telegram.org/bots/api) · [Site](https://telegram.org/) |
+| `trello` | Kanban board management | REST API | Yes | [API Docs](https://developer.atlassian.com/cloud/trello/rest/) · [Site](https://trello.com/) |
 | `ynab` | Personal budgeting | REST API | Yes | [API Docs](https://api.ynab.com/) · [Site](https://www.ynab.com/) |
 
 ---
@@ -624,7 +627,7 @@ Leave `HEARTBEAT.md` empty (or only comments) to disable proactive polling.
 - `logger.warn()` (deprecated) used in `tcg_mp_selling.py` — should be `logger.warning()`
 - `generate_tcg_mappings` task is commented out in `purchases/tasks_config.py` — must be triggered manually or via n8n
 - Worker functions in `tcg_mp_selling.py` re-import all dependencies inside the function body — required for `multiprocessing` on Windows (no `fork`)
-- `own_tracks` has no Python integration code — Docker Compose runtime dependency only
+- `own_tracks` requires the Docker stack running (`apps/own_tracks/docker compose up -d`) before tests pass
 - `moo` app is a hollow stub with no services or tests
 - `aaa` tests use `unittest.TestCase` (not pytest-style), placed in `unit_tests.py`
 

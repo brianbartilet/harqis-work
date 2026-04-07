@@ -17,6 +17,7 @@ from apps.telegram.mcp import register_telegram_tools
 from apps.trello.mcp import register_trello_tools
 from apps.jira.mcp import register_jira_tools
 from apps.own_tracks.mcp import register_own_tracks_tools
+from apps.orgo.mcp import register_orgo_tools
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,6 +56,9 @@ register_jira_tools(mcp)
 
 logger.info("Registering OwnTracks tools")
 register_own_tracks_tools(mcp)
+
+logger.info("Registering Orgo tools")
+register_orgo_tools(mcp)
 
 logger.info("MCP server ready — %d tool(s) registered", len(mcp._tool_manager._tools))
 

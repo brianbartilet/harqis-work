@@ -141,15 +141,17 @@ Auto-generated JSON-like files that expose Celery tasks and shell commands to n8
 | `elastic` | Elasticsearch logging | REST API |
 | `google_apps` | Calendar, Sheets, Keep | REST API |
 | `investagrams` | Philippine stock analytics | Scraping |
+| `jira` | Jira project management (Data Center, Bearer auth) | REST API |
 | `moo` | Stub — work in progress | — |
 | `oanda` | Forex trading | REST API |
 | `open_ai` | OpenAI GPT | REST API |
-| `own_tracks` | GPS tracking (Docker only, no Python API) | MQTT |
+| `orgo` | Cloud VM desktop control for AI agents | REST API |
+| `own_tracks` | GPS location tracking via OwnTracks Recorder | REST API + Docker/MQTT |
 | `rainmeter` | Windows desktop HUD skinning | Local |
 | `scryfall` | MTG card database | REST API |
 | `tcg_mp` | TCG Marketplace (most complex app) | REST API |
 | `telegram` | Telegram Bot — messaging and updates | REST API |
-| `trello` | Kanban — references only, no impl | REST API |
+| `trello` | Kanban board management | REST API |
 | `ynab` | Personal budgeting | REST API |
 
 ## Workflow Inventory
@@ -171,7 +173,7 @@ Active Celery Beat schedules: `hud`, `purchases`, `desktop` (merged in `workflow
 All tests are **live integration tests** — no mocking. Requires valid `.env/apps.env` and `apps_config.yaml` credentials to run.
 
 - `aaa` tests use `unittest.TestCase` (not pytest-style), placed in `unit_tests.py` per the alternate `pytest.ini` pattern.
-- Apps with zero tests: `desktop`, `elastic`, `investagrams`, `moo`, `open_ai`, `own_tracks`, `trello`.
+- Apps with zero tests: `desktop`, `elastic`, `investagrams`, `moo`, `open_ai`.
 - Workflow tests are excluded from default `pytest` run — must be run explicitly.
 
 ## Known Issues
@@ -179,5 +181,5 @@ All tests are **live integration tests** — no mocking. Requires valid `.env/ap
 - `logger.warn()` (deprecated) used in `tcg_mp_selling.py` — should be `logger.warning()`
 - `generate_tcg_mappings` task is commented out in `purchases/tasks_config.py` — must be triggered manually or via n8n
 - Worker functions in `tcg_mp_selling.py` re-import all dependencies inside the function body — required for `multiprocessing` on Windows (no `fork`)
-- `own_tracks` has no Python integration code — it's a Docker Compose runtime dependency only
+- `own_tracks` requires Docker stack running before tests pass (`apps/own_tracks/docker compose up -d`)
 - `moo` app is a hollow stub with no services or tests
