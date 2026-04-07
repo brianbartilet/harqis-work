@@ -111,12 +111,21 @@ When requesting data from harqis-work apps:
 
 ---
 
-## Important: Python Interpreter
+## Important: Python Interpreter + Env Loading
 
 Always use `.venv/Scripts/python.exe` when running harqis-work scripts, not system `python`:
 ```
 C:\Users\brian\GIT\harqis-work\.venv\Scripts\python.exe script.py
 ```
+
+**Env Vars:** When running scripts directly (not via pytest), manually load `.env/apps.env` using `python-dotenv`:
+```python
+from dotenv import load_dotenv
+load_dotenv('.env/apps.env')
+os.environ['APP_CONFIG_FILE'] = 'apps_config.yaml'
+```
+
+Pytest auto-loads via `pytest.ini` but direct scripts do not.
 
 ---
 
