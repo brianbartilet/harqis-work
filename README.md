@@ -18,7 +18,7 @@
 | `desktop` | Windows desktop automation | Local | No | — |
 | `discord` | Discord bot — messaging, guilds, webhooks | REST API | Yes | [API Docs](https://discord.com/developers/docs/reference) · [Portal](https://discord.com/developers/applications) |
 | `echo_mtg` | MTG collection management | REST API | Yes | [API Docs](https://www.echomtg.com/api/) · [Site](https://www.echomtg.com/) |
-| `google_apps` | Calendar, Sheets, Keep | REST API (OAuth) | Yes | [API Docs](https://developers.google.com/workspace) · [Console](https://console.cloud.google.com/) |
+| `google_apps` | Calendar, Gmail, Keep, Sheets, Tasks, Drive, Translation | REST API (OAuth + API key) | Yes | [API Docs](https://developers.google.com/workspace) · [Console](https://console.cloud.google.com/) |
 | `investagrams` | Philippine stock analytics | Web scraping | No | [Site](https://www.investagrams.com/) |
 | `jira` | Jira project management | REST API (DC/Bearer) | Yes | [API Docs](https://developer.atlassian.com/server/jira/platform/rest-apis/) · [Site](https://www.atlassian.com/software/jira) |
 | `linkedin` | LinkedIn — profile, posts, sharing | REST API (OAuth2) | Yes | [API Docs](https://learn.microsoft.com/en-gb/linkedin/shared/api-guide/concepts) · [Portal](https://www.linkedin.com/developers/apps) |

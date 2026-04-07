@@ -140,7 +140,7 @@ Auto-generated JSON-like files that expose Celery tasks and shell commands to n8
 | `discord` | Discord bot — messaging, guilds, webhooks | REST API |
 | `echo_mtg` | MTG collection management | REST API |
 | `elastic` | Elasticsearch logging | REST API |
-| `google_apps` | Calendar, Sheets, Keep | REST API |
+| `google_apps` | Calendar, Gmail, Keep, Sheets, Tasks, Drive, Translation | REST API (OAuth + API key) |
 | `investagrams` | Philippine stock analytics | Scraping |
 | `jira` | Jira project management (Data Center, Bearer auth) | REST API |
 | `linkedin` | LinkedIn — profile, posts, sharing | REST API (OAuth2) |
@@ -186,3 +186,4 @@ All tests are **live integration tests** — no mocking. Requires valid `.env/ap
 - Worker functions in `tcg_mp_selling.py` re-import all dependencies inside the function body — required for `multiprocessing` on Windows (no `fork`)
 - `own_tracks` requires Docker stack running before tests pass (`apps/own_tracks/docker compose up -d`)
 - `moo` app is a hollow stub with no services or tests
+- `google_apps` Keep tests are permanently skipped — `https://www.googleapis.com/auth/keep` scope is not publicly available for third-party OAuth apps (Google policy restriction). Use Google Tasks instead.
