@@ -78,6 +78,14 @@ Account/credential details: see `memory/private.md`
 
 ---
 
+## Google Calendar
+
+- **Always fetch from ALL calendars**, not just primary
+- You have 8 calendars: Primary + 7 category calendars (Finance, Food/Health, Mischief, Career, Organization, + 2 holiday calendars)
+- When requesting schedule/events, merge results from all and sort by time
+
+---
+
 ## OpenClaw Setup
 
 - **Config and workspace paths:** see `memory/private.md`
