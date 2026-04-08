@@ -3,6 +3,7 @@ from workflows.finance.tasks.parse_transaction import (
     _to_ynab_amount,
     _match_category,
     _build_dto,
+    _build_split_dto,
 )
 from apps.ynab.references.dto.transaction import DtoSaveTransaction
 
@@ -11,7 +12,7 @@ from apps.ynab.references.dto.transaction import DtoSaveTransaction
 # These call the real Anthropic + YNAB APIs.
 # Place the PDF in workflows/finance/transactions/ before running.
 
-def test__add_ynab_transactions_from_pdf__sgd():
+def test__add_ynab_transactions_from_pdf_debit():
     add_ynab_transactions_from_pdf(
         input_pdf="transaction_history_07042026_223941.pdf",
         ynab_budget_name="HARQIS Testing",
@@ -21,11 +22,22 @@ def test__add_ynab_transactions_from_pdf__sgd():
     )
 
 
-def test__add_ynab_transactions_from_pdf__php():
+def test__add_ynab_transactions_from_pdf_credit():
     add_ynab_transactions_from_pdf(
         input_pdf="transaction_history_07042026_224029.pdf",
         ynab_budget_name="HARQIS Testing",
         ynab_account_name="Test Account Credit",
+        cfg_id__ynab="YNAB",
+        cfg_id__anthropic="ANTHROPIC",
+    )
+
+
+def test__add_ynab_transactions_from_pdf_split():
+    add_ynab_transactions_from_pdf(
+        input_pdf="transaction_history_07042026_223941.pdf",
+        ynab_budget_name="HARQIS Testing",
+        ynab_account_name="Test Account",
+        split=True,
         cfg_id__ynab="YNAB",
         cfg_id__anthropic="ANTHROPIC",
     )
@@ -93,3 +105,25 @@ def test__build_dto__memo_truncated():
           "payee_name": None, "category_hint": None}
     dto = _build_dto(tx, "acc-123", {})
     assert len(dto.memo) <= 200
+
+
+def test__build_split_dto__total_amount_equals_sum():
+    txs = [
+        {"date": "2026-04-01", "memo": "GRAB", "amount": 10.0, "type": "debit", "payee_name": "Grab", "category_hint": None},
+        {"date": "2026-04-02", "memo": "SALARY", "amount": 5000.0, "type": "credit", "payee_name": "Employer", "category_hint": None},
+        {"date": "2026-04-03", "memo": "NTUC", "amount": 25.50, "type": "debit", "payee_name": "NTUC", "category_hint": None},
+    ]
+    dto = _build_split_dto(txs, "acc-123", {}, "statement.pdf")
+    assert dto.amount == sum(s.amount for s in dto.subtransactions)
+    assert len(dto.subtransactions) == 3
+    assert dto.date == "2026-04-01"   # earliest date
+    assert "statement.pdf" in dto.memo
+
+
+def test__build_split_dto__skips_missing_amount():
+    txs = [
+        {"date": "2026-04-01", "memo": "GRAB", "amount": 10.0, "type": "debit", "payee_name": None, "category_hint": None},
+        {"date": "2026-04-01", "memo": "BAD", "amount": None, "type": "debit", "payee_name": None, "category_hint": None},
+    ]
+    dto = _build_split_dto(txs, "acc-123", {}, "statement.pdf")
+    assert len(dto.subtransactions) == 1

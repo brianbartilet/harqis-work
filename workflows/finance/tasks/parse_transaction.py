@@ -19,7 +19,9 @@ from apps.apps_config import CONFIG_MANAGER
 from apps.desktop.helpers.feed import feed
 from apps.ynab.references.web.api.budgets import ApiServiceYNABBudgets
 from apps.ynab.references.web.api.transactions import ApiServiceYNABTransactions
-from apps.ynab.references.dto.transaction import DtoSaveTransaction, DtoSaveTransactionsWrapper
+from apps.ynab.references.dto.transaction import (
+    DtoSaveTransaction, DtoSaveSubTransaction, DtoSaveTransactionsWrapper,
+)
 from apps.ynab.references.constants import YNAB_MILLIUNITS
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 
@@ -94,7 +96,6 @@ def _parse_pdf_with_claude(pdf_path: Path, cfg_id__anthropic: str = "ANTHROPIC")
         try:
             recovered = raw.rstrip().rstrip(",")
             if not recovered.endswith("]"):
-                # Close the last open string/object if needed
                 if not recovered.endswith("}"):
                     last_brace = recovered.rfind("}")
                     if last_brace != -1:
@@ -225,19 +226,89 @@ def _build_dto(tx: dict, account_id: str, category_lookup: dict[str, str]) -> Op
         return None
 
 
+def _build_split_dto(parsed_transactions: list[dict], account_id: str,
+                     category_lookup: dict[str, str], pdf_name: str) -> DtoSaveTransaction:
+    """Build a single split DtoSaveTransaction from all parsed transactions.
+
+    Each parsed transaction becomes a subtransaction. The parent transaction:
+      - date  = earliest date found across all transactions
+      - amount = sum of all subtransaction amounts (YNAB requires these to match)
+      - memo  = PDF filename as the import reference
+
+    Args:
+        parsed_transactions: Raw transaction dicts from Claude.
+        account_id:          Resolved YNAB account ID.
+        category_lookup:     Live {category_name_lower: category_id} from YNAB.
+        pdf_name:            PDF filename used as the parent memo.
+    """
+    subtransactions = []
+    skipped = 0
+
+    for tx in parsed_transactions:
+        try:
+            memo = (tx.get("memo") or "")[:200]
+            amount_raw = tx.get("amount")
+            tx_type = (tx.get("type") or "unknown").lower()
+            payee_name = tx.get("payee_name")
+            category_hint = tx.get("category_hint")
+
+            if amount_raw is None:
+                _log.warning("Skipping subtransaction missing amount: %s", tx)
+                skipped += 1
+                continue
+
+            subtransactions.append(DtoSaveSubTransaction(
+                amount=_to_ynab_amount(float(amount_raw), tx_type),
+                payee_name=payee_name,
+                category_id=_match_category(category_hint, category_lookup),
+                memo=memo,
+            ))
+        except (TypeError, ValueError) as exc:
+            _log.error("Failed to build subtransaction for %s: %s", tx, exc)
+            skipped += 1
+
+    if not subtransactions:
+        raise ValueError("No valid subtransactions could be built from the parsed PDF.")
+
+    # Parent amount must equal the sum of all subtransaction amounts
+    total_amount = sum(s.amount for s in subtransactions)
+
+    # Use the earliest date found across all transactions
+    dates = [tx.get("date") for tx in parsed_transactions if tx.get("date")]
+    parent_date = min(dates) if dates else None
+    if not parent_date:
+        raise ValueError("No valid dates found in parsed transactions.")
+
+    _log.info("Built split transaction: %d subtransaction(s), %d skipped, total=%d milliunits",
+              len(subtransactions), skipped, total_amount)
+
+    return DtoSaveTransaction(
+        account_id=account_id,
+        date=parent_date,
+        amount=total_amount,
+        memo=f"PDF Import: {pdf_name}"[:200],
+        cleared="uncleared",
+        approved=False,
+        subtransactions=subtransactions,
+    )
+
+
 # ── Task ──────────────────────────────────────────────────────────────────────
 
 @SPROUT.task(queue='default')
 @log_result()
 @feed()
 def add_ynab_transactions_from_pdf(input_pdf: str, ynab_budget_name: str,
-                                   ynab_account_name: str, **kwargs):
+                                   ynab_account_name: str, split: bool = False, **kwargs):
     """Parse a bank statement PDF and import transactions into YNAB.
 
     Args:
         input_pdf:           PDF filename inside workflows/finance/transactions/.
         ynab_budget_name:    YNAB budget name as shown in the app (e.g. 'SGD Budget').
         ynab_account_name:   YNAB account name within that budget (e.g. 'DBS Checking').
+        split:               If True, import the entire PDF as a single YNAB split
+                             transaction where each line becomes a subtransaction.
+                             If False (default), import each line as its own transaction.
         cfg_id__ynab:        Config key for YNAB (default 'YNAB').
         cfg_id__anthropic:   Config key for Anthropic (default 'ANTHROPIC').
 
@@ -253,7 +324,7 @@ def add_ynab_transactions_from_pdf(input_pdf: str, ynab_budget_name: str,
     pdf_path = _TRANSACTIONS_DIR / input_pdf
     if not pdf_path.exists():
         raise FileNotFoundError(f"PDF not found: {pdf_path}")
-    _log.info("Parsing PDF: %s", pdf_path)
+    _log.info("Parsing PDF: %s (split=%s)", pdf_path, split)
 
     # ── Parse PDF via Claude ──────────────────────────────────────────────
     try:
@@ -289,42 +360,63 @@ def add_ynab_transactions_from_pdf(input_pdf: str, ynab_budget_name: str,
     category_lookup = _build_category_lookup(budget_service, budget_id)
     _log.info("Loaded %d YNAB categories for matching", len(category_lookup))
 
-    # ── Convert to YNAB DTOs ──────────────────────────────────────────────
-    dtos = []
-    skipped = 0
-    for tx in parsed_transactions:
-        dto = _build_dto(tx, account_id, category_lookup)
-        if dto is not None:
-            dtos.append(dto)
-        else:
-            skipped += 1
-
-    _log.info("Built %d DTO(s), skipped %d", len(dtos), skipped)
-
-    if not dtos:
-        return f"All {len(parsed_transactions)} transactions were skipped (missing date or amount)."
-
-    # ── Post to YNAB ──────────────────────────────────────────────────────
+    # ── Build payload ─────────────────────────────────────────────────────
     tx_service = ApiServiceYNABTransactions(cfg__ynab)
-    wrapper = DtoSaveTransactionsWrapper(transactions=dtos)
-    # YNAB API expects a plain dict payload — serialize the dataclass tree
-    wrapper_dict = asdict(wrapper)
-    # Remove null top-level 'transaction' key to avoid confusion with batch endpoint
-    wrapper_dict.pop("transaction", None)
 
-    try:
-        result = tx_service.create_new_transaction(budget_id, wrapper_dict)
-    except Exception as exc:
-        _log.error("YNAB create_new_transaction failed: %s", exc)
-        raise
+    if split:
+        # One parent transaction with all lines as subtransactions
+        try:
+            split_dto = _build_split_dto(parsed_transactions, account_id, category_lookup, input_pdf)
+        except ValueError as exc:
+            _log.error("Split transaction build failed: %s", exc)
+            raise
 
-    imported = len(result.get("transactions", result.get("transaction", [])) or [])
-    duplicates = len(result.get("duplicate_import_ids", []))
+        payload = {"transaction": asdict(split_dto)}
 
-    summary = (
-        f"Imported {imported} transaction(s) from '{input_pdf}' "
-        f"into {ynab_budget_name} / {ynab_account_name}. "
-        f"Skipped (parse): {skipped}. Duplicates: {duplicates}."
-    )
+        try:
+            result = tx_service.create_new_transaction(budget_id, payload)
+        except Exception as exc:
+            _log.error("YNAB create_new_transaction (split) failed: %s", exc)
+            raise
+
+        sub_count = len(split_dto.subtransactions)
+        summary = (
+            f"Imported 1 split transaction ({sub_count} subtransaction(s)) "
+            f"from '{input_pdf}' into {ynab_budget_name} / {ynab_account_name}."
+        )
+
+    else:
+        # Individual transaction per line
+        dtos = []
+        skipped = 0
+        for tx in parsed_transactions:
+            dto = _build_dto(tx, account_id, category_lookup)
+            if dto is not None:
+                dtos.append(dto)
+            else:
+                skipped += 1
+
+        _log.info("Built %d DTO(s), skipped %d", len(dtos), skipped)
+
+        if not dtos:
+            return f"All {len(parsed_transactions)} transactions were skipped (missing date or amount)."
+
+        wrapper_dict = asdict(DtoSaveTransactionsWrapper(transactions=dtos))
+        wrapper_dict.pop("transaction", None)
+
+        try:
+            result = tx_service.create_new_transaction(budget_id, wrapper_dict)
+        except Exception as exc:
+            _log.error("YNAB create_new_transaction failed: %s", exc)
+            raise
+
+        imported = len(result.get("transactions", result.get("transaction", [])) or [])
+        duplicates = len(result.get("duplicate_import_ids", []))
+        summary = (
+            f"Imported {imported} transaction(s) from '{input_pdf}' "
+            f"into {ynab_budget_name} / {ynab_account_name}. "
+            f"Skipped (parse): {skipped}. Duplicates: {duplicates}."
+        )
+
     _log.info(summary)
     return summary
