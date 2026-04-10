@@ -602,7 +602,7 @@ Lightweight JSON-like files exposing Celery tasks and shell commands to n8n and 
 
 ## Contact
 
-For questions or feedback: **[REDACTED_EMAIL](mailto:REDACTED_EMAIL)**
+For questions or feedback: **[LinkedIn](https://www.linkedin.com/in/dbbartilet/)**
 
 ## License
 
