@@ -37,7 +37,7 @@ TRELLO_API_KEY=...
 TRELLO_API_TOKEN=...
 
 # Optional
-KANBAN_POLL_INTERVAL=30       # seconds between board polls (default: 30)
+KANBAN_POLL_INTERVAL=60       # seconds between board polls (default: 60)
 KANBAN_PROFILES_DIR=          # path to custom profiles dir (default: bundled examples)
 KANBAN_DRY_RUN=0              # set to 1 to poll without running agents
 ```
@@ -46,15 +46,16 @@ KANBAN_DRY_RUN=0              # set to 1 to poll without running agents
 
 Create a Trello board with these lists (exact names):
 
-| List Name | Purpose |
-|---|---|
-| `Backlog` | New tasks — orchestrator picks from here |
-| `Pending` | Agent claimed the card |
-| `In Progress` | Agent actively working |
-| `Blocked` | Agent waiting on human input |
-| `Done` | Agent done — awaiting human approval |
-| `Done` | Completed |
-| `Failed` | Agent encountered an unrecoverable error |
+| List Name     | Purpose                                     |
+|---------------|---------------------------------------------|
+| `Draft`       | Sandbox to write and organize tasks to send |
+| `Backlog`     | New tasks — orchestrator picks from here    |
+| `Pending`     | Agent claimed the card                      |
+| `In Progress` | Agent actively working                      |
+| `Blocked`     | Agent waiting on human input                |
+| `Done`        | Agent done — awaiting human approval        |
+| `Done`        | Completed                                   |
+| `Failed`      | Agent encountered an unrecoverable error    |
 
 **Get your board ID:** Open any card on the board, copy its URL
 (`https://trello.com/c/<card_id>`), then call:

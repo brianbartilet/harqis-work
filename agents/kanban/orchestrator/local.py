@@ -251,7 +251,7 @@ def from_env(profiles_dir: Optional[Path] = None) -> LocalOrchestrator:
 
     Optional:
         KANBAN_PROFILES_DIR   path to profiles directory (default: agents/kanban/profiles/examples)
-        KANBAN_POLL_INTERVAL  seconds between polls (default: 30)
+        KANBAN_POLL_INTERVAL  seconds between polls (default: 60)
         KANBAN_DRY_RUN        set to "1" to skip actual agent execution
         KANBAN_AUDIT_LOG      path to audit JSONL file (default: logs/kanban_audit.jsonl)
     """
@@ -277,7 +277,7 @@ def from_env(profiles_dir: Optional[Path] = None) -> LocalOrchestrator:
 
     board_id = os.environ["KANBAN_BOARD_ID"]
     api_key = os.environ["ANTHROPIC_API_KEY"]
-    poll_interval = int(os.environ.get("KANBAN_POLL_INTERVAL", "30"))
+    poll_interval = int(os.environ.get("KANBAN_POLL_INTERVAL", "60"))
     dry_run = os.environ.get("KANBAN_DRY_RUN", "0") == "1"
 
     audit_log_path = Path(os.environ.get("KANBAN_AUDIT_LOG", "logs/kanban_audit.jsonl"))

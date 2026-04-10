@@ -425,7 +425,7 @@ ANTHROPIC_API_KEY=
 # Kanban orchestrator
 KANBAN_PROVIDER=trello          # or jira
 KANBAN_BOARD_ID=
-KANBAN_POLL_INTERVAL=30
+KANBAN_POLL_INTERVAL=60
 KANBAN_AUDIT_LOG=logs/kanban_audit.jsonl
 
 # Trello
