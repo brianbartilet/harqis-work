@@ -19,7 +19,7 @@ harqis-work is a multi-platform codebase. Most components are fully cross-platfo
 | `apps/` — REST API integrations (20+ apps)                     | ✅ | ✅ | ✅ | Pure HTTP/SDK; no OS dependencies |
 | `frontend/` — FastAPI + HTMX dashboard                         | ✅ | ✅ | ✅ | Cross-platform |
 | `mcp/` — FastMCP server                                        | ✅ | ✅ | ✅ | Cross-platform |
-| `workflows/hud/` — some integraties with rainmeter             | ✅ | ⚠️ | ⚠️ | Partial — see Windows-specific section |
+| `workflows/hud/` — some integrations with rainmeter             | ✅ | ⚠️ | ⚠️ | Partial — see Windows-specific section |
 | `workflows/purchases/` — MTG card pipeline                     | ✅ | ✅ | ✅ | Cross-platform |
 | `workflows/desktop/` — git pulls, file sync, window management | ✅ | ⚠️ | ⚠️ | Partial — see Windows-specific section |
 | `apps/rainmeter/` — HUD desktop rendering                      | ✅ | — | — | Windows-only by design |
