@@ -2,7 +2,6 @@
 .claude/settings.local.json
 *config.yaml
 .env/*
-!.env/.gitkeep
 **/.env
 **/.env.*
 .venv
