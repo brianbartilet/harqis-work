@@ -1,0 +1,279 @@
+"""
+Agent profile schema — loaded from YAML files.
+
+Each profile fully describes one logical agent:
+  identity, model config, repo context, tools, permissions, hardware, lifecycle.
+
+Profiles support inheritance via `extends: <base-profile-id>`.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Optional
+
+import yaml
+
+
+# ── Sub-configs ───────────────────────────────────────────────────────────────
+
+@dataclass
+class ModelConfig:
+    provider: str = "anthropic"
+    model_id: str = "claude-sonnet-4-6"
+    max_tokens: int = 4096
+    system_prompt: str = ""
+    system_prompt_file: str = ""
+
+    def resolved_system_prompt(self, base_dir: Optional[Path] = None) -> str:
+        if self.system_prompt:
+            return self.system_prompt
+        if self.system_prompt_file:
+            p = Path(self.system_prompt_file)
+            if base_dir and not p.is_absolute():
+                p = base_dir / p
+            return p.read_text(encoding="utf-8")
+        return ""
+
+
+@dataclass
+class RepoConfig:
+    url: str = ""
+    local_path: str = ""
+    branch_policy: str = "any"  # any | read-only | feature-branch-only
+
+
+@dataclass
+class ContextConfig:
+    repos: list[RepoConfig] = field(default_factory=list)
+    working_directory: str = ""
+    env_files: list[str] = field(default_factory=list)
+    config_files: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ToolsConfig:
+    allowed: list[str] = field(default_factory=list)
+    denied: list[str] = field(default_factory=list)
+    mcp_servers: list[str] = field(default_factory=list)
+
+
+@dataclass
+class FilesystemPermission:
+    allow: list[str] = field(default_factory=list)
+    deny: list[str] = field(default_factory=list)
+
+
+@dataclass
+class NetworkPermission:
+    allow: list[str] = field(default_factory=list)
+    deny: list[str] = field(default_factory=list)
+
+
+@dataclass
+class GitPermission:
+    can_push: bool = False
+    protected_branches: list[str] = field(
+        default_factory=lambda: ["main", "master", "prod"]
+    )
+    require_pr: bool = True
+
+
+@dataclass
+class PermissionsConfig:
+    filesystem: FilesystemPermission = field(default_factory=FilesystemPermission)
+    network: NetworkPermission = field(default_factory=NetworkPermission)
+    git: GitPermission = field(default_factory=GitPermission)
+
+
+@dataclass
+class HardwareConfig:
+    node_affinity: str = "any"
+    fallback_nodes: list[str] = field(default_factory=list)
+    requires_display: bool = False
+    requires_usb: bool = False
+    min_ram_gb: int = 2
+    queue: str = "default"
+
+
+@dataclass
+class LifecycleConfig:
+    timeout_minutes: int = 20
+    on_timeout: str = "move_to_failed"
+    on_error: str = "post_error_comment_and_fail"
+    on_success: str = "move_to_review"
+    auto_approve: bool = False
+    max_retries: int = 1
+    retry_delay_seconds: int = 30
+
+
+# ── Root profile ──────────────────────────────────────────────────────────────
+
+@dataclass
+class AgentProfile:
+    id: str
+    name: str
+    description: str = ""
+    version: str = "1.0"
+    extends: str = ""
+    model: ModelConfig = field(default_factory=ModelConfig)
+    context: ContextConfig = field(default_factory=ContextConfig)
+    tools: ToolsConfig = field(default_factory=ToolsConfig)
+    permissions: PermissionsConfig = field(default_factory=PermissionsConfig)
+    hardware: HardwareConfig = field(default_factory=HardwareConfig)
+    lifecycle: LifecycleConfig = field(default_factory=LifecycleConfig)
+
+    # ── Label matching ────────────────────────────────────────────────────────
+
+    def matches_label(self, label: str) -> bool:
+        """Return True if this profile's id matches the given card label."""
+        return self.id == label or self.id.startswith(label)
+
+    # ── YAML loading ──────────────────────────────────────────────────────────
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AgentProfile:
+        return cls(
+            id=data["id"],
+            name=data.get("name", data["id"]),
+            description=data.get("description", ""),
+            version=str(data.get("version", "1.0")),
+            extends=data.get("extends", ""),
+            model=_load_model(data.get("model", {})),
+            context=_load_context(data.get("context", {})),
+            tools=_load_tools(data.get("tools", {})),
+            permissions=_load_permissions(data.get("permissions", {})),
+            hardware=_load_hardware(data.get("hardware", {})),
+            lifecycle=_load_lifecycle(data.get("lifecycle", {})),
+        )
+
+    @classmethod
+    def from_yaml(cls, path: Path) -> AgentProfile:
+        with open(path, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        return cls.from_dict(data)
+
+    def merge_base(self, base: AgentProfile) -> AgentProfile:
+        """Return a new profile with base values filled in where this profile has defaults."""
+        def _pick(mine, base_val):
+            return mine if mine != base_val.__class__() else base_val
+
+        return AgentProfile(
+            id=self.id,
+            name=self.name,
+            description=self.description or base.description,
+            version=self.version,
+            extends=self.extends,
+            model=self.model if self.model != ModelConfig() else base.model,
+            context=self.context if self.context != ContextConfig() else base.context,
+            tools=_merge_tools(self.tools, base.tools),
+            permissions=_merge_permissions(self.permissions, base.permissions),
+            hardware=self.hardware if self.hardware != HardwareConfig() else base.hardware,
+            lifecycle=self.lifecycle if self.lifecycle != LifecycleConfig() else base.lifecycle,
+        )
+
+
+# ── Internal helpers ──────────────────────────────────────────────────────────
+
+def _load_model(d: dict) -> ModelConfig:
+    return ModelConfig(
+        provider=d.get("provider", "anthropic"),
+        model_id=d.get("model_id", "claude-sonnet-4-6"),
+        max_tokens=int(d.get("max_tokens", 4096)),
+        system_prompt=d.get("system_prompt", ""),
+        system_prompt_file=d.get("system_prompt_file", ""),
+    )
+
+
+def _load_context(d: dict) -> ContextConfig:
+    repos = [
+        RepoConfig(
+            url=r.get("url", ""),
+            local_path=r.get("local_path", ""),
+            branch_policy=r.get("branch_policy", "any"),
+        )
+        for r in d.get("repos", [])
+    ]
+    return ContextConfig(
+        repos=repos,
+        working_directory=d.get("working_directory", ""),
+        env_files=d.get("env_files", []),
+        config_files=d.get("config_files", []),
+    )
+
+
+def _load_tools(d: dict) -> ToolsConfig:
+    return ToolsConfig(
+        allowed=d.get("allowed", []),
+        denied=d.get("denied", []),
+        mcp_servers=d.get("mcp_servers", []),
+    )
+
+
+def _load_permissions(d: dict) -> PermissionsConfig:
+    fs = d.get("filesystem", {})
+    net = d.get("network", {})
+    git = d.get("git", {})
+    return PermissionsConfig(
+        filesystem=FilesystemPermission(
+            allow=fs.get("allow", []),
+            deny=fs.get("deny", []),
+        ),
+        network=NetworkPermission(
+            allow=net.get("allow", []),
+            deny=net.get("deny", []),
+        ),
+        git=GitPermission(
+            can_push=git.get("can_push", False),
+            protected_branches=git.get(
+                "protected_branches", ["main", "master", "prod"]
+            ),
+            require_pr=git.get("require_pr", True),
+        ),
+    )
+
+
+def _load_hardware(d: dict) -> HardwareConfig:
+    return HardwareConfig(
+        node_affinity=d.get("node_affinity", "any"),
+        fallback_nodes=d.get("fallback_nodes", []),
+        requires_display=d.get("requires_display", False),
+        requires_usb=d.get("requires_usb", False),
+        min_ram_gb=int(d.get("min_ram_gb", 2)),
+        queue=d.get("queue", "default"),
+    )
+
+
+def _load_lifecycle(d: dict) -> LifecycleConfig:
+    return LifecycleConfig(
+        timeout_minutes=int(d.get("timeout_minutes", 20)),
+        on_timeout=d.get("on_timeout", "move_to_failed"),
+        on_error=d.get("on_error", "post_error_comment_and_fail"),
+        on_success=d.get("on_success", "move_to_review"),
+        auto_approve=bool(d.get("auto_approve", False)),
+        max_retries=int(d.get("max_retries", 1)),
+        retry_delay_seconds=int(d.get("retry_delay_seconds", 30)),
+    )
+
+
+def _merge_tools(mine: ToolsConfig, base: ToolsConfig) -> ToolsConfig:
+    return ToolsConfig(
+        allowed=mine.allowed or base.allowed,
+        denied=list(set(mine.denied + base.denied)),
+        mcp_servers=mine.mcp_servers or base.mcp_servers,
+    )
+
+
+def _merge_permissions(mine: PermissionsConfig, base: PermissionsConfig) -> PermissionsConfig:
+    return PermissionsConfig(
+        filesystem=FilesystemPermission(
+            allow=mine.filesystem.allow or base.filesystem.allow,
+            deny=list(set(mine.filesystem.deny + base.filesystem.deny)),
+        ),
+        network=NetworkPermission(
+            allow=mine.network.allow or base.network.allow,
+            deny=list(set(mine.network.deny + base.network.deny)),
+        ),
+        git=mine.git if mine.git != GitPermission() else base.git,
+    )

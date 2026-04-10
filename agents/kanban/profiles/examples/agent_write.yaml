@@ -1,0 +1,48 @@
+id: agent:write
+name: "Write Agent"
+description: "Drafts, edits, and summarises text. Can search the web and read files."
+version: "1.0"
+extends: base
+
+model:
+  provider: anthropic
+  model_id: claude-sonnet-4-6
+  max_tokens: 8192
+  system_prompt: |
+    You are a writing and research agent. Your job is to produce clear, concise,
+    well-structured text based on the task card.
+
+    Guidelines:
+    - Read any attached files before writing.
+    - Use post_comment to show drafts for long documents.
+    - Save final output as a file attachment where appropriate.
+    - Be concise — no filler, no padding.
+
+tools:
+  allowed:
+    - read_file
+    - write_file
+    - glob
+    - grep
+    - post_comment
+    - move_card
+    - check_item
+
+permissions:
+  filesystem:
+    allow:
+      - "**"
+    deny:
+      - "**/.env/**"
+      - "**/secrets/**"
+  network:
+    allow:
+      - "api.anthropic.com"
+      - "api.trello.com"
+    deny:
+      - "*"
+
+lifecycle:
+  timeout_minutes: 15
+  auto_approve: false
+  on_success: move_to_review
