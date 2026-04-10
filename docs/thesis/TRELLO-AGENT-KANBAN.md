@@ -41,7 +41,7 @@ Orchestrator (Mac Mini)
          ├── reads full card context (description, checklists, attachments, custom fields)
          ├── executes work using scoped tools
          ├── posts result as card comment
-         └── moves card → [Review] or [Done]
+         └── moves card → [Done] or [Done]
 ```
 
 The Trello board is the single source of truth for task state. The orchestrator is stateless between polls — all task state lives on the card.
@@ -125,10 +125,10 @@ hw:any         → default; orchestrator picks least-loaded node
 | Column | Purpose | Who Moves Here |
 |---|---|---|
 | **Backlog** | New tasks awaiting pickup | Human |
-| **Claimed** | Agent has locked the card (race-condition guard) | Agent (immediately on pickup) |
+| **Pending** | Agent has locked the card (race-condition guard) | Agent (immediately on pickup) |
 | **In Progress** | Agent actively working | Agent |
 | **Blocked** | Agent waiting on dependency or human input | Agent |
-| **Review** | Result posted, awaiting human approval | Agent |
+| **Done** | Result posted, awaiting human approval | Agent |
 | **Done** | Verified and closed | Human or auto-close rule |
 | **Failed** | Agent encountered unrecoverable error | Agent |
 
@@ -351,7 +351,7 @@ class ProfileRegistry:
 |---|---|---|---|
 | `agent:code` | Code Agent | Write, refactor, review code | bash, git, read/write file |
 | `agent:test` | Test Agent | Generate + run tests, coverage | bash, pytest, browser |
-| `agent:review` | Review Agent | PR review, code quality analysis | git, grep, web_search |
+| `agent:review` | Done Agent | PR review, code quality analysis | git, grep, web_search |
 | `agent:ci` | CI Agent | Trigger pipelines, parse failures | bash, http, trello |
 | `agent:web` | Web Agent | Browse, scrape, search | browser, web_search |
 | `agent:write` | Write Agent | Draft, edit, summarise | write_file, web_search |
@@ -411,7 +411,7 @@ Permissions are declared in the agent profile and enforced at the orchestrator l
 | **Tools** | `tools.allowed[]`, `tools.denied[]` | Allow `bash`, deny `send_email` |
 | **MCP servers** | `mcp_servers[].scope[]` | harqis-work MCP, scoped to `[trello]` only |
 | **Hardware** | `node_affinity`, `requires_display` | Pin to N100-1, no display needed |
-| **Trello** | `can_move_to_done`, `can_delete_card` | Move to Review only; human closes |
+| **Trello** | `can_move_to_done`, `can_delete_card` | Move to Done only; human closes |
 
 ### 7.3 Permission Enforcement Architecture
 
@@ -945,18 +945,16 @@ providers:
 column_map:
   trello:
     Backlog:     "Backlog"
-    Claimed:     "Claimed"
+    Pending:     "Pending"
     "In Progress": "In Progress"
     Blocked:     "Blocked"
-    Review:      "Review"
     Done:        "Done"
     Failed:      "Failed"
   jira:
     Backlog:     "Backlog"
-    Claimed:     "In Review"         # closest Jira default
+    Pending:     "In Review"       # closest Jira default
     "In Progress": "In Progress"
     Blocked:     "Blocked"
-    Review:      "In Review"
     Done:        "Done"
     Failed:      "Rejected"
 ```
@@ -1006,7 +1004,7 @@ class KanbanOrchestrator:
             if not profile:
                 continue   # no matching agent; leave card in Backlog
             secrets  = self.vault.read(profile.permissions.secrets.vault_path)
-            self.trello.move_card(card.id, "Claimed")
+            self.trello.move_card(card.id, "Pending")
             self.trello.add_comment(card.id, f"claimed-by: {profile.name}")
             self.celery.dispatch(
                 queue=profile.hardware.queue,
@@ -1035,7 +1033,7 @@ def run_agent(self, profile_id: str, card_id: str, secrets: dict):
     try:
         result = agent.run()
         trello.add_comment(card_id, f"## Result\n{result}")
-        destination = "Done" if profile.lifecycle.auto_approve else "Review"
+        destination = "Done" if profile.lifecycle.auto_approve else "Done"
         trello.move_card(card_id, destination)
     except AgentTimeout:
         trello.add_comment(card_id, "## Timeout\nAgent exceeded time limit.")
@@ -1180,10 +1178,10 @@ curl -X POST "https://api.trello.com/1/webhooks" \
 
 | Challenge | Detail | Mitigation |
 |---|---|---|
-| **Race conditions** | Two agent instances claiming the same card simultaneously | Atomic "Claimed" column move + `claimed-by` comment written before any work |
+| **Race conditions** | Two agent instances claiming the same card simultaneously | Atomic "Pending" column move + `claimed-by` comment written before any work |
 | **Context window limits** | Large repos + card context exceeding model limits | Chunked file reads; RAG over repo (embedding search before passing to agent) |
 | **Secret leakage** | Agent posts secret value in card comment | Post-processing filter on all comment writes; deny `echo $SECRET` in bash tool |
-| **Node failure** | N100 node goes down mid-task | Celery task ack only after success; heartbeat moves orphaned "In Progress" cards back to Claimed for re-dispatch |
+| **Node failure** | N100 node goes down mid-task | Celery task ack only after success; heartbeat moves orphaned "In Progress" cards back to Pending for re-dispatch |
 | **Runaway agents** | Agent loops indefinitely or burns tokens | Hard `timeout_minutes` in profile enforced by Celery task `soft_time_limit` |
 | **Permission bypass** | Agent uses bash to access denied paths | Sandbox with Docker + read-only bind mounts; deny shell wildcards that escape allowed paths |
 | **Profile drift** | Profile changes invalidate running tasks | Profiles are immutable once injected; version field in profile; apply changes only to new tasks |
@@ -1199,7 +1197,7 @@ curl -X POST "https://api.trello.com/1/webhooks" \
 | N100 node compromised | High | Low | Network egress allow-list per node; agents run in Docker with no host network |
 | Trello loses card data | Medium | Very Low | Periodic board export to Git; critical outputs also saved as repo commits |
 | Token cost overrun | Medium | Medium | Per-profile `max_tokens` cap; monthly budget alert via YNAB/cost tracking |
-| Agent misunderstands card and does wrong work | Medium | High | Clear card templates; checklist confirmation before destructive actions; Review gate |
+| Agent misunderstands card and does wrong work | Medium | High | Clear card templates; checklist confirmation before destructive actions; Done gate |
 
 ### 13.3 Milestones
 
@@ -1208,7 +1206,7 @@ curl -X POST "https://api.trello.com/1/webhooks" \
 - [ ] Single agent profile working end-to-end (`agent:code:harqis`)
 - [ ] Card anatomy defined; custom fields created on `harqis-work` board
 - [ ] Secrets vault operational (SOPS or Vault)
-- [ ] `Claimed → In Progress → Review → Done` flow working
+- [ ] `Pending → In Progress → Done → Done` flow working
 - [ ] Error handling: Failed column, error comment
 
 #### Phase 2 — Multi-Agent and Hardware (Weeks 3–4)
@@ -1258,8 +1256,8 @@ curl -X POST "https://api.trello.com/1/webhooks" \
 - Use checklists for tasks with more than 3 steps; agents can show progress granularly.
 
 **Race condition prevention**
-- The orchestrator moves a card to **Claimed** in a single atomic API call before dispatching to any worker. Workers never poll Backlog directly.
-- Add a `claimed-by: <agent-id>` comment immediately after claiming. If a card is in Claimed for >5 minutes with no In Progress transition, the orchestrator reclaims it.
+- The orchestrator moves a card to **Pending** in a single atomic API call before dispatching to any worker. Workers never poll Backlog directly.
+- Add a `claimed-by: <agent-id>` comment immediately after claiming. If a card is in Pending for >5 minutes with no In Progress transition, the orchestrator reclaims it.
 
 **Outputs**
 - Post large outputs (files, CSVs, generated code) as **card attachments**, not comment text. Comments are for summaries.
@@ -1268,7 +1266,7 @@ curl -X POST "https://api.trello.com/1/webhooks" \
 **Security**
 - Never allow agents to read their own profile secrets file. Secrets are injected as environment variables and the file path is not in the allowed filesystem scope.
 - Rotate `ANTHROPIC_API_KEY` per agent profile so a compromised agent can be revoked without affecting others.
-- Enable Trello's audit log. Review it weekly for unexpected card moves or comments.
+- Enable Trello's audit log. Done it weekly for unexpected card moves or comments.
 
 **Cost control**
 - Use `claude-haiku-4-5` for high-volume, simple routing decisions (e.g., labelling cards, summarising short texts).

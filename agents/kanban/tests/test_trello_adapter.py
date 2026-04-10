@@ -13,7 +13,7 @@ from agents.kanban.interface import KanbanCard, KanbanColumn, KanbanChecklist
 
 FAKE_KEY = "test_api_key"
 FAKE_TOKEN = "test_token"
-FAKE_BOARD_ID = "board123"
+FAKE_BOARD_ID = "a" * 24   # 24-char ID skips short-link resolution
 
 
 @pytest.fixture()
@@ -25,7 +25,7 @@ def provider():
 def mock_lists_response():
     return [
         {"id": "list_backlog", "name": "Backlog"},
-        {"id": "list_claimed", "name": "Claimed"},
+        {"id": "list_claimed", "name": "Pending"},
         {"id": "list_in_progress", "name": "In Progress"},
         {"id": "list_review", "name": "Review"},
         {"id": "list_done", "name": "Done"},
@@ -39,7 +39,7 @@ def mock_card_response():
         "id": "card_abc",
         "name": "Write a test",
         "desc": "Create a pytest test file",
-        "idBoard": FAKE_BOARD_ID,
+        "idBoard": "a" * 24,
         "idList": "list_backlog",
         "idMembers": [],
         "labels": [{"id": "lbl1", "name": "agent:code"}],

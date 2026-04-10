@@ -3,6 +3,12 @@ BaseKanbanAgent — Claude tool-use loop.
 
 Runs the agent until the model emits a final text response (stop_reason == "end_turn")
 or until a timeout/error occurs. All tool calls are permission-checked before execution.
+
+Security:
+  - Accepts a *scoped* secrets dict (not the full env) from the orchestrator.
+  - Passes scoped env vars to MCP tools so they can authenticate.
+  - Sanitizes all output before posting to Kanban comments.
+  - Records every tool call and permission event to the audit log.
 """
 
 from __future__ import annotations
@@ -17,6 +23,8 @@ from agents.kanban.agent.tools.registry import ToolRegistry
 from agents.kanban.interface import KanbanCard, KanbanProvider
 from agents.kanban.permissions.enforcer import PermissionDenied, PermissionEnforcer
 from agents.kanban.profiles.schema import AgentProfile
+from agents.kanban.security.audit import AuditLogger, NullAuditLogger
+from agents.kanban.security.sanitizer import OutputSanitizer
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +45,7 @@ class BaseKanbanAgent:
     Runs a Claude tool-use loop for one Kanban card.
 
     Usage:
-        agent = BaseKanbanAgent(profile, card, provider, api_key)
+        agent = BaseKanbanAgent(profile, card, provider, api_key, scoped_secrets)
         result = agent.run()   # returns the agent's final text output
     """
 
@@ -47,10 +55,15 @@ class BaseKanbanAgent:
         card: KanbanCard,
         provider: KanbanProvider,
         api_key: str,
+        scoped_secrets: Optional[dict[str, str]] = None,
+        audit: Optional[AuditLogger] = None,
     ):
         self.profile = profile
         self.card = card
         self.provider = provider
+        self._scoped_secrets = scoped_secrets or {}
+        self._audit = audit or NullAuditLogger()
+        self._sanitizer = OutputSanitizer(self._scoped_secrets)
         self.client = anthropic.Anthropic(api_key=api_key)
         self.enforcer = PermissionEnforcer(profile)
         self.registry = ToolRegistry(
@@ -58,6 +71,7 @@ class BaseKanbanAgent:
             card=card,
             provider=provider,
             enforcer=self.enforcer,
+            scoped_secrets=self._scoped_secrets,
         )
 
     # ── Public ────────────────────────────────────────────────────────────────
@@ -70,9 +84,10 @@ class BaseKanbanAgent:
         system = self._system_prompt()
 
         logger.info("[%s] Starting for card %s: %s", self.profile.id, self.card.id, self.card.title)
+        self._audit.agent_start(self.card.title)
 
         iteration = 0
-        max_iterations = 30  # hard safety cap
+        max_iterations = 50  # hard safety cap
 
         while iteration < max_iterations:
             iteration += 1
@@ -87,23 +102,36 @@ class BaseKanbanAgent:
                 kwargs["tools"] = tools
 
             logger.debug("[%s] Calling Claude (iteration %d)", self.profile.id, iteration)
-            response = self.client.messages.create(**kwargs)
+            try:
+                response = self.client.messages.create(**kwargs)
+            except anthropic.BadRequestError as e:
+                msg = str(e)
+                logger.warning("[%s] BadRequestError: %s", self.profile.id, msg)
+                self._audit.agent_finish(success=False, iterations=iteration, detail=msg)
+                return f"ERROR: Request blocked by API — {msg}"
             messages.append({"role": "assistant", "content": response.content})
 
             if response.stop_reason == "end_turn":
-                return self._extract_text(response)
+                text = self._extract_text(response)
+                safe_text = self._sanitizer.scrub(text)
+                self._audit.agent_finish(success=True, iterations=iteration)
+                return safe_text
 
             if response.stop_reason != "tool_use":
                 logger.warning(
                     "[%s] Unexpected stop_reason: %s", self.profile.id, response.stop_reason
                 )
-                return self._extract_text(response)
+                text = self._extract_text(response)
+                safe_text = self._sanitizer.scrub(text)
+                self._audit.agent_finish(success=True, iterations=iteration)
+                return safe_text
 
             # Process tool calls
             tool_results = self._handle_tool_calls(response.content)
             messages.append({"role": "user", "content": tool_results})
 
         logger.error("[%s] Hit max iterations (%d)", self.profile.id, max_iterations)
+        self._audit.agent_finish(success=False, iterations=max_iterations, detail="max iterations exceeded")
         return "ERROR: Agent exceeded maximum iteration limit."
 
     # ── Internal ──────────────────────────────────────────────────────────────
@@ -131,17 +159,22 @@ class BaseKanbanAgent:
             tool_name = block.name
             tool_input = block.input
             logger.debug("[%s] Tool: %s(%s)", self.profile.id, tool_name, tool_input)
+            self._audit.tool_call(tool_name, tool_input)
 
             try:
                 self.enforcer.check_tool(tool_name)
+                self._audit.permission_check("tool", tool_name, allowed=True)
                 output = self.registry.call(tool_name, tool_input)
+                safe_output = self._sanitizer.scrub(str(output))
+                self._audit.tool_result(tool_name, success=True)
                 results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
-                    "content": str(output),
+                    "content": safe_output,
                 })
             except PermissionDenied as e:
                 logger.warning("[%s] Permission denied: %s", self.profile.id, e)
+                self._audit.permission_check("tool", tool_name, allowed=False, reason=str(e))
                 results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
@@ -150,6 +183,7 @@ class BaseKanbanAgent:
                 })
             except Exception as e:
                 logger.error("[%s] Tool error '%s': %s", self.profile.id, tool_name, e)
+                self._audit.tool_result(tool_name, success=False, detail=str(e))
                 results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,

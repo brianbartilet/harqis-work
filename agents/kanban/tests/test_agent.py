@@ -190,4 +190,4 @@ def test_agent_stops_at_max_iterations(open_profile, sample_card):
             result = agent.run()
 
     assert_that(result, contains_string("ERROR"))
-    assert_that(mock_client.messages.create.call_count, equal_to(30))
+    assert_that(mock_client.messages.create.call_count, equal_to(50))

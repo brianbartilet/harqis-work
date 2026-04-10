@@ -51,7 +51,7 @@ class TrelloMoveTool(_BaseTool):
     name = "move_card"
     description = (
         "Move the current Kanban card to a different column. "
-        "Valid columns: Backlog, Claimed, In Progress, Blocked, Review, Done, Failed."
+        "Valid columns: Backlog, Pending, In Progress, Blocked, Done, Failed."
     )
     input_schema = {
         "type": "object",
@@ -61,10 +61,9 @@ class TrelloMoveTool(_BaseTool):
                 "description": "Target column name.",
                 "enum": [
                     "Backlog",
-                    "Claimed",
+                    "Pending",
                     "In Progress",
                     "Blocked",
-                    "Review",
                     "Done",
                     "Failed",
                 ],

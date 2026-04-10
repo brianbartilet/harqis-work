@@ -31,12 +31,32 @@ class TrelloProvider(KanbanProvider):
         self._timeout = timeout
         # board_id → {column_name: list_id}
         self._col_cache: dict[str, dict[str, str]] = {}
+        # short_link → full_id cache
+        self._id_cache: dict[str, str] = {}
+
+    def _resolve_board_id(self, board_id: str) -> str:
+        """Resolve a short link (8 chars) to the full 24-char board ID if needed."""
+        if len(board_id) == 24:
+            return board_id
+        if board_id in self._id_cache:
+            return self._id_cache[board_id]
+        r = requests.get(
+            f"{_BASE}/boards/{board_id}",
+            params={**self._auth, "fields": "id"},
+            timeout=self._timeout,
+        )
+        r.raise_for_status()
+        full_id = r.json()["id"]
+        self._id_cache[board_id] = full_id
+        logger.debug("Resolved board short link %s → %s", board_id, full_id)
+        return full_id
 
     # ── Column helpers ────────────────────────────────────────────────────────
 
     def _refresh_columns(self, board_id: str) -> dict[str, str]:
+        full_id = self._resolve_board_id(board_id)
         r = requests.get(
-            f"{_BASE}/boards/{board_id}/lists",
+            f"{_BASE}/boards/{full_id}/lists",
             params=self._auth,
             timeout=self._timeout,
         )

@@ -30,7 +30,15 @@ lifecycle:
   timeout_minutes: 20
   on_timeout: move_to_failed
   on_error: post_error_comment_and_fail
-  on_success: move_to_review
-  auto_approve: false
+  on_success: move_to_done
+  auto_approve: true
   max_retries: 1
   retry_delay_seconds: 30
+
+# Secrets this agent needs. SecretStore injects only these vars —
+# the agent never sees the full .env/apps.env file.
+secrets:
+  required:
+    - ANTHROPIC_API_KEY
+    - TRELLO_API_KEY
+    - TRELLO_API_TOKEN

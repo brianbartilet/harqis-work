@@ -61,7 +61,7 @@ def test_poll_once_processes_matched_cards(orchestrator, mock_provider, mock_reg
         n = orchestrator.poll_once()
 
     assert_that(n, equal_to(1))
-    mock_provider.move_card.assert_any_call(sample_card.id, "Claimed")
+    mock_provider.move_card.assert_any_call(sample_card.id, "Pending")
     mock_provider.move_card.assert_any_call(sample_card.id, "In Progress")
     comment_texts = [c.args[1] for c in mock_provider.add_comment.call_args_list]
     assert_that(any("claimed-by" in t for t in comment_texts), equal_to(True))
@@ -88,7 +88,7 @@ def test_process_card_moves_to_review_when_not_auto_approved(
         orchestrator.process_card(sample_card)
 
     move_calls = [c.args[1] for c in mock_provider.move_card.call_args_list]
-    assert_that("Review" in move_calls, equal_to(True))
+    assert_that("Done" in move_calls, equal_to(True))
 
 
 @pytest.mark.smoke

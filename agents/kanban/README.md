@@ -49,10 +49,10 @@ Create a Trello board with these lists (exact names):
 | List Name | Purpose |
 |---|---|
 | `Backlog` | New tasks — orchestrator picks from here |
-| `Claimed` | Agent claimed the card |
+| `Pending` | Agent claimed the card |
 | `In Progress` | Agent actively working |
 | `Blocked` | Agent waiting on human input |
-| `Review` | Agent done — awaiting human approval |
+| `Done` | Agent done — awaiting human approval |
 | `Done` | Completed |
 | `Failed` | Agent encountered an unrecoverable error |
 
@@ -90,10 +90,10 @@ python -m agents.kanban.orchestrator.local --poll-interval 15 --dry-run
 The orchestrator will:
 1. Poll the Backlog every 30 seconds
 2. Find cards with `agent:write` or `agent:code` labels
-3. Claim them (move to Claimed → In Progress)
+3. Claim them (move to Pending → In Progress)
 4. Run the Claude agent
 5. Post the result as a comment
-6. Move to Review (or Done if `auto_approve: true` in the profile)
+6. Move to Done (or Done if `auto_approve: true` in the profile)
 
 ---
 

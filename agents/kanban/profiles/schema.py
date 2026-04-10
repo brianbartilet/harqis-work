@@ -53,10 +53,17 @@ class ContextConfig:
 
 
 @dataclass
+class SecretsConfig:
+    required: list[str] = field(default_factory=list)
+    """Env-var names this agent needs. SecretStore injects only these."""
+
+
+@dataclass
 class ToolsConfig:
     allowed: list[str] = field(default_factory=list)
     denied: list[str] = field(default_factory=list)
     mcp_servers: list[str] = field(default_factory=list)
+    mcp_apps: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -123,6 +130,7 @@ class AgentProfile:
     permissions: PermissionsConfig = field(default_factory=PermissionsConfig)
     hardware: HardwareConfig = field(default_factory=HardwareConfig)
     lifecycle: LifecycleConfig = field(default_factory=LifecycleConfig)
+    secrets: SecretsConfig = field(default_factory=SecretsConfig)
 
     # ── Label matching ────────────────────────────────────────────────────────
 
@@ -146,6 +154,7 @@ class AgentProfile:
             permissions=_load_permissions(data.get("permissions", {})),
             hardware=_load_hardware(data.get("hardware", {})),
             lifecycle=_load_lifecycle(data.get("lifecycle", {})),
+            secrets=_load_secrets(data.get("secrets", {})),
         )
 
     @classmethod
@@ -171,6 +180,7 @@ class AgentProfile:
             permissions=_merge_permissions(self.permissions, base.permissions),
             hardware=self.hardware if self.hardware != HardwareConfig() else base.hardware,
             lifecycle=self.lifecycle if self.lifecycle != LifecycleConfig() else base.lifecycle,
+            secrets=_merge_secrets(self.secrets, base.secrets),
         )
 
 
@@ -208,6 +218,7 @@ def _load_tools(d: dict) -> ToolsConfig:
         allowed=d.get("allowed", []),
         denied=d.get("denied", []),
         mcp_servers=d.get("mcp_servers", []),
+        mcp_apps=d.get("mcp_apps", []),
     )
 
 
@@ -257,11 +268,24 @@ def _load_lifecycle(d: dict) -> LifecycleConfig:
     )
 
 
+def _load_secrets(d: dict) -> SecretsConfig:
+    return SecretsConfig(
+        required=d.get("required", []),
+    )
+
+
+def _merge_secrets(mine: SecretsConfig, base: SecretsConfig) -> SecretsConfig:
+    # Union of required vars — child + base, deduplicated
+    combined = list(dict.fromkeys(mine.required + base.required))
+    return SecretsConfig(required=combined)
+
+
 def _merge_tools(mine: ToolsConfig, base: ToolsConfig) -> ToolsConfig:
     return ToolsConfig(
         allowed=mine.allowed or base.allowed,
         denied=list(set(mine.denied + base.denied)),
         mcp_servers=mine.mcp_servers or base.mcp_servers,
+        mcp_apps=mine.mcp_apps or base.mcp_apps,
     )
 
 

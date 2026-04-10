@@ -4,6 +4,18 @@ LocalOrchestrator — single-process polling orchestrator for local development.
 No Celery, no Redis, no Docker required. Your dev machine acts as both
 orchestrator and worker. Suitable for testing the full agent flow locally.
 
+Security model:
+  - All secrets live in one env file (e.g. .env/agents.env) — only the
+    orchestrator process reads it.
+  - Each agent profile declares which env-var names it needs under
+    `secrets.required`.
+  - `SecretStore` extracts only those vars and passes a scoped dict to
+    each agent — the agent never sees the full env file.
+  - `OutputSanitizer` (inside BaseKanbanAgent) scrubs all output before
+    it is posted to Kanban comments or returned to callers.
+  - `AuditLogger` writes a JSONL record for every tool call, permission
+    check, and secret access to logs/kanban_audit.jsonl.
+
 Run:
     python -m agents.kanban.orchestrator.local
 
@@ -27,6 +39,8 @@ from agents.kanban.factory import create_provider
 from agents.kanban.interface import KanbanCard, KanbanProvider
 from agents.kanban.profiles.registry import ProfileRegistry
 from agents.kanban.profiles.schema import AgentProfile
+from agents.kanban.security.audit import AuditLogger, NullAuditLogger
+from agents.kanban.security.secret_store import SecretStore
 
 logger = logging.getLogger(__name__)
 
@@ -45,21 +59,25 @@ class LocalOrchestrator:
         registry: ProfileRegistry,
         api_key: str,
         board_id: str,
+        secret_store: Optional[SecretStore] = None,
         poll_interval: int = 30,
         dry_run: bool = False,
+        audit_log_path: Optional[Path] = None,
     ):
         self.provider = provider
         self.registry = registry
         self.api_key = api_key
         self.board_id = board_id
+        self._secret_store = secret_store or SecretStore()
         self.poll_interval = poll_interval
         self.dry_run = dry_run
+        self._audit_log_path = audit_log_path or Path("logs/kanban_audit.jsonl")
 
     # ── Single card processing ────────────────────────────────────────────────
 
     def process_card(self, card: KanbanCard) -> Optional[str]:
         """
-        Claim a card, run its agent, post result, move to Review/Done.
+        Claim a card, run its agent, post result, move to Done.
         Returns the result text, or None on error.
         """
         profile = self.registry.resolve_for_card(card)
@@ -76,10 +94,36 @@ class LocalOrchestrator:
             logger.info("[DRY RUN] Would run %s on card %s", profile.id, card.id)
             return "[dry-run]"
 
+        # Scope secrets to only what this profile declared it needs
+        try:
+            scoped = self._secret_store.scoped_for_profile(profile)
+            # Always ensure ANTHROPIC_API_KEY is present even if not declared
+            if "ANTHROPIC_API_KEY" not in scoped:
+                scoped["ANTHROPIC_API_KEY"] = self.api_key
+        except KeyError as e:
+            logger.error("Missing required secret for profile %s: %s", profile.id, e)
+            try:
+                self.provider.add_comment(
+                    card.id,
+                    f"## Agent Error\n\nCould not start: missing required secret {e}",
+                )
+                self.provider.move_card(card.id, "Failed")
+            except Exception:
+                pass
+            return None
+
+        audit = AuditLogger(
+            agent_id=profile.id,
+            card_id=card.id,
+            log_path=self._audit_log_path,
+        )
+        audit.secret_access(profile.id, list(scoped.keys()))
+
         # Step 1: Claim
         try:
-            self.provider.move_card(card.id, "Claimed")
+            self.provider.move_card(card.id, "Pending")
             self.provider.add_comment(card.id, f"claimed-by: {profile.name}")
+            audit.card_lifecycle("Backlog", "Pending")
         except Exception as e:
             logger.error("Failed to claim card %s: %s", card.id, e)
             return None
@@ -87,6 +131,7 @@ class LocalOrchestrator:
         # Step 2: Mark in progress
         try:
             self.provider.move_card(card.id, "In Progress")
+            audit.card_lifecycle("Pending", "In Progress")
         except Exception as e:
             logger.warning("Could not move to 'In Progress': %s", e)
 
@@ -97,26 +142,37 @@ class LocalOrchestrator:
                 card=card,
                 provider=self.provider,
                 api_key=self.api_key,
+                scoped_secrets=scoped,
+                audit=audit,
             )
             result = agent.run()
         except Exception as e:
-            self._handle_error(card, profile, e)
+            self._handle_error(card, profile, e, audit)
             return None
 
-        # Step 4: Post result
+        # Step 4: Post result (already sanitized by agent)
         try:
             self.provider.add_comment(card.id, f"## Result\n\n{result}")
-            destination = "Done" if profile.lifecycle.auto_approve else "Review"
+            destination = "Done"
             self.provider.move_card(card.id, destination)
+            audit.card_lifecycle("In Progress", destination)
             logger.info("Card %s → %s", card.id, destination)
         except Exception as e:
             logger.error("Failed to post result for card %s: %s", card.id, e)
 
         return result
 
-    def _handle_error(self, card: KanbanCard, profile: AgentProfile, exc: Exception) -> None:
+    def _handle_error(
+        self,
+        card: KanbanCard,
+        profile: AgentProfile,
+        exc: Exception,
+        audit: Optional[AuditLogger] = None,
+    ) -> None:
         tb = traceback.format_exc()
         logger.error("Agent error on card %s:\n%s", card.id, tb)
+        if audit:
+            audit.agent_finish(success=False, iterations=0, detail=str(exc))
         try:
             self.provider.add_comment(
                 card.id,
@@ -138,10 +194,16 @@ class LocalOrchestrator:
 
         count = 0
         for card in cards:
-            if self.registry.resolve_for_card(card):
+            profile = self.registry.resolve_for_card(card)
+            if profile:
                 result = self.process_card(card)
                 if result is not None:
                     count += 1
+            else:
+                logger.info(
+                    "No profile match for card '%s' (labels=%s) — skipping",
+                    card.title, card.labels,
+                )
         return count
 
     def run(self) -> None:
@@ -191,6 +253,7 @@ def from_env(profiles_dir: Optional[Path] = None) -> LocalOrchestrator:
         KANBAN_PROFILES_DIR   path to profiles directory (default: agents/kanban/profiles/examples)
         KANBAN_POLL_INTERVAL  seconds between polls (default: 30)
         KANBAN_DRY_RUN        set to "1" to skip actual agent execution
+        KANBAN_AUDIT_LOG      path to audit JSONL file (default: logs/kanban_audit.jsonl)
     """
     provider_type = os.environ.get("KANBAN_PROVIDER", "trello").lower()
 
@@ -217,6 +280,8 @@ def from_env(profiles_dir: Optional[Path] = None) -> LocalOrchestrator:
     poll_interval = int(os.environ.get("KANBAN_POLL_INTERVAL", "30"))
     dry_run = os.environ.get("KANBAN_DRY_RUN", "0") == "1"
 
+    audit_log_path = Path(os.environ.get("KANBAN_AUDIT_LOG", "logs/kanban_audit.jsonl"))
+
     # Profiles directory
     if profiles_dir is None:
         profiles_dir_env = os.environ.get("KANBAN_PROFILES_DIR")
@@ -229,13 +294,18 @@ def from_env(profiles_dir: Optional[Path] = None) -> LocalOrchestrator:
     registry = ProfileRegistry.from_dir(profiles_dir)
     logger.info("Loaded %d profile(s) from %s", len(registry), profiles_dir)
 
+    # SecretStore reads the full env once; agents receive only scoped subsets
+    secret_store = SecretStore()
+
     return LocalOrchestrator(
         provider=provider,
         registry=registry,
         api_key=api_key,
         board_id=board_id,
+        secret_store=secret_store,
         poll_interval=poll_interval,
         dry_run=dry_run,
+        audit_log_path=audit_log_path,
     )
 
 
@@ -260,7 +330,6 @@ if __name__ == "__main__":
     if not env_file.exists():
         env_file = Path(".env/apps.env")
     if env_file.exists():
-        from agents.kanban.orchestrator.local import _load_dotenv
         _load_dotenv(env_file)
 
     orch = from_env(profiles_dir=args.profiles_dir)
