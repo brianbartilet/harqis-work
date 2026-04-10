@@ -5,7 +5,7 @@
 - Real-world implementation of [HARQIS-core](https://github.com/brianbartilet/harqis-core), integrating 16+ third-party applications and automation layers.
 - Demonstrates **RPA-like capabilities** implemented entirely in Python with Celery, n8n, and AI-driven workflows.
 - Provides an extensible portfolio of automated routines for business, productivity, and personal systems.
-- Think of it as a code-first RPA platform — every integration is a Python module, every scheduled routine is a Celery task.
+- Think of it as a code-first RPA platform — every integration is a Python module, every scheduled routine is a Celery task, and every repetitive job is a candidate for an AI agent.
 
 ---
 
@@ -37,14 +37,165 @@
 
 ---
 
-## Workflow Inventory
+## AI Agents
 
-Active Celery Beat schedules are merged in `workflows/config.py`:
+HARQIS-Work includes a layer of Claude-powered AI agents that go beyond scheduled tasks — they act autonomously on Kanban cards, respond to conversational inputs, and use all connected app integrations as tools.
+
+### Kanban Agent System (`agents/kanban/`)
+
+A fully autonomous agent ecosystem that turns Trello or Jira cards into AI task assignments. Cards placed in **Backlog** are picked up, processed by a matching Claude agent, and moved to **Done** — all without manual intervention.
+
+> Full design: [`docs/thesis/TRELLO-AGENT-KANBAN.md`](docs/thesis/TRELLO-AGENT-KANBAN.md)
+
+#### How it works
+
+```
+Trello / Jira Board
+  └── Backlog column
+        └── Card (label: agent:code / agent:write)
+              ↓  Orchestrator polls every 30s
+        Profile matched by label
+              ↓
+        Secrets scoped (only what the profile declared)
+              ↓
+        BaseKanbanAgent runs Claude tool-use loop
+          ├── Native tools: read_file, write_file, bash, glob, grep
+          ├── Kanban tools: post_comment, move_card, check_item
+          └── MCP tools: Jira, Gmail, Calendar, Discord, YNAB, Trello, …
+              ↓
+        Output sanitized (secrets redacted)
+              ↓
+        Result posted as card comment → card moved to Done
+              ↓
+        Audit log written to logs/kanban_audit.jsonl
+```
+
+#### Agent Profiles
+
+Profiles are YAML files in `agents/kanban/profiles/` that define each agent's identity, model, tools, permissions, and secrets:
+
+| Profile | Tools | MCP Apps |
+|---------|-------|----------|
+| `agent:code` | bash, read/write file, glob, grep | Jira, Trello, Gmail, Calendar, Discord, YNAB, OANDA, Reddit, Echo MTG, Scryfall, TCG MP |
+| `agent:write` | read/write file, glob, grep | Google Apps, Trello, Discord, Telegram |
+
+Profiles support `extends:` inheritance — child profiles merge with base defaults.
+
+#### Security model
+
+- **Secret scoping**: The orchestrator reads the full `.env` once. Each agent receives only the env-var names it declared under `secrets.required`. Agents never see unrelated credentials.
+- **Output sanitization**: All text returned by tools or Claude is scrubbed for known secret values before being posted to Kanban comments.
+- **Audit log**: Every tool call, permission check, and secret access is written as a JSONL record to `logs/kanban_audit.jsonl`.
+- **Permission enforcer**: Filesystem (glob patterns), network (hostname allowlists), and git (branch protection) are checked before every tool execution.
+- **Worker isolation (future)**: When Celery workers are added, scoped secrets will be Fernet-encrypted in the task payload — workers decrypt at task-start and discard after completion.
+
+#### MCP Bridge
+
+All 14 harqis-work app integrations are exposed to agents as tools via the MCP bridge (`agents/kanban/agent/tools/mcp_bridge.py`). Agents call `search_jira_issues`, `get_gmail_recent_emails`, `get_ynab_transactions`, etc. directly — no separate server process required.
+
+#### Running the orchestrator
+
+```sh
+# Load env and start polling (default: every 30s)
+python -m agents.kanban.orchestrator.local
+
+# Dry run — match cards but don't execute agents
+python -m agents.kanban.orchestrator.local --dry-run
+
+# Custom profiles directory and poll interval
+python -m agents.kanban.orchestrator.local --profiles-dir path/to/profiles --poll-interval 60
+```
+
+Required env vars:
+```env
+KANBAN_PROVIDER=trello          # or jira
+KANBAN_BOARD_ID=<board-id>
+ANTHROPIC_API_KEY=sk-ant-...
+TRELLO_API_KEY=...
+TRELLO_API_TOKEN=...
+```
+
+#### Board columns
+
+```
+Backlog → Pending → In Progress → Done
+                               → Failed
+                               → Blocked
+```
+
+#### Tests
+
+```sh
+# Run all kanban agent tests (offline, no API calls)
+pytest agents/kanban/tests/ -m "not integration"
+
+# Run integration tests (requires live Trello/Jira credentials)
+pytest agents/kanban/tests/ -m integration
+```
+
+75 unit tests · 2 integration tests · fully offline mocked suite.
+
+---
+
+### OpenClaw Agent (`/.openclaw/`)
+
+HARQIS-Work includes an [OpenClaw](https://openclaw.ai) agent workspace. OpenClaw is a local AI agent runtime that hosts Claude agents and connects them to messaging channels (WhatsApp, Telegram, Discord) with a persistent, file-based memory system.
+
+```
+.openclaw/workspace/
+├── SOUL.md        # Agent personality and values
+├── AGENTS.md      # Session startup, memory rules, group chat etiquette
+├── TOOLS.md       # Machine-specific tool notes (SSH, cameras, TTS)
+├── HEARTBEAT.md   # Periodic background task checklist (email, calendar)
+└── BOOTSTRAP.md   # One-time first-run initialization (delete after use)
+```
+
+Only `workspace/` is committed — credentials, device identity, and flow registry are gitignored and machine-local.
+
+---
+
+### MCP Server (`/mcp/`)
+
+A FastMCP server that exposes all harqis-work app tools over the Model Context Protocol. Used by:
+- Claude Desktop (via `mcp/claude_desktop_config.json`)
+- The Kanban agent MCP bridge (in-process, no separate server needed)
+- Any MCP-compatible AI client
+
+```sh
+# Start the MCP server
+python mcp/server.py
+```
+
+---
+
+### Shared Prompt Library (`agents/prompts/`)
+
+All AI prompt templates live in `agents/prompts/`. Workflow-specific prompts remain co-located with their workflow under `workflows/<workflow>/prompts/`.
 
 ```python
-CONFIG_DICTIONARY = WORKFLOW_PURCHASES | WORKFLOWS_HUD | WORKFLOWS_DESKTOP
-SPROUT.conf.beat_schedule = CONFIG_DICTIONARY
+# Load a shared prompt
+from agents.prompts import load_prompt
+text = load_prompt("kanban_agent_default")
+
+# Save a generated prompt (agents write here)
+from agents.prompts import save_prompt
+save_prompt("my_generated", content)
 ```
+
+| File | Used by |
+|------|---------|
+| `kanban_agent_default.md` | `BaseKanbanAgent` default system prompt |
+| `code_smells.md` | Code review tasks |
+| `desktop_analysis.md` | HUD desktop log analysis |
+| `docs_agent.md` | Documentation generation |
+
+---
+
+## Workflows
+
+Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and run on a Beat schedule defined in `workflows/config.py`.
+
+### Workflow Inventory
 
 | Workflow | Status | Tasks | Description |
 |----------|--------|-------|-------------|
@@ -53,176 +204,25 @@ SPROUT.conf.beat_schedule = CONFIG_DICTIONARY
 | `desktop` | Active | 7 | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
 | `mobile` | Active | 1 (unscheduled) | Android screen capture and OCR logging |
 | `finance` | Stub | 0 | No tasks defined |
-| `prompts` | Active | — | AI prompt templates used by hud/desktop workflows |
 | `n8n` | Utilities | — | Shell utilities and ngrok helpers for n8n integration |
 
 ### Celery Task Queues
 
-| Queue | Used By |
+| Queue | Used by |
 |-------|---------|
-| `hud` | All `workflows.hud.tasks.*` |
+| `hud` | `workflows.hud.tasks.*` |
 | `tcg` | TCG card processing tasks |
 | `default` | Desktop and general tasks |
 
----
-
-## Desktop HUD
-
-HARQIS drives a live desktop heads-up display using [Rainmeter](https://www.rainmeter.net/) on Windows. Celery tasks in `workflows/hud/` continuously push data from connected services into Rainmeter skin files, which render as always-on overlay panels on the desktop.
-
-![HARQIS Desktop HUD](docs/images/windows-hud-sample.png)
-
-### Panels
-
-| Panel | Data source | Update frequency |
-|---|---|---|
-| **Calendar Info** | Google Calendar — today's events and upcoming schedule | Every 15 min |
-| **TCG Orders** | TCG Marketplace API — open/pending card orders with pricing | Every hour |
-| **Budgeting Info** | YNAB — budget balances in PHP and SGD | Every 4 hours |
-| **Mouse Bindings** | ICue Corsair Scimitar - show macro mouse mappings from active application | Every 15 sec |
-| **HUD Profiles** | Rainmeter - load, save profiles and update from changes | Daily at midnight |
-| **Desktop Logs** | Claude - AI analysis of captured activity screenshots | Every 5 min |
-| **Failed Jobs Today** | Celery task history — any tasks that errored since midnight | Every 15 min |
-| **Agents Core** | n8n + ElevenLabs — running automation agents and voice assistant state | Daily at midnight |
-
-### How it works
-
-1. A Celery Beat worker fires each task on its configured schedule.
-2. The task fetches data from the relevant service (OANDA, YNAB, Google, etc.).
-3. Data is written into Rainmeter `.ini` skin files via the `rainmeter` app helpers.
-4. Rainmeter detects the file change and re-renders the panel in place on the desktop.
-5. Results are also logged to Elasticsearch via the `@log_result()` decorator.
-
-### Requirements
-
-- **Windows** — Rainmeter is Windows-only
-- **Rainmeter** installed with skins deployed to the configured `RAINMETER_WRITE_SKINS_TO_PATH`
-- **iCUE** (optional) — for Corsair peripheral profile switching via `show_hud_profiles`
-- All `RAINMETER_*` environment variables set in `.env/apps.env`
-
----
-
-## Frontend Dashboard
-
-A lightweight web dashboard for manually triggering Celery tasks, monitoring run status, and customizing the layout.
-
-![HARQIS Dashboard](docs/images/dashboard-sample.png)
-
-> For full setup, configuration, and API reference, see [`frontend/README.md`](frontend/README.md).
-
-### Features
-
-- Login-protected — signed session cookie (no external auth required)
-- Tabbed workflow view — one tab per workflow (HUD, Purchases, Desktop)
-- One-click task triggering — dispatches directly to the Celery broker
-- Live status polling — HTMX polls every 2s, stops automatically on completion
-- Run history — last 20 runs per task, stored in browser localStorage
-- **Customizable layout** — drag-and-drop tab and card reordering, persisted across sessions
-- JSON output rendering — task results are pretty-printed with syntax highlighting
-- Clickable paths — Windows file paths in task output open via OS default app
-- Flower link — header link to the Flower monitoring UI if configured
-
-### Quick Start
-
-```sh
-cd frontend
-pip install -r requirements.txt
-python main.py
-```
-
-Open: **http://localhost:8080**
-
----
-
-## Architecture
-
-### Directory Structure
-
-```
-harqis-work/
-├── apps/                       # App integrations (one folder per service)
-│   ├── .template/              # Template for new apps
-│   ├── aaa/                    # Philippine stock exchange (Selenium)
-│   ├── antropic/               # Anthropic Claude API
-│   ├── desktop/                # Windows desktop automation
-│   ├── echo_mtg/               # MTG collection management (REST)
-│   ├── google_apps/            # Google Workspace (Calendar, Sheets, Keep)
-│   ├── investagrams/           # Philippine stock analytics (scraping)
-│   ├── moo/                    # Stub — work in progress
-│   ├── oanda/                  # Forex trading (REST)
-│   ├── open_ai/                # OpenAI GPT (REST)
-│   ├── own_tracks/             # GPS tracking (Docker/MQTT only)
-│   ├── rainmeter/              # Windows desktop HUD skinning
-│   ├── scryfall/               # MTG card database (REST)
-│   ├── tcg_mp/                 # TCG Marketplace (REST, most complex)
-│   ├── trello/                 # Kanban (references only)
-│   └── ynab/                   # Personal budgeting (REST)
-│
-├── workflows/                  # Celery task definitions
-│   ├── .template/              # Template for new workflows
-│   ├── config.py               # Master Celery Beat schedule
-│   ├── desktop/                # Git pulls, window mgmt, file sync
-│   ├── finance/                # Stub — no tasks yet
-│   ├── hud/                    # Desktop HUD display tasks (12 tasks)
-│   ├── mobile/                 # Android screen capture
-│   ├── n8n/                    # n8n utility helpers
-│   ├── prompts/                # AI prompt templates (markdown)
-│   └── purchases/              # TCG card resale pipeline
-│
-├── frontend/                   # Web dashboard (FastAPI + HTMX + Alpine.js)
-│   ├── main.py                 # FastAPI routes
-│   ├── registry.py             # Static task registry (24 tasks, 3 workflows)
-│   ├── templates/              # Jinja2 HTML templates
-│   ├── README.md               # Frontend setup and architecture docs
-│   └── requirements.txt
-│
-├── docs/                       # Project documentation assets
-│   ├── dashboard-sample.png    # Frontend dashboard screenshot
-│   └── windows-hud-sample.png  # Desktop HUD screenshot
-│
-├── apps_config.yaml            # Central app configuration
-├── pytest.ini                  # Test configuration
-├── requirements.txt            # Python dependencies
-├── logging.yaml                # Logging configuration
-├── workflows.mapping           # Auto-generated Celery task map (do not edit)
-└── conftest.py                 # Pytest session fixtures
-```
-
-### App Structure (Template)
-
-Each app follows this layout:
-
-```
-apps/<app_name>/
-├── config.py                   # Loads app section from apps_config.yaml
-├── references/
-│   ├── base_api_service.py     # Extends harqis-core BaseFixtureServiceRest
-│   ├── base_page.py            # Extends harqis-core BaseFixturePageObject (Selenium)
-│   ├── dto/                    # Dataclass-based data transfer objects
-│   ├── models/                 # Data models (often extend DTOs)
-│   ├── constants/              # Enums and static values
-│   └── web/api/                # Concrete API service implementations
-└── tests/
-```
-
-`config.py` pattern (same in every app):
+### Beat schedule
 
 ```python
-APP_NAME = 'ECHO_MTG'
-CONFIG = AppConfigWSClient(**load_config[APP_NAME])
+# workflows/config.py
+CONFIG_DICTIONARY = WORKFLOW_PURCHASES | WORKFLOWS_HUD | WORKFLOWS_DESKTOP
+SPROUT.conf.beat_schedule = CONFIG_DICTIONARY
 ```
 
-### Workflow Structure (Template)
-
-```
-workflows/<workflow>/
-├── tasks_config.py             # Celery Beat schedule dict
-├── tasks/                      # @SPROUT.task decorated functions
-├── dto/                        # Task parameter DTOs
-└── tests/
-```
-
-Task decorator chain pattern:
+### Task decorator pattern
 
 ```python
 @SPROUT.task(queue='hud')
@@ -235,6 +235,156 @@ def show_calendar_information(**kwargs):
 
 ---
 
+## Desktop HUD
+
+HARQIS drives a live desktop heads-up display using [Rainmeter](https://www.rainmeter.net/) on Windows. Celery tasks in `workflows/hud/` push data from connected services into Rainmeter skin files.
+
+![HARQIS Desktop HUD](docs/images/windows-hud-sample.png)
+
+| Panel | Data source | Update frequency |
+|-------|-------------|-----------------|
+| **Calendar Info** | Google Calendar — today's events and upcoming schedule | Every 15 min |
+| **TCG Orders** | TCG Marketplace — open/pending orders with pricing | Every hour |
+| **Budgeting Info** | YNAB — budget balances in PHP and SGD | Every 4 hours |
+| **Mouse Bindings** | iCUE Corsair Scimitar — active macro mappings | Every 15 sec |
+| **HUD Profiles** | Rainmeter — load/save profiles | Daily at midnight |
+| **Desktop Logs** | Claude — AI analysis of captured activity screenshots | Every 5 min |
+| **Failed Jobs Today** | Celery — tasks that errored since midnight | Every 15 min |
+| **Agents Core** | n8n + ElevenLabs — automation agent and voice assistant state | Daily at midnight |
+
+---
+
+## Frontend Dashboard
+
+A lightweight web dashboard for manually triggering Celery tasks and monitoring run status.
+
+![HARQIS Dashboard](docs/images/dashboard-sample.png)
+
+> Full setup: [`frontend/README.md`](frontend/README.md)
+
+**Features:** login-protected · tabbed by workflow · one-click task triggering · live HTMX status polling · drag-and-drop card reordering · JSON output rendering · clickable file paths · Flower link
+
+```sh
+cd frontend && python main.py
+# → http://localhost:8080
+```
+
+---
+
+## Architecture
+
+### Directory Structure
+
+```
+harqis-work/
+│
+├── agents/                         # AI agent layer
+│   ├── kanban/                     # Kanban-driven autonomous agent system
+│   │   ├── adapters/               # Trello + Jira provider implementations
+│   │   ├── agent/                  # Claude tool-use loop + tool registry
+│   │   │   └── tools/             # filesystem, kanban, MCP bridge tools
+│   │   ├── orchestrator/           # Local polling orchestrator
+│   │   ├── permissions/            # Tool/filesystem/network/git enforcer
+│   │   ├── profiles/               # YAML agent profile schema + registry
+│   │   │   └── examples/          # base, agent:code, agent:write profiles
+│   │   ├── security/               # SecretStore, OutputSanitizer, AuditLogger
+│   │   └── tests/                  # 75 unit + 2 integration tests
+│   └── prompts/                    # Shared AI prompt templates (.md files)
+│
+├── apps/                           # App integrations (one folder per service)
+│   ├── .template/                  # Template for new apps
+│   ├── aaa/                        # Philippine stock exchange (Selenium)
+│   ├── anthropic/                  # Anthropic Claude API
+│   ├── desktop/                    # Windows desktop automation
+│   ├── discord/                    # Discord bot
+│   ├── echo_mtg/                   # MTG collection management
+│   ├── google_apps/                # Google Workspace (Calendar, Gmail, Drive…)
+│   ├── jira/                       # Jira project management
+│   ├── linkedin/                   # LinkedIn API
+│   ├── oanda/                      # Forex trading
+│   ├── open_ai/                    # OpenAI GPT
+│   ├── orgo/                       # Cloud VM desktop control
+│   ├── own_tracks/                 # GPS location tracking
+│   ├── rainmeter/                  # Windows desktop HUD
+│   ├── reddit/                     # Reddit API
+│   ├── scryfall/                   # MTG card database
+│   ├── tcg_mp/                     # TCG Marketplace
+│   ├── telegram/                   # Telegram Bot
+│   ├── trello/                     # Trello Kanban
+│   └── ynab/                       # Personal budgeting
+│
+├── workflows/                      # Celery task definitions
+│   ├── config.py                   # Master Celery Beat schedule
+│   ├── desktop/                    # Git pulls, window mgmt, file sync
+│   ├── finance/                    # Stub — no tasks yet
+│   ├── hud/                        # Desktop HUD tasks (12 tasks)
+│   ├── mobile/                     # Android screen capture
+│   ├── n8n/                        # n8n utility helpers
+│   └── purchases/                  # TCG card resale pipeline
+│
+├── frontend/                       # Web dashboard (FastAPI + HTMX + Alpine.js)
+│   ├── main.py
+│   ├── registry.py                 # Auto-generated task registry (do not edit)
+│   ├── generate_registry.py        # Regenerates registry from tasks_config.py
+│   └── templates/                  # Jinja2 HTML templates
+│
+├── mcp/                            # MCP server (FastMCP)
+│   ├── server.py                   # Exposes all app tools over MCP protocol
+│   └── claude_desktop_config.json  # Claude Desktop integration config
+│
+├── docs/                           # Documentation and design docs
+│   ├── images/
+│   └── thesis/                     # Architecture design documents
+│
+├── scripts/                        # Startup and utility scripts (.bat / .sh)
+├── .openclaw/workspace/            # OpenClaw agent workspace (versioned)
+├── apps_config.yaml                # Central app configuration
+├── pytest.ini                      # Test configuration
+├── requirements.txt                # Python dependencies
+├── workflows.mapping               # Auto-generated Celery task map (do not edit)
+└── conftest.py                     # Pytest session fixtures
+```
+
+### App Structure
+
+```
+apps/<app_name>/
+├── config.py                   # Loads app section from apps_config.yaml
+├── mcp.py                      # Registers app tools with FastMCP
+├── references/
+│   ├── base_api_service.py     # Extends harqis-core BaseFixtureServiceRest
+│   ├── dto/                    # Dataclass-based data transfer objects
+│   ├── models/                 # Data models
+│   ├── constants/              # Enums and static values
+│   └── web/api/                # Concrete API service implementations
+└── tests/
+```
+
+### Workflow Structure
+
+```
+workflows/<workflow>/
+├── tasks_config.py             # Celery Beat schedule dict
+├── tasks/                      # @SPROUT.task decorated functions
+├── dto/                        # Task parameter DTOs
+├── prompts/                    # Workflow-local prompt templates
+└── tests/
+```
+
+### Agent Profile Structure
+
+```
+agents/kanban/profiles/
+├── schema.py                   # AgentProfile dataclass (model, tools, permissions, secrets)
+├── registry.py                 # Resolves cards to profiles by label/assignee
+└── examples/
+    ├── base.yaml               # Base defaults (all profiles extend this)
+    ├── agent_code.yaml         # Software development agent
+    └── agent_write.yaml        # Writing and research agent
+```
+
+---
+
 ## Getting Started
 
 ### Requirements
@@ -242,40 +392,25 @@ def show_calendar_information(**kwargs):
 - **Python 3.12+**
 - **RabbitMQ** (Celery broker, default: `amqp://guest:guest@localhost:5672/`)
 - **Elasticsearch** (optional, for log shipping via `ELASTIC_LOGGING`)
-- **Rainmeter** (Windows only, for desktop HUD skinning)
-- **n8n** (optional, for orchestration via Docker or local install)
+- **Rainmeter** (Windows only, for desktop HUD)
+- **n8n** (optional, for orchestration)
 
 ### Installation
 
-1. Clone the repository:
+```sh
+git clone https://github.com/brianbartilet/harqis-work.git
+cd harqis-work
+python -m venv venv
+source venv/bin/activate        # Linux/macOS
+venv\Scripts\activate           # Windows
+pip install -r requirements.txt
+```
 
-   ```sh
-   git clone https://github.com/brianbartilet/harqis-work.git
-   cd harqis-work
-   ```
+To force-reinstall `harqis-core` from the latest commit:
 
-2. Create and activate a virtual environment:
-
-   ```sh
-   python -m venv venv
-   source venv/bin/activate        # Linux/macOS
-   venv\Scripts\activate           # Windows
-   ```
-
-3. Upgrade pip and install dependencies:
-
-   ```sh
-   python -m pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
-
-   > The sole dependency is `harqis-core` (installed from GitHub). It provides all base classes, Celery setup, REST client utilities, Selenium page object base, and configuration loaders.
-
-4. To force-reinstall `harqis-core` from the latest commit:
-
-   ```sh
-   pip install --upgrade --force-reinstall --no-cache-dir git+https://github.com/brianbartilet/harqis-core.git#egg=harqis-core
-   ```
+```sh
+pip install --upgrade --force-reinstall --no-cache-dir git+https://github.com/brianbartilet/harqis-core.git#egg=harqis-core
+```
 
 ---
 
@@ -283,227 +418,158 @@ def show_calendar_information(**kwargs):
 
 ### Environment Variables (`.env/apps.env`)
 
-All sensitive credentials are injected via environment variables. Create `.env/apps.env` and populate the variables below:
-
 ```env
-# ---------------------------------------------------------------------------
-# Celery / RabbitMQ
-# Default broker uses guest:guest@localhost:5672 — override in apps_config.yaml
-# if your RabbitMQ instance uses different credentials or host.
-# ---------------------------------------------------------------------------
+# Anthropic — Claude API
+ANTHROPIC_API_KEY=
 
-# ---------------------------------------------------------------------------
-# n8n  —  local workflow orchestrator (http://localhost:5678)
-# Generate an API key from n8n Settings > API
-# ---------------------------------------------------------------------------
-N8N_API_KEY=
+# Kanban orchestrator
+KANBAN_PROVIDER=trello          # or jira
+KANBAN_BOARD_ID=
+KANBAN_POLL_INTERVAL=30
+KANBAN_AUDIT_LOG=logs/kanban_audit.jsonl
 
-# ---------------------------------------------------------------------------
-# OpenAI  —  GPT models and Assistants API
-# OPENAI_API_KEY        : platform.openai.com → API Keys
-# OPENAI_ASSISTANT_ID   : default assistant ID used by hud_gpt tasks
-# OPENAI_ASSISTANT_DESKTOP : assistant ID for desktop log analysis
-# OPENAI_ASSISTANT_REPORTER : assistant ID for report generation
-# ---------------------------------------------------------------------------
+# Trello
+TRELLO_API_KEY=
+TRELLO_API_TOKEN=
+
+# Jira
+JIRA_SERVER=
+JIRA_EMAIL=
+JIRA_API_TOKEN=
+
+# OpenAI
 OPENAI_API_KEY=
 OPENAI_ASSISTANT_ID=
 OPENAI_ASSISTANT_DESKTOP=
 OPENAI_ASSISTANT_REPORTER=
 
-# ---------------------------------------------------------------------------
-# Anthropic  —  Claude API
-# console.anthropic.com → API Keys
-# ---------------------------------------------------------------------------
-ANTHROPIC_API_KEY=
-
-# ---------------------------------------------------------------------------
-# OANDA  —  Forex trading (REST API v3)
-# OANDA_BEARER_TOKEN   : personal access token from OANDA My Account
-# OANDA_MT4_ACCOUNT_ID : numeric account ID (used in API calls)
-# ---------------------------------------------------------------------------
+# OANDA — Forex
 OANDA_BEARER_TOKEN=
 OANDA_MT4_ACCOUNT_ID=
 
-# ---------------------------------------------------------------------------
-# Echo MTG  —  MTG collection management (echomtg.com)
-# Primary account: used for standard inventory queries
-# Bulk account   : used for high-volume listing operations
-# ---------------------------------------------------------------------------
+# Echo MTG
 ECHO_MTG_USER=
 ECHO_MTG_PASSWORD=
-
 ECHO_MTG_BULK_USER=
 ECHO_MTG_BULK_PASSWORD=
 ECHO_MTG_BULK_BEARER_TOKEN=
 
-# ---------------------------------------------------------------------------
-# Scryfall  —  MTG card database (no auth required, path only)
-# SCRY_DOWNLOADS_PATH : local folder where bulk JSON files are saved
-#                       e.g. C:\data\scryfall
-# ---------------------------------------------------------------------------
+# Scryfall
 SCRY_DOWNLOADS_PATH=
 
-# ---------------------------------------------------------------------------
-# TCG Marketplace  —  card resale platform (thetcgmarketplace.com)
-# TCG_MP_USER_ID  : numeric user ID returned after login
-# TCG_SAVE        : local folder for saving order/listing exports
-#                   e.g. C:\data\tcg
-# ---------------------------------------------------------------------------
+# TCG Marketplace
 TCG_MP_USER_ID=
 TCG_MP_USERNAME=
 TCG_MP_PASSWORD=
 TCG_SAVE=
 
-# ---------------------------------------------------------------------------
-# Rainmeter  —  Windows desktop HUD skinning
-# RAINMETER_BIN_PATH           : path to Rainmeter.exe
-#                                e.g. C:\Program Files\Rainmeter\Rainmeter.exe
-# RAINMETER_STATIC_PATH        : path to static skin assets folder
-# RAINMETER_WRITE_SKINS_TO_PATH: path where generated skins are written
-# RAINMETER_WRITE_FEED_TO_PATH : path where HUD feed data files are written
-# ---------------------------------------------------------------------------
+# Rainmeter (Windows)
 RAINMETER_BIN_PATH=
 RAINMETER_STATIC_PATH=
 RAINMETER_WRITE_SKINS_TO_PATH=
 RAINMETER_WRITE_FEED_TO_PATH=
 
-# ---------------------------------------------------------------------------
-# Google Apps  —  Calendar, Sheets, Keep (OAuth 2.0)
-# GOOGLE_APPS_API_KEY : API key for non-OAuth endpoints (e.g. public calendar)
-# OAuth credentials are stored in credentials.json / storage.json at repo root.
-# Delete storage.json to re-trigger the OAuth consent flow.
-# ---------------------------------------------------------------------------
+# Google Apps (OAuth)
 GOOGLE_APPS_API_KEY=
 
-# ---------------------------------------------------------------------------
-# Elasticsearch  —  local log shipping (http://localhost:9200)
-# ELASTIC_API_KEY : preferred auth method (leave blank to use basic auth)
-# ELASTIC_USER / ELASTIC_PASSWORD : used if use_basic_auth=True in config
-# ---------------------------------------------------------------------------
+# Elasticsearch
 ELASTIC_API_KEY=
 ELASTIC_USER=
 ELASTIC_PASSWORD=
 
-# ---------------------------------------------------------------------------
-# Desktop capture  —  activity logging and file sync paths
-# ACTIONS_LOG_PATH        : folder where timestamped activity logs are written
-# ACTIONS_ARCHIVE_PATH    : folder where logs are archived by month
-# ACTIONS_SCREENSHOT_PATH : folder where screenshots are saved
-# DESKTOP_PATH_DEV        : source folder for copy_files_targeted task
-# DESKTOP_PATH_RUN        : destination folder for copy_files_targeted task
-# DESKTOP_PATH_I_CUE_PROFILES : path to iCUE profile files (Corsair)
-# DESKTOP_PATH_FEED       : folder read by Rainmeter for HUD feed data
-# ---------------------------------------------------------------------------
+# Desktop capture
 ACTIONS_LOG_PATH=
 ACTIONS_ARCHIVE_PATH=
 ACTIONS_SCREENSHOT_PATH=
 DESKTOP_PATH_DEV=
 DESKTOP_PATH_RUN=
-DESKTOP_PATH_I_CUE_PROFILES=
-DESKTOP_PATH_FEED=
 
-# ---------------------------------------------------------------------------
-# ElevenLabs  —  voice AI agents (agent IDs from ElevenLabs dashboard)
-# ELEVEN_AGENT_N8N            : agent ID for n8n automation voice interface
-# ELEVEN_AGENT_N8N_CHAT       : agent ID for conversational n8n interface
-# ELEVEN_AGENT_N8N_CHAT_TESTS : agent ID for test/sandbox environment
-# ---------------------------------------------------------------------------
-ELEVEN_AGENT_N8N=
-ELEVEN_AGENT_N8N_CHAT=
-ELEVEN_AGENT_N8N_CHAT_TESTS=
-
-# ---------------------------------------------------------------------------
-# Python runner  —  Windows-specific paths for spawning subprocesses
-# PYTHON_EXE : absolute path to the venv Python executable
-#              e.g. C:\path\to\harqis-work\venv\Scripts\python.exe
-# ENV_ROOT   : root directory of the project
-#              e.g. C:\path\to\harqis-work
-# ---------------------------------------------------------------------------
-PYTHON_EXE=
-ENV_ROOT=
-
-# ---------------------------------------------------------------------------
-# YNAB  —  You Need A Budget (api.youneedabudget.com)
-# YNAB_ACCESS_TOKEN : personal access token from YNAB Account Settings
-# YNAB_BUDGET_PHP   : budget ID for PHP (Philippine Peso) budget
-# YNAB_BUDGET_SGD   : budget ID for SGD (Singapore Dollar) budget
-# ---------------------------------------------------------------------------
+# YNAB
 YNAB_ACCESS_TOKEN=
 YNAB_BUDGET_PHP=
 YNAB_BUDGET_SGD=
 
-# ---------------------------------------------------------------------------
-# Moo / Futu  —  stock trading stub (not yet implemented)
-# MOO_PWD_MD5 : MD5 hash of the Futu trading password
-#               Required by the Futu OpenD local gateway (port 11111)
-# ---------------------------------------------------------------------------
-MOO_PWD_MD5=
+# ElevenLabs
+ELEVEN_AGENT_N8N=
+ELEVEN_AGENT_N8N_CHAT=
+
+# Python runner (Windows)
+PYTHON_EXE=
+ENV_ROOT=
 ```
 
 ### `apps_config.yaml`
 
-Central YAML file at the repo root. Each section corresponds to one app. Sensitive values use `${ENV_VAR}` interpolation. Config is loaded at import time via `ConfigLoaderService` from harqis-core.
-
-Key sections: `CELERY_TASKS`, `N8N`, `HARQIS_GPT`, `OANDA`, `ECHO_MTG`, `SCRYFALL`, `TCG_MP`, `RAINMETER`, `GOOGLE_APPS`, `GOOGLE_KEEP`, `ELASTIC_LOGGING`, `DESKTOP`, `YNAB`, `ANTHROPIC`, `MOO`.
+Central YAML at the repo root. Each section maps to one app. Sensitive values use `${ENV_VAR}` interpolation, loaded at import time via `ConfigLoaderService`.
 
 ### Google Apps OAuth
 
-Google API uses OAuth 2.0 via credential files:
-- `credentials.json` — OAuth client credentials (download from Google Cloud Console)
-- `storage.json` — Cached OAuth token (auto-generated on first run)
-- Delete `storage.json` to re-trigger the OAuth consent flow.
+- `credentials.json` — OAuth client credentials (from Google Cloud Console)
+- `storage.json` — Cached OAuth token (auto-generated on first run; delete to re-auth)
 
 ---
 
 ## Running Tests
 
-All tests are **live integration tests** — no mocking. Requires valid `.env/apps.env` and `apps_config.yaml`.
-
 ```sh
-# Run all tests (excludes workflows/)
+# All tests (excludes workflows/)
 pytest
 
-# Run tests for a specific app
+# Kanban agent tests only (offline, no API needed)
+pytest agents/kanban/tests/ -m "not integration"
+
+# Specific app
 pytest apps/echo_mtg/tests/
 
-# Run a single test file
-pytest apps/tcg_mp/tests/test_service.py
-
-# Run only smoke tests
+# By marker
 pytest -m smoke
-
-# Run only sanity tests
 pytest -m sanity
 ```
 
+All app tests are **live integration tests** — no mocking. Requires valid credentials.
+Kanban agent tests are fully offline (75 unit tests, 2 integration tests).
+
 ---
 
-## Running Celery Workers
+## Running Services
+
+### Kanban Orchestrator
 
 ```sh
-# Start a worker for all queues
+python -m agents.kanban.orchestrator.local
+```
+
+### Celery Workers
+
+```sh
+# Worker + Beat (development)
+celery -A workflows.config worker --beat --loglevel=info -Q hud,default,tcg
+
+# Worker only
 celery -A workflows.config worker --loglevel=info
 
-# Start the Celery Beat scheduler
+# Beat scheduler only
 celery -A workflows.config beat --loglevel=info
+```
 
-# Run both together (development only)
-celery -A workflows.config worker --beat --loglevel=info -Q hud,default,tcg
+### Frontend Dashboard
+
+```sh
+cd frontend && python main.py
+# → http://localhost:8080
+```
+
+### MCP Server
+
+```sh
+python mcp/server.py
 ```
 
 ---
 
 ## Mapping Files
 
-HARQIS uses lightweight JSON-like mapping files to expose Celery tasks and shell commands to n8n and AI orchestrators.
-
-### Purpose
-
-- Provide mountable configuration for n8n Docker workflows.
-- Allow AI assistants (OpenAI, Claude, etc.) to parse available actions deterministically.
-- Expose task definitions, commands, schedules, and arguments in a machine-readable form.
-
-### Format
+Lightweight JSON-like files exposing Celery tasks and shell commands to n8n and AI orchestrators:
 
 ```text
 {
@@ -513,115 +579,12 @@ HARQIS uses lightweight JSON-like mapping files to expose Celery tasks and shell
         'args': ['PARAM'],
         'kwargs': {}
     },
-    'command-run--open_notepad': {
-        'cmd': 'notepad'
-    }
+    'command-run--open_notepad': { 'cmd': 'notepad' }
 }
 ```
 
-- Keys follow: `run-job--<name>` or `command-run--<name>`
-- `workflows.mapping` is **auto-generated** by a Celery management job — do not edit directly.
-- `scripts.mapping` may be manually maintained for shell command bindings.
-
----
-
-## OpenClaw Integration
-
-HARQIS-Work includes an [OpenClaw](https://openclaw.ai) agent workspace. OpenClaw is a local AI agent runtime that hosts Claude (or other LLM) agents and connects them to messaging channels (WhatsApp, Telegram, Discord) with a persistent, file-based memory system.
-
-### What it does here
-
-The `.openclaw/workspace/` directory defines the agent's context and behavior for this repo. An OpenClaw agent pointed at this workspace can:
-
-- Maintain continuity across sessions via file-based memory (`memory/YYYY-MM-DD.md`, `MEMORY.md`)
-- Respond proactively via heartbeat polling (periodic email/calendar/notification checks)
-- Participate in WhatsApp, Telegram, or Discord conversations on behalf of the user
-- Use HARQIS workflows and tools as part of its available actions
-
-### Directory Structure
-
-```
-.openclaw/
-├── openclaw.json           # Runtime config — gitignored (local/machine-specific)
-├── .env                    # OpenClaw API keys — gitignored
-├── identity/               # Device identity and Ed25519 keypair — gitignored
-│   └── device.json
-├── credentials/            # Messaging platform credentials — gitignored
-│   └── whatsapp/default/   # WhatsApp Signal Protocol pre-keys
-├── flows/                  # Flow registry (SQLite) — gitignored
-│   └── registry.sqlite
-└── workspace/              # Agent workspace — versioned in git
-    ├── AGENTS.md           # Session startup, memory conventions, group chat rules
-    ├── SOUL.md             # Agent identity and core values
-    ├── TOOLS.md            # Machine-specific tool notes (cameras, SSH, TTS)
-    ├── HEARTBEAT.md        # Periodic background task checklist
-    └── BOOTSTRAP.md        # One-time first-run initialization script
-```
-
-Only `workspace/` is committed to git — credentials, device identity, and the flow registry are gitignored and machine-local.
-
-### Workspace Files
-
-| File | Purpose |
-|------|---------|
-| `SOUL.md` | Defines the agent's personality, values, and behavioral defaults |
-| `AGENTS.md` | Session startup sequence, memory system rules, group chat etiquette, heartbeat behavior |
-| `TOOLS.md` | Notes specific to this machine (SSH aliases, camera names, TTS preferences) |
-| `HEARTBEAT.md` | Short checklist of periodic tasks the agent runs proactively (email, calendar, etc.) |
-| `BOOTSTRAP.md` | One-time initialization — run on first session, then delete |
-
-### Configuration
-
-OpenClaw is configured via `openclaw.json` (stored at `~/.openclaw/openclaw.json` or local `.openclaw/openclaw.json`). Key settings for this repo:
-
-```json
-{
-  "gateway": { "mode": "local" },
-  "agents": {
-    "defaults": {
-      "workspace": "C:\\Users\\<user>\\.openclaw\\workspace",
-      "model": { "primary": "anthropic/claude-sonnet-4-6" }
-    }
-  },
-  "auth": {
-    "profiles": {
-      "anthropic:default": { "provider": "anthropic", "mode": "api_key" }
-    }
-  },
-  "tools": {
-    "web": { "search": { "provider": "brave", "enabled": true } }
-  }
-}
-```
-
-### Setup
-
-1. Install OpenClaw and run the configuration wizard:
-   ```sh
-   openclaw configure
-   ```
-
-2. Set `ANTHROPIC_API_KEY` in `.openclaw/.env` (or via the wizard):
-   ```env
-   ANTHROPIC_API_KEY=sk-ant-...
-   ```
-
-3. Point the agent workspace at `.openclaw/workspace/` in this repo (or copy the files to your global workspace at `~/.openclaw/workspace/`).
-
-4. On first run, `BOOTSTRAP.md` guides the agent through self-initialization. Once complete, delete it.
-
-5. To enable WhatsApp, Telegram, or Discord — configure the relevant channel in the OpenClaw wizard. Credentials are stored in `.openclaw/credentials/` (gitignored).
-
-### Heartbeat
-
-The `HEARTBEAT.md` file controls what the agent checks periodically (every ~30 min by default). Edit it to add or remove tasks:
-
-```markdown
-- Check email for urgent messages
-- Check calendar for events in the next 2 hours
-```
-
-Leave `HEARTBEAT.md` empty (or only comments) to disable proactive polling.
+- `workflows.mapping` — auto-generated by a Celery management job (**do not edit**)
+- `scripts.mapping` — manually maintained shell command bindings
 
 ---
 
@@ -629,10 +592,11 @@ Leave `HEARTBEAT.md` empty (or only comments) to disable proactive polling.
 
 - `logger.warn()` (deprecated) used in `tcg_mp_selling.py` — should be `logger.warning()`
 - `generate_tcg_mappings` task is commented out in `purchases/tasks_config.py` — must be triggered manually or via n8n
-- Worker functions in `tcg_mp_selling.py` re-import all dependencies inside the function body — required for `multiprocessing` on Windows (no `fork`)
+- Worker functions in `tcg_mp_selling.py` re-import dependencies inside the function body — required for `multiprocessing` on Windows (no `fork`)
 - `own_tracks` requires the Docker stack running (`apps/own_tracks/docker compose up -d`) before tests pass
 - `moo` app is a hollow stub with no services or tests
 - `aaa` tests use `unittest.TestCase` (not pytest-style), placed in `unit_tests.py`
+- `google_apps` Keep tests are permanently skipped — `googleapis.com/auth/keep` scope not available for third-party OAuth apps
 
 ---
 
