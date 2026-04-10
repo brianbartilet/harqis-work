@@ -59,7 +59,12 @@ Steps:
    for fast read-only checks and `@pytest.mark.sanity` for broader coverage.
    All tests are live integration tests — no mocks.
 
-10. Remind the user to:
+10. Update the root `README.md`:
+    - Add a row to the **App Inventory** table (name, integration description, type, tests, links)
+    - Add the app directory entry to the **Directory Structure** `apps/` block
+    - Add any new env vars to the **Environment Variables** block in the Configuration section
+
+11. Remind the user to:
     - Add the app section to `apps_config.yaml`
     - Add any required env vars to `.env/apps.env`
     - Add the app to the App Inventory table in `CLAUDE.md`

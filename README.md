@@ -32,6 +32,7 @@
 | `scryfall` | MTG card database | REST API | Yes | [API Docs](https://scryfall.com/docs/api) · [Site](https://scryfall.com/) |
 | `tcg_mp` | TCG Marketplace | REST API | Yes | [Site](https://thetcgmarketplace.com/) |
 | `telegram` | Telegram Bot messaging | REST API | Yes | [API Docs](https://core.telegram.org/bots/api) · [Site](https://telegram.org/) |
+| `notion` | Notion — pages, databases, blocks, search | REST API | Yes | [API Docs](https://developers.notion.com/reference/intro) · [Site](https://www.notion.so/) |
 | `trello` | Kanban board management | REST API | Yes | [API Docs](https://developer.atlassian.com/cloud/trello/rest/) · [Site](https://trello.com/) |
 | `ynab` | Personal budgeting | REST API | Yes | [API Docs](https://api.ynab.com/) · [Site](https://www.ynab.com/) |
 
@@ -310,6 +311,7 @@ harqis-work/
 │   ├── scryfall/                   # MTG card database
 │   ├── tcg_mp/                     # TCG Marketplace
 │   ├── telegram/                   # Telegram Bot
+│   ├── notion/                     # Notion pages, databases, blocks
 │   ├── trello/                     # Trello Kanban
 │   └── ynab/                       # Personal budgeting
 │
@@ -483,6 +485,9 @@ ACTIONS_ARCHIVE_PATH=
 ACTIONS_SCREENSHOT_PATH=
 DESKTOP_PATH_DEV=
 DESKTOP_PATH_RUN=
+
+# Notion
+NOTION_API_TOKEN=
 
 # YNAB
 YNAB_ACCESS_TOKEN=
