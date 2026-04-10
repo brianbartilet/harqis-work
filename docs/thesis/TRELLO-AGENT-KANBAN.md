@@ -34,7 +34,7 @@ Each card is a structured prompt:
 | **Label** | Routes to the correct agent (e.g. `agent:web`, `agent:write`, `agent:data`) |
 | **Description** | Full prompt, context, attachments |
 | **Comment** | Agent posts its result here, then moves the card |
-
+| **Assignee** | Assign to a specific agent to pick up the task |
 ---
 
 ## Agent types (example labels)
