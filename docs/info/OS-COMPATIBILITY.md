@@ -13,18 +13,18 @@ harqis-work is a multi-platform codebase. Most components are fully cross-platfo
 
 ## Platform Support by Component
 
-| Component | Windows | Linux | macOS | Notes |
-|-----------|:-------:|:-----:|:-----:|-------|
-| `agents/kanban/` — Kanban orchestrator + agent loop | ✅ | ✅ | ✅ | Fully cross-platform by design; intended to run on Linux worker nodes |
-| `apps/` — REST API integrations (20+ apps) | ✅ | ✅ | ✅ | Pure HTTP/SDK; no OS dependencies |
-| `frontend/` — FastAPI + HTMX dashboard | ✅ | ✅ | ✅ | Cross-platform |
-| `mcp/` — FastMCP server | ✅ | ✅ | ✅ | Cross-platform |
-| `workflows/hud/` — data-fetch tasks (YNAB, OANDA, Calendar, Trello) | ✅ | ✅ | ✅ | Data layer is cross-platform |
-| `workflows/purchases/` — MTG card pipeline | ✅ | ✅ | ✅ | Cross-platform |
+| Component                                                      | Windows | Linux | macOS | Notes |
+|----------------------------------------------------------------|:-------:|:-----:|:-----:|-------|
+| `agents/kanban/` — Kanban orchestrator + agent loop            | ✅ | ✅ | ✅ | Fully cross-platform by design; intended to run on Linux worker nodes |
+| `apps/` — REST API integrations (20+ apps)                     | ✅ | ✅ | ✅ | Pure HTTP/SDK; no OS dependencies |
+| `frontend/` — FastAPI + HTMX dashboard                         | ✅ | ✅ | ✅ | Cross-platform |
+| `mcp/` — FastMCP server                                        | ✅ | ✅ | ✅ | Cross-platform |
+| `workflows/hud/` — some integraties with rainmeter             | ✅ | ⚠️ | ⚠️ | Partial — see Windows-specific section |
+| `workflows/purchases/` — MTG card pipeline                     | ✅ | ✅ | ✅ | Cross-platform |
 | `workflows/desktop/` — git pulls, file sync, window management | ✅ | ⚠️ | ⚠️ | Partial — see Windows-specific section |
-| `apps/rainmeter/` — HUD desktop rendering | ✅ | — | — | Windows-only by design |
-| `apps/desktop/corsair/` — iCUE hardware profiles | ✅ | — | — | Windows-only by design |
-| Active window detection (`hud_utils.py`) | ✅ | — | — | Windows-only by design (Win32 API) |
+| `apps/rainmeter/` — HUD desktop rendering                      | ✅ | — | — | Windows-only by design |
+| `apps/desktop/corsair/` — iCUE hardware profiles               | ✅ | — | — | Windows-only by design |
+| Active window detection (`hud_utils.py`)                       | ✅ | — | — | Windows-only by design (Win32 API) |
 
 ---
 
