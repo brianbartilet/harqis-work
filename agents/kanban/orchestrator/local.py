@@ -309,6 +309,20 @@ def from_env(profiles_dir: Optional[Path] = None) -> LocalOrchestrator:
     )
 
 
+def _load_dotenv(path: Path) -> None:
+    """Minimal dotenv loader — no extra dependency needed."""
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
 # ── CLI entry point ───────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -339,17 +353,3 @@ if __name__ == "__main__":
         orch.dry_run = True
 
     orch.run()
-
-
-def _load_dotenv(path: Path) -> None:
-    """Minimal dotenv loader — no extra dependency needed."""
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, value = line.partition("=")
-            key = key.strip()
-            value = value.strip().strip('"').strip("'")
-            if key and key not in os.environ:
-                os.environ[key] = value

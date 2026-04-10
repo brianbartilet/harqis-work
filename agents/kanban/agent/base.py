@@ -25,19 +25,22 @@ from agents.kanban.permissions.enforcer import PermissionDenied, PermissionEnfor
 from agents.kanban.profiles.schema import AgentProfile
 from agents.kanban.security.audit import AuditLogger, NullAuditLogger
 from agents.kanban.security.sanitizer import OutputSanitizer
+from agents.prompts import load_prompt
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_SYSTEM = (
-    "You are {name}, an AI agent operating in a Kanban-driven workflow.\n\n"
-    "Complete the task described below using the tools available to you.\n"
-    "Work methodically: read context, plan steps, execute, verify.\n\n"
-    "Guidelines:\n"
-    "- If you cannot complete a step, explain why clearly — do not guess.\n"
-    "- Post a progress comment when starting a long sub-task.\n"
-    "- Check off checklist items as you complete them.\n"
-    "- Your final message should be a clear summary of what you did and the result.\n"
-)
+# Default system prompt loaded from agents/prompts/kanban_agent_default.md
+# Edit that file to change agent behaviour — do not hardcode prompts here.
+def _load_default_system() -> str:
+    try:
+        return load_prompt("kanban_agent_default")
+    except FileNotFoundError:
+        # Fallback if prompt file is missing (e.g. during tests with isolated imports)
+        return (
+            "You are {name}, an AI agent operating in a Kanban-driven workflow.\n"
+            "Complete the task using the tools available. "
+            "Your final message should summarise what you did and the result."
+        )
 
 
 class BaseKanbanAgent:
@@ -139,7 +142,7 @@ class BaseKanbanAgent:
     def _system_prompt(self) -> str:
         prompt = self.profile.model.resolved_system_prompt()
         if not prompt:
-            prompt = _DEFAULT_SYSTEM.format(name=self.profile.name)
+            prompt = _load_default_system().format(name=self.profile.name)
         # Inject profile context
         if self.profile.context.working_directory:
             prompt += f"\n\nWorking directory: {self.profile.context.working_directory}"
@@ -149,7 +152,27 @@ class BaseKanbanAgent:
                 for r in self.profile.context.repos
             )
             prompt += f"\n\nRepositories:\n{repo_list}"
+        # Inject the actual tool list so the agent knows exactly what it has
+        prompt += self._tool_inventory_prompt()
         return prompt
+
+    def _tool_inventory_prompt(self) -> str:
+        """
+        Build a section listing every tool available to this agent.
+
+        This prevents the agent from falling back on training-time assumptions
+        about what tools it does or doesn't have access to.
+        """
+        definitions = self.registry.definitions()
+        if not definitions:
+            return ""
+        names = [d["name"] for d in definitions]
+        lines = "\n".join(f"  - {n}" for n in sorted(names))
+        return (
+            f"\n\n## Your available tools\n"
+            f"You have exactly these tools — use them; do not assume you lack access to any service listed here:\n"
+            f"{lines}"
+        )
 
     def _handle_tool_calls(self, content: list) -> list[dict]:
         results: list[dict] = []

@@ -1,5 +1,5 @@
 import os
-from prompts import load_prompt as _load
+from agents.prompts import load_prompt as _load
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 
