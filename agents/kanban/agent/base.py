@@ -166,6 +166,7 @@ class BaseKanbanAgent:
                 self._audit.permission_check("tool", tool_name, allowed=True)
                 output = self.registry.call(tool_name, tool_input)
                 safe_output = self._sanitizer.scrub(str(output))
+                safe_output = _truncate_tool_output(safe_output, tool_name)
                 self._audit.tool_result(tool_name, success=True)
                 results.append({
                     "type": "tool_result",
@@ -198,3 +199,34 @@ class BaseKanbanAgent:
             if hasattr(block, "text"):
                 return block.text
         return ""
+
+
+# ── Tool output truncation ────────────────────────────────────────────────────
+
+# ~4 chars per token; keep well under the 1M token context limit.
+# bash output is the main offender (pytest, git log, large file reads).
+_MAX_TOOL_OUTPUT_CHARS = 40_000   # ~10K tokens per tool result
+_TRUNCATION_MSG = "\n\n[... output truncated to {kept} chars — {dropped} chars dropped ...]"
+
+
+def _truncate_tool_output(text: str, tool_name: str) -> str:
+    """
+    Cap individual tool output at _MAX_TOOL_OUTPUT_CHARS.
+
+    For bash/grep/read_file results that can be enormous (full pytest
+    output, large files), this prevents context window overflow across
+    many iterations.  The tail of the output is kept because errors
+    and summaries typically appear last.
+    """
+    if len(text) <= _MAX_TOOL_OUTPUT_CHARS:
+        return text
+    kept = _MAX_TOOL_OUTPUT_CHARS
+    dropped = len(text) - kept
+    # Keep the tail — errors/summaries are usually at the end
+    truncated = text[-kept:]
+    note = _TRUNCATION_MSG.format(kept=kept, dropped=dropped)
+    logger.warning(
+        "Tool '%s' output truncated: %d → %d chars (%d dropped)",
+        tool_name, len(text), kept, dropped,
+    )
+    return note + truncated
