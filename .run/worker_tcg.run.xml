@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="worker_tcg" type="BatchConfigurationType" factoryName="Batch">
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/../run/harqis-work/scripts" />
+    <option name="PARENT_ENVS" value="true" />
+    <module name="" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/../run/harqis-work/scripts/run_workflow_worker_tcg.bat" />
+    <option name="PARAMETERS" value="" />
+    <method v="2" />
+  </configuration>
+</component>

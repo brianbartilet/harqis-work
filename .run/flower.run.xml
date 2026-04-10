@@ -1,0 +1,15 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="flower" type="BatchConfigurationType" factoryName="Batch">
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/../harqis-work/scripts" />
+    <option name="PARENT_ENVS" value="true" />
+    <envs>
+      <env name="FLOWER_PASS" value="H3ll0p0z1v23" />
+      <env name="FLOWER_USER" value="harqistesting" />
+    </envs>
+    <module name="" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/../run/harqis-work/scripts/flower.bat" />
+    <option name="PARAMETERS" value="" />
+    <method v="2" />
+  </configuration>
+</component>
