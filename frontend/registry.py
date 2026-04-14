@@ -57,6 +57,16 @@ TASK_REGISTRY: dict[str, WorkflowDef] = {
                 "manual_only": False,
             },
             {
+                "key":         'show_tcg_orders_no_schedule',
+                "label":       'Show Tcg Orders No Schedule',
+                "task_path":   'workflows.hud.tasks.hud_tcg.show_tcg_orders',
+                "queue":       'adhoc',
+                "schedule":    'Every hour',
+                "kwargs":      {'cfg_id__tcg_mp': 'TCG_MP', 'cfg_id__scryfall': 'SCRYFALL', 'cfg_id__calendar': 'GOOGLE_APPS'},
+                "description": '',
+                "manual_only": False,
+            },
+            {
                 "key":         'get_desktop_logs',
                 "label":       'Desktop Logs (AI)',
                 "task_path":   'workflows.hud.tasks.hud_gpt.get_desktop_logs',
