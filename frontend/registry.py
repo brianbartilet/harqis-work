@@ -249,6 +249,16 @@ TASK_REGISTRY: dict[str, WorkflowDef] = {
                 "manual_only": False,
             },
             {
+                "key":         'git_pull_on_paths_adhoc',
+                "label":       'Git Pull On Paths Adhoc',
+                "task_path":   'workflows.desktop.tasks.commands.git_pull_on_paths',
+                "queue":       'adhoc',
+                "schedule":    'Every 10 min',
+                "kwargs":      {},
+                "description": '',
+                "manual_only": False,
+            },
+            {
                 "key":         'set_desktop_hud_to_back',
                 "label":       'HUD to Background',
                 "task_path":   'workflows.desktop.tasks.commands.set_desktop_hud_to_back',
@@ -256,6 +266,16 @@ TASK_REGISTRY: dict[str, WorkflowDef] = {
                 "schedule":    'Every 30 min',
                 "kwargs":      {},
                 "description": 'Sends Rainmeter HUD windows to the background z-order.',
+                "manual_only": False,
+            },
+            {
+                "key":         'set_desktop_hud_to_back_adhoc',
+                "label":       'Set Desktop Hud To Back Adhoc',
+                "task_path":   'workflows.desktop.tasks.commands.set_desktop_hud_to_back',
+                "queue":       'adhoc',
+                "schedule":    'Every 30 min',
+                "kwargs":      {},
+                "description": '',
                 "manual_only": False,
             },
             {
