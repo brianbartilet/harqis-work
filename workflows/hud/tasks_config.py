@@ -64,6 +64,19 @@ WORKFLOWS_HUD = {
         },
     },
 
+    'run-job--show_tcg_orders_no_schedule': {
+        'task': 'workflows.hud.tasks.hud_tcg.show_tcg_orders_no_schedule',
+        'schedule': crontab(minute=0),
+        'kwargs': {
+            "cfg_id__tcg_mp": "TCG_MP",
+            "cfg_id__scryfall": "SCRYFALL",
+        },
+        "options": {
+            "queue": "adhoc",
+            "expires": 60 * 30
+        },
+    },
+
     'run-job--get_desktop_logs': {
         'task': 'workflows.hud.tasks.hud_gpt.get_desktop_logs',
         'schedule': crontab(minute='5'),

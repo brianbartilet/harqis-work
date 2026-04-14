@@ -345,3 +345,6 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
 
     return dump
 
+@SPROUT.task(queue='adhoc')
+def show_tcg_orders_no_schedule(ini=ConfigHelperRainmeter(), **kwargs):
+    show_tcg_orders(ini, **kwargs)
