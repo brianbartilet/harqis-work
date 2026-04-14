@@ -11,7 +11,6 @@ from apps.desktop.helpers.feed import feed
 from apps.apps_config import CONFIG_MANAGER
 
 
-@SPROUT.task(queue='default')
 @log_result()
 def git_pull_on_paths() -> str:
 
@@ -65,7 +64,6 @@ def git_pull_on_paths() -> str:
     return " ".join(x for x in pull_list)
 
 
-@SPROUT.task(queue='default')
 @log_result()
 @feed()
 def copy_files_targeted(**kwargs) -> str:
@@ -84,7 +82,6 @@ def copy_files_targeted(**kwargs) -> str:
     return " ".join(x[0] for x in files)
 
 
-@SPROUT.task(queue='default')
 @log_result()
 @feed()
 def set_desktop_hud_to_back() -> str:

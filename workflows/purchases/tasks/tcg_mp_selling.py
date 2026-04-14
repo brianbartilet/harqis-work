@@ -39,7 +39,6 @@ from workflows.purchases.helpers.constants import image_guid_pattern
 tcg_mp_log = create_logger("tcg_mp_selling")
 
 
-@SPROUT.task(queue='tcg')
 @log_result()
 def task_smoke():
     """Test function to add two numbers and return the result."""
@@ -47,7 +46,7 @@ def task_smoke():
     tcg_mp_log.info("Running a test result {0}".format(number))
     return number
 
-@SPROUT.task(queue='tcg')
+
 @feed()
 def download_scryfall_bulk_data(**kwargs):
     cfg_id__scryfall = kwargs.get("cfg_id__scryfall", "SCRYFALL")
@@ -60,7 +59,7 @@ def download_scryfall_bulk_data(**kwargs):
 
 # region task: generate_tcg_mappings, do not multiprocess because of bulk file
 
-@SPROUT.task(queue='tcg')
+
 @log_result()
 @feed()
 def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **kwargs):
@@ -326,7 +325,6 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         return {"card": card_name, "status": "error", "error": str(e)}
 
 
-@SPROUT.task(queue="tcg")
 @log_result()
 @feed()
 def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs):
@@ -524,7 +522,6 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1 + 
         return {"card": card_name, "status": "error", "error": str(e)}
 
 
-@SPROUT.task(queue="tcg")
 @log_result()
 @feed()
 def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kwargs):
@@ -574,7 +571,6 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
 # endregion
 
 
-@SPROUT.task(queue='tcg')
 @log_result()
 @feed()
 def generate_audit_for_tcg_orders(last_x_days=15, **kwargs) -> None:

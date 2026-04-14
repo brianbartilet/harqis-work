@@ -226,7 +226,7 @@ SPROUT.conf.beat_schedule = CONFIG_DICTIONARY
 ### Task decorator pattern
 
 ```python
-@SPROUT.task(queue='hud')
+
 @log_result()           # Logs output to Elasticsearch
 @init_meter(...)        # Initializes Rainmeter desktop widget
 @feed()                 # Pushes data to desktop HUD feed

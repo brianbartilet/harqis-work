@@ -100,7 +100,7 @@ from core.apps.sprout.app.celery import SPROUT
 from core.apps.sprout.decorators import log_result, feed
 from apps.rainmeter.references.helpers.config_builder import init_meter
 
-@SPROUT.task(queue='hud')
+
 @log_result()
 @init_meter(meter_name='FOREX', skin='HARQIS_DESKTOP')
 @feed()

@@ -18,7 +18,6 @@ from apps.google_apps.references.constants import ScheduleCategory
 from workflows.hud.tasks.sections import sections__ynab
 
 
-@SPROUT.task(queue='hud')
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='BUDGETING INFO', new_sections_dict=sections__ynab, play_sound=True,
             schedule_categories=[ScheduleCategory.FINANCE, ])

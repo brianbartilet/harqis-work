@@ -53,7 +53,6 @@ def _kill_existing_screen_reader_processes():
             continue
 
 
-@SPROUT.task(queue='default')
 @log_result()
 @feed()
 def run_capture_logging(**kwargs):
@@ -92,7 +91,6 @@ def run_capture_logging(**kwargs):
     }
 
 
-@SPROUT.task(queue='default')
 @log_result()
 def generate_daily_desktop_summary(hud_item_name='DESKTOP LOGS', logs_output_path='logs/daily', **kwargs):
     """
@@ -152,7 +150,6 @@ def generate_daily_desktop_summary(hud_item_name='DESKTOP LOGS', logs_output_pat
     return f"SUCCESS: {output_file}"
 
 
-@SPROUT.task(queue='default')
 @log_result()
 def generate_weekly_desktop_summary(logs_daily_path='logs/daily', logs_output_path='logs/weekly', **kwargs):
     """

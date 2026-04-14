@@ -295,7 +295,6 @@ def _build_split_dto(parsed_transactions: list[dict], account_id: str,
 
 # ── Task ──────────────────────────────────────────────────────────────────────
 
-@SPROUT.task(queue='default')
 @log_result()
 @feed()
 def add_ynab_transactions_from_pdf(input_pdf: str, ynab_budget_name: str,

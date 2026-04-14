@@ -40,7 +40,7 @@ CONFIG_DICTIONARY = ... | WORKFLOW_<NAME>
 ```python
 from core.apps.sprout.app.celery import SPROUT
 
-@SPROUT.task(queue='default')
+
 def example_task(**kwargs):
     """Short description of what this task does."""
     # implementation
@@ -52,7 +52,7 @@ With decorators for logging and HUD display:
 ```python
 from core.apps.sprout.decorators import log_result, feed, init_meter
 
-@SPROUT.task(queue='hud')
+
 @log_result()
 @init_meter(meter_name='WIDGET_NAME', skin='HARQIS_DESKTOP')
 @feed()

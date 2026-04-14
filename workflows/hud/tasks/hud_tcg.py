@@ -30,7 +30,6 @@ from workflows.purchases.helpers.constants import image_guid_pattern
 from workflows.hud.tasks.sections import sections__tcg_mp_sections
 
 
-@SPROUT.task(queue='hud')
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='TCG ORDERS', new_sections_dict=sections__tcg_mp_sections,
             play_sound=True,
