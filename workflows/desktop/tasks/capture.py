@@ -14,7 +14,7 @@ from core.utilities.resources.decorators import get_decorator_attrs
 from apps.apps_config import CONFIG_MANAGER
 from apps.desktop.helpers.feed import feed
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
-from apps.antropic.config import CONFIG as ANTHROPIC_CONFIG
+from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 
 from workflows.desktop.prompts import load_prompt
@@ -99,8 +99,9 @@ def generate_daily_desktop_summary(hud_item_name='DESKTOP LOGS', logs_output_pat
 
     Output: logs/daily/DESKTOP-LOGS-DD-MM-YYYY.md
     """
+    cfg_id__anthropic = kwargs.get('cfg_id__anthropic', 'ANTHROPIC')
     try:
-        anthropic = BaseApiServiceAnthropic(ANTHROPIC_CONFIG)
+        anthropic = BaseApiServiceAnthropic(get_anthropic_config(cfg_id__anthropic))
     except Exception as e:
         log.error("Failed to initialize Anthropic client for daily summary")
         raise e
@@ -158,8 +159,9 @@ def generate_weekly_desktop_summary(logs_daily_path='logs/daily', logs_output_pa
 
     Output: logs/weekly/DESKTOP-LOGS-WEEK-WW-YYYY.md
     """
+    cfg_id__anthropic = kwargs.get('cfg_id__anthropic', 'ANTHROPIC')
     try:
-        anthropic = BaseApiServiceAnthropic(ANTHROPIC_CONFIG)
+        anthropic = BaseApiServiceAnthropic(get_anthropic_config(cfg_id__anthropic))
     except Exception as e:
         log.error("Failed to initialize Anthropic client for weekly summary")
         raise e

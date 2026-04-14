@@ -2,15 +2,8 @@ import pytest
 
 from hamcrest import assert_that, not_none, equal_to, greater_than, instance_of
 
-from core.config.loader import ConfigLoaderService
-from core.web.services.core.config.webservice import AppConfigWSClient
-from core.config.env_variables import ENV_APP_CONFIG_FILE
-
+from apps.antropic.config import CONFIG
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
-
-
-load_config = ConfigLoaderService(file_name=ENV_APP_CONFIG_FILE).config
-CONFIG = AppConfigWSClient(**load_config['ANTHROPIC'])
 
 
 @pytest.fixture()

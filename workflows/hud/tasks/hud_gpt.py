@@ -20,7 +20,7 @@ from apps.desktop.config import APP_NAME as APP_NAME_DESKTOP
 from apps.google_apps.references.constants import ScheduleCategory
 from apps.apps_config import CONFIG_MANAGER
 
-from apps.antropic.config import CONFIG as ANTHROPIC_CONFIG
+from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 
 from workflows.hud.tasks.sections import sections__check_desktop, sections__check_world_checks
@@ -41,8 +41,9 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
 
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 
+    cfg_id__anthropic = kwargs.get('cfg_id__anthropic', 'ANTHROPIC')
     try:
-        anthropic = BaseApiServiceAnthropic(ANTHROPIC_CONFIG)
+        anthropic = BaseApiServiceAnthropic(get_anthropic_config(cfg_id__anthropic))
     except Exception as e:
         log.error("Failed to initialize Anthropic client")
         raise e
@@ -271,7 +272,8 @@ def get_events_world_check(countries_list=None, utc_tz="UTC+8", ini=ConfigHelper
     if countries_list is None:
         return "No countries specified.\n\n\n"
 
-    anthropic = BaseApiServiceAnthropic(ANTHROPIC_CONFIG)
+    cfg_id__anthropic = kwargs.get('cfg_id__anthropic', 'ANTHROPIC')
+    anthropic = BaseApiServiceAnthropic(get_anthropic_config(cfg_id__anthropic))
 
     def ask_check_events():
         prompt = (

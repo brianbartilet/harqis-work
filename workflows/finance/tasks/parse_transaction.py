@@ -23,6 +23,7 @@ from apps.ynab.references.dto.transaction import (
     DtoSaveTransaction, DtoSaveSubTransaction, DtoSaveTransactionsWrapper,
 )
 from apps.ynab.references.constants import YNAB_MILLIUNITS
+from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 
 from workflows.finance.prompts import load_prompt
@@ -49,8 +50,7 @@ def _parse_pdf_with_claude(pdf_path: Path, cfg_id__anthropic: str = "ANTHROPIC")
     system_prompt = load_prompt("parse_transaction")
     pdf_b64 = _read_pdf_as_base64(pdf_path)
 
-    cfg__anthropic = CONFIG_MANAGER.get(cfg_id__anthropic)
-    client = BaseApiServiceAnthropic(cfg__anthropic)
+    client = BaseApiServiceAnthropic(get_anthropic_config(cfg_id__anthropic))
     if not client.base_client:
         raise RuntimeError("Anthropic client failed to initialize")
 

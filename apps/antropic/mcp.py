@@ -2,7 +2,7 @@ import logging
 from dataclasses import asdict
 
 from mcp.server.fastmcp import FastMCP
-from apps.antropic.config import CONFIG
+from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.api.usage import ApiServiceAnthropicUsage
 
 logger = logging.getLogger("harqis-mcp.anthropic")
@@ -32,7 +32,7 @@ def register_anthropic_tools(mcp: FastMCP):
             Usage summary with total tokens, per-model breakdown, and estimated USD cost.
         """
         logger.info("Tool called: get_anthropic_usage start=%s end=%s", start_time, end_time)
-        result = ApiServiceAnthropicUsage(CONFIG).get_usage(
+        result = ApiServiceAnthropicUsage(get_anthropic_config()).get_usage(
             start_time=start_time,
             end_time=end_time,
             api_key_id=api_key_id,
@@ -68,7 +68,7 @@ def register_anthropic_tools(mcp: FastMCP):
             Month-to-date summary: total tokens, cost per model, total estimated USD cost.
         """
         logger.info("Tool called: get_anthropic_mtd_cost api_key_id=%s", api_key_id)
-        result = ApiServiceAnthropicUsage(CONFIG).get_month_to_date(api_key_id=api_key_id)
+        result = ApiServiceAnthropicUsage(get_anthropic_config()).get_month_to_date(api_key_id=api_key_id)
         summary = asdict(result)
         logger.info(
             "get_anthropic_mtd_cost period=%s→%s total_cost=$%.4f",
