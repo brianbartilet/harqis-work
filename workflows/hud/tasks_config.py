@@ -65,11 +65,12 @@ WORKFLOWS_HUD = {
     },
 
     'run-job--show_tcg_orders_no_schedule': {
-        'task': 'workflows.hud.tasks.hud_tcg.show_tcg_orders_no_schedule',
+        'task': 'workflows.hud.tasks.hud_tcg.show_tcg_orders',
         'schedule': crontab(minute=0),
         'kwargs': {
             "cfg_id__tcg_mp": "TCG_MP",
             "cfg_id__scryfall": "SCRYFALL",
+            "cfg_id__calendar": "GOOGLE_APPS"
         },
         "options": {
             "queue": "adhoc",
