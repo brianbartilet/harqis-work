@@ -43,11 +43,25 @@ WORKFLOWS_DESKTOP = {
         "options": {"queue": WorkflowQueue.DEFAULT},
     },
 
+    'run-job--git_pull_on_paths_adhoc': {
+        'task': 'workflows.desktop.tasks.commands.git_pull_on_paths',
+        'schedule': crontab(minute='*/10'),
+        'args': [],
+        "options": {"queue": WorkflowQueue.ADHOC},
+    },
+
     'run-job--set_desktop_hud_to_back': {
         'task': 'workflows.desktop.tasks.commands.set_desktop_hud_to_back',
         'schedule': crontab(minute='*/30'),
         'args': [],
         "options": {"queue": WorkflowQueue.DEFAULT},
+    },
+
+    'run-job--set_desktop_hud_to_back_adhoc': {
+        'task': 'workflows.desktop.tasks.commands.set_desktop_hud_to_back',
+        'schedule': crontab(minute='*/30'),
+        'args': [],
+        "options": {"queue": WorkflowQueue.ADHOC},
     },
 
     'run-job--copy_files_targeted': {
