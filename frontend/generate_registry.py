@@ -143,16 +143,17 @@ def _crontab_to_str(c: crontab) -> str:
         if interval:
             return f"Every {interval} min"
 
-    # ── Multiple specific hours with single minute ────────────────────────────
-    if len(mins) == 1 and len(hours) > 1:
+    # ── Multiple specific hours (any minute set) ─────────────────────────────
+    if len(hours) > 1 and (len(mins) == 1 or mins == all_min):
         interval = _detect_interval(hours)
         if interval:
             return f"Every {interval} hours"
 
     # ── Single hour — daily ───────────────────────────────────────────────────
-    if len(hours) == 1 and len(mins) == 1:
-        h, m = sorted(hours)[0], sorted(mins)[0]
-        if m == 0:
+    if len(hours) == 1:
+        h = sorted(hours)[0]
+        m = sorted(mins)[0] if len(mins) == 1 else 0
+        if mins == all_min or m == 0:
             if h == 0:
                 return "Daily at midnight"
             return f"Daily at {h}am" if h < 12 else f"Daily at {h:02d}:00"
