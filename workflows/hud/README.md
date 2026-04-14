@@ -34,8 +34,9 @@ All tasks run on the `hud` queue (configured via `SPROUT.conf.task_routes`).
 |------|-------|
 | `tasks/hud_forex.py` | `show_forex_account` |
 | `tasks/hud_tcg.py` | `show_tcg_orders` |
-| `tasks/hud_logs.py` | `get_desktop_logs`, `take_screenshots_for_gpt_capture`, `get_failed_jobs` |
-| `tasks/hud_calendar.py` | `show_calendar_information`, `get_schedules` |
+| `tasks/hud_gpt.py` | `get_desktop_logs`, `take_screenshots_for_gpt_capture` |
+| `tasks/hud_logs.py` | `get_failed_jobs`, `get_schedules` |
+| `tasks/hud_calendar.py` | `show_calendar_information` |
 | `tasks/hud_utils.py` | `show_mouse_bindings`, `build_summary_mouse_bindings`, `show_hud_profiles`, `show_ai_helper` |
 | `tasks/hud_finance.py` | `show_ynab_budgets_info` |
 | `tasks/sections.py` | HUD section layout helpers |
@@ -77,6 +78,6 @@ celery -A workflows.config call workflows.hud.tasks.hud_calendar.show_calendar_i
 
 ## Notes
 
-- The `show_hud_profiles` task reads the active foreground window to set the appropriate iCUE/Rainmeter profile.
+- `show_mouse_bindings` reads the active foreground window to set the appropriate iCUE/Rainmeter profile.
 - `get_desktop_logs` sends activity log content to GPT/Claude for summarization.
 - HUD feed data is written to `DESKTOP_PATH_FEED` (env var) and picked up by Rainmeter.

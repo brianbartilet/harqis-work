@@ -206,7 +206,7 @@ def build_registry() -> dict:
 
             task_key  = beat_key.removeprefix("run-job--")
             task_path = beat_val["task"]
-            queue     = beat_val.get("options", {}).get("queue", "default")
+            queue     = str(beat_val.get("options", {}).get("queue", "default"))
             kwargs    = beat_val.get("kwargs", {})
             schedule  = beat_val.get("schedule")
 

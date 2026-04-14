@@ -21,6 +21,7 @@ References:
 
 from celery.schedules import crontab
 from datetime import timedelta
+from workflows.queues import WorkflowQueue
 
 """
 A dictionary mapping task identifiers to their configuration for scheduling.
@@ -45,7 +46,7 @@ WORKFLOWS_HUD = {
             "cfg_id__calendar": "GOOGLE_APPS",
             },
         "options": {
-            "queue": "hud",
+            "queue": WorkflowQueue.HUD,
             "expires": 60 * 5
         },
     },
@@ -59,7 +60,7 @@ WORKFLOWS_HUD = {
             "cfg_id__calendar": "GOOGLE_APPS"
         },
         "options": {
-            "queue": "tcg",
+            "queue": WorkflowQueue.TCG,
             "expires": 60 * 30
         },
     },
@@ -73,7 +74,7 @@ WORKFLOWS_HUD = {
             "cfg_id__calendar": "GOOGLE_APPS"
         },
         "options": {
-            "queue": "adhoc",
+            "queue": WorkflowQueue.ADHOC,
             "expires": 60 * 30
         },
     },
@@ -86,7 +87,7 @@ WORKFLOWS_HUD = {
             "cfg_id__calendar": "GOOGLE_APPS"
         },
         "options": {
-            "queue": "default",
+            "queue": WorkflowQueue.DEFAULT,
             "expires": 60 * 60
         },
     },
@@ -98,7 +99,7 @@ WORKFLOWS_HUD = {
             "cfg_id__desktop": "DESKTOP"
         },
         "options": {
-            "queue": "default",
+            "queue": WorkflowQueue.DEFAULT,
             "expires": 60 * 10
         },
     },
@@ -110,7 +111,7 @@ WORKFLOWS_HUD = {
             "cfg_id__calendar": "GOOGLE_APPS",
             "cfg_id__elevenlabs": "ELEVEN_LABS"},
         "options": {
-            "queue": "hud",
+            "queue": WorkflowQueue.HUD,
             "expires": 60 * 30
         },
     },
@@ -119,7 +120,7 @@ WORKFLOWS_HUD = {
         'task': 'workflows.hud.tasks.hud_logs.get_failed_jobs',
         'schedule': crontab(minute='*/15'),
         "options": {
-            "queue": "hud",
+            "queue": WorkflowQueue.HUD,
             "expires": 60 * 15
         },
     },
@@ -131,7 +132,7 @@ WORKFLOWS_HUD = {
             "cfg_id__calendar": "GOOGLE_APPS"
         },
         "options": {
-            "queue": "hud",
+            "queue": WorkflowQueue.HUD,
             "expires": 60 * 1
         },
     },
@@ -143,7 +144,7 @@ WORKFLOWS_HUD = {
             "cfg_id__desktop": "DESKTOP"
         },
         "options": {
-            "queue": "default",
+            "queue": WorkflowQueue.DEFAULT,
             "expires": 60 * 60
         },
     },
@@ -152,7 +153,7 @@ WORKFLOWS_HUD = {
         'task': 'workflows.hud.tasks.hud_utils.show_hud_profiles',
         'schedule': crontab(hour='00'),
         "options": {
-            "queue": "hud",
+            "queue": WorkflowQueue.HUD,
             "expires": 60 * 60
         },
     },
@@ -164,7 +165,7 @@ WORKFLOWS_HUD = {
             "cfg_id__ynab": "YNAB",
             "cfg_id__calendar": "GOOGLE_APPS"},
         "options": {
-            "queue": "hud",
+            "queue": WorkflowQueue.HUD,
             "expires": 60 * 60
         }
     },
@@ -178,7 +179,7 @@ WORKFLOWS_HUD = {
             "cfg_id__py": "PYTHON_RUNNER"
         },
         "options": {
-            "queue": "hud",
+            "queue": WorkflowQueue.HUD,
             "expires": 60 * 60
         }
     },
@@ -190,7 +191,7 @@ WORKFLOWS_HUD = {
             "cfg_id__calendar": "GOOGLE_APPS",
         },
         "options": {
-            "queue": "hud",
+            "queue": WorkflowQueue.HUD,
             "expires": 60 * 60}
     },
 

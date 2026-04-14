@@ -21,6 +21,7 @@ References:
 
 from datetime import timedelta
 from celery.schedules import crontab
+from workflows.queues import WorkflowQueue
 
 """
 A dictionary mapping task identifiers to their configuration for scheduling.
@@ -46,7 +47,7 @@ WORKFLOW_PURCHASES = {
             "cfg_id__scryfall": "SCRYFALL"
         },
         "options": {
-            "queue": "tcg",
+            "queue": WorkflowQueue.TCG,
             "expires": 60 * 60 * 24
         },
     },
@@ -58,7 +59,7 @@ WORKFLOW_PURCHASES = {
             "cfg_id__tcg_mp": "TCG_MP"
         },
         "options": {
-            "queue": "tcg",
+            "queue": WorkflowQueue.TCG,
             "expires": 60 * 60 * 4
         },
     },

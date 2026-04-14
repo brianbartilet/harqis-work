@@ -21,6 +21,7 @@ References:
 
 from datetime import timedelta
 from celery.schedules import crontab
+from workflows.queues import WorkflowQueue
 
 """
 A dictionary mapping task identifiers to their configuration for scheduling.
@@ -39,14 +40,14 @@ WORKFLOWS_DESKTOP = {
         'task': 'workflows.desktop.tasks.commands.git_pull_on_paths',
         'schedule':  crontab(minute='*/10'),
         'args': [],
-        "options": {"queue": "default"},
+        "options": {"queue": WorkflowQueue.DEFAULT},
     },
 
     'run-job--set_desktop_hud_to_back': {
         'task': 'workflows.desktop.tasks.commands.set_desktop_hud_to_back',
         'schedule': crontab(minute='*/30'),
         'args': [],
-        "options": {"queue": "default"},
+        "options": {"queue": WorkflowQueue.DEFAULT},
     },
 
     'run-job--copy_files_targeted': {
@@ -55,14 +56,14 @@ WORKFLOWS_DESKTOP = {
         'kwargs': {
             "cfg_id__desktop_jobs": "DESKTOP"
         },
-        "options": {"queue": "default"},
+        "options": {"queue": WorkflowQueue.DEFAULT},
     },
 
     'run-job--run_n8n_sequence': {
         'task': 'workflows.desktop.tasks.commands.run_n8n_sequence',
         'schedule': crontab(hour='0', minute='0'),
         'args': [],
-        "options": {"queue": "default"},
+        "options": {"queue": WorkflowQueue.DEFAULT},
     },
 
     'run-job--run_capture_logging': {
@@ -72,7 +73,7 @@ WORKFLOWS_DESKTOP = {
             "cfg_id__desktop_utils": "DESKTOP"
         },
         "options": {
-            "queue": "default",
+            "queue": WorkflowQueue.DEFAULT,
             "expires": 60 * 60
         },
     },
@@ -85,7 +86,7 @@ WORKFLOWS_DESKTOP = {
             "logs_output_path": "C:/Users/brian/GIT/harqis-work/logs/daily",
         },
         "options": {
-            "queue": "default",
+            "queue": WorkflowQueue.DEFAULT,
             "expires": 60 * 60,
         },
     },
@@ -98,7 +99,7 @@ WORKFLOWS_DESKTOP = {
             "logs_output_path": "C:/Users/brian/GIT/harqis-work/logs/weekly",
         },
         "options": {
-            "queue": "default",
+            "queue": WorkflowQueue.DEFAULT,
             "expires": 60 * 60,
         },
     },

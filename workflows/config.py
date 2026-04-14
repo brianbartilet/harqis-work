@@ -13,6 +13,7 @@ Known Issues:
 """
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.sprout.settings import TIME_ZONE, USE_TZ
+from workflows.queues import WorkflowQueue
 
 from workflows.purchases.tasks_config import WORKFLOW_PURCHASES
 from workflows.hud.tasks_config import WORKFLOWS_HUD
@@ -32,5 +33,5 @@ CONFIG_DICTIONARY = WORKFLOW_PURCHASES | WORKFLOWS_HUD | WORKFLOWS_DESKTOP
 SPROUT.conf.beat_schedule = CONFIG_DICTIONARY
 
 SPROUT.conf.task_routes = {
-  "workflows.hud.tasks.*": {"queue": "hud"},
+  "workflows.hud.tasks.*": {"queue": WorkflowQueue.HUD},
 }

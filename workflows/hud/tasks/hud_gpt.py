@@ -32,6 +32,7 @@ _MAX_SCREENSHOTS = 5
 _CLAUDE_URL = 'https://claude.ai/'
 
 
+@SPROUT.task()
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='DESKTOP LOGS', new_sections_dict=sections__check_desktop,
             play_sound=True, schedule_categories=[ScheduleCategory.PINNED, ], prepend_if_exists=True)
@@ -336,6 +337,7 @@ def get_events_world_check(countries_list=None, utc_tz="UTC+8", ini=ConfigHelper
     return dump
 
 
+@SPROUT.task()
 @log_result()
 @feed()
 def take_screenshots_for_gpt_capture(**kwargs):

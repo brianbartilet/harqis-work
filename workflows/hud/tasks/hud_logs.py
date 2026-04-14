@@ -21,6 +21,7 @@ from workflows.purchases.tasks_config import WORKFLOW_PURCHASES
 from apps.google_apps.references.constants import ScheduleCategory
 
 
+@SPROUT.task()
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='FAILED JOBS TODAY', new_sections_dict=sections__check_logs, play_sound=False)
 @feed()
@@ -155,6 +156,7 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
     return dump
 
 
+@SPROUT.task()
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='CELERY SPROUTS', new_sections_dict=sections__check_logs,
             play_sound=False, schedule_categories=[ScheduleCategory.DEACTIVATED])
