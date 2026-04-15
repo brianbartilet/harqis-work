@@ -12,6 +12,7 @@ from apps.apps_config import CONFIG_MANAGER
 
 
 @log_result()
+@SPROUT.task()
 def git_pull_on_paths() -> str:
 
     def git_pull_all(paths: list[str]) -> dict:
@@ -66,6 +67,7 @@ def git_pull_on_paths() -> str:
 
 @log_result()
 @feed()
+@SPROUT.task()
 def copy_files_targeted(**kwargs) -> str:
     cfg = CONFIG_MANAGER.get(kwargs.get("cfg_id__desktop_jobs", "DESKTOP"))
     p_from = cfg['copy_files']['path_dev_files']
@@ -84,6 +86,7 @@ def copy_files_targeted(**kwargs) -> str:
 
 @log_result()
 @feed()
+@SPROUT.task()
 def set_desktop_hud_to_back() -> str:
     # Resolve %APPDATA%\Rainmeter\Rainmeter.ini
     rainmeter_ini = Path(os.environ["APPDATA"]) / "Rainmeter" / "Rainmeter.ini"
@@ -93,9 +96,9 @@ def set_desktop_hud_to_back() -> str:
     return str(rainmeter_ini)
 
 
-@SPROUT.task(ueue='default')
 @log_result()
 @feed()
+@SPROUT.task()
 def run_n8n_sequence() -> str:
     def run_bats_in_sequence(bat_files: list[str]) -> dict:
         """

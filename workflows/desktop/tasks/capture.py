@@ -55,6 +55,7 @@ def _kill_existing_screen_reader_processes():
 
 @log_result()
 @feed()
+@SPROUT.task()
 def run_capture_logging(**kwargs):
     """
     Creates today's logfile and starts the run_capture loop
@@ -92,6 +93,7 @@ def run_capture_logging(**kwargs):
 
 
 @log_result()
+@SPROUT.task()
 def generate_daily_desktop_summary(hud_item_name='DESKTOP LOGS', logs_output_path='logs/daily', **kwargs):
     """
     Reads the get_desktop_logs dump.txt and sends it to Claude to produce
@@ -152,6 +154,7 @@ def generate_daily_desktop_summary(hud_item_name='DESKTOP LOGS', logs_output_pat
 
 
 @log_result()
+@SPROUT.task()
 def generate_weekly_desktop_summary(logs_daily_path='logs/daily', logs_output_path='logs/weekly', **kwargs):
     """
     Reads all daily DESKTOP-LOGS-*.md files from the past 7 days and sends them

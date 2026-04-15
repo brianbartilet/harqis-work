@@ -303,6 +303,7 @@ def _build_split_dto(parsed_transactions: list[dict], account_id: str,
 
 @log_result()
 @feed()
+@SPROUT.task()
 def add_ynab_transactions_from_pdf(input_pdf: str, ynab_budget_name: str,
                                    ynab_account_name: str, split: bool = False, **kwargs):
     """Parse a bank statement PDF and import transactions into YNAB.

@@ -262,6 +262,7 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
     return dump
 
 
+@SPROUT.task()
 @log_result()
 @init_meter(RAINMETER_CONFIG,
             hud_item_name='GPT INFO', new_sections_dict=sections__check_world_checks, play_sound=False,

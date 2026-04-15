@@ -48,6 +48,7 @@ def task_smoke():
 
 
 @feed()
+@SPROUT.task()
 def download_scryfall_bulk_data(**kwargs):
     cfg_id__scryfall = kwargs.get("cfg_id__scryfall", "SCRYFALL")
     cfg__scryfall = CONFIG_MANAGER.get(cfg_id__scryfall)
@@ -62,6 +63,7 @@ def download_scryfall_bulk_data(**kwargs):
 
 @log_result()
 @feed()
+@SPROUT.task()
 def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **kwargs):
     """ ../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
     cfg_id__tcg_mp = kwargs.get("cfg_id__tcg_mp", "TCG_MP")
@@ -327,6 +329,7 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
 
 @log_result()
 @feed()
+@SPROUT.task()
 def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs):
     """../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
     cfg_id__tcg_mp = kwargs.pop("cfg_id__tcg_mp", "TCG_MP")
@@ -524,6 +527,7 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1 + 
 
 @log_result()
 @feed()
+@SPROUT.task()
 def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kwargs):
     """../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
     cfg_id__tcg_mp = kwargs.get("cfg_id__tcg_mp", "TCG_MP")
@@ -573,6 +577,7 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
 
 @log_result()
 @feed()
+@SPROUT.task()
 def generate_audit_for_tcg_orders(last_x_days=15, **kwargs) -> None:
     """
     Poll TCG MP orders, compare against ES 'current' index, and
