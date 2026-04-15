@@ -1,6 +1,40 @@
 services:
 
-  # ── OwnTracks ─────────────────────────────────────────────────────────────
+  # ── Message Broker ─────────────────────────────────────────────────────────
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "127.0.0.1:15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics ping
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: redis-cli ping
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── OwnTracks ───────────────────────────────────────────────────────────────
 
   mosquitto:
     image: eclipse-mosquitto:latest
@@ -30,7 +64,7 @@ services:
     depends_on:
       - mosquitto
 
-  # ── n8n + ngrok ───────────────────────────────────────────────────────────
+  # ── n8n ─────────────────────────────────────────────────────────────────────
 
   n8n:
     image: docker.n8n.io/n8nio/n8n:latest
@@ -47,23 +81,78 @@ services:
       N8N_TIMEZONE: Asia/Singapore
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  # ── Observability ───────────────────────────────────────────────────────────
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: elasticsearch
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9200:9200"
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms256m -Xmx512m"
+    volumes:
+      - elastic_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: >
+        curl -s http://localhost:9200/_cluster/health |
+        grep -q '"status":"green"\|"status":"yellow"'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    container_name: kibana
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5601:5601"
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  # ── Public Tunnels ──────────────────────────────────────────────────────────
+  # Use one or both. cloudflared gives a stable custom domain (free).
+  # ngrok is useful for quick testing or when Cloudflare isn't configured yet.
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - n8n
 
   ngrok:
     image: ngrok/ngrok:latest
+    container_name: ngrok
     restart: unless-stopped
-    environment:
-      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
-    env_file:
-      - ./.env/apps.env
     command:
       - "http"
       - "n8n:5678"
       - "--log=stdout"
       - "--log-format=json"
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    env_file:
+      - ./.env/apps.env
     ports:
       - "4040:4040"
     depends_on:
       - n8n
 
 volumes:
+  rabbitmq_data:
+  redis_data:
   n8n_data:
+  elastic_data:

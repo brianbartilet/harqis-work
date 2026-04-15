@@ -41,7 +41,7 @@ The **OpenClaw Server** is the Mac Mini acting as the always-on, on-premise hub 
                     │  MCP server  Celery Beat           │
                     │  Cloudflare Tunnel (webhook in)   │
                     └──────────────────────────────────┘
-                              │  WireGuard VPN
+                              │  Tailscale VPN
                  ┌────────────┴────────────┐
                  ▼                         ▼
          VPS Worker nodes          N100 Windows nodes
@@ -77,7 +77,7 @@ All services the Mac Mini runs, with ports and resource estimates:
 | MCP server | stdio | stdio | Claude tools (55 tools) | ~150 MB |
 | Cloudflare Tunnel | — | outbound | Expose :8000 without static IP | ~30 MB |
 | Celery Beat | — | internal | Scheduled task dispatch | ~100 MB |
-| WireGuard | 51820 | UDP | VPN server for worker nodes | ~10 MB |
+| Tailscale | — | outbound | VPN mesh for worker nodes (no open port) | ~5 MB |
 
 **Total estimated RAM:** ~1.9 GB for all services.  
 With 16 GB RAM available on the M4, the Mac Mini comfortably hosts everything with headroom for local agent runs and system overhead.
@@ -85,11 +85,10 @@ With 16 GB RAM available on the M4, the Mac Mini comfortably hosts everything wi
 ### Ports to open in macOS Firewall
 
 ```
-Inbound  51820/UDP  — WireGuard VPN (worker nodes only)
 Inbound  8000/TCP   — Cloudflare Tunnel (localhost; no direct internet exposure)
 ```
 
-All other ports are LAN or VPN-only. Never expose 5672, 6379, 9200, or 5555 to the internet.
+Tailscale requires **no inbound ports** — it connects outbound through NAT. All broker ports (5672, 6379, 9200, 5555) remain LAN/VPN-only and are never exposed to the internet.
 
 ---
 
@@ -102,7 +101,10 @@ All other ports are LAN or VPN-only. Never expose 5672, 6379, 9200, or 5555 to t
 /bin/bash -c "$(curl -fsSL https://brew.sh)"
 
 # Install system tools
-brew install git python@3.12 wireguard-tools cloudflared
+brew install git python@3.12 cloudflared
+
+# Install Tailscale
+brew install tailscale
 
 # Install Docker Desktop for Mac
 brew install --cask docker
@@ -514,14 +516,15 @@ Update `TOOLS.md` for the Mac Mini environment:
 - Python: /opt/harqis/.venv/bin/python
 - MCP server: /opt/harqis/mcp/server.py
 
-## Connected Nodes (WireGuard VPN)
-- 10.0.0.1  — Mac Mini (this machine)
-- 10.0.0.2  — VPS Node 1 (Hetzner, code/write queues)
-- 10.0.0.10 — N100 Windows (hud/tcg queues, home LAN)
+## Connected Nodes (Tailscale VPN)
+- mac-mini  — Mac Mini (this machine)
+- vps1      — VPS Node 1 (Hetzner, code/write queues)
+- n100      — N100 Windows (hud/tcg queues, home LAN)
+# Run `tailscale status` to see current IPs
 
 ## SSH Aliases
-- vps1: ssh harqis@10.0.0.2
-- n100: ssh harqis@10.0.0.10 (if SSH enabled on Windows)
+- vps1: ssh harqis@vps1  (Tailscale SSH or standard SSH over Tailscale IP)
+- n100: ssh harqis@n100  (if SSH enabled on Windows)
 
 ## Services
 - RabbitMQ mgmt: http://localhost:15672
@@ -540,7 +543,7 @@ Update `HEARTBEAT.md` for server-side monitoring:
 - If any queue depth > 10 for 10+ minutes, alert via Telegram
 - Check Telegram for unread messages
 - Check Google Calendar for events in next 2 hours
-- If VPS nodes are unresponsive (ping 10.0.0.2), alert and log to Elasticsearch
+- If VPS nodes are unresponsive (tailscale ping vps1), alert and log to Elasticsearch
 - Check OANDA open trades if market is open (Mon–Fri 00:00–22:00 UTC)
 - Write daily summary to .openclaw/workspace/memory/YYYY-MM-DD.md
 ```
@@ -592,45 +595,51 @@ Or in `claude_desktop_config.json` on the remote machine:
 
 ## 7. Connecting Worker Nodes
 
-### 7.1 WireGuard VPN Setup (Mac Mini as Server)
+### 7.1 Tailscale VPN Setup
+
+Tailscale creates a mesh VPN with no server to manage and no ports to open. All nodes authenticate via the Tailscale control plane and communicate peer-to-peer (or via DERP relay when NAT traversal isn't possible).
+
+**Mac Mini (and every other node):**
 
 ```bash
-# Generate server key pair
-wg genkey | tee /etc/wireguard/server_private.key | wg pubkey > /etc/wireguard/server_public.key
+# macOS — start the daemon and authenticate
+sudo tailscaled &
+tailscale up
 
-# Create /etc/wireguard/wg0.conf
-cat > /etc/wireguard/wg0.conf << EOF
-[Interface]
-Address = 10.0.0.1/24
-ListenPort = 51820
-PrivateKey = $(cat /etc/wireguard/server_private.key)
-
-# VPS Node 1
-[Peer]
-PublicKey = <vps1_public_key>
-AllowedIPs = 10.0.0.2/32
-
-# N100 Windows Node
-[Peer]
-PublicKey = <n100_public_key>
-AllowedIPs = 10.0.0.10/32
-EOF
-
-# Start VPN
-wg-quick up wg0
-
-# Auto-start on boot
-sudo launchctl load /Library/LaunchDaemons/com.wireguard.wg0.plist
+# Opens a browser link — log in with your Tailscale account
+# The Mac Mini gets a stable Tailscale IP (e.g. 100.x.x.x) and MagicDNS name
 ```
+
+**VPS worker node (Linux):**
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+tailscale up
+```
+
+**N100 Windows node:**
+
+Download and install the Tailscale Windows client from tailscale.com, then click "Log in" — no config files or key pairs needed.
+
+**Verify all nodes are connected:**
+
+```bash
+tailscale status
+# Shows every peer, its IP, and whether it's online
+```
+
+**Auto-start on macOS boot** — Tailscale installs a LaunchDaemon automatically via `brew install tailscale`. No extra plist needed.
+
+> **Optional — Headscale (self-hosted control plane):** If you want zero dependency on Tailscale's servers, run [Headscale](https://github.com/juanfont/headscale) on one of the Hetzner VPS nodes and point all nodes at it with `tailscale up --login-server https://your-headscale-host`.
 
 ### 7.2 VPS Node Bootstrap
 
-See [VPS-CLUSTER-AGENT-DESIGN.md](VPS-CLUSTER-AGENT-DESIGN.md#32-vps-worker-nodes) for the full bootstrap script. The broker URL changes from `localhost` to the Mac Mini VPN address:
+See [VPS-CLUSTER-AGENT-DESIGN.md](VPS-CLUSTER-AGENT-DESIGN.md#32-vps-worker-nodes) for the full bootstrap script. After joining Tailscale, use the Mac Mini's MagicDNS name or Tailscale IP as the broker address:
 
 ```bash
-# On VPS worker — after joining VPN
-export CELERY_BROKER_URL=amqp://guest:guest@10.0.0.1:5672/
-export CELERY_RESULT_BACKEND=redis://10.0.0.1:6379/0
+# On VPS worker — after tailscale up
+export CELERY_BROKER_URL=amqp://guest:guest@mac-mini:5672/
+export CELERY_RESULT_BACKEND=redis://mac-mini:6379/0
 ```
 
 Or update `apps_config.yaml` for workers:
@@ -638,24 +647,19 @@ Or update `apps_config.yaml` for workers:
 ```yaml
 CELERY_TASKS:
   application_name: 'workflow-harqis'
-  broker: 'amqp://guest:guest@10.0.0.1:5672/'  # Mac Mini VPN IP
+  broker: 'amqp://guest:guest@mac-mini:5672/'  # Mac Mini MagicDNS name
 ```
+
+Replace `mac-mini` with the actual MagicDNS hostname shown in `tailscale status` (e.g. `mac-mini.tail1234.ts.net`) or the stable Tailscale IP (`100.x.x.x`).
 
 ### 7.3 N100 Windows Node (HUD Worker)
 
-The N100 continues to connect to the RabbitMQ broker on the Mac Mini. If N100 is on the same LAN as the Mac Mini:
+After installing the Tailscale Windows client and logging in, the N100 reaches the Mac Mini over the Tailscale mesh — no LAN IP guessing or router port-forwarding needed:
 
 ```bat
 REM set_env_workflows.bat on N100
-REM Point to Mac Mini IP on LAN (or VPN if preferred)
-set CELERY_BROKER=amqp://guest:guest@192.168.1.x:5672/
-```
-
-If N100 joins the WireGuard VPN (recommended for consistency):
-
-```bat
-REM After WireGuard Windows client is configured
-set CELERY_BROKER=amqp://guest:guest@10.0.0.1:5672/
+REM Use Mac Mini MagicDNS name (shown in Tailscale admin console)
+set CELERY_BROKER=amqp://guest:guest@mac-mini:5672/
 ```
 
 ---
@@ -903,9 +907,9 @@ docker compose up -d
 ### Add a New VPS Worker Node
 
 1. Provision VPS (Hetzner CX22 recommended)
-2. Generate WireGuard key pair on new node: `wg genkey | tee private.key | wg pubkey`
-3. Add node as peer in `/etc/wireguard/wg0.conf` on Mac Mini, assign IP `10.0.0.N`
-4. Restart WireGuard: `wg-quick down wg0 && wg-quick up wg0`
+2. Install Tailscale: `curl -fsSL https://tailscale.com/install.sh | sh && tailscale up`
+3. Approve the node in the Tailscale admin console (tailscale.com/admin)
+4. Verify connectivity from Mac Mini: `tailscale ping <new-node-hostname>`
 5. Bootstrap node: `curl -sSL https://raw.githubusercontent.com/brianbartilet/harqis-work/main/scripts/linux/bootstrap_worker.sh | bash`
 6. Node auto-starts Celery worker on `code,write,default` queues
 
@@ -939,8 +943,8 @@ celery -A core.apps.sprout.app.celery:SPROUT inspect active
 # Queue depths
 celery -A core.apps.sprout.app.celery:SPROUT inspect reserved
 
-# WireGuard peers
-sudo wg show
+# Tailscale peers
+tailscale status
 ```
 
 ---
@@ -959,7 +963,7 @@ sudo wg show
 | **Code deployment** | `git pull` + worker restart |
 | **Agent identity** | `.openclaw/workspace/` — persistent, persists across reboots |
 | **Uptime protection** | UPS + `launchd` auto-restart |
-| **Worker nodes** | VPS (Hetzner) + N100 Windows over WireGuard VPN |
+| **Worker nodes** | VPS (Hetzner) + N100 Windows over Tailscale VPN |
 
 Further reading:
 - **[VPS-CLUSTER-AGENT-DESIGN.md](VPS-CLUSTER-AGENT-DESIGN.md)** — full cluster architecture, scaling, cost, and security model
