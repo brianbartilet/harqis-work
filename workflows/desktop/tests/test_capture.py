@@ -3,9 +3,8 @@ from workflows.desktop.tasks.capture import (run_capture_logging, generate_daily
                                              generate_weekly_desktop_summary)
 
 
-@pytest.mark.skip(reason="Manual test only")
 def test__run_capture_logging():
-    run_capture_logging("DESKTOP")
+    run_capture_logging(cfg_id__desktop_utils="DESKTOP")
 
 def test__generate_daily_desktop_summary():
     generate_daily_desktop_summary(hud_item_name="DESKTOP LOGS", logs_output_path="logs/daily")
