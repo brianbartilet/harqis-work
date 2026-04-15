@@ -21,7 +21,7 @@ from workflows.hud.tasks.sections import sections__utilities_desktop, sections__
 from workflows.hud.dto.constants import Profile, AppExe, HUD_NAME_MOUSE_BINDINGS, APP_TO_PROFILE
 
 
-def get_profile_for_process_name(proc_name: str) -> Profile:
+def _get_profile_for_process_name(proc_name: str) -> Profile:
     """
     Given a process exe name like 'docker.exe', return the mapped Profile.
     Falls back to Profile.DEFAULT if not mapped.
@@ -35,7 +35,7 @@ def get_profile_for_process_name(proc_name: str) -> Profile:
     return Profile.BASE
 
 
-def get_active_window_app(print_all=False):
+def _get_active_window_app(print_all=False):
     # get active window handle
     hwnd = win32gui.GetForegroundWindow()
 
@@ -219,8 +219,8 @@ def show_mouse_bindings(ini=ConfigHelperRainmeter(), **kwargs):
     ini['Variables']['ItemLines'] = '{0}'.format(15)
     # endregion
 
-    active_window_app = get_active_window_app()
-    profile = get_profile_for_process_name(active_window_app).value
+    active_window_app = _get_active_window_app()
+    profile = _get_profile_for_process_name(active_window_app).value
 
     ini['Variables']['TextFile'] = '#CURRENTPATH#dump-{0}.txt'.format(profile)
 
