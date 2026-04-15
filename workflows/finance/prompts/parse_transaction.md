@@ -14,6 +14,7 @@ Extract every transaction line from the provided bank statement PDF text. For ea
 ## Rules
 
 - Skip opening/closing balance lines, column headers, subtotals, and any non-transaction rows.
+- **Date group headers are NOT transactions.** Some statements (e.g. DBS) show a date label with a daily total beside it — for example `Fri, 10 Apr 2026 | SGD -112.61`. This is a subtotal row, not a transaction. Skip it entirely and use that date for the individual transaction lines that follow.
 - If a date is missing for a line but it's clearly part of the same day as the prior line, use the same date.
 - Amounts must always be positive numbers regardless of debit/credit — use the `type` field to indicate direction.
 - If you cannot reliably determine debit vs credit from context, set `type` to `"unknown"`.

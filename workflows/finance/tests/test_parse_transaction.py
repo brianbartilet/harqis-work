@@ -25,7 +25,7 @@ def test__add_ynab_transactions_from_pdf_debit():
 
 def test__add_ynab_transactions_from_pdf_credit():
     add_ynab_transactions_from_pdf(
-        input_pdf="transaction_history_14042026_114515.pdf",
+        input_pdf="transaction_history_15042026_114814.pdf",
         ynab_budget_name="Daily Bankroll - SGD",
         ynab_account_name="DBS Vantage",
         split=True,

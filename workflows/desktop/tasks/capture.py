@@ -178,7 +178,7 @@ def generate_weekly_desktop_summary(logs_daily_path='logs/daily', logs_output_pa
     daily_files = []
     for i in range(7):
         day = today - timedelta(days=i)
-        filename = f"DESKTOP-LOGS-{day.strftime('%d-%m-%Y')}.md"
+        filename = f"DESKTOP-LOGS-{day.strftime('%m-%d-%Y')}.md"
         filepath = daily_dir / filename
         if filepath.exists():
             daily_files.append((day, filepath))

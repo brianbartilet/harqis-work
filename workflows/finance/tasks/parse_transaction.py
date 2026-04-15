@@ -8,6 +8,7 @@ transactions into YNAB, with automatic category matching and debit/credit detect
 import json
 import base64
 from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -57,7 +58,7 @@ def _parse_pdf_with_claude(pdf_path: Path, cfg_id__anthropic: str = "ANTHROPIC")
     response = client._with_backoff(
         client.base_client.messages.create,
         model=client.model,
-        max_tokens=8192,
+        max_tokens=16000,
         system=system_prompt,
         messages=[
             {
@@ -227,11 +228,12 @@ def _build_dto(tx: dict, account_id: str, category_lookup: dict[str, str]) -> Op
 
 
 def _build_split_dto(parsed_transactions: list[dict], account_id: str,
-                     category_lookup: dict[str, str], pdf_name: str) -> DtoSaveTransaction:
+                     category_lookup: dict[str, str], pdf_name: str,
+                     use_today: bool = False) -> DtoSaveTransaction:
     """Build a single split DtoSaveTransaction from all parsed transactions.
 
     Each parsed transaction becomes a subtransaction. The parent transaction:
-      - date  = earliest date found across all transactions
+      - date  = today's date if use_today=True, otherwise the earliest date in the PDF
       - amount = sum of all subtransaction amounts (YNAB requires these to match)
       - memo  = PDF filename as the import reference
 
@@ -240,6 +242,8 @@ def _build_split_dto(parsed_transactions: list[dict], account_id: str,
         account_id:          Resolved YNAB account ID.
         category_lookup:     Live {category_name_lower: category_id} from YNAB.
         pdf_name:            PDF filename used as the parent memo.
+        use_today:           If True, set the parent date to today instead of the
+                             earliest transaction date from the PDF.
     """
     subtransactions = []
     skipped = 0
@@ -273,11 +277,13 @@ def _build_split_dto(parsed_transactions: list[dict], account_id: str,
     # Parent amount must equal the sum of all subtransaction amounts
     total_amount = sum(s.amount for s in subtransactions)
 
-    # Use the earliest date found across all transactions
-    dates = [tx.get("date") for tx in parsed_transactions if tx.get("date")]
-    parent_date = min(dates) if dates else None
-    if not parent_date:
-        raise ValueError("No valid dates found in parsed transactions.")
+    if use_today:
+        parent_date = datetime.now().strftime("%Y-%m-%d")
+    else:
+        dates = [tx.get("date") for tx in parsed_transactions if tx.get("date")]
+        parent_date = min(dates) if dates else None
+        if not parent_date:
+            raise ValueError("No valid dates found in parsed transactions.")
 
     _log.info("Built split transaction: %d subtransaction(s), %d skipped, total=%d milliunits",
               len(subtransactions), skipped, total_amount)
@@ -365,7 +371,7 @@ def add_ynab_transactions_from_pdf(input_pdf: str, ynab_budget_name: str,
     if split:
         # One parent transaction with all lines as subtransactions
         try:
-            split_dto = _build_split_dto(parsed_transactions, account_id, category_lookup, input_pdf)
+            split_dto = _build_split_dto(parsed_transactions, account_id, category_lookup, input_pdf, use_today=True)
         except ValueError as exc:
             _log.error("Split transaction build failed: %s", exc)
             raise
