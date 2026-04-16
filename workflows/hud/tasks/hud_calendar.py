@@ -115,7 +115,7 @@ def show_calendar_information(ini=ConfigHelperRainmeter(), **kwargs):
     for event_upcoming in events_today_upcoming:
         line_ctr += 1
         end_time = datetime.fromisoformat(event_upcoming['start']['dateTime']).strftime('%I:%M %p')
-        dump += '> {0:<35} {1:>10}\n'.format(event_upcoming['calendarSummary'], end_time)
+        dump += '> {0:<35} {1:>10}\n'.format(event_upcoming['summary'], end_time)
 
     dump += make_separator(separator_count) + '\n'
 
