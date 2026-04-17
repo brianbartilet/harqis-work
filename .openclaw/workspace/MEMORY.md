@@ -100,6 +100,17 @@ When requesting data from harqis-work apps:
 
 ---
 
+## Browser Configuration
+
+- **Default profile:** Chrome with personal user data
+- **Launch command:** `Start-Process "C:\Program Files\Google\Chrome\Application\chrome.exe" -ArgumentList "--remote-debugging-port=9222"`
+- **Remote debugging port:** 9222
+- **Always launch Chrome with:** `--remote-debugging-port=9222` flag
+- OpenClaw connects to your Chrome session via CDP (all logins, bookmarks, history available)
+- When browser tools are used, they operate in your actual Chrome profile
+
+---
+
 ## OpenClaw Setup
 
 - **Config and workspace paths:** see `memory/private.md`
