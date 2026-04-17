@@ -108,14 +108,40 @@ When requesting data from harqis-work apps:
 - **Always launch Chrome with:** `--remote-debugging-port=9222` flag
 - OpenClaw connects to your Chrome session via CDP (all logins, bookmarks, history available)
 - When browser tools are used, they operate in your actual Chrome profile
+- **Current implementation:** Configured in `harqis-openclaw-sync/openclaw.json`
 
 ---
 
 ## OpenClaw Setup
 
-- **Config and workspace paths:** see `memory/private.md`
-- Active channels: **Telegram** (@harqis_bot), WhatsApp disabled
-- Model: `anthropic/claude-sonnet-4-6`
+**IMPORTANT:** OpenClaw config and workspace have moved to a dedicated sync repo.
+
+**Old location (deprecated):** `C:\Users\brian\GIT\harqis-work\.openclaw`  
+**New location (active):** `C:\Users\brian\GIT\harqis-openclaw-sync`
+
+### Syncing Across Machines
+
+- OpenClaw config is now **centrally synced** via git
+- **Auto-pull:** Every 30 minutes from `harqis-openclaw-sync` repo
+- **Auto-push:** After agent changes via `sync-push.ps1`
+- **Reference:** See `harqis-openclaw-sync/README.md` for details
+- **Setup guide:** See `docs/openclaw-sync-setup.md` in harqis-work
+
+### To Start OpenClaw
+
+```powershell
+cd C:\Users\brian\GIT\harqis-openclaw-sync
+./scripts/openclaw-with-sync.ps1 gateway
+```
+
+### Active Channels
+
+- **Telegram** (@harqis_bot)
+- **WhatsApp** disabled
+
+### Model & Performance
+
+- Model: `anthropic/claude-haiku-4-5` (cost-optimized)
 - Heartbeat: every 90 min, lightContext enabled
 - Compaction: safeguard mode with memory flush
 - Thinking: off (cost optimization)
@@ -146,10 +172,18 @@ os.environ['APP_CONFIG_FILE'] = 'apps_config.yaml'  # Set config file
 
 ## Git Workflow
 
-- **Auto-commit + push** any changes inside `.openclaw/workspace/` after every edit
-- Scope is strictly `C:\Users\brian\GIT\harqis-work\.openclaw\workspace\` — nothing else
-- All other repo changes are Brian's to commit manually
-- Commit message format: `(openclaw-commit) <short description>`
+**harqis-work repository:**
+- Manual commits for code/app changes
+- Track: `apps/`, `workflows/`, `docs/`, etc.
+- Ignore: `.openclaw/` directory (moved to sync repo)
+
+**harqis-openclaw-sync repository:**
+- **Auto-commit + push** via `scripts/sync-push.ps1` after agent changes
+- **Auto-pull** every 30 minutes via Windows scheduled task
+- Scope: `openclaw.json`, `workspace/`, `state/`
+- Commit message format: `sync: <timestamp> - <description>`
+
+See `docs/openclaw-sync-setup.md` for details.
 
 ---
 
