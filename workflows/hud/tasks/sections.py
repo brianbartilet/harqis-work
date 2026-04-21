@@ -140,3 +140,6 @@ sections__ynab = {
         "Preset": "InjectedByTest",
     },
 }
+
+sections__utilities_ahk = {}
+

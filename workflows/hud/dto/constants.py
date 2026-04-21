@@ -2,6 +2,7 @@ from enum import Enum
 
 
 HUD_NAME_MOUSE_BINDINGS = 'MOUSE BINDINGS'
+HUD_NAME_AHK_BINDINGS = 'NUMPAD MACROS'
 
 class AppExe(str, Enum):
     DOCKER = "docker.exe"

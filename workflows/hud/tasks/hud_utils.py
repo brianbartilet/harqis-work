@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import os
+import re
 import win32gui
 import win32process
 import psutil
@@ -17,8 +18,8 @@ from apps.google_apps.references.constants import ScheduleCategory
 from apps.desktop.config import APP_NAME as APP_NAME_DESKTOP
 from apps.apps_config import CONFIG_MANAGER
 
-from workflows.hud.tasks.sections import sections__utilities_desktop, sections__utilities_i_cue, sections__utilities_ai
-from workflows.hud.dto.constants import Profile, AppExe, HUD_NAME_MOUSE_BINDINGS, APP_TO_PROFILE
+from workflows.hud.tasks.sections import sections__utilities_desktop, sections__utilities_i_cue, sections__utilities_ai, sections__utilities_ahk
+from workflows.hud.dto.constants import Profile, AppExe, HUD_NAME_MOUSE_BINDINGS, HUD_NAME_AHK_BINDINGS, APP_TO_PROFILE
 
 
 def _get_profile_for_process_name(proc_name: str) -> Profile:
@@ -227,6 +228,19 @@ def show_mouse_bindings(ini=ConfigHelperRainmeter(), **kwargs):
     return "SUCCESS"
 
 
+_AHK_BINDING_PATTERN = re.compile(r'^;\s+(.+?)\s+->\s+(.+)$')
+
+
+def _parse_ahk_bindings(ahk_path: str) -> list[tuple[str, str]]:
+    bindings = []
+    with open(ahk_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            m = _AHK_BINDING_PATTERN.match(line.strip())
+            if m:
+                bindings.append((m.group(1).strip(), m.group(2).strip()))
+    return bindings
+
+
 @SPROUT.task()
 @log_result()
 def build_summary_mouse_bindings(**kwargs):
@@ -343,3 +357,51 @@ def show_ai_helper(ini=ConfigHelperRainmeter(), **kwargs):
     # endregion
 
     return ""
+
+
+@SPROUT.task()
+@log_result()
+@init_meter(RAINMETER_CONFIG,
+            hud_item_name=HUD_NAME_AHK_BINDINGS,
+            new_sections_dict=sections__utilities_ahk,
+            play_sound=False)
+def show_ahk_bindings(ini=ConfigHelperRainmeter(), **kwargs):
+    ahk_path = kwargs.get('ahk_path', r'G:\My Drive\Bin.Deploy\Bin.Scripts\AHK\keypadmacro.ahk')
+
+    bindings = _parse_ahk_bindings(ahk_path)
+
+    hud = str(HUD_NAME_AHK_BINDINGS).replace(" ", "").upper()
+    skin_dir = os.path.join(RAINMETER_CONFIG['write_skin_to_path'], RAINMETER_CONFIG['skin_name'], hud)
+    os.makedirs(skin_dir, exist_ok=True)
+    dump_file = os.path.join(skin_dir, 'dump-ahk.txt')
+
+    lines = ['{:<12} {}'.format(key, action) for key, action in bindings]
+    with open(dump_file, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines))
+
+    ini['meterLink']['Text'] = "NUMPAD MACROS"
+    ini['meterLink']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(ahk_path)
+    ini['meterLink']['tooltiptext'] = ahk_path
+
+    width_multiplier = 1.75
+    ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
+    ini['MeterDisplay']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
+    ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
+    ini['MeterDisplay']['X'] = '14'
+    ini['MeterDisplay']['MeasureName'] = 'MeasureScrollableText'
+    ini['MeterBackground']['Shape'] = (
+        'Rectangle 0,0,({0}*190),(36+(#ItemLines#*22)),2 | Fill Color #fillColor# '
+        '| StrokeWidth (1*#Scale#) | Stroke Color [#darkColor] '
+        '| Scale #Scale#,#Scale#,0,0').format(width_multiplier)
+    ini['MeterBackgroundTop']['Shape'] = (
+        'Rectangle 3,3,({0}*186),25,2 | Fill Color #headerColor# | StrokeWidth 0 '
+        '| Stroke Color [#darkColor] | Scale #Scale#,#Scale#,0,0').format(width_multiplier)
+    ini['Rainmeter']['SkinWidth'] = '({0}*198*#Scale#)'.format(width_multiplier)
+    ini['Rainmeter']['SkinHeight'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
+    ini['meterTitle']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
+    ini['meterTitle']['X'] = '({0}*198*#Scale#)/2'.format(width_multiplier)
+    ini['Variables']['ItemLines'] = '{0}'.format(len(bindings) or 15)
+
+    ini['Variables']['TextFile'] = '#CURRENTPATH#dump-ahk.txt'
+
+    return "SUCCESS"
