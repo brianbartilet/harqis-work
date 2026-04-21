@@ -70,7 +70,7 @@ Then set `FLOWER_URL=http://localhost:5555` in `frontend/.env`.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `APP_USERNAME` | `admin` | Dashboard login username |
-| `APP_PASSWORD` | `changeme` | Dashboard login password |
+| APP_PASSWORD | `changeme` | Dashboard login password |
 | `SECRET_KEY` | — | Secret for signing session cookies (change this!) |
 | `CELERY_BROKER` | `amqp://guest:guest@localhost:5672/` | RabbitMQ broker URL |
 | `FLOWER_URL` | `http://localhost:5555` | Flower monitoring URL |
