@@ -17,6 +17,7 @@
 8. [Monitoring and Observability](#8-monitoring-and-observability)
 9. [Recommended Production docker-compose](#9-recommended-production-docker-compose)
 10. [Maintenance Runbook](#10-maintenance-runbook)
+11. [Tailscale VPN Access & Access Control](#11-tailscale-vpn-access--access-control)
 
 ---
 
@@ -970,3 +971,144 @@ tailscale status
 Further reading:
 - **[VPS-CLUSTER-AGENT-DESIGN.md](VPS-CLUSTER-AGENT-DESIGN.md)** — full cluster architecture, scaling, cost, and security model
 - **[OPEN_CLAW_CONTROLLER.md](../info/OPEN_CLAW_CONTROLLER.md)** — OpenClaw agent setup, MCP tools, multi-agent topology
+
+---
+
+## 11. Tailscale VPN Access & Access Control
+
+This section covers making all services reachable from other Tailscale nodes, fixing the n8n secure-cookie error, and restricting which nodes can access which services.
+
+### 11.1 The Problem: `127.0.0.1` Port Bindings
+
+By default several services in `docker-compose.yml` were bound to the loopback address (`127.0.0.1`). Tailscale MagicDNS routes traffic to the machine's Tailscale IP (`100.x.x.x`), which is a different network interface — loopback bindings are never reachable from other tailnet nodes even when the hostname resolves correctly.
+
+**Port binding audit:**
+
+| Container | Original bind | Fixed bind | Tailscale-reachable |
+|-----------|--------------|-----------|---------------------|
+| n8n | `0.0.0.0:5678` | unchanged | ✅ |
+| owntracks-recorder | `0.0.0.0:8083` | unchanged | ✅ |
+| mosquitto | `0.0.0.0:1883` | unchanged | ✅ |
+| rabbitmq AMQP | `0.0.0.0:5672` | unchanged | ✅ |
+| rabbitmq mgmt UI | `127.0.0.1:15672` | `15672` | ✅ fixed |
+| redis | `127.0.0.1:6379` | `6379` | ✅ fixed |
+| elasticsearch | `127.0.0.1:9200` | `9200` | ✅ fixed |
+| kibana | `127.0.0.1:5601` | `5601` | ✅ fixed |
+
+The fix in `docker-compose.yml` is simply removing the `127.0.0.1:` prefix so Docker binds to all interfaces including the Tailscale one. Tailscale ACLs (Section 11.3) then enforce who can actually connect.
+
+### 11.2 Fixing the n8n Secure Cookie Error
+
+When accessing n8n over a plain HTTP Tailscale URL (`http://harqis-ones-mac-mini:5678`), n8n refuses to set its session cookie because `N8N_SECURE_COOKIE` defaults to `true`, which requires HTTPS.
+
+**Short-term fix** (already applied in `docker-compose.yml`):
+
+```yaml
+n8n:
+  environment:
+    N8N_SECURE_COOKIE: "false"
+```
+
+This is safe because all Tailscale traffic is already encrypted at the WireGuard layer — the HTTP transport inside the VPN is equivalent to HTTPS from a confidentiality standpoint.
+
+**Long-term fix — Tailscale HTTPS (recommended):**
+
+Tailscale can issue a valid TLS cert for your MagicDNS hostname and proxy traffic through it, removing the need for the `N8N_SECURE_COOKIE` workaround entirely.
+
+```bash
+# On the Mac Mini — get a TLS cert issued for your tailnet hostname
+sudo tailscale cert harqis-ones-mac-mini.your-tailnet.ts.net
+
+# Start a Tailscale HTTPS reverse proxy in front of n8n
+tailscale serve --https=443 --bg http://localhost:5678
+```
+
+n8n is then available at `https://harqis-ones-mac-mini.your-tailnet.ts.net` with a browser-trusted cert. Once this is in place, re-enable the secure cookie:
+
+```yaml
+n8n:
+  environment:
+    N8N_SECURE_COOKIE: "true"
+    N8N_HOST: harqis-ones-mac-mini.your-tailnet.ts.net
+    N8N_PROTOCOL: https
+    WEBHOOK_URL: https://harqis.yourdomain.com/   # Cloudflare tunnel URL for inbound webhooks
+```
+
+### 11.3 Tailscale ACL Policy (Per-Node Access Control)
+
+The full policy lives at `scripts/tailscale/acl-policy.hujson`. Apply it at https://login.tailscale.com/admin/acls.
+
+**Node tags and what each can reach on the server:**
+
+| Tag | Nodes | Ports allowed on `tag:server` | Rationale |
+|-----|-------|-------------------------------|-----------|
+| `tag:server` | Mac Mini | — (it is the server) | |
+| `tag:worker` | VPS Celery nodes | 5672, 6379, 9200 | Broker + result backend + ES logging |
+| `tag:hud-node` | N100 Windows | 5672, 6379 | Celery HUD queue only; no admin UIs |
+| `tag:personal` | Laptop, phone | all (`*`) | Full admin access |
+
+**Tag each machine once** (run after `tailscale up`):
+
+```bash
+# Mac Mini
+tailscale up --advertise-tags=tag:server
+
+# VPS workers (run on each VPS)
+tailscale up --advertise-tags=tag:worker
+
+# N100 Windows — use the Tailscale admin console to assign tag:hud-node
+# or run in an elevated PowerShell:
+# tailscale up --advertise-tags=tag:hud-node
+
+# Personal devices — assign tag:personal in the admin console
+```
+
+> **Note:** Tag ownership must be set in the ACL policy (`tagOwners`) before a node can self-assign a tag. The policy in `acl-policy.hujson` restricts tag assignment to `autogroup:admin` (Tailscale account owners).
+
+### 11.4 macOS Firewall
+
+The macOS application firewall is a separate layer from Tailscale ACLs. If it is enabled, it can silently drop incoming Tailscale connections even when `docker-compose.yml` binds to `0.0.0.0`.
+
+Check the state:
+
+```bash
+sudo /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate
+```
+
+If the firewall is on, add Docker to the allow list:
+
+```bash
+sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /Applications/Docker.app/Contents/MacOS/Docker
+sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /Applications/Docker.app/Contents/MacOS/Docker
+```
+
+Or use System Settings → Network → Firewall → Options to add Docker explicitly.
+
+### 11.5 Redeploy After Changes
+
+After updating `docker-compose.yml`:
+
+```bash
+cd /opt/harqis
+docker compose down && docker compose up -d
+
+# Verify all containers started cleanly
+docker compose ps
+
+# Confirm a previously-blocked port is now reachable from another tailnet node
+# (run from your laptop or VPS)
+curl http://harqis-ones-mac-mini:5601   # Kibana
+curl http://harqis-ones-mac-mini:9200   # Elasticsearch
+```
+
+### 11.6 Security Notes for VPN-Exposed Services
+
+Opening services to the Tailscale network rather than `127.0.0.1` increases the attack surface within the tailnet. Recommended hardening steps:
+
+| Service | Default credentials | Recommended action |
+|---------|--------------------|--------------------|
+| RabbitMQ | `guest` / `guest` | Set `RABBITMQ_USER` and `RABBITMQ_PASS` in `.env/apps.env` and update all worker `CELERY_BROKER_URL` values |
+| Redis | no password | Add `command: redis-server --requirepass ${REDIS_PASSWORD}` to compose and update `CELERY_RESULT_BACKEND` URLs |
+| Elasticsearch | xpack security disabled | Acceptable for VPN-only; enable xpack if compliance requires it |
+| Kibana | unauthenticated | Use Tailscale ACLs to limit to `tag:personal` only (already in policy) |
+| n8n | basic auth via `N8N_BASIC_AUTH_*` | Already configured in `.env/apps.env` |

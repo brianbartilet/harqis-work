@@ -8,7 +8,7 @@ services:
     restart: unless-stopped
     ports:
       - "5672:5672"
-      - "127.0.0.1:15672:15672"
+      - "15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
@@ -25,7 +25,7 @@ services:
     container_name: redis
     restart: unless-stopped
     ports:
-      - "127.0.0.1:6379:6379"
+      - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -79,6 +79,12 @@ services:
     environment:
       TZ: Asia/Singapore
       N8N_TIMEZONE: Asia/Singapore
+      # Tailscale: traffic is already encrypted at VPN layer, cookie security is redundant
+      N8N_SECURE_COOKIE: "false"
+      # Set these in .env/apps.env to match your Tailscale MagicDNS hostname
+      # N8N_HOST: harqis-ones-mac-mini
+      # N8N_PROTOCOL: http
+      # WEBHOOK_URL: https://harqis.yourdomain.com/   # Cloudflare tunnel URL for webhooks
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -92,7 +98,7 @@ services:
     container_name: elasticsearch
     restart: unless-stopped
     ports:
-      - "127.0.0.1:9200:9200"
+      - "9200:9200"
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
@@ -112,7 +118,7 @@ services:
     container_name: kibana
     restart: unless-stopped
     ports:
-      - "127.0.0.1:5601:5601"
+      - "5601:5601"
     environment:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
     depends_on:
