@@ -3,14 +3,23 @@ from __future__ import annotations
 import functools
 import hashlib
 import os
+import sys
 import tempfile
-import winsound
 import time
 import ctypes
 
-from .bangs import _refresh_app, _activate_config, _deactivate_config, _refresh_skin
+if sys.platform == "win32":
+    import winsound
+    from .bangs import _refresh_app, _activate_config, _deactivate_config, _refresh_skin
+    user32 = ctypes.windll.user32
+else:
+    winsound = None  # type: ignore[assignment]
+    user32 = None
+    def _refresh_app(): pass
+    def _activate_config(*a, **kw): pass
+    def _deactivate_config(*a, **kw): pass
+    def _refresh_skin(*a, **kw): pass
 
-user32 = ctypes.windll.user32
 WM_COPYDATA = 0x004A
 
 from configparser import ConfigParser

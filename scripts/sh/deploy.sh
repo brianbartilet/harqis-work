@@ -1,38 +1,37 @@
 #!/usr/bin/env bash
-# deploy.sh — Start the full OpenClaw server stack.
+# deploy.sh — Start Docker services + Celery Beat scheduler + default worker + frontend.
 #
 # Usage:
-#   ./scripts/macos/deploy.sh [OPTIONS]
+#   ./scripts/sh/deploy.sh [--down] [--docker-only]
 #
 # Options:
-#   --workers        Also start Celery workers (Beat + default + adhoc + tcg)
-#   --with-core      Include the harqis-core compose file (adds Prism mock server)
-#   --down           Stop all services instead of starting them
-#   --restart        Stop then start all services
-#   -h, --help       Show this help message
+#   --down         Stop all services instead of starting them
+#   --docker-only  Only manage Docker (skip LaunchAgent service plists)
+#   -h|--help      Show this help message
 
 set -euo pipefail
 
 # ── Resolve paths ─────────────────────────────────────────────────────────────
 
 REPO_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-VENV="$REPO_ROOT/.venv"
-PYTHON="$VENV/bin/python"
+
+PLISTS=(
+  "$HOME/Library/LaunchAgents/work.harqis.scheduler.plist"
+  "$HOME/Library/LaunchAgents/work.harqis.worker.plist"
+  "$HOME/Library/LaunchAgents/work.harqis.frontend.plist"
+)
 
 # ── Parse flags ───────────────────────────────────────────────────────────────
 
-START_WORKERS=false
-WITH_CORE=false
 MODE=up
+DOCKER_ONLY=false
 
 for arg in "$@"; do
   case $arg in
-    --workers)   START_WORKERS=true ;;
-    --with-core) WITH_CORE=true ;;
-    --down)      MODE=down ;;
-    --restart)   MODE=restart ;;
+    --down)         MODE=down ;;
+    --docker-only)  DOCKER_ONLY=true ;;
     -h|--help)
-      sed -n '2,15p' "$0" | sed 's/^# \?//'
+      sed -n '2,11p' "$0" | sed 's/^# \?//'
       exit 0
       ;;
     *)
@@ -42,9 +41,8 @@ for arg in "$@"; do
   esac
 done
 
-# ── Load secrets ──────────────────────────────────────────────────────────────
+# ── Load secrets (for docker compose env vars) ────────────────────────────────
 
-# Prefer macOS Keychain; fall back to .env/apps.env
 _kcget() { security find-generic-password -a harqis -s "$1" -w 2>/dev/null || true; }
 
 KEYCHAIN_KEY=$(_kcget ANTHROPIC_API_KEY)
@@ -56,30 +54,16 @@ if [ -n "$KEYCHAIN_KEY" ]; then
   export CLOUDFLARE_TUNNEL_TOKEN=$(_kcget CLOUDFLARE_TUNNEL_TOKEN)
 elif [ -f "$REPO_ROOT/.env/apps.env" ]; then
   echo "Loading secrets from .env/apps.env..."
-  set -a
-  # shellcheck disable=SC1090
-  source "$REPO_ROOT/.env/apps.env"
-  set +a
+  while IFS= read -r line || [ -n "$line" ]; do
+    [[ -z "$line" || "$line" == \#* || "$line" != *=* ]] && continue
+    key="${line%%=*}"
+    value="${line#*=}"
+    value="${value%\"}" ; value="${value#\"}"
+    value="${value%\'}" ; value="${value#\'}"
+    export "$key=$value"
+  done < "$REPO_ROOT/.env/apps.env"
 else
   echo "WARNING: No secrets source found (Keychain or .env/apps.env)."
-fi
-
-# ── Build compose file list ───────────────────────────────────────────────────
-
-COMPOSE_FILES=(-f "$REPO_ROOT/docker-compose.yml")
-
-if [ "$WITH_CORE" = true ]; then
-  # Locate harqis-core's compose file inside the venv site-packages
-  CORE_COMPOSE=$("$PYTHON" -c \
-    "import core, os; print(os.path.join(os.path.dirname(core.__file__), 'demo', 'docker-compose.yaml'))" \
-    2>/dev/null || true)
-
-  if [ -f "$CORE_COMPOSE" ]; then
-    echo "Including harqis-core compose: $CORE_COMPOSE"
-    COMPOSE_FILES+=(-f "$CORE_COMPOSE")
-  else
-    echo "WARNING: --with-core specified but harqis-core compose not found (is the venv active?)"
-  fi
 fi
 
 # ── Docker Compose ────────────────────────────────────────────────────────────
@@ -88,43 +72,39 @@ cd "$REPO_ROOT"
 
 case $MODE in
   up)
-    echo "Starting services..."
-    docker compose "${COMPOSE_FILES[@]}" up -d
+    echo "Starting Docker services..."
+    docker compose -f "$REPO_ROOT/docker-compose.yml" up -d
+
+    echo ""
+    docker compose -f "$REPO_ROOT/docker-compose.yml" ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+
+    # ── Python services (via LaunchAgent plists) ──────────────────────────────
+
+    if [ "$DOCKER_ONLY" = false ]; then
+      echo ""
+      for plist in "${PLISTS[@]}"; do
+        label=$(basename "$plist" .plist)
+        launchctl unload "$plist" 2>/dev/null || true
+        launchctl load   "$plist"
+        echo "  Started: $label"
+      done
+    fi
+
+    echo ""
+    echo "Deploy complete. Scheduler + default worker + frontend running."
+    echo "Logs: ~/Library/Logs/harqis-*.log"
+    echo "Stop with: $0 --down"
     ;;
   down)
-    echo "Stopping services..."
-    docker compose "${COMPOSE_FILES[@]}" down
-    ;;
-  restart)
-    echo "Restarting services..."
-    docker compose "${COMPOSE_FILES[@]}" down
-    docker compose "${COMPOSE_FILES[@]}" up -d
+    if [ "$DOCKER_ONLY" = false ]; then
+      echo "Stopping Python services..."
+      for plist in "${PLISTS[@]}"; do
+        launchctl unload "$plist" 2>/dev/null || true
+      done
+    fi
+
+    echo "Stopping Docker services..."
+    docker compose -f "$REPO_ROOT/docker-compose.yml" down
+    echo "All services stopped."
     ;;
 esac
-
-# ── Celery workers (optional) ─────────────────────────────────────────────────
-
-if [ "$START_WORKERS" = true ] && [ "$MODE" != "down" ]; then
-  echo "Activating venv..."
-  # shellcheck disable=SC1090
-  source "$VENV/bin/activate"
-  source "$REPO_ROOT/scripts/linux/set_env_workflows.sh"
-
-  echo "Starting Celery Beat..."
-  python "$REPO_ROOT/run_workflows.py" beat &
-
-  echo "Starting Celery workers..."
-  WORKFLOW_QUEUE=default python "$REPO_ROOT/run_workflows.py" worker &
-  WORKFLOW_QUEUE=adhoc   python "$REPO_ROOT/run_workflows.py" worker &
-  WORKFLOW_QUEUE=tcg     python "$REPO_ROOT/run_workflows.py" worker &
-
-  echo "Workers started (Beat + default + adhoc + tcg). Use 'pkill -f run_workflows.py' to stop."
-fi
-
-# ── Summary ───────────────────────────────────────────────────────────────────
-
-if [ "$MODE" != "down" ]; then
-  echo ""
-  echo "Services running:"
-  docker compose "${COMPOSE_FILES[@]}" ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
-fi
