@@ -36,6 +36,8 @@ The **OpenClaw Server** is the Mac Mini acting as the always-on, on-premise hub 
                     │  │   USER.md  HEARTBEAT.md     │ │
                     │  └─────────────────────────────┘ │
                     │                                  │
+                    │  HARQIS-WORK                     │
+                    │  ------------------------------  │
                     │  RabbitMQ  Redis  n8n  Frontend  │
                     │  Flower  Elasticsearch  Kibana   │
                     │  MCP server  Celery Beat         │
