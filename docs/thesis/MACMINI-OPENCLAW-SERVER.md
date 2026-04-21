@@ -26,20 +26,20 @@ The **OpenClaw Server** is the Mac Mini acting as the always-on, on-premise hub 
 
 ```
                     ┌──────────────────────────────────┐
-                    │        OpenClaw Server            │
-                    │        (Mac Mini M4)              │
-                    │                                   │
-                    │  ┌─────────────────────────────┐  │
-                    │  │   OpenClaw Agent Identity   │  │
-                    │  │   .openclaw/workspace/       │  │
-                    │  │   SOUL.md  AGENTS.md         │  │
-                    │  │   USER.md  HEARTBEAT.md      │  │
-                    │  └─────────────────────────────┘  │
-                    │                                   │
-                    │  RabbitMQ  Redis  n8n  Frontend   │
-                    │  Flower  Elasticsearch  Kibana     │
-                    │  MCP server  Celery Beat           │
-                    │  Cloudflare Tunnel (webhook in)   │
+                    │        OpenClaw Server           │
+                    │        (Mac Mini M4)             │
+                    │                                  │
+                    │  ┌─────────────────────────────┐ │
+                    │  │   OpenClaw Agent Identity   │ │
+                    │  │   .openclaw/workspace/      │ │
+                    │  │   SOUL.md  AGENTS.md        │ │
+                    │  │   USER.md  HEARTBEAT.md     │ │
+                    │  └─────────────────────────────┘ │
+                    │                                  │
+                    │  RabbitMQ  Redis  n8n  Frontend  │
+                    │  Flower  Elasticsearch  Kibana   │
+                    │  MCP server  Celery Beat         │
+                    │  Cloudflare Tunnel (webhook in)  |
                     └──────────────────────────────────┘
                               │  Tailscale VPN
                  ┌────────────┴────────────┐
