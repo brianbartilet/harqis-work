@@ -1,6 +1,7 @@
-# Mac Mini as OpenClaw Server — Deployment & Migration Guide
+# OpenClaw Server — Deployment & Migration Guide
 
-**Related:** [VPS-CLUSTER-AGENT-DESIGN.md](VPS-CLUSTER-AGENT-DESIGN.md) · [OPEN_CLAW_CONTROLLER.md](../info/OPEN_CLAW_CONTROLLER.md)  
+**Hardware target:** Mac Mini M4, 16 GB RAM, 256 GB SSD.
+**Related:** [VPS-CLUSTER-AGENT-DESIGN.md](../thesis/VPS-CLUSTER-AGENT-DESIGN.md) · [OPEN_CLAW_CONTROLLER.md](OPEN_CLAW_CONTROLLER.md)  
 **Date:** 2026-04-14
 
 ---
@@ -23,7 +24,8 @@
 
 ## 1. Overview — The OpenClaw Server Concept
 
-The **OpenClaw Server** is the Mac Mini acting as the always-on, on-premise hub of the harqis-work platform. It is not just a machine that runs services — it is the persistent identity of the OpenClaw agent system: secrets vault, task orchestrator, MCP endpoint, and long-term memory store.
+The **OpenClaw Server** is the Mac Mini acting as the always-on, on-premise hub of the harqis-work platform. 
+It is not just a machine that runs services — it is the persistent identity of the OpenClaw agent system: secrets vault, task orchestrator, MCP endpoint, and long-term memory store.
 
 ```
                     ┌──────────────────────────────────┐
@@ -51,18 +53,16 @@ The **OpenClaw Server** is the Mac Mini acting as the always-on, on-premise hub 
          (code, write, default)    (hud, tcg, windows)
 ```
 
-The Mac Mini is the only machine that:
+The host is the only machine that:
 - Holds API keys and the Fernet master key
 - Runs the Celery Beat scheduler (task dispatch)
 - Hosts the RabbitMQ / Redis broker (local, never exposed to the internet)
 - Provides the webhook entry point via Cloudflare Tunnel
 - Maintains the OpenClaw agent workspace and long-term memory
 
-**Hardware target:** Mac Mini M4, 16 GB RAM, 256 GB SSD.
-
 ---
 
-## 2. Service Inventory
+## 2. Services Inventory
 
 All services the Mac Mini runs, with ports and resource estimates:
 
@@ -95,7 +95,10 @@ Tailscale requires **no inbound ports** — it connects outbound through NAT. Al
 
 ---
 
-## 3. Mac Mini Deployment Guide (macOS)
+## 3. Deployment Guide
+### 3.0 Target OS
+ - macOS
+ - linux
 
 ### 3.1 Prerequisites
 
@@ -153,9 +156,9 @@ TELEGRAM_DEFAULT_CHAT_ID=...
 # HARQIS_FERNET_KEY=<see section 6.2>
 ```
 
-### 3.3 macOS Keychain for Secrets
+### 3.3 Keychain for Secrets
 
-Store sensitive values in the macOS Keychain rather than in `.env` files:
+Store sensitive values in the Keychain rather than in `.env` files:
 
 ```bash
 # Store a secret
@@ -304,6 +307,7 @@ launchctl load ~/Library/LaunchAgents/com.harqis.server.plist
 ### 4.1 Root `Dockerfile` — Current State and Issues
 
 **Current:**
+
 ```dockerfile
 FROM python:3.12-slim
 WORKDIR /app
@@ -312,7 +316,7 @@ RUN apt-get update && apt-get install -y git curl build-essential python3-dev
 RUN python -m venv /app/venv
 COPY requirements.txt .
 RUN pip install -r requirements.txt
-COPY . .
+COPY ../thesis .
 ENV PYTHONPATH=/app
 ENV ENV_ROOT_DIRECTORY=/app
 ENV ENV=TEST
@@ -494,7 +498,8 @@ Or automate via an n8n workflow: GitHub push webhook → SSH into Mac Mini → `
 
 ### 6.1 Agent Identity Setup
 
-The OpenClaw agent workspace lives at `.openclaw/workspace/`. On the Mac Mini, this persists between sessions and defines the server's agent identity.
+- The OpenClaw agent workspace lives at `.openclaw/workspace/` or can be pointed to a sync repository to manage context across devices.  See here for more details [OPENCLAW-SYNC.md](../info/OPENCLAW-SYNC.md). 
+- On the host, this persists between sessions and defines the server's agent identity.
 
 ```
 /opt/harqis/.openclaw/workspace/
@@ -511,7 +516,7 @@ The OpenClaw agent workspace lives at `.openclaw/workspace/`. On the Mac Mini, t
 Update `TOOLS.md` for the Mac Mini environment:
 
 ```markdown
-# TOOLS.md — OpenClaw Server (Mac Mini)
+# TOOLS.md — OpenClaw Server
 
 ## Environment
 - OS: macOS (Apple Silicon M4)
