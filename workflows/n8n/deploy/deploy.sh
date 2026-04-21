@@ -4,9 +4,9 @@ set -euo pipefail
 echo "[INFO] n8n deploy starting..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
+COMPOSE_FILE="$SCRIPT_DIR/../../../docker-compose.yml"
 OLD_DATA_DIR="$(cd "$SCRIPT_DIR/../backups/n8n" 2>/dev/null && pwd || true)"
-VOLUME_NAME="deploy_n8n_data"
+VOLUME_NAME="harqis-work_n8n_data"
 
 # ---------- sanity checks ----------
 if [[ ! -f "$COMPOSE_FILE" ]]; then
@@ -54,6 +54,6 @@ fi
 
 # ---------- start n8n ----------
 echo "[INFO] Starting n8n via docker compose..."
-$DC -f "$COMPOSE_FILE" up -d
+$DC -f "$COMPOSE_FILE" up -d n8n
 
 echo "[OK] n8n deploy complete. Container should be running now."

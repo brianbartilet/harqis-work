@@ -4,9 +4,9 @@ setlocal ENABLEDELAYEDEXPANSION
 echo [INFO] n8n deploy starting...
 
 set "SCRIPT_DIR=%~dp0"
-set "COMPOSE_FILE=%SCRIPT_DIR%docker-compose.yml"
+set "COMPOSE_FILE=%SCRIPT_DIR%..\..\..\docker-compose.yml"
 set "OLD_DATA_DIR=%SCRIPT_DIR%..\backups\n8n"
-set "VOLUME_NAME=deploy_n8n_data"
+set "VOLUME_NAME=harqis-work_n8n_data"
 
 if not exist "%COMPOSE_FILE%" (
     echo [ERROR] docker-compose.yml not found at: %COMPOSE_FILE%
@@ -58,7 +58,7 @@ if exist "%OLD_DATA_DIR%" (
 
 REM start n8n
 echo [INFO] Starting n8n via docker compose...
-%DC% -f "%COMPOSE_FILE%" up -d
+%DC% -f "%COMPOSE_FILE%" up -d n8n
 
 echo [OK] n8n deploy complete.
 endlocal
