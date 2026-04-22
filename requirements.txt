@@ -1,4 +1,5 @@
 git+https://github.com/brianbartilet/harqis-core.git#egg=harqis-core
 pytest-dotenv>=0.5.2
+mcp
 # moomoo-api: install separately to avoid protobuf conflict
 # pip install moomoo-api --no-deps
