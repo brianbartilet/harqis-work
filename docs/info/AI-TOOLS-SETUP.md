@@ -1,0 +1,207 @@
+# AI Tools — Setup & Sync Guide
+
+How Brian's two AI tools (**Claude Code** and **OpenClaw**) are wired into this workspace, where each one writes, and the one-shot prompts to orient a fresh session on any machine.
+
+---
+
+## Why this matters — purpose of syncing
+
+Brian's setup spans **macOS** (Mac Mini M4 — the OpenClaw server), **Windows** (N100 workers + primary laptop), and **Linux VPS** nodes. Two git repos keep identity, rules, and tooling consistent across all of them:
+
+| Repo | What it holds | Remote |
+|---|---|---|
+| [`harqis-work`](https://github.com/brianbartilet/harqis-work) | Platform code, app integrations, workflows, Claude Code customisation (`.claude/`) | Brian manages manually |
+| [`harqis-openclaw-sync`](https://github.com/brianbartilet/harqis-openclaw-sync) | OpenClaw agent identity, long-term memory, cross-machine workspace | Auto-commits (OpenClaw) |
+
+**Without sync**, every machine starts blank: no personality, no remembered rules, no heartbeat context, no custom prompts. Pulling the right repo at session start is what makes "HARQIS-CLAW on the VPS" behave identically to "HARQIS-CLAW on the Mac Mini".
+
+**Key rule for both tools:** keep writes in the *right* repo so they don't overlap or drift.
+
+| Tool | Writes go to | Commit owner |
+|---|---|---|
+| **Claude Code** | `harqis-work/.claude/` | **Brian — manual** |
+| **OpenClaw agent** | `harqis-openclaw-sync/.openclaw/workspace/` | **Agent — auto-commit+push** |
+
+---
+
+## Paths — resolve per-OS, never hardcode
+
+| Repo | macOS | Windows | Linux / VPS |
+|---|---|---|---|
+| `harqis-work` | `/Users/harqis-one/GIT/harqis-work` | `C:\Users\brian\GIT\harqis-work` | `~/GIT/harqis-work` |
+| `harqis-openclaw-sync` | `/Users/harqis-one/GIT/harqis-openclaw-sync` | `C:\Users\brian\GIT\harqis-openclaw-sync` | `~/GIT/harqis-openclaw-sync` |
+
+From inside either repo, `git rev-parse --show-toplevel` returns the root on any OS.
+
+---
+
+## Tool 1 — Claude Code
+
+**Home dir in this repo:** `.claude/`
+**Current contents:**
+- `.claude/commands/` — project slash-commands (`/agent-prompt`, `/generate-registry`, `/new-app`, `/new-workflow`, `/run-tests`)
+- `.claude/settings.local.json` — per-machine permissions (safe list of Bash/Read/etc.)
+- `.claude/settings.json` — shared settings (currently empty; add hooks here when needed)
+
+**What belongs here:**
+- New slash-commands (`.md` files under `commands/`)
+- Hooks (SessionStart, PreToolUse, etc. in `settings.json`)
+- Permissions and project-scoped config
+- Notes/docs about how the harness is wired for this repo
+
+**What does NOT belong here:**
+- OpenClaw identity files (those live in the sync repo)
+- Secrets (those live in `.env/apps.env`, never in `.claude/`)
+- Harness auto-memory (`~/.claude/projects/.../memory/`) — per-machine, not git-tracked, and location-fixed by Claude Code
+
+### Orientation prompt for a fresh Claude Code session
+
+Paste this at the start of a new session on any machine to point it at the right places:
+
+```
+You are working inside the harqis-work repo. Use project config at
+./.claude/ (settings.json, settings.local.json, commands/) for all
+Claude Code customisation. Write new slash-commands, hooks, and
+project-scoped rules into ./.claude/ — never into the sync repo.
+
+Do NOT auto-commit anything inside harqis-work; I (Brian) commit this
+repo manually. After any edit under ./.claude/, surface `git status`
+and wait for me to commit.
+
+For OpenClaw agent identity and long-term memory, read from the sibling
+repo ./../harqis-openclaw-sync/.openclaw/workspace/ (files: SOUL.md,
+USER.md, AGENTS.md, MEMORY.md, IDENTITY.md, TOOLS.md, HEARTBEAT.md,
+plus memory/YYYY-MM-DD.md daily notes). That repo is auto-committed
+by the agent — don't stage files there from this session.
+
+Before any harqis-work dependent work (MCP tools, OANDA/YNAB/Gmail/
+TCG/EchoMTG services, Celery workflows, frontend):
+  1. docker compose -f ./docker-compose.yml ps  # expect rabbitmq, redis,
+     n8n, mosquitto, elasticsearch, kibana, owntracks-recorder up
+  2. On macOS also: launchctl list | grep work.harqis  # expect scheduler,
+     worker, frontend with PIDs
+  3. If anything is down, run ./scripts/sh/deploy.sh (macOS/Linux) or the
+     per-service .bat files under ./scripts/ (Windows).
+
+Search the current system — detect OS via `uname -s` or `$OSTYPE` on
+POSIX, `ver` or `$env:OS` on Windows — and pick the matching flow.
+Never hardcode macOS paths.
+```
+
+### First-time setup on a new machine
+
+```bash
+# 1. Clone both repos side by side under your GIT folder
+cd ~/GIT  # or C:\Users\brian\GIT on Windows
+git clone git@github.com:brianbartilet/harqis-work.git
+git clone git@github.com:brianbartilet/harqis-openclaw-sync.git
+
+# 2. Install harqis-work Python deps
+cd harqis-work && python -m venv .venv
+# macOS/Linux:  .venv/bin/pip install -r requirements.txt
+# Windows:      .venv\Scripts\pip install -r requirements.txt
+
+# 3. Populate .env/apps.env with the secrets (never committed)
+
+# 4. Open Claude Code in this directory — it auto-picks up .claude/
+```
+
+---
+
+## Tool 2 — OpenClaw
+
+**Home dir across machines:** `harqis-openclaw-sync/.openclaw/workspace/`
+
+**What belongs here:**
+- `IDENTITY.md`, `SOUL.md`, `USER.md`, `AGENTS.md` — identity and rules
+- `MEMORY.md` — long-term narrative memory
+- `TOOLS.md`, `HEARTBEAT.md` — environment + periodic check tasks
+- `memory/YYYY-MM-DD.md` — daily notes
+- `memory/private.md` — sensitive info (gitignored)
+
+**What does NOT belong here:**
+- Claude Code config (that lives in `harqis-work/.claude/`)
+- Application code (that lives in `harqis-work/`)
+- Secrets in plaintext (use `memory/private.md` which is gitignored, or the machine Keychain)
+
+### Orientation prompt for OpenClaw agent
+
+```
+You are HARQIS-CLAW, Brian's automation agent. Your canonical workspace
+is the sync repo:
+  macOS:   /Users/harqis-one/GIT/harqis-openclaw-sync/.openclaw/workspace/
+  Windows: C:\Users\brian\GIT\harqis-openclaw-sync\.openclaw\workspace\
+  Linux:   ~/GIT/harqis-openclaw-sync/.openclaw/workspace/
+
+Read SOUL.md, USER.md, AGENTS.md, and MEMORY.md at session start.
+Also read today's memory/YYYY-MM-DD.md if present.
+
+ALWAYS write identity, memory, and workspace updates into the sync repo
+— never into harqis-work/.openclaw/ (that's a legacy/local copy).
+
+After any edit inside .openclaw/workspace/, auto-commit+push:
+  git -C <SYNC_REPO> add .openclaw/workspace/
+  git -C <SYNC_REPO> commit -m "(openclaw-commit) <short description>"
+  git -C <SYNC_REPO> push origin main
+
+Do it silently unless it fails. Surface the failure and let Brian decide
+if push breaks (conflict, no network, auth).
+
+Do NOT stage or commit anything outside .openclaw/workspace/. The
+harqis-work repo is Brian's to commit manually.
+```
+
+### Auto-pull cadence
+
+| OS | How pulls happen |
+|---|---|
+| Windows | Task Scheduler runs `scripts/install-scheduled-task.ps1` → pulls every 30 min |
+| macOS | Manual `git -C ~/GIT/harqis-openclaw-sync pull --ff-only` (add a LaunchAgent if you want it automatic) |
+| Linux / VPS | Manual `git -C ~/GIT/harqis-openclaw-sync pull --ff-only` (or a user-level systemd timer / cron) |
+
+Always pull before trusting memory state — another machine may have pushed updates.
+
+---
+
+## Why keep them separate?
+
+| Concern | Claude Code | OpenClaw |
+|---|---|---|
+| Runtime identity | The harness tool (editor-side) | The agent persona (runs 24/7) |
+| Commit cadence | When Brian says so | Automatic after every workspace edit |
+| Cross-machine sync | Via harqis-work pushes (Brian's cadence) | Via harqis-openclaw-sync pushes (agent-driven, ~continuous) |
+| Secrets exposure | Permissions file (`.claude/settings.local.json`) may reveal paths | No secrets ever; `memory/private.md` is gitignored |
+| Failure mode if mis-routed | Cluttered git status in harqis-work | Identity drift between machines |
+
+Keeping them separate means:
+- Brian retains full control over what lands in his main code repo
+- The OpenClaw agent can freely write memory without risking spurious commits in the code repo
+- Searching `.claude/` vs `.openclaw/workspace/` answers "whose config is this?" unambiguously
+- Disaster recovery is per-scope: losing harqis-work doesn't lose OpenClaw memory, and vice versa
+
+---
+
+## Quick reference — "where does this go?"
+
+| If you're writing… | Put it in |
+|---|---|
+| A new Claude Code slash-command | `harqis-work/.claude/commands/*.md` |
+| A Claude Code hook (SessionStart, PreToolUse, etc.) | `harqis-work/.claude/settings.json` |
+| A permission allow-list entry | `harqis-work/.claude/settings.local.json` |
+| A note about how Claude Code is wired for this project | `harqis-work/.claude/` (new file, plain markdown) |
+| OpenClaw agent rules (workspace conventions, heartbeat, red lines) | `harqis-openclaw-sync/.openclaw/workspace/AGENTS.md` |
+| Long-term agent memory (narrative) | `harqis-openclaw-sync/.openclaw/workspace/MEMORY.md` |
+| Today's session notes / learnings | `harqis-openclaw-sync/.openclaw/workspace/memory/YYYY-MM-DD.md` |
+| Sensitive account info | `harqis-openclaw-sync/.openclaw/workspace/memory/private.md` (gitignored) |
+| A new app integration | `harqis-work/apps/<name>/` |
+| A new Celery task | `harqis-work/workflows/<name>/` |
+
+---
+
+## See also
+
+- `docs/info/HARQIS-WORK-OPENCLAW-SERVER.md` — full service inventory, Mac Mini deployment, ports, migration guide
+- `docs/info/OPENCLAW-SYNC.md` — sync-repo architecture and setup across machines
+- `docs/info/OPEN_CLAW_CONTROLLER.md` — controller app setup
+- `docs/info/OS-COMPATIBILITY.md` — cross-platform notes
+- `mcp/README.md` — MCP server tool inventory (OANDA, YNAB, Gmail, TCG, etc.)
