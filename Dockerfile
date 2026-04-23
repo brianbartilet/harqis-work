@@ -24,9 +24,13 @@ ENV PATH=/app/venv/bin:$PATH
 # Copy only requirements first for better Docker layer caching
 COPY requirements.txt .
 
-# Upgrade pip and install Python deps
+# Upgrade pip and install Python deps.
+# mcp requires anyio>=4.5 but harqis-core pins anyio==4.3.0.
+# Install base deps first, upgrade anyio, then install mcp separately.
 RUN python -m pip install --upgrade pip && \
-    pip install -r requirements.txt
+    pip install -r requirements.txt && \
+    pip install --upgrade anyio && \
+    pip install "mcp>=1.0.0"
 
 # If harqis-core pulls Playwright and you need browser automation at runtime,
 # install browser dependencies + Chromium

@@ -200,6 +200,166 @@ Flag any violations and suggest fixes.
 
 ---
 
+## Skills & OpenClaw Integration
+
+The host running `harqis-work` is also the **OpenClaw Server** — the machine where the
+OpenClaw agent workspace and Claude Code share the same filesystem. This co-location means a
+skill can read OpenClaw identity and memory files as live dynamic context, giving every Claude
+Code session on this machine the same persistent identity that OpenClaw agents have.
+
+### Co-location layout
+
+```
+$HOME/GIT/
+├── harqis-work/
+│   ├── .claude/
+│   │   ├── settings.local.json   ← Claude Code permissions for this machine
+│   │   └── commands/             ← project slash-commands
+│   └── mcp/server.py             ← MCP server (55 tools) — runs locally
+│
+└── harqis-openclaw-sync/
+    └── .openclaw/workspace/
+        ├── SOUL.md               ← agent personality
+        ├── USER.md               ← who the agent assists
+        ├── AGENTS.md             ← session rules and behaviour
+        ├── MEMORY.md             ← long-term narrative memory index
+        ├── TOOLS.md              ← environment: paths, SSH hosts, services
+        ├── HEARTBEAT.md          ← periodic monitoring tasks
+        └── memory/
+            └── YYYY-MM-DD.md    ← daily notes
+```
+
+The MCP server (`mcp/server.py`) also runs on this machine and is the tool endpoint for both
+Claude Code sessions and remote worker agents. Skills that call MCP tools do so via the local
+process — no network hop required.
+
+### Injecting OpenClaw context into a skill
+
+Use the `` !`command` `` dynamic context syntax to read OpenClaw files at invoke time. The shell
+command runs before Claude sees the skill body, so the content is part of the prompt rather than
+something the agent has to go and fetch.
+
+```yaml
+---
+name: openclaw-context
+description: Load OpenClaw identity and memory into the current session
+user-invocable: false
+allowed-tools: Read Bash(git -C * pull --ff-only)
+---
+
+## OpenClaw Identity
+
+### SOUL
+!`cat $HOME/GIT/harqis-openclaw-sync/.openclaw/workspace/SOUL.md`
+
+### USER
+!`cat $HOME/GIT/harqis-openclaw-sync/.openclaw/workspace/USER.md`
+
+### MEMORY
+!`cat $HOME/GIT/harqis-openclaw-sync/.openclaw/workspace/MEMORY.md`
+
+### Today's Notes
+!`cat $HOME/GIT/harqis-openclaw-sync/.openclaw/workspace/memory/$(date +%Y-%m-%d).md 2>/dev/null || echo "(no notes yet today)"`
+
+---
+
+You now have the OpenClaw agent's identity and memory in context. Apply USER.md to tailor
+responses. Respect the rules in SOUL.md and AGENTS.md for the rest of this session.
+```
+
+Setting `user-invocable: false` keeps this skill hidden from the `/` menu. Claude auto-invokes
+it when the session description matches — or you can invoke it explicitly with `/openclaw-context`
+if you have overridden `user-invocable`.
+
+### Pulling the sync repo before loading context
+
+To ensure memory is current (another machine may have pushed updates), pull before reading:
+
+```yaml
+---
+name: sync-openclaw
+description: Pull the latest OpenClaw memory from the sync repo and load identity into context
+disable-model-invocation: true
+allowed-tools: Bash(git -C * pull --ff-only) Read
+---
+
+Pulling latest OpenClaw workspace:
+!`git -C $HOME/GIT/harqis-openclaw-sync pull --ff-only 2>&1`
+
+## Identity loaded after pull
+
+### SOUL
+!`cat $HOME/GIT/harqis-openclaw-sync/.openclaw/workspace/SOUL.md`
+
+### USER
+!`cat $HOME/GIT/harqis-openclaw-sync/.openclaw/workspace/USER.md`
+
+### MEMORY
+!`cat $HOME/GIT/harqis-openclaw-sync/.openclaw/workspace/MEMORY.md`
+```
+
+This is set to `disable-model-invocation: true` so it only runs when you explicitly type
+`/sync-openclaw` — pulling the repo on every auto-invocation would be too noisy.
+
+### Writing back to daily memory
+
+A skill can also append session learnings to the OpenClaw daily note and auto-commit:
+
+```yaml
+---
+name: log-memory
+description: Append a note to today's OpenClaw daily memory file and commit it
+disable-model-invocation: true
+allowed-tools: Bash(echo * >> *) Bash(git -C * add *) Bash(git -C * commit *) Bash(git -C * push *)
+arguments: [note]
+---
+
+Appending note to today's OpenClaw memory:
+!`echo "\n## $(date '+%H:%M') — Claude Code session\n$note" >> $HOME/GIT/harqis-openclaw-sync/.openclaw/workspace/memory/$(date +%Y-%m-%d).md`
+
+Committing:
+!`git -C $HOME/GIT/harqis-openclaw-sync add .openclaw/workspace/memory/ && git -C $HOME/GIT/harqis-openclaw-sync commit -m "(openclaw-commit) session note $(date +%Y-%m-%d)" && git -C $HOME/GIT/harqis-openclaw-sync push origin main`
+
+Memory note saved and pushed.
+```
+
+### MCP tools inside skills
+
+Because the MCP server runs locally on this machine, a skill can call any registered MCP tool
+directly without extra configuration. Tools are already scoped and available in any Claude Code
+session that has the `harqis-work` MCP server connected:
+
+```yaml
+---
+name: morning-brief
+description: Pull today's calendar, latest email, and OANDA balance into context
+context: fork
+agent: general-purpose
+---
+
+Fetch and summarise:
+1. Today's Google Calendar events — use the get_google_calendar_events_today MCP tool
+2. The 5 most recent Gmail messages — use get_gmail_recent_emails with max_results=5
+3. Current OANDA account balance — use get_oanda_account_details
+
+Format as a morning brief: calendar first, then email summary, then financial snapshot.
+```
+
+### Summary — what lives where on this machine
+
+| Item | Location | Commit owner |
+|---|---|---|
+| Skills and commands | `harqis-work/.claude/commands/` | Maintainer — manual |
+| Claude Code permissions | `harqis-work/.claude/settings.local.json` | Maintainer — manual |
+| Claude Code auto-memory | `~/.claude/projects/.../memory/` | Claude Code — local only, never committed |
+| OpenClaw identity files | `harqis-openclaw-sync/.openclaw/workspace/` | OpenClaw agent — auto-commit + push |
+| MCP server | `harqis-work/mcp/server.py` | Maintainer — manual |
+
+Skills bridge these two systems: they live in `harqis-work/.claude/` (maintainer-controlled) but
+can read from and write to the OpenClaw sync repo at runtime using dynamic context and tool calls.
+
+---
+
 ## Skills in This Project
 
 | Skill | Where defined | Purpose |
