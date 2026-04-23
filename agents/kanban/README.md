@@ -206,6 +206,182 @@ context:
 
 ---
 
+## Specialized Agents & System Prompt Architecture
+
+### How prompts are layered
+
+Every agent run composes three independent layers:
+
+| Layer | Source | Controls |
+|---|---|---|
+| **System prompt** | YAML profile (`model.system_prompt` or `model.system_prompt_file`) | Who the agent is — persona, constraints, output rules |
+| **Task prompt** | Trello card (description, checklists, custom fields, attachments) | What to do on this specific card |
+| **Tool scope** | Profile `tools.allowed` + `tools.mcp_apps` | What the agent can touch — files, APIs, MCP services |
+
+The card carries the **task**. The profile carries the **persona**. You never repeat the persona on every card — putting the `agent:write:article` label on a card is enough to load the right identity.
+
+---
+
+### Building a specialized agent
+
+To add a new agent type (e.g. article writer, calculator, transcriber):
+
+1. Create a YAML profile in `agents/kanban/profiles/examples/`:
+
+```yaml
+# profiles/examples/agent_write_article.yaml
+extends: base
+id: agent:write:article
+name: "Article Writing Agent"
+model:
+  model_id: claude-sonnet-4-6
+  max_tokens: 8192
+  system_prompt: |
+    You are a professional article writing agent. Given a topic and brief,
+    you research, outline, draft, and refine long-form written content.
+    Write in clear, engaging prose. Always confirm target audience, tone,
+    and desired length if not specified in the card.
+tools:
+  allowed: [read_file, write_file, web_search, post_comment, move_card, check_item]
+  mcp_apps: [google_apps, discord, telegram]
+hardware:
+  queue: write
+```
+
+```yaml
+# profiles/examples/agent_calculate.yaml
+extends: base
+id: agent:calculate
+name: "Calculation Agent"
+model:
+  model_id: claude-sonnet-4-6
+  max_tokens: 4096
+  system_prompt: |
+    You are a numerical analysis and calculation agent. Perform financial
+    calculations, data transformations, statistical analysis, and formula
+    evaluation. Show working step-by-step. Return results in the format
+    specified by the card's output_format custom field.
+tools:
+  allowed: [bash, read_file, write_file, post_comment, move_card, check_item]
+  mcp_apps: [oanda, ynab, google_apps]
+hardware:
+  queue: data
+```
+
+```yaml
+# profiles/examples/agent_transcribe.yaml
+extends: base
+id: agent:transcribe
+name: "Transcription Agent"
+model:
+  model_id: claude-sonnet-4-6
+  max_tokens: 8192
+  system_prompt: |
+    You are an information transcription and structuring agent. Extract,
+    clean, and reformat information from attachments, images, PDFs, or
+    raw text into structured output. Preserve accuracy over brevity.
+    Flag anything ambiguous rather than guessing.
+tools:
+  allowed: [read_file, write_file, post_comment, move_card, check_item]
+  mcp_apps: [google_apps]
+hardware:
+  queue: default
+```
+
+2. On Trello, label a card `agent:write:article` (or `agent:calculate`, `agent:transcribe`). The orchestrator resolves label → profile → system prompt automatically. No other changes needed.
+
+---
+
+### Card-level system prompt additions
+
+For one-off prompt instructions without changing the profile, add a `system_prompt_addon` custom field to the card. The agent appends it to the base system prompt at runtime:
+
+```
+Card custom field: system_prompt_addon = "Write in Spanish. Use formal register."
+```
+
+This is handled in `agents/kanban/agent/base.py` in `_system_prompt()`. The split is:
+
+| Where | What you put there |
+|---|---|
+| Profile `system_prompt` | Permanent persona — who the agent is for all tasks of this type |
+| Card description | The task — topic, source material, parameters |
+| Card custom field `system_prompt_addon` | One-off overrides for this card only |
+| Card checklists | Sub-steps the agent checks off as it works |
+| Card attachments | Source files, reference docs, images |
+
+---
+
+### MCP tool scope per agent
+
+Worker agents access the harqis-work MCP server running on the orchestrator node. Each profile scopes which MCP apps it needs via `tools.mcp_apps` — workers never get access beyond what the profile declares.
+
+Recommended scope by agent type:
+
+| Agent | MCP apps |
+|---|---|
+| `agent:write:article` | `google_apps` (Drive/Gmail for research), `discord`, `telegram` |
+| `agent:calculate` | `oanda` (forex data), `ynab` (budget data), `google_apps` (Sheets) |
+| `agent:transcribe` | `google_apps` (Drive source files) |
+| `agent:code` | `trello`, `jira`, `discord` (notifications) |
+| `agent:finance` | `oanda`, `ynab`, `google_apps` |
+
+Workers call the MCP server over stdio or HTTP/SSE — they do not run their own instance.
+
+---
+
+### OpenClaw integration
+
+OpenClaw provides persistent identity and long-term memory from the `harqis-openclaw-sync` repo. There are two integration points:
+
+**1. Identity injection at task startup (recommended)**
+
+The orchestrator reads the OpenClaw workspace files before creating the agent and prepends them to the system prompt. Add the following to `agents/kanban/orchestrator/local.py`:
+
+```python
+from datetime import date
+from pathlib import Path
+
+def _load_openclaw_context() -> str:
+    sync_root = Path(os.environ.get("OPENCLAW_SYNC_PATH", ""))
+    workspace = sync_root / ".openclaw" / "workspace"
+    if not workspace.exists():
+        return ""
+    sections = []
+    for fname in ["SOUL.md", "USER.md", "MEMORY.md"]:
+        p = workspace / fname
+        if p.exists():
+            sections.append(f"## {fname}\n{p.read_text()}")
+    today = workspace / "memory" / f"{date.today()}.md"
+    if today.exists():
+        sections.append(f"## Today's Notes\n{today.read_text()}")
+    return "\n\n".join(sections)
+```
+
+Set `OPENCLAW_SYNC_PATH` in your env to the `harqis-openclaw-sync` repo root. The injected context prepends USER.md (who the user is), SOUL.md (agent personality), and MEMORY.md + today's notes to every agent's system prompt — no card needs to carry any of that.
+
+**2. Memory write-back (for agents that update memory)**
+
+Give the agent `read_file` / `write_file` scoped to the sync repo path, plus a git push tool scoped to `harqis-openclaw-sync`. The agent can then append to `memory/YYYY-MM-DD.md` and auto-commit exactly as the OpenClaw agent does natively.
+
+**End-to-end flow with OpenClaw:**
+
+```
+Card labelled agent:write:article added to Backlog
+  ↓
+Orchestrator reads SOUL.md + USER.md + MEMORY.md from sync repo
+  ↓
+Injects OpenClaw context + article agent system prompt + tool inventory
+  ↓
+Agent receives: [who the user is] + [article persona] + [this card's task]
+  ↓
+Runs with MCP scope: google_apps, discord, telegram
+  ↓
+Posts result, moves card to Done, optionally writes to daily memory note
+```
+
+---
+
 ## Adding a New Kanban Provider
 
 1. Create `agents/kanban/adapters/myprovider.py` implementing `KanbanProvider`
