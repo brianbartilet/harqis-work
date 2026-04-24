@@ -160,13 +160,31 @@ harqis-work repo is the maintainer's to commit manually.
 
 ### Auto-pull cadence
 
-| OS | How pulls happen |
-|---|---|
-| Windows | Task Scheduler runs `scripts/install-scheduled-task.ps1` → pulls every 30 min |
-| macOS | Manual `git -C ~/GIT/harqis-openclaw-sync pull --ff-only` (add a LaunchAgent if you want it automatic) |
-| Linux / VPS | Manual `git -C ~/GIT/harqis-openclaw-sync pull --ff-only` (or a user-level systemd timer / cron) |
+The auto-pull job pulls **both repos** in one shot — `harqis-openclaw-sync` (rebase) and `harqis-work` (`--ff-only` so a dirty tree or local commits never get clobbered). Scripts live in the sync repo: `scripts/sync-pull.sh` (bash) and `scripts/sync-pull.ps1` (PowerShell).
+
+| OS | Wiring | Cadence |
+|---|---|---|
+| **macOS** | LaunchAgent `work.harqis.autopull` — install with `harqis-openclaw-sync/scripts/install-launchagent.sh` (renders `scripts/launchd/work.harqis.autopull.plist` into `~/Library/LaunchAgents/`, loads it, runs at load + every 30 min). Logs: `~/Library/Logs/harqis-autopull.log`. Uninstall: `install-launchagent.sh --uninstall`. | Every 30 min + at load |
+| **Windows** | Task Scheduler — `harqis-openclaw-sync/scripts/install-scheduled-task.ps1` registers `OpenClaw-Auto-Pull` which runs `scripts/sync-pull.ps1` (now pulls **both** repos). Logs: `<sync-repo>\logs\sync-pull.log`. | Every 30 min |
+| **Linux / VPS** | Run `scripts/sync-pull.sh` from a user-level systemd timer or cron entry (e.g. `*/30 * * * * /home/<user>/GIT/harqis-openclaw-sync/scripts/sync-pull.sh`). | Every 30 min (recommended) |
+
+Override paths or skip a repo via env vars / switches:
+
+```bash
+# macOS / Linux
+SYNC_REPO=/alt/path/sync WORK_REPO=/alt/path/work scripts/sync-pull.sh
+SKIP_WORK=1 scripts/sync-pull.sh   # only pull the sync repo
+
+# Windows
+.\scripts\sync-pull.ps1 -SyncRepoPath D:\sync -WorkRepoPath D:\work
+.\scripts\sync-pull.ps1 -SkipWork
+```
+
+After a sync-repo update the script also runs `openclaw gateway --no-restart` to reload config without dropping connections.
 
 Always pull before trusting memory state — another machine may have pushed updates.
+
+**Why `--ff-only` for harqis-work:** `harqis-work` is the maintainer's repo (manual commits). A fast-forward-only pull silently no-ops if there are local commits or a dirty tree, instead of merging or rebasing over uncommitted work. Failures are logged and surfaced on next manual interaction; nothing is auto-resolved.
 
 ---
 
