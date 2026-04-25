@@ -12,7 +12,7 @@ memory store.
 - [OS-COMPATIBILITY.md](OS-COMPATIBILITY.md) — Cross-platform notes
 - [mcp/README.md](../../mcp/README.md) — Full MCP tool catalog
 - [VPS-CLUSTER-AGENT-DESIGN.md](VPS-CLUSTER-AGENT-DESIGN.md) — Cluster architecture and scaling
-- [TRELLO-AGENT-KANBAN.md](../thesis/TRELLO-AGENT-KANBAN.md) — Kanban-driven multi-agent design
+- [AGENTS-TASKS-KANBAN.md](AGENTS-TASKS-KANBAN.md) — Kanban-driven multi-agent design
 
 ---
 
@@ -621,7 +621,7 @@ IP (`100.x.x.x`) from `tailscale status`.
 | N100 Windows | `hud`, `windows` | Windows-native HUD, desktop automation |
 
 Use `hw:<node>` Trello card labels to pin specific tasks to specific hardware. See
-[TRELLO-AGENT-KANBAN.md](../thesis/TRELLO-AGENT-KANBAN.md) for the full routing design.
+[AGENTS-TASKS-KANBAN.md](AGENTS-TASKS-KANBAN.md) for the full routing design.
 
 ### 8.4 Port binding and firewall
 
@@ -705,7 +705,7 @@ Each agent:
 - Coordinates through shared services above
 - Reports failures to Telegram, logs everything to Elasticsearch
 
-See [TRELLO-AGENT-KANBAN.md](../thesis/TRELLO-AGENT-KANBAN.md) for the full Kanban-driven
+See [AGENTS-TASKS-KANBAN.md](AGENTS-TASKS-KANBAN.md) for the full Kanban-driven
 agent orchestration design, including specialized agent profiles, permission model, and
 hardware routing.
 

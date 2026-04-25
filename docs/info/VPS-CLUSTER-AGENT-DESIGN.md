@@ -1,6 +1,6 @@
 # VPS Cluster Agent Design — Mac Mini Orchestrator + Cloud Worker Nodes
 
-**Related:** [TRELLO-AGENT-KANBAN.md](../thesis/TRELLO-AGENT-KANBAN.md)  
+**Related:** [AGENTS-TASKS-KANBAN.md](AGENTS-TASKS-KANBAN.md)  
 **Date:** 2026-04-10
 
 ---

@@ -44,97 +44,66 @@ HARQIS-Work includes a layer of Claude-powered AI agents that go beyond schedule
 
 ### Kanban Agent System (`agents/kanban/`)
 
-A fully autonomous agent ecosystem that turns Trello or Jira cards into AI task assignments. Cards placed in **Backlog** are picked up, processed by a matching Claude agent, and moved to **Done** — all without manual intervention.
+> Full reference: [`docs/info/AGENTS-TASKS-KANBAN.md`](docs/info/AGENTS-TASKS-KANBAN.md)
 
-> Full design: [`docs/thesis/TRELLO-AGENT-KANBAN.md`](docs/thesis/TRELLO-AGENT-KANBAN.md)
+**Goal:** Use Trello or Jira as the human-AI task interface. Humans create cards; Claude agents pick them up, execute work with scoped tools, and post results back — all visible on the same board. Every agent behavior is declared in a YAML profile; no code change is needed to add a new agent type.
 
 #### How it works
 
 ```
-Trello / Jira Board
-  └── Backlog column
-        └── Card (label: agent:code / agent:write)
-              ↓  Orchestrator polls every 30s
-        Profile matched by label
-              ↓
-        Secrets scoped (only what the profile declared)
-              ↓
-        BaseKanbanAgent runs Claude tool-use loop
-          ├── Native tools: read_file, write_file, bash, glob, grep
-          ├── Kanban tools: post_comment, move_card, check_item
-          └── MCP tools: Jira, Gmail, Calendar, Discord, YNAB, Trello, …
-              ↓
-        Output sanitized (secrets redacted)
-              ↓
-        Result posted as card comment → card moved to Done
-              ↓
-        Audit log written to logs/kanban_audit.jsonl
+Human creates card → [Backlog]  (Trello or Jira)
+          ↓
+LocalOrchestrator polls every 30s
+  ├── matches card label → AgentProfile (YAML)
+  ├── scopes secrets: only vars declared in profile.secrets.required
+  ├── card → Pending → In Progress
+  └── BaseKanbanAgent: Claude tool-use loop
+            ├── read_file · write_file · glob · grep · bash
+            ├── post_comment · move_card · check_item
+            └── MCP bridge: Gmail, Calendar, Jira, Discord, YNAB, OANDA …
+                      ↓
+              OutputSanitizer scrubs secrets from all tool output
+                      ↓
+              Result posted as card comment → card → Done
+                      ↓
+              AuditLogger → logs/kanban_audit.jsonl
 ```
 
 #### Agent Profiles
 
-Profiles are YAML files in `agents/kanban/profiles/` that define each agent's identity, model, tools, permissions, and secrets:
+YAML files in `agents/kanban/profiles/`. Each profile declares model, tools, permissions, and secrets. Profiles support `extends:` inheritance.
 
-| Profile | Tools | MCP Apps |
-|---------|-------|----------|
-| `agent:code` | bash, read/write file, glob, grep | Jira, Trello, Gmail, Calendar, Discord, YNAB, OANDA, Reddit, Echo MTG, Scryfall, TCG MP |
-| `agent:write` | read/write file, glob, grep | Google Apps, Trello, Discord, Telegram |
+| Profile | Extra tools vs base | MCP apps |
+|---|---|---|
+| `base` | read_file, glob, grep, post_comment, move_card, check_item | — |
+| `agent:code` | + write_file, bash | Jira, Trello, Gmail, Calendar, Discord, YNAB, OANDA, Reddit, Echo MTG, Scryfall, TCG MP |
+| `agent:write` | + write_file (no bash) | Google Apps, Trello, Discord, Telegram |
 
-Profiles support `extends:` inheritance — child profiles merge with base defaults.
+New agent type = new YAML file. No orchestrator code changes.
 
 #### Security model
 
-- **Secret scoping**: The orchestrator reads the full `.env` once. Each agent receives only the env-var names it declared under `secrets.required`. Agents never see unrelated credentials.
-- **Output sanitization**: All text returned by tools or Claude is scrubbed for known secret values before being posted to Kanban comments.
-- **Audit log**: Every tool call, permission check, and secret access is written as a JSONL record to `logs/kanban_audit.jsonl`.
-- **Permission enforcer**: Filesystem (glob patterns), network (hostname allowlists), and git (branch protection) are checked before every tool execution.
-- **Worker isolation (future)**: When Celery workers are added, scoped secrets will be Fernet-encrypted in the task payload — workers decrypt at task-start and discard after completion.
+- **Secret scoping** — agents see only the env-vars listed in `secrets.required`; the rest of `.env` is invisible
+- **Output sanitization** — all tool output scrubbed for known secret values before Claude sees it or it is posted to the board
+- **Permission enforcer** — filesystem (glob patterns), network (domain allowlists), and git (branch protection) checked before every tool call
+- **Audit log** — every tool call, permission decision, and secret access written to `logs/kanban_audit.jsonl`
+- **Encrypted payloads** — `SecretStore` supports Fernet encryption for future Celery worker dispatch
 
-#### MCP Bridge
-
-All 14 harqis-work app integrations are exposed to agents as tools via the MCP bridge (`agents/kanban/agent/tools/mcp_bridge.py`). Agents call `search_jira_issues`, `get_gmail_recent_emails`, `get_ynab_transactions`, etc. directly — no separate server process required.
-
-#### Running the orchestrator
+#### Quick start
 
 ```sh
-# Load env and start polling (default: every 30s)
-python -m agents.kanban.orchestrator.local
-
-# Dry run — match cards but don't execute agents
-python -m agents.kanban.orchestrator.local --dry-run
-
-# Custom profiles directory and poll interval
-python -m agents.kanban.orchestrator.local --profiles-dir path/to/profiles --poll-interval 60
+python -m agents.kanban.orchestrator.local           # poll every 30s
+python -m agents.kanban.orchestrator.local --dry-run # match cards, no execution
 ```
 
-Required env vars:
 ```env
-KANBAN_PROVIDER=trello          # or jira
-KANBAN_BOARD_ID=<board-id>
-ANTHROPIC_API_KEY=sk-ant-...
-TRELLO_API_KEY=...
-TRELLO_API_TOKEN=...
+KANBAN_PROVIDER=trello   KANBAN_BOARD_ID=<id>
+ANTHROPIC_API_KEY=...    TRELLO_API_KEY=...    TRELLO_API_TOKEN=...
 ```
 
-#### Board columns
+Board columns: `Backlog → Pending → In Progress → Done / Failed / Blocked`
 
-```
-Backlog → Pending → In Progress → Done
-                               → Failed
-                               → Blocked
-```
-
-#### Tests
-
-```sh
-# Run all kanban agent tests (offline, no API calls)
-pytest agents/kanban/tests/ -m "not integration"
-
-# Run integration tests (requires live Trello/Jira credentials)
-pytest agents/kanban/tests/ -m integration
-```
-
-75 unit tests · 2 integration tests · fully offline mocked suite.
+Tests: `pytest agents/kanban/tests/ -m "not integration"` — 75 unit tests, fully offline.
 
 ---
 
@@ -332,7 +301,7 @@ harqis-work/
 │
 ├── mcp/                            # MCP server (FastMCP)
 │   ├── server.py                   # Exposes all app tools over MCP protocol
-│   └── claude_desktop_config.json  # Claude Desktop integration config
+│   └── claude_desktop_config.json.template  # Render per-machine (actual file is gitignored)
 │
 ├── docs/                           # Documentation and design docs
 │   ├── images/
@@ -384,6 +353,92 @@ agents/kanban/profiles/
     ├── agent_code.yaml         # Software development agent
     └── agent_write.yaml        # Writing and research agent
 ```
+
+---
+
+## Platform Runtime
+
+> Full deployment guide: [`docs/info/HARQIS-CLAW-HOST.md`](docs/info/HARQIS-CLAW-HOST.md)
+
+### Goal
+
+HARQIS-Work is designed to run as an **always-on, self-managing automation hub** anchored to a single host machine (Mac Mini M4 or equivalent server). The goal is that every repetitive task — checking email, tracking trades, updating a desktop HUD, processing a Kanban card, sending a Telegram alert — happens automatically, without manual intervention, and is reachable by AI agents as a tool.
+
+The three driving principles:
+1. **Everything is a tool** — every app integration is callable via MCP, so Claude agents can use any service as naturally as a function call
+2. **Schedules, not crons** — Celery Beat replaces fragile shell crons; tasks are Python functions with typed inputs, retries, and live logs
+3. **Identity travels with the agent** — OpenClaw's workspace (SOUL.md, MEMORY.md, AGENTS.md) is git-synced across machines so the agent behaves identically on any node
+
+### How Everything Is Wired Together
+
+```
+  Messaging channels                    Developer / Operator
+  (Telegram · Discord · WhatsApp)       (Claude Desktop · Claude Code CLI)
+           │                                        │
+           ▼                                        ▼
+   ┌──────────────────────────────────────────────────────────┐
+   │                  OpenClaw Agent Runtime                   │
+   │         SOUL.md · AGENTS.md · MEMORY.md · USER.md        │
+   │                 (harqis-openclaw-sync)                    │
+   └─────────────────────────┬────────────────────────────────┘
+                             │  calls tools via
+                             ▼
+   ┌──────────────────────────────────────────────────────────┐
+   │                   MCP Server  (mcp/)                      │
+   │    55 tools across 16 modules — OANDA, YNAB, Gmail,       │
+   │    Telegram, Discord, Trello, Jira, Scryfall, TCG …       │
+   └──────┬──────────────────────────────────┬────────────────┘
+          │ reads / writes                   │ triggers
+          ▼                                  ▼
+   ┌────────────────┐              ┌──────────────────────────┐
+   │   apps/        │              │  Celery Worker + Beat     │
+   │  REST clients  │              │  workflows/ tasks run on  │
+   │  for every     │              │  schedule (hud, purchases,│
+   │  3rd-party API │              │  desktop, finance …)      │
+   └────────────────┘              └──────────────┬───────────┘
+                                                  │ output to
+                                   ┌──────────────▼───────────┐
+                                   │ Rainmeter HUD · Frontend  │
+                                   │ Elasticsearch · Kibana    │
+                                   │ Telegram alerts · n8n     │
+                                   └───────────────────────────┘
+
+  ── All of the above runs on the HARQIS-CLAW Host ──────────────
+  ── Worker nodes (VPS, N100 Windows) connect via Tailscale VPN ─
+```
+
+### Key Components and Their Roles
+
+| Component | Where | What it does |
+|---|---|---|
+| **OpenClaw agent** | `harqis-openclaw-sync/.openclaw/workspace/` | Persistent AI agent identity, memory, heartbeat tasks, and behavioral rules |
+| **MCP server** | `mcp/server.py` | Exposes all 20+ app integrations as callable tools over the Model Context Protocol |
+| **Celery Beat** | `workflows/config.py` | Runs all scheduled automation — HUD updates, MTG resale pipeline, desktop sync |
+| **RabbitMQ + Redis** | Docker stack | Celery broker and result backend |
+| **Frontend** | `frontend/main.py` | Web dashboard — manually trigger any task, inspect run history |
+| **Kanban agents** | `agents/kanban/` | Autonomous Claude agents that process Trello/Jira cards as task assignments |
+| **Tailscale VPN** | Host + workers | Secure mesh network connecting Mac Mini, VPS workers, and Windows N100 nodes |
+| **n8n** | Docker stack | Low-code webhook glue — bridges external events into Celery tasks |
+| **Elasticsearch + Kibana** | Docker stack | Log shipping and observability for all task outputs |
+
+### Runtime Startup Order
+
+```sh
+# 1. Ensure the Docker stack is up (RabbitMQ, Redis, n8n, Mosquitto, Elasticsearch, Kibana, OwnTracks)
+docker compose -f docker-compose.yml up -d
+
+# 2. On macOS — verify LaunchAgents (scheduler, worker, frontend)
+launchctl list | grep work.harqis
+
+# 3. If anything is down, run the deploy script
+./scripts/sh/deploy.sh      # macOS / Linux
+scripts\deploy.bat          # Windows
+
+# 4. Start the MCP server for Claude Desktop / Claude Code
+python mcp/server.py
+```
+
+See [`docs/info/HARQIS-CLAW-HOST.md`](docs/info/HARQIS-CLAW-HOST.md) for the full deployment guide, Tailscale ACL setup, worker node configuration, monitoring runbook, and multi-agent topology.
 
 ---
 
