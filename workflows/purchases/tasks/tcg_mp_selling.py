@@ -487,9 +487,7 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1 + 
 
         json_note["tcg_mp_selling_price"] = post_price
 
-        # add logic to update, since mapping already fixed id, get all same match count then update quantity and price
-        existing = api_service__search.search_card(card_echo["emid"], tradable_only=1)
-        quantity = len(existing) if len(existing) > 1 else 1
+        # just update prices, app can't support multiple copies of the same card with different prices
         try:
             time.sleep(2)
             # update the flow to remove the previous listing then add a new one to consolidate
@@ -501,8 +499,6 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1 + 
                 base_delay=1.0,
                 max_delay=20.0,
                 price=post_price * commission_rate,
-                quantity=quantity,
-                foil=card_echo["foil"],
                 listing_id=json_note["tcg_mp_listing_id"],
             )
             updated = True
