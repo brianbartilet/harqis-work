@@ -20,6 +20,9 @@ logs/
 /workflows.mapping
 /scripts.mapping
 
+# ── MCP ──────────────────────────────────────────────────────────────────────
+mcp/claude_desktop_config.json
+
 # ── Celery ───────────────────────────────────────────────────────────────────
 celerybeat-schedule.db
 

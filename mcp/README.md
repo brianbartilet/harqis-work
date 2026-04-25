@@ -40,9 +40,9 @@ registers tool modules from each app. Each app exposes a `register_<app>_tools(m
 
 ```
 mcp/
-├── server.py                         # Entry point — creates FastMCP, registers tools, runs server
-├── claude_desktop_config.json        # Config snippet for Claude Desktop
-└── README.md                         # This file
+├── server.py                              # Entry point — creates FastMCP, registers tools, runs server
+├── claude_desktop_config.json.template   # Template — render per-machine (gitignored when rendered)
+└── README.md                              # This file
 
 apps/
 ├── oanda/mcp.py                      # OANDA forex tools
@@ -218,33 +218,45 @@ startup logs confirming which tools were registered.
 
 ## Connecting to Claude Desktop
 
-1. Open **Claude Desktop** → Settings → Developer → **Edit Config**
-2. Merge the following into your `claude_desktop_config.json`
-   (the full snippet is also at `mcp/claude_desktop_config.json`):
+`mcp/claude_desktop_config.json` is **gitignored** — it contains machine-specific absolute paths.
+Use the template to generate it for your machine:
 
-```json
-{
-  "mcpServers": {
-    "harqis-work": {
-      "command": "C:\\Users\\brian\\GIT\\harqis-work\\.venv\\Scripts\\python.exe",
-      "args": ["C:\\Users\\brian\\GIT\\harqis-work\\mcp\\server.py"]
-    }
-  }
-}
+```sh
+# macOS / Linux
+export HARQIS_WORK_ROOT="$HOME/GIT/harqis-work"
+export HARQIS_VENV_PYTHON="$HARQIS_WORK_ROOT/.venv/bin/python"
+envsubst < mcp/claude_desktop_config.json.template > mcp/claude_desktop_config.json
+
+# Windows PowerShell
+$env:HARQIS_WORK_ROOT = "$env:USERPROFILE\GIT\harqis-work"
+$env:HARQIS_VENV_PYTHON = "$env:HARQIS_WORK_ROOT\.venv\Scripts\python.exe"
+(Get-Content mcp\claude_desktop_config.json.template) `
+  -replace '\$\{HARQIS_WORK_ROOT\}', $env:HARQIS_WORK_ROOT `
+  -replace '\$\{HARQIS_VENV_PYTHON\}', $env:HARQIS_VENV_PYTHON |
+  Set-Content mcp\claude_desktop_config.json
 ```
 
-3. **Restart Claude Desktop** — the harqis-work tools will appear in the tools panel.
+1. Generate `mcp/claude_desktop_config.json` using the commands above
+2. Open **Claude Desktop** → Settings → Developer → **Edit Config**
+3. Merge the contents of `mcp/claude_desktop_config.json` into the Claude Desktop config
+4. **Restart Claude Desktop** — the harqis-work tools will appear in the tools panel.
 
 ---
 
 ## Connecting to Claude Code (this CLI)
 
-Add the server to your Claude Code MCP config:
+Add the server to your Claude Code MCP config (adjust paths for your OS):
 
 ```sh
+# macOS / Linux
 claude mcp add harqis-work \
-  "C:\Users\brian\GIT\harqis-work\.venv\Scripts\python.exe" \
-  "C:\Users\brian\GIT\harqis-work\mcp\server.py"
+  "$HOME/GIT/harqis-work/.venv/bin/python" \
+  "$HOME/GIT/harqis-work/mcp/server.py"
+
+# Windows PowerShell
+claude mcp add harqis-work `
+  "$env:USERPROFILE\GIT\harqis-work\.venv\Scripts\python.exe" `
+  "$env:USERPROFILE\GIT\harqis-work\mcp\server.py"
 ```
 
 Or add it manually to `~/.claude/settings.json` under `mcpServers`.

@@ -11,7 +11,7 @@ memory store.
 - [OPENCLAW-SYNC.md](OPENCLAW-SYNC.md) — Sync repo architecture across machines
 - [OS-COMPATIBILITY.md](OS-COMPATIBILITY.md) — Cross-platform notes
 - [mcp/README.md](../../mcp/README.md) — Full MCP tool catalog
-- [VPS-CLUSTER-AGENT-DESIGN.md](../thesis/VPS-CLUSTER-AGENT-DESIGN.md) — Cluster architecture and scaling
+- [VPS-CLUSTER-AGENT-DESIGN.md](VPS-CLUSTER-AGENT-DESIGN.md) — Cluster architecture and scaling
 - [TRELLO-AGENT-KANBAN.md](../thesis/TRELLO-AGENT-KANBAN.md) — Kanban-driven multi-agent design
 
 ---

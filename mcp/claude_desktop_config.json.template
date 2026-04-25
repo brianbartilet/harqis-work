@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "harqis-work": {
+      "command": "${HARQIS_VENV_PYTHON}",
+      "args": [
+        "${HARQIS_WORK_ROOT}/mcp/server.py"
+      ],
+      "env": {}
+    }
+  }
+}
