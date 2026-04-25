@@ -30,7 +30,6 @@
 
 ```
 apps/own_tracks/
-├── docker-compose.yml              # Mosquitto + Recorder containers
 ├── mosquitto/
 │   └── config/
 │       └── mosquitto.conf          # MQTT broker config (anonymous, port 1883)
@@ -39,15 +38,18 @@ apps/own_tracks/
 └── recorder_store/                 # Auto-created: persisted location data (gitignored)
 ```
 
+> The `mosquitto` and `recorder` services are defined in the **repo-root `docker-compose.yml`** (consolidated 2026-04-24). The previous standalone `apps/own_tracks/docker-compose.yml` has been removed because its `container_name`s collided with the root file.
+
 ---
 
 ## Setup
 
 ### 1. Start the Docker stack
 
+From the repo root:
+
 ```bash
-cd apps/own_tracks
-docker compose up -d
+docker compose up -d mosquitto recorder
 ```
 
 This starts:
@@ -55,6 +57,8 @@ This starts:
 |---|---|---|
 | `mosquitto` | 1883 | MQTT broker |
 | `owntracks-recorder` | 8083 | REST API + web UI |
+
+To bring up the full stack instead (broker, recorder, RabbitMQ, Redis, n8n, Elasticsearch, Kibana, Flower, tunnels): `docker compose up -d`.
 
 ### 2. Configure OwnTracks on your phone
 

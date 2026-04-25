@@ -3,7 +3,13 @@
     <deployment type="docker-compose.yml">
       <settings>
         <option name="containerName" value="" />
-        <option name="sourceFilePath" value="../harqis-work/apps/own_tracks/docker-compose.yml" />
+        <option name="sourceFilePath" value="../harqis-work/docker-compose.yml" />
+        <option name="services">
+          <list>
+            <option value="mosquitto" />
+            <option value="recorder" />
+          </list>
+        </option>
       </settings>
     </deployment>
     <method v="2" />

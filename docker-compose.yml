@@ -125,6 +125,27 @@ services:
       elasticsearch:
         condition: service_healthy
 
+  # ── Celery Monitoring ───────────────────────────────────────────────────────
+
+  flower:
+    image: mher/flower:2.0
+    container_name: flower
+    restart: unless-stopped
+    command:
+      - "celery"
+      - "--broker=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672//"
+      - "--result-backend=redis://redis:6379/0"
+      - "flower"
+      - "--port=5555"
+      - "--address=0.0.0.0"
+    ports:
+      - "5555:5555"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   # ── Public Tunnels ──────────────────────────────────────────────────────────
   # Use one or both. cloudflared gives a stable custom domain (free).
   # ngrok is useful for quick testing or when Cloudflare isn't configured yet.

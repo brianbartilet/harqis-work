@@ -1,7 +1,42 @@
-.github
-*.egg-info
-.pytest_cache
-.idea
-venv
-dist
+# Secrets — never bake into the image. Mount .env/ as a volume at runtime.
+.env/
+**/.env
+**/.env.*
+
+# Local Python state
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Editor / IDE
+.idea/
+.vscode/
+.run/
+
+# VCS
+.git/
+.github/
+
+# Build/dist artifacts
+dist/
+build/
+*.tgz
+
+# Logs and runtime droppings (keep the image clean)
 *.log*
+logs/
+screenshots/
+scripts/app*.log
+celerybeat-schedule.db
+*pid.*
+
+# Docs — runtime image doesn't need them
+docs/
+*.md
+!README.md
+
+# OpenClaw agent state — host-only, never inside the image
+.openclaw/

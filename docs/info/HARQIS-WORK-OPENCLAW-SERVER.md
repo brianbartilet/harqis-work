@@ -194,22 +194,13 @@ cd /opt/harqis
 docker compose up -d
 ```
 
-This starts: Mosquitto, OwnTracks Recorder, n8n, ngrok (see Section 4 for recommended changes).
-
-**Start RabbitMQ and Redis** (not yet in docker-compose — see Section 4 for the improved compose):
+The consolidated compose now starts the full dependency stack in one shot: **RabbitMQ, Redis, Mosquitto, OwnTracks Recorder, n8n, Elasticsearch, Kibana, Flower, Cloudflared, and ngrok** (the last two are tunnel options — keep one or both depending on whether you have a Cloudflare tunnel token configured). See [§4.2](#42-docker-composeyml--consolidated-service-stack) for the per-service rationale.
 
 ```bash
-# Temporary: run as standalone containers until compose is updated
-docker run -d --name rabbitmq \
-  -p 5672:5672 -p 15672:15672 \
-  -e RABBITMQ_DEFAULT_USER=guest \
-  -e RABBITMQ_DEFAULT_PASS=guest \
-  rabbitmq:3-management
-
-docker run -d --name redis \
-  -p 6379:6379 \
-  redis:7-alpine
+docker compose ps   # verify all containers are healthy
 ```
+
+The Celery `worker` and `beat` processes are **not** containerised — they run on the host (next sub-section). See §4.2 for the rationale.
 
 ### 3.5 Start Celery Workers
 
@@ -304,105 +295,74 @@ launchctl load ~/Library/LaunchAgents/com.harqis.server.plist
 
 ## 4. Docker & docker-compose Review
 
-### 4.1 Root `Dockerfile` — Current State and Issues
+> **Status (2026-04-24):** the recommendations in this section are **implemented** in the repo — root `Dockerfile`, `.dockerignore`, and `docker-compose.yml` now match what's described below. Build verified with `docker build -t harqis-work:dev .` and `docker compose config --quiet`.
 
-**Current:**
+### 4.1 Root `Dockerfile` — Implemented Hardening
 
-```dockerfile
-FROM python:3.12-slim
-WORKDIR /app
-VOLUME ["/app/data"]
-RUN apt-get update && apt-get install -y git curl build-essential python3-dev
-RUN python -m venv /app/venv
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY ../thesis .
-ENV PYTHONPATH=/app
-ENV ENV_ROOT_DIRECTORY=/app
-ENV ENV=TEST
+The original Dockerfile shipped without a `CMD`, ran as root, hardcoded `ENV=TEST`, and had no `HEALTHCHECK` — meaning images were unusable without an explicit entrypoint, exposed secrets if the build context was sloppy, and orchestrators couldn't detect a stuck container.
+
+The current `Dockerfile` addresses each of those:
+
+| Concern | Fix in current Dockerfile |
+|---|---|
+| Secrets leaking into image layers | `.dockerignore` excludes `.env/`, `**/.env`, `.git/`, `.openclaw/`, logs, IDE state, virtualenvs, docs |
+| Container runs as root | `useradd --uid 1000 harqis`; `USER harqis` set before `pip install`; `COPY --chown=harqis:harqis` |
+| No build-time env separation | `ARG ENV=production` (override with `--build-arg ENV=staging`) — the `ENV=TEST` hardcode is gone |
+| Missing default entrypoint | `CMD ["python", "run_workflows.py", "worker"]` — Celery worker by default, override per-service in compose |
+| Orchestrator can't detect unhealthy containers | `HEALTHCHECK` runs `python -c "import workflows"` every 30s — passes without needing a broker connection |
+| Mutable runtime data | `VOLUME ["/app/data", "/app/.env"]` so secrets and emitted artifacts mount in, not bake in |
+
+**Dependency-conflict workaround (kept from the prior Dockerfile):** `mcp>=1.0.0` requires `anyio>=4.5`, but `harqis-core` pins `anyio==4.3.0`. The build installs `requirements.txt` first, then upgrades `anyio` and installs `mcp` on top. pip prints conflict warnings about `pydantic`, `httpx`, etc., but the resulting image works — verified by `docker run --rm harqis-work:dev python -c "import workflows"` returning success and the non-root `harqis` user being active.
+
+**Build it:**
+
+```bash
+docker build -t harqis-work:dev .
+
+# Override the env label for a staging image
+docker build -t harqis-work:staging --build-arg ENV=staging .
 ```
 
-**Issues:**
+**Run it (worker):**
 
-| Issue | Risk | Fix |
-|-------|------|-----|
-| `COPY . .` copies `.env/apps.env` into the image | Secrets in image layer | Add `.dockerignore` |
-| `ENV=TEST` hardcoded | No production/staging separation | Use `ARG ENV=production` |
-| No `CMD` defined | Image is unusable without explicit entrypoint | Add default `CMD` |
-| No non-root user | Container runs as root | Add `useradd harqis` |
-| No healthcheck | Orchestrators can't detect unhealthy containers | Add `HEALTHCHECK` |
-
-**Recommended fixes:**
-
-Create `.dockerignore`:
-```
-.env/
-.venv/
-__pycache__/
-*.pyc
-.git/
-scripts/app*.log
-docs/
-*.md
-.openclaw/
+```bash
+docker run --rm \
+  --env-file .env/apps.env \
+  -v "$(pwd)/.env:/app/.env:ro" \
+  --network host \
+  harqis-work:dev
 ```
 
-Updated `Dockerfile`:
-```dockerfile
-ARG PYTHON_VERSION=3.12
-ARG ENV=production
+`--network host` (or a bridge with broker URLs pointing at Docker service names) is needed so the container can reach `localhost:5672` for RabbitMQ — see the `apps_config.yaml` broker URL.
 
-FROM python:${PYTHON_VERSION}-slim
+### 4.2 `docker-compose.yml` — Consolidated Service Stack
 
-WORKDIR /app
+The root `docker-compose.yml` now hosts the full dependency stack. The previous gaps (RabbitMQ, Redis, Elasticsearch, Kibana, Flower) have all been added; the duplicate `apps/own_tracks/docker-compose.yml` was removed (its `container_name`s collided with the root file) and `apps/own_tracks/README.md` now points to the consolidated services.
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl build-essential python3-dev \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd -m -u 1000 harqis
+| Service | Status | Notes |
+|---|---|---|
+| `rabbitmq` | ✅ added | `rabbitmq:3-management-alpine`, ports 5672/15672, healthcheck via `rabbitmq-diagnostics ping`, named volume `rabbitmq_data` |
+| `redis` | ✅ added | `redis:7-alpine`, port 6379, healthcheck via `redis-cli ping`, named volume `redis_data` |
+| `mosquitto` + `recorder` | ✅ moved from `apps/own_tracks/` | Bind-mounts `apps/own_tracks/{mosquitto,recorder_store}/`; same definitions, single source of truth |
+| `n8n` | ✅ kept | `N8N_SECURE_COOKIE=false` for plain-HTTP Tailscale access (see §11.2); `depends_on: rabbitmq` |
+| `elasticsearch` + `kibana` | ✅ added | ES capped at 512 MB heap (`ES_JAVA_OPTS`); Kibana waits on ES healthcheck |
+| `flower` | ✅ added | `mher/flower:2.0`, port 5555, broker/result-backend via env so `${RABBITMQ_USER}`/`${RABBITMQ_PASS}` carry through; depends on rabbitmq + redis healthchecks |
+| `cloudflared` | ✅ added | Stable public tunnel; expects `CLOUDFLARE_TUNNEL_TOKEN` in `.env/apps.env` |
+| `ngrok` | ⚠️ retained alongside `cloudflared` | Useful for quick testing when Cloudflare isn't configured. Either tunnel can be commented out — `cloudflared` is the production choice |
+| Celery `worker` / `beat` | ❌ host processes (intentional) | Run via `python run_workflows.py worker` / `beat` on the host; `apps_config.yaml` broker URL is `localhost:5672`, and Keychain-backed secrets don't survive container boundaries cleanly. Containerise once the Celery config is parameterised by env vars |
 
-RUN python -m venv /app/venv
-ENV PATH=/app/venv/bin:$PATH
+**Bring it up:**
 
-COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
-
-COPY --chown=harqis:harqis . .
-
-ENV PYTHONPATH=/app
-ENV ENV_ROOT_DIRECTORY=/app
-ARG ENV
-ENV ENV=${ENV}
-
-USER harqis
-VOLUME ["/app/data", "/app/.env"]
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=20s \
-  CMD python -c "import workflows" || exit 1
-
-CMD ["python", "run_workflows.py", "worker"]
+```bash
+docker compose up -d                         # full stack
+docker compose up -d mosquitto recorder      # OwnTracks subset only
+docker compose ps                            # verify health
+docker compose logs -f flower                # tail Flower
 ```
 
-### 4.2 `docker-compose.yml` — Current State and Issues
+**Tunnel choice:** `cloudflared` is the production entry point (free, stable subdomain, no rate limit). `ngrok` is kept as the fast-iteration fallback for when you don't have a tunnel token wired up.
 
-**Current services:** Mosquitto, OwnTracks Recorder, n8n, ngrok.
-
-**Missing services:**
-
-| Missing | Impact |
-|---------|--------|
-| RabbitMQ | `apps_config.yaml` references `amqp://guest:guest@localhost:5672/` but no broker in compose |
-| Redis | Required as Celery result backend; no service defined |
-| Elasticsearch + Kibana | `ELASTIC_LOGGING` config exists but no service in compose |
-| Flower | Monitoring has no container definition |
-| Celery worker(s) | Workers start manually; not containerised |
-
-**ngrok vs Cloudflare Tunnel:**
-- ngrok requires an auth token and has rate limits on free tier
-- Cloudflare Tunnel (`cloudflared`) is free, stable, and gives a custom domain
-- Recommendation: replace `ngrok` service with `cloudflared`
-
-See Section 9 for the complete recommended `docker-compose.yml`.
+The full production compose is reproduced in [§9](#9-recommended-production-docker-compose) for reference.
 
 ---
 
@@ -726,11 +686,13 @@ Returns 200 when the server is up, enabling external alerting on downtime.
 
 ## 9. Recommended Production docker-compose
 
-The following replaces the current `docker-compose.yml` with a complete, production-ready service stack for the Mac Mini:
+This is the canonical production `docker-compose.yml` — it matches the file checked in at the repo root. Differences in the live file should be reconciled here when intentional.
 
 ```yaml
 # docker-compose.yml — OpenClaw Server (Mac Mini)
-# Usage: docker compose up -d
+# Usage:
+#   docker compose up -d                       # full stack
+#   docker compose up -d mosquitto recorder    # OwnTracks subset only
 
 services:
 
@@ -742,7 +704,7 @@ services:
     restart: unless-stopped
     ports:
       - "5672:5672"
-      - "15672:15672"   # Management UI — bind to 127.0.0.1 in production
+      - "15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
@@ -766,6 +728,7 @@ services:
       test: redis-cli ping
       interval: 30s
       timeout: 5s
+      retries: 3
 
   # ── OwnTracks ───────────────────────────────────────────────────────────────
 
@@ -780,7 +743,7 @@ services:
       - ./apps/own_tracks/mosquitto/data:/mosquitto/data
       - ./apps/own_tracks/mosquitto/log:/mosquitto/log
 
-  owntracks-recorder:
+  recorder:
     image: owntracks/recorder:latest
     container_name: owntracks-recorder
     restart: unless-stopped
@@ -789,6 +752,8 @@ services:
     environment:
       OTR_HOST: mosquitto
       OTR_PORT: 1883
+      OTR_USER: ""
+      OTR_PASS: ""
       OTR_HTTP_PORT: 8083
     volumes:
       - ./apps/own_tracks/recorder_store:/store
@@ -810,13 +775,14 @@ services:
     environment:
       TZ: Asia/Singapore
       N8N_TIMEZONE: Asia/Singapore
+      N8N_SECURE_COOKIE: "false"   # see §11.2 — Tailscale layer already encrypts
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
       rabbitmq:
         condition: service_healthy
 
-  # ── Observability ────────────────────────────────────────────────────────────
+  # ── Observability ───────────────────────────────────────────────────────────
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
@@ -848,7 +814,30 @@ services:
       elasticsearch:
         condition: service_healthy
 
-  # ── Public Tunnel (replaces ngrok) ──────────────────────────────────────────
+  # ── Celery Monitoring ───────────────────────────────────────────────────────
+
+  flower:
+    image: mher/flower:2.0
+    container_name: flower
+    restart: unless-stopped
+    command:
+      - "celery"
+      - "--broker=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672//"
+      - "--result-backend=redis://redis:6379/0"
+      - "flower"
+      - "--port=5555"
+      - "--address=0.0.0.0"
+    ports:
+      - "5555:5555"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Public Tunnels ──────────────────────────────────────────────────────────
+  # Use one or both. cloudflared = stable custom domain (production).
+  # ngrok = quick testing when Cloudflare isn't configured.
 
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -860,6 +849,20 @@ services:
     depends_on:
       - n8n
 
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: ngrok
+    restart: unless-stopped
+    command: ["http", "n8n:5678", "--log=stdout", "--log-format=json"]
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    env_file:
+      - ./.env/apps.env
+    ports:
+      - "4040:4040"
+    depends_on:
+      - n8n
+
 volumes:
   rabbitmq_data:
   redis_data:
@@ -868,10 +871,13 @@ volumes:
 ```
 
 **Notes on this compose:**
-- Celery workers and Beat run as processes (not containers) to keep deployment simple. Containerise them once the service is stable.
-- Cloudflare Tunnel requires a pre-created tunnel token (`cloudflared tunnel token <tunnel-name>`). Store it in `.env/apps.env` as `CLOUDFLARE_TUNNEL_TOKEN`.
-- Elasticsearch memory is capped at 512 MB via `ES_JAVA_OPTS`. Increase to 1 GB if log volume grows.
+- **Celery workers and Beat run as host processes**, not containers — `apps_config.yaml` hardcodes broker URLs to `localhost`, and macOS Keychain-backed secret loading doesn't survive container boundaries cleanly. Containerise once those are env-var-driven.
+- **Cloudflare Tunnel** requires a pre-created tunnel token (`cloudflared tunnel token <tunnel-name>`). Store as `CLOUDFLARE_TUNNEL_TOKEN` in `.env/apps.env`. Without it the container will restart-loop — comment the service out if you only want ngrok.
+- **ngrok** needs `NGROK_AUTHTOKEN` in `.env/apps.env`. Without it, also restart-loops.
+- **Elasticsearch** is capped at 512 MB heap (`ES_JAVA_OPTS`). Bump to 1 GB if log volume grows.
+- **Flower** uses Docker service names (`rabbitmq`, `redis`) for its broker/backend URLs, independent of the host-side `localhost` URLs the workers use — both connect to the same broker over different network paths.
 - All services use named volumes for persistence across container restarts.
+- Per §11.1 the previously-loopback bindings (`127.0.0.1:`) are removed so Tailscale peers can reach the services.
 
 ---
 
