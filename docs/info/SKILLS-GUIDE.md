@@ -368,6 +368,7 @@ can read from and write to the OpenClaw sync repo at runtime using dynamic conte
 | `/agent-prompt` | `.claude/commands/agent-prompt.md` | Run a prompt from `agents/prompts/` against the codebase |
 | `/new-workflow` | `.claude/commands/new-workflow.md` | Scaffold a new workflow under `workflows/` |
 | `/new-service-app` | `.claude/commands/new-service-app.md` | Scaffold an app integration under `apps/` — skeleton or from OpenAPI spec/URL; chainable to `/new-workflow` |
+| `/new-n8n-workflow` | `.claude/commands/new-n8n-workflow.md` | Build and deploy an n8n workflow from a drawio diagram, XML/BPMN file, or text description into the local n8n instance |
 | `/generate-registry` | `.claude/commands/generate-registry.md` | Regenerate `frontend/registry.py` from all `tasks_config.py` files |
 | `/review` | built-in | Review a pull request |
 | `/security-review` | built-in | Security review of pending branch changes |

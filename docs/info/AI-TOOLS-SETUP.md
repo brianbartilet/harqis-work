@@ -44,6 +44,7 @@ From inside either repo, `git rev-parse --show-toplevel` returns the root on any
   - `/generate-registry` — regenerate `frontend/registry.py` from all `workflows/*/tasks_config.py` files
   - `/new-service-app` — scaffold a complete app integration under `apps/`; with a spec/URL it generates real implementations, without one it creates a skeleton; chainable to `/new-workflow`
   - `/new-workflow` — scaffold a new workflow under `workflows/`
+  - `/new-n8n-workflow` — build and deploy an n8n workflow from a drawio diagram, XML/BPMN file, or text description; imports directly into the local n8n instance via Docker CLI
   - `/run-tests` — run tests for a specific app or the full suite
 - `.claude/settings.local.json` — per-machine permissions (safe list of Bash/Read/etc.)
 - `.claude/settings.json` — shared settings (currently empty; add hooks here when needed)
