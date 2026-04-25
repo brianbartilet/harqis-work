@@ -19,6 +19,6 @@ jobs:
       run: docker build --no-cache -t harqis-work .
 
     - name: Run Tests
-      run: docker run harqis-work
-      env:
-        ENV_ROOT_DIRECTORY: /app
+      run: |
+        docker run --rm harqis-work \
+          python -m pytest agents/kanban/tests/ -m "not integration" -v

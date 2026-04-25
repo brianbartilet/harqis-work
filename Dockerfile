@@ -51,7 +51,8 @@ COPY --chown=harqis:harqis . .
 ARG ENV=production
 ENV PYTHONPATH=/app \
     ENV_ROOT_DIRECTORY=/app \
-    ENV=${ENV}
+    ENV=${ENV} \
+    ENV_WORKFLOW_CONFIG=workflows.config
 
 # Persist task-emitted artifacts and let the operator mount real secrets.
 VOLUME ["/app/data", "/app/.env"]

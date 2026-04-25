@@ -377,31 +377,31 @@ The three driving principles:
            │                                        │
            ▼                                        ▼
    ┌──────────────────────────────────────────────────────────┐
-   │                  OpenClaw Agent Runtime                   │
+   │                  OpenClaw Agent Runtime                  │
    │         SOUL.md · AGENTS.md · MEMORY.md · USER.md        │
-   │                 (harqis-openclaw-sync)                    │
+   │                 (harqis-openclaw-sync)                   │
    └─────────────────────────┬────────────────────────────────┘
                              │  calls tools via
                              ▼
    ┌──────────────────────────────────────────────────────────┐
-   │                   MCP Server  (mcp/)                      │
-   │    55 tools across 16 modules — OANDA, YNAB, Gmail,       │
-   │    Telegram, Discord, Trello, Jira, Scryfall, TCG …       │
+   │                   MCP Server  (mcp/)                     │
+   │    55 tools across 16 modules — OANDA, YNAB, Gmail,      │
+   │    Telegram, Discord, Trello, Jira, Scryfall, TCG …      │
    └──────┬──────────────────────────────────┬────────────────┘
           │ reads / writes                   │ triggers
           ▼                                  ▼
-   ┌────────────────┐              ┌──────────────────────────┐
-   │   apps/        │              │  Celery Worker + Beat     │
-   │  REST clients  │              │  workflows/ tasks run on  │
-   │  for every     │              │  schedule (hud, purchases,│
-   │  3rd-party API │              │  desktop, finance …)      │
-   └────────────────┘              └──────────────┬───────────┘
+   ┌────────────────┐              ┌────────────────────────────┐
+   │   apps/        │              │  Celery Worker + Beat      │
+   │  REST clients  │              │  workflows/ tasks run on   │
+   │  for every     │              │  schedule (hud, purchases, │
+   │  3rd-party API │              │  desktop, finance …)       │
+   └────────────────┘              └──────────────┬─────────────┘
                                                   │ output to
                                    ┌──────────────▼───────────┐
-                                   │ Rainmeter HUD · Frontend  │
-                                   │ Elasticsearch · Kibana    │
-                                   │ Telegram alerts · n8n     │
-                                   └───────────────────────────┘
+                                   │ Rainmeter HUD · Frontend │
+                                   │ Elasticsearch · Kibana   │
+                                   │ Telegram alerts · n8n    │
+                                   └──────────────────────────┘
 
   ── All of the above runs on the HARQIS-CLAW Host ──────────────
   ── Worker nodes (VPS, N100 Windows) connect via Tailscale VPN ─
