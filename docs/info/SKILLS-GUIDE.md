@@ -367,7 +367,7 @@ can read from and write to the OpenClaw sync repo at runtime using dynamic conte
 | `/run-tests` | `.claude/commands/run-tests.md` | Run tests for an app or the full suite |
 | `/agent-prompt` | `.claude/commands/agent-prompt.md` | Run a prompt from `agents/prompts/` against the codebase |
 | `/new-workflow` | `.claude/commands/new-workflow.md` | Scaffold a new workflow under `workflows/` |
-| `/new-app` | `.claude/commands/new-app.md` | Scaffold a new app integration under `apps/` |
+| `/new-service-app` | `.claude/commands/new-service-app.md` | Scaffold an app integration under `apps/` — skeleton or from OpenAPI spec/URL; chainable to `/new-workflow` |
 | `/generate-registry` | `.claude/commands/generate-registry.md` | Regenerate `frontend/registry.py` from all `tasks_config.py` files |
 | `/review` | built-in | Review a pull request |
 | `/security-review` | built-in | Security review of pending branch changes |

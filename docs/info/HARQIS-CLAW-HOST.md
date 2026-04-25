@@ -520,7 +520,9 @@ Or in `claude_desktop_config.json` on a remote machine:
 ### Adding a new app
 
 ```bash
-/new-app <app_name>   # Claude Code skill scaffolds the structure
+/new-service-app <app_name>                     # skeleton only
+/new-service-app <app_name> <openapi_url>       # full generation from spec
+/new-service-app <app_name> <url> --workflow <name>  # also scaffold a workflow
 ```
 
 Or manually:
@@ -549,7 +551,7 @@ integration patterns.
 
 | Skill | Purpose |
 |---|---|
-| `/new-app <name>` | Scaffold a new app integration under `apps/` |
+| `/new-service-app <name> [spec_url] [--workflow name]` | Scaffold an app integration — skeleton or from OpenAPI spec/URL; optionally chain to a new workflow |
 | `/new-workflow <name>` | Create a workflow directory with a Celery task template |
 | `/run-tests <app>` | Run pytest for a specific app with correct flags |
 | `/generate-registry` | Rebuild `frontend/registry.py` from all `tasks_config.py` files |

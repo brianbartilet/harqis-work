@@ -42,7 +42,7 @@ From inside either repo, `git rev-parse --show-toplevel` returns the root on any
 - `.claude/commands/` — project slash-commands:
   - `/agent-prompt` — run an AI agent prompt from `prompts/` against the codebase
   - `/generate-registry` — regenerate `frontend/registry.py` from all `workflows/*/tasks_config.py` files
-  - `/new-app` — scaffold a new app integration under `apps/`
+  - `/new-service-app` — scaffold a complete app integration under `apps/`; with a spec/URL it generates real implementations, without one it creates a skeleton; chainable to `/new-workflow`
   - `/new-workflow` — scaffold a new workflow under `workflows/`
   - `/run-tests` — run tests for a specific app or the full suite
 - `.claude/settings.local.json` — per-machine permissions (safe list of Bash/Read/etc.)
@@ -225,8 +225,9 @@ Keeping them separate means:
 
 ## See also
 
-- `docs/info/HARQIS-WORK-OPENCLAW-SERVER.md` — full service inventory, Mac Mini deployment, ports, migration guide
+- `docs/info/HARQIS-CLAW-HOST.md` — full service inventory, Mac Mini deployment, ports, controller setup, migration guide
 - `docs/info/OPENCLAW-SYNC.md` — sync-repo architecture and setup across machines
-- `docs/info/OPEN_CLAW_CONTROLLER.md` — controller app setup
+- `docs/info/AGENTS-TASKS-KANBAN.md` — Kanban agent system: board design, agent profiles, security layer, MCP bridge
+- `docs/info/SKILLS-GUIDE.md` — Claude Code skills reference and OpenClaw integration patterns
 - `docs/info/OS-COMPATIBILITY.md` — cross-platform notes
 - `mcp/README.md` — MCP server tool inventory (OANDA, YNAB, Gmail, TCG, etc.)
