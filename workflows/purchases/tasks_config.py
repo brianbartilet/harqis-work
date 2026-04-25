@@ -35,7 +35,52 @@ Example task 'run-test-sample-workflow' is scheduled to run every 10 seconds, ex
 the 'run_sample_workflow_add' function with specified arguments.
 """
 WORKFLOW_PURCHASES = {
+
+    'run-job--generate_tcg_mappings': {
+        'task': 'workflows.purchases.tasks.tcg_mp_selling.generate_tcg_mappings',
+        'schedule': crontab(hour='0'),
+        'kwargs': {
+            "cfg_id__tcg_mp": "TCG_MP",
+            "cfg_id__echo_mtg": "ECHO_MTG",
+            "cfg_id__echo_mtg_fe": "ECHO_MTG_FE",
+            "cfg_id__scryfall": "SCRYFALL",
+            "limit": 100
+        },
+        "options": {
+            "queue": "tcg",
+            "expires": 60 * 60 * 8
+        },
+    },
+
+    'run-job--generate_tcg_listings': {
+        'task': 'workflows.purchases.tasks.tcg_mp_selling.generate_tcg_listings',
+        'schedule': crontab(hour='1'),
+        'kwargs': {
+            "cfg_id__tcg_mp": "TCG_MP",
+            "cfg_id__echo_mtg": "ECHO_MTG",
+            "cfg_id__echo_mtg_fe": "ECHO_MTG_FE",
+            "limit": 100
+        },
+        "options": {
+            "queue": "tcg",
+            "expires": 60 * 60 * 8
+        },
+    },
     
+    'run-job--update_tcg_listings_prices': {
+        'task': 'workflows.purchases.tasks.tcg_mp_selling.update_tcg_listings_prices',
+        'schedule': crontab(day_of_week="mon", hour='3'),
+        'kwargs': {
+            "cfg_id__tcg_mp": "TCG_MP",
+            "cfg_id__echo_mtg": "ECHO_MTG",
+            "cfg_id__echo_mtg_fe": "ECHO_MTG_FE"
+        },
+        "options": {
+            "queue": WorkflowQueue.TCG,
+            "expires": 60 * 60 * 48
+        },
+    },
+
     'run-job--download_scryfall_bulk_data': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.download_scryfall_bulk_data',
         'schedule': crontab(
