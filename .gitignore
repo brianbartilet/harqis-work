@@ -1,4 +1,5 @@
 .idea
+.openclaw
 .claude/settings.local.json
 *config.yaml
 .env/*
