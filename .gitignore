@@ -38,3 +38,4 @@ apps/own_tracks/recorder_store/
 .openclaw/*
 !.openclaw/workspace
 !.openclaw/workspace/**
+/.openclaw/workspace/
