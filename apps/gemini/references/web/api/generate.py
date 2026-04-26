@@ -1,11 +1,8 @@
-from typing import List, Optional
+from typing import Optional
 
 from core.web.services.core.decorators.deserializer import deserialized
 from apps.gemini.references.web.base_api_service import BaseApiServiceGemini
-from apps.gemini.references.dto.models import (
-    DtoGeminiGenerateContentResponse,
-    DtoGeminiCountTokensResponse,
-)
+from apps.gemini.references.dto.models import DtoGeminiModel
 
 DEFAULT_MODEL = 'models/gemini-2.0-flash'
 
@@ -22,7 +19,7 @@ class ApiServiceGeminiGenerate(BaseApiServiceGemini):
     def __init__(self, config, **kwargs):
         super(ApiServiceGeminiGenerate, self).__init__(config, **kwargs)
 
-    @deserialized(DtoGeminiGenerateContentResponse)
+    @deserialized(dict)
     def generate_content(
         self,
         prompt: str,
@@ -32,7 +29,7 @@ class ApiServiceGeminiGenerate(BaseApiServiceGemini):
         top_p: Optional[float] = None,
         top_k: Optional[int] = None,
         system_instruction: Optional[str] = None,
-    ) -> DtoGeminiGenerateContentResponse:
+    ) -> dict:
         """
         Generate content from a text prompt.
 
@@ -46,7 +43,7 @@ class ApiServiceGeminiGenerate(BaseApiServiceGemini):
             system_instruction: Optional system-level instruction prepended before the prompt.
 
         Returns:
-            DtoGeminiGenerateContentResponse with candidates and usage metadata.
+            Raw dict with keys: candidates (list), usageMetadata.
         """
         payload = {
             'contents': [{'parts': [{'text': prompt}], 'role': 'user'}],
@@ -71,12 +68,12 @@ class ApiServiceGeminiGenerate(BaseApiServiceGemini):
             .add_json_payload(payload)
         return self.client.execute_request(self.request.build())
 
-    @deserialized(DtoGeminiCountTokensResponse)
+    @deserialized(dict)
     def count_tokens(
         self,
         prompt: str,
         model: str = DEFAULT_MODEL,
-    ) -> DtoGeminiCountTokensResponse:
+    ) -> dict:
         """
         Count the number of tokens a prompt would consume without generating a response.
 
@@ -85,7 +82,7 @@ class ApiServiceGeminiGenerate(BaseApiServiceGemini):
             model:  Model resource name (default 'models/gemini-2.0-flash').
 
         Returns:
-            DtoGeminiCountTokensResponse with totalTokens.
+            Raw dict with key: totalTokens (int).
         """
         payload = {
             'contents': [{'parts': [{'text': prompt}], 'role': 'user'}],

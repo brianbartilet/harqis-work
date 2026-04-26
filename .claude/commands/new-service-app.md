@@ -113,16 +113,17 @@ class BaseApiServiceAPP_NAME(BaseFixtureServiceRest):
         })
 ```
 
-**API key as query param (e.g. Trello style):**
+**API key as query param (e.g. Trello / Gemini style):**
 ```python
 class BaseApiServiceAPP_NAME(BaseFixtureServiceRest):
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
-        self._api_key = config.app_data['api_key']
-
-    def _add_auth(self):
-        self.request.add_query_string('apiKey', self._api_key)
+        self.request \
+            .add_header(HttpHeaders.CONTENT_TYPE, 'application/json') \
+            .add_query_string('key', config.app_data['api_key'])
 ```
+
+Note: always use `self.request.add_query_string()` in `__init__` — **never** `self.client.session.params` (session is not initialized at construction time in this framework).
 
 **Token in URL path (e.g. Telegram style):**
 ```python
