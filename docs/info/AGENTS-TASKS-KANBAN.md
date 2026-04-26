@@ -5,7 +5,7 @@ Turn a Trello or Jira board into an AI task interface. Humans create cards; Clau
 **Related docs:**
 - [HARQIS-CLAW-HOST.md](HARQIS-CLAW-HOST.md) — host deployment, service inventory, worker nodes
 - [SKILLS-GUIDE.md](SKILLS-GUIDE.md) — Claude Code skills and OpenClaw integration
-- [AI-TOOLS-SETUP.md](AI-TOOLS-SETUP.md) — Claude Code and OpenClaw workspace setup
+- [AI-TOOLS-SETUP.md](AI-TOOLS-WIRING.md) — Claude Code and OpenClaw workspace setup
 - [mcp/README.md](../../mcp/README.md) — full MCP tool catalog (all 16 app modules)
 
 ---

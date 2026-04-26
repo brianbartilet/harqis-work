@@ -6,7 +6,7 @@ of the OpenClaw agent system: secrets vault, task orchestrator, MCP endpoint, an
 memory store.
 
 **Related docs:**
-- [AI-TOOLS-SETUP.md](AI-TOOLS-SETUP.md) — Claude Code orientation and workspace sync
+- [AI-TOOLS-SETUP.md](AI-TOOLS-WIRING.md) — Claude Code orientation and workspace sync
 - [SKILLS-GUIDE.md](SKILLS-GUIDE.md) — Claude Code skills and OpenClaw integration
 - [OPENCLAW-SYNC.md](OPENCLAW-SYNC.md) — Sync repo architecture across machines
 - [OS-COMPATIBILITY.md](OS-COMPATIBILITY.md) — Cross-platform notes
