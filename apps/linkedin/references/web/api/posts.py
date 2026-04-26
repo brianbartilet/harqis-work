@@ -77,6 +77,36 @@ class ApiServiceLinkedInPosts(BaseApiServiceLinkedIn):
         return self.client.execute_request(self.request.build())
 
     @deserialized(dict)
+    def create_draft(self, text: str, visibility: str = 'PUBLIC') -> dict:
+        """
+        Save a text post as a draft (not visible to the network).
+
+        Args:
+            text:       Post body text.
+            visibility: 'PUBLIC' or 'CONNECTIONS'. Default 'PUBLIC'.
+
+        Returns:
+            Empty dict on success (HTTP 201). Draft URN in 'X-RestLi-Id' header.
+        """
+        payload = {
+            'author': self._author_urn,
+            'lifecycleState': 'DRAFT',
+            'specificContent': {
+                'com.linkedin.ugc.ShareContent': {
+                    'shareCommentary': {'text': text},
+                    'shareMediaCategory': 'NONE',
+                }
+            },
+            'visibility': {
+                'com.linkedin.ugc.MemberNetworkVisibility': visibility,
+            },
+        }
+        self.request.post() \
+            .add_uri_parameter('ugcPosts') \
+            .add_json_payload(payload)
+        return self.client.execute_request(self.request.build())
+
+    @deserialized(dict)
     def get_post(self, post_urn: str) -> dict:
         """
         Retrieve a UGC post by its URN.

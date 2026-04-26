@@ -329,42 +329,62 @@ Do NOT write secrets to any file. Print them as instructions only.
 
 Create `workflows/<category>/tests/test_<task_name>.py`. Do **not** run the tests.
 
+**Structure (mandatory — always in this order):**
+
+1. **Workflow (integration) tests first** — call the real task function with real config keys, just like the task will be called in production. These are the primary tests. No mocks, no classes.
+2. **Unit / function tests after** — test individual helper functions in isolation. Use `assert` statements. May mock external calls when the helper is purely logic.
+
+Naming convention: `test__<function_name>` (double underscore separates `test` from the function name).
+
 ```python
-"""
-Tests for workflows/<category>/tasks/<module>.<task_name>
-
-These are live integration tests — requires valid credentials in .env/apps.env.
-Run manually: pytest workflows/<category>/tests/test_<task_name>.py -v
-"""
-
 import pytest
-from unittest.mock import patch, MagicMock
-from workflows.<category>.tasks.<module> import <task_name>
+from workflows.<category>.tasks.<module> import (
+    <task_name>,
+    <helper_fn_a>,
+    <helper_fn_b>,
+)
 
 
-class TestTaskName:
+# ── Workflow (integration) ────────────────────────────────────────────────────
 
-    @pytest.mark.smoke
-    def test_<task_name>_runs_without_error(self):
-        """Happy path: task executes and returns a non-empty string."""
-        result = <task_name>()
-        assert result is not None
-        assert isinstance(result, str)
+def test__<task_name>():
+    <task_name>(cfg_id__<app_a>='<APP_A>', cfg_id__<app_b>='<APP_B>')
 
-    @pytest.mark.smoke
-    def test_<task_name>_handles_empty_data(self):
-        """Task returns gracefully when the source app returns no data."""
-        with patch('apps.<app_a>.references.web.api.<resource>.ApiService<AppA><Resource>.get_something',
-                   return_value=[]):
-            result = <task_name>()
-        assert "No data" in result or result is not None
 
-    @pytest.mark.integration
-    def test_<task_name>_live(self):
-        """Live integration test — requires real credentials."""
-        result = <task_name>()
-        assert result is not None
+def test__<task_name>_with_variant():
+    """Variant call — different kwarg combination."""
+    <task_name>(cfg_id__<app_a>='<APP_A>', <other_param>=<value>)
+
+
+@pytest.mark.skip(reason="Manual only — <destructive or side-effect action>")
+def test__<task_name>_full_pipeline():
+    <task_name>(cfg_id__<app_a>='<APP_A>', cfg_id__<app_b>='<APP_B>')
+
+
+# ── Unit / function ───────────────────────────────────────────────────────────
+
+def test__<helper_fn_a>_returns_expected():
+    result = <helper_fn_a>(<args>)
+    assert isinstance(result, <type>)
+
+
+def test__<helper_fn_a>_empty_input():
+    result = <helper_fn_a>([])
+    assert result == <expected>
+
+
+def test__<helper_fn_b>_structure():
+    result = <helper_fn_b>(<year>, <month>)
+    if result:
+        assert "<key>" in result[0]
 ```
+
+**Rules:**
+- No test classes. All functions at module level.
+- No `@pytest.mark.smoke` / `@pytest.mark.integration` markers (not used in this repo).
+- Use `@pytest.mark.skip(reason="...")` for tests that have real side-effects (send emails, post to social, mutate live data). The reason must describe what would happen.
+- Workflow tests pass real config key strings (`'LINKEDIN'`, `'GOOGLE_APPS'`, etc.) — never mock the config layer.
+- Unit tests may mock external service calls but should prefer testing pure logic functions directly.
 
 If the user explicitly asks to run tests after writing them:
 ```bash

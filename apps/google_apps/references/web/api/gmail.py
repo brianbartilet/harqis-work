@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import re
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Any, Dict, List, Optional
 
 from apps.google_apps.references.web.discovery import BaseGoogleDiscoveryService
@@ -160,3 +162,40 @@ class ApiServiceGoogleGmail(BaseGoogleDiscoveryService):
                 "labelIds": msg.get("labelIds", []),
             })
         return emails
+
+    def send_email(
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        body_html: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Send an email via Gmail API.
+
+        Requires the 'gmail.send' scope on the OAuth credential.
+
+        Args:
+            to:        Recipient email address.
+            subject:   Email subject line.
+            body:      Plain-text body.
+            body_html: Optional HTML body (sends multipart/alternative when provided).
+
+        Returns:
+            Sent message resource dict with 'id', 'threadId', 'labelIds'.
+        """
+        if body_html:
+            msg: MIMEMultipart | MIMEText = MIMEMultipart("alternative")
+            msg.attach(MIMEText(body, "plain"))
+            msg.attach(MIMEText(body_html, "html"))
+        else:
+            msg = MIMEText(body, "plain")
+
+        msg["To"] = to
+        msg["Subject"] = subject
+
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
+        return self.service.users().messages().send(
+            userId=self.user_id,
+            body={"raw": raw},
+        ).execute()
