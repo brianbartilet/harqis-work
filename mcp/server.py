@@ -26,6 +26,7 @@ from apps.reddit.mcp import register_reddit_tools
 from apps.linkedin.mcp import register_linkedin_tools
 from apps.notion.mcp import register_notion_tools
 from apps.antropic.mcp import register_anthropic_tools
+from apps.gemini.mcp import register_gemini_tools
 
 logging.basicConfig(
     level=logging.INFO,
@@ -82,6 +83,9 @@ register_notion_tools(mcp)
 
 logger.info("Registering Anthropic tools")
 register_anthropic_tools(mcp)
+
+logger.info("Registering Gemini tools")
+register_gemini_tools(mcp)
 
 logger.info("MCP server ready — %d tool(s) registered", len(mcp._tool_manager._tools))
 

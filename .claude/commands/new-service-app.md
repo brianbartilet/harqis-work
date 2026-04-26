@@ -270,7 +270,97 @@ register_APP_NAME_tools(mcp)
 
 ---
 
-## Step 9 — Write tests in `apps/APP_NAME/tests/test_<resource>.py`
+## Step 9 — Register in `agents/kanban/agent/tools/mcp_bridge.py`
+
+Read `agents/kanban/agent/tools/mcp_bridge.py`. Find the `_APP_LOADERS` dict. Add a new entry in alphabetical order by key:
+
+```python
+"app_name":    "apps.app_name.mcp.register_app_name_tools",
+```
+
+Where `app_name` is the snake_case app name and `register_app_name_tools` is the function defined in `apps/APP_NAME/mcp.py`. Preserve the column-alignment style of the existing entries.
+
+---
+
+## Step 10 — Update `apps_config.yaml`
+
+Read `apps_config.yaml`. Append the new app block at the end of the file. Match the exact YAML formatting style used by other entries (2-space indent, single-quoted strings for app_id and client, `True`/`False` for booleans).
+
+Derive the env var names from the auth type determined in Steps 1/4:
+
+| Auth type | `app_data` fields |
+|---|---|
+| Bearer / API key (header or query) | `api_key: ${APP_NAME_UPPER_API_KEY}` |
+| Basic auth | `username: ${APP_NAME_UPPER_USERNAME}` · `password: ${APP_NAME_UPPER_PASSWORD}` |
+| OAuth2 | `client_id: ${APP_NAME_UPPER_CLIENT_ID}` · `client_secret: ${APP_NAME_UPPER_CLIENT_SECRET}` · `access_token: ${APP_NAME_UPPER_ACCESS_TOKEN}` |
+
+`APP_NAME_UPPER` = `app_name` converted to SCREAMING_SNAKE_CASE (e.g. `my_app` → `MY_APP`).
+
+Standard block template:
+```yaml
+
+
+APP_NAME_UPPER:
+  app_id: 'app_name'
+  client: 'rest'
+  parameters:
+    base_url: '<BASE_URL_FROM_STEP_1>'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: False
+  app_data:
+    api_key: ${APP_NAME_UPPER_API_KEY}
+  return_data_only: True
+```
+
+Adjust `app_data` fields to match the actual auth type. Set `stream: True` if the API supports streaming.
+
+---
+
+## Step 11 — Update `.env/apps.env`
+
+Read `.env/apps.env`. Check whether the app's env var(s) are already present (grep for `APP_NAME_UPPER`). If **not** present, append a new section at the end of the file:
+
+```
+# APP_NAME_UPPER
+APP_NAME_UPPER_API_KEY=
+```
+
+Add one line per env var identified in Step 9 (all set to empty — the user fills in the real value). Do **not** add a section if any of the app's env vars already exist in the file.
+
+---
+
+## Step 12 — Restart MCP server / Claude Desktop
+
+Run the following PowerShell to restart Claude Desktop if it is currently running. The restart picks up the newly registered tools without any manual action.
+
+```powershell
+$proc = Get-Process -Name "Claude" -ErrorAction SilentlyContinue
+if ($proc) {
+    $claudePath = $proc.Path
+    Stop-Process -Name "Claude" -Force
+    Start-Sleep -Seconds 2
+    Start-Process $claudePath
+    Write-Host "Claude Desktop restarted — new MCP tools will be available on reconnect."
+} else {
+    Write-Host "Claude Desktop is not running — no restart needed. Start it manually to load the new tools."
+}
+```
+
+If the PowerShell command fails (e.g. path not found), fall back to:
+```powershell
+taskkill /F /IM Claude.exe 2>$null
+Start-Sleep -Seconds 2
+$fallback = "$env:LOCALAPPDATA\AnthropicClaude\Claude.exe"
+if (Test-Path $fallback) { Start-Process $fallback }
+```
+
+Report the outcome to the user: whether Claude Desktop was restarted or was not running.
+
+---
+
+## Step 13 — Write tests in `apps/APP_NAME/tests/test_<resource>.py`
 
 One test file per service class. All tests are live integration tests — no mocking.
 Use `@pytest.mark.smoke` for fast read-only checks, `@pytest.mark.sanity` for broader coverage.
@@ -307,7 +397,7 @@ For **Mode A**, mark tests with `@pytest.mark.skip(reason="not implemented")`.
 
 ---
 
-## Step 10 — Write `apps/APP_NAME/README.md`
+## Step 14 — Write `apps/APP_NAME/README.md`
 
 Follow `apps/.template/README.md` structure exactly. Required sections:
 
@@ -322,9 +412,9 @@ Follow `apps/.template/README.md` structure exactly. Required sections:
 
 ---
 
-## Step 11 — Update root `README.md`
+## Step 15 — Update root `README.md`
 
-Read `README.md`. Make three targeted edits:
+Read `README.md`. Make two targeted edits:
 
 1. **App Inventory table** — add a row in alphabetical order:
    ```
@@ -336,11 +426,9 @@ Read `README.md`. Make three targeted edits:
    │   ├── APP_NAME/                   # <short description>
    ```
 
-3. **Environment Variables block** — append the new env vars with empty values and a comment above them.
-
 ---
 
-## Step 12 — Update `mcp/README.md`
+## Step 16 — Update `mcp/README.md`
 
 Read `mcp/README.md`. Add a new `### APP_NAME` section (alphabetical position) with:
 - Heading linking to the API docs
@@ -350,17 +438,15 @@ Read `mcp/README.md`. Add a new `### APP_NAME` section (alphabetical position) w
 
 ---
 
-## Step 13 — Remind the user
+## Step 17 — Remind the user
 
 Print this checklist verbatim at the end:
 
 ```
-Next steps (manual):
-  [ ] Add APP_NAME section to apps_config.yaml  ← see apps/APP_NAME/README.md for the snippet
-  [ ] Add required env vars to .env/apps.env
-  [ ] Add APP_NAME to agents/kanban/agent/tools/mcp_bridge.py if Kanban agents should use it
+Next steps:
+  [ ] Fill in APP_NAME_UPPER_API_KEY (and any other vars) in .env/apps.env
   [ ] Run: pytest apps/APP_NAME/tests/ -m smoke
-  [ ] Restart MCP server / Claude Desktop to load the new tools
+  (apps_config.yaml updated ✓ — Kanban bridge registered ✓ — MCP server restarted automatically if it was running ✓)
 ```
 
 ---
@@ -383,6 +469,10 @@ If `--workflow <workflow_name>` was passed, after completing all steps above run
 - [ ] All DTO fields are `Optional` with `None` defaults
 - [ ] Every MCP tool has a docstring, `Args:` section, entry log, and defensive return check
 - [ ] `mcp/server.py` registration added
+- [ ] Kanban bridge `_APP_LOADERS` entry added in `agents/kanban/agent/tools/mcp_bridge.py`
+- [ ] `apps_config.yaml` updated with APP_NAME_UPPER section
+- [ ] `.env/apps.env` updated with env var placeholder(s)
+- [ ] MCP server restart attempted via PowerShell (outcome reported)
 - [ ] Tests use `hamcrest` and `@pytest.mark.smoke`; Mode A tests are `@pytest.mark.skip`
 - [ ] `apps/APP_NAME/README.md` covers config snippet, env vars, and tool table
 - [ ] Root `README.md` App Inventory row added in alphabetical order

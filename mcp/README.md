@@ -100,6 +100,26 @@ Wraps `apps/ynab/references/web/api/` services. Requires valid `YNAB` section in
 
 ---
 
+### Gemini (`apps/gemini/mcp.py`)
+
+Wraps `apps/gemini/references/web/api/` services. Requires valid `GEMINI` section in `apps_config.yaml`.
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `list_gemini_models` | `page_size?` | List of available Gemini model dicts |
+| `get_gemini_model` | `model_name` | Single model metadata |
+| `gemini_generate_content` | `prompt`, `model?`, `temperature?`, `max_output_tokens?`, `system_instruction?` | Candidates list with generated text |
+| `gemini_count_tokens` | `prompt`, `model?` | Token count for the prompt |
+| `gemini_embed_content` | `text`, `model?`, `task_type?` | Embedding vector (values list) |
+| `gemini_batch_embed_contents` | `texts`, `model?`, `task_type?` | List of embedding vectors |
+
+**Example prompts:**
+- *"Ask Gemini to summarise this text for me."*
+- *"How many tokens will this prompt use with Gemini Flash?"*
+- *"Generate a text embedding for this sentence using Gemini."*
+
+---
+
 ### Google Apps (`apps/google_apps/mcp.py`)
 
 Wraps `apps/google_apps/references/web/api/` services.
