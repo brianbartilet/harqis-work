@@ -10,7 +10,7 @@ from workflows.social.tasks.social_linkedin_monthly import (
 # ── Workflow (integration) ────────────────────────────────────────────────────
 
 def test__generate_monthly_linkedin_post():
-    generate_monthly_linkedin_post(skip_draft=True, skip_email=True)
+    generate_monthly_linkedin_post()
 
 
 def test__generate_monthly_linkedin_post_march_2026():
