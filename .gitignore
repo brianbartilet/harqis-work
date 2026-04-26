@@ -38,15 +38,3 @@ apps/own_tracks/recorder_store/
 .openclaw/*
 !.openclaw/workspace
 !.openclaw/workspace/**
-!.openclaw/setup-env.ps1
-!.openclaw/setup-env.bat
-!.openclaw/setup-env.sh
-!.openclaw/SETUP_ENV.md
-!.openclaw/INTEGRATION_GUIDE.md
-!.openclaw/Makefile
-!.openclaw/QUICKSTART.md
-!.openclaw/sync-push.ps1
-!.openclaw/sync-pull.ps1
-!.openclaw/sync-push.sh
-!.openclaw/sync-pull.sh
-!.openclaw/SYNC_AUTOMATION.md
