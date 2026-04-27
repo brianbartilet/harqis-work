@@ -131,7 +131,7 @@ harqis-openclaw-sync/          ← separate git repo, cloned alongside harqis-wo
 
 **Cross-machine sync:** an auto-pull job runs every 30 minutes on each host (macOS LaunchAgent, Windows Task Scheduler, Linux cron) and pulls both repos. This is what makes HARQIS-CLAW behave identically on any node — it always has the latest identity and memory files before starting a session.
 
-> Setup, sync scripts, and per-OS wiring details: [`docs/info/AI-TOOLS-SETUP.md`](docs/info/AI-TOOLS-SETUP.md)  
+> Setup, sync scripts, and per-OS wiring details: [`docs/info/AI-TOOLS-WIRING.md`](docs/info/AI-TOOLS-WIRING.md)  
 > Host deployment and service inventory: [`docs/info/HARQIS-CLAW-HOST.md`](docs/info/HARQIS-CLAW-HOST.md)  
 > Sync repo architecture: [`docs/info/OPENCLAW-SYNC.md`](docs/info/OPENCLAW-SYNC.md)
 

@@ -386,6 +386,6 @@ use a full skill directory under `.claude/skills/`.
 
 ## See Also
 
-- `docs/info/AI-TOOLS-SETUP.md` — Claude Code orientation and workspace sync guide
+- `docs/info/AI-TOOLS-WIRING.md` — Claude Code orientation and workspace sync guide
 - `.claude/commands/` — current project slash-commands
 - `.claude/settings.local.json` — per-machine permission allowlist

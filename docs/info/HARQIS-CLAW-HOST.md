@@ -1,12 +1,12 @@
 # HARQIS-CLAW Host — Deployment & Operations Guide
 
-The **HARQIS-CLAW Host** is the always-on primary machine small11that acts as the hub
+The **HARQIS-CLAW Host** is the always-on primary machine that acts as the hub
 of the harqis-work platform. It is not just a service runner — it is the persistent identity
 of the OpenClaw agent system: secrets vault, task orchestrator, MCP endpoint, and long-term
 memory store.
 
 **Related docs:**
-- [AI-TOOLS-SETUP.md](AI-TOOLS-WIRING.md) — Claude Code orientation and workspace sync
+- [AI-TOOLS-WIRING.md](AI-TOOLS-WIRING.md) — Claude Code orientation and workspace sync
 - [SKILLS-GUIDE.md](SKILLS-GUIDE.md) — Claude Code skills and OpenClaw integration
 - [OPENCLAW-SYNC.md](OPENCLAW-SYNC.md) — Sync repo architecture across machines
 - [OS-COMPATIBILITY.md](OS-COMPATIBILITY.md) — Cross-platform notes
