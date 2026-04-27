@@ -1,5 +1,7 @@
+import importlib
 import logging
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -9,25 +11,11 @@ load_dotenv(_repo_root / ".env" / "apps.env")
 # Ensure the production config file is used regardless of ENV setting
 os.environ.setdefault("APP_CONFIG_FILE", "apps_config.yaml")
 
+# Allow `python mcp/server.py` to resolve `apps.*` imports without PYTHONPATH
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+
 from mcp.server.fastmcp import FastMCP
-from apps.oanda.mcp import register_oanda_tools
-from apps.ynab.mcp import register_ynab_tools
-from apps.google_apps.mcp import register_google_apps_tools
-from apps.tcg_mp.mcp import register_tcg_mp_tools
-from apps.echo_mtg.mcp import register_echo_mtg_tools
-from apps.scryfall.mcp import register_scryfall_tools
-from apps.telegram.mcp import register_telegram_tools
-from apps.trello.mcp import register_trello_tools
-from apps.jira.mcp import register_jira_tools
-from apps.own_tracks.mcp import register_own_tracks_tools
-from apps.orgo.mcp import register_orgo_tools
-from apps.discord.mcp import register_discord_tools
-from apps.reddit.mcp import register_reddit_tools
-from apps.linkedin.mcp import register_linkedin_tools
-from apps.notion.mcp import register_notion_tools
-from apps.antropic.mcp import register_anthropic_tools
-from apps.gemini.mcp import register_gemini_tools
-from apps.open_ai.mcp import register_open_ai_tools
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,59 +25,38 @@ logger = logging.getLogger("harqis-mcp")
 
 mcp = FastMCP("harqis-work")
 
-logger.info("Registering OANDA tools")
-register_oanda_tools(mcp)
+# (label, module path, registrar function name)
+APP_REGISTRARS = [
+    ("OANDA",            "apps.oanda.mcp",        "register_oanda_tools"),
+    ("YNAB",             "apps.ynab.mcp",         "register_ynab_tools"),
+    ("Google Apps",      "apps.google_apps.mcp",  "register_google_apps_tools"),
+    ("TCG Marketplace",  "apps.tcg_mp.mcp",       "register_tcg_mp_tools"),
+    ("Echo MTG",         "apps.echo_mtg.mcp",     "register_echo_mtg_tools"),
+    ("Scryfall",         "apps.scryfall.mcp",     "register_scryfall_tools"),
+    ("Telegram",         "apps.telegram.mcp",     "register_telegram_tools"),
+    ("Trello",           "apps.trello.mcp",       "register_trello_tools"),
+    ("Jira",             "apps.jira.mcp",         "register_jira_tools"),
+    ("OwnTracks",        "apps.own_tracks.mcp",   "register_own_tracks_tools"),
+    ("Orgo",             "apps.orgo.mcp",         "register_orgo_tools"),
+    ("Discord",          "apps.discord.mcp",      "register_discord_tools"),
+    ("Reddit",           "apps.reddit.mcp",       "register_reddit_tools"),
+    ("LinkedIn",         "apps.linkedin.mcp",     "register_linkedin_tools"),
+    ("Notion",           "apps.notion.mcp",       "register_notion_tools"),
+    ("Anthropic",        "apps.antropic.mcp",     "register_anthropic_tools"),
+    ("Gemini",           "apps.gemini.mcp",       "register_gemini_tools"),
+    ("OpenAI",           "apps.open_ai.mcp",      "register_open_ai_tools"),
+]
 
-logger.info("Registering YNAB tools")
-register_ynab_tools(mcp)
-
-logger.info("Registering Google Apps tools")
-register_google_apps_tools(mcp)
-
-logger.info("Registering TCG Marketplace tools")
-register_tcg_mp_tools(mcp)
-
-logger.info("Registering Echo MTG tools")
-register_echo_mtg_tools(mcp)
-
-logger.info("Registering Scryfall tools")
-register_scryfall_tools(mcp)
-
-logger.info("Registering Telegram tools")
-register_telegram_tools(mcp)
-
-logger.info("Registering Trello tools")
-register_trello_tools(mcp)
-
-logger.info("Registering Jira tools")
-register_jira_tools(mcp)
-
-logger.info("Registering OwnTracks tools")
-register_own_tracks_tools(mcp)
-
-logger.info("Registering Orgo tools")
-register_orgo_tools(mcp)
-
-logger.info("Registering Discord tools")
-register_discord_tools(mcp)
-
-logger.info("Registering Reddit tools")
-register_reddit_tools(mcp)
-
-logger.info("Registering LinkedIn tools")
-register_linkedin_tools(mcp)
-
-logger.info("Registering Notion tools")
-register_notion_tools(mcp)
-
-logger.info("Registering Anthropic tools")
-register_anthropic_tools(mcp)
-
-logger.info("Registering Gemini tools")
-register_gemini_tools(mcp)
-
-logger.info("Registering OpenAI tools")
-register_open_ai_tools(mcp)
+# Lazy-import each app's mcp module so a missing config section in one app
+# does not prevent the rest from loading. Skipped apps log a warning.
+for label, module_path, fn_name in APP_REGISTRARS:
+    try:
+        mod = importlib.import_module(module_path)
+        registrar = getattr(mod, fn_name)
+        logger.info("Registering %s tools", label)
+        registrar(mcp)
+    except Exception as e:
+        logger.warning("Skipping %s tools — %s: %s", label, type(e).__name__, e)
 
 logger.info("MCP server ready — %d tool(s) registered", len(mcp._tool_manager._tools))
 

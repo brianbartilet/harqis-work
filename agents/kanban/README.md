@@ -52,9 +52,8 @@ Create a Trello board with these lists (exact names):
 | `Backlog`     | New tasks — orchestrator picks from here    |
 | `Pending`     | Agent claimed the card                      |
 | `In Progress` | Agent actively working                      |
-| `Blocked`     | Agent waiting on human input                |
-| `Done`        | Agent done — awaiting human approval        |
-| `Done`        | Completed                                   |
+| `Blocked`     | Hard-stop dependency — auto re-queued when resolved |
+| `Done`        | Agent done — awaiting maintainer review     |
 | `Failed`      | Agent encountered an unrecoverable error    |
 
 **Get your board ID:** Open any card on the board, copy its URL
@@ -127,27 +126,34 @@ agents/kanban/
 │   ├── trello.py             # TrelloProvider — Trello REST API v1
 │   └── jira.py               # JiraProvider — Jira REST API v2/v3
 │
+├── dependencies/
+│   ├── __init__.py
+│   └── detector.py           # DependencyDetector — identifies blocking / soft deps from card
+│
 ├── profiles/
 │   ├── schema.py             # AgentProfile dataclass + YAML loader
 │   ├── registry.py           # ProfileRegistry — loads and resolves profiles
 │   └── examples/
 │       ├── base.yaml         # Base profile (inherited by others)
 │       ├── agent_code.yaml   # Code agent — bash, read/write files, git
-│       └── agent_write.yaml  # Write agent — read/write files, research
+│       ├── agent_write.yaml  # Write agent — read/write files, research
+│       └── agent_full.yaml   # Full agent — deps, git tools, PR creation, claude[bot] author
 │
 ├── permissions/
 │   └── enforcer.py           # PermissionEnforcer — checks tools, FS, network, git
 │
 ├── agent/
-│   ├── context.py            # AgentContext — builds prompt from card data
+│   ├── context.py            # AgentContext — builds prompt from card data + repo snapshot
 │   ├── base.py               # BaseKanbanAgent — Claude tool-use loop
 │   └── tools/
 │       ├── registry.py       # ToolRegistry — maps tool names to callables + Claude defs
 │       ├── filesystem.py     # ReadFileTool, WriteFileTool, GlobTool, GrepTool, BashTool
+│       ├── git_tools.py      # GitStatusTool, GitCreateBranchTool, GitCommitTool, GitPushTool, GitCreatePRTool
 │       └── kanban_tools.py   # TrelloCommentTool, TrelloMoveTool, ChecklistTool
 │
 ├── orchestrator/
-│   └── local.py              # LocalOrchestrator — single-process polling loop + CLI
+│   ├── local.py              # LocalOrchestrator — single-process polling loop + CLI
+│   └── blocked_handler.py    # BlockedCardHandler — re-queues cards when deps are resolved
 │
 └── tests/
     ├── conftest.py            # Shared fixtures (cards, profiles)
@@ -156,8 +162,89 @@ agents/kanban/
     ├── test_profiles.py       # Profile loading + registry
     ├── test_permissions.py    # PermissionEnforcer
     ├── test_agent.py          # BaseKanbanAgent (mocked Claude)
-    └── test_orchestrator.py   # LocalOrchestrator (mocked provider + agent)
+    ├── test_orchestrator.py   # LocalOrchestrator (mocked provider + agent)
+    ├── test_git_tools.py      # Git tools (mocked subprocess)
+    ├── test_dependencies.py   # DependencyDetector
+    └── test_blocked_handler.py # BlockedCardHandler
 ```
+
+---
+
+---
+
+## New Features
+
+### Dependency Detection & BLOCKED State
+
+Before the agent runs, the orchestrator scans the card for hard-stop dependencies:
+
+| Signal | How it's detected |
+|---|---|
+| `required_secrets` custom field | Explicit list of env var names that must be set |
+| Service name in description | e.g. "OANDA" → checks `OANDA_ACCESS_TOKEN` |
+| "new workflow" in description | Soft dep — agent scaffolds from template |
+| "new app" in description | Soft dep — agent scaffolds from template |
+
+If **blocking** dependencies are unmet, the orchestrator:
+1. Posts a comment on the card listing what's needed
+2. Moves the card to **Blocked**
+
+The orchestrator then polls the Blocked column on a separate interval (default 300 s). When all required env vars are present, the card is automatically moved back to Backlog for retry.
+
+**Maintainer workflow for a blocked card:**
+1. Card arrives in Blocked with a comment describing the missing secret
+2. Maintainer adds the secret to `.env/agents.env` and restarts the orchestrator
+3. On the next blocked-column poll, the card is re-queued automatically
+
+To declare explicit blocking deps on a card, add a custom field:
+
+```
+required_secrets = SPOTIFY_CLIENT_ID,SPOTIFY_CLIENT_SECRET
+```
+
+---
+
+### Git Tools & Pull Request Creation
+
+All agents now have access to five git tools (controlled by the profile's `tools.allowed` list):
+
+| Tool | Purpose |
+|---|---|
+| `git_status` | Show working tree status |
+| `git_create_branch` | Create `agent/<card_id>/<slug>` branch |
+| `git_commit` | Stage + commit attributed to `claude[bot]` |
+| `git_push` | Push branch to origin (requires `git.can_push: true`) |
+| `git_create_pr` | Open a GitHub PR via `gh pr create` |
+
+All commits are attributed to the `claude[bot]` GitHub contributor:
+
+```
+Author: claude[bot] <claude[bot]@users.noreply.github.com>
+```
+
+Override the author in a profile's `permissions.git` section:
+
+```yaml
+permissions:
+  git:
+    can_push: true
+    author_name: "my-bot[bot]"
+    author_email: "my-bot[bot]@users.noreply.github.com"
+```
+
+The `agent:full` profile enables the complete git workflow end-to-end.
+
+---
+
+### Repository Context Injection
+
+When a profile sets `context.working_directory`, the agent's initial prompt automatically includes:
+
+- **CLAUDE.md** contents (if present, first 3000 chars)
+- **Existing MCP apps** (names from `apps/` directory)
+- **Existing workflows** (names from `workflows/` directory)
+
+This lets the agent reuse existing integrations rather than rebuilding them.
 
 ---
 

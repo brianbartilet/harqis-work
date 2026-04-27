@@ -105,6 +105,9 @@ class ProfileRegistry:
     def __len__(self) -> int:
         return len(self._profiles)
 
+    def __iter__(self):
+        return iter(self._profiles.values())
+
     def __contains__(self, profile_id: str) -> bool:
         return profile_id in self._profiles
 

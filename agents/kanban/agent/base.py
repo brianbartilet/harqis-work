@@ -81,7 +81,10 @@ class BaseKanbanAgent:
 
     def run(self) -> str:
         """Execute the agent loop. Returns the final text output."""
-        ctx = build_card_context(self.card)
+        ctx = build_card_context(
+            self.card,
+            working_directory=self.profile.context.working_directory or None,
+        )
         messages: list[dict] = [{"role": "user", "content": ctx.to_prompt()}]
         tools = self.registry.definitions()
         system = self._system_prompt()
@@ -90,7 +93,7 @@ class BaseKanbanAgent:
         self._audit.agent_start(self.card.title)
 
         iteration = 0
-        max_iterations = 50  # hard safety cap
+        max_iterations = 50
 
         while iteration < max_iterations:
             iteration += 1

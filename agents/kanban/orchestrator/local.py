@@ -35,8 +35,10 @@ from time import sleep
 from typing import Optional
 
 from agents.kanban.agent.base import BaseKanbanAgent
+from agents.kanban.dependencies.detector import DependencyDetector
 from agents.kanban.factory import create_provider
 from agents.kanban.interface import KanbanCard, KanbanProvider
+from agents.kanban.orchestrator.blocked_handler import BlockedCardHandler
 from agents.kanban.profiles.registry import ProfileRegistry
 from agents.kanban.profiles.schema import AgentProfile
 from agents.kanban.security.audit import AuditLogger, NullAuditLogger
@@ -72,6 +74,9 @@ class LocalOrchestrator:
         self.poll_interval = poll_interval
         self.dry_run = dry_run
         self._audit_log_path = audit_log_path or Path("logs/kanban_audit.jsonl")
+        self._dep_detector = DependencyDetector()
+        self._blocked_handler = BlockedCardHandler(provider, board_id)
+        self._blocked_poll_countdown = 0
 
     # ── Single card processing ────────────────────────────────────────────────
 
@@ -93,6 +98,27 @@ class LocalOrchestrator:
         if self.dry_run:
             logger.info("[DRY RUN] Would run %s on card %s", profile.id, card.id)
             return "[dry-run]"
+
+        # Dependency check — block if hard-stop deps are unmet
+        if profile.lifecycle.detect_dependencies and profile.lifecycle.block_on_missing_secrets:
+            dep_result = self._dep_detector.detect(card)
+            if dep_result.has_blocking:
+                logger.warning(
+                    "Card '%s' has blocking dependencies — moving to Blocked", card.title
+                )
+                try:
+                    summary = dep_result.blocker_summary()
+                    self.provider.add_comment(
+                        card.id,
+                        f"## Agent: Blocked\n\n"
+                        f"Cannot start — the following dependencies must be resolved by the maintainer:\n\n"
+                        f"{summary}\n\n"
+                        f"Once resolved, the card will be automatically re-queued.",
+                    )
+                    self.provider.move_card(card.id, "Blocked")
+                except Exception as e:
+                    logger.error("Failed to block card %s: %s", card.id, e)
+                return None
 
         # Scope secrets to only what this profile declared it needs
         try:
@@ -206,14 +232,43 @@ class LocalOrchestrator:
                 )
         return count
 
+    def poll_blocked(self) -> int:
+        """
+        Check the Blocked column for cards whose dependencies are now resolved.
+        Returns the number of cards re-queued to Backlog.
+        """
+        n = self._blocked_handler.poll_once()
+        if n:
+            logger.info("Re-queued %d previously blocked card(s)", n)
+        return n
+
     def run(self) -> None:
-        """Start the polling loop. Ctrl+C to stop."""
+        """
+        Start the polling loop. Ctrl+C to stop.
+
+        Every poll_interval seconds the Backlog is checked. Blocked cards are
+        rechecked on a separate cadence (blocked_poll_interval_seconds from the
+        first profile loaded, defaulting to 300 s).
+        """
+        # Derive blocked poll interval from the registry's first profile, if any
+        blocked_interval = 300
+        try:
+            first_profile = next(iter(self.registry))
+            blocked_interval = first_profile.lifecycle.blocked_poll_interval_seconds
+        except (StopIteration, AttributeError):
+            pass
+
         logger.info(
-            "LocalOrchestrator started | board=%s | interval=%ds | dry_run=%s",
+            "LocalOrchestrator started | board=%s | interval=%ds | blocked_interval=%ds | dry_run=%s",
             self.board_id,
             self.poll_interval,
+            blocked_interval,
             self.dry_run,
         )
+
+        ticks_until_blocked_poll = blocked_interval // max(self.poll_interval, 1)
+        tick = 0
+
         while True:
             try:
                 n = self.poll_once()
@@ -221,6 +276,12 @@ class LocalOrchestrator:
                     logger.info("Processed %d card(s)", n)
                 else:
                     logger.debug("Nothing to do")
+
+                tick += 1
+                if tick >= ticks_until_blocked_poll:
+                    self.poll_blocked()
+                    tick = 0
+
             except KeyboardInterrupt:
                 logger.info("Shutting down orchestrator")
                 break

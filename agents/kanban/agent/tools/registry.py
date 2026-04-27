@@ -68,11 +68,16 @@ class ToolRegistry:
         from agents.kanban.agent.tools.filesystem import (
             BashTool, GlobTool, GrepTool, ReadFileTool, WriteFileTool,
         )
+        from agents.kanban.agent.tools.git_tools import (
+            GitCommitTool, GitCreateBranchTool, GitCreatePRTool,
+            GitPushTool, GitStatusTool,
+        )
         from agents.kanban.agent.tools.kanban_tools import (
             ChecklistTool, TrelloCommentTool, TrelloMoveTool,
         )
 
         working_dir = self._profile.context.working_directory or None
+        git_config = self._profile.permissions.git
 
         for tool_cls in (
             ReadFileTool(self._enforcer),
@@ -80,6 +85,11 @@ class ToolRegistry:
             GlobTool(self._enforcer),
             GrepTool(self._enforcer),
             BashTool(self._enforcer, cwd=working_dir),
+            GitStatusTool(self._enforcer, cwd=working_dir),
+            GitCreateBranchTool(self._enforcer, cwd=working_dir),
+            GitCommitTool(self._enforcer, git_config=git_config, cwd=working_dir),
+            GitPushTool(self._enforcer, git_config=git_config, cwd=working_dir),
+            GitCreatePRTool(self._enforcer, cwd=working_dir),
             TrelloCommentTool(self._provider, self._card.id),
             TrelloMoveTool(self._provider, self._card.id),
             ChecklistTool(self._provider, self._card.id, self._card.checklists),

@@ -85,6 +85,8 @@ class GitPermission:
         default_factory=lambda: ["main", "master", "prod"]
     )
     require_pr: bool = True
+    author_name: str = "claude[bot]"
+    author_email: str = "claude[bot]@users.noreply.github.com"
 
 
 @dataclass
@@ -113,6 +115,9 @@ class LifecycleConfig:
     auto_approve: bool = False
     max_retries: int = 1
     retry_delay_seconds: int = 30
+    detect_dependencies: bool = True
+    block_on_missing_secrets: bool = True
+    blocked_poll_interval_seconds: int = 300
 
 
 # ── Root profile ──────────────────────────────────────────────────────────────
@@ -241,6 +246,8 @@ def _load_permissions(d: dict) -> PermissionsConfig:
                 "protected_branches", ["main", "master", "prod"]
             ),
             require_pr=git.get("require_pr", True),
+            author_name=git.get("author_name", "claude[bot]"),
+            author_email=git.get("author_email", "claude[bot]@users.noreply.github.com"),
         ),
     )
 
@@ -265,6 +272,9 @@ def _load_lifecycle(d: dict) -> LifecycleConfig:
         auto_approve=bool(d.get("auto_approve", False)),
         max_retries=int(d.get("max_retries", 1)),
         retry_delay_seconds=int(d.get("retry_delay_seconds", 30)),
+        detect_dependencies=bool(d.get("detect_dependencies", True)),
+        block_on_missing_secrets=bool(d.get("block_on_missing_secrets", True)),
+        blocked_poll_interval_seconds=int(d.get("blocked_poll_interval_seconds", 300)),
     )
 
 

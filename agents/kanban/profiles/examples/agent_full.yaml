@@ -1,0 +1,117 @@
+id: agent:full
+name: "Full Agent"
+description: >
+  Full-capability agent that detects dependencies, scaffolds new workflows/apps,
+  commits changes, and opens pull requests attributed to claude[bot].
+version: "1.0"
+extends: base
+
+model:
+  provider: anthropic
+  model_id: claude-sonnet-4-6
+  max_tokens: 8192
+  system_prompt: |
+    You are a full-capability software engineering agent operating on a harqis-work repository clone.
+
+    ## Context gathering (always do this first)
+    Before writing any code:
+    1. Read the Repository Context section of the task — it lists all existing apps and workflows.
+    2. Check if any existing app or workflow already implements what you need — reuse beats rebuild.
+    3. Scan the card's description and parameters for clues about required services or APIs.
+    4. Use glob and grep to explore the codebase before touching files.
+
+    ## Dependency awareness
+    - If the card requires an API key or secret that is not in your environment, post a comment
+      explaining what is needed and stop — do not guess or fabricate credentials.
+    - If the card requires a new Celery workflow, scaffold it from workflows/.template/.
+    - If the card requires a new MCP app, scaffold it from apps/.template/.
+    - Document all scaffolded dependencies in your final comment.
+
+    ## Git workflow
+    1. Always start by creating a branch: agent/<card_id>/<slug>
+    2. Commit frequently with descriptive messages.
+    3. All commits must use git_commit — never the bash tool directly for committing.
+    4. After all work is done, push the branch and open a pull request.
+    5. The PR body must include: what changed, why, test results, and the card URL.
+    6. Post the PR URL as a comment on the card.
+
+    ## Code quality
+    - Read existing code before modifying it.
+    - Run tests after changes: use bash with pytest.
+    - Never commit directly to main/master/prod.
+    - Never commit .env files or secret files.
+
+context:
+  working_directory: ""  # Override via KANBAN_WORKING_DIR env var or card custom field
+
+tools:
+  allowed:
+    - read_file
+    - write_file
+    - glob
+    - grep
+    - bash
+    - git_status
+    - git_create_branch
+    - git_commit
+    - git_push
+    - git_create_pr
+    - post_comment
+    - move_card
+    - check_item
+  mcp_apps:
+    - google_apps
+    - trello
+    - discord
+    - jira
+    - telegram
+
+permissions:
+  filesystem:
+    allow:
+      - "**"
+    deny:
+      - "**/.env/**"
+      - "**/secrets/**"
+      - "**/.git/config"
+  network:
+    allow:
+      - "api.anthropic.com"
+      - "api.trello.com"
+      - "api.github.com"
+    deny:
+      - "*"
+  git:
+    can_push: true
+    protected_branches:
+      - main
+      - master
+      - prod
+    require_pr: true
+    author_name: "claude[bot]"
+    author_email: "claude[bot]@users.noreply.github.com"
+
+hardware:
+  node_affinity: any
+  queue: code
+
+lifecycle:
+  timeout_minutes: 45
+  auto_approve: false
+  on_success: move_to_done
+  max_retries: 2
+  detect_dependencies: true
+  block_on_missing_secrets: true
+  blocked_poll_interval_seconds: 300
+
+secrets:
+  required:
+    - ANTHROPIC_API_KEY
+    - TRELLO_API_KEY
+    - TRELLO_API_TOKEN
+    - DISCORD_BOT_TOKEN
+    - DISCORD_GUILD_ID
+    - TELEGRAM_BOT_TOKEN
+    - JIRA_SERVER
+    - JIRA_EMAIL
+    - JIRA_API_TOKEN
