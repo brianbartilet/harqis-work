@@ -27,6 +27,7 @@ from apps.linkedin.mcp import register_linkedin_tools
 from apps.notion.mcp import register_notion_tools
 from apps.antropic.mcp import register_anthropic_tools
 from apps.gemini.mcp import register_gemini_tools
+from apps.open_ai.mcp import register_open_ai_tools
 
 logging.basicConfig(
     level=logging.INFO,
@@ -86,6 +87,9 @@ register_anthropic_tools(mcp)
 
 logger.info("Registering Gemini tools")
 register_gemini_tools(mcp)
+
+logger.info("Registering OpenAI tools")
+register_open_ai_tools(mcp)
 
 logger.info("MCP server ready — %d tool(s) registered", len(mcp._tool_manager._tools))
 

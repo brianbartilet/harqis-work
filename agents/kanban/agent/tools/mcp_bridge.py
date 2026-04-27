@@ -52,6 +52,7 @@ _APP_LOADERS: dict[str, str] = {
     "orgo":        "apps.orgo.mcp.register_orgo_tools",
     "own_tracks":  "apps.own_tracks.mcp.register_own_tracks_tools",
     "gemini":      "apps.gemini.mcp.register_gemini_tools",
+    "open_ai":     "apps.open_ai.mcp.register_open_ai_tools",
 }
 
 
