@@ -327,6 +327,48 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         return {"card": card_name, "status": "error", "error": str(e)}
 
 
+def _worker_fetch_note_for_listing(task: dict):
+    """
+    Fetch a single card's note and return the card if it needs a new listing, else None.
+    Runs inside a spawned process — all imports must be local.
+
+    Qualifies when:
+      - tcg_mp_listing_id == 0  → no listing yet, or reset by update_tcg_listings_prices
+      - tcg_mp_card_id > 0     → TCG product mapping exists (required by add_listing)
+    """
+    from apps.apps_config import CONFIG_MANAGER
+    from apps.echo_mtg.references.web.api.notes import ApiServiceEchoMTGNotes
+    import json
+
+    card = task["card_echo"]
+    cfg_id__echo_mtg = task["cfg_id__echo_mtg"]
+
+    try:
+        cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
+        api_notes = ApiServiceEchoMTGNotes(cfg__echo_mtg)
+        note = api_notes.get_note(card["note_id"])
+        json_note = json.loads(note["note"]["note"])
+        if json_note["tcg_mp_listing_id"] == 0 and json_note["tcg_mp_card_id"] > 0:
+            return card
+    except Exception:
+        pass
+    return None
+
+
+def _filter_cards_needing_listing(cards: list, cfg_id__echo_mtg: str, worker_count: int = 4) -> list:
+    """
+    Parallel pre-filter: fetch notes for all cards concurrently and return only those
+    that need a new TCG MP listing. Order is not guaranteed (not required).
+
+    Pre-filtering here avoids spawning a worker process per card in generate_tcg_listings
+    only to have the worker immediately return {"status": "existing_listing"}.
+    """
+    tasks = [{"card_echo": card, "cfg_id__echo_mtg": cfg_id__echo_mtg} for card in cards]
+    mp_client = MultiProcessingClient(tasks=tasks, worker_count=worker_count)
+    mp_client.execute_tasks(_worker_fetch_note_for_listing, timeout_secs=60 * 30)
+    return [card for card in mp_client.get_tasks_output() if card is not None]
+
+
 @log_result()
 @feed()
 @SPROUT.task()
@@ -339,15 +381,17 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
     cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
     api_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
 
-    cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
-    api_service__tcg_mp_merchant = ApiServiceTcgMpMerchant(cfg__tcg_mp)
-
     cards_echo = api_inventory.get_collection(tradable_only=1) or []
     if not cards_echo:
         tcg_mp_log.info("No tradable cards found.")
         return "SUCCESS"
     cards_echo = cards_echo if limit is None else cards_echo[:limit]
     cards_echo.reverse()
+
+    cards_to_list = _filter_cards_needing_listing(cards_echo, cfg_id__echo_mtg, worker_count or min(4, psutil.cpu_count()))
+    tcg_mp_log.info(f"{len(cards_to_list)} of {len(cards_echo)} cards need a new listing.")
+    if not cards_to_list:
+        return "SUCCESS"
 
     # api_service__tcg_mp_merchant.set_listing_status(0)
 
@@ -358,7 +402,7 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
             "cfg_id__echo_mtg": cfg_id__echo_mtg,
             "cfg_id__echo_mtg_fe": cfg_id__echo_mtg_fe,
         }
-        for card in cards_echo
+        for card in cards_to_list
     ]
 
     mp_client = MultiProcessingClient(
@@ -426,7 +470,7 @@ def _retry_edit_listing(api_publish, *, max_attempts=10, base_delay=1.0, max_del
     return r
 
 
-def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1 + 0.20 + 0.10), commission_rate = 1.05):
+def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 + 0), commission_rate = 1.05):
     """
     Worker executed in a separate process.
     conversion_multiplier = currency estimated rate + tcg/ck pricing diff
@@ -486,22 +530,47 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1 + 
             post_price = round(decision.price * conversion_multiplier, 2)
 
         json_note["tcg_mp_selling_price"] = post_price
+        # check if original listing still exists if not create another, example scenario would be
+        # 1. previous listing was 1
+        # 2. it was sold and the echo mtg inventory was not updated
+        # 3. copy of the same card is added to the inventory
+        # 4. will still be mapped to the old listing, instead to a new one
 
-        # just update prices, app can't support multiple copies of the same card with different prices
+        # Update price for the existing TCG MP listing.
+        # Quantity reflects only matching foil/non-foil copies so duplicate inventory entries
+        # are consolidated into one listing rather than creating separate listings per copy.
+        #
+        # edit_listing returns '' when the listing no longer exists on TCG MP (e.g. sold or
+        # removed externally). In that case reset tcg_mp_listing_id to 0 so that
+        # generate_tcg_listings (scheduled at hour=1, after generate_tcg_mappings at hour=0)
+        # treats this card as new and recreates the listing on the marketplace.
+
         try:
             time.sleep(2)
-            # update the flow to remove the previous listing then add a new one to consolidate
-            # when updated pricing is run, if there are two or more listings (w/ different pricing), it would consolidate
-            # to one and an previous listing would remain causing the duplicates
-            _retry_edit_listing(
+            existing = api_service__search.search_card(card_echo["emid"], tradable_only=1)
+            matching = [c for c in existing if c["foil"] == card_echo["foil"]]
+            quantity = len(matching) if len(matching) > 1 else 1
+
+            edit_result = _retry_edit_listing(
                 api_publish,
                 max_attempts=10,
                 base_delay=1.0,
                 max_delay=20.0,
                 price=post_price * commission_rate,
+                quantity=quantity,
+                foil=card_echo["foil"],
                 listing_id=json_note["tcg_mp_listing_id"],
             )
-            updated = True
+
+            if not edit_result:
+                # Listing gone from TCG MP; reset so generate_tcg_listings can recreate it.
+                _log_worker_generate_tcg_listings.warning(
+                    f"Listing {json_note['tcg_mp_listing_id']} not found for {card_name}; resetting to allow recreation."
+                )
+                json_note["tcg_mp_listing_id"] = 0
+                updated = False
+            else:
+                updated = True
         except Exception:
             _log_worker_generate_tcg_listings.exception(f"Failed to update listing for {card_name}")
             updated = False
