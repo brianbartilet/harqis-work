@@ -19,7 +19,7 @@ Produce a LinkedIn post in plain text (no markdown headings, no bullet symbols w
 ### Structure (follow this order exactly):
 
 ```
-HARQIS-WORK: {MONTH_NAME} {YEAR} Update
+HARQIS-WORK: {MONTH_NAME} {YEAR} Summary
 
 {1-2 sentence opening that frames the month's theme or standout achievement. Make it engaging — lead with impact.}
 
