@@ -2,10 +2,16 @@
 
 ## Introduction
 
-- Real-world implementation of [HARQIS-core](https://github.com/brianbartilet/harqis-core), integrating 16+ third-party applications and automation layers.
-- Demonstrates **RPA-like capabilities** implemented entirely in Python with Celery, n8n, and AI-driven workflows.
-- Provides an extensible portfolio of automated routines for business, productivity, and personal systems.
-- Think of it as a code-first RPA platform — every integration is a Python module, every scheduled routine is a Celery task, and every repetitive job is a candidate for an AI agent.
+**HARQIS-Work** is a self-hosted automation platform designed to eliminate repetitive manual work — built initially as a personal system, but structured to scale to real-world business workflows and production requirements. It connects 20+ third-party services and orchestrates them as a coordinated set of Python integrations, scheduled tasks, and AI agents.
+
+It provides an extensible portfolio of automated routines spanning business operations, developer productivity, personal finance, trading, and lifestyle management. Every integration is a standalone Python module; every routine is a schedulable Celery task; every repetitive job is a candidate for an AI agent. The platform started as a code-first RPA system and has since evolved into AI-driven automation — while still fully supporting traditional scheduled tasks and browser-based RPA workflows where needed.
+
+At its core the platform has three layers:
+
+- **App integrations** (`apps/`) — REST clients and service wrappers for every connected third-party (Google Workspace, Discord, Jira, Trello, OANDA, YNAB, LinkedIn, Reddit, and more), each exposable as an MCP tool so AI agents can call them directly.
+- **Scheduled workflows** (`workflows/`) — Celery Beat tasks that run on a defined schedule: pushing live data to a desktop HUD, processing MTG card resale pipelines, syncing git repos, posting monthly LinkedIn summaries, and more.
+- **AI agent layer** (`agents/`) — Claude-powered agents that operate autonomously: a Kanban agent that picks up Trello/Jira cards and executes them as tool-use loops, and an OpenClaw persistent agent reachable over Telegram, Discord, and WhatsApp with its own synced memory and identity.
+- **Core framework** — built on [HARQIS-core](https://github.com/brianbartilet/harqis-core), which provides the base service fixtures, configuration loading, and test infrastructure that every app integration extends.
 
 ---
 
