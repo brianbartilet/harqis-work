@@ -108,20 +108,32 @@ Tests: `pytest agents/kanban/tests/ -m "not integration"` — 75 unit tests, ful
 
 ---
 
-### OpenClaw Agent (`/.openclaw/`)
+### OpenClaw Agent
 
-HARQIS-Work includes an [OpenClaw](https://openclaw.ai) agent workspace. OpenClaw is a local AI agent runtime that hosts Claude agents and connects them to messaging channels (WhatsApp, Telegram, Discord) with a persistent, file-based memory system.
+[OpenClaw](https://openclaw.ai) is a local AI agent runtime that hosts Claude agents and connects them to messaging channels (WhatsApp, Telegram, Discord) with a persistent, file-based memory and identity system.
+
+The OpenClaw workspace is **not stored in this repo**. It lives in its own dedicated sync repository — [`harqis-openclaw-sync`](https://github.com/brianbartilet/harqis-openclaw-sync) — so that the agent's identity, memory, and rules are shared consistently across every host (Mac Mini, VPS, Windows worker nodes) without mixing agent state into the platform codebase.
 
 ```
-.openclaw/workspace/
-├── SOUL.md        # Agent personality and values
-├── AGENTS.md      # Session startup, memory rules, group chat etiquette
-├── TOOLS.md       # Machine-specific tool notes (SSH, cameras, TTS)
-├── HEARTBEAT.md   # Periodic background task checklist (email, calendar)
-└── BOOTSTRAP.md   # One-time first-run initialization (delete after use)
+harqis-openclaw-sync/          ← separate git repo, cloned alongside harqis-work
+└── .openclaw/workspace/
+    ├── SOUL.md        # Agent personality and core values
+    ├── USER.md        # Who the agent assists and how
+    ├── AGENTS.md      # Session startup rules, memory discipline, group chat etiquette
+    ├── MEMORY.md      # Long-term narrative memory index
+    ├── TOOLS.md       # Machine-specific tool notes (SSH, cameras, TTS, paths)
+    ├── HEARTBEAT.md   # Periodic background task checklist (email, calendar, monitoring)
+    └── memory/
+        └── YYYY-MM-DD.md  # Daily session notes (auto-committed by the agent)
 ```
 
-Only `workspace/` is committed — credentials, device identity, and flow registry are gitignored and machine-local.
+**Why it's separate:** the agent auto-commits and pushes to `harqis-openclaw-sync` after every memory update. Keeping it out of `harqis-work` means the platform repo stays under manual maintainer control while the agent writes its own memory continuously. Losing one repo does not affect the other.
+
+**Cross-machine sync:** an auto-pull job runs every 30 minutes on each host (macOS LaunchAgent, Windows Task Scheduler, Linux cron) and pulls both repos. This is what makes HARQIS-CLAW behave identically on any node — it always has the latest identity and memory files before starting a session.
+
+> Setup, sync scripts, and per-OS wiring details: [`docs/info/AI-TOOLS-SETUP.md`](docs/info/AI-TOOLS-SETUP.md)  
+> Host deployment and service inventory: [`docs/info/HARQIS-CLAW-HOST.md`](docs/info/HARQIS-CLAW-HOST.md)  
+> Sync repo architecture: [`docs/info/OPENCLAW-SYNC.md`](docs/info/OPENCLAW-SYNC.md)
 
 ---
 
@@ -173,6 +185,7 @@ Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and 
 | `hud` | Active | 12 | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins |
 | `purchases` | Active | 3 (+1 disabled) | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
 | `desktop` | Active | 7 | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
+| `social` | Active | 1 | Monthly LinkedIn post — git history → Claude → LinkedIn draft + Gmail notification |
 | `mobile` | Active | 1 (unscheduled) | Android screen capture and OCR logging |
 | `finance` | Stub | 0 | No tasks defined |
 | `n8n` | Utilities | — | Shell utilities and ngrok helpers for n8n integration |
@@ -310,7 +323,6 @@ harqis-work/
 │   └── thesis/                     # Architecture design documents
 │
 ├── scripts/                        # Startup and utility scripts (.bat / .sh)
-├── .openclaw/workspace/            # OpenClaw agent workspace (versioned)
 ├── apps_config.yaml                # Central app configuration
 ├── pytest.ini                      # Test configuration
 ├── requirements.txt                # Python dependencies
@@ -381,7 +393,7 @@ The three driving principles:
    ┌──────────────────────────────────────────────────────────┐
    │                  OpenClaw Agent Runtime                  │
    │         SOUL.md · AGENTS.md · MEMORY.md · USER.md        │
-   │                 (harqis-openclaw-sync)                   │
+   │       identity synced via harqis-openclaw-sync repo      │
    └─────────────────────────┬────────────────────────────────┘
                              │  calls tools via
                              ▼
@@ -413,7 +425,7 @@ The three driving principles:
 
 | Component | Where | What it does |
 |---|---|---|
-| **OpenClaw agent** | `harqis-openclaw-sync/.openclaw/workspace/` | Persistent AI agent identity, memory, heartbeat tasks, and behavioral rules |
+| **OpenClaw agent** | [`harqis-openclaw-sync`](https://github.com/brianbartilet/harqis-openclaw-sync) — `.openclaw/workspace/` | Persistent AI agent identity, memory, heartbeat tasks, and behavioral rules — shared across all hosts via auto-sync |
 | **MCP server** | `mcp/server.py` | Exposes all 20+ app integrations as callable tools over the Model Context Protocol |
 | **Celery Beat** | `workflows/config.py` | Runs all scheduled automation — HUD updates, MTG resale pipeline, desktop sync |
 | **RabbitMQ + Redis** | Docker stack | Celery broker and result backend |
