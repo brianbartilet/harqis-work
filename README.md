@@ -118,6 +118,25 @@ Tests: `pytest agents/kanban/tests/ -m "not integration"` — 75 unit tests, ful
 
 [OpenClaw](https://openclaw.ai) is a local AI agent runtime that hosts Claude agents and connects them to messaging channels (WhatsApp, Telegram, Discord) with a persistent, file-based memory and identity system.
 
+#### Primary use case: wiring and manual triggering
+
+OpenClaw's role in this platform is **not** to build integrations — that happens in `harqis-work`. Its role is to **wire things together** and act as the human-facing control surface:
+
+- **Trigger workflows on demand** — invoke any Celery task in `harqis-work` manually via a chat message without opening a terminal (e.g. "run the TCG price update now", "kick off the LinkedIn post job")
+- **Local scheduling for single apps** — set up lightweight, ad-hoc schedules for a single app or task that don't warrant a full Celery Beat entry (e.g. "remind me to check OANDA at 9am", "poll my inbox every hour today")
+- **Wire integrations into conversational flows** — chain MCP tools from `harqis-work` across a conversation turn: fetch data from one app, process it, push the result to another, without writing a new workflow
+
+**Separation of concerns:**
+
+| Repo | Role | What lives here |
+|---|---|---|
+| `harqis-work` | **Build** — the platform structure | App integrations, Celery workflows, MCP server, scheduled tasks, core config |
+| `harqis-openclaw-sync` | **Wire** — the pipes and control surface | Agent identity, memory, rules, ad-hoc schedules, manual trigger scripts |
+
+The rule of thumb: if it needs to run reliably on a cron or be reused by multiple consumers, it belongs in `harqis-work`. If it's a one-off connection, a manual trigger, or a conversational shortcut, it belongs in OpenClaw.
+
+#### Workspace layout
+
 The OpenClaw workspace is **not stored in this repo**. It lives in its own dedicated sync repository — [`harqis-openclaw-sync`](https://github.com/brianbartilet/harqis-openclaw-sync) — so that the agent's identity, memory, and rules are shared consistently across every host (Mac Mini, VPS, Windows worker nodes) without mixing agent state into the platform codebase.
 
 ```
