@@ -538,8 +538,8 @@ in sync with the actual `.env/apps.env` whenever an app is added — the
 
 ```env
 # ── Core / harness ────────────────────────────────────────────────────────────
-APP_CONFIG_FILE=apps_config.yaml
-WORKFLOW_CONFIG=workflows.config
+APP_CONFIG_FILE=                  # default: apps_config.yaml
+WORKFLOW_CONFIG=                  # default: workflows.config
 
 # ── Frontend dashboard ────────────────────────────────────────────────────────
 APP_USERNAME=
@@ -547,23 +547,23 @@ APP_PASSWORD=
 APP_SECRET_KEY=
 
 # ── RabbitMQ / Celery broker ──────────────────────────────────────────────────
-DOCKER_HOST_PORT_RABBIT_MQ=15672
-CELERY_BROKER=amqp://guest:guest@localhost:5672/
+DOCKER_HOST_PORT_RABBIT_MQ=       # default: 15672
+CELERY_BROKER=                    # default: amqp://guest:guest@localhost:5672/
 
 # ── Elasticsearch + Kibana ────────────────────────────────────────────────────
-ELASTIC_HOST=http://localhost:9200
+ELASTIC_HOST=                     # default: http://localhost:9200
 ELASTIC_USER=
 ELASTIC_PASSWORD=
 ELASTICSEARCH_PASSWORD=
-KIBANA_HOST=http://localhost:5601
-KIBANA_SYSTEM_USER=kibana_system
+KIBANA_HOST=                      # default: http://localhost:5601
+KIBANA_SYSTEM_USER=               # default: kibana_system
 KIBANA_SYSTEM_PASSWORD=
 KIBANA_ANON_PASSWORD=
 ELASTIC_API_KEY=
 
 # ── n8n ───────────────────────────────────────────────────────────────────────
-N8N_BASIC_AUTH_ACTIVE=true
-N8N_BASIC_AUTH_USER=admin
+N8N_BASIC_AUTH_ACTIVE=            # true | false
+N8N_BASIC_AUTH_USER=              # default: admin
 N8N_API_KEY=
 
 # ── Flower (Celery monitor) ───────────────────────────────────────────────────
@@ -574,8 +574,8 @@ FLOWER_PASSWORD=
 NGROK_AUTHTOKEN=
 
 # ── Python runner ─────────────────────────────────────────────────────────────
-PYTHON_EXE=
-ENV_ROOT=
+PYTHON_EXE=                       # absolute path to your venv python
+ENV_ROOT=                         # absolute path to repo root on this host
 
 # ── AI / LLM ──────────────────────────────────────────────────────────────────
 ANTHROPIC_API_KEY=
@@ -596,17 +596,17 @@ ELEVEN_AGENT_N8N_CHAT_TESTS=
 # ── Productivity / project management ─────────────────────────────────────────
 TRELLO_API_KEY=
 TRELLO_API_TOKEN=
-JIRA_DOMAIN=
+JIRA_DOMAIN=                      # e.g. yourcompany.atlassian.net
 JIRA_EMAIL=
 JIRA_API_TOKEN=
 NOTION_API_TOKEN=
-AIRTABLE_API_TOKEN=
+AIRTABLE_API_TOKEN=               # personal access token (pat...)
 
 # Kanban orchestrator
-KANBAN_BOARD_ID=
+KANBAN_BOARD_ID=                  # Trello board id or Jira project key
 
 # ── GitHub ────────────────────────────────────────────────────────────────────
-GITHUB_API_TOKEN=
+GITHUB_API_TOKEN=                 # fine-grained PAT (ghp_...)
 
 # ── Communication ─────────────────────────────────────────────────────────────
 DISCORD_BOT_TOKEN=
@@ -617,14 +617,14 @@ TELEGRAM_DEFAULT_CHAT_ID=
 LINKEDIN_CLIENT_ID=
 LINKEDIN_CLIENT_SECRET=
 LINKEDIN_ACCESS_TOKEN=
-LINKEDIN_REDIRECT_URI=
+LINKEDIN_REDIRECT_URI=            # e.g. http://localhost:8099
 LINKEDIN_PERSON_ID=
 LINKEDIN_DEFAULT_POST_URN=
 REDDIT_CLIENT_ID=
 REDDIT_CLIENT_SECRET=
 REDDIT_USERNAME=
 REDDIT_PASSWORD=
-REDDIT_USER_AGENT=
+REDDIT_USER_AGENT=                # e.g. harqis-work:v1.0 (by /u/<you>)
 REDDIT_DEFAULT_SUBREDDIT=
 
 # ── Finance ───────────────────────────────────────────────────────────────────
@@ -641,31 +641,31 @@ ECHO_MTG_PASSWORD=
 ECHO_MTG_BULK_BEARER_TOKEN=
 ECHO_MTG_BULK_USER=
 ECHO_MTG_BULK_PASSWORD=
-SCRY_DOWNLOADS_PATH=
+SCRY_DOWNLOADS_PATH=              # local download dir for Scryfall bulk files
 TCG_MP_USERNAME=
 TCG_MP_PASSWORD=
 TCG_MP_USER_ID=
-TCG_SAVE=
+TCG_SAVE=                         # local save dir for TCG marketplace exports
 
 # ── Cloud / infrastructure ────────────────────────────────────────────────────
 ORGO_API_KEY=
 GOOGLE_APPS_API_KEY=
-OWN_TRACKS_HOST=localhost
-OWN_TRACKS_PORT=8083
+OWN_TRACKS_HOST=                  # default: localhost
+OWN_TRACKS_PORT=                  # default: 8083
 OWN_TRACKS_USERNAME=
 OWN_TRACKS_PASSWORD=
 OWN_TRACKS_DEFAULT_USER=
 OWN_TRACKS_DEFAULT_DEVICE=
 
 # ── Desktop capture / Rainmeter (Windows) ─────────────────────────────────────
-ACTIONS_LOG_PATH=
-ACTIONS_ARCHIVE_PATH=
-ACTIONS_SCREENSHOT_PATH=
-DESKTOP_PATH_DEV=
-DESKTOP_PATH_RUN=
-DESKTOP_PATH_FEED=
-DESKTOP_PATH_I_CUE_PROFILES=
-RAINMETER_BIN_PATH=
+ACTIONS_LOG_PATH=                 # absolute path
+ACTIONS_ARCHIVE_PATH=             # absolute path
+ACTIONS_SCREENSHOT_PATH=          # absolute path
+DESKTOP_PATH_DEV=                 # repo path on this host
+DESKTOP_PATH_RUN=                 # runtime path on this host
+DESKTOP_PATH_FEED=                # feed output path
+DESKTOP_PATH_I_CUE_PROFILES=      # Corsair iCUE profiles dir
+RAINMETER_BIN_PATH=               # path to Rainmeter.exe
 RAINMETER_STATIC_PATH=
 RAINMETER_WRITE_SKINS_TO_PATH=
 RAINMETER_WRITE_FEED_TO_PATH=
