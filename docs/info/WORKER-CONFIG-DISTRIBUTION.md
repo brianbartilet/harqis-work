@@ -92,17 +92,17 @@ WORKER (no local files needed):
 │                   │                                                         │
 │          ┌────────┴────────┐                                                │
 │          │                 │                                                │
-│   ┌──────▼──────┐   ┌──────▼──────┐                                        │
-│   │  Redis      │   │  HTTP       │   ← choose one (or both)               │
-│   │  DB 1       │   │  server     │                                        │
-│   │  :6379/1    │   │  :8765      │                                        │
-│   └──────┬──────┘   └──────┬──────┘                                        │
+│   ┌──────▼──────┐   ┌──────▼──────┐                                         │
+│   │  Redis      │   │  HTTP       │   ← choose one (or both)                │
+│   │  DB 1       │   │  server     │                                         │
+│   │  :6379/1    │   │  :8765      │                                         │
+│   └──────┬──────┘   └──────┬──────┘                                         │
 │          │                 │                                                │
-└──────────┼─────────────────┼───────────────────────────────────────────────┘
+└──────────┼─────────────────┼────────────────────────────────────────────────┘
            │   VPN / network │
 ┌──────────┼─────────────────┼───────────────────────────────────────────────┐
-│  REMOTE WORKERS            │                                                │
-│                            │                                                │
+│  REMOTE WORKERS            │                                               │
+│                            │                                               │
 │  ┌──────────────────┐  ┌───▼──────────────────┐                            │
 │  │  Worker Node A   │  │  Worker Node B       │   ...                      │
 │  │  CONFIG_SOURCE   │  │  CONFIG_SOURCE=http  │                            │
@@ -110,73 +110,12 @@ WORKER (no local files needed):
 │  │  → fetch at      │  │  → no apps.env       │                            │
 │  │    startup       │  │  → no apps_config    │                            │
 │  └──────────────────┘  └──────────────────────┘                            │
-│                                                                             │
-│  Workers only need:                                                         │
-│    CONFIG_SOURCE + connection vars (Redis URL or HTTP URL + token)          │
-│    CELERY_BROKER_URL (host RabbitMQ over VPN)                               │
-└─────────────────────────────────────────────────────────────────────────────┘
+│                                                                            │
+│  Workers only need:                                                        │
+│    CONFIG_SOURCE + connection vars (Redis URL or HTTP URL + token)         │
+│    CELERY_BROKER_URL (host RabbitMQ over VPN)                              │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
-
-### Data flow diagrams
-
-#### Redis backend
-
-```mermaid
-sequenceDiagram
-    participant Host
-    participant Redis
-    participant Worker
-
-    Note over Host: apps.env loaded into env<br/>apps_config.yaml read from disk
-    Host->>Host: ConfigFileYaml.load()<br/>resolves all ${VAR} placeholders
-    Host->>Redis: SET harqis:config <JSON>
-    Note over Redis: Stores fully-resolved dict
-
-    Note over Worker: Starts with CONFIG_SOURCE=redis
-    Worker->>Redis: GET harqis:config
-    Redis-->>Worker: JSON blob (resolved config)
-    Worker->>Worker: AppConfigManager initialised<br/>from dict — no local files needed
-    Worker->>Worker: Celery task runs<br/>CONFIG_MANAGER.get('OANDA') works
-```
-
-#### HTTP backend
-
-```mermaid
-sequenceDiagram
-    participant Host
-    participant ConfigServer
-    participant Worker
-
-    Note over Host: apps.env loaded into env<br/>apps_config.yaml read from disk
-    Host->>Host: ConfigFileYaml.load()<br/>resolves all ${VAR} placeholders
-    Host->>ConfigServer: Spawn FastAPI server<br/>with resolved dict in memory
-
-    Note over Worker: Starts with CONFIG_SOURCE=http
-    Worker->>ConfigServer: GET /config<br/>Authorization: Bearer <token>
-    ConfigServer-->>Worker: JSON (resolved config)
-    Worker->>Worker: AppConfigManager initialised<br/>from dict — no local files needed
-    Worker->>Worker: Celery task runs<br/>CONFIG_MANAGER.get('OANDA') works
-```
-
-#### Broker URL flow
-
-```mermaid
-flowchart LR
-    A["apps_config.yaml\nbroker: '${CELERY_BROKER_URL}'"]
-    B["Host env\nCELERY_BROKER_URL=amqp://localhost/"]
-    C["Push resolved dict\n broker=amqp://10.0.0.1/"]
-    D["Redis / HTTP\nstored config"]
-    E["Remote worker\nfetches config"]
-    F["SPROUT Celery app\nconnects to 10.0.0.1"]
-
-    A --> B
-    B -->|"set CELERY_BROKER_URL=\namqp://10.0.0.1/ before push"| C
-    C --> D
-    D --> E
-    E --> F
-```
-
----
 
 ## 4. Backend A — Redis Config Store
 
