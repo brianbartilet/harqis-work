@@ -44,6 +44,7 @@ APP_REGISTRARS = [
     ("Notion",           "apps.notion.mcp",       "register_notion_tools"),
     ("Anthropic",        "apps.antropic.mcp",     "register_anthropic_tools"),
     ("Gemini",           "apps.gemini.mcp",       "register_gemini_tools"),
+    ("Grok",             "apps.grok.mcp",         "register_grok_tools"),
     ("OpenAI",           "apps.open_ai.mcp",      "register_open_ai_tools"),
 ]
 

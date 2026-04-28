@@ -25,6 +25,7 @@ At its core the platform has three layers:
 | `discord` | Discord bot — messaging, guilds, webhooks | REST API | Yes | [API Docs](https://discord.com/developers/docs/reference) · [Portal](https://discord.com/developers/applications) |
 | `echo_mtg` | MTG collection management | REST API | Yes | [API Docs](https://www.echomtg.com/api/) · [Site](https://www.echomtg.com/) |
 | `gemini` | Google Gemini — text generation, token counting, embeddings | REST API | Yes | [API Docs](https://ai.google.dev/api/rest) · [Console](https://aistudio.google.com/) |
+| `grok` | xAI Grok — chat completions, live web search, X post search, embeddings | REST (native SDK) | Yes | [API Docs](https://docs.x.ai/api-reference) · [Console](https://console.x.ai/) |
 | `google_apps` | Calendar, Gmail, Keep, Sheets, Tasks, Drive, Translation | REST API (OAuth + API key) | Yes | [API Docs](https://developers.google.com/workspace) · [Console](https://console.cloud.google.com/) |
 | `investagrams` | Philippine stock analytics | Web scraping | No | [Site](https://www.investagrams.com/) |
 | `jira` | Jira project management | REST API (DC/Bearer) | Yes | [API Docs](https://developer.atlassian.com/server/jira/platform/rest-apis/) · [Site](https://www.atlassian.com/software/jira) |
@@ -308,6 +309,7 @@ harqis-work/
 │   ├── discord/                    # Discord bot
 │   ├── echo_mtg/                   # MTG collection management
 │   ├── gemini/                     # Google Gemini AI (generation, embeddings)
+│   ├── grok/                       # xAI Grok LLM (chat, web search, X search, embeddings)
 │   ├── google_apps/                # Google Workspace (Calendar, Gmail, Drive…)
 │   ├── jira/                       # Jira project management
 │   ├── linkedin/                   # LinkedIn API

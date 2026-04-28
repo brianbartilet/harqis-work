@@ -120,6 +120,26 @@ Wraps `apps/gemini/references/web/api/` services. Requires valid `GEMINI` sectio
 
 ---
 
+### Grok (`apps/grok/mcp.py`)
+
+Wraps xAI Grok via the OpenAI-compatible SDK (`https://api.x.ai/v1`). Requires valid `GROK` section in `apps_config.yaml`.
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `grok_chat` | `prompt`, `model?`, `system?`, `temperature?`, `max_tokens?` | `{id, model, output_text, finish_reason, usage}` |
+| `grok_web_search` | `query`, `model?` | `{id, model, output_text, finish_reason, usage}` — answer grounded in live web results |
+| `grok_x_search` | `query`, `model?` | `{id, model, output_text, finish_reason, usage}` — answer grounded in X (Twitter) posts |
+| `grok_list_models` | — | List of available Grok model dicts |
+| `grok_embed` | `text`, `model?` | `{model, embedding_dims, embedding, usage}` — 4096-dim vector |
+
+**Example prompts:**
+- *"Ask Grok what happened in AI news today."*
+- *"Use grok_web_search to find the current Bitcoin price."*
+- *"Search X posts about the latest Grok release using grok_x_search."*
+- *"Generate an embedding for this sentence with Grok."*
+
+---
+
 ### Google Apps (`apps/google_apps/mcp.py`)
 
 Wraps `apps/google_apps/references/web/api/` services.
