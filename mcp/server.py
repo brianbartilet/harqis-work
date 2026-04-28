@@ -47,6 +47,7 @@ APP_REGISTRARS = [
     ("Gemini",           "apps.gemini.mcp",         "register_gemini_tools"),
     ("Grok",             "apps.grok.mcp",           "register_grok_tools"),
     ("OpenAI",           "apps.open_ai.mcp",        "register_open_ai_tools"),
+    ("Perplexity",       "apps.perplexity.mcp",     "register_perplexity_tools"),
     ("GitHub",           "apps.github.mcp",         "register_github_tools"),
     ("Git",              "apps.git.mcp",            "register_git_tools"),
     ("Filesystem",       "apps.filesystem.mcp",     "register_filesystem_tools"),

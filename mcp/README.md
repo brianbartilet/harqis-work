@@ -140,6 +140,27 @@ Wraps xAI Grok via the OpenAI-compatible SDK (`https://api.x.ai/v1`). Requires v
 
 ---
 
+### Perplexity (`apps/perplexity/mcp.py`)
+
+Wraps Perplexity Sonar — chat completions with built-in live web search and inline citations, a direct search endpoint, embeddings, and async deep research. [API docs](https://docs.perplexity.ai/). Requires valid `PERPLEXITY` section in `apps_config.yaml`.
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `perplexity_chat` | `prompt`, `model?`, `system?`, `temperature?`, `max_tokens?`, `search_domain_filter?`, `search_recency_filter?` | `{id, model, output_text, citations, finish_reason, usage}` |
+| `perplexity_submit_async` | `prompt`, `model?`, `system?`, `max_tokens?` | Async request envelope with `id` |
+| `perplexity_get_async` | `request_id` | Async result (status + completion if ready) |
+| `perplexity_list_async` | — | List of pending/completed async requests |
+| `perplexity_search` | `query`, `max_results?`, `search_domain_filter?`, `search_recency_filter?`, `language?` | `{query, results, count}` |
+| `perplexity_embed` | `text`, `model?` | `{model, embedding_dims, embedding, usage}` |
+| `perplexity_list_models` | — | List of model dicts |
+
+**Example prompts:**
+- *"Ask Perplexity what tech news happened today and cite the sources."*
+- *"Use perplexity_search to find the latest research papers on retrieval-augmented generation."*
+- *"Run perplexity_submit_async with sonar-deep-research on '...' and check it later."*
+
+---
+
 ### Google Apps (`apps/google_apps/mcp.py`)
 
 Wraps `apps/google_apps/references/web/api/` services.
