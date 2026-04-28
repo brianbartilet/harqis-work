@@ -61,6 +61,32 @@ imports only from its own app's services and config.
 
 ## Available tools
 
+### Airtable (`apps/airtable/mcp.py`)
+
+Wraps Airtable Web API v0 for spreadsheet-style CRUD over bases, tables, and records. [API docs](https://airtable.com/developers/web/api/introduction). Requires valid `AIRTABLE` section in `apps_config.yaml`.
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `airtable_whoami` | — | `{id, email, scopes}` |
+| `airtable_list_bases` | — | List of `{id, name, permissionLevel}` |
+| `airtable_list_tables` | `base_id` | Tables with their fields and views |
+| `airtable_list_records` | `base_id`, `table`, `view?`, `filter_by_formula?`, `max_records?`, `page_size?`, `sort?`, `fields?`, `offset?` | `{records, offset, count}` (one page) |
+| `airtable_list_all_records` | `base_id`, `table`, `view?`, `filter_by_formula?`, `max_records?`, `sort?`, `fields?` | All matching records (auto-paginated) |
+| `airtable_get_record` | `base_id`, `table`, `record_id` | `{id, createdTime, fields}` |
+| `airtable_create_records` | `base_id`, `table`, `records`, `typecast?` | List of created records (max 10) |
+| `airtable_update_records` | `base_id`, `table`, `records`, `typecast?`, `replace?` | List of updated records (max 10) |
+| `airtable_upsert_records` | `base_id`, `table`, `records`, `merge_on`, `typecast?` | Raw API response |
+| `airtable_delete_records` | `base_id`, `table`, `record_ids` | Raw API response |
+| `airtable_create_table` | `base_id`, `name`, `fields`, `description?` | Created table dict |
+| `airtable_create_field` | `base_id`, `table_id`, `name`, `type`, `options?`, `description?` | Created field dict |
+
+**Example prompts:**
+- *"List all my Airtable bases."*
+- *"Show the first 10 'Done' tasks from base appXYZ table 'Tasks'."*
+- *"Add a new lead to base appXYZ table 'Leads' with name 'Acme' and email 'hi@acme.com'."*
+
+---
+
 ### OANDA (`apps/oanda/mcp.py`)
 
 Wraps `apps/oanda/references/web/api/` services. Requires valid `OANDA` section in `apps_config.yaml`.

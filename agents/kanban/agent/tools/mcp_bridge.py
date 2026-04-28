@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 _APP_LOADERS: dict[str, str] = {
     "google_apps": "apps.google_apps.mcp.register_google_apps_tools",
     "trello":      "apps.trello.mcp.register_trello_tools",
+    "airtable":    "apps.airtable.mcp.register_airtable_tools",
     "browser":     "apps.browser.mcp.register_browser_tools",
     "discord":     "apps.discord.mcp.register_discord_tools",
     "echo_mtg":    "apps.echo_mtg.mcp.register_echo_mtg_tools",

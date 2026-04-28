@@ -20,6 +20,7 @@ At its core the platform has three layers:
 | App | Integration | Type | Tests | Links |
 |-----|-------------|------|-------|-------|
 | `aaa` | Philippine stock exchange (PSEI) | Selenium | Yes | [Site](https://aaa-equities.com.ph/) |
+| `airtable` | Airtable bases, tables, fields, and full record CRUD with formula filters and upsert | REST API | Yes | [API Docs](https://airtable.com/developers/web/api/introduction) · [Site](https://airtable.com/) |
 | `antropic` | Anthropic Claude API | REST (native SDK) | Yes | [API Docs](https://docs.anthropic.com/en/api/) · [Console](https://console.anthropic.com/) |
 | `browser` | HTTP fetching and web scraping (httpx + BeautifulSoup) | Local | No | — |
 | `desktop` | Windows desktop automation | Local | No | — |
@@ -311,6 +312,7 @@ harqis-work/
 ├── apps/                           # App integrations (one folder per service)
 │   ├── .template/                  # Template for new apps
 │   ├── aaa/                        # Philippine stock exchange (Selenium)
+│   ├── airtable/                   # Airtable bases, tables, records (CRUD)
 │   ├── anthropic/                  # Anthropic Claude API
 │   ├── browser/                    # HTTP fetching and web scraping
 │   ├── desktop/                    # Windows desktop automation
