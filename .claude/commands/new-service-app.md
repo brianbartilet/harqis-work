@@ -413,16 +413,18 @@ Follow `apps/.template/README.md` structure exactly. Required sections:
 
 ---
 
-## Step 15 — Update root `README.md`
+## Step 15 — Update root `README.md`  ← **MANDATORY — never skip**
 
-Read `README.md`. Make two targeted edits:
+Read `README.md`. Make two targeted edits. These edits are **required** regardless of whether a spec was provided, the app is a skeleton, or the app has no external API. If this step is skipped the App Inventory goes out of sync with the codebase.
 
-1. **App Inventory table** — add a row in alphabetical order:
+1. **App Inventory table** (under `## App Inventory`) — add a row in **alphabetical order by app name**:
    ```
    | `APP_NAME` | <one-line description> | REST API | Yes | [API Docs](<url>) · [Site](<url>) |
    ```
+   - For local/no-config apps (git, filesystem, playwright, browser) use `Local` for Type and `No` for Tests and `—` for Links.
+   - For stub/skeleton apps use `Stub` for Type and `No` for Tests.
 
-2. **Directory Structure `apps/` block** — add in alphabetical order:
+2. **Directory Structure `apps/` block** — add in **alphabetical order**:
    ```
    │   ├── APP_NAME/                   # <short description>
    ```
@@ -476,5 +478,6 @@ If `--workflow <workflow_name>` was passed, after completing all steps above run
 - [ ] MCP server restart attempted via PowerShell (outcome reported)
 - [ ] Tests use `hamcrest` and `@pytest.mark.smoke`; Mode A tests are `@pytest.mark.skip`
 - [ ] `apps/APP_NAME/README.md` covers config snippet, env vars, and tool table
-- [ ] Root `README.md` App Inventory row added in alphabetical order
+- [ ] **Root `README.md` App Inventory row added** (alphabetical, under `## App Inventory`) ← easy to forget
+- [ ] **Root `README.md` Directory Structure `apps/` line added** (alphabetical) ← easy to forget
 - [ ] `mcp/README.md` section added
