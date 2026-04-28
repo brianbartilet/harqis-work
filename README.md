@@ -532,88 +532,149 @@ pip install --upgrade --force-reinstall --no-cache-dir git+https://github.com/br
 
 ### Environment Variables (`.env/apps.env`)
 
+This is the canonical list of every env var consumed across the platform. Keep it
+in sync with the actual `.env/apps.env` whenever an app is added — the
+`/new-service-app` skill includes this update as a mandatory step.
+
 ```env
-# Anthropic — Claude API
+# ── Core / harness ────────────────────────────────────────────────────────────
+APP_CONFIG_FILE=apps_config.yaml
+WORKFLOW_CONFIG=workflows.config
+
+# ── Frontend dashboard ────────────────────────────────────────────────────────
+APP_USERNAME=
+APP_PASSWORD=
+APP_SECRET_KEY=
+
+# ── RabbitMQ / Celery broker ──────────────────────────────────────────────────
+DOCKER_HOST_PORT_RABBIT_MQ=15672
+CELERY_BROKER=amqp://guest:guest@localhost:5672/
+
+# ── Elasticsearch + Kibana ────────────────────────────────────────────────────
+ELASTIC_HOST=http://localhost:9200
+ELASTIC_USER=
+ELASTIC_PASSWORD=
+ELASTICSEARCH_PASSWORD=
+KIBANA_HOST=http://localhost:5601
+KIBANA_SYSTEM_USER=kibana_system
+KIBANA_SYSTEM_PASSWORD=
+KIBANA_ANON_PASSWORD=
+ELASTIC_API_KEY=
+
+# ── n8n ───────────────────────────────────────────────────────────────────────
+N8N_BASIC_AUTH_ACTIVE=true
+N8N_BASIC_AUTH_USER=admin
+N8N_API_KEY=
+
+# ── Flower (Celery monitor) ───────────────────────────────────────────────────
+FLOWER_USER=
+FLOWER_PASSWORD=
+
+# ── ngrok ─────────────────────────────────────────────────────────────────────
+NGROK_AUTHTOKEN=
+
+# ── Python runner ─────────────────────────────────────────────────────────────
+PYTHON_EXE=
+ENV_ROOT=
+
+# ── AI / LLM ──────────────────────────────────────────────────────────────────
 ANTHROPIC_API_KEY=
-
-# Kanban orchestrator
-KANBAN_PROVIDER=trello          # or jira
-KANBAN_BOARD_ID=
-KANBAN_POLL_INTERVAL=60
-KANBAN_AUDIT_LOG=logs/kanban_audit.jsonl
-
-# Trello
-TRELLO_API_KEY=
-TRELLO_API_TOKEN=
-
-# Jira
-JIRA_SERVER=
-JIRA_EMAIL=
-JIRA_API_TOKEN=
-
-# OpenAI
+ANTHROPIC_ADMIN_KEY=
 OPENAI_API_KEY=
 OPENAI_ASSISTANT_ID=
 OPENAI_ASSISTANT_DESKTOP=
 OPENAI_ASSISTANT_REPORTER=
+GROK_API_KEY=
+PERPLEXITY_API_KEY=
 
-# OANDA — Forex
+# ── ElevenLabs ────────────────────────────────────────────────────────────────
+ELEVEN_LABS_API_KEY=
+ELEVEN_AGENT_N8N=
+ELEVEN_AGENT_N8N_CHAT=
+ELEVEN_AGENT_N8N_CHAT_TESTS=
+
+# ── Productivity / project management ─────────────────────────────────────────
+TRELLO_API_KEY=
+TRELLO_API_TOKEN=
+JIRA_DOMAIN=
+JIRA_EMAIL=
+JIRA_API_TOKEN=
+NOTION_API_TOKEN=
+AIRTABLE_API_TOKEN=
+
+# Kanban orchestrator
+KANBAN_BOARD_ID=
+
+# ── GitHub ────────────────────────────────────────────────────────────────────
+GITHUB_API_TOKEN=
+
+# ── Communication ─────────────────────────────────────────────────────────────
+DISCORD_BOT_TOKEN=
+DISCORD_DEFAULT_GUILD_ID=
+DISCORD_DEFAULT_CHANNEL_ID=
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_DEFAULT_CHAT_ID=
+LINKEDIN_CLIENT_ID=
+LINKEDIN_CLIENT_SECRET=
+LINKEDIN_ACCESS_TOKEN=
+LINKEDIN_REDIRECT_URI=
+LINKEDIN_PERSON_ID=
+LINKEDIN_DEFAULT_POST_URN=
+REDDIT_CLIENT_ID=
+REDDIT_CLIENT_SECRET=
+REDDIT_USERNAME=
+REDDIT_PASSWORD=
+REDDIT_USER_AGENT=
+REDDIT_DEFAULT_SUBREDDIT=
+
+# ── Finance ───────────────────────────────────────────────────────────────────
 OANDA_BEARER_TOKEN=
 OANDA_MT4_ACCOUNT_ID=
+YNAB_ACCESS_TOKEN=
+YNAB_BUDGET_PHP=
+YNAB_BUDGET_SGD=
 
-# Echo MTG
+# ── Magic: The Gathering ──────────────────────────────────────────────────────
+ECHO_MTG_BEARER_TOKEN=
 ECHO_MTG_USER=
 ECHO_MTG_PASSWORD=
+ECHO_MTG_BULK_BEARER_TOKEN=
 ECHO_MTG_BULK_USER=
 ECHO_MTG_BULK_PASSWORD=
-ECHO_MTG_BULK_BEARER_TOKEN=
-
-# Scryfall
 SCRY_DOWNLOADS_PATH=
-
-# TCG Marketplace
-TCG_MP_USER_ID=
 TCG_MP_USERNAME=
 TCG_MP_PASSWORD=
+TCG_MP_USER_ID=
 TCG_SAVE=
 
-# Rainmeter (Windows)
-RAINMETER_BIN_PATH=
-RAINMETER_STATIC_PATH=
-RAINMETER_WRITE_SKINS_TO_PATH=
-RAINMETER_WRITE_FEED_TO_PATH=
-
-# Google Apps (OAuth)
+# ── Cloud / infrastructure ────────────────────────────────────────────────────
+ORGO_API_KEY=
 GOOGLE_APPS_API_KEY=
+OWN_TRACKS_HOST=localhost
+OWN_TRACKS_PORT=8083
+OWN_TRACKS_USERNAME=
+OWN_TRACKS_PASSWORD=
+OWN_TRACKS_DEFAULT_USER=
+OWN_TRACKS_DEFAULT_DEVICE=
 
-# Elasticsearch
-ELASTIC_API_KEY=
-ELASTIC_USER=
-ELASTIC_PASSWORD=
-
-# Desktop capture
+# ── Desktop capture / Rainmeter (Windows) ─────────────────────────────────────
 ACTIONS_LOG_PATH=
 ACTIONS_ARCHIVE_PATH=
 ACTIONS_SCREENSHOT_PATH=
 DESKTOP_PATH_DEV=
 DESKTOP_PATH_RUN=
-
-# Notion
-NOTION_API_TOKEN=
-
-# YNAB
-YNAB_ACCESS_TOKEN=
-YNAB_BUDGET_PHP=
-YNAB_BUDGET_SGD=
-
-# ElevenLabs
-ELEVEN_AGENT_N8N=
-ELEVEN_AGENT_N8N_CHAT=
-
-# Python runner (Windows)
-PYTHON_EXE=
-ENV_ROOT=
+DESKTOP_PATH_FEED=
+DESKTOP_PATH_I_CUE_PROFILES=
+RAINMETER_BIN_PATH=
+RAINMETER_STATIC_PATH=
+RAINMETER_WRITE_SKINS_TO_PATH=
+RAINMETER_WRITE_FEED_TO_PATH=
 ```
+
+> The actual `.env/apps.env` file is **gitignored** — values shown here are
+> placeholders. Each entry corresponds to a `${ENV_VAR}` reference in
+> `apps_config.yaml`. Apps without a matching env var simply skip registration
+> at MCP server boot (logged as a warning, not an error).
 
 ### `apps_config.yaml`
 

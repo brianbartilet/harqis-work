@@ -415,7 +415,7 @@ Follow `apps/.template/README.md` structure exactly. Required sections:
 
 ## Step 15 — Update root `README.md`  ← **MANDATORY — never skip**
 
-Read `README.md`. Make two targeted edits. These edits are **required** regardless of whether a spec was provided, the app is a skeleton, or the app has no external API. If this step is skipped the App Inventory goes out of sync with the codebase.
+Read `README.md`. Make **three** targeted edits. These edits are **required** regardless of whether a spec was provided, the app is a skeleton, or the app has no external API. If this step is skipped the App Inventory and Configuration docs go out of sync with the codebase.
 
 1. **App Inventory table** (under `## App Inventory`) — add a row in **alphabetical order by app name**:
    ```
@@ -428,6 +428,15 @@ Read `README.md`. Make two targeted edits. These edits are **required** regardle
    ```
    │   ├── APP_NAME/                   # <short description>
    ```
+
+3. **Environment Variables block** (under `## Configuration` → `### Environment Variables (.env/apps.env)`) — append the new app's env var(s) under the matching category section (or add a new `# ── <Category> ──` section if none fits):
+   ```env
+   # ── My category ──...
+   APP_NAME_UPPER_API_KEY=
+   ```
+   - All values **must be blank** — never paste real keys into README.md.
+   - Match the env var names you added to `.env/apps.env` in Step 11 exactly.
+   - For local/no-config apps (no env vars), skip this edit.
 
 ---
 
@@ -480,4 +489,5 @@ If `--workflow <workflow_name>` was passed, after completing all steps above run
 - [ ] `apps/APP_NAME/README.md` covers config snippet, env vars, and tool table
 - [ ] **Root `README.md` App Inventory row added** (alphabetical, under `## App Inventory`) ← easy to forget
 - [ ] **Root `README.md` Directory Structure `apps/` line added** (alphabetical) ← easy to forget
+- [ ] **Root `README.md` Configuration block updated** with the new env var(s), values blank ← easy to forget
 - [ ] `mcp/README.md` section added
