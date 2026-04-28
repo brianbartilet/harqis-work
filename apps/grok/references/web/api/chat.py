@@ -1,16 +1,17 @@
-"""Grok Chat Completions API service.
+"""Grok Chat Completions and Responses API service.
 
-xAI's API is OpenAI-compatible (POST /v1/chat/completions).
+Standard chat uses the OpenAI-compatible POST /v1/chat/completions endpoint.
 
-Built-in tools supported by Grok:
-  - web_search     — live web search results injected into context
-  - x_post_search  — search posts on X (Twitter)
+Search-grounded requests use POST /v1/responses with server-side tools:
+  - tools: [{"type": "web_search"}]  — live web search
+  - tools: [{"type": "x_search"}]    — X (Twitter) posts
 
 Vision is supported by grok-2-vision-1212: pass image URLs as content
 blocks with type 'image_url'.
 
 See: https://docs.x.ai/api-reference
 """
+import httpx
 from typing import Optional, List
 
 from apps.grok.references.web.base_api_service import BaseApiServiceGrok, DEFAULT_MODEL
@@ -20,6 +21,10 @@ from apps.grok.references.dto.chat import (
     DtoGrokMessage,
     DtoGrokUsage,
 )
+
+_XAI_CHAT_URL = "https://api.x.ai/v1/chat/completions"
+_XAI_RESPONSES_URL = "https://api.x.ai/v1/responses"
+_SEARCH_MODEL = "grok-4"  # server-side tools require grok-4 family
 
 
 class ApiServiceGrokChat(BaseApiServiceGrok):
@@ -34,16 +39,8 @@ class ApiServiceGrokChat(BaseApiServiceGrok):
         model: Optional[str] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
-        tools: Optional[List[dict]] = None,
-        stream: bool = False,
     ) -> DtoGrokResponse:
-        """Send a chat completions request to Grok.
-
-        Pass messages as [{"role": "user"/"system"/"assistant", "content": "..."}].
-        To use built-in tools pass xAI live_search format e.g.:
-          tools=[{"type": "live_search", "live_search": {"sources": [{"type": "web"}]}}]
-          tools=[{"type": "live_search", "live_search": {"sources": [{"type": "x"}]}}]
-        """
+        """Send a standard chat completions request (no tools) via the openai SDK."""
         params: dict = {
             "model": model or self.default_model,
             "messages": messages,
@@ -52,12 +49,6 @@ class ApiServiceGrokChat(BaseApiServiceGrok):
             params["temperature"] = temperature
         if max_tokens is not None:
             params["max_tokens"] = max_tokens
-
-        # xAI-specific tool types (e.g. live_search) are not part of the OpenAI
-        # schema so the SDK strips their nested fields before serialisation.
-        # Passing via extra_body sends the dict verbatim and bypasses validation.
-        if tools:
-            params["extra_body"] = {"tools": tools}
 
         response = self.native_client.chat.completions.create(**params)
         return self._map(response)
@@ -78,22 +69,65 @@ class ApiServiceGrokChat(BaseApiServiceGrok):
         return self.chat(messages, model=model, temperature=temperature, max_tokens=max_tokens)
 
     def web_search(self, query: str, model: Optional[str] = None) -> DtoGrokResponse:
-        """Ask Grok to answer using live web search results."""
-        return self.chat(
-            messages=[{"role": "user", "content": query}],
-            model=model or self.default_model,
-            tools=[{"type": "live_search", "live_search": {"sources": [{"type": "web"}]}}],
-        )
+        """Ask Grok to answer using live web search via the Responses API.
+
+        Requires grok-4 family — defaults to grok-4 when no model is specified.
+        """
+        body = {
+            "model": model or _SEARCH_MODEL,
+            "input": query,
+            "tools": [{"type": "web_search"}],
+        }
+        return self._raw_responses(body)
 
     def x_search(self, query: str, model: Optional[str] = None) -> DtoGrokResponse:
-        """Ask Grok to answer grounded in X (Twitter) posts."""
-        return self.chat(
-            messages=[{"role": "user", "content": query}],
-            model=model or self.default_model,
-            tools=[{"type": "live_search", "live_search": {"sources": [{"type": "x"}]}}],
+        """Ask Grok to answer grounded in X (Twitter) posts via the Responses API.
+
+        Requires grok-4 family — defaults to grok-4 when no model is specified.
+        """
+        body = {
+            "model": model or _SEARCH_MODEL,
+            "input": query,
+            "tools": [{"type": "x_search"}],
+        }
+        return self._raw_responses(body)
+
+    def _raw_chat(self, body: dict) -> DtoGrokResponse:
+        """POST to xAI chat completions via httpx, bypassing openai SDK validation."""
+        resp = httpx.post(
+            _XAI_CHAT_URL,
+            headers={
+                "Authorization": f"Bearer {self.native_client.api_key}",
+                "Content-Type": "application/json",
+            },
+            json=body,
+            timeout=60,
         )
+        if not resp.is_success:
+            raise RuntimeError(
+                f"xAI API {resp.status_code}: {resp.text}"
+            )
+        return self._map_dict(resp.json())
+
+    def _raw_responses(self, body: dict) -> DtoGrokResponse:
+        """POST to xAI /v1/responses endpoint (Agent Tools / search_parameters API)."""
+        resp = httpx.post(
+            _XAI_RESPONSES_URL,
+            headers={
+                "Authorization": f"Bearer {self.native_client.api_key}",
+                "Content-Type": "application/json",
+            },
+            json=body,
+            timeout=60,
+        )
+        if not resp.is_success:
+            raise RuntimeError(
+                f"xAI API {resp.status_code}: {resp.text}"
+            )
+        return self._map_responses_dict(resp.json())
 
     def _map(self, response) -> DtoGrokResponse:
+        """Map an openai SDK response object to DtoGrokResponse."""
         usage = None
         raw_usage = getattr(response, "usage", None)
         if raw_usage:
@@ -104,7 +138,6 @@ class ApiServiceGrokChat(BaseApiServiceGrok):
                 prompt_tokens_details=getattr(raw_usage, "prompt_tokens_details", None),
                 completion_tokens_details=getattr(raw_usage, "completion_tokens_details", None),
             )
-
         choices = []
         for c in getattr(response, "choices", None) or []:
             msg = getattr(c, "message", None)
@@ -117,16 +150,78 @@ class ApiServiceGrokChat(BaseApiServiceGrok):
                     tool_calls=getattr(msg, "tool_calls", None) if msg else None,
                 ),
             ))
-
-        output_text = None
-        if choices and choices[0].message:
-            output_text = choices[0].message.content
-
+        output_text = choices[0].message.content if choices and choices[0].message else None
         return DtoGrokResponse(
             id=getattr(response, "id", None),
             object=getattr(response, "object", None),
             created=getattr(response, "created", None),
             model=getattr(response, "model", None),
+            choices=choices,
+            usage=usage,
+            output_text=output_text,
+        )
+
+    def _map_responses_dict(self, data: dict) -> DtoGrokResponse:
+        """Map a /v1/responses ModelResponse dict to DtoGrokResponse.
+
+        The output array contains items of various types; the assistant text lives
+        in items with type=='message', inside a content block with type=='output_text'.
+        """
+        output_text = None
+        for item in data.get("output") or []:
+            if item.get("type") == "message":
+                for block in item.get("content") or []:
+                    if block.get("type") == "output_text":
+                        output_text = block.get("text")
+                        break
+            if output_text is not None:
+                break
+
+        raw_usage = data.get("usage") or {}
+        usage = DtoGrokUsage(
+            prompt_tokens=raw_usage.get("input_tokens"),
+            completion_tokens=raw_usage.get("output_tokens"),
+            total_tokens=raw_usage.get("total_tokens"),
+        ) if raw_usage else None
+
+        return DtoGrokResponse(
+            id=data.get("id"),
+            object=data.get("object"),
+            created=data.get("created_at"),
+            model=data.get("model"),
+            choices=[],
+            usage=usage,
+            output_text=output_text,
+        )
+
+    def _map_dict(self, data: dict) -> DtoGrokResponse:
+        """Map a raw API response dict to DtoGrokResponse."""
+        raw_usage = data.get("usage") or {}
+        usage = DtoGrokUsage(
+            prompt_tokens=raw_usage.get("prompt_tokens"),
+            completion_tokens=raw_usage.get("completion_tokens"),
+            total_tokens=raw_usage.get("total_tokens"),
+        ) if raw_usage else None
+
+        choices = []
+        for c in data.get("choices") or []:
+            msg = c.get("message") or {}
+            choices.append(DtoGrokChoice(
+                index=c.get("index"),
+                finish_reason=c.get("finish_reason"),
+                message=DtoGrokMessage(
+                    role=msg.get("role"),
+                    content=msg.get("content"),
+                    tool_calls=msg.get("tool_calls"),
+                ),
+            ))
+
+        output_text = choices[0].message.content if choices and choices[0].message else None
+        return DtoGrokResponse(
+            id=data.get("id"),
+            object=data.get("object"),
+            created=data.get("created"),
+            model=data.get("model"),
             choices=choices,
             usage=usage,
             output_text=output_text,
