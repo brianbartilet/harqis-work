@@ -110,6 +110,94 @@ For each app identified in Step 1 that does NOT exist in `apps/`:
 
 ---
 
+## Step 3b — Resolve Python package dependencies
+
+After identifying the apps and libraries the workflow will need, check whether all required Python packages are available in the project's virtual environment.
+
+### 3b-1 — Identify required packages
+
+From the task design in Steps 1–3, list every third-party Python package the task will `import` that is **not** part of the standard library or the `harqis-core` / `apps/` codebase.
+
+Also check `requirements.txt` to see what is already declared:
+
+```bash
+cat requirements.txt
+```
+
+For each package **not already listed** in `requirements.txt`, it is a candidate for installation.
+
+### 3b-2 — Search PyPI for the right package
+
+For each missing package, search PyPI to confirm the canonical package name and latest stable version:
+
+```bash
+.venv/bin/pip index versions <package_name> 2>/dev/null | head -5
+```
+
+If the exact name is uncertain (e.g. you know you need "yaml support" but don't know whether it's `pyyaml`, `ruamel.yaml`, etc.), run a keyword search:
+
+```bash
+.venv/bin/pip search <keyword> 2>/dev/null || \
+  curl -s "https://pypi.org/pypi/<package_name>/json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['info']['name'], d['info']['version'], d['info']['summary'])"
+```
+
+Pick the package that:
+1. Has the most direct name match to what the task needs
+2. Is actively maintained (check `info.version` date if unsure)
+3. Has no known conflict with packages already in `requirements.txt`
+
+Tell the user which package you selected and why before installing.
+
+### 3b-3 — Install into the virtual environment
+
+Install each confirmed package into the project's `.venv`:
+
+```bash
+.venv/bin/pip install <package_name>
+```
+
+For a specific version (use when `requirements.txt` style requires pinning):
+
+```bash
+.venv/bin/pip install "<package_name>==<version>"
+```
+
+Capture the installed version from pip's output or by running:
+
+```bash
+.venv/bin/pip show <package_name> | grep -E "^(Name|Version):"
+```
+
+If installation fails (conflict, missing system library, etc.), report the error to the user and propose an alternative package or ask how to proceed. Do **not** silently skip.
+
+### 3b-4 — Update `requirements.txt`
+
+After each successful install, append the package with its pinned version to `requirements.txt`:
+
+```
+<package_name>>=<installed_version>
+```
+
+Use `>=` (minimum version) unless the task requires an exact pin. Insert the new entry in alphabetical order within the existing list, respecting any comment sections already present.
+
+Verify the final state:
+
+```bash
+grep "<package_name>" requirements.txt
+```
+
+### 3b-5 — Confirm the environment is consistent
+
+After all packages are installed, run a quick import check inside the venv to confirm nothing is broken:
+
+```bash
+.venv/bin/python -c "import <package_name>; print('ok')"
+```
+
+If any import fails, diagnose and fix before continuing to Step 4.
+
+---
+
 ## Step 4 — Create or extend the category directory
 
 **If `workflows/<category>/` does not exist:**
@@ -432,6 +520,10 @@ Print this at the end, filled in with the actual values:
 
 ```
 Workflow created. Manual steps to activate:
+
+  Python packages (installed automatically in Step 3b — verify if needed):
+  [ ] Confirm packages are present: .venv/bin/pip show <pkg_1> <pkg_2>
+  [ ] Confirm requirements.txt updated with new entries
 
   Config & secrets:
   [ ] Add <APP_A> section to apps_config.yaml  (snippet printed above if missing)
