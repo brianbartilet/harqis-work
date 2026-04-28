@@ -52,3 +52,12 @@ echo Environment variable WORKFLOW_CONFIG set to %WORKFLOW_CONFIG%.
 REM Which apps config file to use (your loader default)
 set "APP_CONFIG_FILE=apps_config.yaml"
 echo Environment variable APP_CONFIG_FILE set to %APP_CONFIG_FILE%.
+
+REM Celery broker URL — defaults to localhost for the host machine.
+REM Remote workers override this to point to the host's network/VPN address.
+if not defined CELERY_BROKER_URL set "CELERY_BROKER_URL=amqp://guest:guest@localhost:5672/"
+echo CELERY_BROKER_URL set to %CELERY_BROKER_URL%.
+
+REM Config source — 'local' on the host; remote workers set 'redis' or 'http'.
+if not defined CONFIG_SOURCE set "CONFIG_SOURCE=local"
+echo CONFIG_SOURCE set to %CONFIG_SOURCE%.

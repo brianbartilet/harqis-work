@@ -47,3 +47,11 @@ echo "WORKFLOW_CONFIG set to $WORKFLOW_CONFIG"
 
 export APP_CONFIG_FILE="apps_config.yaml"
 echo "APP_CONFIG_FILE set to $APP_CONFIG_FILE"
+
+# Celery broker URL — defaults to localhost for the host machine.
+# Remote workers override this to point to the host's network/VPN address.
+export CELERY_BROKER_URL="${CELERY_BROKER_URL:-amqp://guest:guest@localhost:5672/}"
+echo "CELERY_BROKER_URL set to $CELERY_BROKER_URL"
+
+# Config source — 'local' on the host; remote workers set 'redis' or 'http'.
+export CONFIG_SOURCE="${CONFIG_SOURCE:-local}"

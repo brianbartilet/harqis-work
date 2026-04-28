@@ -1,32 +1,64 @@
-from core.config.env_variables import ENV_APP_CONFIG, ENV_APP_CONFIG_FILE
-from core.config.loader import ConfigLoaderService
+"""
+Centralized application configuration manager.
+
+The CONFIG_SOURCE env var selects where config is loaded from at process startup:
+
+  local (default) — reads apps_config.yaml + apps.env from local disk (existing behaviour)
+  redis            — fetches the pre-resolved config dict from a Redis key on the host
+  http             — fetches the pre-resolved config dict from the host config HTTP server
+
+Remote sources (redis / http) let distributed worker nodes operate without
+local copies of apps.env or apps_config.yaml. The host resolves all secrets
+at push/serve time; workers receive the final dict over the network.
+
+See docs/info/WORKER-CONFIG-DISTRIBUTION.md for full setup instructions.
+"""
+
+import logging
+import os
+
 from core.config.app_config_manager import AppConfigManager
 
-# ENV_APP_CONFIG and ENV_APP_CONFIG_FILE:
-# These variables are imported from core.config.env_variables module. They are expected to contain
-# environment-specific settings:
-#   ENV_APP_CONFIG - The base path to the configuration directory.
-#   ENV_APP_CONFIG_FILE - The name of the YAML file containing the application's configuration.
+logger = logging.getLogger(__name__)
 
-# ConfigLoaderService:
-# This class is responsible for loading configuration files. It is initialized here with parameters
-# that specify the name and location of the configuration file. The ConfigLoaderService is designed
-# to parse the YAML file specified by `ENV_APP_CONFIG_FILE` located in the directory specified by
-# `ENV_APP_CONFIG`.
-CONFIG_SERVICE = ConfigLoaderService(file_name=ENV_APP_CONFIG_FILE, base_path=ENV_APP_CONFIG)
-"""
-CONFIG_SERVICE is an instance of ConfigLoaderService, initialized with environment-specific
-file name and base path. This service loads the configuration data from a YAML file located
-at the path specified by ENV_APP_CONFIG and named ENV_APP_CONFIG_FILE.
-"""
+CONFIG_SOURCE = os.environ.get("CONFIG_SOURCE", "local").lower()
 
-# AppConfigManager:
-# This class is designed to manage the application configuration. It uses an instance of
-# ConfigLoaderService to load and handle the configuration data effectively.
 
-CONFIG_MANAGER = AppConfigManager(CONFIG_SERVICE)
-"""
-CONFIG_MANAGER is an instance of AppConfigManager. It is responsible for managing the application
-configuration using the CONFIG_SERVICE. This manager facilitates access to configuration data,
-allowing for structured and centralized configuration management within the application.
-"""
+class _DictService:
+    """
+    Minimal ConfigLoaderService-compatible wrapper for a pre-fetched config dict.
+    Lets AppConfigManager be initialised from a remotely-supplied dict without
+    touching the harqis-core loader internals.
+    """
+
+    def __init__(self, data: dict) -> None:
+        self._data = data
+
+    @property
+    def config(self) -> dict:
+        return self._data
+
+
+def _build() -> tuple:
+    if CONFIG_SOURCE == "redis":
+        logger.info("apps_config: loading from Redis (CONFIG_SOURCE=redis)")
+        from apps.config_remote import fetch_config_from_redis
+        data = fetch_config_from_redis()
+        svc = _DictService(data)
+
+    elif CONFIG_SOURCE == "http":
+        logger.info("apps_config: loading from HTTP server (CONFIG_SOURCE=http)")
+        from apps.config_remote import fetch_config_from_http
+        data = fetch_config_from_http()
+        svc = _DictService(data)
+
+    else:
+        logger.debug("apps_config: loading from local disk (CONFIG_SOURCE=local)")
+        from core.config.env_variables import ENV_APP_CONFIG, ENV_APP_CONFIG_FILE
+        from core.config.loader import ConfigLoaderService
+        svc = ConfigLoaderService(file_name=ENV_APP_CONFIG_FILE, base_path=ENV_APP_CONFIG)
+
+    return svc, AppConfigManager(svc)
+
+
+CONFIG_SERVICE, CONFIG_MANAGER = _build()

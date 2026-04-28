@@ -1,5 +1,6 @@
 git+https://github.com/brianbartilet/harqis-core.git#egg=harqis-core
 pytest-dotenv>=0.5.2
+redis>=5.0.0
 # mcp: install separately — harqis-core pins anyio==4.3.0 but mcp requires anyio>=4.5
 # pip install --upgrade anyio && pip install "mcp>=1.0.0"
 # moomoo-api: install separately to avoid protobuf conflict
