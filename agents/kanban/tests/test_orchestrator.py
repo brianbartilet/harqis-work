@@ -149,6 +149,76 @@ def test_load_dotenv(tmp_path):
     assert_that(os.environ.get("ANOTHER"), equal_to("world"))
 
 
+@pytest.mark.smoke
+def test_poll_once_multi_agent_processes_all_cards(mock_provider, mock_registry, sample_card):
+    card2 = KanbanCard(
+        id="card2", title="Second card", description="",
+        labels=["agent:open"], assignees=[], column="Backlog", url="",
+    )
+    mock_provider.get_cards.return_value = [sample_card, card2]
+
+    orch = LocalOrchestrator(
+        provider=mock_provider,
+        registry=mock_registry,
+        api_key="test_api_key",
+        board_id="board123",
+        poll_interval=1,
+        num_agents=2,
+    )
+
+    with patch("agents.kanban.orchestrator.local.BaseKanbanAgent") as mock_agent_cls:
+        mock_agent_cls.return_value.run.return_value = "done"
+        n = orch.poll_once()
+
+    assert_that(n, equal_to(2))
+
+
+@pytest.mark.smoke
+def test_num_agents_clamps_to_one_minimum(mock_provider, mock_registry):
+    orch = LocalOrchestrator(
+        provider=mock_provider,
+        registry=mock_registry,
+        api_key="key",
+        board_id="board",
+        num_agents=0,
+    )
+    assert_that(orch.num_agents, equal_to(1))
+
+
+@pytest.mark.smoke
+def test_poll_once_multi_agent_partial_failure(mock_provider, mock_registry, sample_card):
+    card2 = KanbanCard(
+        id="card2", title="Failing card", description="",
+        labels=["agent:open"], assignees=[], column="Backlog", url="",
+    )
+    mock_provider.get_cards.return_value = [sample_card, card2]
+
+    orch = LocalOrchestrator(
+        provider=mock_provider,
+        registry=mock_registry,
+        api_key="test_api_key",
+        board_id="board123",
+        poll_interval=1,
+        num_agents=2,
+    )
+
+    call_count = 0
+
+    def run_side_effect():
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2:
+            raise RuntimeError("agent exploded")
+        return "done"
+
+    with patch("agents.kanban.orchestrator.local.BaseKanbanAgent") as mock_agent_cls:
+        mock_agent_cls.return_value.run.side_effect = run_side_effect
+        n = orch.poll_once()
+
+    # One card succeeded, one was error-handled (returns None) — count should be 1
+    assert_that(n, equal_to(1))
+
+
 @pytest.mark.integration
 def test_live_poll_dry_run():
     """Integration: polls a real board in dry-run mode. No agents are executed."""

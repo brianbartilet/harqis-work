@@ -30,6 +30,7 @@ from __future__ import annotations
 import logging
 import os
 import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from time import sleep
 from typing import Optional
@@ -65,6 +66,7 @@ class LocalOrchestrator:
         poll_interval: int = 30,
         dry_run: bool = False,
         audit_log_path: Optional[Path] = None,
+        num_agents: int = 1,
     ):
         self.provider = provider
         self.registry = registry
@@ -74,6 +76,7 @@ class LocalOrchestrator:
         self.poll_interval = poll_interval
         self.dry_run = dry_run
         self._audit_log_path = audit_log_path or Path("logs/kanban_audit.jsonl")
+        self.num_agents = max(1, num_agents)
         self._dep_detector = DependencyDetector()
         self._blocked_handler = BlockedCardHandler(provider, board_id)
         self._blocked_poll_countdown = 0
@@ -218,18 +221,43 @@ class LocalOrchestrator:
             logger.error("Failed to fetch Backlog: %s", e)
             return 0
 
-        count = 0
+        matched = []
         for card in cards:
             profile = self.registry.resolve_for_card(card)
             if profile:
-                result = self.process_card(card)
-                if result is not None:
-                    count += 1
+                matched.append(card)
             else:
                 logger.info(
                     "No profile match for card '%s' (labels=%s) — skipping",
                     card.title, card.labels,
                 )
+
+        if not matched:
+            return 0
+
+        if self.num_agents == 1:
+            count = 0
+            for card in matched:
+                result = self.process_card(card)
+                if result is not None:
+                    count += 1
+            return count
+
+        logger.info(
+            "Dispatching %d card(s) across %d agent worker(s)",
+            len(matched), self.num_agents,
+        )
+        count = 0
+        with ThreadPoolExecutor(max_workers=self.num_agents) as pool:
+            futures = {pool.submit(self.process_card, card): card for card in matched}
+            for future in as_completed(futures):
+                card = futures[future]
+                try:
+                    result = future.result()
+                    if result is not None:
+                        count += 1
+                except Exception as e:
+                    logger.error("Unhandled error processing card %s: %s", card.id, e)
         return count
 
     def poll_blocked(self) -> int:
@@ -259,10 +287,11 @@ class LocalOrchestrator:
             pass
 
         logger.info(
-            "LocalOrchestrator started | board=%s | interval=%ds | blocked_interval=%ds | dry_run=%s",
+            "LocalOrchestrator started | board=%s | interval=%ds | blocked_interval=%ds | num_agents=%d | dry_run=%s",
             self.board_id,
             self.poll_interval,
             blocked_interval,
+            self.num_agents,
             self.dry_run,
         )
 
@@ -315,6 +344,7 @@ def from_env(profiles_dir: Optional[Path] = None) -> LocalOrchestrator:
         KANBAN_POLL_INTERVAL  seconds between polls (default: 60)
         KANBAN_DRY_RUN        set to "1" to skip actual agent execution
         KANBAN_AUDIT_LOG      path to audit JSONL file (default: logs/kanban_audit.jsonl)
+        KANBAN_NUM_AGENTS     number of concurrent agent workers on this host (default: 1)
     """
     provider_type = os.environ.get("KANBAN_PROVIDER", "trello").lower()
 
@@ -340,6 +370,7 @@ def from_env(profiles_dir: Optional[Path] = None) -> LocalOrchestrator:
     api_key = os.environ["ANTHROPIC_API_KEY"]
     poll_interval = int(os.environ.get("KANBAN_POLL_INTERVAL", "60"))
     dry_run = os.environ.get("KANBAN_DRY_RUN", "0") == "1"
+    num_agents = int(os.environ.get("KANBAN_NUM_AGENTS", "1"))
 
     audit_log_path = Path(os.environ.get("KANBAN_AUDIT_LOG", "logs/kanban_audit.jsonl"))
 
@@ -367,6 +398,7 @@ def from_env(profiles_dir: Optional[Path] = None) -> LocalOrchestrator:
         poll_interval=poll_interval,
         dry_run=dry_run,
         audit_log_path=audit_log_path,
+        num_agents=num_agents,
     )
 
 
@@ -398,6 +430,10 @@ if __name__ == "__main__":
     parser.add_argument("--profiles-dir", type=Path, help="Path to agent profiles directory")
     parser.add_argument("--poll-interval", type=int, help="Poll interval in seconds")
     parser.add_argument("--dry-run", action="store_true", help="Don't run agents, just log")
+    parser.add_argument(
+        "--num-agents", type=int, default=None,
+        help="Number of concurrent agent workers on this host (default: 1)",
+    )
     args = parser.parse_args()
 
     # Load .env file if present
@@ -412,5 +448,7 @@ if __name__ == "__main__":
         orch.poll_interval = args.poll_interval
     if args.dry_run:
         orch.dry_run = True
+    if args.num_agents is not None:
+        orch.num_agents = max(1, args.num_agents)
 
     orch.run()
