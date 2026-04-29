@@ -12,6 +12,7 @@ Skill files live in `.claude/commands/*.md`. The first line of each file is the 
 | Skill | Command | Description |
 |---|---|---|
 | **agent-prompt** | `/agent-prompt <prompt_name>` | Run a named AI prompt from `agents/prompts/` against the codebase. `prompt_name` is the filename without extension (e.g. `code_smells`, `docs_agent`, `desktop_analysis`). |
+| **deploy-harqis** | `/deploy-harqis <host\|node> [-q queues] [--down] [--no-frontend] [--no-mcp] [--no-kanban] [--num-agents N] [--dry-run]` | End-to-end reusable deploy of the harqis-work platform — **cross-platform**, auto-detects macOS / Linux / Windows and dispatches to `scripts/sh/deploy.sh` or `scripts/ps/deploy.ps1`. `host` brings up the full stack (Docker + Beat scheduler + worker + frontend + MCP daemon + Kanban orchestrator that doubles as 1 in-process agent worker). `node` runs a Celery worker only against the host's broker. Pass `-q hud,tcg,default` to specify the queue list — one process subscribes to all listed queues (Celery's native `-Q`). Beat scheduler runs on `host` only. Tear down with `--down`. |
 | **generate-registry** | `/generate-registry` | Regenerate `frontend/registry.py` by scanning all `workflows/*/tasks_config.py` files. Run after adding or removing any Celery task. |
 | **new-n8n-workflow** | `/new-n8n-workflow <description_or_diagram>` | Build and deploy an n8n workflow directly into the local n8n instance (`localhost:5678`) from a drawio diagram, XML/BPMN file, or free-text description. |
 | **new-service-app** | `/new-service-app <app_name> [<spec_or_url>] [--workflow <name>]` | Scaffold a complete app integration under `apps/`. With a spec URL, generates real service classes, DTOs, and MCP tools from the API. Without a spec, creates a skeleton stub. Pass `--workflow` to also scaffold a Celery task that uses the new app. |
@@ -41,6 +42,39 @@ Available prompts:
 | `docs_agent.md` | Generate or update documentation from code |
 | `desktop_analysis.md` | Analyse desktop HUD log screenshots |
 | `kanban_agent_default.md` | Default system prompt used by `BaseKanbanAgent` |
+
+---
+
+### `/deploy-harqis`
+
+End-to-end deploy of the harqis-work platform on the current machine. Decides what to start based on the **role** argument and a **queue list**:
+
+```
+/deploy-harqis host                              # full stack, default queue
+/deploy-harqis host -q default,adhoc,tcg         # host also drains adhoc + tcg queues
+/deploy-harqis host --no-kanban                  # skip Kanban orchestrator
+/deploy-harqis host --num-agents 3               # 3 concurrent in-process Kanban agents
+/deploy-harqis node -q hud,tcg,default           # N100: hardware queues + default
+/deploy-harqis node -q code,write,default        # VPS: dev/research queues
+/deploy-harqis host --down                       # tear down host
+```
+
+| Role | Components started |
+|---|---|
+| `host` | Docker stack · **Beat scheduler** · worker (queues from `-q`, default `default`) · FastAPI frontend · MCP daemon · Kanban orchestrator (1 agent worker) |
+| `node` | Celery worker only — subscribes to every queue in `-q` (single process, multi-queue via Celery's native `-Q`). Connects to host's broker. Never runs Beat. |
+
+**Beat scheduler runs on the host only** — there must be exactly one Beat across the cluster, otherwise scheduled tasks duplicate. Workers are role-agnostic: pass whichever queues this machine should consume via `-q`.
+
+The skill validates Docker / venv / broker connectivity before making changes, surfaces per-component log paths on any failure, and supports clean teardown via `--down`. **OS auto-detection** dispatches to:
+
+| OS | Underlying script | Daemon wrappers | Hosting |
+|---|---|---|---|
+| macOS | `scripts/sh/deploy.sh` | `scripts/sh/run_*_daemon.sh` | LaunchAgent plists |
+| Linux | `scripts/sh/deploy.sh` | `scripts/sh/run_*_daemon.sh` | systemd or `nohup` (Appendix B) |
+| Windows | `scripts/ps/deploy.ps1` | `scripts/ps/run_*_daemon.ps1` | `Start-Process -WindowStyle Hidden` (default) or Scheduled Tasks (`-Register`, Appendix C) |
+
+When new always-on components are added to harqis-work (a new daemon or orchestrator), the skill's "Maintenance" section lists the three places that must be updated to keep the deploy reproducible. See also [HARQIS-CLAW-HOST.md §4](HARQIS-CLAW-HOST.md#4-deploy-pipeline-host-vs-node) for the full pipeline diagram.
 
 ---
 

@@ -21,17 +21,18 @@ memory store.
 1. [Platform Overview](#1-platform-overview)
 2. [Service Inventory](#2-service-inventory)
 3. [First-Time Setup](#3-first-time-setup)
-4. [Host Deployment (Mac Mini / Primary Server)](#4-host-deployment-mac-mini--primary-server)
-5. [OpenClaw Agent Configuration](#5-openclaw-agent-configuration)
-6. [MCP Server & Tools](#6-mcp-server--tools)
-7. [Claude Code Skills Integration](#7-claude-code-skills-integration)
-8. [Worker Nodes & Networking](#8-worker-nodes--networking)
-9. [Multi-Agent Topology](#9-multi-agent-topology)
-10. [Monitoring & Observability](#10-monitoring--observability)
-11. [Docker & Infrastructure](#11-docker--infrastructure)
-12. [Maintenance Runbook](#12-maintenance-runbook)
-13. [Tailscale VPN & Access Control](#13-tailscale-vpn--access-control)
-14. [Quick Reference](#14-quick-reference)
+4. [Deploy Pipeline (host vs node)](#4-deploy-pipeline-host-vs-node)
+5. [Host Deployment (Mac Mini / Primary Server)](#5-host-deployment-mac-mini--primary-server)
+6. [OpenClaw Agent Configuration](#6-openclaw-agent-configuration)
+7. [MCP Server & Tools](#7-mcp-server--tools)
+8. [Claude Code Skills Integration](#8-claude-code-skills-integration)
+9. [Worker Nodes & Networking](#9-worker-nodes--networking)
+10. [Multi-Agent Topology](#10-multi-agent-topology)
+11. [Monitoring & Observability](#11-monitoring--observability)
+12. [Docker & Infrastructure](#12-docker--infrastructure)
+13. [Maintenance Runbook](#13-maintenance-runbook)
+14. [Tailscale VPN & Access Control](#14-tailscale-vpn--access-control)
+15. [Quick Reference](#15-quick-reference)
 
 ---
 
@@ -246,9 +247,204 @@ after editing — the harqis-work tools will appear in the tools panel.
 
 ---
 
-## 4. Host Deployment (Mac Mini / Primary Server)
+## 4. Deploy Pipeline (host vs node)
 
-### 4.1 System prerequisites
+The platform is deployed via a single reusable script (`scripts/sh/deploy.sh`) and a matching Claude Code skill (`/deploy-harqis`). Both take a **role** argument that determines what gets started on the current machine.
+
+### 4.1 Roles at a glance
+
+| Component | `host` | `node` |
+|---|---|---|
+| Docker stack (RabbitMQ, Redis, ES, Kibana, n8n, Mosquitto, OwnTracks, cloudflared) | ✅ | — (connects to host's broker) |
+| **Celery Beat scheduler** (global dispatcher) | ✅ (must be globally unique) | ❌ never |
+| **Celery worker** (consumes from queue list) | ✅ (default queue, or `-q` override) | ✅ (queue list passed via `-q`) |
+| FastAPI frontend dashboard | ✅ (optional) | — |
+| MCP server daemon | ✅ (optional — Claude Desktop usually spawns its own) | — |
+| Kanban orchestrator | ✅ (acts as 1 in-process agent worker) | optional (when nodes also run agents) |
+| OpenClaw agent identity files | ✅ persistent | reads from sync repo only |
+| Tailscale | ✅ | ✅ |
+
+### Beat scheduler vs worker queues — the rule that must never break
+
+- **Beat scheduler** runs on `host` only. There must be exactly **one** Beat across the entire cluster, otherwise every periodic task fires N times (once per scheduler).
+- **Workers** run on every machine and are configured per-machine via `-q` (a comma-separated queue list). Beat dispatches tasks; whichever worker subscribes to the right queue picks them up.
+
+A single worker process can subscribe to multiple queues — Celery's native `-Q` flag accepts a comma-separated list, and `core.apps.sprout` already wires `WORKFLOW_QUEUE=q1,q2,q3` straight through. So there's no need for one process per queue: pass `-q hud,tcg,default` and one process will pull tasks from all three.
+
+| Machine | Typical `-q` argument | Notes |
+|---|---|---|
+| Mac Mini (host) | `default,adhoc,tcg` (or just `default`) | Plus the Beat scheduler. |
+| VPS workers | `code,write,default` | Code/research/long-running tasks; broker via Tailscale. |
+| N100 Windows | `hud,tcg,windows` | Hardware-pinned (HUD / Rainmeter / Windows-only). |
+
+### 4.2 Deploy pipeline
+
+```
+                  /deploy-harqis <role>  ─or─  ./scripts/sh/deploy.sh --role <role>
+                                  │
+                                  ▼
+                    ┌───────────────────────────┐
+                    │  Step 1  Validate role +  │
+                    │          detect OS / venv │
+                    └────────────┬──────────────┘
+                                 ▼
+                    ┌───────────────────────────┐
+                    │  Step 2  Validate prereqs │
+                    │          (Docker / broker │
+                    │          reachability)    │
+                    └────────────┬──────────────┘
+                                 ▼
+            ┌────────────────────┴────────────────────┐
+            │                                         │
+            ▼                                         ▼
+       role=host                                role=node
+            │                                         │
+            ▼                                         │
+  Step 3  Docker compose up                           │
+        ───────────────────────                       │
+        rabbitmq · redis · n8n                        │
+        elasticsearch · kibana                        │
+        mosquitto · owntracks                         │
+        cloudflared (tunnel)                          │
+            │                                         │
+            ▼                                         │
+  Step 4  Source set_env_workflows.sh ◄───────────────┤
+            │      (CELERY_BROKER_URL, PYTHONPATH,    │
+            │       APP_CONFIG_FILE, …)               │
+            ▼                                         ▼
+  Step 5  launchctl load                        (no scheduler on node — never)
+        work.harqis.scheduler.plist                   │
+        (Celery Beat — global dispatcher)             │
+            │                                         │
+            ▼                                         ▼
+  Step 6  launchctl load                        WORKFLOW_QUEUE=$queues
+        work.harqis.worker.plist                launchctl load
+        WORKFLOW_QUEUE=$queues                  work.harqis.worker.plist
+        (default, or -q override)               (one process, all queues in -q)
+            │                                         │
+            ▼                                         │
+  Step 7a launchctl load work.harqis.frontend.plist   │
+            FastAPI dashboard → http://localhost:8000 │
+            │                                         │
+            ▼                                         │
+  Step 7b launchctl load work.harqis.mcp.plist        │
+            MCP daemon (stdio / SSH-stdio remote)     │
+            │                                         │
+            ▼                                         │
+  Step 7c launchctl load work.harqis.kanban.plist     │
+            Kanban orchestrator                       │
+            ├── polls Trello/Jira board               │
+            ├── 1 in-process agent worker (default)   │
+            ├── BlockedHandler re-queues unblocked    │
+            └── writes logs/kanban_audit.jsonl        │
+            │                                         │
+            ▼                                         ▼
+  Step 8  Health checks: docker compose ps · celery inspect ping ·
+          GET /health · tail logs/kanban_audit.jsonl
+                                  │
+                                  ▼
+                            Print summary
+```
+
+### 4.3 Reusable invocations
+
+The skill auto-detects the OS and dispatches to the right script set. Direct shell invocations:
+
+**macOS / Linux (Bash → `scripts/sh/`):**
+```bash
+# Full host deploy (Docker + Beat + worker[default] + frontend + MCP + Kanban=1 agent)
+./scripts/sh/deploy.sh --role host
+
+# Host that also drains the adhoc and tcg queues (single multi-queue worker)
+./scripts/sh/deploy.sh --role host -q default,adhoc,tcg
+
+# Host without Kanban (e.g. on a low-RAM Mac Mini that only orchestrates workflows)
+./scripts/sh/deploy.sh --role host --no-kanban
+
+# Host with N concurrent Kanban agents (M4 with headroom)
+KANBAN_NUM_AGENTS=3 ./scripts/sh/deploy.sh --role host
+
+# Worker-only N100/VPS node — runs hud + tcg queues against the host's broker
+CELERY_BROKER_URL=amqp://guest:guest@mac-mini.tail1234.ts.net:5672/ \
+  ./scripts/sh/deploy.sh --role node -q hud,tcg,default
+
+# Tear down
+./scripts/sh/deploy.sh --role host --down
+./scripts/sh/deploy.sh --role node --down
+```
+
+**Windows (PowerShell → `scripts/ps/`):**
+```powershell
+# Worker-only N100 node — hud + tcg + default
+$env:CELERY_BROKER_URL = 'amqp://guest:guest@mac-mini.tail1234.ts.net:5672/'
+.\scripts\ps\deploy.ps1 -Role node -Queues 'hud,tcg,default'
+
+# Host (rare on Windows but supported — Docker Desktop required)
+.\scripts\ps\deploy.ps1 -Role host -Queues 'default,adhoc'
+
+# Persistent registration (Scheduled Task at startup) — must run elevated
+.\scripts\ps\deploy.ps1 -Role node -Queues 'hud,tcg' -Register
+
+# Tear down
+.\scripts\ps\deploy.ps1 -Role node -Down
+```
+
+Or, from any Claude Code session opened in the repo (OS-agnostic):
+
+```
+/deploy-harqis host
+/deploy-harqis host -q default,adhoc,tcg
+/deploy-harqis host --no-frontend --num-agents 3
+/deploy-harqis node -q hud,tcg,default
+/deploy-harqis node -q code,write,default
+/deploy-harqis host --down
+```
+
+The skill walks through every step, validates prerequisites before making changes, and surfaces a per-component log path on any failure. See `.claude/commands/deploy-harqis.md` for the full reference.
+
+### 4.4 Daemon scripts
+
+Each daemon ships in two flavours — Bash (`scripts/sh/`) for macOS / Linux and PowerShell (`scripts/ps/`) for Windows. Both flavours source the OS-appropriate env loader (`set_env_workflows.sh` or `set_env_workflows.ps1`) and exec the same Python entry point.
+
+| Label | Bash (sh) | PowerShell (ps) | Process |
+|---|---|---|---|
+| `work.harqis.scheduler` | `run_scheduler_daemon.sh` | `run_scheduler_daemon.ps1` | `python run_workflows.py scheduler` |
+| `work.harqis.worker` | `run_worker_daemon.sh` | `run_worker_daemon.ps1` | `WORKFLOW_QUEUE=${WORKFLOW_QUEUE:-default} python run_workflows.py worker` (Celery's `-Q` accepts a comma-separated list) |
+| `work.harqis.frontend` | `run_frontend_daemon.sh` | `run_frontend_daemon.ps1` | `python frontend/main.py` |
+| `work.harqis.mcp` | `run_mcp_daemon.sh` | `run_mcp_daemon.ps1` | `python mcp/server.py` |
+| `work.harqis.kanban` | `run_kanban_daemon.sh` | `run_kanban_daemon.ps1` | `python -m agents.kanban.orchestrator.local --num-agents $KANBAN_NUM_AGENTS` |
+
+**Hosting mechanism per OS:**
+
+| OS | Default (ad-hoc) | Persistent (production) |
+|---|---|---|
+| macOS | `launchctl load <plist>` | LaunchAgent plists in `~/Library/LaunchAgents/` |
+| Linux | `nohup ... &` (PID file in `.run/`) | systemd unit (Appendix B in the skill file) |
+| Windows | `Start-Process -WindowStyle Hidden` (PID in `.run\<label>.pid`) | Scheduled Task at startup (`deploy.ps1 -Register`, must run elevated) |
+
+On Linux nodes, replace LaunchAgent plists with systemd units pointing at the same wrapper scripts (see `/deploy-harqis` skill, Appendix B).
+
+### 4.5 Adding a new always-on component
+
+When you add a new daemon-style service (a new orchestrator, a long-running agent, etc.), update **both** OS flavours so the deploy stays cross-platform:
+
+1. Create the daemon wrappers:
+   - `scripts/sh/run_<name>_daemon.sh` — sources `set_env_workflows.sh`, execs the Python entry point.
+   - `scripts/ps/run_<name>_daemon.ps1` — sources `set_env_workflows.ps1`, execs the same entry point.
+2. Add the new label to **both** rows of the §4.4 table (sh + ps columns).
+3. Wire the new component into both deploy scripts:
+   - `scripts/sh/deploy.sh` — add `PLIST_<NAME>` variable, `WITH_<NAME>` toggle, `--no-<name>` CLI flag.
+   - `scripts/ps/deploy.ps1` — add an entry to the `$services` array, plus a `-No<Name>` switch param.
+4. Update the `/deploy-harqis` skill: a new Step 7 sub-section, both Appendix A (macOS plist) and Appendix C (Windows scripts) tables, and a Quality Checklist line.
+5. Add a health check + summary line to the skill's Step 9 summary block.
+
+This keeps the host bring-up reproducible and self-documenting on every supported OS.
+
+---
+
+## 5. Host Deployment (Mac Mini / Primary Server)
+
+### 5.1 System prerequisites
 
 ```bash
 # Install Homebrew
@@ -261,7 +457,7 @@ brew install git python@3.12 cloudflared tailscale
 brew install --cask docker
 ```
 
-### 4.2 Clone and environment setup
+### 5.2 Clone and environment setup
 
 ```bash
 git clone https://github.com/brianbartilet/harqis-work.git /opt/harqis
@@ -274,7 +470,7 @@ pip install -r requirements.txt
 pip install --upgrade anyio && pip install "mcp>=1.0.0"
 ```
 
-### 4.3 Secrets in macOS Keychain
+### 5.3 Secrets in macOS Keychain
 
 Store sensitive values in Keychain rather than `.env` files:
 
@@ -294,7 +490,7 @@ export HARQIS_FERNET_KEY=$(_kcget HARQIS_FERNET_KEY)
 
 Source before starting workers: `source scripts/macos/load_keychain_secrets.sh`
 
-### 4.4 Start Celery workers
+### 5.4 Start Celery workers
 
 ```bash
 cd /opt/harqis
@@ -315,7 +511,7 @@ WORKFLOW_QUEUE=hud python run_workflows.py worker &
 WORKFLOW_QUEUE=tcg python run_workflows.py worker &
 ```
 
-### 4.5 Cloudflare Tunnel (public webhook entry)
+### 5.5 Cloudflare Tunnel (public webhook entry)
 
 ```bash
 cloudflared tunnel login
@@ -327,7 +523,7 @@ cloudflared tunnel run --url http://localhost:8000 harqis-server
 This gives a stable `https://harqis.yourdomain.com` for n8n webhooks, Trello webhooks, and
 external agent callbacks — no static IP required.
 
-### 4.6 Run on startup (launchd)
+### 5.6 Run on startup (launchd)
 
 ```xml
 <!-- ~/Library/LaunchAgents/com.harqis.server.plist -->
@@ -351,7 +547,7 @@ external agent callbacks — no static IP required.
 launchctl load ~/Library/LaunchAgents/com.harqis.server.plist
 ```
 
-### 4.7 Migrating queues from Windows N100 to Mac Mini
+### 5.7 Migrating queues from Windows N100 to Mac Mini
 
 The N100 Windows machine handles `hud` and `tcg` queues. To shift `tcg` to the Mac Mini:
 
@@ -371,7 +567,7 @@ The N100 Windows machine handles `hud` and `tcg` queues. To shift `tcg` to the M
 
 ---
 
-## 5. OpenClaw Agent Configuration
+## 6. OpenClaw Agent Configuration
 
 ### 5.1 Workspace files
 
@@ -463,7 +659,7 @@ This key encrypts scoped secrets sent to worker nodes. It never leaves the host.
 
 ---
 
-## 6. MCP Server & Tools
+## 7. MCP Server & Tools
 
 The MCP server (`mcp/server.py`) exposes **55 tools** across 16 integrated services. Any Claude
 agent (Desktop, Claude Code, OpenClaw) connected to this server can call any tool.
@@ -538,7 +734,7 @@ Then register in `mcp/server.py` and add config to `apps_config.yaml`.
 
 ---
 
-## 7. Claude Code Skills Integration
+## 8. Claude Code Skills Integration
 
 Claude Code skills (slash commands in `.claude/commands/`) and OpenClaw share the same host
 filesystem. Skills can read OpenClaw identity files as live dynamic context, inject live service
@@ -571,7 +767,7 @@ language instructions.
 
 ---
 
-## 8. Worker Nodes & Networking
+## 9. Worker Nodes & Networking
 
 ### 8.1 Tailscale VPN setup
 
@@ -673,7 +869,7 @@ re-enable `N8N_SECURE_COOKIE: "true"`.
 
 ---
 
-## 9. Multi-Agent Topology
+## 10. Multi-Agent Topology
 
 For a fully autonomous setup across machines:
 
@@ -713,7 +909,7 @@ hardware routing.
 
 ---
 
-## 10. Monitoring & Observability
+## 11. Monitoring & Observability
 
 ### Flower (Celery task monitor)
 
@@ -770,7 +966,7 @@ tasks to n8n dynamically.
 
 ---
 
-## 11. Docker & Infrastructure
+## 12. Docker & Infrastructure
 
 ### Recommended production docker-compose
 
@@ -899,7 +1095,7 @@ Containerise them once the service is stable.
 
 ---
 
-## 12. Maintenance Runbook
+## 13. Maintenance Runbook
 
 ### Restart Celery workers
 
@@ -958,9 +1154,9 @@ tailscale status
 
 ---
 
-## 13. Tailscale VPN & Access Control
+## 14. Tailscale VPN & Access Control
 
-See section [8. Worker Nodes & Networking](#8-worker-nodes--networking) for setup.
+See section [9. Worker Nodes & Networking](#9-worker-nodes--networking) for setup.
 
 The full ACL policy is at `scripts/tailscale/acl-policy.hujson`. Key security notes for
 VPN-exposed services:
@@ -980,7 +1176,7 @@ VPN-exposed services:
 
 ---
 
-## 14. Quick Reference
+## 15. Quick Reference
 
 ### Key URLs
 
