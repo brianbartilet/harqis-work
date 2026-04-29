@@ -5,17 +5,18 @@ Deploy the harqis-work platform on this machine — full stack ("host") or worke
 `$ARGUMENTS` format:
 
 ```
-<role> [-q <queues>] [--down] [--no-frontend] [--no-mcp] [--no-kanban] [--num-agents N] [--dry-run]
+<role> [-q <queues>] [--down] [--no-frontend] [--no-mcp] [--no-kanban] [--no-flower] [--num-agents N] [--dry-run]
 ```
 
 | Token | Required | Description |
 |---|---|---|
-| `role` | Yes | `host` or `node`. `host` is the always-on hub (Docker stack + Beat scheduler + worker + frontend + MCP + Kanban). `node` is a remote worker that connects to the host's broker. |
+| `role` | Yes | `host` or `node`. `host` is the always-on hub (Docker stack + Beat scheduler + worker + frontend + MCP + Kanban + Flower). `node` is a remote worker that connects to the host's broker. |
 | `-q`, `--queues <LIST>` | No | Comma-separated Celery queue list for the worker, e.g. `hud,tcg,default` or `code,write`. **Default:** `default` (both roles). On `node`, this is the primary knob — pass whichever queues this node should consume. On `host`, the default `default` is usually right; override only if the host should also consume hardware-specific queues. A single worker process listens to all listed queues (Celery's native `-Q` multi-queue behaviour). |
 | `--down` | No | Tear down services for this role instead of starting them. |
 | `--no-frontend` | No | Skip the FastAPI dashboard (host only). |
 | `--no-mcp` | No | Skip the MCP server daemon (host only). |
 | `--no-kanban` | No | Skip the Kanban orchestrator (host only). |
+| `--no-flower` | No | Skip the Flower Celery monitor (host only). |
 | `--num-agents N` | No | Number of concurrent in-process Kanban agent workers (host only, default 1). |
 | `--dry-run` | No | Run Kanban orchestrator in dry-run mode (logs actions, doesn't invoke Claude). |
 
@@ -176,6 +177,8 @@ For each component below, the launch mechanism depends on OS:
 
 After loading, tail the last 5 lines of `logs/kanban_audit.jsonl` to confirm the orchestrator is polling. If the file doesn't exist yet, that's fine — it's created on the first poll.
 
+7d. **Flower (Celery task monitor)** — runs `run_flower_daemon.{sh,ps1}`. Listens on `127.0.0.1:5555` by default with HTTP Basic auth (`FLOWER_USER` + `FLOWER_PASSWORD` from `.env/apps.env`). To expose over Tailscale set `FLOWER_ADDRESS=0.0.0.0` before deploy. Probe `http://localhost:5555/api/workers` (with the configured basic auth) until it returns 200, max 15s. Skip if `--no-flower`. **Required env vars:** if `FLOWER_USER` or `FLOWER_PASSWORD` are unset, the daemon will exit immediately — surface the error and either set them or pass `--no-flower`.
+
 If a plist file (macOS) is missing, generate it on-the-fly using Appendix A and persist it. On Windows, deploy.ps1 handles this automatically — no plist generation needed.
 
 ---
@@ -229,12 +232,14 @@ Started:
   ✓ Frontend           http://localhost:8000                                                  [host, optional]
   ✓ MCP server         daemon (stdio)                                                          [host, optional]
   ✓ Kanban orchestrator agents=<n>, profiles=<count>                                          [host, optional]
+  ✓ Flower              http://localhost:5555  (basic-auth: $FLOWER_USER:$FLOWER_PASSWORD)    [host, optional]
 
 Logs:
   ~/Library/Logs/harqis-scheduler.log
   ~/Library/Logs/harqis-worker.log
   ~/Library/Logs/harqis-frontend.log
   ~/Library/Logs/harqis-kanban.log
+  ~/Library/Logs/harqis-flower.log
   logs/kanban_audit.jsonl
 
 Stop:
@@ -277,6 +282,7 @@ Standard label-to-script mapping:
 | `work.harqis.frontend` | `run_frontend_daemon.sh` |
 | `work.harqis.mcp` | `run_mcp_daemon.sh` |
 | `work.harqis.kanban` | `run_kanban_daemon.sh` |
+| `work.harqis.flower` | `run_flower_daemon.sh` |
 
 ---
 
@@ -319,6 +325,7 @@ The Windows path uses PowerShell scripts in `scripts/ps/` and Windows-native dae
 | `work.harqis.frontend` | `scripts/ps/run_frontend_daemon.ps1` |
 | `work.harqis.mcp` | `scripts/ps/run_mcp_daemon.ps1` |
 | `work.harqis.kanban` | `scripts/ps/run_kanban_daemon.ps1` |
+| `work.harqis.flower` | `scripts/ps/run_flower_daemon.ps1` |
 
 **Background launch (default — survives console close, dies on logout):**
 
@@ -366,6 +373,8 @@ The PowerShell deploy script auto-strips whitespace from `-Queues`, exports `$en
 - [ ] Worker subscribed to every requested queue (`celery inspect active_queues` lists all of them)
 - [ ] Frontend `/health` returns 200 (host, unless `--no-frontend`)
 - [ ] Kanban orchestrator polling (host, unless `--no-kanban`)
+- [ ] Flower `/api/workers` returns 200 with `FLOWER_USER:FLOWER_PASSWORD` basic auth (host, unless `--no-flower`)
+- [ ] If `FLOWER_USER`/`FLOWER_PASSWORD` are unset, the Flower daemon errored cleanly — surface the missing env var rather than silently skipping
 - [ ] Failures surface log path + retry command (no silent failures)
 - [ ] `--down` cleanly stops all components for the role and only those
 

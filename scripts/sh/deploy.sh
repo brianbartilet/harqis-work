@@ -25,6 +25,7 @@
 #   --no-frontend      Don't start the FastAPI dashboard (host only)
 #   --no-mcp           Don't start the MCP daemon (host only)
 #   --no-kanban        Don't start the Kanban orchestrator (host only)
+#   --no-flower        Don't start the Flower Celery monitor (host only)
 #   -h|--help          Show this help message
 
 set -euo pipefail
@@ -39,6 +40,7 @@ PLIST_WORKER="$HOME/Library/LaunchAgents/work.harqis.worker.plist"
 PLIST_FRONTEND="$HOME/Library/LaunchAgents/work.harqis.frontend.plist"
 PLIST_MCP="$HOME/Library/LaunchAgents/work.harqis.mcp.plist"
 PLIST_KANBAN="$HOME/Library/LaunchAgents/work.harqis.kanban.plist"
+PLIST_FLOWER="$HOME/Library/LaunchAgents/work.harqis.flower.plist"
 
 # ── Parse flags ───────────────────────────────────────────────────────────────
 
@@ -48,6 +50,7 @@ DOCKER_ONLY=false
 WITH_FRONTEND=true
 WITH_MCP=true
 WITH_KANBAN=true
+WITH_FLOWER=true
 QUEUES=""
 
 while [ $# -gt 0 ]; do
@@ -61,8 +64,9 @@ while [ $# -gt 0 ]; do
     --no-frontend)  WITH_FRONTEND=false; shift ;;
     --no-mcp)       WITH_MCP=false; shift ;;
     --no-kanban)    WITH_KANBAN=false; shift ;;
+    --no-flower)    WITH_FLOWER=false; shift ;;
     -h|--help)
-      sed -n '2,28p' "$0" | sed -e 's/^# //' -e 's/^#$//'
+      sed -n '2,29p' "$0" | sed -e 's/^# //' -e 's/^#$//'
       exit 0
       ;;
     *)
@@ -93,6 +97,7 @@ if [ "$ROLE" = "host" ]; then
   [ "$WITH_FRONTEND" = true ] && PLISTS+=("$PLIST_FRONTEND")
   [ "$WITH_MCP" = true ]      && PLISTS+=("$PLIST_MCP")
   [ "$WITH_KANBAN" = true ]   && PLISTS+=("$PLIST_KANBAN")
+  [ "$WITH_FLOWER" = true ]   && PLISTS+=("$PLIST_FLOWER")
 else
   # Node: worker only
   PLISTS+=("$PLIST_WORKER")
@@ -154,9 +159,9 @@ case $MODE in
     echo ""
     if [ "$ROLE" = "host" ]; then
       echo "[host] Deploy complete."
-      echo "  Components: docker, scheduler, worker(queues=$WORKFLOW_QUEUE)$([ "$WITH_FRONTEND" = true ] && echo ', frontend')$([ "$WITH_MCP" = true ] && echo ', mcp')$([ "$WITH_KANBAN" = true ] && echo ', kanban')"
+      echo "  Components: docker, scheduler, worker(queues=$WORKFLOW_QUEUE)$([ "$WITH_FRONTEND" = true ] && echo ', frontend')$([ "$WITH_MCP" = true ] && echo ', mcp')$([ "$WITH_KANBAN" = true ] && echo ', kanban')$([ "$WITH_FLOWER" = true ] && echo ', flower')"
       echo "  Frontend:   http://localhost:8000"
-      echo "  Flower:     http://localhost:5555"
+      [ "$WITH_FLOWER" = true ] && echo "  Flower:     http://localhost:5555  (basic-auth: \$FLOWER_USER:\$FLOWER_PASSWORD)"
       echo "  Logs:       ~/Library/Logs/harqis-*.log"
     else
       echo "[node] Worker attached to broker ${CELERY_BROKER_URL:-(unset — set CELERY_BROKER_URL!)}"

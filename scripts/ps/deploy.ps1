@@ -5,7 +5,8 @@
 .DESCRIPTION
     Roles:
       host   — the always-on hub: Docker stack + Beat scheduler + worker(s) + frontend
-               + MCP daemon + Kanban orchestrator (acts as 1 agent worker).
+               + MCP daemon + Kanban orchestrator + Flower (Celery monitor).
+               The Kanban orchestrator also acts as 1 in-process agent worker.
       node   — a remote worker that connects to the host's broker. Runs Celery
                worker(s) only (no Docker, no scheduler, no frontend).
 
@@ -36,6 +37,7 @@ param(
     [switch]$NoFrontend,
     [switch]$NoMcp,
     [switch]$NoKanban,
+    [switch]$NoFlower,
     [switch]$Register,
     [int]$NumAgents = 1
 )
@@ -59,6 +61,7 @@ $services = @(
     @{ Label='work.harqis.frontend';  Script='run_frontend_daemon.ps1';  Roles='host'; Skip=$NoFrontend }
     @{ Label='work.harqis.mcp';       Script='run_mcp_daemon.ps1';       Roles='host'; Skip=$NoMcp }
     @{ Label='work.harqis.kanban';    Script='run_kanban_daemon.ps1';    Roles='host'; Skip=$NoKanban }
+    @{ Label='work.harqis.flower';    Script='run_flower_daemon.ps1';    Roles='host'; Skip=$NoFlower }
 )
 
 # ── Load secrets from .env\apps.env (for docker-compose env interpolation) ───
@@ -193,10 +196,11 @@ if ($Role -eq 'host') {
     if (-not $NoFrontend) { $components += 'frontend' }
     if (-not $NoMcp)      { $components += 'mcp' }
     if (-not $NoKanban)   { $components += 'kanban' }
+    if (-not $NoFlower)   { $components += 'flower' }
     Write-Host "[host] Deploy complete."
     Write-Host "  Components: $($components -join ', ')"
     Write-Host "  Frontend:   http://localhost:8000"
-    Write-Host "  Flower:     http://localhost:5555"
+    if (-not $NoFlower)   { Write-Host "  Flower:     http://localhost:5555  (basic-auth: `$FLOWER_USER:`$FLOWER_PASSWORD)" }
     Write-Host "  Logs:       $repoRoot\logs\work.harqis.*.log"
 } else {
     $broker = if ($env:CELERY_BROKER_URL) { $env:CELERY_BROKER_URL } else { '(unset — set CELERY_BROKER_URL!)' }

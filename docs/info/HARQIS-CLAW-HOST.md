@@ -258,9 +258,10 @@ The platform is deployed via a single reusable script (`scripts/sh/deploy.sh`) a
 | Docker stack (RabbitMQ, Redis, ES, Kibana, n8n, Mosquitto, OwnTracks, cloudflared) | ✅ | — (connects to host's broker) |
 | **Celery Beat scheduler** (global dispatcher) | ✅ (must be globally unique) | ❌ never |
 | **Celery worker** (consumes from queue list) | ✅ (default queue, or `-q` override) | ✅ (queue list passed via `-q`) |
-| FastAPI frontend dashboard | ✅ (optional) | — |
-| MCP server daemon | ✅ (optional — Claude Desktop usually spawns its own) | — |
-| Kanban orchestrator | ✅ (acts as 1 in-process agent worker) | optional (when nodes also run agents) |
+| FastAPI frontend dashboard | ✅ (optional, `--no-frontend` to skip) | — |
+| MCP server daemon | ✅ (optional, `--no-mcp` to skip — Claude Desktop usually spawns its own) | — |
+| Kanban orchestrator | ✅ (optional, `--no-kanban` to skip — acts as 1 in-process agent worker) | optional (when nodes also run agents) |
+| Flower (Celery monitor, port 5555) | ✅ (optional, `--no-flower` to skip — needs `FLOWER_USER` + `FLOWER_PASSWORD` in `.env`) | — |
 | OpenClaw agent identity files | ✅ persistent | reads from sync repo only |
 | Tailscale | ✅ | ✅ |
 
@@ -352,14 +353,14 @@ The skill auto-detects the OS and dispatches to the right script set. Direct she
 
 **macOS / Linux (Bash → `scripts/sh/`):**
 ```bash
-# Full host deploy (Docker + Beat + worker[default] + frontend + MCP + Kanban=1 agent)
+# Full host deploy (Docker + Beat + worker[default] + frontend + MCP + Kanban=1 agent + Flower)
 ./scripts/sh/deploy.sh --role host
 
 # Host that also drains the adhoc and tcg queues (single multi-queue worker)
 ./scripts/sh/deploy.sh --role host -q default,adhoc,tcg
 
-# Host without Kanban (e.g. on a low-RAM Mac Mini that only orchestrates workflows)
-./scripts/sh/deploy.sh --role host --no-kanban
+# Host without Kanban or Flower (e.g. low-RAM Mac Mini that only orchestrates workflows)
+./scripts/sh/deploy.sh --role host --no-kanban --no-flower
 
 # Host with N concurrent Kanban agents (M4 with headroom)
 KANBAN_NUM_AGENTS=3 ./scripts/sh/deploy.sh --role host
@@ -413,6 +414,7 @@ Each daemon ships in two flavours — Bash (`scripts/sh/`) for macOS / Linux and
 | `work.harqis.frontend` | `run_frontend_daemon.sh` | `run_frontend_daemon.ps1` | `python frontend/main.py` |
 | `work.harqis.mcp` | `run_mcp_daemon.sh` | `run_mcp_daemon.ps1` | `python mcp/server.py` |
 | `work.harqis.kanban` | `run_kanban_daemon.sh` | `run_kanban_daemon.ps1` | `python -m agents.kanban.orchestrator.local --num-agents $KANBAN_NUM_AGENTS` |
+| `work.harqis.flower` | `run_flower_daemon.sh` | `run_flower_daemon.ps1` | `python -m celery -A core.apps.sprout.app.celery:SPROUT flower --port=$FLOWER_PORT --address=$FLOWER_ADDRESS --basic-auth=$FLOWER_USER:$FLOWER_PASSWORD` |
 
 **Hosting mechanism per OS:**
 
