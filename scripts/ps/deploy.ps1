@@ -39,7 +39,14 @@ param(
     [switch]$NoKanban,
     [switch]$NoFlower,
     [switch]$Register,
-    [int]$NumAgents = 1
+    [int]$NumAgents = 1,
+
+    [Parameter(Mandatory=$false)]
+    [Alias('p')]
+    [string]$Profile = '',
+
+    [Parameter(Mandatory=$false)]
+    [string]$Hw = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,13 +61,25 @@ $Queues = ($Queues -replace '\s', '')
 $env:WORKFLOW_QUEUE = $Queues
 $env:KANBAN_NUM_AGENTS = "$NumAgents"
 
+# Kanban profile filter — host defaults to agent:default; node has no default.
+if (-not $Profile) {
+    if ($Role -eq 'host') {
+        $Profile = 'agent:default'
+    } elseif (-not $Down -and -not $NoKanban) {
+        Write-Error "ERROR: -Role node requires -Profile <id> (e.g. -Profile agent:code). Or pass -NoKanban to skip the kanban orchestrator on this node."
+        exit 1
+    }
+}
+$env:KANBAN_PROFILE_FILTER = $Profile
+if ($Hw) { $env:KANBAN_HW_LABELS = $Hw }
+
 # ── Service definitions (label → script + role visibility) ───────────────────
 $services = @(
     @{ Label='work.harqis.scheduler'; Script='run_scheduler_daemon.ps1'; Roles='host'; Skip=$false }
     @{ Label='work.harqis.worker';    Script='run_worker_daemon.ps1';    Roles='host,node'; Skip=$false }
     @{ Label='work.harqis.frontend';  Script='run_frontend_daemon.ps1';  Roles='host'; Skip=$NoFrontend }
     @{ Label='work.harqis.mcp';       Script='run_mcp_daemon.ps1';       Roles='host'; Skip=$NoMcp }
-    @{ Label='work.harqis.kanban';    Script='run_kanban_daemon.ps1';    Roles='host'; Skip=$NoKanban }
+    @{ Label='work.harqis.kanban';    Script='run_kanban_daemon.ps1';    Roles='host,node'; Skip=$NoKanban }
     @{ Label='work.harqis.flower';    Script='run_flower_daemon.ps1';    Roles='host'; Skip=$NoFlower }
 )
 
@@ -200,11 +219,19 @@ if ($Role -eq 'host') {
     Write-Host "[host] Deploy complete."
     Write-Host "  Components: $($components -join ', ')"
     Write-Host "  Frontend:   http://localhost:8000"
-    if (-not $NoFlower)   { Write-Host "  Flower:     http://localhost:5555  (basic-auth: `$FLOWER_USER:`$FLOWER_PASSWORD)" }
+    if (-not $NoFlower) { Write-Host "  Flower:     http://localhost:5555  (basic-auth: `$FLOWER_USER:`$FLOWER_PASSWORD)" }
+    if (-not $NoKanban) {
+        $hwShown = if ($env:KANBAN_HW_LABELS) { $env:KANBAN_HW_LABELS } else { '(auto)' }
+        Write-Host "  Kanban:     profile=$($env:KANBAN_PROFILE_FILTER)  hw=$hwShown"
+    }
     Write-Host "  Logs:       $repoRoot\logs\work.harqis.*.log"
 } else {
     $broker = if ($env:CELERY_BROKER_URL) { $env:CELERY_BROKER_URL } else { '(unset — set CELERY_BROKER_URL!)' }
     Write-Host "[node] Worker attached to broker $broker"
     Write-Host "  Queues:   $Queues"
+    if (-not $NoKanban) {
+        $hwShown = if ($env:KANBAN_HW_LABELS) { $env:KANBAN_HW_LABELS } else { '(auto)' }
+        Write-Host "  Kanban:   profile=$($env:KANBAN_PROFILE_FILTER)  hw=$hwShown"
+    }
 }
 Write-Host "Stop with: .\scripts\ps\deploy.ps1 -Role $Role -Down"

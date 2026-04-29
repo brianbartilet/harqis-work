@@ -26,6 +26,11 @@
 #   --no-mcp           Don't start the MCP daemon (host only)
 #   --no-kanban        Don't start the Kanban orchestrator (host only)
 #   --no-flower        Don't start the Flower Celery monitor (host only)
+#   -p, --profile ID   Kanban profile this orchestrator owns. Defaults:
+#                      host="agent:default" (host also acts as 1 default-queue node);
+#                      node has NO default — must be passed (e.g. agent:code).
+#   --hw LABELS        Comma-separated hw:* labels this orchestrator satisfies.
+#                      Unset = auto-detect from OS.
 #   -h|--help          Show this help message
 
 set -euo pipefail
@@ -52,6 +57,8 @@ WITH_MCP=true
 WITH_KANBAN=true
 WITH_FLOWER=true
 QUEUES=""
+KANBAN_PROFILE=""
+KANBAN_HW=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -65,8 +72,12 @@ while [ $# -gt 0 ]; do
     --no-mcp)       WITH_MCP=false; shift ;;
     --no-kanban)    WITH_KANBAN=false; shift ;;
     --no-flower)    WITH_FLOWER=false; shift ;;
+    -p|--profile)   KANBAN_PROFILE="$2"; shift 2 ;;
+    --profile=*)    KANBAN_PROFILE="${1#*=}"; shift ;;
+    --hw)           KANBAN_HW="$2"; shift 2 ;;
+    --hw=*)         KANBAN_HW="${1#*=}"; shift ;;
     -h|--help)
-      sed -n '2,29p' "$0" | sed -e 's/^# //' -e 's/^#$//'
+      sed -n '2,33p' "$0" | sed -e 's/^# //' -e 's/^#$//'
       exit 0
       ;;
     *)
@@ -89,6 +100,19 @@ fi
 QUEUES="$(echo "$QUEUES" | tr -d '[:space:]')"
 export WORKFLOW_QUEUE="$QUEUES"
 
+# Kanban profile filter — host defaults to agent:default; node has no default.
+if [ -z "$KANBAN_PROFILE" ]; then
+  if [ "$ROLE" = "host" ]; then
+    KANBAN_PROFILE="agent:default"
+  elif [ "$MODE" = "up" ] && [ "$WITH_KANBAN" = true ]; then
+    echo "ERROR: --role node requires --profile <id> (e.g. --profile agent:code)" >&2
+    echo "       Or pass --no-kanban to skip the kanban orchestrator on this node." >&2
+    exit 1
+  fi
+fi
+export KANBAN_PROFILE_FILTER="$KANBAN_PROFILE"
+[ -n "$KANBAN_HW" ] && export KANBAN_HW_LABELS="$KANBAN_HW"
+
 # ── Build the per-role plist list ─────────────────────────────────────────────
 
 PLISTS=()
@@ -99,8 +123,9 @@ if [ "$ROLE" = "host" ]; then
   [ "$WITH_KANBAN" = true ]   && PLISTS+=("$PLIST_KANBAN")
   [ "$WITH_FLOWER" = true ]   && PLISTS+=("$PLIST_FLOWER")
 else
-  # Node: worker only
+  # Node: worker, plus optionally a profile-scoped kanban orchestrator.
   PLISTS+=("$PLIST_WORKER")
+  [ "$WITH_KANBAN" = true ]   && PLISTS+=("$PLIST_KANBAN")
 fi
 
 # ── Load secrets (for docker compose env vars) ────────────────────────────────
@@ -162,10 +187,12 @@ case $MODE in
       echo "  Components: docker, scheduler, worker(queues=$WORKFLOW_QUEUE)$([ "$WITH_FRONTEND" = true ] && echo ', frontend')$([ "$WITH_MCP" = true ] && echo ', mcp')$([ "$WITH_KANBAN" = true ] && echo ', kanban')$([ "$WITH_FLOWER" = true ] && echo ', flower')"
       echo "  Frontend:   http://localhost:8000"
       [ "$WITH_FLOWER" = true ] && echo "  Flower:     http://localhost:5555  (basic-auth: \$FLOWER_USER:\$FLOWER_PASSWORD)"
+      [ "$WITH_KANBAN" = true ] && echo "  Kanban:     profile=$KANBAN_PROFILE_FILTER  hw=${KANBAN_HW_LABELS:-(auto)}"
       echo "  Logs:       ~/Library/Logs/harqis-*.log"
     else
       echo "[node] Worker attached to broker ${CELERY_BROKER_URL:-(unset — set CELERY_BROKER_URL!)}"
       echo "  Queues:   $WORKFLOW_QUEUE"
+      [ "$WITH_KANBAN" = true ] && echo "  Kanban:   profile=$KANBAN_PROFILE_FILTER  hw=${KANBAN_HW_LABELS:-(auto)}"
     fi
     echo "Stop with: $0 --role $ROLE --down"
     ;;

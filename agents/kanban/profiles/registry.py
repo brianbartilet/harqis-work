@@ -5,7 +5,10 @@ Resolution order for a card:
   1. Exact match on card assignee name
   2. Exact label match (e.g. "agent:code:harqis")
   3. Prefix label match (e.g. "agent:code" matches "agent:code:harqis")
-  4. None — card is skipped by the orchestrator
+  4. Fallback to `agent:default` — but ONLY if the card has no `agent:*` label.
+     A label like `agent:typo` (no matching profile) still returns None so
+     the typo surfaces instead of being silently routed to default.
+  5. None — card is skipped by the orchestrator
 """
 
 import logging
@@ -16,6 +19,8 @@ from agents.kanban.interface import KanbanCard
 from agents.kanban.profiles.schema import AgentProfile
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_PROFILE_ID = "agent:default"
 
 
 class ProfileRegistry:
@@ -75,7 +80,10 @@ class ProfileRegistry:
         return self._profiles.get(profile_id)
 
     def resolve_for_card(self, card: KanbanCard) -> Optional[AgentProfile]:
-        """Find the best matching profile for a card."""
+        """Find the best matching profile for a card.
+
+        See module docstring for resolution order.
+        """
         # 1. Assignee name exact match
         for member_id in card.assignees:
             if match := self._profiles.get(member_id):
@@ -95,7 +103,20 @@ class ProfileRegistry:
                     if len(pid) > best_len:
                         best = profile
                         best_len = len(pid)
-        return best
+        if best is not None:
+            return best
+
+        # 4. Fallback to agent:default — but only when no agent:* label is present.
+        #    A card tagged `agent:foo` with no `foo` profile is a typo, not a
+        #    default-eligible card; surface it by returning None.
+        has_agent_label = any(label.startswith("agent:") for label in card.labels)
+        if not has_agent_label:
+            default = self._profiles.get(DEFAULT_PROFILE_ID)
+            if default is not None:
+                return default
+
+        # 5. Nothing matched
+        return None
 
     # ── Inspection ────────────────────────────────────────────────────────────
 

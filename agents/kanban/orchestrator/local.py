@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 import os
+import platform
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -47,6 +48,28 @@ from agents.kanban.security.audit import AuditLogger, NullAuditLogger
 from agents.kanban.security.secret_store import SecretStore
 
 logger = logging.getLogger(__name__)
+
+
+def detect_local_hw_labels() -> set[str]:
+    """Return the set of `hw:*` labels this machine satisfies.
+
+    Auto-detected from `platform.system()`. macOS gets both `hw:darwin` and
+    `hw:macos` so card authors can use either spelling. Linux and Windows are
+    one each.
+    """
+    sysname = platform.system().lower()
+    if sysname == "darwin":
+        return {"hw:darwin", "hw:macos"}
+    if sysname == "linux":
+        return {"hw:linux"}
+    if sysname == "windows":
+        return {"hw:windows"}
+    return {f"hw:{sysname}"}
+
+
+def card_hw_required(card: KanbanCard) -> set[str]:
+    """Return the set of `hw:*` labels declared on a card."""
+    return {lbl for lbl in (card.labels or []) if lbl.startswith("hw:")}
 
 
 class LocalOrchestrator:
@@ -69,6 +92,8 @@ class LocalOrchestrator:
         audit_log_path: Optional[Path] = None,
         num_agents: int = 1,
         provider_config: Optional[dict] = None,
+        profile_filter: Optional[str] = None,
+        hw_labels: Optional[set[str]] = None,
     ):
         self.provider = provider
         self.registry = registry
@@ -83,11 +108,45 @@ class LocalOrchestrator:
         self._blocked_handler = BlockedCardHandler(provider, board_id)
         self._blocked_poll_countdown = 0
         # Mode A — per-profile provider cache.
-        # `provider_config` is the dict used to build the global provider; per-profile
-        # providers are cloned from it with credentials replaced by the profile's
-        # provider_credentials env-var lookups.
         self._provider_config = provider_config or {}
         self._profile_providers: dict[str, KanbanProvider] = {}
+        # Routing — per-orchestrator filters that decide which cards this
+        # orchestrator is willing to claim.
+        # - profile_filter: only handle cards whose resolved profile id matches.
+        #   None means "any profile" (legacy single-orchestrator behaviour).
+        # - hw_labels: the `hw:*` labels this orchestrator's machine satisfies.
+        #   None auto-detects from the host OS. Cards with no hw:* label match
+        #   any orchestrator; cards with hw:* labels only match orchestrators
+        #   whose hw_labels include at least one of them.
+        self.profile_filter: Optional[str] = profile_filter
+        self.hw_labels: set[str] = hw_labels if hw_labels is not None else detect_local_hw_labels()
+        logger.info(
+            "Orchestrator routing: profile_filter=%s hw_labels=%s",
+            self.profile_filter or "(any)", sorted(self.hw_labels),
+        )
+
+    # ── Routing ───────────────────────────────────────────────────────────────
+
+    def _card_is_for_me(
+        self, card: KanbanCard, profile: Optional[AgentProfile]
+    ) -> tuple[bool, str]:
+        """Return (eligible, reason) for whether this orchestrator should
+        process this card. `reason` is a one-line string for logging when
+        eligible=False; empty when eligible.
+        """
+        # Profile filter: card's resolved profile must match.
+        if self.profile_filter:
+            if profile is None or profile.id != self.profile_filter:
+                resolved = profile.id if profile else "(none)"
+                return False, f"profile mismatch (card={resolved}, filter={self.profile_filter})"
+
+        # Hardware filter: any hw:* label on the card must intersect this
+        # orchestrator's hw_labels.
+        required_hw = card_hw_required(card)
+        if required_hw and not (required_hw & self.hw_labels):
+            return False, f"hw mismatch (card needs {sorted(required_hw)}, this host satisfies {sorted(self.hw_labels)})"
+
+        return True, ""
 
     # ── Per-profile provider (Mode A) ─────────────────────────────────────────
 
@@ -177,6 +236,12 @@ class LocalOrchestrator:
         profile = self.registry.resolve_for_card(card)
         if not profile:
             logger.debug("No profile for card %s (labels=%s)", card.id, card.labels)
+            return None
+
+        # Routing — apply profile + hw filters BEFORE making any provider calls.
+        eligible, reason = self._card_is_for_me(card, profile)
+        if not eligible:
+            logger.debug("Skipping card %s — %s", card.id, reason)
             return None
 
         logger.info(
@@ -326,13 +391,19 @@ class LocalOrchestrator:
         matched = []
         for card in cards:
             profile = self.registry.resolve_for_card(card)
-            if profile:
-                matched.append(card)
-            else:
+            if not profile:
                 logger.info(
                     "No profile match for card '%s' (labels=%s) — skipping",
                     card.title, card.labels,
                 )
+                continue
+            eligible, reason = self._card_is_for_me(card, profile)
+            if not eligible:
+                # Quiet log — another orchestrator (host or another node) is the
+                # intended owner. Filtering here is intentional and not an error.
+                logger.debug("Card '%s' not for this orchestrator — %s", card.title, reason)
+                continue
+            matched.append(card)
 
         if not matched:
             return 0
@@ -443,11 +514,18 @@ def from_env(profiles_dir: Optional[Path] = None) -> LocalOrchestrator:
         JIRA_API_TOKEN
 
     Optional:
-        KANBAN_PROFILES_DIR   path to profiles directory (default: agents/kanban/profiles/examples)
-        KANBAN_POLL_INTERVAL  seconds between polls (default: 60)
-        KANBAN_DRY_RUN        set to "1" to skip actual agent execution
-        KANBAN_AUDIT_LOG      path to audit JSONL file (default: logs/kanban_audit.jsonl)
-        KANBAN_NUM_AGENTS     number of concurrent agent workers on this host (default: 1)
+        KANBAN_PROFILES_DIR    path to profiles directory (default: agents/kanban/profiles/examples)
+        KANBAN_POLL_INTERVAL   seconds between polls (default: 60)
+        KANBAN_DRY_RUN         set to "1" to skip actual agent execution
+        KANBAN_AUDIT_LOG       path to audit JSONL file (default: logs/kanban_audit.jsonl)
+        KANBAN_NUM_AGENTS      number of concurrent agent workers on this host (default: 1)
+        KANBAN_PROFILE_FILTER  only process cards whose resolved profile id matches this
+                               (e.g. 'agent:default', 'agent:code'). When unset, the
+                               orchestrator handles every profile (legacy single-host mode).
+        KANBAN_HW_LABELS       comma-separated `hw:*` labels this orchestrator satisfies.
+                               When unset, auto-detected from platform.system() —
+                               darwin gets {hw:darwin, hw:macos}, linux gets {hw:linux},
+                               windows gets {hw:windows}.
     """
     provider_type = os.environ.get("KANBAN_PROVIDER", "trello").lower()
 
@@ -499,6 +577,14 @@ def from_env(profiles_dir: Optional[Path] = None) -> LocalOrchestrator:
     # SecretStore reads the full env once; agents receive only scoped subsets
     secret_store = SecretStore()
 
+    profile_filter = os.environ.get("KANBAN_PROFILE_FILTER") or None
+    hw_labels_env = os.environ.get("KANBAN_HW_LABELS")
+    hw_labels = (
+        {x.strip() for x in hw_labels_env.split(",") if x.strip()}
+        if hw_labels_env
+        else None  # auto-detect
+    )
+
     return LocalOrchestrator(
         provider=provider,
         registry=registry,
@@ -510,6 +596,8 @@ def from_env(profiles_dir: Optional[Path] = None) -> LocalOrchestrator:
         audit_log_path=audit_log_path,
         num_agents=num_agents,
         provider_config=provider_config,
+        profile_filter=profile_filter,
+        hw_labels=hw_labels,
     )
 
 
@@ -545,6 +633,18 @@ if __name__ == "__main__":
         "--num-agents", type=int, default=None,
         help="Number of concurrent agent workers on this host (default: 1)",
     )
+    parser.add_argument(
+        "--profile", type=str, default=None,
+        help="Restrict to one profile id (e.g. 'agent:default', 'agent:code'). "
+             "When set, this orchestrator only claims cards whose resolved profile matches. "
+             "Overrides KANBAN_PROFILE_FILTER env var.",
+    )
+    parser.add_argument(
+        "--hw", type=str, default=None,
+        help="Comma-separated hw:* labels this orchestrator satisfies "
+             "(e.g. 'hw:linux,hw:gpu'). When unset, auto-detects from the host OS. "
+             "Overrides KANBAN_HW_LABELS env var.",
+    )
     args = parser.parse_args()
 
     # Load .env file if present
@@ -553,6 +653,12 @@ if __name__ == "__main__":
         env_file = Path(".env/apps.env")
     if env_file.exists():
         _load_dotenv(env_file)
+
+    # CLI overrides for routing — set env vars BEFORE from_env() reads them.
+    if args.profile:
+        os.environ["KANBAN_PROFILE_FILTER"] = args.profile
+    if args.hw:
+        os.environ["KANBAN_HW_LABELS"] = args.hw
 
     orch = from_env(profiles_dir=args.profiles_dir)
     if args.poll_interval:

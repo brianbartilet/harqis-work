@@ -1,4 +1,4 @@
-id: base
+sadcxconcid: base
 name: "Base Agent"
 description: "Base profile — all other profiles extend this"
 version: "1.0"

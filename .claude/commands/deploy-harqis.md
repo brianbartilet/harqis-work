@@ -5,19 +5,21 @@ Deploy the harqis-work platform on this machine — full stack ("host") or worke
 `$ARGUMENTS` format:
 
 ```
-<role> [-q <queues>] [--down] [--no-frontend] [--no-mcp] [--no-kanban] [--no-flower] [--num-agents N] [--dry-run]
+<role> [-q <queues>] [-p <profile>] [--hw <labels>] [--down] [--no-frontend] [--no-mcp] [--no-kanban] [--no-flower] [--num-agents N] [--dry-run]
 ```
 
 | Token | Required | Description |
 |---|---|---|
-| `role` | Yes | `host` or `node`. `host` is the always-on hub (Docker stack + Beat scheduler + worker + frontend + MCP + Kanban + Flower). `node` is a remote worker that connects to the host's broker. |
-| `-q`, `--queues <LIST>` | No | Comma-separated Celery queue list for the worker, e.g. `hud,tcg,default` or `code,write`. **Default:** `default` (both roles). On `node`, this is the primary knob — pass whichever queues this node should consume. On `host`, the default `default` is usually right; override only if the host should also consume hardware-specific queues. A single worker process listens to all listed queues (Celery's native `-Q` multi-queue behaviour). |
+| `role` | Yes | `host` or `node`. `host` is the always-on hub (Docker stack + Beat scheduler + worker + frontend + MCP + Kanban + Flower). `node` is a remote worker that connects to the host's broker — and **also** runs a profile-scoped Kanban orchestrator unless `--no-kanban` is set. |
+| `-q`, `--queues <LIST>` | No | Comma-separated Celery queue list for the worker, e.g. `hud,tcg,default` or `code,write`. **Default:** `default` (both roles). |
+| `-p`, `--profile <ID>` | Yes for `node`, optional for `host` | Kanban profile id this orchestrator owns (e.g. `agent:default`, `agent:code`, `agent:write`). The orchestrator only claims cards whose resolved profile matches. **Defaults:** host → `agent:default` (so the host also acts as 1 default-queue node); node → **no default — must be passed**. If the user invokes `/deploy-harqis node` without `-p`, **ask which profile** before continuing (list available profiles from `agents/kanban/profiles/examples/`). |
+| `--hw <LABELS>` | No | Comma-separated `hw:*` labels this orchestrator satisfies, e.g. `hw:linux,hw:gpu`. Unset = auto-detect from `platform.system()` (darwin → `hw:darwin,hw:macos`; linux → `hw:linux`; windows → `hw:windows`). Cards with no `hw:*` label run on any node; cards with `hw:windows` only run on Windows nodes. |
 | `--down` | No | Tear down services for this role instead of starting them. |
 | `--no-frontend` | No | Skip the FastAPI dashboard (host only). |
 | `--no-mcp` | No | Skip the MCP server daemon (host only). |
-| `--no-kanban` | No | Skip the Kanban orchestrator (host only). |
+| `--no-kanban` | No | Skip the Kanban orchestrator. On node this also relaxes the `--profile` requirement. |
 | `--no-flower` | No | Skip the Flower Celery monitor (host only). |
-| `--num-agents N` | No | Number of concurrent in-process Kanban agent workers (host only, default 1). |
+| `--num-agents N` | No | Number of concurrent in-process Kanban agent workers (default 1). Applies to whichever profile this orchestrator is filtered to. |
 | `--dry-run` | No | Run Kanban orchestrator in dry-run mode (logs actions, doesn't invoke Claude). |
 
 `role` is mandatory. If the user invokes `/deploy-harqis` without args, ask which role and which queues (the latter only matters for `node`).
@@ -26,6 +28,17 @@ Deploy the harqis-work platform on this machine — full stack ("host") or worke
 
 - **Scheduler (Celery Beat)** runs on `host` only — there must be exactly **one** Beat instance across the whole cluster. Running it on a node would cause every scheduled task to fire multiple times.
 - **Queues** are role-agnostic. Workers (host or node) consume from the queue list passed via `-q`. Beat dispatches tasks; whichever worker subscribes to the right queue picks them up. That's why `-q` only affects the worker, never the scheduler.
+
+### Kanban routing — profile + hw filters
+
+The Kanban orchestrator runs on **both** host and node. Each instance polls the same Trello/Jira board but only claims cards that match its filters:
+
+1. **Profile filter (`-p`)** — Card's resolved profile id must equal `--profile`. Cards with `agent:code` label go to the orchestrator filtered to `agent:code`; cards with no `agent:*` label fall back to `agent:default`.
+2. **Hardware filter (`--hw`)** — Card's `hw:*` labels must intersect the orchestrator's `hw_labels`. Cards with no `hw:*` label match any orchestrator.
+
+Both filters AND together. A card matching neither filter is skipped silently — another orchestrator is the intended owner.
+
+If the user invokes `/deploy-harqis node` without `-p`, **stop and ask which profile** (e.g. `agent:code`, `agent:write`). List available profiles by reading filenames from `agents/kanban/profiles/examples/`. Don't guess.
 
 ---
 

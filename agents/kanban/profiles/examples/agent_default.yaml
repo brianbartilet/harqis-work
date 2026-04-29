@@ -1,0 +1,71 @@
+id: agent:default
+name: "Claude · Default"
+description: >
+  Default fallback agent — runs cards that have no specific `agent:*` label.
+  Also the profile bound to the host's in-process worker (one thread on host =
+  default-queue worker for cards no node specifically owns).
+version: "1.0"
+extends: base
+
+model:
+  provider: anthropic
+  model_id: claude-sonnet-4-6
+  max_tokens: 4096
+
+context:
+  working_directory: ""
+
+# Tools — superset of `base` plus the most commonly useful tool list.
+tools:
+  allowed:
+    - read_file
+    - glob
+    - grep
+    - post_comment
+    - move_card
+    - check_item
+
+permissions:
+  filesystem:
+    deny:
+      - "**/.env/**"
+  network:
+    allow:
+      - "api.anthropic.com"
+      - "api.trello.com"
+      - "*.atlassian.net"
+    deny: []
+  git:
+    can_push: false
+    require_pr: true
+
+hardware:
+  node_affinity: any
+  queue: default
+
+lifecycle:
+  timeout_minutes: 20
+  auto_approve: true
+  on_success: move_to_done
+  detect_dependencies: true
+  block_on_missing_secrets: true
+
+secrets:
+  required:
+    - ANTHROPIC_API_KEY
+    - TRELLO_API_KEY
+    - TRELLO_API_TOKEN
+
+# Persona — used to sign comments under the shared bot account (Mode B).
+persona:
+  display_name: "Claude · Default"
+  email:        "claude-default@harqis.local"
+  role:         "Default fallback agent"
+  signature:    "Posted by the harqis-work default agent. Re-tag the card with `agent:code` / `agent:write` etc. to redirect to a specialist."
+  # avatar_url: ""
+  # member_id:  ""
+
+# Mode A — per-agent Trello account. See agent_code.yaml for setup notes.
+# provider_credentials:
+#   trello_api_key_env:   TRELLO_AGENT_API_KEY__DEFAULT
+#   trello_api_token_env: TRELLO_AGENT_API_TOKEN__DEFAULT

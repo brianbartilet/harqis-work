@@ -56,6 +56,75 @@ Create a Trello board with these lists (exact names):
 | `Done`        | Agent done — awaiting maintainer review     |
 | `Failed`      | Agent encountered an unrecoverable error (Anthropic API usage/rate limit, 4xx/5xx, raised exception). Comment header surfaces the error `kind` so humans can decide whether to re-queue or wait. |
 
+## Card label routing
+
+Three label families control where each card is routed. **All three are optional** — the orchestrator has sensible fallbacks for cards that omit any of them.
+
+### `agent:*` — which agent handles the card
+
+| Label on card | Resolved profile | Notes |
+|---|---|---|
+| `agent:code` | `agent:code` | Specific profile match (exact id) |
+| `agent:write` | `agent:write` | Specific profile match |
+| `agent:default` or *(no `agent:*` label)* | `agent:default` | Default fallback for unlabelled cards |
+| `agent:nonexistent` (typo) | **None — card is skipped** | A card tagged with an `agent:*` label that doesn't match any profile is left untouched. This surfaces typos instead of silently routing to default. |
+
+`agent:default` is a real, runnable profile shipped in `profiles/examples/agent_default.yaml`. The host's kanban orchestrator is filtered to it by default — so the host **also acts as 1 default-queue worker** alongside its other duties. Nodes own one specific profile each (passed via `/deploy-harqis node -p agent:code`).
+
+### `hw:*` — which machine OS the card requires
+
+| Label on card | Eligible orchestrators |
+|---|---|
+| *(no `hw:*` label)* | Any orchestrator |
+| `hw:linux` | Orchestrators on Linux only |
+| `hw:darwin` or `hw:macos` | Orchestrators on macOS (host or worker) |
+| `hw:windows` | Orchestrators on Windows only |
+| `hw:linux,hw:gpu` (multiple) | Orchestrator must satisfy **at least one** |
+
+`hw:*` labels are auto-detected from `platform.system()` per orchestrator instance; override with `--hw hw:linux,hw:gpu` on the deploy script. Cards with no `hw:*` label match every orchestrator.
+
+### `claimed-by:*` — who owns the card after pickup *(automatic)*
+
+The orchestrator posts a `claimed-by: <profile_name>` comment when it claims a card. This is informational — it's the audit trail of which agent took the card.
+
+### Routing examples
+
+```
+Card title:       "Refactor auth middleware"
+Labels:           agent:code, hw:linux
+                  → only the Linux node filtered to agent:code claims this
+
+Card title:       "Update HUD layout"
+Labels:           hw:windows, urgent
+                  → no agent:* label, falls back to agent:default
+                  → but only the Windows node satisfies hw:windows
+
+Card title:       "Reply on Slack"
+Labels:           (none)
+                  → falls back to agent:default
+                  → any orchestrator filtered to agent:default can claim it
+                  → in default deployment, that's the host
+
+Card title:       "Run on the GPU box"
+Labels:           agent:code, hw:gpu
+                  → only orchestrators with --hw hw:gpu claim it
+                  → host doesn't satisfy hw:gpu, ignores
+```
+
+### Adding new agent personas
+
+Use `/new-kanban-profile <name>`. The skill:
+- Creates `profiles/examples/agent_<name>.yaml` with a persona block
+- Registers Mode A env-var placeholders in `.env/apps.env`
+- Prints the manual Trello-account setup checklist (when going Mode A)
+
+Once a profile exists, deploy a node for it:
+```
+/deploy-harqis node -p agent:<name>
+# or with hw filter:
+/deploy-harqis node -p agent:<name> --hw hw:linux
+```
+
 **Get your board ID:** Open any card on the board, copy its URL
 (`https://trello.com/c/<card_id>`), then call:
 ```

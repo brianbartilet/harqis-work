@@ -260,10 +260,27 @@ The platform is deployed via a single reusable script (`scripts/sh/deploy.sh`) a
 | **Celery worker** (consumes from queue list) | ✅ (default queue, or `-q` override) | ✅ (queue list passed via `-q`) |
 | FastAPI frontend dashboard | ✅ (optional, `--no-frontend` to skip) | — |
 | MCP server daemon | ✅ (optional, `--no-mcp` to skip — Claude Desktop usually spawns its own) | — |
-| Kanban orchestrator | ✅ (optional, `--no-kanban` to skip — acts as 1 in-process agent worker) | optional (when nodes also run agents) |
+| Kanban orchestrator | ✅ Filtered to `agent:default` (also acts as 1 in-process agent worker for the default profile). Override with `--profile <id>`. | ✅ Filtered to the profile passed via `--profile` (required — the deploy script asks if missing). Each node owns one profile. |
 | Flower (Celery monitor, port 5555) | ✅ (optional, `--no-flower` to skip — needs `FLOWER_USER` + `FLOWER_PASSWORD` in `.env`) | — |
 | OpenClaw agent identity files | ✅ persistent | reads from sync repo only |
 | Tailscale | ✅ | ✅ |
+
+### Kanban routing — profile + hw filters
+
+Host and node each run their **own** Kanban orchestrator. They poll the same Trello/Jira board but only claim cards that match their filters:
+
+| Filter | Source | Default per role |
+|---|---|---|
+| `--profile <id>` | CLI flag → `KANBAN_PROFILE_FILTER` env var | host: `agent:default` · node: **required** (deploy script asks if missing) |
+| `--hw <labels>` | CLI flag → `KANBAN_HW_LABELS` env var | auto-detected from `platform.system()` (darwin → `hw:darwin,hw:macos` · linux → `hw:linux` · windows → `hw:windows`) |
+
+A card is eligible for an orchestrator iff:
+1. The card's resolved profile id matches `--profile` (or matches `agent:default` when no `agent:*` label is set), **AND**
+2. Any `hw:*` label on the card intersects the orchestrator's hw set (or no `hw:*` label is set, which matches everyone).
+
+Cards not matching either filter are skipped silently — another orchestrator owns them. **No two orchestrators ever claim the same card** because both filters hash to a unique owner per card.
+
+> **Special case — agent:default fallback.** Cards without any `agent:*` label resolve to `agent:default`. Cards with an `agent:*` label that doesn't match any loaded profile (e.g. `agent:typo`) are returned as None and skipped — typos surface instead of silently routing to default.
 
 ### Beat scheduler vs worker queues — the rule that must never break
 
@@ -353,14 +370,21 @@ The skill auto-detects the OS and dispatches to the right script set. Direct she
 
 **macOS / Linux (Bash → `scripts/sh/`):**
 ```bash
-# Full host deploy (Docker + Beat + worker[default] + frontend + MCP + Kanban=1 agent + Flower)
+# Full host deploy — Kanban orchestrator filtered to agent:default (host = 1 default-queue worker)
 ./scripts/sh/deploy.sh --role host
+
+# Host owns a different profile (e.g. agent:write)
+./scripts/sh/deploy.sh --role host --profile agent:write
 
 # Host that also drains the adhoc and tcg queues (single multi-queue worker)
 ./scripts/sh/deploy.sh --role host -q default,adhoc,tcg
 
 # Host without Kanban or Flower (e.g. low-RAM Mac Mini that only orchestrates workflows)
 ./scripts/sh/deploy.sh --role host --no-kanban --no-flower
+
+# Worker-only N100 node — owns agent:code with native Linux hw matching
+CELERY_BROKER_URL=amqp://guest:guest@mac-mini.tail1234.ts.net:5672/ \
+  ./scripts/sh/deploy.sh --role node -q hud,tcg,default --profile agent:code
 
 # Host with N concurrent Kanban agents (M4 with headroom)
 KANBAN_NUM_AGENTS=3 ./scripts/sh/deploy.sh --role host
