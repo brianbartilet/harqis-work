@@ -58,7 +58,18 @@ Create a Trello board with these lists (exact names):
 
 ## Card label routing
 
-Three label families control where each card is routed. **All three are optional** — the orchestrator has sensible fallbacks for cards that omit any of them.
+Four label families control where each card is routed. **All are optional** — the orchestrator has sensible fallbacks for cards that omit any of them.
+
+### `human` / `manual` — keep the card off the automation path entirely
+
+| Label on card | Behaviour |
+|---|---|
+| `human` *(case-insensitive)* | The orchestrator skips the card across **every** profile and **every** host/node. No claim, no comment, no column move — the card stays where the human put it. |
+| `manual` *(case-insensitive)* | Same as `human`. Use whichever wording reads better on your board. |
+| Any combination with `agent:*` | The `human`/`manual` label still wins. Useful as an emergency override: tag a card `human` to instantly pause any agent that was about to take it. |
+
+These are the only two labels that override every other routing rule. Useful for cards that need maintainer judgement (sensitive change, ambiguous spec, in-flight discussion).
+
 
 ### `agent:*` — which agent handles the card
 
@@ -109,6 +120,16 @@ Card title:       "Run on the GPU box"
 Labels:           agent:code, hw:gpu
                   → only orchestrators with --hw hw:gpu claim it
                   → host doesn't satisfy hw:gpu, ignores
+
+Card title:       "Decide vendor for SOC2"
+Labels:           human
+                  → skipped by every orchestrator
+                  → stays in Backlog until a human moves it manually
+
+Card title:       "Investigate billing anomaly"
+Labels:           human, agent:code
+                  → human label wins → skipped
+                  → agent:code is ignored as long as `human` is present
 ```
 
 ### Adding new agent personas

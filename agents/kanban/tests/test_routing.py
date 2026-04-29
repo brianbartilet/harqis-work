@@ -11,6 +11,7 @@ from agents.kanban.orchestrator.local import (
     LocalOrchestrator,
     card_hw_required,
     detect_local_hw_labels,
+    is_human_card,
 )
 from agents.kanban.profiles.registry import DEFAULT_PROFILE_ID, ProfileRegistry
 from agents.kanban.profiles.schema import AgentProfile
@@ -176,3 +177,58 @@ def test_card_with_multi_hw_label_passes_if_one_matches(orchestrator):
     card = _card(labels=["agent:default", "hw:linux", "hw:windows"])
     eligible, _ = orchestrator._card_is_for_me(card, _profile("agent:default"))
     assert_that(eligible, equal_to(True))
+
+
+# ── human / manual skip ───────────────────────────────────────────────────────
+
+@pytest.mark.smoke
+def test_is_human_card_true_for_human_label():
+    assert_that(is_human_card(_card(labels=["human"])), equal_to(True))
+
+
+@pytest.mark.smoke
+def test_is_human_card_true_for_manual_label():
+    assert_that(is_human_card(_card(labels=["manual"])), equal_to(True))
+
+
+@pytest.mark.smoke
+def test_is_human_card_case_insensitive():
+    assert_that(is_human_card(_card(labels=["Human"])), equal_to(True))
+    assert_that(is_human_card(_card(labels=["MANUAL"])), equal_to(True))
+
+
+@pytest.mark.smoke
+def test_is_human_card_false_for_unrelated_labels():
+    assert_that(is_human_card(_card(labels=["agent:code", "hw:linux"])), equal_to(False))
+
+
+@pytest.mark.smoke
+def test_is_human_card_false_for_no_labels():
+    assert_that(is_human_card(_card(labels=[])), equal_to(False))
+
+
+@pytest.mark.smoke
+def test_is_human_card_does_not_match_substring():
+    """`humanitarian` or `manual-mode` should not match — only the bare label does."""
+    assert_that(is_human_card(_card(labels=["humanitarian"])), equal_to(False))
+    assert_that(is_human_card(_card(labels=["manual-mode"])), equal_to(False))
+
+
+@pytest.mark.smoke
+def test_process_card_returns_none_for_human_card(orchestrator):
+    """Even with a perfectly-matching agent label and hw, a human-tagged card is skipped."""
+    card = _card(labels=["agent:default", "hw:linux", "human"])
+    result = orchestrator.process_card(card)
+    assert_that(result, is_(None))
+    # Nothing should be moved or commented on a human card.
+    orchestrator.provider.move_card.assert_not_called()
+    orchestrator.provider.add_comment.assert_not_called()
+
+
+@pytest.mark.smoke
+def test_human_label_trumps_agent_label(orchestrator):
+    """If both `human` and `agent:default` are present, the human label wins."""
+    card = _card(labels=["human", "agent:default"])
+    assert_that(is_human_card(card), equal_to(True))
+    result = orchestrator.process_card(card)
+    assert_that(result, is_(None))

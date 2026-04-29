@@ -50,6 +50,25 @@ from agents.kanban.security.secret_store import SecretStore
 logger = logging.getLogger(__name__)
 
 
+# Cards bearing any of these labels are explicitly reserved for humans —
+# the orchestrator skips them entirely (no profile resolution, no claim, no
+# comment, no column move). Match is case-insensitive on the bare label.
+HUMAN_LABELS: frozenset[str] = frozenset({"human", "manual"})
+
+
+def is_human_card(card: KanbanCard) -> bool:
+    """True if the card carries a `human` or `manual` label.
+
+    Case-insensitive — `Human`, `MANUAL`, `manual` all match. The orchestrator
+    skips these cards across every profile and every host/node, so they're
+    safe sentinel labels for tasks the maintainer wants to keep off the
+    automation path entirely.
+    """
+    if not card.labels:
+        return False
+    return any(lbl.strip().lower() in HUMAN_LABELS for lbl in card.labels)
+
+
 def detect_local_hw_labels() -> set[str]:
     """Return the set of `hw:*` labels this machine satisfies.
 
@@ -233,6 +252,14 @@ class LocalOrchestrator:
         Claim a card, run its agent, post result, move to Done.
         Returns the result text, or None on error.
         """
+        # Hard skip — human/manual cards are off-limits to all orchestrators.
+        if is_human_card(card):
+            logger.debug(
+                "Skipping card %s — labelled human/manual (labels=%s)",
+                card.id, card.labels,
+            )
+            return None
+
         profile = self.registry.resolve_for_card(card)
         if not profile:
             logger.debug("No profile for card %s (labels=%s)", card.id, card.labels)
@@ -390,6 +417,13 @@ class LocalOrchestrator:
 
         matched = []
         for card in cards:
+            # Hard skip — never touch a card flagged for humans.
+            if is_human_card(card):
+                logger.debug(
+                    "Card '%s' labelled human/manual — skipping (off-limits to all agents)",
+                    card.title,
+                )
+                continue
             profile = self.registry.resolve_for_card(card)
             if not profile:
                 logger.info(

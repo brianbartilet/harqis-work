@@ -281,6 +281,8 @@ A card is eligible for an orchestrator iff:
 Cards not matching either filter are skipped silently — another orchestrator owns them. **No two orchestrators ever claim the same card** because both filters hash to a unique owner per card.
 
 > **Special case — agent:default fallback.** Cards without any `agent:*` label resolve to `agent:default`. Cards with an `agent:*` label that doesn't match any loaded profile (e.g. `agent:typo`) are returned as None and skipped — typos surface instead of silently routing to default.
+>
+> **Hard skip — `human` / `manual` labels.** A card tagged `human` (or `manual`, case-insensitive) is skipped by **every** orchestrator regardless of profile or hw filters. No agent ever claims it. Use these labels for cards that require maintainer judgement, or as an emergency "pause" — tag a card `human` to instantly stop any agent that was about to pick it up.
 
 ### Beat scheduler vs worker queues — the rule that must never break
 
