@@ -605,6 +605,16 @@ AIRTABLE_API_TOKEN=               # personal access token (pat...)
 # Kanban orchestrator
 KANBAN_BOARD_ID=                  # Trello board id or Jira project key
 
+# Kanban agent personas (Mode A — per-agent Trello accounts).
+# One pair per profile; leave blank to use Mode B (shared bot account
+# + signed comments). Add new ones via `/new-kanban-profile <name>`.
+TRELLO_AGENT_API_KEY__CODE=
+TRELLO_AGENT_API_TOKEN__CODE=
+TRELLO_AGENT_API_KEY__WRITE=
+TRELLO_AGENT_API_TOKEN__WRITE=
+TRELLO_AGENT_API_KEY__FULL=
+TRELLO_AGENT_API_TOKEN__FULL=
+
 # ── GitHub ────────────────────────────────────────────────────────────────────
 GITHUB_API_TOKEN=                 # fine-grained PAT (ghp_...)
 
@@ -770,7 +780,7 @@ Lightweight JSON-like files exposing Celery tasks and shell commands to n8n and 
 
 Claude Code skills are slash commands available in any Claude Code session opened in this repo. They encode multi-step workflows so Claude can execute them end-to-end without step-by-step prompting. Invoke with `/skill-name [arguments]` in the Claude Code prompt.
 
-There are currently **8 skills** covering workflow scaffolding, app integration, Zapier MCP discovery, n8n deployment, platform deployment (host/node roles), test running, and prompt-driven codebase analysis.
+There are currently **9 skills** covering workflow scaffolding, app integration, Kanban agent profile creation (with personas), Zapier MCP discovery, n8n deployment, platform deployment (host/node roles), test running, and prompt-driven codebase analysis.
 
 For the full skill inventory, command reference, and per-skill details see **[docs/info/SKILLS-INVENTORY.md](docs/info/SKILLS-INVENTORY.md)**.
 

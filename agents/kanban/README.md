@@ -97,6 +97,47 @@ The orchestrator will:
 
 ---
 
+## Agent personas (Mode A and Mode B)
+
+Every profile in `profiles/examples/` is a **distinct user** on the board — its
+own display name, email, role, and (in Mode A) its own Trello account with a
+real avatar. There are two ways an agent can present itself:
+
+| | Mode B — Signed comments (default) | Mode A — Real per-agent account |
+|---|---|---|
+| Setup time | **0 min** — works immediately | ~5 min per agent (sign up, verify email, invite to board, generate token) |
+| Trello attribution | Shared bot account (`TRELLO_API_TOKEN`) | The agent's own Trello account |
+| Avatar / member ID | n/a (signature only) | Real avatar, real member ID, real audit trail |
+| Comment format | Persona signature block prepended (`> 👤 **Name** · _role_`) | Native — no signature prefix |
+| When it activates | Always, unless Mode A is configured | When `provider_credentials` env vars are set **and** the YAML block is uncommented |
+
+**Mode B is on by default** — every profile that has a `persona:` block automatically
+signs its comments. You don't need to do anything to enable it.
+
+**Mode A activates automatically** when both these conditions are true:
+1. The profile's `provider_credentials` block is uncommented and references
+   `trello_api_key_env` + `trello_api_token_env`.
+2. The named env vars (e.g. `TRELLO_AGENT_API_KEY__CODE`,
+   `TRELLO_AGENT_API_TOKEN__CODE`) are set in `.env/apps.env` to real
+   credentials.
+
+If Mode A creds are missing or the env vars are blank, the orchestrator logs
+a one-line notice and falls back to Mode B for that profile only — other
+profiles are unaffected.
+
+**Creating new agents:** use the `/new-kanban-profile <name>` skill. It
+scaffolds the YAML, registers placeholder env vars in `.env/apps.env`, and
+prints the manual setup checklist for getting the bot's Trello account
+ready (sign up the email → invite to board → generate token → uncomment
+the YAML block).
+
+**Concurrency note:** when the host runs with `--num-agents N`, multiple
+worker threads can run the same profile in parallel. They all share the same
+persona — one account, multiple cards in flight. This matches how a human
+team member operates and avoids token thrashing.
+
+---
+
 ## Running Tests
 
 ```bash

@@ -107,6 +107,48 @@ class HardwareConfig:
 
 
 @dataclass
+class PersonaConfig:
+    """Display identity used to sign comments (Mode B) and to label the agent in audit logs.
+
+    All fields optional. When `display_name` is empty the agent uses its profile id.
+    `member_id` is the Trello member ID (24-char hex) — only set after the bot account
+    has been created and invited to the board (Mode A).
+    """
+    display_name: str = ""
+    email: str = ""
+    avatar_url: str = ""
+    signature: str = ""
+    role: str = ""
+    member_id: str = ""
+
+
+@dataclass
+class ProviderCredentialsConfig:
+    """Per-profile Kanban provider credentials (Mode A).
+
+    Each field names the *env var* to read at runtime — the orchestrator looks
+    them up and, when present, builds a per-profile `KanbanProvider` so this
+    agent's actions are attributed to its own Trello/Jira account.
+
+    When all referenced env vars are unset, the orchestrator falls back to the
+    global provider (Mode B — signed comments under the shared bot account).
+    """
+    trello_api_key_env: str = ""
+    trello_api_token_env: str = ""
+    jira_email_env: str = ""
+    jira_api_token_env: str = ""
+
+    def is_set(self) -> bool:
+        """True if at least one credential env var name is configured."""
+        return any([
+            self.trello_api_key_env,
+            self.trello_api_token_env,
+            self.jira_email_env,
+            self.jira_api_token_env,
+        ])
+
+
+@dataclass
 class LifecycleConfig:
     timeout_minutes: int = 20
     on_timeout: str = "move_to_failed"
@@ -136,6 +178,8 @@ class AgentProfile:
     hardware: HardwareConfig = field(default_factory=HardwareConfig)
     lifecycle: LifecycleConfig = field(default_factory=LifecycleConfig)
     secrets: SecretsConfig = field(default_factory=SecretsConfig)
+    persona: PersonaConfig = field(default_factory=PersonaConfig)
+    provider_credentials: ProviderCredentialsConfig = field(default_factory=ProviderCredentialsConfig)
 
     # ── Label matching ────────────────────────────────────────────────────────
 
@@ -160,6 +204,8 @@ class AgentProfile:
             hardware=_load_hardware(data.get("hardware", {})),
             lifecycle=_load_lifecycle(data.get("lifecycle", {})),
             secrets=_load_secrets(data.get("secrets", {})),
+            persona=_load_persona(data.get("persona", {})),
+            provider_credentials=_load_provider_credentials(data.get("provider_credentials", {})),
         )
 
     @classmethod
@@ -186,6 +232,12 @@ class AgentProfile:
             hardware=self.hardware if self.hardware != HardwareConfig() else base.hardware,
             lifecycle=self.lifecycle if self.lifecycle != LifecycleConfig() else base.lifecycle,
             secrets=_merge_secrets(self.secrets, base.secrets),
+            persona=self.persona if self.persona != PersonaConfig() else base.persona,
+            provider_credentials=(
+                self.provider_credentials
+                if self.provider_credentials != ProviderCredentialsConfig()
+                else base.provider_credentials
+            ),
         )
 
 
@@ -281,6 +333,26 @@ def _load_lifecycle(d: dict) -> LifecycleConfig:
 def _load_secrets(d: dict) -> SecretsConfig:
     return SecretsConfig(
         required=d.get("required", []),
+    )
+
+
+def _load_persona(d: dict) -> PersonaConfig:
+    return PersonaConfig(
+        display_name=d.get("display_name", ""),
+        email=d.get("email", ""),
+        avatar_url=d.get("avatar_url", ""),
+        signature=d.get("signature", ""),
+        role=d.get("role", ""),
+        member_id=d.get("member_id", ""),
+    )
+
+
+def _load_provider_credentials(d: dict) -> ProviderCredentialsConfig:
+    return ProviderCredentialsConfig(
+        trello_api_key_env=d.get("trello_api_key_env", ""),
+        trello_api_token_env=d.get("trello_api_token_env", ""),
+        jira_email_env=d.get("jira_email_env", ""),
+        jira_api_token_env=d.get("jira_api_token_env", ""),
     )
 
 

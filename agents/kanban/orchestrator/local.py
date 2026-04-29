@@ -36,12 +36,13 @@ from time import sleep
 from typing import Optional
 
 from agents.kanban.agent.base import AgentExecutionError, BaseKanbanAgent
+from agents.kanban.agent.persona import sign_comment
 from agents.kanban.dependencies.detector import DependencyDetector
 from agents.kanban.factory import create_provider
 from agents.kanban.interface import KanbanCard, KanbanProvider
 from agents.kanban.orchestrator.blocked_handler import BlockedCardHandler
 from agents.kanban.profiles.registry import ProfileRegistry
-from agents.kanban.profiles.schema import AgentProfile
+from agents.kanban.profiles.schema import AgentProfile, ProviderCredentialsConfig
 from agents.kanban.security.audit import AuditLogger, NullAuditLogger
 from agents.kanban.security.secret_store import SecretStore
 
@@ -67,6 +68,7 @@ class LocalOrchestrator:
         dry_run: bool = False,
         audit_log_path: Optional[Path] = None,
         num_agents: int = 1,
+        provider_config: Optional[dict] = None,
     ):
         self.provider = provider
         self.registry = registry
@@ -80,6 +82,90 @@ class LocalOrchestrator:
         self._dep_detector = DependencyDetector()
         self._blocked_handler = BlockedCardHandler(provider, board_id)
         self._blocked_poll_countdown = 0
+        # Mode A — per-profile provider cache.
+        # `provider_config` is the dict used to build the global provider; per-profile
+        # providers are cloned from it with credentials replaced by the profile's
+        # provider_credentials env-var lookups.
+        self._provider_config = provider_config or {}
+        self._profile_providers: dict[str, KanbanProvider] = {}
+
+    # ── Per-profile provider (Mode A) ─────────────────────────────────────────
+
+    def provider_for_profile(self, profile: AgentProfile) -> KanbanProvider:
+        """Return the KanbanProvider for this profile.
+
+        Mode A: if the profile has `provider_credentials` set AND the named env
+        vars are populated, build (and cache) a per-profile provider that
+        authenticates as that agent's own Trello/Jira account. All actions
+        (comments, moves, claims) then attribute to that account natively.
+
+        Mode B: otherwise, return the global provider — the orchestrator will
+        sign comments with the persona block instead.
+        """
+        creds = profile.provider_credentials
+        if not creds.is_set() or not self._provider_config:
+            return self.provider
+
+        cached = self._profile_providers.get(profile.id)
+        if cached is not None:
+            return cached
+
+        kind = self._provider_config.get("provider", "trello").lower()
+        config = dict(self._provider_config)
+
+        if kind == "trello":
+            api_key = os.environ.get(creds.trello_api_key_env) if creds.trello_api_key_env else None
+            token = os.environ.get(creds.trello_api_token_env) if creds.trello_api_token_env else None
+            if not api_key or not token:
+                logger.info(
+                    "Profile %s declares Trello provider_credentials but env vars "
+                    "(%s / %s) are not set — falling back to global provider (Mode B).",
+                    profile.id, creds.trello_api_key_env, creds.trello_api_token_env,
+                )
+                return self.provider
+            config["api_key"] = api_key
+            config["token"] = token
+        elif kind == "jira":
+            email = os.environ.get(creds.jira_email_env) if creds.jira_email_env else None
+            api_token = os.environ.get(creds.jira_api_token_env) if creds.jira_api_token_env else None
+            if not email or not api_token:
+                logger.info(
+                    "Profile %s declares Jira provider_credentials but env vars "
+                    "(%s / %s) are not set — falling back to global provider (Mode B).",
+                    profile.id, creds.jira_email_env, creds.jira_api_token_env,
+                )
+                return self.provider
+            config["email"] = email
+            config["api_token"] = api_token
+
+        per_profile = create_provider(config)
+        self._profile_providers[profile.id] = per_profile
+        logger.info("Mode A active for profile %s — using dedicated %s account", profile.id, kind)
+        return per_profile
+
+    def _post_comment(
+        self, card_id: str, body: str, profile: Optional[AgentProfile] = None
+    ) -> None:
+        """Post a comment using the right provider, with persona signature applied
+        (Mode B). When the profile is None or the per-profile provider is being used
+        (Mode A), the signature is skipped — the underlying account already attributes
+        the comment correctly.
+        """
+        if profile is not None:
+            target = self.provider_for_profile(profile)
+            using_mode_a = target is not self.provider
+            if not using_mode_a:
+                body = sign_comment(profile, body)
+        else:
+            target = self.provider
+        target.add_comment(card_id, body)
+
+    def _provider_move(
+        self, card_id: str, column: str, profile: Optional[AgentProfile] = None
+    ) -> None:
+        """Move a card via the right provider (per-profile for Mode A)."""
+        target = self.provider_for_profile(profile) if profile else self.provider
+        target.move_card(card_id, column)
 
     # ── Single card processing ────────────────────────────────────────────────
 
@@ -111,14 +197,15 @@ class LocalOrchestrator:
                 )
                 try:
                     summary = dep_result.blocker_summary()
-                    self.provider.add_comment(
+                    self._post_comment(
                         card.id,
                         f"## Agent: Blocked\n\n"
                         f"Cannot start — the following dependencies must be resolved by the maintainer:\n\n"
                         f"{summary}\n\n"
                         f"Once resolved, the card will be automatically re-queued.",
+                        profile,
                     )
-                    self.provider.move_card(card.id, "Blocked")
+                    self._provider_move(card.id, "Blocked", profile)
                 except Exception as e:
                     logger.error("Failed to block card %s: %s", card.id, e)
                 return None
@@ -132,11 +219,12 @@ class LocalOrchestrator:
         except KeyError as e:
             logger.error("Missing required secret for profile %s: %s", profile.id, e)
             try:
-                self.provider.add_comment(
+                self._post_comment(
                     card.id,
                     f"## Agent Error\n\nCould not start: missing required secret {e}",
+                    profile,
                 )
-                self.provider.move_card(card.id, "Failed")
+                self._provider_move(card.id, "Failed", profile)
             except Exception:
                 pass
             return None
@@ -148,10 +236,14 @@ class LocalOrchestrator:
         )
         audit.secret_access(profile.id, list(scoped.keys()))
 
+        # Resolve the per-profile provider once (cached) — this is what claims,
+        # comments, and moves use so the right Trello/Jira account gets attribution.
+        agent_provider = self.provider_for_profile(profile)
+
         # Step 1: Claim
         try:
-            self.provider.move_card(card.id, "Pending")
-            self.provider.add_comment(card.id, f"claimed-by: {profile.name}")
+            self._provider_move(card.id, "Pending", profile)
+            self._post_comment(card.id, f"claimed-by: {profile.name}", profile)
             audit.card_lifecycle("Backlog", "Pending")
         except Exception as e:
             logger.error("Failed to claim card %s: %s", card.id, e)
@@ -159,7 +251,7 @@ class LocalOrchestrator:
 
         # Step 2: Mark in progress
         try:
-            self.provider.move_card(card.id, "In Progress")
+            self._provider_move(card.id, "In Progress", profile)
             audit.card_lifecycle("Pending", "In Progress")
         except Exception as e:
             logger.warning("Could not move to 'In Progress': %s", e)
@@ -169,7 +261,7 @@ class LocalOrchestrator:
             agent = BaseKanbanAgent(
                 profile=profile,
                 card=card,
-                provider=self.provider,
+                provider=agent_provider,
                 api_key=self.api_key,
                 scoped_secrets=scoped,
                 audit=audit,
@@ -181,9 +273,9 @@ class LocalOrchestrator:
 
         # Step 4: Post result (already sanitized by agent)
         try:
-            self.provider.add_comment(card.id, f"## Result\n\n{result}")
+            self._post_comment(card.id, f"## Result\n\n{result}", profile)
             destination = "Done"
-            self.provider.move_card(card.id, destination)
+            self._provider_move(card.id, destination, profile)
             audit.card_lifecycle("In Progress", destination)
             logger.info("Card %s → %s", card.id, destination)
         except Exception as e:
@@ -216,8 +308,8 @@ class LocalOrchestrator:
         if audit:
             audit.agent_finish(success=False, iterations=0, detail=str(exc))
         try:
-            self.provider.add_comment(card.id, comment)
-            self.provider.move_card(card.id, "Failed")
+            self._post_comment(card.id, comment, profile)
+            self._provider_move(card.id, "Failed", profile)
         except Exception as post_err:
             logger.error("Could not post error comment: %s", post_err)
 
@@ -417,6 +509,7 @@ def from_env(profiles_dir: Optional[Path] = None) -> LocalOrchestrator:
         dry_run=dry_run,
         audit_log_path=audit_log_path,
         num_agents=num_agents,
+        provider_config=provider_config,
     )
 
 

@@ -110,3 +110,22 @@ secrets:
     - REDDIT_CLIENT_SECRET
     - REDDIT_USERNAME
     - REDDIT_PASSWORD
+
+# Persona — used to sign comments (Mode B) and to label this agent in audit logs.
+# Override `display_name`/`signature` to reflect the agent's voice on the board.
+persona:
+  display_name: "Claude · Code"
+  email:        "claude-code@harqis.local"
+  role:         "Code-writing agent"
+  signature:    "Posted by the harqis-work code-writing agent. Reply on the card to redirect."
+  # Filled in if you sign up a dedicated Trello account for this agent (Mode A).
+  # avatar_url: ""
+  # member_id:  ""
+
+# Mode A — per-agent Trello account.
+# Leave commented until you've signed up the bot account, invited it to the board,
+# and pasted its key/token into .env/apps.env. While commented, Mode B (signed
+# comments under the shared TRELLO_API_KEY/TRELLO_API_TOKEN) applies automatically.
+# provider_credentials:
+#   trello_api_key_env:   TRELLO_AGENT_API_KEY__CODE
+#   trello_api_token_env: TRELLO_AGENT_API_TOKEN__CODE

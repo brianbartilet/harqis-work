@@ -116,3 +116,17 @@ secrets:
     - JIRA_DOMAIN
     - JIRA_EMAIL
     - JIRA_API_TOKEN
+
+# Persona — used to sign comments (Mode B) and to label this agent in audit logs.
+persona:
+  display_name: "Claude · Full"
+  email:        "claude-full@harqis.local"
+  role:         "Generalist agent (catch-all)"
+  signature:    "Posted by the harqis-work generalist agent. Reply on the card to redirect."
+  # avatar_url: ""
+  # member_id:  ""
+
+# Mode A — per-agent Trello account. See agent_code.yaml for setup notes.
+# provider_credentials:
+#   trello_api_key_env:   TRELLO_AGENT_API_KEY__FULL
+#   trello_api_token_env: TRELLO_AGENT_API_TOKEN__FULL

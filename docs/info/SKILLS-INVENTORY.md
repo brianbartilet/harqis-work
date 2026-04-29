@@ -14,6 +14,7 @@ Skill files live in `.claude/commands/*.md`. The first line of each file is the 
 | **agent-prompt** | `/agent-prompt <prompt_name>` | Run a named AI prompt from `agents/prompts/` against the codebase. `prompt_name` is the filename without extension (e.g. `code_smells`, `docs_agent`, `desktop_analysis`). |
 | **deploy-harqis** | `/deploy-harqis <host\|node> [-q queues] [--down] [--no-frontend] [--no-mcp] [--no-kanban] [--num-agents N] [--dry-run]` | End-to-end reusable deploy of the harqis-work platform — **cross-platform**, auto-detects macOS / Linux / Windows and dispatches to `scripts/sh/deploy.sh` or `scripts/ps/deploy.ps1`. `host` brings up the full stack (Docker + Beat scheduler + worker + frontend + MCP daemon + Kanban orchestrator that doubles as 1 in-process agent worker). `node` runs a Celery worker only against the host's broker. Pass `-q hud,tcg,default` to specify the queue list — one process subscribes to all listed queues (Celery's native `-Q`). Beat scheduler runs on `host` only. Tear down with `--down`. |
 | **generate-registry** | `/generate-registry` | Regenerate `frontend/registry.py` by scanning all `workflows/*/tasks_config.py` files. Run after adding or removing any Celery task. |
+| **new-kanban-profile** | `/new-kanban-profile <profile_name> [--display-name "..."] [--email "..."] [--role "..."] [--no-mode-a]` | Scaffold a new Kanban agent profile YAML under `agents/kanban/profiles/examples/`. Includes a persona block (signed comments — Mode B, default-on) and commented-out Mode A scaffolding. Adds blank `TRELLO_AGENT_API_KEY__<SUFFIX>` / `TRELLO_AGENT_API_TOKEN__<SUFFIX>` placeholders to `.env/apps.env`. Prints the manual Trello-account setup checklist. |
 | **new-n8n-workflow** | `/new-n8n-workflow <description_or_diagram>` | Build and deploy an n8n workflow directly into the local n8n instance (`localhost:5678`) from a drawio diagram, XML/BPMN file, or free-text description. |
 | **new-service-app** | `/new-service-app <app_name> [<spec_or_url>] [--workflow <name>]` | Scaffold a complete app integration under `apps/`. With a spec URL, generates real service classes, DTOs, and MCP tools from the API. Without a spec, creates a skeleton stub. Pass `--workflow` to also scaffold a Celery task that uses the new app. |
 | **new-workflow** | `/new-workflow [<category>] <task_description_or_diagram> [--merge <file>] [--new-file <name>]` | Design and implement an RPA-style Celery workflow that chains app integrations. Parses drawio diagrams or text descriptions, resolves missing app and Python package dependencies, writes the task file, registers the schedule, and produces tests. |
@@ -75,6 +76,29 @@ The skill validates Docker / venv / broker connectivity before making changes, s
 | Windows | `scripts/ps/deploy.ps1` | `scripts/ps/run_*_daemon.ps1` | `Start-Process -WindowStyle Hidden` (default) or Scheduled Tasks (`-Register`, Appendix C) |
 
 When new always-on components are added to harqis-work (a new daemon or orchestrator), the skill's "Maintenance" section lists the three places that must be updated to keep the deploy reproducible. See also [HARQIS-CLAW-HOST.md §4](HARQIS-CLAW-HOST.md#4-deploy-pipeline-host-vs-node) for the full pipeline diagram.
+
+---
+
+### `/new-kanban-profile`
+
+Scaffolds a new Kanban agent profile under `agents/kanban/profiles/examples/<file_basename>.yaml` and registers Mode A env-var placeholders in `.env/apps.env`. Designed so each profile = one persona = one user-facing identity on the Trello/Jira board.
+
+```
+/new-kanban-profile finance
+/new-kanban-profile research --display-name "Claude · Research" --role "Research agent"
+/new-kanban-profile sandbox --no-mode-a       # ephemeral profile, no env-var registration
+```
+
+**What it generates:**
+- A YAML profile with all the standard sections + a `persona` block (display name, email, role, signature) and a **commented** `provider_credentials` block.
+- Two new lines in `.env/apps.env` under a `# KANBAN AGENT PERSONAS` section: `TRELLO_AGENT_API_KEY__<SUFFIX>=` and `TRELLO_AGENT_API_TOKEN__<SUFFIX>=` (blank — the user fills these in only if they want Mode A).
+- A printed checklist explaining the manual Trello-account setup (sign up, verify email, invite to board, generate token).
+
+**Mode B (default, immediate):** the new agent runs **right now** under the shared `TRELLO_API_KEY` / `TRELLO_API_TOKEN` and signs every comment with its persona block. No manual setup required.
+
+**Mode A (opt-in):** activates automatically when both `TRELLO_AGENT_API_KEY__<SUFFIX>` and `TRELLO_AGENT_API_TOKEN__<SUFFIX>` are populated **and** the profile's `provider_credentials` block is uncommented. Trello then attributes every action (comment / move / claim) to the agent's own Trello account natively — its avatar appears, no signature prefix needed.
+
+The orchestrator picks the mode automatically per profile at runtime via `LocalOrchestrator.provider_for_profile()`. No code change required to flip an agent over — just set the env vars and uncomment the YAML block.
 
 ---
 

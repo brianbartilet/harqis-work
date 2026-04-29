@@ -71,3 +71,17 @@ secrets:
     - GOOGLE_APPS_API_KEY
     - DISCORD_BOT_TOKEN
     - TELEGRAM_BOT_TOKEN
+
+# Persona — used to sign comments (Mode B) and to label this agent in audit logs.
+persona:
+  display_name: "Claude · Write"
+  email:        "claude-write@harqis.local"
+  role:         "Content-writing agent"
+  signature:    "Posted by the harqis-work content-writing agent. Reply on the card to redirect."
+  # avatar_url: ""
+  # member_id:  ""
+
+# Mode A — per-agent Trello account. See agent_code.yaml for setup notes.
+# provider_credentials:
+#   trello_api_key_env:   TRELLO_AGENT_API_KEY__WRITE
+#   trello_api_token_env: TRELLO_AGENT_API_TOKEN__WRITE
