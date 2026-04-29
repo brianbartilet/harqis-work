@@ -54,7 +54,7 @@ Create a Trello board with these lists (exact names):
 | `In Progress` | Agent actively working                      |
 | `Blocked`     | Hard-stop dependency — auto re-queued when resolved |
 | `Done`        | Agent done — awaiting maintainer review     |
-| `Failed`      | Agent encountered an unrecoverable error    |
+| `Failed`      | Agent encountered an unrecoverable error (Anthropic API usage/rate limit, 4xx/5xx, raised exception). Comment header surfaces the error `kind` so humans can decide whether to re-queue or wait. |
 
 **Get your board ID:** Open any card on the board, copy its URL
 (`https://trello.com/c/<card_id>`), then call:

@@ -29,6 +29,42 @@ from agents.prompts import load_prompt
 
 logger = logging.getLogger(__name__)
 
+
+class AgentExecutionError(Exception):
+    """Raised when the agent cannot complete a card and the orchestrator should
+    move it to the Failed column.
+
+    The orchestrator's `_handle_error` checks for this exception type and posts
+    a clean failure comment (no traceback noise) before moving the card.
+
+    Attributes:
+        kind: A short stable identifier for the failure category. Used by the
+              audit log and the comment header.
+              Known values:
+                - 'api_usage_limit'  — Anthropic returned a usage/credit/quota error
+                                       (e.g. 400 with "You have reached your specified
+                                       API usage limits"). Do NOT retry.
+                - 'api_rate_limit'   — Anthropic returned 429. Transient; manual re-queue ok.
+                - 'api_error'        — Other 4xx/5xx from Anthropic.
+                - 'general'          — Catch-all.
+    """
+
+    def __init__(self, message: str, *, kind: str = "general"):
+        self.kind = kind
+        super().__init__(message)
+
+
+# Substrings (lowercased) that indicate an Anthropic 400 is actually a hard usage
+# limit and not a transient bad request. When matched, `kind` is set to
+# 'api_usage_limit' so the orchestrator can surface the expected unblock time.
+_USAGE_LIMIT_PATTERNS = (
+    "usage limit",
+    "credit balance",
+    "monthly spend limit",
+    "quota",
+)
+
+
 # Default system prompt loaded from agents/prompts/kanban_agent_default.md
 # Edit that file to change agent behaviour — do not hardcode prompts here.
 def _load_default_system() -> str:
@@ -110,11 +146,24 @@ class BaseKanbanAgent:
             logger.debug("[%s] Calling Claude (iteration %d)", self.profile.id, iteration)
             try:
                 response = self.client.messages.create(**kwargs)
-            except anthropic.BadRequestError as e:
+            except anthropic.APIStatusError as e:
+                # Any 4xx/5xx from Anthropic is unrecoverable for this card —
+                # raise so the orchestrator routes it to the Failed column instead
+                # of silently posting the error message as a "Done" comment.
                 msg = str(e)
-                logger.warning("[%s] BadRequestError: %s", self.profile.id, msg)
+                low = msg.lower()
+                if any(p in low for p in _USAGE_LIMIT_PATTERNS):
+                    kind = "api_usage_limit"
+                elif isinstance(e, anthropic.RateLimitError):
+                    kind = "api_rate_limit"
+                else:
+                    kind = "api_error"
+                logger.warning(
+                    "[%s] %s (kind=%s): %s",
+                    self.profile.id, type(e).__name__, kind, msg,
+                )
                 self._audit.agent_finish(success=False, iterations=iteration, detail=msg)
-                return f"ERROR: Request blocked by API — {msg}"
+                raise AgentExecutionError(msg, kind=kind) from e
             messages.append({"role": "assistant", "content": response.content})
 
             if response.stop_reason == "end_turn":

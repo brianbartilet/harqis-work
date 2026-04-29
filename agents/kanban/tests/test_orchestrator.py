@@ -121,6 +121,54 @@ def test_process_card_posts_error_on_agent_failure(
 
 
 @pytest.mark.smoke
+def test_process_card_moves_to_failed_on_anthropic_usage_limit(
+    orchestrator, mock_provider, open_profile, sample_card
+):
+    """Regression: an Anthropic 400 'usage limit reached' must move the card
+    to Failed (not Done) and surface the limit message in the comment."""
+    from agents.kanban.agent.base import AgentExecutionError
+
+    msg = (
+        "Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', "
+        "'message': 'You have reached your specified API usage limits. "
+        "You will regain access on 2026-05-01 at 00:00 UTC.'}}"
+    )
+    with patch("agents.kanban.orchestrator.local.BaseKanbanAgent") as mock_agent_cls:
+        mock_agent_cls.return_value.run.side_effect = AgentExecutionError(
+            msg, kind="api_usage_limit"
+        )
+        orchestrator.process_card(sample_card)
+
+    # Card must end up in Failed, not Done.
+    final_destinations = [c.args[1] for c in mock_provider.move_card.call_args_list]
+    assert_that("Failed" in final_destinations, equal_to(True))
+    assert_that("Done" not in final_destinations, equal_to(True))
+
+    # The comment should mention the usage-limit kind and quote the underlying message.
+    comments = [c.args[1] for c in mock_provider.add_comment.call_args_list]
+    assert_that(any("usage limit" in c.lower() for c in comments), equal_to(True))
+    assert_that(any("2026-05-01" in c for c in comments), equal_to(True))
+
+
+@pytest.mark.smoke
+def test_process_card_moves_to_failed_on_anthropic_rate_limit(
+    orchestrator, mock_provider, open_profile, sample_card
+):
+    from agents.kanban.agent.base import AgentExecutionError
+
+    with patch("agents.kanban.orchestrator.local.BaseKanbanAgent") as mock_agent_cls:
+        mock_agent_cls.return_value.run.side_effect = AgentExecutionError(
+            "Error code: 429 - rate_limit_exceeded", kind="api_rate_limit"
+        )
+        orchestrator.process_card(sample_card)
+
+    destinations = [c.args[1] for c in mock_provider.move_card.call_args_list]
+    assert_that("Failed" in destinations, equal_to(True))
+    comments = [c.args[1] for c in mock_provider.add_comment.call_args_list]
+    assert_that(any("rate limit" in c.lower() for c in comments), equal_to(True))
+
+
+@pytest.mark.smoke
 def test_dry_run_skips_agent_execution(orchestrator, mock_provider, sample_card):
     orchestrator.dry_run = True
     mock_provider.get_cards.return_value = [sample_card]

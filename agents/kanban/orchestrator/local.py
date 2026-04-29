@@ -35,7 +35,7 @@ from pathlib import Path
 from time import sleep
 from typing import Optional
 
-from agents.kanban.agent.base import BaseKanbanAgent
+from agents.kanban.agent.base import AgentExecutionError, BaseKanbanAgent
 from agents.kanban.dependencies.detector import DependencyDetector
 from agents.kanban.factory import create_provider
 from agents.kanban.interface import KanbanCard, KanbanProvider
@@ -198,15 +198,25 @@ class LocalOrchestrator:
         exc: Exception,
         audit: Optional[AuditLogger] = None,
     ) -> None:
-        tb = traceback.format_exc()
-        logger.error("Agent error on card %s:\n%s", card.id, tb)
+        if isinstance(exc, AgentExecutionError):
+            # Clean, expected failure from the agent itself (API limit, rate limit,
+            # bad request, etc). Don't dump a Python traceback into the card —
+            # surface the kind + message clearly.
+            heading = {
+                "api_usage_limit": "Agent Failed — Anthropic usage limit reached",
+                "api_rate_limit":  "Agent Failed — Anthropic rate limit (transient)",
+                "api_error":       "Agent Failed — Anthropic API error",
+            }.get(exc.kind, f"Agent Failed — {exc.kind}")
+            comment = f"## {heading}\n\n```\n{exc}\n```"
+            logger.error("Agent failed on card %s (%s): %s", card.id, exc.kind, exc)
+        else:
+            tb = traceback.format_exc()
+            comment = f"## Agent Error\n\n```\n{tb}\n```"
+            logger.error("Agent error on card %s:\n%s", card.id, tb)
         if audit:
             audit.agent_finish(success=False, iterations=0, detail=str(exc))
         try:
-            self.provider.add_comment(
-                card.id,
-                f"## Agent Error\n\n```\n{tb}\n```",
-            )
+            self.provider.add_comment(card.id, comment)
             self.provider.move_card(card.id, "Failed")
         except Exception as post_err:
             logger.error("Could not post error comment: %s", post_err)
