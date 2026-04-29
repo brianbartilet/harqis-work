@@ -31,6 +31,10 @@
 #                      node has NO default — must be passed (e.g. agent:code).
 #   --hw LABELS        Comma-separated hw:* labels this orchestrator satisfies.
 #                      Unset = auto-detect from OS.
+#   --with-broadcast   Auto-subscribe the worker to fanout queues — adds
+#                      `<queue>_broadcast` for every base queue in -q that has a
+#                      matching broadcast queue declared in workflows/config.py.
+#                      Currently: hud → hud_broadcast.
 #   -h|--help          Show this help message
 
 set -euo pipefail
@@ -59,6 +63,7 @@ WITH_FLOWER=true
 QUEUES=""
 KANBAN_PROFILE=""
 KANBAN_HW=""
+WITH_BROADCAST=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -76,8 +81,9 @@ while [ $# -gt 0 ]; do
     --profile=*)    KANBAN_PROFILE="${1#*=}"; shift ;;
     --hw)           KANBAN_HW="$2"; shift 2 ;;
     --hw=*)         KANBAN_HW="${1#*=}"; shift ;;
+    --with-broadcast) WITH_BROADCAST=true; shift ;;
     -h|--help)
-      sed -n '2,33p' "$0" | sed -e 's/^# //' -e 's/^#$//'
+      sed -n '2,37p' "$0" | sed -e 's/^# //' -e 's/^#$//'
       exit 0
       ;;
     *)
@@ -98,6 +104,23 @@ if [ -z "$QUEUES" ]; then
 fi
 # Reject whitespace; trim accidentally-quoted spaces around commas.
 QUEUES="$(echo "$QUEUES" | tr -d '[:space:]')"
+
+# Optional: auto-subscribe the worker to fanout queues for every base queue that
+# has a matching broadcast partner declared in workflows/config.py.
+if [ "$WITH_BROADCAST" = true ]; then
+  # Map: base queue → broadcast queue. Keep in sync with workflows/queues.py.
+  IFS=',' read -ra _qs <<< "$QUEUES"
+  _augmented="$QUEUES"
+  for q in "${_qs[@]}"; do
+    case "$q" in
+      hud) [[ ",$_augmented," != *",hud_broadcast,"* ]] && _augmented="$_augmented,hud_broadcast" ;;
+      # Add new pairs here when new broadcast queues are declared.
+    esac
+  done
+  QUEUES="$_augmented"
+  echo "[deploy] --with-broadcast → expanded queues to: $QUEUES"
+fi
+
 export WORKFLOW_QUEUE="$QUEUES"
 
 # Kanban profile filter — host defaults to agent:default; node has no default.

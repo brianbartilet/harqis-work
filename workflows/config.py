@@ -11,6 +11,9 @@ References:
 Known Issues:
 - Potential issues with Celery and Eventlet: https://github.com/eventlet/eventlet/issues/616
 """
+from kombu import Queue
+from kombu.common import Broadcast
+
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.sprout.settings import TIME_ZONE, USE_TZ
 from workflows.queues import WorkflowQueue
@@ -33,6 +36,32 @@ CONFIG_DICTIONARY = WORKFLOW_PURCHASES | WORKFLOWS_HUD | WORKFLOWS_DESKTOP | WOR
 # Configure the Celery beat schedule based on the current environment's task mapping.
 SPROUT.conf.beat_schedule = CONFIG_DICTIONARY
 
+# ── Queue topology ────────────────────────────────────────────────────────────
+# Explicit declaration — Celery now creates exactly these queues on RabbitMQ at
+# worker startup. Any new queue must be registered both here AND in
+# `workflows.queues.WorkflowQueue`.
+#
+# Direct queues use the default (competing-consumers) exchange — one task is
+# consumed by exactly one worker.
+#
+# Broadcast queues use a fanout exchange — RabbitMQ creates an anonymous
+# auto-delete queue per consumer behind the scenes, so every subscribed worker
+# receives every task. Tasks routed to a Broadcast queue MUST be idempotent —
+# they run N times on N workers simultaneously.
+SPROUT.conf.task_queues = (
+    Queue(WorkflowQueue.DEFAULT.value),
+    Queue(WorkflowQueue.HUD.value),
+    Queue(WorkflowQueue.TCG.value),
+    Queue(WorkflowQueue.ADHOC.value),
+    Broadcast(WorkflowQueue.HUD_BROADCAST.value),
+)
+SPROUT.conf.task_default_queue = WorkflowQueue.DEFAULT.value
+
+# Routing rules — tasks named `workflows.hud.tasks.broadcast_*` go to the
+# fanout queue and run on every subscribed worker. Everything else under
+# `workflows.hud.tasks.*` keeps the existing single-worker behaviour.
+# Order matters: more-specific patterns first.
 SPROUT.conf.task_routes = {
-  "workflows.hud.tasks.*": {"queue": WorkflowQueue.HUD},
+    "workflows.hud.tasks.broadcast_*": {"queue": WorkflowQueue.HUD_BROADCAST.value},
+    "workflows.hud.tasks.*":           {"queue": WorkflowQueue.HUD.value},
 }

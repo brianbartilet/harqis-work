@@ -46,7 +46,9 @@ param(
     [string]$Profile = '',
 
     [Parameter(Mandatory=$false)]
-    [string]$Hw = ''
+    [string]$Hw = '',
+
+    [switch]$WithBroadcast
 )
 
 $ErrorActionPreference = 'Stop'
@@ -58,6 +60,22 @@ if (-not (Test-Path $runDir)) { New-Item -ItemType Directory -Path $runDir | Out
 
 # Strip whitespace from queues — must look like "q1,q2,q3"
 $Queues = ($Queues -replace '\s', '')
+
+# Optional: auto-subscribe the worker to fanout queues for every base queue
+# that has a matching broadcast partner declared in workflows/config.py.
+if ($WithBroadcast) {
+    # Map: base queue → broadcast queue. Keep in sync with workflows/queues.py.
+    $broadcastMap = @{ 'hud' = 'hud_broadcast' }
+    $current = $Queues -split ','
+    foreach ($q in $current) {
+        if ($broadcastMap.ContainsKey($q)) {
+            $b = $broadcastMap[$q]
+            if (-not ($current -contains $b)) { $Queues = "$Queues,$b" }
+        }
+    }
+    Write-Host "[deploy] -WithBroadcast → expanded queues to: $Queues"
+}
+
 $env:WORKFLOW_QUEUE = $Queues
 $env:KANBAN_NUM_AGENTS = "$NumAgents"
 

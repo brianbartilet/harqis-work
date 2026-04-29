@@ -291,6 +291,23 @@ Cards not matching either filter are skipped silently — another orchestrator o
 
 A single worker process can subscribe to multiple queues — Celery's native `-Q` flag accepts a comma-separated list, and `core.apps.sprout` already wires `WORKFLOW_QUEUE=q1,q2,q3` straight through. So there's no need for one process per queue: pass `-q hud,tcg,default` and one process will pull tasks from all three.
 
+### Direct vs broadcast (fanout) queues
+
+Most queues (`default`, `hud`, `tcg`, `adhoc`) are **direct** — exactly one worker handles each task (competing-consumers). For cluster-wide actions where **every** subscribed worker should run the same task, use a **broadcast** queue (RabbitMQ fanout exchange).
+
+Currently `hud_broadcast` is the only broadcast queue declared. To subscribe a worker to broadcasts:
+
+```bash
+# Manual — append `<queue>_broadcast` to the queue list
+./scripts/sh/deploy.sh --role node -q hud,hud_broadcast
+
+# Convenience flag — auto-appends `<queue>_broadcast` for every base queue
+# that has a broadcast partner declared
+./scripts/sh/deploy.sh --role node -q hud --with-broadcast
+```
+
+Tasks named `workflows.hud.tasks.broadcast_*` route to `hud_broadcast` automatically (naming-convention rule in `workflows/config.py`). Broadcast tasks **must be idempotent** — they run on every subscribed worker simultaneously. See [`workflows/README.md`](../../workflows/README.md) for the full reference, the demo task at `workflows/hud/tasks/broadcast_reload.py`, and the missed-broadcast caveat (offline workers don't get backfilled — pair broadcasts with a worker-startup convergence task for state that must always be consistent).
+
 | Machine | Typical `-q` argument | Notes |
 |---|---|---|
 | Mac Mini (host) | `default,adhoc,tcg` (or just `default`) | Plus the Beat scheduler. |
