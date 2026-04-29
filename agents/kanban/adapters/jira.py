@@ -5,7 +5,8 @@ Supports both Jira Cloud (v3) and Jira Data Center / Server (v2).
 Uses basic auth (email + API token for Cloud, username + password for DC).
 
 Credentials from env vars:
-    JIRA_SERVER       e.g. https://yourcompany.atlassian.net
+    JIRA_DOMAIN       e.g. yourcompany.atlassian.net (canonical name in .env/apps.env;
+                      JIRA_SERVER also accepted as a legacy fallback by the orchestrator)
     JIRA_EMAIL        e.g. brian@example.com
     JIRA_API_TOKEN    Jira Cloud API token or DC password
 

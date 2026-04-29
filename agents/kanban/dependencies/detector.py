@@ -67,19 +67,48 @@ class DependencyDetector:
     3. Soft dependency patterns: 'new workflow', 'new app', etc. (non-blocking).
     """
 
-    # (regex pattern, env var name) — checked against card title + description
+    # (regex pattern, env var name) — checked against card title + description.
+    # Env var names MUST match keys in .env/apps.env exactly, otherwise the dependency
+    # detector will flag missing secrets that are actually configured (just under a
+    # different name).
+    # KEEP IN SYNC WITH /new-service-app: every new app integration that has an env var
+    # in apps_config.yaml must be represented here so the kanban orchestrator can detect
+    # missing creds before starting an agent. Naming MUST match keys in .env/apps.env exactly.
     _SERVICE_SECRETS: list[tuple[str, str]] = [
-        (r"\bOANDA\b", "OANDA_ACCESS_TOKEN"),
-        (r"\bYNAB\b", "YNAB_PERSONAL_ACCESS_TOKEN"),
-        (r"\bDISCORD\b", "DISCORD_BOT_TOKEN"),
-        (r"\bTELEGRAM\b", "TELEGRAM_BOT_TOKEN"),
-        (r"\bGMAIL\b", "GMAIL_REFRESH_TOKEN"),
-        (r"\bJIRA\b", "JIRA_API_TOKEN"),
-        (r"\bGITHUB\b|gh\s+pr\b|gh\s+repo\b", "GITHUB_TOKEN"),
-        (r"\bREDDIT\b", "REDDIT_CLIENT_SECRET"),
-        (r"\bLINKEDIN\b", "LINKEDIN_ACCESS_TOKEN"),
-        (r"\bNOTION\b", "NOTION_TOKEN"),
-        (r"\bTRELLO\b", "TRELLO_API_TOKEN"),
+        # Finance
+        (r"\bOANDA\b",                            "OANDA_BEARER_TOKEN"),
+        (r"\bYNAB\b",                             "YNAB_ACCESS_TOKEN"),
+        # Productivity / project management
+        (r"\bJIRA\b",                             "JIRA_API_TOKEN"),
+        (r"\bTRELLO\b",                           "TRELLO_API_TOKEN"),
+        (r"\bAIRTABLE\b",                         "AIRTABLE_API_TOKEN"),
+        (r"\bNOTION\b",                           "NOTION_API_TOKEN"),
+        # Communication
+        (r"\bDISCORD\b",                          "DISCORD_BOT_TOKEN"),
+        (r"\bTELEGRAM\b",                         "TELEGRAM_BOT_TOKEN"),
+        (r"\bREDDIT\b",                           "REDDIT_CLIENT_SECRET"),
+        (r"\bLINKEDIN\b",                         "LINKEDIN_ACCESS_TOKEN"),
+        # Google / Gmail / Calendar use file-based OAuth (credentials.json + storage-*.json);
+        # GOOGLE_APPS_API_KEY is the shared API key, used as a coarse readiness signal.
+        (r"\bGMAIL\b|\bGOOGLE\s*CALENDAR\b|\bGOOGLE\s*DRIVE\b",
+                                                  "GOOGLE_APPS_API_KEY"),
+        # GitHub / source control
+        (r"\bGITHUB\b|gh\s+pr\b|gh\s+repo\b",     "GITHUB_API_TOKEN"),
+        # AI / LLM
+        (r"\bANTHROPIC\b|\bCLAUDE\b",             "ANTHROPIC_API_KEY"),
+        (r"\bOPENAI\b|\bGPT-?\d*\b",              "OPENAI_API_KEY"),
+        (r"\bGROK\b|\bxAI\b",                     "GROK_API_KEY"),
+        (r"\bPERPLEXITY\b|\bSONAR\b",             "PERPLEXITY_API_KEY"),
+        (r"\bELEVEN\s*LABS\b|\bELEVENLABS\b",     "ELEVEN_LABS_API_KEY"),
+        # Magic: The Gathering / TCG
+        (r"\bECHO\s*MTG\b|\bECHOMTG\b",           "ECHO_MTG_BEARER_TOKEN"),
+        (r"\bTCG\s*MP\b|\bTCGPLAYER\b",           "TCG_MP_PASSWORD"),
+        # Cloud / infrastructure
+        (r"\bORGO\b",                             "ORGO_API_KEY"),
+        (r"\bOWN\s*TRACKS\b|\bOWNTRACKS\b",       "OWN_TRACKS_PASSWORD"),
+        (r"\bN8N\b",                              "N8N_API_KEY"),
+        # Trading / brokerage
+        (r"\bMOO\b|\bFUTU\b",                     "MOO_PWD_MD5"),
     ]
 
     _WORKFLOW_PATTERNS = [

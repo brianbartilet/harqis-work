@@ -61,15 +61,13 @@ lifecycle:
   auto_approve: true
   on_success: move_to_done
 
-# Only the secrets this write agent actually uses
+# Only the secrets this write agent actually uses.
+# Names must match keys in .env/apps.env. Gmail/Calendar use file-based OAuth.
 secrets:
   required:
     - ANTHROPIC_API_KEY
     - TRELLO_API_KEY
     - TRELLO_API_TOKEN
-    - GOOGLE_CALENDAR_API_KEY
-    - GMAIL_CLIENT_ID
-    - GMAIL_CLIENT_SECRET
-    - GMAIL_REFRESH_TOKEN
+    - GOOGLE_APPS_API_KEY
     - DISCORD_BOT_TOKEN
     - TELEGRAM_BOT_TOKEN

@@ -20,4 +20,4 @@ ARGS=()
 [ -n "${KANBAN_PROFILES_DIR:-}" ]  && ARGS+=(--profiles-dir "$KANBAN_PROFILES_DIR")
 [ "${KANBAN_DRY_RUN:-0}" = "1" ]   && ARGS+=(--dry-run)
 
-exec python -m agents.kanban.orchestrator.local "${ARGS[@]}"
+exec python -m agents.kanban.orchestrator.local "${ARGS[@]+"${ARGS[@]}"}"

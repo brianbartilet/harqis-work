@@ -283,6 +283,42 @@ Where `app_name` is the snake_case app name and `register_app_name_tools` is the
 
 ---
 
+## Step 9b — Update Kanban dependency detector  ← **MANDATORY if the new app has any env var**
+
+Read `agents/kanban/dependencies/detector.py`. Add a new entry to the `_SERVICE_SECRETS` list so the orchestrator can short-circuit cards that mention this service when its credentials are missing.
+
+```python
+# In _SERVICE_SECRETS, add — alphabetised within the existing category comment block:
+(r"\bAPP_NAME_UPPER\b",   "APP_NAME_UPPER_API_KEY"),
+```
+
+Rules:
+- The **regex** matches what humans write on Kanban cards. Use `\b` word boundaries. If the app has common aliases (e.g. `OpenAI` ↔ `GPT`, `Grok` ↔ `xAI`, `Perplexity` ↔ `Sonar`, `Moo` ↔ `Futu`), include them with `|` alternation. Use `\s*` between words for products with optional whitespace (e.g. `OWN\s*TRACKS` matches both "OwnTracks" and "Own Tracks").
+- The **env var name** must match the key in `.env/apps.env` and the `${VAR}` reference in `apps_config.yaml` **exactly**. If they don't match, the agent will be blocked even when the credential is configured (just under a different name).
+- For OAuth services that store tokens in files (e.g. `credentials.json` + `storage-*.json`), use the **shared API key** as a coarse readiness signal rather than naming a non-existent token env var.
+- For services with multiple required vars (e.g. OAuth client_id + secret + access_token), pick the **most specific** one — typically the access/bearer token. The agent's actual app config will fail loudly on any other missing var, so naming all of them isn't worth the noise.
+- Apps with **no** env var at all (filesystem, browser, playwright, scryfall, etc.) get **no entry** here — there's nothing to detect.
+
+After editing, run a quick sanity check:
+```python
+from agents.kanban.dependencies.detector import DependencyDetector
+mapping = dict(DependencyDetector._SERVICE_SECRETS)
+assert "APP_NAME_UPPER_API_KEY" in mapping.values()
+```
+
+### Optional — update agent profiles
+
+If the new app should be available to existing agent profiles (`agents/kanban/profiles/examples/agent_*.yaml`), add the env var to each profile's `secrets.required` list. Keep alphabetical order within each profile. Do **not** add it to `base.yaml` (that's the minimum core set — orchestrator deps only).
+
+Decide based on the agent type:
+- `agent_code.yaml` — tools that read/write code, run shell commands, use most APIs
+- `agent_write.yaml` — tools that produce content (docs, social posts) — likely needs comms apps
+- `agent_full.yaml` — superset; almost always include
+
+If unsure, leave profile updates to the user — they know which agents are meant to call this app.
+
+---
+
 ## Step 10 — Update `apps_config.yaml`
 
 Read `apps_config.yaml`. Append the new app block at the end of the file. Match the exact YAML formatting style used by other entries (2-space indent, single-quoted strings for app_id and client, `True`/`False` for booleans).
@@ -482,6 +518,7 @@ If `--workflow <workflow_name>` was passed, after completing all steps above run
 - [ ] Every MCP tool has a docstring, `Args:` section, entry log, and defensive return check
 - [ ] `mcp/server.py` registration added
 - [ ] Kanban bridge `_APP_LOADERS` entry added in `agents/kanban/agent/tools/mcp_bridge.py`
+- [ ] **Kanban dependency detector** entry added in `agents/kanban/dependencies/detector.py:_SERVICE_SECRETS` (skip only if the app has zero env vars) — env var name matches `.env/apps.env` exactly
 - [ ] `apps_config.yaml` updated with APP_NAME_UPPER section
 - [ ] `.env/apps.env` updated with env var placeholder(s)
 - [ ] MCP server restart attempted via PowerShell (outcome reported)

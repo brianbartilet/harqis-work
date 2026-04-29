@@ -104,14 +104,15 @@ lifecycle:
   block_on_missing_secrets: true
   blocked_poll_interval_seconds: 300
 
+# Names must match keys in .env/apps.env (interpolated into apps_config.yaml).
 secrets:
   required:
     - ANTHROPIC_API_KEY
     - TRELLO_API_KEY
     - TRELLO_API_TOKEN
     - DISCORD_BOT_TOKEN
-    - DISCORD_GUILD_ID
+    - DISCORD_DEFAULT_GUILD_ID
     - TELEGRAM_BOT_TOKEN
-    - JIRA_SERVER
+    - JIRA_DOMAIN
     - JIRA_EMAIL
     - JIRA_API_TOKEN

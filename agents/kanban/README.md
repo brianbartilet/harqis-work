@@ -181,7 +181,7 @@ Before the agent runs, the orchestrator scans the card for hard-stop dependencie
 | Signal | How it's detected |
 |---|---|
 | `required_secrets` custom field | Explicit list of env var names that must be set |
-| Service name in description | e.g. "OANDA" → checks `OANDA_ACCESS_TOKEN` |
+| Service name in description | e.g. "OANDA" → checks `OANDA_BEARER_TOKEN` (env var names match `.env/apps.env`) |
 | "new workflow" in description | Soft dep — agent scaffolds from template |
 | "new app" in description | Soft dep — agent scaffolds from template |
 

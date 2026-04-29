@@ -335,7 +335,8 @@ def from_env(profiles_dir: Optional[Path] = None) -> LocalOrchestrator:
         TRELLO_API_TOKEN
 
     Jira-specific:
-        JIRA_SERVER
+        JIRA_DOMAIN     e.g. yourcompany.atlassian.net (canonical name in .env/apps.env;
+                        JIRA_SERVER also accepted as a legacy fallback)
         JIRA_EMAIL
         JIRA_API_TOKEN
 
@@ -355,9 +356,16 @@ def from_env(profiles_dir: Optional[Path] = None) -> LocalOrchestrator:
             "token": os.environ["TRELLO_API_TOKEN"],
         }
     elif provider_type == "jira":
+        # Canonical name is JIRA_DOMAIN (matches apps_config.yaml); JIRA_SERVER kept as legacy.
+        jira_server = os.environ.get("JIRA_DOMAIN") or os.environ.get("JIRA_SERVER")
+        if not jira_server:
+            raise KeyError("JIRA_DOMAIN (or legacy JIRA_SERVER) must be set for KANBAN_PROVIDER=jira")
+        # Accept either bare host (yourcompany.atlassian.net) or full URL.
+        if not jira_server.startswith(("http://", "https://")):
+            jira_server = f"https://{jira_server}"
         provider_config = {
             "provider": "jira",
-            "server": os.environ["JIRA_SERVER"],
+            "server": jira_server,
             "email": os.environ["JIRA_EMAIL"],
             "api_token": os.environ["JIRA_API_TOKEN"],
         }
