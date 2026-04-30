@@ -347,6 +347,39 @@ All agents now have access to five git tools (controlled by the profile's `tools
 | `git_push` | Push branch to origin (requires `git.can_push: true`) |
 | `git_create_pr` | Open a GitHub PR via `gh pr create` |
 
+#### Prerequisite: GitHub CLI (`gh`)
+
+The `git_create_pr` tool shells out to `gh pr create`, so every host that runs a profile with `git_create_pr` in `tools.allowed` needs `gh` installed **and authenticated**. Without it the first four tools still work (branch, commit, push) — only PR creation fails.
+
+| OS | Install |
+|---|---|
+| Windows | `winget install --id GitHub.cli -e` (then open a fresh terminal so PATH refreshes) |
+| macOS | `brew install gh` |
+| Linux (Debian/Ubuntu) | `sudo apt install gh` |
+| Linux (Fedora/RHEL) | `sudo dnf install gh` |
+| Linux (Arch) | `sudo pacman -S github-cli` |
+| Any | Download from https://cli.github.com/ |
+
+Authenticate once per host (interactive browser flow):
+
+```sh
+gh auth login          # GitHub.com → HTTPS → web browser → paste one-time code
+gh auth status         # verify: "✓ Logged in to github.com as <user>"
+```
+
+The token is stored per-user, so it persists across shells and reboots — you only do this once per machine. New worker nodes need their own auth.
+
+**Smoke test before relying on it in production:** the offline unit tests + a live PR-creation run together cover the full pipeline. Run on a fresh host with:
+
+```sh
+pytest agents/kanban/tests/test_git_tools.py -v   # offline, mocked
+# then exercise the live path from a real card with a profile that includes git_create_pr
+```
+
+If `gh` is missing or not authenticated, the tool returns `ERROR creating PR: ...` and the agent posts that as a card comment — visible failure, no silent skip.
+
+#### Commit attribution
+
 All commits are attributed to the `claude[bot]` GitHub contributor:
 
 ```

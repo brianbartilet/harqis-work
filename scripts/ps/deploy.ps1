@@ -91,6 +91,35 @@ if (-not $Profile) {
 $env:KANBAN_PROFILE_FILTER = $Profile
 if ($Hw) { $env:KANBAN_HW_LABELS = $Hw }
 
+# ── Preflight: gh CLI (only required by kanban git_create_pr tool) ───────────
+# Non-blocking — agents without git_create_pr in tools.allowed work fine without gh.
+function Test-GhCli {
+    $gh = Get-Command gh -ErrorAction SilentlyContinue
+    if (-not $gh) {
+        Write-Host ""
+        Write-Warning "gh CLI not found on PATH."
+        Write-Host "  The kanban git_create_pr tool needs gh to open pull requests."
+        Write-Host "  Install: winget install --id GitHub.cli -e"
+        Write-Host "  Then open a fresh terminal and run: gh auth login"
+        Write-Host ""
+        return
+    }
+    $null = & gh auth status 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ""
+        Write-Warning "gh CLI installed but not authenticated."
+        Write-Host "  Run: gh auth login"
+        Write-Host "  Then verify: gh auth status"
+        Write-Host ""
+        return
+    }
+    $version = (& gh --version | Select-Object -First 1)
+    Write-Host "[deploy] gh CLI: $version (authenticated)"
+}
+if (-not $Down -and -not $NoKanban) {
+    Test-GhCli
+}
+
 # ── Service definitions (label → script + role visibility) ───────────────────
 $services = @(
     @{ Label='work.harqis.scheduler'; Script='run_scheduler_daemon.ps1'; Roles='host'; Skip=$false }

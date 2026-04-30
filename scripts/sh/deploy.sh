@@ -136,6 +136,41 @@ fi
 export KANBAN_PROFILE_FILTER="$KANBAN_PROFILE"
 [ -n "$KANBAN_HW" ] && export KANBAN_HW_LABELS="$KANBAN_HW"
 
+# ── Preflight: gh CLI (only required by kanban git_create_pr tool) ───────────
+# Non-blocking — agents without git_create_pr in tools.allowed work fine without gh.
+_preflight_gh() {
+  if ! command -v gh >/dev/null 2>&1; then
+    echo ""
+    echo "[deploy] WARNING: gh CLI not found on PATH."
+    echo "  The kanban git_create_pr tool needs gh to open pull requests."
+    case "$(uname -s)" in
+      Darwin)  echo "  Install: brew install gh" ;;
+      Linux)
+        if   [ -f /etc/debian_version ]; then echo "  Install: sudo apt install gh"
+        elif [ -f /etc/redhat-release ]; then echo "  Install: sudo dnf install gh"
+        elif [ -f /etc/arch-release   ]; then echo "  Install: sudo pacman -S github-cli"
+        else                                  echo "  Install: see https://cli.github.com/"
+        fi ;;
+      *)       echo "  Install: see https://cli.github.com/" ;;
+    esac
+    echo "  Then authenticate once per host: gh auth login"
+    echo ""
+    return
+  fi
+  if ! gh auth status >/dev/null 2>&1; then
+    echo ""
+    echo "[deploy] WARNING: gh CLI installed but not authenticated."
+    echo "  Run: gh auth login"
+    echo "  Then verify: gh auth status"
+    echo ""
+    return
+  fi
+  echo "[deploy] gh CLI: $(gh --version | head -1) (authenticated)"
+}
+if [ "$MODE" = "up" ] && [ "$WITH_KANBAN" = true ]; then
+  _preflight_gh
+fi
+
 # ── Build the per-role plist list ─────────────────────────────────────────────
 
 PLISTS=()
