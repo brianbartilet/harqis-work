@@ -1,6 +1,6 @@
 Stage and commit the current working-tree changes with a Conventional-Commit-style message inferred from the diff. Following [COMMIT-MESSAGE-GUIDE.md](../../docs/info/COMMIT-MESSAGE-GUIDE.md).
 
-**Calling `/commit` is your sign-off** — the skill stages all working-tree changes and commits in one shot, no confirmation prompt. Use `--dry-run` to preview first, or pass pathspecs to commit a subset.
+**Calling `/commit` is your sign-off** — the skill stages all working-tree changes, commits, and pushes to the tracking remote in one shot, no confirmation prompt. If the remote has new commits, it rebases first and then pushes. Use `--dry-run` to preview first, `--no-push` to commit without pushing, or pass pathspecs to commit a subset.
 
 ## Arguments
 
@@ -13,7 +13,8 @@ Stage and commit the current working-tree changes with a Conventional-Commit-sty
 | `--type <t>` | Force the type (`feat`, `fix`, `chore`, `test`, `docs`, `refactor`, `perf`, `build`, `ci`, `style`). |
 | `--scope <s>` | Force the scope (`apps`, `apps/google`, `workflows/hud`, `repo`, …). |
 | `--no-untracked` | Skip untracked files when auto-staging (default: include untracked tracked by `git ls-files --others --exclude-standard`). |
-| `--dry-run` | Print the drafted message and stop. Stage nothing. Commit nothing. |
+| `--no-push` | Commit but skip the push step. |
+| `--dry-run` | Print the drafted message and stop. Stage nothing. Commit nothing. Push nothing. |
 
 If a token starts with `-` it's a flag; if it resolves to an existing path it's a pathspec; otherwise it's part of the subject hint.
 
@@ -125,13 +126,40 @@ EOF
 
 - Never pass `--no-verify`. If a pre-commit hook fails, surface the error and stop. Leave the staged state intact so the user can fix and re-run `/commit`.
 - Never amend (`--amend`). Always a new commit.
-- Never push.
 - Never `git add -A` blindly — auto-staging is `git add -u` plus enumerated untracked files (with `.env*` skipped). Untracked files are listed in the post-commit summary so the user can spot anything unexpected.
 - No `Co-Authored-By` footer.
 
-## Step 7 — Report
+## Step 7 — Push (rebase if remote diverged)
 
-After the commit, print:
+Skip this step entirely if `--no-push` was passed.
+
+Determine the current branch and its upstream:
+
+```bash
+git rev-parse --abbrev-ref HEAD
+git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null
+```
+
+Then:
+
+1. **Upstream is configured** → run `git push`.
+   - If it succeeds, continue to Step 8.
+   - If it fails because the remote has new commits (rejected non-fast-forward / "fetch first"):
+     - Run `git pull --rebase --autostash`.
+     - If rebase completes cleanly → `git push` again.
+     - If rebase has conflicts → **stop**. Do not run `git rebase --abort`, `git rebase --skip`, or any destructive recovery. Print the conflicting paths and tell the user to resolve, then run `git rebase --continue && git push`. The local commit stays — it's safe.
+   - If it fails for any other reason (auth, network, hook, protected branch) → stop and surface the error verbatim. Leave the local commit in place.
+2. **No upstream configured** → run `git push -u origin <current-branch>` to push and set tracking. Same failure handling as above.
+
+**Hard rules for push:**
+
+- Never `--force` or `--force-with-lease`. If the remote rejects, rebase is the only allowed recovery.
+- Never `git rebase --abort` or `--skip` automatically. Conflicts are the user's call.
+- Never push to a different remote or branch than the current one's upstream.
+
+## Step 8 — Report
+
+After the commit (and push, if attempted), print:
 
 ```
 <oneline from `git log -1 --oneline`>
@@ -142,12 +170,13 @@ Staged: <N> file(s)
   …and M more
 Untracked added: <list, or "(none)">
 .env* skipped: <list, or "(none)">
+Push: <pushed to <remote>/<branch> | rebased onto <remote>/<branch> and pushed | skipped (--no-push) | failed: <reason>>
 ```
 
 If the diff spanned multiple unrelated scopes (Step 4 note), append the split-suggestion line.
 
 Stop.
 
-## Step 8 — Stale memory
+## Step 9 — Stale memory
 
 If a memory entry contradicts the rules above, update or remove it. The guide and this skill are the source of truth.
