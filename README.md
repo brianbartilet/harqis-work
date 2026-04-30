@@ -300,11 +300,11 @@ harqis-work/
 │   ├── kanban/                     # Kanban-driven autonomous agent system
 │   │   ├── adapters/               # Trello + Jira provider implementations
 │   │   ├── agent/                  # Claude tool-use loop + tool registry
-│   │   │   └── tools/             # filesystem, kanban, MCP bridge tools
+│   │   │   └── tools/              # filesystem, kanban, MCP bridge tools
 │   │   ├── orchestrator/           # Local polling orchestrator
 │   │   ├── permissions/            # Tool/filesystem/network/git enforcer
 │   │   ├── profiles/               # YAML agent profile schema + registry
-│   │   │   └── examples/          # base, agent:code, agent:write profiles
+│   │   │   └── examples/           # base, agent:code, agent:write profiles
 │   │   ├── security/               # SecretStore, OutputSanitizer, AuditLogger
 │   │   └── tests/                  # 75 unit + 2 integration tests
 │   └── prompts/                    # Shared AI prompt templates (.md files)
