@@ -1,25 +1,43 @@
-Generate a Conventional-Commit-style message from the currently staged files and commit, following the harqis-work commit template.
+Stage and commit the current working-tree changes with a Conventional-Commit-style message inferred from the diff. Following [COMMIT-MESSAGE-GUIDE.md](../../docs/info/COMMIT-MESSAGE-GUIDE.md).
 
-Reference: [docs/info/COMMIT-MESSAGE-GUIDE.md](../../docs/info/COMMIT-MESSAGE-GUIDE.md). Read the rules there before drafting — this skill is the automated path of that guide.
+**Calling `/commit` is your sign-off** — the skill stages all working-tree changes and commits in one shot, no confirmation prompt. Use `--dry-run` to preview first, or pass pathspecs to commit a subset.
 
 ## Arguments
 
-`$ARGUMENTS` is optional and free-form. Use it to override or hint:
+`$ARGUMENTS` is optional and free-form. Order doesn't matter; tokens are parsed independently:
 
 | Token | Effect |
 |---|---|
-| `<free text>` | Treat as a subject hint — bias the drafted subject toward this wording. |
+| `<free text>` | Subject hint — biases the drafted subject toward this wording. |
+| `<pathspec>` | Any token that resolves to an existing path (file or directory). Limits staging to that path. Multiple allowed. |
 | `--type <t>` | Force the type (`feat`, `fix`, `chore`, `test`, `docs`, `refactor`, `perf`, `build`, `ci`, `style`). |
 | `--scope <s>` | Force the scope (`apps`, `apps/google`, `workflows/hud`, `repo`, …). |
-| `--dry-run` | Print the drafted message and stop. Do not commit. |
+| `--no-untracked` | Skip untracked files when auto-staging (default: include untracked tracked by `git ls-files --others --exclude-standard`). |
+| `--dry-run` | Print the drafted message and stop. Stage nothing. Commit nothing. |
 
-If `$ARGUMENTS` is empty, infer everything.
+If a token starts with `-` it's a flag; if it resolves to an existing path it's a pathspec; otherwise it's part of the subject hint.
 
 ---
 
-## Step 1 — Read staged changes only
+## Step 1 — Determine what to commit
 
 Run in parallel:
+
+```bash
+git status --short
+git diff --cached --name-status
+```
+
+Then pick the **commit set** in this priority order:
+
+1. **Pathspecs given** → run `git add -- <paths>`. The commit set is whatever is now staged.
+2. **Anything already staged** (and no pathspecs given) → use the existing staged set as-is. Don't auto-stage extras. Mention any unstaged working-tree changes once so the user knows they'll be left out.
+3. **Nothing staged, no pathspecs** → auto-stage:
+   - Tracked modifications + deletions: `git add -u`
+   - Untracked files (unless `--no-untracked`): `git add -- <each path from git ls-files --others --exclude-standard>`
+   - Skip anything matching `.env*` even if otherwise untracked — print a one-line warning that `.env*` files were skipped for safety. The user can stage them manually if intentional.
+
+After staging, re-read:
 
 ```bash
 git diff --cached --name-status
@@ -27,19 +45,17 @@ git diff --cached --stat
 git diff --cached
 ```
 
-**If `git diff --cached --name-status` is empty:** stop. Print:
+**If still nothing is staged** (e.g. clean tree, or pathspecs matched nothing): stop and print:
 
-> Nothing is staged. `/commit` only reads staged changes — stage what you want to commit (`git add <paths>`) and run `/commit` again.
+> Nothing to commit. Working tree is clean (or pathspecs matched no changes).
 
-Do **not** run `git add` for the user. Do **not** offer to.
-
-If working-tree changes exist alongside staged ones, mention it once so the user knows they'll be left out, then continue.
+Do not invent changes. Do not run `git commit --allow-empty`.
 
 ## Step 2 — Classify the type
 
 Apply rules from [COMMIT-MESSAGE-GUIDE.md → Type-detection cheatsheet](../../docs/info/COMMIT-MESSAGE-GUIDE.md#type-detection-cheatsheet-used-by-commit) in this priority order:
 
-1. If `$ARGUMENTS` includes `--type <t>` → use that, skip detection.
+1. If `--type <t>` was passed → use that, skip detection.
 2. If **every** staged file matches `**/test_*.py` or `**/tests/**` → `test`.
 3. If **every** staged file matches `*.md` or `docs/**` → `docs`.
 4. If **every** staged file matches `Dockerfile*` or `docker-compose*.yml` → `build`.
@@ -54,11 +70,13 @@ Apply rules from [COMMIT-MESSAGE-GUIDE.md → Type-detection cheatsheet](../../d
 
 Mixed staging (prod + tests): use the prod-code type. Never use `test` when prod files are also staged.
 
+`.claude/commands/*.md` exception: a net-new slash command file is `feat`, not `docs`, even though it's a `.md` file — these are functional skill definitions executed by the harness.
+
 ## Step 3 — Pick the scope
 
 Apply rules from [COMMIT-MESSAGE-GUIDE.md → Scope-detection cheatsheet](../../docs/info/COMMIT-MESSAGE-GUIDE.md#scope-detection-cheatsheet-used-by-commit):
 
-1. If `$ARGUMENTS` includes `--scope <s>` → use that.
+1. If `--scope <s>` was passed → use that.
 2. Take each staged file's first path segment. Recognised layers: `apps`, `workflows`, `agents`, `mcp`, `frontend`, `docs`, `scripts`.
 3. If all staged files share **one** layer → scope = that layer.
 4. If they also share **one** sub-folder under that layer → scope = `<layer>/<sub>` (e.g. `apps/google`, `workflows/hud`, `agents/kanban`).
@@ -70,50 +88,31 @@ Treat any non-recognised first segment as `repo` (don't invent new top-level sco
 ## Step 4 — Draft the subject
 
 - Imperative, lower-case, no trailing period, **≤72 chars** in the full line.
-- If `$ARGUMENTS` has free-text, use it as the seed; otherwise summarise the diff.
+- If a subject hint was given in `$ARGUMENTS`, use it as the seed; otherwise summarise the diff.
 - Lead with the verb: `add`, `fix`, `update`, `remove`, `rename`, `support`, `mirror`, `extract`, `inline`, `move`, `pin`.
 - Be concrete — name the function, file, app, or behaviour. Avoid `improve`, `enhance`, `cleanup`, `refine`, `various`.
-- Mention the *what* changed, not the *why* (why goes in the PR description).
+- Mention the *what* changed, not the *why*.
 
-If multiple unrelated changes are staged, the subject becomes vague — flag this:
+If the staged set spans clearly unrelated areas (e.g. one workflow change + one app change), surface this **once** in the result message after committing — never as a blocking prompt:
 
-> Heads up: staged changes touch both `<area A>` and `<area B>`. The drafted subject covers both, but consider splitting into two commits for a cleaner history. Continue anyway?
-
-Do not block — just surface the observation once and proceed if the user confirms.
+> Note: this commit mixed `<area A>` and `<area B>`. Consider `git reset HEAD~` and re-running `/commit` with pathspecs to split it.
 
 ## Step 5 — Assemble and validate
 
 Format: `<type>(<scope>): <subject>`
 
-Length check: if the full line is >72 chars, shorten the subject (drop adjectives, swap to a tighter verb). Never abbreviate the type or scope.
+Length check: if the full line is >72 chars, shorten the subject (drop adjectives, swap to a tighter verb). Never abbreviate type or scope.
 
-Validate against the guide's anti-examples:
+Validate:
 - Subject does not start with `(work)`, `(wip)`, capital letter, or end with `.`.
 - Type is in the allowed set.
 - Scope is in the allowed set or follows `<layer>/<name>`.
 
-## Step 6 — Show, confirm, commit
+## Step 6 — Commit (no confirmation)
 
-Print the drafted message and a one-line summary of staged files:
+If `--dry-run`, print the drafted message + the staged-file list and stop. Do **not** unstage what was staged in Step 1 — the user may want to inspect and commit manually.
 
-```
-Drafted commit message:
-  <type>(<scope>): <subject>
-
-Staged: <N> file(s) — <short list, max 5, then "…and M more">
-```
-
-Then ask: **"Commit this? (yes / edit / cancel)"**
-
-- `yes` → run the commit.
-- `edit` → ask the user for their preferred wording, validate against the format, then commit.
-- `cancel` / no response → stop without committing.
-
-If `--dry-run` was passed, skip the prompt and stop here.
-
-## Step 7 — Commit
-
-Run with the message via HEREDOC so quoting cannot break:
+Otherwise commit immediately via HEREDOC:
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -124,13 +123,31 @@ EOF
 
 **Hard rules:**
 
-- Never pass `--no-verify`. If a pre-commit hook fails, surface the error and stop — let the user fix the underlying issue and re-run `/commit`.
-- Never amend (`--amend`). Always create a new commit.
-- Never push. The user pushes when ready.
-- Do not add a `Co-Authored-By` footer — repo style is subject-only.
+- Never pass `--no-verify`. If a pre-commit hook fails, surface the error and stop. Leave the staged state intact so the user can fix and re-run `/commit`.
+- Never amend (`--amend`). Always a new commit.
+- Never push.
+- Never `git add -A` blindly — auto-staging is `git add -u` plus enumerated untracked files (with `.env*` skipped). Untracked files are listed in the post-commit summary so the user can spot anything unexpected.
+- No `Co-Authored-By` footer.
 
-After the commit, print the resulting `git log -1 --oneline` line and stop.
+## Step 7 — Report
+
+After the commit, print:
+
+```
+<oneline from `git log -1 --oneline`>
+
+Staged: <N> file(s)
+  <file 1>
+  <file 2>
+  …and M more
+Untracked added: <list, or "(none)">
+.env* skipped: <list, or "(none)">
+```
+
+If the diff spanned multiple unrelated scopes (Step 4 note), append the split-suggestion line.
+
+Stop.
 
 ## Step 8 — Stale memory
 
-If you saved a memory in a prior turn that contradicts the rules above (e.g. a feedback note saying to use a different format), update or remove it now. The guide and this skill are the source of truth.
+If a memory entry contradicts the rules above, update or remove it. The guide and this skill are the source of truth.

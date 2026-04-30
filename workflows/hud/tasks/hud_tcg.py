@@ -7,7 +7,7 @@ from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import  logger as log
 from core.utilities.data.numbers import  safe_number
 from core.utilities.data.strings import  make_separator
-from core.utilities.files import move_files_any, remove_files_with_patterns, sanitize_filename
+from core.utilities.files import move_files_any, remove_files_with_patterns, sanitize_filename, copy_files_to_folder
 from core.utilities.resources.download_file import ServiceDownloadFile
 
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
@@ -340,6 +340,17 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
         # Create folder if it doesn't exist
         os.makedirs(dated_path, exist_ok=True)
         download_qr_codes_to_drive(dated_path)
+
+        # Mirror the latest run into a stable "now" folder for quick access
+        now_path = os.path.join(path, "now")
+        if os.path.isdir(now_path):
+            remove_files_with_patterns(now_path, ["*.png"])
+        qr_files = [
+            os.path.join(dated_path, f)
+            for f in os.listdir(dated_path)
+            if f.lower().endswith(".png")
+        ]
+        copy_files_to_folder(path, "now", qr_files)
 
     # endregion
 

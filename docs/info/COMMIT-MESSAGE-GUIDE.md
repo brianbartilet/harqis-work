@@ -108,4 +108,4 @@ build(repo): pin docker base image to python:3.12-slim
 
 ## Automation
 
-The `/commit` skill reads **only staged files** (`git diff --cached`), classifies type and scope using the rules above, drafts the subject, prints the message, and commits after you confirm. It never stages files for you. See [SKILLS-INVENTORY.md §`/commit`](SKILLS-INVENTORY.md#commit) for invocation details.
+The `/commit` skill stages all working-tree changes, classifies type and scope using the rules above, drafts the subject, and commits **without a confirmation prompt** — calling `/commit` is your sign-off. Pass pathspecs to scope the staging (`/commit workflows/hud`), `--type`/`--scope` to override detection, or `--dry-run` to preview without committing. `.env*` files are skipped from auto-staging for safety. See [SKILLS-INVENTORY.md §`/commit`](SKILLS-INVENTORY.md#commit) for invocation details.

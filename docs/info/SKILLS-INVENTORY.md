@@ -12,6 +12,7 @@ Skill files live in `.claude/commands/*.md`. The first line of each file is the 
 | Skill | Command | Description |
 |---|---|---|
 | **agent-prompt** | `/agent-prompt <prompt_name>` | Run a named AI prompt from `agents/prompts/` against the codebase. `prompt_name` is the filename without extension (e.g. `code_smells`, `docs_agent`, `desktop_analysis`). |
+| **commit** | `/commit [<subject hint>] [<pathspec>...] [--type <t>] [--scope <s>] [--no-untracked] [--dry-run]` | Stage all working-tree changes and commit with a Conventional-Commit message inferred from the diff, following [COMMIT-MESSAGE-GUIDE.md](COMMIT-MESSAGE-GUIDE.md). **Calling `/commit` is your sign-off — no confirmation prompt.** Auto-detects type and scope from the layer of changed files (`apps/<name>`, `workflows/<name>`, `agents/kanban`, `mcp`, `frontend`, `repo`). Pass pathspecs to limit staging. Skips `.env*` files for safety. Never pushes, never amends, never bypasses hooks. |
 | **deploy-harqis** | `/deploy-harqis <host\|node> [-q queues] [-p profile] [--hw labels] [--down] [--no-frontend] [--no-mcp] [--no-kanban] [--num-agents N] [--dry-run]` | End-to-end reusable deploy of the harqis-work platform — **cross-platform**, auto-detects macOS / Linux / Windows. `host` brings up the full stack (Docker + Beat scheduler + worker + frontend + MCP + Kanban + Flower); the host's Kanban orchestrator defaults to `agent:default` so the host also acts as 1 default-queue agent worker. `node` runs a Celery worker plus a profile-scoped Kanban orchestrator (the skill **asks** for `-p` if missing). `--hw` filters by `hw:*` labels (auto-detected from OS otherwise). Tear down with `--down`. |
 | **generate-registry** | `/generate-registry` | Regenerate `frontend/registry.py` by scanning all `workflows/*/tasks_config.py` files. Run after adding or removing any Celery task. |
 | **new-kanban-profile** | `/new-kanban-profile <profile_name> [--display-name "..."] [--email "..."] [--role "..."] [--no-mode-a]` | Scaffold a new Kanban agent profile YAML under `agents/kanban/profiles/examples/`. Includes a persona block (signed comments — Mode B, default-on) and commented-out Mode A scaffolding. Adds blank `TRELLO_AGENT_API_KEY__<SUFFIX>` / `TRELLO_AGENT_API_TOKEN__<SUFFIX>` placeholders to `.env/apps.env`. Prints the manual Trello-account setup checklist. |
@@ -43,6 +44,48 @@ Available prompts:
 | `docs_agent.md` | Generate or update documentation from code |
 | `desktop_analysis.md` | Analyse desktop HUD log screenshots |
 | `kanban_agent_default.md` | Default system prompt used by `BaseKanbanAgent` |
+
+---
+
+### `/commit`
+
+Stages all working-tree changes and commits in one shot with a Conventional-Commit message inferred from the diff. **Calling `/commit` is your sign-off** — there is no confirmation prompt. Implements the rules in [COMMIT-MESSAGE-GUIDE.md](COMMIT-MESSAGE-GUIDE.md).
+
+```
+/commit                                       # stage everything tracked + new files, commit
+/commit workflows/hud                         # only stage paths under workflows/hud
+/commit "mirror tcg qr downloads into now"    # subject hint
+/commit --type fix --scope workflows/hud      # force type/scope
+/commit --no-untracked                        # skip new files, only modified/deleted
+/commit --dry-run                             # preview message, do not commit
+```
+
+**Format produced:** `<type>(<scope>): <subject>` — single line, ≤72 chars, imperative, lower-case.
+
+**Staging behaviour:**
+
+| Situation | What `/commit` stages |
+|---|---|
+| Pathspecs given | Only those paths (`git add -- <paths>`). |
+| Something already staged, no pathspecs | Whatever was staged. Unstaged working-tree changes left alone, mentioned once. |
+| Nothing staged, no pathspecs | Tracked modifications + deletions (`git add -u`) **plus** untracked files (unless `--no-untracked`). |
+| `.env*` files | **Always skipped** from auto-staging, listed in the post-commit summary. Stage manually if intentional. |
+
+| Detection | Source |
+|---|---|
+| **Type** | All test files → `test`. All `*.md` → `docs` (with `.claude/commands/*.md` exception → `feat`). Dockerfiles → `build`. CI files → `ci`. Repo plumbing (`requirements.txt`, `.gitignore`, `apps_config.yaml`, `.env*`, `pytest.ini`) → `chore`. Otherwise inspects diff for new defs/classes (`feat`), bug language (`fix`), pure restructure (`refactor`), or whitespace (`style`). |
+| **Scope** | First common path segment of staged files: `apps`, `workflows`, `agents`, `mcp`, `frontend`, `docs`, `scripts`. Adds sub-scope if all files share one (`apps/google`, `workflows/hud`). Cross-layer or root-only → `repo`. |
+| **Subject** | Drafted from the diff, biased by any free-text hint in `$ARGUMENTS`. |
+
+**Hard rules baked into the skill:**
+
+- Never amends, never force-pushes, never passes `--no-verify`. Pre-commit hook failures stop the skill (with the staged state preserved) so you can fix the root cause and re-run.
+- Never pushes — the user pushes when ready.
+- Never blindly `git add -A`. Auto-staging is `git add -u` plus enumerated untracked files, with `.env*` excluded.
+- No `Co-Authored-By` footer — repo style is subject-only.
+- If the staged set spans unrelated scopes, the post-commit summary suggests `git reset HEAD~` + a split using pathspecs.
+
+`--dry-run` drafts and prints the message but does not commit. Anything staged in Step 1 stays staged so you can inspect and commit manually if you prefer.
 
 ---
 

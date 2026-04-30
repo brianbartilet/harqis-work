@@ -780,7 +780,7 @@ Lightweight JSON-like files exposing Celery tasks and shell commands to n8n and 
 
 Claude Code skills are slash commands available in any Claude Code session opened in this repo. They encode multi-step workflows so Claude can execute them end-to-end without step-by-step prompting. Invoke with `/skill-name [arguments]` in the Claude Code prompt.
 
-There are currently **9 skills** covering workflow scaffolding, app integration, Kanban agent profile creation (with personas), Zapier MCP discovery, n8n deployment, platform deployment (host/node roles), test running, and prompt-driven codebase analysis.
+There are currently **10 skills** covering workflow scaffolding, app integration, Kanban agent profile creation (with personas), Zapier MCP discovery, n8n deployment, platform deployment (host/node roles), test running, prompt-driven codebase analysis, and standardised commit-message generation.
 
 For the full skill inventory, command reference, and per-skill details see **[docs/info/SKILLS-INVENTORY.md](docs/info/SKILLS-INVENTORY.md)**.
 
