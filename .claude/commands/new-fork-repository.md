@@ -5,19 +5,23 @@ Fork the `harqis-work` repository into a fresh, business-/client-scoped baseline
 `$ARGUMENTS` format (parse left to right):
 
 ```
-<business_or_client_name> [--target-dir <path>] [--remote <git_url>] [--description "<short blurb>"] [--keep <folder,folder,...>] [--strip <folder,folder,...>] [--no-git-init] [--dry-run]
+<business_or_client_name> [--target-dir <path>] [--remote <git_url>] [--owner <gh_org_or_user>] [--visibility public|private|internal] [--description "<short blurb>"] [--keep <folder,folder,...>] [--strip <folder,folder,...>] [--no-create-repo] [--no-push] [--no-git-init] [--dry-run]
 ```
 
 | Token | Required | Description |
 |---|---|---|
 | `business_or_client_name` | Yes | Free-form name. Will be slugified to kebab-case for the repo / folder name (`Acme Logistics` → `acme-logistics`). The final repo name is always `harqis-work-fork-<slug>`. |
 | `--target-dir <path>` | No | Where to create the fork on disk. Default: sibling of the source repo, i.e. `<parent_of_source>/harqis-work-fork-<slug>`. |
-| `--remote <git_url>` | No | If provided, set as `origin` after `git init`. Otherwise leave the fork without a remote. |
-| `--description "<text>"` | No | One-paragraph project description for the new README. If omitted, ask the user (Step 0). |
+| `--remote <git_url>` | No | Set as `origin` after `git init`. If omitted, the skill calls `gh repo create` instead (default behaviour) — pass this when the GitHub repo already exists or you want to push to a non-GitHub remote. |
+| `--owner <gh_org_or_user>` | No | Owner under which to create the GitHub repo. Defaults to the authenticated `gh` user. Pass this for org-owned forks (`--owner acme-corp`). |
+| `--visibility public\|private\|internal` | No | Visibility for the auto-created GitHub repo. **Default: `private`** — forks may carry client business context and should not be public unless explicitly opted in. `internal` is org-only. |
+| `--description "<text>"` | No | One-paragraph project description for the new README. Also passed to `gh repo create --description`. If omitted, ask the user (Step 0). |
 | `--keep <list>` | No | Comma-separated list of workflow categories to preserve from the source (default: only `.template` is kept). Example: `--keep .template,n8n`. |
 | `--strip <list>` | No | Comma-separated list of additional top-level folders to remove from the fork (in addition to the always-stripped `.claude` and `.openclaw`). |
-| `--no-git-init` | No | Skip `git init` and remote setup. Useful when the user wants to wire git themselves. |
-| `--dry-run` | No | Print the plan (folders kept, folders stripped, files rewritten) without touching disk. |
+| `--no-create-repo` | No | Skip `gh repo create`. The skill still runs `git init` + initial commit; the user wires the remote manually. |
+| `--no-push` | No | Initialize git and (optionally) create the GitHub repo, but do not run `git push`. |
+| `--no-git-init` | No | Skip `git init` entirely. Implies `--no-create-repo` and `--no-push`. Useful when the user wants to wire git themselves. |
+| `--dry-run` | No | Print the plan (folders kept, folders stripped, files rewritten, gh actions) without touching disk or invoking gh. |
 
 The agent invoking this skill may also pass these decisions inline in a natural-language prompt; parse the prompt for them before falling back to `$ARGUMENTS`.
 
@@ -31,7 +35,10 @@ Confirm or ask for the following if not unambiguously provided:
 2. **Description** — what does this fork automate? Which industry or use case? (Used in the new README intro.)
 3. **Target directory** — confirm the absolute path. Refuse to write into the source repo itself.
 4. **Categories to keep** — by default ONLY `workflows/.template/` is kept. Any others (`n8n`, `social`, `desktop`, `hud`, `finance`, `mobile`, `purchases`) must be explicitly opted in via `--keep`.
-5. **Remote** — does the user want `origin` set now, or wire it manually later?
+5. **GitHub auto-publish** — by default the skill creates a private GitHub repo via `gh repo create` and pushes the initial commit. Confirm:
+   - Owner (default: authenticated `gh` user; pass `--owner` for an org).
+   - Visibility (default: `private`; `--visibility public` to opt out — never silently public).
+   - Skip entirely with `--no-create-repo` (init + commit only) or `--no-push` (create repo but don't push).
 6. **App inventory pruning** — does the user want to keep all entries under `apps/`, or trim to a shortlist? (Default: keep all — apps are reusable building blocks. Trimming is opt-in.)
 
 If any of these are unclear, ASK before continuing — the fork is hard to undo cleanly once files are duplicated.
@@ -81,6 +88,7 @@ __pycache__/              # at every level
 app.log, app.log.*, app-debug.log
 celerybeat-schedule.*     # local scheduler state
 data/                     # local cached data dumps
+logs/                     # runtime audit logs (kanban_audit.jsonl, daily/, weekly/, …)
 ```
 
 ### Always strip from `workflows/` (custom categories — replaced by minimal scaffold)
@@ -424,15 +432,44 @@ ls <target>/apps_config.yaml 2>/dev/null
 ```
 
 Rules:
-- Any file under `.env/` that is NOT `*.example` → delete from the fork. Do not copy
-  real secrets across.
-- `apps_config.yaml` → if a `apps_config.yaml.example` already exists upstream, keep
-  only that. Otherwise generate one by reading `apps_config.yaml` and replacing every
-  string value with `"<REPLACE_ME>"` (preserving keys, comments, and structure).
-  Save as `apps_config.yaml.example`. Then DELETE the original `apps_config.yaml` from
-  the fork.
-- Any file containing obvious credential patterns (`api_key:`, `secret:`, `password:`,
-  `token:`, `Bearer`, `OAUTH_REFRESH_TOKEN=`) → flag to the user and ask before
+- **`.env/`** — Any file that is NOT `*.example` → delete from the fork. Then for
+  every removed file, regenerate an `.example` template from the upstream copy by
+  preserving keys/comments/section dividers and replacing any value that isn't
+  obviously safe (port numbers, hostnames, public URLs, default placeholder strings)
+  with `<REPLACE_ME>`. Hosts (`http://elasticsearch:9200`), ports (`5672`,
+  `8083`, `15000`), `WORKFLOW_CONFIG="workflows.config"`, and broker URL templates
+  with placeholder credentials (`amqp://guest:guest@localhost:5672/`) may be kept
+  as-is. Tokens, passwords, account IDs, API keys, OAuth refresh tokens, and
+  asset paths — always redact. Save the result as `.env/<name>.env.example`.
+
+- **`apps_config.yaml`** — Three cases, in order of preference:
+  1. If `apps_config.yaml.example` already exists upstream → copy only that and
+     delete `apps_config.yaml` from the fork.
+  2. If every credential value in upstream `apps_config.yaml` is already an
+     `${ENV_VAR}` placeholder (no inline secrets), the file is effectively a
+     template — copy it verbatim to `apps_config.yaml.example` and delete the
+     original from the fork. Verify with:
+     ```bash
+     grep -nE "(token|key|secret|password|client_id|client_secret):" \
+       <source>/apps_config.yaml | grep -vE '\$\{|^#'
+     ```
+     A clean result (or only matches like `max_tokens: 200`) confirms the
+     template-only condition.
+  3. Otherwise generate `apps_config.yaml.example` by reading the file and
+     replacing each non-templated credential string with `<REPLACE_ME>`,
+     preserving keys, structure, and comments. Then delete the original
+     `apps_config.yaml` from the fork.
+
+- **OAuth / service-account JSON** — Any `*.json` under `.env/` that looks like a
+  Google `credentials.json`, `storage.json`, or service-account file → delete
+  outright. Do not generate an `.example` (the structure is well-known; the host
+  operator obtains a fresh download from the relevant cloud console). Print which
+  files were removed in the activation checklist.
+
+- **Pattern sweep** — Any file containing obvious credential shapes
+  (`api_key:`, `secret:`, `password:`, `token:`, `Bearer <hex>`,
+  `OAUTH_REFRESH_TOKEN=`, `sk-…`, `sk-ant-…`, `ghp_…`, `AIza…`, JWTs starting
+  `eyJhbGciOi…`, `ATTA…`, `sk_live_…`, `ntn_…`) → flag to the user and ask before
   including.
 
 Print a checklist of secrets the fork's host operator must supply before the platform
@@ -440,28 +477,113 @@ will boot.
 
 ---
 
-## Step 8 — Initialize git in the fork
+## Step 8 — Initialize git, create the GitHub repo, and push
 
-Skip if `--no-git-init` was passed.
+The default behaviour is end-to-end automation: `git init` → initial commit →
+`gh repo create` (private) → `git push`. The flags below let the user opt out of
+each layer.
+
+Skip the entire step if `--no-git-init` was passed (it implies `--no-create-repo`
+and `--no-push` too).
+
+### 8a — Initialize and commit
 
 ```bash
 cd <target>
 git init -b main
 git add -A
+git status --short | head      # sanity-check what's about to be committed
 git commit -m "chore: scaffold harqis-work-fork-<slug> from upstream"
 ```
 
-If `--remote` was provided:
+If the commit fails because of empty staging (which would mean the copy in Step 3
+or the rewrites in Steps 4–7 produced nothing to track), STOP — do not run
+`--allow-empty`. Surface the error and let the user investigate.
+
+### 8b — Auto-create the GitHub repo (default unless `--no-create-repo` or `--remote` was passed)
+
+#### Preflight: verify `gh` is installed and authenticated
 
 ```bash
-git remote add origin <remote_url>
-# do NOT push — leave that to the user
+command -v gh >/dev/null 2>&1 || { echo "gh CLI not installed — install with 'winget install --id GitHub.cli' (Windows) or 'brew install gh' (macOS)"; exit 1; }
+gh auth status 2>&1 | head -5
 ```
 
-Always print the next-step instructions for pushing:
+If `gh auth status` reports the user is not logged in, STOP and tell them to run
+`gh auth login` in a terminal (since `/commit` and similar interactive logins
+must happen at the user's terminal, not from inside Claude Code). Print:
+
+> The `gh` CLI is not authenticated. Run `gh auth login` in your terminal, then
+> re-invoke `/new-fork-repository` (or pass `--no-create-repo` to skip).
+
+#### Resolve the owner
+
+If `--owner <gh_org_or_user>` was passed, use it. Otherwise default to the
+authenticated user:
+
+```bash
+GH_OWNER=$(gh api user --jq .login)
+```
+
+Confirm the resolved owner with the user before creating the repo unless they
+already explicitly named one. Print: `Will create <owner>/harqis-work-fork-<slug>
+(<visibility>).`
+
+#### Create
+
+```bash
+gh repo create "<owner>/harqis-work-fork-<slug>" \
+  --<visibility>                                 \    # --private (default), --public, or --internal
+  --description "<description from Step 0 or --description>" \
+  --source=.                                     \
+  --remote=origin
+```
+
+Notes:
+- `gh repo create` with `--source=.` and `--remote=origin` adds the remote to
+  the local repo automatically. Do not run a separate `git remote add origin`.
+- If the repo name already exists under that owner, `gh` errors out — surface
+  the error and ask whether to (a) pick a different slug, (b) push to the
+  existing repo (skip create with `--no-create-repo` and pass `--remote`), or
+  (c) abort. Never overwrite an existing repo.
+
+#### `--remote <url>` override
+
+If the user passed `--remote <url>` instead, skip the `gh repo create` block and
+just wire the remote:
+
+```bash
+git remote add origin <url>
+```
+
+### 8c — Push (default unless `--no-push` was passed)
+
+```bash
+git push -u origin main
+```
+
+If push fails:
+- **Rejected (non-fast-forward / fetch first)** — should not happen because the
+  repo was just created and is empty. If it does, surface the error and stop;
+  do NOT force-push.
+- **Auth error** — tell the user to re-run `gh auth refresh -s repo` (or
+  reauthenticate) and retry the push manually.
+- **Network / hook error** — surface verbatim and stop. The local commit and
+  the (possibly empty) remote are both intact; the user can retry.
+
+### 8d — Print the published URL
+
+If the push succeeded:
+
+```bash
+echo "Published: $(gh repo view --json url --jq .url)"
+```
+
+If `--no-create-repo` was used (init + commit only): print the manual next-step
+instructions:
 
 ```
-To publish this fork:
+To publish this fork manually:
   cd <target>
   gh repo create harqis-work-fork-<slug> --private --source=. --remote=origin
   git push -u origin main
@@ -471,10 +593,21 @@ To publish this fork:
 
 ## Step 9 — Print the activation checklist
 
-Print this at the end, filled in with the actual values:
+Re-run the stale-doc-refs sweep from Step 6 and capture any remaining hits — those
+become a `Stale doc references` block in the checklist so the consuming team
+knows what they may want to edit before publishing.
+
+```bash
+grep -rE "(\.claude/|\.openclaw/|workflows/(desktop|finance|hud|mobile|n8n|purchases|social))" \
+  <target>/docs <target>/scripts <target>/agents <target>/README.md 2>/dev/null
+```
+
+Print this at the end, filled in with the actual values (drop the
+`Published:` line if `--no-create-repo` or `--no-push` was used):
 
 ```
 Fork created: <target>
+Published:    <github_url>     (or "skipped — run `gh repo create …` to publish")
 
 What's in it:
   ✓ apps/                          (all integrations preserved)
@@ -485,22 +618,29 @@ What's in it:
   ✓ workflows/README.md            (rewritten for <BUSINESS_NAME>)
   ✓ README.md                      (rewritten for <BUSINESS_NAME>)
   ✓ Dockerfile, docker-compose.yml, scripts/, .github/
+  ✓ apps_config.yaml.example       (no real credentials)
+  ✓ .env/apps.env.example          (every secret redacted to <REPLACE_ME>)
 
 What was removed:
   ✗ .claude/, .openclaw/           (local AI-tooling configs)
+  ✗ logs/, data/                   (host-local runtime artifacts)
   ✗ workflows/{desktop,finance,hud,mobile,n8n,purchases,social}/
-  ✗ Real secrets (.env/*.real, apps_config.yaml)
+  ✗ Real secrets (.env/*.real, apps_config.yaml, OAuth JSON files)
+
+Stale doc references (review before sharing):
+  <list each grep hit on its own line, or "(none — clean)" if empty>
 
 Next steps for the host operator:
+  [ ] Clone: git clone <github_url> && cd harqis-work-fork-<slug>
   [ ] Copy apps_config.yaml.example → apps_config.yaml and fill in values
-  [ ] Create .env/apps.env from the upstream .env/apps.env.example template
+  [ ] Copy .env/apps.env.example → .env/apps.env and fill in <REPLACE_ME> entries
+  [ ] Obtain fresh Google OAuth/service-account JSON files and place under .env/
   [ ] Run `pip install -r requirements.txt` inside a fresh .venv
-  [ ] Run `/deploy-harqis host` (if Claude Code is installed in the fork) or
+  [ ] Run `/deploy-harqis host` (after installing Claude Code + skills in the fork) or
       `./scripts/sh/deploy.sh --role host` to bring the stack up
   [ ] Build the first workflow:
         cp -r workflows/.template workflows/<your_category>
         # then edit tasks_config.py and tasks/*.py
-  [ ] git push -u origin main once the remote is configured
 ```
 
 ---
@@ -525,5 +665,6 @@ Next steps for the host operator:
 - Do NOT carry forward real credentials (`apps_config.yaml`, `.env/*` non-`.example` files).
 - Do NOT preserve the upstream's pre-built workflow categories unless `--keep` lists them. The fork's value is the clean slate.
 - Do NOT modify the source repo. All operations are read-only against `<source>` and write-only into `<target>`.
-- Do NOT push to any remote. Print the push command and let the user execute.
+- Do NOT make a fork's GitHub repo public unless the user explicitly passes `--visibility public`. Default is `private` — forks may carry client business context.
+- Do NOT force-push (`--force` / `--force-with-lease`) under any circumstance. The first push to a freshly created repo should never need force.
 - Do NOT add Claude Code config (`.claude/`) or AI agent state (`.openclaw/`) to the fork — the consuming team installs its own.

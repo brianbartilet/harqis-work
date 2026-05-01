@@ -15,6 +15,7 @@ Skill files live in `.claude/commands/*.md`. The first line of each file is the 
 | **commit** | `/commit [<subject hint>] [<pathspec>...] [--type <t>] [--scope <s>] [--no-untracked] [--dry-run]` | Stage all working-tree changes and commit with a Conventional-Commit message inferred from the diff, following [COMMIT-MESSAGE-GUIDE.md](COMMIT-MESSAGE-GUIDE.md). **Calling `/commit` is your sign-off — no confirmation prompt.** Auto-detects type and scope from the layer of changed files (`apps/<name>`, `workflows/<name>`, `agents/kanban`, `mcp`, `frontend`, `repo`). Pass pathspecs to limit staging. Skips `.env*` files for safety. Never pushes, never amends, never bypasses hooks. |
 | **deploy-harqis** | `/deploy-harqis <host\|node> [-q queues] [-p profile] [--hw labels] [--down] [--no-frontend] [--no-mcp] [--no-kanban] [--num-agents N] [--dry-run]` | End-to-end reusable deploy of the harqis-work platform — **cross-platform**, auto-detects macOS / Linux / Windows. `host` brings up the full stack (Docker + Beat scheduler + worker + frontend + MCP + Kanban + Flower); the host's Kanban orchestrator defaults to `agent:default` so the host also acts as 1 default-queue agent worker. `node` runs a Celery worker plus a profile-scoped Kanban orchestrator (the skill **asks** for `-p` if missing). `--hw` filters by `hw:*` labels (auto-detected from OS otherwise). Tear down with `--down`. |
 | **generate-registry** | `/generate-registry` | Regenerate `frontend/registry.py` by scanning all `workflows/*/tasks_config.py` files. Run after adding or removing any Celery task. |
+| **new-fork-repository** | `/new-fork-repository <business_or_client_name> [--owner <gh_owner>] [--visibility public\|private\|internal] [--description "..."] [--keep <list>] [--strip <list>] [--target-dir <path>] [--remote <url>] [--no-create-repo] [--no-push] [--no-git-init] [--dry-run]` | Fork `harqis-work` into a clean business-/client-scoped baseline at `harqis-work-fork-<slug>`. Strips host-local AI tooling (`.claude/`, `.openclaw/`, `logs/`, `data/`), every pre-built workflow category (keeps only `.template`), and all real credentials (regenerates `.example` variants). Rewrites `README.md`, `workflows/README.md`, `workflows/config.py`, `workflows/queues.py` for the new context. **Auto-creates a private GitHub repo via `gh repo create` and pushes the initial commit by default** — pass `--no-create-repo` or `--no-push` to opt out, `--visibility public` to publish openly. |
 | **new-kanban-profile** | `/new-kanban-profile <profile_name> [--display-name "..."] [--email "..."] [--role "..."] [--no-mode-a]` | Scaffold a new Kanban agent profile YAML under `agents/kanban/profiles/examples/`. Includes a persona block (signed comments — Mode B, default-on) and commented-out Mode A scaffolding. Adds blank `TRELLO_AGENT_API_KEY__<SUFFIX>` / `TRELLO_AGENT_API_TOKEN__<SUFFIX>` placeholders to `.env/apps.env`. Prints the manual Trello-account setup checklist. |
 | **new-n8n-workflow** | `/new-n8n-workflow <description_or_diagram>` | Build and deploy an n8n workflow directly into the local n8n instance (`localhost:5678`) from a drawio diagram, XML/BPMN file, or free-text description. |
 | **new-service-app** | `/new-service-app <app_name> [<spec_or_url>] [--workflow <name>]` | Scaffold a complete app integration under `apps/`. With a spec URL, generates real service classes, DTOs, and MCP tools from the API. Without a spec, creates a skeleton stub. Pass `--workflow` to also scaffold a Celery task that uses the new app. |
@@ -154,6 +155,58 @@ Scans all `workflows/*/tasks_config.py` files and rewrites `frontend/registry.py
 ```
 
 No arguments. Reports what changed (added / removed task keys).
+
+---
+
+### `/new-fork-repository`
+
+Forks `harqis-work` into a fresh, business-/client-scoped baseline that another team can adopt as the starting point for their own automation host. Keeps the platform skeleton (`apps/`, `agents/`, deploy scripts, core framework hooks) but strips local AI tooling and pre-built workflow categories so the consuming agents have a clean slate.
+
+```
+/new-fork-repository "Acme Logistics"
+/new-fork-repository "Acme Logistics" --owner acme-corp --description "Logistics ops automation for Acme"
+/new-fork-repository test-client --no-push                       # init + create repo, do not push
+/new-fork-repository test-client --no-create-repo                # local-only fork, no GitHub
+/new-fork-repository test-client --keep .template,n8n            # also preserve the n8n category
+/new-fork-repository test-client --visibility public              # explicit opt-in to public
+/new-fork-repository test-client --dry-run                       # preview without writing
+```
+
+**Arguments:**
+
+| Token | Required | Description |
+|---|---|---|
+| `business_or_client_name` | Yes | Slugified to kebab-case for the repo / folder name. Final repo: `harqis-work-fork-<slug>`. |
+| `--owner <gh_org_or_user>` | No | Owner under which to create the GitHub repo. Defaults to the authenticated `gh` user. |
+| `--visibility public\|private\|internal` | No | Visibility for the auto-created GitHub repo. **Default: `private`** — never silently public. |
+| `--description "..."` | No | One-paragraph project description; also passed to `gh repo create --description`. |
+| `--target-dir <path>` | No | Disk location for the fork. Default: sibling of source repo. |
+| `--remote <url>` | No | Skip `gh repo create` and use this URL as `origin` instead. |
+| `--keep <list>` | No | Workflow categories to preserve (default: only `.template`). |
+| `--strip <list>` | No | Extra top-level folders to remove. |
+| `--no-create-repo` | No | Init + commit only; the user wires the GitHub remote manually. |
+| `--no-push` | No | Init + (optionally) create repo, but skip the `git push`. |
+| `--no-git-init` | No | Skip git entirely. Implies `--no-create-repo` and `--no-push`. |
+| `--dry-run` | No | Print the plan and stop without writing or invoking `gh`. |
+
+**What it does:**
+
+1. **Plans the strip vs. keep lists** and prints them for confirmation.
+2. **Copies** the source tree into `<parent>/harqis-work-fork-<slug>` with excludes for `.claude/`, `.openclaw/`, `.idea/`, `.run/`, `.venv/`, `.pytest_cache/`, `__pycache__/`, `data/`, `logs/`, `app.log*`, `celerybeat-schedule.*`, `apps_config.yaml`, `.env/*` (non-`.example`), and every workflow category not in the keep list.
+3. **Regenerates** the minimal `workflows/` scaffold — empty `CONFIG_DICTIONARY` in `config.py`, only `DEFAULT` + `ADHOC` queues in `queues.py`, instructions-only `README.md`, and an empty `__init__.py`.
+4. **Rewrites the top-level `README.md`** for the business — origin notice, App Inventory preserved verbatim, getting-started block (all real values redacted), upstream-sync section.
+5. **Sanitizes secrets** — produces `apps_config.yaml.example` and `.env/<name>.env.example` with every credential replaced by `<REPLACE_ME>`. OAuth/service-account JSON files under `.env/` are deleted outright (the host operator obtains fresh ones).
+6. **Sweeps the docs** for stale references to stripped folders. Code imports get a `# TODO: re-introduce after building <category>` marker; markdown references are listed in the activation checklist for the consuming team to review.
+7. **Initializes git** in the fork (unless `--no-git-init`).
+8. **Auto-publishes to GitHub** via `gh repo create` (private by default) and pushes the initial commit. Skipped only if `--no-create-repo` or `--no-push` was passed. The skill verifies `gh auth status` before invoking and never force-pushes.
+9. **Prints the activation checklist** with the published URL, file inventory (kept / removed / generated), stale-doc-refs report, and next steps for the host operator.
+
+**Defaults that are non-negotiable unless explicitly overridden:**
+
+- Visibility = `private` (forks may carry client business context).
+- Real credentials are never copied — `.env/*` and `apps_config.yaml` are always redacted to `.example` templates.
+- The fork's `.claude/` and `.openclaw/` are always stripped (the consuming team installs its own).
+- Force-push is never used.
 
 ---
 
