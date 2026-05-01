@@ -69,6 +69,20 @@ sections__tcg_mp_sections = {
 }
 
 
+sections__tcg_mp_sell_cart_sections = {
+    # Header link to the marketplace's sell cart UI — the seller fulfils
+    # these manually after the workflow has queued matched bids.
+    "meterLink_sell_cart": {
+        "Preset": "InjectedByTest",
+    },
+    # Optional secondary link / metric slot — left available so the HUD can
+    # surface "matches found" / "bids added" without rewriting layout.
+    "meterLink_sell_cart_metrics": {
+        "Preset": "InjectedByTest",
+    },
+}
+
+
 sections__utilities_desktop = {
     "meterLink_home": {
         "Preset": "InjectedByTest",

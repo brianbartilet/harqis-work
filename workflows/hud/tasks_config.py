@@ -79,6 +79,27 @@ WORKFLOWS_HUD = {
         },
     },
 
+    # ── show_tcg_sell_cart ───────────────────────────────────────────────────
+    # Inferred schedule: weekly on Sunday at 00:00 — the matching pass talks to
+    # the marketplace for every listing the user owns, so a once-per-week
+    # cadence keeps load + noise low while still surfacing fresh bids.
+    # `expires`: 60 * 60 * 24 — a missed Sunday run can still fire any time
+    # within the same day; after that the result is stale.
+    'run-job--show_tcg_sell_cart': {
+        'task': 'workflows.hud.tasks.hud_tcg.show_tcg_sell_cart',
+        'schedule': crontab(day_of_week='sun', hour=0, minute=0),
+        'kwargs': {
+            "cfg_id__tcg_mp": "TCG_MP",
+            "discount_threshold_pct": 10.0,
+            "worker_count": 4,
+            "dry_run": False,
+        },
+        "options": {
+            "queue": WorkflowQueue.TCG,
+            "expires": 60 * 60 * 24,
+        },
+    },
+
     'run-job--get_desktop_logs': {
         'task': 'workflows.hud.tasks.hud_gpt.get_desktop_logs',
         'schedule': crontab(minute='5'),
