@@ -1,10 +1,10 @@
+from dataclasses import fields
 from typing import List
 
 from apps.tcg_mp.references.dto.listing import DtoWantToBuyListing
 from apps.tcg_mp.references.web.base_api_service import BaseApiServiceAppTcgMp
 
 from core.web.services.core.constants.payload_type import PayloadType
-from core.web.services.core.decorators.deserializer import deserialized
 
 
 class ApiServiceTcgMpBuy(BaseApiServiceAppTcgMp):
@@ -22,9 +22,15 @@ class ApiServiceTcgMpBuy(BaseApiServiceAppTcgMp):
     def initialize(self):
         self.request.set_base_uri('buy')
 
-    @deserialized(List[DtoWantToBuyListing], child='data.data', many=True)
-    def get_want_to_buy_listings(self, product_id, foil):
+    def get_want_to_buy_listings(self, product_id, foil) -> List[DtoWantToBuyListing]:
         """Fetch all want-to-buy bids for the given product + foil.
+
+        The marketplace's response shape is:
+            {"status": 200, "data": {"message": "", "data": [...] | "" }, "meta": {...}}
+        On no-results the inner `data.data` is sometimes returned as an empty
+        string instead of an empty list, which broke the framework's typed
+        deserializer (`@deserialized`). We parse the inner list manually here
+        so the worker always receives an iterable.
 
         Args:
             product_id: TCG MP product id (the same `product_id` returned on
@@ -43,4 +49,30 @@ class ApiServiceTcgMpBuy(BaseApiServiceAppTcgMp):
             .add_uri_parameter('listed_item_filter') \
             .add_payload(payload, PayloadType.DICT)
 
-        return self.client.execute_request(self.request.build())
+        response = self.client.execute_request(self.request.build())
+        return _parse_want_to_buy_listings(response)
+
+
+_DTO_FIELDS = {f.name for f in fields(DtoWantToBuyListing)}
+
+
+def _parse_want_to_buy_listings(response) -> List[DtoWantToBuyListing]:
+    """Extract the bid list from a `buy/listed_item_filter` response.
+
+    Tolerates the no-results case where `data.data` is `""` instead of `[]`,
+    and the case where the framework already unwrapped one layer.
+    """
+    body = getattr(response, "data", response)
+    if isinstance(body, dict):
+        body = body.get("data", body)
+    if not body or isinstance(body, str):
+        return []
+    if not isinstance(body, list):
+        return []
+    return [_to_dto(item) for item in body if isinstance(item, dict)]
+
+
+def _to_dto(item: dict) -> DtoWantToBuyListing:
+    """Build a DTO from an arbitrary item dict, ignoring unknown keys."""
+    kwargs = {k: v for k, v in item.items() if k in _DTO_FIELDS}
+    return DtoWantToBuyListing(**kwargs)

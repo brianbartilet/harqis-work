@@ -606,7 +606,8 @@ def show_tcg_sell_cart(ini=ConfigHelperRainmeter(),
     ini['meterLink_sell_cart_metrics']['H'] = '52'
     ini['meterLink_sell_cart_metrics']['Text'] = metrics_text
     ini['meterLink_sell_cart_metrics']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(sell_cart_url)
-    ini['meterLink_sell_cart_metrics']['tooltiptext'] = "Threshold: {0:.1f}% — click to open sell cart".format(
+    # ConfigParser uses %(name)s interpolation — `%` literals must be doubled.
+    ini['meterLink_sell_cart_metrics']['tooltiptext'] = "Threshold: {0:.1f}%% — click to open sell cart".format(
         discount_threshold_pct,
     )
     # endregion
