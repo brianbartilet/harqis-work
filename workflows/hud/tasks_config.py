@@ -87,7 +87,7 @@ WORKFLOWS_HUD = {
     # within the same day; after that the result is stale.
     'run-job--show_tcg_sell_cart': {
         'task': 'workflows.hud.tasks.hud_tcg.show_tcg_sell_cart',
-        'schedule': crontab(day_of_week='sun', hour=0, minute=0),
+        'schedule': crontab(hour=0, minute=0),
         'kwargs': {
             "cfg_id__tcg_mp": "TCG_MP",
             "discount_threshold_pct": 10.0,
@@ -96,7 +96,7 @@ WORKFLOWS_HUD = {
         },
         "options": {
             "queue": WorkflowQueue.TCG,
-            "expires": 60 * 60 * 24,
+            "expires": 60 * 60 * 8,
         },
     },
 

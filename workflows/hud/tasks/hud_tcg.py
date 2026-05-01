@@ -11,6 +11,7 @@ from core.utilities.data.numbers import  safe_number
 from core.utilities.data.strings import  make_separator
 from core.utilities.files import move_files_any, remove_files_with_patterns, sanitize_filename, copy_files_to_folder
 from core.utilities.multiprocess import MultiProcessingClient
+from core.utilities.resources.decorators import get_decorator_attrs
 from core.utilities.resources.download_file import ServiceDownloadFile
 
 from apps.rainmeter.references.helpers.config_builder import ConfigHelperRainmeter, init_meter
@@ -18,7 +19,7 @@ from apps.desktop.helpers.feed import feed
 
 from apps.tcg_mp.references.web.api.order import ApiServiceTcgMpOrder
 from apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
-from apps.tcg_mp.references.web.api.cart import ApiServiceTcgMpUserViewCart
+from apps.tcg_mp.references.web.api.cart import ApiServiceTcgMpUserViewCart, ApiServiceTcgMpWantToBuyCart
 from apps.tcg_mp.references.web.api.view import ApiServiceTcgMpUserView
 from apps.tcg_mp.references.dto.order import EnumTcgOrderStatus
 from apps.scryfall.references.web.api.cards import ApiServiceScryfallCards
@@ -138,7 +139,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
 
 
     # region Set dimensions
-    max_hud_lines = 16
+    max_hud_lines = 10
     width_multiplier = 3
 
     ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
@@ -537,6 +538,16 @@ def show_tcg_sell_cart(ini=ConfigHelperRainmeter(),
     cfg_id__tcg_mp = kwargs.get('cfg_id__tcg_mp', APP_NAME_TCG_MP)
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
 
+    # Always start from a clean cart so each run produces a deterministic set
+    # of queued bids. Skipped under dry_run so a verification pass cannot
+    # silently empty an intentional cart.
+    if not dry_run:
+        try:
+            ApiServiceTcgMpWantToBuyCart(cfg__tcg_mp).remove_all()
+            log.info("show_tcg_sell_cart: cleared sell cart before matching")
+        except Exception as e:
+            log.warning("show_tcg_sell_cart: cart remove_all failed (continuing): %s", e)
+
     api_view = ApiServiceTcgMpUserView(cfg__tcg_mp)
     listings = api_view.get_listings() or []
     if listings and limit is not None:
@@ -578,38 +589,40 @@ def show_tcg_sell_cart(ini=ConfigHelperRainmeter(),
     # endregion
 
     # region Build links
+    # Use the template's default `meterLink` slot for the SELL CART label so
+    # the Rainmeter HUD doesn't fall back to its placeholder text ("Link 1").
     sell_cart_url = 'https://thetcgmarketplace.com/sellcart'
-    ini['meterLink_sell_cart']['Meter'] = 'String'
-    ini['meterLink_sell_cart']['MeterStyle'] = 'sItemLink'
-    ini['meterLink_sell_cart']['X'] = '(52*#Scale#)'
-    ini['meterLink_sell_cart']['Y'] = '(38*#Scale#)'
-    ini['meterLink_sell_cart']['W'] = '120'
-    ini['meterLink_sell_cart']['H'] = '52'
-    ini['meterLink_sell_cart']['Text'] = '|SELL CART'
-    ini['meterLink_sell_cart']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(sell_cart_url)
-    ini['meterLink_sell_cart']['tooltiptext'] = sell_cart_url
+    ini['meterLink']['text'] = "CART"
+    ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(sell_cart_url)
+    ini['meterLink']['tooltiptext'] = sell_cart_url
+    ini['meterLink']['W'] = '120'
 
+    # DUMP — opens the dump.txt that Rainmeter writes for this HUD widget.
+    # Path mirrors the pattern in hud_logs.get_schedules / hud_utils helpers:
+    # <write_skin_to_path>/<skin_name>/<HUD_ITEM_NAME_NOSPACES_UPPER>/dump.txt
+    meta = get_decorator_attrs(show_tcg_sell_cart, prefix='')
+    hud_item = str(meta['_hud_item_name']).replace(" ", "").upper()
+    dump_path = os.path.join(
+        RAINMETER_CONFIG['write_skin_to_path'],
+        RAINMETER_CONFIG['skin_name'],
+        hud_item,
+        "dump.txt",
+    )
+    ini['meterLink_dump']['Meter'] = 'String'
+    ini['meterLink_dump']['MeterStyle'] = 'sItemLink'
+    ini['meterLink_dump']['X'] = '(34*#Scale#)'
+    ini['meterLink_dump']['Y'] = '(38*#Scale#)'
+    ini['meterLink_dump']['W'] = '80'
+    ini['meterLink_dump']['H'] = '55'
+    ini['meterLink_dump']['Text'] = '|DUMP'
+    ini['meterLink_dump']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(dump_path)
+    ini['meterLink_dump']['tooltiptext'] = dump_path
+
+    # Status buckets — kept for the dump header counts. The user asked to
+    # keep only the SELL CART link at the top, so no separate metrics meter.
     added = [r for r in results if r.get("status") == "added"]
     would_add = [r for r in results if r.get("status") == "would_add"]
-    no_match = [r for r in results if r.get("status") == "no_match"]
-    no_bidders = [r for r in results if r.get("status") == "no_bidders"]
     errored = [r for r in results if r.get("status") == "error"]
-
-    metrics_text = "Added: {0}  Pending: {1}  No-match: {2}  No-bid: {3}  Err: {4}".format(
-        len(added), len(would_add), len(no_match), len(no_bidders), len(errored),
-    )
-    ini['meterLink_sell_cart_metrics']['Meter'] = 'String'
-    ini['meterLink_sell_cart_metrics']['MeterStyle'] = 'sItemLink'
-    ini['meterLink_sell_cart_metrics']['X'] = '(180*#Scale#)'
-    ini['meterLink_sell_cart_metrics']['Y'] = '(38*#Scale#)'
-    ini['meterLink_sell_cart_metrics']['W'] = '430'
-    ini['meterLink_sell_cart_metrics']['H'] = '52'
-    ini['meterLink_sell_cart_metrics']['Text'] = metrics_text
-    ini['meterLink_sell_cart_metrics']['LeftMouseUpAction'] = '!Execute["{0}" 3]'.format(sell_cart_url)
-    # ConfigParser uses %(name)s interpolation — `%` literals must be doubled.
-    ini['meterLink_sell_cart_metrics']['tooltiptext'] = "Threshold: {0:.1f}%% — click to open sell cart".format(
-        discount_threshold_pct,
-    )
     # endregion
 
     # region Set dimensions (mirror show_tcg_orders sizing)
@@ -618,12 +631,12 @@ def show_tcg_sell_cart(ini=ConfigHelperRainmeter(),
 
     ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
-    ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
+    ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*16)*#Scale#)'
 
     ini['Rainmeter']['SkinWidth'] = '({0}*198*#Scale#)'.format(width_multiplier)
-    ini['Rainmeter']['SkinHeight'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
+    ini['Rainmeter']['SkinHeight'] = '((42*#Scale#)+(#ItemLines#*16)*#Scale#)'
 
-    ini['MeterBackground']['Shape'] = ('Rectangle 0,0,({0}*190),(36+(#ItemLines#*22)),2 | Fill Color #fillColor# '
+    ini['MeterBackground']['Shape'] = ('Rectangle 0,0,({0}*190),(36+(#ItemLines#*16)),2 | Fill Color #fillColor# '
                                        '| StrokeWidth (1*#Scale#) | Stroke Color [#darkColor] '
                                        '| Scale #Scale#,#Scale#,0,0').format(width_multiplier)
     ini['MeterBackgroundTop']['Shape'] = ('Rectangle 3,3,({0}*187),25,2 | Fill Color #headerColor# | StrokeWidth 0 '
@@ -636,7 +649,7 @@ def show_tcg_sell_cart(ini=ConfigHelperRainmeter(),
     # region Compose dump
     queued_amount = sum(safe_number(r.get("bid_price")) for r in (added + would_add))
     dump = (("{0}\n"
-             "SELL CART  THRESHOLD: {1:.1f}%  CHECKED: {2}  QUEUED: {3}  AMOUNT: {4}\n"
+             "THRESHOLD: {1:.1f}%  CHECKED: {2}  QUEUED: {3}  AMOUNT: {4}\n"
              "{0}\n")
             .format(make_separator(88), discount_threshold_pct,
                     len(results), len(added) + len(would_add), round(queued_amount, 2)))
@@ -644,19 +657,26 @@ def show_tcg_sell_cart(ini=ConfigHelperRainmeter(),
     queued = added + would_add
     if not queued:
         dump += "No matches queued this run.\n"
+    else:
+        # 88-char rows match the header/footer `make_separator(88)` exactly.
+        # Layout: " F  <name 62>  <mine 7>  <bid 7>  <qty 5>"   = 88 chars
+        # Numeric columns are zero-padded to 2 decimals for clean alignment.
+        dump += " {0:<2} {1:<62} {2:>7} {3:>7} {4:>5}\n".format(
+            "F", "Name", "Mine", "Bid", "Qty",
+        )
+        dump += make_separator(88, '-') + "\n"
 
     queued.sort(key=lambda r: -safe_number(r.get("bid_price")))
     for r in queued:
         foil = "F" if str(r.get("foil")) == "1" else "N"
-        flag = "+" if r.get("status") == "added" else "?"      # ? = would_add (dry-run)
-        name = (r["card"][:48] + '..') if r.get("card") and len(r["card"]) > 48 else r.get("card", "")
-        dump += " {0} {1:<2} {2:<50} mine: {3:>7}  bid: {4:>7}  buyer: {5}\n".format(
-            flag,
+        name = (r["card"][:62]) if r.get("card") and len(r["card"]) > 62 else r.get("card", "")
+        qty = int(safe_number(r.get("qty")) or 1)
+        dump += " {0:<2} {1:<62} {2:>7} {3:>7} {4:>5}\n".format(
             foil,
             name,
-            f"{round(safe_number(r.get('my_price')), 2)}",
-            f"{round(safe_number(r.get('bid_price')), 2)}",
-            r.get("buyer") or "-",
+            f"{safe_number(r.get('my_price')):.2f}",
+            f"{safe_number(r.get('bid_price')):.2f}",
+            qty,
         )
 
     if errored:

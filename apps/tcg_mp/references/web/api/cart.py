@@ -1,6 +1,5 @@
 from apps.tcg_mp.references.web.base_api_service import BaseApiServiceAppTcgMp
 
-from core.web.services.core.constants.payload_type import PayloadType
 from core.web.services.core.decorators.deserializer import deserialized
 
 
@@ -41,6 +40,20 @@ class ApiServiceTcgMpWantToBuyCart(BaseApiServiceAppTcgMp):
         self.request.set_base_uri('want_to_buy')
 
     @deserialized(dict, child='data')
+    def remove_all(self):
+        """Empty the seller's sell cart of every queued want-to-buy entry.
+
+        Backed by `GET /want_to_buy/cart/remove_all`. Called at the start of
+        the matching workflow so each run produces a fresh, deterministic
+        cart instead of accumulating stale matches across runs.
+        """
+        self.request.set_base_uri('want_to_buy')
+        self.request.get() \
+            .add_uri_parameter('cart') \
+            .add_uri_parameter('remove_all')
+        return self.client.execute_request(self.request.build())
+
+    @deserialized(dict, child='data')
     def add_to_sell_cart(self, listing_id, qty=1):
         """Accept a buyer's want-to-buy bid and queue it in the seller's sell cart.
 
@@ -60,10 +73,11 @@ class ApiServiceTcgMpWantToBuyCart(BaseApiServiceAppTcgMp):
             'listing_id': listing_id,
             'qty': qty,
         }
+        # JSON body required — same constraint as /buy/listed_item_filter.
         self.request.post() \
             .add_uri_parameter('cart') \
             .add_uri_parameter('add') \
-            .add_payload(payload, PayloadType.DICT)
+            .add_json_payload(payload)
 
         return self.client.execute_request(self.request.build())
 

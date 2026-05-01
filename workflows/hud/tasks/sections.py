@@ -70,14 +70,10 @@ sections__tcg_mp_sections = {
 
 
 sections__tcg_mp_sell_cart_sections = {
-    # Header link to the marketplace's sell cart UI — the seller fulfils
-    # these manually after the workflow has queued matched bids.
-    "meterLink_sell_cart": {
-        "Preset": "InjectedByTest",
-    },
-    # Optional secondary link / metric slot — left available so the HUD can
-    # surface "matches found" / "bids added" without rewriting layout.
-    "meterLink_sell_cart_metrics": {
+    # `meterLink` (the template default) is used for SELL CART;
+    # `meterLink_dump` is the second top-row slot, opening the dump.txt file
+    # produced by Rainmeter on every run. See `show_tcg_sell_cart`.
+    "meterLink_dump": {
         "Preset": "InjectedByTest",
     },
 }

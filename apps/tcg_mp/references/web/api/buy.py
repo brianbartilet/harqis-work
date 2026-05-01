@@ -4,8 +4,6 @@ from typing import List
 from apps.tcg_mp.references.dto.listing import DtoWantToBuyListing
 from apps.tcg_mp.references.web.base_api_service import BaseApiServiceAppTcgMp
 
-from core.web.services.core.constants.payload_type import PayloadType
-
 
 class ApiServiceTcgMpBuy(BaseApiServiceAppTcgMp):
     """Buyer-side endpoints under `/buy`.
@@ -45,9 +43,12 @@ class ApiServiceTcgMpBuy(BaseApiServiceAppTcgMp):
             'product_id': str(product_id),
             'foil': str(foil),
         }
+        # The marketplace's /buy/listed_item_filter requires a JSON body.
+        # `add_payload(..., PayloadType.DICT)` sends form-encoded data and the
+        # server then errors with `Unexpected token p in JSON at position 0`.
         self.request.post() \
             .add_uri_parameter('listed_item_filter') \
-            .add_payload(payload, PayloadType.DICT)
+            .add_json_payload(payload)
 
         response = self.client.execute_request(self.request.build())
         return _parse_want_to_buy_listings(response)
@@ -59,10 +60,27 @@ _DTO_FIELDS = {f.name for f in fields(DtoWantToBuyListing)}
 def _parse_want_to_buy_listings(response) -> List[DtoWantToBuyListing]:
     """Extract the bid list from a `buy/listed_item_filter` response.
 
-    Tolerates the no-results case where `data.data` is `""` instead of `[]`,
-    and the case where the framework already unwrapped one layer.
+    The marketplace's wire shape is:
+        response.data = {
+            "status": 200,
+            "data":  {                  ← outer envelope
+                "message": "",
+                "data": [...] | ""      ← inner list (or empty string when no bids)
+            },
+            "meta":  {"total": N},
+        }
+
+    We navigate the two `data` layers, tolerating:
+      * the no-results case where the inner list is returned as `""` not `[]`,
+      * a framework-pre-unwrapped response where `response.data` is already
+        the outer envelope (one of the `if isinstance(..., dict)` branches
+        will be a no-op).
     """
     body = getattr(response, "data", response)
+    # Hop 1: outer envelope → drop status/meta wrapping.
+    if isinstance(body, dict):
+        body = body.get("data", body)
+    # Hop 2: inner envelope → drop message; surface the actual list.
     if isinstance(body, dict):
         body = body.get("data", body)
     if not body or isinstance(body, str):
