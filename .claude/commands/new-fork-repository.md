@@ -5,7 +5,7 @@ Fork the `harqis-work` repository into a fresh, business-/client-scoped baseline
 `$ARGUMENTS` format (parse left to right):
 
 ```
-<business_or_client_name> [--target-dir <path>] [--remote <git_url>] [--owner <gh_org_or_user>] [--visibility public|private|internal] [--description "<short blurb>"] [--keep <folder,folder,...>] [--strip <folder,folder,...>] [--no-create-repo] [--no-push] [--no-git-init] [--dry-run]
+<business_or_client_name> [--target-dir <path>] [--remote <git_url>] [--owner <gh_org_or_user>] [--visibility public|private|internal] [--description "<short blurb>"] [--keep <folder,folder,...>] [--strip <folder,folder,...>] [--apps-keep <app,app,...>] [--apps-keep-all] [--no-create-repo] [--no-push] [--no-git-init] [--dry-run]
 ```
 
 | Token | Required | Description |
@@ -18,10 +18,40 @@ Fork the `harqis-work` repository into a fresh, business-/client-scoped baseline
 | `--description "<text>"` | No | One-paragraph project description for the new README. Also passed to `gh repo create --description`. If omitted, ask the user (Step 0). |
 | `--keep <list>` | No | Comma-separated list of workflow categories to preserve from the source (default: only `.template` is kept). Example: `--keep .template,n8n`. |
 | `--strip <list>` | No | Comma-separated list of additional top-level folders to remove from the fork (in addition to the always-stripped `.claude` and `.openclaw`). |
+| `--apps-keep <list>` | No | Comma-separated list of `apps/<name>` integrations to keep. **Default: the curated minimal set** (see "App keep list" below). Pass to override — e.g. `--apps-keep .template,airtable,trello,telegram`. Always include `.template` so consumers can scaffold new apps. App-name aliases: `anthropic` → `antropic` (normalised silently). |
+| `--apps-keep-all` | No | Skip app filtering entirely — copy every app under `apps/` from the source. Use when the consuming team explicitly wants the full inventory. |
 | `--no-create-repo` | No | Skip `gh repo create`. The skill still runs `git init` + initial commit; the user wires the remote manually. |
 | `--no-push` | No | Initialize git and (optionally) create the GitHub repo, but do not run `git push`. |
 | `--no-git-init` | No | Skip `git init` entirely. Implies `--no-create-repo` and `--no-push`. Useful when the user wants to wire git themselves. |
 | `--dry-run` | No | Print the plan (folders kept, folders stripped, files rewritten, gh actions) without touching disk or invoking gh. |
+
+### App keep list
+
+The fork ships with only the curated set below by default. Apps that aren't listed here are stripped from `apps/`, and every dependent surface (config, env, MCP registrar, agent profiles, README inventory, docs) is filtered to match.
+
+```
+.template       # ALWAYS kept — required for /new-service-app to scaffold new apps
+airtable        # Bases / tables / records — generic structured-data store
+antropic        # Anthropic Claude API (folder name has the historical typo;
+                # `--apps-keep anthropic` is silently normalised to `antropic`)
+browser         # HTTP fetching + BeautifulSoup scraping
+filesystem      # Local file/directory operations
+gemini          # Google Gemini
+git             # Local git CLI wrapper
+github          # GitHub repos / issues / PRs / branches
+google_apps     # Calendar / Gmail / Keep / Sheets / Tasks / Translation
+google_drive    # Drive uploads / downloads / exports
+grok            # xAI Grok
+open_ai         # OpenAI Responses API
+perplexity      # Perplexity Sonar (web search)
+playwright      # Headless browser automation
+telegram        # Telegram Bot messaging
+trello          # Trello boards (used by the Kanban agent)
+```
+
+The list is intentionally narrow — it covers the AI / generic-integration / web / messaging surface that almost every fork will need. Anything domain-specific (finance, MTG card pipelines, desktop HUD, social-network publishers, etc.) is excluded by default and the consuming team can add what they need via `/new-service-app`.
+
+To preserve everything from upstream, pass `--apps-keep-all`. To customise, pass `--apps-keep .template,<your_apps...>`.
 
 The agent invoking this skill may also pass these decisions inline in a natural-language prompt; parse the prompt for them before falling back to `$ARGUMENTS`.
 
@@ -39,7 +69,10 @@ Confirm or ask for the following if not unambiguously provided:
    - Owner (default: authenticated `gh` user; pass `--owner` for an org).
    - Visibility (default: `private`; `--visibility public` to opt out — never silently public).
    - Skip entirely with `--no-create-repo` (init + commit only) or `--no-push` (create repo but don't push).
-6. **App inventory pruning** — does the user want to keep all entries under `apps/`, or trim to a shortlist? (Default: keep all — apps are reusable building blocks. Trimming is opt-in.)
+6. **App inventory pruning** — by default the skill ships only the curated 16-item app keep list (see Arguments → "App keep list"). Confirm one of:
+   - Use the default minimal set (recommended for a clean baseline).
+   - Override with `--apps-keep <list>` (always include `.template`).
+   - Preserve every upstream app with `--apps-keep-all`.
 
 If any of these are unclear, ASK before continuing — the fork is hard to undo cleanly once files are duplicated.
 
@@ -112,6 +145,30 @@ Walk `agents/` and strip:
 - Any `*.local.yaml` / `*.local.json` files.
 - Any `agents/openclaw/memory/` directory contents.
 
+### Strip apps not in the keep list (default behaviour — see Step 7b for the full cascade)
+
+Resolve the keep list:
+```
+keep_list = (--apps-keep argument as csv) or APPS_KEEP_DEFAULT
+keep_set  = {normalise(name) for name in keep_list} ∪ {".template"}    # .template is mandatory
+```
+
+Where `APPS_KEEP_DEFAULT` is the curated 16-item list documented under Arguments → "App keep list":
+```
+.template, airtable, antropic, browser, filesystem, gemini, git, github,
+google_apps, google_drive, grok, open_ai, perplexity, playwright,
+telegram, trello
+```
+
+Normalisation rules:
+- Lowercase before matching (`Trello` → `trello`).
+- The historical typo `antropic` is the canonical folder name; accept `anthropic` as an alias and silently rewrite to `antropic`.
+- Reject any keep-list entry that doesn't correspond to a real folder under `<source>/apps/` — print a warning, don't add it to `keep_set`.
+
+When `--apps-keep-all` is set, skip the strip step entirely (and skip Step 7b — the cascade is a no-op).
+
+For every directory under `<source>/apps/` whose name is NOT in `keep_set`, add it to the strip list. The actual filesystem strip happens in Step 3 (just like the workflows-category strip).
+
 ### Always preserve
 
 ```
@@ -132,6 +189,24 @@ apps_config.yaml.example  # if it exists; otherwise generate from apps_config.ya
 ```
 
 User-supplied `--strip` entries are added to the strip list verbatim.
+
+### Print the apps-strip summary
+
+Before printing the full plan, print a one-block summary of the apps decision:
+
+```
+Apps:
+  Mode: <minimal default | custom keep list | --apps-keep-all>
+  Keeping (N):  .template, airtable, antropic, browser, filesystem, ...
+  Stripping (M): aaa, desktop, discord, echo_mtg, investagrams, jira, linkedin,
+                 moo, notion, oanda, orgo, own_tracks, rainmeter, reddit,
+                 scryfall, tcg_mp, ynab
+  Cascade (Step 7b): apps_config.yaml.example sections, .env/apps.env.example
+                     vars, mcp/server.py registrars, agent profile mcp_apps,
+                     README app inventory.
+```
+
+When `--apps-keep-all` is set, print `Mode: full inventory (no app filtering)` and skip the cascade line.
 
 ### Print the plan
 
@@ -477,6 +552,133 @@ will boot.
 
 ---
 
+## Step 7b — Apps cascade (filter every dependent surface)
+
+Skip this step entirely if `--apps-keep-all` was set.
+
+Once apps not in `keep_set` have been excluded from the copy in Step 3, every place in the fork that names a stripped app must be filtered to match. Otherwise:
+- The MCP server boots with noisy "Skipping X — ModuleNotFoundError" warnings on every startup.
+- Agent profiles try to load MCP tool bridges for apps that don't exist.
+- The README's app inventory advertises capabilities the fork doesn't have.
+- Config and env files contain dead sections that confuse the host operator filling them in.
+
+Apply each of the following to the fork target:
+
+### 7b-1 — `apps_config.yaml.example`
+
+This file was produced in Step 7 (verbatim copy of upstream when source uses `${ENV_VAR}` placeholders, otherwise the redacted variant). For each top-level YAML section, drop it if its lowercase name **starts with** any stripped-app folder name plus `_` or end-of-string:
+
+```
+keep section iff  not any(
+    section.lower() == stripped_app
+    or section.lower().startswith(stripped_app + "_")
+    for stripped_app in stripped_apps
+)
+```
+
+Always keep these infrastructure sections regardless of the matcher:
+```
+CELERY_TASKS, ELASTIC_LOGGING, PYTHON_RUNNER, ELEVEN_LABS, HARQIS_GPT
+```
+
+(`HARQIS_GPT` maps to `apps/open_ai`, which is in the default keep list. If `open_ai` is stripped via custom `--apps-keep`, also drop `HARQIS_GPT`.)
+
+After filtering, verify the file still parses as valid YAML:
+```bash
+.venv/bin/python -c "import yaml; yaml.safe_load(open('apps_config.yaml.example'))" || echo "YAML parse FAILED — restore from upstream"
+```
+
+### 7b-2 — `.env/apps.env.example`
+
+Read the redacted env template. The file is divided into comment-headed sections like `# OANDA`, `# ECHO_MTG`, `# JIRA`, etc. For each `# <NAME>` block:
+
+- Drop the block if `NAME.lower()` matches a stripped-app folder name (or starts with `<stripped_app>_`).
+- Keep infrastructure blocks unconditionally: `Generic apps configuration`, `SPROUT configuration`, `RabbitMQ`, `Elastic`, `PYTHON`, `FLOWER TASKS`, `NGROK`.
+
+Concretely the default minimal set keeps these sections in `.env/apps.env.example`:
+```
+Generic apps configuration, SPROUT configuration, RabbitMQ, Elastic,
+OpenAI, ANTHROPIC, GEMINI, GROK, GOOGLE APPS, GOOGLE_DRIVE, AIRTABLE (if present),
+GITHUB (if present), TELEGRAM, TRELLO, TRELLO KANBAN, FLOWER TASKS,
+NGROK, PYTHON
+```
+
+Drop these:
+```
+OANDA, ECHO_MTG, ECHO_MTG_BULK, TCG_MP, SCRYFALL, RAINMETER, DESKTOP,
+ELEVEN LABS, YNAB, OWN_TRACKS, JIRA, DISCORD, ORGO, REDDIT, LINKEDIN,
+NOTION, MOO
+```
+
+### 7b-3 — `mcp/server.py`
+
+The file contains an `APP_REGISTRARS = [...]` list with one entry per app. For every entry whose `module_path` is `apps.<stripped_app>.mcp`, delete the line. The lazy-import pattern would tolerate missing modules, but each missing app emits a warning at every startup; filtering the list keeps the boot log clean.
+
+Match the module path against stripped folder names:
+```
+( "apps." + stripped_app + ".mcp" ) == entry[1]
+```
+
+After editing, the file must still parse:
+```bash
+.venv/bin/python -c "import ast; ast.parse(open('mcp/server.py').read())" && echo "ok"
+```
+
+### 7b-4 — Agent profiles (`agents/kanban/profiles/examples/agent_*.yaml`)
+
+For each profile YAML, locate the `tools.mcp_apps:` list and remove any entry whose value matches a stripped-app folder name. Profiles that reference no kept apps should have `mcp_apps: []` (empty list — `_load_tools` accepts this) rather than omitting the key.
+
+Files affected:
+```
+agents/kanban/profiles/examples/agent_code.yaml    # mcp_apps: many
+agents/kanban/profiles/examples/agent_write.yaml   # mcp_apps: ~4
+agents/kanban/profiles/examples/agent_full.yaml    # mcp_apps: ~5
+agents/kanban/profiles/examples/agent_default.yaml # no mcp_apps (skip)
+agents/kanban/profiles/examples/base.yaml          # no mcp_apps (skip)
+```
+
+After editing, sanity-check the YAML loads:
+```bash
+.venv/bin/python -c "import yaml; \
+  [yaml.safe_load(open(f'agents/kanban/profiles/examples/{f}')) \
+   for f in ['agent_code.yaml','agent_write.yaml','agent_full.yaml']]; print('ok')"
+```
+
+### 7b-5 — Top-level `README.md`'s App Inventory table
+
+The README rewritten in Step 5 inherits the upstream App Inventory table verbatim. After the apps strip, prune that table:
+- Remove every row whose first column (`apps/<name>`) is in `stripped_apps`.
+- Update the lead-in note to: *"Apps are reusable building blocks. The fork ships with a curated minimal set; consumers can add more via `/new-service-app`."*
+
+### 7b-6 — Stale doc references (extend Step 6's sweep)
+
+Step 6 already greps for references to stripped folders. Extend the sweep to include the stripped apps:
+```bash
+grep -rE "(apps/(<app1>|<app2>|...)|from apps\.(<app1>|<app2>|...))" \
+  <target>/docs <target>/agents <target>/scripts <target>/README.md \
+  <target>/agents/prompts 2>/dev/null
+```
+
+For each hit:
+- **Markdown docs** with descriptive references — leave as a TODO for the consuming team (already the policy).
+- **Python imports of stripped apps** in `agents/`, `scripts/`, or `mcp/` — comment out the import with `# TODO: re-introduce after building <app_name> integration`.
+- **MCP tool descriptions or prompts** referencing stripped apps in `agents/prompts/*.md` — leave as TODO.
+
+Add the resulting hit list (deduplicated by file) to the activation checklist in Step 9 under "Stale doc references".
+
+### 7b-7 — Verify
+
+Quick smoke test before continuing to git init:
+```bash
+ls <target>/apps/                      # only the keep_set should remain
+.venv/bin/python -c "import yaml; yaml.safe_load(open('<target>/apps_config.yaml.example'))" && echo "apps_config OK"
+.venv/bin/python -c "import ast; ast.parse(open('<target>/mcp/server.py').read())" && echo "mcp/server.py OK"
+```
+
+If any check fails, STOP and surface the error — do not proceed to git init.
+
+---
+
 ## Step 8 — Initialize git, create the GitHub repo, and push
 
 The default behaviour is end-to-end automation: `git init` → initial commit →
@@ -610,21 +812,23 @@ Fork created: <target>
 Published:    <github_url>     (or "skipped — run `gh repo create …` to publish")
 
 What's in it:
-  ✓ apps/                          (all integrations preserved)
+  ✓ apps/ (curated set — N kept, M stripped via Step 7b cascade)
   ✓ agents/                        (framework + examples; private profiles stripped)
   ✓ workflows/.template/           (reference scaffold)
   ✓ workflows/config.py            (minimal — empty CONFIG_DICTIONARY)
   ✓ workflows/queues.py            (minimal — DEFAULT + ADHOC only)
   ✓ workflows/README.md            (rewritten for <BUSINESS_NAME>)
-  ✓ README.md                      (rewritten for <BUSINESS_NAME>)
+  ✓ README.md                      (rewritten for <BUSINESS_NAME>; App Inventory pruned)
+  ✓ mcp/server.py                  (APP_REGISTRARS filtered to kept apps)
   ✓ Dockerfile, docker-compose.yml, scripts/, .github/
-  ✓ apps_config.yaml.example       (no real credentials)
-  ✓ .env/apps.env.example          (every secret redacted to <REPLACE_ME>)
+  ✓ apps_config.yaml.example       (sections for stripped apps removed; no creds)
+  ✓ .env/apps.env.example          (env vars for stripped apps removed; redacted)
 
 What was removed:
   ✗ .claude/, .openclaw/           (local AI-tooling configs)
   ✗ logs/, data/                   (host-local runtime artifacts)
   ✗ workflows/{desktop,finance,hud,mobile,n8n,purchases,social}/
+  ✗ apps/{<list of stripped app folders>}/   (per --apps-keep; default = curated 16-app set)
   ✗ Real secrets (.env/*.real, apps_config.yaml, OAuth JSON files)
 
 Stale doc references (review before sharing):
@@ -653,7 +857,8 @@ Next steps for the host operator:
 | User is forking for an internal team (not a separate client) | Slug still applies — use the team name. The naming convention is non-negotiable. |
 | Source repo has uncommitted changes | Warn and stop unless the user confirms "use working tree as-is" |
 | Target dir already exists | Refuse — never overwrite. Ask the user to pick a different path or remove the existing dir. |
-| `apps/` contains an integration the fork doesn't need | Default: keep it. Trimming `apps/` is a separate, opt-in step (`--strip apps/<name>`) — apps are cheap to leave in and expensive to re-introduce. |
+| `apps/` contains an integration the fork doesn't need | Default behaviour already strips it — the fork ships with a curated 16-app keep list. Pass `--apps-keep <list>` to override, or `--apps-keep-all` to preserve everything. |
+| Fork team needs an app that's not in the default keep list | Easiest: pass `--apps-keep .template,<their_apps...>` at fork time. Already-forked: re-introduce by `git cherry-pick`-ing the app folder from upstream and adding it back to the cascade surfaces (apps_config, .env example, mcp/server.py, agent profiles, README). |
 | User wants the fork to track upstream | Step 8 already prints the `git remote add upstream …` snippet — no extra config needed. |
 | Dry run | Print the full plan from Step 2 with no disk writes; exit before Step 3. |
 
