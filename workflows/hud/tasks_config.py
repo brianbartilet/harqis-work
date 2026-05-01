@@ -91,7 +91,7 @@ WORKFLOWS_HUD = {
         'kwargs': {
             "cfg_id__tcg_mp": "TCG_MP",
             "discount_threshold_pct": 10.0,
-            "worker_count": 4,
+            "worker_count": 2,
             "dry_run": False,
         },
         "options": {
