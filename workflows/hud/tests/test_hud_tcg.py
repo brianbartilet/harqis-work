@@ -23,8 +23,8 @@ def test__show_tcg_sell_cart_dry_run():
         cfg_id__tcg_mp="TCG_MP",
         discount_threshold_pct=10.0,
         dry_run=False,
-        worker_count=2,
-        limit=50
+        worker_count=3,
+        limit=200
     )
 
 

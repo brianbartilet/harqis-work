@@ -139,7 +139,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
 
 
     # region Set dimensions
-    max_hud_lines = 10
+    max_hud_lines = 16
     width_multiplier = 3
 
     ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
@@ -626,17 +626,21 @@ def show_tcg_sell_cart(ini=ConfigHelperRainmeter(),
     # endregion
 
     # region Set dimensions (mirror show_tcg_orders sizing)
-    max_hud_lines = 16
+
+    max_hud_lines = 14
     width_multiplier = 3
 
     ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['W'] = '({0}*190*#Scale#)'.format(width_multiplier)
-    ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*16)*#Scale#)'
+    # SkinHeight must be > Background height by ~6 px so the StrokeWidth=1
+    # border on the rectangle has room to render. Using 36 here matched the
+    # background exactly and the bottom edge clipped; 42 mirrors `show_tcg_orders`.
+    ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
 
     ini['Rainmeter']['SkinWidth'] = '({0}*198*#Scale#)'.format(width_multiplier)
-    ini['Rainmeter']['SkinHeight'] = '((42*#Scale#)+(#ItemLines#*16)*#Scale#)'
+    ini['Rainmeter']['SkinHeight'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
 
-    ini['MeterBackground']['Shape'] = ('Rectangle 0,0,({0}*190),(36+(#ItemLines#*16)),2 | Fill Color #fillColor# '
+    ini['MeterBackground']['Shape'] = ('Rectangle 0,0,({0}*190),(36+(#ItemLines#*22)),2 | Fill Color #fillColor# '
                                        '| StrokeWidth (1*#Scale#) | Stroke Color [#darkColor] '
                                        '| Scale #Scale#,#Scale#,0,0').format(width_multiplier)
     ini['MeterBackgroundTop']['Shape'] = ('Rectangle 3,3,({0}*187),25,2 | Fill Color #headerColor# | StrokeWidth 0 '
@@ -666,7 +670,16 @@ def show_tcg_sell_cart(ini=ConfigHelperRainmeter(),
         )
         dump += make_separator(88, '-') + "\n"
 
-    queued.sort(key=lambda r: -safe_number(r.get("bid_price")))
+    # Sort rows by bid price DESC so the highest-paying buyers appear first.
+    # Tie-breakers: my listing price DESC, then card name (stable + readable).
+    queued.sort(
+        key=lambda r: (
+            safe_number(r.get("bid_price")),
+            safe_number(r.get("my_price")),
+            r.get("card") or "",
+        ),
+        reverse=True,
+    )
     for r in queued:
         foil = "F" if str(r.get("foil")) == "1" else "N"
         name = (r["card"][:62]) if r.get("card") and len(r["card"]) > 62 else r.get("card", "")
