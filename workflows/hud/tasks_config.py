@@ -90,9 +90,7 @@ WORKFLOWS_HUD = {
         'schedule': crontab(hour=0, minute=0),
         'kwargs': {
             "cfg_id__tcg_mp": "TCG_MP",
-            "discount_threshold_pct": 10.0,
-            "worker_count": 2,
-            "dry_run": False,
+            "worker_count": 3
         },
         "options": {
             "queue": WorkflowQueue.TCG,

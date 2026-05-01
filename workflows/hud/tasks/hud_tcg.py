@@ -439,8 +439,16 @@ def _worker_match_and_add_to_sell_cart(task: dict) -> dict:
         if not bids:
             return {"status": "no_bidders", "card": listing_name, "my_price": my_price}
 
-        # Filter: skip own listings + suspended buyers + bidders with stale offers,
-        # then pick the first that satisfies the price + quantity rule.
+        # Filter: skip own listings + suspended buyers + foil mismatches +
+        # bidders whose quantity won't cover the listing, then pick the first
+        # bid that satisfies the price rule.
+        #
+        # Foil matters because /buy/listed_item_filter ignores the `foil`
+        # parameter and returns BOTH foil=0 and foil=1 bids for the product.
+        # Selling a non-foil card to a buyer wanting the foil (or vice versa)
+        # is invalid, so we filter client-side. `crd_foil` is a string ("0"/"1")
+        # on the DTO; coerce both sides to str for the comparison.
+        my_foil = str(foil)
         match = None
         for bid in bids:
             bid_dict = bid.__dict__ if not isinstance(bid, dict) else bid
@@ -448,6 +456,8 @@ def _worker_match_and_add_to_sell_cart(task: dict) -> dict:
                 continue
             if bid_dict.get("suspended"):
                 continue
+            if str(bid_dict.get("crd_foil")) != my_foil:
+                continue   # foil/non-foil mismatch — different physical card variant
             bid_price = safe_number(bid_dict.get("price"))
             bid_qty = safe_number(bid_dict.get("quantity")) or 0
             if bid_qty < my_qty:
@@ -627,7 +637,7 @@ def show_tcg_sell_cart(ini=ConfigHelperRainmeter(),
 
     # region Set dimensions (mirror show_tcg_orders sizing)
 
-    max_hud_lines = 14
+    max_hud_lines = 10
     width_multiplier = 3
 
     ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
@@ -640,7 +650,7 @@ def show_tcg_sell_cart(ini=ConfigHelperRainmeter(),
     ini['Rainmeter']['SkinWidth'] = '({0}*198*#Scale#)'.format(width_multiplier)
     ini['Rainmeter']['SkinHeight'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
 
-    ini['MeterBackground']['Shape'] = ('Rectangle 0,0,({0}*190),(36+(#ItemLines#*22)),2 | Fill Color #fillColor# '
+    ini['MeterBackground']['Shape'] = ('Rectangle 0,0,({0}*190),(34+(#ItemLines#*22)),2 | Fill Color #fillColor# '
                                        '| StrokeWidth (1*#Scale#) | Stroke Color [#darkColor] '
                                        '| Scale #Scale#,#Scale#,0,0').format(width_multiplier)
     ini['MeterBackgroundTop']['Shape'] = ('Rectangle 3,3,({0}*187),25,2 | Fill Color #headerColor# | StrokeWidth 0 '
@@ -660,7 +670,13 @@ def show_tcg_sell_cart(ini=ConfigHelperRainmeter(),
 
     queued = added + would_add
     if not queued:
-        dump += "No matches queued this run.\n"
+        # Show a friendly "no matches" message + timestamp instead of the
+        # column header. Format mirrors the user-requested output:
+        #   <blank>
+        #   No matching bids. Last executed on YYYY-MM-DD-HH-MM
+        #   <blank><blank>
+        run_ts = datetime.now().strftime("%Y-%m-%d-%H-%M")
+        dump += "\nNo matching bids. Last executed on {0}\n\n".format(run_ts)
     else:
         # 88-char rows match the header/footer `make_separator(88)` exactly.
         # Layout: " F  <name 62>  <mine 7>  <bid 7>  <qty 5>"   = 88 chars
