@@ -203,7 +203,7 @@ If any import fails, diagnose and fix before continuing to Step 4.
 **If `workflows/<category>/` does not exist:**
 ```
 workflows/<category>/
-├── __init__.py
+├── __init__.py              # MUST import every task module — see Step 5b
 ├── tasks_config.py          # start from .template pattern
 ├── tasks/
 │   ├── __init__.py
@@ -215,9 +215,11 @@ workflows/<category>/
     └── __init__.py
 ```
 
+`SPROUT.autodiscover_tasks(['workflows'])` only scans for a top-level `tasks.py` per package — it does NOT walk into `tasks/` subpackages. Each task module must be imported explicitly from `workflows/<category>/__init__.py` so the `@SPROUT.task()` decorator runs at worker startup. Skip this and Celery rejects the message with `Received unregistered task of type ...`.
+
 **If `workflows/<category>/` already exists:**
 - Do NOT touch existing files unless explicitly merging (Step 5).
-- Only add the new task file and update `tasks_config.py` and `README.md`.
+- Only add the new task file, update `tasks_config.py` and `README.md`, and append the new task import to `workflows/<category>/__init__.py` (Step 5b).
 
 Copy the diagram file (if provided) into `workflows/<category>/diagrams/` for reference.
 
@@ -302,6 +304,58 @@ def <task_name>(**kwargs):
 Decorators are applied bottom-up — `@SPROUT.task()` must be innermost (closest to the function).
 
 **For AI/Claude steps:** load the prompt from `workflows/<category>/prompts/` (see Step 6). Use `apps.antropic.references.web.base_api_service.BaseApiServiceAnthropic` for the API call. Follow the pattern in `workflows/finance/tasks/parse_transaction.py`.
+
+---
+
+## Step 5b — Register the task module in `workflows/<category>/__init__.py`
+
+This step is **mandatory** — without it the Celery worker logs `Received unregistered task of type 'workflows.<category>.tasks.<module>.<task_name>'` and discards every message for the new task.
+
+### 5b-1 — Read the current `__init__.py`
+
+```bash
+cat workflows/<category>/__init__.py
+```
+
+Compare against the established pattern in sibling packages (`workflows/desktop/__init__.py`, `workflows/hud/__init__.py`, `workflows/purchases/__init__.py`) — each one explicitly imports its task submodules.
+
+### 5b-2 — Apply the right edit
+
+| State of `workflows/<category>/__init__.py` | Action |
+|---|---|
+| File missing or empty (new category from Step 4) | Create with the header comment + a single `import workflows.<category>.tasks.<module>` line |
+| File exists and already imports other task modules | **Append** a new `import workflows.<category>.tasks.<module>` line — do not rewrite existing imports |
+| File exists with platform-guarded imports (e.g. `if sys.platform == "win32":` like `workflows/hud/__init__.py`) | Add the new import inside the same guard if the task is platform-specific; otherwise add it above/below the guard at module top level |
+| New module is already imported (`--merge` into a file already registered) | Skip — no edit needed |
+
+Default template for a fresh category:
+
+```python
+# Add import statements for tasks modules to make them accessible
+import workflows.<category>.tasks.<module>
+```
+
+For `--merge` into an existing task file: only add the import if the **module path** is new. Adding a new function to an already-imported module does not require an `__init__.py` change — Python imports the whole module.
+
+### 5b-3 — Verify the import works
+
+After editing, confirm the module loads cleanly:
+
+```bash
+.venv/bin/python -c "import workflows.<category>; print('ok')"
+```
+
+If this raises an `ImportError`, fix it before continuing — the worker will fail the same way at startup.
+
+### 5b-4 — Confirm the task name Celery will see
+
+Run a quick check that the decorated task is now registered under the dotted path the scheduler will use:
+
+```bash
+.venv/bin/python -c "from core.apps.sprout.app.celery import SPROUT; import workflows.<category>; print('workflows.<category>.tasks.<module>.<task_name>' in SPROUT.tasks)"
+```
+
+It should print `True`. If it prints `False`, the import in `__init__.py` is wrong or the `@SPROUT.task()` decorator was not applied.
 
 ---
 
@@ -532,10 +586,14 @@ Workflow created. Manual steps to activate:
         <ENV_VAR_1>=
         <ENV_VAR_2>=
 
+  Task registration (already done by Step 5b — verify):
+  [ ] workflows/<category>/__init__.py imports workflows.<category>.tasks.<module>
+  [ ] .venv/bin/python -c "from core.apps.sprout.app.celery import SPROUT; import workflows.<category>; print('workflows.<category>.tasks.<module>.<task_name>' in SPROUT.tasks)" prints True
+
   Schedule activation:
   [ ] Review and uncomment the schedule in workflows/<category>/tasks_config.py
   [ ] Uncomment the import + merge line in workflows/config.py
-  [ ] Restart Celery Beat to pick up the new task
+  [ ] Restart Celery Beat AND the worker to pick up the new task (worker reload is required for the new __init__.py import)
 
   Testing:
   [ ] pytest workflows/<category>/tests/test_<task_name>.py -v -m "not integration"
