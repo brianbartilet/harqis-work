@@ -80,14 +80,38 @@ The board is the single source of truth for task state. The orchestrator is stat
 |---|---|---|
 | **Backlog** | New tasks awaiting pickup | Human |
 | **Pending** | Orchestrator has claimed the card (race-condition guard) | Orchestrator |
-| **In Progress** | Agent actively working | Orchestrator |
-| **Blocked** | Agent waiting on a dependency or human input | Agent (via `move_card` tool) |
-| **Done** | Result posted | Agent (via `move_card` tool) |
+| **In Progress** | Agent actively working — *also where the agent waits for human replies* (signalled by the `agent:question` label, see below) | Orchestrator |
+| **Blocked** | Agent cannot proceed because of an unmet hard dependency (e.g. missing secret, missing referenced ticket) | Orchestrator (via dependency detector) |
+| **Done** | Result posted | Orchestrator (after agent finishes) |
 | **Failed** | Unrecoverable error; error comment posted | Orchestrator |
 
 ### Race-condition prevention
 
 The orchestrator moves a card to **Pending** in a single atomic API call before starting the agent. If a card is found in Pending but never reaches In Progress within the poll window, a future poll will reprocess it.
+
+### Asking the human a question (`agent:question` / `agent:remember`)
+
+A card stays in **In Progress** even when the agent is paused waiting for a human reply — there is no separate "Waiting" column. The interaction is signalled by labels and comment markers:
+
+| Signal | Meaning |
+|---|---|
+| `agent:question` label on the card | The agent is paused. It posted a question as a card comment (prefixed `[agent:question]`) and stopped its run. |
+| `agent:remember` label (optional) | Stateful resume — the agent persists its full message history to a hidden sidecar comment so the resumed run picks up exactly where it left off. Without this label, the resume gets a text recap and starts fresh. |
+
+**Flow:**
+
+1. The agent calls the `ask_human` tool with its question. The tool posts `[agent:question] <text>` as a comment, adds the `agent:question` label, and (when `agent:remember` is on the card) embeds a hidden state sidecar comment. It then raises `AgentPausedForQuestion`, exiting the run loop cleanly.
+2. The orchestrator catches the pause, leaves the card in **In Progress**, and does not post a result.
+3. A human replies by adding a normal comment to the card. They can also move the card to **Failed** or **Blocked** to cancel.
+4. On the next poll, the orchestrator scans **In Progress** for cards carrying `agent:question` whose latest comment is a human reply (i.e. not prefixed with an agent marker). For each, it removes the label and re-runs the agent.
+5. The resumed agent reads the human's reply, optionally asks another `ask_human` question (looping back to step 1), or finishes normally and the card moves to **Done**.
+
+**Mode comparison:**
+
+- **Stateless** (no `agent:remember`): cheaper, simpler, suitable for "ask once → confirm direction → finish" tasks. Risk: agent may re-do idempotent work it already completed before the question.
+- **Stateful** (with `agent:remember`): full message history persisted, no re-work. Best for irreversible side effects (drafting → confirming → publishing), multi-turn iteration, and context-heavy investigations. The persisted state is base64 JSON inside an HTML comment — readable by anyone with card access.
+
+**Implementation:** `agents/kanban/agent/question.py` defines the protocol constants, exception, sidecar serialiser, and resume-signal detector. `agents/kanban/agent/tools/kanban_tools.py::AskHumanTool` is the agent-facing tool. `agents/kanban/orchestrator/local.py::poll_resumes` and `resume_card` drive the resumption.
 
 ---
 

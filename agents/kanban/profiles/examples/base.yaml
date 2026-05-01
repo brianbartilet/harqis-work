@@ -16,6 +16,7 @@ tools:
     - post_comment
     - move_card
     - check_item
+    - ask_human
   denied: []
 
 permissions:

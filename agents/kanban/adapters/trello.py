@@ -197,10 +197,103 @@ class TrelloProvider(KanbanProvider):
         ).raise_for_status()
 
     def add_label(self, card_id: str, label: str) -> None:
-        logger.warning("add_label: label ID resolution not implemented in POC — skipping")
+        """Attach a label by name to a card.
+
+        Trello's label model is per-board: every card-label association is
+        actually a reference to a board-scoped label record. We resolve the
+        label name on the card's board, creating the label if it doesn't
+        exist yet, then attach it to the card. No-op if already attached.
+        """
+        board_id = self._resolve_card_board_id(card_id)
+        label_id = self._resolve_or_create_label_id(board_id, label)
+        # Skip the round-trip if it's already attached.
+        if self._card_has_label(card_id, label_id):
+            logger.debug("Card %s already has label '%s' (%s)", card_id, label, label_id)
+            return
+        r = requests.post(
+            f"{_BASE}/cards/{card_id}/idLabels",
+            params={**self._auth, "value": label_id},
+            timeout=self._timeout,
+        )
+        r.raise_for_status()
+        logger.debug("Added label '%s' (%s) to card %s", label, label_id, card_id)
 
     def remove_label(self, card_id: str, label: str) -> None:
-        logger.warning("remove_label: label ID resolution not implemented in POC — skipping")
+        """Detach a label by name from a card. No-op if not attached."""
+        board_id = self._resolve_card_board_id(card_id)
+        try:
+            label_id = self._resolve_label_id(board_id, label)
+        except KeyError:
+            logger.debug("Label '%s' does not exist on board %s — nothing to remove", label, board_id)
+            return
+        if not self._card_has_label(card_id, label_id):
+            logger.debug("Card %s does not carry label '%s' — no-op", card_id, label)
+            return
+        r = requests.delete(
+            f"{_BASE}/cards/{card_id}/idLabels/{label_id}",
+            params=self._auth,
+            timeout=self._timeout,
+        )
+        # Trello returns 200 on success and a slightly weird 400 if the label
+        # isn't attached — guard against the race-condition path.
+        if r.status_code == 400 and "does not exist" in r.text.lower():
+            return
+        r.raise_for_status()
+        logger.debug("Removed label '%s' (%s) from card %s", label, label_id, card_id)
+
+    # ── Label helpers ─────────────────────────────────────────────────────────
+
+    def _resolve_card_board_id(self, card_id: str) -> str:
+        r = requests.get(
+            f"{_BASE}/cards/{card_id}",
+            params={**self._auth, "fields": "idBoard"},
+            timeout=self._timeout,
+        )
+        r.raise_for_status()
+        return r.json()["idBoard"]
+
+    def _board_labels(self, board_id: str) -> list[dict]:
+        r = requests.get(
+            f"{_BASE}/boards/{board_id}/labels",
+            params={**self._auth, "fields": "id,name,color", "limit": 1000},
+            timeout=self._timeout,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def _resolve_label_id(self, board_id: str, label: str) -> str:
+        for lb in self._board_labels(board_id):
+            if lb.get("name") == label:
+                return lb["id"]
+        raise KeyError(label)
+
+    def _resolve_or_create_label_id(self, board_id: str, label: str) -> str:
+        try:
+            return self._resolve_label_id(board_id, label)
+        except KeyError:
+            r = requests.post(
+                f"{_BASE}/labels",
+                params={
+                    **self._auth,
+                    "name": label,
+                    "color": "null",          # uncoloured — readable on every Trello theme
+                    "idBoard": board_id,
+                },
+                timeout=self._timeout,
+            )
+            r.raise_for_status()
+            new_id = r.json()["id"]
+            logger.info("Created Trello label '%s' (%s) on board %s", label, new_id, board_id)
+            return new_id
+
+    def _card_has_label(self, card_id: str, label_id: str) -> bool:
+        r = requests.get(
+            f"{_BASE}/cards/{card_id}",
+            params={**self._auth, "fields": "idLabels"},
+            timeout=self._timeout,
+        )
+        r.raise_for_status()
+        return label_id in r.json().get("idLabels", [])
 
     def get_custom_fields(self, card_id: str) -> dict[str, str]:
         r = requests.get(

@@ -16,6 +16,8 @@ context:
   working_directory: ""
 
 # Tools — superset of `base` plus the most commonly useful tool list.
+# `ask_human` lets the agent pause and wait for a human reply on the card —
+# any card that should be able to answer mid-task needs this in its allow list.
 tools:
   allowed:
     - read_file
@@ -24,6 +26,7 @@ tools:
     - post_comment
     - move_card
     - check_item
+    - ask_human
 
 permissions:
   filesystem:

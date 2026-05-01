@@ -19,6 +19,11 @@ from typing import Optional
 import anthropic
 
 from agents.kanban.agent.context import build_card_context
+from agents.kanban.agent.question import (
+    AgentPausedForQuestion,
+    REMEMBER_LABEL,
+    serialize_state,
+)
 from agents.kanban.agent.tools.registry import ToolRegistry
 from agents.kanban.interface import KanbanCard, KanbanProvider
 from agents.kanban.permissions.enforcer import PermissionDenied, PermissionEnforcer
@@ -96,7 +101,25 @@ class BaseKanbanAgent:
         api_key: str,
         scoped_secrets: Optional[dict[str, str]] = None,
         audit: Optional[AuditLogger] = None,
+        prior_messages: Optional[list[dict]] = None,
+        prior_iteration: int = 0,
+        resume_user_message: Optional[str] = None,
     ):
+        """
+        Args:
+            prior_messages:       Previously persisted message history (stateful
+                                  resume — REMEMBER_LABEL). When provided, the
+                                  run loop skips building fresh context and
+                                  starts from this list.
+            prior_iteration:      Iteration counter to resume from. Capped under
+                                  the same max_iterations budget; a card that
+                                  paused at iteration 30 can only run 20 more
+                                  before hitting the cap.
+            resume_user_message:  Text to append as a user-role message before
+                                  the next Claude call. Used by both stateless
+                                  resume (recap prompt) and stateful resume
+                                  (the human's reply text).
+        """
         self.profile = profile
         self.card = card
         self.provider = provider
@@ -105,34 +128,73 @@ class BaseKanbanAgent:
         self._sanitizer = OutputSanitizer(self._scoped_secrets)
         self.client = anthropic.Anthropic(api_key=api_key)
         self.enforcer = PermissionEnforcer(profile)
+        self._prior_messages = prior_messages
+        self._prior_iteration = prior_iteration
+        self._resume_user_message = resume_user_message
+        # Mutable state used by the AskHumanTool callback. Updated each loop
+        # iteration so a pause captures the most recent message list.
+        self._current_messages: list[dict] = []
+        self._current_iteration: int = 0
         self.registry = ToolRegistry(
             profile=profile,
             card=card,
             provider=provider,
             enforcer=self.enforcer,
             scoped_secrets=self._scoped_secrets,
+            save_state_fn=self._save_state_for_pause,
         )
 
     # ── Public ────────────────────────────────────────────────────────────────
 
     def run(self) -> str:
-        """Execute the agent loop. Returns the final text output."""
-        ctx = build_card_context(
-            self.card,
-            working_directory=self.profile.context.working_directory or None,
-        )
-        messages: list[dict] = [{"role": "user", "content": ctx.to_prompt()}]
+        """Execute the agent loop. Returns the final text output.
+
+        Raises:
+            AgentPausedForQuestion: when the agent calls `ask_human` to wait
+                for a human reply. The orchestrator catches this and leaves
+                the card in `In Progress` until a reply arrives. Comment +
+                label have already been posted by the tool before this is
+                raised; no further state changes happen here.
+            AgentExecutionError: any unrecoverable Claude API failure.
+        """
         tools = self.registry.definitions()
         system = self._system_prompt()
 
-        logger.info("[%s] Starting for card %s: %s", self.profile.id, self.card.id, self.card.title)
+        # Stateful resume — caller passed previously persisted message history.
+        # Otherwise build fresh context from the card.
+        if self._prior_messages is not None:
+            messages: list[dict] = list(self._prior_messages)
+            logger.info(
+                "[%s] Resuming card %s from prior history (%d messages, iteration %d)",
+                self.profile.id, self.card.id, len(messages), self._prior_iteration,
+            )
+        else:
+            ctx = build_card_context(
+                self.card,
+                working_directory=self.profile.context.working_directory or None,
+            )
+            messages = [{"role": "user", "content": ctx.to_prompt()}]
+            logger.info(
+                "[%s] Starting for card %s: %s",
+                self.profile.id, self.card.id, self.card.title,
+            )
+
+        # Append the resume cue (recap prompt for stateless mode, human reply
+        # text for stateful mode) so the model sees it on the next turn.
+        if self._resume_user_message:
+            messages.append({"role": "user", "content": self._resume_user_message})
+
         self._audit.agent_start(self.card.title)
 
-        iteration = 0
+        iteration = self._prior_iteration
         max_iterations = 50
 
         while iteration < max_iterations:
             iteration += 1
+            # Track the live state so the AskHumanTool callback can serialise
+            # exactly the messages-so-far if the model decides to pause.
+            self._current_messages = messages
+            self._current_iteration = iteration
 
             kwargs: dict = {
                 "model": self.profile.model.model_id,
@@ -182,7 +244,17 @@ class BaseKanbanAgent:
                 return safe_text
 
             # Process tool calls
-            tool_results = self._handle_tool_calls(response.content)
+            try:
+                tool_results = self._handle_tool_calls(response.content)
+            except AgentPausedForQuestion as paused:
+                logger.info(
+                    "[%s] Card %s paused for human reply (stateful=%s) at iteration %d",
+                    self.profile.id, self.card.id, paused.stateful, iteration,
+                )
+                self._audit.agent_finish(
+                    success=True, iterations=iteration, detail="paused_for_question"
+                )
+                raise
             messages.append({"role": "user", "content": tool_results})
 
         logger.error("[%s] Hit max iterations (%d)", self.profile.id, max_iterations)
@@ -248,6 +320,12 @@ class BaseKanbanAgent:
                     "tool_use_id": block.id,
                     "content": safe_output,
                 })
+            except AgentPausedForQuestion:
+                # The ask_human tool already posted the question and added
+                # the label. Bubble up to the run loop so it can exit cleanly
+                # without recording a generic tool error.
+                self._audit.tool_result(tool_name, success=True, detail="paused_for_question")
+                raise
             except PermissionDenied as e:
                 logger.warning("[%s] Permission denied: %s", self.profile.id, e)
                 self._audit.permission_check("tool", tool_name, allowed=False, reason=str(e))
@@ -274,6 +352,80 @@ class BaseKanbanAgent:
             if hasattr(block, "text"):
                 return block.text
         return ""
+
+    # ── Stateful pause / resume ───────────────────────────────────────────────
+
+    def _save_state_for_pause(self) -> None:
+        """Serialise current message history and post it as a sidecar comment.
+
+        Called by the AskHumanTool just before it raises AgentPausedForQuestion,
+        and only when the card carries REMEMBER_LABEL. The serialised payload is
+        embedded inside an HTML-comment marker so it stays out of human readers'
+        way; the orchestrator finds it on resume via `extract_state`.
+
+        Failures here are logged but not raised — see AskHumanTool.run.
+        """
+        jsonable = [_message_to_jsonable(m) for m in self._current_messages]
+        body = serialize_state(
+            messages=jsonable,
+            iteration=self._current_iteration,
+            profile_id=self.profile.id,
+            model_id=self.profile.model.model_id,
+        )
+        self.provider.add_comment(self.card.id, body)
+        logger.debug(
+            "[%s] Persisted agent state for card %s (%d messages, iteration %d)",
+            self.profile.id, self.card.id, len(jsonable), self._current_iteration,
+        )
+
+
+# ── JSON-serialisable conversion for state persistence ───────────────────────
+
+def _message_to_jsonable(message: dict) -> dict:
+    """Return a deep-JSON-serialisable copy of a single message dict.
+
+    The Anthropic SDK populates assistant turns with rich `ContentBlock`
+    objects (TextBlock, ToolUseBlock, etc.) that can't go through `json.dumps`
+    directly. This helper converts each block to the same shape the API
+    accepts on a follow-up call so the resumed agent can replay the
+    conversation faithfully.
+    """
+    role = message.get("role", "user")
+    content = message.get("content")
+
+    # Plain string content (typical for user messages with text only)
+    if isinstance(content, str):
+        return {"role": role, "content": content}
+
+    # List of blocks — coerce each to a dict the API will accept on resume.
+    blocks: list[dict] = []
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict):
+                blocks.append(block)
+                continue
+            block_type = getattr(block, "type", None)
+            if block_type == "text":
+                blocks.append({"type": "text", "text": getattr(block, "text", "")})
+            elif block_type == "tool_use":
+                blocks.append({
+                    "type": "tool_use",
+                    "id": getattr(block, "id", ""),
+                    "name": getattr(block, "name", ""),
+                    "input": getattr(block, "input", {}) or {},
+                })
+            elif block_type == "tool_result":
+                blocks.append({
+                    "type": "tool_result",
+                    "tool_use_id": getattr(block, "tool_use_id", ""),
+                    "content": getattr(block, "content", ""),
+                    "is_error": getattr(block, "is_error", False),
+                })
+            else:
+                # Unknown block type — fall back to repr so we don't lose it
+                # entirely. Resume will likely ignore this turn but won't crash.
+                blocks.append({"type": "text", "text": repr(block)})
+    return {"role": role, "content": blocks}
 
 
 # ── Tool output truncation ────────────────────────────────────────────────────

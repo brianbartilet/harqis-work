@@ -38,6 +38,15 @@ from typing import Optional
 
 from agents.kanban.agent.base import AgentExecutionError, BaseKanbanAgent
 from agents.kanban.agent.persona import sign_comment
+from agents.kanban.agent.question import (
+    AgentPausedForQuestion,
+    QUESTION_LABEL,
+    QUESTION_MARKER,
+    REMEMBER_LABEL,
+    build_recap_prompt,
+    extract_state,
+    find_resume_signal,
+)
 from agents.kanban.dependencies.detector import DependencyDetector
 from agents.kanban.factory import create_provider
 from agents.kanban.interface import KanbanCard, KanbanProvider
@@ -359,6 +368,17 @@ class LocalOrchestrator:
                 audit=audit,
             )
             result = agent.run()
+        except AgentPausedForQuestion as paused:
+            # The agent posted a question to the human and added the
+            # `agent:question` label. Leave the card in `In Progress` — a
+            # later poll will resume the agent once a human replies in the
+            # comments. No result posted here, no column move.
+            logger.info(
+                "Card %s paused for human reply (stateful=%s)",
+                card.id, paused.stateful,
+            )
+            audit.card_lifecycle("In Progress", "In Progress (waiting)")
+            return f"[paused-for-question] {paused.question}"
         except Exception as e:
             self._handle_error(card, profile, e, audit)
             return None
@@ -477,6 +497,176 @@ class LocalOrchestrator:
             logger.info("Re-queued %d previously blocked card(s)", n)
         return n
 
+    # ── Resume (agent-paused-for-question) ────────────────────────────────────
+
+    def poll_resumes(self) -> int:
+        """Scan `In Progress` for cards where a paused agent should resume.
+
+        A card is resume-ready when:
+          - It carries the `agent:question` label, AND
+          - At least one non-agent comment was posted *after* the most recent
+            `[agent:question]` marker comment.
+
+        For each ready card, removes the label and re-runs the agent. Returns
+        the number of cards resumed.
+        """
+        try:
+            cards = self.provider.get_cards(self.board_id, "In Progress")
+        except Exception as e:
+            logger.debug("Could not fetch In Progress for resume scan: %s", e)
+            return 0
+
+        resumed = 0
+        for card in cards:
+            if is_human_card(card):
+                continue
+            if QUESTION_LABEL not in (card.labels or []):
+                continue
+            profile = self.registry.resolve_for_card(card)
+            if not profile:
+                continue
+            eligible, reason = self._card_is_for_me(card, profile)
+            if not eligible:
+                logger.debug("Resume candidate %s not for this orchestrator — %s", card.id, reason)
+                continue
+            try:
+                comments = self.provider.get_comments(card.id)
+            except Exception as e:
+                logger.warning("Could not read comments for resume on card %s: %s", card.id, e)
+                continue
+            signal = find_resume_signal(comments)
+            if signal is None:
+                continue
+            try:
+                if self.resume_card(card, profile, comments, signal):
+                    resumed += 1
+            except Exception as e:
+                logger.error("Unhandled error resuming card %s: %s", card.id, e)
+        return resumed
+
+    def resume_card(
+        self,
+        card: KanbanCard,
+        profile: AgentProfile,
+        comments: list[str],
+        signal: tuple[int, list[str]],
+    ) -> bool:
+        """Resume a paused agent for one card. Returns True on a clean dispatch.
+
+        Stateful (REMEMBER_LABEL on card): rebuilds the agent's message history
+        from the latest sidecar state comment and appends the human reply as a
+        new user message.
+
+        Stateless: builds a recap text from the question + reply pair and runs
+        the agent fresh with that as additional context.
+
+        In both cases:
+          - Removes `agent:question` BEFORE running the agent so concurrent
+            polls don't double-fire.
+          - Catches `AgentPausedForQuestion` re-raised by `run()` so the agent
+            can ask follow-up questions.
+        """
+        if self.dry_run:
+            logger.info("[DRY RUN] Would resume card %s with profile %s", card.id, profile.id)
+            return True
+
+        question_idx, human_replies = signal
+        question_comment = comments[question_idx]
+        stateful = REMEMBER_LABEL in (card.labels or [])
+
+        agent_provider = self.provider_for_profile(profile)
+
+        # Remove the question label first — even if the resume fails, we don't
+        # want the orchestrator to keep re-trying the same human reply on
+        # every tick.
+        try:
+            agent_provider.remove_label(card.id, QUESTION_LABEL)
+        except Exception as e:
+            logger.warning(
+                "Could not remove %s label from card %s (continuing): %s",
+                QUESTION_LABEL, card.id, e,
+            )
+
+        try:
+            scoped = self._secret_store.scoped_for_profile(profile)
+            if "ANTHROPIC_API_KEY" not in scoped:
+                scoped["ANTHROPIC_API_KEY"] = self.api_key
+        except KeyError as e:
+            logger.error("Missing required secret for profile %s on resume: %s", profile.id, e)
+            return False
+
+        audit = AuditLogger(
+            agent_id=profile.id,
+            card_id=card.id,
+            log_path=self._audit_log_path,
+        )
+        audit.secret_access(profile.id, list(scoped.keys()))
+
+        # Compose the resume prompt and (when stateful) the prior message list.
+        prior_messages: Optional[list[dict]] = None
+        prior_iteration = 0
+        if stateful:
+            payload = extract_state(comments)
+            if payload:
+                prior_messages = payload.get("messages") or None
+                prior_iteration = int(payload.get("iteration", 0))
+                logger.info(
+                    "Resuming card %s in stateful mode (%d prior messages, iteration %d)",
+                    card.id, len(prior_messages or []), prior_iteration,
+                )
+            else:
+                logger.warning(
+                    "Card %s has %s but no decodable state sidecar — falling back to stateless resume",
+                    card.id, REMEMBER_LABEL,
+                )
+
+        # Stateful: append the human reply as a new user turn.
+        # Stateless: synthesise a recap prompt that names the question + reply.
+        if prior_messages is not None:
+            resume_user_message = "\n\n".join(r.strip() for r in human_replies)
+        else:
+            resume_user_message = build_recap_prompt(question_comment, human_replies)
+
+        logger.info(
+            "Resuming agent %s on card %s (stateful=%s, replies=%d)",
+            profile.id, card.id, prior_messages is not None, len(human_replies),
+        )
+
+        try:
+            agent = BaseKanbanAgent(
+                profile=profile,
+                card=card,
+                provider=agent_provider,
+                api_key=self.api_key,
+                scoped_secrets=scoped,
+                audit=audit,
+                prior_messages=prior_messages,
+                prior_iteration=prior_iteration,
+                resume_user_message=resume_user_message,
+            )
+            result = agent.run()
+        except AgentPausedForQuestion as paused:
+            # Agent asked another follow-up — leave the card in In Progress and
+            # let the next poll handle the next reply.
+            logger.info(
+                "Card %s asked another question on resume (stateful=%s)",
+                card.id, paused.stateful,
+            )
+            return True
+        except Exception as e:
+            self._handle_error(card, profile, e, audit)
+            return False
+
+        # Resume completed — post result and move to Done.
+        try:
+            self._post_comment(card.id, f"## Result\n\n{result}", profile)
+            self._provider_move(card.id, "Done", profile)
+            audit.card_lifecycle("In Progress", "Done")
+            logger.info("Card %s → Done (after resume)", card.id)
+        except Exception as e:
+            logger.error("Failed to post resume result for card %s: %s", card.id, e)
+        return True
+
     def run(self) -> None:
         """
         Start the polling loop. Ctrl+C to stop.
@@ -507,10 +697,17 @@ class LocalOrchestrator:
 
         while True:
             try:
+                # Resumes (cards waiting for human input) take priority — they
+                # represent in-flight work, and answering them quickly keeps
+                # the conversation feeling responsive.
+                resumed = self.poll_resumes()
+                if resumed:
+                    logger.info("Resumed %d paused card(s)", resumed)
+
                 n = self.poll_once()
                 if n:
                     logger.info("Processed %d card(s)", n)
-                else:
+                elif not resumed:
                     logger.debug("Nothing to do")
 
                 tick += 1

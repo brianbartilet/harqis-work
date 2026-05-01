@@ -27,6 +27,7 @@ class ToolRegistry:
         provider: KanbanProvider,
         enforcer: PermissionEnforcer,
         scoped_secrets: Optional[dict[str, str]] = None,
+        save_state_fn: Optional[Callable[[], None]] = None,
     ):
         self._tools: dict[str, dict] = {}       # name → {schema, fn}
         self._profile = profile
@@ -34,6 +35,9 @@ class ToolRegistry:
         self._provider = provider
         self._enforcer = enforcer
         self._scoped_secrets = scoped_secrets or {}
+        # Wired by BaseKanbanAgent so the AskHumanTool can persist message
+        # history before pausing when REMEMBER_LABEL is on the card.
+        self._save_state_fn = save_state_fn
         self._mcp_bridge = None
         self._register_defaults()
         self._register_mcp_tools()
@@ -73,7 +77,7 @@ class ToolRegistry:
             GitPushTool, GitStatusTool,
         )
         from agents.kanban.agent.tools.kanban_tools import (
-            ChecklistTool, TrelloCommentTool, TrelloMoveTool,
+            AskHumanTool, ChecklistTool, TrelloCommentTool, TrelloMoveTool,
         )
 
         working_dir = self._profile.context.working_directory or None
@@ -93,6 +97,12 @@ class ToolRegistry:
             TrelloCommentTool(self._provider, self._card.id),
             TrelloMoveTool(self._provider, self._card.id),
             ChecklistTool(self._provider, self._card.id, self._card.checklists),
+            AskHumanTool(
+                self._provider,
+                self._card.id,
+                self._card.labels,
+                save_state_fn=self._save_state_fn,
+            ),
         ):
             self.register(
                 tool_cls.name,

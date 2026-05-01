@@ -59,6 +59,7 @@ tools:
     - post_comment
     - move_card
     - check_item
+    - ask_human
   mcp_apps:
     - google_apps
     - trello
