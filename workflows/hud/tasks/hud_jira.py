@@ -79,6 +79,11 @@ _MAX_BOARD_ISSUES: int = 200
 _INCLUDED_ISSUE_TYPES: tuple = ("Story", "Bug", "Task")
 _TYPE_SORT_RANK: dict = {name: i for i, name in enumerate(_INCLUDED_ISSUE_TYPES)}
 
+# Display name for the synthesised "assigned to me" section that prepends
+# the status columns. Picked up by the renderer as the section title and by
+# the metrics payload as the key in `by_section`.
+_ASSIGNED_TO_ME_LABEL: str = "ASSIGNED TO ME"
+
 
 @SPROUT.task()
 @log_result()
@@ -163,15 +168,30 @@ def show_jira_board(board_id: int,
     except Exception as e:
         log.warning("show_jira_board: failed to fetch board %s: %s", board_id, e)
         issues_all = []
+        fetch_error: Optional[str] = str(e)
         sections: List[dict] = [
-            {"status": s, "issues": [], "error": str(e)} for s in statuses
+            {"status": s, "issues": [], "error": fetch_error} for s in statuses
         ]
     else:
+        fetch_error = None
         sections = _group_issues_by_status(
             issues_all, statuses,
             max_per_section=max_results_per_status,
             column_status_ids=column_status_ids,
         )
+
+    # Prepend the "ASSIGNED TO ME" section using the same sprint payload —
+    # filter by `fields.assignee.displayName == cfg__jira.app_data.user`
+    # case-insensitively. Skipped silently when no `user` is configured so
+    # the HUD keeps working for callers that haven't set the field yet.
+    current_user = (cfg__jira.app_data or {}).get('user')
+    if current_user:
+        assigned_issues = _filter_issues_by_assignee(issues_all, current_user)
+        sections.insert(0, {
+            "status": _ASSIGNED_TO_ME_LABEL,
+            "issues": assigned_issues[:max_results_per_status],
+            "error": fetch_error,
+        })
     # endregion
 
     # region Build links — header
@@ -267,19 +287,26 @@ def show_jira_board(board_id: int,
     # endregion
 
     # region Build frontend payload
-    # Per-status counts let the frontend render a compact summary card
+    # Per-section counts let the frontend render a compact summary card
     # (e.g. "BOARD · 12 issues · IN PROGRESS=4, REVIEW=3, READY=5") without
-    # having to parse the dump text. Status names are kept in the order the
-    # caller requested so the UI ordering matches the HUD ordering.
-    by_status = {
+    # having to parse the dump text. Section names are kept in the order
+    # the renderer used so the UI ordering matches the HUD ordering.
+    by_section = {
         s.get("status"): len(s.get("issues") or [])
         for s in sections
     }
-    total_issues = sum(by_status.values())
+    # `total_issues` counts column rows only — exclude the synthesised
+    # "ASSIGNED TO ME" section to avoid double-counting (those issues
+    # also appear in their respective status column).
+    assigned_count = by_section.get(_ASSIGNED_TO_ME_LABEL, 0)
+    total_issues = sum(c for name, c in by_section.items() if name != _ASSIGNED_TO_ME_LABEL)
     errors = [s.get("status") for s in sections if s.get("error")]
-    summary_parts = [f"{name.upper()}={count}" for name, count in by_status.items()]
-    summary = "{0} issue(s) · {1}".format(total_issues, ", ".join(summary_parts)) \
+    summary_parts = [f"{name.upper()}={count}" for name, count in by_section.items()
+                     if name != _ASSIGNED_TO_ME_LABEL]
+    base_summary = "{0} issue(s) · {1}".format(total_issues, ", ".join(summary_parts)) \
         if summary_parts else "no issues"
+    summary = "MINE={0} · {1}".format(assigned_count, base_summary) \
+        if current_user else base_summary
     # endregion
 
     return {
@@ -288,7 +315,9 @@ def show_jira_board(board_id: int,
         "metrics": {
             "board_id": board_id,
             "total_issues": total_issues,
-            "by_status": by_status,
+            "assigned_to_me": assigned_count,
+            "current_user": current_user,
+            "by_section": by_section,
             "errors": errors,
         },
         "links": {
@@ -471,6 +500,27 @@ def _first_fix_version(issue: dict) -> str:
     """Extract the first `fixVersions[].name` for sort + display purposes."""
     fix_versions = ((issue or {}).get("fields") or {}).get("fixVersions") or []
     return fix_versions[0]["name"] if fix_versions else ""
+
+
+def _filter_issues_by_assignee(issues: List[dict], assignee_name: str) -> List[dict]:
+    """Return the subset of `issues` assigned to `assignee_name`, sorted.
+
+    Match is case-insensitive + whitespace-trimmed against
+    `fields.assignee.displayName`. Issues with no assignee never match.
+    The result is run through `_filter_and_sort_issues` for the same
+    Story → Bug → Task → fixVersion ordering used by the status columns,
+    so the "ASSIGNED TO ME" section reads consistently with the rest.
+    """
+    target = (assignee_name or "").strip().lower()
+    if not target:
+        return []
+    matches: List[dict] = []
+    for issue in issues:
+        assignee = (((issue or {}).get("fields") or {}).get("assignee") or {})
+        display = (assignee.get("displayName") or "").strip().lower()
+        if display == target:
+            matches.append(issue)
+    return _filter_and_sort_issues(matches)
 
 
 def _filter_and_sort_issues(issues: List[dict]) -> List[dict]:

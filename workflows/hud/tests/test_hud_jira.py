@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 
 from workflows.hud.tasks.hud_jira import (
     _filter_and_sort_issues,
+    _filter_issues_by_assignee,
     _fix_version_sort_key,
     _group_issues_by_status,
     _render_issue_row,
@@ -585,6 +586,66 @@ def test__resolve_column_status_ids__empty_statuses_list():
     }
     out = _resolve_column_status_ids(api, 1790, ["In Review"])
     assert out["In Review"] == set()
+
+
+# ── Unit / function — _filter_issues_by_assignee ─────────────────────────────
+
+
+def _make_issue(*, summary: str, assignee_display: str | None,
+                issue_type: str = "Task", key: str = "X-1") -> dict:
+    """Tiny fixture builder for assignee-filter tests."""
+    fields = {
+        "summary": summary,
+        "issuetype": {"name": issue_type},
+        "fixVersions": [],
+    }
+    if assignee_display is not None:
+        fields["assignee"] = {"displayName": assignee_display}
+    return {"key": key, "fields": fields}
+
+
+def test__filter_issues_by_assignee__exact_match():
+    """displayName matches case-insensitively."""
+    issues = [
+        _make_issue(summary="A", assignee_display="Bartilet, Dick Brian Reario", key="X-1"),
+        _make_issue(summary="B", assignee_display="Someone Else", key="X-2"),
+        _make_issue(summary="C", assignee_display="bartilet, dick brian reario", key="X-3"),
+    ]
+    out = _filter_issues_by_assignee(issues, "Bartilet, Dick Brian Reario")
+    keys = {i["key"] for i in out}
+    assert keys == {"X-1", "X-3"}
+
+
+def test__filter_issues_by_assignee__handles_missing_assignee():
+    """Issues with no assignee never match."""
+    issues = [
+        _make_issue(summary="A", assignee_display=None, key="X-1"),
+        _make_issue(summary="B", assignee_display="Me", key="X-2"),
+    ]
+    out = _filter_issues_by_assignee(issues, "Me")
+    assert [i["key"] for i in out] == ["X-2"]
+
+
+def test__filter_issues_by_assignee__empty_target_returns_empty():
+    """An empty / whitespace `assignee_name` returns no matches (safe default)."""
+    issues = [
+        _make_issue(summary="A", assignee_display="Anyone", key="X-1"),
+    ]
+    assert _filter_issues_by_assignee(issues, "") == []
+    assert _filter_issues_by_assignee(issues, "   ") == []
+    assert _filter_issues_by_assignee(issues, None) == []
+
+
+def test__filter_issues_by_assignee__sorts_like_status_sections():
+    """Result is run through `_filter_and_sort_issues` (Story → Bug → Task)."""
+    issues = [
+        _make_issue(summary="task", assignee_display="Me", issue_type="Task", key="X-3"),
+        _make_issue(summary="story", assignee_display="Me", issue_type="Story", key="X-1"),
+        _make_issue(summary="bug", assignee_display="Me", issue_type="Bug", key="X-2"),
+        _make_issue(summary="epic", assignee_display="Me", issue_type="Epic", key="X-4"),
+    ]
+    out = _filter_issues_by_assignee(issues, "Me")
+    assert [i["key"] for i in out] == ["X-1", "X-2", "X-3"]
 
 
 # `_compute_max_hud_lines` tests live in `test_helpers_sizing.py` now.
