@@ -98,10 +98,11 @@ WORKFLOWS_DESKTOP = {
         'kwargs': {
             "hud_item_name": "DESKTOP LOGS",
             "logs_output_path": "C:/Users/brian/GIT/harqis-work/logs/daily",
+            "model": "claude-haiku-4-5-20251001",
         },
         "options": {
             "queue": WorkflowQueue.DEFAULT,
-            "expires": 60 * 60,
+            "expires": 60 * 60 * 24,
         },
     },
 
@@ -111,10 +112,11 @@ WORKFLOWS_DESKTOP = {
         'kwargs': {
             "logs_daily_path": "C:/Users/brian/GIT/harqis-work/logs/daily",
             "logs_output_path": "C:/Users/brian/GIT/harqis-work/logs/weekly",
+            "model": "claude-haiku-4-5-20251001",
         },
         "options": {
             "queue": WorkflowQueue.DEFAULT,
-            "expires": 60 * 60,
+            "expires": 60 * 60 * 24 * 7,
         },
     },
 

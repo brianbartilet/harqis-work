@@ -128,7 +128,8 @@ WORKFLOWS_HUD = {
         'schedule': crontab(minute='5'),
         'kwargs': {
             "cfg_id__desktop": "DESKTOP",
-            "cfg_id__calendar": "GOOGLE_APPS"
+            "cfg_id__calendar": "GOOGLE_APPS",
+            "model": "claude-haiku-4-5-20251001",
         },
         "options": {
             "queue": WorkflowQueue.DEFAULT,

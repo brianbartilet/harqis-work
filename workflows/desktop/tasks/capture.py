@@ -99,14 +99,24 @@ def generate_daily_desktop_summary(hud_item_name='DESKTOP LOGS', logs_output_pat
     Reads the get_desktop_logs dump.txt and sends it to Claude to produce
     a structured Markdown daily highlights file.
 
+    Kwargs:
+        cfg_id__anthropic: Config key for the Anthropic client. Default 'ANTHROPIC'.
+        model:             Optional model override. When omitted, falls
+                           back to ``BaseApiServiceAnthropic``'s configured
+                           model. The celery schedule passes
+                           ``model="claude-haiku-4-5-20251001"`` so this
+                           daily summarisation runs on Haiku to save cost.
+
     Output: logs/daily/DESKTOP-LOGS-DD-MM-YYYY.md
     """
     cfg_id__anthropic = kwargs.get('cfg_id__anthropic', 'ANTHROPIC')
+    model_override = kwargs.get('model')
     try:
         anthropic = BaseApiServiceAnthropic(get_anthropic_config(cfg_id__anthropic))
     except Exception as e:
         log.error("Failed to initialize Anthropic client for daily summary")
         raise e
+    resolved_model = model_override or anthropic.model
 
     hud = hud_item_name.replace(" ", "").upper()
     dump_path = os.path.join(
@@ -130,7 +140,7 @@ def generate_daily_desktop_summary(hud_item_name='DESKTOP LOGS', logs_output_pat
     try:
         response = anthropic._with_backoff(
             anthropic.base_client.messages.create,
-            model=anthropic.model,
+            model=resolved_model,
             max_tokens=8192,
             messages=[{
                 "role": "user",
@@ -160,14 +170,24 @@ def generate_weekly_desktop_summary(logs_daily_path='logs/daily', logs_output_pa
     Reads all daily DESKTOP-LOGS-*.md files from the past 7 days and sends them
     to Claude to produce a structured Markdown weekly highlights report.
 
+    Kwargs:
+        cfg_id__anthropic: Config key for the Anthropic client. Default 'ANTHROPIC'.
+        model:             Optional model override. When omitted, falls
+                           back to ``BaseApiServiceAnthropic``'s configured
+                           model. The celery schedule passes
+                           ``model="claude-haiku-4-5-20251001"`` so the
+                           weekly roll-up runs on Haiku to save cost.
+
     Output: logs/weekly/DESKTOP-LOGS-WEEK-WW-YYYY.md
     """
     cfg_id__anthropic = kwargs.get('cfg_id__anthropic', 'ANTHROPIC')
+    model_override = kwargs.get('model')
     try:
         anthropic = BaseApiServiceAnthropic(get_anthropic_config(cfg_id__anthropic))
     except Exception as e:
         log.error("Failed to initialize Anthropic client for weekly summary")
         raise e
+    resolved_model = model_override or anthropic.model
 
     today = datetime.now()
     week_num = today.strftime("%W")
@@ -210,7 +230,7 @@ def generate_weekly_desktop_summary(logs_daily_path='logs/daily', logs_output_pa
     try:
         response = anthropic._with_backoff(
             anthropic.base_client.messages.create,
-            model=anthropic.model,
+            model=resolved_model,
             max_tokens=8192,
             messages=[{"role": "user", "content": prompt}],
         )

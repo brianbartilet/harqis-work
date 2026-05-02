@@ -38,15 +38,34 @@ _CLAUDE_URL = 'https://claude.ai/'
             play_sound=True, schedule_categories=[ScheduleCategory.PINNED, ], prepend_if_exists=True)
 @feed()
 def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **kwargs):
+    """Fetch the last hour of desktop activity + screenshots, ask Claude
+    to analyse them, and write the result to the HUD.
+
+    Kwargs:
+        cfg_id__anthropic:  Config key for the Anthropic client. Default 'ANTHROPIC'.
+        cfg_id__desktop:    Config key for the desktop capture paths. Default 'DESKTOP'.
+        model:              Optional model override. When omitted, falls
+                            back to ``BaseApiServiceAnthropic``'s configured
+                            model (which itself defaults to Opus). The
+                            celery schedule passes
+                            ``model="claude-haiku-4-5-20251001"`` to keep
+                            this high-frequency task on the cheaper Haiku
+                            tier without changing the global default.
+    """
 
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 
     cfg_id__anthropic = kwargs.get('cfg_id__anthropic', 'ANTHROPIC')
+    model_override = kwargs.get('model')
     try:
         anthropic = BaseApiServiceAnthropic(get_anthropic_config(cfg_id__anthropic))
     except Exception as e:
         log.error("Failed to initialize Anthropic client")
         raise e
+    # Resolve the model once: explicit kwarg wins, otherwise fall back to
+    # whatever the service was initialised with (apps_config.yaml::ANTHROPIC.app_data.model
+    # or the class-level DEFAULT_MODEL).
+    resolved_model = model_override or anthropic.model
 
     cfg_id__desktop = kwargs.get("cfg_id__desktop", APP_NAME_DESKTOP)
     cfg__desktop = CONFIG_MANAGER.get(cfg_id__desktop)
@@ -162,7 +181,7 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
         try:
             response = anthropic._with_backoff(
                 anthropic.base_client.messages.create,
-                model=anthropic.model,
+                model=resolved_model,
                 max_tokens=8192,
                 messages=[{"role": "user", "content": content}],
             )
@@ -261,10 +280,11 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
 
     return {
         "text": dump,
-        "summary": "{0} screenshot(s) analysed · window {1} → {2}".format(
+        "summary": "{0} screenshot(s) analysed · window {1} → {2} · {3}".format(
             len(_collected.get('screenshots') or []),
             first_ts.strftime("%H:%M") if hasattr(first_ts, "strftime") else (first_ts or "n/a"),
             last_ts.strftime("%H:%M") if hasattr(last_ts, "strftime") else (last_ts or "n/a"),
+            resolved_model,
         ),
         "metrics": {
             "screenshots": len(_collected.get('screenshots') or []),
@@ -272,6 +292,7 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
             "first_ts": first_ts.isoformat() if hasattr(first_ts, "isoformat") else first_ts,
             "last_ts": last_ts.isoformat() if hasattr(last_ts, "isoformat") else last_ts,
             "timedelta_hours": timedelta_previous_hours,
+            "model": resolved_model,
         },
         "links": {
             "claude": _CLAUDE_URL,
