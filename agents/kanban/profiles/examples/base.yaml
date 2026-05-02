@@ -5,7 +5,11 @@ version: "1.0"
 
 model:
   provider: anthropic
-  model_id: claude-sonnet-4-6
+  # Haiku 4.5 — base/orchestrator profile runs lightweight routing and
+  # bookkeeping work that doesn't need Sonnet's reasoning. Specialised
+  # agent profiles (agent_default, agent_code, agent_write, agent_full)
+  # keep Sonnet so the actual card processing isn't downgraded.
+  model_id: claude-haiku-4-5-20251001
   max_tokens: 4096
 
 tools:
