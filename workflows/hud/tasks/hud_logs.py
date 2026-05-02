@@ -153,7 +153,29 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
     dump = dump + "\n"
     # endregion
 
-    return dump
+    failed_payload = []
+    for hit in results:
+        details = hit.get('_source', {}) or {}
+        name = str(details.get('name', '')).split('.')[-2:]
+        failed_payload.append({
+            "task": '.'.join(name),
+            "error": str(details.get('exception_message', '')).strip(),
+            "last_failed": details.get('last_failed'),
+        })
+
+    return {
+        "text": dump,
+        "summary": "{0} failed job(s) on {1}".format(len(results), today),
+        "metrics": {
+            "date": today,
+            "failed_count": len(results),
+            "failed": failed_payload,
+        },
+        "links": {
+            "kibana": kibana_url,
+            "schedules": mapping_file,
+        },
+    }
 
 
 @SPROUT.task()
@@ -213,6 +235,7 @@ def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
 
     # region Dump data
     dump = "\n"
+    scheduled_payload = []
     for wfd in workflow_mapping:
         for name, cfg in wfd.items():
             schedule = cfg.get("schedule")
@@ -221,9 +244,29 @@ def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
                 task = cfg.get("task")
                 wf, group, tasks, file, func = task.split('.')
                 dump += f'{make_separator(36, "-")}\n{file}.{func:}\n > Triggers {human.lower()}\n'
+                scheduled_payload.append({
+                    "name": name,
+                    "task": task,
+                    "trigger": human.lower(),
+                })
 
     # endregion
 
     ini['Variables']['ItemLines'] = '{0}'.format(5)
 
-    return dump
+    total_workflows = sum(len(wfd) for wfd in workflow_mapping)
+
+    return {
+        "text": dump,
+        "summary": "{0} scheduled task(s) across {1} workflow file(s)".format(
+            len(scheduled_payload), total_workflows,
+        ),
+        "metrics": {
+            "scheduled_count": len(scheduled_payload),
+            "total_workflows": total_workflows,
+            "scheduled": scheduled_payload,
+        },
+        "artifacts": {
+            "mapping_file": str(output_path),
+        },
+    }

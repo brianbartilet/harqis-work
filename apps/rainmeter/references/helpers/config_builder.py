@@ -110,8 +110,19 @@ def init_meter(
                         for k, v in (kv or {}).items():
                             cfg.set(sect, k, v)
 
-                # 4) Let user function compute the notes text
-                notes_text: str = func(ini=cfg, *args, **kwargs)
+                # 4) Let user function compute the notes text. Tasks may
+                #    return either a string (legacy: just the dump text) or
+                #    a dict with at minimum a `text` key plus arbitrary
+                #    extra fields (`summary`, `metrics`, ...) that get
+                #    merged into the final return so the frontend can read
+                #    a human-readable summary without parsing the dump.
+                raw = func(ini=cfg, *args, **kwargs)
+                extra_fields: Dict[str, object] = {}
+                if isinstance(raw, dict):
+                    notes_text = raw.get("text", "")
+                    extra_fields = {k: v for k, v in raw.items() if k != "text"}
+                else:
+                    notes_text = raw
                 if not isinstance(notes_text, str):
                     notes_text = str(notes_text)
 
@@ -140,7 +151,7 @@ def init_meter(
                         elif ScheduleCategory.DEACTIVATED in schedule_categories:
                             log.warning("schedule is DEACTIVATED; HUD is hidden.")
                             _deactivate_config(skin_name, hud_dirname)
-                            return {"updated": changed, "ini_path": str(ini_path), "notes_path": note_path}
+                            return _build_return(hud_item_name, changed, ini_path, note_path, extra_fields)
                         else:
                             google_cfg_id = kwargs.get("cfg_id__calendar", "GOOGLE_APPS")
                             config_calendar = CONFIG_MANAGER.get(google_cfg_id)
@@ -152,7 +163,7 @@ def init_meter(
                             else:
                                 log.warning("No matching schedule categories found; deactivating HUD until next check.")
                                 _deactivate_config(skin_name, hud_dirname)
-                                return {"updated": changed, "ini_path": str(ini_path), "notes_path": note_path}
+                                return _build_return(hud_item_name, changed, ini_path, note_path, extra_fields)
                     except ConnectionError:
                         log.error("Calendar service is not working as expected.  Please check settings.")
                     except Exception as e:
@@ -179,8 +190,9 @@ def init_meter(
                 _activate_config(skin_name, hud_dirname, ini_filename)
                 _refresh_skin(skin_name, hud_dirname)
 
-                # Return useful info for callers/tests
-                return {"updated": changed, "ini_path": str(ini_path), "notes_path": str(note_path)}
+                # Return useful info for callers/tests, merging any extra
+                # fields the wrapped task returned (`summary`, `metrics`, …).
+                return _build_return(hud_item_name, changed, ini_path, note_path, extra_fields)
 
             except Exception as e:
                 log.error(f"Failed HUD initialization: {e}")
@@ -196,6 +208,35 @@ def init_meter(
 # ----------------------
 # Helpers
 # ----------------------
+def _build_return(
+    hud_item_name: str,
+    changed: bool,
+    ini_path: Path,
+    note_path: Path,
+    extra_fields: Mapping[str, object],
+) -> Dict[str, object]:
+    """Compose the dict returned to Celery / the frontend.
+
+    The base shape is always present (`hud`, `updated`, `ini_path`,
+    `notes_path`). Tasks that returned a dict get their non-`text` keys
+    merged on top so the frontend sees `summary`, `metrics`, etc. without
+    needing to parse the dump file. Reserved keys (the base shape) are
+    never overwritten by extra_fields — that keeps the contract stable.
+    """
+    base: Dict[str, object] = {
+        "hud": hud_item_name,
+        "updated": changed,
+        "ini_path": str(ini_path),
+        "notes_path": str(note_path),
+    }
+    reserved = set(base.keys())
+    for key, value in (extra_fields or {}).items():
+        if key in reserved:
+            continue
+        base[key] = value
+    return base
+
+
 def sanitize_name(name: str) -> str:
     """Make a filesystem-friendly short name."""
     import re

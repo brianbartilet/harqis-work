@@ -226,6 +226,21 @@ def _safe_stringify(obj: Any) -> str:
 # Public decorator
 # -----------------------------
 
+def _extract_dump_text(raw_result: Any) -> str:
+    """Pull the human-readable dump out of a task return value.
+
+    HUD tasks may return either a string (legacy: just the dump text) or a
+    dict shaped like ``{"text": "<dump>", "summary": ..., "metrics": ...}``.
+    The feed file should always contain the dump text, never the JSON of
+    the metadata, so we prefer ``text`` when the return is a dict and fall
+    back to the safe-stringify path otherwise.
+    """
+    if isinstance(raw_result, dict) and "text" in raw_result:
+        text = raw_result.get("text", "")
+        return text if isinstance(text, str) else _safe_stringify(text)
+    return _safe_stringify(raw_result)
+
+
 def feed(
     filename_prefix: str = "hud-logs",
     *,
@@ -233,15 +248,17 @@ def feed(
     lock_timeout_secs: int | None = None,
     lock_sleep_secs: float = DEFAULT_LOCK_SLEEP_SECS,
     stale_lock_max_age_secs: float | None = DEFAULT_STALE_LOCK_MAX_AGE_SECS,
-) -> Callable[[Callable[..., T]], Callable[..., str]]:
+) -> Callable[[Callable[..., T]], Callable[..., Any]]:
     """
-    Decorator: capture ANY return value from wrapped func, stringify it, and prepend
-    it into a per-day feed file.
+    Decorator: capture ANY return value from wrapped func, write its dump
+    text into a per-day feed file, then return the *original* value
+    untouched so outer decorators (e.g. ``@init_meter``) can still inspect
+    structured returns like ``{"text", "summary", "metrics"}``.
 
     - File: <CONFIG["feed"]["path_to_feed"]>/<prefix>-YYYYMMDD.txt
     - Prepends newest data at top
     - Uses temp-based lock to prevent concurrent corruption (safe for GDrive logs)
-    - Returns the stringified dump
+    - Returns the wrapped function's value as-is (string OR dict)
     """
     try:
         feed_dir = Path(CONFIG["feed"]["path_to_feed"]).resolve()
@@ -249,10 +266,10 @@ def feed(
     except FileNotFoundError:
         log.warning("The location for the feed is unavailable. Skipping this entry.")
 
-        def _noop_decorator(func: Callable[..., T]) -> Callable[..., str]:
+        def _noop_decorator(func: Callable[..., T]) -> Callable[..., Any]:
             @functools.wraps(func)
-            def wrapper(*args, **kwargs) -> str:
-                return _safe_stringify(func(*args, **kwargs)).rstrip()
+            def wrapper(*args, **kwargs) -> Any:
+                return func(*args, **kwargs)
             return wrapper
 
         return _noop_decorator
@@ -264,11 +281,11 @@ def feed(
         lock_dir=None,  # keep lock files in %TEMP% by default
     )
 
-    def decorator(func: Callable[..., T]) -> Callable[..., str]:
+    def decorator(func: Callable[..., T]) -> Callable[..., Any]:
         @functools.wraps(func)
-        def wrapper(*args, **kwargs) -> str:
+        def wrapper(*args, **kwargs) -> Any:
             raw_result = func(*args, **kwargs)
-            dump = _safe_stringify(raw_result).rstrip()
+            dump = _extract_dump_text(raw_result).rstrip()
 
             day = datetime.now().strftime("%Y%m%d")
             feed_path = feed_dir / f"{filename_prefix}-{day}.txt"
@@ -285,7 +302,7 @@ def feed(
                 lock_cfg=lock_cfg,
             )
 
-            return dump
+            return raw_result
 
         return wrapper
 

@@ -109,5 +109,31 @@ def show_ynab_budgets_info(ini=ConfigHelperRainmeter(), **kwargs):
     # endregion
     ini['Variables']['ItemLines'] = '{0}'.format(len(categories_fetched) + line_ctr)
 
-    return dump
+    total_budgeted = sum(item[2] for item in categories_fetched)
+    total_balance = sum(item[3] for item in categories_fetched)
+
+    return {
+        "text": dump,
+        "summary": "{0} budget warning(s) · budgeted ${1:.2f} · remaining ${2:.2f}".format(
+            len(categories_fetched), total_budgeted, total_balance,
+        ),
+        "metrics": {
+            "warnings": len(categories_fetched),
+            "total_budgeted": round(total_budgeted, 2),
+            "total_balance": round(total_balance, 2),
+            "warning_threshold_pct": round(budget_percent_warning * 100, 2),
+            "categories": [
+                {
+                    "name": name,
+                    "budgeted": round(budgeted, 2),
+                    "balance": round(balance, 2),
+                }
+                for name, _, budgeted, balance in categories_fetched
+            ],
+        },
+        "links": {
+            "budget_sgd": url_budget_sgd,
+            "budget_php": url_budget_php,
+        },
+    }
 

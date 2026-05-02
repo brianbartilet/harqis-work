@@ -160,7 +160,13 @@ def show_hud_profiles(ini=ConfigHelperRainmeter()):
     ini['Variables']['ItemLines'] = '{0}'.format(3)
     # endregion
 
-    return ""
+    return {
+        "text": "",
+        "summary": "3 layout(s) available: home, office, custom",
+        "metrics": {
+            "profiles": [profile_base, profile_office, profile_custom],
+        },
+    }
 
 
 @SPROUT.task()
@@ -225,7 +231,14 @@ def show_mouse_bindings(ini=ConfigHelperRainmeter(), **kwargs):
 
     ini['Variables']['TextFile'] = '#CURRENTPATH#dump-{0}.txt'.format(profile)
 
-    return "SUCCESS"
+    return {
+        "text": "SUCCESS",
+        "summary": "active app '{0}' → profile '{1}'".format(active_window_app, profile),
+        "metrics": {
+            "active_app": active_window_app,
+            "profile": profile,
+        },
+    }
 
 
 _AHK_BINDING_PATTERN = re.compile(r'^;\s+(.+?)\s+->\s+(.+)$')
@@ -252,7 +265,15 @@ def build_summary_mouse_bindings(**kwargs):
 
     combined_out_path, combined_dump, per_profile_outputs = build_summary(path, output_dir=skin_dir, per_profile_prefix="dump-")
 
-    return combined_dump
+    return {
+        "text": combined_dump,
+        "summary": "{0} profile dump(s) written".format(len(per_profile_outputs or [])),
+        "metrics": {
+            "combined_out_path": str(combined_out_path),
+            "per_profile_count": len(per_profile_outputs or []),
+            "per_profile_outputs": [str(p) for p in (per_profile_outputs or [])],
+        },
+    }
 
 
 @SPROUT.task()
@@ -356,7 +377,21 @@ def show_ai_helper(ini=ConfigHelperRainmeter(), **kwargs):
     ini['Variables']['ItemLines'] = '{0}'.format(4)
     # endregion
 
-    return ""
+    return {
+        "text": "",
+        "summary": "n8n at {0} · 3 agent shortcut(s) wired".format(base_url),
+        "metrics": {
+            "n8n_base_url": base_url,
+            "agents": {
+                "voice": agent_voice,
+                "chat": agent_chat,
+                "chat_tests": agent_chat_testing,
+            },
+        },
+        "links": {
+            "n8n_executions": n8n_executions_url,
+        },
+    }
 
 
 @SPROUT.task()
@@ -404,4 +439,12 @@ def show_ahk_bindings(ini=ConfigHelperRainmeter(), **kwargs):
 
     ini['Variables']['TextFile'] = '#CURRENTPATH#dump-ahk.txt'
 
-    return "SUCCESS"
+    return {
+        "text": "SUCCESS",
+        "summary": "{0} AHK binding(s) parsed".format(len(bindings)),
+        "metrics": {
+            "binding_count": len(bindings),
+            "ahk_path": ahk_path,
+            "dump_file": dump_file,
+        },
+    }

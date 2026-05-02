@@ -150,5 +150,22 @@ def show_calendar_information(ini=ConfigHelperRainmeter(), **kwargs):
 
     ini['Variables']['ItemLines'] = '{0}'.format(line_ctr)
 
-    return dump
+    return {
+        "text": dump,
+        "summary": "{0} happening now · {1} upcoming · {2} all-day".format(
+            len(events_today_now),
+            len(events_today_upcoming),
+            len(events_today_filtered),
+        ),
+        "metrics": {
+            "now": len(events_today_now),
+            "upcoming": len(events_today_upcoming),
+            "all_day": len(events_today_filtered),
+        },
+        "links": {
+            "assistant": assistant_url,
+            "calendar": calendar_url,
+            "keep": keep_url,
+        },
+    }
 

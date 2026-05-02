@@ -93,16 +93,44 @@ def show_forex_account(ini=ConfigHelperRainmeter(), **kwargs):
     # endregion
 
     # region Build Dump
-    dump = '{0}  {1}  $ {2:>10}\n'.format("TOTAL:", "UPL ", round(float(account_details.NAV), 2))
+    nav = round(float(account_details.NAV), 2)
+    dump = '{0}  {1}  $ {2:>10}\n'.format("TOTAL:", "UPL ", nav)
+    trades_payload = []
+    total_unrealized_pl = 0.0
     for trade in open_trades:
         unrealized_profit_loss = round(float(trade['unrealizedPL']), 2)
-        dump = dump + '{0}  {1}  $ {2:>10}\n'.format(str(trade['instrument']).replace('_', ''),
-                                                     'SELL'if '-' in str(trade['currentUnits']) else 'BUY ',
+        total_unrealized_pl += unrealized_profit_loss
+        side = 'SELL' if '-' in str(trade['currentUnits']) else 'BUY '
+        instrument = str(trade['instrument']).replace('_', '')
+        trades_payload.append({
+            "instrument": instrument,
+            "side": side.strip(),
+            "unrealized_pl": unrealized_profit_loss,
+        })
+        dump = dump + '{0}  {1}  $ {2:>10}\n'.format(instrument,
+                                                     side,
                                                      '{0}{1}'.format('+' if '-' not in str(unrealized_profit_loss)
                                                                      else '',
                                                      str(round(unrealized_profit_loss, 2))),
                                                )
     # endregion
 
-    return dump
+    return {
+        "text": dump,
+        "summary": "NAV ${0:.2f} · {1} open trade(s) · UPL ${2:+.2f}".format(
+            nav, len(open_trades), total_unrealized_pl,
+        ),
+        "metrics": {
+            "nav": nav,
+            "open_trades": len(open_trades),
+            "total_unrealized_pl": round(total_unrealized_pl, 2),
+            "trades": trades_payload,
+        },
+        "links": {
+            "board": board_url,
+            "broker": broker_url,
+            "news": news_url,
+            "metrics": url,
+        },
+    }
 

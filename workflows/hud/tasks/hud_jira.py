@@ -266,7 +266,38 @@ def show_jira_board(board_id: int,
     ini['Variables']['ItemLines'] = '{0}'.format(max_hud_lines)
     # endregion
 
-    return dump
+    # region Build frontend payload
+    # Per-status counts let the frontend render a compact summary card
+    # (e.g. "BOARD · 12 issues · IN PROGRESS=4, REVIEW=3, READY=5") without
+    # having to parse the dump text. Status names are kept in the order the
+    # caller requested so the UI ordering matches the HUD ordering.
+    by_status = {
+        s.get("status"): len(s.get("issues") or [])
+        for s in sections
+    }
+    total_issues = sum(by_status.values())
+    errors = [s.get("status") for s in sections if s.get("error")]
+    summary_parts = [f"{name.upper()}={count}" for name, count in by_status.items()]
+    summary = "{0} issue(s) · {1}".format(total_issues, ", ".join(summary_parts)) \
+        if summary_parts else "no issues"
+    # endregion
+
+    return {
+        "text": dump,
+        "summary": summary,
+        "metrics": {
+            "board_id": board_id,
+            "total_issues": total_issues,
+            "by_status": by_status,
+            "errors": errors,
+        },
+        "links": {
+            "board": board_url,
+            "dashboard": dashboard_url,
+            "repository": repository_url,
+            "structure": structure_url,
+        },
+    }
 
 
 # ── Rendering helpers ─────────────────────────────────────────────────────────

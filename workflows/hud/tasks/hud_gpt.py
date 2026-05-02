@@ -259,7 +259,26 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
 
     ini['Variables']['ItemLines'] = '{0}'.format(7)
 
-    return dump
+    return {
+        "text": dump,
+        "summary": "{0} screenshot(s) analysed · window {1} → {2}".format(
+            len(_collected.get('screenshots') or []),
+            first_ts.strftime("%H:%M") if hasattr(first_ts, "strftime") else (first_ts or "n/a"),
+            last_ts.strftime("%H:%M") if hasattr(last_ts, "strftime") else (last_ts or "n/a"),
+        ),
+        "metrics": {
+            "screenshots": len(_collected.get('screenshots') or []),
+            "log_path": _collected.get('log_path'),
+            "first_ts": first_ts.isoformat() if hasattr(first_ts, "isoformat") else first_ts,
+            "last_ts": last_ts.isoformat() if hasattr(last_ts, "isoformat") else last_ts,
+            "timedelta_hours": timedelta_previous_hours,
+        },
+        "links": {
+            "claude": _CLAUDE_URL,
+            "github": github_work_url,
+            "dump": dump_path,
+        },
+    }
 
 
 @SPROUT.task()
@@ -271,7 +290,11 @@ def get_events_world_check(countries_list=None, utc_tz="UTC+8", ini=ConfigHelper
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
 
     if countries_list is None:
-        return "No countries specified.\n\n\n"
+        return {
+            "text": "No countries specified.\n\n\n",
+            "summary": "no countries configured",
+            "metrics": {"countries": [], "country_count": 0},
+        }
 
     cfg_id__anthropic = kwargs.get('cfg_id__anthropic', 'ANTHROPIC')
     anthropic = BaseApiServiceAnthropic(get_anthropic_config(cfg_id__anthropic))
@@ -337,7 +360,22 @@ def get_events_world_check(countries_list=None, utc_tz="UTC+8", ini=ConfigHelper
 
     ini['Variables']['ItemLines'] = '{0}'.format(8)
 
-    return dump
+    return {
+        "text": dump,
+        "summary": "world check · {0} country/countries · tz {1}".format(
+            len(countries_list), utc_tz,
+        ),
+        "metrics": {
+            "countries": list(countries_list),
+            "country_count": len(countries_list),
+            "timezone": utc_tz,
+            "answer_received": bool(answer_),
+        },
+        "links": {
+            "claude": _CLAUDE_URL,
+            "github": github_work_url,
+        },
+    }
 
 
 @SPROUT.task()
@@ -351,6 +389,14 @@ def take_screenshots_for_gpt_capture(**kwargs):
     ts = now.strftime(cfg['capture']['strf_time'])
     screenshot.take_screenshot_all_monitors(save_dir=path, prefix=f'{ts}-sc-desktop-check')
 
-    return "SUCCESS"
+    return {
+        "text": "SUCCESS",
+        "summary": "screenshots captured at {0}".format(ts),
+        "metrics": {
+            "save_dir": path,
+            "timestamp": ts,
+            "prefix": f'{ts}-sc-desktop-check',
+        },
+    }
 
 

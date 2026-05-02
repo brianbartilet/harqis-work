@@ -360,7 +360,31 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
 
     # endregion
 
-    return dump
+    return {
+        "text": dump,
+        "summary": "{0} order(s) · {1} card(s) · ${2:.2f} · balance ${3:.2f} pending ${4:.2f}".format(
+            len(sorted_data_single_card_name) + len(multiple_items_oder),
+            int(safe_number(total_cards)),
+            float(safe_number(total_amount)),
+            float(safe_number(balance)),
+            float(safe_number(pending_balance)),
+        ),
+        "metrics": {
+            "orders": len(sorted_data_single_card_name) + len(multiple_items_oder),
+            "single_card_orders": len(sorted_data_single_card_name),
+            "multi_card_orders": len(multiple_items_oder),
+            "total_cards": int(safe_number(total_cards)),
+            "total_amount": round(float(safe_number(total_amount)), 2),
+            "balance": round(float(safe_number(balance)), 2),
+            "pending_balance": round(float(safe_number(pending_balance)), 2),
+        },
+        "links": {
+            "echomtg": collection_url,
+            "orders": orders_url,
+            "audit": audit_url,
+            "sales": sales_url,
+        },
+    }
 
 
 # ── show_tcg_sell_cart ────────────────────────────────────────────────────────
@@ -720,5 +744,28 @@ def show_tcg_sell_cart(ini=ConfigHelperRainmeter(),
     ini['Variables']['ItemLines'] = '{0}'.format(max_hud_lines)
     # endregion
 
-    return dump
+    return {
+        "text": dump,
+        "summary": "checked {0} listing(s) · queued {1} · ${2:.2f} · {3} error(s) · threshold {4:.1f}%{5}".format(
+            len(results),
+            len(added) + len(would_add),
+            float(queued_amount),
+            len(errored),
+            float(discount_threshold_pct),
+            " (dry_run)" if dry_run else "",
+        ),
+        "metrics": {
+            "checked": len(results),
+            "added": len(added),
+            "would_add": len(would_add),
+            "queued": len(added) + len(would_add),
+            "errored": len(errored),
+            "queued_amount": round(float(queued_amount), 2),
+            "discount_threshold_pct": float(discount_threshold_pct),
+            "dry_run": bool(dry_run),
+        },
+        "links": {
+            "sell_cart": sell_cart_url,
+        },
+    }
 
