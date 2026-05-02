@@ -12,22 +12,22 @@ from apps.ynab.references.dto.transaction import DtoSaveTransaction
 # These call the real Anthropic + YNAB APIs.
 # Place the PDF in workflows/finance/transactions/ before running.
 
-def test__add_ynab_transactions_from_pdf_debit():
+def test__add_ynab_transactions_from_pdf_credit():
     add_ynab_transactions_from_pdf(
-        input_pdf="transaction_history_14042026_104112.pdf",
+        input_pdf="transaction_history_01052026_230908.pdf",
         ynab_budget_name="Daily Bankroll - SGD",
-        ynab_account_name="PAYROLL",
+        ynab_account_name="DBS Vantage",
         split=True,
         cfg_id__ynab="YNAB",
         cfg_id__anthropic="ANTHROPIC",
     )
 
 
-def test__add_ynab_transactions_from_pdf_credit():
+def test__add_ynab_transactions_from_pdf_debit():
     add_ynab_transactions_from_pdf(
-        input_pdf="transaction_history_15042026_114814.pdf",
+        input_pdf="transaction_history_14042026_104112.pdf",
         ynab_budget_name="Daily Bankroll - SGD",
-        ynab_account_name="DBS Vantage",
+        ynab_account_name="PAYROLL",
         split=True,
         cfg_id__ynab="YNAB",
         cfg_id__anthropic="ANTHROPIC",
