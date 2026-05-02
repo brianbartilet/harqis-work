@@ -10,3 +10,4 @@ if sys.platform == "win32":
     import workflows.hud.tasks.hud_logs
     import workflows.hud.tasks.hud_utils
     import workflows.hud.tasks.hud_finance
+    import workflows.hud.tasks.hud_jira

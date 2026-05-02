@@ -153,3 +153,22 @@ sections__ynab = {
 
 sections__utilities_ahk = {}
 
+
+sections__jira_board = {
+    # Header link slots — `meterLink` (template default) carries JIRA_BOARD;
+    # the rest are positioned dynamically via `compute_horizontal_link_layout`
+    # in `show_jira_board` (X coords come from label widths, not hardcoded).
+    "meterLink_dump": {
+        "Preset": "InjectedByTest",
+    },
+    "meterLink_dashboard": {
+        "Preset": "InjectedByTest",
+    },
+    "meterLink_repository": {
+        "Preset": "InjectedByTest",
+    },
+    "meterLink_structure": {
+        "Preset": "InjectedByTest",
+    },
+}
+

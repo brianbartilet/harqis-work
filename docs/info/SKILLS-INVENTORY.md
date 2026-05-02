@@ -13,6 +13,7 @@ Skill files live in `.claude/commands/*.md`. The first line of each file is the 
 |---|---|---|
 | **agent-prompt** | `/agent-prompt <prompt_name>` | Run a named AI prompt from `agents/prompts/` against the codebase. `prompt_name` is the filename without extension (e.g. `code_smells`, `docs_agent`, `desktop_analysis`). |
 | **commit** | `/commit [<subject hint>] [<pathspec>...] [--type <t>] [--scope <s>] [--no-untracked] [--dry-run]` | Stage all working-tree changes and commit with a Conventional-Commit message inferred from the diff, following [COMMIT-MESSAGE-GUIDE.md](COMMIT-MESSAGE-GUIDE.md). **Calling `/commit` is your sign-off — no confirmation prompt.** Auto-detects type and scope from the layer of changed files (`apps/<name>`, `workflows/<name>`, `agents/kanban`, `mcp`, `frontend`, `repo`). Pass pathspecs to limit staging. Skips `.env*` files for safety. Never pushes, never amends, never bypasses hooks. |
+| **create-new-hud** | `/create-new-hud <hud_title> <description_or_screenshot_path> [--reference <existing_hud>] [--no-prompt]` | Scaffold a new Rainmeter HUD widget under `workflows/hud/tasks/hud_<slug>.py` from a description (or screenshot). Asks for the title, header links, sample dump output, dimensions (with reference-widget defaults), `ScheduleCategory` (calendar visibility), Celery schedule, and queue (extending `WorkflowQueue` if a new queue is named). Wires up the section dict, schedule entry, `__init__.py` import, README row, and any new app endpoints needed for the data fetch. |
 | **deploy-harqis** | `/deploy-harqis <host\|node> [-q queues] [-p profile] [--hw labels] [--down] [--no-frontend] [--no-mcp] [--no-kanban] [--num-agents N] [--dry-run]` | End-to-end reusable deploy of the harqis-work platform — **cross-platform**, auto-detects macOS / Linux / Windows. `host` brings up the full stack (Docker + Beat scheduler + worker + frontend + MCP + Kanban + Flower); the host's Kanban orchestrator defaults to `agent:default` so the host also acts as 1 default-queue agent worker. `node` runs a Celery worker plus a profile-scoped Kanban orchestrator (the skill **asks** for `-p` if missing). `--hw` filters by `hw:*` labels (auto-detected from OS otherwise). Tear down with `--down`. |
 | **generate-registry** | `/generate-registry` | Regenerate `frontend/registry.py` by scanning all `workflows/*/tasks_config.py` files. Run after adding or removing any Celery task. |
 | **new-fork-repository** | `/new-fork-repository <business_or_client_name> [--owner <gh_owner>] [--visibility public\|private\|internal] [--description "..."] [--keep <list>] [--strip <list>] [--apps-keep <list>] [--apps-keep-all] [--target-dir <path>] [--remote <url>] [--no-create-repo] [--no-push] [--no-git-init] [--dry-run]` | Fork `harqis-work` into a clean business-/client-scoped baseline at `harqis-work-fork-<slug>`. Strips host-local AI tooling (`.claude/`, `.openclaw/`, `logs/`, `data/`), every pre-built workflow category (keeps only `.template`), and all real credentials (regenerates `.example` variants). **Apps are pruned to a curated 16-item set by default** (override with `--apps-keep` or `--apps-keep-all`); the prune cascades through `apps_config.yaml.example`, `.env/apps.env.example`, `mcp/server.py`'s `APP_REGISTRARS`, agent profiles' `mcp_apps`, and the README app inventory. Rewrites `README.md`, `workflows/README.md`, `workflows/config.py`, `workflows/queues.py`. **Auto-creates a private GitHub repo via `gh repo create` and pushes the initial commit by default** — pass `--no-create-repo` or `--no-push` to opt out, `--visibility public` to publish openly. |
@@ -87,6 +88,33 @@ Stages all working-tree changes and commits in one shot with a Conventional-Comm
 - If the staged set spans unrelated scopes, the post-commit summary suggests `git reset HEAD~` + a split using pathspecs.
 
 `--dry-run` drafts and prints the message but does not commit. Anything staged in Step 1 stays staged so you can inspect and commit manually if you prefer.
+
+---
+
+### `/create-new-hud`
+
+Scaffolds a new Rainmeter HUD widget under `workflows/hud/tasks/hud_<slug>.py` from a description (or a screenshot path). Walks through 7 questions — title, header links, sample dump output, dimensions, calendar visibility, Celery schedule, and queue — then writes the task file, the section dict in `tasks/sections.py`, the schedule entry in `tasks_config.py`, the import in `workflows/hud/__init__.py`, and the README row.
+
+```
+/create-new-hud "JIRA BOARD" "Pull tickets from rapidView=1790 grouped by status"
+/create-new-hud "OANDA POSITIONS" /path/to/screenshot.png --reference show_tcg_orders
+/create-new-hud "SPRINT BURNDOWN" "..." --no-prompt
+```
+
+**What it does:**
+
+1. Asks for missing info (HUD title, header links, sample text, dimensions, schedule category, Celery schedule + queue, apps).
+2. Adds a new `WorkflowQueue` value + queue declaration in `workflows/config.py` if the user named a queue not in the existing enum (e.g. `peon`).
+3. Builds any missing app endpoint inside `apps/<name>/references/web/api/` if the data source isn't reachable yet (offers `/new-service-app` for missing apps).
+4. Writes the HUD task with the standard `@SPROUT.task / @log_result / @init_meter / @feed` decorator stack and the `42`-px-padded dimension formulas (the recipe that makes the Rainmeter border render correctly — using `36` clips it).
+5. Adds an 88-char-wide table layout sized from the user's sample, plus a `DUMP` link to the widget's own dump.txt and a configurable header link.
+6. Wires the schedule (`crontab(...)` in `tasks_config.py`), the platform-guarded import in `workflows/hud/__init__.py`, and a README row.
+7. Prints an activation checklist with the manual restart steps + sanity-check commands.
+
+**Dimension defaults** (copied from `show_tcg_orders` unless `--reference` overrides):
+- 88-char-wide rows, scrollable via `MeasureScrollableText`.
+- `width_multiplier=3`, line-height 22 px, header padding 42 px.
+- `SkinHeight = ((42*Scale)+(ItemLines*22)*Scale)` — the +6 px over the 36-px background is the slack the border stroke needs to render.
 
 ---
 

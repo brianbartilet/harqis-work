@@ -98,6 +98,31 @@ WORKFLOWS_HUD = {
         },
     },
 
+    # ── show_jira_board ──────────────────────────────────────────────────────
+    # Inferred schedule: weekdays every hour on the hour. Pulls In-Review /
+    # In-Progress / Ready / In-Analysis tickets from a Jira Software board so
+    # the user can scan the team's queue without opening the browser.
+    # `expires`: 60 * 30 — a missed run can still fire within the 30-minute
+    # window; after that the next hourly tick will refresh anyway.
+    'run-job--show_jira_board': {
+        'task': 'workflows.hud.tasks.hud_jira.show_jira_board',
+        'schedule': crontab(day_of_week='mon-fri', minute=0),
+        'kwargs': {
+            "cfg_id__jira": "JIRA",
+            # Numeric ids only — full URLs are built by show_jira_board from
+            # the configured Jira domain (apps_config.yaml::JIRA.app_data.domain
+            # ← JIRA_DOMAIN env var).
+            "board_id":      1790,    # /secure/RapidBoard.jspa?rapidView=
+            "dashboard_id":  24135,   # /secure/Dashboard.jspa?selectPageId=
+            "repository_id": 24135,   # /secure/Dashboard.jspa?selectPageId=
+            "structure_id":  616,     # /secure/StructureBoard.jspa?s=
+        },
+        "options": {
+            "queue": WorkflowQueue.PEON,
+            "expires": 60 * 30,
+        },
+    },
+
     'run-job--get_desktop_logs': {
         'task': 'workflows.hud.tasks.hud_gpt.get_desktop_logs',
         'schedule': crontab(minute='5'),

@@ -13,6 +13,7 @@ class WorkflowQueue(StrEnum):
     HUD = "hud"
     TCG = "tcg"
     ADHOC = "adhoc"
+    PEON = "peon"   # work-related HUD tasks (Jira boards, calendar focus, etc.)
 
     # ── Broadcast (fanout) queues — every subscribed worker handles each task ──
     # Use for cluster-wide actions: config reload, cache invalidation, "every HUD

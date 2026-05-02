@@ -18,6 +18,7 @@ All tasks run on the `hud` queue (configured via `SPROUT.conf.task_routes`).
 | `show_forex_account` | Every 15 min (weekdays) | OANDA forex account summary |
 | `show_tcg_orders` | Every hour | TCG Marketplace open orders |
 | `show_tcg_sell_cart` | Sundays at midnight | Match my listings to want-to-buy bids within `discount_threshold_pct` and queue them in the seller's sell cart for manual fulfilment. Multiprocess one worker per listing. |
+| `show_jira_board` | Weekdays every hour | Pull In-Review / In-Progress / Ready / In-Analysis tickets from a Jira Software board (rapidView=`board_id`) and render them as a 4-section HUD widget. Queue: `peon`. |
 | `get_desktop_logs` | Every 5 min | AI analysis of desktop activity logs |
 | `take_screenshots_for_gpt_capture` | Every 10 min | Desktop screenshot capture |
 | `show_calendar_information` | Every 15 min | Google Calendar events for today |
@@ -35,6 +36,7 @@ All tasks run on the `hud` queue (configured via `SPROUT.conf.task_routes`).
 |------|-------|
 | `tasks/hud_forex.py` | `show_forex_account` |
 | `tasks/hud_tcg.py` | `show_tcg_orders`, `show_tcg_sell_cart` |
+| `tasks/hud_jira.py` | `show_jira_board` |
 | `tasks/hud_gpt.py` | `get_desktop_logs`, `take_screenshots_for_gpt_capture` |
 | `tasks/hud_logs.py` | `get_failed_jobs`, `get_schedules` |
 | `tasks/hud_calendar.py` | `show_calendar_information` |
