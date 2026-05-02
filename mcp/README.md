@@ -87,6 +87,77 @@ Wraps Airtable Web API v0 for spreadsheet-style CRUD over bases, tables, and rec
 
 ---
 
+### Alpha Vantage (`apps/alpha_vantage/mcp.py`)
+
+Wraps the [Alpha Vantage API](https://www.alphavantage.co/documentation/) — stock quotes, FX rates, news & sentiment, fundamentals, technical indicators, crypto, commodities, and US economic indicators. Auth is a single `apikey` query parameter; rate limits are 25 requests/day on the free tier (premium tiers raise the cap). Requires valid `ALPHA_VANTAGE` section in `apps_config.yaml`.
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `alpha_vantage_global_quote` | `symbol` | Latest price/volume for one ticker |
+| `alpha_vantage_realtime_bulk_quotes` | `symbols` (comma-separated, ≤100) | Quotes for many US tickers |
+| `alpha_vantage_search_symbol` | `keywords` | Best-match tickers with scores |
+| `alpha_vantage_market_status` | — | Open/closed status for global venues |
+| `alpha_vantage_time_series_intraday` | `symbol`, `interval?`, `outputsize?` | Intraday OHLCV |
+| `alpha_vantage_time_series_daily` | `symbol`, `outputsize?`, `adjusted?` | Daily OHLCV (raw or adjusted) |
+| `alpha_vantage_fx_rate` | `from_currency`, `to_currency` | Realtime FX rate (also crypto codes) |
+| `alpha_vantage_convert_currency` | `amount`, `from_currency`, `to_currency` | Converted amount + rate |
+| `alpha_vantage_fx_intraday` | `from_symbol`, `to_symbol`, `interval?`, `outputsize?` | Intraday FX series |
+| `alpha_vantage_fx_daily` | `from_symbol`, `to_symbol`, `outputsize?` | Daily FX series |
+| `alpha_vantage_news_sentiment` | `tickers?`, `topics?`, `time_from?`, `time_to?`, `sort?`, `limit?` | News articles with sentiment |
+| `alpha_vantage_top_gainers_losers` | — | Daily top gainers/losers/most active |
+| `alpha_vantage_insider_transactions` | `symbol` | Recent insider buys/sells |
+| `alpha_vantage_earnings_call_transcript` | `symbol`, `quarter?` | Earnings call transcript |
+| `alpha_vantage_company_overview` | `symbol` | Description, ratios, metrics |
+| `alpha_vantage_etf_profile` | `symbol` | ETF holdings + sector allocation |
+| `alpha_vantage_income_statement` | `symbol` | Annual + quarterly income statements |
+| `alpha_vantage_balance_sheet` | `symbol` | Annual + quarterly balance sheets |
+| `alpha_vantage_cash_flow` | `symbol` | Annual + quarterly cash flows |
+| `alpha_vantage_earnings` | `symbol` | Earnings history + EPS |
+| `alpha_vantage_dividends` | `symbol` | Dividend events |
+| `alpha_vantage_indicator` | `function`, `symbol`, `interval?`, `time_period?`, `series_type?` | Generic technical indicator dispatcher |
+| `alpha_vantage_rsi` / `alpha_vantage_sma` / `alpha_vantage_ema` / `alpha_vantage_macd` / `alpha_vantage_bbands` | per-indicator | Common indicators |
+| `alpha_vantage_crypto_intraday` | `symbol`, `market?`, `interval?` | Intraday crypto OHLCV |
+| `alpha_vantage_crypto_daily` | `symbol`, `market?` | Daily crypto exchange rates |
+| `alpha_vantage_commodity` | `name`, `interval?` | Commodity series (WTI, BRENT, COPPER, etc.) |
+| `alpha_vantage_economic_indicator` | `name`, `interval?`, `maturity?` | Economic indicator series (GDP, CPI, etc.) |
+
+**Example prompts:**
+- *"What's the current EUR to USD exchange rate, and convert 500 EUR to USD."*
+- *"Get the latest news sentiment for AAPL and summarise the bullish vs bearish split."*
+- *"Show TSLA's RSI(14) on the daily timeframe and tell me if it's overbought."*
+- *"Pull the company overview for MSFT and quote the P/E and dividend yield."*
+
+---
+
+### Apify (`apps/apify/mcp.py`)
+
+Wraps the [Apify REST API v2](https://docs.apify.com/api/v2) — a web-scraping platform whose unit of execution is an *actor*. Generic tools call any actor (sync or async); the trends helpers wrap well-known public actors (Google Trends, Instagram, Facebook, TikTok, Reddit) so the model doesn't have to memorise per-actor input schemas. Auth is a Bearer token; runs consume Apify Compute Units. Requires valid `APIFY` section in `apps_config.yaml`.
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `apify_list_actors` | `my?`, `limit?` | List of actors visible to the token |
+| `apify_get_actor` | `actor_id` | Full actor metadata |
+| `apify_run_actor_sync` | `actor_id`, `input_payload?`, `timeout_secs?`, `limit?` | Dataset items from a sync run |
+| `apify_run_actor` | `actor_id`, `input_payload?`, `timeout_secs?` | Async run object (poll later) |
+| `apify_list_runs` | `status?`, `limit?` | Recent runs across the account |
+| `apify_get_run` | `run_id` | Run status + dataset/store IDs |
+| `apify_get_dataset_items` | `dataset_id`, `limit?`, `offset?`, `fields?` | Records from a dataset |
+| `apify_google_trends` | `keywords`, `geo?`, `timeframe?` | Trending interest per keyword/region/window |
+| `apify_instagram_hashtag` | `hashtags`, `results_limit?` | Recent IG posts per hashtag |
+| `apify_facebook_posts` | `page_urls_or_queries`, `results_limit?` | Recent FB posts |
+| `apify_tiktok` | `hashtags_or_keywords`, `results_per_page?` | Recent TikTok videos |
+| `apify_reddit` | `keywords`, `subreddits?`, `sort?`, `max_items?` | Reddit search hits |
+| `apify_aggregate_trends` | `query`, `platforms?`, `location?`, `timeframe?`, `per_platform_limit?` | Cross-platform normalised items |
+| `apify_default_actors` | — | Default actor IDs used by the trends helpers |
+
+**Example prompts:**
+- *"What's trending on Google for 'AI' in the US over the last month, and pull related queries."*
+- *"Aggregate posts about #climate across Instagram, TikTok, and Reddit and rank by engagement."*
+- *"Run the apify/google-trends-scraper for 'space exploration', 'mars', 'starship' worldwide for the last 12 months."*
+- *"Find recent TikTok videos tagged #fintech and Reddit posts about 'fintech' from r/technology."*
+
+---
+
 ### OANDA (`apps/oanda/mcp.py`)
 
 Wraps `apps/oanda/references/web/api/` services. Requires valid `OANDA` section in `apps_config.yaml`.

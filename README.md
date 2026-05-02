@@ -21,7 +21,9 @@ At its core the platform has three layers:
 |-----|-------------|------|-------|-------|
 | `aaa` | Philippine stock exchange (PSEI) | Selenium | Yes | [Site](https://aaa-equities.com.ph/) |
 | `airtable` | Airtable bases, tables, fields, and full record CRUD with formula filters and upsert | REST API | Yes | [API Docs](https://airtable.com/developers/web/api/introduction) · [Site](https://airtable.com/) |
+| `alpha_vantage` | Stock quotes, FX rates, news & sentiment, fundamentals, technical indicators, crypto, commodities, economic indicators | REST API | Yes | [API Docs](https://www.alphavantage.co/documentation/) · [MCP](https://mcp.alphavantage.co/) · [Site](https://www.alphavantage.co/) |
 | `antropic` | Anthropic Claude API | REST (native SDK) | Yes | [API Docs](https://docs.anthropic.com/en/api/) · [Console](https://console.anthropic.com/) |
+| `apify` | Web scraping platform — run actors, fetch datasets, social-media trends aggregation (Google Trends, IG, FB, TikTok, Reddit) | REST API | Yes | [API Docs](https://docs.apify.com/api/v2) · [Store](https://apify.com/store) · [Console](https://console.apify.com/) |
 | `browser` | HTTP fetching and web scraping (httpx + BeautifulSoup) | Local | No | — |
 | `desktop` | Windows desktop automation | Local | No | — |
 | `discord` | Discord bot — messaging, guilds, webhooks | REST API | Yes | [API Docs](https://discord.com/developers/docs/reference) · [Portal](https://discord.com/developers/applications) |
@@ -313,7 +315,9 @@ harqis-work/
 │   ├── .template/                  # Template for new apps
 │   ├── aaa/                        # Philippine stock exchange (Selenium)
 │   ├── airtable/                   # Airtable bases, tables, records (CRUD)
+│   ├── alpha_vantage/              # Stock/FX/news/fundamentals/technicals/crypto/commodities
 │   ├── anthropic/                  # Anthropic Claude API
+│   ├── apify/                      # Web scraping actors + social-media trends aggregation
 │   ├── browser/                    # HTTP fetching and web scraping
 │   ├── desktop/                    # Windows desktop automation
 │   ├── discord/                    # Discord bot
@@ -638,6 +642,7 @@ REDDIT_USER_AGENT=                # e.g. harqis-work:v1.0 (by /u/<you>)
 REDDIT_DEFAULT_SUBREDDIT=
 
 # ── Finance ───────────────────────────────────────────────────────────────────
+ALPHA_VANTAGE_API_KEY=
 OANDA_BEARER_TOKEN=
 OANDA_MT4_ACCOUNT_ID=
 YNAB_ACCESS_TOKEN=
@@ -656,6 +661,9 @@ TCG_MP_USERNAME=
 TCG_MP_PASSWORD=
 TCG_MP_USER_ID=
 TCG_SAVE=                         # local save dir for TCG marketplace exports
+
+# ── Web scraping / market research ────────────────────────────────────────────
+APIFY_API_KEY=
 
 # ── Cloud / infrastructure ────────────────────────────────────────────────────
 ORGO_API_KEY=

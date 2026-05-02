@@ -28,6 +28,8 @@ mcp = FastMCP("harqis-work")
 # (label, module path, registrar function name)
 APP_REGISTRARS = [
     ("Airtable",         "apps.airtable.mcp",       "register_airtable_tools"),
+    ("Alpha Vantage",    "apps.alpha_vantage.mcp",  "register_alpha_vantage_tools"),
+    ("Apify",            "apps.apify.mcp",          "register_apify_tools"),
     ("OANDA",            "apps.oanda.mcp",          "register_oanda_tools"),
     ("YNAB",             "apps.ynab.mcp",           "register_ynab_tools"),
     ("Google Apps",      "apps.google_apps.mcp",    "register_google_apps_tools"),

@@ -14,6 +14,8 @@ def given():
 def test_exchange_rate(given):
     when = given.get_exchange_rate('USD', 'EUR')
     assert_that(when, instance_of(dict))
+    if 'Information' in when or 'Note' in when:
+        pytest.skip(f"Alpha Vantage rate limit hit: {when.get('Information') or when.get('Note')}")
     assert_that(when, has_key('Realtime Currency Exchange Rate'))
 
 

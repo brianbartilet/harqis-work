@@ -76,6 +76,7 @@ class DependencyDetector:
     # missing creds before starting an agent. Naming MUST match keys in .env/apps.env exactly.
     _SERVICE_SECRETS: list[tuple[str, str]] = [
         # Finance
+        (r"\bALPHA\s*VANTAGE\b|\bALPHAVANTAGE\b",  "ALPHA_VANTAGE_API_KEY"),
         (r"\bOANDA\b",                            "OANDA_BEARER_TOKEN"),
         (r"\bYNAB\b",                             "YNAB_ACCESS_TOKEN"),
         # Productivity / project management
@@ -107,6 +108,8 @@ class DependencyDetector:
         (r"\bORGO\b",                             "ORGO_API_KEY"),
         (r"\bOWN\s*TRACKS\b|\bOWNTRACKS\b",       "OWN_TRACKS_PASSWORD"),
         (r"\bN8N\b",                              "N8N_API_KEY"),
+        # Web scraping / market research
+        (r"\bAPIFY\b",                            "APIFY_API_KEY"),
         # Trading / brokerage
         (r"\bMOO\b|\bFUTU\b",                     "MOO_PWD_MD5"),
     ]
