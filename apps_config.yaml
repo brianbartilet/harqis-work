@@ -1,0 +1,557 @@
+CELERY_TASKS:
+  application_name: 'workflow-harqis'
+  broker: ${CELERY_BROKER}
+
+
+N8N:
+    base_url: 'http://localhost:5678'
+    api_key: ${N8N_API_KEY}
+
+
+# DEPRECATED: HARQIS_GPT is the legacy config key used by the Assistants v2 REST fixtures
+# in apps/open_ai/references/services/. Kept to avoid breaking existing hud/ workflows.
+# New integrations should use the OPEN_AI section below.
+HARQIS_GPT:
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.openai.com/v1'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    api_key: ${OPENAI_API_KEY}
+    model: 'gpt-4.1'
+    max_tokens: 200
+    default_assistant_id: ${OPENAI_ASSISTANT_ID}
+    assistant_id_desktop: ${OPENAI_ASSISTANT_DESKTOP}
+    assistant_id_reporter: ${OPENAI_ASSISTANT_REPORTER}
+
+
+OPEN_AI:
+  app_id: 'open_ai'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.openai.com/v1/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 120
+    stream: True
+  app_data:
+    api_key: ${OPENAI_API_KEY}
+    model: 'gpt-4.1'
+    default_assistant_id: ${OPENAI_ASSISTANT_ID}
+    assistant_id_desktop: ${OPENAI_ASSISTANT_DESKTOP}
+    assistant_id_reporter: ${OPENAI_ASSISTANT_REPORTER}
+  return_data_only: True
+
+
+OANDA:
+  app_id: 'oanda'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api-fxtrade.oanda.com/v3/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    token: ${OANDA_BEARER_TOKEN}
+    mt4AccountID: ${OANDA_MT4_ACCOUNT_ID}
+  return_data_only: True
+
+
+ECHO_MTG:
+  app_id: 'echo_mtg'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.echomtg.com/api/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    username: ${ECHO_MTG_USER}
+    password: ${ECHO_MTG_PASSWORD}
+  return_data_only: True
+
+
+ECHO_MTG_FE:
+  app_id: 'echo_mtg'
+  client: 'rest'
+  parameters:
+    base_url: 'https://www.echomtg.com/api/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    username: ${ECHO_MTG_USER}
+    password: ${ECHO_MTG_PASSWORD}
+  return_data_only: True
+
+
+ECHO_MTG_BULK:
+  app_id: 'echo_mtg'
+  client: 'rest'
+  parameters:
+    base_url: 'https://www.echomtg.com/api/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    username: ${ECHO_MTG_BULK_USER}
+    password: ${ECHO_MTG_BULK_PASSWORD}
+    token: ${ECHO_MTG_BULK_BEARER_TOKEN}
+  return_data_only: True
+
+
+ECHO_MTG_FE_BULK:
+  app_id: 'echo_mtg'
+  client: 'rest'
+  parameters:
+    base_url: 'https://www.echomtg.com/api/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    username: ${ECHO_MTG_BULK_USER}
+    password: ${ECHO_MTG_BULK_PASSWORD}
+    token: ${ECHO_MTG_BULK_BEARER_TOKEN}
+  return_data_only: True
+
+
+SCRYFALL:
+  app_id: 'scry_mtg'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.scryfall.com/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  return_data_only: True
+  app_data:
+    app_name_header: 'harqis-work/1.0'
+    path_folder_static_file: ${SCRY_DOWNLOADS_PATH}
+
+
+TCG_MP:
+  app_id: 'tcg_mp'
+  client: 'rest'
+  parameters:
+    base_url: 'https://thetcgmarketplace.com:3501/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    category_id: 3 # Magic: The Gathering
+    user_id: ${TCG_MP_USER_ID}
+    username: ${TCG_MP_USERNAME}
+    password: ${TCG_MP_PASSWORD}
+    save_path: ${TCG_SAVE}
+  return_data_only: True
+
+
+RAINMETER:
+  app_id: 'rainmeter'
+  bin_path: ${RAINMETER_BIN_PATH}
+  static_path: ${RAINMETER_STATIC_PATH}
+  write_skin_to_path: ${RAINMETER_WRITE_SKINS_TO_PATH}
+  write_skin_to_feed: ${RAINMETER_WRITE_FEED_TO_PATH}
+  skin_name: 'HARQIS_DESKTOP'
+
+
+GOOGLE_APPS:
+  app_id: 'gsuite'
+  client: 'rest'
+  parameters:
+    base_url: 'https://www.googleapis.com'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    api_key: ${GOOGLE_APPS_API_KEY}
+    scopes:
+      - "https://www.googleapis.com/auth/calendar.readonly"
+    credentials: "credentials.json"
+    storage: "storage.json"
+    sheet_id_app_harqis: ${GOOGLE_SHEET_HARQIS_ID}
+  return_data_only: True
+
+
+GOOGLE_KEEP:
+  app_id: 'keep'
+  client: 'rest'
+  parameters:
+    base_url: 'https://keep.googleapis.com/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    scopes:
+      - "https://www.googleapis.com/auth/keep"
+    storage: "storage-ha.json"
+    credentials: "credentials-ha.json"
+  return_data_only: True
+
+
+GOOGLE_GMAIL:
+  app_id: 'gmail'
+  client: 'rest'
+  parameters:
+    base_url: 'https://gmail.googleapis.com/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    scopes:
+      - "https://www.googleapis.com/auth/gmail.readonly"
+    credentials: "credentials.json"
+    storage: "storage-gmail.json"
+  return_data_only: True
+
+
+GOOGLE_GMAIL_SEND:
+  app_id: 'gmail'
+  client: 'rest'
+  parameters:
+    base_url: 'https://gmail.googleapis.com/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    scopes:
+      - "https://www.googleapis.com/auth/gmail.send"
+    credentials: "credentials.json"
+    storage: "storage-gmail-send.json"
+  return_data_only: True
+
+
+ELASTIC_LOGGING:
+  app_id: 'elasticsearch'
+  client: 'rest'
+  parameters:
+    url: http://localhost:9200
+  app_data:
+    update_interval: "DAILY"
+    api_key: ${ELASTIC_API_KEY}
+    username: ${ELASTIC_USER}
+    password: ${ELASTIC_PASSWORD}
+    use_basic_auth: False
+    auth_type: basic
+    default_index: harqis-elastic-logging
+
+
+DESKTOP:
+  capture:
+    strf_time: "%Y-%m-%d-%H-%M"
+    re_monthly: '\b\d{4}-\d{2}\b'
+    re_daily: '\b\d{4}-\d{2}-\d{2}\b'
+    re_hourly: '\b\d{4}-\d{2}-\d{2} \d{2}\b'
+    actions_log_path: ${ACTIONS_LOG_PATH}
+    archive_path: ${ACTIONS_ARCHIVE_PATH}
+    screenshots_path: ${ACTIONS_SCREENSHOT_PATH}
+    show_console: False
+  copy_files:
+    path_dev_files: ${DESKTOP_PATH_DEV}
+    path_run_files: ${DESKTOP_PATH_RUN}
+  corsair:
+    path_profiles: ${DESKTOP_PATH_I_CUE_PROFILES}
+  feed:
+    path_to_feed: ${DESKTOP_PATH_FEED}
+
+
+ELEVEN_LABS:
+  data:
+    assistants:
+      agent_n8n_automation: ${ELEVEN_AGENT_N8N}
+      agent_n8n_automation_chat: ${ELEVEN_AGENT_N8N_CHAT}
+      agent_n8n_automation_chat_tests: ${ELEVEN_AGENT_N8N_CHAT_TESTS}
+
+
+PYTHON_RUNNER: # hard code a runner to trigger Python commands instead of calling activate
+  bin: ${PYTHON_EXE}
+  root: ${ENV_ROOT}
+
+
+YNAB:
+  app_id: 'ynab_account_main'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.youneedabudget.com/v1/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    access_token: ${YNAB_ACCESS_TOKEN}
+    budget_php_id: ${YNAB_BUDGET_PHP}
+    budget_sgd_id: ${YNAB_BUDGET_SGD}
+  return_data_only: True
+
+ANTHROPIC:
+  app_id: "claude_work"
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.anthropic.com/v1/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    access_token: ${ANTHROPIC_API_KEY}
+  return_data_only: True
+
+OWN_TRACKS:
+  app_id: 'own_tracks'
+  client: 'rest'
+  parameters:
+    base_url: 'http://localhost:8083/'
+    response_encoding: 'utf-8'
+    verify: False
+    timeout: 10
+    stream: False
+  app_data:
+    host: ${OWN_TRACKS_HOST}
+    port: ${OWN_TRACKS_PORT}
+    username: ${OWN_TRACKS_USERNAME}
+    password: ${OWN_TRACKS_PASSWORD}
+    default_user: ${OWN_TRACKS_DEFAULT_USER}
+    default_device: ${OWN_TRACKS_DEFAULT_DEVICE}
+  return_data_only: True
+
+
+JIRA:
+  app_id: 'jira'
+  client: 'rest'
+  parameters:
+    base_url: 'https://placeholder/rest/api/2/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    domain: ${JIRA_DOMAIN}
+    api_token: ${JIRA_API_TOKEN}
+    user: ${JIRA_USER}
+  return_data_only: True
+
+
+TRELLO:
+  app_id: 'trello'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.trello.com/1/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    api_key: ${TRELLO_API_KEY}
+    api_token: ${TRELLO_API_TOKEN}
+  return_data_only: True
+
+
+TELEGRAM:
+  app_id: 'telegram'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.telegram.org/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    bot_token: ${TELEGRAM_BOT_TOKEN}
+    default_chat_id: ${TELEGRAM_DEFAULT_CHAT_ID}
+  return_data_only: True
+
+
+MOO:
+  app_id: 'moo'
+  app_data:
+    host: 127.0.0.1
+    port: 11111
+    trd_env: SIMULATE
+    acc_id: 0
+    security_firm: FUTUSECURITIES
+    pwd_md5: ${MOO_PWD_MD5}
+
+
+DISCORD:
+  app_id: 'discord'
+  client: 'rest'
+  parameters:
+    base_url: 'https://discord.com/api/v10/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 30
+    stream: False
+  app_data:
+    bot_token: ${DISCORD_BOT_TOKEN}
+    default_guild_id: ${DISCORD_DEFAULT_GUILD_ID}
+    default_channel_id: ${DISCORD_DEFAULT_CHANNEL_ID}
+  return_data_only: True
+
+
+ORGO:
+  app_id: 'orgo'
+  client: 'rest'
+  parameters:
+    base_url: 'https://www.orgo.ai/api/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: False
+  app_data:
+    api_key: ${ORGO_API_KEY}
+  return_data_only: True
+
+
+REDDIT:
+  app_id: 'reddit'
+  client: 'rest'
+  parameters:
+    base_url: 'https://oauth.reddit.com/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 30
+    stream: False
+  app_data:
+    client_id: ${REDDIT_CLIENT_ID}
+    client_secret: ${REDDIT_CLIENT_SECRET}
+    username: ${REDDIT_USERNAME}
+    password: ${REDDIT_PASSWORD}
+    user_agent: ${REDDIT_USER_AGENT}
+    default_subreddit: ${REDDIT_DEFAULT_SUBREDDIT}
+
+
+LINKEDIN:
+  app_id: 'linkedin'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.linkedin.com/v2/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 30
+    stream: False
+  app_data:
+    client_id: ${LINKEDIN_CLIENT_ID}
+    client_secret: ${LINKEDIN_CLIENT_SECRET}
+    access_token: ${LINKEDIN_ACCESS_TOKEN}
+    redirect_uri: ${LINKEDIN_REDIRECT_URI}
+    person_id: ${LINKEDIN_PERSON_ID}
+    default_post_urn: ${LINKEDIN_DEFAULT_POST_URN}
+  return_data_only: True
+
+
+NOTION:
+  app_id: 'notion'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.notion.com/v1/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    api_token: ${NOTION_API_TOKEN}
+  return_data_only: True
+
+
+GOOGLE_TASKS:
+  app_id: 'tasks'
+  client: 'rest'
+  parameters:
+    base_url: 'https://tasks.googleapis.com/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: False
+  app_data:
+    scopes:
+      - "https://www.googleapis.com/auth/tasks"
+    credentials: "credentials.json"
+    storage: "storage-tasks.json"
+  return_data_only: True
+
+
+GOOGLE_DRIVE:
+  app_id: 'drive'
+  client: 'rest'
+  parameters:
+    base_url: 'https://www.googleapis.com/drive/v3/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: False
+  app_data:
+    scopes:
+      - "https://www.googleapis.com/auth/drive"
+    credentials: "credentials.json"
+    storage: "storage-drive.json"
+  return_data_only: True
+
+
+GOOGLE_TRANSLATION:
+  app_id: 'translation'
+  client: 'rest'
+  parameters:
+    base_url: 'https://translation.googleapis.com/language/translate/v2'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 30
+    stream: False
+  app_data:
+    api_key: ${GOOGLE_APPS_API_KEY}
+  return_data_only: True
+
+
+GEMINI:
+  app_id: 'gemini'
+  client: 'rest'
+  parameters:
+    base_url: 'https://generativelanguage.googleapis.com/v1beta/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: False
+  app_data:
+    api_key: ${GEMINI_API_KEY}
+  return_data_only: True
+
+
+ALPHA_VANTAGE:
+  app_id: 'alpha_vantage'
+  client: 'rest'
+  parameters:
+    base_url: 'https://www.alphavantage.co/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: False
+  app_data:
+    api_key: ${ALPHA_VANTAGE_API_KEY}
+  return_data_only: True
+
+
+APIFY:
+  app_id: 'apify'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.apify.com/v2/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 300
+    stream: False
+  app_data:
+    api_key: ${APIFY_API_KEY}
+  return_data_only: True
