@@ -555,3 +555,64 @@ APIFY:
   app_data:
     api_key: ${APIFY_API_KEY}
   return_data_only: True
+
+
+GROK:
+  app_id: 'grok'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.x.ai/v1'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    api_key: ${GROK_API_KEY}
+    model: 'grok-3'
+  return_data_only: True
+
+
+GITHUB:
+    app_id: 'github'
+    client: 'rest'
+    parameters:
+      base_url: 'https://api.github.com'
+      response_encoding: 'utf-8'
+      verify: True
+      timeout: 30
+      stream: False
+    app_data:
+      api_token: ${GITHUB_API_TOKEN}
+    return_data_only: True
+
+
+PERPLEXITY:
+    app_id: 'perplexity'
+    client: 'rest'
+    parameters:
+      base_url: 'https://api.perplexity.ai'
+      response_encoding: 'utf-8'
+      verify: True
+      timeout: 60
+      stream: True
+    app_data:
+      api_key: ${PERPLEXITY_API_KEY}
+      model: 'sonar'
+    return_data_only: True
+
+
+AIRTABLE:
+    app_id: 'airtable'
+    client: 'rest'
+    parameters:
+      base_url: 'https://api.airtable.com/v0'
+      response_encoding: 'utf-8'
+      verify: True
+      timeout: 30
+      stream: False
+    app_data:
+      api_token: ${AIRTABLE_API_TOKEN}
+    return_data_only: True
+
+
+
