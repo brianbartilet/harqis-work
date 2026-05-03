@@ -42,7 +42,7 @@ Scope is the top-level layer of the change. If every changed file lives under on
 | `workflows` | Anything under `workflows/` |
 | `workflows/<name>` | Single workflow category — e.g. `workflows/hud`, `workflows/purchases` |
 | `agents` | Anything under `agents/` |
-| `agents/kanban` | Kanban orchestrator and profiles |
+| `agents/projects` | Kanban orchestrator and profiles |
 | `mcp` | `mcp/` server |
 | `frontend` | `frontend/` |
 | `docs` | `docs/`, `README.md`, in-tree `*.md` |
@@ -62,7 +62,7 @@ Scope is the top-level layer of the change. If every changed file lives under on
 ```
 feat(apps/airtable): scaffold integration with mcp tools
 feat(workflows): support task execution via broadcast
-feat(agents/kanban): support manual tags for humans
+feat(agents/projects): support manual tags for humans
 fix(workflows/hud): mirror tcg qr downloads into now folder
 fix(workflows/purchases): handle empty scryfall bulk response
 refactor(apps/openai): adopt latest sdk client surface

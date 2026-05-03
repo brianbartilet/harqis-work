@@ -12,12 +12,12 @@ Skill files live in `.claude/commands/*.md`. The first line of each file is the 
 | Skill | Command | Description |
 |---|---|---|
 | **agent-prompt** | `/agent-prompt <prompt_name>` | Run a named AI prompt from `agents/prompts/` against the codebase. `prompt_name` is the filename without extension (e.g. `code_smells`, `docs_agent`, `desktop_analysis`). |
-| **commit** | `/commit [<subject hint>] [<pathspec>...] [--type <t>] [--scope <s>] [--no-untracked] [--dry-run]` | Stage all working-tree changes and commit with a Conventional-Commit message inferred from the diff, following [COMMIT-MESSAGE-GUIDE.md](COMMIT-MESSAGE-GUIDE.md). **Calling `/commit` is your sign-off — no confirmation prompt.** Auto-detects type and scope from the layer of changed files (`apps/<name>`, `workflows/<name>`, `agents/kanban`, `mcp`, `frontend`, `repo`). Pass pathspecs to limit staging. Skips `.env*` files for safety. Never pushes, never amends, never bypasses hooks. |
+| **commit** | `/commit [<subject hint>] [<pathspec>...] [--type <t>] [--scope <s>] [--no-untracked] [--dry-run]` | Stage all working-tree changes and commit with a Conventional-Commit message inferred from the diff, following [COMMIT-MESSAGE-GUIDE.md](COMMIT-MESSAGE-GUIDE.md). **Calling `/commit` is your sign-off — no confirmation prompt.** Auto-detects type and scope from the layer of changed files (`apps/<name>`, `workflows/<name>`, `agents/projects`, `mcp`, `frontend`, `repo`). Pass pathspecs to limit staging. Skips `.env*` files for safety. Never pushes, never amends, never bypasses hooks. |
 | **create-new-hud** | `/create-new-hud <hud_title> <description_or_screenshot_path> [--reference <existing_hud>] [--no-prompt]` | Scaffold a new Rainmeter HUD widget under `workflows/hud/tasks/hud_<slug>.py` from a description (or screenshot). Asks for the title, header links, sample dump output, dimensions (with reference-widget defaults), `ScheduleCategory` (calendar visibility), Celery schedule, and queue (extending `WorkflowQueue` if a new queue is named). Wires up the section dict, schedule entry, `__init__.py` import, README row, and any new app endpoints needed for the data fetch. |
 | **deploy-harqis** | `/deploy-harqis <host\|node> [-q queues] [-p profile] [--hw labels] [--down] [--no-frontend] [--no-mcp] [--no-kanban] [--num-agents N] [--dry-run]` | End-to-end reusable deploy of the harqis-work platform — **cross-platform**, auto-detects macOS / Linux / Windows. `host` brings up the full stack (Docker + Beat scheduler + worker + frontend + MCP + Kanban + Flower); the host's Kanban orchestrator defaults to `agent:default` so the host also acts as 1 default-queue agent worker. `node` runs a Celery worker plus a profile-scoped Kanban orchestrator (the skill **asks** for `-p` if missing). `--hw` filters by `hw:*` labels (auto-detected from OS otherwise). Tear down with `--down`. |
 | **generate-registry** | `/generate-registry` | Regenerate `frontend/registry.py` by scanning all `workflows/*/tasks_config.py` files. Run after adding or removing any Celery task. |
 | **new-fork-repository** | `/new-fork-repository <business_or_client_name> [--owner <gh_owner>] [--visibility public\|private\|internal] [--description "..."] [--keep <list>] [--strip <list>] [--apps-keep <list>] [--apps-keep-all] [--target-dir <path>] [--remote <url>] [--no-create-repo] [--no-push] [--no-git-init] [--dry-run]` | Fork `harqis-work` into a clean business-/client-scoped baseline at `harqis-work-fork-<slug>`. Strips host-local AI tooling (`.claude/`, `.openclaw/`, `logs/`, `data/`), every pre-built workflow category (keeps only `.template`), and all real credentials (regenerates `.example` variants). **Apps are pruned to a curated 16-item set by default** (override with `--apps-keep` or `--apps-keep-all`); the prune cascades through `apps_config.yaml.example`, `.env/apps.env.example`, `mcp/server.py`'s `APP_REGISTRARS`, agent profiles' `mcp_apps`, and the README app inventory. Rewrites `README.md`, `workflows/README.md`, `workflows/config.py`, `workflows/queues.py`. **Auto-creates a private GitHub repo via `gh repo create` and pushes the initial commit by default** — pass `--no-create-repo` or `--no-push` to opt out, `--visibility public` to publish openly. |
-| **new-kanban-profile** | `/new-kanban-profile <profile_name> [--display-name "..."] [--email "..."] [--role "..."] [--no-mode-a]` | Scaffold a new Kanban agent profile YAML under `agents/kanban/profiles/examples/`. Includes a persona block (signed comments — Mode B, default-on) and commented-out Mode A scaffolding. Adds blank `TRELLO_AGENT_API_KEY__<SUFFIX>` / `TRELLO_AGENT_API_TOKEN__<SUFFIX>` placeholders to `.env/apps.env`. Prints the manual Trello-account setup checklist. |
+| **new-kanban-profile** | `/new-kanban-profile <profile_name> [--display-name "..."] [--email "..."] [--role "..."] [--no-mode-a]` | Scaffold a new Kanban agent profile YAML under `agents/projects/profiles/examples/`. Includes a persona block (signed comments — Mode B, default-on) and commented-out Mode A scaffolding. Adds blank `TRELLO_AGENT_API_KEY__<SUFFIX>` / `TRELLO_AGENT_API_TOKEN__<SUFFIX>` placeholders to `.env/apps.env`. Prints the manual Trello-account setup checklist. |
 | **new-n8n-workflow** | `/new-n8n-workflow <description_or_diagram>` | Build and deploy an n8n workflow directly into the local n8n instance (`localhost:5678`) from a drawio diagram, XML/BPMN file, or free-text description. |
 | **new-service-app** | `/new-service-app <app_name> [<spec_or_url>] [--workflow <name>]` | Scaffold a complete app integration under `apps/`. With a spec URL, generates real service classes, DTOs, and MCP tools from the API. Without a spec, creates a skeleton stub. Pass `--workflow` to also scaffold a Celery task that uses the new app. |
 | **new-workflow** | `/new-workflow [<category>] <task_description_or_diagram> [--merge <file>] [--new-file <name>]` | Design and implement an RPA-style Celery workflow that chains app integrations. Parses drawio diagrams or text descriptions, resolves missing app and Python package dependencies, writes the task file, registers the schedule, and produces tests. |
@@ -153,7 +153,7 @@ When new always-on components are added to harqis-work (a new daemon or orchestr
 
 ### `/new-kanban-profile`
 
-Scaffolds a new Kanban agent profile under `agents/kanban/profiles/examples/<file_basename>.yaml` and registers Mode A env-var placeholders in `.env/apps.env`. Designed so each profile = one persona = one user-facing identity on the Trello/Jira board.
+Scaffolds a new Kanban agent profile under `agents/projects/profiles/examples/<file_basename>.yaml` and registers Mode A env-var placeholders in `.env/apps.env`. Designed so each profile = one persona = one user-facing identity on the Trello/Jira board.
 
 ```
 /new-kanban-profile finance
@@ -231,7 +231,7 @@ Forks `harqis-work` into a fresh, business-/client-scoped baseline that another 
    - `apps_config.yaml.example` — sections matching stripped apps removed (infrastructure sections like `CELERY_TASKS`, `ELASTIC_LOGGING` are preserved).
    - `.env/apps.env.example` — env-var blocks for stripped apps removed; redaction still applied.
    - `mcp/server.py` — `APP_REGISTRARS` filtered so the MCP server boots without "skipping module" warnings.
-   - `agents/kanban/profiles/examples/agent_*.yaml` — `mcp_apps` lists filtered to kept apps.
+   - `agents/projects/profiles/examples/agent_*.yaml` — `mcp_apps` lists filtered to kept apps.
    - The README's App Inventory table — rows for stripped apps removed.
 6. **Sanitizes secrets** — every credential replaced by `<REPLACE_ME>`. OAuth/service-account JSON files under `.env/` are deleted outright (the host operator obtains fresh ones).
 7. **Sweeps the docs** for stale references to stripped folders/apps. Code imports get a `# TODO: re-introduce after building <name>` marker; markdown references are listed in the activation checklist for the consuming team to review.
@@ -302,7 +302,7 @@ apps/<app_name>/
 
 **Also updates automatically:**
 - `mcp/server.py` — registers tools with the MCP server
-- `agents/kanban/agent/tools/mcp_bridge.py` — adds to `_APP_LOADERS`
+- `agents/projects/agent/tools/mcp_bridge.py` — adds to `_APP_LOADERS`
 - `apps_config.yaml` — appends new app block with `${ENV_VAR}` placeholders
 - `.env/apps.env` — appends empty env var stubs
 - `README.md` — adds row to App Inventory table
@@ -367,7 +367,7 @@ Runs pytest for a specific app or the full suite.
 ```
 /run-tests                        # full suite (excludes workflows/)
 /run-tests echo_mtg               # apps/echo_mtg/tests/
-/run-tests agents/kanban/tests/   # direct pytest path
+/run-tests agents/projects/tests/   # direct pytest path
 /run-tests -m smoke               # by marker
 ```
 
@@ -379,7 +379,7 @@ Runs pytest for a specific app or the full suite.
 | `sanity` | Broader coverage, may write data |
 | `integration` | Requires live credentials and external services |
 
-All app tests are live integration tests — no mocking. Kanban agent tests (`agents/kanban/tests/`) are fully offline (75 unit tests).
+All app tests are live integration tests — no mocking. Kanban agent tests (`agents/projects/tests/`) are fully offline (75 unit tests).
 
 ---
 

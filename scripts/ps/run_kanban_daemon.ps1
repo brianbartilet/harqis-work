@@ -6,8 +6,8 @@
 #   KANBAN_PROFILES_DIR    — override profiles directory
 #   KANBAN_DRY_RUN         — set to "1" to log actions without invoking Claude
 #   KANBAN_PROFILE_FILTER  — restrict to one profile (e.g. "agent:default", "agent:code")
-#   KANBAN_HW_LABELS       — comma-separated hw:* labels this orchestrator satisfies;
-#                            unset = auto-detect from the host OS (Windows → hw:windows)
+#   KANBAN_OS_LABELS       — comma-separated os:* labels this orchestrator satisfies;
+#                            unset = auto-detect from the host OS (Windows → os:windows, os:win)
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = (& git -C $PSScriptRoot rev-parse --show-toplevel)
@@ -21,7 +21,7 @@ if ($env:KANBAN_NUM_AGENTS)      { $kanbanArgs += @('--num-agents',     $env:KAN
 if ($env:KANBAN_POLL_INTERVAL)   { $kanbanArgs += @('--poll-interval',  $env:KANBAN_POLL_INTERVAL) }
 if ($env:KANBAN_PROFILES_DIR)    { $kanbanArgs += @('--profiles-dir',   $env:KANBAN_PROFILES_DIR) }
 if ($env:KANBAN_PROFILE_FILTER)  { $kanbanArgs += @('--profile',        $env:KANBAN_PROFILE_FILTER) }
-if ($env:KANBAN_HW_LABELS)       { $kanbanArgs += @('--hw',             $env:KANBAN_HW_LABELS) }
+if ($env:KANBAN_OS_LABELS)       { $kanbanArgs += @('--os',             $env:KANBAN_OS_LABELS) }
 if ($env:KANBAN_DRY_RUN -eq '1') { $kanbanArgs += '--dry-run' }
 
-& python -m agents.kanban.orchestrator.local @kanbanArgs
+& python -m agents.projects.orchestrator.local @kanbanArgs

@@ -15,7 +15,7 @@ harqis-work is a multi-platform codebase. Most components are fully cross-platfo
 
 | Component                                                      | Windows | Linux | macOS | Notes |
 |----------------------------------------------------------------|:-------:|:-----:|:-----:|-------|
-| `agents/kanban/` — Kanban orchestrator + agent loop            | ✅ | ✅ | ✅ | Fully cross-platform by design; intended to run on Linux worker nodes |
+| `agents/projects/` — Kanban orchestrator + agent loop            | ✅ | ✅ | ✅ | Fully cross-platform by design; intended to run on Linux worker nodes |
 | `apps/` — REST API integrations (20+ apps)                     | ✅ | ✅ | ✅ | Pure HTTP/SDK; no OS dependencies |
 | `frontend/` — FastAPI + HTMX dashboard                         | ✅ | ✅ | ✅ | Cross-platform |
 | `mcp/` — FastMCP server                                        | ✅ | ✅ | ✅ | Cross-platform |
@@ -79,7 +79,7 @@ Batch files (`.bat`) are provided for Windows. The n8n deployment scripts have b
 
 ## Cross-Platform Notes
 
-### Bash Tool (`agents/kanban/agent/tools/filesystem.py`)
+### Bash Tool (`agents/projects/agent/tools/filesystem.py`)
 
 The `BashTool` used by Kanban agents detects the platform at runtime:
 
@@ -115,6 +115,6 @@ The intended deployment topology separates Windows-specific workloads from cross
 |------|----|------|
 | Orchestrator / dev machine | Windows | Rainmeter HUD, iCUE profiles, active window detection, Kanban orchestrator, frontend |
 | Worker nodes | Linux (e.g. N100 mini PCs) | Kanban agents, REST workflow tasks, MCP server |
-| Shared | Any | All `apps/` integrations, `agents/kanban/`, `frontend/`, `mcp/` |
+| Shared | Any | All `apps/` integrations, `agents/projects/`, `frontend/`, `mcp/` |
 
 This means Windows-specific subsystems are always co-located on the primary Windows machine, while compute-heavy or headless agent workloads can be offloaded to Linux nodes.

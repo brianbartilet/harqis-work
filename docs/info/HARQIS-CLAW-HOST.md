@@ -456,7 +456,7 @@ Each daemon ships in two flavours — Bash (`scripts/sh/`) for macOS / Linux and
 | `work.harqis.worker` | `run_worker_daemon.sh` | `run_worker_daemon.ps1` | `WORKFLOW_QUEUE=${WORKFLOW_QUEUE:-default} python run_workflows.py worker` (Celery's `-Q` accepts a comma-separated list) |
 | `work.harqis.frontend` | `run_frontend_daemon.sh` | `run_frontend_daemon.ps1` | `python frontend/main.py` |
 | `work.harqis.mcp` | `run_mcp_daemon.sh` | `run_mcp_daemon.ps1` | `python mcp/server.py` |
-| `work.harqis.kanban` | `run_kanban_daemon.sh` | `run_kanban_daemon.ps1` | `python -m agents.kanban.orchestrator.local --num-agents $KANBAN_NUM_AGENTS` |
+| `work.harqis.kanban` | `run_kanban_daemon.sh` | `run_kanban_daemon.ps1` | `python -m agents.projects.orchestrator.local --num-agents $KANBAN_NUM_AGENTS` |
 | `work.harqis.flower` | `run_flower_daemon.sh` | `run_flower_daemon.ps1` | `python -m celery -A core.apps.sprout.app.celery:SPROUT flower --port=$FLOWER_PORT --address=$FLOWER_ADDRESS --basic-auth=$FLOWER_USER:$FLOWER_PASSWORD` |
 
 **Hosting mechanism per OS:**

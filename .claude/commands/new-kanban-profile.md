@@ -1,4 +1,4 @@
-Scaffold a new Kanban agent profile under `agents/kanban/profiles/examples/` — generates the YAML with a persona block, registers placeholder Mode A env vars in `.env/apps.env`, and prints the manual Trello/Atlassian-account setup checklist for the user to follow afterwards.
+Scaffold a new agent profile under `agents/projects/profiles/examples/` — generates the YAML with a persona block, registers placeholder Mode A env vars in `.env/apps.env`, and prints the manual Trello-account setup checklist for the user to follow afterwards.
 
 ## Arguments
 
@@ -40,13 +40,13 @@ Rules:
 - `suffix_upper` is `<bare>` uppercased — used for env var keys
   (`TRELLO_AGENT_API_KEY__<SUFFIX>` and `TRELLO_AGENT_API_TOKEN__<SUFFIX>`).
 
-If the file `agents/kanban/profiles/examples/<file_basename>.yaml` already exists, stop and tell the user — don't overwrite.
+If the file `agents/projects/profiles/examples/<file_basename>.yaml` already exists, stop and tell the user — don't overwrite.
 
 ---
 
 ## Step 2 — Generate the profile YAML
 
-Write `agents/kanban/profiles/examples/<file_basename>.yaml` using this template. Replace every `${...}` token with the values from Step 1.
+Write `agents/projects/profiles/examples/<file_basename>.yaml` using this template. Replace every `${...}` token with the values from Step 1.
 
 ```yaml
 id: ${profile_id}
@@ -157,7 +157,7 @@ Do not add real values. Never overwrite a populated line.
 Print this checklist verbatim, with `<NAME>`, `<EMAIL>`, `<SUFFIX>`, `<DISPLAY>` substituted from Step 1:
 
 ```
-✅ Profile scaffolded: agents/kanban/profiles/examples/<file_basename>.yaml
+✅ Profile scaffolded: agents/projects/profiles/examples/<file_basename>.yaml
 ✅ Mode A env vars added to .env/apps.env (blank — fill in to activate)
 
 The agent is RUNNING NOW under Mode B (signed comments under the shared
@@ -193,7 +193,7 @@ To upgrade to Mode A (real Trello account, real avatar, real attribution):
            TRELLO_AGENT_API_TOKEN__<SUFFIX>=<paste>
 
   5. Activate Mode A in the profile YAML:
-       - Open agents/kanban/profiles/examples/<file_basename>.yaml
+       - Open agents/projects/profiles/examples/<file_basename>.yaml
        - Uncomment the `provider_credentials:` block
        - Commit the change
 
@@ -226,7 +226,7 @@ The new profile is automatically loaded by `ProfileRegistry` and gets exercised 
 ## Quality checklist (verify before finishing)
 
 - [ ] `profile_id` follows the `agent:<bare>` convention
-- [ ] File written at `agents/kanban/profiles/examples/<file_basename>.yaml`
+- [ ] File written at `agents/projects/profiles/examples/<file_basename>.yaml`
 - [ ] File doesn't already exist (no overwrite)
 - [ ] Persona block includes `display_name`, `email`, `role`, `signature`
 - [ ] Mode A `provider_credentials` block is **commented** (not active) — Mode B is the default-on

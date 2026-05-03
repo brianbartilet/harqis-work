@@ -86,7 +86,7 @@ ls apps/ | grep -i "<app_keyword>"
 **Check the Kanban MCP bridge:**
 
 ```bash
-grep -i "<app_keyword>" agents/kanban/agent/tools/mcp_bridge.py
+grep -i "<app_keyword>" agents/projects/agent/tools/mcp_bridge.py
 ```
 
 If a native integration exists:

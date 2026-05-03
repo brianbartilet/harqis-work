@@ -141,7 +141,7 @@ workflows/social/
 ### Always strip from `agents/` (any client-private profiles or memory)
 
 Walk `agents/` and strip:
-- Anything under `agents/kanban/profiles/` that is NOT inside `examples/` (private profiles stay with the source).
+- Anything under `agents/projects/profiles/` that is NOT inside `examples/` (private profiles stay with the source).
 - Any `*.local.yaml` / `*.local.json` files.
 - Any `agents/openclaw/memory/` directory contents.
 
@@ -226,7 +226,7 @@ STRIP (will not be copied):
   .claude/, .openclaw/, .idea/, .run/, .venv/, .pytest_cache/, __pycache__/
   workflows/desktop/, workflows/finance/, workflows/hud/, workflows/mobile/,
   workflows/n8n/, workflows/purchases/, workflows/social/
-  agents/kanban/profiles/<private profiles>
+  agents/projects/profiles/<private profiles>
   app.log*, celerybeat-schedule.*, data/
   <any --strip entries>
 
@@ -624,23 +624,23 @@ After editing, the file must still parse:
 .venv/bin/python -c "import ast; ast.parse(open('mcp/server.py').read())" && echo "ok"
 ```
 
-### 7b-4 — Agent profiles (`agents/kanban/profiles/examples/agent_*.yaml`)
+### 7b-4 — Agent profiles (`agents/projects/profiles/examples/agent_*.yaml`)
 
 For each profile YAML, locate the `tools.mcp_apps:` list and remove any entry whose value matches a stripped-app folder name. Profiles that reference no kept apps should have `mcp_apps: []` (empty list — `_load_tools` accepts this) rather than omitting the key.
 
 Files affected:
 ```
-agents/kanban/profiles/examples/agent_code.yaml    # mcp_apps: many
-agents/kanban/profiles/examples/agent_write.yaml   # mcp_apps: ~4
-agents/kanban/profiles/examples/agent_full.yaml    # mcp_apps: ~5
-agents/kanban/profiles/examples/agent_default.yaml # no mcp_apps (skip)
-agents/kanban/profiles/examples/base.yaml          # no mcp_apps (skip)
+agents/projects/profiles/examples/agent_code.yaml    # mcp_apps: many
+agents/projects/profiles/examples/agent_write.yaml   # mcp_apps: ~4
+agents/projects/profiles/examples/agent_full.yaml    # mcp_apps: ~5
+agents/projects/profiles/examples/agent_default.yaml # no mcp_apps (skip)
+agents/projects/profiles/examples/base.yaml          # no mcp_apps (skip)
 ```
 
 After editing, sanity-check the YAML loads:
 ```bash
 .venv/bin/python -c "import yaml; \
-  [yaml.safe_load(open(f'agents/kanban/profiles/examples/{f}')) \
+  [yaml.safe_load(open(f'agents/projects/profiles/examples/{f}')) \
    for f in ['agent_code.yaml','agent_write.yaml','agent_full.yaml']]; print('ok')"
 ```
 

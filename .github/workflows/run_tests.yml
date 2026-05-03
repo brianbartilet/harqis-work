@@ -21,4 +21,4 @@ jobs:
     - name: Run Tests
       run: |
         docker run --rm harqis-work \
-          python -m pytest agents/kanban/tests/ -m "not integration" -v
+          python -m pytest agents/projects/tests/ -m "not integration" -v

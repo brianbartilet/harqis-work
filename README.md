@@ -60,7 +60,7 @@ At its core the platform has three layers:
 
 HARQIS-Work includes a layer of Claude-powered AI agents that go beyond scheduled tasks — they act autonomously on Kanban cards, respond to conversational inputs, and use all connected app integrations as tools.
 
-### Kanban Agent System (`agents/kanban/`)
+### Project Kanban Agent System (`agents/projects/`)
 
 > Full reference: [`docs/info/AGENTS-TASKS-KANBAN.md`](docs/info/AGENTS-TASKS-KANBAN.md)
 
@@ -89,7 +89,7 @@ LocalOrchestrator polls every 30s
 
 #### Agent Profiles
 
-YAML files in `agents/kanban/profiles/`. Each profile declares model, tools, permissions, and secrets. Profiles support `extends:` inheritance.
+YAML files in `agents/projects/profiles/`. Each profile declares model, tools, permissions, and secrets. Profiles support `extends:` inheritance.
 
 | Profile | Extra tools vs base | MCP apps |
 |---|---|---|
@@ -110,8 +110,8 @@ New agent type = new YAML file. No orchestrator code changes.
 #### Quick start
 
 ```sh
-python -m agents.kanban.orchestrator.local           # poll every 30s
-python -m agents.kanban.orchestrator.local --dry-run # match cards, no execution
+python -m agents.projects.orchestrator.local           # poll every 30s
+python -m agents.projects.orchestrator.local --dry-run # match cards, no execution
 ```
 
 ```env
@@ -121,7 +121,7 @@ ANTHROPIC_API_KEY=...    TRELLO_API_KEY=...    TRELLO_API_TOKEN=...
 
 Board columns: `Backlog → Pending → In Progress → Done / Failed / Blocked`
 
-Tests: `pytest agents/kanban/tests/ -m "not integration"` — 75 unit tests, fully offline.
+Tests: `pytest agents/projects/tests/ -m "not integration"` — 75 unit tests, fully offline.
 
 ---
 
@@ -406,7 +406,7 @@ workflows/<workflow>/
 ### Agent Profile Structure
 
 ```
-agents/kanban/profiles/
+agents/projects/profiles/
 ├── schema.py                   # AgentProfile dataclass (model, tools, permissions, secrets)
 ├── registry.py                 # Resolves cards to profiles by label/assignee
 └── examples/
@@ -477,7 +477,7 @@ The three driving principles:
 | **Celery Beat** | `workflows/config.py` | Runs all scheduled automation — HUD updates, MTG resale pipeline, desktop sync |
 | **RabbitMQ + Redis** | Docker stack | Celery broker and result backend |
 | **Frontend** | `frontend/main.py` | Web dashboard — manually trigger any task, inspect run history |
-| **Kanban agents** | `agents/kanban/` | Autonomous Claude agents that process Trello/Jira cards as task assignments |
+| **Kanban agents** | `agents/projects/` | Autonomous Claude agents that process Trello/Jira cards as task assignments |
 | **Tailscale VPN** | Host + workers | Secure mesh network connecting Mac Mini, VPS workers, and Windows N100 nodes |
 | **n8n** | Docker stack | Low-code webhook glue — bridges external events into Celery tasks |
 | **Elasticsearch + Kibana** | Docker stack | Log shipping and observability for all task outputs |
@@ -712,7 +712,7 @@ Central YAML at the repo root. Each section maps to one app. Sensitive values us
 pytest
 
 # Kanban agent tests only (offline, no API needed)
-pytest agents/kanban/tests/ -m "not integration"
+pytest agents/projects/tests/ -m "not integration"
 
 # Specific app
 pytest apps/echo_mtg/tests/
@@ -732,7 +732,7 @@ Kanban agent tests are fully offline (75 unit tests, 2 integration tests).
 ### Kanban Orchestrator
 
 ```sh
-python -m agents.kanban.orchestrator.local
+python -m agents.projects.orchestrator.local
 ```
 
 ### Celery Workers

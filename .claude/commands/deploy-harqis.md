@@ -5,15 +5,15 @@ Deploy the harqis-work platform on this machine — full stack ("host") or worke
 `$ARGUMENTS` format:
 
 ```
-<role> [-q <queues>] [-p <profile>] [--hw <labels>] [--down] [--no-frontend] [--no-mcp] [--no-kanban] [--no-flower] [--num-agents N] [--dry-run]
+<role> [-q <queues>] [-p <profile>] [--os <labels>] [--down] [--no-frontend] [--no-mcp] [--no-kanban] [--no-flower] [--num-agents N] [--dry-run]
 ```
 
 | Token | Required | Description |
 |---|---|---|
 | `role` | Yes | `host` or `node`. `host` is the always-on hub (Docker stack + Beat scheduler + worker + frontend + MCP + Kanban + Flower). `node` is a remote worker that connects to the host's broker — and **also** runs a profile-scoped Kanban orchestrator unless `--no-kanban` is set. |
 | `-q`, `--queues <LIST>` | No | Comma-separated Celery queue list for the worker, e.g. `hud,tcg,default` or `code,write`. **Default:** `default` (both roles). |
-| `-p`, `--profile <ID>` | Yes for `node`, optional for `host` | Kanban profile id this orchestrator owns (e.g. `agent:default`, `agent:code`, `agent:write`). The orchestrator only claims cards whose resolved profile matches. **Defaults:** host → `agent:default` (so the host also acts as 1 default-queue node); node → **no default — must be passed**. If the user invokes `/deploy-harqis node` without `-p`, **ask which profile** before continuing (list available profiles from `agents/kanban/profiles/examples/`). |
-| `--hw <LABELS>` | No | Comma-separated `hw:*` labels this orchestrator satisfies, e.g. `hw:linux,hw:gpu`. Unset = auto-detect from `platform.system()` (darwin → `hw:darwin,hw:macos`; linux → `hw:linux`; windows → `hw:windows`). Cards with no `hw:*` label run on any node; cards with `hw:windows` only run on Windows nodes. |
+| `-p`, `--profile <ID>` | Yes for `node`, optional for `host` | Kanban profile id this orchestrator owns (e.g. `agent:default`, `agent:code`, `agent:write`). The orchestrator only claims cards whose resolved profile matches. **Defaults:** host → `agent:default` (so the host also acts as 1 default-queue node); node → **no default — must be passed**. If the user invokes `/deploy-harqis node` without `-p`, **ask which profile** before continuing (list available profiles from `agents/projects/profiles/examples/`). |
+| `--os <LABELS>` | No | Comma-separated `os:*` labels this orchestrator satisfies, e.g. `os:linux,os:gpu`. Unset = auto-detect from `platform.system()` (darwin → `os:darwin,os:macos,os:mac`; linux → `os:linux`; windows → `os:windows,os:win`; all hosts also satisfy `os:any`). Cards with no `os:*` label run on any node; cards with `os:windows` only run on Windows nodes. |
 | `--down` | No | Tear down services for this role instead of starting them. |
 | `--no-frontend` | No | Skip the FastAPI dashboard (host only). |
 | `--no-mcp` | No | Skip the MCP server daemon (host only). |
@@ -29,16 +29,16 @@ Deploy the harqis-work platform on this machine — full stack ("host") or worke
 - **Scheduler (Celery Beat)** runs on `host` only — there must be exactly **one** Beat instance across the whole cluster. Running it on a node would cause every scheduled task to fire multiple times.
 - **Queues** are role-agnostic. Workers (host or node) consume from the queue list passed via `-q`. Beat dispatches tasks; whichever worker subscribes to the right queue picks them up. That's why `-q` only affects the worker, never the scheduler.
 
-### Kanban routing — profile + hw filters
+### Project routing — profile + os filters
 
-The Kanban orchestrator runs on **both** host and node. Each instance polls the same Trello/Jira board but only claims cards that match its filters:
+The projects orchestrator runs on **both** host and node. Each instance polls every Trello board in the configured workspace (or static `TRELLO_BOARD_IDS`), and only claims cards that match its filters:
 
 1. **Profile filter (`-p`)** — Card's resolved profile id must equal `--profile`. Cards with `agent:code` label go to the orchestrator filtered to `agent:code`; cards with no `agent:*` label fall back to `agent:default`.
-2. **Hardware filter (`--hw`)** — Card's `hw:*` labels must intersect the orchestrator's `hw_labels`. Cards with no `hw:*` label match any orchestrator.
+2. **OS filter (`--os`)** — Card's `os:*` labels must intersect the orchestrator's `os_labels`. Cards with no `os:*` label match any orchestrator.
 
 Both filters AND together. A card matching neither filter is skipped silently — another orchestrator is the intended owner.
 
-If the user invokes `/deploy-harqis node` without `-p`, **stop and ask which profile** (e.g. `agent:code`, `agent:write`). List available profiles by reading filenames from `agents/kanban/profiles/examples/`. Don't guess.
+If the user invokes `/deploy-harqis node` without `-p`, **stop and ask which profile** (e.g. `agent:code`, `agent:write`). List available profiles by reading filenames from `agents/projects/profiles/examples/`. Don't guess.
 
 ---
 
@@ -72,7 +72,7 @@ If `--down` was passed, jump to Step 8 (teardown).
 **`host`:**
 - Docker daemon must be running (`docker info` exits 0).
 - `$REPO_ROOT/docker-compose.yml` must exist.
-- For Kanban: `$REPO_ROOT/agents/kanban/profiles/examples/` should contain at least one `.yaml` profile.
+- For Kanban: `$REPO_ROOT/agents/projects/profiles/examples/` should contain at least one `.yaml` profile.
 
 **`node`:**
 - `CELERY_BROKER_URL` must be set in `.env/apps.env` (or via `set_env_worker_remote.sh`) and point to the host's broker (e.g. `amqp://guest:guest@<host-tailscale-ip>:5672/`).
@@ -186,9 +186,9 @@ For each component below, the launch mechanism depends on OS:
 
 7b. **MCP server daemon** — runs `run_mcp_daemon.{sh,ps1}`. Note: typically the MCP server is spawned as a stdio subprocess by Claude Desktop, so this daemon is only needed for SSH-stdio remote access or HTTP-transport setups. Skip if `--no-mcp`.
 
-7c. **Kanban orchestrator (acts as 1 agent worker on the host)** — runs `run_kanban_daemon.{sh,ps1}`. Default `KANBAN_NUM_AGENTS=1`. If `--num-agents N` was passed, export it before launching (the PowerShell deploy.ps1 sets `$env:KANBAN_NUM_AGENTS` automatically). If `--dry-run`, set `KANBAN_DRY_RUN=1`. Skip if `--no-kanban`.
+7c. **Projects orchestrator (acts as 1 agent worker on the host)** — runs `run_kanban_daemon.{sh,ps1}` (legacy filename; module is now `agents.projects.orchestrator.local`). Default `KANBAN_NUM_AGENTS=1`. If `--num-agents N` was passed, export it before launching (the PowerShell deploy.ps1 sets `$env:KANBAN_NUM_AGENTS` automatically). If `--dry-run`, set `KANBAN_DRY_RUN=1`. Skip if `--no-kanban`.
 
-After loading, tail the last 5 lines of `logs/kanban_audit.jsonl` to confirm the orchestrator is polling. If the file doesn't exist yet, that's fine — it's created on the first poll.
+After loading, tail the last 5 lines of `logs/projects_audit.jsonl` to confirm the orchestrator is polling. If the file doesn't exist yet, that's fine — it's created on the first poll.
 
 7d. **Flower (Celery task monitor)** — runs `run_flower_daemon.{sh,ps1}`. Listens on `127.0.0.1:5555` by default with HTTP Basic auth (`FLOWER_USER` + `FLOWER_PASSWORD` from `.env/apps.env`). To expose over Tailscale set `FLOWER_ADDRESS=0.0.0.0` before deploy. Probe `http://localhost:5555/api/workers` (with the configured basic auth) until it returns 200, max 15s. Skip if `--no-flower`. **Required env vars:** if `FLOWER_USER` or `FLOWER_PASSWORD` are unset, the daemon will exit immediately — surface the error and either set them or pass `--no-flower`.
 
@@ -253,7 +253,7 @@ Logs:
   ~/Library/Logs/harqis-frontend.log
   ~/Library/Logs/harqis-kanban.log
   ~/Library/Logs/harqis-flower.log
-  logs/kanban_audit.jsonl
+  logs/projects_audit.jsonl
 
 Stop:
   ./scripts/sh/deploy.sh --role <role> --down

@@ -271,9 +271,9 @@ register_APP_NAME_tools(mcp)
 
 ---
 
-## Step 9 — Register in `agents/kanban/agent/tools/mcp_bridge.py`
+## Step 9 — Register in `agents/projects/agent/tools/mcp_bridge.py`
 
-Read `agents/kanban/agent/tools/mcp_bridge.py`. Find the `_APP_LOADERS` dict. Add a new entry in alphabetical order by key:
+Read `agents/projects/agent/tools/mcp_bridge.py`. Find the `_APP_LOADERS` dict. Add a new entry in alphabetical order by key:
 
 ```python
 "app_name":    "apps.app_name.mcp.register_app_name_tools",
@@ -285,7 +285,7 @@ Where `app_name` is the snake_case app name and `register_app_name_tools` is the
 
 ## Step 9b — Update Kanban dependency detector  ← **MANDATORY if the new app has any env var**
 
-Read `agents/kanban/dependencies/detector.py`. Add a new entry to the `_SERVICE_SECRETS` list so the orchestrator can short-circuit cards that mention this service when its credentials are missing.
+Read `agents/projects/dependencies/detector.py`. Add a new entry to the `_SERVICE_SECRETS` list so the orchestrator can short-circuit cards that mention this service when its credentials are missing.
 
 ```python
 # In _SERVICE_SECRETS, add — alphabetised within the existing category comment block:
@@ -301,14 +301,14 @@ Rules:
 
 After editing, run a quick sanity check:
 ```python
-from agents.kanban.dependencies.detector import DependencyDetector
+from agents.projects.dependencies.detector import DependencyDetector
 mapping = dict(DependencyDetector._SERVICE_SECRETS)
 assert "APP_NAME_UPPER_API_KEY" in mapping.values()
 ```
 
 ### Optional — update agent profiles
 
-If the new app should be available to existing agent profiles (`agents/kanban/profiles/examples/agent_*.yaml`), add the env var to each profile's `secrets.required` list. Keep alphabetical order within each profile. Do **not** add it to `base.yaml` (that's the minimum core set — orchestrator deps only).
+If the new app should be available to existing agent profiles (`agents/projects/profiles/examples/agent_*.yaml`), add the env var to each profile's `secrets.required` list. Keep alphabetical order within each profile. Do **not** add it to `base.yaml` (that's the minimum core set — orchestrator deps only).
 
 Decide based on the agent type:
 - `agent_code.yaml` — tools that read/write code, run shell commands, use most APIs
@@ -517,8 +517,8 @@ If `--workflow <workflow_name>` was passed, after completing all steps above run
 - [ ] All DTO fields are `Optional` with `None` defaults
 - [ ] Every MCP tool has a docstring, `Args:` section, entry log, and defensive return check
 - [ ] `mcp/server.py` registration added
-- [ ] Kanban bridge `_APP_LOADERS` entry added in `agents/kanban/agent/tools/mcp_bridge.py`
-- [ ] **Kanban dependency detector** entry added in `agents/kanban/dependencies/detector.py:_SERVICE_SECRETS` (skip only if the app has zero env vars) — env var name matches `.env/apps.env` exactly
+- [ ] Kanban bridge `_APP_LOADERS` entry added in `agents/projects/agent/tools/mcp_bridge.py`
+- [ ] **Kanban dependency detector** entry added in `agents/projects/dependencies/detector.py:_SERVICE_SECRETS` (skip only if the app has zero env vars) — env var name matches `.env/apps.env` exactly
 - [ ] `apps_config.yaml` updated with APP_NAME_UPPER section
 - [ ] `.env/apps.env` updated with env var placeholder(s)
 - [ ] MCP server restart attempted via PowerShell (outcome reported)

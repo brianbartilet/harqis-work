@@ -314,7 +314,7 @@ The smallest viable RAG built above is the foundation. Each capability below ext
 
 ### 5.4 Kanban agent with project memory  🟡 ingest shipped, agent hook pending
 
-**Background:** the kanban agent in `agents/kanban` re-reads card history each run. It has no memory of similar cards solved months ago.
+**Background:** the kanban agent in `agents/projects` re-reads card history each run. It has no memory of similar cards solved months ago.
 
 **Status:** Jira ingest is live (§6.3) — every closed ticket is now retrievable as `source='jira'`. What's left is the small agent-side change: a pre-action hook that calls `retrieve(card.summary, k=5, source='jira')` and prepends the result to the agent's prompt.
 

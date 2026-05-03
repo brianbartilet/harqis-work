@@ -111,7 +111,7 @@ A card stays in **In Progress** even when the agent is paused waiting for a huma
 - **Stateless** (no `agent:remember`): cheaper, simpler, suitable for "ask once → confirm direction → finish" tasks. Risk: agent may re-do idempotent work it already completed before the question.
 - **Stateful** (with `agent:remember`): full message history persisted, no re-work. Best for irreversible side effects (drafting → confirming → publishing), multi-turn iteration, and context-heavy investigations. The persisted state is base64 JSON inside an HTML comment — readable by anyone with card access.
 
-**Implementation:** `agents/kanban/agent/question.py` defines the protocol constants, exception, sidecar serialiser, and resume-signal detector. `agents/kanban/agent/tools/kanban_tools.py::AskHumanTool` is the agent-facing tool. `agents/kanban/orchestrator/local.py::poll_resumes` and `resume_card` drive the resumption.
+**Implementation:** `agents/projects/agent/question.py` defines the protocol constants, exception, sidecar serialiser, and resume-signal detector. `agents/projects/agent/tools/kanban_tools.py::AskHumanTool` is the agent-facing tool. `agents/projects/orchestrator/local.py::poll_resumes` and `resume_card` drive the resumption.
 
 ---
 
@@ -168,12 +168,12 @@ Board-level custom fields pass structured inputs without encoding them in the de
 
 ## 5. Agent Profiles
 
-A profile is a YAML file under `agents/kanban/profiles/` that fully declares an agent's identity, model, tools, permissions, and secrets. Profiles support single-level `extends` inheritance.
+A profile is a YAML file under `agents/projects/profiles/` that fully declares an agent's identity, model, tools, permissions, and secrets. Profiles support single-level `extends` inheritance.
 
 ### Full schema
 
 ```yaml
-# agents/kanban/profiles/examples/agent_code.yaml
+# agents/projects/profiles/examples/agent_code.yaml
 
 id: agent:code           # matches Trello/Jira card label (required)
 name: "Code Agent"
@@ -271,7 +271,7 @@ lifecycle:
 ### Profile inheritance
 
 ```yaml
-# agents/kanban/profiles/examples/base.yaml
+# agents/projects/profiles/examples/base.yaml
 id: base
 model:
   model_id: claude-sonnet-4-6
@@ -301,7 +301,7 @@ secrets:
 
 ## 6. Profile Registry
 
-**File:** `agents/kanban/profiles/registry.py`
+**File:** `agents/projects/profiles/registry.py`
 
 ```python
 class ProfileRegistry:
@@ -332,7 +332,7 @@ Example: card with label `agent:code:backend` matches profile `agent:code` if no
 
 The label on a card is the routing key. The matching profile defines everything else.
 
-### Built-in profiles (in `agents/kanban/profiles/examples/`)
+### Built-in profiles (in `agents/projects/profiles/examples/`)
 
 | Profile ID | Label | Primary Tools | MCP Apps |
 |---|---|---|---|
@@ -342,10 +342,10 @@ The label on a card is the routing key. The matching profile defines everything 
 
 ### Creating a new agent type
 
-Add a YAML file to `agents/kanban/profiles/`:
+Add a YAML file to `agents/projects/profiles/`:
 
 ```yaml
-# agents/kanban/profiles/agent_finance.yaml
+# agents/projects/profiles/agent_finance.yaml
 id: agent:finance
 extends: base
 name: "Finance Agent"
@@ -378,7 +378,7 @@ Profile YAML (declared)
               └── AuditLogger records permission_check event
 ```
 
-**File:** `agents/kanban/permissions/enforcer.py`
+**File:** `agents/projects/permissions/enforcer.py`
 
 ### What is checked
 
@@ -405,7 +405,7 @@ Profile YAML (declared)
 
 ## 9. Security Layer
 
-### SecretStore (`agents/kanban/security/secret_store.py`)
+### SecretStore (`agents/projects/security/secret_store.py`)
 
 Scopes secrets from the full environment down to only what a profile declared.
 
@@ -425,7 +425,7 @@ key = SecretStore.generate_key()
 
 Agents never see `os.environ` directly. The `McpBridge` temporarily injects scoped secrets into `os.environ` during a tool call (via a context manager) and restores the original state after.
 
-### OutputSanitizer (`agents/kanban/security/sanitizer.py`)
+### OutputSanitizer (`agents/projects/security/sanitizer.py`)
 
 ```python
 sanitizer = OutputSanitizer(secrets=scoped_secrets)
@@ -438,7 +438,7 @@ sanitizer.scrub_messages(messages)             # mutates message history in-plac
 - Secrets shorter than 8 characters are skipped (avoids false positives)
 - Applied to every tool output before it is returned to Claude, and to the final result before it is posted as a card comment
 
-### AuditLogger (`agents/kanban/security/audit.py`)
+### AuditLogger (`agents/projects/security/audit.py`)
 
 Writes JSONL records to `logs/kanban_audit.jsonl` (configurable via `KANBAN_AUDIT_LOG`).
 
@@ -459,7 +459,7 @@ Writes JSONL records to `logs/kanban_audit.jsonl` (configurable via `KANBAN_AUDI
 
 ## 10. Agent Implementation
 
-**File:** `agents/kanban/agent/base.py`  
+**File:** `agents/projects/agent/base.py`  
 **Class:** `BaseKanbanAgent`
 
 ### Constructor
@@ -517,7 +517,7 @@ Repos: <repo URLs and branch policies if configured>
 
 ## 11. Tool System
 
-**Files:** `agents/kanban/agent/tools/`
+**Files:** `agents/projects/agent/tools/`
 
 ### Native tools
 
@@ -532,7 +532,7 @@ Repos: <repo URLs and branch policies if configured>
 | `move_card` | `kanban_tools.py` | Move card to a column (`Backlog`, `Pending`, `In Progress`, `Blocked`, `Done`, `Failed`) |
 | `check_item` | `kanban_tools.py` | Mark a checklist item checked/unchecked (case-insensitive partial match on name) |
 
-### Tool registry (`agents/kanban/agent/tools/registry.py`)
+### Tool registry (`agents/projects/agent/tools/registry.py`)
 
 ```python
 class ToolRegistry:
@@ -546,7 +546,7 @@ class ToolRegistry:
 
 ## 12. MCP Bridge
 
-**File:** `agents/kanban/agent/tools/mcp_bridge.py`  
+**File:** `agents/projects/agent/tools/mcp_bridge.py`  
 **Class:** `McpBridge`
 
 The bridge imports each app's `register_*_tools(mcp)` function directly (no separate server process) and exposes registered tools to the agent via the same `call()` / `definitions()` interface as native tools.
@@ -585,7 +585,7 @@ Agents can only call MCP tools for apps listed in their profile's `mcp_apps`. Th
 
 ## 13. Kanban Provider Interface
 
-**File:** `agents/kanban/interface.py`
+**File:** `agents/projects/interface.py`
 
 ### Core dataclasses
 
@@ -660,24 +660,24 @@ class KanbanProvider(ABC):
     def delete_webhook(self, webhook_id: str) -> None: ...
 ```
 
-### Trello adapter (`agents/kanban/adapters/trello.py`)
+### Trello adapter (`agents/projects/adapters/trello.py`)
 
 - `TrelloProvider(api_key, token, timeout=10)`
 - Caches board column mappings (`_refresh_columns()`) to avoid repeated API calls
 - `_resolve_board_id()` — converts short Trello links to full board IDs
 - Full implementation of all `KanbanProvider` methods
 
-### Jira adapter (`agents/kanban/adapters/jira.py`)
+### Jira adapter (`agents/projects/adapters/jira.py`)
 
 - `JiraProvider(server, email, api_token, api_version="3", timeout=15)`
 - Uses Basic Auth (base64 `email:api_token`)
 - Maps Jira concepts: Issues → cards, Statuses → columns, Subtasks → checklists
 - ADF document body is parsed to plain text by `_extract_text()`
 
-### Provider factory (`agents/kanban/factory.py`)
+### Provider factory (`agents/projects/factory.py`)
 
 ```python
-from agents.kanban.factory import create_provider
+from agents.projects.factory import create_provider
 
 provider = create_provider({
     "provider": "trello",
@@ -706,7 +706,7 @@ Supported values for `"provider"`: `"trello"`, `"jira"`.
 
 ## 14. Orchestrator
 
-**File:** `agents/kanban/orchestrator/local.py`  
+**File:** `agents/projects/orchestrator/local.py`  
 **Class:** `LocalOrchestrator`
 
 ### Constructor
@@ -762,7 +762,7 @@ orchestrator = LocalOrchestrator.from_env(profiles_dir=None)
 | `JIRA_SERVER` | If Jira | — | Jira server URL |
 | `JIRA_EMAIL` | If Jira | — | Jira account email |
 | `JIRA_API_TOKEN` | If Jira | — | Jira API token |
-| `KANBAN_PROFILES_DIR` | No | `agents/kanban/profiles/examples` | Profile directory |
+| `KANBAN_PROFILES_DIR` | No | `agents/projects/profiles/examples` | Profile directory |
 | `KANBAN_POLL_INTERVAL` | No | `30` | Poll interval (seconds) |
 | `KANBAN_DRY_RUN` | No | `false` | Match cards but don't run agents |
 | `KANBAN_AUDIT_LOG` | No | `logs/kanban_audit.jsonl` | Audit log path |
@@ -773,14 +773,14 @@ orchestrator = LocalOrchestrator.from_env(profiles_dir=None)
 
 ```sh
 # From repo root with .env loaded
-python -m agents.kanban.orchestrator.local
+python -m agents.projects.orchestrator.local
 
 # Dry run — resolves profiles but does not execute agents
-python -m agents.kanban.orchestrator.local --dry-run
+python -m agents.projects.orchestrator.local --dry-run
 
 # Custom profiles directory and poll interval
-python -m agents.kanban.orchestrator.local \
-  --profiles-dir agents/kanban/profiles \
+python -m agents.projects.orchestrator.local \
+  --profiles-dir agents/projects/profiles \
   --poll-interval 60
 ```
 
@@ -798,10 +798,10 @@ TRELLO_API_TOKEN=...
 
 ```sh
 # Offline unit tests (no API calls)
-pytest agents/kanban/tests/ -m "not integration"
+pytest agents/projects/tests/ -m "not integration"
 
 # Integration tests (requires live credentials)
-pytest agents/kanban/tests/ -m integration
+pytest agents/projects/tests/ -m integration
 ```
 
 **Coverage:** 7 test files · ~1,116 lines · 75 unit tests · 2 integration tests
@@ -858,7 +858,7 @@ Currently the orchestrator runs agents in-process. The planned extension is Cele
 
 - `SecretStore.pack()` / `unpack()` (Fernet encryption) is already implemented for encrypted worker payloads
 - `profile.hardware.queue` field is in the schema, ready for Celery routing
-- Worker nodes would run `agents.kanban.workers.run_agent` as a Celery task
+- Worker nodes would run `agents.projects.workers.run_agent` as a Celery task
 - See [`HARQIS-CLAW-HOST.md`](HARQIS-CLAW-HOST.md) for the planned multi-node topology
 
 ### Webhook trigger mode

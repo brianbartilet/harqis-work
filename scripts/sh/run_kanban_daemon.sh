@@ -8,7 +8,7 @@
 #   KANBAN_DRY_RUN         — set to "1" to log actions without invoking Claude
 #   KANBAN_PROFILE_FILTER  — restrict to one profile (e.g. "agent:default", "agent:code");
 #                            host typically sets "agent:default", node sets the agent it owns
-#   KANBAN_HW_LABELS       — comma-separated hw:* labels this orchestrator satisfies;
+#   KANBAN_OS_LABELS       — comma-separated os:* labels this orchestrator satisfies;
 #                            unset = auto-detect from the host OS
 set -euo pipefail
 
@@ -23,7 +23,7 @@ ARGS=()
 [ -n "${KANBAN_POLL_INTERVAL:-}" ]   && ARGS+=(--poll-interval "$KANBAN_POLL_INTERVAL")
 [ -n "${KANBAN_PROFILES_DIR:-}" ]    && ARGS+=(--profiles-dir "$KANBAN_PROFILES_DIR")
 [ -n "${KANBAN_PROFILE_FILTER:-}" ]  && ARGS+=(--profile "$KANBAN_PROFILE_FILTER")
-[ -n "${KANBAN_HW_LABELS:-}" ]       && ARGS+=(--hw "$KANBAN_HW_LABELS")
+[ -n "${KANBAN_OS_LABELS:-}" ]       && ARGS+=(--os "$KANBAN_OS_LABELS")
 [ "${KANBAN_DRY_RUN:-0}" = "1" ]     && ARGS+=(--dry-run)
 
-exec python -m agents.kanban.orchestrator.local "${ARGS[@]+"${ARGS[@]}"}"
+exec python -m agents.projects.orchestrator.local "${ARGS[@]+"${ARGS[@]}"}"
