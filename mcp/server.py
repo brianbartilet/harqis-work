@@ -56,6 +56,8 @@ APP_REGISTRARS = [
     ("Filesystem",       "apps.filesystem.mcp",     "register_filesystem_tools"),
     ("Browser",          "apps.browser.mcp",        "register_browser_tools"),
     ("Playwright",       "apps.playwright.mcp",     "register_playwright_tools"),
+    ("SQLite-Vec",       "apps.sqlite_vec.mcp",     "register_sqlite_vec_tools"),
+    ("Knowledge / RAG",  "workflows.knowledge.mcp", "register_knowledge_tools"),
 ]
 
 # Lazy-import each app's mcp module so a missing config section in one app

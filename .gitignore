@@ -16,6 +16,7 @@ venv
 *.egg-info/
 screenshots/
 logs/
+data/
 *.tgz
 /workflows.mapping
 /scripts.mapping
