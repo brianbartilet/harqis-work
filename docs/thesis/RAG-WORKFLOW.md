@@ -43,7 +43,7 @@ The harqis-work platform already ships almost every component RAG needs:
 | Orchestration | `workflows/`, Celery + RabbitMQ, queue topology in `workflows/config.py` | Beat schedules, fanout queues |
 | Surfacing | `mcp/server.py` (Claude Desktop), `workflows/hud` (Rainmeter widgets) | |
 
-What was missing: **a vector store**. This thesis fills that gap with `apps/sqlite_vec` and wires a first end-to-end pipeline through `workflows/knowledge`.
+What was missing: **a vector store**. This thesis fills that gap with `apps/sqlite_vec` and wires four ingestors through `workflows/knowledge` — **Notion, Jira, GitHub, and Google Drive Docs** — all writing into the same store under their own `source=` labels. Adding more (Confluence, Slack, Trello, …) is the same recipe; see §6.2.
 
 > **Aside on Anthropic embeddings.** Anthropic does not provide a first-party embeddings API — their docs recommend Voyage AI. We use Gemini for the embed step (free tier, asymmetric task types) and Anthropic for the generate step. The split is intentional and is the same pattern Anthropic itself recommends in their RAG cookbook.
 
@@ -104,20 +104,23 @@ apps/sqlite_vec/                   ← NEW: local vector store
 └── tests/test_store.py
 
 workflows/knowledge/               ← NEW: RAG pipeline
-├── chunking.py                    ← text splitter + Notion block extractor
+├── chunking.py                    ← text splitter + Notion block extractor + ADF flattener
 ├── retriever.py                   ← embed query + KNN
 ├── prompts/rag_answer.md          ← system prompt for the answer step
 ├── tasks/
-│   ├── ingest_notion.py           ← Notion → embed → upsert (beat: nightly)
+│   ├── ingest_notion.py           ← Notion → embed → upsert (beat: 02:30)
+│   ├── ingest_jira.py             ← Jira issues + comments  (beat: 02:45)
+│   ├── ingest_github.py           ← GitHub PRs + issues     (beat: 03:00)
+│   ├── ingest_gdrive.py           ← Google Docs             (beat: 03:15)
 │   └── answer.py                  ← question → retrieve → Anthropic
-├── tasks_config.py                ← beat schedules
+├── tasks_config.py                ← beat schedules (4 ingestors + answer slot)
 ├── mcp.py                         ← knowledge_ask + knowledge_search MCP tools
 └── README.md
 
 workflows/config.py                ← MODIFIED: registers WORKFLOW_KNOWLEDGE
 mcp/server.py                      ← MODIFIED: adds two new registrars
 requirements.txt                   ← MODIFIED: adds sqlite-vec
-docs/thesis/HARQIS-RAG-WORKFLOW.md ← THIS DOCUMENT
+docs/thesis/RAG-WORKFLOW.md        ← THIS DOCUMENT
 ```
 
 ---
@@ -126,33 +129,39 @@ docs/thesis/HARQIS-RAG-WORKFLOW.md ← THIS DOCUMENT
 
 ### 3.1 Ingestion flow (write path)
 
+Four ingestors all follow the same shape — only **fetch** and **flatten** vary by source. The Notion path is the canonical example:
+
 ```
-Celery beat (02:30 nightly)
+Celery beat (staggered nightly: 02:30 / 02:45 / 03:00 / 03:15)
     │
     ▼
-ingest_notion_pages
+ingest_<source>_*  (notion / jira / github / gdrive)
     │
-    ├── apps/notion/search.search(filter='page')        → list of pages (paginated)
+    ├── fetch from source API                          → list of items (paginated)
     │
-    ├── for each page:
-    │       apps/notion/blocks.get_block_children()     → flatten to plain text
-    │       chunking.chunk_text(text, chars=2000)       → list of chunks
+    ├── for each item:
+    │       extract_text(item)                         → plain text
+    │         └─ Notion : iterate blocks, pull rich_text
+    │         └─ Jira   : flatten ADF JSON → text
+    │         └─ GitHub : title + body + first 20 comments
+    │         └─ Drive  : files().export(text/plain)
+    │       chunking.chunk_text(text, chars=2000)      → list of chunks
     │
     ├── batch (50 at a time):
     │       apps/gemini/embed.batch_embed_contents(
-    │           texts, task_type='RETRIEVAL_DOCUMENT')   → list of vectors
+    │           texts, task_type='RETRIEVAL_DOCUMENT')  → list of vectors
     │
     └── for each (chunk, vector):
             apps/sqlite_vec/store.upsert(
-                id=f"{page_id}:{chunk_idx}",
+                id=f"{item_id}:{chunk_idx}",
                 text=chunk,
                 embedding=vector,
-                source='notion',
-                ref=page_url,
-                meta={page_id, title, chunk_idx})
+                source='<notion|jira|github|gdrive>',   ← the per-source label
+                ref=item_url,
+                meta={...source-specific extras...})
 ```
 
-Idempotency: re-running the task is safe. Chunk ids are stable (`page_id:idx`), so re-ingesting a page replaces its existing rows. For a clean rebuild, pass `rebuild=True` — the task drops the `notion` source first.
+Idempotency: re-running any task is safe. Chunk ids are stable (`{item_id}:{idx}`), so re-ingesting an item replaces its existing rows. For a clean rebuild, pass `rebuild=True` — the task drops only its own source first, leaving the other corpora untouched.
 
 ### 3.2 Query flow (read path)
 
@@ -303,15 +312,17 @@ The smallest viable RAG built above is the foundation. Each capability below ext
 - Pair with `apps/echo_mtg` and `apps/tcg_mp` to inject current prices into the answer prompt.
 - Add a `format='modern'` filter to keep recommendations legal.
 
-### 5.4 Kanban agent with project memory
+### 5.4 Kanban agent with project memory  🟡 ingest shipped, agent hook pending
 
 **Background:** the kanban agent in `agents/kanban` re-reads card history each run. It has no memory of similar cards solved months ago.
 
-**Pipeline:**
-- Ingest task indexes every closed Jira/Trello card: title + description + final comment, source='kanban_history'.
-- Pre-action hook in the agent calls `retrieve(card.summary, k=5, source='kanban_history')` and injects "5 most semantically similar past cards" as a context block.
+**Status:** Jira ingest is live (§6.3) — every closed ticket is now retrievable as `source='jira'`. What's left is the small agent-side change: a pre-action hook that calls `retrieve(card.summary, k=5, source='jira')` and prepends the result to the agent's prompt.
 
-**Use case:** Agent picks up *"investigate flaky test X"* and is told *"these 3 prior cards (PROJ-481, PROJ-512, PROJ-633) solved similar flakes by checking the Y race condition"* — without bloating every prompt with the whole project history.
+**Pipeline:**
+- Ingest: handled by `ingest_jira_issues` (already shipped).
+- Pre-action hook in the agent calls `retrieve(card.summary, k=5, source='jira')` and injects "5 most semantically similar past tickets" as a context block.
+
+**Use case:** Agent picks up *"investigate flaky test X"* and is told *"these 3 prior tickets (PROJ-481, PROJ-512, PROJ-633) solved similar flakes by checking the Y race condition"* — without bloating every prompt with the whole project history.
 
 **Extending it:**
 - Decay weight by recency (multiply distance by a `1+age_in_days/365` factor) so recent solutions outrank ancient ones at the same similarity.
@@ -367,7 +378,177 @@ question
 
 ---
 
-## 6. Roadmap — what to build next
+## 6. Multi-source extension
+
+The single-source ("Ask my Notion") pipeline was the v0. The store was always designed to host multiple corpora — every chunk carries a `source` label, and queries can scope to one (`source='notion'`) or cross-search them all (`source=None`). v1 extends the system with three more ingestors, each writing to the same store under its own label.
+
+### 6.1 Why these three sources, in this order
+
+| Order | Source | Why it earns its place | App reused |
+|---|---|---|---|
+| 1 | **Jira** (`source='jira'`) | Highest leverage for any ticket-driven team — tickets contain the *current* state of the work plus the negotiation that led there. The "kanban agent with project memory" capability from §5.4 becomes real once this exists: every closed ticket is suddenly retrievable by similarity. | `apps/jira` ✅ |
+| 2 | **GitHub PRs + issues** (`source='github'`) | Institutional memory — the *why* of every code decision lives in the PR description and the first ~20 review comments. Six months later when nobody remembers why a function returns a tuple instead of a dict, the answer is here. | `apps/github` ✅ |
+| 3 | **Google Drive Docs** (`source='gdrive'`) | The catch-all for anything outside Notion — long-form RFCs, meeting notes, vendor contracts, anything a teammate wrote in Docs and dropped a link to once. Cheap to add given the auth dance was already done. | `apps/google_drive` ✅ |
+
+Each source label is independent. You can run all four ingestors, only Notion + Jira, or just GitHub. Queries cross sources automatically (`source=None`) or stay scoped (`source='jira'`).
+
+### 6.2 The shared shape (recipe for any future source)
+
+Every ingest task follows the same five-step skeleton:
+
+```python
+@SPROUT.task()
+@log_result()
+def ingest_<source>(**kwargs):
+    items = pull_from_source_api()              # 1. fetch — the only per-source code
+    for item in items:
+        text = extract_text(item)               # 2. flatten to plain text (varies)
+        chunks = chunk_text(text)               # 3. chunk (reuse chunking.py)
+        vectors = batch_embed(chunks)           # 4. embed (reuse Gemini)
+        for i, (chunk, vec) in enumerate(zip(chunks, vectors)):
+            store.upsert(
+                chunk_id=f"{item.id}:{i}",      # 5. upsert with stable id
+                text=chunk,
+                embedding=vec,
+                source="<source>",              # ← the new label
+                ref=item.url,
+                meta={...},                     # source-specific extras
+            )
+```
+
+Steps 3, 4, and 5 are shared across every ingestor. Only steps 1 and 2 differ — and step 2 is small for most sources (their APIs already return text-friendly fields).
+
+### 6.3 v1 ingestors — what each one captures
+
+#### `ingest_jira_issues` (Jira)
+
+- **Captures:** issue summary, description, type, status, plus up to N comments per issue. Descriptions and comments are Atlassian Document Format (ADF) JSON in the Cloud REST v3 API — flattened to plain text by `chunking.flatten_adf`.
+- **Chunk id:** `f"{issue_key}:{chunk_idx}"` — re-ingest is idempotent at the issue level.
+- **Reference:** browse URL (`https://<domain>.atlassian.net/browse/HARQIS-42`).
+- **Meta:** `issue_key`, `project`, `status`, `issue_type`, `summary`.
+- **Scope:** by `project_keys` kwarg, with optional JQL extension via `jql_extra` (e.g. `'updated >= -30d'` for incremental ingest).
+- **Default schedule:** nightly **02:45**.
+
+#### `ingest_github_repos` (GitHub)
+
+- **Captures:** PR body + first 20 issue-thread comments + first 20 review comments (line-level reviews). For plain issues: body + first 20 comments. The GitHub wrapper (`apps/github/references/web/api/repos.py`) doesn't expose the comment endpoints directly — the task uses the base service's `_get` method to hit `/repos/.../issues/N/comments` and `/repos/.../pulls/N/comments` directly.
+- **Chunk id:** `f"{owner}/{repo}#PR{n}:{i}"` for PRs, `f"{owner}/{repo}#I{n}:{i}"` for issues — namespaced so PR and issue numbers can't collide.
+- **Reference:** `html_url`.
+- **Meta:** `owner`, `repo`, `kind` (`pr` or `issue`), `number`, `state`, `title`, plus `merged` for PRs and `labels` for issues.
+- **Scope:** by `repos=['acme/web', 'acme/api']` kwarg, plus `states='open'/'closed'/'all'`.
+- **Default schedule:** nightly **03:00**.
+
+#### `ingest_gdrive_docs` (Google Drive Docs)
+
+- **Captures:** Google Docs only (MIME type `application/vnd.google-apps.document`). Sheets and Slides are skipped in v1 — their cell-/slide-shaped content benefits from a dedicated extractor we'll add when first needed. Binary files (PDFs, images) are skipped too.
+- **Extraction:** `files().export(mimeType='text/plain')` — Google does the heavy lifting; we just chunk the result.
+- **Chunk id:** `f"{file_id}:{idx}"`.
+- **Reference:** `https://docs.google.com/document/d/{file_id}/edit`.
+- **Meta:** `file_id`, `name`, `modified_time`, `mime_type`.
+- **Scope:** by `folder_id` (None = whole Drive), plus `modified_after` RFC 3339 timestamp for incremental ingest.
+- **Default schedule:** nightly **03:15**.
+
+### 6.4 Why the schedules are staggered
+
+Gemini's free-tier embedding quota is generous but not infinite (60 RPM at the time of writing). Running four ingestors at the same minute would race for the same bucket and cause throttling:
+
+```
+02:30  ingest_notion_pages         ┐
+02:45  ingest_jira_issues          ├─ each gets a clean 15-min runway
+03:00  ingest_github_repos         │
+03:15  ingest_gdrive_docs          ┘
+```
+
+15 minutes is comfortable for a few hundred pages/issues/docs at the free-tier rate. If a corpus grows past that, either bump its `max_*` cap, set a `modified_after` filter for incremental runs, or move to the paid tier.
+
+### 6.5 Cross-source query patterns
+
+The retriever takes a single optional `source` filter today:
+
+```python
+# scoped — fast, focused, lowest risk of irrelevant hits
+knowledge_ask("what did we decide about merge-freeze?", source="notion")
+
+# cross-source — finds connections you'd otherwise have to chase by hand
+knowledge_ask("how did we solve the flaky-test issue?", source=None)
+# → may cite [1] from Jira, [2] from a GitHub PR, [3] from a Notion runbook
+```
+
+For multi-source filters (e.g. "Notion + Jira but not GitHub"), the change is small — `apps/sqlite_vec/store.py:search()` would swap `c.source = ?` for `c.source IN (...)`. Not implemented in v1 because the two extreme cases (one source vs all) cover ~95% of query intents.
+
+**Caveat — cross-source noise.** When one corpus is much chattier than the others (a busy Discord ingest can be 10× the size of Notion), unscoped queries can be dominated by it. Two mitigations available:
+
+1. **Per-source quota.** Modify the retriever to ask for `k_per_source` instead of `k`, then merge. Cheap; ~10 lines.
+2. **Source weighting.** Multiply distance by a per-source factor (0.9 for trusted curated sources, 1.1 for chatty ones) before sorting. Tuneable from config.
+
+Neither ships in v1 — they're listed in the roadmap and recommended once you've watched real query patterns for a week.
+
+### 6.6 Cost — what to watch
+
+The user explicitly opted into observed Gemini cost for v1. Reference points to anchor the bill against:
+
+| Operation | Tokens (rough) | Gemini text-embedding-004 free tier |
+|---|---|---|
+| One Notion page (~2 chunks) | ~1k | covered ad infinitum |
+| One Jira issue + 30 comments (~3 chunks) | ~1.5k | covered |
+| One GitHub PR + 20 comments (~5 chunks) | ~2.5k | covered |
+| One Google Doc, 10 pages (~6 chunks) | ~3k | covered |
+| Full nightly run, 200 of each | ~1.6M | well within free tier |
+
+What costs **money** is the answer step (Anthropic). Haiku 4.5 at the time of writing: ~$0.80/M input, ~$4/M output. A single `knowledge_ask` with k=5 is roughly:
+- ~3k input tokens (system prompt + 5 chunks + question) → $0.0024
+- ~500 output tokens (cited answer)                      → $0.002
+- **≈ $0.005 per question**
+
+For observation, the simplest way to track is the existing ES logging — `@log_result()` already wraps every ingest task and the `answer` task. Look at `harqis-mcp.knowledge` and `knowledge.ingest_*` log streams. If you want a dedicated dashboard:
+- **Embed ingest cost:** sum of `chunks_written × avg_chunk_tokens` across the four ingest tasks per night
+- **Answer cost:** count of `answer` task calls × ~$0.005
+
+If the bill starts to surprise you: drop `max_pages` / `max_issues` / `max_files` / `per_repo_limit` in `tasks_config.py` and the next run is throttled.
+
+### 6.7 Setup — going from one source to four
+
+Each source needs its config block in `apps_config.yaml` populated. Notion you've already done. The other three:
+
+| Source | Required env vars (in `.env/apps.env`) | Where to get the credential |
+|---|---|---|
+| Jira | `JIRA_DOMAIN`, `JIRA_API_TOKEN` | <https://id.atlassian.com/manage-profile/security/api-tokens> |
+| GitHub | `GITHUB_API_TOKEN` (or whatever your config block names it) | <https://github.com/settings/tokens> — fine-grained PAT with `repo` read scope |
+| Google Drive | OAuth credentials JSON in `credentials.json` and a `storage-drive.json` token cache | Google Cloud console → OAuth client → Desktop app type. The `apps/google_drive/config.py` flow handles the rest. |
+
+Once env vars are set, populate the kwargs in `workflows/knowledge/tasks_config.py`:
+
+```python
+'run-job--ingest_jira_issues': { ..., 'kwargs': {'project_keys': ['HARQIS', 'OPS'], ...}, ... },
+'run-job--ingest_github_repos': { ..., 'kwargs': {'repos': ['brianbartilet/harqis-work'], ...}, ... },
+'run-job--ingest_gdrive_docs':  { ..., 'kwargs': {'folder_id': '<root or specific folder id>', ...}, ... },
+```
+
+Then either wait until 02:45 / 03:00 / 03:15 or trigger manually:
+
+```bash
+# Manual smoke runs (synchronous, no broker required)
+python -c "from workflows.knowledge.tasks.ingest_jira import ingest_jira_issues; print(ingest_jira_issues(project_keys=['HARQIS'], max_issues=20))"
+python -c "from workflows.knowledge.tasks.ingest_github import ingest_github_repos; print(ingest_github_repos(repos=['brianbartilet/harqis-work'], per_repo_limit=20))"
+python -c "from workflows.knowledge.tasks.ingest_gdrive import ingest_gdrive_docs; print(ingest_gdrive_docs(max_files=20))"
+```
+
+After each, sanity-check via the MCP tool `vector_store_stats` — you should see `by_source: {notion: …, jira: …, github: …, gdrive: …}`.
+
+### 6.8 Operational gotchas
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `ingest_jira_issues` returns 0 | `project_keys=[]` (default) and the user has access to nothing | Set `project_keys` explicitly in `tasks_config.py` |
+| Jira description shows up as `{...ADF noise...}` in chunks | Old API path that doesn't go through `flatten_adf` | The current `_compose_issue_text` covers it; if you bypass it, route the field through `chunking.flatten_adf` |
+| `ingest_github_repos` returns 0 | `repos=[]` (default) — explicitly required | Set `repos=['owner/repo', …]` |
+| GitHub PRs ingest but issues are empty | `apps/github` `list_issues` already filters out PRs (it skips items with `pull_request` key); plain issues need to actually exist | Confirm the repo has issues and the token has issue read scope |
+| `ingest_gdrive_docs` returns 0 | OAuth token cache (`storage-drive.json`) expired or never created | Re-run the auth flow from `apps/google_drive` |
+| `chunks_written: 0` everywhere | Likely a Gemini rate-limit / quota error | Check the task logs for 429s; reduce `max_*` and stagger longer |
+
+---
+
+## 7. Roadmap — what to build next
 
 In rough priority order:
 
@@ -380,23 +561,34 @@ In rough priority order:
 
 ---
 
-## 7. Quick start
+## 8. Quick start
 
 ```bash
 # 1. Install
 pip install -r requirements.txt
 
-# 2. Make sure NOTION + GEMINI + ANTHROPIC are set in apps_config.yaml / apps.env
+# 2. Make sure GEMINI + ANTHROPIC are set in apps_config.yaml / apps.env, plus
+#    whichever sources you want to index: NOTION, JIRA, GITHUB, GOOGLE_DRIVE.
 
-# 3. Trigger first ingest (synchronous, no broker required)
-python -c "from workflows.knowledge.tasks.ingest_notion import ingest_notion_pages; print(ingest_notion_pages(max_pages=20))"
+# 3. Trigger ingests (synchronous — no broker required, so you can watch costs land)
+python -c "from workflows.knowledge.tasks.ingest_notion  import ingest_notion_pages;   print(ingest_notion_pages(max_pages=20))"
+python -c "from workflows.knowledge.tasks.ingest_jira    import ingest_jira_issues;    print(ingest_jira_issues(project_keys=['HARQIS'], max_issues=20))"
+python -c "from workflows.knowledge.tasks.ingest_github  import ingest_github_repos;   print(ingest_github_repos(repos=['brianbartilet/harqis-work'], per_repo_limit=20))"
+python -c "from workflows.knowledge.tasks.ingest_gdrive  import ingest_gdrive_docs;    print(ingest_gdrive_docs(max_files=20))"
 
-# 4. Ask a question
-python -c "from workflows.knowledge.tasks.answer import answer_question; \
-           import json; print(json.dumps(answer_question('what did I write about merge freeze?', source='notion'), indent=2))"
+# 4. Sanity-check the store
+python -c "from apps.sqlite_vec import store; import json; print(json.dumps(store.stats(), indent=2))"
 
-# 5. Or via Claude Desktop — the MCP server registers knowledge_ask + knowledge_search automatically
+# 5. Ask a scoped question (one corpus)
+python -c "from workflows.knowledge.tasks.answer import answer_question; import json; \
+           print(json.dumps(answer_question('what did I write about merge freeze?', source='notion'), indent=2))"
+
+# 6. Ask a cross-source question (all corpora)
+python -c "from workflows.knowledge.tasks.answer import answer_question; import json; \
+           print(json.dumps(answer_question('how did we solve the flaky-test issue?', source=None, k=8), indent=2))"
+
+# 7. Or via Claude Desktop — the MCP server registers knowledge_ask + knowledge_search automatically
 python mcp/server.py
 ```
 
-Once the beat scheduler is running (`./scripts/sh/deploy.sh` or platform equivalent), the nightly Notion ingest at 02:30 keeps the store warm without manual intervention.
+Once the beat scheduler is running (`./scripts/sh/deploy.sh` or platform equivalent), the four ingestors run nightly at 02:30 / 02:45 / 03:00 / 03:15 and keep the store warm without manual intervention.

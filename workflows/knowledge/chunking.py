@@ -75,6 +75,38 @@ def extract_notion_block_text(block: dict[str, Any]) -> str:
     return ""
 
 
+def flatten_adf(node: Any) -> str:
+    """Flatten an Atlassian Document Format (ADF) tree to plain text.
+
+    Jira Cloud REST v3 returns issue descriptions and comments as ADF JSON —
+    a recursive node tree with `type`, `content`, and (for leaf text nodes)
+    `text` keys. We walk the tree depth-first and concatenate every `text`
+    field. Block-level boundaries become double newlines so chunking stays
+    paragraph-aware.
+
+    Robust to: plain strings (returned unchanged), empty/None inputs (return
+    ""), and unrecognised node types (recursed into anyway).
+    """
+    if node is None:
+        return ""
+    if isinstance(node, str):
+        return node
+    if not isinstance(node, dict):
+        return ""
+
+    out: list[str] = []
+    if "text" in node and isinstance(node["text"], str):
+        out.append(node["text"])
+
+    for child in node.get("content", []) or []:
+        out.append(flatten_adf(child))
+
+    block_types = {"paragraph", "heading", "bulletList", "orderedList",
+                   "listItem", "blockquote", "codeBlock", "panel"}
+    sep = "\n\n" if node.get("type") in block_types else ""
+    return sep + "".join(out) + sep
+
+
 def iter_notion_blocks(
     page_id: str,
     blocks_service: Any,

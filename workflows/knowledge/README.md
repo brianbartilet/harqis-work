@@ -2,7 +2,7 @@
 
 Local Retrieval-Augmented-Generation pipeline. Ingests source corpora into a single sqlite-vec store and answers questions over them with Anthropic Claude.
 
-For the design rationale, full pipeline diagram, and the broader capability roadmap, see [`docs/thesis/HARQIS-RAG-WORKFLOW.md`](../../docs/thesis/HARQIS-RAG-WORKFLOW.md).
+For the design rationale, full pipeline diagram, and the broader capability roadmap, see [`docs/thesis/HARQIS-RAG-WORKFLOW.md`](../../docs/thesis/RAG-WORKFLOW.md).
 
 ## Layout
 
