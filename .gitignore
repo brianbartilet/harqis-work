@@ -1,6 +1,5 @@
 .idea
 .claude/settings.local.json
-*config.yaml
 .env/*
 **/.env
 **/.env.*
