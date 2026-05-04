@@ -78,13 +78,34 @@ SERVICES: dict[str, dict] = {
 
 # ── Machine config ────────────────────────────────────────────────────────────
 
+def _merge_machines(base: dict, override: dict) -> dict:
+    """Shallow merge: override's top-level keys win; for dict values
+    (e.g. [hostnames] or a [<machine>] section), inner keys merge."""
+    out = {**base}
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = {**out[key], **value}
+        else:
+            out[key] = value
+    return out
+
+
 def load_machine_config(name: str | None) -> dict:
-    """Resolve machine config from scripts/machines.toml.
+    """Resolve machine config from scripts/machines.toml + machines.local.toml.
+
+    machines.local.toml is gitignored — host it yourself per machine to add
+    real hostnames or override settings without leaking topology to the repo.
+
     Lookup order: explicit --machine name → hostname mapping → 'default' section.
     """
     if not MACHINES_TOML.exists():
         return {"role": "host", "queues": ["default"]}
     cfg = tomllib.loads(MACHINES_TOML.read_text(encoding="utf-8"))
+
+    local_path = MACHINES_TOML.with_suffix(".local.toml")
+    if local_path.exists():
+        cfg = _merge_machines(cfg, tomllib.loads(local_path.read_text(encoding="utf-8")))
+
     if name is None:
         host = socket.gethostname()
         name = cfg.get("hostnames", {}).get(host, "default")

@@ -3,6 +3,7 @@
 .env/*
 **/.env
 **/.env.*
+scripts/machines.local.toml
 .venv
 venv
 *pid.*

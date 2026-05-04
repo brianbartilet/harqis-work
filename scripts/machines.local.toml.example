@@ -1,0 +1,31 @@
+# scripts/machines.local.toml — per-machine override (GITIGNORED).
+#
+# Copy this to scripts/machines.local.toml and fill in your real hostnames /
+# overrides. deploy.py merges this on top of machines.toml at load time:
+#   - keys here win over keys in machines.toml
+#   - dict values (e.g. [hostnames] or a [<machine>] section) merge inner keys
+#
+# Find this machine's hostname:
+#   python -c "import socket; print(socket.gethostname())"
+
+
+# Map real hostnames → machine names declared in machines.toml.
+# These usually contain identifying info (Tailscale node names, internal
+# DNS, etc.) so they live here, never in the public repo.
+[hostnames]
+# "harqis-mac-mini.local"   = "harqis-server"
+# "DESKTOP-N100"             = "windows-work"
+# "vps-1.tail-scale.ts.net"  = "vps-worker"
+
+
+# Override individual fields of a machine declared in machines.toml. Only the
+# keys you list here override; the rest are inherited.
+# [windows-work]
+# kanban_num_agents = 3
+# disable = ["mcp", "kanban", "flower"]
+
+
+# Or declare a brand-new machine that only exists on your local setup.
+# [my-laptop]
+# role = "node"
+# queues = ["adhoc"]

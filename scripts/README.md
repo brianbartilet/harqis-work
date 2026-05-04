@@ -132,6 +132,22 @@ Find a machine's hostname:
 python -c "import socket; print(socket.gethostname())"
 ```
 
+**Local override (`machines.local.toml`)** — gitignored. `deploy.py` merges
+it on top of `machines.toml` at load time, so real hostname mappings or
+per-machine tweaks stay off the repo. Copy `machines.local.toml.example`
+to `machines.local.toml` and fill in:
+
+```toml
+[hostnames]
+"harqis-mac-mini.local"   = "harqis-server"
+"DESKTOP-N100"            = "windows-work"
+"vps-1.tail-scale.ts.net" = "vps-worker"
+
+# Override a field of an existing machine
+[windows-work]
+kanban_num_agents = 3
+```
+
 ---
 
 ## Quick recipes

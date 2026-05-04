@@ -51,8 +51,13 @@ queues = ["agent", "worker"]
 kanban_profile = "agent:code"
 
 
-# Map socket.gethostname() → machine name above. Add your real hostnames here.
-# Find your hostname:  python -c "import socket; print(socket.gethostname())"
+# Map socket.gethostname() → machine name above.
+#
+# Real hostname mappings should NOT live here — they leak topology. Put them
+# in scripts/machines.local.toml (gitignored). deploy.py merges that file on
+# top of this one at load time. See machines.local.toml.example for the shape.
+#
+# Find this machine's hostname:  python -c "import socket; print(socket.gethostname())"
 [hostnames]
 # "harqis-mac-mini"      = "harqis-server"
 # "harqis-mac-mini.local" = "harqis-server"
