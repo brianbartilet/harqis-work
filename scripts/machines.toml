@@ -1,0 +1,55 @@
+# Per-machine deployment topology for scripts/deploy.py.
+#
+# How auto-detection works:
+#   1. python scripts/deploy.py reads socket.gethostname()
+#   2. looks the hostname up in [hostnames] below to get a machine name
+#   3. loads the corresponding [<name>] section
+#   4. falls back to [default] if nothing matches
+#
+# Override on the command line:
+#   python scripts/deploy.py --machine harqis-server
+#   python scripts/deploy.py --role node --queues agent,worker
+#
+# Per-machine fields:
+#   role            "host" (runs scheduler + docker) or "node" (worker-only)
+#   queues          list of Celery queues this machine consumes
+#   disable         list of services NOT to run here (subset of:
+#                   scheduler worker frontend mcp kanban flower)
+#   kanban_profile  agent profile filter for the kanban orchestrator
+#                   (e.g. "agent:default", "agent:code")
+#   kanban_num_agents  concurrent in-process kanban agents (default: 1)
+
+
+# Fallback when no [hostnames] entry matches.
+[default]
+role = "host"
+queues = ["default"]
+
+
+# ── Always-on hub: TCG/PEON/AGENT workloads, full host stack ─────────────────
+[harqis-server]
+role = "host"
+queues = ["tcg", "peon", "agent"]
+
+
+# ── Windows work box: DEFAULT + HUD, no MCP/Kanban here ──────────────────────
+[windows-work]
+role = "host"
+queues = ["default", "hud"]
+disable = ["mcp", "kanban"]
+
+
+# ── VPS worker nodes — pure workers, no docker / scheduler ───────────────────
+[vps-worker]
+role = "node"
+queues = ["agent", "worker"]
+kanban_profile = "agent:code"
+
+
+# Map socket.gethostname() → machine name above. Add your real hostnames here.
+# Find your hostname:  python -c "import socket; print(socket.gethostname())"
+[hostnames]
+# "harqis-mac-mini"      = "harqis-server"
+# "harqis-mac-mini.local" = "harqis-server"
+# "DESKTOP-N100"          = "windows-work"
+# "vps-1"                 = "vps-worker"

@@ -25,7 +25,7 @@ Queue names live in `workflows/queues.py`. The wire-level topology (which queues
 
 ### Adding a new broadcast task
 
-1. Pick a domain that already has a broadcast queue (currently only `hud`). To add a new domain (e.g. `tcg_broadcast`), update `workflows/queues.py`, `workflows/config.py` (`task_queues` + `task_routes`), and the broadcast-pair map in `scripts/sh/deploy.sh` and `scripts/ps/deploy.ps1` first.
+1. Pick a domain that already has a broadcast queue (currently only `hud`). To add a new domain (e.g. `tcg_broadcast`), update `workflows/queues.py`, `workflows/config.py` (`task_queues` + `task_routes`), and the broadcast-pair map in `scripts/deploy.py` first.
 2. Create the task with the prefix `broadcast_` so the naming-convention route picks it up:
    ```python
    # workflows/hud/tasks/broadcast_<thing>.py
@@ -36,7 +36,7 @@ Queue names live in `workflows/queues.py`. The wire-level topology (which queues
        # idempotent body — runs once per subscribed worker
        ...
    ```
-3. Workers subscribe by including `hud_broadcast` in their `-Q` queue list. Easiest: `./scripts/sh/deploy.sh --role node -q hud --with-broadcast`. The flag auto-appends `<queue>_broadcast` for every base queue with a broadcast partner.
+3. Workers subscribe by including `hud_broadcast` in their `-Q` queue list. Easiest: `python scripts/deploy.py --role node -q hud,hud_broadcast`.
 4. Trigger:
    ```python
    from workflows.hud.tasks.broadcast_<thing> import broadcast_<thing>

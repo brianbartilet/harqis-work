@@ -591,4 +591,4 @@ python -c "from workflows.knowledge.tasks.answer import answer_question; import 
 python mcp/server.py
 ```
 
-Once the beat scheduler is running (`./scripts/sh/deploy.sh` or platform equivalent), the four ingestors run nightly at 02:30 / 02:45 / 03:00 / 03:15 and keep the store warm without manual intervention.
+Once the beat scheduler is running (`python scripts/deploy.py`), the four ingestors run nightly at 02:30 / 02:45 / 03:00 / 03:15 and keep the store warm without manual intervention.

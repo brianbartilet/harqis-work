@@ -141,11 +141,11 @@ End-to-end deploy of the harqis-work platform on the current machine. Decides wh
 
 The skill validates Docker / venv / broker connectivity before making changes, surfaces per-component log paths on any failure, and supports clean teardown via `--down`. **OS auto-detection** dispatches to:
 
-| OS | Underlying script | Daemon wrappers | Hosting |
+| OS | Underlying script | Daemon launcher | Hosting (auto-start via `--register`) |
 |---|---|---|---|
-| macOS | `scripts/sh/deploy.sh` | `scripts/sh/run_*_daemon.sh` | LaunchAgent plists |
-| Linux | `scripts/sh/deploy.sh` | `scripts/sh/run_*_daemon.sh` | systemd or `nohup` (Appendix B) |
-| Windows | `scripts/ps/deploy.ps1` | `scripts/ps/run_*_daemon.ps1` | `Start-Process -WindowStyle Hidden` (default) or Scheduled Tasks (`-Register`, Appendix C) |
+| macOS | `python scripts/deploy.py` | `python scripts/launch.py <service>` | LaunchAgent plists |
+| Linux | `python scripts/deploy.py` | `python scripts/launch.py <service>` | systemd user units |
+| Windows | `python scripts/deploy.py` | `python scripts/launch.py <service>` | Scheduled Tasks (must run elevated) |
 
 When new always-on components are added to harqis-work (a new daemon or orchestrator), the skill's "Maintenance" section lists the three places that must be updated to keep the deploy reproducible. See also [HARQIS-CLAW-HOST.md §4](HARQIS-CLAW-HOST.md#4-deploy-pipeline-host-vs-node) for the full pipeline diagram.
 

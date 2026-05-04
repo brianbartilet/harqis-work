@@ -18,8 +18,8 @@ Environment variables consumed by each backend:
     CONFIG_SERVER_PORT   Port the server listens on    (default: 8765)
 
 Host-side CLI (run on the machine that has apps.env + apps_config.yaml):
-  python -m apps.config_remote push-redis  [--redis-url URL] [--key KEY]
-  python -m apps.config_remote serve-http  [--port PORT] [--token TOKEN] [--host HOST]
+  python scripts/launch.py push-config   [--redis-url URL] [--key KEY]
+  python scripts/launch.py serve-config  [--port PORT] [--token TOKEN] [--host HOST]
 """
 
 from __future__ import annotations

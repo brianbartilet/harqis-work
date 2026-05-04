@@ -490,7 +490,7 @@ grep -rE "(\.claude/|\.openclaw/|workflows/(desktop|finance|hud|mobile|n8n|purch
 For each hit:
 - If it's a doc reference (markdown): rewrite to point at the upstream repo, OR delete the section if it only made sense in the personal context.
 - If it's code (a script that imports a stripped module): comment out the import with a `# TODO: re-introduce after building <category>` marker.
-- If it's a deploy script flag (`--with-broadcast`, `-q hud`): leave it but add a comment noting the fork has no broadcast queue by default.
+- If it's a deploy script flag (`-q hud`): leave it but add a comment noting the fork has no broadcast queue by default.
 
 Do NOT scrub aggressively — better to leave a TODO than to silently remove
 working scripts that the fork might re-enable later.
@@ -841,7 +841,7 @@ Next steps for the host operator:
   [ ] Obtain fresh Google OAuth/service-account JSON files and place under .env/
   [ ] Run `pip install -r requirements.txt` inside a fresh .venv
   [ ] Run `/deploy-harqis host` (after installing Claude Code + skills in the fork) or
-      `./scripts/sh/deploy.sh --role host` to bring the stack up
+      `python scripts/deploy.py --role host` to bring the stack up
   [ ] Build the first workflow:
         cp -r workflows/.template workflows/<your_category>
         # then edit tasks_config.py and tasks/*.py

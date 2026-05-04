@@ -240,14 +240,14 @@ This is already added to `requirements.txt`.
 ### 8.2 Parameterise the Celery broker URL
 
 `apps_config.yaml` now uses `${CELERY_BROKER_URL}` for the broker field.
-`set_env_workflows.sh` (and `.bat`) default it to `localhost` for local runs.
+Env loading is handled automatically by `scripts/launch.py` (defaults to `localhost` for local runs).
 
 When pushing config for remote workers, set `REMOTE_BROKER_URL` to the address
 that workers will use to reach RabbitMQ (typically the host's VPN/LAN IP):
 
 ```bash
 export REMOTE_BROKER_URL="amqp://guest:guest@10.0.0.1:5672/"
-bash scripts/sh/push_config.sh
+python scripts/launch.py push-config
 ```
 
 ### 8.3 Push config to Redis (Backend A)
@@ -255,10 +255,10 @@ bash scripts/sh/push_config.sh
 ```bash
 # On the host, after any change to apps.env or apps_config.yaml:
 export REMOTE_BROKER_URL="amqp://guest:guest@10.0.0.1:5672/"
-bash scripts/sh/push_config.sh
+python scripts/launch.py push-config
 
 # Custom Redis URL:
-bash scripts/sh/push_config.sh --redis-url redis://10.0.0.1:6379/1 --key harqis:config
+python scripts/launch.py push-config --redis-url redis://10.0.0.1:6379/1 --key harqis:config
 ```
 
 ### 8.4 Start the HTTP config server (Backend B)
@@ -269,7 +269,7 @@ export CONFIG_SERVER_TOKEN="$(openssl rand -hex 32)"
 echo "Token: $CONFIG_SERVER_TOKEN"   # save this for workers
 
 export REMOTE_BROKER_URL="amqp://guest:guest@10.0.0.1:5672/"
-bash scripts/sh/run_config_server.sh --port 8765 --token "$CONFIG_SERVER_TOKEN"
+python scripts/launch.py serve-config --port 8765 --token "$CONFIG_SERVER_TOKEN"
 ```
 
 To keep it running as a daemon, add a LaunchAgent plist (macOS) or systemd unit (Linux) similar to the existing scheduler/worker plists.
@@ -303,38 +303,25 @@ CONFIG_SERVER_URL=http://10.0.0.1:8765
 CONFIG_SERVER_TOKEN=<token from host>
 ```
 
-### 9.2 Start a worker (Linux / macOS)
+### 9.2 Start a worker (cross-platform)
 
 ```bash
-# Make scripts executable (first time):
-chmod +x scripts/sh/run_workflow_worker_remote*.sh
-
 # Default queue:
-bash scripts/sh/run_workflow_worker_remote.sh
+python scripts/launch.py worker
 
 # TCG queue:
-bash scripts/sh/run_workflow_worker_remote_tcg.sh
+python scripts/launch.py worker --queues tcg
 
 # HUD queue:
-bash scripts/sh/run_workflow_worker_remote_hud.sh
+python scripts/launch.py worker --queues hud
 ```
 
-### 9.3 Start a worker (Windows)
-
-```bat
-REM From the scripts\ directory:
-run_workflow_worker_remote.bat
-run_workflow_worker_remote_tcg.bat
-run_workflow_worker_remote_hud.bat
-```
-
-### 9.4 Verify config loaded correctly
+### 9.3 Verify config loaded correctly
 
 ```bash
-# Quick smoke test on the remote node:
+# Quick smoke test on the remote node (CONFIG_SOURCE merged into launch.py — set CONFIG_SOURCE in apps.env):
 cd <repo-root>
 source .venv/bin/activate
-source scripts/sh/set_env_worker_remote.sh   # sets CONFIG_SOURCE etc.
 python -c "from apps.apps_config import CONFIG_MANAGER; print(list(CONFIG_MANAGER._current_app_configs.keys()))"
 ```
 
@@ -384,23 +371,20 @@ Expected output: list of all config section names (OANDA, HARQIS_GPT, etc.).
 
 ### Host scripts
 
-| Script | Platform | Purpose |
-|---|---|---|
-| `scripts/sh/push_config.sh` | Linux / macOS | Resolve config + push to Redis |
-| `scripts/sh/run_config_server.sh` | Linux / macOS | Resolve config + start HTTP server |
+| Command | Purpose |
+|---|---|
+| `python scripts/launch.py push-config` | Resolve config + push to Redis |
+| `python scripts/launch.py serve-config` | Resolve config + start HTTP server |
 
-### Remote worker scripts
+### Remote worker commands
 
-| Script | Platform | Queue |
-|---|---|---|
-| `scripts/sh/set_env_worker_remote.sh` | Linux / macOS | Env setup (source only) |
-| `scripts/sh/run_workflow_worker_remote.sh` | Linux / macOS | default |
-| `scripts/sh/run_workflow_worker_remote_tcg.sh` | Linux / macOS | tcg |
-| `scripts/sh/run_workflow_worker_remote_hud.sh` | Linux / macOS | hud |
-| `scripts/set_env_worker_remote.bat` | Windows | Env setup (call only) |
-| `scripts/run_workflow_worker_remote.bat` | Windows | default |
-| `scripts/run_workflow_worker_remote_tcg.bat` | Windows | tcg |
-| `scripts/run_workflow_worker_remote_hud.bat` | Windows | hud |
+| Command | Queue |
+|---|---|
+| `python scripts/launch.py worker` | default |
+| `python scripts/launch.py worker --queues tcg` | tcg |
+| `python scripts/launch.py worker --queues hud` | hud |
+
+(CONFIG_SOURCE is read from `.env/apps.env` — merged into launch.py.)
 
 ### Python module CLI
 
@@ -422,7 +406,7 @@ python -m apps.config_remote serve-http --port 8765 --token <token> --host 0.0.0
 RuntimeError: Config key 'harqis:config' not found in Redis at redis://...
 ```
 
-**Fix:** Run `bash scripts/sh/push_config.sh` on the host first, then restart the worker.
+**Fix:** Run `python scripts/launch.py push-config` on the host first, then restart the worker.
 
 ---
 
@@ -432,7 +416,7 @@ RuntimeError: Config key 'harqis:config' not found in Redis at redis://...
 PermissionError: Config server rejected the bearer token.
 ```
 
-**Fix:** Ensure `CONFIG_SERVER_TOKEN` on the worker matches the value passed to `run_config_server.sh --token`.
+**Fix:** Ensure `CONFIG_SERVER_TOKEN` on the worker matches the value passed to `python scripts/launch.py serve-config --token`.
 
 ---
 
@@ -445,7 +429,7 @@ PermissionError: Config server rejected the bearer token.
 **Fix:**
 ```bash
 export REMOTE_BROKER_URL="amqp://guest:guest@10.0.0.1:5672/"
-bash scripts/sh/push_config.sh   # re-push with correct broker URL
+python scripts/launch.py push-config   # re-push with correct broker URL
 # Then restart all remote workers
 ```
 

@@ -491,9 +491,8 @@ docker compose -f docker-compose.yml up -d
 # 2. On macOS — verify LaunchAgents (scheduler, worker, frontend)
 launchctl list | grep work.harqis
 
-# 3. If anything is down, run the deploy script
-./scripts/sh/deploy.sh      # macOS / Linux
-scripts\deploy.bat          # Windows
+# 3. If anything is down, run the deploy script (cross-platform)
+python scripts/deploy.py
 
 # 4. Start the MCP server for Claude Desktop / Claude Code
 python mcp/server.py

@@ -249,7 +249,7 @@ after editing — the harqis-work tools will appear in the tools panel.
 
 ## 4. Deploy Pipeline (host vs node)
 
-The platform is deployed via a single reusable script (`scripts/sh/deploy.sh`) and a matching Claude Code skill (`/deploy-harqis`). Both take a **role** argument that determines what gets started on the current machine.
+The platform is deployed via a single cross-platform Python entry point (`python scripts/deploy.py`) and a matching Claude Code skill (`/deploy-harqis`). Both take a **role** argument that determines what gets started on the current machine. `machines.toml` maps hostname → role/queues so `python scripts/deploy.py` auto-detects the local machine; explicit overrides via `--machine NAME` or `--role`/`--queues` flags. Auto-start: `python scripts/deploy.py --register` writes a launchd plist (macOS) / systemd user unit (Linux) / Scheduled Task (Windows). `--unregister` removes them.
 
 ### 4.1 Roles at a glance
 
@@ -298,12 +298,8 @@ Most queues (`default`, `hud`, `tcg`, `adhoc`) are **direct** — exactly one wo
 Currently `hud_broadcast` is the only broadcast queue declared. To subscribe a worker to broadcasts:
 
 ```bash
-# Manual — append `<queue>_broadcast` to the queue list
-./scripts/sh/deploy.sh --role node -q hud,hud_broadcast
-
-# Convenience flag — auto-appends `<queue>_broadcast` for every base queue
-# that has a broadcast partner declared
-./scripts/sh/deploy.sh --role node -q hud --with-broadcast
+# Append `<queue>_broadcast` to the queue list
+python scripts/deploy.py --role node -q hud,hud_broadcast
 ```
 
 Tasks named `workflows.hud.tasks.broadcast_*` route to `hud_broadcast` automatically (naming-convention rule in `workflows/config.py`). Broadcast tasks **must be idempotent** — they run on every subscribed worker simultaneously. See [`workflows/README.md`](../../workflows/README.md) for the full reference, the demo task at `workflows/hud/tasks/broadcast_reload.py`, and the missed-broadcast caveat (offline workers don't get backfilled — pair broadcasts with a worker-startup convergence task for state that must always be consistent).
@@ -317,7 +313,7 @@ Tasks named `workflows.hud.tasks.broadcast_*` route to `hud_broadcast` automatic
 ### 4.2 Deploy pipeline
 
 ```
-                  /deploy-harqis <role>  ─or─  ./scripts/sh/deploy.sh --role <role>
+                  /deploy-harqis <role>  ─or─  python scripts/deploy.py --role <role>
                                   │
                                   ▼
                     ┌───────────────────────────┐
@@ -345,7 +341,7 @@ Tasks named `workflows.hud.tasks.broadcast_*` route to `hud_broadcast` automatic
         cloudflared (tunnel)                          │
             │                                         │
             ▼                                         │
-  Step 4  Source set_env_workflows.sh ◄───────────────┤
+  Step 4  Env loaded automatically  ◄─────────────────┤
             │      (CELERY_BROKER_URL, PYTHONPATH,    │
             │       APP_CONFIG_FILE, …)               │
             ▼                                         ▼
@@ -385,52 +381,38 @@ Tasks named `workflows.hud.tasks.broadcast_*` route to `hud_broadcast` automatic
 
 ### 4.3 Reusable invocations
 
-The skill auto-detects the OS and dispatches to the right script set. Direct shell invocations:
+The skill auto-detects the OS and dispatches to the cross-platform Python entry point. Direct invocations:
 
-**macOS / Linux (Bash → `scripts/sh/`):**
 ```bash
 # Full host deploy — Kanban orchestrator filtered to agent:default (host = 1 default-queue worker)
-./scripts/sh/deploy.sh --role host
+python scripts/deploy.py --role host
 
 # Host owns a different profile (e.g. agent:write)
-./scripts/sh/deploy.sh --role host --profile agent:write
+python scripts/deploy.py --role host --profile agent:write
 
 # Host that also drains the adhoc and tcg queues (single multi-queue worker)
-./scripts/sh/deploy.sh --role host -q default,adhoc,tcg
+python scripts/deploy.py --role host -q default,adhoc,tcg
 
 # Host without Kanban or Flower (e.g. low-RAM Mac Mini that only orchestrates workflows)
-./scripts/sh/deploy.sh --role host --no-kanban --no-flower
+python scripts/deploy.py --role host --no-kanban --no-flower
 
 # Worker-only N100 node — owns agent:code with native Linux hw matching
 CELERY_BROKER_URL=amqp://guest:guest@mac-mini.tail1234.ts.net:5672/ \
-  ./scripts/sh/deploy.sh --role node -q hud,tcg,default --profile agent:code
+  python scripts/deploy.py --role node -q hud,tcg,default --profile agent:code
 
 # Host with N concurrent Kanban agents (M4 with headroom)
-KANBAN_NUM_AGENTS=3 ./scripts/sh/deploy.sh --role host
+python scripts/deploy.py --role host --num-agents 3
 
 # Worker-only N100/VPS node — runs hud + tcg queues against the host's broker
 CELERY_BROKER_URL=amqp://guest:guest@mac-mini.tail1234.ts.net:5672/ \
-  ./scripts/sh/deploy.sh --role node -q hud,tcg,default
+  python scripts/deploy.py --role node -q hud,tcg,default
+
+# Persistent registration (launchd / systemd / Scheduled Task at startup)
+python scripts/deploy.py --role node -q hud,tcg --register
 
 # Tear down
-./scripts/sh/deploy.sh --role host --down
-./scripts/sh/deploy.sh --role node --down
-```
-
-**Windows (PowerShell → `scripts/ps/`):**
-```powershell
-# Worker-only N100 node — hud + tcg + default
-$env:CELERY_BROKER_URL = 'amqp://guest:guest@mac-mini.tail1234.ts.net:5672/'
-.\scripts\ps\deploy.ps1 -Role node -Queues 'hud,tcg,default'
-
-# Host (rare on Windows but supported — Docker Desktop required)
-.\scripts\ps\deploy.ps1 -Role host -Queues 'default,adhoc'
-
-# Persistent registration (Scheduled Task at startup) — must run elevated
-.\scripts\ps\deploy.ps1 -Role node -Queues 'hud,tcg' -Register
-
-# Tear down
-.\scripts\ps\deploy.ps1 -Role node -Down
+python scripts/deploy.py --role host --down
+python scripts/deploy.py --role node --down
 ```
 
 Or, from any Claude Code session opened in the repo (OS-agnostic):
@@ -448,39 +430,33 @@ The skill walks through every step, validates prerequisites before making change
 
 ### 4.4 Daemon scripts
 
-Each daemon ships in two flavours — Bash (`scripts/sh/`) for macOS / Linux and PowerShell (`scripts/ps/`) for Windows. Both flavours source the OS-appropriate env loader (`set_env_workflows.sh` or `set_env_workflows.ps1`) and exec the same Python entry point.
+Each daemon is launched via the cross-platform `python scripts/launch.py <service>` entry point, which handles env loading automatically and execs the right Python process.
 
-| Label | Bash (sh) | PowerShell (ps) | Process |
-|---|---|---|---|
-| `work.harqis.scheduler` | `run_scheduler_daemon.sh` | `run_scheduler_daemon.ps1` | `python run_workflows.py scheduler` |
-| `work.harqis.worker` | `run_worker_daemon.sh` | `run_worker_daemon.ps1` | `WORKFLOW_QUEUE=${WORKFLOW_QUEUE:-default} python run_workflows.py worker` (Celery's `-Q` accepts a comma-separated list) |
-| `work.harqis.frontend` | `run_frontend_daemon.sh` | `run_frontend_daemon.ps1` | `python frontend/main.py` |
-| `work.harqis.mcp` | `run_mcp_daemon.sh` | `run_mcp_daemon.ps1` | `python mcp/server.py` |
-| `work.harqis.kanban` | `run_kanban_daemon.sh` | `run_kanban_daemon.ps1` | `python -m agents.projects.orchestrator.local --num-agents $KANBAN_NUM_AGENTS` |
-| `work.harqis.flower` | `run_flower_daemon.sh` | `run_flower_daemon.ps1` | `python -m celery -A core.apps.sprout.app.celery:SPROUT flower --port=$FLOWER_PORT --address=$FLOWER_ADDRESS --basic-auth=$FLOWER_USER:$FLOWER_PASSWORD` |
+| Label | Launcher | Process |
+|---|---|---|
+| `work.harqis.scheduler` | `python scripts/launch.py scheduler` | `python run_workflows.py scheduler` |
+| `work.harqis.worker` | `python scripts/launch.py worker` | `WORKFLOW_QUEUE=${WORKFLOW_QUEUE:-default} python run_workflows.py worker` (Celery's `-Q` accepts a comma-separated list) |
+| `work.harqis.frontend` | `python scripts/launch.py frontend` | `python frontend/main.py` |
+| `work.harqis.mcp` | `python scripts/launch.py mcp` | `python mcp/server.py` |
+| `work.harqis.kanban` | `python scripts/launch.py kanban` | `python -m agents.projects.orchestrator.local --num-agents $KANBAN_NUM_AGENTS` |
+| `work.harqis.flower` | `python scripts/launch.py flower` | `python -m celery -A core.apps.sprout.app.celery:SPROUT flower --port=$FLOWER_PORT --address=$FLOWER_ADDRESS --basic-auth=$FLOWER_USER:$FLOWER_PASSWORD` |
 
 **Hosting mechanism per OS:**
 
-| OS | Default (ad-hoc) | Persistent (production) |
-|---|---|---|
-| macOS | `launchctl load <plist>` | LaunchAgent plists in `~/Library/LaunchAgents/` |
-| Linux | `nohup ... &` (PID file in `.run/`) | systemd unit (Appendix B in the skill file) |
-| Windows | `Start-Process -WindowStyle Hidden` (PID in `.run\<label>.pid`) | Scheduled Task at startup (`deploy.ps1 -Register`, must run elevated) |
-
-On Linux nodes, replace LaunchAgent plists with systemd units pointing at the same wrapper scripts (see `/deploy-harqis` skill, Appendix B).
+| OS | Auto-start mechanism (via `python scripts/deploy.py --register`) |
+|---|---|
+| macOS | LaunchAgent plists in `~/Library/LaunchAgents/` |
+| Linux | systemd user unit |
+| Windows | Scheduled Task at startup (must run elevated) |
 
 ### 4.5 Adding a new always-on component
 
-When you add a new daemon-style service (a new orchestrator, a long-running agent, etc.), update **both** OS flavours so the deploy stays cross-platform:
+When you add a new daemon-style service (a new orchestrator, a long-running agent, etc.), update the cross-platform launcher and deploy scripts:
 
-1. Create the daemon wrappers:
-   - `scripts/sh/run_<name>_daemon.sh` — sources `set_env_workflows.sh`, execs the Python entry point.
-   - `scripts/ps/run_<name>_daemon.ps1` — sources `set_env_workflows.ps1`, execs the same entry point.
-2. Add the new label to **both** rows of the §4.4 table (sh + ps columns).
-3. Wire the new component into both deploy scripts:
-   - `scripts/sh/deploy.sh` — add `PLIST_<NAME>` variable, `WITH_<NAME>` toggle, `--no-<name>` CLI flag.
-   - `scripts/ps/deploy.ps1` — add an entry to the `$services` array, plus a `-No<Name>` switch param.
-4. Update the `/deploy-harqis` skill: a new Step 7 sub-section, both Appendix A (macOS plist) and Appendix C (Windows scripts) tables, and a Quality Checklist line.
+1. Add the new service to `scripts/launch.py` so `python scripts/launch.py <name>` works.
+2. Add the new label to the §4.4 table.
+3. Wire the new component into `scripts/deploy.py` — add the start/stop entry plus a `--no-<name>` CLI flag.
+4. Update the `/deploy-harqis` skill: a new Step 7 sub-section and a Quality Checklist line.
 5. Add a health check + summary line to the skill's Step 9 summary block.
 
 This keeps the host bring-up reproducible and self-documenting on every supported OS.
@@ -539,21 +515,21 @@ Source before starting workers: `source scripts/macos/load_keychain_secrets.sh`
 
 ```bash
 cd /opt/harqis
-source .venv/bin/activate && source scripts/linux/set_env_workflows.sh
+source .venv/bin/activate
 
 # Beat scheduler (one instance globally — run only on the host)
-python run_workflows.py beat &
+python scripts/launch.py scheduler &
 
 # Workers
-WORKFLOW_QUEUE=default python run_workflows.py worker &
-WORKFLOW_QUEUE=adhoc   python run_workflows.py worker &
+WORKFLOW_QUEUE=default python scripts/launch.py worker &
+WORKFLOW_QUEUE=adhoc   python scripts/launch.py worker &
 ```
 
 HUD and TCG queues run on Windows N100 nodes. If consolidating all queues to the host:
 
 ```bash
-WORKFLOW_QUEUE=hud python run_workflows.py worker &
-WORKFLOW_QUEUE=tcg python run_workflows.py worker &
+WORKFLOW_QUEUE=hud python scripts/launch.py worker &
+WORKFLOW_QUEUE=tcg python scripts/launch.py worker &
 ```
 
 ### 5.5 Cloudflare Tunnel (public webhook entry)
@@ -596,8 +572,8 @@ launchctl load ~/Library/LaunchAgents/com.harqis.server.plist
 
 The N100 Windows machine handles `hud` and `tcg` queues. To shift `tcg` to the Mac Mini:
 
-1. Start `tcg` worker on Mac Mini: `WORKFLOW_QUEUE=tcg python run_workflows.py worker &`
-2. Stop `tcg` worker on N100 (`run_workflow_worker_tcg.bat`)
+1. Start `tcg` worker on Mac Mini: `WORKFLOW_QUEUE=tcg python scripts/launch.py worker &`
+2. Stop `tcg` worker on N100 (`python scripts/launch.py worker --queues tcg`)
 3. Beat scheduler: stop on N100, start on Mac Mini
 4. N100 becomes HUD-only (`hud,windows` queues — Windows-native tasks that can't migrate)
 
@@ -1147,10 +1123,10 @@ Containerise them once the service is stable.
 ```bash
 pkill -f "run_workflows.py worker"
 sleep 3
-cd /opt/harqis && source .venv/bin/activate && source scripts/linux/set_env_workflows.sh
-WORKFLOW_QUEUE=default python run_workflows.py worker &
-WORKFLOW_QUEUE=adhoc   python run_workflows.py worker &
-python run_workflows.py beat &
+cd /opt/harqis && source .venv/bin/activate
+WORKFLOW_QUEUE=default python scripts/launch.py worker &
+WORKFLOW_QUEUE=adhoc   python scripts/launch.py worker &
+python scripts/launch.py scheduler &
 ```
 
 ### Deploy code updates
@@ -1238,11 +1214,11 @@ VPN-exposed services:
 
 ```bash
 docker compose up -d
-WORKFLOW_QUEUE=default python run_workflows.py worker &
-WORKFLOW_QUEUE=adhoc   python run_workflows.py worker &
-python run_workflows.py beat &
-cd frontend && uvicorn main:app --port 8000 &
-celery -A workflows flower --port 5555 &
+WORKFLOW_QUEUE=default python scripts/launch.py worker &
+WORKFLOW_QUEUE=adhoc   python scripts/launch.py worker &
+python scripts/launch.py scheduler &
+python scripts/launch.py frontend &
+python scripts/launch.py flower &
 # MCP server is auto-started by Claude Desktop
 ```
 

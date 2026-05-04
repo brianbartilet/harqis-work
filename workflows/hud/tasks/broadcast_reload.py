@@ -22,7 +22,7 @@ direct queue for those).
 
 Subscription:
     Workers subscribe by including `hud_broadcast` in their `-Q` queue list.
-    `deploy.sh --with-broadcast` auto-appends it for HUD workers.
+    Use `python scripts/deploy.py --role node -q hud,hud_broadcast`.
 """
 
 import logging

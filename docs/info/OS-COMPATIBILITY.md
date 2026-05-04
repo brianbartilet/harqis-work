@@ -61,15 +61,14 @@ A PySide6 floating widget for the ElevenLabs voice assistant. On Windows, it use
 
 ### Startup Scripts (`scripts/`)
 
-Batch files (`.bat`) are provided for Windows. The n8n deployment scripts have both `.bat` and `.sh` equivalents. General workflow startup scripts are Windows-only.
+Workflow startup is cross-platform via two Python entry points. The n8n deployment scripts retain their `.bat` and `.sh` equivalents.
 
-| Script | Platform |
+| Command | Platform |
 |--------|----------|
-| `scripts/run_workflow_scheduler.bat` | Windows |
-| `scripts/run_workflow_worker.bat` | Windows |
-| `scripts/run_workflow_worker_hud.bat` | Windows |
-| `scripts/set_env_workflows.bat` | Windows |
-| `scripts/set_env.sh` | Linux / macOS |
+| `python scripts/launch.py scheduler` | Cross-platform |
+| `python scripts/launch.py worker` | Cross-platform |
+| `python scripts/launch.py worker --queues hud` | Cross-platform |
+| `(handled automatically by scripts/launch.py)` | Cross-platform (env loading) |
 | `workflows/n8n/deploy/backup.bat` | Windows |
 | `workflows/n8n/deploy/backup.sh` | Linux / macOS |
 | `workflows/n8n/deploy/restore.bat` | Windows |

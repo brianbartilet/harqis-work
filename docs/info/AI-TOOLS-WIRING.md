@@ -88,8 +88,7 @@ Jira, OwnTracks, Orgo, Discord, Reddit, LinkedIn, Notion, Anthropic
      n8n, mosquitto, elasticsearch, kibana, owntracks-recorder up
   2. On macOS also: launchctl list | grep work.harqis  # expect scheduler,
      worker, frontend with PIDs
-  3. If anything is down, run ./scripts/sh/deploy.sh (macOS/Linux) or the
-     per-service .bat files under ./scripts/ (Windows).
+  3. If anything is down, run python scripts/deploy.py (cross-platform).
 
 Search the current system — detect OS via `uname -s` or `$OSTYPE` on
 POSIX, `ver` or `$env:OS` on Windows — and pick the matching flow.

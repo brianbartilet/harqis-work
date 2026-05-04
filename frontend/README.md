@@ -56,8 +56,8 @@ Open: **http://localhost:8080**
 Flower must be running for task status tracking to work. From the repo root:
 
 ```sh
-# Using the existing scripts
-scripts\flower.bat
+# Using the cross-platform launcher
+python scripts/launch.py flower
 
 # Or manually
 celery -A workflows.config flower --port=5555

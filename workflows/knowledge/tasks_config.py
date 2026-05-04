@@ -27,7 +27,7 @@ WORKFLOW_KNOWLEDGE = {
             'rebuild': False,
         },
         'options': {
-            'queue': WorkflowQueue.AGENTS,
+            'queue': WorkflowQueue.AGENT,
             'expires': 60 * 60 * 6,  # 6h — skip if a previous run is still pending
         },
     },
@@ -46,7 +46,7 @@ WORKFLOW_KNOWLEDGE = {
             'rebuild': False,
         },
         'options': {
-            'queue': WorkflowQueue.AGENTS,
+            'queue': WorkflowQueue.AGENT,
             'expires': 60 * 60 * 6,
         },
     },
@@ -64,7 +64,7 @@ WORKFLOW_KNOWLEDGE = {
             'rebuild': False,
         },
         'options': {
-            'queue': WorkflowQueue.AGENTS,
+            'queue': WorkflowQueue.AGENT,
             'expires': 60 * 60 * 6,
         },
     },
@@ -79,7 +79,7 @@ WORKFLOW_KNOWLEDGE = {
             'rebuild': False,
         },
         'options': {
-            'queue': WorkflowQueue.AGENTS,
+            'queue': WorkflowQueue.AGENT,
             'expires': 60 * 60 * 6,
         },
     },
