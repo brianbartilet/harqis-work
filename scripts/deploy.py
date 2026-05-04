@@ -410,21 +410,37 @@ def _unregister_systemd(services):
 # Windows Scheduled Tasks (delegates to PowerShell)
 
 def _register_scheduled_tasks(machine, args, services):
+    """Register a Scheduled Task per service that runs at user logon.
+
+    Uses the current user's session (no -RunLevel Highest) so registration
+    works without admin elevation. The task fires at logon, so services
+    auto-start when you sign in. If registration fails (e.g. a Group Policy
+    restriction), the failure is surfaced — we don't pretend success.
+    """
     for s in services:
         cmd = build_service_cmd(s, machine, args)
         task = f"work.harqis.{s}"
+        # -Argument needs PowerShell-escaped single quotes inside the string.
+        ps_argument = " ".join(cmd[1:]).replace("'", "''")
         ps = (
             f"$action = New-ScheduledTaskAction -Execute '{cmd[0]}' "
-            f"-Argument '{' '.join(cmd[1:])}'; "
-            "$trigger = New-ScheduledTaskTrigger -AtStartup; "
+            f"-Argument '{ps_argument}'; "
+            "$trigger = New-ScheduledTaskTrigger -AtLogOn; "
             "$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries "
             "-DontStopIfGoingOnBatteries -StartWhenAvailable "
             "-RestartInterval (New-TimeSpan -Minutes 1) -RestartCount 999; "
             f"Register-ScheduledTask -TaskName '{task}' -Action $action -Trigger $trigger "
-            "-Settings $settings -Force -RunLevel Highest | Out-Null"
+            "-Settings $settings -Force | Out-Null"
         )
-        subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=False)
-        print(f"  Registered Scheduled Task: {task}")
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            print(f"  Registered Scheduled Task: {task} (runs at logon)")
+        else:
+            err = (result.stderr or result.stdout or "(no error output)").strip()
+            print(f"  WARN: Scheduled Task registration FAILED for {task}: {err.splitlines()[0]}")
 
 
 def _unregister_scheduled_tasks(services):
@@ -528,7 +544,9 @@ def main() -> None:
 
     if args.register:
         register_services(machine, args, services)
-        return
+        # fall through and start services NOW too — registration only fires
+        # at logon (Windows) / login (macOS LaunchAgent) / login (systemd user),
+        # so without this the user has to log out/in to see anything running.
 
     if args.docker_only:
         return
