@@ -38,6 +38,11 @@ role = "host"
 queues = ["default", "hud"]
 disable = ["mcp", "kanban"]
 
+[windows-work-all]
+role = "host"
+queues = ["default", "hud", "tcg", "peon", "adhoc"]
+disable = ["mcp", "kanban"]
+
 
 # ── VPS worker nodes — pure workers, no docker / scheduler ───────────────────
 [vps-worker]
