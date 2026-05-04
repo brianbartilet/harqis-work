@@ -23,31 +23,31 @@
 # Fallback when no [hostnames] entry matches.
 [default]
 role = "host"
-queues = ["default"]
+queues = ["default", "default_broadcast"]
 
 
 # ── Always-on hub: TCG/PEON/AGENT workloads, full host stack ─────────────────
 [harqis-server]
 role = "host"
-queues = ["tcg", "agent", "host", "adhoc"]
+queues = ["tcg", "agent", "host", "adhoc", "default_broadcast"]
 
 
 # ── Windows work box: DEFAULT + HUD, no Kanban here ──────────────────────────
 [windows-work]
 role = "host"
-queues = ["default", "hud"]
+queues = ["default", "hud", "default_broadcast"]
 disable = ["kanban"]
 
 [windows-work-all]
 role = "host"
-queues = ["default", "hud", "tcg", "peon", "adhoc"]
+queues = ["default", "hud", "tcg", "peon", "adhoc", "default_broadcast"]
 disable = ["kanban"]
 
 
 # ── VPS worker nodes — pure workers, no docker / scheduler ───────────────────
 [vps-worker]
 role = "node"
-queues = ["agent", "worker"]
+queues = ["agent", "worker", "default_broadcast"]
 kanban_profile = "agent:code"
 
 
