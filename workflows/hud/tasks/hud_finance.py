@@ -15,6 +15,7 @@ from apps.apps_config import CONFIG_MANAGER
 
 from apps.google_apps.references.constants import ScheduleCategory
 
+from workflows.hud.helpers.sizing import compute_max_hud_lines
 from workflows.hud.tasks.sections import sections__ynab
 
 
@@ -94,7 +95,6 @@ def show_ynab_budgets_info(ini=ConfigHelperRainmeter(), **kwargs):
     # endregion
 
     # region Build Dump
-    line_ctr = 2
     dump = '{0:<24} {1:>8} {2:>8}\n'.format("CATEGORY", "BUDGETED", "REMAINING")
     dump += f'{make_separator(44, "-")}\n'
 
@@ -107,7 +107,10 @@ def show_ynab_budgets_info(ini=ConfigHelperRainmeter(), **kwargs):
         dump += '{0:<24} {1:>8.2f} {2:>8.2f}\n'.format(category_name, budgeted, balance)
 
     # endregion
-    ini['Variables']['ItemLines'] = '{0}'.format(len(categories_fetched) + line_ctr)
+    # Size to actual content + the shared 2-row buffer so the last row
+    # isn't clipped by the title/links bar overhead. See hud_jira for the
+    # same pattern.
+    ini['Variables']['ItemLines'] = str(compute_max_hud_lines(dump))
 
     total_budgeted = sum(item[2] for item in categories_fetched)
     total_balance = sum(item[3] for item in categories_fetched)

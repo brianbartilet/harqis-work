@@ -82,7 +82,11 @@ _TYPE_SORT_RANK: dict = {name: i for i, name in enumerate(_INCLUDED_ISSUE_TYPES)
 # Display name for the synthesised "assigned to me" section that prepends
 # the status columns. Picked up by the renderer as the section title and by
 # the metrics payload as the key in `by_section`.
-_ASSIGNED_TO_ME_LABEL: str = "ASSIGNED TO ME"
+_ASSIGNED_TO_ME_LABEL: str = "OPEN ASSIGNED TO ME"
+
+# Statuses excluded from the "OPEN ASSIGNED TO ME" section — finished work isn't
+# something to focus on. Lowercased + whitespace-trimmed when compared.
+_ASSIGNED_EXCLUDED_STATUSES: frozenset = frozenset({"done", "closed"})
 
 
 @SPROUT.task()
@@ -507,6 +511,8 @@ def _filter_issues_by_assignee(issues: List[dict], assignee_name: str) -> List[d
 
     Match is case-insensitive + whitespace-trimmed against
     `fields.assignee.displayName`. Issues with no assignee never match.
+    Issues whose status is in `_ASSIGNED_EXCLUDED_STATUSES` (Done/Closed)
+    are dropped — the "assigned to me" view is for in-flight work only.
     The result is run through `_filter_and_sort_issues` for the same
     Story → Bug → Task → fixVersion ordering used by the status columns,
     so the "ASSIGNED TO ME" section reads consistently with the rest.
@@ -516,10 +522,15 @@ def _filter_issues_by_assignee(issues: List[dict], assignee_name: str) -> List[d
         return []
     matches: List[dict] = []
     for issue in issues:
-        assignee = (((issue or {}).get("fields") or {}).get("assignee") or {})
+        fields = (issue or {}).get("fields") or {}
+        assignee = fields.get("assignee") or {}
         display = (assignee.get("displayName") or "").strip().lower()
-        if display == target:
-            matches.append(issue)
+        if display != target:
+            continue
+        status_name = ((fields.get("status") or {}).get("name") or "").strip().lower()
+        if status_name in _ASSIGNED_EXCLUDED_STATUSES:
+            continue
+        matches.append(issue)
     return _filter_and_sort_issues(matches)
 
 

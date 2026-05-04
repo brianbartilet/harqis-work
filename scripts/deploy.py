@@ -71,8 +71,12 @@ IS_LIN = sys.platform.startswith("linux")
 # Maps service short-name → launch.py subcommand + which roles can run it.
 
 SERVICES: dict[str, dict] = {
-    "scheduler": {"cmd": ["scheduler"],         "roles": {"host"}},
-    "worker":    {"cmd": ["worker"],            "roles": {"host", "node"}},
+    # `console: True` means --console flips this service to a visible
+    # window (CREATE_NEW_CONSOLE + python.exe + no log redirect). Use
+    # for celery-backed daemons where you want to monitor live output;
+    # closing the window terminates the daemon.
+    "scheduler": {"cmd": ["scheduler"],         "roles": {"host"},         "console": True},
+    "worker":    {"cmd": ["worker"],            "roles": {"host", "node"}, "console": True},
     "frontend":  {"cmd": ["frontend"],          "roles": {"host"}},
     "mcp":       {"cmd": ["mcp"],               "roles": {"host"}},
     "kanban":    {"cmd": ["kanban"],            "roles": {"host", "node"}},
@@ -181,31 +185,44 @@ def read_pid(service: str) -> int | None:
     return pid
 
 
-def spawn_detached(cmd: list[str], log_file: Path) -> int:
+def spawn_detached(cmd: list[str], log_file: Path, *, show_console: bool = False) -> int:
     """Spawn a long-running process detached from this terminal. Returns its PID.
 
-    On Windows, uses CREATE_NO_WINDOW so the spawned python.exe (a console
-    app) does not pop up its own blank console window. CREATE_NEW_PROCESS_GROUP
-    detaches it from this terminal's signal group so Ctrl-C here doesn't kill
-    the daemon.
+    Two modes on Windows:
+      - show_console=False (default) — windowless daemon. CREATE_NO_WINDOW
+        suppresses console creation; stdout/stderr redirect to log_file.
+      - show_console=True — visible window. CREATE_NEW_CONSOLE allocates a
+        new console; stdio is NOT redirected so live output flows there.
+        Closing the window terminates the daemon.
+
+    CREATE_NEW_PROCESS_GROUP detaches the child from this terminal's signal
+    group so Ctrl-C here doesn't kill the daemon. On Unix, the start_new_session
+    equivalent is used; show_console=True there means inherit the current
+    terminal's stdio (no separate window concept).
     """
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    fout = open(log_file, "ab")
     if IS_WIN:
-        # CREATE_NO_WINDOW suppresses console creation for console apps.
-        # CREATE_NEW_PROCESS_GROUP is needed so the child is independent.
-        flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
-        proc = subprocess.Popen(
-            cmd,
-            stdin=subprocess.DEVNULL, stdout=fout, stderr=subprocess.STDOUT,
-            creationflags=flags, close_fds=True,
-        )
+        if show_console:
+            flags = subprocess.CREATE_NEW_CONSOLE | subprocess.CREATE_NEW_PROCESS_GROUP
+            proc = subprocess.Popen(cmd, creationflags=flags, close_fds=True)
+        else:
+            fout = open(log_file, "ab")
+            flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+            proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.DEVNULL, stdout=fout, stderr=subprocess.STDOUT,
+                creationflags=flags, close_fds=True,
+            )
     else:
-        proc = subprocess.Popen(
-            cmd,
-            stdin=subprocess.DEVNULL, stdout=fout, stderr=subprocess.STDOUT,
-            start_new_session=True, close_fds=True,
-        )
+        if show_console:
+            proc = subprocess.Popen(cmd, start_new_session=True, close_fds=True)
+        else:
+            fout = open(log_file, "ab")
+            proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.DEVNULL, stdout=fout, stderr=subprocess.STDOUT,
+                start_new_session=True, close_fds=True,
+            )
     return proc.pid
 
 
@@ -233,14 +250,31 @@ def stop_pid(pid: int, service: str) -> bool:
         pid_path(service).unlink(missing_ok=True)
 
 
-def python_exe() -> str:
+def python_exe(*, console: bool = False) -> str:
+    """Resolve the venv python interpreter.
+
+    On Windows: pythonw.exe by default (windowless daemon), python.exe when
+    console=True so the spawned process can write to its CREATE_NEW_CONSOLE
+    window. On Unix the choice is irrelevant — single python binary.
+    """
+    if not IS_WIN or not console:
+        return str(VENV_PY) if VENV_PY.exists() else sys.executable
+    venv_python = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
+    if venv_python.exists():
+        return str(venv_python)
     return str(VENV_PY) if VENV_PY.exists() else sys.executable
 
 
 # ── Service start / stop ──────────────────────────────────────────────────────
 
+def _service_uses_console(service: str, args: argparse.Namespace) -> bool:
+    """True iff this service should launch in a visible console window."""
+    return bool(getattr(args, "console", False)) and SERVICES[service].get("console", False)
+
+
 def build_service_cmd(service: str, machine: dict, args: argparse.Namespace) -> list[str]:
-    base = [python_exe(), str(LAUNCH_PY), *SERVICES[service]["cmd"]]
+    use_console = _service_uses_console(service, args)
+    base = [python_exe(console=use_console), str(LAUNCH_PY), *SERVICES[service]["cmd"]]
     if service == "worker":
         queues = args.queues or ",".join(machine.get("queues", ["default"]))
         base += ["--queues", queues]
@@ -261,14 +295,18 @@ def start_service(service: str, machine: dict, args: argparse.Namespace) -> bool
         print(f"  Already running: {service} (PID {existing})")
         return True
     cmd = build_service_cmd(service, machine, args)
-    pid = spawn_detached(cmd, log_path(service))
+    use_console = _service_uses_console(service, args)
+    pid = spawn_detached(cmd, log_path(service), show_console=use_console)
     pid_path(service).write_text(str(pid))
     detail = ""
     if service == "worker":
         detail = f"  queues={cmd[cmd.index('--queues') + 1]}"
     elif service == "kanban" and "--profile" in cmd:
         detail = f"  profile={cmd[cmd.index('--profile') + 1]}"
-    print(f"  Started: {service} (PID {pid}){detail}  ->  {log_path(service)}")
+    if use_console:
+        detail += "  [console]"
+    target = "console window" if use_console else log_path(service)
+    print(f"  Started: {service} (PID {pid}){detail}  ->  {target}")
     # NOTE: PID tracked here is the launcher; Sprout's Django autoreloader
     # forks a child for the real celery process and the launcher PID may
     # exit shortly after. Use the per-service log to confirm the daemon
@@ -614,6 +652,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-mcp",      action="store_true")
     p.add_argument("--no-kanban",   action="store_true")
     p.add_argument("--no-flower",   action="store_true")
+    p.add_argument("--console",     action="store_true",
+                   help="Launch scheduler+worker in visible console windows "
+                        "(live celery output, no log file). Closing a window kills the daemon.")
 
     g = p.add_mutually_exclusive_group()
     g.add_argument("--down",       action="store_true", help="Stop services")

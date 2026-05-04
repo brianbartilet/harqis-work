@@ -37,8 +37,11 @@ SCRIPTS_DIR = REPO_ROOT / "scripts"
 ENV_FILE = REPO_ROOT / ".env" / "apps.env"
 
 if os.name == "nt":
-    # Prefer pythonw.exe (windowless) over python.exe so deamons spawned via
-    # `os.execvp` below don't pop up an empty console on Windows.
+    # Prefer pythonw.exe (windowless) over python.exe so daemons spawned via
+    # `os.execvp` below don't pop up an empty console on Windows. The
+    # console-mode override happens in `_python()` below — when deploy.py
+    # launches us with --console (CREATE_NEW_CONSOLE), we exec to python.exe
+    # instead so output flows to the visible window.
     _PYTHONW = REPO_ROOT / ".venv" / "Scripts" / "pythonw.exe"
     _PYTHON_NT = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
     VENV_PY = _PYTHONW if _PYTHONW.exists() else _PYTHON_NT
@@ -87,8 +90,34 @@ def setup_env() -> None:
     os.environ.setdefault("CONFIG_SOURCE", "local")
 
 
+def _has_attached_console() -> bool:
+    """True iff a Windows console is attached to this process.
+
+    Used to pick python.exe (visible-output mode) vs pythonw.exe
+    (silent daemon mode) — the deploy.py --console flag launches us
+    via CREATE_NEW_CONSOLE which attaches a window we should keep.
+    """
+    if os.name != "nt":
+        return True
+    try:
+        import ctypes
+        return ctypes.windll.kernel32.GetConsoleWindow() != 0
+    except (OSError, AttributeError):
+        return False
+
+
 def _python() -> str:
-    """Path to the venv Python (falls back to current interpreter if no venv)."""
+    """Path to the venv Python (falls back to current interpreter if no venv).
+
+    On Windows: python.exe when a console is attached (output flows to
+    the visible window after os.execvp), else pythonw.exe so the daemon
+    stays windowless.
+    """
+    if os.name != "nt":
+        return str(VENV_PY) if VENV_PY.exists() else sys.executable
+    venv_python = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
+    if _has_attached_console() and venv_python.exists():
+        return str(venv_python)
     return str(VENV_PY) if VENV_PY.exists() else sys.executable
 
 
