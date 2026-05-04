@@ -32,16 +32,16 @@ role = "host"
 queues = ["tcg", "peon", "agent"]
 
 
-# ── Windows work box: DEFAULT + HUD, no MCP/Kanban here ──────────────────────
+# ── Windows work box: DEFAULT + HUD, no Kanban here ──────────────────────────
 [windows-work]
 role = "host"
 queues = ["default", "hud"]
-disable = ["mcp", "kanban"]
+disable = ["kanban"]
 
 [windows-work-all]
 role = "host"
 queues = ["default", "hud", "tcg", "peon", "adhoc"]
-disable = ["mcp", "kanban"]
+disable = ["kanban"]
 
 
 # ── VPS worker nodes — pure workers, no docker / scheduler ───────────────────
