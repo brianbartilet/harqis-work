@@ -244,11 +244,12 @@ def build_service_cmd(service: str, machine: dict, args: argparse.Namespace) -> 
     return base
 
 
-def start_service(service: str, machine: dict, args: argparse.Namespace) -> None:
+def start_service(service: str, machine: dict, args: argparse.Namespace) -> bool:
+    """Spawn the daemon. Returns True on launch (or if already running)."""
     existing = read_pid(service)
     if existing:
         print(f"  Already running: {service} (PID {existing})")
-        return
+        return True
     cmd = build_service_cmd(service, machine, args)
     pid = spawn_detached(cmd, log_path(service))
     pid_path(service).write_text(str(pid))
@@ -257,7 +258,12 @@ def start_service(service: str, machine: dict, args: argparse.Namespace) -> None
         detail = f"  queues={cmd[cmd.index('--queues') + 1]}"
     elif service == "kanban" and "--profile" in cmd:
         detail = f"  profile={cmd[cmd.index('--profile') + 1]}"
-    print(f"  Started: {service} (PID {pid}){detail}  →  {log_path(service)}")
+    print(f"  Started: {service} (PID {pid}){detail}  ->  {log_path(service)}")
+    # NOTE: PID tracked here is the launcher; Sprout's Django autoreloader
+    # forks a child for the real celery process and the launcher PID may
+    # exit shortly after. Use the per-service log to confirm the daemon
+    # is actually serving requests.
+    return True
 
 
 def stop_service(service: str) -> None:
@@ -269,15 +275,62 @@ def stop_service(service: str) -> None:
         print(f"  Stopped: {service} (PID {pid})")
 
 
+def _process_matching(needle: str) -> list[int]:
+    """Return PIDs of running python processes whose command line contains needle.
+
+    Used as a fuzzy supplement to PID-file tracking — Sprout's Django reloader
+    forks the actual worker, so the launcher PID we tracked may have exited.
+    """
+    if IS_WIN:
+        try:
+            ps_cmd = (
+                "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
+                f"Where-Object {{ $_.CommandLine -like '*{needle}*' }} | "
+                "Select-Object -ExpandProperty ProcessId"
+            )
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_cmd],
+                capture_output=True, text=True, check=False,
+            )
+            return [int(x) for x in out.stdout.split() if x.strip().isdigit()]
+        except (FileNotFoundError, OSError):
+            return []
+    try:
+        out = subprocess.run(
+            ["pgrep", "-f", needle],
+            capture_output=True, text=True, check=False,
+        )
+        return [int(x) for x in out.stdout.split() if x.strip().isdigit()]
+    except FileNotFoundError:
+        return []
+
+
+_STATUS_NEEDLES = {
+    "scheduler": "run_workflows.py scheduler",
+    "worker":    "run_workflows.py worker",
+    "flower":    "celery -A core.apps.sprout.app.celery:SPROUT flower",
+    "frontend":  "frontend\\main.py",
+    "mcp":       "mcp\\server.py",
+    "kanban":    "agents.projects.orchestrator.local",
+}
+
+
 def show_status() -> None:
-    print(f"{'SERVICE':<12} {'PID':>8}  STATUS")
-    print(f"{'-' * 12} {'-' * 8}  {'-' * 30}")
+    print(f"{'SERVICE':<12} {'PID':>8}  {'ALIVE PIDs':<24}  STATUS")
+    print(f"{'-' * 12} {'-' * 8}  {'-' * 24}  {'-' * 30}")
     for service in SERVICES:
         pid = read_pid(service)
-        if pid:
-            print(f"{service:<12} {pid:>8}  running  →  {log_path(service)}")
+        alive = _process_matching(_STATUS_NEEDLES.get(service, service))
+        alive_str = ",".join(str(p) for p in alive) if alive else "-"
+        if pid and pid in alive:
+            status = f"running (tracked) -> {log_path(service)}"
+        elif alive:
+            status = f"running (forked) -> {log_path(service)}"
+        elif pid:
+            status = "stale PID file (process gone)"
         else:
-            print(f"{service:<12} {'-':>8}  stopped")
+            status = "stopped"
+        print(f"{service:<12} {str(pid or '-'):>8}  {alive_str:<24}  {status}")
 
 
 # ── Docker compose ────────────────────────────────────────────────────────────
@@ -407,51 +460,48 @@ def _unregister_systemd(services):
     subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
 
 
-# Windows Scheduled Tasks (delegates to PowerShell)
+# Windows: HKCU\...\Run registry keys (auto-launch at user logon, no admin)
+#
+# Scheduled Tasks were attempted first but Register-ScheduledTask requires
+# admin even for user-scope tasks on most installs. HKCU Run keys are the
+# standard non-elevated equivalent: they fire at user logon, run as the
+# current user with the user's env, and need no special privileges.
+
+_RUN_KEY = r"HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+
 
 def _register_scheduled_tasks(machine, args, services):
-    """Register a Scheduled Task per service that runs at user logon.
-
-    Uses the current user's session (no -RunLevel Highest) so registration
-    works without admin elevation. The task fires at logon, so services
-    auto-start when you sign in. If registration fails (e.g. a Group Policy
-    restriction), the failure is surfaced — we don't pretend success.
-    """
     for s in services:
         cmd = build_service_cmd(s, machine, args)
-        task = f"work.harqis.{s}"
-        # -Argument needs PowerShell-escaped single quotes inside the string.
-        ps_argument = " ".join(cmd[1:]).replace("'", "''")
+        # Quote the executable + each arg containing spaces.
+        parts = [f'"{cmd[0]}"'] + [f'"{a}"' if " " in a else a for a in cmd[1:]]
+        value = " ".join(parts).replace("'", "''")
+        name = f"work.harqis.{s}"
         ps = (
-            f"$action = New-ScheduledTaskAction -Execute '{cmd[0]}' "
-            f"-Argument '{ps_argument}'; "
-            "$trigger = New-ScheduledTaskTrigger -AtLogOn; "
-            "$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries "
-            "-DontStopIfGoingOnBatteries -StartWhenAvailable "
-            "-RestartInterval (New-TimeSpan -Minutes 1) -RestartCount 999; "
-            f"Register-ScheduledTask -TaskName '{task}' -Action $action -Trigger $trigger "
-            "-Settings $settings -Force | Out-Null"
+            f"Set-ItemProperty -Path '{_RUN_KEY}' "
+            f"-Name '{name}' -Value '{value}' -Type String"
         )
         result = subprocess.run(
             ["powershell", "-NoProfile", "-Command", ps],
             capture_output=True, text=True,
         )
         if result.returncode == 0:
-            print(f"  Registered Scheduled Task: {task} (runs at logon)")
+            print(f"  Registered Run key: {name} (auto-launch at logon)")
         else:
             err = (result.stderr or result.stdout or "(no error output)").strip()
-            print(f"  WARN: Scheduled Task registration FAILED for {task}: {err.splitlines()[0]}")
+            print(f"  WARN: Run-key registration FAILED for {name}: {err.splitlines()[0]}")
 
 
 def _unregister_scheduled_tasks(services):
     for s in services:
-        task = f"work.harqis.{s}"
+        name = f"work.harqis.{s}"
         subprocess.run(
             ["powershell", "-NoProfile", "-Command",
-             f"Unregister-ScheduledTask -TaskName '{task}' -Confirm:$false"],
+             f"Remove-ItemProperty -Path '{_RUN_KEY}' -Name '{name}' "
+             "-ErrorAction SilentlyContinue"],
             capture_output=True,
         )
-        print(f"  Unregistered Scheduled Task: {task}")
+        print(f"  Unregistered Run key: {name}")
 
 
 # ── Service selection ─────────────────────────────────────────────────────────
@@ -552,11 +602,11 @@ def main() -> None:
         return
 
     print("")
-    for s in services:
-        start_service(s, machine, args)
+    started = sum(1 for s in services if start_service(s, machine, args))
 
     print("")
-    print(f"Started {len([s for s in services if read_pid(s)])}/{len(services)} services.")
+    print(f"Started {started}/{len(services)} services. (PID-based --status may show 'stopped' "
+          f"for daemons whose launcher forks; check logs/<service>.log to confirm.)")
     print(f"Stop with: python scripts/deploy.py --down")
     print(f"Status:    python scripts/deploy.py --status")
 
