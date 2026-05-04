@@ -376,7 +376,7 @@ harqis-work/
 │   ├── config.py                   # Master Celery Beat schedule
 │   ├── desktop/                    # Git pulls, window mgmt, file sync
 │   ├── finance/                    # Stub — no tasks yet
-│   ├── hud/                        # Desktop HUD tasks (12 tasks)
+│   ├── hud/                        # Desktop HUD tasks (15 tasks)
 │   ├── mobile/                     # Android screen capture
 │   ├── n8n/                        # n8n utility helpers
 │   └── purchases/                  # TCG card resale pipeline

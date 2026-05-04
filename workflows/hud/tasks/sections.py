@@ -151,6 +151,12 @@ sections__ynab = {
     },
 }
 
+
+sections__pc_daily_sales = {
+    # Only the template default `meterLink` is used — carries the WEB link
+    # to the AppSheet app. No additional top-row slots.
+}
+
 sections__utilities_ahk = {}
 
 

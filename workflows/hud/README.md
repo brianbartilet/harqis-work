@@ -3,8 +3,8 @@
 ## Description
 
 - Displays real-time data on a Windows desktop HUD via Rainmeter widgets.
-- Aggregates data from Google Calendar, OANDA forex, TCG Marketplace, YNAB budgets, and Elasticsearch logs.
-- 12 scheduled Celery tasks push data to the desktop feed at various intervals.
+- Aggregates data from Google Calendar, OANDA forex, TCG Marketplace, YNAB budgets, AppSheet (PC INVOICE table), and Elasticsearch logs.
+- 15 scheduled Celery tasks push data to the desktop feed at various intervals.
 - Tasks use the decorator chain: `@SPROUT.task` → `@log_result` → `@init_meter` → `@feed`.
 
 ## Queue
@@ -27,6 +27,7 @@ All tasks run on the `hud` queue (configured via `SPROUT.conf.task_routes`).
 | `build_summary_mouse_bindings` | Daily at 1am | Summary of daily mouse bindings |
 | `show_hud_profiles` | Daily at midnight | Active iCUE/Rainmeter HUD profiles |
 | `show_ynab_budgets_info` | Every 4 hours | YNAB budget balances |
+| `show_pc_daily_sales` | Every hour | PC DAILY SALES — sums `TOTAL PRICE` per `DATE` from the AppSheet `INVOICE` table for the last 60 days, grouped by month with a 24-dash separator. Same width as OANDA ACCOUNT; height shows 10 rows at a time, the rest scrolls. Queue: `hud`. |
 | `show_ai_helper` | Daily at midnight | AI helper widget initialization |
 | `get_schedules` | Every 4 hours | Upcoming calendar schedule |
 
@@ -41,7 +42,7 @@ All tasks run on the `hud` queue (configured via `SPROUT.conf.task_routes`).
 | `tasks/hud_logs.py` | `get_failed_jobs`, `get_schedules` |
 | `tasks/hud_calendar.py` | `show_calendar_information` |
 | `tasks/hud_utils.py` | `show_mouse_bindings`, `build_summary_mouse_bindings`, `show_hud_profiles`, `show_ai_helper` |
-| `tasks/hud_finance.py` | `show_ynab_budgets_info` |
+| `tasks/hud_finance.py` | `show_ynab_budgets_info`, `show_pc_daily_sales` |
 | `tasks/sections.py` | HUD section layout helpers |
 
 ## App Dependencies
@@ -52,6 +53,7 @@ All tasks run on the `hud` queue (configured via `SPROUT.conf.task_routes`).
 | `tcg_mp` | Open orders display |
 | `google_apps` | Calendar events and schedules |
 | `ynab` | Budget balances by currency (PHP, SGD) |
+| `appsheet` | PC INVOICE table — gross daily sales aggregation |
 | `rainmeter` | Desktop HUD skin rendering |
 | `desktop` | Screenshot capture, log reading |
 | `open_ai` / `antropic` | Log analysis and AI helper |
