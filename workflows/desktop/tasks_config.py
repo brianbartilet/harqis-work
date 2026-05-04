@@ -47,7 +47,7 @@ WORKFLOWS_DESKTOP = {
         'task': 'workflows.desktop.tasks.commands.git_pull_on_paths',
         'schedule': crontab(minute='*/10'),
         'args': [],
-        "options": {"queue": WorkflowQueue.ADHOC},
+        "options": {"queue": WorkflowQueue.DEFAULT},
     },
 
     'run-job--set_desktop_hud_to_back': {
@@ -55,13 +55,6 @@ WORKFLOWS_DESKTOP = {
         'schedule': crontab(minute='*/30'),
         'args': [],
         "options": {"queue": WorkflowQueue.DEFAULT},
-    },
-
-    'run-job--set_desktop_hud_to_back_adhoc': {
-        'task': 'workflows.desktop.tasks.commands.set_desktop_hud_to_back',
-        'schedule': crontab(minute='*/30'),
-        'args': [],
-        "options": {"queue": WorkflowQueue.ADHOC},
     },
 
     'run-job--copy_files_targeted': {
@@ -118,6 +111,13 @@ WORKFLOWS_DESKTOP = {
             "queue": WorkflowQueue.DEFAULT,
             "expires": 60 * 60 * 24 * 7,
         },
+    },
+
+    'run-job--set_desktop_hud_to_back_adhoc': {
+        'task': 'workflows.desktop.tasks.commands.set_desktop_hud_to_back',
+        'schedule': crontab(minute='*/30'),
+        'args': [],
+        "options": {"queue": WorkflowQueue.HUD},
     },
 
 }

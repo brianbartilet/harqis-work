@@ -60,21 +60,7 @@ WORKFLOWS_HUD = {
             "cfg_id__calendar": "GOOGLE_APPS"
         },
         "options": {
-            "queue": WorkflowQueue.TCG,
-            "expires": 60 * 30
-        },
-    },
-
-    'run-job--show_tcg_orders_no_schedule': {
-        'task': 'workflows.hud.tasks.hud_tcg.show_tcg_orders',
-        'schedule': crontab(minute=0),
-        'kwargs': {
-            "cfg_id__tcg_mp": "TCG_MP",
-            "cfg_id__scryfall": "SCRYFALL",
-            "cfg_id__calendar": "GOOGLE_APPS"
-        },
-        "options": {
-            "queue": WorkflowQueue.ADHOC,
+            "queue": WorkflowQueue.HUD,
             "expires": 60 * 30
         },
     },
@@ -93,7 +79,7 @@ WORKFLOWS_HUD = {
             "worker_count": 3
         },
         "options": {
-            "queue": WorkflowQueue.TCG,
+            "queue": WorkflowQueue.HUD,
             "expires": 60 * 60 * 8,
         },
     },
@@ -118,7 +104,7 @@ WORKFLOWS_HUD = {
             "structure_id":  616,     # /secure/StructureBoard.jspa?s=
         },
         "options": {
-            "queue": WorkflowQueue.PEON,
+            "queue": WorkflowQueue.HUD,
             "expires": 60 * 30,
         },
     },
@@ -132,7 +118,7 @@ WORKFLOWS_HUD = {
             "model": "claude-haiku-4-5-20251001",
         },
         "options": {
-            "queue": WorkflowQueue.DEFAULT,
+            "queue": WorkflowQueue.HUD,
             "expires": 60 * 60
         },
     },
@@ -189,7 +175,7 @@ WORKFLOWS_HUD = {
             "cfg_id__desktop": "DESKTOP"
         },
         "options": {
-            "queue": WorkflowQueue.DEFAULT,
+            "queue": WorkflowQueue.HUD,
             "expires": 60 * 60
         },
     },

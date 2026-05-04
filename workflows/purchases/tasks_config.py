@@ -47,7 +47,7 @@ WORKFLOW_PURCHASES = {
             "limit": 100
         },
         "options": {
-            "queue": "tcg",
+            "queue": WorkflowQueue.TCG,
             "expires": 60 * 60 * 8
         },
     },
@@ -62,7 +62,7 @@ WORKFLOW_PURCHASES = {
             "limit": 100
         },
         "options": {
-            "queue": "tcg",
+            "queue": WorkflowQueue.TCG,
             "expires": 60 * 60 * 8
         },
     },
