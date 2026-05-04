@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/banner.jpg" alt="HARQIS Work — multi-armed automation orchestrator" width="800">
+</p>
+
 # HARQIS Work
 
 ## Introduction
