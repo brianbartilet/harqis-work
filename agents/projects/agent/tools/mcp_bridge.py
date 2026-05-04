@@ -42,6 +42,7 @@ _APP_LOADERS: dict[str, str] = {
     "airtable":    "apps.airtable.mcp.register_airtable_tools",
     "alpha_vantage":"apps.alpha_vantage.mcp.register_alpha_vantage_tools",
     "apify":       "apps.apify.mcp.register_apify_tools",
+    "appsheet":    "apps.appsheet.mcp.register_appsheet_tools",
     "browser":     "apps.browser.mcp.register_browser_tools",
     "discord":     "apps.discord.mcp.register_discord_tools",
     "echo_mtg":    "apps.echo_mtg.mcp.register_echo_mtg_tools",

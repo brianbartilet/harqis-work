@@ -143,7 +143,7 @@ Each new agent gets exactly two empty lines:
 # Mode A — per-agent Trello accounts (one bot account per profile, real avatar
 # + email shown in Trello). Leave blank to keep that agent on Mode B (signed
 # comments under TRELLO_API_KEY / TRELLO_API_TOKEN above). See the persona setup
-# checklist printed by `/new-kanban-profile` for how to populate.
+# checklist printed by `/create-new-kanban-profile` for how to populate.
 TRELLO_AGENT_API_KEY__${suffix_upper}=
 TRELLO_AGENT_API_TOKEN__${suffix_upper}=
 ```
@@ -213,7 +213,7 @@ acted).
 
 ## Step 5 — Update the kanban dependency detector if appropriate
 
-If the new profile mentions any service in its description that's not already covered, follow the rules from `/new-service-app` Step 9b — but in 99% of cases this skill creates a profile that just *uses* existing apps, so no detector change is needed. Skip unless the user explicitly asks.
+If the new profile mentions any service in its description that's not already covered, follow the rules from `/create-new-service-app` Step 9b — but in 99% of cases this skill creates a profile that just *uses* existing apps, so no detector change is needed. Skip unless the user explicitly asks.
 
 ---
 

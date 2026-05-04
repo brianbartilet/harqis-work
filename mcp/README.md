@@ -158,6 +158,26 @@ Wraps the [Apify REST API v2](https://docs.apify.com/api/v2) — a web-scraping 
 
 ---
 
+### AppSheet (`apps/appsheet/mcp.py`)
+
+Wraps the AppSheet [API v2](https://support.google.com/appsheet/answer/10105768) — find/add/edit/delete rows in any table of an AppSheet app. Auth is the per-app `ApplicationAccessKey` header (generated in *Manage → Integrations*). Requires valid `APPSHEET` section in `apps_config.yaml`.
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `appsheet_find_rows` | `table`, `selector?`, `app_id?` | List of row dicts (full column set returned by the app) |
+| `appsheet_add_rows` | `table`, `rows`, `app_id?` | List of inserted row dicts (with system columns filled in) |
+| `appsheet_edit_rows` | `table`, `rows`, `app_id?` | List of updated row dicts — each row must include the key column |
+| `appsheet_delete_rows` | `table`, `rows`, `app_id?` | `{deleted, raw}` |
+
+`selector` is an AppSheet expression evaluated server-side, e.g. `Filter("Tasks", [Status] = "Open")`. `app_id` falls back to `APPSHEET.default_app_id` when omitted.
+
+**Example prompts:**
+- *"Show every open task in my AppSheet 'Tasks' table."*
+- *"Find rows in 'Inventory' where Qty is greater than 0."*
+- *"Add a row to 'Leads' with Name 'Acme' and Email 'hi@acme.com'."*
+
+---
+
 ### OANDA (`apps/oanda/mcp.py`)
 
 Wraps `apps/oanda/references/web/api/` services. Requires valid `OANDA` section in `apps_config.yaml`.

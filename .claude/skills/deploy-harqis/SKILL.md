@@ -374,4 +374,4 @@ Also update:
 - `scripts/launch.py` — add a new service handler so `python scripts/launch.py <name>` works
 - `scripts/deploy.py` — add a new entry + a `--no-<name>` CLI flag
 
-When **new MCP apps** are added (via `/new-service-app`), no update to this skill is needed — they're picked up automatically by `mcp/server.py` on next MCP daemon start.
+When **new MCP apps** are added (via `/create-new-service-app`), no update to this skill is needed — they're picked up automatically by `mcp/server.py` on next MCP daemon start.

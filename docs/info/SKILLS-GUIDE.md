@@ -2,13 +2,13 @@
 
 Skills are reusable prompt-based workflows stored as markdown files. They create `/skill-name`
 commands you (or Claude automatically) can invoke. They are the recommended replacement for
-custom slash-commands in `.claude/commands/`.
+custom slash-commands in `.claude/skills/`.
 
 ---
 
 ## Skills vs Custom Commands
 
-Both `.claude/commands/deploy.md` and `.claude/skills/deploy/SKILL.md` create a `/deploy`
+Both `.claude/skills/deploy/SKILL.md` and `.claude/skills/deploy/SKILL.md` create a `/deploy`
 command and behave identically. Skills are preferred because they add:
 
 - **Supporting files** — keep `SKILL.md` focused; move reference material to sibling files
@@ -16,7 +16,7 @@ command and behave identically. Skills are preferred because they add:
 - **Subagent execution** — `context: fork` runs the skill in an isolated subagent
 - **Dynamic context** — `` !`command` `` inlines live shell output before Claude reads the skill
 
-Existing `.claude/commands/` files continue to work without changes.
+Existing `.claude/skills/` files continue to work without changes.
 
 ---
 
@@ -349,7 +349,7 @@ Format as a morning brief: calendar first, then email summary, then financial sn
 
 | Item | Location | Commit owner |
 |---|---|---|
-| Skills and commands | `harqis-work/.claude/commands/` | Maintainer — manual |
+| Skills and commands | `harqis-work/.claude/skills/` | Maintainer — manual |
 | Claude Code permissions | `harqis-work/.claude/settings.local.json` | Maintainer — manual |
 | Claude Code auto-memory | `~/.claude/projects/.../memory/` | Claude Code — local only, never committed |
 | OpenClaw identity files | `harqis-openclaw-sync/.openclaw/workspace/` | OpenClaw agent — auto-commit + push |
@@ -364,12 +364,12 @@ can read from and write to the OpenClaw sync repo at runtime using dynamic conte
 
 | Skill | Where defined | Purpose |
 |---|---|---|
-| `/run-tests` | `.claude/commands/run-tests.md` | Run tests for an app or the full suite |
-| `/agent-prompt` | `.claude/commands/agent-prompt.md` | Run a prompt from `agents/prompts/` against the codebase |
-| `/new-workflow` | `.claude/commands/new-workflow.md` | Scaffold a new workflow under `workflows/` |
-| `/new-service-app` | `.claude/commands/new-service-app.md` | Scaffold an app integration under `apps/` — skeleton or from OpenAPI spec/URL; chainable to `/new-workflow` |
-| `/new-n8n-workflow` | `.claude/commands/new-n8n-workflow.md` | Build and deploy an n8n workflow from a drawio diagram, XML/BPMN file, or text description into the local n8n instance |
-| `/generate-registry` | `.claude/commands/generate-registry.md` | Regenerate `frontend/registry.py` from all `tasks_config.py` files |
+| `/run-tests` | `.claude/skills/run-tests/SKILL.md` | Run tests for an app or the full suite |
+| `/agent-prompt` | `.claude/skills/agent-prompt/SKILL.md` | Run a prompt from `agents/prompts/` against the codebase |
+| `/create-new-workflow` | `.claude/skills/create-new-workflow/SKILL.md` | Scaffold a new workflow under `workflows/` |
+| `/create-new-service-app` | `.claude/skills/create-new-service-app/SKILL.md` | Scaffold an app integration under `apps/` — skeleton or from OpenAPI spec/URL; chainable to `/create-new-workflow` |
+| `/create-new-n8n-workflow` | `.claude/skills/create-new-n8n-workflow/SKILL.md` | Build and deploy an n8n workflow from a drawio diagram, XML/BPMN file, or text description into the local n8n instance |
+| `/generate-registry` | `.claude/skills/generate-registry/SKILL.md` | Regenerate `frontend/registry.py` from all `tasks_config.py` files |
 | `/review` | built-in | Review a pull request |
 | `/security-review` | built-in | Security review of pending branch changes |
 | `/simplify` | built-in | Review changed code for quality and fix issues |
@@ -379,7 +379,7 @@ can read from and write to the OpenClaw sync repo at runtime using dynamic conte
 | `/schedule` | built-in | Schedule a remote agent on a cron schedule |
 | `/claude-api` | built-in | Build and debug Anthropic SDK apps |
 
-Project commands live in `.claude/commands/`. To add a new one, create a `.md` file there or
+Project commands live in `.claude/skills/`. To add a new one, create a `.md` file there or
 use a full skill directory under `.claude/skills/`.
 
 ---
@@ -387,5 +387,5 @@ use a full skill directory under `.claude/skills/`.
 ## See Also
 
 - `docs/info/AI-TOOLS-WIRING.md` — Claude Code orientation and workspace sync guide
-- `.claude/commands/` — current project slash-commands
+- `.claude/skills/` — current project slash-commands
 - `.claude/settings.local.json` — per-machine permission allowlist

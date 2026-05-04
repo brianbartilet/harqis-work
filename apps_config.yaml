@@ -615,4 +615,20 @@ AIRTABLE:
     return_data_only: True
 
 
+APPSHEET:
+  app_id: 'appsheet'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.appsheet.com/api/v2'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: False
+  app_data:
+    application_access_key: ${APPSHEET_APPLICATION_ACCESS_KEY}
+    default_app_id: ${APPSHEET_DEFAULT_APP_ID}
+    locale: 'en-US'
+  return_data_only: True
+
+
 

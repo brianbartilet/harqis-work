@@ -501,7 +501,7 @@ Next steps:
 
 ## Chaining to a new workflow (--workflow flag)
 
-If `--workflow <workflow_name>` was passed, after completing all steps above run `/new-workflow <workflow_name>` and in that workflow:
+If `--workflow <workflow_name>` was passed, after completing all steps above run `/create-new-workflow <workflow_name>` and in that workflow:
 - Import the new app's service classes in the task files
 - Propose 1–3 useful scheduled tasks based on what the API provides (e.g. daily summary, alert on new items, periodic sync)
 - Name tasks clearly after the app and the action (e.g. `fetch_APP_NAME_daily_report`)

@@ -157,7 +157,7 @@ Ask the user. Default queue: `HUD`. Default schedule: `crontab(minute=0)`.
 
 ### Q7. Apps required
 List every `apps/<name>` integration the widget needs to fetch data from (e.g. `apps/jira`, `apps/oanda`, `apps/ynab`). For each:
-- Confirm the app exists under `apps/`. If missing, suggest `/new-service-app <name>` to scaffold it before continuing.
+- Confirm the app exists under `apps/`. If missing, suggest `/create-new-service-app <name>` to scaffold it before continuing.
 - Identify the specific service class + method to call. If the existing service doesn't expose what the HUD needs, build the new endpoint inside the same app (separate file is fine — see `apps/jira/references/web/api/boards.py` for the pattern).
 
 ### Q8. Confirmation

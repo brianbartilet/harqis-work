@@ -3,7 +3,7 @@
 Skills are slash commands available in any Claude Code session opened in this repo. They encode multi-step workflows so Claude executes them end-to-end without step-by-step prompting.
 
 Invoke with `/skill-name [arguments]` in the Claude Code prompt.  
-Skill files live in `.claude/commands/*.md`. The first line of each file is the short description shown in the skill picker.
+Skill files live in `.claude/skills/*/SKILL.md`. The first line of each file is the short description shown in the skill picker.
 
 ---
 
@@ -16,11 +16,11 @@ Skill files live in `.claude/commands/*.md`. The first line of each file is the 
 | **create-new-hud** | `/create-new-hud <hud_title> <description_or_screenshot_path> [--reference <existing_hud>] [--no-prompt]` | Scaffold a new Rainmeter HUD widget under `workflows/hud/tasks/hud_<slug>.py` from a description (or screenshot). Asks for the title, header links, sample dump output, dimensions (with reference-widget defaults), `ScheduleCategory` (calendar visibility), Celery schedule, and queue (extending `WorkflowQueue` if a new queue is named). Wires up the section dict, schedule entry, `__init__.py` import, README row, and any new app endpoints needed for the data fetch. |
 | **deploy-harqis** | `/deploy-harqis <host\|node> [-q queues] [-p profile] [--hw labels] [--down] [--no-frontend] [--no-mcp] [--no-kanban] [--num-agents N] [--dry-run]` | End-to-end reusable deploy of the harqis-work platform — **cross-platform**, auto-detects macOS / Linux / Windows. `host` brings up the full stack (Docker + Beat scheduler + worker + frontend + MCP + Kanban + Flower); the host's Kanban orchestrator defaults to `agent:default` so the host also acts as 1 default-queue agent worker. `node` runs a Celery worker plus a profile-scoped Kanban orchestrator (the skill **asks** for `-p` if missing). `--hw` filters by `hw:*` labels (auto-detected from OS otherwise). Tear down with `--down`. |
 | **generate-registry** | `/generate-registry` | Regenerate `frontend/registry.py` by scanning all `workflows/*/tasks_config.py` files. Run after adding or removing any Celery task. |
-| **new-fork-repository** | `/new-fork-repository <business_or_client_name> [--owner <gh_owner>] [--visibility public\|private\|internal] [--description "..."] [--keep <list>] [--strip <list>] [--apps-keep <list>] [--apps-keep-all] [--target-dir <path>] [--remote <url>] [--no-create-repo] [--no-push] [--no-git-init] [--dry-run]` | Fork `harqis-work` into a clean business-/client-scoped baseline at `harqis-work-fork-<slug>`. Strips host-local AI tooling (`.claude/`, `.openclaw/`, `logs/`, `data/`), every pre-built workflow category (keeps only `.template`), and all real credentials (regenerates `.example` variants). **Apps are pruned to a curated 16-item set by default** (override with `--apps-keep` or `--apps-keep-all`); the prune cascades through `apps_config.yaml.example`, `.env/apps.env.example`, `mcp/server.py`'s `APP_REGISTRARS`, agent profiles' `mcp_apps`, and the README app inventory. Rewrites `README.md`, `workflows/README.md`, `workflows/config.py`, `workflows/queues.py`. **Auto-creates a private GitHub repo via `gh repo create` and pushes the initial commit by default** — pass `--no-create-repo` or `--no-push` to opt out, `--visibility public` to publish openly. |
-| **new-kanban-profile** | `/new-kanban-profile <profile_name> [--display-name "..."] [--email "..."] [--role "..."] [--no-mode-a]` | Scaffold a new Kanban agent profile YAML under `agents/projects/profiles/examples/`. Includes a persona block (signed comments — Mode B, default-on) and commented-out Mode A scaffolding. Adds blank `TRELLO_AGENT_API_KEY__<SUFFIX>` / `TRELLO_AGENT_API_TOKEN__<SUFFIX>` placeholders to `.env/apps.env`. Prints the manual Trello-account setup checklist. |
-| **new-n8n-workflow** | `/new-n8n-workflow <description_or_diagram>` | Build and deploy an n8n workflow directly into the local n8n instance (`localhost:5678`) from a drawio diagram, XML/BPMN file, or free-text description. |
-| **new-service-app** | `/new-service-app <app_name> [<spec_or_url>] [--workflow <name>]` | Scaffold a complete app integration under `apps/`. With a spec URL, generates real service classes, DTOs, and MCP tools from the API. Without a spec, creates a skeleton stub. Pass `--workflow` to also scaffold a Celery task that uses the new app. |
-| **new-workflow** | `/new-workflow [<category>] <task_description_or_diagram> [--merge <file>] [--new-file <name>]` | Design and implement an RPA-style Celery workflow that chains app integrations. Parses drawio diagrams or text descriptions, resolves missing app and Python package dependencies, writes the task file, registers the schedule, and produces tests. |
+| **new-fork-repository** | `/create-new-fork-repository <business_or_client_name> [--owner <gh_owner>] [--visibility public\|private\|internal] [--description "..."] [--keep <list>] [--strip <list>] [--apps-keep <list>] [--apps-keep-all] [--target-dir <path>] [--remote <url>] [--no-create-repo] [--no-push] [--no-git-init] [--dry-run]` | Fork `harqis-work` into a clean business-/client-scoped baseline at `harqis-work-fork-<slug>`. Strips host-local AI tooling (`.claude/`, `.openclaw/`, `logs/`, `data/`), every pre-built workflow category (keeps only `.template`), and all real credentials (regenerates `.example` variants). **Apps are pruned to a curated 16-item set by default** (override with `--apps-keep` or `--apps-keep-all`); the prune cascades through `apps_config.yaml.example`, `.env/apps.env.example`, `mcp/server.py`'s `APP_REGISTRARS`, agent profiles' `mcp_apps`, and the README app inventory. Rewrites `README.md`, `workflows/README.md`, `workflows/config.py`, `workflows/queues.py`. **Auto-creates a private GitHub repo via `gh repo create` and pushes the initial commit by default** — pass `--no-create-repo` or `--no-push` to opt out, `--visibility public` to publish openly. |
+| **new-kanban-profile** | `/create-new-kanban-profile <profile_name> [--display-name "..."] [--email "..."] [--role "..."] [--no-mode-a]` | Scaffold a new Kanban agent profile YAML under `agents/projects/profiles/examples/`. Includes a persona block (signed comments — Mode B, default-on) and commented-out Mode A scaffolding. Adds blank `TRELLO_AGENT_API_KEY__<SUFFIX>` / `TRELLO_AGENT_API_TOKEN__<SUFFIX>` placeholders to `.env/apps.env`. Prints the manual Trello-account setup checklist. |
+| **new-n8n-workflow** | `/create-new-n8n-workflow <description_or_diagram>` | Build and deploy an n8n workflow directly into the local n8n instance (`localhost:5678`) from a drawio diagram, XML/BPMN file, or free-text description. |
+| **new-service-app** | `/create-new-service-app <app_name> [<spec_or_url>] [--workflow <name>]` | Scaffold a complete app integration under `apps/`. With a spec URL, generates real service classes, DTOs, and MCP tools from the API. Without a spec, creates a skeleton stub. Pass `--workflow` to also scaffold a Celery task that uses the new app. |
+| **new-workflow** | `/create-new-workflow [<category>] <task_description_or_diagram> [--merge <file>] [--new-file <name>]` | Design and implement an RPA-style Celery workflow that chains app integrations. Parses drawio diagrams or text descriptions, resolves missing app and Python package dependencies, writes the task file, registers the schedule, and produces tests. |
 | **run-tests** | `/run-tests [<app_name_or_path>]` | Run the test suite. Without arguments runs the full suite; with an app name (e.g. `echo_mtg`) or a pytest path runs only that scope. |
 | **zapier-mcp** | `/zapier-mcp <task_or_app> [--enable] [--workflow <name>] [--research]` | Search Zapier's 9,000+ app catalogue for actions that match a task, enable them on the Zapier MCP server, infer parameters from context, and optionally wire them into a Celery workflow. Use `--research` for discovery only. |
 
@@ -75,7 +75,7 @@ Stages all working-tree changes and commits in one shot with a Conventional-Comm
 
 | Detection | Source |
 |---|---|
-| **Type** | All test files → `test`. All `*.md` → `docs` (with `.claude/commands/*.md` exception → `feat`). Dockerfiles → `build`. CI files → `ci`. Repo plumbing (`requirements.txt`, `.gitignore`, `apps_config.yaml`, `.env*`, `pytest.ini`) → `chore`. Otherwise inspects diff for new defs/classes (`feat`), bug language (`fix`), pure restructure (`refactor`), or whitespace (`style`). |
+| **Type** | All test files → `test`. All `*.md` → `docs` (with `.claude/skills/*/SKILL.md` exception → `feat`). Dockerfiles → `build`. CI files → `ci`. Repo plumbing (`requirements.txt`, `.gitignore`, `apps_config.yaml`, `.env*`, `pytest.ini`) → `chore`. Otherwise inspects diff for new defs/classes (`feat`), bug language (`fix`), pure restructure (`refactor`), or whitespace (`style`). |
 | **Scope** | First common path segment of staged files: `apps`, `workflows`, `agents`, `mcp`, `frontend`, `docs`, `scripts`. Adds sub-scope if all files share one (`apps/google`, `workflows/hud`). Cross-layer or root-only → `repo`. |
 | **Subject** | Drafted from the diff, biased by any free-text hint in `$ARGUMENTS`. |
 
@@ -105,7 +105,7 @@ Scaffolds a new Rainmeter HUD widget under `workflows/hud/tasks/hud_<slug>.py` f
 
 1. Asks for missing info (HUD title, header links, sample text, dimensions, schedule category, Celery schedule + queue, apps).
 2. Adds a new `WorkflowQueue` value + queue declaration in `workflows/config.py` if the user named a queue not in the existing enum (e.g. `peon`).
-3. Builds any missing app endpoint inside `apps/<name>/references/web/api/` if the data source isn't reachable yet (offers `/new-service-app` for missing apps).
+3. Builds any missing app endpoint inside `apps/<name>/references/web/api/` if the data source isn't reachable yet (offers `/create-new-service-app` for missing apps).
 4. Writes the HUD task with the standard `@SPROUT.task / @log_result / @init_meter / @feed` decorator stack and the `42`-px-padded dimension formulas (the recipe that makes the Rainmeter border render correctly — using `36` clips it).
 5. Adds an 88-char-wide table layout sized from the user's sample, plus a `DUMP` link to the widget's own dump.txt and a configurable header link.
 6. Wires the schedule (`crontab(...)` in `tasks_config.py`), the platform-guarded import in `workflows/hud/__init__.py`, and a README row.
@@ -151,14 +151,14 @@ When new always-on components are added to harqis-work (a new daemon or orchestr
 
 ---
 
-### `/new-kanban-profile`
+### `/create-new-kanban-profile`
 
 Scaffolds a new Kanban agent profile under `agents/projects/profiles/examples/<file_basename>.yaml` and registers Mode A env-var placeholders in `.env/apps.env`. Designed so each profile = one persona = one user-facing identity on the Trello/Jira board.
 
 ```
-/new-kanban-profile finance
-/new-kanban-profile research --display-name "Claude · Research" --role "Research agent"
-/new-kanban-profile sandbox --no-mode-a       # ephemeral profile, no env-var registration
+/create-new-kanban-profile finance
+/create-new-kanban-profile research --display-name "Claude · Research" --role "Research agent"
+/create-new-kanban-profile sandbox --no-mode-a       # ephemeral profile, no env-var registration
 ```
 
 **What it generates:**
@@ -186,18 +186,18 @@ No arguments. Reports what changed (added / removed task keys).
 
 ---
 
-### `/new-fork-repository`
+### `/create-new-fork-repository`
 
 Forks `harqis-work` into a fresh, business-/client-scoped baseline that another team can adopt as the starting point for their own automation host. Keeps the platform skeleton (`apps/`, `agents/`, deploy scripts, core framework hooks) but strips local AI tooling and pre-built workflow categories so the consuming agents have a clean slate.
 
 ```
-/new-fork-repository "Acme Logistics"
-/new-fork-repository "Acme Logistics" --owner acme-corp --description "Logistics ops automation for Acme"
-/new-fork-repository test-client --no-push                       # init + create repo, do not push
-/new-fork-repository test-client --no-create-repo                # local-only fork, no GitHub
-/new-fork-repository test-client --keep .template,n8n            # also preserve the n8n category
-/new-fork-repository test-client --visibility public              # explicit opt-in to public
-/new-fork-repository test-client --dry-run                       # preview without writing
+/create-new-fork-repository "Acme Logistics"
+/create-new-fork-repository "Acme Logistics" --owner acme-corp --description "Logistics ops automation for Acme"
+/create-new-fork-repository test-client --no-push                       # init + create repo, do not push
+/create-new-fork-repository test-client --no-create-repo                # local-only fork, no GitHub
+/create-new-fork-repository test-client --keep .template,n8n            # also preserve the n8n category
+/create-new-fork-repository test-client --visibility public              # explicit opt-in to public
+/create-new-fork-repository test-client --dry-run                       # preview without writing
 ```
 
 **Arguments:**
@@ -249,13 +249,13 @@ Forks `harqis-work` into a fresh, business-/client-scoped baseline that another 
 
 ---
 
-### `/new-n8n-workflow`
+### `/create-new-n8n-workflow`
 
 Builds and deploys an n8n workflow into the local n8n instance at `localhost:5678`.
 
 ```
-/new-n8n-workflow "when a Jira ticket is created, post a Slack message"
-/new-n8n-workflow path/to/diagram.drawio
+/create-new-n8n-workflow "when a Jira ticket is created, post a Slack message"
+/create-new-n8n-workflow path/to/diagram.drawio
 ```
 
 **Accepts:** free-text description, drawio file path, or XML/BPMN file path.
@@ -269,14 +269,14 @@ Builds and deploys an n8n workflow into the local n8n instance at `localhost:567
 
 ---
 
-### `/new-service-app`
+### `/create-new-service-app`
 
 Scaffolds a complete harqis-work app integration under `apps/<app_name>/`.
 
 ```
-/new-service-app stripe https://stripe.com/docs/api
-/new-service-app openweather                          # skeleton stub only
-/new-service-app hubspot https://developers.hubspot.com/docs/api/overview --workflow crm_sync
+/create-new-service-app stripe https://stripe.com/docs/api
+/create-new-service-app openweather                          # skeleton stub only
+/create-new-service-app hubspot https://developers.hubspot.com/docs/api/overview --workflow crm_sync
 ```
 
 **Arguments:**
@@ -310,14 +310,14 @@ apps/<app_name>/
 
 ---
 
-### `/new-workflow`
+### `/create-new-workflow`
 
 Designs and implements an RPA-style Celery workflow that chains multiple app integrations.
 
 ```
-/new-workflow finance "fetch OANDA rates, summarise with Claude, post to Discord"
-/new-workflow hud path/to/diagram.drawio --merge hud_finance.py
-/new-workflow purchases "MTG card pipeline" --new-file tcg_resale.py
+/create-new-workflow finance "fetch OANDA rates, summarise with Claude, post to Discord"
+/create-new-workflow hud path/to/diagram.drawio --merge hud_finance.py
+/create-new-workflow purchases "MTG card pipeline" --new-file tcg_resale.py
 ```
 
 **Arguments:**
@@ -333,7 +333,7 @@ Designs and implements an RPA-style Celery workflow that chains multiple app int
 
 1. Clarifies category, trigger, schedule, apps needed, and credentials
 2. Parses drawio/XML diagrams into ordered steps (if a file is provided)
-3. Resolves missing `apps/` integrations — calls `/new-service-app` for any app not in the repo
+3. Resolves missing `apps/` integrations — calls `/create-new-service-app` for any app not in the repo
 4. **Resolves Python package dependencies (Step 3b):**
    - Identifies packages the task will import that aren't in `requirements.txt`
    - Searches PyPI to confirm the canonical package name and version
@@ -399,7 +399,7 @@ Searches Zapier's 9,000+ app catalogue via the Zapier MCP server, enables action
 |---|---|---|
 | `task_or_app_description` | Yes | Task to accomplish or app name to research |
 | `--enable` | No | Auto-enable the best matching action without prompting |
-| `--workflow <name>` | No | Scaffold a Celery task that calls the action via REST and trigger `/new-workflow` |
+| `--workflow <name>` | No | Scaffold a Celery task that calls the action via REST and trigger `/create-new-workflow` |
 | `--research` | No | Discovery only — list matches, do not enable anything |
 
 **Steps performed:**
@@ -450,7 +450,7 @@ Searches Zapier's 9,000+ app catalogue via the Zapier MCP server, enables action
 
 ## Adding a New Skill
 
-1. Create `.claude/commands/<skill-name>.md`. The **first line** (before any heading) is the one-line description shown in the skill picker.
+1. Create `.claude/skills/<skill-name>.md`. The **first line** (before any heading) is the one-line description shown in the skill picker.
 2. Add a row to the **Skill Inventory** table above.
 3. Add a **Skill Details** section if the skill has flags, multi-step behaviour, or generated file structures worth documenting.
 4. Update the overview paragraph in `README.md` if the new skill changes the total skill count.

@@ -30,7 +30,7 @@ Fork the `harqis-work` repository into a fresh, business-/client-scoped baseline
 The fork ships with only the curated set below by default. Apps that aren't listed here are stripped from `apps/`, and every dependent surface (config, env, MCP registrar, agent profiles, README inventory, docs) is filtered to match.
 
 ```
-.template       # ALWAYS kept — required for /new-service-app to scaffold new apps
+.template       # ALWAYS kept — required for /create-new-service-app to scaffold new apps
 airtable        # Bases / tables / records — generic structured-data store
 antropic        # Anthropic Claude API (folder name has the historical typo;
                 # `--apps-keep anthropic` is silently normalised to `antropic`)
@@ -49,7 +49,7 @@ telegram        # Telegram Bot messaging
 trello          # Trello boards (used by the Kanban agent)
 ```
 
-The list is intentionally narrow — it covers the AI / generic-integration / web / messaging surface that almost every fork will need. Anything domain-specific (finance, MTG card pipelines, desktop HUD, social-network publishers, etc.) is excluded by default and the consuming team can add what they need via `/new-service-app`.
+The list is intentionally narrow — it covers the AI / generic-integration / web / messaging surface that almost every fork will need. Anything domain-specific (finance, MTG card pipelines, desktop HUD, social-network publishers, etc.) is excluded by default and the consuming team can add what they need via `/create-new-service-app`.
 
 To preserve everything from upstream, pass `--apps-keep-all`. To customise, pass `--apps-keep .template,<your_apps...>`.
 
@@ -336,7 +336,7 @@ your own categories below as you build the workflows for <BUSINESS_NAME>.
    `WORKFLOW_<YOUR_CATEGORY>` and merging it into `CONFIG_DICTIONARY`.
 
 If you have access to Claude Code with the harqis-work skills installed, you can
-delegate the whole flow to `/new-workflow` instead of doing it manually.
+delegate the whole flow to `/create-new-workflow` instead of doing it manually.
 
 ## Queues
 
@@ -460,7 +460,7 @@ Required sections (in order):
    `<BUSINESS_NAME>` can be removed without affecting the rest."*
 6. **Workflows** — replace the upstream list of pre-built categories with:
    *"This fork ships with no pre-built workflow categories. Use the `.template`
-   under `workflows/` and the `/new-workflow` skill (or copy the template manually)
+   under `workflows/` and the `/create-new-workflow` skill (or copy the template manually)
    to build the automations specific to `<BUSINESS_NAME>`."*
 7. **Getting started** — copy the upstream "Deployment" / "Quick start" section,
    replace any path examples with the fork's path, and replace the repo URL.
@@ -648,7 +648,7 @@ After editing, sanity-check the YAML loads:
 
 The README rewritten in Step 5 inherits the upstream App Inventory table verbatim. After the apps strip, prune that table:
 - Remove every row whose first column (`apps/<name>`) is in `stripped_apps`.
-- Update the lead-in note to: *"Apps are reusable building blocks. The fork ships with a curated minimal set; consumers can add more via `/new-service-app`."*
+- Update the lead-in note to: *"Apps are reusable building blocks. The fork ships with a curated minimal set; consumers can add more via `/create-new-service-app`."*
 
 ### 7b-6 — Stale doc references (extend Step 6's sweep)
 
@@ -716,7 +716,7 @@ If `gh auth status` reports the user is not logged in, STOP and tell them to run
 must happen at the user's terminal, not from inside Claude Code). Print:
 
 > The `gh` CLI is not authenticated. Run `gh auth login` in your terminal, then
-> re-invoke `/new-fork-repository` (or pass `--no-create-repo` to skip).
+> re-invoke `/create-new-fork-repository` (or pass `--no-create-repo` to skip).
 
 #### Resolve the owner
 

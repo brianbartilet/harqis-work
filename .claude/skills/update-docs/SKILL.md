@@ -54,7 +54,7 @@ If `<target>` is a path other than the root README, walk that file's sections in
 
 Whenever you edit a doc, `grep` for the doc's path across all `*.md` files in the repo. Any other doc that mentions the target may need a parallel update — for example, editing `scripts/README.md` should also refresh:
 - The root `README.md` "Running Services" / "Architecture" sections that reference `scripts/`
-- Slash-command docs in `.claude/commands/*.md` that mention `python scripts/deploy.py …`
+- Slash-command docs in `.claude/skills/*/SKILL.md` that mention `python scripts/deploy.py …`
 - `docs/info/HARQIS-CLAW-HOST.md` if it linked to the moved file
 
 Apply the same drift check to those files. **Skip the cross-reference step** when invoked with `--related-only` (the user is doing only the cascading update).

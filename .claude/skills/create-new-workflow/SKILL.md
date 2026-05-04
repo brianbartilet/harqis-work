@@ -104,7 +104,7 @@ For each app identified in Step 1 that does NOT exist in `apps/`:
 2. Search for its public API documentation:
    - Try `WebFetch` on the service's official docs URL (e.g. `https://docs.<service>.com/api`)
    - Or ask the user for the API docs URL or OpenAPI spec
-3. Invoke `/new-service-app <app_name> <spec_or_url>` to scaffold the full integration.
+3. Invoke `/create-new-service-app <app_name> <spec_or_url>` to scaffold the full integration.
 4. Wait for that skill to complete, then continue.
 5. If the API cannot be found or building fails, mark the step as a **manual stub** and add a `# TODO: implement <app_name> integration` comment in the task.
 

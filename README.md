@@ -28,6 +28,7 @@ At its core the platform has three layers:
 | `alpha_vantage` | Stock quotes, FX rates, news & sentiment, fundamentals, technical indicators, crypto, commodities, economic indicators | REST API | Yes | [API Docs](https://www.alphavantage.co/documentation/) · [MCP](https://mcp.alphavantage.co/) · [Site](https://www.alphavantage.co/) |
 | `antropic` | Anthropic Claude API | REST (native SDK) | Yes | [API Docs](https://docs.anthropic.com/en/api/) · [Console](https://console.anthropic.com/) |
 | `apify` | Web scraping platform — run actors, fetch datasets, social-media trends aggregation (Google Trends, IG, FB, TikTok, Reddit) | REST API | Yes | [API Docs](https://docs.apify.com/api/v2) · [Store](https://apify.com/store) · [Console](https://console.apify.com/) |
+| `appsheet` | AppSheet tables — find/add/edit/delete rows via the v2 REST API | REST API | Yes | [API Docs](https://support.google.com/appsheet/answer/10105768) · [Site](https://www.appsheet.com/) |
 | `browser` | HTTP fetching and web scraping (httpx + BeautifulSoup) | Local | No | — |
 | `desktop` | Windows desktop automation | Local | No | — |
 | `discord` | Discord bot — messaging, guilds, webhooks | REST API | Yes | [API Docs](https://discord.com/developers/docs/reference) · [Portal](https://discord.com/developers/applications) |
@@ -342,6 +343,7 @@ harqis-work/
 │   ├── alpha_vantage/              # Stock/FX/news/fundamentals/technicals/crypto/commodities
 │   ├── anthropic/                  # Anthropic Claude API
 │   ├── apify/                      # Web scraping actors + social-media trends aggregation
+│   ├── appsheet/                   # AppSheet tables — find/add/edit/delete rows
 │   ├── browser/                    # HTTP fetching and web scraping
 │   ├── desktop/                    # Windows desktop automation
 │   ├── discord/                    # Discord bot
@@ -561,7 +563,7 @@ pip install --upgrade --force-reinstall --no-cache-dir git+https://github.com/br
 
 This is the canonical list of every env var consumed across the platform. Keep it
 in sync with the actual `.env/apps.env` whenever an app is added — the
-`/new-service-app` skill includes this update as a mandatory step.
+`/create-new-service-app` skill includes this update as a mandatory step.
 
 ```env
 # ── Core / harness ────────────────────────────────────────────────────────────
@@ -628,13 +630,15 @@ JIRA_EMAIL=
 JIRA_API_TOKEN=
 NOTION_API_TOKEN=
 AIRTABLE_API_TOKEN=               # personal access token (pat...)
+APPSHEET_APPLICATION_ACCESS_KEY=  # per-app key — Manage → Integrations in your AppSheet app
+APPSHEET_DEFAULT_APP_ID=          # default AppSheet app id (overridable per call)
 
 # Kanban orchestrator
 KANBAN_BOARD_ID=                  # Trello board id or Jira project key
 
 # Kanban agent personas (Mode A — per-agent Trello accounts).
 # One pair per profile; leave blank to use Mode B (shared bot account
-# + signed comments). Add new ones via `/new-kanban-profile <name>`.
+# + signed comments). Add new ones via `/create-new-kanban-profile <name>`.
 TRELLO_AGENT_API_KEY__CODE=
 TRELLO_AGENT_API_TOKEN__CODE=
 TRELLO_AGENT_API_KEY__WRITE=
@@ -807,7 +811,7 @@ Lightweight JSON-like files exposing Celery tasks and shell commands to n8n and 
 
 ---
 
-## Claude Code Skills (`/.claude/commands/`)
+## Claude Code Skills (`/.claude/skills/`)
 
 Claude Code skills are slash commands available in any Claude Code session opened in this repo. They encode multi-step workflows so Claude can execute them end-to-end without step-by-step prompting. Invoke with `/skill-name [arguments]` in the Claude Code prompt.
 

@@ -224,7 +224,7 @@ Mode A activates when:
 
 Otherwise the orchestrator logs once and falls back to Mode B for that profile.
 
-Use `/new-kanban-profile <name>` to scaffold a new profile + register
+Use `/create-new-kanban-profile <name>` to scaffold a new profile + register
 placeholder env vars + print the manual Trello-account setup checklist.
 
 ### Specialized agents (system prompts)

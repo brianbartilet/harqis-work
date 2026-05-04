@@ -12,7 +12,7 @@ Search, enable, and wire Zapier MCP actions into harqis-work workflows or use th
 |---|---|---|
 | `task_or_app_description` | Yes | Free-text: the task to accomplish OR the app name to research (e.g. `"send a Slack message"`, `"HubSpot"`, `"post to Airtable when a Jira ticket is created"`). |
 | `--enable` | No | After finding a match, immediately enable the action on the Zapier MCP server without asking again. |
-| `--workflow <name>` | No | After enabling, scaffold a Celery workflow task that calls the action. Triggers `/new-workflow`. |
+| `--workflow <name>` | No | After enabling, scaffold a Celery workflow task that calls the action. Triggers `/create-new-workflow`. |
 | `--research` | No | Discovery only — list all matching Zapier apps/actions, do not enable anything. |
 
 ---
@@ -278,9 +278,9 @@ ZAPIER_API_KEY=
 
 Remind the user to fill in the key from mcp.zapier.com → Settings → API Keys.
 
-### 7d — Invoke /new-workflow
+### 7d — Invoke /create-new-workflow
 
-Call `/new-workflow <name>` with the following context pre-answered:
+Call `/create-new-workflow <name>` with the following context pre-answered:
 - **Apps needed:** zapier (for the HTTP call), plus any harqis-work apps involved in prior/subsequent steps
 - **Step that calls Zapier:** uses `CONFIG_MANAGER.get('ZAPIER')` and posts to the action endpoint
 - **Parameters:** already mapped in Step 5

@@ -71,7 +71,7 @@ class DependencyDetector:
     # Env var names MUST match keys in .env/apps.env exactly, otherwise the dependency
     # detector will flag missing secrets that are actually configured (just under a
     # different name).
-    # KEEP IN SYNC WITH /new-service-app: every new app integration that has an env var
+    # KEEP IN SYNC WITH /create-new-service-app: every new app integration that has an env var
     # in apps_config.yaml must be represented here so the kanban orchestrator can detect
     # missing creds before starting an agent. Naming MUST match keys in .env/apps.env exactly.
     _SERVICE_SECRETS: list[tuple[str, str]] = [
@@ -83,6 +83,7 @@ class DependencyDetector:
         (r"\bJIRA\b",                             "JIRA_API_TOKEN"),
         (r"\bTRELLO\b",                           "TRELLO_API_TOKEN"),
         (r"\bAIRTABLE\b",                         "AIRTABLE_API_TOKEN"),
+        (r"\bAPP\s*SHEET\b|\bAPPSHEET\b",         "APPSHEET_APPLICATION_ACCESS_KEY"),
         (r"\bNOTION\b",                           "NOTION_API_TOKEN"),
         # Communication
         (r"\bDISCORD\b",                          "DISCORD_BOT_TOKEN"),

@@ -71,7 +71,7 @@ Apply rules from [COMMIT-MESSAGE-GUIDE.md → Type-detection cheatsheet](../../d
 
 Mixed staging (prod + tests): use the prod-code type. Never use `test` when prod files are also staged.
 
-`.claude/commands/*.md` exception: a net-new slash command file is `feat`, not `docs`, even though it's a `.md` file — these are functional skill definitions executed by the harness.
+`.claude/skills/*/SKILL.md` exception: a net-new slash command file is `feat`, not `docs`, even though it's a `.md` file — these are functional skill definitions executed by the harness.
 
 ## Step 3 — Pick the scope
 

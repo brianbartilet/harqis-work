@@ -426,7 +426,7 @@ Or, from any Claude Code session opened in the repo (OS-agnostic):
 /deploy-harqis host --down
 ```
 
-The skill walks through every step, validates prerequisites before making changes, and surfaces a per-component log path on any failure. See `.claude/commands/deploy-harqis.md` for the full reference.
+The skill walks through every step, validates prerequisites before making changes, and surfaces a per-component log path on any failure. See `.claude/skills/deploy-harqis/SKILL.md` for the full reference.
 
 ### 4.4 Daemon scripts
 
@@ -737,9 +737,9 @@ Or in `claude_desktop_config.json` on a remote machine:
 ### Adding a new app
 
 ```bash
-/new-service-app <app_name>                     # skeleton only
-/new-service-app <app_name> <openapi_url>       # full generation from spec
-/new-service-app <app_name> <url> --workflow <name>  # also scaffold a workflow
+/create-new-service-app <app_name>                     # skeleton only
+/create-new-service-app <app_name> <openapi_url>       # full generation from spec
+/create-new-service-app <app_name> <url> --workflow <name>  # also scaffold a workflow
 ```
 
 Or manually:
@@ -757,7 +757,7 @@ Then register in `mcp/server.py` and add config to `apps_config.yaml`.
 
 ## 8. Claude Code Skills Integration
 
-Claude Code skills (slash commands in `.claude/commands/`) and OpenClaw share the same host
+Claude Code skills (slash commands in `.claude/skills/`) and OpenClaw share the same host
 filesystem. Skills can read OpenClaw identity files as live dynamic context, inject live service
 data via MCP, and write back to the daily memory log.
 
@@ -768,8 +768,8 @@ integration patterns.
 
 | Skill | Purpose |
 |---|---|
-| `/new-service-app <name> [spec_url] [--workflow name]` | Scaffold an app integration — skeleton or from OpenAPI spec/URL; optionally chain to a new workflow |
-| `/new-workflow <name>` | Create a workflow directory with a Celery task template |
+| `/create-new-service-app <name> [spec_url] [--workflow name]` | Scaffold an app integration — skeleton or from OpenAPI spec/URL; optionally chain to a new workflow |
+| `/create-new-workflow <name>` | Create a workflow directory with a Celery task template |
 | `/run-tests <app>` | Run pytest for a specific app with correct flags |
 | `/generate-registry` | Rebuild `frontend/registry.py` from all `tasks_config.py` files |
 | `/agent-prompt <name>` | Run a named prompt from `agents/prompts/` against the codebase |
@@ -779,7 +779,7 @@ integration patterns.
 OpenClaw agents can invoke Claude Code (and its skills) as a subprocess:
 
 1. Agent receives: *"add a new Jira workflow that posts overdue tickets to Telegram daily"*
-2. Agent calls Claude Code: `/new-workflow jira_digest`
+2. Agent calls Claude Code: `/create-new-workflow jira_digest`
 3. Claude Code scaffolds the workflow, writes the task, registers it in `tasks_config.py`
 4. Agent commits, runs `/run-tests jira`, notifies via Telegram when done
 

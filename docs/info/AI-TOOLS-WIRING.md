@@ -39,12 +39,12 @@ From inside either repo, `git rev-parse --show-toplevel` returns the root on any
 
 **Home dir in this repo:** `.claude/`
 **Current contents:**
-- `.claude/commands/` — project slash-commands:
+- `.claude/skills/` — project slash-commands:
   - `/agent-prompt` — run an AI agent prompt from `prompts/` against the codebase
   - `/generate-registry` — regenerate `frontend/registry.py` from all `workflows/*/tasks_config.py` files
-  - `/new-service-app` — scaffold a complete app integration under `apps/`; with a spec/URL it generates real implementations, without one it creates a skeleton; chainable to `/new-workflow`
-  - `/new-workflow` — scaffold a new workflow under `workflows/`
-  - `/new-n8n-workflow` — build and deploy an n8n workflow from a drawio diagram, XML/BPMN file, or text description; imports directly into the local n8n instance via Docker CLI
+  - `/create-new-service-app` — scaffold a complete app integration under `apps/`; with a spec/URL it generates real implementations, without one it creates a skeleton; chainable to `/create-new-workflow`
+  - `/create-new-workflow` — scaffold a new workflow under `workflows/`
+  - `/create-new-n8n-workflow` — build and deploy an n8n workflow from a drawio diagram, XML/BPMN file, or text description; imports directly into the local n8n instance via Docker CLI
   - `/run-tests` — run tests for a specific app or the full suite
 - `.claude/settings.local.json` — per-machine permissions (safe list of Bash/Read/etc.)
 - `.claude/settings.json` — shared settings (currently empty; add hooks here when needed)
@@ -210,7 +210,7 @@ Keeping them separate means:
 
 | If you're writing… | Put it in |
 |---|---|
-| A new Claude Code slash-command | `harqis-work/.claude/commands/*.md` |
+| A new Claude Code slash-command | `harqis-work/.claude/skills/*/SKILL.md` |
 | A Claude Code hook (SessionStart, PreToolUse, etc.) | `harqis-work/.claude/settings.json` |
 | A permission allow-list entry | `harqis-work/.claude/settings.local.json` |
 | A note about how Claude Code is wired for this project | `harqis-work/.claude/` (new file, plain markdown) |

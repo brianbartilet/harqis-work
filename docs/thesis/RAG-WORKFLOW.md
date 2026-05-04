@@ -552,7 +552,7 @@ After each, sanity-check via the MCP tool `vector_store_stats` — you should se
 
 In rough priority order:
 
-1. **Voyage embeddings app.** Scaffold `apps/voyage` via `/new-service-app` so domain-tuned models (`voyage-code-3`, `voyage-finance-2`) become available. Run an A/B against Gemini on a fixed eval set before switching anything by default.
+1. **Voyage embeddings app.** Scaffold `apps/voyage` via `/create-new-service-app` so domain-tuned models (`voyage-code-3`, `voyage-finance-2`) become available. Run an A/B against Gemini on a fixed eval set before switching anything by default.
 2. **Re-ranker step.** After top-k retrieval, re-rank with a small cross-encoder (Cohere rerank, or Gemini's `RANKING` task type) before sending to the LLM. Cheap, often a +10-20% recall@5 win.
 3. **Eval harness.** A fixed list of (question, expected-source) pairs + a script that runs the full pipeline and scores recall@k. Without this, every config tweak is a guess.
 4. **Per-corpus chunkers.** Code wants AST-aware chunks; Notion wants block-aware chunks; Jira wants comment-aware chunks. Centralise the contract in `workflows/knowledge/chunking.py`; specialise per corpus.
