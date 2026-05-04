@@ -315,6 +315,73 @@ def _process_matching(needle: str) -> list[int]:
         return []
 
 
+def _all_processes_matching(needle: str) -> list[int]:
+    """Like _process_matching, but not restricted to python.exe.
+
+    Sprout's autoreloader forks the actual celery worker as a separate
+    celery.exe child of the python launcher. To clean those up we have to
+    match every process by command line, not just python.exe.
+    """
+    if IS_WIN:
+        try:
+            ps_cmd = (
+                "Get-CimInstance Win32_Process | "
+                f"Where-Object {{ $_.CommandLine -like '*{needle}*' }} | "
+                "Select-Object -ExpandProperty ProcessId"
+            )
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_cmd],
+                capture_output=True, text=True, check=False,
+            )
+            return [int(x) for x in out.stdout.split() if x.strip().isdigit()]
+        except (FileNotFoundError, OSError):
+            return []
+    try:
+        out = subprocess.run(
+            ["pgrep", "-f", needle],
+            capture_output=True, text=True, check=False,
+        )
+        return [int(x) for x in out.stdout.split() if x.strip().isdigit()]
+    except FileNotFoundError:
+        return []
+
+
+def kill_stray_celery() -> None:
+    """Kill any leftover launcher / celery processes from prior runs.
+
+    Sprout's Django autoreloader forks celery as a child of the launcher.
+    The launcher may exit while the forked celery keeps running, leaving
+    our PID-file tracking stale. Repeated deploys without this sweep pile
+    up orphan workers — visible as multiple console windows on Windows.
+    """
+    needles = [
+        "run_workflows.py",       # launcher entrypoint (host & node)
+        "core.apps.sprout.app",   # celery -A target — worker, beat, flower
+    ]
+    pids: set[int] = set()
+    self_pid = os.getpid()
+    for needle in needles:
+        for pid in _all_processes_matching(needle):
+            if pid != self_pid:
+                pids.add(pid)
+    if not pids:
+        return
+    pids_sorted = sorted(pids)
+    print(f"  Killing {len(pids_sorted)} stray celery/launcher process(es): "
+          f"{','.join(str(p) for p in pids_sorted)}")
+    for pid in pids_sorted:
+        if IS_WIN:
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                capture_output=True, check=False,
+            )
+        else:
+            try:
+                os.kill(pid, 15)
+            except OSError:
+                pass
+
+
 _STATUS_NEEDLES = {
     "scheduler": "run_workflows.py scheduler",
     "worker":    "run_workflows.py worker",
@@ -589,6 +656,7 @@ def main() -> None:
         print(f"==> Tearing down machine={name} role={role}")
         for s in services:
             stop_service(s)
+        kill_stray_celery()
         if role == "host" and not args.docker_only:
             docker_down()
         print(f"All services stopped for machine={name}.")
@@ -596,6 +664,11 @@ def main() -> None:
 
     print(f"==> Deploy machine={name}  role={role}  queues={queues}")
     print(f"    services: {', '.join(services) if services else '(none)'}")
+
+    # Clean slate: kill any orphan celery/launcher processes from prior runs
+    # before spawning new daemons (avoids piling up console windows on Windows).
+    if not args.docker_only:
+        kill_stray_celery()
 
     if role == "host" and not args.docker_only:
         docker_up()
