@@ -7,8 +7,8 @@ entry points.
 | Path | Purpose |
 |---|---|
 | [`launch.py`](#launchpy) | Single-process launcher — runs one daemon in the foreground (`worker`, `scheduler`, `flower`, `frontend`, `mcp`, `kanban`, `trigger-hud-tasks`, `push-config`, `serve-config`). |
-| [`deploy.py`](#deploypy) | Multi-daemon orchestrator — reads `machines.toml`, brings the whole stack up/down, optionally registers OS auto-start units. |
-| [`machines.toml`](#machinestoml) | Per-machine topology (role, queue list, disabled services). Auto-detected from hostname. |
+| [`deploy.py`](#deploypy) | Multi-daemon orchestrator — reads `machines.toml` from the repo root, brings the whole stack up/down, optionally registers OS auto-start units. |
+| [`../machines.toml`](#machinestoml) | Per-machine topology (role, queue list, disabled services). Lives at the repo root so per-machine `machines.local.toml` overrides sit next to it. Auto-detected from hostname. |
 | [`run_agent_prompt.py`](#run_agent_promptpy) | Claude-driven docs / code-smell regenerator. Unchanged. |
 | [`tailscale/`](#tailscale) | Tailscale ACL policy. Unchanged. |
 
@@ -59,21 +59,48 @@ python scripts/launch.py print-env                                 # eval-able e
 Orchestrator. Reads `machines.toml`, decides which services to start
 (based on `role` + `disable`), launches each as a detached background
 process, tracks PIDs in `<repo>/.run/<service>.pid`, and logs to
-`<repo>/logs/<service>.log`.
+`<repo>/logs/<service>.log`. On every deploy or `--down` it also sweeps
+stray celery / launcher processes (matched by command-line needles
+`run_workflows.py` and `core.apps.sprout.app`) so orphans from prior
+runs — the kind that pile up extra console windows on Windows — are
+killed before fresh daemons start.
+
+**All commands**
 
 ```bash
-python scripts/deploy.py                            # auto-detect from hostname
-python scripts/deploy.py --machine harqis-server    # explicit lookup
-python scripts/deploy.py --role host -q tcg,peon,agent  # ad-hoc override
+# Lifecycle
+python scripts/deploy.py                            # auto-detect from hostname → start everything
+python scripts/deploy.py --down                     # stop services + sweep celery + docker compose down
+python scripts/deploy.py --status                   # tabular status (PID + alive PIDs + log path)
+python scripts/deploy.py --stop SERVICE             # stop one service by name (worker / scheduler / …)
 
-python scripts/deploy.py --status                   # list running services
-python scripts/deploy.py --stop worker              # stop one
-python scripts/deploy.py --down                     # stop everything
+# OS auto-start
+python scripts/deploy.py --register                 # register at-logon auto-start, then start now
+python scripts/deploy.py --unregister               # remove auto-start units
 
-python scripts/deploy.py --register                 # OS auto-start (launchd /
-                                                    # systemd / Scheduled Task)
-python scripts/deploy.py --unregister               # remove auto-start
+# Targeting / overrides
+python scripts/deploy.py --machine NAME             # explicit profile lookup (skip hostname auto-detect)
+python scripts/deploy.py --role host|node           # override role from machines.toml
+python scripts/deploy.py -q QUEUES                  # comma-separated worker queues (override profile)
+python scripts/deploy.py -p PROFILE                 # override Kanban profile filter (e.g. agent:code)
+python scripts/deploy.py --num-agents N             # override Kanban concurrent agents
+
+# Service filters (skip individual host daemons; can also live under `disable=` in machines.toml)
+python scripts/deploy.py --no-frontend
+python scripts/deploy.py --no-mcp
+python scripts/deploy.py --no-kanban
+python scripts/deploy.py --no-flower
+
+# Visible scheduler/worker windows (live celery output)
+python scripts/deploy.py --console                  # CREATE_NEW_CONSOLE for scheduler+worker only;
+                                                    # closes-window-kills-daemon, no log file written
+
+# Docker only (skip Python services)
+python scripts/deploy.py --docker-only              # bring docker compose up/down without daemons
 ```
+
+`--down`, `--status`, `--stop`, `--register`, `--unregister` are mutually
+exclusive — pass at most one per invocation.
 
 **Per-role behaviour**
 
@@ -85,47 +112,80 @@ python scripts/deploy.py --unregister               # remove auto-start
 Use `--no-frontend / --no-mcp / --no-kanban / --no-flower` to skip
 individual host daemons, or list them under `disable` in `machines.toml`.
 
-**OS-native registration (`--register`)**
+**Console mode (`--console`)**
 
-| OS | Mechanism | Unit location |
+`scheduler` and `worker` are flagged `console: True` in `SERVICES`. With
+`--console`, those two daemons launch under `python.exe` (not
+`pythonw.exe`) with `CREATE_NEW_CONSOLE` and **no stdout redirect** —
+each gets its own visible window with live celery output. Other services
+(`frontend`, `mcp`, `kanban`, `flower`) stay windowless even with the
+flag set. Trade-offs:
+
+- `logs/scheduler.log` / `logs/worker.log` are **not** written while in
+  console mode (output goes only to the windows).
+- Closing a console window terminates that daemon — no automatic respawn.
+  Use `--down` for orderly shutdown.
+- The harqis-core sprout patch (`d30527a` and later) auto-detects an
+  attached console and inherits it for the forked celery child, so you
+  see celery's actual log lines (not just the launcher's startup print).
+
+**OS-native auto-start (`--register`)**
+
+| OS | Mechanism | Unit / key location |
 |---|---|---|
 | macOS | launchd LaunchAgent | `~/Library/LaunchAgents/work.harqis.<svc>.plist` |
 | Linux | systemd user unit | `~/.config/systemd/user/harqis-<svc>.service` |
-| Windows | Scheduled Task (at startup) | `work.harqis.<svc>` |
+| Windows | HKCU `…\CurrentVersion\Run` key | `HKCU:\Software\Microsoft\Windows\CurrentVersion\Run\work.harqis.<svc>` |
 
-Each unit is `KeepAlive=true` / `Restart=always` / restarts on failure with
-backoff. `--unregister` removes them cleanly.
+macOS launchd / Linux systemd units are `KeepAlive=true` /
+`Restart=always` / restart on failure with backoff. Windows Run keys
+fire **once at user logon** (no auto-restart on crash) — they were
+chosen over Scheduled Tasks because Scheduled Tasks need admin even for
+user-scope tasks on most installs. `--register` also starts the
+services *now* (otherwise on Windows you'd have to log out/in to see
+anything running). `--unregister` removes them cleanly.
 
 ---
 
 ## `machines.toml`
 
-Declarative topology. Each section describes one machine; `[hostnames]`
-maps `socket.gethostname()` → machine name. Example layout:
+Lives at the **repo root** (alongside `requirements.txt`, `apps_config.yaml`,
+etc.), not under `scripts/`. Declarative topology — each section describes
+one machine; `[hostnames]` maps `socket.gethostname()` → machine name.
+Example layout:
 
 ```toml
 [default]                       # fallback when no [hostnames] entry matches
 role = "host"
-queues = ["default"]
+queues = ["default", "default_broadcast"]
 
 [harqis-server]                 # always-on hub
 role = "host"
-queues = ["tcg", "peon", "agent"]
+queues = ["tcg", "agent", "host", "adhoc", "default_broadcast"]
 
 [windows-work]
 role = "host"
-queues = ["default", "hud"]
-disable = ["mcp", "kanban"]
+queues = ["default", "hud", "default_broadcast"]
+disable = ["kanban"]
 
 [vps-worker]
 role = "node"
-queues = ["agent", "worker"]
+queues = ["agent", "worker", "default_broadcast"]
 kanban_profile = "agent:code"
 
 [hostnames]
 "harqis-mac-mini.local" = "harqis-server"
 "DESKTOP-N100"          = "windows-work"
 ```
+
+> **Broadcast queues:** any name ending in `_broadcast` (e.g.
+> `default_broadcast`, `hud_broadcast`) is a fanout exchange in
+> `workflows/config.py`. Workers must include the broadcast queue in
+> their `queues` list, otherwise the exchange is never declared on
+> RabbitMQ and beat publishes fail with `404 NOT_FOUND - no exchange
+> '<name>' in vhost '/'`. The broadcast subscriber on every machine
+> above is what makes `git_pull_on_paths_broadcast` (and any future
+> cluster-wide task) actually fan out.
 
 Find a machine's hostname:
 ```bash

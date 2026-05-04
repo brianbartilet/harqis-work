@@ -2,7 +2,7 @@
 """Deploy the harqis-work platform on this machine (cross-platform).
 
 Replaces scripts/sh/deploy.sh and scripts/ps/deploy.ps1. Reads per-machine
-topology from scripts/machines.toml so each host just runs:
+topology from machines.toml (at the repo root) so each host just runs:
 
     python scripts/deploy.py            # auto-detect from hostname
     python scripts/deploy.py --down
@@ -47,7 +47,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 LAUNCH_PY = SCRIPTS_DIR / "launch.py"
-MACHINES_TOML = SCRIPTS_DIR / "machines.toml"
+MACHINES_TOML = REPO_ROOT / "machines.toml"
 RUN_DIR = REPO_ROOT / ".run"
 LOG_DIR = REPO_ROOT / "logs"
 ENV_FILE = REPO_ROOT / ".env" / "apps.env"
@@ -99,7 +99,7 @@ def _merge_machines(base: dict, override: dict) -> dict:
 
 
 def load_machine_config(name: str | None) -> dict:
-    """Resolve machine config from scripts/machines.toml + machines.local.toml.
+    """Resolve machine config from machines.toml + machines.local.toml at repo root.
 
     machines.local.toml is gitignored — host it yourself per machine to add
     real hostnames or override settings without leaking topology to the repo.
@@ -642,7 +642,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Deploy the harqis-work platform on this machine.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("--machine", help="Machine name in scripts/machines.toml (default: auto-detect by hostname)")
+    p.add_argument("--machine", help="Machine name in machines.toml (default: auto-detect by hostname)")
     p.add_argument("--role", choices=["host", "node"], help="Override role from machines.toml")
     p.add_argument("-q", "--queues", help="Override worker queues (comma-separated)")
     p.add_argument("-p", "--profile", help="Override Kanban profile filter")
