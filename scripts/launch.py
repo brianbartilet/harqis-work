@@ -35,11 +35,15 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 ENV_FILE = REPO_ROOT / ".env" / "apps.env"
-VENV_PY = (
-    REPO_ROOT / ".venv" / "Scripts" / "python.exe"
-    if os.name == "nt"
-    else REPO_ROOT / ".venv" / "bin" / "python"
-)
+
+if os.name == "nt":
+    # Prefer pythonw.exe (windowless) over python.exe so deamons spawned via
+    # `os.execvp` below don't pop up an empty console on Windows.
+    _PYTHONW = REPO_ROOT / ".venv" / "Scripts" / "pythonw.exe"
+    _PYTHON_NT = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
+    VENV_PY = _PYTHONW if _PYTHONW.exists() else _PYTHON_NT
+else:
+    VENV_PY = REPO_ROOT / ".venv" / "bin" / "python"
 
 
 # ── Environment loading ───────────────────────────────────────────────────────

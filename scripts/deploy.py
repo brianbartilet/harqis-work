@@ -52,11 +52,15 @@ RUN_DIR = REPO_ROOT / ".run"
 LOG_DIR = REPO_ROOT / "logs"
 ENV_FILE = REPO_ROOT / ".env" / "apps.env"
 
-VENV_PY = (
-    REPO_ROOT / ".venv" / "Scripts" / "python.exe"
-    if os.name == "nt"
-    else REPO_ROOT / ".venv" / "bin" / "python"
-)
+if os.name == "nt":
+    # Prefer pythonw.exe (windowless) over python.exe so spawned daemons
+    # don't pop up empty console windows. Fall back to python.exe if pythonw
+    # was stripped (some minimal venv setups).
+    _PYTHONW = REPO_ROOT / ".venv" / "Scripts" / "pythonw.exe"
+    _PYTHON_NT = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
+    VENV_PY = _PYTHONW if _PYTHONW.exists() else _PYTHON_NT
+else:
+    VENV_PY = REPO_ROOT / ".venv" / "bin" / "python"
 
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
@@ -178,13 +182,19 @@ def read_pid(service: str) -> int | None:
 
 
 def spawn_detached(cmd: list[str], log_file: Path) -> int:
-    """Spawn a long-running process detached from this terminal. Returns its PID."""
+    """Spawn a long-running process detached from this terminal. Returns its PID.
+
+    On Windows, uses CREATE_NO_WINDOW so the spawned python.exe (a console
+    app) does not pop up its own blank console window. CREATE_NEW_PROCESS_GROUP
+    detaches it from this terminal's signal group so Ctrl-C here doesn't kill
+    the daemon.
+    """
     log_file.parent.mkdir(parents=True, exist_ok=True)
     fout = open(log_file, "ab")
     if IS_WIN:
-        DETACHED_PROCESS = 0x00000008
-        CREATE_NEW_PROCESS_GROUP = 0x00000200
-        flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+        # CREATE_NO_WINDOW suppresses console creation for console apps.
+        # CREATE_NEW_PROCESS_GROUP is needed so the child is independent.
+        flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
         proc = subprocess.Popen(
             cmd,
             stdin=subprocess.DEVNULL, stdout=fout, stderr=subprocess.STDOUT,
