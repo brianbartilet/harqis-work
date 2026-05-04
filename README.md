@@ -232,11 +232,31 @@ Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and 
 
 ### Celery Task Queues
 
+Declared in `workflows/queues.py` (`WorkflowQueue` enum) and registered with RabbitMQ in `workflows/config.py` (`SPROUT.conf.task_queues`). Workers consume specific queues based on each machine's `queues = […]` list in `machines.toml`.
+
+**Direct (competing-consumers)** — exactly one worker handles each published task:
+
 | Queue | Used by |
 |-------|---------|
-| `hud` | `workflows.hud.tasks.*` |
-| `tcg` | TCG card processing tasks |
-| `default` | Desktop and general tasks |
+| `default` | Catch-all / unrouted tasks; fallback when a task has no `options.queue` |
+| `hud` | All `workflows.hud.tasks.*` (auto-routed via `task_routes`) — calendar, TCG orders, YNAB, AI logs |
+| `peon` | Work-context HUD tasks (Jira boards, calendar focus, etc.) |
+| `tcg` | TCG marketplace pipeline — Scryfall bulk, card matching, listings, pricing |
+| `adhoc` | One-off / manual triggers (no schedule) |
+| `host` | Tasks that must run on the host (Docker, broker access) |
+| `agent` | AI agent task dispatch (Kanban / OpenClaw worker invocations) |
+| `worker` | Generic background worker pool (cross-app jobs) |
+
+**Broadcast (fanout)** — every subscribed worker runs each task; tasks **must** be idempotent. A worker only receives broadcasts when its `queues` list includes the broadcast name (otherwise the exchange isn't declared and beat publishes fail with `NOT_FOUND`):
+
+| Queue | Used by |
+|-------|---------|
+| `default_broadcast` | Cluster-wide jobs that every node must run locally — e.g. `git_pull_on_paths` so each node refreshes its own working tree |
+| `hud_broadcast` | HUD-level fanout — `workflows.hud.tasks.broadcast_*` (auto-routed); reload skin config / refresh-all-HUDs cluster-wide |
+| `workers_broadcast` | Worker-pool-wide control messages (declared in enum; reserved) |
+| `agents_broadcast` | Agent-pool-wide control messages (declared in enum; reserved) |
+
+> Routing override: a task can target any queue via `options={"queue": WorkflowQueue.X}` in its Beat schedule entry, regardless of `task_routes` patterns.
 
 ### Beat schedule
 
