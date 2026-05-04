@@ -15,7 +15,7 @@ WORKFLOW_SOCIAL = {
             'skip_email': False,
         },
         'options': {
-            'queue': WorkflowQueue.DEFAULT,
+            'queue': WorkflowQueue.PEON,
             'expires': 60 * 60 * 24 * 7,
         },
     },

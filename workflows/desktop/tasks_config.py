@@ -40,21 +40,30 @@ WORKFLOWS_DESKTOP = {
         'task': 'workflows.desktop.tasks.commands.git_pull_on_paths',
         'schedule':  crontab(minute='*/10'),
         'args': [],
-        "options": {"queue": WorkflowQueue.DEFAULT},
+        "options": {
+            "expires": 60 * 60,
+            "queue": WorkflowQueue.DEFAULT
+        },
     },
 
-    'run-job--git_pull_on_paths_adhoc': {
+    'run-job--git_pull_on_paths_broadcast': {
         'task': 'workflows.desktop.tasks.commands.git_pull_on_paths',
-        'schedule': crontab(minute='*/10'),
+        'schedule': crontab(hour='*/4'),
         'args': [],
-        "options": {"queue": WorkflowQueue.DEFAULT},
+        "options": {
+            "expires": 60 * 60 * 4,
+            "queue": WorkflowQueue.DEFAULT_BROADCAST
+        },
     },
 
     'run-job--set_desktop_hud_to_back': {
         'task': 'workflows.desktop.tasks.commands.set_desktop_hud_to_back',
         'schedule': crontab(minute='*/30'),
         'args': [],
-        "options": {"queue": WorkflowQueue.DEFAULT},
+        "options": {
+            "expires": 60 * 60,
+            "queue": WorkflowQueue.HUD
+        },
     },
 
     'run-job--copy_files_targeted': {
@@ -63,14 +72,19 @@ WORKFLOWS_DESKTOP = {
         'kwargs': {
             "cfg_id__desktop_jobs": "DESKTOP"
         },
-        "options": {"queue": WorkflowQueue.DEFAULT},
+        "options": {
+            "expires": 60 * 60,
+            "queue": WorkflowQueue.DEFAULT},
     },
 
     'run-job--run_n8n_sequence': {
         'task': 'workflows.desktop.tasks.commands.run_n8n_sequence',
         'schedule': crontab(hour='0', minute='0'),
         'args': [],
-        "options": {"queue": WorkflowQueue.DEFAULT},
+        "options": {
+            "expires": 60 * 60 * 8,
+            "queue": WorkflowQueue.HOST
+        },
     },
 
     'run-job--run_capture_logging': {
@@ -80,7 +94,7 @@ WORKFLOWS_DESKTOP = {
             "cfg_id__desktop_utils": "DESKTOP"
         },
         "options": {
-            "queue": WorkflowQueue.DEFAULT,
+            "queue": WorkflowQueue.PEON,
             "expires": 60 * 60
         },
     },
@@ -94,7 +108,7 @@ WORKFLOWS_DESKTOP = {
             "model": "claude-haiku-4-5-20251001",
         },
         "options": {
-            "queue": WorkflowQueue.DEFAULT,
+            "queue": WorkflowQueue.PEON,
             "expires": 60 * 60 * 24,
         },
     },
@@ -108,16 +122,9 @@ WORKFLOWS_DESKTOP = {
             "model": "claude-haiku-4-5-20251001",
         },
         "options": {
-            "queue": WorkflowQueue.DEFAULT,
+            "queue": WorkflowQueue.PEON,
             "expires": 60 * 60 * 24 * 7,
         },
-    },
-
-    'run-job--set_desktop_hud_to_back_adhoc': {
-        'task': 'workflows.desktop.tasks.commands.set_desktop_hud_to_back',
-        'schedule': crontab(minute='*/30'),
-        'args': [],
-        "options": {"queue": WorkflowQueue.HUD},
     },
 
 }

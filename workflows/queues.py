@@ -10,6 +10,7 @@ class WorkflowQueue(StrEnum):
 
     # ── Direct (competing-consumers) queues — exactly one worker handles each task ──
     DEFAULT = "default"
+    HOST = 'host'
     HUD = "hud"
     TCG = "tcg"
     ADHOC = "adhoc"
@@ -21,6 +22,7 @@ class WorkflowQueue(StrEnum):
     # Use for cluster-wide actions: config reload, cache invalidation, "every HUD
     # node refresh now". Tasks routed here MUST be idempotent — they run on every
     # worker that subscribes (typically several at once).
+    DEFAULT_BROADCAST = "default_broadcast"
     HUD_BROADCAST = "hud_broadcast"
     WORKERS_BROADCAST= "workers_broadcast"
     AGENT_BROADCAST = "agents_broadcast"

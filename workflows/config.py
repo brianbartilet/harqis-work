@@ -55,6 +55,7 @@ SPROUT.conf.task_queues = (
     Queue(WorkflowQueue.TCG.value),
     Queue(WorkflowQueue.ADHOC.value),
     Queue(WorkflowQueue.PEON.value),
+    Broadcast(WorkflowQueue.DEFAULT_BROADCAST.value),
     Broadcast(WorkflowQueue.HUD_BROADCAST.value),
 )
 SPROUT.conf.task_default_queue = WorkflowQueue.DEFAULT.value
