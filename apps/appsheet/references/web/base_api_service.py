@@ -31,6 +31,7 @@ class BaseApiServiceAppSheet(BaseFixtureServiceRest):
         super().__init__(config=config, **kwargs)
         self._access_key: str = config.app_data["application_access_key"]
         self._default_app_id: Optional[str] = config.app_data.get("default_app_id")
+        self.default_table: Optional[str] = config.app_data.get("default_table")
         self._default_locale: str = config.app_data.get("locale", "en-US")
         self._timeout: int = int(config.parameters.get("timeout", 60))
         # Trim trailing slash so f-string concatenation produces a single slash.

@@ -1,7 +1,7 @@
 import os
 
 import pytest
-from hamcrest import assert_that, instance_of, not_none
+from hamcrest import assert_that, has_length, greater_than, instance_of, not_none, only_contains
 
 from apps.appsheet.config import CONFIG
 from apps.appsheet.references.dto.tables import DtoAppSheetActionResult
@@ -12,11 +12,11 @@ pytestmark = pytest.mark.skipif(
     not (
         os.environ.get("APPSHEET_APPLICATION_ACCESS_KEY")
         and os.environ.get("APPSHEET_DEFAULT_APP_ID")
-        and os.environ.get("APPSHEET_TEST_TABLE")
+        and os.environ.get("APPSHEET_DEFAULT_TABLE")
     ),
     reason=(
         "AppSheet tests need APPSHEET_APPLICATION_ACCESS_KEY, "
-        "APPSHEET_DEFAULT_APP_ID, and APPSHEET_TEST_TABLE set."
+        "APPSHEET_DEFAULT_APP_ID, and APPSHEET_DEFAULT_TABLE set."
     ),
 )
 
@@ -27,8 +27,8 @@ def given():
 
 
 @pytest.fixture()
-def test_table() -> str:
-    return os.environ["APPSHEET_TEST_TABLE"]
+def test_table(given) -> str:
+    return given.default_table
 
 
 @pytest.mark.smoke
@@ -45,3 +45,11 @@ def test_find_rows_with_selector(given, test_table):
         selector=f'Filter("{test_table}", TRUE)',
     )
     assert_that(when.rows, not_none())
+
+
+@pytest.mark.smoke
+def test_get_headers_returns_user_columns(given, test_table):
+    when = given.get_headers(table=test_table)
+    assert_that(when, instance_of(list))
+    assert_that(when, has_length(greater_than(0)))
+    assert_that([k.startswith("_") for k in when], only_contains(False))

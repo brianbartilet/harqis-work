@@ -92,6 +92,58 @@ class ApiServiceAppSheetTables(BaseApiServiceAppSheet):
         )
         return _wrap("Add", table, payload)
 
+    def get_headers(
+        self,
+        table: str,
+        app_id: Optional[str] = None,
+        include_system: bool = False,
+    ) -> list[str]:
+        """Discover column names by sampling rows from the table.
+
+        AppSheet exposes no schema endpoint, so columns are inferred from
+        the keys of the returned rows. System columns (any key starting
+        with `_`, e.g. `_RowNumber`, `_ComputedKey`) are excluded unless
+        `include_system=True`.
+        """
+        payload = self._action(table_name=table, action="Find", app_id=app_id)
+        if not isinstance(payload, list):
+            return []
+        keys: list[str] = []
+        seen: set[str] = set()
+        for row in payload:
+            if not isinstance(row, dict):
+                continue
+            for k in row.keys():
+                if k in seen:
+                    continue
+                if not include_system and k.startswith("_"):
+                    continue
+                seen.add(k)
+                keys.append(k)
+        return keys
+
+    def add_row(
+        self,
+        table: str,
+        data: dict[str, Any],
+        app_id: Optional[str] = None,
+        properties: Optional[dict[str, Any]] = None,
+    ) -> DtoAppSheetActionResult:
+        """Add a single row, dropping any key not present in the table's headers.
+
+        Looks up the table's columns via `get_headers`, keeps only the
+        intersection with `data`, then forwards to `add_rows`. Use
+        `add_rows` directly to bypass the filter.
+        """
+        header_set = set(self.get_headers(table, app_id=app_id))
+        filtered = {k: v for k, v in data.items() if k in header_set}
+        return self.add_rows(
+            table=table,
+            rows=[filtered],
+            app_id=app_id,
+            properties=properties,
+        )
+
     def edit_rows(
         self,
         table: str,
