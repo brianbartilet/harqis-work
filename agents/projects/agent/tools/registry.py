@@ -169,14 +169,19 @@ class ToolRegistry:
                 continue
             result.append(tool["definition"])
 
-        # MCP tools — added on top; denied list still applies
+        # MCP tools — same allowed/denied semantics as native tools.
+        # When a profile sets `tools.allowed`, MCP tools that aren't on the
+        # whitelist are hidden from the definitions list shown to Claude.
+        # This matches the runtime behavior of PermissionEnforcer.check_tool
+        # (which already denies non-whitelisted tools regardless of source),
+        # so advertising them would just invite tool calls that fail.
         if self._mcp_bridge:
             for defn in self._mcp_bridge.definitions():
                 name = defn["name"]
                 if name in denied:
                     continue
-                # MCP tools are included unless explicitly denied
-                # (allowed list only restricts native tools when set)
+                if allowed and name not in allowed:
+                    continue
                 result.append(defn)
 
         return result
