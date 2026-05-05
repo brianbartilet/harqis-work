@@ -392,6 +392,22 @@ python mcp/server.py
 The server starts in `stdio` mode (the default for local Claude Desktop connections). You will see
 startup logs confirming which tools were registered.
 
+### Restricting the app surface per node (`MCP_ENABLED_APPS`)
+
+By default every app in `APP_REGISTRARS` is registered. For node-specific deployments
+(e.g. a worker that should only expose Trello + Discord) set the comma-separated env var
+`MCP_ENABLED_APPS` to the case-insensitive labels you want to keep:
+
+```sh
+# Only register Trello and Discord, even though many apps are wired up
+export MCP_ENABLED_APPS="trello,discord"
+python mcp/server.py
+```
+
+Labels match the first column of `APP_REGISTRARS` in `mcp/server.py` ("Trello", "Discord",
+"Knowledge / RAG", etc.). Whitespace is trimmed; matching is case-insensitive. Unset or empty
+preserves the legacy "register everything" behavior.
+
 ---
 
 ## Connecting to Claude Desktop

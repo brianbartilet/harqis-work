@@ -61,9 +61,34 @@ APP_REGISTRARS = [
     ("Knowledge / RAG",  "workflows.knowledge.mcp", "register_knowledge_tools"),
 ]
 
+# Per-node app surface filter.
+#
+# Set MCP_ENABLED_APPS to a comma-separated list of app labels (case-insensitive,
+# matched against the first column of APP_REGISTRARS) to restrict which apps
+# this MCP server registers. Unset/empty = register everything (default).
+#
+# Examples:
+#   MCP_ENABLED_APPS=trello,discord
+#   MCP_ENABLED_APPS="Knowledge / RAG, Filesystem"
+_enabled_raw = os.environ.get("MCP_ENABLED_APPS", "").strip()
+_enabled_filter: set[str] | None = None
+if _enabled_raw:
+    _enabled_filter = {name.strip().lower() for name in _enabled_raw.split(",") if name.strip()}
+
+_total_apps = len(APP_REGISTRARS)
+if _enabled_filter is not None:
+    _filtered_registrars = [t for t in APP_REGISTRARS if t[0].lower() in _enabled_filter]
+    logger.info(
+        "MCP_ENABLED_APPS filter active: %d of %d apps will be registered (%s)",
+        len(_filtered_registrars), _total_apps,
+        ", ".join(t[0] for t in _filtered_registrars) or "<none>",
+    )
+else:
+    _filtered_registrars = APP_REGISTRARS
+
 # Lazy-import each app's mcp module so a missing config section in one app
 # does not prevent the rest from loading. Skipped apps log a warning.
-for label, module_path, fn_name in APP_REGISTRARS:
+for label, module_path, fn_name in _filtered_registrars:
     try:
         mod = importlib.import_module(module_path)
         registrar = getattr(mod, fn_name)
@@ -72,7 +97,10 @@ for label, module_path, fn_name in APP_REGISTRARS:
     except Exception as e:
         logger.warning("Skipping %s tools — %s: %s", label, type(e).__name__, e)
 
-logger.info("MCP server ready — %d tool(s) registered", len(mcp._tool_manager._tools))
+logger.info(
+    "MCP server: registered %d tool(s) from %d app(s) (filtered from %d total)",
+    len(mcp._tool_manager._tools), len(_filtered_registrars), _total_apps,
+)
 
 if __name__ == "__main__":
     logger.info("Starting harqis-work MCP server (stdio transport)")
