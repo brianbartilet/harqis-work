@@ -71,32 +71,20 @@ HARQIS-Work includes a layer of Claude-powered AI agents that go beyond schedule
 
 **Skills are slash commands that build the three core repo features for you: app integrations, workflows, and HUD widgets.** Open any Claude Code session in the repo and type `/<skill-name>` — Claude executes a multi-step recipe end-to-end (no step-by-step prompting), guided by the skill's `SKILL.md` under `.claude/skills/<name>/`. Every artefact in `apps/`, `workflows/`, and the Rainmeter HUD started life as a single slash command; the skill encodes the file layout, decorator stack, registry wiring, and tests so each new piece lands consistent with what's already there.
 
-#### Building the three core features
+#### Building the core features
 
-| What you're adding | Skill | What you get |
-|---|---|---|
-| **App integration** — wrap a REST API as a service + DTO + MCP tool, following the existing `apps/<name>/` template | `/create-new-service-app <name> [<openapi_url>]` | Full app scaffold mirroring the established pattern (`config.py`, `references/web/api/*.py`, `references/dto/*.py`, `mcp.py`, `tests/test_*.py`). With a spec URL it generates real endpoints from OpenAPI; without one it creates a skeleton. Pass `--workflow` to chain into a Celery task scaffold in one step. |
-| **Workflow / scheduled task** — the RPA layer (fetch from app A → transform → push to app B), with cron schedule and queue routing | `/create-new-workflow [<category>] <description_or_diagram>` | Parses a drawio diagram or text brief, resolves missing app + Python package dependencies, writes the task file under `workflows/<category>/tasks/`, registers the `'run-job--<name>'` Beat schedule entry with `kwargs` / `queue` / `expires`, and produces tests. Use `--merge <file>` to drop additional schedule entries into an existing tasks_config. |
-| **Workflow built visually outside Celery** — long branching automations or third-party connectors not in `apps/` | `/create-new-n8n-workflow <description_or_diagram>` | Builds and deploys directly into the local **n8n** instance at `localhost:5678` from a drawio diagram, XML/BPMN file, or free-text. n8n covers the cases where a visual editor or pre-built connector beats writing Python; Celery tasks call into n8n via webhooks when platform integration is needed. |
-| **HUD widget** — Rainmeter desktop heads-up display fed by an existing app or workflow | `/create-new-hud <title> <description_or_screenshot>` | Scaffolds `workflows/hud/tasks/hud_<slug>.py` from a description (or screenshot of the desired layout). Asks for header links, sample dump output, dimensions (with reference-widget defaults), `ScheduleCategory` (calendar visibility), Celery schedule, and queue. Wires the section dict, schedule entry, `__init__.py` import, README row, and any new app endpoint needed for the data fetch. |
-
-After adding a workflow or HUD task, re-run `/generate-registry` to refresh `frontend/registry.json` so the dashboard sees the new entry (the frontend also auto-runs this on startup).
-
-#### Other skills (operational, not feature-building)
-
-| Goal | Skill |
+| What you're adding | Skill |
 |---|---|
-| Discover and wire a Zapier action — quick connector when a full app integration is overkill | `/zapier-mcp <task_or_app> [--enable] [--workflow <name>]` |
-| Create a Kanban agent persona (YAML profile for `agents/projects/`) | `/create-new-kanban-profile <name>` |
-| Fork the platform into a customer-scoped baseline | `/create-new-fork-repository <name>` |
-| Deploy this machine (host or worker node) | `/deploy-harqis <host\|node> [-q queues] [-p profile]` |
-| Run tests across the suite or scoped to one app | `/run-tests [<app_or_path>]` |
-| Run a code-review or analysis prompt over the codebase | `/agent-prompt <prompt_name>` |
-| Stage, commit, and push with an inferred Conventional-Commit message | `/commit [<hint>]` |
+| **App integration** — REST API wrapper (service + DTO + MCP tool) under `apps/<name>/` | `/create-new-service-app <name> [<openapi_url>]` |
+| **Workflow / scheduled task** — Celery RPA chaining apps with cron + queue routing | `/create-new-workflow [<category>] <description_or_diagram>` |
+| **Visual workflow outside Celery** — n8n flows for branching automations or vendor connectors not in `apps/` | `/create-new-n8n-workflow <description_or_diagram>` |
+| **HUD widget** — Rainmeter desktop display fed by an app or workflow | `/create-new-hud <title> <description_or_screenshot>` |
+
+Re-run `/generate-registry` after a workflow or HUD task lands so the dashboard picks it up. See [`docs/info/SKILLS-INVENTORY.md`](docs/info/SKILLS-INVENTORY.md) for every skill (operations, deploy, agent profiles, Zapier wiring, commits, tests).
 
 #### Why skills, not docs
 
-Every skill is the executable form of an internal convention. Without skills, "add a new app" requires reading three docs, copying four files, registering five places, and hoping nothing was missed (the MCP bridge, the dependency detector, the dashboard registry, …). With `/create-new-service-app`, the convention IS the skill — when the file layout changes, the skill changes, and every future scaffold gets the new pattern for free. The `SKILL.md` files double as living documentation — they are the source of truth for "how do we do X here".
+Every skill is the executable form of an internal convention. With `/create-new-service-app`, the convention IS the skill — when the file layout changes, the skill changes, and every future scaffold gets the new pattern for free. The `SKILL.md` files double as living documentation — they are the source of truth for "how do we do X here".
 
 ---
 
