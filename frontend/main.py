@@ -103,16 +103,24 @@ async def health():
 
 
 @app.get("/debug/config")
-async def debug_config():
-    """Verify loaded settings (passwords masked). Remove this route in production."""
-    from config import _ENV_FILE
+async def debug_config(request: Request):
+    """Verify loaded settings (auth required, all sensitive values masked).
+
+    Previously unauthenticated and leaked the broker URI verbatim — now gated
+    behind the dashboard session and only confirms whether each value is set,
+    not its content. Closes audit finding H6.
+    """
+    user, redirect = _require_auth(request)
+    if redirect:
+        return redirect
+    from config import _APPS_ENV
     return {
-        "env_file": str(_ENV_FILE),
-        "env_file_exists": _ENV_FILE.exists(),
+        "env_file": str(_APPS_ENV),
+        "env_file_exists": _APPS_ENV.exists(),
         "flower_url": settings.flower_url,
-        "flower_user": settings.flower_user or "(empty)",
-        "flower_password": "***" if settings.flower_password else "(empty)",
-        "celery_broker": settings.celery_broker,
+        "flower_user_set": bool(settings.flower_user),
+        "flower_password_set": bool(settings.flower_password),
+        "celery_broker_set": bool(settings.celery_broker),
     }
 
 
