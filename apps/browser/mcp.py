@@ -1,6 +1,10 @@
 """Browser MCP tools — HTTP fetching and basic web scraping."""
+import ipaddress
 import logging
+import os
+import socket
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -13,6 +17,84 @@ _DEFAULT_HEADERS = {
     "Accept-Language": "en-US,en;q=0.5",
 }
 _TIMEOUT = 30
+
+
+def _allow_private_addresses() -> bool:
+    """Honor the BROWSER_MCP_ALLOW_PRIVATE escape hatch."""
+    return os.environ.get("BROWSER_MCP_ALLOW_PRIVATE", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
+def _assert_public_url(url: str) -> None:
+    """Reject URLs whose hostname resolves to a non-public IP.
+
+    Blocks Server-Side Request Forgery (SSRF) scenarios where the model is
+    coerced into fetching internal endpoints — cloud metadata services
+    (169.254.169.254), localhost (127.0.0.0/8, ::1), private LAN ranges
+    (10.0.0.0/8, 192.168.0.0/16, etc.), and link-local/multicast/reserved
+    IPs.
+
+    Set ``BROWSER_MCP_ALLOW_PRIVATE=1`` in the environment to opt out — useful
+    for scraping a deliberately self-hosted local service.
+
+    Raises ValueError if any DNS-resolved address for the URL is non-public.
+    Network resolution failures pass through unchanged so the caller still
+    sees a meaningful httpx error.
+    """
+    if _allow_private_addresses():
+        return
+
+    parsed = urlparse(url)
+    host = parsed.hostname
+    if not host:
+        raise ValueError(f"URL has no hostname: {url!r}")
+
+    # Resolve every A/AAAA record for the hostname. If the host already *is*
+    # an IP literal (or IPv6 in brackets), getaddrinfo will return it back
+    # unchanged so this still catches direct-IP attempts.
+    try:
+        infos = socket.getaddrinfo(host, parsed.port, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        # DNS failure — let httpx surface the real error to the caller.
+        return
+
+    for info in infos:
+        addr_str = info[4][0]
+        try:
+            ip = ipaddress.ip_address(addr_str)
+        except ValueError:
+            continue
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            raise ValueError(
+                f"URL {url!r} resolves to non-public IP {addr_str} "
+                "— refusing for SSRF safety. Set BROWSER_MCP_ALLOW_PRIVATE=1 "
+                "to override."
+            )
+
+
+def _make_redirect_guard():
+    """Return an httpx event-hook list that re-validates each redirect target.
+
+    httpx surfaces redirects via the response hook; we inspect the Location
+    header (resolved against the current URL) and call _assert_public_url
+    before httpx follows it.
+    """
+    def _on_response(response: httpx.Response) -> None:
+        if response.is_redirect:
+            location = response.headers.get("location")
+            if not location:
+                return
+            target = str(response.url.join(location))
+            _assert_public_url(target)
+    return {"response": [_on_response]}
 
 
 def register_browser_tools(mcp: FastMCP):
@@ -30,8 +112,13 @@ def register_browser_tools(mcp: FastMCP):
             follow_redirects: Follow HTTP redirects (default: True).
         """
         logger.info("Tool called: browser_fetch method=%s url=%s", method, url)
+        _assert_public_url(url)
         req_headers = {**_DEFAULT_HEADERS, **(headers or {})}
-        with httpx.Client(follow_redirects=follow_redirects, timeout=_TIMEOUT) as client:
+        with httpx.Client(
+            follow_redirects=follow_redirects,
+            timeout=_TIMEOUT,
+            event_hooks=_make_redirect_guard(),
+        ) as client:
             resp = client.request(method.upper(), url, headers=req_headers, content=body)
         out = {
             "success": resp.is_success,
@@ -56,7 +143,12 @@ def register_browser_tools(mcp: FastMCP):
             from bs4 import BeautifulSoup
         except ImportError:
             return {"success": False, "error": "beautifulsoup4 is required", "text": None}
-        with httpx.Client(follow_redirects=True, timeout=_TIMEOUT) as client:
+        _assert_public_url(url)
+        with httpx.Client(
+            follow_redirects=True,
+            timeout=_TIMEOUT,
+            event_hooks=_make_redirect_guard(),
+        ) as client:
             resp = client.get(url, headers=_DEFAULT_HEADERS)
         soup = BeautifulSoup(resp.text, "html.parser")
         for tag in soup(["script", "style", "noscript", "header", "footer", "nav"]):
@@ -85,8 +177,13 @@ def register_browser_tools(mcp: FastMCP):
             from bs4 import BeautifulSoup
         except ImportError:
             return {"success": False, "error": "beautifulsoup4 is required", "links": []}
-        from urllib.parse import urljoin, urlparse
-        with httpx.Client(follow_redirects=True, timeout=_TIMEOUT) as client:
+        from urllib.parse import urljoin
+        _assert_public_url(url)
+        with httpx.Client(
+            follow_redirects=True,
+            timeout=_TIMEOUT,
+            event_hooks=_make_redirect_guard(),
+        ) as client:
             resp = client.get(url, headers=_DEFAULT_HEADERS)
         soup = BeautifulSoup(resp.text, "html.parser")
         base_domain = urlparse(str(resp.url)).netloc
@@ -109,7 +206,12 @@ def register_browser_tools(mcp: FastMCP):
             url: The URL returning a JSON response.
         """
         logger.info("Tool called: browser_extract_json url=%s", url)
-        with httpx.Client(follow_redirects=True, timeout=_TIMEOUT) as client:
+        _assert_public_url(url)
+        with httpx.Client(
+            follow_redirects=True,
+            timeout=_TIMEOUT,
+            event_hooks=_make_redirect_guard(),
+        ) as client:
             resp = client.get(url, headers={**_DEFAULT_HEADERS, "Accept": "application/json"})
         if not resp.is_success:
             return {"success": False, "status_code": resp.status_code, "data": None}
@@ -128,7 +230,12 @@ def register_browser_tools(mcp: FastMCP):
             url: The URL to inspect.
         """
         logger.info("Tool called: browser_get_headers url=%s", url)
-        with httpx.Client(follow_redirects=True, timeout=_TIMEOUT) as client:
+        _assert_public_url(url)
+        with httpx.Client(
+            follow_redirects=True,
+            timeout=_TIMEOUT,
+            event_hooks=_make_redirect_guard(),
+        ) as client:
             resp = client.head(url, headers=_DEFAULT_HEADERS)
         headers = dict(resp.headers)
         logger.info("browser_get_headers status=%d", resp.status_code)
