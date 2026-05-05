@@ -12,12 +12,32 @@ from agents.projects.permissions.enforcer import PermissionDenied, PermissionEnf
 
 
 @pytest.mark.smoke
-def test_open_profile_allows_all_tools(open_profile):
+def test_open_profile_allows_ordinary_tools(open_profile):
     enforcer = PermissionEnforcer(open_profile)
-    # No exception = allowed
-    enforcer.check_tool("bash")
+    # An empty allowed list still permits ordinary tools by default.
     enforcer.check_tool("read_file")
     enforcer.check_tool("anything")
+
+
+@pytest.mark.smoke
+def test_open_profile_denies_dangerous_tools_without_explicit_allow(open_profile):
+    """H4: bash / write_file / git_clone require an explicit allowlist entry.
+
+    Even on an open profile (empty allowed list, empty denied list), these
+    tools are deny-by-default. Operators have to opt in by listing them in
+    tools.allowed.
+    """
+    enforcer = PermissionEnforcer(open_profile)
+    for dangerous in ("bash", "write_file", "git_clone"):
+        with pytest.raises(PermissionDenied):
+            enforcer.check_tool(dangerous)
+
+
+@pytest.mark.smoke
+def test_open_profile_allows_dangerous_tool_with_explicit_allow(open_profile):
+    open_profile.tools.allowed = ["bash"]
+    enforcer = PermissionEnforcer(open_profile)
+    enforcer.check_tool("bash")  # must not raise
 
 
 @pytest.mark.smoke

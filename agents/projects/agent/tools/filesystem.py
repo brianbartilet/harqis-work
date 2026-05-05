@@ -1,8 +1,10 @@
 """
 Filesystem and shell tools for agents.
 
-Cross-platform: uses pathlib.Path everywhere; bash/shell is invoked via
-subprocess with shell=True which works on both Windows and Linux.
+Cross-platform: uses pathlib.Path everywhere; the bash/shell tool tokenizes
+the command with shlex (POSIX rules off-Windows, Windows rules on Windows)
+and invokes subprocess with ``shell=False`` so shell-metacharacter injection
+in the command string cannot escape the intended argv.
 """
 
 from __future__ import annotations
@@ -10,6 +12,7 @@ from __future__ import annotations
 import fnmatch
 import logging
 import platform
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -218,8 +221,10 @@ class GrepTool(_BaseTool):
 class BashTool(_BaseTool):
     name = "bash"
     description = (
-        "Execute a shell command and return stdout + stderr. "
-        "On Windows this runs via cmd.exe; on Linux/macOS via /bin/bash. "
+        "Execute a single command (no shell-metacharacters) and return "
+        "stdout + stderr. The command is tokenized with shlex and run with "
+        "shell=False, so pipes, redirects, and chained commands are NOT "
+        "supported. Run separate steps as separate bash calls. "
         "Working directory is the agent's configured working_directory."
     )
     input_schema = {
@@ -227,7 +232,11 @@ class BashTool(_BaseTool):
         "properties": {
             "command": {
                 "type": "string",
-                "description": "Shell command to execute.",
+                "description": (
+                    "Command to execute. Tokenized via shlex; runs without "
+                    "a shell, so '|', '&&', '>', backticks, and $(...) do "
+                    "NOT work. Quote arguments containing spaces."
+                ),
             },
             "timeout": {
                 "type": "integer",
@@ -242,18 +251,25 @@ class BashTool(_BaseTool):
         self._cwd = cwd
 
     def run(self, command: str, timeout: int = 60) -> str:
+        # Defense in depth — registry should already have refused to register
+        # `bash` for profiles without an explicit allow, but the enforcer
+        # check is still the authoritative gate.
         self._enforcer.check_tool("bash")
         logger.debug("bash: %s", command)
         try:
+            argv = shlex.split(command, posix=not _IS_WINDOWS)
+        except ValueError as e:
+            return f"ERROR: failed to tokenize command ({e})"
+        if not argv:
+            return "ERROR: empty command"
+        try:
             result = subprocess.run(
-                command,
-                shell=True,
+                argv,
+                shell=False,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
                 cwd=self._cwd or None,
-                # On Windows, use cmd.exe; on POSIX use /bin/bash
-                executable=None if _IS_WINDOWS else "/bin/bash",
             )
             output = result.stdout
             if result.stderr:
@@ -261,6 +277,8 @@ class BashTool(_BaseTool):
             if result.returncode != 0:
                 output += f"\n[exit code: {result.returncode}]"
             return output.strip() or "(no output)"
+        except FileNotFoundError as e:
+            return f"ERROR: executable not found ({e})"
         except subprocess.TimeoutExpired:
             return f"ERROR: Command timed out after {timeout}s"
         except Exception as e:
