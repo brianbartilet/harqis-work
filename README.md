@@ -309,16 +309,37 @@ HARQIS drives a live desktop heads-up display using [Rainmeter](https://www.rain
 
 ![HARQIS Desktop HUD](docs/images/windows-hud-sample.png)
 
-| Panel | Data source | Update frequency |
-|-------|-------------|-----------------|
-| **Calendar Info** | Google Calendar — today's events and upcoming schedule | Every 15 min |
-| **TCG Orders** | TCG Marketplace — open/pending orders with pricing | Every hour |
-| **Budgeting Info** | YNAB — budget balances in PHP and SGD | Every 4 hours |
-| **Mouse Bindings** | iCUE Corsair Scimitar — active macro mappings | Every 15 sec |
-| **HUD Profiles** | Rainmeter — load/save profiles | Daily at midnight |
-| **Desktop Logs** | Claude — AI analysis of captured activity screenshots | Every 5 min |
-| **Failed Jobs Today** | Celery — tasks that errored since midnight | Every 15 min |
-| **Agents Core** | n8n + ElevenLabs — automation agent and voice assistant state | Daily at midnight |
+### Calendar-driven visibility
+
+**The HUD is wired with Google Calendar.** Every widget is tagged with a `ScheduleCategory` (defined in `apps/google_apps/references/constants.py`), and Rainmeter only shows widgets whose category matches the **current calendar event's name**. The dashboard reshapes itself across the day with no manual toggling — schedule a `"Finance | Investing | Business"` block on your calendar at 9am and the OANDA, PC Daily Sales, and YNAB widgets pop in; transition into a `"Career | Work"` block at 10am and the Jira board takes over; drop into a `"Mischief | Misdirection | Play"` block in the evening and the TCG widgets surface.
+
+| Category | Calendar event name | Widgets that surface |
+|---|---|---|
+| `PINNED` | (always visible — no event needed) | Calendar Info, Desktop Logs, HUD Profiles, Agents Core, Failed Jobs |
+| `WORK` | `"Career \| Work"` | Jira Board |
+| `FINANCE` | `"Finance \| Investing \| Business"` | OANDA Account, PC Daily Sales, Budgeting Info |
+| `PLAY` | `"Mischief \| Misdirection \| Play"` | TCG Orders, TCG Sell Cart |
+| `ORGANIZE` | `"Organization \| Everyman Skills"` | Mouse Bindings (also `WORK`) |
+| `DEACTIVATED` | — | Never auto-shows; manual trigger only |
+
+Widgets are wired to categories in each task's `@init_meter(..., schedule_categories=[ScheduleCategory.<X>])` decorator. A widget can list multiple categories (e.g. `Mouse Bindings` is both `ORGANIZE` and `WORK`) so it surfaces during any matching block.
+
+### Panel inventory
+
+| Panel | Visibility | Data source | Update frequency |
+|-------|-----------|-------------|------------------|
+| **Calendar Info** | Always | Google Calendar — today's events and upcoming schedule | Every 15 min |
+| **Desktop Logs** | Always | Claude Haiku — AI summary of captured activity screenshots | Every 5 min |
+| **HUD Profiles** | Always | Rainmeter / iCUE — active HUD profile selector and load/save | Daily at midnight |
+| **Agents Core** | Always | n8n + ElevenLabs — chat agent and voice assistant launcher | Daily at midnight |
+| **Failed Jobs Today** | Always | Celery — tasks that errored since midnight | Every 15 min |
+| **OANDA Account** | Finance block | OANDA — forex account NAV and open trades | Every 15 min (Mon–Fri) |
+| **PC Daily Sales** | Finance block | AppSheet `INVOICE` table — gross daily sales grouped by month, last 60 days, scrollable | Every hour |
+| **Budgeting Info** | Finance block | YNAB — budget balances in PHP and SGD with overspend warnings | Every 4 hours |
+| **Jira Board** | Work block | Jira Software — In-Review / In-Progress / Ready / In-Analysis tickets | Weekdays every hour |
+| **Mouse Bindings** | Organize + Work | iCUE Corsair Scimitar — active macro bindings for the foreground app | Every 15 sec |
+| **TCG Orders** | Play block | TCG Marketplace — open and pending orders with card art | Every hour |
+| **TCG Sell Cart** | Play block | TCG Marketplace — match listings to active want-to-buy bids | Sundays at midnight |
 
 ---
 

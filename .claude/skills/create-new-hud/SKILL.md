@@ -1,4 +1,4 @@
-Scaffold a new Rainmeter HUD widget under `workflows/hud/tasks/hud_<name>.py` from a description, copying the layout/dimension pattern of an existing widget. Wires up the section dict, the schedule entry in `tasks_config.py`, the import in `workflows/hud/__init__.py`, and the docs row in `workflows/hud/README.md`. Optionally adds a new `WorkflowQueue` value when the user wants the task on a dedicated queue.
+Scaffold a new Rainmeter HUD widget under `workflows/hud/tasks/hud_<name>.py` from a description, copying the layout/dimension pattern of an existing widget. Wires up the section dict, the schedule entry in `tasks_config.py`, the import in `workflows/hud/__init__.py`, the docs row in `workflows/hud/README.md`, and the panel row in the root `README.md` Desktop HUD section. Optionally adds a new `WorkflowQueue` value when the user wants the task on a dedicated queue.
 
 ## Arguments
 
@@ -479,6 +479,33 @@ And a row to the Task Files table:
 
 ---
 
+## Step 7b — Update the root `README.md` Desktop HUD section
+
+Open `README.md`, find the `## Desktop HUD` section. There are two things that may need updating:
+
+### 1. The panel inventory table (always)
+
+Append (or merge) a row:
+
+```markdown
+| **<HUD TITLE>** | <Visibility> | <App / data source> — <one-line what it shows> | <Schedule description> |
+```
+
+- **Panel name** = the `hud_item_name` passed to `@init_meter`, in display case (`PC DAILY SALES`, `OANDA ACCOUNT`, `JIRA BOARD`).
+- **Visibility** = `Always` (PINNED), `Finance block` (FINANCE), `Work block` (WORK), `Play block` (PLAY), `Organize block` (ORGANIZE), `Organize + Work` (combined), or `Manual only` (DEACTIVATED). Match what was passed to `schedule_categories=[ScheduleCategory.<X>]` in Step 4.
+- **Data source** = the source app(s) + a tight description (e.g. `AppSheet INVOICE table — 60-day gross sales by month`).
+- **Schedule** = the human-readable cadence (mirror Step 7's wording — `Every hour`, `Every 15 min (Mon–Fri)`, `Daily at midnight`, …).
+
+Place the row in its visibility group (Always-visible widgets up top, then Finance, Work, Organize, Play). Skip this step ONLY for background-capture tasks with no `@init_meter` (e.g. `take_screenshots_for_gpt_capture`, `build_summary_mouse_bindings`).
+
+### 2. The calendar-driven visibility table (only if the widget uses a category not already listed)
+
+The `## Desktop HUD → Calendar-driven visibility` section maps each `ScheduleCategory` to the widgets that surface for it. If the new widget uses a category that **already has rows in that table**, append the panel name to the existing row's "Widgets that surface" cell — don't add a new row. If the widget uses a brand-new category (rare; usually the existing six cover everything), add a new row in the visibility-table.
+
+If the panel inventory has drifted (panels exist in `tasks_config.py` but not in the README), add the missing rows in the same edit so the inventory stays complete.
+
+---
+
 ## Step 8 — Write tests (mandatory)
 
 Create `workflows/hud/tests/test_hud_<slug>.py`. Mirror the structure used by `workflows/hud/tests/test_hud_jira.py` and `test_hud_tcg.py` — **integration tests at the top, unit tests below**, no test classes, function names use the `test__<function_name>` double-underscore convention.
@@ -632,6 +659,10 @@ HUD widget created. Manual steps to activate:
   [ ] workflows/hud/__init__.py imports workflows.hud.tasks.hud_<slug>
   [ ] workflows/hud/tasks_config.py contains 'run-job--show_<slug>' entry
   [ ] Restart Celery Beat AND the worker
+
+  Docs (Step 7 + 7b):
+  [ ] workflows/hud/README.md has Scheduled Tasks + Task Files rows
+  [ ] Root README.md Desktop HUD panel table has the new panel row
 
   Visual sanity (Step 9):
   [ ] Trigger one manual run: celery -A core.apps.sprout call workflows.hud.tasks.hud_<slug>.show_<slug>
