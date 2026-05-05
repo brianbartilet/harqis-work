@@ -11,7 +11,8 @@ References:
 Known Issues:
 - Potential issues with Celery and Eventlet: https://github.com/eventlet/eventlet/issues/616
 """
-from kombu import Queue
+from celery.signals import beat_init, worker_init
+from kombu import Exchange, Queue
 from kombu.common import Broadcast
 
 from core.apps.sprout.app.celery import SPROUT
@@ -68,3 +69,36 @@ SPROUT.conf.task_routes = {
     "workflows.hud.tasks.broadcast_*": {"queue": WorkflowQueue.HUD_BROADCAST.value},
     "workflows.hud.tasks.*":           {"queue": WorkflowQueue.HUD.value},
 }
+
+
+# ── Broadcast exchange pre-declaration ────────────────────────────────────────
+# Kombu's Broadcast(...) creates the fanout exchange ON THE CONSUMER SIDE — i.e.
+# only when a worker subscribes. If Beat publishes before any worker has
+# subscribed (or while the worker is restarting), RabbitMQ returns 404
+# NOT_FOUND, the AMQP channel dies, and EVERY subsequent publish in the same
+# tick fails — even unrelated direct-queue tasks like `show_mouse_bindings`,
+# because they reuse the poisoned channel. Declaring the fanout exchanges on
+# Beat (and worker) startup avoids that cascade.
+_BROADCAST_QUEUES = (
+    WorkflowQueue.DEFAULT_BROADCAST.value,
+    WorkflowQueue.HUD_BROADCAST.value,
+    WorkflowQueue.WORKERS_BROADCAST.value,
+    WorkflowQueue.AGENT_BROADCAST.value,
+)
+
+
+def _ensure_broadcast_exchanges(app):
+    with app.connection_or_acquire() as conn:
+        channel = conn.default_channel
+        for name in _BROADCAST_QUEUES:
+            Exchange(name, type='fanout', durable=True)(channel).declare()
+
+
+@beat_init.connect
+def _declare_on_beat(sender=None, **_):
+    _ensure_broadcast_exchanges(sender.app)
+
+
+@worker_init.connect
+def _declare_on_worker(sender=None, **_):
+    _ensure_broadcast_exchanges(sender.app)

@@ -46,16 +46,6 @@ WORKFLOWS_DESKTOP = {
         },
     },
 
-    'run-job--git_pull_on_paths_broadcast': {
-        'task': 'workflows.desktop.tasks.commands.git_pull_on_paths',
-        'schedule': crontab(hour='*/4'),
-        'args': [],
-        "options": {
-            "expires": 60 * 60 * 4,
-            "queue": WorkflowQueue.DEFAULT_BROADCAST
-        },
-    },
-
     'run-job--set_desktop_hud_to_back': {
         'task': 'workflows.desktop.tasks.commands.set_desktop_hud_to_back',
         'schedule': crontab(minute='*/30'),
