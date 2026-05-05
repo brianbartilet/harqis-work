@@ -17,6 +17,10 @@ _INSECURE_DEFAULTS = {
 }
 
 
+class InsecureDefaultError(RuntimeError):
+    """Raised at startup when a critical secret is left at its default value."""
+
+
 class Settings(BaseSettings):
     # APP_USERNAME / APP_PASSWORD in apps.env (field name uppercased = env var name)
     app_username: str  = "admin"
@@ -48,12 +52,21 @@ def get_settings() -> Settings:
 
 
 def warn_insecure_defaults(settings: Settings) -> None:
-    """Log warnings if the app is still using default credentials or secret key."""
-    for field, default in _INSECURE_DEFAULTS.items():
-        if getattr(settings, field) == default:
-            logger.warning(
-                "SECURITY: %s is set to the default value — change it before "
-                "exposing this app to the network. Set %s in .env/apps.env",
-                field,
-                field.upper(),
-            )
+    """Refuse to start when a critical secret is at its default value.
+
+    Previously this only logged a warning; the audit (data/SECURITY_AUDIT.md,
+    finding H1) flagged that as insufficient — a host running with
+    `admin/changeme` is openly exploitable from anywhere it's reachable.
+    Both `app_password` and `secret_key` are now hard requirements.
+    """
+    breached = [
+        field for field, default in _INSECURE_DEFAULTS.items()
+        if getattr(settings, field) == default
+    ]
+    if breached:
+        env_vars = ", ".join(f.upper() for f in breached)
+        raise InsecureDefaultError(
+            "Refusing to start the dashboard: the following critical secrets "
+            "are still at their default values — set them in .env/apps.env "
+            f"before starting: {env_vars}"
+        )

@@ -15,6 +15,7 @@ GET  /health                        → simple health check
 from pathlib import Path
 from typing import Optional
 
+import hmac
 import logging
 import os
 import subprocess
@@ -147,7 +148,10 @@ async def login(
             status_code=429,
         )
 
-    if username == settings.app_username and password == settings.app_password:
+    # Constant-time compare for both fields to avoid leaking timing signals.
+    username_ok = hmac.compare_digest(username, settings.app_username)
+    password_ok = hmac.compare_digest(password, settings.app_password)
+    if username_ok and password_ok:
         clear_failed_logins(ip)
         token = create_session_token(username)
         response = RedirectResponse("/dashboard", status_code=302)
