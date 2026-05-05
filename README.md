@@ -311,7 +311,7 @@ HARQIS drives a live desktop heads-up display using [Rainmeter](https://www.rain
 
 ### Calendar-driven visibility
 
-**The HUD is wired with Google Calendar.** Every widget is tagged with a `ScheduleCategory` (defined in `apps/google_apps/references/constants.py`), and Rainmeter only shows widgets whose category matches the **current calendar event's name**. The dashboard reshapes itself across the day with no manual toggling — schedule a `"Finance | Investing | Business"` block on your calendar at 9am and the OANDA, PC Daily Sales, and YNAB widgets pop in; transition into a `"Career | Work"` block at 10am and the Jira board takes over; drop into a `"Mischief | Misdirection | Play"` block in the evening and the TCG widgets surface.
+**The HUD is wired with Google Calendar.** Each widget carries a `ScheduleCategory`; Rainmeter only renders widgets whose category matches the **current calendar event's name**. Block `"Finance | Investing | Business"` and the finance widgets surface; switch to `"Career | Work"` and the Jira board takes over. The dashboard reshapes itself across the day, no manual toggling.
 
 | Category | Calendar event name | Widgets that surface |
 |---|---|---|
