@@ -86,7 +86,13 @@ class ToolRegistry:
         if not mcp_apps:
             return
         from agents.projects.agent.tools.mcp_bridge import build_bridge
-        self._mcp_bridge = build_bridge(mcp_apps, scoped_secrets=self._scoped_secrets)
+        # Pass the enforcer so the bridge can run permissions.network checks
+        # for URL-bearing MCP tool calls (H2).
+        self._mcp_bridge = build_bridge(
+            mcp_apps,
+            scoped_secrets=self._scoped_secrets,
+            enforcer=self._enforcer,
+        )
         if self._mcp_bridge:
             logger.debug(
                 "MCP bridge loaded apps: %s (%d tools)",

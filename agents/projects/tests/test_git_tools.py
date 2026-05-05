@@ -200,6 +200,9 @@ def test_git_push_success(enforcer, full_git_profile):
     with patch("agents.projects.agent.tools.git_tools.subprocess.run") as mock_run:
         mock_run.side_effect = [
             _make_completed(0, stdout="agent/c1/fix"),  # branch --show-current
+            # H2: GitPushTool now resolves remote.origin.url and passes the
+            # host through PermissionEnforcer.check_network before pushing.
+            _make_completed(0, stdout="https://github.com/owner/repo.git"),
             _make_completed(0, stdout="Branch set up to track origin/agent/c1/fix"),
         ]
         result = tool.run()

@@ -11,6 +11,7 @@ import logging
 import os
 import subprocess
 from typing import Optional
+from urllib.parse import urlparse
 
 from agents.projects.permissions.enforcer import PermissionEnforcer
 from agents.projects.profiles.schema import GitPermission
@@ -35,6 +36,46 @@ def _validate_git_arg(arg: str, name: str) -> None:
             f"Git argument {name!r}={arg!r} starts with '-' and would be parsed "
             "as an option — refusing for argument-injection safety."
         )
+
+
+def _host_from_git_url(url: str) -> Optional[str]:
+    """Extract a hostname from a git remote URL.
+
+    Handles both SSH-style (``git@github.com:user/repo.git``) and URL-style
+    (``https://github.com/user/repo.git``) remotes. Returns None if no
+    hostname can be parsed.
+    """
+    if not url:
+        return None
+    # SSH-style: user@host:path/to/repo.git
+    if "://" not in url and "@" in url and ":" in url:
+        try:
+            after_at = url.split("@", 1)[1]
+            host = after_at.split(":", 1)[0]
+            return host or None
+        except (IndexError, ValueError):
+            return None
+    parsed = urlparse(url)
+    return parsed.hostname
+
+
+def _enforce_remote_network(enforcer: PermissionEnforcer, cwd: str, remote: str = "origin") -> None:
+    """Resolve the named git remote's URL and run it through the network ACL (H2).
+
+    Silently no-ops if the remote isn't configured or the URL has no parseable
+    host — git will surface the real error itself.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "config", "--get", f"remote.{remote}.url"],
+            capture_output=True, text=True, cwd=cwd, timeout=10,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return
+    url = (result.stdout or "").strip()
+    host = _host_from_git_url(url)
+    if host:
+        enforcer.check_network(host)
 
 
 def _run_git(
@@ -265,6 +306,10 @@ class GitPushTool(_BaseGitTool):
 
         _validate_git_arg(branch, "branch")
         self._enforcer.check_git_push(branch)
+        # Resolve the remote URL and run it through the profile's network
+        # ACL (H2). Pushing to a denied host now fails up-front with
+        # PermissionDenied instead of silently going out the wire.
+        _enforce_remote_network(self._enforcer, cwd, remote="origin")
 
         args = ["push", "--set-upstream", "origin", branch]
         if force:
