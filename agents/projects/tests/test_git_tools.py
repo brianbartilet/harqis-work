@@ -188,7 +188,8 @@ def test_git_commit_specific_paths(enforcer, full_git_profile):
         mock_run.side_effect = capture
         tool.run(message="partial commit", paths=["src/foo.py", "src/bar.py"])
 
-    assert_that(staged_args[0], equal_to(["git", "add", "src/foo.py", "src/bar.py"]))
+    # `--` separates options from positional paths to block argument injection (M4).
+    assert_that(staged_args[0], equal_to(["git", "add", "--", "src/foo.py", "src/bar.py"]))
 
 
 # ── GitPushTool ───────────────────────────────────────────────────────────────

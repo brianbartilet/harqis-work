@@ -21,6 +21,22 @@ _DEFAULT_AUTHOR_NAME = "claude[bot]"
 _DEFAULT_AUTHOR_EMAIL = "claude[bot]@users.noreply.github.com"
 
 
+def _validate_git_arg(arg: str, name: str) -> None:
+    """Reject user-supplied git arguments that look like options.
+
+    Without this guard, an attacker-controlled branch / URL / path argument
+    can mutate into a git option (CVE-2017-1000117 family). Always pair this
+    with a ``--`` separator before positional arguments to subprocess.
+    """
+    if not isinstance(arg, str) or not arg:
+        raise ValueError(f"Git argument {name!r} must be a non-empty string")
+    if arg.startswith("-"):
+        raise ValueError(
+            f"Git argument {name!r}={arg!r} starts with '-' and would be parsed "
+            "as an option — refusing for argument-injection safety."
+        )
+
+
 def _run_git(
     args: list[str],
     cwd: str,
@@ -109,7 +125,13 @@ class GitCreateBranchTool(_BaseGitTool):
 
     def run(self, branch: str, path: str = ".") -> str:
         self._enforcer.check_tool("git_create_branch")
-        rc, output = _run_git(["checkout", "-b", branch], cwd=path or self._cwd or ".")
+        _validate_git_arg(branch, "branch")
+        # `--` keeps a malicious branch name like "--upload-pack=evil" out
+        # of git's option parser.
+        rc, output = _run_git(
+            ["checkout", "-b", branch, "--"],
+            cwd=path or self._cwd or ".",
+        )
         if rc != 0:
             return f"ERROR creating branch '{branch}': {output}"
         return f"Created and switched to branch: {branch}"
@@ -169,7 +191,13 @@ class GitCommitTool(_BaseGitTool):
         cwd = path or self._cwd or "."
         author_name, author_email = self._author()
 
-        stage_args = ["add"] + (paths if paths else ["."])
+        if paths:
+            for p in paths:
+                _validate_git_arg(p, "paths[]")
+            # `--` keeps user-supplied paths out of git's option parser.
+            stage_args = ["add", "--"] + paths
+        else:
+            stage_args = ["add", "."]
         rc, out = _run_git(stage_args, cwd=cwd, author_name=author_name, author_email=author_email)
         if rc != 0:
             return f"ERROR staging files: {out}"
@@ -235,6 +263,7 @@ class GitPushTool(_BaseGitTool):
             _, branch_out = _run_git(["branch", "--show-current"], cwd=cwd)
             branch = branch_out.strip()
 
+        _validate_git_arg(branch, "branch")
         self._enforcer.check_git_push(branch)
 
         args = ["push", "--set-upstream", "origin", branch]
