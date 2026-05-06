@@ -23,7 +23,7 @@ All tasks run on the `hud` queue (configured via `SPROUT.conf.task_routes`).
 | `take_screenshots_for_gpt_capture` | Every 10 min | Desktop screenshot capture |
 | `show_calendar_information` | Every 15 min | Google Calendar events for today |
 | `get_failed_jobs` | Every 15 min | Failed Celery task list |
-| `show_mouse_bindings` | Every 15 sec | Mouse shortcut bindings display |
+| `show_mouse_bindings` | Every 60 sec | Mouse shortcut bindings display |
 | `build_summary_mouse_bindings` | Daily at 1am | Summary of daily mouse bindings |
 | `show_hud_profiles` | Daily at midnight | Active iCUE/Rainmeter HUD profiles |
 | `show_ynab_budgets_info` | Every 4 hours | YNAB budget balances |

@@ -337,7 +337,7 @@ Widgets are wired to categories in each task's `@init_meter(..., schedule_catego
 | **PC Daily Sales** | Finance block | AppSheet `INVOICE` table — gross daily sales grouped by month, last 60 days, scrollable | Every hour |
 | **Budgeting Info** | Finance block | YNAB — budget balances in PHP and SGD with overspend warnings | Every 4 hours |
 | **Jira Board** | Work block | Jira Software — In-Review / In-Progress / Ready / In-Analysis tickets | Weekdays every hour |
-| **Mouse Bindings** | Organize + Work | iCUE Corsair Scimitar — active macro bindings for the foreground app | Every 15 sec |
+| **Mouse Bindings** | Organize + Work | iCUE Corsair Scimitar — active macro bindings for the foreground app | Every 60 sec |
 | **TCG Orders** | Play block | TCG Marketplace — open and pending orders with card art | Every hour |
 | **TCG Sell Cart** | Play block | TCG Marketplace — match listings to active want-to-buy bids | Sundays at midnight |
 
