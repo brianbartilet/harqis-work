@@ -40,7 +40,7 @@ disable = ["kanban"]
 
 [windows-work-all]
 role = "host"
-queues = ["default", "hud", "tcg", "peon", "adhoc", "default_broadcast"]
+queues = ["host", "default", "hud", "tcg", "peon", "adhoc", "default_broadcast"]
 disable = ["kanban"]
 
 
