@@ -19,6 +19,21 @@ class PermissionDenied(Exception):
     """Raised when an agent attempts an action outside its declared permissions."""
 
 
+# Tools that are dangerous enough that they must be *explicitly* listed in
+# ``profile.tools.allowed`` to be usable. An empty `allowed` list (which the
+# rest of the system treats as "no restriction") does NOT grant these. Adding
+# a tool here flips its default from allow-by-default to deny-by-default.
+#
+# - bash:       arbitrary command execution, even with shell=False. (H4)
+# - write_file: full-disk-write authority subject only to fs.allow/deny.
+# - git_clone:  pulls remote code that can later be executed.
+_REQUIRES_EXPLICIT_ALLOW: frozenset[str] = frozenset({
+    "bash",
+    "write_file",
+    "git_clone",
+})
+
+
 class PermissionEnforcer:
     def __init__(self, profile: AgentProfile):
         self.profile = profile
@@ -30,6 +45,15 @@ class PermissionEnforcer:
         if tool_name in t.denied:
             raise PermissionDenied(
                 f"Tool '{tool_name}' is explicitly denied by profile '{self.profile.id}'"
+            )
+        # Dangerous tools are deny-by-default — they must appear in `allowed`
+        # explicitly, regardless of whether the rest of the allowed list is
+        # set or empty. (H4)
+        if tool_name in _REQUIRES_EXPLICIT_ALLOW and tool_name not in t.allowed:
+            raise PermissionDenied(
+                f"Tool '{tool_name}' is in the deny-by-default list and is not "
+                f"explicitly allowed by profile '{self.profile.id}'. "
+                f"Add it to tools.allowed if you really need it."
             )
         if t.allowed and tool_name not in t.allowed:
             raise PermissionDenied(

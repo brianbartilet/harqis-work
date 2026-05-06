@@ -328,7 +328,8 @@ def build_parser() -> argparse.ArgumentParser:
     sc = sub.add_parser("serve-config", help="Serve resolved config over HTTP (host)")
     sc.add_argument("--port", type=int, help="Port (default: env CONFIG_SERVER_PORT or 8765)")
     sc.add_argument("--token", help="Bearer token (default: env CONFIG_SERVER_TOKEN)")
-    sc.add_argument("--host", default="0.0.0.0", help="Bind address")
+    sc.add_argument("--host", default="127.0.0.1",
+                    help="Bind address (default 127.0.0.1; pass 0.0.0.0 only if remote workers need access)")
     sc.add_argument("--remote-broker-url", help="Override CELERY_BROKER_URL for the served dict")
     sc.set_defaults(func=cmd_serve_config)
 

@@ -11,6 +11,7 @@ import logging
 import os
 import subprocess
 from typing import Optional
+from urllib.parse import urlparse
 
 from agents.projects.permissions.enforcer import PermissionEnforcer
 from agents.projects.profiles.schema import GitPermission
@@ -19,6 +20,62 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_AUTHOR_NAME = "claude[bot]"
 _DEFAULT_AUTHOR_EMAIL = "claude[bot]@users.noreply.github.com"
+
+
+def _validate_git_arg(arg: str, name: str) -> None:
+    """Reject user-supplied git arguments that look like options.
+
+    Without this guard, an attacker-controlled branch / URL / path argument
+    can mutate into a git option (CVE-2017-1000117 family). Always pair this
+    with a ``--`` separator before positional arguments to subprocess.
+    """
+    if not isinstance(arg, str) or not arg:
+        raise ValueError(f"Git argument {name!r} must be a non-empty string")
+    if arg.startswith("-"):
+        raise ValueError(
+            f"Git argument {name!r}={arg!r} starts with '-' and would be parsed "
+            "as an option — refusing for argument-injection safety."
+        )
+
+
+def _host_from_git_url(url: str) -> Optional[str]:
+    """Extract a hostname from a git remote URL.
+
+    Handles both SSH-style (``git@github.com:user/repo.git``) and URL-style
+    (``https://github.com/user/repo.git``) remotes. Returns None if no
+    hostname can be parsed.
+    """
+    if not url:
+        return None
+    # SSH-style: user@host:path/to/repo.git
+    if "://" not in url and "@" in url and ":" in url:
+        try:
+            after_at = url.split("@", 1)[1]
+            host = after_at.split(":", 1)[0]
+            return host or None
+        except (IndexError, ValueError):
+            return None
+    parsed = urlparse(url)
+    return parsed.hostname
+
+
+def _enforce_remote_network(enforcer: PermissionEnforcer, cwd: str, remote: str = "origin") -> None:
+    """Resolve the named git remote's URL and run it through the network ACL (H2).
+
+    Silently no-ops if the remote isn't configured or the URL has no parseable
+    host — git will surface the real error itself.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "config", "--get", f"remote.{remote}.url"],
+            capture_output=True, text=True, cwd=cwd, timeout=10,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return
+    url = (result.stdout or "").strip()
+    host = _host_from_git_url(url)
+    if host:
+        enforcer.check_network(host)
 
 
 def _run_git(
@@ -109,7 +166,13 @@ class GitCreateBranchTool(_BaseGitTool):
 
     def run(self, branch: str, path: str = ".") -> str:
         self._enforcer.check_tool("git_create_branch")
-        rc, output = _run_git(["checkout", "-b", branch], cwd=path or self._cwd or ".")
+        _validate_git_arg(branch, "branch")
+        # `--` keeps a malicious branch name like "--upload-pack=evil" out
+        # of git's option parser.
+        rc, output = _run_git(
+            ["checkout", "-b", branch, "--"],
+            cwd=path or self._cwd or ".",
+        )
         if rc != 0:
             return f"ERROR creating branch '{branch}': {output}"
         return f"Created and switched to branch: {branch}"
@@ -169,7 +232,13 @@ class GitCommitTool(_BaseGitTool):
         cwd = path or self._cwd or "."
         author_name, author_email = self._author()
 
-        stage_args = ["add"] + (paths if paths else ["."])
+        if paths:
+            for p in paths:
+                _validate_git_arg(p, "paths[]")
+            # `--` keeps user-supplied paths out of git's option parser.
+            stage_args = ["add", "--"] + paths
+        else:
+            stage_args = ["add", "."]
         rc, out = _run_git(stage_args, cwd=cwd, author_name=author_name, author_email=author_email)
         if rc != 0:
             return f"ERROR staging files: {out}"
@@ -235,7 +304,12 @@ class GitPushTool(_BaseGitTool):
             _, branch_out = _run_git(["branch", "--show-current"], cwd=cwd)
             branch = branch_out.strip()
 
+        _validate_git_arg(branch, "branch")
         self._enforcer.check_git_push(branch)
+        # Resolve the remote URL and run it through the profile's network
+        # ACL (H2). Pushing to a denied host now fails up-front with
+        # PermissionDenied instead of silently going out the wire.
+        _enforce_remote_network(self._enforcer, cwd, remote="origin")
 
         args = ["push", "--set-upstream", "origin", branch]
         if force:

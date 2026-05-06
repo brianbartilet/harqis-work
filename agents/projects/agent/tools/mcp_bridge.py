@@ -30,10 +30,25 @@ import contextlib
 import logging
 import os
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP
 
+from agents.projects.permissions.enforcer import PermissionDenied, PermissionEnforcer
+
 logger = logging.getLogger(__name__)
+
+
+# Field names in MCP tool input schemas that we treat as network destinations.
+# When present (and non-empty) in the runtime call inputs, the bridge extracts
+# their hostname and invokes ``enforcer.check_network(host)`` before letting
+# the tool run. This is how the H2 wiring mitigates the previously-decorative
+# ``permissions.network.{allow,deny}`` settings.
+_URL_INPUT_FIELDS: frozenset[str] = frozenset({
+    "url",
+    "uri",
+    "endpoint",
+})
 
 # Maps profile mcp_apps key → register function import path
 _APP_LOADERS: dict[str, str] = {
@@ -97,10 +112,16 @@ class McpBridge:
     as Anthropic tool definitions + Python callables.
     """
 
-    def __init__(self, app_keys: list[str], scoped_secrets: Optional[dict[str, str]] = None):
+    def __init__(
+        self,
+        app_keys: list[str],
+        scoped_secrets: Optional[dict[str, str]] = None,
+        enforcer: Optional[PermissionEnforcer] = None,
+    ):
         self._mcp = FastMCP("kanban-agent-bridge")
         self._loaded_apps: list[str] = []
         self._scoped_secrets: dict[str, str] = scoped_secrets or {}
+        self._enforcer = enforcer
         for key in app_keys:
             self._load_app(key)
 
@@ -133,20 +154,46 @@ class McpBridge:
             })
         return defs
 
+    def _enforce_network(self, name: str, inputs: dict[str, Any]) -> None:
+        """If the tool inputs include a URL-like field, run it through the
+        profile's network ACL before allowing the call (H2). Tools without
+        any URL/uri/endpoint argument are left untouched.
+        """
+        if self._enforcer is None:
+            return
+        for field in _URL_INPUT_FIELDS:
+            value = inputs.get(field)
+            if not isinstance(value, str) or not value:
+                continue
+            host = urlparse(value).hostname
+            if not host:
+                continue
+            self._enforcer.check_network(host)
+            logger.debug("MCP network check passed: tool=%s host=%s", name, host)
+
     def call(self, name: str, inputs: dict[str, Any]) -> Any:
         """
         Call a tool by name with given inputs.
 
         Injects scoped secrets into os.environ for the duration of the
-        call, then restores the original environment.
+        call, then restores the original environment. Before running the
+        tool, applies the agent profile's network ACL (H2) for tools whose
+        inputs include a URL-shaped field.
         """
         tool = self._mcp._tool_manager._tools.get(name)
         if not tool:
             return f"Unknown MCP tool: {name}"
+        # Network ACL is enforced *before* secrets are injected, so a denied
+        # destination can't capture credentials via a side-effect log.
+        self._enforce_network(name, inputs)
         try:
             with _injected_env(self._scoped_secrets):
                 result = tool.fn(**inputs)
             return result
+        except PermissionDenied:
+            # Surface PermissionDenied unmodified so the agent loop can render
+            # the standard PERMISSION DENIED tool_result.
+            raise
         except Exception as e:
             logger.error("MCP tool '%s' error: %s", name, e)
             raise
@@ -162,8 +209,9 @@ class McpBridge:
 def build_bridge(
     mcp_apps: list[str],
     scoped_secrets: Optional[dict[str, str]] = None,
+    enforcer: Optional[PermissionEnforcer] = None,
 ) -> McpBridge | None:
     """Build an McpBridge from a list of app keys. Returns None if list is empty."""
     if not mcp_apps:
         return None
-    return McpBridge(mcp_apps, scoped_secrets=scoped_secrets)
+    return McpBridge(mcp_apps, scoped_secrets=scoped_secrets, enforcer=enforcer)

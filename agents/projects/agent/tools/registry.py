@@ -86,7 +86,13 @@ class ToolRegistry:
         if not mcp_apps:
             return
         from agents.projects.agent.tools.mcp_bridge import build_bridge
-        self._mcp_bridge = build_bridge(mcp_apps, scoped_secrets=self._scoped_secrets)
+        # Pass the enforcer so the bridge can run permissions.network checks
+        # for URL-bearing MCP tool calls (H2).
+        self._mcp_bridge = build_bridge(
+            mcp_apps,
+            scoped_secrets=self._scoped_secrets,
+            enforcer=self._enforcer,
+        )
         if self._mcp_bridge:
             logger.debug(
                 "MCP bridge loaded apps: %s (%d tools)",
@@ -169,14 +175,19 @@ class ToolRegistry:
                 continue
             result.append(tool["definition"])
 
-        # MCP tools — added on top; denied list still applies
+        # MCP tools — same allowed/denied semantics as native tools.
+        # When a profile sets `tools.allowed`, MCP tools that aren't on the
+        # whitelist are hidden from the definitions list shown to Claude.
+        # This matches the runtime behavior of PermissionEnforcer.check_tool
+        # (which already denies non-whitelisted tools regardless of source),
+        # so advertising them would just invite tool calls that fail.
         if self._mcp_bridge:
             for defn in self._mcp_bridge.definitions():
                 name = defn["name"]
                 if name in denied:
                     continue
-                # MCP tools are included unless explicitly denied
-                # (allowed list only restricts native tools when set)
+                if allowed and name not in allowed:
+                    continue
                 result.append(defn)
 
         return result

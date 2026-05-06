@@ -9,6 +9,24 @@ from mcp.server.fastmcp import FastMCP
 logger = logging.getLogger("harqis-mcp.git")
 
 
+def _validate_git_arg(arg: str, name: str) -> None:
+    """Reject user-supplied git arguments that look like options.
+
+    Without this guard, an attacker-controlled branch / URL / path argument
+    can mutate into a git option (CVE-2017-1000117 family). Always pair this
+    with a ``--`` separator before positional arguments to subprocess.
+
+    Empty strings and non-strings are also rejected.
+    """
+    if not isinstance(arg, str) or not arg:
+        raise ValueError(f"Git argument {name!r} must be a non-empty string")
+    if arg.startswith("-"):
+        raise ValueError(
+            f"Git argument {name!r}={arg!r} starts with '-' and would be parsed "
+            "as an option — refusing for argument-injection safety."
+        )
+
+
 def _run(args: list[str], cwd: Optional[str] = None, timeout: int = 60) -> dict:
     try:
         result = subprocess.run(
@@ -105,10 +123,13 @@ def register_git_tools(mcp: FastMCP):
             create: Create the branch if it does not exist (default: False).
         """
         logger.info("Tool called: git_checkout branch=%s create=%s", branch, create)
+        _validate_git_arg(branch, "branch")
+        # `--` separates options from positional args so a branch named
+        # "--upload-pack=evil" can't be parsed as a git option.
         args = ["checkout"]
         if create:
             args.append("-b")
-        args.append(branch)
+        args += ["--", branch]
         result = _run(args, cwd=path)
         logger.info("git_checkout success=%s", result["success"])
         return result
@@ -123,6 +144,9 @@ def register_git_tools(mcp: FastMCP):
             branch: Branch to pull (default: current branch).
         """
         logger.info("Tool called: git_pull path=%s remote=%s", path, remote)
+        _validate_git_arg(remote, "remote")
+        if branch:
+            _validate_git_arg(branch, "branch")
         args = ["pull", remote]
         if branch:
             args.append(branch)
@@ -201,6 +225,9 @@ def register_git_tools(mcp: FastMCP):
             set_upstream: Set the upstream tracking reference (default: False).
         """
         logger.info("Tool called: git_push path=%s remote=%s", path, remote)
+        _validate_git_arg(remote, "remote")
+        if branch:
+            _validate_git_arg(branch, "branch")
         args = ["push", remote]
         if branch:
             args.append(branch)
@@ -220,9 +247,17 @@ def register_git_tools(mcp: FastMCP):
             depth:       Shallow clone depth — number of commits to fetch (default: full clone).
         """
         logger.info("Tool called: git_clone url=%s destination=%s", url, destination)
-        args = ["clone", url]
+        _validate_git_arg(url, "url")
+        if destination:
+            _validate_git_arg(destination, "destination")
+        # Build options first, then `--`, then positional args. git accepts
+        # the URL after `--`, so this is the safe form even though it differs
+        # from the typical "git clone URL DEST" CLI mental model.
+        args = ["clone"]
         if depth:
             args += ["--depth", str(depth)]
+        args.append("--")
+        args.append(url)
         if destination:
             args.append(destination)
         result = _run(args, timeout=300)

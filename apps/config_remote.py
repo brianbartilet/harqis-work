@@ -14,7 +14,7 @@ Environment variables consumed by each backend:
 
   HTTP backend (CONFIG_SOURCE=http):
     CONFIG_SERVER_URL    Base URL of the config server (default: http://localhost:8765)
-    CONFIG_SERVER_TOKEN  Bearer token for auth         (default: no auth)
+    CONFIG_SERVER_TOKEN  Bearer token for auth         (REQUIRED — server refuses to start without it)
     CONFIG_SERVER_PORT   Port the server listens on    (default: 8765)
 
 Host-side CLI (run on the machine that has apps.env + apps_config.yaml):
@@ -128,17 +128,32 @@ def run_config_server(
     data: Dict[str, Any],
     port: int = _HTTP_PORT,
     token: str = _HTTP_TOKEN,
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
 ) -> None:
     """
     Start a FastAPI config HTTP server (blocking).
 
     Endpoints:
-      GET /config  → full resolved config JSON  (bearer-token protected if token is set)
+      GET /config  → full resolved config JSON  (bearer-token protected, ALWAYS)
       GET /health  → liveness check with section list
+
+    Secure-by-default behavior:
+      * Refuses to start unless a non-empty bearer ``token`` is supplied
+        (via the CONFIG_SERVER_TOKEN env var or ``--token`` CLI flag).
+      * Defaults bind address to ``127.0.0.1`` to avoid accidentally exposing
+        the resolved config (which contains app secrets) on a LAN/WAN
+        interface. Pass ``host="0.0.0.0"`` deliberately if remote workers
+        need to reach this host.
 
     Call this on the HOST MACHINE only. Workers call fetch_config_from_http() to pull from it.
     """
+    if not token:
+        raise RuntimeError(
+            "Config server refuses to start without a bearer token. "
+            "Set CONFIG_SERVER_TOKEN env var or pass --token to "
+            "'python scripts/launch.py serve-config'."
+        )
+
     try:
         import uvicorn
         from fastapi import FastAPI, HTTPException, Security
@@ -153,9 +168,11 @@ def run_config_server(
     async def get_config(
         credentials: HTTPAuthorizationCredentials | None = Security(_bearer),
     ):
-        if token:
-            if credentials is None or credentials.credentials != token:
-                raise HTTPException(status_code=401, detail="Invalid or missing bearer token")
+        # Bearer token check is unconditional — startup guard above guarantees
+        # ``token`` is non-empty here, so an empty value would be a server bug
+        # rather than an auth bypass.
+        if credentials is None or credentials.credentials != token:
+            raise HTTPException(status_code=401, detail="Invalid or missing bearer token")
         return data
 
     @app.get("/health")
@@ -163,8 +180,8 @@ def run_config_server(
         return {"status": "ok", "sections": sorted(data.keys())}
 
     logger.info(
-        "Config server starting on %s:%d  token_auth=%s  sections=%d",
-        host, port, bool(token), len(data),
+        "Config server starting on %s:%d  token_auth=True  sections=%d",
+        host, port, len(data),
     )
     uvicorn.run(app, host=host, port=port, log_level="info")
 
@@ -196,9 +213,9 @@ if __name__ == "__main__":
     ps.add_argument("--port",  type=int, default=_HTTP_PORT, metavar="PORT",
                     help="Port to listen on")
     ps.add_argument("--token", default=_HTTP_TOKEN, metavar="TOKEN",
-                    help="Bearer token (leave empty to disable auth)")
-    ps.add_argument("--host",  default="0.0.0.0", metavar="HOST",
-                    help="Bind address")
+                    help="Bearer token (REQUIRED — server refuses to start without one)")
+    ps.add_argument("--host",  default="127.0.0.1", metavar="HOST",
+                    help="Bind address (default 127.0.0.1; pass 0.0.0.0 only if remote workers need access)")
 
     args = parser.parse_args()
 

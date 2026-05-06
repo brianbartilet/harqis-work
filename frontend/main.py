@@ -15,6 +15,7 @@ GET  /health                        → simple health check
 from pathlib import Path
 from typing import Optional
 
+import hmac
 import logging
 import os
 import subprocess
@@ -22,7 +23,7 @@ import sys
 
 import uvicorn
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -103,16 +104,24 @@ async def health():
 
 
 @app.get("/debug/config")
-async def debug_config():
-    """Verify loaded settings (passwords masked). Remove this route in production."""
-    from config import _ENV_FILE
+async def debug_config(request: Request):
+    """Verify loaded settings (auth required, all sensitive values masked).
+
+    Previously unauthenticated and leaked the broker URI verbatim — now gated
+    behind the dashboard session and only confirms whether each value is set,
+    not its content. Closes audit finding H6.
+    """
+    user, redirect = _require_auth(request)
+    if redirect:
+        return redirect
+    from config import _APPS_ENV
     return {
-        "env_file": str(_ENV_FILE),
-        "env_file_exists": _ENV_FILE.exists(),
+        "env_file": str(_APPS_ENV),
+        "env_file_exists": _APPS_ENV.exists(),
         "flower_url": settings.flower_url,
-        "flower_user": settings.flower_user or "(empty)",
-        "flower_password": "***" if settings.flower_password else "(empty)",
-        "celery_broker": settings.celery_broker,
+        "flower_user_set": bool(settings.flower_user),
+        "flower_password_set": bool(settings.flower_password),
+        "celery_broker_set": bool(settings.celery_broker),
     }
 
 
@@ -139,7 +148,10 @@ async def login(
             status_code=429,
         )
 
-    if username == settings.app_username and password == settings.app_password:
+    # Constant-time compare for both fields to avoid leaking timing signals.
+    username_ok = hmac.compare_digest(username, settings.app_username)
+    password_ok = hmac.compare_digest(password, settings.app_password)
+    if username_ok and password_ok:
         clear_failed_logins(ip)
         token = create_session_token(username)
         response = RedirectResponse("/dashboard", status_code=302)
@@ -253,11 +265,76 @@ async def task_status(request: Request, task_id: str):
 
 # ── Open local path (Windows) ─────────────────────────────────────────────────
 
+# Extensions that are runnable on Windows / macOS / Linux. `os.startfile` and
+# `xdg-open` will execute these, so they are forbidden even when the path is
+# inside an allowed root.
+_OPEN_PATH_DENIED_EXTENSIONS = frozenset({
+    ".exe", ".bat", ".cmd", ".com", ".lnk", ".ps1", ".psm1", ".vbs",
+    ".js", ".jse", ".jar", ".msi", ".scr", ".pif", ".sh", ".reg",
+})
+
+
+def _resolve_open_path_roots() -> list[Path]:
+    """Compute the absolute root directories that `/open-path` may open under.
+
+    Source order:
+      1. `OPEN_PATH_ALLOWED_ROOTS` env var — OS-pathsep-separated absolute paths.
+      2. Default — repo root, plus `RAINMETER_WRITE_SKINS_TO_PATH` and
+         `DESKTOP_PATH_RUN` env vars when present.
+    """
+    raw = os.environ.get("OPEN_PATH_ALLOWED_ROOTS", "").strip()
+    if raw:
+        return [Path(p).resolve() for p in raw.split(os.pathsep) if p.strip()]
+    roots = [Path(__file__).resolve().parent.parent]
+    for env_key in ("RAINMETER_WRITE_SKINS_TO_PATH", "DESKTOP_PATH_RUN"):
+        value = os.environ.get(env_key)
+        if value:
+            roots.append(Path(value).resolve())
+    return roots
+
+
+_OPEN_PATH_ALLOWED_ROOTS: list[Path] = _resolve_open_path_roots()
+
+
+def _is_open_path_safe(p: str) -> tuple[bool, str]:
+    """Validate `p` is safe for `/open-path`. Returns `(ok, reason)`."""
+    if not p:
+        return False, "empty path"
+    # Reject UNC paths up front — they can point at attacker-controlled SMB shares.
+    if p.startswith("\\\\") or p.startswith("//"):
+        return False, "UNC paths not allowed"
+    try:
+        resolved = Path(p).resolve(strict=False)
+    except (OSError, ValueError) as exc:
+        return False, f"cannot resolve path: {exc}"
+    if not resolved.exists():
+        return False, "path does not exist"
+    if resolved.suffix.lower() in _OPEN_PATH_DENIED_EXTENSIONS:
+        return False, f"extension not allowed: {resolved.suffix}"
+    for root in _OPEN_PATH_ALLOWED_ROOTS:
+        try:
+            resolved.relative_to(root)
+            return True, ""
+        except ValueError:
+            continue
+    return False, "path is not under an allowed root"
+
+
 @app.get("/open-path")
 async def open_path(request: Request, p: str):
-    """Open a local file or directory using the OS default application."""
+    """Open a local file or directory using the OS default application.
+
+    Restricted to paths under `OPEN_PATH_ALLOWED_ROOTS` (or repo root +
+    `RAINMETER_WRITE_SKINS_TO_PATH` + `DESKTOP_PATH_RUN` by default). Rejects
+    UNC paths and runnable extensions (`.exe`, `.bat`, `.cmd`, `.lnk`, …).
+    Closes audit finding C2.
+    """
     if not get_current_user(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
+    ok, reason = _is_open_path_safe(p)
+    if not ok:
+        logger.warning("open-path blocked for %r: %s", p, reason)
+        return JSONResponse({"error": reason}, status_code=400)
     try:
         if sys.platform == "win32":
             os.startfile(p)
