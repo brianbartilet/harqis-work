@@ -27,7 +27,7 @@ All tasks run on the `hud` queue (configured via `SPROUT.conf.task_routes`).
 | `build_summary_mouse_bindings` | Daily at 1am | Summary of daily mouse bindings |
 | `show_hud_profiles` | Daily at midnight | Active iCUE/Rainmeter HUD profiles |
 | `show_ynab_budgets_info` | Every 4 hours | YNAB budget balances |
-| `show_pc_daily_sales` | Every hour | PC DAILY SALES — sums `TOTAL PRICE` per `DATE` from the AppSheet `INVOICE` table for the last 60 days, grouped by month with a 24-dash separator. Same width as OANDA ACCOUNT; height shows 10 rows at a time, the rest scrolls. Queue: `hud`. |
+| `show_pc_daily_sales` | Every 4 hours | PC DAILY SALES — sums `TOTAL PRICE` per `DATE` from the AppSheet `INVOICE` table for the last 60 days, grouped by month with a 24-dash separator. Same width as OANDA ACCOUNT; height shows 10 rows at a time, the rest scrolls. Queue: `hud`. |
 | `show_ai_helper` | Daily at midnight | AI helper widget initialization |
 | `get_schedules` | Every 4 hours | Upcoming calendar schedule |
 

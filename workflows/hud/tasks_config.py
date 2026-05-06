@@ -207,14 +207,14 @@ WORKFLOWS_HUD = {
     },
 
     # ── show_pc_daily_sales ──────────────────────────────────────────────────
-    # Hourly pull of gross daily sales (sum of TOTAL PRICE per DATE) from the
-    # AppSheet INVOICE table. Renders 60 days grouped by month; only
+    # Every 4 hours pull of gross daily sales (sum of TOTAL PRICE per DATE)
+    # from the AppSheet INVOICE table. Renders 60 days grouped by month; only
     # `visible_lines` are visible at once — the rest scrolls.
-    # `expires`: 60 * 60 — full-cadence per the brief; missed run still fires
-    # within the hour, after that the next tick refreshes.
+    # `expires`: 60 * 60 * 2 — half-cadence; a missed run can still fire within
+    # 2 hours, after that the next 4-hour tick refreshes.
     'run-job--show_pc_daily_sales': {
         'task': 'workflows.hud.tasks.hud_finance.show_pc_daily_sales',
-        'schedule': crontab(minute=0),
+        'schedule': crontab(hour='*/4', minute=0),
         'kwargs': {
             "cfg_id__appsheet": "APPSHEET",
             "days": 60,
@@ -224,7 +224,7 @@ WORKFLOWS_HUD = {
         },
         "options": {
             "queue": WorkflowQueue.HUD,
-            "expires": 60 * 60,
+            "expires": 60 * 60 * 2,
         },
     },
 
