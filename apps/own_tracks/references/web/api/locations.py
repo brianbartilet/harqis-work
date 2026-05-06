@@ -17,7 +17,6 @@ class ApiServiceOwnTracksLocations(BaseApiServiceOwnTracks):
     def __init__(self, config, **kwargs):
         super(ApiServiceOwnTracksLocations, self).__init__(config, **kwargs)
 
-    @deserialized(List[dict])
     def get_last(self, user: str = None, device: str = None):
         """
         Get the last known location for all devices, or filter by user/device.
@@ -39,7 +38,15 @@ class ApiServiceOwnTracksLocations(BaseApiServiceOwnTracks):
         if device:
             self.request.add_query_string('device', device)
 
-        return self.client.execute_request(self.request.build())
+        # Recorder returns a list of cards when devices have reported, but
+        # degenerates to {} when empty — normalize so callers always see a list.
+        response = self.client.execute_request(self.request.build())
+        data = response.data if hasattr(response, 'data') else response
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            return list(data.values())
+        return []
 
     @deserialized(dict)
     def get_history(self, user: str, device: str,

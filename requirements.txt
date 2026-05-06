@@ -3,6 +3,11 @@ pytest-dotenv>=0.5.2
 redis>=5.0.0
 sqlite-vec>=0.1.6
 
+# openai>=1.50 introduced client.responses (Responses API). apps/open_ai/references/web/api/responses.py
+# and code_interpreter.py call native_client.responses.{create,retrieve,delete,input_items.list};
+# without this floor, those tests fail with AttributeError. harqis-core pulls a much older openai transitively.
+openai>=1.50.0
+
 # Frontend (FastAPI dashboard at scripts/launch.py frontend → frontend/main.py).
 # uvicorn[standard] pulls httptools/websockets/watchfiles for production-grade
 # serving; python-multipart enables `Form(...)` parsing in auth.py; jinja2
