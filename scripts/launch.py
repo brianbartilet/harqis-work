@@ -129,12 +129,39 @@ def _exec(*argv: str) -> None:
 # ── Subcommand implementations ────────────────────────────────────────────────
 
 def cmd_worker(args: argparse.Namespace) -> None:
+    """Launch a celery worker.
+
+    Bypasses sprout's `restart_celery_worker` (which hard-codes
+    `pool=gevent`, `concurrency=10`) so we can pick the pool implementation
+    per-host. The default `WORKFLOW_POOL=threads` is the safe choice on
+    Windows: gevent greenlets block on win32 C calls (GetForegroundWindow,
+    Rainmeter ini writes, etc.) and serialise the entire pool, while
+    Python threads release the GIL across blocking syscalls and run truly
+    in parallel for the I/O-bound HUD tasks.
+
+    Override via env: `WORKFLOW_POOL=gevent|eventlet|prefork|solo` and
+    `WORKFLOW_CONCURRENCY=<n>`. See celery's worker docs for caveats —
+    `prefork` doesn't work well on Windows.
+    """
     setup_env()
     if args.queues:
         os.environ["WORKFLOW_QUEUE"] = args.queues.replace(" ", "")
     os.environ.setdefault("WORKFLOW_QUEUE", "default")
-    print(f"[launch] worker queues={os.environ['WORKFLOW_QUEUE']}", flush=True)
-    _exec(_python(), str(REPO_ROOT / "run_workflows.py"), "worker")
+    queues = os.environ["WORKFLOW_QUEUE"]
+    pool = os.environ.get("WORKFLOW_POOL", "threads")
+    concurrency = os.environ.get("WORKFLOW_CONCURRENCY", "8")
+    print(
+        f"[launch] worker queues={queues} pool={pool} concurrency={concurrency}",
+        flush=True,
+    )
+    _exec(
+        _python(), "-m", "celery",
+        "-A", "core.apps.sprout.app.celery:SPROUT", "worker",
+        "--loglevel=INFO",
+        f"--queues={queues}",
+        f"--pool={pool}",
+        f"--concurrency={concurrency}",
+    )
 
 
 def cmd_scheduler(args: argparse.Namespace) -> None:
