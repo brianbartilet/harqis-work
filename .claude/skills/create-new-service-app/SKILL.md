@@ -368,36 +368,7 @@ Add one line per env var identified in Step 9 (all set to empty — the user fil
 
 ---
 
-## Step 12 — Restart MCP server / Claude Desktop
-
-Run the following PowerShell to restart Claude Desktop if it is currently running. The restart picks up the newly registered tools without any manual action.
-
-```powershell
-$proc = Get-Process -Name "Claude" -ErrorAction SilentlyContinue
-if ($proc) {
-    $claudePath = $proc.Path
-    Stop-Process -Name "Claude" -Force
-    Start-Sleep -Seconds 2
-    Start-Process $claudePath
-    Write-Host "Claude Desktop restarted — new MCP tools will be available on reconnect."
-} else {
-    Write-Host "Claude Desktop is not running — no restart needed. Start it manually to load the new tools."
-}
-```
-
-If the PowerShell command fails (e.g. path not found), fall back to:
-```powershell
-taskkill /F /IM Claude.exe 2>$null
-Start-Sleep -Seconds 2
-$fallback = "$env:LOCALAPPDATA\AnthropicClaude\Claude.exe"
-if (Test-Path $fallback) { Start-Process $fallback }
-```
-
-Report the outcome to the user: whether Claude Desktop was restarted or was not running.
-
----
-
-## Step 13 — Write tests in `apps/APP_NAME/tests/test_<resource>.py`
+## Step 12 — Write tests in `apps/APP_NAME/tests/test_<resource>.py`
 
 One test file per service class. All tests are live integration tests — no mocking.
 Use `@pytest.mark.smoke` for fast read-only checks, `@pytest.mark.sanity` for broader coverage.
@@ -434,7 +405,7 @@ For **Mode A**, mark tests with `@pytest.mark.skip(reason="not implemented")`.
 
 ---
 
-## Step 14 — Write `apps/APP_NAME/README.md`
+## Step 13 — Write `apps/APP_NAME/README.md`
 
 Follow `apps/.template/README.md` structure exactly. Required sections:
 
@@ -449,7 +420,7 @@ Follow `apps/.template/README.md` structure exactly. Required sections:
 
 ---
 
-## Step 15 — Update root `README.md`  ← **MANDATORY — never skip**
+## Step 14 — Update root `README.md`  ← **MANDATORY — never skip**
 
 Read `README.md`. Make **three** targeted edits. These edits are **required** regardless of whether a spec was provided, the app is a skeleton, or the app has no external API. If this step is skipped the App Inventory and Configuration docs go out of sync with the codebase.
 
@@ -476,7 +447,7 @@ Read `README.md`. Make **three** targeted edits. These edits are **required** re
 
 ---
 
-## Step 16 — Update `mcp/README.md`
+## Step 15 — Update `mcp/README.md`
 
 Read `mcp/README.md`. Add a new `### APP_NAME` section (alphabetical position) with:
 - Heading linking to the API docs
@@ -486,7 +457,7 @@ Read `mcp/README.md`. Add a new `### APP_NAME` section (alphabetical position) w
 
 ---
 
-## Step 17 — Remind the user
+## Step 16 — Remind the user
 
 Print this checklist verbatim at the end:
 
@@ -494,7 +465,8 @@ Print this checklist verbatim at the end:
 Next steps:
   [ ] Fill in APP_NAME_UPPER_API_KEY (and any other vars) in .env/apps.env
   [ ] Run: pytest apps/APP_NAME/tests/ -m smoke
-  (apps_config.yaml updated ✓ — Kanban bridge registered ✓ — MCP server restarted automatically if it was running ✓)
+  [ ] Restart the MCP server / Claude Desktop to load the new tools
+  (apps_config.yaml updated ✓ — Kanban bridge registered ✓)
 ```
 
 ---
@@ -521,7 +493,6 @@ If `--workflow <workflow_name>` was passed, after completing all steps above run
 - [ ] **Kanban dependency detector** entry added in `agents/projects/dependencies/detector.py:_SERVICE_SECRETS` (skip only if the app has zero env vars) — env var name matches `.env/apps.env` exactly
 - [ ] `apps_config.yaml` updated with APP_NAME_UPPER section
 - [ ] `.env/apps.env` updated with env var placeholder(s)
-- [ ] MCP server restart attempted via PowerShell (outcome reported)
 - [ ] Tests use `hamcrest` and `@pytest.mark.smoke`; Mode A tests are `@pytest.mark.skip`
 - [ ] `apps/APP_NAME/README.md` covers config snippet, env vars, and tool table
 - [ ] **Root `README.md` App Inventory row added** (alphabetical, under `## App Inventory`) ← easy to forget

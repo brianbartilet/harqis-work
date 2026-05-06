@@ -217,6 +217,41 @@ Wraps `apps/ynab/references/web/api/` services. Requires valid `YNAB` section in
 
 ---
 
+### Stripe (`apps/stripe/mcp.py`)
+
+Wraps the Stripe [REST API v1](https://docs.stripe.com/api) — balance, charges, customers, invoices, payment intents, subscriptions, and the events audit trail. Auth is the secret key (`sk_live_…` / `sk_test_…`) sent as a Bearer token. Requires valid `STRIPE` section in `apps_config.yaml`.
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `stripe_get_balance` | — | Account balance — `available`, `pending`, `instant_available` per currency |
+| `stripe_list_balance_transactions` | `limit?`, `type_filter?` | Ledger entries (charges, refunds, payouts, fees) |
+| `stripe_list_charges` | `limit?`, `customer?` | Recent charges, newest first |
+| `stripe_get_charge` | `charge_id` | Single charge by id |
+| `stripe_list_customers` | `limit?`, `email?` | Customers (filter by exact-match email) |
+| `stripe_get_customer` | `customer_id` | Single customer |
+| `stripe_search_customers` | `query`, `limit?` | Stripe-search-language results — `email:'a@b.com'`, `metadata['k']:'v'` |
+| `stripe_create_customer` | `email?`, `name?`, `description?`, `phone?` | New customer object |
+| `stripe_list_invoices` | `limit?`, `customer?`, `status?` | Invoices filterable by status (`draft`, `open`, `paid`, `void`) |
+| `stripe_get_invoice` | `invoice_id` | Single invoice |
+| `stripe_get_upcoming_invoice` | `customer` | Preview of next invoice for a customer |
+| `stripe_list_payment_intents` | `limit?`, `customer?` | PaymentIntents (modern payment lifecycle) |
+| `stripe_get_payment_intent` | `intent_id` | Single PaymentIntent |
+| `stripe_list_subscriptions` | `limit?`, `customer?`, `status?` | Subscriptions (status: `active`, `past_due`, `canceled`, `trialing`, `all`) |
+| `stripe_get_subscription` | `subscription_id` | Single subscription |
+| `stripe_list_events` | `limit?`, `type_filter?` | Audit trail / webhook history — filter by event type |
+| `stripe_get_event` | `event_id` | Single event |
+
+Amounts are in the smallest currency unit (cents for USD). Pagination is cursor-based via `starting_after`. The base service overrides `Content-Type` to `application/x-www-form-urlencoded` because Stripe doesn't accept JSON bodies.
+
+**Example prompts:**
+- *"What's my Stripe balance right now?"*
+- *"Show me the last 20 charges and total them."*
+- *"List all open invoices for customer cus_ABC123."*
+- *"Find the customer whose email is brian@example.com and list their subscriptions."*
+- *"Pull the last 50 `charge.failed` events to investigate failures."*
+
+---
+
 ### Gemini (`apps/gemini/mcp.py`)
 
 Wraps `apps/gemini/references/web/api/` services. Requires valid `GEMINI` section in `apps_config.yaml`.

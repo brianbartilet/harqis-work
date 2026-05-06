@@ -79,6 +79,7 @@ _APP_LOADERS: dict[str, str] = {
     "playwright":  "apps.playwright.mcp.register_playwright_tools",
     "reddit":      "apps.reddit.mcp.register_reddit_tools",
     "scryfall":    "apps.scryfall.mcp.register_scryfall_tools",
+    "stripe":      "apps.stripe.mcp.register_stripe_tools",
     "tcg_mp":      "apps.tcg_mp.mcp.register_tcg_mp_tools",
     "telegram":    "apps.telegram.mcp.register_telegram_tools",
     "trello":      "apps.trello.mcp.register_trello_tools",

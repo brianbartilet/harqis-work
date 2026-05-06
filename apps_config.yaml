@@ -632,4 +632,18 @@ APPSHEET:
   return_data_only: True
 
 
+STRIPE:
+  app_id: 'stripe'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.stripe.com/v1'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: False
+  app_data:
+    api_key: ${STRIPE_API_KEY}
+  return_data_only: True
+
+
 

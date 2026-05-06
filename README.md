@@ -54,6 +54,7 @@ At its core the platform has three layers:
 | `rainmeter` | Windows desktop HUD skinning | Local | No | [Docs](https://docs.rainmeter.net/) · [Site](https://www.rainmeter.net/) |
 | `reddit` | Reddit — subreddits, posts, comments, inbox | REST API (OAuth2) | Yes | [API Docs](https://www.reddit.com/dev/api/) · [Apps](https://www.reddit.com/prefs/apps) |
 | `scryfall` | MTG card database | REST API | Yes | [API Docs](https://scryfall.com/docs/api) · [Site](https://scryfall.com/) |
+| `stripe` | Stripe payments — balance, charges, customers, invoices, subscriptions, events | REST API | Yes | [API Docs](https://docs.stripe.com/api) · [Dashboard](https://dashboard.stripe.com/) |
 | `tcg_mp` | TCG Marketplace | REST API | Yes | [Site](https://thetcgmarketplace.com/) |
 | `telegram` | Telegram Bot messaging | REST API | Yes | [API Docs](https://core.telegram.org/bots/api) · [Site](https://telegram.org/) |
 | `trello` | Kanban board management | REST API | Yes | [API Docs](https://developer.atlassian.com/cloud/trello/rest/) · [Site](https://trello.com/) |
@@ -411,6 +412,7 @@ harqis-work/
 │   ├── rainmeter/                  # Windows desktop HUD
 │   ├── reddit/                     # Reddit API
 │   ├── scryfall/                   # MTG card database
+│   ├── stripe/                     # Stripe payments — balance, charges, customers, invoices, subscriptions
 │   ├── tcg_mp/                     # TCG Marketplace
 │   ├── telegram/                   # Telegram Bot
 │   ├── trello/                     # Trello Kanban
@@ -716,6 +718,7 @@ REDDIT_DEFAULT_SUBREDDIT=
 ALPHA_VANTAGE_API_KEY=
 OANDA_BEARER_TOKEN=
 OANDA_MT4_ACCOUNT_ID=
+STRIPE_API_KEY=                    # secret key — sk_live_... or sk_test_...
 YNAB_ACCESS_TOKEN=
 YNAB_BUDGET_PHP=
 YNAB_BUDGET_SGD=

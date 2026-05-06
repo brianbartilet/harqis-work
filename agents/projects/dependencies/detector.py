@@ -78,6 +78,7 @@ class DependencyDetector:
         # Finance
         (r"\bALPHA\s*VANTAGE\b|\bALPHAVANTAGE\b",  "ALPHA_VANTAGE_API_KEY"),
         (r"\bOANDA\b",                            "OANDA_BEARER_TOKEN"),
+        (r"\bSTRIPE\b",                           "STRIPE_API_KEY"),
         (r"\bYNAB\b",                             "YNAB_ACCESS_TOKEN"),
         # Productivity / project management
         (r"\bJIRA\b",                             "JIRA_API_TOKEN"),
