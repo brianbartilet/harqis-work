@@ -156,15 +156,20 @@ WORKFLOWS_HUD = {
         },
     },
 
+    # Cadence bumped from 15s → 60s. Each invocation actually takes 14-22s
+    # (cold-imports + win32 GetForegroundWindow + Rainmeter ini write under
+    # gevent contention), so 15s scheduling kept a worker greenlet permanently
+    # saturated and starved every other HUD task. 60s gives ~4× headroom and
+    # the active-app readout doesn't need sub-minute precision.
     'run-job--show_mouse_bindings': {
         'task': 'workflows.hud.tasks.hud_utils.show_mouse_bindings',
-        'schedule': timedelta(seconds=15),
+        'schedule': timedelta(seconds=60),
         'kwargs': {
             "cfg_id__calendar": "GOOGLE_APPS"
         },
         "options": {
             "queue": WorkflowQueue.HUD,
-            "expires": 60 * 1
+            "expires": 60 * 2
         },
     },
 
