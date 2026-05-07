@@ -332,7 +332,8 @@ def _process_matching(needle: str) -> list[int]:
     if IS_WIN:
         try:
             ps_cmd = (
-                "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
+                "Get-CimInstance Win32_Process | "
+                "Where-Object { $_.Name -in @('python.exe','pythonw.exe') } | "
                 f"Where-Object {{ $_.CommandLine -like '*{needle}*' }} | "
                 "Select-Object -ExpandProperty ProcessId"
             )
