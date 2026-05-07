@@ -5,8 +5,13 @@ sqlite-vec>=0.1.6
 
 # openai>=1.50 introduced client.responses (Responses API). apps/open_ai/references/web/api/responses.py
 # and code_interpreter.py call native_client.responses.{create,retrieve,delete,input_items.list};
-# without this floor, those tests fail with AttributeError. harqis-core pulls a much older openai transitively.
-openai>=1.50.0
+# without this floor, those tests fail with AttributeError.
+#
+# harqis-core pins openai==1.14.1, so the pip>=24 resolver in CI/Docker rejects an
+# `openai>=1.50.0` line here as a hard conflict. Install separately AFTER
+# `pip install -r requirements.txt`, same pattern as anyio/mcp below:
+#     pip install --upgrade "openai>=1.50.0"
+# The Dockerfile already does this in the chained RUN.
 
 # Frontend (FastAPI dashboard at scripts/launch.py frontend → frontend/main.py).
 # uvicorn[standard] pulls httptools/websockets/watchfiles for production-grade

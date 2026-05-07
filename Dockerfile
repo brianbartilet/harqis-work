@@ -35,12 +35,13 @@ USER harqis
 # Cache layer: only requirements first.
 COPY --chown=harqis:harqis requirements.txt .
 
-# mcp pulls anyio>=4.5 but harqis-core pins anyio==4.3.0, so install base deps
-# first, then upgrade anyio, then add mcp on top. Keep these on one RUN to avoid
-# blowing up the layer count.
+# harqis-core pins anyio==4.3.0 and openai==1.14.1, but we need newer versions
+# (mcp needs anyio>=4.5; apps/open_ai uses the Responses API added in openai>=1.50).
+# Install base deps first, then force-upgrade the conflicting transitive pins,
+# then add mcp on top. Keep these on one RUN to avoid blowing up the layer count.
 RUN pip install --upgrade pip \
     && pip install -r requirements.txt \
-    && pip install --upgrade anyio \
+    && pip install --upgrade "anyio>=4.5" "openai>=1.50.0" \
     && pip install "mcp>=1.0.0"
 
 # Application code (after deps so code edits don't bust the pip cache).
