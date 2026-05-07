@@ -393,8 +393,8 @@ def kill_stray_celery() -> None:
     up orphan workers — visible as multiple console windows on Windows.
     """
     needles = [
-        "run_workflows.py",       # launcher entrypoint (host & node)
-        "core.apps.sprout.app",   # celery -A target — worker, beat, flower
+        "run_workflows.py",       # launcher entrypoint (host & node) — legacy
+        "workflows.config",       # celery -A target — worker, beat, flower
     ]
     pids: set[int] = set()
     self_pid = os.getpid()
@@ -421,9 +421,9 @@ def kill_stray_celery() -> None:
 
 
 _STATUS_NEEDLES = {
-    "scheduler": "run_workflows.py scheduler",
-    "worker":    "run_workflows.py worker",
-    "flower":    "celery -A core.apps.sprout.app.celery:SPROUT flower",
+    "scheduler": "celery -A workflows.config beat",
+    "worker":    "celery -A workflows.config worker",
+    "flower":    "celery -A workflows.config flower",
     "frontend":  "frontend\\main.py",
     "mcp":       "mcp\\server.py",
     "kanban":    "agents.projects.orchestrator.local",

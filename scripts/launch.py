@@ -156,7 +156,7 @@ def cmd_worker(args: argparse.Namespace) -> None:
     )
     _exec(
         _python(), "-m", "celery",
-        "-A", "core.apps.sprout.app.celery:SPROUT", "worker",
+        "-A", "workflows.config", "worker",
         "--loglevel=INFO",
         f"--queues={queues}",
         f"--pool={pool}",
@@ -167,7 +167,12 @@ def cmd_worker(args: argparse.Namespace) -> None:
 def cmd_scheduler(args: argparse.Namespace) -> None:
     setup_env()
     print("[launch] scheduler (celery beat)", flush=True)
-    _exec(_python(), str(REPO_ROOT / "run_workflows.py"), "scheduler")
+    _exec(
+        _python(), "-m", "celery",
+        "-A", "workflows.config", "beat",
+        "--loglevel=INFO",
+        "--pidfile=",
+    )
 
 
 def cmd_flower(args: argparse.Namespace) -> None:
@@ -181,7 +186,7 @@ def cmd_flower(args: argparse.Namespace) -> None:
     print(f"[launch] flower {address}:{port} (auth: {user})", flush=True)
     _exec(
         _python(), "-m", "celery",
-        "-A", "core.apps.sprout.app.celery:SPROUT", "flower",
+        "-A", "workflows.config", "flower",
         f"--port={port}", f"--address={address}",
         f"--basic-auth={user}:{password}",
     )
