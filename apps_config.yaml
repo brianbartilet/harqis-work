@@ -484,6 +484,29 @@ GOOGLE_TASKS:
   return_data_only: True
 
 
+# Multi-account example — uncomment to add a second Google account whose
+# 'Agents Tasks' list should also feed the kanban board. The gtasks ↔ kanban
+# bridge polls every key listed in GTASKS_AGENTS_ACCOUNTS. Each block needs its
+# own `storage:` so OAuth tokens don't collide. Friendly account name is
+# derived as the lowercase suffix after `GOOGLE_TASKS_` (e.g. "work").
+#
+# GOOGLE_TASKS_WORK:
+#   app_id: 'tasks'
+#   client: 'rest'
+#   parameters:
+#     base_url: 'https://tasks.googleapis.com/'
+#     response_encoding: 'utf-8'
+#     verify: True
+#     timeout: 60
+#     stream: False
+#   app_data:
+#     scopes:
+#       - "https://www.googleapis.com/auth/tasks"
+#     credentials: "credentials.json"
+#     storage: "storage-tasks-work.json"
+#   return_data_only: True
+
+
 GOOGLE_DRIVE:
   app_id: 'drive'
   client: 'rest'

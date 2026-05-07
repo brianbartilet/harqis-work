@@ -320,6 +320,61 @@ The orchestrator can prepend `SOUL.md` + `USER.md` + `MEMORY.md` +
 today's daily note to the system prompt so every agent inherits the same
 identity context. See `agent/persona.py` and the OpenClaw docs.
 
+### Google Tasks bridge (`agents/projects/integrations/gtasks_bridge.py`)
+
+Watches a Google Tasks list (default name `Agents Tasks`, env-overridable)
+across one or more accounts and turns every new task into a card on the
+shared kanban board. As the kanban moves the card forward, the gtask
+title is rewritten with a `|<Status>| ` prefix and the gtask is marked
+completed when the card lands in `Done` — so the user can file work from
+their phone and watch the status update in the Google Tasks app.
+
+Driven by a celery beat task that runs every 2 min:
+`workflows.projects.tasks.gtasks_sync.gtasks_kanban_sync`.
+
+**Setup**
+
+```bash
+# Trello target — reuses the canonical kanban board.
+KANBAN_BOARD_ID=<board id>
+
+# One or more apps_config keys for Google Tasks accounts (each block
+# carries its own OAuth credentials/storage path). Comma-separated.
+# Default: GOOGLE_TASKS  (single account, backwards-compatible).
+GTASKS_AGENTS_ACCOUNTS=GOOGLE_TASKS,GOOGLE_TASKS_WORK
+
+# Tasklist title to watch on every configured account.
+# Default: 'Agents Tasks'.
+GTASKS_AGENTS_LIST=Agents Tasks
+```
+
+To add a second account, copy the `GOOGLE_TASKS:` block in
+`apps_config.yaml`, give it a unique key (e.g. `GOOGLE_TASKS_WORK`), and
+point it at a different `storage:` token file so the OAuth credentials
+don't collide.
+
+**Status mapping**
+
+| Trello list | gtask title prefix |
+|---|---|
+| `Ready` / `Pending` | `\|Pending\| ` |
+| `In Progress` | `\|In Progress\| ` |
+| `Blocked` | `\|Blocked\| ` |
+| `In Review` | _(unchanged — internal kanban state)_ |
+| `Failed` | `\|Failed\| ` |
+| `Done` | _prefix stripped, gtask marked completed_ |
+
+**Description enrichment** — each new gtask is run through Anthropic
+Haiku 4.5 to expand the bare title into a 2-3 paragraph Trello card
+description. Set `enrich=False` in the celery kwargs to disable (placeholder
+description is used instead).
+
+**State** — `gtask_id ↔ card_id` bindings live in
+`.run/gtasks_bindings.json`. Stop the worker, delete the file to reset.
+
+**Direct Trello link** — the gtask's `notes` get a `Trello: <card_url>`
+line on creation; refreshed on subsequent cycles if the line drifted.
+
 ---
 
 ## Card data available to agents
