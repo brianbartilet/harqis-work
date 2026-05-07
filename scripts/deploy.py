@@ -394,7 +394,7 @@ def kill_stray_celery() -> None:
     """
     needles = [
         "run_workflows.py",       # launcher entrypoint (host & node) — legacy
-        "workflows.config",       # celery -A target — worker, beat, flower
+        "core.apps.sprout",       # celery -A target — worker, beat, flower
     ]
     pids: set[int] = set()
     self_pid = os.getpid()
@@ -421,9 +421,9 @@ def kill_stray_celery() -> None:
 
 
 _STATUS_NEEDLES = {
-    "scheduler": "celery -A workflows.config beat",
-    "worker":    "celery -A workflows.config worker",
-    "flower":    "celery -A workflows.config flower",
+    "scheduler": "core.apps.sprout:SPROUT beat",
+    "worker":    "core.apps.sprout:SPROUT worker",
+    "flower":    "core.apps.sprout:SPROUT flower",
     "frontend":  "frontend\\main.py",
     "mcp":       "mcp\\server.py",
     "kanban":    "agents.projects.orchestrator.local",

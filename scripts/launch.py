@@ -156,7 +156,7 @@ def cmd_worker(args: argparse.Namespace) -> None:
     )
     _exec(
         _python(), "-m", "celery",
-        "-A", "workflows.config", "worker",
+        "-A", "core.apps.sprout:SPROUT", "worker",
         "--loglevel=INFO",
         f"--queues={queues}",
         f"--pool={pool}",
@@ -169,7 +169,7 @@ def cmd_scheduler(args: argparse.Namespace) -> None:
     print("[launch] scheduler (celery beat)", flush=True)
     _exec(
         _python(), "-m", "celery",
-        "-A", "workflows.config", "beat",
+        "-A", "core.apps.sprout:SPROUT", "beat",
         "--loglevel=INFO",
         "--pidfile=",
     )
@@ -186,7 +186,7 @@ def cmd_flower(args: argparse.Namespace) -> None:
     print(f"[launch] flower {address}:{port} (auth: {user})", flush=True)
     _exec(
         _python(), "-m", "celery",
-        "-A", "workflows.config", "flower",
+        "-A", "core.apps.sprout:SPROUT", "flower",
         f"--port={port}", f"--address={address}",
         f"--basic-auth={user}:{password}",
     )
