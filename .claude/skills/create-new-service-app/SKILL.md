@@ -79,18 +79,16 @@ For **Mode B**, create one file per discovered endpoint group.
 
 ## Step 3 — Write `apps/APP_NAME/config.py`
 
-Always the same pattern — do not deviate:
+Always the same pattern — do not deviate. Mirrors `apps/.template/config.py`:
 
 ```python
-import os
-from core.config.loader import ConfigLoaderService
-from core.web.services.core.config.webservice import AppConfigWSClient
-from core.config.env_variables import ENV_APP_CONFIG_FILE
+from apps.config_loader import app_name_for, get_ws_config
 
-load_config = ConfigLoaderService(file_name=ENV_APP_CONFIG_FILE).config
-APP_NAME = str(os.path.basename(os.path.dirname(os.path.abspath(__file__)))).upper()
-CONFIG = AppConfigWSClient(**load_config[APP_NAME])
+APP_NAME = app_name_for(__file__)
+CONFIG = get_ws_config(__file__)
 ```
+
+Do **not** instantiate `ConfigLoaderService` directly here. The centralized helper routes through `apps.apps_config.CONFIG_SERVICE`, which honours the `CONFIG_SOURCE` env var (local / redis / http) and is built once with an explicit `base_path=ENV_APP_CONFIG`. A direct `ConfigLoaderService(file_name=...)` call falls back to `os.getcwd()` and walks upward, which can pick up a stale `apps_config.yaml` from a sibling repo (e.g. `harqis-core`) and silently hand the worker the wrong config.
 
 ---
 
