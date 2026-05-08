@@ -24,6 +24,7 @@ from workflows.hud.tasks_config import WORKFLOWS_HUD
 from workflows.desktop.tasks_config import WORKFLOWS_DESKTOP
 from workflows.social.tasks_config import WORKFLOW_SOCIAL
 from workflows.knowledge.tasks_config import WORKFLOW_KNOWLEDGE
+from workflows.projects.tasks_config import WORKFLOW_PROJECTS
 
 # Set Celery to use the same timezone settings as the Django project
 SPROUT.conf.enable_utc = USE_TZ
@@ -33,7 +34,14 @@ SPROUT.autodiscover_tasks(['workflows'])
 
 # Configuration dictionary mapping environment variable values to specific task mappings.
 # Be careful to use duplicate keys in the dictionary, as it will overwrite the previous key.
-CONFIG_DICTIONARY = WORKFLOW_PURCHASES | WORKFLOWS_HUD | WORKFLOWS_DESKTOP | WORKFLOW_SOCIAL | WORKFLOW_KNOWLEDGE
+CONFIG_DICTIONARY = (
+    WORKFLOW_PURCHASES
+    | WORKFLOWS_HUD
+    | WORKFLOWS_DESKTOP
+    | WORKFLOW_SOCIAL
+    | WORKFLOW_KNOWLEDGE
+    | WORKFLOW_PROJECTS
+)
 
 # Configure the Celery beat schedule based on the current environment's task mapping.
 SPROUT.conf.beat_schedule = CONFIG_DICTIONARY

@@ -121,6 +121,11 @@ Requires scope: `https://www.googleapis.com/auth/tasks`
 
 Use `'@default'` as `tasklist_id` to target the default task list.
 
+**Used by:** `agents/projects/integrations/gtasks_bridge.py` — watches a
+named tasklist (default `Agents Tasks`) across one or more accounts and
+turns every new task into a Trello kanban card. See
+`agents/projects/README.md → Google Tasks bridge` for the full lifecycle.
+
 ---
 
 ### `ApiServiceGoogleDrive`
