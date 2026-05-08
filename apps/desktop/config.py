@@ -13,24 +13,10 @@ Attributes:
                                 connection settings specific to the application determined by APP_NAME.
 """
 import os
-from core.config.loader import ConfigLoaderService
 from core.web.services.core.config.webservice import AppConfigWSClient
-
-from core.config.env_variables import ENV_APP_CONFIG_FILE
 
 from apps.apps_config import CONFIG_MANAGER
 
-# Load configuration from a YAML file using the ConfigFileLoader class.
-# The 'file_name' parameter specifies the name of the YAML configuration file.
-load_config = ConfigLoaderService(file_name=ENV_APP_CONFIG_FILE).config
-
-# Determine the application name by extracting the base name of the directory
-# where the current script is located. This is used to segment the configuration
-# specific to this application within the YAML file.
 APP_NAME = str(os.path.basename(os.path.dirname(os.path.abspath(__file__)))).upper()
-
-# Create a configuration client for the web service. This client is initialized
-# with the specific configuration for this application, fetched by keying into
-# the 'load_config' dictionary with 'APP_NAME'.
 CONFIG = CONFIG_MANAGER.get(APP_NAME)
 
