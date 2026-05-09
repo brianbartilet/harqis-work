@@ -74,6 +74,15 @@ def setup_env() -> None:
     for key, value in load_env_file().items():
         os.environ.setdefault(key, value)
 
+    # Pin cwd to repo root: core's file loader (IFileLoader) walks up from
+    # os.getcwd() looking for apps_config.yaml. When launchd / a service /
+    # the user's shell starts us elsewhere (e.g. $HOME), the search misses
+    # the repo and the celery `-A` import fails with FileNotFoundError.
+    try:
+        os.chdir(REPO_ROOT)
+    except OSError:
+        pass
+
     pythonpath_parts = [str(REPO_ROOT), str(SCRIPTS_DIR)]
     existing = os.environ.get("PYTHONPATH", "")
     if existing:
