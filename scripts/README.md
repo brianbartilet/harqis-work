@@ -174,8 +174,8 @@ queues = ["agent", "worker", "default_broadcast"]
 kanban_profile = "agent:code"
 
 [hostnames]
-"harqis-mac-mini.local" = "harqis-server"
-"DESKTOP-N100"          = "windows-work"
+"<bare-hostname>.local" = "harqis-server"
+"<windows-hostname>"    = "windows-work"
 ```
 
 > **Broadcast queues:** any name ending in `_broadcast` (e.g.
@@ -199,9 +199,9 @@ to `machines.local.toml` and fill in:
 
 ```toml
 [hostnames]
-"harqis-mac-mini.local"   = "harqis-server"
-"DESKTOP-N100"            = "windows-work"
-"vps-1.tail-scale.ts.net" = "vps-worker"
+"<bare-hostname>.local"      = "harqis-server"
+"<windows-hostname>"         = "windows-work"
+"<vps-hostname>.tailnet.net" = "vps-worker"
 
 # Override a field of an existing machine
 [windows-work]

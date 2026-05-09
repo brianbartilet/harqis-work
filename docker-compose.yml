@@ -82,7 +82,7 @@ services:
       # Tailscale: traffic is already encrypted at VPN layer, cookie security is redundant
       N8N_SECURE_COOKIE: "false"
       # Set these in .env/apps.env to match your Tailscale MagicDNS hostname
-      # N8N_HOST: harqis-ones-mac-mini
+      # N8N_HOST: <your-magicdns-hostname>
       # N8N_PROTOCOL: http
       # WEBHOOK_URL: https://harqis.yourdomain.com/   # Cloudflare tunnel URL for webhooks
     extra_hosts:

@@ -59,7 +59,7 @@ kanban_profile = "agent:code"
 #
 # Find this machine's hostname:  python -c "import socket; print(socket.gethostname())"
 [hostnames]
-# "harqis-mac-mini"      = "harqis-server"
-# "harqis-mac-mini.local" = "harqis-server"
-# "DESKTOP-N100"          = "windows-work"
-# "vps-1"                 = "vps-worker"
+# "<bare-hostname>"        = "harqis-server"
+# "<bare-hostname>.local"  = "harqis-server"
+# "<windows-hostname>"     = "windows-work"
+# "<vps-hostname>"         = "vps-worker"
