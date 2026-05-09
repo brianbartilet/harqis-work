@@ -901,6 +901,31 @@ def main() -> None:
     print(f"Stop with: python scripts/deploy.py --down")
     print(f"Status:    python scripts/deploy.py --status")
 
+    # Post-deploy hook: close console windows with "Process completed"
+    if started > 0:
+        print("\nRunning post-deploy cleanup (closing stray console windows)...")
+        if IS_WIN:
+            cleanup_script = SCRIPTS_DIR / "close-completed-windows.ps1"
+            if cleanup_script.exists():
+                try:
+                    subprocess.run(
+                        ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(cleanup_script)],
+                        check=False,
+                    )
+                except Exception as e:
+                    print(f"Warning: post-deploy cleanup failed: {e}")
+            else:
+                print(f"Warning: cleanup script not found at {cleanup_script}")
+        elif IS_MAC:
+            cleanup_script = SCRIPTS_DIR / "close-completed-windows.sh"
+            if cleanup_script.exists():
+                try:
+                    subprocess.run(["bash", str(cleanup_script)], check=False)
+                except Exception as e:
+                    print(f"Warning: post-deploy cleanup failed: {e}")
+            else:
+                print(f"Warning: cleanup script not found at {cleanup_script}")
+
 
 if __name__ == "__main__":
     main()
