@@ -110,11 +110,15 @@ def _emit(event: str, location_key: str, **fields: Any) -> None:
     post = _resolve_es_post()
     if post is None:
         return
+    # Forward slashes in location_key end up in the ES doc id, where they're
+    # parsed as URL path separators (POST /<index>/_doc/<id> → 400 "no handler
+    # found for uri"). Sanitize at the single source instead of every callsite.
+    safe_location_key = location_key.replace("/", "_")
     try:
         post(
             json_dump=_base_payload(event, **fields),
             index_name=_index_name(),
-            location_key=location_key,
+            location_key=safe_location_key,
             use_interval_map=False,
             identifier=f"{event}_{int(datetime.now(timezone.utc).timestamp() * 1000)}",
         )
