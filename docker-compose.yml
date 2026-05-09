@@ -138,6 +138,7 @@ services:
       - "flower"
       - "--port=5555"
       - "--address=0.0.0.0"
+      - "--basic-auth=${FLOWER_USER}:${FLOWER_PASSWORD}"
     ports:
       - "5555:5555"
     depends_on:
