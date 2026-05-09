@@ -75,7 +75,7 @@ WORKFLOWS_HUD = {
     # within the same day; after that the result is stale.
     'run-job--show_tcg_sell_cart': {
         'task': 'workflows.hud.tasks.hud_tcg.show_tcg_sell_cart',
-        'schedule': crontab(day_of_week='sun,tue', hour=0),
+        'schedule': crontab(day_of_week='sun,tue', hour=0, minute=0),
         'kwargs': {
             "cfg_id__tcg_mp": "TCG_MP",
             "worker_count": 2
@@ -184,7 +184,7 @@ WORKFLOWS_HUD = {
 
     'run-job--build_summary_mouse_bindings': {
         'task': 'workflows.hud.tasks.hud_utils.build_summary_mouse_bindings',
-        'schedule': crontab(hour='1'),
+        'schedule': crontab(hour='1', minute=0),
         'kwargs': {
             "cfg_id__desktop": "DESKTOP"
         },
@@ -197,7 +197,7 @@ WORKFLOWS_HUD = {
 
     'run-job--show_hud_profiles': {
         'task': 'workflows.hud.tasks.hud_utils.show_hud_profiles',
-        'schedule': crontab(hour='00'),
+        'schedule': crontab(hour='00', minute=0),
         "options": {
             "queue": WorkflowQueue.HUD,
             "os": ["windows"],
@@ -207,7 +207,7 @@ WORKFLOWS_HUD = {
 
     'run-job--show_ynab_budgets_info': {
         'task': 'workflows.hud.tasks.hud_finance.show_ynab_budgets_info',
-        'schedule': crontab(hour='0,4,8,12,16,20'),
+        'schedule': crontab(hour='0,4,8,12,16,20', minute=0),
         'kwargs': {
             "cfg_id__ynab": "YNAB",
             "cfg_id__calendar": "GOOGLE_APPS"},
@@ -243,7 +243,7 @@ WORKFLOWS_HUD = {
 
     'run-job--show_ai_helper': {
         'task': 'workflows.hud.tasks.hud_utils.show_ai_helper',
-        'schedule': crontab(hour='0'),
+        'schedule': crontab(hour='0', minute=0),
         'kwargs': {
             "cfg_id__n8n": "N8N",
             "cfg_id__eleven": "ELEVEN_LABS",
@@ -258,7 +258,7 @@ WORKFLOWS_HUD = {
 
     'run-job--get_schedules': {
         'task': 'workflows.hud.tasks.hud_logs.get_schedules',
-        'schedule': crontab(hour='0,4,8,12,16,20'),
+        'schedule': crontab(hour='0,4,8,12,16,20', minute=0),
         'kwargs': {
             "cfg_id__calendar": "GOOGLE_APPS",
         },

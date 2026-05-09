@@ -38,7 +38,7 @@ WORKFLOWS_DESKTOP = {
 
     'run-job--git_pull_on_paths': {
         'task': 'workflows.desktop.tasks.commands.git_pull_on_paths',
-        'schedule':  crontab(hour='*/4'),
+        'schedule':  crontab(hour='*/4', minute=0),
         'args': [],
         "options": {
             "expires": 60 * 60,

@@ -38,7 +38,7 @@ WORKFLOW_PURCHASES = {
 
     'run-job--generate_tcg_mappings': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.generate_tcg_mappings',
-        'schedule': crontab(hour='0'),
+        'schedule': crontab(hour='0', minute=0),
         'kwargs': {
             "cfg_id__tcg_mp": "TCG_MP",
             "cfg_id__echo_mtg": "ECHO_MTG",
@@ -54,7 +54,7 @@ WORKFLOW_PURCHASES = {
 
     'run-job--generate_tcg_listings': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.generate_tcg_listings',
-        'schedule': crontab(hour='1'),
+        'schedule': crontab(hour='1', minute=0),
         'kwargs': {
             "cfg_id__tcg_mp": "TCG_MP",
             "cfg_id__echo_mtg": "ECHO_MTG",
@@ -69,7 +69,7 @@ WORKFLOW_PURCHASES = {
     
     'run-job--update_tcg_listings_prices': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.update_tcg_listings_prices',
-        'schedule': crontab(day_of_week="mon", hour='4'),
+        'schedule': crontab(day_of_week="mon", hour='4', minute=0),
         'kwargs': {
             "cfg_id__tcg_mp": "TCG_MP",
             "cfg_id__echo_mtg": "ECHO_MTG",
