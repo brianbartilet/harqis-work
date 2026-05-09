@@ -12,11 +12,23 @@ Queue names live in `workflows/queues.py`. The wire-level topology (which queues
 
 | Queue | Type | Behaviour |
 |---|---|---|
-| `default` | Direct (competing-consumers) | One worker dequeues each task. The default home for any task without an explicit route. |
-| `hud` | Direct | One HUD worker per task. The `workflows.hud.tasks.*` route sends every HUD task here. |
-| `tcg` | Direct | One TCG worker per task. |
-| `adhoc` | Direct | One worker per task; used for one-off triggers. |
-| `hud_broadcast` | **Fanout** | **Every** subscribed worker runs every task. Use for cluster-wide actions: config reload, cache invalidation, "refresh all HUD machines now". |
+| `default` | Direct (competing-consumers) | One worker dequeues each task. The default home for any task without an explicit route (`task_default_queue`). |
+| `host` | Direct | Tasks pinned to a host-class machine (Docker, broker access). |
+| `hud` | Direct | One HUD worker per task. The `workflows.hud.tasks.*` route sends every HUD task here unless overridden. |
+| `tcg` | Direct | TCG marketplace pipeline (Scryfall bulk, listings, pricing). |
+| `peon` | Direct | Work-context HUD/desktop tasks (Jira boards, calendar focus, captures). |
+| `adhoc` | Direct | One-off / manual triggers (no schedule, or rare cron). |
+| `agent` | Direct | AI ingest / RAG / agent dispatch (e.g. `workflows.knowledge.tasks.*`). |
+| `worker` | Direct | Generic background worker pool — VPS nodes default here. |
+| `n8n` | Direct | n8n container ops (backup / restore / deploy) — pinned to `harqis-server` only. |
+| `default_broadcast` | **Fanout** | Cluster-wide jobs every subscribed node must run locally (e.g. local cache invalidation, config reload). |
+| `hud_broadcast` | **Fanout** | HUD-level fanout — `workflows.hud.tasks.broadcast_*` (auto-routed); reload skin config / refresh-all-HUDs cluster-wide. |
+| `workers_broadcast` | **Fanout** | Reserved — declared in enum, no route yet. |
+| `agents_broadcast` | **Fanout** | Reserved — declared in enum, no route yet. |
+
+### Optional `os` annotation in beat options
+
+Beat entries may include an `"os"` key listing the platforms where the task can run, e.g. `"os": ["windows"]`, `"os": ["macos", "linux"]`, or omit it for cross-platform. **Informational only** — Celery does not enforce it. The `/manage-queues` skill reads these labels to surface routing/OS mismatches (e.g. a `windows`-only task on a queue whose only consumer is a Mac box). See `.claude/skills/manage-queues/SKILL.md` for the heuristic fallback when no annotation is present.
 
 ### Direct vs fanout — decision rule
 

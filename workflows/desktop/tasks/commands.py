@@ -1,4 +1,4 @@
-import os, subprocess
+import os, subprocess, sys, tomllib
 from pathlib import Path
 
 from core.apps.sprout.app.celery import SPROUT
@@ -9,6 +9,9 @@ from apps.rainmeter.references.helpers.config_builder import _refresh_app
 from apps.desktop.helpers.feed import feed
 
 from apps.apps_config import CONFIG_MANAGER
+
+# Repo root resolved at import time — workflows/desktop/tasks/commands.py → 4 parents up.
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 @log_result()
@@ -56,13 +59,11 @@ def git_pull_on_paths() -> str:
 
         return results
 
-    pull_list = [
-        'C:/Users/brian/GIT/run/harqis-work'
-    ]
+    pull_list = [str(REPO_ROOT)]
 
     git_pull_all(pull_list)
 
-    return " ".join(x for x in pull_list)
+    return " ".join(pull_list)
 
 
 @log_result()
@@ -70,18 +71,28 @@ def git_pull_on_paths() -> str:
 @SPROUT.task()
 def copy_files_targeted(**kwargs) -> str:
     cfg = CONFIG_MANAGER.get(kwargs.get("cfg_id__desktop_jobs", "DESKTOP"))
-    p_from = cfg['copy_files']['path_dev_files']
-    p_to = cfg['copy_files']['path_run_files']
+    p_from = Path(cfg['copy_files']['path_dev_files'])
+    p_to = Path(cfg['copy_files']['path_run_files'])
 
-    files = [
-        (rf"{p_from}\.env\credentials.json", rf"{p_to}\.env"),
-        (rf"{p_from}\.env\storage.json", rf"{p_to}\.env"),
-        (rf"{p_from}\.env\apps.env", rf"{p_to}\.env"),
-        (rf"{p_from}\apps_config.yaml", rf"{p_to}"),
-    ]
-    copy_files_any(files)
+    # Source the file list from machines.local.toml [sync] items so sensitive
+    # paths live in one gitignored place instead of being hard-coded here.
+    with open(p_from / "machines.local.toml", "rb") as f:
+        items = tomllib.load(f).get("sync", {}).get("items", [])
 
-    return " ".join(x[0] for x in files)
+    pairs: list[tuple[str, str]] = []
+    for item in items:
+        src = p_from / item
+        if src.is_dir():
+            for child in src.rglob("*"):
+                if child.is_file():
+                    rel = child.relative_to(p_from)
+                    pairs.append((str(child), str(p_to / rel.parent)))
+        else:
+            pairs.append((str(src), str(p_to / Path(item).parent)))
+
+    copy_files_any(pairs)
+
+    return " ".join(p[0] for p in pairs)
 
 
 @log_result()
@@ -100,58 +111,40 @@ def set_desktop_hud_to_back() -> str:
 @feed()
 @SPROUT.task()
 def run_n8n_sequence() -> str:
-    def run_bats_in_sequence(bat_files: list[str]) -> dict:
-        """
-        Runs each .bat file in the list sequentially.
+    """Run the n8n backup → restore sequence using the platform-appropriate
+    script in workflows/n8n/deploy/ (.bat on Windows, .sh on macOS/Linux)."""
 
-        Args:
-            bat_files (list[str]): List of full paths to .bat files.
+    is_windows = sys.platform == "win32"
+    ext = ".bat" if is_windows else ".sh"
+    runner = ["cmd", "/c"] if is_windows else ["bash"]
 
-        Returns:
-            dict: {bat_path: (success: bool, output: str)}
-        """
-        results: dict[str, tuple[bool, str]] = {}
+    deploy_dir = REPO_ROOT / "workflows" / "n8n" / "deploy"
+    scripts = [deploy_dir / f"backup{ext}", deploy_dir / f"restore{ext}"]
 
-        for bat_path in bat_files:
-            if not os.path.isfile(bat_path):
-                msg = "BAT file not found"
-                results[bat_path] = (False, msg)
-                print(f"\n=== {bat_path} ===")
-                print(msg)
-                continue
+    results: dict[str, tuple[bool, str]] = {}
+    for script in scripts:
+        path = str(script)
+        if not script.is_file():
+            msg = f"script not found: {path}"
+            results[path] = (False, msg)
+            print(f"\n=== {path} ===\n{msg}")
+            continue
 
-            try:
-                # Run the .bat file via cmd.exe
-                result = subprocess.run(
-                    ["cmd", "/c", bat_path],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                )
+        try:
+            result = subprocess.run(
+                [*runner, path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            success = result.returncode == 0
+            output = result.stdout if success else result.stderr
+            results[path] = (success, output)
+            print(f"\n=== {path} (exit={result.returncode}) ===\n{output}")
+        except Exception as e:
+            results[path] = (False, str(e))
+            print(f"\nError running {path}: {e}")
 
-                success = result.returncode == 0
-                output = result.stdout if success else result.stderr
-
-                results[bat_path] = (success, output)
-
-                print(f"\n=== {bat_path} (exit={result.returncode}) ===")
-                print(output)
-
-            except Exception as e:
-                results[bat_path] = (False, str(e))
-                print(f"\nError running {bat_path}: {e}")
-
-        return results
-
-    # Adjust these paths as needed
-    bat_list = [
-        r"C:\Users\brian\GIT\harqis-work\workflows\n8n\deploy\backup.bat",
-        r"C:\Users\brian\GIT\harqis-work\workflows\n8n\deploy\restore.bat",
-    ]
-
-    run_bats_in_sequence(bat_list)
-
-    # Simple summary for the task result
-    return " | ".join(bat_list)
+    return " | ".join(str(s) for s in scripts)
 
 

@@ -47,6 +47,7 @@ WORKFLOWS_HUD = {
             },
         "options": {
             "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
             "expires": 60 * 5
         },
     },
@@ -61,6 +62,7 @@ WORKFLOWS_HUD = {
         },
         "options": {
             "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
             "expires": 60 * 30
         },
     },
@@ -80,6 +82,7 @@ WORKFLOWS_HUD = {
         },
         "options": {
             "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
             "expires": 60 * 60 * 24,
         },
     },
@@ -105,6 +108,7 @@ WORKFLOWS_HUD = {
         },
         "options": {
             "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
             "expires": 60 * 30,
         },
     },
@@ -119,6 +123,7 @@ WORKFLOWS_HUD = {
         },
         "options": {
             "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
             "expires": 60 * 60
         },
     },
@@ -130,7 +135,8 @@ WORKFLOWS_HUD = {
             "cfg_id__desktop": "DESKTOP"
         },
         "options": {
-            "queue": WorkflowQueue.DEFAULT,
+            "queue": WorkflowQueue.PEON,
+            "os": ["windows"],
             "expires": 60 * 10
         },
     },
@@ -143,6 +149,7 @@ WORKFLOWS_HUD = {
             "cfg_id__elevenlabs": "ELEVEN_LABS"},
         "options": {
             "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
             "expires": 60 * 30
         },
     },
@@ -152,6 +159,7 @@ WORKFLOWS_HUD = {
         'schedule': crontab(minute='*/15'),
         "options": {
             "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
             "expires": 60 * 15
         },
     },
@@ -169,6 +177,7 @@ WORKFLOWS_HUD = {
         },
         "options": {
             "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
             "expires": 60 * 2
         },
     },
@@ -181,6 +190,7 @@ WORKFLOWS_HUD = {
         },
         "options": {
             "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
             "expires": 60 * 60
         },
     },
@@ -190,6 +200,7 @@ WORKFLOWS_HUD = {
         'schedule': crontab(hour='00'),
         "options": {
             "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
             "expires": 60 * 60
         },
     },
@@ -202,6 +213,7 @@ WORKFLOWS_HUD = {
             "cfg_id__calendar": "GOOGLE_APPS"},
         "options": {
             "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
             "expires": 60 * 60
         }
     },
@@ -224,6 +236,7 @@ WORKFLOWS_HUD = {
         },
         "options": {
             "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
             "expires": 60 * 60 * 2,
         },
     },
@@ -238,6 +251,7 @@ WORKFLOWS_HUD = {
         },
         "options": {
             "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
             "expires": 60 * 60
         }
     },
@@ -250,6 +264,7 @@ WORKFLOWS_HUD = {
         },
         "options": {
             "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
             "expires": 60 * 60}
     },
 

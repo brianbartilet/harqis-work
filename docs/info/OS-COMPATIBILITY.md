@@ -76,6 +76,26 @@ Workflow startup is cross-platform via two Python entry points. The n8n deployme
 
 ---
 
+## Beat-options `os` annotation
+
+Beat schedule entries in `workflows/*/tasks_config.py` may carry an optional `"os"` key inside `options`:
+
+```python
+'run-job--show_jira_board': {
+    'task': 'workflows.hud.tasks.hud_jira.show_jira_board',
+    'schedule': crontab(...),
+    'options': {
+        'queue': WorkflowQueue.HUD,
+        'os': ['windows'],      # ← optional, informational
+        'expires': 60 * 30,
+    },
+},
+```
+
+Allowed values: `"windows"`, `"macos"`, `"linux"`, or any combination as a list. Omit the key for cross-platform tasks.
+
+**Informational only** — Celery does not enforce this. The `/manage-queues` skill reads it (with a heuristic fallback that scans the task module for `pywin32` / `Rainmeter` / `cmd /c` / `.bat` / etc.) and surfaces `OS-MISMATCH` warnings when a task is routed to a queue whose only consumer is on the wrong OS. Annotated tasks today: all 15 entries in `workflows/hud/tasks_config.py` (`["windows"]`), `set_desktop_hud_to_back` in desktop (`["windows"]`), and `run_n8n_sequence` (`["windows", "macos", "linux"]`).
+
 ## Cross-Platform Notes
 
 ### Bash Tool (`agents/projects/agent/tools/filesystem.py`)

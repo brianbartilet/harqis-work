@@ -247,7 +247,7 @@ Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and 
 
 | Workflow | Status | Tasks | Description |
 |----------|--------|-------|-------------|
-| `hud` | Active | 12 | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins |
+| `hud` | Active | 15 | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins |
 | `purchases` | Active | 3 (+1 disabled) | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
 | `desktop` | Active | 7 | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
 | `social` | Active | 1 | Monthly LinkedIn post — git history → Claude → LinkedIn draft + Gmail notification |
@@ -271,6 +271,7 @@ Declared in `workflows/queues.py` (`WorkflowQueue` enum) and registered with Rab
 | `host` | Tasks that must run on the host (Docker, broker access) |
 | `agent` | AI agent task dispatch (Kanban / OpenClaw worker invocations) |
 | `worker` | Generic background worker pool (cross-app jobs) |
+| `n8n` | n8n container ops (backup / restore / deploy) — pinned to `harqis-server` |
 
 **Broadcast (fanout)** — every subscribed worker runs each task; tasks **must** be idempotent. A worker only receives broadcasts when its `queues` list includes the broadcast name (otherwise the exchange isn't declared and beat publishes fail with `NOT_FOUND`):
 
@@ -282,12 +283,14 @@ Declared in `workflows/queues.py` (`WorkflowQueue` enum) and registered with Rab
 | `agents_broadcast` | Agent-pool-wide control messages (declared in enum; reserved) |
 
 > Routing override: a task can target any queue via `options={"queue": WorkflowQueue.X}` in its Beat schedule entry, regardless of `task_routes` patterns.
+>
+> Optional OS hint: beat entries may also include `options={"os": ["windows"]}` (or `["macos", "linux"]`, etc.) — informational only; consumed by the `/manage-queues` skill to surface OS-vs-routing mismatches. Celery does not enforce this field.
 
 ### Beat schedule
 
 ```python
 # workflows/config.py
-CONFIG_DICTIONARY = WORKFLOW_PURCHASES | WORKFLOWS_HUD | WORKFLOWS_DESKTOP
+CONFIG_DICTIONARY = WORKFLOW_PURCHASES | WORKFLOWS_HUD | WORKFLOWS_DESKTOP | WORKFLOW_SOCIAL | WORKFLOW_KNOWLEDGE
 SPROUT.conf.beat_schedule = CONFIG_DICTIONARY
 ```
 

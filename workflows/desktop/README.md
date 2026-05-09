@@ -6,21 +6,21 @@
 - Captures desktop activity (screenshots + OCR) and generates daily/weekly AI-powered summaries.
 - Runs n8n automation sequences on a schedule.
 
-## Queue
+## Queues
 
-Tasks run on the `default` queue.
+Tasks are routed per-entry in `tasks_config.py`. See the `Queue` column below.
 
 ## Scheduled Tasks
 
-| Task | Schedule | Description |
-|------|----------|-------------|
-| `git_pull_on_paths` | Every 10 min | Pull latest commits on configured git repos |
-| `set_desktop_hud_to_back` | Every 30 min | Send desktop HUD windows to background |
-| `copy_files_targeted` | Every 30 min | Sync dev files to run directory |
-| `run_n8n_sequence` | Daily at midnight | Execute n8n automation workflow |
-| `run_capture_logging` | Every 15 min | Capture screenshot + log foreground app |
-| `generate_daily_desktop_summary` | Daily at 23:55 | AI summary of today's desktop activity |
-| `generate_weekly_desktop_summary` | Sundays at 23:58 | AI summary of the week's activity |
+| Task | Schedule | Queue | OS | Description |
+|------|----------|-------|----|-------------|
+| `git_pull_on_paths` | Every 4h | `default_broadcast` (fanout) | any | Pull latest commits on the repo root (resolved from `REPO_ROOT`). Fanout queue → every subscribed worker pulls its own working tree. |
+| `run_n8n_sequence` | Daily at midnight | `n8n` | windows / macos / linux | Backup → restore via `.bat` (Windows) or `.sh` (macOS / Linux) in `workflows/n8n/deploy/` |
+| `set_desktop_hud_to_back` | Every 30 min | `hud` | windows | Send desktop HUD windows to background (Rainmeter) |
+| `copy_files_targeted` | Every 30 min | `peon` | any | Sync dev files to run dir; file list sourced from `machines.local.toml` `[sync] items` |
+| `run_capture_logging` | Every 15 min | `peon` | any | Capture screenshot + log foreground app |
+| `generate_daily_desktop_summary` | Daily at 23:55 | `peon` | any | AI summary of today's desktop activity |
+| `generate_weekly_desktop_summary` | Sundays at 23:58 | `peon` | any | AI summary of the week's activity |
 
 ## Task Files
 
@@ -87,5 +87,7 @@ Log filenames use the format: `YYYY-MM-DD-HH-MM`.
 ## Notes
 
 - `generate_daily_desktop_summary` and `generate_weekly_desktop_summary` were moved out of the `hud` workflow into `desktop` to keep concerns separated.
-- `run_n8n_sequence` requires n8n to be running locally (default: `http://localhost:5678`).
+- `run_n8n_sequence` requires n8n to be running locally (default: `http://localhost:5678`). It auto-picks `.bat` on Windows and `.sh` on macOS / Linux from `workflows/n8n/deploy/`, and is routed to the dedicated `n8n` queue (consumed by `harqis-server` only).
+- `copy_files_targeted` reads its file list from `machines.local.toml` `[sync] items` — same source of truth as `scripts/sync-to-host.ps1`. No hardcoded paths in source.
+- `git_pull_on_paths` uses `REPO_ROOT` (resolved from this module's location) instead of a hard-coded path, so it works on Windows and macOS without per-host edits.
 - The `set_desktop_hud_to_back` task prevents the Rainmeter HUD from overlapping active windows.

@@ -38,11 +38,22 @@ WORKFLOWS_DESKTOP = {
 
     'run-job--git_pull_on_paths': {
         'task': 'workflows.desktop.tasks.commands.git_pull_on_paths',
-        'schedule':  crontab(minute='*/10'),
+        'schedule':  crontab(hour='*/4'),
         'args': [],
         "options": {
             "expires": 60 * 60,
-            "queue": WorkflowQueue.DEFAULT
+            "queue": WorkflowQueue.DEFAULT_BROADCAST
+        },
+    },
+
+    'run-job--run_n8n_sequence': {
+        'task': 'workflows.desktop.tasks.commands.run_n8n_sequence',
+        'schedule': crontab(hour='0', minute='0'),
+        'args': [],
+        "options": {
+            "expires": 60 * 60 * 8,
+            "queue": WorkflowQueue.N8N,
+            "os": ["windows", "macos", "linux"],
         },
     },
 
@@ -52,7 +63,8 @@ WORKFLOWS_DESKTOP = {
         'args': [],
         "options": {
             "expires": 60 * 60,
-            "queue": WorkflowQueue.HUD
+            "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
         },
     },
 
@@ -64,16 +76,7 @@ WORKFLOWS_DESKTOP = {
         },
         "options": {
             "expires": 60 * 60,
-            "queue": WorkflowQueue.DEFAULT},
-    },
-
-    'run-job--run_n8n_sequence': {
-        'task': 'workflows.desktop.tasks.commands.run_n8n_sequence',
-        'schedule': crontab(hour='0', minute='0'),
-        'args': [],
-        "options": {
-            "expires": 60 * 60 * 8,
-            "queue": WorkflowQueue.HOST
+            "queue": WorkflowQueue.PEON
         },
     },
 

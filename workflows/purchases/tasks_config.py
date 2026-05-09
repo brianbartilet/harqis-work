@@ -104,7 +104,7 @@ WORKFLOW_PURCHASES = {
             "cfg_id__tcg_mp": "TCG_MP"
         },
         "options": {
-            "queue": WorkflowQueue.HOST,
+            "queue": WorkflowQueue.TCG,
             "expires": 60 * 60 * 4
         },
     },

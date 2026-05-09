@@ -17,6 +17,7 @@ class WorkflowQueue(StrEnum):
     PEON = "peon"   # work-related HUD tasks (Jira boards, calendar focus, etc.)
     AGENT = "agent"
     WORKER = "worker"
+    N8N = "n8n"     # n8n container ops (backup/restore/deploy) — pinned to harqis-server
 
     # ── Broadcast (fanout) queues — every subscribed worker handles each task ──
     # Use for cluster-wide actions: config reload, cache invalidation, "every HUD

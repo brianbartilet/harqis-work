@@ -52,6 +52,12 @@ The auto-generated `workflows.mapping` file at the repo root is mounted into n8n
 
 Keys follow: `run-job--<task_name>`
 
+## Deploy scripts
+
+`workflows/n8n/deploy/` ships paired `.bat` and `.sh` variants of `backup`, `restore`, and `deploy`. The desktop task `run_n8n_sequence` (in `workflows/desktop/tasks/commands.py`) auto-picks the right extension via `sys.platform` so the same beat entry runs on Windows (`cmd /c …bat`) and macOS / Linux (`bash …sh`).
+
+The task is routed to the dedicated **`n8n` queue** (declared in `workflows/queues.py` and `workflows/config.py`), which is consumed only by `harqis-server` per `machines.toml`. This pins n8n container ops to the always-on hub and keeps them off worker nodes.
+
 ## Notes
 
 - n8n must be running locally (default `http://localhost:5678`) for the `run_n8n_sequence` desktop task to work.
