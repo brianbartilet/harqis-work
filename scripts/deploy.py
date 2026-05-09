@@ -769,10 +769,11 @@ def select_services(machine: dict, args: argparse.Namespace) -> list[str]:
 
     role = machine["role"]
     disabled: set[str] = set(machine.get("disable", []))
-    if args.no_frontend: disabled.add("frontend")
-    if args.no_mcp:      disabled.add("mcp")
-    if args.no_kanban:   disabled.add("kanban")
-    if args.no_flower:   disabled.add("flower")
+    if args.no_scheduler: disabled.add("scheduler")
+    if args.no_frontend:  disabled.add("frontend")
+    if args.no_mcp:       disabled.add("mcp")
+    if args.no_kanban:    disabled.add("kanban")
+    if args.no_flower:    disabled.add("flower")
     return [
         s for s, info in SERVICES.items()
         if role in info["roles"] and s not in disabled
@@ -792,6 +793,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-p", "--profile", help="Override Kanban profile filter")
     p.add_argument("--num-agents", type=int, help="Override Kanban concurrent agents")
     p.add_argument("--docker-only", action="store_true", help="Manage Docker only — skip Python services")
+    p.add_argument("--no-scheduler", action="store_true",
+                   help="Skip the Celery Beat scheduler. Use on every host EXCEPT the "
+                        "one canonical Beat runner — duplicate Beat instances fire every "
+                        "scheduled task N times.")
     p.add_argument("--no-frontend", action="store_true")
     p.add_argument("--no-mcp",      action="store_true")
     p.add_argument("--no-kanban",   action="store_true")

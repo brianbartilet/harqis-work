@@ -41,7 +41,9 @@ disable = ["kanban"]
 [windows-work-all]
 role = "host"
 queues = ["host", "default", "hud", "peon", "adhoc", "default_broadcast"]
-disable = ["kanban"]
+# scheduler disabled — Beat must run on exactly one machine cluster-wide
+# (harqis-server is the canonical Beat runner per the "always-on hub" comment).
+disable = ["kanban", "scheduler"]
 
 
 # ── VPS worker nodes — pure workers, no docker / scheduler ───────────────────
