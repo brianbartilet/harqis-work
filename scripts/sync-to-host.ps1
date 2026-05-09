@@ -28,7 +28,8 @@ param(
     [string]$SshTarget,
     [string]$RemotePath,
     [switch]$List,
-    [switch]$DryRun
+    [switch]$DryRun,
+    [switch]$Check
 )
 
 $ErrorActionPreference = 'Stop'
@@ -126,28 +127,77 @@ Write-Host "Remote path : $RemotePath"
 Write-Host "Items       :"
 foreach ($item in $items) { Write-Host "  - $item" }
 
-$remoteCmd = "mkdir -p $RemotePath && tar -xf - -C $RemotePath"
+# Remote command: extract verbosely, then list the destination so the user gets
+# ground truth on one connection (no second password prompt).
+# Single-quoted PS string so 2>&1 stays literal text for the remote shell.
+$verifyList = ($items | ForEach-Object { "$RemotePath/$_" }) -join ' '
+$remoteCmd  = 'mkdir -p ' + $RemotePath + ' && tar -xvf - -C ' + $RemotePath +
+              " && echo '---POST-SYNC LISTING---' && ls -la " + $verifyList + ' 2>' + '&1'
 
-if ($DryRun) {
-    Write-Host "`n[dry-run] Would run:" -ForegroundColor Yellow
-    Write-Host "  tar -cf <tmp> $($items -join ' ')"
-    Write-Host "  ssh $SshTarget `"$remoteCmd`" < <tmp>"
+if ($Check) {
+    $checkCmd = 'echo OK && uname -a && pwd && ls -d ' + $RemotePath + ' 2>' + '&1'
+    Write-Host "Connectivity check -> $SshTarget" -ForegroundColor Cyan
+    Write-Host "  (one password prompt; runs: $checkCmd)"
+    & ssh -o ConnectTimeout=8 $SshTarget $checkCmd
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "`nssh exited $LASTEXITCODE -- connectivity or auth failed." -ForegroundColor Red
+        exit $LASTEXITCODE
+    }
+    Write-Host "`nConnectivity OK." -ForegroundColor Green
     return
 }
 
-# PowerShell's pipeline corrupts binary streams (CRLF translation + text encoding),
-# which breaks `tar | ssh`. Workaround: tar to a temp file, then feed it to ssh's
-# stdin via cmd.exe redirection (binary-safe).
+if ($DryRun) {
+    Write-Host "`n[dry-run] Would run:" -ForegroundColor Yellow
+    Write-Host ('  tar -cf [tmpfile] {0}' -f ($items -join ' '))
+    Write-Host ('  ssh {0} "{1}" [stdin: tmpfile]' -f $SshTarget, $remoteCmd)
+    return
+}
+
+# Use Windows's built-in bsdtar explicitly — `tar` on PATH often resolves to
+# Git-for-Windows' GNU tar, which mangles Windows paths (treats `C:` as an
+# rsh-style host) and produces archives the remote can't parse.
+$tarExe = Join-Path $env:WINDIR 'System32\tar.exe'
+if (-not (Test-Path -LiteralPath $tarExe)) {
+    throw "bsdtar not found at $tarExe (Windows 10 1803+ ships it). Install or adjust the script."
+}
+
+# Strategy: tar to a temp file (avoids PowerShell's text-mode pipeline that
+# corrupts binary streams), then feed that file into ssh's stdin via .NET's
+# Process API (avoids cmd.exe's quirky quote handling around `< file` with
+# multiple double-quoted arguments).
 $tarFile = Join-Path ([System.IO.Path]::GetTempPath()) "sync-to-host-$([guid]::NewGuid()).tar"
 
 try {
     Write-Host "`nBuilding archive at $tarFile ..." -ForegroundColor Cyan
-    & tar -cf $tarFile @items
+    & $tarExe -cf $tarFile @items
     if ($LASTEXITCODE -ne 0) { throw "tar failed (exit $LASTEXITCODE)" }
 
-    Write-Host "Streaming archive to $SshTarget ..." -ForegroundColor Cyan
-    & cmd /c "ssh `"$SshTarget`" `"$remoteCmd`" < `"$tarFile`""
-    if ($LASTEXITCODE -ne 0) { throw "ssh/tar-extract failed (exit $LASTEXITCODE)" }
+    $tarSize = (Get-Item -LiteralPath $tarFile).Length
+    Write-Host ("  archive size: {0:N0} bytes" -f $tarSize)
+    Write-Host "  archive contents:"
+    & $tarExe -tf $tarFile | ForEach-Object { Write-Host "    $_" }
+
+    Write-Host "`nStreaming archive to $SshTarget ..." -ForegroundColor Cyan
+    $sshCmd = Get-Command ssh -ErrorAction Stop
+    $psi = [System.Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName = $sshCmd.Source
+    $psi.Arguments = '"{0}" "{1}"' -f $SshTarget, $remoteCmd
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardInput = $true   # binary stdin from .NET FileStream
+
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $tarStream = [System.IO.File]::OpenRead($tarFile)
+    try {
+        $tarStream.CopyTo($proc.StandardInput.BaseStream)
+    }
+    finally {
+        $tarStream.Dispose()
+        $proc.StandardInput.Close()
+    }
+    $proc.WaitForExit()
+
+    if ($proc.ExitCode -ne 0) { throw "ssh/tar-extract failed (exit $($proc.ExitCode))" }
 }
 finally {
     Remove-Item -LiteralPath $tarFile -ErrorAction SilentlyContinue
