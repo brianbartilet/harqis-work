@@ -41,9 +41,19 @@ disable = ["kanban"]
 [windows-work-all]
 role = "host"
 queues = ["host", "default", "hud", "peon", "adhoc", "default_broadcast"]
-# scheduler disabled — Beat must run on exactly one machine cluster-wide
-# (harqis-server is the canonical Beat runner per the "always-on hub" comment).
-disable = ["kanban", "scheduler"]
+# Beat must run on exactly one machine cluster-wide (harqis-server is the
+# canonical Beat runner per the "always-on hub" comment), so disable scheduler
+# here. Kanban runs as an agent worker — orchestrator + agent are the same
+# process today; OS auto-detection keeps it claiming only os:windows cards
+# (or unlabelled cards via cooperative-claim race with other orchestrators).
+disable = ["scheduler"]
+# Concurrent in-process agent workers per board. Bump for more throughput.
+kanban_num_agents = 4
+# Optionally narrow this orchestrator to a single profile slice. Uncomment to
+# pin this box to one agent type (other profiles will be claimed by other
+# orchestrators in the workspace). Leave commented to run any profile that
+# matches the host's os:* labels.
+# kanban_profile = "agent:code"
 
 
 # ── VPS worker nodes — pure workers, no docker / scheduler ───────────────────
