@@ -126,20 +126,31 @@ Write-Host "Remote path : $RemotePath"
 Write-Host "Items       :"
 foreach ($item in $items) { Write-Host "  - $item" }
 
+$remoteCmd = "mkdir -p $RemotePath && tar -xf - -C $RemotePath"
+
 if ($DryRun) {
     Write-Host "`n[dry-run] Would run:" -ForegroundColor Yellow
-    Write-Host "  tar -cf - $($items -join ' ') | ssh $SshTarget `"mkdir -p $RemotePath && tar -xf - -C $RemotePath`""
+    Write-Host "  tar -cf <tmp> $($items -join ' ')"
+    Write-Host "  ssh $SshTarget `"$remoteCmd`" < <tmp>"
     return
 }
 
-$tarArgs = @('-cf', '-') + $items
-$remoteCmd = "mkdir -p $RemotePath && tar -xf - -C $RemotePath"
+# PowerShell's pipeline corrupts binary streams (CRLF translation + text encoding),
+# which breaks `tar | ssh`. Workaround: tar to a temp file, then feed it to ssh's
+# stdin via cmd.exe redirection (binary-safe).
+$tarFile = Join-Path ([System.IO.Path]::GetTempPath()) "sync-to-host-$([guid]::NewGuid()).tar"
 
-Write-Host "`nStreaming archive to $SshTarget ..." -ForegroundColor Cyan
-& tar @tarArgs | & ssh $SshTarget $remoteCmd
+try {
+    Write-Host "`nBuilding archive at $tarFile ..." -ForegroundColor Cyan
+    & tar -cf $tarFile @items
+    if ($LASTEXITCODE -ne 0) { throw "tar failed (exit $LASTEXITCODE)" }
 
-if ($LASTEXITCODE -ne 0) {
-    throw "Sync failed (exit $LASTEXITCODE)"
+    Write-Host "Streaming archive to $SshTarget ..." -ForegroundColor Cyan
+    & cmd /c "ssh `"$SshTarget`" `"$remoteCmd`" < `"$tarFile`""
+    if ($LASTEXITCODE -ne 0) { throw "ssh/tar-extract failed (exit $LASTEXITCODE)" }
+}
+finally {
+    Remove-Item -LiteralPath $tarFile -ErrorAction SilentlyContinue
 }
 
 Write-Host "`nDone." -ForegroundColor Green
