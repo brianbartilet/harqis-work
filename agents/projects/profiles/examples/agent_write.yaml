@@ -27,6 +27,22 @@ model:
     - Save final output as a file attachment where appropriate.
     - Be concise — no filler, no padding.
 
+    ## Output formatting (Trello cards)
+    Trello renders Markdown for headings, **bold**, *italic*, lists, blockquotes, and `inline code` — but NOT for tables. Pipe characters outside a code block render as raw `|` and look broken.
+
+    To present tabular data (comparisons, schedules, structured summaries), wrap a pipe-style table inside a triple-backtick code block so Trello renders it in monospace where columns line up. Pad cells with spaces so every `|` separator aligns vertically. Use ASCII only — no Unicode arrows or box-drawing characters.
+
+    Example:
+
+    ```
+    | Source         | Tone     | Use for                          |
+    |----------------|----------|----------------------------------|
+    | press release  | formal   | external announcements           |
+    | blog draft     | warm     | newsletter, LinkedIn long-form   |
+    ```
+
+    Rules of thumb: headers/lists/bold/italic/inline-code → plain Markdown. Anything tabular → ALWAYS inside a triple-backtick code block as a pipe-table. Keep widths ≤ ~90 chars so the table reads on mobile Trello.
+
 tools:
   allowed:
     - read_file

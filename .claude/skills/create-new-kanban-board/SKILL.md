@@ -86,7 +86,7 @@ If `apps.trello` doesn't expose label creation, use direct REST. Same auth (key/
 
 Card name: `README — How this board works`
 
-Card description (markdown — Trello renders headers, tables, code blocks, blockquotes, emoji, and horizontal rules):
+Card description (Trello-friendly Markdown — headers/lists/bold/italic/inline-code render natively, but **tables don't**, so every table is wrapped in a triple-backtick code block for monospace alignment):
 
 ```markdown
 # 📌 README — How this board works
@@ -96,21 +96,29 @@ Card description (markdown — Trello renders headers, tables, code blocks, bloc
 This board is driven by the **harqis-work Kanban orchestrator**.
 Full reference: [`agents/projects/README.md`](https://github.com/brianbartilet/harqis-work/blob/main/agents/projects/README.md).
 
+> ⚠️ **Trello tip:** Markdown tables don't render here, so every table below is wrapped in a triple-backtick code block. Agents on this board follow the same rule when posting comments.
+
 ---
 
 ## 🚦 Lifecycle — what each list means
 
-| List | Moved by | Notes |
-|---|---|---|
-| 📋 `Templates` | Humans | Copy a card from here to start a new one. **Orchestrator never touches this list.** |
-| ✏️ `Draft` | Humans | Refining specs / wording. Orchestrator ignores. |
-| 📥 `Ready` | Humans → orchestrator | Intake. Drop a card here when it's ready to be picked up. |
-| ⏳ `Pending` | Orchestrator | Card claimed, about to start. |
-| ⚙️ `In Progress` | Orchestrator | Agent is working. May be paused if `agent:question` / `agent:remember` is set. |
-| 👀 `In Review` | Orchestrator → reviewer | Agent finished; awaiting human (or reviewer-agent) approval. Skipped if the profile has `lifecycle.auto_approve`. |
-| 🚧 `Blocked` | Orchestrator | A required secret / dependency is missing. Re-queued to `Ready` when resolved. |
-| ✅ `Done` | Reviewer | Accepted. Terminal. |
-| ❌ `Failed` | Orchestrator | Unrecoverable error. **Read the first comment** — header names the kind: `api_usage_limit`, `api_rate_limit`, `api_error`, or `unknown`. |
+```
+| List           | Moved by                  | Notes                                          |
+|----------------|---------------------------|------------------------------------------------|
+| Templates      | Humans                    | Card templates. Orchestrator never touches.    |
+| Draft          | Humans                    | Refining specs. Orchestrator ignores.          |
+| Ready          | Humans -> orchestrator    | Intake. Drop here when ready to be picked up.  |
+| Pending        | Orchestrator              | Card claimed, about to start.                  |
+| In Progress    | Orchestrator              | Agent is working. May pause for input.         |
+| In Review      | Orchestrator -> reviewer  | Agent finished; awaiting approval.             |
+| Blocked        | Orchestrator              | Required secret/dep missing. Re-queues later.  |
+| Done           | Reviewer                  | Accepted. Terminal.                            |
+| Failed         | Orchestrator              | Unrecoverable error. See first comment.        |
+```
+
+`In Review` is **skipped** when the agent's profile has `lifecycle.auto_approve: true` — the card goes `In Progress -> Done` directly.
+
+For `Failed` cards, the first comment header names the failure kind: `api_usage_limit`, `api_rate_limit`, `api_error`, or `unknown`.
 
 ---
 
@@ -122,20 +130,25 @@ Full reference: [`agents/projects/README.md`](https://github.com/brianbartilet/h
 
 These three labels trump every other label — `human, agent:code` is **still skipped**, no claim, no comment, no move.
 
-| Label | Effect |
-|---|---|
-| `human` | Skipped by every orchestrator. Card stays put until a human moves it. |
-| `manual` | Same as `human`. |
-| `input` | Same — signals the card needs human input. |
+```
+| Label    | Effect                                                   |
+|----------|----------------------------------------------------------|
+| human    | Skipped by every orchestrator. Stays put until a human   |
+|          | moves it.                                                |
+| manual   | Same as human.                                           |
+| input    | Same — signals the card needs human input.               |
+```
 
 ### 🔵 Profile routing — which agent handles the card
 
-| Label | Resolves to |
-|---|---|
-| `agent:default` | Fallback profile (used when no `agent:*` label is set). |
-| `agent:code` | Code agent — `bash`, `git`, `write_file`, MCP apps. |
-| `agent:write` | Writing agent — `write_file` only, no `bash`. |
-| `agent:write:article` | Article-specialised writer (most-specific prefix wins on resolution). |
+```
+| Label                  | Resolves to                                    |
+|------------------------|------------------------------------------------|
+| agent:default          | Fallback profile (no agent:* label set).       |
+| agent:code             | Code agent — bash, git, write_file, MCP apps.  |
+| agent:write            | Writing agent — write_file only, no bash.      |
+| agent:write:article    | Article writer (most-specific prefix wins).    |
+```
 
 > ⚠️ A card with a typo (e.g. `agent:typo` with no matching profile) is **skipped**, not silently routed. Typos surface as ignored cards.
 
@@ -143,21 +156,26 @@ These three labels trump every other label — `human, agent:code` is **still sk
 
 Multiple `os:*` labels are OR'd. The host's labels are auto-detected from `platform.system()`; override with `--os` flag or `KANBAN_OS_LABELS`.
 
-| Label | Eligible hosts |
-|---|---|
-| *(no `os:*`)* | Any |
-| `os:any` | Any (always satisfied) |
-| `os:linux` | Linux only |
-| `os:macos` *(also `os:darwin`, `os:mac`)* | macOS only |
-| `os:windows` *(also `os:win`)* | Windows only |
+```
+| Label                                  | Eligible hosts             |
+|----------------------------------------|----------------------------|
+| (no os:* label)                        | Any                        |
+| os:any                                 | Any (always satisfied)     |
+| os:linux                               | Linux only                 |
+| os:macos    (also os:darwin, os:mac)   | macOS only                 |
+| os:windows  (also os:win)              | Windows only               |
+```
 
 ### 🤖 Managed by the orchestrator — **do not add manually**
 
-| Label | When it's added |
-|---|---|
-| `claimed-by:<profile_name>` | On claim — informational audit trail of who picked the card up. |
-| `agent:question` | When the agent calls `ask_human(...)` and pauses for input. |
-| `agent:remember` | Alongside `agent:question` to request a **stateful** resume (full prior message history reloaded). |
+```
+| Label                       | When it's added                              |
+|-----------------------------|----------------------------------------------|
+| claimed-by:<profile_name>   | On claim — audit trail of who picked it up.  |
+| agent:question              | When the agent calls ask_human() and pauses. |
+| agent:remember              | Pair with agent:question for stateful resume |
+|                             | (full prior message history reloaded).       |
+```
 
 Both `agent:question` and `agent:remember` are auto-removed when a human replies in the comments.
 
@@ -165,15 +183,21 @@ Both `agent:question` and `agent:remember` are auto-removed when a human replies
 
 ## 📝 Card template — what agents see
 
-| Source | How it reaches the agent |
-|---|---|
-| **Title** | Fallback prompt when description is empty. |
-| **Description** | Main task prompt — rendered under `# Task` in the agent's input. |
-| **Checklists** | Rendered under `# Sub-tasks`; agent ticks items via the `check_item` tool. |
-| **Custom field — `required_secrets`** | Hard dependency check. Card moves to `Blocked` if any listed secret is missing in the host's env. |
-| **Custom field — `system_prompt_addon`** | One-off addition prepended to the agent's system prompt for this card only. |
-| **Text attachments** | Fetched + inlined under `# Attached Files`. |
-| **URL attachments** | Appended verbatim at the bottom. |
+```
+| Source                                | How it reaches the agent             |
+|---------------------------------------|--------------------------------------|
+| Title                                 | Fallback prompt if description empty.|
+| Description                           | Main task prompt under "# Task".     |
+| Checklists                            | Listed under "# Sub-tasks"; agent    |
+|                                       | ticks via the check_item tool.       |
+| Custom field: required_secrets        | Hard dep check. Card -> Blocked if   |
+|                                       | any listed secret is missing.        |
+| Custom field: system_prompt_addon     | One-off prepended to system prompt   |
+|                                       | for this card only.                  |
+| Text attachments                      | Fetched + inlined under              |
+|                                       | "# Attached Files".                  |
+| URL attachments                       | Appended verbatim at the bottom.     |
+```
 
 ---
 
@@ -207,13 +231,22 @@ Body:   Review the attached spreadsheet and post sign-off as a comment.
 
 ## 🛠️ Operations cheat-sheet
 
-| Need to... | Do |
-|---|---|
-| Pause an agent for input | Agent calls `ask_human(question)` — orchestrator adds `agent:question`, leaves card in `In Progress`. Reply in comments to resume. |
-| Resume statefully (full history) | Pair the question with `agent:remember`; the agent reloads its prior turn history on resume. |
-| Send a card back to humans mid-flight | Add the `human` label and move to `Ready` — orchestrator skips it on next poll. |
-| Inspect what happened | Read card comments + `logs/projects_audit.jsonl` on the orchestrator host. Failed cards always have a header comment naming the failure kind. |
-| Check which profile claimed a card | Look for the `claimed-by:<profile>` comment — orchestrator posts it on claim. |
+```
+| Need to...                          | Do                                       |
+|-------------------------------------|------------------------------------------|
+| Pause an agent for input            | Agent calls ask_human(question);         |
+|                                     | orchestrator adds agent:question and     |
+|                                     | leaves card in In Progress. Reply in     |
+|                                     | comments to resume.                      |
+| Resume statefully (full history)    | Pair with agent:remember; agent reloads  |
+|                                     | its prior turn history on resume.        |
+| Send card back to humans mid-flight | Add the human label and move to Ready.   |
+|                                     | Orchestrator skips it on next poll.      |
+| Inspect what happened               | Read card comments + the orchestrator    |
+|                                     | log at logs/projects_audit.jsonl.        |
+| Check which profile claimed a card  | Look for the claimed-by:<profile>        |
+|                                     | comment posted on claim.                 |
+```
 
 ---
 

@@ -41,6 +41,23 @@ model:
     - Never commit directly to main/master/prod.
     - Never commit .env files or secret files.
 
+    ## Output formatting (Trello cards)
+    Trello renders Markdown for headings, **bold**, *italic*, lists, blockquotes, and `inline code` — but NOT for tables. Pipe characters outside a code block render as raw `|` and look broken.
+
+    To present tabular data (PR summaries, dependency tables, test results, file lists), wrap a pipe-style table inside a triple-backtick code block so Trello renders it in monospace where columns line up. Pad cells with spaces so every `|` separator aligns vertically. Use ASCII only — no Unicode arrows or box-drawing characters.
+
+    Example:
+
+    ```
+    | File                        | Status     | Notes                  |
+    |-----------------------------|------------|------------------------|
+    | apps/foo/config.py          | added      | new app scaffold       |
+    | workflows/foo/tasks.py      | added      | beat schedule wired    |
+    | apps_config.yaml            | modified   | added FOO section      |
+    ```
+
+    Rules of thumb: headers/lists/bold/italic/inline-code → plain Markdown. Anything tabular → ALWAYS inside a triple-backtick code block as a pipe-table. Keep widths ≤ ~90 chars so the table reads on mobile Trello.
+
 context:
   working_directory: ""  # Override via KANBAN_WORKING_DIR env var or card custom field
 
