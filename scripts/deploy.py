@@ -14,6 +14,15 @@ Override the auto-detection or add ad-hoc daemons via flags:
     python scripts/deploy.py --role node --queues agent,worker
     python scripts/deploy.py --role host --no-mcp --no-kanban --no-flower
 
+Single-instance mode (skip the full stack — run just one celery process):
+
+    python scripts/deploy.py --scheduler                    # only Beat
+    python scripts/deploy.py -c 4                           # only worker, concurrency=4
+    python scripts/deploy.py -c 4 -q hud,peon               # only worker on hud+peon, c=4
+
+In single-instance mode Docker is NOT touched (assumes the broker is already
+reachable). --scheduler and -c/--concurrency are mutually exclusive.
+
 Lifecycle:
     --down           Stop all services this machine launched
     --status         Show running services with PIDs
@@ -33,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import shutil
 import socket
 import subprocess
@@ -185,22 +195,132 @@ def read_pid(service: str) -> int | None:
     return pid
 
 
-def spawn_detached(cmd: list[str], log_file: Path, *, show_console: bool = False) -> int:
+def _spawn_macos_console(cmd: list[str], pidfile: Path) -> int:
+    """macOS console mode: open a new Terminal.app window running cmd.
+
+    AppleScript's `do script` runs in a fresh shell inside a new Terminal
+    window. To recover the daemon's PID for --status/--down, we wrap the
+    command in `echo $$ > <pidfile>; exec <cmd>`:
+      - `$$` is the shell's PID (captured BEFORE exec)
+      - `exec` replaces the shell process with the celery binary
+      - so the PID written to pidfile === the running celery PID
+
+    We poll pidfile for up to 5s while Terminal launches and the helper runs.
+    """
+    pidfile.parent.mkdir(parents=True, exist_ok=True)
+    pidfile.unlink(missing_ok=True)
+
+    quoted = " ".join(shlex.quote(c) for c in cmd)
+    inner = f"echo $$ > {shlex.quote(str(pidfile))}; exec {quoted}"
+    # AppleScript double-quoted string: escape \ and " inside the do-script body.
+    escaped = inner.replace("\\", "\\\\").replace('"', '\\"')
+    # Tag the tab via custom title so _close_macos_terminal_windows() can find
+    # and close it later on redeploy / --down.
+    title = f"harqis-work:{pidfile.stem}"
+    osa = (
+        'tell application "Terminal"\n'
+        '    activate\n'
+        f'    set newTab to do script "{escaped}"\n'
+        f'    set custom title of newTab to "{title}"\n'
+        'end tell'
+    )
+
+    subprocess.Popen(["osascript", "-e", osa], close_fds=True)
+
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        if pidfile.exists():
+            try:
+                pid = int(pidfile.read_text().strip())
+                if pid > 0:
+                    return pid
+            except (ValueError, OSError):
+                pass
+        time.sleep(0.1)
+    raise RuntimeError(
+        f"Timed out (5s) waiting for {pidfile} to be written by Terminal helper. "
+        "Check that AppleScript is allowed to control Terminal "
+        "(System Settings → Privacy & Security → Automation)."
+    )
+
+
+def _close_macos_terminal_windows(services: list[str] | None = None) -> None:
+    """Close Terminal.app tabs tagged 'harqis-work:<service>' from prior deploys.
+
+    Tabs are tagged at spawn time via `set custom title of newTab to ...`
+    in `_spawn_macos_console`. Closing the tab terminates the running celery
+    process inside it (Terminal sends the shell SIGHUP).
+
+    `services=None` closes every harqis-work:* tab (broad pre-deploy sweep).
+    `services=['scheduler']` closes only the scheduler's tab (per-service stop).
+    """
+    if not IS_MAC:
+        return
+    if services is None:
+        cond = '(tabTitle starts with "harqis-work:")'
+    else:
+        wanted = ' or '.join(f'(tabTitle is "harqis-work:{s}")' for s in services)
+        cond = f'({wanted})'
+    osa = (
+        'tell application "Terminal"\n'
+        '    set targets to {}\n'
+        '    repeat with w in windows\n'
+        '        repeat with t in tabs of w\n'
+        '            try\n'
+        '                set tabTitle to custom title of t\n'
+        f'                if {cond} then\n'
+        '                    set end of targets to t\n'
+        '                end if\n'
+        '            end try\n'
+        '        end repeat\n'
+        '    end repeat\n'
+        '    repeat with t in targets\n'
+        '        try\n'
+        '            close t saving no\n'
+        '        end try\n'
+        '    end repeat\n'
+        'end tell\n'
+    )
+    subprocess.run(
+        ["osascript", "-e", osa],
+        capture_output=True, text=True, check=False,
+    )
+
+
+def spawn_detached(
+    cmd: list[str],
+    log_file: Path,
+    *,
+    show_console: bool = False,
+    pidfile: Path | None = None,
+) -> int:
     """Spawn a long-running process detached from this terminal. Returns its PID.
 
-    Two modes on Windows:
-      - show_console=False (default) — windowless daemon. CREATE_NO_WINDOW
-        suppresses console creation; stdout/stderr redirect to log_file.
-      - show_console=True — visible window. CREATE_NEW_CONSOLE allocates a
-        new console; stdio is NOT redirected so live output flows there.
-        Closing the window terminates the daemon.
+    `show_console=False` (default) — windowless daemon, stdio → log_file.
+    `show_console=True` — visible window, stdio inherits the new window.
 
-    CREATE_NEW_PROCESS_GROUP detaches the child from this terminal's signal
-    group so Ctrl-C here doesn't kill the daemon. On Unix, the start_new_session
-    equivalent is used; show_console=True there means inherit the current
-    terminal's stdio (no separate window concept).
+    Per-platform behaviour for `show_console=True`:
+      - **Windows:** CREATE_NEW_CONSOLE allocates a new console window.
+        Closing the window terminates the daemon.
+      - **macOS:** new Terminal.app window via `osascript`. Requires `pidfile`
+        so the helper can write the celery PID (Terminal-spawned processes
+        aren't direct children of this script). First run will prompt for
+        Automation permission to control Terminal.app.
+      - **Linux:** no portable new-window mechanism (gnome-terminal vs
+        konsole vs xterm vs ...). Falls back to inheriting the current
+        terminal's stdio. Run via `tmux new-session 'python scripts/deploy.py
+        --console …'` if you want isolation.
+
+    CREATE_NEW_PROCESS_GROUP / start_new_session detach the child from this
+    terminal's signal group so Ctrl-C here doesn't kill the daemon.
     """
     log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    if show_console and IS_MAC:
+        if pidfile is None:
+            raise ValueError("Mac console mode requires pidfile= for PID capture")
+        return _spawn_macos_console(cmd, pidfile)
+
     if IS_WIN:
         if show_console:
             flags = subprocess.CREATE_NEW_CONSOLE | subprocess.CREATE_NEW_PROCESS_GROUP
@@ -296,7 +416,11 @@ def start_service(service: str, machine: dict, args: argparse.Namespace) -> bool
         return True
     cmd = build_service_cmd(service, machine, args)
     use_console = _service_uses_console(service, args)
-    pid = spawn_detached(cmd, log_path(service), show_console=use_console)
+    pid = spawn_detached(
+        cmd, log_path(service),
+        show_console=use_console,
+        pidfile=pid_path(service),
+    )
     pid_path(service).write_text(str(pid))
     detail = ""
     if service == "worker":
@@ -318,9 +442,13 @@ def stop_service(service: str) -> None:
     pid = read_pid(service)
     if not pid:
         print(f"  Not running: {service}")
+        # Even if no PID file, a tagged Terminal tab may still be open
+        # (e.g. PID file got deleted manually). Sweep that one tab anyway.
+        _close_macos_terminal_windows([service])
         return
     if stop_pid(pid, service):
         print(f"  Stopped: {service} (PID {pid})")
+    _close_macos_terminal_windows([service])
 
 
 def _process_matching(needle: str) -> list[int]:
@@ -403,6 +531,10 @@ def kill_stray_celery() -> None:
         for pid in _all_processes_matching(needle):
             if pid != self_pid:
                 pids.add(pid)
+    # macOS: also close any tagged Terminal.app tabs from prior --console runs.
+    # The pgrep sweep above kills the celery PIDs; this closes the leftover
+    # windows so they don't pile up after every redeploy.
+    _close_macos_terminal_windows()
     if not pids:
         return
     pids_sorted = sorted(pids)
@@ -623,7 +755,18 @@ def _unregister_scheduled_tasks(services):
 # ── Service selection ─────────────────────────────────────────────────────────
 
 def select_services(machine: dict, args: argparse.Namespace) -> list[str]:
-    """Filter SERVICES by role + machine.disable + --no-* flags."""
+    """Filter SERVICES by role + machine.disable + --no-* flags.
+
+    Single-instance mode short-circuits the role-based selection: passing
+    --scheduler runs only the scheduler; passing -c/--concurrency runs only
+    the worker (with the given concurrency exported as WORKFLOW_CONCURRENCY).
+    The two flags are mutually exclusive (enforced in argparse).
+    """
+    if args.scheduler:
+        return ["scheduler"]
+    if args.concurrency is not None:
+        return ["worker"]
+
     role = machine["role"]
     disabled: set[str] = set(machine.get("disable", []))
     if args.no_frontend: disabled.add("frontend")
@@ -657,6 +800,14 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Launch scheduler+worker in visible console windows "
                         "(live celery output, no log file). Closing a window kills the daemon.")
 
+    si = p.add_mutually_exclusive_group()
+    si.add_argument("--scheduler", action="store_true",
+                    help="Single-instance mode: run ONLY the Celery Beat scheduler (skip worker, "
+                         "frontend, mcp, kanban, flower, Docker). Mutually exclusive with -c.")
+    si.add_argument("-c", "--concurrency", type=int, metavar="N",
+                    help="Single-instance mode: run ONLY a worker with concurrency N. "
+                         "Sets WORKFLOW_CONCURRENCY=N before spawning. Mutually exclusive with --scheduler.")
+
     g = p.add_mutually_exclusive_group()
     g.add_argument("--down",       action="store_true", help="Stop services")
     g.add_argument("--status",     action="store_true", help="Show running services")
@@ -689,6 +840,10 @@ def main() -> None:
     name = machine.get("_name", "(adhoc)")
     role = machine["role"]
     queues = args.queues or ",".join(machine.get("queues", ["default"]))
+    single_instance = args.scheduler or args.concurrency is not None
+    if args.concurrency is not None:
+        # Picked up by scripts/launch.py worker (which falls back to 8 if unset).
+        os.environ["WORKFLOW_CONCURRENCY"] = str(args.concurrency)
 
     if args.unregister:
         unregister_services(services)
@@ -699,22 +854,28 @@ def main() -> None:
         for s in services:
             stop_service(s)
         kill_stray_celery()
-        if role == "host" and not args.docker_only:
+        if role == "host" and not args.docker_only and not single_instance:
             docker_down()
         print(f"All services stopped for machine={name}.")
         return
 
-    print(f"==> Deploy machine={name}  role={role}  queues={queues}")
-    print(f"    services: {', '.join(services) if services else '(none)'}")
+    if single_instance:
+        mode = "scheduler" if args.scheduler else f"worker (concurrency={args.concurrency})"
+        print(f"==> Single-instance: {mode}  queues={queues}")
+        print(f"    services: {', '.join(services)}")
+        print(f"    (skipping Docker — single-instance mode assumes broker is reachable)")
+    else:
+        print(f"==> Deploy machine={name}  role={role}  queues={queues}")
+        print(f"    services: {', '.join(services) if services else '(none)'}")
 
     # Clean slate: kill any orphan celery/launcher processes from prior runs
     # before spawning new daemons (avoids piling up console windows on Windows).
     if not args.docker_only:
         kill_stray_celery()
 
-    if role == "host" and not args.docker_only:
+    if role == "host" and not args.docker_only and not single_instance:
         docker_up()
-    elif role == "node":
+    elif role == "node" and not single_instance:
         print("[node] Skipping Docker — broker is on the host.")
 
     if args.register:

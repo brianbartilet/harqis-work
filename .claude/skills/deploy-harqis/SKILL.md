@@ -21,8 +21,10 @@ Deploy the harqis-work platform on this machine — full stack ("host") or worke
 | `--no-flower` | No | Skip the Flower Celery monitor (host only). |
 | `--num-agents N` | No | Number of concurrent in-process Kanban agent workers (default 1). Applies to whichever profile this orchestrator is filtered to. |
 | `--dry-run` | No | Run Kanban orchestrator in dry-run mode (logs actions, doesn't invoke Claude). |
+| `--scheduler` | No | **Single-instance mode** — run ONLY the Celery Beat scheduler. Skips worker, frontend, mcp, kanban, flower, and Docker. `role` is ignored. Mutually exclusive with `-c`. |
+| `-c N`, `--concurrency N` | No | **Single-instance mode** — run ONLY a worker with concurrency N (sets `WORKFLOW_CONCURRENCY=N`). Skips other services and Docker. `role` is ignored. Mutually exclusive with `--scheduler`. |
 
-`role` is mandatory. If the user invokes `/deploy-harqis` without args, ask which role and which queues (the latter only matters for `node`).
+`role` is mandatory **unless** `--scheduler` or `-c` is passed (those put deploy.py in single-instance mode and bypass role-based selection). If the user invokes `/deploy-harqis` without args, ask which role and which queues (the latter only matters for `node`).
 
 ### Scheduler vs queues — the rule that must never break
 
