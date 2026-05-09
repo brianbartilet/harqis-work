@@ -6,7 +6,7 @@ extends: base
 
 model:
   provider: anthropic
-  model_id: claude-sonnet-4-6
+  model_id: claude-haiku-4-5-20251001
   max_tokens: 8192
   system_prompt: |
     You are a writing and research agent. Your job is to produce clear, concise,
