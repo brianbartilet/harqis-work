@@ -14,6 +14,7 @@ from typing import Any
 
 import httpx
 from celery import Celery
+from kombu.common import Broadcast
 
 from config import get_settings
 
@@ -23,6 +24,16 @@ settings = get_settings()
 @lru_cache(maxsize=1)
 def _get_celery() -> Celery:
     app = Celery(broker=settings.celery_broker)
+    # Fanout queues must be declared so send_task(queue='*_broadcast') publishes
+    # via the fanout exchange. Otherwise the bare client falls back to
+    # task_default_exchange_type='direct' and RabbitMQ rejects the redeclare
+    # against the existing fanout exchange with 406 PRECONDITION_FAILED.
+    app.conf.task_queues = (
+        Broadcast('default_broadcast'),
+        Broadcast('hud_broadcast'),
+        Broadcast('workers_broadcast'),
+        Broadcast('agents_broadcast'),
+    )
     app.conf.broker_connection_timeout = 5       # seconds before giving up
     app.conf.broker_connection_retry = False     # fail fast, don't retry
     app.conf.broker_connection_retry_on_startup = False
