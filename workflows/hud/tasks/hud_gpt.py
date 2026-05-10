@@ -31,6 +31,42 @@ _DESKTOP_ANALYSIS_PROMPT = load_prompt('desktop_analysis')
 _MAX_SCREENSHOTS = 5
 _CLAUDE_URL = 'https://claude.ai/'
 
+# Cap dump.txt at ~3 MB. The HUD task PREPENDS each new entry to the file,
+# so newest content is at the top — when we trim, we keep the first N bytes
+# and drop the older tail. New content per run is ~5–50 KB, so we leave a
+# 256 KB cushion below the hard cap to avoid bouncing the file over 3 MB
+# right after the prepend.
+_MAX_DUMP_BYTES = 3 * 1024 * 1024
+_KEEP_DUMP_BYTES = _MAX_DUMP_BYTES - 256 * 1024
+
+
+def _trim_dump_file(path: str, keep_bytes: int) -> None:
+    """Trim `path` to at most `keep_bytes`, cutting at a clean entry boundary.
+
+    No-op if the file doesn't exist or is already small enough. Cuts after
+    the last `[END]` line that fits within `keep_bytes` so we never end
+    mid-entry (which would render as garbage in the HUD).
+    """
+    try:
+        if not os.path.exists(path):
+            return
+        if os.path.getsize(path) <= keep_bytes:
+            return
+        with open(path, 'rb') as f:
+            chunk = f.read(keep_bytes)
+        text = chunk.decode('utf-8', errors='ignore')
+        last_end = text.rfind("[END]")
+        if last_end >= 0:
+            line_break = text.find("\n", last_end)
+            if line_break >= 0:
+                text = text[: line_break + 1]
+        text += "\n[...older entries trimmed; dump.txt capped at ~3 MB]\n"
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(text)
+        log.info("Trimmed dump.txt at %s to ~%d KB", path, len(text) // 1024)
+    except OSError as e:
+        log.warning("Could not trim dump.txt at %s: %s", path, e)
+
 
 @SPROUT.task()
 @log_result()
@@ -218,6 +254,13 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
                                           RAINMETER_CONFIG['skin_name'],
                                           hud, "dump.txt"
                                           ))
+
+    # Cap dump.txt growth — trims existing file BEFORE the @init_meter
+    # decorator's prepend write happens at function exit, so the new entry
+    # this tick lands on top of an already-bounded file. See _trim_dump_file
+    # for boundary-aware cut logic.
+    _trim_dump_file(dump_path, _KEEP_DUMP_BYTES)
+
     ini['meterLink_dump']['Meter'] = 'String'
     ini['meterLink_dump']['MeterStyle'] = 'sItemLink'
     ini['meterLink_dump']['X'] = '(90*#Scale#)'
