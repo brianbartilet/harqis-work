@@ -71,7 +71,8 @@ def test_emit_card_claimed_sends_expected_payload():
     # Indexed under the configured index.
     assert_that(kwargs["index_name"], equal_to(telemetry._index_name()))
     # Location key combines board + card so a card's lifecycle docs cluster.
-    assert_that(kwargs["location_key"], equal_to("b1/card_a"))
+    # Forward slashes are sanitized to underscores (see telemetry._emit comment).
+    assert_that(kwargs["location_key"], equal_to("b1_card_a"))
 
 
 @pytest.mark.smoke
