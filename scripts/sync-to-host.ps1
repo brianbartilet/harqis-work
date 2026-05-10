@@ -131,7 +131,11 @@ foreach ($item in $items) { Write-Host "  - $item" }
 # ground truth on one connection (no second password prompt).
 # Single-quoted PS string so 2>&1 stays literal text for the remote shell.
 $verifyList = ($items | ForEach-Object { "$RemotePath/$_" }) -join ' '
-$remoteCmd  = 'mkdir -p ' + $RemotePath + ' && tar -xvf - -C ' + $RemotePath +
+# Stream is base64 on the wire so Windows ssh.exe doesn't corrupt binary stdin.
+# Decode with python3 (preinstalled on macOS) — more lenient than BSD base64 -d
+# about whitespace/padding, and uses a binary stdout buffer.
+$pyDecode = "python3 -c 'import sys,base64;sys.stdout.buffer.write(base64.b64decode(sys.stdin.buffer.read()))'"
+$remoteCmd  = 'mkdir -p ' + $RemotePath + ' && ' + $pyDecode + ' | tar -xvf - -C ' + $RemotePath +
               " && echo '---POST-SYNC LISTING---' && ls -la " + $verifyList + ' 2>' + '&1'
 
 if ($Check) {
@@ -179,28 +183,24 @@ try {
     & $tarExe -tf $tarFile | ForEach-Object { Write-Host "    $_" }
 
     Write-Host "`nStreaming archive to $SshTarget ..." -ForegroundColor Cyan
-    $sshCmd = Get-Command ssh -ErrorAction Stop
-    $psi = [System.Diagnostics.ProcessStartInfo]::new()
-    $psi.FileName = $sshCmd.Source
-    $psi.Arguments = '"{0}" "{1}"' -f $SshTarget, $remoteCmd
-    $psi.UseShellExecute = $false
-    $psi.RedirectStandardInput = $true   # binary stdin from .NET FileStream
+    # Write base64 to a sibling file. Start-Process -RedirectStandardInput reads
+    # this file as raw bytes — no .NET StreamWriter, no BOM, no text-mode quirks.
+    $b64File  = "$tarFile.b64"
+    $tarBytes = [System.IO.File]::ReadAllBytes($tarFile)
+    $b64      = [System.Convert]::ToBase64String($tarBytes)
+    [System.IO.File]::WriteAllBytes($b64File, [System.Text.Encoding]::ASCII.GetBytes($b64))
 
-    $proc = [System.Diagnostics.Process]::Start($psi)
-    $tarStream = [System.IO.File]::OpenRead($tarFile)
-    try {
-        $tarStream.CopyTo($proc.StandardInput.BaseStream)
-    }
-    finally {
-        $tarStream.Dispose()
-        $proc.StandardInput.Close()
-    }
-    $proc.WaitForExit()
+    $sshCmd = Get-Command ssh -ErrorAction Stop
+    $proc = Start-Process -FilePath $sshCmd.Source `
+        -ArgumentList @("`"$SshTarget`"", "`"$remoteCmd`"") `
+        -RedirectStandardInput $b64File `
+        -NoNewWindow -PassThru -Wait
 
     if ($proc.ExitCode -ne 0) { throw "ssh/tar-extract failed (exit $($proc.ExitCode))" }
 }
 finally {
     Remove-Item -LiteralPath $tarFile -ErrorAction SilentlyContinue
+    if ($b64File) { Remove-Item -LiteralPath $b64File -ErrorAction SilentlyContinue }
 }
 
 Write-Host "`nDone." -ForegroundColor Green
