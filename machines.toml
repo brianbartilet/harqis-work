@@ -75,3 +75,29 @@ kanban_profile = "agent:code"
 # "<bare-hostname>.local"  = "harqis-server"
 # "<windows-hostname>"     = "windows-work"
 # "<vps-hostname>"         = "vps-worker"
+
+
+# ── Daily dumps workflow (workflows/dumps/) ───────────────────────────────────
+# Schema only — actual values belong in machines.local.toml.
+#
+# [dumps] holds the harqis-server SSH target and inbox path that the broadcast
+# task ships files to:
+#
+#     [dumps]
+#     harqis_server_ssh   = "<remote-user>@<host-or-tailscale-magicdns>"
+#     harqis_server_inbox = "<absolute-path-on-harqis-server>"
+#
+# Per-machine paths to scan are declared on the matching [<machine>] block:
+#
+#     [<machine>.daily_dumps]
+#     paths = [ "<absolute-path>", "<absolute-path>" ]
+#
+# Non-celery devices (Android via Termux SSHD, etc.) are pulled by the
+# host-side task — list them here:
+#
+#     [dumps.pull_targets.<device-name>]
+#     ssh   = "<remote-user>@<host-or-tailscale-magicdns>"
+#     port  = 22                  # 8022 for Termux's default
+#     paths = [ "<absolute-path>", ... ]
+#
+# Full reference: workflows/dumps/README.md
