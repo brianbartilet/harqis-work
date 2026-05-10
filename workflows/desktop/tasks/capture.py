@@ -24,6 +24,25 @@ _WEEKLY_SUMMARY_PROMPT = load_prompt('weekly_summary')
 
 SCREENREADER_MARKER = "--desktop-screenreader"
 
+# Hard cap on raw dump content shipped to Claude. ~600KB ≈ 150k tokens at the
+# typical 4-chars-per-token rate for mixed-English text — comfortably inside
+# Haiku's 200k context (and Sonnet's 200k / 1M). Anything older is dropped;
+# the prompt gets a marker line so the model knows it's seeing the tail.
+MAX_DUMP_CHARS = 600_000
+
+
+def _tail_with_marker(text: str, max_chars: int) -> str:
+    """Return the last `max_chars` of `text`. If truncated, prepend a marker
+    line so the LLM treats the slice as a tail and doesn't hallucinate the
+    missing earlier context."""
+    if len(text) <= max_chars:
+        return text
+    dropped = len(text) - max_chars
+    return (
+        f"[truncated: dropped {dropped:,} earlier chars; kept last {max_chars:,}]\n"
+        + text[-max_chars:]
+    )
+
 # Windows flags
 if os.name == "nt":
     HIDDEN_WINDOW = subprocess.CREATE_NO_WINDOW
@@ -137,6 +156,17 @@ def generate_daily_desktop_summary(hud_item_name='DESKTOP LOGS', logs_output_pat
         log.warning("dump.txt is empty — skipping daily summary")
         return "SKIPPED: dump.txt is empty"
 
+    # Cap to keep us under any model's context window. Without this the file
+    # accumulates over time and a single call eventually overflows
+    # (1.17M tokens > 1M observed in the wild).
+    original_chars = len(dump_content)
+    dump_content = _tail_with_marker(dump_content, MAX_DUMP_CHARS)
+    if original_chars > MAX_DUMP_CHARS:
+        log.warning(
+            "dump.txt was %s chars; truncated to last %s for daily summary",
+            f"{original_chars:,}", f"{MAX_DUMP_CHARS:,}",
+        )
+
     try:
         response = anthropic._with_backoff(
             anthropic.base_client.messages.create,
@@ -149,8 +179,12 @@ def generate_daily_desktop_summary(hud_item_name='DESKTOP LOGS', logs_output_pat
         )
         summary_md = response.content[0].text
     except Exception as e:
-        log.error(f"Anthropic daily summary generation failed: {e}")
-        return f"FAILED: {e}"
+        # Re-raise so Celery marks the task FAILED — visible in Flower, the
+        # failed-jobs HUD widget, and any retry policy. Returning "FAILED: ..."
+        # as a string previously made the failure invisible to everything but
+        # this log line.
+        log.error("Anthropic daily summary generation failed: %s", e)
+        raise
 
     today = datetime.now().strftime("%m-%d-%Y")
     output_dir = Path(logs_output_path).expanduser()
@@ -220,6 +254,16 @@ def generate_weekly_desktop_summary(logs_daily_path='logs/daily', logs_output_pa
             combined.append(f"<!-- {day.strftime('%A %d %b %Y')} -->\n{f.read()}")
 
     combined_content = "\n\n---\n\n".join(combined)
+    # Same cap as the daily task — defensive: daily summaries are usually
+    # small (~5-30KB each, capped at 8192 output tokens) but if an upstream
+    # change ever inlines raw dumps this still won't overflow.
+    original_chars = len(combined_content)
+    combined_content = _tail_with_marker(combined_content, MAX_DUMP_CHARS)
+    if original_chars > MAX_DUMP_CHARS:
+        log.warning(
+            "Weekly combined content was %s chars; truncated to last %s",
+            f"{original_chars:,}", f"{MAX_DUMP_CHARS:,}",
+        )
     prompt = (
         f"{_WEEKLY_SUMMARY_PROMPT}\n\n"
         f"Week number: {week_num}\n"
@@ -236,8 +280,9 @@ def generate_weekly_desktop_summary(logs_daily_path='logs/daily', logs_output_pa
         )
         summary_md = response.content[0].text
     except Exception as e:
-        log.error(f"Anthropic weekly summary generation failed: {e}")
-        return f"FAILED: {e}"
+        # Re-raise so Celery sees the failure — see daily task for rationale.
+        log.error("Anthropic weekly summary generation failed: %s", e)
+        raise
 
     output_dir = Path(logs_output_path).expanduser()
     output_dir.mkdir(parents=True, exist_ok=True)
