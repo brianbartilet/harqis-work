@@ -75,7 +75,7 @@ WORKFLOWS_HUD = {
     # within the same day; after that the result is stale.
     'run-job--show_tcg_sell_cart': {
         'task': 'workflows.hud.tasks.hud_tcg.show_tcg_sell_cart',
-        'schedule': crontab(day_of_week='sun,tue', hour=0, minute=0),
+        'schedule': crontab(day_of_week='sun,sat', hour="*/4", minute=0),
         'kwargs': {
             "cfg_id__tcg_mp": "TCG_MP",
             "worker_count": 2
@@ -226,7 +226,7 @@ WORKFLOWS_HUD = {
     # 2 hours, after that the next 4-hour tick refreshes.
     'run-job--show_pc_daily_sales': {
         'task': 'workflows.hud.tasks.hud_finance.show_pc_daily_sales',
-        'schedule': crontab(hour='*/4', minute=0),
+        'schedule': crontab(hour='*/2', minute=0),
         'kwargs': {
             "cfg_id__appsheet": "APPSHEET",
             "days": 60,
