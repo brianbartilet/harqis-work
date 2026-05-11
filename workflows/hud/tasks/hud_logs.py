@@ -119,12 +119,14 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
     # endregion
 
     # region Set dimensions
-    width_multiplier = 2.1
+    # 2.25 matches DESKTOP LOGS (hud_gpt.get_desktop_logs) so the two
+    # always-visible widgets line up side by side without a width step.
+    width_multiplier = 2.25
     ini['meterSeperator']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['W'] = '({0}*186*#Scale#)'.format(width_multiplier)
     ini['MeterDisplay']['H'] = '((42*#Scale#)+(#ItemLines#*22)*#Scale#)'
     ini['MeterDisplay']['X'] = '14'
-    #ini['MeterDisplay']['MeasureName'] = 'MeasureLuaScriptScroll'
+    ini['MeterDisplay']['MeasureName'] = 'MeasureScrollableText'
 
     ini['MeterBackground']['Shape'] = ('Rectangle 0,0,({0}*190),(36+(#ItemLines#*22)),2 | Fill Color #fillColor# '
                                        '| StrokeWidth (1*#Scale#) | Stroke Color [#darkColor] '
@@ -139,13 +141,17 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
     # endregion
 
     # region Dump data
+    # Total budget ~60 chars to fit the meter at width_multiplier=2.25
+    # without wrapping. Each column truncates its source string so the
+    # row stays single-line even with long task/machine/error values.
     dump = ""
     for hit in results:
         details = hit['_source']
         show_method = str(details['name']).split('.')[-2:]
-        target_name = '.'.join(show_method)
-        target_error = str(details['exception_message']).strip()
-        dump += f"{target_name:<{42}} {target_error:>{8}}\n"
+        target_name = '.'.join(show_method)[:36]
+        target_error = str(details['exception_message']).strip()[:12]
+        target_machine = (details.get('machine') or 'NA')[:10]
+        dump += f"{target_name:<{36}} {target_machine:<{10}} {target_error:<{12}}\n"
 
 
 
@@ -164,6 +170,7 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
             "task": '.'.join(name),
             "error": str(details.get('exception_message', '')).strip(),
             "last_failed": details.get('last_failed'),
+            "machine": details.get('machine') or 'NA',
         })
 
     return {
