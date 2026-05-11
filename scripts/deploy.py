@@ -130,7 +130,37 @@ def load_machine_config(name: str | None) -> dict:
     machine = cfg.get(name)
     if machine is None:
         machine = cfg.get("default", {"role": "host", "queues": ["default"]})
-    return {**machine, "_name": name}
+    # Attach the top-level [shared] block under `_shared` so callers can
+    # resolve cluster-wide defaults (e.g. [shared.env_vars]) without
+    # re-loading the file. Per-machine values still override shared ones —
+    # the merge happens in the consumer (see machine_env_vars below).
+    return {**machine, "_name": name, "_shared": cfg.get("shared", {})}
+
+
+def machine_env_vars(machine: dict) -> dict[str, str]:
+    """Resolve env vars to inject into daemons spawned for this machine.
+
+    Source files: machines.toml + machines.local.toml (merged earlier in
+    load_machine_config). Two tables contribute:
+
+      [shared.env_vars]           cluster-wide defaults from machines.toml
+      [<machine>.env_vars]        per-machine overrides from either file
+
+    Per-machine values win on key conflict. TOML values are stringified
+    because OS environment variables must be strings.
+
+    Phase 0 of the apps.env → machines.toml migration: deploy.py injects the
+    returned dict into the environment of every daemon it spawns via
+    spawn_detached(extra_env=...). Daemons keep calling os.environ.get(...)
+    and apps_config.yaml's ${PLACEHOLDER} resolver keeps working — they just
+    see the TOML-sourced values in addition to (or in place of) what
+    .env/apps.env provides. See docs/info/WORKER-CONFIG-DISTRIBUTION.md §3
+    for the migration design and the env-injection mechanism.
+    """
+    shared = (machine.get("_shared") or {}).get("env_vars") or {}
+    own = machine.get("env_vars") or {}
+    merged = {**shared, **own}
+    return {k: str(v) for k, v in merged.items()}
 
 
 # ── Env loading (for docker-compose) ──────────────────────────────────────────
@@ -201,7 +231,12 @@ def read_pid(service: str) -> int | None:
     return pid
 
 
-def _spawn_macos_console(cmd: list[str], pidfile: Path) -> int:
+def _spawn_macos_console(
+    cmd: list[str],
+    pidfile: Path,
+    *,
+    extra_env: dict[str, str] | None = None,
+) -> int:
     """macOS console mode: open a new Terminal.app window running cmd.
 
     AppleScript's `do script` runs in a fresh shell inside a new Terminal
@@ -211,13 +246,24 @@ def _spawn_macos_console(cmd: list[str], pidfile: Path) -> int:
       - `exec` replaces the shell process with the celery binary
       - so the PID written to pidfile === the running celery PID
 
+    When `extra_env` is provided, each KEY=VALUE pair is prefixed as an
+    `export` statement before `exec`. Necessary because the new Terminal
+    shell starts fresh and does NOT inherit our process's environment —
+    re-export is the only way to make machines.toml env_vars visible to
+    the celery process.
+
     We poll pidfile for up to 5s while Terminal launches and the helper runs.
     """
     pidfile.parent.mkdir(parents=True, exist_ok=True)
     pidfile.unlink(missing_ok=True)
 
     quoted = " ".join(shlex.quote(c) for c in cmd)
-    inner = f"echo $$ > {shlex.quote(str(pidfile))}; exec {quoted}"
+    exports = ""
+    if extra_env:
+        exports = "".join(
+            f"export {k}={shlex.quote(v)}; " for k, v in extra_env.items()
+        )
+    inner = f"echo $$ > {shlex.quote(str(pidfile))}; {exports}exec {quoted}"
     # AppleScript double-quoted string: escape \ and " inside the do-script body.
     escaped = inner.replace("\\", "\\\\").replace('"', '\\"')
     # Tag the tab via custom title so _close_macos_terminal_windows() can find
@@ -299,11 +345,19 @@ def spawn_detached(
     *,
     show_console: bool = False,
     pidfile: Path | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> int:
     """Spawn a long-running process detached from this terminal. Returns its PID.
 
     `show_console=False` (default) — windowless daemon, stdio → log_file.
     `show_console=True` — visible window, stdio inherits the new window.
+
+    `extra_env` — optional dict of KEY=VALUE pairs to inject into the child
+    process's environment. These values win over anything subsequently
+    loaded by dotenv inside the child (apps.env is loaded with
+    override=False). Source: machine_env_vars(machine) — see Phase 0 of the
+    apps.env → machines.toml migration in
+    docs/info/WORKER-CONFIG-DISTRIBUTION.md §3.
 
     Per-platform behaviour for `show_console=True`:
       - **Windows:** CREATE_NEW_CONSOLE allocates a new console window.
@@ -322,32 +376,38 @@ def spawn_detached(
     """
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
+    # Compose the child's environment. When extra_env is empty we pass
+    # env=None so subprocess inherits our env unchanged (the cheap path).
+    env = {**os.environ, **extra_env} if extra_env else None
+
     if show_console and IS_MAC:
         if pidfile is None:
             raise ValueError("Mac console mode requires pidfile= for PID capture")
-        return _spawn_macos_console(cmd, pidfile)
+        # AppleScript Terminal can't inherit our env; _spawn_macos_console
+        # injects extra_env via `export KEY=VAL` prefixes instead.
+        return _spawn_macos_console(cmd, pidfile, extra_env=extra_env)
 
     if IS_WIN:
         if show_console:
             flags = subprocess.CREATE_NEW_CONSOLE | subprocess.CREATE_NEW_PROCESS_GROUP
-            proc = subprocess.Popen(cmd, creationflags=flags, close_fds=True)
+            proc = subprocess.Popen(cmd, creationflags=flags, close_fds=True, env=env)
         else:
             fout = open(log_file, "ab")
             flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
             proc = subprocess.Popen(
                 cmd,
                 stdin=subprocess.DEVNULL, stdout=fout, stderr=subprocess.STDOUT,
-                creationflags=flags, close_fds=True,
+                creationflags=flags, close_fds=True, env=env,
             )
     else:
         if show_console:
-            proc = subprocess.Popen(cmd, start_new_session=True, close_fds=True)
+            proc = subprocess.Popen(cmd, start_new_session=True, close_fds=True, env=env)
         else:
             fout = open(log_file, "ab")
             proc = subprocess.Popen(
                 cmd,
                 stdin=subprocess.DEVNULL, stdout=fout, stderr=subprocess.STDOUT,
-                start_new_session=True, close_fds=True,
+                start_new_session=True, close_fds=True, env=env,
             )
     return proc.pid
 
@@ -426,6 +486,7 @@ def start_service(service: str, machine: dict, args: argparse.Namespace) -> bool
         cmd, log_path(service),
         show_console=use_console,
         pidfile=pid_path(service),
+        extra_env=machine_env_vars(machine),
     )
     pid_path(service).write_text(str(pid))
     detail = ""
