@@ -239,7 +239,7 @@ ELASTIC_LOGGING:
   app_id: 'elasticsearch'
   client: 'rest'
   parameters:
-    url: http://localhost:9200
+    url: ${ELASTIC_HOST}
   app_data:
     update_interval: "DAILY"
     api_key: ${ELASTIC_API_KEY}
