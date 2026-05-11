@@ -30,7 +30,7 @@ queues = ["default", "default_broadcast"]
 [harqis-server]
 role = "host"
 queues = ["default", "tcg", "agent", "host", "adhoc", "default_broadcast", "n8n"]
-
+kanban_num_agents = 4
 
 # ── Windows work box: DEFAULT + HUD, no Kanban here ──────────────────────────
 [windows-work]
