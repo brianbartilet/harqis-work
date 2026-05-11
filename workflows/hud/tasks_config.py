@@ -241,6 +241,28 @@ WORKFLOWS_HUD = {
         },
     },
 
+    # ── show_api_costs ───────────────────────────────────────────────────────
+    # Every-2-hours pull of trailing-3-month LLM API spend, grouped per
+    # month → service → model. Anthropic numbers come from the admin
+    # usage API (requires ANTHROPIC_ADMIN_KEY); OpenAI / Gemini are
+    # stubbed until cost endpoints land in their apps.
+    # `expires`: 60 * 60 — half-cadence; a missed run can still fire within
+    # an hour, after that the next 2-hour tick refreshes.
+    'run-job--show_api_costs': {
+        'task': 'workflows.hud.tasks.hud_api_costs.show_api_costs',
+        'schedule': crontab(hour='*/2', minute=0),
+        'kwargs': {
+            "cfg_id__anthropic": "ANTHROPIC",
+            "months": 3,
+            "visible_lines": 10,
+        },
+        "options": {
+            "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
+            "expires": 60 * 60,
+        },
+    },
+
     'run-job--show_ai_helper': {
         'task': 'workflows.hud.tasks.hud_utils.show_ai_helper',
         'schedule': crontab(hour='0', minute=0),

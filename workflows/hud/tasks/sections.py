@@ -157,6 +157,19 @@ sections__pc_daily_sales = {
     # to the AppSheet app. No additional top-row slots.
 }
 
+
+sections__api_costs = {
+    # `meterLink` (template default) carries ANTHROPIC; the rest are extras
+    # positioned dynamically via `compute_horizontal_link_layout` in
+    # show_api_costs (X / W coords come from label widths, not hardcoded).
+    "meterLink_openai": {
+        "Preset": "InjectedByTest",
+    },
+    "meterLink_gemini": {
+        "Preset": "InjectedByTest",
+    },
+}
+
 sections__utilities_ahk = {}
 
 

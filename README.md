@@ -321,7 +321,7 @@ HARQIS drives a live desktop heads-up display using [Rainmeter](https://www.rain
 |---|---|---|
 | `PINNED` | (always visible — no event needed) | Calendar Info, Desktop Logs, HUD Profiles, Agents Core, Failed Jobs |
 | `WORK` | `"Career \| Work"` | Jira Board |
-| `FINANCE` | `"Finance \| Investing \| Business"` | OANDA Account, PC Daily Sales, Budgeting Info |
+| `FINANCE` | `"Finance \| Investing \| Business"` | OANDA Account, PC Daily Sales, Budgeting Info, API Costs |
 | `PLAY` | `"Mischief \| Misdirection \| Play"` | TCG Orders, TCG Sell Cart |
 | `ORGANIZE` | `"Organization \| Everyman Skills"` | Mouse Bindings (also `WORK`) |
 | `DEACTIVATED` | — | Never auto-shows; manual trigger only |
@@ -340,6 +340,7 @@ Widgets are wired to categories in each task's `@init_meter(..., schedule_catego
 | **OANDA Account** | Finance block | OANDA — forex account NAV and open trades | Every 15 min (Mon–Fri) |
 | **PC Daily Sales** | Finance block | AppSheet `INVOICE` table — gross daily sales grouped by month, last 60 days, scrollable | Every 4 hours |
 | **Budgeting Info** | Finance block | YNAB — budget balances in PHP and SGD with overspend warnings | Every 4 hours |
+| **API Costs** | Finance block | Anthropic admin usage API (OpenAI / Gemini stubbed) — trailing 3-month LLM spend grouped per month → service → model | Every 2 hours |
 | **Jira Board** | Work block | Jira Software — In-Review / In-Progress / Ready / In-Analysis tickets | Weekdays every hour |
 | **Mouse Bindings** | Organize + Work | iCUE Corsair Scimitar — active macro bindings for the foreground app | Every 60 sec |
 | **TCG Orders** | Play block | TCG Marketplace — open and pending orders with card art | Every hour |

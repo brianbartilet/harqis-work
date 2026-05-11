@@ -28,6 +28,7 @@ Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for
 | `show_hud_profiles` | Daily at midnight | Active iCUE/Rainmeter HUD profiles |
 | `show_ynab_budgets_info` | Every 4 hours | YNAB budget balances |
 | `show_pc_daily_sales` | Every 4 hours | PC DAILY SALES — sums `TOTAL PRICE` per `DATE` from the AppSheet `INVOICE` table for the last 60 days, grouped by month with a 24-dash separator. Same width as OANDA ACCOUNT; height shows 10 rows at a time, the rest scrolls. Queue: `hud`. |
+| `show_api_costs` | Every 2 hours | API COSTS — trailing 3-month LLM API spend grouped per month → service → model. Anthropic from the admin usage API (`ANTHROPIC_ADMIN_KEY`); OpenAI / Gemini stubbed at zero until cost endpoints exist. Service section omitted when its monthly total is 0. Queue: `hud`. |
 | `show_ai_helper` | Daily at midnight | AI helper widget initialization |
 | `get_schedules` | Every 4 hours | Upcoming calendar schedule |
 
@@ -43,6 +44,7 @@ Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for
 | `tasks/hud_calendar.py` | `show_calendar_information` |
 | `tasks/hud_utils.py` | `show_mouse_bindings`, `build_summary_mouse_bindings`, `show_hud_profiles`, `show_ai_helper` |
 | `tasks/hud_finance.py` | `show_ynab_budgets_info`, `show_pc_daily_sales` |
+| `tasks/hud_api_costs.py` | `show_api_costs` |
 | `tasks/sections.py` | HUD section layout helpers |
 
 ## App Dependencies
