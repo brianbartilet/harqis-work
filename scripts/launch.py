@@ -70,9 +70,15 @@ def load_env_file(path: Path = ENV_FILE) -> dict[str, str]:
 
 
 def setup_env() -> None:
-    """Idempotent env setup: load apps.env, set PYTHONPATH and standard vars."""
+    """Idempotent env setup: load apps.env, set PYTHONPATH and standard vars.
+
+    apps.env values override any inherited shell env — the repo's pinned
+    config is the source of truth for daemons. Defaults below (PYTHONPATH,
+    ROOT_DIRECTORY, etc.) stay `setdefault` since they're last-resort
+    fallbacks, not overrides.
+    """
     for key, value in load_env_file().items():
-        os.environ.setdefault(key, value)
+        os.environ[key] = value
 
     # Pin cwd to repo root: core's file loader (IFileLoader) walks up from
     # os.getcwd() looking for apps_config.yaml. When launchd / a service /

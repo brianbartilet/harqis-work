@@ -136,6 +136,12 @@ def load_machine_config(name: str | None) -> dict:
 # ── Env loading (for docker-compose) ──────────────────────────────────────────
 
 def load_env_into_os() -> None:
+    """Load .env/apps.env into os.environ, overriding any inherited shell values.
+
+    apps.env is the source of truth — a stale value exported in the invoking
+    shell must not silently override the repo's pinned config (otherwise
+    workers/scheduler can pick up wrong paths, creds, etc.).
+    """
     if not ENV_FILE.exists():
         return
     for raw in ENV_FILE.read_text(encoding="utf-8").splitlines():
@@ -147,7 +153,7 @@ def load_env_into_os() -> None:
         value = value.strip()
         if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
             value = value[1:-1]
-        os.environ.setdefault(key, value)
+        os.environ[key] = value
 
 
 # ── Process tracking ──────────────────────────────────────────────────────────
