@@ -96,7 +96,10 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
     # endregion
 
     # region Set links
-    kibana_url = 'http://localhost:5601/app/dev_tools#/console'
+    # Kibana host is configurable via env so dev (localhost) and the deployed
+    # harqis-ones-mac-mini stack point at the right console without code edits.
+    kibana_host = os.environ.get('KIBANA_HOST', 'http://localhost:5601').rstrip('/')
+    kibana_url = f'{kibana_host}/app/dev_tools#/console'
     ini['meterLink']['text'] = "KIBANA"
     ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}" 3]'.format(kibana_url)
     ini['meterLink']['tooltiptext'] = kibana_url
