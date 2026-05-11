@@ -97,12 +97,25 @@ SERVICES: dict[str, dict] = {
 # ── Machine config ────────────────────────────────────────────────────────────
 
 def _merge_machines(base: dict, override: dict) -> dict:
-    """Shallow merge: override's top-level keys win; for dict values
-    (e.g. [hostnames] or a [<machine>] section), inner keys merge."""
+    """Recursively merge two machine-config dicts; override wins on key conflict.
+
+    For non-dict values: override replaces base.
+    For dict values: recurse — inner keys merge, all the way down.
+
+    This is necessary so that e.g. a `[windows-work-all.env_vars]` table
+    declared in machines.local.toml MERGES with (rather than REPLACES) a
+    `[windows-work-all.env_vars]` table declared in machines.toml. Same
+    machine block split across both files: each contributes its keys, the
+    other inherits them.
+
+    Tuples/lists are not deep-merged — they're values, override replaces them
+    (so `queues = […]` in machines.local.toml fully overrides the upstream
+    list, which is the documented behaviour for that field).
+    """
     out = {**base}
     for key, value in override.items():
         if isinstance(value, dict) and isinstance(out.get(key), dict):
-            out[key] = {**out[key], **value}
+            out[key] = _merge_machines(out[key], value)
         else:
             out[key] = value
     return out
