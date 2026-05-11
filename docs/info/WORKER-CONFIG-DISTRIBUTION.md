@@ -9,16 +9,17 @@
 
 1. [Problem Statement](#1-problem-statement)
 2. [How Config Is Loaded (Current vs. Remote)](#2-how-config-is-loaded-current-vs-remote)
-3. [Architecture Overview](#3-architecture-overview)
-4. [Backend A — Redis Config Store](#4-backend-a--redis-config-store)
-5. [Backend B — HTTP Config Server](#5-backend-b--http-config-server)
-6. [Choosing a Backend](#6-choosing-a-backend)
-7. [Environment Variables Reference](#7-environment-variables-reference)
-8. [Host Setup](#8-host-setup)
-9. [Remote Worker Setup](#9-remote-worker-setup)
-10. [Security Model](#10-security-model)
-11. [Script Reference](#11-script-reference)
-12. [Troubleshooting](#12-troubleshooting)
+3. [The Three-File Config Split — `apps.env` vs `machines.toml` vs `machines.local.toml`](#3-the-three-file-config-split--appsenv-vs-machinestoml-vs-machineslocaltoml)
+4. [Architecture Overview](#4-architecture-overview)
+5. [Backend A — Redis Config Store](#5-backend-a--redis-config-store)
+6. [Backend B — HTTP Config Server](#6-backend-b--http-config-server)
+7. [Choosing a Backend](#7-choosing-a-backend)
+8. [Environment Variables Reference](#8-environment-variables-reference)
+9. [Host Setup](#9-host-setup)
+10. [Remote Worker Setup](#10-remote-worker-setup)
+11. [Security Model](#11-security-model)
+12. [Script Reference](#12-script-reference)
+13. [Troubleshooting](#13-troubleshooting)
 
 ---
 
@@ -80,7 +81,136 @@ WORKER (no local files needed):
 
 ---
 
-## 3. Architecture Overview
+## 3. The Three-File Config Split — `apps.env` vs `machines.toml` vs `machines.local.toml`
+
+Before the remote-distribution machinery in §4+ becomes relevant, every machine
+already runs against a **three-file local config split**. Understanding which
+file a variable belongs in is the foundation for everything that follows —
+remote distribution only transports the *resolved* values; the source split
+stays the same.
+
+### 3.1 What each file is for
+
+| File | Committed? | Read by | Granularity | Right for |
+|---|---|---|---|---|
+| `.env/apps.env` | **No** (gitignored) | `pytest.ini`, `scripts/launch.py`, every daemon process via `os.getenv()` | Process-wide; **single value** that applies to every machine that reads this file | Secrets (API keys, passwords, tokens) + values genuinely shared cluster-wide |
+| `machines.toml` | **Yes** | `scripts/deploy.py` only — read once at boot, then passed to daemons as CLI flags | Per-machine `[<machine-name>]` blocks; fields can differ per host | Public per-machine knobs (queues, role, concurrency, disabled services, kanban tuning) |
+| `machines.local.toml` | **No** (gitignored, sits next to `machines.toml`) | `scripts/deploy.py` — merged on top of `machines.toml` at load time | Same as `machines.toml`; values here win | Per-machine paths, hostnames, ports, and anything that leaks deployment topology |
+
+`deploy.py` merges the two TOML files via `_merge_machines()`: keys in the
+local file override keys in the committed file; nested tables (like
+`[hostnames]` or `[<machine>]`) merge inner keys rather than replacing the
+whole block.
+
+### 3.2 Decision tree — which file does this variable belong in?
+
+```
+Is it a secret? (API key, OAuth token, password, bearer)
+    └── Yes  →  .env/apps.env       (no exception)
+    └── No   →  ↓
+
+Does it identify a specific host or filesystem path?
+  (e.g. "harqis-ones-mac-mini", "C:\Users\…", "G:\My Drive\…")
+    └── Yes  →  machines.local.toml (gitignored, topology-leaking)
+    └── No   →  ↓
+
+Does it vary per machine but is safe to publish?
+  (queue list, concurrency, poll interval, dry-run flag, role)
+    └── Yes  →  machines.toml       (committed, diffable, per-[machine] block)
+    └── No   →  ↓
+
+Is it a cluster-wide constant?
+  (APP_CONFIG_FILE, WORKFLOW_CONFIG, KANBAN_TELEMETRY_INDEX, …)
+    └── Yes  →  .env/apps.env       (or a shared block in machines.toml)
+```
+
+### 3.3 The reference pattern — `kanban_num_agents`
+
+The cleanest example of an env-var → TOML migration that already shipped:
+
+1. **Before:** `KANBAN_NUM_AGENTS=4` lived in `apps.env`. The same line meant
+   the same number for every machine that sourced this file; tuning one box
+   meant hand-editing the file on that box.
+2. **After:** Each `[machine]` block in `machines.toml` can carry its own
+   `kanban_num_agents = N`. `deploy.py:411` reads it and passes
+   `--num-agents N` to `launch.py`. `launch.py:229` still consults the env
+   var as a fallback for hand-launched workers, so the env var isn't broken —
+   it's just no longer the source of truth.
+3. **Diff story:** Bumping concurrency on one box is now a normal commit
+   (`chore(repo): set kanban_num_agents=4 on harqis-server`) rather than a
+   "hand-edit-this-on-each-box" event.
+
+The same pattern fits any per-machine numeric/boolean/list knob:
+`kanban_profile`, `kanban_poll_interval`, `kanban_dry_run`,
+`workflow_autoreload`, `rabbit_port`, etc. Implementation cost per variable
+is: add a field to the relevant `[machine]` block + read it in
+`build_service_cmd()` (or wherever the daemon is spawned) + drop a CLI flag
+or env-var into the child process.
+
+### 3.4 Current categorisation of `apps.env`
+
+Walking the existing `.env/apps.env` top-to-bottom, here is where each
+section *should* live. "Move" means a future migration; the file is correct
+as it stands today, but these are the migration targets if you want to
+shrink the secrets surface area.
+
+| Section in `apps.env` | Action | Notes |
+|---|---|---|
+| **Platform / Harness** (`APP_CONFIG_FILE`, `WORKFLOW_CONFIG`) | Keep in env | Effectively constants; could become code defaults |
+| `WORKFLOW_AUTORELOAD` | **Move to `machines.toml`** | Dev-only flag; per-machine boolean |
+| **Local Python env** (`PYTHON_EXE`, `ENV_ROOT`) | **Move to `machines.local.toml`** | Pure filesystem topology; `deploy.py` already auto-detects the venv python |
+| **Infrastructure** — `DOCKER_HOST_PORT_RABBIT_MQ` | **Move to `machines.toml`** | Port differs between boxes (15000 vs 15672) |
+| `CELERY_BROKER`, `ELASTIC_HOST`, `KIBANA_HOST` | **Move to `machines.local.toml`** | Hostnames like `harqis-ones-mac-mini` leak topology |
+| `ELASTIC_*_PASSWORD`, `KIBANA_*_PASSWORD`, `FLOWER_PASSWORD`, `NGROK_AUTHTOKEN` | Keep in env | Secrets |
+| **AI providers**, **Finance**, **TCG**, **Communication tokens**, **Productivity tokens**, **Social**, **Workflow tokens** | Keep in env | API keys / OAuth / bearer tokens |
+| `TCG_SAVE`, `SCRY_DOWNLOADS_PATH` | **Move to `machines.local.toml`** | Per-machine paths |
+| **Desktop / HUD (Windows-only)** — all `RAINMETER_*`, `ACTIONS_*`, `DESKTOP_PATH_*`, `OWN_TRACKS_HOST`/`PORT` | **Move to `machines.local.toml`** | Strongest migration candidate — none are secrets, all only apply to the Windows box; group under `[<windows-machine>.rainmeter]`, `[<windows-machine>.actions]`, `[<windows-machine>.desktop_paths]` |
+| `OWN_TRACKS_USERNAME`/`PASSWORD` | Keep in env | Secrets (when set) |
+| `TELEGRAM_DEFAULT_CHAT_ID`, `DISCORD_DEFAULT_GUILD_ID`/`CHANNEL_ID` | **Move to `machines.toml`** | Non-secret routing IDs; either shared default or per-machine |
+| **Kanban orchestrator** — `KANBAN_NUM_AGENTS`, `KANBAN_PROFILE_FILTER` | Already migrated | `kanban_num_agents` / `kanban_profile` in `machines.toml`; env var remains as hand-launch fallback |
+| `KANBAN_POLL_INTERVAL`, `KANBAN_DRY_RUN` | **Move to `machines.toml`** | Same pattern as `kanban_num_agents` |
+| `KANBAN_PROFILES_DIR`, `KANBAN_AUDIT_LOG` | **Move to `machines.local.toml`** | Per-machine paths (if used) |
+| `KANBAN_TELEMETRY_INDEX` | Keep in env or shared `[kanban]` block | Cluster-wide constant |
+| `KANBAN_OS_LABELS` | Keep in env | Auto-detected at runtime |
+| `TRELLO_WORKSPACE_ID` / `TRELLO_BOARD_IDS` / `KANBAN_BOARD_ID` | Keep in env | Credentials-adjacent — co-located with `TRELLO_API_KEY` |
+| `TRELLO_BOARD_NAME_FILTER`/`EXCLUDE`, `TRELLO_REDISCOVER_SECONDS` | **Move to shared `[kanban]` block in `machines.toml`** | Public tuning knobs |
+
+### 3.5 Wins from the migration
+
+- **Smaller secrets surface area** — Windows-only paths and Kanban tunables
+  leave `apps.env` entirely, so the file becomes "secrets + shared cluster
+  defaults" rather than "secrets + per-machine kitchen sink."
+- **Per-machine config is addressable** — no more "ship the same `apps.env`
+  to every box and hand-edit one section." TOML blocks are merge-friendly
+  and reviewable in PRs.
+- **Ops history is diffable** — bumping `kanban_num_agents` or rotating a
+  queue assignment becomes a normal commit on `main`, not a tribal-knowledge
+  edit on one machine.
+- **Remote distribution (§4+) gets simpler** — fewer values to resolve and
+  push, because per-machine values are already addressed by the local TOML
+  merge instead of needing to be parameterised in the resolved config blob.
+
+### 3.6 Cost / friction
+
+`apps_config.yaml`'s `${PLACEHOLDER}` resolver today only reads from
+`os.getenv()`. Two pragmatic migration paths:
+
+1. **`deploy.py`-driven (cheap, in use):** read `machines.toml`, generate the
+   relevant env vars / CLI flags at launch time, and let `launch.py` keep its
+   current `os.environ.get()` calls. This is how `kanban_num_agents` works
+   today — the daemon never knows it came from TOML.
+2. **Resolver-aware (later, if needed):** teach `AppConfigManager` (or a thin
+   wrapper around it) to also read from `machines.toml` for non-env-backed
+   values. Required only if a value needs to appear inside
+   `apps_config.yaml`'s placeholders rather than as a flag on the daemon
+   process.
+
+Stick with path 1 for new migrations. It's strictly additive (the env-var
+fallback keeps working) and requires no changes to the config loader.
+
+---
+
+## 4. Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -117,7 +247,7 @@ WORKER (no local files needed):
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## 4. Backend A — Redis Config Store
+## 5. Backend A — Redis Config Store
 
 The host resolves all config once and writes it as a JSON blob to a dedicated Redis key (separate DB from the Celery result backend). Workers read the key at startup.
 
@@ -152,7 +282,7 @@ Then use `redis://:${REDIS_PASSWORD}@10.0.0.1:6379/1` as `CONFIG_REDIS_URL`.
 
 ---
 
-## 5. Backend B — HTTP Config Server
+## 6. Backend B — HTTP Config Server
 
 The host loads config and starts a FastAPI server that responds to `GET /config` with the resolved dict as JSON. Workers fetch from it at startup over an authenticated HTTPS/HTTP connection.
 
@@ -185,7 +315,7 @@ The host loads config and starts a FastAPI server that responds to `GET /config`
 
 ---
 
-## 6. Choosing a Backend
+## 7. Choosing a Backend
 
 | Situation | Recommendation |
 |---|---|
@@ -200,7 +330,7 @@ You can run **both** simultaneously — some workers use Redis, others use HTTP.
 
 ---
 
-## 7. Environment Variables Reference
+## 8. Environment Variables Reference
 
 ### Host machine
 
@@ -227,9 +357,9 @@ You can run **both** simultaneously — some workers use Redis, others use HTTP.
 
 ---
 
-## 8. Host Setup
+## 9. Host Setup
 
-### 8.1 Install redis-py (for Redis backend)
+### 9.1 Install redis-py (for Redis backend)
 
 ```bash
 .venv/bin/pip install 'redis>=5.0.0'
@@ -237,7 +367,7 @@ You can run **both** simultaneously — some workers use Redis, others use HTTP.
 
 This is already added to `requirements.txt`.
 
-### 8.2 Parameterise the Celery broker URL
+### 9.2 Parameterise the Celery broker URL
 
 `apps_config.yaml` now uses `${CELERY_BROKER_URL}` for the broker field.
 Env loading is handled automatically by `scripts/launch.py` (defaults to `localhost` for local runs).
@@ -250,7 +380,7 @@ export REMOTE_BROKER_URL="amqp://guest:guest@10.0.0.1:5672/"
 python scripts/launch.py push-config
 ```
 
-### 8.3 Push config to Redis (Backend A)
+### 9.3 Push config to Redis (Backend A)
 
 ```bash
 # On the host, after any change to apps.env or apps_config.yaml:
@@ -261,7 +391,7 @@ python scripts/launch.py push-config
 python scripts/launch.py push-config --redis-url redis://10.0.0.1:6379/1 --key harqis:config
 ```
 
-### 8.4 Start the HTTP config server (Backend B)
+### 9.4 Start the HTTP config server (Backend B)
 
 ```bash
 # Generate a strong token once:
@@ -276,9 +406,9 @@ To keep it running as a daemon, add a LaunchAgent plist (macOS) or systemd unit 
 
 ---
 
-## 9. Remote Worker Setup
+## 10. Remote Worker Setup
 
-### 9.1 Create worker.env on the remote machine
+### 10.1 Create worker.env on the remote machine
 
 ```bash
 # On the remote worker node:
@@ -303,7 +433,7 @@ CONFIG_SERVER_URL=http://10.0.0.1:8765
 CONFIG_SERVER_TOKEN=<token from host>
 ```
 
-### 9.2 Start a worker (cross-platform)
+### 10.2 Start a worker (cross-platform)
 
 ```bash
 # Default queue:
@@ -316,7 +446,7 @@ python scripts/launch.py worker --queues tcg
 python scripts/launch.py worker --queues hud
 ```
 
-### 9.3 Verify config loaded correctly
+### 10.3 Verify config loaded correctly
 
 ```bash
 # Quick smoke test on the remote node (CONFIG_SOURCE merged into launch.py — set CONFIG_SOURCE in apps.env):
@@ -329,7 +459,7 @@ Expected output: list of all config section names (OANDA, HARQIS_GPT, etc.).
 
 ---
 
-## 10. Security Model
+## 11. Security Model
 
 ### What stays on the host only
 
@@ -367,7 +497,7 @@ Expected output: list of all config section names (OANDA, HARQIS_GPT, etc.).
 
 ---
 
-## 11. Script Reference
+## 12. Script Reference
 
 ### Host scripts
 
@@ -398,7 +528,7 @@ python -m apps.config_remote serve-http --port 8765 --token <token> --host 0.0.0
 
 ---
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 ### Worker fails with "Config key not found in Redis"
 
