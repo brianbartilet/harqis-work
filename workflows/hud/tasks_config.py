@@ -226,7 +226,7 @@ WORKFLOWS_HUD = {
     # 2 hours, after that the next 4-hour tick refreshes.
     'run-job--show_pc_daily_sales': {
         'task': 'workflows.hud.tasks.hud_finance.show_pc_daily_sales',
-        'schedule': crontab(hour='*/2', minute=0),
+        'schedule': crontab(hour='*/1', minute=0),
         'kwargs': {
             "cfg_id__appsheet": "APPSHEET",
             "days": 60,
@@ -250,7 +250,7 @@ WORKFLOWS_HUD = {
     # an hour, after that the next 2-hour tick refreshes.
     'run-job--show_api_costs': {
         'task': 'workflows.hud.tasks.hud_api_costs.show_api_costs',
-        'schedule': crontab(hour='*/2', minute=0),
+        'schedule': crontab(hour='*/1', minute=0),
         'kwargs': {
             "cfg_id__anthropic": "ANTHROPIC",
             "months": 3,
