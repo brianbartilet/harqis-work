@@ -207,7 +207,7 @@ WORKFLOWS_HUD = {
 
     'run-job--show_ynab_budgets_info': {
         'task': 'workflows.hud.tasks.hud_finance.show_ynab_budgets_info',
-        'schedule': crontab(hour='0,4,8,12,16,20', minute=0),
+        'schedule': crontab(hour='*/1', minute=0),
         'kwargs': {
             "cfg_id__ynab": "YNAB",
             "cfg_id__calendar": "GOOGLE_APPS"},
