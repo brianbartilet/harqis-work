@@ -278,6 +278,57 @@ WORKFLOWS_HUD = {
         }
     },
 
+    # ── show_daily_radar ─────────────────────────────────────────────────────
+    # Every 4 hours: combines ideas #1, #3, #4, #12, #17 from
+    # data/AGENTS_IDEAS.md — desktop context, commitment watcher, email
+    # priority, notification triage, and morning-briefing-style top
+    # priorities. Inputs are pulled from Gmail (last 8h), Calendar (today),
+    # Google Tasks (open), Trello (open cards on configured boards), Jira
+    # (tickets the user is involved in updated in the last 8h), ES
+    # failed-jobs (last 8h), plus the DESKTOP LOGS dump.txt tail.
+    # `model`: Sonnet 4.6 — once-per-shift briefing benefits from the
+    # stronger synthesis over Haiku; cost is still small at every-4-hours
+    # cadence on text-only inputs.
+    # `expires`: 60 * 60 * 2 — half-cadence; a missed run can fire within
+    # 2 hours, after that the next 4-hour tick refreshes.
+    'run-job--show_daily_radar': {
+        'task': 'workflows.hud.tasks.hud_radar.show_daily_radar',
+        'schedule': crontab(hour='*/4', minute=0),
+        'kwargs': {
+            # Each Google product points at the config that holds its
+            # scoped OAuth token. GOOGLE_APPS only has calendar.readonly;
+            # Gmail / Tasks need their own pre-authorized storage files.
+            "cfg_id__calendar": "GOOGLE_APPS",
+            "cfg_id__gmail": "GOOGLE_GMAIL",
+            "cfg_id__gtasks": "GOOGLE_TASKS",
+            "cfg_id__trello": "TRELLO",
+            "cfg_id__jira": "JIRA",
+            # MCP sweep — extra signal feeds. Each collector is fail-soft,
+            # so missing creds (e.g. owntracks host unreachable) just renders
+            # "(<source> unavailable)" in the prompt input.
+            "cfg_id__github": "GITHUB",
+            "cfg_id__owntracks": "OWN_TRACKS",
+            "cfg_id__anthropic": "ANTHROPIC",
+            "model": "claude-sonnet-4-6",
+            # Analysis window for every time-bounded collector (Gmail,
+            # Jira recent updates, ES failed jobs) AND the [START]/[END]
+            # range shown on the HUD. Bump or drop here — no code edit
+            # needed — to widen/narrow the slice of the day the radar
+            # reflects.
+            "window_hours": 8,
+            # Fixed visible height. 16 keeps the radar near JIRA BOARD's
+            # vertical footprint while leaving enough room for ~2-3
+            # sections + the long DESKTOP CONTEXT paragraph. The marquee
+            # scrolls everything past this window.
+            "max_hud_lines": 16,
+        },
+        "options": {
+            "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
+            "expires": 60 * 60 * 2,
+        },
+    },
+
     'run-job--get_schedules': {
         'task': 'workflows.hud.tasks.hud_logs.get_schedules',
         'schedule': crontab(hour='0,4,8,12,16,20', minute=0),

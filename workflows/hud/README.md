@@ -31,6 +31,7 @@ Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for
 | `show_api_costs` | Every 2 hours | API COSTS — trailing 3-month LLM API spend grouped per month → service → model. Anthropic from the admin usage API (`ANTHROPIC_ADMIN_KEY`); OpenAI / Gemini stubbed at zero until cost endpoints exist. Service section omitted when its monthly total is 0. Queue: `hud`. |
 | `show_ai_helper` | Daily at midnight | AI helper widget initialization |
 | `get_schedules` | Every 4 hours | Upcoming calendar schedule |
+| `show_daily_radar` | Every 4 hours | DAILY RADAR — combines AGENTS_IDEAS #1/#3/#4/#12/#17 into one briefing. **Input sweep**: Gmail (last 8h, GOOGLE_GMAIL scope), Calendar (today, GOOGLE_APPS), Google Tasks (open, GOOGLE_TASKS), Trello (open cards), Jira (tickets updated in window), GitHub PRs involving me (last 8h, `involves:@me`), OwnTracks last location (context only), ES failed-jobs, plus the DESKTOP LOGS dump.txt tail. Sent to Claude Sonnet 4.6 for synthesis. Output preserves section breaks (`wrap_preserving_breaks`, wrap width 65) so bullets and `===` rules survive into the HUD. Width matches DESKTOP LOGS (`width_multiplier=2.25`); height fixed at `ItemLines=16`; marquee scrolls anything beyond. Single DUMP header link. `play_sound=True`. `[START]`/`[END]` bracket the 8h window. Visible during WORK and ORGANIZE calendar blocks. Queue: `hud`. |
 
 ## Task Files
 
@@ -45,7 +46,11 @@ Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for
 | `tasks/hud_utils.py` | `show_mouse_bindings`, `build_summary_mouse_bindings`, `show_hud_profiles`, `show_ai_helper` |
 | `tasks/hud_finance.py` | `show_ynab_budgets_info`, `show_pc_daily_sales` |
 | `tasks/hud_api_costs.py` | `show_api_costs` |
+| `tasks/hud_radar.py` | `show_daily_radar` |
+| `tasks/daily_radar_agent.py` | Data-gathering helpers consumed by `show_daily_radar` (Gmail / Calendar / Tasks / Trello / Jira / ES collectors, prompt formatter, and `wrap_preserving_breaks` output wrapper) |
 | `tasks/sections.py` | HUD section layout helpers |
+| `prompts/daily_radar.md` | DAILY RADAR synthesis prompt (combines ideas #1, #3, #4, #12, #17 from `data/AGENTS_IDEAS.md`) |
+| `prompts/desktop_analysis.md` | DESKTOP LOGS evidence-only activity analysis prompt |
 
 ## App Dependencies
 
@@ -59,6 +64,7 @@ Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for
 | `rainmeter` | Desktop HUD skin rendering |
 | `desktop` | Screenshot capture, log reading |
 | `open_ai` / `antropic` | Log analysis and AI helper |
+| `trello` | Open cards on the agents kanban board(s) — feeds DAILY RADAR notification triage |
 
 ## DTOs / Constants
 
@@ -70,8 +76,64 @@ Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for
 
 ## Prompt Templates
 
-AI tasks use markdown prompts from `prompts/` (repo root):
-- `desktop_analysis.md` — Prompt for log analysis (`get_desktop_logs`)
+AI tasks use markdown prompts from `workflows/hud/prompts/` (loaded via `from workflows.hud.prompts import load_prompt`):
+
+- `desktop_analysis.md` — Prompt for log analysis (`get_desktop_logs`). Evidence-only summarisation of the rolling activity log + screenshots.
+- `daily_radar.md` — Prompt for `show_daily_radar`. Combines five productivity ideas (`#1` desktop context, `#3` overlooked commitments, `#4` email priority, `#12` notification triage, `#17` daily command center from `data/AGENTS_IDEAS.md`) into a single 8-hour briefing with `TOP 3 PRIORITIES`, `OVERLOOKED COMMITMENTS`, `EMAIL PRIORITY`, `NOTIFICATION TRIAGE`, `DESKTOP CONTEXT`, and `SUGGESTED FIRST MOVE` sections.
+
+### DAILY RADAR architecture
+
+```
+                         ┌──────────────────────────────┐
+       ┌────────────────►│  workflows/hud/tasks/        │
+       │                 │   hud_radar.py               │◄──── @init_meter (Rainmeter)
+       │                 │   show_daily_radar           │
+       │                 └─────────────┬────────────────┘
+       │                               │ calls
+       │                               ▼
+       │  ┌──────────────────────────────────────────────────────────────┐
+       │  │  workflows/hud/tasks/daily_radar_agent.py                    │
+       │  │                                                              │
+       │  │  collect_inputs(...) → {                                     │
+       │  │    desktop_activity_log,                                     │  ◄── reads DESKTOPLOGS/dump.txt
+       │  │    gmail_recent,                                             │  ◄── ApiServiceGoogleGmail (8h)
+       │  │    calendar_today,                                           │  ◄── ApiServiceGoogleCalendarEvents
+       │  │    google_tasks_open,                                        │  ◄── ApiServiceGoogleTasks
+       │  │    trello_open_cards,                                        │  ◄── ApiServiceTrelloBoards
+       │  │    jira_recent_updates,                                      │  ◄── ApiServiceJiraIssues (JQL: updated >= -8h)
+       │  │    github_prs_involving_me,                                  │  ◄── ApiServiceGitHubRepos.search_issues (involves:@me)
+       │  │    last_location,                                            │  ◄── ApiServiceOwnTracksLocations.get_last
+       │  │    es_failed_jobs,                                           │  ◄── get_index_data(LOGGING_INDEX)
+       │  │  }                                                           │
+       │  │  format_inputs_as_prompt_text(...) → flattened delimiter text│
+       │  └───────────────────────────┬──────────────────────────────────┘
+       │                              │
+       │                              ▼
+       │             ┌──────────────────────────────┐
+       │             │  Anthropic Claude Sonnet 4.6 │
+       │             │  (prompts/daily_radar.md +   │
+       │             │   inputs block)              │
+       │             └─────────────┬────────────────┘
+       │                           │ briefing
+       │                           ▼
+       │          DAILY RADAR/dump.txt (prepended, auto-scrolling marquee)
+       │
+       └─── 4h cron tick (run-job--show_daily_radar)
+```
+
+Behavior:
+
+- **Cadence:** every 4 hours (`crontab(hour='*/4', minute=0)`).
+- **Analysis window:** last 8 hours of email / failed jobs / Jira updates (configurable via `window_hours`).
+- **Sound:** `play_sound=True` — Rainmeter beeps on each update.
+- **Scroll:** `MeasureLuaScriptScroll` (auto-scrolling marquee, identical to DESKTOP LOGS).
+- **Width:** `width_multiplier=2.25` — matches DESKTOP LOGS so the two pinned widgets line up side by side.
+- **Height:** FIXED at `DAILY_RADAR_MAX_HUD_LINES` (30) — tall enough to keep ~5 of the radar's 7 content sections on-screen at once. Earlier defaults (15 like MOUSE BINDINGS, 22 mid-iteration) hid too much of the briefing behind the marquee. The marquee still scrolls anything past 30 lines so longer briefings don't grow the widget. **Note**: this widget sets BOTH `Variables.ItemLines` (sizes the meter background) AND `Variables.MaxLines` (controls how many lines `TextCycle.lua` renders at once, default 16). Other widgets only set `ItemLines` and inherit the Lua-script default for the marquee window. If you copy this widget as a template, keep them in sync — setting only `ItemLines` inflates the background while the visible scrolling text stays capped at 16.
+- **Wrap width:** 65 chars, tuned to the 2.25 column width.
+- **Readability:** `wrap_preserving_breaks` keeps the prompt's section structure intact (each `===` rule, blank-line break, and bullet line survives — the previous `wrap_text` flattened everything to one paragraph).
+- **Header links:** one only — `DUMP`, opens the rendered `DAILY RADAR/dump.txt` for inspection.
+- **Resilience:** every collector is wrapped in its own try/except so a missing Trello board, expired OAuth token, or offline ES does not break the render — the affected section renders `"<source> unavailable: <reason>"` instead. The Trello collector specifically guards against non-list responses from `@deserialized` (regression: `'Response' object is not subscriptable`).
+- **Cost:** Sonnet 4.6 pinned in the beat schedule (`model="claude-sonnet-4-6"`). Sonnet's stronger synthesis is worth the cost for a once-per-shift briefing; if cost becomes a concern, pass `model="claude-haiku-4-5-20251001"` from the beat kwargs.
 
 ## Running
 

@@ -1,0 +1,536 @@
+"""
+Tests for `workflows/hud/tasks/hud_radar.show_daily_radar` and the
+data-gathering helpers in `workflows/hud/tasks/daily_radar_agent`.
+
+Layout:
+  1. Workflow (integration) tests first — call the real task with the live
+     configs. Hit Gmail / Calendar / Tasks / Trello / ES / Anthropic and
+     require valid creds in `.env/apps.env`.
+  2. Unit / function tests for the pure formatting helpers — fully offline,
+     using fixture dicts that mirror the real collector outputs.
+"""
+
+import os
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
+
+import pytest
+
+from workflows.hud.tasks.daily_radar_agent import (
+    ANALYSIS_WINDOW_HOURS,
+    _ensure_list_of_dicts,
+    _format_calendar,
+    _format_emails,
+    _format_failed_jobs,
+    _format_github_prs,
+    _format_jira,
+    _format_last_location,
+    _format_tasks,
+    _format_trello,
+    _parse_gmail_date,
+    _resolve_trello_board_ids,
+    format_inputs_as_prompt_text,
+    looks_like_commitment,
+    read_desktop_dump_tail,
+    summarise_inputs,
+    wrap_preserving_breaks,
+)
+
+
+# ── Unit / function — task decorator wiring ───────────────────────────────────
+
+
+def test__init_meter_overwrites_dump_per_tick():
+    """Regression: the radar is a fresh briefing per tick, not a rolling log.
+
+    `prepend_if_exists=True` (DESKTOP LOGS's setting) would push every new
+    briefing on top of the prior one; the marquee would then scroll backward
+    through stale content and the [START]/[END] bookends would not line up
+    with what's on screen. The decorator MUST be configured to overwrite.
+    """
+    from workflows.hud.tasks.hud_radar import show_daily_radar
+    # The @init_meter decorator stores its config on the wrapped function
+    # via core.utilities.resources.decorators; the underlying inner uses the
+    # closure's `prepend_if_exists`. We assert by introspecting the source
+    # so a future edit can't silently flip it back to True.
+    import inspect
+    src = inspect.getsource(show_daily_radar)
+    assert "prepend_if_exists=False" in src, (
+        "show_daily_radar must overwrite dump.txt (prepend_if_exists=False); "
+        "found a different setting — see the rolling-log regression in CR."
+    )
+
+
+def test__radar_uses_fixed_height():
+    """Layout uses a fixed visible-line cap (not the dynamic JIRA-BOARD
+    shape). Default 14 matches JIRA BOARD's footprint so the two work-
+    block widgets sit at the same height. If this needs to change,
+    update the constant AND the beat-schedule kwarg in lockstep."""
+    from workflows.hud.tasks.hud_radar import DAILY_RADAR_MAX_HUD_LINES
+    assert DAILY_RADAR_MAX_HUD_LINES == 16
+
+
+def test__radar_sets_both_itemlines_and_maxlines():
+    """Regression: bumping `max_hud_lines` must size BOTH the meter
+    background (Variables.ItemLines) AND the marquee's visible window
+    (Variables.MaxLines, read by TextCycle.lua, default 16). The earlier
+    bug only set ItemLines, so growing the cap inflated the empty
+    background while the scrolling text region stayed capped at 16."""
+    import inspect
+    from workflows.hud.tasks.hud_radar import show_daily_radar
+    src = inspect.getsource(show_daily_radar)
+    assert 'ini["Variables"]["ItemLines"]' in src
+    assert 'ini["Variables"]["MaxLines"]' in src
+
+
+# ── Workflow (integration) ────────────────────────────────────────────────────
+
+
+def test__show_daily_radar():
+    """Live call — hits Gmail / Calendar / Tasks / Trello / Jira / GitHub /
+    OwnTracks / ES / Anthropic."""
+    from workflows.hud.tasks.hud_radar import show_daily_radar
+    show_daily_radar(
+        cfg_id__calendar="GOOGLE_APPS",
+        cfg_id__gmail="GOOGLE_GMAIL",
+        cfg_id__gtasks="GOOGLE_TASKS",
+        cfg_id__trello="TRELLO",
+        cfg_id__jira="JIRA",
+        cfg_id__github="GITHUB",
+        cfg_id__owntracks="OWN_TRACKS",
+        cfg_id__anthropic="ANTHROPIC",
+        model="claude-sonnet-4-6",
+        window_hours=8,
+    )
+
+
+def test__show_daily_radar_tight_window():
+    """Shorten the window to 2h — verifies the window kwarg flows through."""
+    from workflows.hud.tasks.hud_radar import show_daily_radar
+    show_daily_radar(
+        cfg_id__calendar="GOOGLE_APPS",
+        cfg_id__gmail="GOOGLE_GMAIL",
+        cfg_id__gtasks="GOOGLE_TASKS",
+        cfg_id__trello="TRELLO",
+        cfg_id__jira="JIRA",
+        cfg_id__github="GITHUB",
+        cfg_id__owntracks="OWN_TRACKS",
+        cfg_id__anthropic="ANTHROPIC",
+        model="claude-sonnet-4-6",
+        window_hours=2,
+    )
+
+
+# ── Unit / function — read_desktop_dump_tail ──────────────────────────────────
+
+
+def test__read_desktop_dump_tail_missing_file_returns_empty(tmp_path):
+    missing = str(tmp_path / "nope.txt")
+    assert read_desktop_dump_tail(missing) == ""
+
+
+def test__read_desktop_dump_tail_returns_head_bytes(tmp_path):
+    """get_desktop_logs PREPENDS new entries, so head-of-file is freshest."""
+    p = tmp_path / "dump.txt"
+    p.write_text("FRESH first line\n" + ("x" * 1000) + "\nOLDEST line\n", encoding="utf-8")
+    out = read_desktop_dump_tail(str(p), tail_bytes=100)
+    assert out.startswith("FRESH first line")
+    assert len(out) <= 100
+
+
+# ── Unit / function — Gmail date parsing ──────────────────────────────────────
+
+
+def test__parse_gmail_date_handles_valid_header():
+    dt = _parse_gmail_date("Tue, 12 May 2026 10:00:00 +0800")
+    assert dt.year == 2026 and dt.month == 5 and dt.day == 12
+
+
+def test__parse_gmail_date_falls_back_to_epoch_on_garbage():
+    dt = _parse_gmail_date("not-a-date")
+    assert dt == datetime.fromtimestamp(0, tz=timezone.utc)
+
+
+def test__parse_gmail_date_handles_empty():
+    assert _parse_gmail_date("") == datetime.fromtimestamp(0, tz=timezone.utc)
+
+
+# ── Unit / function — Trello board id resolution ──────────────────────────────
+
+
+def test__resolve_trello_board_ids_prefers_kanban_single():
+    with patch.dict(os.environ, {
+        "KANBAN_BOARD_ID": "single123",
+        "TRELLO_BOARD_IDS": "multi1,multi2",
+    }, clear=False):
+        assert _resolve_trello_board_ids() == ["single123"]
+
+
+def test__resolve_trello_board_ids_splits_comma_list():
+    with patch.dict(os.environ, {
+        "KANBAN_BOARD_ID": "",
+        "TRELLO_BOARD_IDS": "a,  b ,c",
+    }, clear=False):
+        assert _resolve_trello_board_ids() == ["a", "b", "c"]
+
+
+def test__resolve_trello_board_ids_returns_empty_when_unset():
+    with patch.dict(os.environ, {
+        "KANBAN_BOARD_ID": "",
+        "TRELLO_BOARD_IDS": "",
+    }, clear=False):
+        assert _resolve_trello_board_ids() == []
+
+
+# ── Unit / function — _ensure_list_of_dicts (guards Trello bad responses) ────
+
+
+class _NonListResponse:
+    """Stand-in for the raw `Response` object Trello's deserializer returns
+    when the JSON body fails to parse. Not subscriptable / not iterable in
+    the expected way — calling code must NOT treat it as a list."""
+
+    def __getitem__(self, _key):
+        raise TypeError("'Response' object is not subscriptable")
+
+
+def test__ensure_list_of_dicts_passes_through_clean_list():
+    assert _ensure_list_of_dicts([{"a": 1}, {"b": 2}]) == [{"a": 1}, {"b": 2}]
+
+
+def test__ensure_list_of_dicts_drops_non_dict_members():
+    assert _ensure_list_of_dicts([{"ok": True}, "junk", 42, None]) == [{"ok": True}]
+
+
+def test__ensure_list_of_dicts_coerces_response_object_to_empty():
+    """Regression: malformed Trello reply must not crash card iteration."""
+    assert _ensure_list_of_dicts(_NonListResponse()) == []
+
+
+def test__ensure_list_of_dicts_coerces_none_to_empty():
+    assert _ensure_list_of_dicts(None) == []
+
+
+# ── Unit / function — section formatters ──────────────────────────────────────
+
+
+def test__format_emails_renders_each_field():
+    section = {
+        "emails": [
+            {
+                "from": "alice@example.com",
+                "subject": "Quarterly sign-off",
+                "date": "Tue, 12 May 2026 10:00:00 +0800",
+                "snippet": "Please review the attached approval form.",
+                "body": "",
+                "labels": ["INBOX", "IMPORTANT"],
+            },
+        ],
+        "error": None,
+    }
+    out = _format_emails(section)
+    assert "FROM: alice@example.com" in out
+    assert "SUBJ: Quarterly sign-off" in out
+    assert "LABELS: INBOX,IMPORTANT" in out
+
+
+def test__format_emails_empty_list_renders_friendly_placeholder():
+    assert _format_emails({"emails": [], "error": None}) == "(no email)"
+
+
+def test__format_emails_surfaces_error():
+    out = _format_emails({"emails": [], "error": "401 Unauthorized"})
+    assert "gmail unavailable" in out
+    assert "401 Unauthorized" in out
+
+
+def test__format_calendar_renders_event_line():
+    section = {
+        "events": [
+            {
+                "summary": "Career | Work",
+                "start": "2026-05-12T09:00:00+08:00",
+                "end": "2026-05-12T18:00:00+08:00",
+                "calendar": "primary",
+                "location": "",
+            },
+        ],
+        "error": None,
+    }
+    out = _format_calendar(section)
+    assert "Career | Work" in out
+    assert "2026-05-12T09:00:00+08:00" in out
+
+
+def test__format_calendar_empty_renders_placeholder():
+    assert _format_calendar({"events": [], "error": None}) == "(no events)"
+
+
+def test__format_tasks_renders_list_and_due():
+    section = {
+        "tasks": [
+            {"list": "Inbox", "title": "Reply to Alice", "due": "2026-05-15", "notes": ""},
+        ],
+        "error": None,
+    }
+    out = _format_tasks(section)
+    assert "[Inbox]" in out
+    assert "Reply to Alice" in out
+    assert "(due: 2026-05-15)" in out
+
+
+def test__format_tasks_empty_renders_placeholder():
+    assert _format_tasks({"tasks": [], "error": None}) == "(no open tasks)"
+
+
+def test__format_trello_renders_list_and_name():
+    section = {
+        "cards": [
+            {"list": "In Progress", "name": "Wire DAILY RADAR", "due": "", "board_id": "x", "url": ""},
+        ],
+        "error": None,
+    }
+    out = _format_trello(section)
+    assert "[In Progress]" in out
+    assert "Wire DAILY RADAR" in out
+
+
+def test__format_trello_handles_unconfigured_board():
+    out = _format_trello({"cards": [], "error": "no board configured"})
+    assert "trello unavailable" in out
+    assert "no board configured" in out
+
+
+def test__format_jira_renders_key_status_summary():
+    section = {
+        "issues": [
+            {
+                "key": "SEHLAT-42",
+                "status": "In Progress",
+                "summary": "Wire DAILY RADAR Jira section",
+                "assignee": "Bartilet, Dick Brian",
+                "priority": "Major",
+                "updated": "2026-05-12T15:30:00+08:00",
+            },
+        ],
+        "error": None,
+    }
+    out = _format_jira(section)
+    assert "SEHLAT-42" in out
+    assert "[In Progress]" in out
+    assert "Wire DAILY RADAR Jira section" in out
+    assert "Bartilet, Dick Brian" in out
+    assert "Major" in out
+
+
+def test__format_jira_empty_renders_placeholder():
+    assert _format_jira({"issues": [], "error": None}) == "(no recent jira updates)"
+
+
+def test__format_jira_surfaces_error():
+    out = _format_jira({"issues": [], "error": "401 Unauthorized"})
+    assert "jira unavailable" in out
+    assert "401 Unauthorized" in out
+
+
+def test__format_github_prs_renders_number_state_title():
+    section = {
+        "prs": [
+            {
+                "number": 11,
+                "state": "open",
+                "title": "feat/config-env-injection",
+                "author": "brianbartilet",
+                "labels": ["enhancement", "config"],
+                "updated": "2026-05-12T15:00:00Z",
+            },
+        ],
+        "error": None,
+    }
+    out = _format_github_prs(section)
+    assert "#11" in out
+    assert "[open]" in out
+    assert "feat/config-env-injection" in out
+    assert "brianbartilet" in out
+    assert "enhancement,config" in out
+
+
+def test__format_github_prs_empty_renders_placeholder():
+    assert _format_github_prs({"prs": [], "error": None}) == (
+        "(no PRs involving me updated in window)"
+    )
+
+
+def test__format_github_prs_surfaces_error():
+    out = _format_github_prs({"prs": [], "error": "401 Unauthorized"})
+    assert "github unavailable" in out
+    assert "401 Unauthorized" in out
+
+
+def test__format_last_location_renders_user_device_coords():
+    section = {
+        "location": {
+            "user": "brian",
+            "device": "iphone",
+            "lat": 1.29,
+            "lon": 103.85,
+            "tst": 1747038600,
+            "topic": "owntracks/brian/iphone",
+        },
+        "error": None,
+    }
+    out = _format_last_location(section)
+    assert "user=brian" in out
+    assert "device=iphone" in out
+    assert "lat=1.29" in out
+    assert "lon=103.85" in out
+
+
+def test__format_last_location_empty_renders_placeholder():
+    assert _format_last_location({"location": None, "error": None}) == (
+        "(no recent location fix)"
+    )
+
+
+def test__format_last_location_surfaces_error():
+    out = _format_last_location({"location": None, "error": "connection refused"})
+    assert "owntracks unavailable" in out
+    assert "connection refused" in out
+
+
+def test__format_failed_jobs_renders_task_and_error():
+    section = {
+        "jobs": [
+            {
+                "task": "hud_tcg.show_tcg_orders",
+                "error": "ConnectionResetError",
+                "last_failed": "2026-05-12T07:42:01",
+                "machine": "harqis-server",
+            },
+        ],
+        "error": None,
+    }
+    out = _format_failed_jobs(section)
+    assert "hud_tcg.show_tcg_orders" in out
+    assert "ConnectionResetError" in out
+    assert "harqis-server" in out
+
+
+def test__format_failed_jobs_empty_renders_placeholder():
+    assert _format_failed_jobs({"jobs": [], "error": None}) == "(no failed jobs)"
+
+
+# ── Unit / function — prompt assembly ─────────────────────────────────────────
+
+
+def _fixture_payload() -> dict:
+    return {
+        "window_hours": ANALYSIS_WINDOW_HOURS,
+        "desktop_activity_log": "[START] 2026-05-12 08:00\nPyCharm focus\n[END]",
+        "gmail_recent": {"emails": [], "error": None},
+        "calendar_today": {"events": [], "error": None},
+        "google_tasks_open": {"tasks": [], "error": None},
+        "trello_open_cards": {"cards": [], "error": "no board configured"},
+        "jira_recent_updates": {"issues": [], "error": None},
+        "github_prs_involving_me": {"prs": [], "error": None},
+        "last_location": {"location": None, "error": None},
+        "es_failed_jobs": {"jobs": [], "error": None},
+    }
+
+
+def test__format_inputs_as_prompt_text_contains_all_section_markers():
+    text = format_inputs_as_prompt_text(_fixture_payload())
+    for marker in [
+        "DESKTOP_ACTIVITY_LOG",
+        "GMAIL_RECENT",
+        "CALENDAR_TODAY",
+        "GOOGLE_TASKS_OPEN",
+        "TRELLO_OPEN_CARDS",
+        "JIRA_RECENT_UPDATES",
+        "GITHUB_PRS_INVOLVING_ME",
+        "LAST_LOCATION",
+        "ES_FAILED_JOBS",
+        "ANALYSIS WINDOW: last 8 hours",
+    ]:
+        assert marker in text, "missing marker: {0}".format(marker)
+
+
+def test__format_inputs_as_prompt_text_passes_through_desktop_log():
+    text = format_inputs_as_prompt_text(_fixture_payload())
+    assert "PyCharm focus" in text
+
+
+# ── Unit / function — summarise_inputs ────────────────────────────────────────
+
+
+def test__summarise_inputs_counts_each_source():
+    payload = {
+        "window_hours": 8,
+        "desktop_activity_log": "abc",
+        "gmail_recent": {"emails": [{}, {}], "error": None},
+        "calendar_today": {"events": [{}], "error": None},
+        "google_tasks_open": {"tasks": [], "error": None},
+        "trello_open_cards": {"cards": [{}, {}, {}], "error": None},
+        "jira_recent_updates": {"issues": [{}, {}, {}, {}], "error": None},
+        "github_prs_involving_me": {"prs": [{}, {}], "error": None},
+        "last_location": {"location": {"lat": 1.0, "lon": 2.0}, "error": None},
+        "es_failed_jobs": {"jobs": [], "error": "timeout"},
+    }
+    out = summarise_inputs(payload)
+    assert out["email_count"] == 2
+    assert out["calendar_count"] == 1
+    assert out["task_count"] == 0
+    assert out["trello_count"] == 3
+    assert out["jira_count"] == 4
+    assert out["github_pr_count"] == 2
+    assert out["has_location"] is True
+    assert out["failed_job_count"] == 0
+    assert out["sources_errored"] == ["es_failed_jobs"]
+    assert out["desktop_log_chars"] == 3
+
+
+# ── Unit / function — wrap_preserving_breaks ──────────────────────────────────
+
+
+def test__wrap_preserving_breaks_keeps_blank_lines():
+    """Section breaks (blank lines) must survive the wrap step."""
+    src = "HEADER\n\n- item one\n- item two\n\nNEXT HEADER"
+    out = wrap_preserving_breaks(src, width=80)
+    assert "HEADER\n\n- item one\n- item two\n\nNEXT HEADER" == out
+
+
+def test__wrap_preserving_breaks_wraps_long_lines_individually():
+    src = "short line\n" + ("verylongtoken " * 20).rstrip()
+    out = wrap_preserving_breaks(src, width=40)
+    lines = out.splitlines()
+    assert lines[0] == "short line"
+    assert all(len(line) <= 40 or " " not in line.strip() for line in lines[1:])
+
+
+def test__wrap_preserving_breaks_handles_empty():
+    assert wrap_preserving_breaks("") == ""
+    assert wrap_preserving_breaks(None) == ""
+
+
+def test__wrap_preserving_breaks_does_not_break_long_unbroken_token():
+    """URLs and long identifiers stay intact — overflow > truncation."""
+    src = "see https://example.com/a/very/long/path/that/exceeds/width"
+    out = wrap_preserving_breaks(src, width=20)
+    # The URL token stays on a single physical line.
+    assert "https://example.com/a/very/long/path/that/exceeds/width" in out
+
+
+# ── Unit / function — commitment-phrase detection ─────────────────────────────
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("I'll send the report tomorrow", True),
+    ("Let me confirm the budget", True),
+    ("I will follow up after the meeting", True),
+    ("we need to align on scope", True),
+    ("Thanks for the update", False),
+    ("", False),
+    (None, False),
+])
+def test__looks_like_commitment(text, expected):
+    assert looks_like_commitment(text) is expected

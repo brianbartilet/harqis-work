@@ -173,6 +173,13 @@ sections__api_costs = {
 sections__utilities_ahk = {}
 
 
+sections__daily_radar = {
+    # Only the template default `meterLink` is used — carries DUMP, opening
+    # the rendered dump.txt for the DAILY RADAR widget. No additional
+    # top-row slots (per requirement: "only one link for the DUMP text").
+}
+
+
 sections__jira_board = {
     # Header link slots — `meterLink` (template default) carries JIRA_BOARD;
     # the rest are positioned dynamically via `compute_horizontal_link_layout`

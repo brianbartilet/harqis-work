@@ -320,10 +320,10 @@ HARQIS drives a live desktop heads-up display using [Rainmeter](https://www.rain
 | Category | Calendar event name | Widgets that surface |
 |---|---|---|
 | `PINNED` | (always visible — no event needed) | Calendar Info, Desktop Logs, HUD Profiles, Agents Core, Failed Jobs |
-| `WORK` | `"Career \| Work"` | Jira Board |
+| `WORK` | `"Career \| Work"` | Jira Board, Daily Radar (also `ORGANIZE`) |
 | `FINANCE` | `"Finance \| Investing \| Business"` | OANDA Account, PC Daily Sales, Budgeting Info, API Costs |
 | `PLAY` | `"Mischief \| Misdirection \| Play"` | TCG Orders, TCG Sell Cart |
-| `ORGANIZE` | `"Organization \| Everyman Skills"` | Mouse Bindings (also `WORK`) |
+| `ORGANIZE` | `"Organization \| Everyman Skills"` | Mouse Bindings (also `WORK`), Daily Radar (also `WORK`) |
 | `DEACTIVATED` | — | Never auto-shows; manual trigger only |
 
 Widgets are wired to categories in each task's `@init_meter(..., schedule_categories=[ScheduleCategory.<X>])` decorator. A widget can list multiple categories (e.g. `Mouse Bindings` is both `ORGANIZE` and `WORK`) so it surfaces during any matching block.
@@ -342,6 +342,7 @@ Widgets are wired to categories in each task's `@init_meter(..., schedule_catego
 | **Budgeting Info** | Finance block | YNAB — budget balances in PHP and SGD with overspend warnings | Every 4 hours |
 | **API Costs** | Finance block | Anthropic admin usage API (OpenAI / Gemini stubbed) — trailing 3-month LLM spend grouped per month → service → model | Every 2 hours |
 | **Jira Board** | Work block | Jira Software — In-Review / In-Progress / Ready / In-Analysis tickets | Weekdays every hour |
+| **Daily Radar** | Work + Organize | Claude Sonnet — combines Gmail (last 8h), Calendar (today), Google Tasks (open), Trello (open cards), Jira (tickets updated in 8h), ES failed-jobs, and DESKTOP LOGS dump tail into a single briefing (top 3 priorities, overlooked commitments, email priority, Jira recent, notification triage, desktop context, suggested first move). Width matches DESKTOP LOGS (2.25); height fixed at 30 lines so ~5 of 7 sections sit on-screen at once; marquee scrolls beyond. `[START]`/`[END]` bracket the 8h window. Beeps on update. | Every 4 hours |
 | **Mouse Bindings** | Organize + Work | iCUE Corsair Scimitar — active macro bindings for the foreground app | Every 60 sec |
 | **TCG Orders** | Play block | TCG Marketplace — open and pending orders with card art | Every hour |
 | **TCG Sell Cart** | Play block | TCG Marketplace — match listings to active want-to-buy bids | Sundays at midnight |
