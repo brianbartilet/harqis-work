@@ -31,32 +31,55 @@ sys.path.insert(0, str(FRONTEND_DIR))
 
 from celery.schedules import crontab  # noqa: E402 — needs sys.path above
 
-# ── Workflow source config ────────────────────────────────────────────────────
-# Defines which tasks_config variable maps to which dashboard workflow tab.
-# Update this dict when adding a new workflow to the dashboard.
-WORKFLOW_SOURCES = {
-    "hud": {
-        "module":      "workflows/hud/tasks_config.py",
-        "var":         "WORKFLOWS_HUD",
-        "label":       "HUD",
-        "color":       "blue",
-        "description": "Desktop heads-up display — Rainmeter widgets for forex, calendar, budgets, and TCG orders.",
-    },
-    "purchases": {
-        "module":      "workflows/purchases/tasks_config.py",
-        "var":         "WORKFLOW_PURCHASES",
-        "label":       "Purchases",
-        "color":       "emerald",
-        "description": "MTG card resale pipeline — Scryfall bulk data → listings → price updates → order audit.",
-    },
-    "desktop": {
-        "module":      "workflows/desktop/tasks_config.py",
-        "var":         "WORKFLOWS_DESKTOP",
-        "label":       "Desktop",
-        "color":       "violet",
-        "description": "Windows desktop automation — git pulls, window management, file sync, and activity capture.",
-    },
-}
+# ── Workflow discovery ────────────────────────────────────────────────────────
+# Workflows are discovered by globbing `workflows/*/tasks_config.py`. The first
+# top-level dict whose keys start with `run-job--` is treated as the beat schedule.
+# Folder name → workflow key. Label/color/description are auto-derived on first
+# discovery and then preserved across runs via the merge in `build_registry()`,
+# so users can edit them in `registry.json` without losing changes.
+WORKFLOWS_GLOB = "workflows/*/tasks_config.py"
+
+# Tailwind palette assigned by sorted-folder index for new workflows. Existing
+# workflows keep whatever color is already saved in registry.json.
+_COLOR_PALETTE = ("blue", "emerald", "violet", "amber", "rose", "cyan", "fuchsia", "lime")
+
+
+def _find_beat_dict(module) -> dict | None:
+    """Return the first module-level dict whose keys start with `run-job--`."""
+    for name in dir(module):
+        if name.startswith("_"):
+            continue
+        value = getattr(module, name)
+        if not isinstance(value, dict) or not value:
+            continue
+        if all(isinstance(k, str) and k.startswith("run-job--") for k in value):
+            return value
+    return None
+
+
+def discover_workflows() -> list[tuple[str, Path, dict, str]]:
+    """Glob tasks_config.py files; return (key, module_path, beat_dict, color) tuples."""
+    discovered = []
+    paths = sorted(REPO_ROOT.glob(WORKFLOWS_GLOB))
+    for idx, mod_path in enumerate(paths):
+        wf_key = mod_path.parent.name
+        if mod_path.stat().st_size == 0:
+            print(f"  [{wf_key}] Skipped: tasks_config.py is empty")
+            continue
+        spec = importlib.util.spec_from_file_location(f"_tasks_cfg_{wf_key}", mod_path)
+        mod = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(mod)
+        except Exception as exc:
+            print(f"  [{wf_key}] Skipped: import failed ({exc})")
+            continue
+        beat_dict = _find_beat_dict(mod)
+        if beat_dict is None:
+            print(f"  [{wf_key}] Skipped: no `run-job--*` dict found")
+            continue
+        color = _COLOR_PALETTE[idx % len(_COLOR_PALETTE)]
+        discovered.append((wf_key, mod_path, beat_dict, color))
+    return discovered
 
 
 # ── Schedule → human-readable string ─────────────────────────────────────────
@@ -189,13 +212,7 @@ def build_registry() -> dict:
     existing = _load_existing_registry()
     registry = {}
 
-    for wf_key, wf_cfg in WORKFLOW_SOURCES.items():
-        mod_path = REPO_ROOT / wf_cfg["module"]
-        spec     = importlib.util.spec_from_file_location(f"_tasks_cfg_{wf_key}", mod_path)
-        mod      = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        beat_dict = getattr(mod, wf_cfg["var"])  # type: dict
-
+    for wf_key, _mod_path, beat_dict, auto_color in discover_workflows():
         existing_wf    = existing.get(wf_key, {})
         existing_tasks = {t["key"]: t for t in existing_wf.get("tasks", [])}
 
@@ -239,9 +256,9 @@ def build_registry() -> dict:
                 print(f"  [{wf_key}] New task detected:      {t['key']}")
 
         registry[wf_key] = {
-            "label":       existing_wf.get("label",       wf_cfg["label"]),
-            "color":       existing_wf.get("color",       wf_cfg["color"]),
-            "description": existing_wf.get("description", wf_cfg["description"]),
+            "label":       existing_wf.get("label",       _label_from_key(wf_key)),
+            "color":       existing_wf.get("color",       auto_color),
+            "description": existing_wf.get("description", ""),
             "tasks":       tasks,
         }
 
