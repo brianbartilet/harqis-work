@@ -36,12 +36,18 @@ the 'run_sample_workflow_add' function with specified arguments.
 """
 WORKFLOWS_DESKTOP = {
 
+    # Fanout `git pull` to every subscribed worker at 00:00 and 12:00 local
+    # time. Twice-a-day is enough now that branches don't churn fast —
+    # earlier every-4-hours cadence was noisy and would occasionally
+    # collide with active edits on a worker's working tree.
     'run-job--git_pull_on_paths': {
         'task': 'workflows.desktop.tasks.commands.git_pull_on_paths',
-        'schedule':  crontab(hour='*/4', minute=0),
+        'schedule': crontab(hour='0,12', minute=0),
         'args': [],
         "options": {
-            "expires": 60 * 60,
+            # Half-cadence: a missed run can still fire within 6 hours,
+            # after that the next 00:00/12:00 tick refreshes.
+            "expires": 60 * 60 * 6,
             "queue": WorkflowQueue.DEFAULT_BROADCAST
         },
     },
