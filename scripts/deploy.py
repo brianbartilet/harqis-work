@@ -546,15 +546,33 @@ def kill_stray_celery() -> None:
     pids_sorted = sorted(pids)
     print(f"  Killing {len(pids_sorted)} stray celery/launcher process(es): "
           f"{','.join(str(p) for p in pids_sorted)}")
-    for pid in pids_sorted:
-        if IS_WIN:
+    if IS_WIN:
+        for pid in pids_sorted:
             subprocess.run(
                 ["taskkill", "/PID", str(pid), "/T", "/F"],
                 capture_output=True, check=False,
             )
-        else:
+        return
+    # SIGTERM all, wait up to 5s, then SIGKILL survivors. A beat spinning on
+    # a corrupt celerybeat-schedule.db shelve lock ignores SIGTERM — without
+    # escalation the next deploy spawns a second beat on top of the stuck
+    # one, both fight for the lock at 99% CPU, and no tasks fire.
+    for pid in pids_sorted:
+        try:
+            os.kill(pid, 15)
+        except OSError:
+            pass
+    for _ in range(20):
+        if not any(is_alive(p) for p in pids_sorted):
+            return
+        time.sleep(0.25)
+    survivors = [p for p in pids_sorted if is_alive(p)]
+    if survivors:
+        print(f"  SIGTERM ignored — escalating SIGKILL: "
+              f"{','.join(str(p) for p in survivors)}")
+        for pid in survivors:
             try:
-                os.kill(pid, 15)
+                os.kill(pid, 9)
             except OSError:
                 pass
 
@@ -610,11 +628,17 @@ def docker_down() -> None:
 # ── OS-native service registration ────────────────────────────────────────────
 
 def register_services(machine: dict, args: argparse.Namespace, services: list[str]) -> None:
-    """Register every active service as an OS auto-start unit."""
+    """Register every active service as an OS auto-start unit.
+
+    With `--console`, register the unit for next-login persistence but do NOT
+    activate it now — start_service will spawn visible Terminal tabs and we
+    don't want a background duplicate alongside them.
+    """
+    activate = not getattr(args, "console", False)
     if IS_MAC:
-        _register_launchd(machine, args, services)
+        _register_launchd(machine, args, services, load=activate)
     elif IS_LIN:
-        _register_systemd(machine, args, services)
+        _register_systemd(machine, args, services, activate=activate)
     elif IS_WIN:
         _register_scheduled_tasks(machine, args, services)
     else:
@@ -636,7 +660,12 @@ def _plist_path(service: str) -> Path:
     return Path.home() / "Library" / "LaunchAgents" / f"work.harqis.{service}.plist"
 
 
-def _register_launchd(machine, args, services):
+def _register_launchd(machine, args, services, *, load: bool = True):
+    """Write launchd plists. If `load`, also `launchctl load` (which starts the
+    daemon via RunAtLoad=true). Pass `load=False` when the caller plans to
+    start the same services in visible console tabs — loading the plist would
+    spawn a background duplicate alongside the console process.
+    """
     for s in services:
         cmd = build_service_cmd(s, machine, args)
         label = f"work.harqis.{s}"
@@ -657,9 +686,14 @@ def _register_launchd(machine, args, services):
         path = _plist_path(s)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(plist)
+        # Always unload first so a prior plist doesn't keep a stale daemon
+        # alive in the background.
         subprocess.run(["launchctl", "unload", str(path)], capture_output=True)
-        subprocess.run(["launchctl", "load", str(path)], check=False)
-        print(f"  Registered launchd: {label}")
+        if load:
+            subprocess.run(["launchctl", "load", str(path)], check=False)
+            print(f"  Registered + loaded launchd: {label}")
+        else:
+            print(f"  Registered launchd plist (not loaded — console mode): {label}")
 
 
 def _unregister_launchd(services):
@@ -677,7 +711,10 @@ def _systemd_unit_path(service: str) -> Path:
     return Path.home() / ".config" / "systemd" / "user" / f"harqis-{service}.service"
 
 
-def _register_systemd(machine, args, services):
+def _register_systemd(machine, args, services, *, activate: bool = True):
+    """Write systemd user units. If `activate`, also `enable --now`. Pass
+    `activate=False` when start_service will spawn visible console tabs.
+    """
     for s in services:
         cmd = build_service_cmd(s, machine, args)
         unit = f"""[Unit]
@@ -699,8 +736,12 @@ WantedBy=default.target
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(unit)
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
-        subprocess.run(["systemctl", "--user", "enable", "--now", path.name], check=False)
-        print(f"  Registered systemd: harqis-{s}")
+        if activate:
+            subprocess.run(["systemctl", "--user", "enable", "--now", path.name], check=False)
+            print(f"  Registered + started systemd: harqis-{s}")
+        else:
+            subprocess.run(["systemctl", "--user", "enable", path.name], check=False)
+            print(f"  Registered systemd (not started — console mode): harqis-{s}")
 
 
 def _unregister_systemd(services):
@@ -889,13 +930,30 @@ def main() -> None:
     elif role == "node" and not single_instance:
         print("[node] Skipping Docker — broker is on the host.")
 
+    # Did register_services already start the daemons? Yes when:
+    #   - macOS launchd loaded the plist with RunAtLoad=true
+    #   - Linux systemd ran `enable --now`
+    # Both are skipped in console mode (see `register_services`) precisely so
+    # the fall-through `start_service` loop can open Terminal tabs without
+    # spawning a background duplicate alongside them. Windows HKCU\Run never
+    # starts the daemon at register-time, so the fall-through is required.
+    register_started_immediately = (
+        args.register
+        and (IS_MAC or IS_LIN)
+        and not getattr(args, "console", False)
+    )
     if args.register:
         register_services(machine, args, services)
-        # fall through and start services NOW too — registration only fires
-        # at logon (Windows) / login (macOS LaunchAgent) / login (systemd user),
-        # so without this the user has to log out/in to see anything running.
 
     if args.docker_only:
+        return
+
+    if register_started_immediately:
+        print("")
+        print(f"Started {len(services)} service(s) via "
+              f"{'launchd' if IS_MAC else 'systemd'} (background).")
+        print(f"Stop with: python scripts/deploy.py --down")
+        print(f"Status:    python scripts/deploy.py --status")
         return
 
     print("")
