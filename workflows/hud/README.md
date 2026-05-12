@@ -135,6 +135,27 @@ Behavior:
 - **Resilience:** every collector is wrapped in its own try/except so a missing Trello board, expired OAuth token, or offline ES does not break the render — the affected section renders `"<source> unavailable: <reason>"` instead. The Trello collector specifically guards against non-list responses from `@deserialized` (regression: `'Response' object is not subscriptable`).
 - **Cost:** Sonnet 4.6 pinned in the beat schedule (`model="claude-sonnet-4-6"`). Sonnet's stronger synthesis is worth the cost for a once-per-shift briefing; if cost becomes a concern, pass `model="claude-haiku-4-5-20251001"` from the beat kwargs.
 
+### Source registry (extensibility)
+
+Data sources are declared in `daily_radar_agent.py::SOURCE_REGISTRY`. Each entry is a `SourceSpec` dataclass binding a `name` (the lookup key used in the beat schedule's `sources=[...]` list) to its `default_cfg`, `collector`, `formatter`, `payload_key`, and `prompt_marker`. The radar's three orchestrating functions — `collect_inputs`, `format_inputs_as_prompt_text`, and `summarise_inputs` — all iterate the registry instead of carrying per-source branches.
+
+**To add a new source** (e.g. Notion recent edits):
+
+1. Write `collect_notion_recent(cfg_id, hours, **params) -> {pages, error}` in `daily_radar_agent.py`. MUST be fail-soft — return the error string, never raise.
+2. Write `_format_notion_pages(section) -> str` next to it. MUST handle `error`, empty, and populated payloads.
+3. Append a `SourceSpec` to the registry in `_register_default_sources()` at the bottom of the file.
+4. Add the source name to `sources=[...]` in the beat schedule (or pass it from a custom call).
+5. Add one section block to `prompts/daily_radar.md` so the LLM knows the input exists and what to do with it.
+6. Add a unit test for the formatter.
+
+`collect_inputs`, `show_daily_radar`, the beat-schedule signature, and the test fixtures stay untouched.
+
+**Per-source tuning without code edits:**
+
+- `source_overrides={"gmail": "GOOGLE_GMAIL_WORK"}` — redirect a single source to a different `apps_config.yaml` key.
+- `source_params={"owntracks": {"user": "brian"}}` — pass source-specific kwargs to a collector. Merged on top of the spec's `default_params`.
+- Drop a name from `sources` to disable that feed; reorder to change which sections the LLM weighs first.
+
 ## Running
 
 ```sh

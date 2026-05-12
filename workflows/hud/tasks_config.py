@@ -298,19 +298,25 @@ WORKFLOWS_HUD = {
         'task': 'workflows.hud.tasks.hud_radar.show_daily_radar',
         'schedule': crontab(hour='*/4', minute=0),
         'kwargs': {
-            # Each Google product points at the config that holds its
-            # scoped OAuth token. GOOGLE_APPS only has calendar.readonly;
-            # Gmail / Tasks need their own pre-authorized storage files.
-            "cfg_id__calendar": "GOOGLE_APPS",
-            "cfg_id__gmail": "GOOGLE_GMAIL",
-            "cfg_id__gtasks": "GOOGLE_TASKS",
-            "cfg_id__trello": "TRELLO",
-            "cfg_id__jira": "JIRA",
-            # MCP sweep — extra signal feeds. Each collector is fail-soft,
-            # so missing creds (e.g. owntracks host unreachable) just renders
-            # "(<source> unavailable)" in the prompt input.
-            "cfg_id__github": "GITHUB",
-            "cfg_id__owntracks": "OWN_TRACKS",
+            # Priority list of sources to pull. Order doubles as prompt-
+            # input precedence (first entry's section comes first to the
+            # LLM). Each source is registered in
+            # `daily_radar_agent.SOURCE_REGISTRY` with its correctly-
+            # scoped default cfg id; drop a name here to disable that
+            # source, reorder to change weighting, or pass
+            # `source_overrides={"gmail": "GOOGLE_GMAIL_WORK"}` to swap
+            # cfg ids without editing code. See the registry for the
+            # full list of available sources.
+            "sources": [
+                "gmail",
+                "calendar",
+                "gtasks",
+                "trello",
+                "jira",
+                "github",
+                "owntracks",
+                "es_failed_jobs",
+            ],
             "cfg_id__anthropic": "ANTHROPIC",
             "model": "claude-sonnet-4-6",
             # Analysis window for every time-bounded collector (Gmail,

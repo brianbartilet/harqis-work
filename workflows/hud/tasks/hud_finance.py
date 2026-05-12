@@ -216,7 +216,7 @@ def _render_pc_daily_sales_dump(daily_totals) -> str:
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='PC DAILY SALES',
             new_sections_dict=sections__pc_daily_sales, play_sound=False,
-            schedule_categories=[ScheduleCategory.ORGANIZE, ])
+            schedule_categories=[ScheduleCategory.FINANCE, ])
 @feed()
 def show_pc_daily_sales(ini=ConfigHelperRainmeter(),
                         days: int = 60,

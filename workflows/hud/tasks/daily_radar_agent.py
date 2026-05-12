@@ -24,8 +24,9 @@ from __future__ import annotations
 import os
 import re
 import textwrap
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from core.utilities.logging.custom_logger import logger as log
 
@@ -33,6 +34,80 @@ from core.utilities.logging.custom_logger import logger as log
 # Window every collector queries. Kept in one place so the HUD task and
 # the prompt header stay in sync.
 ANALYSIS_WINDOW_HOURS: int = 8
+
+
+# ---------------------------------------------------------------------------
+# Source registry — declarative entries for every data feed the radar can
+# pull from. The orchestration trio (collect_inputs / format_inputs_as_prompt_text
+# / summarise_inputs) walks this registry instead of carrying per-source
+# branches, so adding a new source is one entry — see hud README for the
+# step-by-step.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SourceSpec:
+    """One row in `SOURCE_REGISTRY`. Names a collector + formatter pair and
+    pins them to a default config id.
+
+    Attributes:
+      name:           Lookup key. Appears in `sources=[...]` and in
+                      `source_overrides` / `source_params` maps.
+      default_cfg:    apps_config.yaml key to pass as `cfg_id` to the
+                      collector. `None` for sources that don't read
+                      `CONFIG_MANAGER` (e.g. ES failed-jobs, which reads
+                      its own env). Overridable per-tick via
+                      `source_overrides`.
+      collector:      Callable with signature `(cfg_id, hours, **params)
+                      -> {data, error}`. MUST be fail-soft — return the
+                      error string, never raise.
+      formatter:      Callable that takes the collector's output dict
+                      and returns the text block for the LLM prompt.
+                      MUST handle `error`, empty, and populated cases.
+      payload_key:    Key under which the collector's output is stored
+                      in the aggregated payload dict.
+      prompt_marker:  UPPERCASE header the LLM expects above this
+                      section in the prompt input. Must match the
+                      section the daily_radar.md prompt asks for.
+      count_field:    Optional list-field name inside the collector
+                      output that `summarise_inputs` counts. None
+                      sources don't emit a count.
+      default_params: Default kwargs passed to the collector on every
+                      call. Merged with (and overridden by)
+                      `source_params[name]` at call time.
+    """
+
+    name: str
+    default_cfg: Optional[str]
+    collector: Callable[..., Dict[str, Any]]
+    formatter: Callable[[Dict[str, Any]], str]
+    payload_key: str
+    prompt_marker: str
+    count_field: Optional[str] = None
+    default_params: Dict[str, Any] = field(default_factory=dict)
+
+
+# Populated by `_register_default_sources()` at the bottom of this module
+# AFTER every collector + formatter has been defined. Kept mutable so
+# callers (or external modules) can register additional sources at import
+# time without forking this file.
+SOURCE_REGISTRY: Dict[str, SourceSpec] = {}
+
+
+# Default priority list — the order the radar pulls and renders sources
+# when the beat schedule doesn't pass an explicit `sources=[...]`. Order
+# IS meaningful: the first entry's section appears first in the prompt
+# input (and tends to weigh more in the LLM's synthesis).
+DEFAULT_SOURCES: List[str] = [
+    "gmail",
+    "calendar",
+    "gtasks",
+    "trello",
+    "jira",
+    "github",
+    "owntracks",
+    "es_failed_jobs",
+]
 
 # Tail of DESKTOP LOGS dump.txt to feed back into the radar. dump.txt is
 # capped at ~3 MB by hud_gpt._trim_dump_file; we read only the most-recent
@@ -69,9 +144,10 @@ def read_desktop_dump_tail(dump_path: str,
 # Gmail (ideas #3 + #4) — recent emails in the analysis window
 # ---------------------------------------------------------------------------
 
-def collect_recent_emails(cfg_id__gsuite: str,
+def collect_recent_emails(cfg_id: str,
                           hours: int = ANALYSIS_WINDOW_HOURS,
-                          max_results: int = 25) -> Dict[str, Any]:
+                          max_results: int = 25,
+                          **_) -> Dict[str, Any]:
     """Pull emails received in the last `hours` window.
 
     Returns `{"emails": [...], "error": str|None}`. Each email is the dict
@@ -85,7 +161,7 @@ def collect_recent_emails(cfg_id__gsuite: str,
         return {"emails": [], "error": "import: {0}".format(e)}
 
     try:
-        cfg = CONFIG_MANAGER.get(cfg_id__gsuite)
+        cfg = CONFIG_MANAGER.get(cfg_id)
         gmail = ApiServiceGoogleGmail(cfg)
         # Gmail search supports "newer_than:" with a day-granularity quirk —
         # convert hours → days, rounding up so an 8-hour window doesn't miss
@@ -138,7 +214,7 @@ def _parse_gmail_date(date_str: str) -> datetime:
 # Calendar (idea #17) — today's events, all-day + scheduled
 # ---------------------------------------------------------------------------
 
-def collect_calendar_today(cfg_id__gsuite: str) -> Dict[str, Any]:
+def collect_calendar_today(cfg_id: str, **_) -> Dict[str, Any]:
     """Return `{"events": [...], "error": str|None}` for today's events."""
     try:
         from apps.apps_config import CONFIG_MANAGER
@@ -150,7 +226,7 @@ def collect_calendar_today(cfg_id__gsuite: str) -> Dict[str, Any]:
         return {"events": [], "error": "import: {0}".format(e)}
 
     try:
-        cfg = CONFIG_MANAGER.get(cfg_id__gsuite)
+        cfg = CONFIG_MANAGER.get(cfg_id)
         cal = ApiServiceGoogleCalendarEvents(cfg)
         events = cal.get_all_events_today(EventType.ALL)
     except Exception as e:
@@ -175,8 +251,9 @@ def collect_calendar_today(cfg_id__gsuite: str) -> Dict[str, Any]:
 # Google Tasks (idea #17) — open todos across all task lists
 # ---------------------------------------------------------------------------
 
-def collect_open_google_tasks(cfg_id__gsuite: str,
-                              max_per_list: int = 25) -> Dict[str, Any]:
+def collect_open_google_tasks(cfg_id: str,
+                              max_per_list: int = 25,
+                              **_) -> Dict[str, Any]:
     """Return `{"tasks": [...], "error": str|None}` for open Google Tasks."""
     try:
         from apps.apps_config import CONFIG_MANAGER
@@ -185,7 +262,7 @@ def collect_open_google_tasks(cfg_id__gsuite: str,
         return {"tasks": [], "error": "import: {0}".format(e)}
 
     try:
-        cfg = CONFIG_MANAGER.get(cfg_id__gsuite)
+        cfg = CONFIG_MANAGER.get(cfg_id)
         svc = ApiServiceGoogleTasks(cfg)
         lists = svc.list_task_lists(max_results=100) or []
     except Exception as e:
@@ -221,9 +298,10 @@ def collect_open_google_tasks(cfg_id__gsuite: str,
 # Jira (idea #17 / work context) — recently-updated tickets in window
 # ---------------------------------------------------------------------------
 
-def collect_jira_recent_updates(cfg_id__jira: str,
+def collect_jira_recent_updates(cfg_id: str,
                                 hours: int = ANALYSIS_WINDOW_HOURS,
-                                max_results: int = 25) -> Dict[str, Any]:
+                                max_results: int = 25,
+                                **_) -> Dict[str, Any]:
     """Return `{"issues": [...], "error": str|None}` for tickets updated in
     the analysis window.
 
@@ -240,7 +318,7 @@ def collect_jira_recent_updates(cfg_id__jira: str,
         return {"issues": [], "error": "import: {0}".format(e)}
 
     try:
-        cfg = CONFIG_MANAGER.get(cfg_id__jira)
+        cfg = CONFIG_MANAGER.get(cfg_id)
         svc = ApiServiceJiraIssues(cfg)
         jql = (
             "(assignee = currentUser() OR reporter = currentUser() "
@@ -278,9 +356,10 @@ def collect_jira_recent_updates(cfg_id__jira: str,
 # GitHub (idea #4 / work context) — PRs involving me, updated in window
 # ---------------------------------------------------------------------------
 
-def collect_github_prs_involving_me(cfg_id__github: str,
+def collect_github_prs_involving_me(cfg_id: str,
                                     hours: int = ANALYSIS_WINDOW_HOURS,
-                                    max_results: int = 25) -> Dict[str, Any]:
+                                    max_results: int = 25,
+                                    **_) -> Dict[str, Any]:
     """Return `{"prs": [...], "error": str|None}` for open PRs involving the
     authenticated user that have moved in the analysis window.
 
@@ -295,7 +374,7 @@ def collect_github_prs_involving_me(cfg_id__github: str,
         return {"prs": [], "error": "import: {0}".format(e)}
 
     try:
-        cfg = CONFIG_MANAGER.get(cfg_id__github)
+        cfg = CONFIG_MANAGER.get(cfg_id)
         gh = ApiServiceGitHubRepos(cfg)
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
         query = "is:pr is:open involves:@me updated:>{0}".format(cutoff)
@@ -326,9 +405,10 @@ def collect_github_prs_involving_me(cfg_id__github: str,
 # OwnTracks (situational context) — last known location
 # ---------------------------------------------------------------------------
 
-def collect_last_location(cfg_id__owntracks: str,
+def collect_last_location(cfg_id: str,
                           user: Optional[str] = None,
-                          device: Optional[str] = None) -> Dict[str, Any]:
+                          device: Optional[str] = None,
+                          **_) -> Dict[str, Any]:
     """Return `{"location": dict|None, "error": str|None}` with the most
     recent OwnTracks fix.
 
@@ -346,7 +426,7 @@ def collect_last_location(cfg_id__owntracks: str,
         return {"location": None, "error": "import: {0}".format(e)}
 
     try:
-        cfg = CONFIG_MANAGER.get(cfg_id__owntracks)
+        cfg = CONFIG_MANAGER.get(cfg_id)
         svc = ApiServiceOwnTracksLocations(cfg)
         locations = svc.get_last(user=user, device=device) or []
     except Exception as e:
@@ -381,7 +461,11 @@ def collect_last_location(cfg_id__owntracks: str,
 # ES failed jobs (idea #12) — Celery / workflow failures in window
 # ---------------------------------------------------------------------------
 
-def collect_failed_jobs(hours: int = ANALYSIS_WINDOW_HOURS) -> Dict[str, Any]:
+def collect_failed_jobs(cfg_id: Optional[str] = None,
+                        hours: int = ANALYSIS_WINDOW_HOURS,
+                        **_) -> Dict[str, Any]:
+    # cfg_id accepted for registry-uniform signature; ES library reads
+    # its own env. Pass None or any string — both ignored.
     """Return `{"jobs": [...], "error": str|None}` for failed tasks in window."""
     try:
         from core.apps.es_logging.app.elasticsearch import get_index_data, LOGGING_INDEX
@@ -421,8 +505,9 @@ def collect_failed_jobs(hours: int = ANALYSIS_WINDOW_HOURS) -> Dict[str, Any]:
 # Trello (idea #12 / agent kanban) — open cards on configured boards
 # ---------------------------------------------------------------------------
 
-def collect_trello_cards(cfg_id__trello: str = "TRELLO",
-                         max_cards_per_board: int = 30) -> Dict[str, Any]:
+def collect_trello_cards(cfg_id: str = "TRELLO",
+                         max_cards_per_board: int = 30,
+                         **_) -> Dict[str, Any]:
     """Return `{"cards": [...], "error": str|None}` for open Trello cards.
 
     Resolves which board(s) to inspect by walking, in order:
@@ -442,7 +527,7 @@ def collect_trello_cards(cfg_id__trello: str = "TRELLO",
     board_ids = _resolve_trello_board_ids()
     if not board_ids:
         try:
-            cfg = CONFIG_MANAGER.get(cfg_id__trello)
+            cfg = CONFIG_MANAGER.get(cfg_id)
             members = ApiServiceTrelloMembers(cfg)
             mine = _ensure_list_of_dicts(
                 members.get_member_boards("me", filter="open")
@@ -468,7 +553,7 @@ def collect_trello_cards(cfg_id__trello: str = "TRELLO",
         return {"cards": [], "error": "no board configured"}
 
     try:
-        cfg = CONFIG_MANAGER.get(cfg_id__trello)
+        cfg = CONFIG_MANAGER.get(cfg_id)
         boards_svc = ApiServiceTrelloBoards(cfg)
     except Exception as e:
         return {"cards": [], "error": str(e)}
@@ -533,50 +618,71 @@ def _resolve_trello_board_ids() -> List[str]:
 # Aggregator — produces the dict passed to the LLM prompt
 # ---------------------------------------------------------------------------
 
-def collect_inputs(cfg_id__calendar: str,
-                   cfg_id__gmail: str,
-                   cfg_id__gtasks: str,
-                   cfg_id__trello: str,
-                   cfg_id__jira: str,
-                   cfg_id__github: str,
-                   cfg_id__owntracks: str,
+def collect_inputs(sources: List[str],
                    desktop_dump_path: str,
                    hours: int = ANALYSIS_WINDOW_HOURS,
-                   owntracks_user: Optional[str] = None,
-                   owntracks_device: Optional[str] = None) -> Dict[str, Any]:
-    """Run every collector and return the bundled payload.
+                   source_overrides: Optional[Dict[str, str]] = None,
+                   source_params: Optional[Dict[str, Dict[str, Any]]] = None,
+                   ) -> Dict[str, Any]:
+    """Walk the priority list in `sources`, dispatch each to its collector,
+    and return the bundled payload ready for the prompt + summary.
 
-    Each Google service uses a SEPARATE config key so it picks up the
-    correctly-scoped OAuth token from `.env/storage*.json`. A single
-    `GOOGLE_APPS` config only carries `calendar.readonly`, so wiring Gmail
-    or Tasks to it produces a 403 `insufficientPermissions` on the API
-    call. Pre-authorized scoped configs live under:
+    `sources` is the **priority list** — each name is looked up in
+    `SOURCE_REGISTRY`, the collector is called with the default cfg id
+    (overridable via `source_overrides`) and default params (overridable
+    via `source_params`). Unknown source names are logged and skipped so
+    a typo in the beat schedule degrades gracefully.
 
-      * `GOOGLE_APPS`  — calendar.readonly  → storage.json
-      * `GOOGLE_GMAIL` — gmail.readonly     → storage-gmail.json
-      * `GOOGLE_TASKS` — tasks              → storage-tasks.json
+    Args:
+      sources:           ordered list of source names to pull from. The
+                         order doubles as the prompt-input ordering —
+                         the first entry's section comes first in the
+                         LLM input. See `DEFAULT_SOURCES`.
+      desktop_dump_path: path to DESKTOP LOGS dump.txt. Always read,
+                         independent of `sources` (the desktop log is
+                         intrinsic to the radar, not a configurable source).
+      hours:             analysis window in hours (passed to every
+                         collector that accepts it).
+      source_overrides:  per-source cfg id overrides, e.g.
+                         ``{"gmail": "GOOGLE_GMAIL_WORK"}``. Defaults to {}.
+      source_params:     per-source param overrides, e.g.
+                         ``{"owntracks": {"user": "brian"}}``. Each dict
+                         is merged on top of the collector's
+                         ``default_params``. Defaults to {}.
 
-    A failing collector NEVER raises — it surfaces an `error` field on its
-    own subsection so the prompt can render "<source> unavailable" cleanly.
+    Each Google product needs its OWN scoped OAuth token —
+    ``GOOGLE_APPS`` (calendar.readonly) is NOT interchangeable with
+    ``GOOGLE_GMAIL`` (gmail.readonly) or ``GOOGLE_TASKS`` (tasks). The
+    registry pins each source to its correctly-scoped cfg by default.
+
+    A failing collector NEVER raises — it surfaces an ``error`` field on
+    its own subsection so the prompt can render ``"<source>
+    unavailable"`` cleanly without breaking the rest of the briefing.
     """
-    return {
+    overrides = source_overrides or {}
+    params_map = source_params or {}
+
+    payload: Dict[str, Any] = {
         "window_hours": hours,
         "desktop_activity_log": read_desktop_dump_tail(desktop_dump_path),
-        "gmail_recent": collect_recent_emails(cfg_id__gmail, hours=hours),
-        "calendar_today": collect_calendar_today(cfg_id__calendar),
-        "google_tasks_open": collect_open_google_tasks(cfg_id__gtasks),
-        "trello_open_cards": collect_trello_cards(cfg_id__trello),
-        "jira_recent_updates": collect_jira_recent_updates(cfg_id__jira, hours=hours),
-        "github_prs_involving_me": collect_github_prs_involving_me(
-            cfg_id__github, hours=hours,
-        ),
-        "last_location": collect_last_location(
-            cfg_id__owntracks,
-            user=owntracks_user,
-            device=owntracks_device,
-        ),
-        "es_failed_jobs": collect_failed_jobs(hours=hours),
+        # Preserved so format_inputs_as_prompt_text and summarise_inputs
+        # can replay the same order without re-deriving it from the keys.
+        "_sources": list(sources),
     }
+
+    for name in sources:
+        spec = SOURCE_REGISTRY.get(name)
+        if spec is None:
+            log.warning(
+                "DAILY RADAR: unknown source '%s' — not in SOURCE_REGISTRY; skipped",
+                name,
+            )
+            continue
+        cfg_id = overrides.get(name, spec.default_cfg)
+        params = {**spec.default_params, **params_map.get(name, {})}
+        payload[spec.payload_key] = spec.collector(cfg_id, hours=hours, **params)
+
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -590,9 +696,15 @@ _SECTION_RULE = "-" * 64
 def format_inputs_as_prompt_text(payload: Dict[str, Any]) -> str:
     """Flatten the aggregator payload into a single delimited text block.
 
-    The structure matches the daily_radar.md prompt's expectations — every
-    block is preceded by an UPPERCASE marker and a separator line so the
-    LLM can locate each section reliably.
+    Walks `payload["_sources"]` in order, looking each name up in
+    `SOURCE_REGISTRY` to find its `prompt_marker` (the UPPERCASE header
+    the LLM expects) and `formatter` (turns the section dict into text).
+    Sources whose payload key isn't present are skipped silently —
+    happens when a name in the priority list isn't registered.
+
+    The DESKTOP_ACTIVITY_LOG header sits at the top before any registered
+    source because the desktop log is intrinsic (always present, never
+    configurable).
     """
     parts: List[str] = []
     parts.append("ANALYSIS WINDOW: last {0} hours".format(payload.get("window_hours", 8)))
@@ -603,45 +715,15 @@ def format_inputs_as_prompt_text(payload: Dict[str, Any]) -> str:
     parts.append(_SECTION_RULE)
     parts.append(payload.get("desktop_activity_log") or "(empty)")
 
-    parts.append("\n" + _SECTION_RULE)
-    parts.append("GMAIL_RECENT")
-    parts.append(_SECTION_RULE)
-    parts.append(_format_emails(payload.get("gmail_recent") or {}))
-
-    parts.append("\n" + _SECTION_RULE)
-    parts.append("CALENDAR_TODAY")
-    parts.append(_SECTION_RULE)
-    parts.append(_format_calendar(payload.get("calendar_today") or {}))
-
-    parts.append("\n" + _SECTION_RULE)
-    parts.append("GOOGLE_TASKS_OPEN")
-    parts.append(_SECTION_RULE)
-    parts.append(_format_tasks(payload.get("google_tasks_open") or {}))
-
-    parts.append("\n" + _SECTION_RULE)
-    parts.append("TRELLO_OPEN_CARDS")
-    parts.append(_SECTION_RULE)
-    parts.append(_format_trello(payload.get("trello_open_cards") or {}))
-
-    parts.append("\n" + _SECTION_RULE)
-    parts.append("JIRA_RECENT_UPDATES")
-    parts.append(_SECTION_RULE)
-    parts.append(_format_jira(payload.get("jira_recent_updates") or {}))
-
-    parts.append("\n" + _SECTION_RULE)
-    parts.append("GITHUB_PRS_INVOLVING_ME")
-    parts.append(_SECTION_RULE)
-    parts.append(_format_github_prs(payload.get("github_prs_involving_me") or {}))
-
-    parts.append("\n" + _SECTION_RULE)
-    parts.append("LAST_LOCATION")
-    parts.append(_SECTION_RULE)
-    parts.append(_format_last_location(payload.get("last_location") or {}))
-
-    parts.append("\n" + _SECTION_RULE)
-    parts.append("ES_FAILED_JOBS")
-    parts.append(_SECTION_RULE)
-    parts.append(_format_failed_jobs(payload.get("es_failed_jobs") or {}))
+    for name in payload.get("_sources") or []:
+        spec = SOURCE_REGISTRY.get(name)
+        if spec is None:
+            continue
+        section = payload.get(spec.payload_key) or {}
+        parts.append("\n" + _SECTION_RULE)
+        parts.append(spec.prompt_marker)
+        parts.append(_SECTION_RULE)
+        parts.append(spec.formatter(section))
 
     return "\n".join(parts)
 
@@ -804,37 +886,45 @@ def _format_failed_jobs(section: Dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 def summarise_inputs(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Return a count-only metrics dict suitable for log_result()."""
-    def _len(section_key: str, list_key: str) -> int:
-        s = payload.get(section_key) or {}
-        return len(s.get(list_key) or [])
+    """Return a count-only metrics dict suitable for log_result().
 
+    Counts are emitted as `{source_name}_count` for every registered
+    source that has a `count_field` set (e.g. "gmail" → `gmail_count`).
+    `sources_errored` lists source names (not payload keys) whose
+    collector returned a non-empty `error`. `has_location` is True when
+    the owntracks source is active and produced a fix.
+    """
     desktop_len = len(payload.get("desktop_activity_log") or "")
-    last_location = (payload.get("last_location") or {}).get("location")
+    sources = payload.get("_sources") or []
+
+    counts: Dict[str, int] = {}
+    errored: List[str] = []
+    has_location = False
+
+    for name in sources:
+        spec = SOURCE_REGISTRY.get(name)
+        if spec is None:
+            continue
+        section = payload.get(spec.payload_key) or {}
+        if section.get("error"):
+            errored.append(name)
+        if spec.count_field:
+            counts["{0}_count".format(name)] = len(
+                section.get(spec.count_field) or []
+            )
+        # OwnTracks is the only source that surfaces a singular dict
+        # rather than a list — track it explicitly so callers can branch
+        # on "is location available" without inspecting the payload.
+        if name == "owntracks":
+            has_location = bool(section.get("location"))
+
     return {
         "window_hours": payload.get("window_hours"),
         "desktop_log_chars": desktop_len,
-        "email_count": _len("gmail_recent", "emails"),
-        "calendar_count": _len("calendar_today", "events"),
-        "task_count": _len("google_tasks_open", "tasks"),
-        "trello_count": _len("trello_open_cards", "cards"),
-        "jira_count": _len("jira_recent_updates", "issues"),
-        "github_pr_count": _len("github_prs_involving_me", "prs"),
-        "has_location": last_location is not None,
-        "failed_job_count": _len("es_failed_jobs", "jobs"),
-        "sources_errored": [
-            name for name in (
-                "gmail_recent",
-                "calendar_today",
-                "google_tasks_open",
-                "trello_open_cards",
-                "jira_recent_updates",
-                "github_prs_involving_me",
-                "last_location",
-                "es_failed_jobs",
-            )
-            if (payload.get(name) or {}).get("error")
-        ],
+        "has_location": has_location,
+        "sources_active": list(sources),
+        "sources_errored": errored,
+        **counts,
     }
 
 
@@ -897,3 +987,94 @@ def looks_like_commitment(text: str) -> bool:
     if not text:
         return False
     return bool(_COMMITMENT_RE.search(text))
+
+
+# ---------------------------------------------------------------------------
+# Populate SOURCE_REGISTRY — runs at module import time, after every
+# collector + formatter above is defined. To plug in a new source, append
+# one SourceSpec here (and write the matching collector + formatter
+# functions above). The radar's beat schedule then enables it by adding
+# the `name` to its `sources=[...]` list. See workflows/hud/README.md.
+# ---------------------------------------------------------------------------
+
+
+def _register_default_sources() -> None:
+    SOURCE_REGISTRY.update({
+        "gmail": SourceSpec(
+            name="gmail",
+            default_cfg="GOOGLE_GMAIL",
+            collector=collect_recent_emails,
+            formatter=_format_emails,
+            payload_key="gmail_recent",
+            prompt_marker="GMAIL_RECENT",
+            count_field="emails",
+        ),
+        "calendar": SourceSpec(
+            name="calendar",
+            default_cfg="GOOGLE_APPS",
+            collector=collect_calendar_today,
+            formatter=_format_calendar,
+            payload_key="calendar_today",
+            prompt_marker="CALENDAR_TODAY",
+            count_field="events",
+        ),
+        "gtasks": SourceSpec(
+            name="gtasks",
+            default_cfg="GOOGLE_TASKS",
+            collector=collect_open_google_tasks,
+            formatter=_format_tasks,
+            payload_key="google_tasks_open",
+            prompt_marker="GOOGLE_TASKS_OPEN",
+            count_field="tasks",
+        ),
+        "trello": SourceSpec(
+            name="trello",
+            default_cfg="TRELLO",
+            collector=collect_trello_cards,
+            formatter=_format_trello,
+            payload_key="trello_open_cards",
+            prompt_marker="TRELLO_OPEN_CARDS",
+            count_field="cards",
+        ),
+        "jira": SourceSpec(
+            name="jira",
+            default_cfg="JIRA",
+            collector=collect_jira_recent_updates,
+            formatter=_format_jira,
+            payload_key="jira_recent_updates",
+            prompt_marker="JIRA_RECENT_UPDATES",
+            count_field="issues",
+        ),
+        "github": SourceSpec(
+            name="github",
+            default_cfg="GITHUB",
+            collector=collect_github_prs_involving_me,
+            formatter=_format_github_prs,
+            payload_key="github_prs_involving_me",
+            prompt_marker="GITHUB_PRS_INVOLVING_ME",
+            count_field="prs",
+        ),
+        "owntracks": SourceSpec(
+            name="owntracks",
+            default_cfg="OWN_TRACKS",
+            collector=collect_last_location,
+            formatter=_format_last_location,
+            payload_key="last_location",
+            prompt_marker="LAST_LOCATION",
+            # `last_location` carries a singular dict, not a list — no
+            # count_field; summarise_inputs has a special-case for owntracks
+            # that emits `has_location` (bool) instead.
+        ),
+        "es_failed_jobs": SourceSpec(
+            name="es_failed_jobs",
+            default_cfg=None,  # ES library reads its own env
+            collector=collect_failed_jobs,
+            formatter=_format_failed_jobs,
+            payload_key="es_failed_jobs",
+            prompt_marker="ES_FAILED_JOBS",
+            count_field="jobs",
+        ),
+    })
+
+
+_register_default_sources()

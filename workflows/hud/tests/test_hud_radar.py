@@ -87,17 +87,10 @@ def test__radar_sets_both_itemlines_and_maxlines():
 
 
 def test__show_daily_radar():
-    """Live call — hits Gmail / Calendar / Tasks / Trello / Jira / GitHub /
-    OwnTracks / ES / Anthropic."""
+    """Live call — walks the default registry (Gmail, Calendar, Tasks,
+    Trello, Jira, GitHub, OwnTracks, ES) and hits Anthropic."""
     from workflows.hud.tasks.hud_radar import show_daily_radar
     show_daily_radar(
-        cfg_id__calendar="GOOGLE_APPS",
-        cfg_id__gmail="GOOGLE_GMAIL",
-        cfg_id__gtasks="GOOGLE_TASKS",
-        cfg_id__trello="TRELLO",
-        cfg_id__jira="JIRA",
-        cfg_id__github="GITHUB",
-        cfg_id__owntracks="OWN_TRACKS",
         cfg_id__anthropic="ANTHROPIC",
         model="claude-sonnet-4-6",
         window_hours=8,
@@ -108,13 +101,6 @@ def test__show_daily_radar_tight_window():
     """Shorten the window to 2h — verifies the window kwarg flows through."""
     from workflows.hud.tasks.hud_radar import show_daily_radar
     show_daily_radar(
-        cfg_id__calendar="GOOGLE_APPS",
-        cfg_id__gmail="GOOGLE_GMAIL",
-        cfg_id__gtasks="GOOGLE_TASKS",
-        cfg_id__trello="TRELLO",
-        cfg_id__jira="JIRA",
-        cfg_id__github="GITHUB",
-        cfg_id__owntracks="OWN_TRACKS",
         cfg_id__anthropic="ANTHROPIC",
         model="claude-sonnet-4-6",
         window_hours=2,
@@ -427,6 +413,14 @@ def _fixture_payload() -> dict:
     return {
         "window_hours": ANALYSIS_WINDOW_HOURS,
         "desktop_activity_log": "[START] 2026-05-12 08:00\nPyCharm focus\n[END]",
+        # Replays what `collect_inputs` writes — `_sources` is the
+        # priority list it actually walked, used by both the prompt
+        # formatter and the summary to know what to emit and in what
+        # order.
+        "_sources": [
+            "gmail", "calendar", "gtasks", "trello",
+            "jira", "github", "owntracks", "es_failed_jobs",
+        ],
         "gmail_recent": {"emails": [], "error": None},
         "calendar_today": {"events": [], "error": None},
         "google_tasks_open": {"tasks": [], "error": None},
@@ -464,9 +458,17 @@ def test__format_inputs_as_prompt_text_passes_through_desktop_log():
 
 
 def test__summarise_inputs_counts_each_source():
+    """`summarise_inputs` walks `_sources` (the priority list the radar
+    actually ran) and emits one `{source_name}_count` per registered
+    source with a `count_field`. Names match the registry key, not the
+    payload key — `gmail_count` not `email_count`."""
     payload = {
         "window_hours": 8,
         "desktop_activity_log": "abc",
+        "_sources": [
+            "gmail", "calendar", "gtasks", "trello",
+            "jira", "github", "owntracks", "es_failed_jobs",
+        ],
         "gmail_recent": {"emails": [{}, {}], "error": None},
         "calendar_today": {"events": [{}], "error": None},
         "google_tasks_open": {"tasks": [], "error": None},
@@ -477,16 +479,147 @@ def test__summarise_inputs_counts_each_source():
         "es_failed_jobs": {"jobs": [], "error": "timeout"},
     }
     out = summarise_inputs(payload)
-    assert out["email_count"] == 2
+    assert out["gmail_count"] == 2
     assert out["calendar_count"] == 1
-    assert out["task_count"] == 0
+    assert out["gtasks_count"] == 0
     assert out["trello_count"] == 3
     assert out["jira_count"] == 4
-    assert out["github_pr_count"] == 2
+    assert out["github_count"] == 2
     assert out["has_location"] is True
-    assert out["failed_job_count"] == 0
+    assert out["es_failed_jobs_count"] == 0
     assert out["sources_errored"] == ["es_failed_jobs"]
+    assert out["sources_active"] == payload["_sources"]
     assert out["desktop_log_chars"] == 3
+
+
+# ── Unit / function — SOURCE_REGISTRY + sources priority list ────────────────
+
+
+def test__source_registry_has_all_default_sources():
+    """Every name in DEFAULT_SOURCES must resolve in SOURCE_REGISTRY,
+    otherwise a default tick would silently skip a feed."""
+    from workflows.hud.tasks.daily_radar_agent import (
+        DEFAULT_SOURCES,
+        SOURCE_REGISTRY,
+    )
+    missing = [n for n in DEFAULT_SOURCES if n not in SOURCE_REGISTRY]
+    assert missing == [], "unregistered sources in DEFAULT_SOURCES: {0}".format(missing)
+
+
+def test__source_registry_specs_are_well_formed():
+    """Each SourceSpec must carry the fields the orchestrators read."""
+    from workflows.hud.tasks.daily_radar_agent import SOURCE_REGISTRY
+    for name, spec in SOURCE_REGISTRY.items():
+        assert spec.name == name, "registry key {0} mismatches spec.name {1}".format(name, spec.name)
+        assert callable(spec.collector), "{0}: collector not callable".format(name)
+        assert callable(spec.formatter), "{0}: formatter not callable".format(name)
+        assert spec.payload_key, "{0}: payload_key empty".format(name)
+        assert spec.prompt_marker == spec.prompt_marker.upper(), (
+            "{0}: prompt_marker must be UPPERCASE".format(name)
+        )
+
+
+def test__collect_inputs_unknown_source_is_skipped_not_raised(tmp_path):
+    """Typos in the `sources` list must NOT crash the radar — they're
+    logged and skipped so the rest of the briefing still runs."""
+    from workflows.hud.tasks.daily_radar_agent import collect_inputs
+    dump = tmp_path / "dump.txt"
+    dump.write_text("hello", encoding="utf-8")
+    payload = collect_inputs(
+        sources=["definitely_not_a_real_source"],
+        desktop_dump_path=str(dump),
+        hours=8,
+    )
+    assert payload["_sources"] == ["definitely_not_a_real_source"]
+    # Desktop log still read; no source payload keys added.
+    assert payload["desktop_activity_log"] == "hello"
+
+
+def test__source_overrides_redirects_cfg_id(monkeypatch):
+    """`source_overrides={"gmail": "X"}` must replace the registry's
+    default cfg id when calling the gmail collector."""
+    from workflows.hud.tasks.daily_radar_agent import (
+        SOURCE_REGISTRY,
+        SourceSpec,
+        collect_inputs,
+    )
+
+    captured = {}
+
+    def fake_collector(cfg_id, hours, **_):
+        captured["cfg_id"] = cfg_id
+        captured["hours"] = hours
+        return {"emails": [], "error": None}
+
+    def fake_formatter(section):
+        return "(noop)"
+
+    monkeypatch.setitem(SOURCE_REGISTRY, "gmail", SourceSpec(
+        name="gmail",
+        default_cfg="GOOGLE_GMAIL",
+        collector=fake_collector,
+        formatter=fake_formatter,
+        payload_key="gmail_recent",
+        prompt_marker="GMAIL_RECENT",
+        count_field="emails",
+    ))
+
+    collect_inputs(
+        sources=["gmail"],
+        desktop_dump_path="/nope",
+        hours=4,
+        source_overrides={"gmail": "GOOGLE_GMAIL_WORK"},
+    )
+    assert captured == {"cfg_id": "GOOGLE_GMAIL_WORK", "hours": 4}
+
+
+def test__source_params_merges_with_default_params(monkeypatch):
+    """`source_params={"owntracks": {"user": "brian"}}` must thread
+    through to the collector as a kwarg."""
+    from workflows.hud.tasks.daily_radar_agent import (
+        SOURCE_REGISTRY,
+        SourceSpec,
+        collect_inputs,
+    )
+
+    captured_kwargs = {}
+
+    def fake_collector(cfg_id, hours, **kwargs):
+        captured_kwargs.update(kwargs)
+        return {"location": None, "error": None}
+
+    monkeypatch.setitem(SOURCE_REGISTRY, "owntracks", SourceSpec(
+        name="owntracks",
+        default_cfg="OWN_TRACKS",
+        collector=fake_collector,
+        formatter=lambda s: "(noop)",
+        payload_key="last_location",
+        prompt_marker="LAST_LOCATION",
+        default_params={"device": "iphone"},
+    ))
+
+    collect_inputs(
+        sources=["owntracks"],
+        desktop_dump_path="/nope",
+        hours=8,
+        source_params={"owntracks": {"user": "brian"}},
+    )
+    assert captured_kwargs == {"device": "iphone", "user": "brian"}
+
+
+def test__format_inputs_walks_sources_in_priority_order():
+    """Prompt-input section order matches the order the radar pulled —
+    callers can rearrange `sources` to weight what the LLM sees first."""
+    from workflows.hud.tasks.daily_radar_agent import format_inputs_as_prompt_text
+    payload = {
+        "window_hours": 8,
+        "desktop_activity_log": "",
+        "_sources": ["jira", "gmail"],   # jira first, gmail second
+        "gmail_recent": {"emails": [], "error": None},
+        "jira_recent_updates": {"issues": [], "error": None},
+    }
+    text = format_inputs_as_prompt_text(payload)
+    assert text.index("JIRA_RECENT_UPDATES") < text.index("GMAIL_RECENT")
 
 
 # ── Unit / function — wrap_preserving_breaks ──────────────────────────────────

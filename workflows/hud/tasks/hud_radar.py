@@ -55,9 +55,9 @@ from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.desktop.helpers.feed import feed
 
 from apps.google_apps.references.constants import ScheduleCategory
-from apps.google_apps.config import APP_NAME as APP_NAME_GOOGLE_APPS
-from apps.trello.config import APP_NAME as APP_NAME_TRELLO
-from apps.jira.config import APP_NAME as APP_NAME_JIRA
+# Per-source cfg ids and default params live in
+# `daily_radar_agent.SOURCE_REGISTRY`; this task only orchestrates which
+# sources to pull (via `sources=[...]`) and what to override.
 
 from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
@@ -72,6 +72,7 @@ DAILY_RADAR_MAX_HUD_LINES: int = 16
 from workflows.hud.tasks.sections import sections__daily_radar
 from workflows.hud.tasks.daily_radar_agent import (
     ANALYSIS_WINDOW_HOURS,
+    DEFAULT_SOURCES,
     collect_inputs,
     format_inputs_as_prompt_text,
     summarise_inputs,
@@ -104,55 +105,49 @@ _DESKTOP_LOGS_HUD_FOLDER = "DESKTOPLOGS"
 def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
     """Render the DAILY RADAR briefing.
 
-    Each Google product has its own config key because each one carries a
-    DIFFERENT OAuth scope and DIFFERENT storage file. The earlier single
-    `cfg_id__gsuite="GOOGLE_APPS"` was wired to a calendar-only token,
-    which made Gmail and Tasks return 403 `insufficientPermissions`.
+    Data sources are driven by `SOURCE_REGISTRY` in
+    `workflows.hud.tasks.daily_radar_agent`. The radar pulls each source
+    in the order given by `sources`; default cfg ids + per-source params
+    come from the registry. Override only what you need to via the two
+    map kwargs below.
 
     Kwargs:
-        cfg_id__calendar:  Google Calendar config. Default 'GOOGLE_APPS'
-                            (calendar.readonly scope, storage.json).
-        cfg_id__gmail:     Gmail config. Default 'GOOGLE_GMAIL'
-                            (gmail.readonly scope, storage-gmail.json).
-        cfg_id__gtasks:    Google Tasks config. Default 'GOOGLE_TASKS'
-                            (tasks scope, storage-tasks.json).
-        cfg_id__trello:    Config key for Trello. Default 'TRELLO'.
-        cfg_id__jira:      Config key for Jira (recent-update collector).
-                            Default 'JIRA'.
-        cfg_id__github:    Config key for GitHub PR sweep. Default 'GITHUB'.
-                            Pulls open PRs where the user is author /
-                            assignee / mentioned / review-requested,
-                            updated in the analysis window.
-        cfg_id__owntracks: Config key for OwnTracks last-location lookup.
-                            Default 'OWN_TRACKS'. Pure context (home vs
-                            office) used by the prompt to tailor suggestions.
-        owntracks_user:    Optional OwnTracks username filter; defaults to
-                            None (most recent device across the account).
-        owntracks_device:  Optional OwnTracks device filter; requires user.
+        sources:           Priority list of source names. Defaults to
+                           `DEFAULT_SOURCES` (gmail, calendar, gtasks,
+                           trello, jira, github, owntracks, es_failed_jobs).
+                           Drop entries to disable; reorder to change
+                           prompt-input precedence.
+        source_overrides:  Map of `{source_name: cfg_id}` to redirect a
+                           single source's config without touching the
+                           registry. Example:
+                           `{"gmail": "GOOGLE_GMAIL_WORK"}`. Sources not
+                           present use the registry default. Defaults to {}.
+        source_params:     Map of `{source_name: {param: value}}` to pass
+                           source-specific kwargs to a collector. Merged
+                           on top of the registry's `default_params`.
+                           Example: `{"owntracks": {"user": "brian"}}`.
+                           Defaults to {}.
         cfg_id__anthropic: Config key for Anthropic. Default 'ANTHROPIC'.
         model:             Anthropic model id. Default Sonnet 4.6 —
-                            stronger synthesis than Haiku for a once-per-
-                            shift briefing; the beat schedule pins this
-                            explicitly so the model choice is obvious.
+                           stronger synthesis than Haiku for a once-per-
+                           shift briefing; the beat schedule pins this
+                           explicitly so the model choice is obvious.
         window_hours:      Analysis window in hours. Default 8.
         max_hud_lines:     Fixed visible HUD height. Default
-                            `DAILY_RADAR_MAX_HUD_LINES` (14, matches JIRA
-                            BOARD). Content beyond this scrolls via the
-                            auto-scrolling marquee. Override to give the
-                            radar more or less vertical space.
+                           `DAILY_RADAR_MAX_HUD_LINES`. Content beyond
+                           this scrolls via the auto-scrolling marquee.
+
+    To plug in a new source: add the collector + formatter to
+    `daily_radar_agent.py`, append a `SourceSpec` to the registry, and
+    add its name to `sources` here (or in the beat schedule). No edits
+    to this function needed.
     """
     log.info("show_daily_radar kwargs: %s", list(kwargs.keys()))
 
-    cfg_id__calendar = kwargs.get("cfg_id__calendar", APP_NAME_GOOGLE_APPS)
-    cfg_id__gmail = kwargs.get("cfg_id__gmail", "GOOGLE_GMAIL")
-    cfg_id__gtasks = kwargs.get("cfg_id__gtasks", "GOOGLE_TASKS")
-    cfg_id__trello = kwargs.get("cfg_id__trello", APP_NAME_TRELLO)
-    cfg_id__jira = kwargs.get("cfg_id__jira", APP_NAME_JIRA)
-    cfg_id__github = kwargs.get("cfg_id__github", "GITHUB")
-    cfg_id__owntracks = kwargs.get("cfg_id__owntracks", "OWN_TRACKS")
+    sources = kwargs.get("sources", DEFAULT_SOURCES)
+    source_overrides = kwargs.get("source_overrides") or {}
+    source_params = kwargs.get("source_params") or {}
     cfg_id__anthropic = kwargs.get("cfg_id__anthropic", "ANTHROPIC")
-    owntracks_user = kwargs.get("owntracks_user")
-    owntracks_device = kwargs.get("owntracks_device")
     model = kwargs.get("model", "claude-sonnet-4-6")
     window_hours = int(kwargs.get("window_hours", ANALYSIS_WINDOW_HOURS))
     max_hud_lines_cap = int(kwargs.get("max_hud_lines", DAILY_RADAR_MAX_HUD_LINES))
@@ -189,17 +184,11 @@ def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
     # inside daily_radar_agent.collect_inputs, so a single failing source
     # (e.g. Trello creds missing) never breaks the render.
     payload = collect_inputs(
-        cfg_id__calendar=cfg_id__calendar,
-        cfg_id__gmail=cfg_id__gmail,
-        cfg_id__gtasks=cfg_id__gtasks,
-        cfg_id__trello=cfg_id__trello,
-        cfg_id__jira=cfg_id__jira,
-        cfg_id__github=cfg_id__github,
-        cfg_id__owntracks=cfg_id__owntracks,
+        sources=sources,
         desktop_dump_path=desktop_dump_path,
         hours=window_hours,
-        owntracks_user=owntracks_user,
-        owntracks_device=owntracks_device,
+        source_overrides=source_overrides,
+        source_params=source_params,
     )
     prompt_inputs = format_inputs_as_prompt_text(payload)
     # endregion
@@ -277,15 +266,26 @@ def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
     metrics["item_lines"] = max_hud_lines
     metrics["model"] = model
 
+    # Build the summary from whatever sources actually ran — `summarise_inputs`
+    # emits one `{name}_count` per source with a `count_field`, plus the
+    # owntracks-only `has_location` flag. Iterate `sources_active` so a
+    # custom `sources=[...]` doesn't blow up the .format(**metrics) call
+    # by referencing keys that aren't present.
+    count_bits = []
+    for name in metrics.get("sources_active") or []:
+        key = "{0}_count".format(name)
+        if key in metrics:
+            count_bits.append("{0}={1}".format(name, metrics[key]))
+    if metrics.get("has_location"):
+        count_bits.append("loc=1")
+    errored = metrics.get("sources_errored") or []
+    err_bit = " err=[{0}]".format(",".join(errored)) if errored else ""
+
     return {
         "text": dump,
-        "summary": (
-            "daily radar · window {0}h · "
-            "email={email_count} cal={calendar_count} "
-            "tasks={task_count} trello={trello_count} "
-            "jira={jira_count} gh={github_pr_count} loc={has_location} "
-            "failed={failed_job_count} · {model}"
-        ).format(window_hours, **metrics),
+        "summary": "daily radar · window {0}h · {1}{2} · {3}".format(
+            window_hours, " ".join(count_bits), err_bit, model,
+        ),
         "metrics": metrics,
         "links": {
             "dump": own_dump_path,
