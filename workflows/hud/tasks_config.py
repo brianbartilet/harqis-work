@@ -219,14 +219,15 @@ WORKFLOWS_HUD = {
     },
 
     # ── show_pc_daily_sales ──────────────────────────────────────────────────
-    # Every 4 hours pull of gross daily sales (sum of TOTAL PRICE per DATE)
+    # Every 2 hours pull of gross daily sales (sum of TOTAL PRICE per DATE)
     # from the AppSheet INVOICE table. Renders 60 days grouped by month; only
-    # `visible_lines` are visible at once — the rest scrolls.
-    # `expires`: 60 * 60 * 2 — half-cadence; a missed run can still fire within
-    # 2 hours, after that the next 4-hour tick refreshes.
+    # `visible_lines` are visible at once — the rest scrolls. Surfaces under
+    # the ORGANIZE calendar block (moved from FINANCE).
+    # `expires`: 60 * 60 — half-cadence; a missed run can still fire within
+    # an hour, after that the next 2-hour tick refreshes.
     'run-job--show_pc_daily_sales': {
         'task': 'workflows.hud.tasks.hud_finance.show_pc_daily_sales',
-        'schedule': crontab(hour='*/1', minute=0),
+        'schedule': crontab(hour='*/2', minute=0),
         'kwargs': {
             "cfg_id__appsheet": "APPSHEET",
             "days": 60,
@@ -237,20 +238,22 @@ WORKFLOWS_HUD = {
         "options": {
             "queue": WorkflowQueue.HUD,
             "os": ["windows"],
-            "expires": 60 * 60 * 2,
+            "expires": 60 * 60,
         },
     },
 
     # ── show_api_costs ───────────────────────────────────────────────────────
-    # Every-2-hours pull of trailing-3-month LLM API spend, grouped per
+    # Every-30-minutes pull of trailing-3-month LLM API spend, grouped per
     # month → service → model. Anthropic numbers come from the admin
     # usage API (requires ANTHROPIC_ADMIN_KEY); OpenAI / Gemini are
-    # stubbed until cost endpoints land in their apps.
-    # `expires`: 60 * 60 — half-cadence; a missed run can still fire within
-    # an hour, after that the next 2-hour tick refreshes.
+    # stubbed until cost endpoints land in their apps. Surfaces under the
+    # ORGANIZE calendar block (moved from FINANCE — Brian wants live cost
+    # feedback while doing work, not just during finance review).
+    # `expires`: 60 * 15 — half-cadence; a missed run can still fire within
+    # 15 minutes, after that the next half-hour tick refreshes.
     'run-job--show_api_costs': {
         'task': 'workflows.hud.tasks.hud_api_costs.show_api_costs',
-        'schedule': crontab(hour='*/1', minute=0),
+        'schedule': crontab(minute='*/30'),
         'kwargs': {
             "cfg_id__anthropic": "ANTHROPIC",
             "months": 3,
@@ -259,7 +262,7 @@ WORKFLOWS_HUD = {
         "options": {
             "queue": WorkflowQueue.HUD,
             "os": ["windows"],
-            "expires": 60 * 60,
+            "expires": 60 * 15,
         },
     },
 

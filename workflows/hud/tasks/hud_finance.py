@@ -28,7 +28,7 @@ from workflows.hud.tasks.sections import sections__ynab, sections__pc_daily_sale
 @SPROUT.task()
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='BUDGETING INFO', new_sections_dict=sections__ynab, play_sound=True,
-            schedule_categories=[ScheduleCategory.FINANCE, ])
+            schedule_categories=[ScheduleCategory.ORGANIZE, ])
 @feed()
 def show_ynab_budgets_info(ini=ConfigHelperRainmeter(), **kwargs):
     log.info("Showing available keyword arguments: {0}".format(str(kwargs.keys())))
@@ -216,7 +216,7 @@ def _render_pc_daily_sales_dump(daily_totals) -> str:
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='PC DAILY SALES',
             new_sections_dict=sections__pc_daily_sales, play_sound=False,
-            schedule_categories=[ScheduleCategory.FINANCE, ])
+            schedule_categories=[ScheduleCategory.ORGANIZE, ])
 @feed()
 def show_pc_daily_sales(ini=ConfigHelperRainmeter(),
                         days: int = 60,
