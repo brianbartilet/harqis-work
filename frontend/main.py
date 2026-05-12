@@ -36,17 +36,21 @@ from auth import (
     clear_failed_logins,
 )
 from config import get_settings, warn_insecure_defaults
-from registry import TASK_REGISTRY
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ── Auto-regenerate registry from tasks_config.py on every startup ────────────
+# Regenerate registry.json BEFORE importing TASK_REGISTRY — `from registry
+# import TASK_REGISTRY` snapshots registry.json at import time. If the regen
+# runs after the import, the on-disk JSON has the new tasks but the in-memory
+# dict is stale, and the dashboard renders the old set.
 try:
     import generate_registry
     generate_registry.main()
 except Exception as _regen_err:
     logger.warning("Registry regeneration failed: %s", _regen_err)
+
+from registry import TASK_REGISTRY  # noqa: E402 — must follow regen above
 
 # ── App setup ─────────────────────────────────────────────────────────────────
 settings = get_settings()
