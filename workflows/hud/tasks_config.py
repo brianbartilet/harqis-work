@@ -282,21 +282,23 @@ WORKFLOWS_HUD = {
     },
 
     # ── show_daily_radar ─────────────────────────────────────────────────────
-    # Every 4 hours: combines ideas #1, #3, #4, #12, #17 from
-    # data/AGENTS_IDEAS.md — desktop context, commitment watcher, email
-    # priority, notification triage, and morning-briefing-style top
-    # priorities. Inputs are pulled from Gmail (last 8h), Calendar (today),
-    # Google Tasks (open), Trello (open cards on configured boards), Jira
-    # (tickets the user is involved in updated in the last 8h), ES
-    # failed-jobs (last 8h), plus the DESKTOP LOGS dump.txt tail.
+    # Fires at 08:00, 12:00, 16:00, 20:00, and 00:00 — every 4h across the
+    # waking day plus a midnight wrap-up, skipping the dead 04:00 tick.
+    # Combines ideas #1, #3, #4, #12, #17 from data/AGENTS_IDEAS.md —
+    # desktop context, commitment watcher, email priority, notification
+    # triage, and morning-briefing-style top priorities. Inputs are
+    # pulled from Gmail (last 8h), Calendar (today), Google Tasks (open),
+    # Trello (open cards on configured boards), Jira (tickets the user
+    # is involved in updated in the last 8h), ES failed-jobs (last 8h),
+    # plus the DESKTOP LOGS dump.txt tail.
     # `model`: Sonnet 4.6 — once-per-shift briefing benefits from the
     # stronger synthesis over Haiku; cost is still small at every-4-hours
     # cadence on text-only inputs.
     # `expires`: 60 * 60 * 2 — half-cadence; a missed run can fire within
-    # 2 hours, after that the next 4-hour tick refreshes.
+    # 2 hours, after that the next scheduled tick refreshes.
     'run-job--show_daily_radar': {
         'task': 'workflows.hud.tasks.hud_radar.show_daily_radar',
-        'schedule': crontab(hour='*/4', minute=0),
+        'schedule': crontab(hour='0,8,12,16,20', minute=0),
         'kwargs': {
             # Priority list of sources to pull. Order doubles as prompt-
             # input precedence (first entry's section comes first to the
