@@ -13,6 +13,7 @@ from agents.projects.agent.provider import (
     ENV_API_KEY,
     ENV_MAX_TOKEN,
     ENV_PROVIDER_OVERRIDE,
+    ENV_PROVIDER_OVERRIDE_LEGACY,
     PROVIDER_ANTHROPIC_API,
     PROVIDER_CLAUDE_CODE,
     ProviderConfig,
@@ -163,3 +164,96 @@ def test_describe_contains_kind_and_source():
     assert PROVIDER_CLAUDE_CODE in desc
     assert ENV_MAX_TOKEN in desc
     assert "Max" in desc
+
+
+# ── Max → API fallback wiring ─────────────────────────────────────────────────
+
+def test_both_credentials_attaches_api_fallback_to_max_primary():
+    """When both creds are set the primary is Max with an API fallback —
+    that's how the agent loop knows to swap on quota errors."""
+    cfg = detect_provider(
+        env={ENV_MAX_TOKEN: "oauth-xyz", ENV_API_KEY: "sk-abc"},
+        probe_cli=False,
+    )
+    assert cfg.kind == PROVIDER_CLAUDE_CODE
+    assert cfg.fallback is not None
+    assert cfg.fallback.kind == PROVIDER_ANTHROPIC_API
+    assert cfg.fallback.api_key == "sk-abc"
+    # Fallback is one-directional — the API fallback has no further fallback.
+    assert cfg.fallback.fallback is None
+
+
+def test_max_only_has_no_fallback():
+    cfg = detect_provider(env={ENV_MAX_TOKEN: "oauth-xyz"}, probe_cli=False)
+    assert cfg.kind == PROVIDER_CLAUDE_CODE
+    assert cfg.fallback is None
+
+
+def test_api_only_has_no_fallback():
+    cfg = detect_provider(env={ENV_API_KEY: "sk-abc"}, probe_cli=False)
+    assert cfg.kind == PROVIDER_ANTHROPIC_API
+    assert cfg.fallback is None
+
+
+def test_explicit_max_override_still_attaches_fallback_when_api_key_present():
+    """Even when forced to Max, having an API key in env means fallback is
+    available — this is the "I picked Max but want resilience" case."""
+    cfg = detect_provider(
+        env={
+            ENV_PROVIDER_OVERRIDE: "claude_code",
+            ENV_MAX_TOKEN: "oauth-xyz",
+            ENV_API_KEY: "sk-abc",
+        },
+        probe_cli=False,
+    )
+    assert cfg.kind == PROVIDER_CLAUDE_CODE
+    assert cfg.fallback is not None
+    assert cfg.fallback.kind == PROVIDER_ANTHROPIC_API
+
+
+def test_explicit_api_override_does_not_attach_max_fallback():
+    """Fallback is intentionally one-directional. API → Max would be wrong
+    because Max is a different account, not a higher-capacity tier."""
+    cfg = detect_provider(
+        env={
+            ENV_PROVIDER_OVERRIDE: "anthropic_api",
+            ENV_MAX_TOKEN: "oauth-xyz",
+            ENV_API_KEY: "sk-abc",
+        },
+        probe_cli=False,
+    )
+    assert cfg.kind == PROVIDER_ANTHROPIC_API
+    assert cfg.fallback is None
+
+
+def test_describe_mentions_fallback_when_present():
+    cfg = detect_provider(
+        env={ENV_MAX_TOKEN: "oauth-xyz", ENV_API_KEY: "sk-abc"},
+        probe_cli=False,
+    )
+    assert "fallback ready" in cfg.describe()
+
+
+# ── legacy KANBAN_PROVIDER alias ──────────────────────────────────────────────
+
+def test_legacy_kanban_provider_alias_works():
+    """KANBAN_PROVIDER is kept as a back-compat alias for ANTHROPIC_PROVIDER."""
+    cfg = detect_provider(
+        env={ENV_PROVIDER_OVERRIDE_LEGACY: "anthropic_api", ENV_API_KEY: "sk-abc"},
+        probe_cli=False,
+    )
+    assert cfg.kind == PROVIDER_ANTHROPIC_API
+
+
+def test_canonical_provider_var_wins_over_legacy():
+    """When both are set the canonical ANTHROPIC_PROVIDER takes precedence."""
+    cfg = detect_provider(
+        env={
+            ENV_PROVIDER_OVERRIDE: "anthropic_api",
+            ENV_PROVIDER_OVERRIDE_LEGACY: "claude_code",
+            ENV_API_KEY: "sk-abc",
+            ENV_MAX_TOKEN: "oauth-xyz",
+        },
+        probe_cli=False,
+    )
+    assert cfg.kind == PROVIDER_ANTHROPIC_API
