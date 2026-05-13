@@ -470,16 +470,30 @@ Both ultimately call the same `anthropic.Anthropic(...)` SDK — the only differ
 
 ### Precedence (first match wins)
 
-1. **`KANBAN_PROVIDER` explicit override.** Set to `claude_code` or `anthropic_api` to force a path. Errors at startup if the matching credential is missing — no silent fallback when the operator was explicit.
+1. **`ANTHROPIC_PROVIDER` explicit override.** Set to `claude_code` or `anthropic_api` to force a path. Errors at startup if the matching credential is missing — no silent fallback when the operator was explicit. `KANBAN_PROVIDER` is kept as a back-compat alias.
 2. **`CLAUDE_CODE_OAUTH_TOKEN` is present** in the env → `claude_code`. This is the "Max if available, else …" default.
 3. **`ANTHROPIC_API_KEY` is present** → `anthropic_api`.
 4. Else → hard startup error with instructions.
 
+When **both** credentials are present, the resolved primary (Max) carries a `fallback` pointing at the API path — see "Max → API fallback" below.
+
 The chosen provider is logged once at boot:
 
 ```
-Kanban provider resolved: claude_code (source: CLAUDE_CODE_OAUTH_TOKEN env; billing: Claude Max subscription)
+Anthropic provider resolved: claude_code (source: CLAUDE_CODE_OAUTH_TOKEN env; billing: Claude Max subscription) [fallback ready: anthropic_api]
 ```
+
+### Max → API fallback
+
+If `CLAUDE_CODE_OAUTH_TOKEN` **and** `ANTHROPIC_API_KEY` are both set in the environment, the orchestrator wires the API key as a one-shot fallback. When a Max call returns a quota/rate-limit error mid-card, the kanban agent:
+
+1. Swaps `anthropic.Anthropic` to the API-keyed client.
+2. Retries the same iteration once.
+3. Continues the rest of the card on the API path.
+
+The fallback is **per-card** (not orchestrator-wide), **one-directional** (Max → API, never the other way — Max is a different account, not a higher-capacity tier), and **one-shot** (a second quota hit on the API path properly fails the card).
+
+This same fallback runs at the **workflow service layer** for any Anthropic-calling workflow (LinkedIn monthly post, RAG answer, daily radar, desktop summary, …). It's wired in `apps/antropic/references/web/base_api_service.py::BaseApiServiceAnthropic` — every workflow inherits it for free, no per-task code change. The admin/usage API (`ApiServiceAnthropicUsage`, used by `workflows/hud/tasks/hud_api_costs.py`) is **explicitly API-key only** because the admin endpoint isn't exposed via Max OAuth — its docstring documents this.
 
 ### Generating the Max token
 
@@ -507,6 +521,18 @@ You only do this once per host. The token survives logouts of the interactive `c
 
 Per-profile provider selection (`provider: claude_code` in a profile YAML) is not implemented yet. The current shape applies one provider to the whole orchestrator. If you need per-card billing isolation, open an issue and we'll thread the selection through `BaseKanbanAgent` (the constructor already accepts a `ProviderConfig` directly, so the wiring is already there).
 
-### Same pattern applies to `workflows/` Anthropic callers
+### Workflows already inherit this
 
-The Anthropic-calling tasks under `workflows/*/tasks/` (e.g. `workflows/social/tasks/social_linkedin_monthly.py`, `workflows/knowledge/tasks/answer.py`, `workflows/hud/tasks/hud_radar.py`) all construct their client through `apps/antropic/...`. The same detect-and-inject design extends naturally to those — see `agents/projects/agent/provider.py` for the reference implementation; promoting it to a shared helper under `apps/antropic/` or `core/` is the natural follow-up.
+Every workflow Anthropic call constructs its client through `apps.antropic.references.web.base_api_service.BaseApiServiceAnthropic` — that class now calls `detect_provider()` and the Max → API fallback in its `_maybe_swap_to_fallback()` method. The five active workflow tasks that route through this path are:
+
+| Workflow | File |
+|---|---|
+| LinkedIn monthly post | `workflows/social/tasks/social_linkedin_monthly.py` |
+| Bank PDF transaction parse (inactive) | `workflows/finance/tasks/parse_transaction.py` |
+| RAG answer | `workflows/knowledge/tasks/answer.py` |
+| Daily / weekly desktop summary | `workflows/desktop/tasks/capture.py` |
+| Daily radar (Sonnet 4.6) | `workflows/hud/tasks/hud_radar.py` |
+
+No per-workflow code change is needed — they all already construct the service the same way.
+
+The **admin / usage** workflow (`workflows/hud/tasks/hud_api_costs.py` → `ApiServiceAnthropicUsage`) deliberately stays on the API key. That class talks to the admin endpoint via httpx (not the SDK), reads `ANTHROPIC_ADMIN_KEY` (falling back to `ANTHROPIC_API_KEY`), and never constructs the Max-aware SDK clients. Documented on the class.
