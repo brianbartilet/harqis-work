@@ -250,6 +250,39 @@ class BaseKanbanAgent:
                     kind = "api_rate_limit"
                 else:
                     kind = "api_error"
+
+                # Max → API fallback: when the current provider was
+                # detected with a fallback (i.e. both CLAUDE_CODE_OAUTH_TOKEN
+                # and ANTHROPIC_API_KEY are set in env) and the error is a
+                # quota / rate-limit hit, swap the client to the API path
+                # and retry this same iteration. The fallback is one-shot:
+                # the new ProviderConfig has no further fallback, so a
+                # second 429 on the API path properly raises.
+                if (
+                    kind in ("api_usage_limit", "api_rate_limit")
+                    and self.provider_config is not None
+                    and self.provider_config.fallback is not None
+                ):
+                    fb = self.provider_config.fallback
+                    logger.warning(
+                        "[%s] %s on provider=%s — falling back to %s and "
+                        "retrying iteration %d",
+                        self.profile.id, kind, self.provider_config.kind,
+                        fb.kind, iteration,
+                    )
+                    self._audit.permission_check(
+                        "provider_fallback",
+                        f"{self.provider_config.kind}->{fb.kind}",
+                        allowed=True,
+                    )
+                    self.provider_config = fb
+                    if fb.kind == PROVIDER_CLAUDE_CODE:
+                        self.client = anthropic.Anthropic(auth_token=fb.auth_token)
+                    else:
+                        self.client = anthropic.Anthropic(api_key=fb.api_key)
+                    iteration -= 1  # `iteration += 1` at top of loop re-runs the same turn
+                    continue
+
                 logger.warning(
                     "[%s] %s (kind=%s): %s",
                     self.profile.id, type(e).__name__, kind, msg,
