@@ -17,6 +17,8 @@ At its core the platform has three layers:
 - **AI agent layer** (`agents/`) — Claude-powered agents that operate autonomously: a Kanban agent that picks up Trello/Jira cards and executes them as tool-use loops, and an OpenClaw persistent agent reachable over Telegram, Discord, and WhatsApp with its own synced memory and identity.
 - **Core framework** — built on [HARQIS-core](https://github.com/brianbartilet/harqis-core), which provides the base service fixtures, configuration loading, and test infrastructure that every app integration extends.
 
+> **Guiding principles:** read [`docs/MANIFESTO.md`](docs/MANIFESTO.md) before scoping new work or letting an LLM agent change code. It defines the mission, vision, and the four operating principles (CODE + PARA, Homework for Life, the 7 Habits, the PAER loop) that govern what gets built here and how.
+
 ---
 
 ## App Inventory
