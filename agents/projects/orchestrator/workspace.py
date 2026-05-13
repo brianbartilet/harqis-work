@@ -42,7 +42,7 @@ class WorkspaceOrchestrator:
         self,
         client: TrelloClient,
         registry: ProfileRegistry,
-        api_key: str,
+        api_key,  # str (legacy) or ProviderConfig
         secret_store: SecretStore,
         os_labels: set[str],
         # Either workspace OR static board_ids must be set.

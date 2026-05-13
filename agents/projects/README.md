@@ -38,10 +38,15 @@ pip install anthropic pyyaml requests
 Create `.env/agents.env` (or add to existing `.env/apps.env`):
 
 ```bash
-# Required
-ANTHROPIC_API_KEY=sk-ant-...
+# Required — Trello
 TRELLO_API_KEY=...
 TRELLO_API_TOKEN=...
+
+# Required — Anthropic credential. Set ONE; auto-detected at orchestrator
+# boot. See "Provider auto-detection" below.
+ANTHROPIC_API_KEY=sk-ant-...                   # bills against Anthropic Console
+# CLAUDE_CODE_OAUTH_TOKEN=...                  # bills against your Claude Max
+# KANBAN_PROVIDER=anthropic_api                # optional override
 
 # Board source — pick ONE of these
 TRELLO_WORKSPACE_ID=harqis-work          # auto-discover every board in the org
@@ -447,3 +452,87 @@ agents/projects/
 │
 └── tests/                     # 218+ unit tests; see "Run tests" above
 ```
+
+---
+
+## Provider auto-detection
+
+The orchestrator picks its Anthropic auth path automatically at boot. You don't pass an API key on the command line; you set environment variables and the orchestrator chooses.
+
+### Two providers
+
+| Provider | Credential env var | Bills against | When to use |
+| --- | --- | --- | --- |
+| `claude_code` | `CLAUDE_CODE_OAUTH_TOKEN` | Your Claude Max subscription | Personal workstation, low/moderate card volume, want a fixed monthly cost |
+| `anthropic_api` | `ANTHROPIC_API_KEY` | Anthropic Console org / API credits | Headless VPS, high concurrency, scales with traffic |
+
+Both ultimately call the same `anthropic.Anthropic(...)` SDK — the only difference is whether the SDK authenticates with `auth_token=` (bearer, Max) or `api_key=` (x-api-key, Console). The tool-use loop, prompt, profiles, and audit pipeline are identical.
+
+### Precedence (first match wins)
+
+1. **`ANTHROPIC_PROVIDER` explicit override.** Set to `claude_code` or `anthropic_api` to force a path. Errors at startup if the matching credential is missing — no silent fallback when the operator was explicit. `KANBAN_PROVIDER` is kept as a back-compat alias.
+2. **`CLAUDE_CODE_OAUTH_TOKEN` is present** in the env → `claude_code`. This is the "Max if available, else …" default.
+3. **`ANTHROPIC_API_KEY` is present** → `anthropic_api`.
+4. Else → hard startup error with instructions.
+
+When **both** credentials are present, the resolved primary (Max) carries a `fallback` pointing at the API path — see "Max → API fallback" below.
+
+The chosen provider is logged once at boot:
+
+```
+Anthropic provider resolved: claude_code (source: CLAUDE_CODE_OAUTH_TOKEN env; billing: Claude Max subscription) [fallback ready: anthropic_api]
+```
+
+### Max → API fallback
+
+If `CLAUDE_CODE_OAUTH_TOKEN` **and** `ANTHROPIC_API_KEY` are both set in the environment, the orchestrator wires the API key as a one-shot fallback. When a Max call returns a quota/rate-limit error mid-card, the kanban agent:
+
+1. Swaps `anthropic.Anthropic` to the API-keyed client.
+2. Retries the same iteration once.
+3. Continues the rest of the card on the API path.
+
+The fallback is **per-card** (not orchestrator-wide), **one-directional** (Max → API, never the other way — Max is a different account, not a higher-capacity tier), and **one-shot** (a second quota hit on the API path properly fails the card).
+
+This same fallback runs at the **workflow service layer** for any Anthropic-calling workflow (LinkedIn monthly post, RAG answer, daily radar, desktop summary, …). It's wired in `apps/antropic/references/web/base_api_service.py::BaseApiServiceAnthropic` — every workflow inherits it for free, no per-task code change. The admin/usage API (`ApiServiceAnthropicUsage`, used by `workflows/hud/tasks/hud_api_costs.py`) is **explicitly API-key only** because the admin endpoint isn't exposed via Max OAuth — its docstring documents this.
+
+### Generating the Max token
+
+On any machine logged in to Claude Max via `claude` CLI, run:
+
+```bash
+claude setup-token
+```
+
+It prints a long-lived bearer token. Drop it in `.env/agents.env`:
+
+```bash
+CLAUDE_CODE_OAUTH_TOKEN=oauth-...
+```
+
+You only do this once per host. The token survives logouts of the interactive `claude` CLI session — it's a separate programmatic credential minted from your Max account.
+
+### Caveats to know
+
+- **Max rate limits are lower than API tier.** If you bump `KANBAN_NUM_AGENTS > 1` while routed to `claude_code`, bursts can trip 429s. The orchestrator logs a warning at boot when Max is selected. Set `KANBAN_PROVIDER=anthropic_api` to opt out for high-volume runs.
+- **Subprocess tools (Bash, MCP servers) inherit the same credential** under the right env-var name (`CLAUDE_CODE_OAUTH_TOKEN` for Max, `ANTHROPIC_API_KEY` for API). Profiles that explicitly declare their own credential under `secrets.required` always win — the orchestrator only fills gaps.
+- **The `claude --status` probe is informational only.** If the CLI looks Max-logged-in but you haven't run `claude setup-token`, the orchestrator logs a one-line hint and continues with API auth. It does not auto-mint tokens (that would require interactive consent in a browser, which is wrong for a worker process).
+
+### Per-profile override (future)
+
+Per-profile provider selection (`provider: claude_code` in a profile YAML) is not implemented yet. The current shape applies one provider to the whole orchestrator. If you need per-card billing isolation, open an issue and we'll thread the selection through `BaseKanbanAgent` (the constructor already accepts a `ProviderConfig` directly, so the wiring is already there).
+
+### Workflows already inherit this
+
+Every workflow Anthropic call constructs its client through `apps.antropic.references.web.base_api_service.BaseApiServiceAnthropic` — that class now calls `detect_provider()` and the Max → API fallback in its `_maybe_swap_to_fallback()` method. The five active workflow tasks that route through this path are:
+
+| Workflow | File |
+|---|---|
+| LinkedIn monthly post | `workflows/social/tasks/social_linkedin_monthly.py` |
+| Bank PDF transaction parse (inactive) | `workflows/finance/tasks/parse_transaction.py` |
+| RAG answer | `workflows/knowledge/tasks/answer.py` |
+| Daily / weekly desktop summary | `workflows/desktop/tasks/capture.py` |
+| Daily radar (Sonnet 4.6) | `workflows/hud/tasks/hud_radar.py` |
+
+No per-workflow code change is needed — they all already construct the service the same way.
+
+The **admin / usage** workflow (`workflows/hud/tasks/hud_api_costs.py` → `ApiServiceAnthropicUsage`) deliberately stays on the API key. That class talks to the admin endpoint via httpx (not the SDK), reads `ANTHROPIC_ADMIN_KEY` (falling back to `ANTHROPIC_API_KEY`), and never constructs the Max-aware SDK clients. Documented on the class.

@@ -14,11 +14,16 @@ Security:
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 import anthropic
 
 from agents.projects.agent.context import build_card_context
+from agents.projects.agent.provider import (
+    PROVIDER_ANTHROPIC_API,
+    PROVIDER_CLAUDE_CODE,
+    ProviderConfig,
+)
 from agents.projects.agent.question import (
     AgentPausedForQuestion,
     REMEMBER_LABEL,
@@ -99,7 +104,7 @@ class BaseKanbanAgent:
         profile: AgentProfile,
         card: KanbanCard,
         provider: TrelloClient,
-        api_key: str,
+        api_key: Union[str, ProviderConfig],
         scoped_secrets: Optional[dict[str, str]] = None,
         audit: Optional[AuditLogger] = None,
         prior_messages: Optional[list[dict]] = None,
@@ -108,6 +113,14 @@ class BaseKanbanAgent:
     ):
         """
         Args:
+            api_key:              Either a raw API-key string (legacy callers)
+                                  or a ``ProviderConfig`` from
+                                  ``agents.projects.agent.provider.detect_provider``.
+                                  When a string is passed, it is treated as an
+                                  API key — billed against the Anthropic Console
+                                  org. When a ``ProviderConfig`` is passed, the
+                                  underlying ``anthropic`` client is built with
+                                  the right auth (api_key vs bearer auth_token).
             prior_messages:       Previously persisted message history (stateful
                                   resume — REMEMBER_LABEL). When provided, the
                                   run loop skips building fresh context and
@@ -127,7 +140,23 @@ class BaseKanbanAgent:
         self._scoped_secrets = scoped_secrets or {}
         self._audit = audit or NullAuditLogger()
         self._sanitizer = OutputSanitizer(self._scoped_secrets)
-        self.client = anthropic.Anthropic(api_key=api_key)
+
+        if isinstance(api_key, ProviderConfig):
+            self.provider_config: Optional[ProviderConfig] = api_key
+            if api_key.kind == PROVIDER_CLAUDE_CODE:
+                self.client = anthropic.Anthropic(auth_token=api_key.auth_token)
+            else:
+                self.client = anthropic.Anthropic(api_key=api_key.api_key)
+        else:
+            # Legacy: bare API-key string. Wrap in a ProviderConfig so the
+            # rest of the loop has uniform access to provider_config.
+            self.provider_config = ProviderConfig(
+                kind=PROVIDER_ANTHROPIC_API,
+                api_key=api_key,
+                source="legacy api_key str",
+                billing_hint="Anthropic Console API key",
+            )
+            self.client = anthropic.Anthropic(api_key=api_key)
         self.enforcer = PermissionEnforcer(profile)
         self._prior_messages = prior_messages
         self._prior_iteration = prior_iteration
@@ -221,6 +250,39 @@ class BaseKanbanAgent:
                     kind = "api_rate_limit"
                 else:
                     kind = "api_error"
+
+                # Max → API fallback: when the current provider was
+                # detected with a fallback (i.e. both CLAUDE_CODE_OAUTH_TOKEN
+                # and ANTHROPIC_API_KEY are set in env) and the error is a
+                # quota / rate-limit hit, swap the client to the API path
+                # and retry this same iteration. The fallback is one-shot:
+                # the new ProviderConfig has no further fallback, so a
+                # second 429 on the API path properly raises.
+                if (
+                    kind in ("api_usage_limit", "api_rate_limit")
+                    and self.provider_config is not None
+                    and self.provider_config.fallback is not None
+                ):
+                    fb = self.provider_config.fallback
+                    logger.warning(
+                        "[%s] %s on provider=%s — falling back to %s and "
+                        "retrying iteration %d",
+                        self.profile.id, kind, self.provider_config.kind,
+                        fb.kind, iteration,
+                    )
+                    self._audit.permission_check(
+                        "provider_fallback",
+                        f"{self.provider_config.kind}->{fb.kind}",
+                        allowed=True,
+                    )
+                    self.provider_config = fb
+                    if fb.kind == PROVIDER_CLAUDE_CODE:
+                        self.client = anthropic.Anthropic(auth_token=fb.auth_token)
+                    else:
+                        self.client = anthropic.Anthropic(api_key=fb.api_key)
+                    iteration -= 1  # `iteration += 1` at top of loop re-runs the same turn
+                    continue
+
                 logger.warning(
                     "[%s] %s (kind=%s): %s",
                     self.profile.id, type(e).__name__, kind, msg,

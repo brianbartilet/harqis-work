@@ -58,6 +58,15 @@ class ApiServiceAnthropicUsage(BaseApiServiceAnthropic):
     Environment variable: ANTHROPIC_ADMIN_KEY
     Falls back to ANTHROPIC_API_KEY if ANTHROPIC_ADMIN_KEY is not set.
 
+    Provider note: this class **always uses an API key**, not a Claude Max
+    bearer token. The admin/usage endpoint is org-scoped on the API account
+    and is not exposed via Max OAuth. Calling ``super().__init__`` with
+    ``use_base_client=False`` skips the SDK client construction so the
+    Max-vs-API auto-detect in the parent never affects this transport —
+    requests are made through httpx with ``x-api-key`` headers built from
+    the admin key. The Max → API fallback in ``BaseApiServiceAnthropic`` is
+    also a no-op here (the SDK clients it would swap are never built).
+
     Docs: https://docs.anthropic.com/en/api/usage
     """
 

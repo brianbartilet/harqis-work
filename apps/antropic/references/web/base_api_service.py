@@ -5,10 +5,17 @@ import asyncio
 
 import httpx
 from anthropic import AsyncAnthropic, Anthropic
-from anthropic import RateLimitError, APIConnectionError, InternalServerError
+from anthropic import APIStatusError, RateLimitError, APIConnectionError, InternalServerError
 
 from core.web.services.fixtures.rest import BaseFixtureServiceRest
 from core.utilities.logging.custom_logger import logger as log
+
+from apps.antropic.provider import (
+    PROVIDER_CLAUDE_CODE,
+    ProviderConfig,
+    ProviderResolutionError,
+    detect_provider,
+)
 
 from typing import TypeVar, Any, Callable, Optional
 TWebService = TypeVar("TWebService")
@@ -16,6 +23,16 @@ TWebService = TypeVar("TWebService")
 _RETRYABLE = (RateLimitError, APIConnectionError, InternalServerError,
               httpx.RemoteProtocolError, httpx.ConnectError, httpx.TimeoutException)
 _HTTPX_RETRYABLE_STATUSES = {413, 429, 500, 503, 529}
+
+# Substrings (lowercased) that flag a 400-class error as actually a Max/API
+# quota hit rather than a transient bad-request. Used to decide whether the
+# fallback swap kicks in for this call.
+_USAGE_LIMIT_PATTERNS = (
+    "usage limit",
+    "credit balance",
+    "monthly spend limit",
+    "quota",
+)
 
 
 class BaseApiServiceAnthropic(BaseFixtureServiceRest):
@@ -48,7 +65,38 @@ class BaseApiServiceAnthropic(BaseFixtureServiceRest):
         **kwargs: Any,
     ) -> None:
         self.use_base_client = use_base_client
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+
+        # Resolve the auth route. Precedence:
+        #   1. Explicit ``api_key`` arg (caller knows what they want) →
+        #      classic api-key auth, no detection.
+        #   2. ``apps.antropic.provider.detect_provider()`` → Max bearer or
+        #      api-key from env, with optional Max → API fallback wired in
+        #      when both creds are present.
+        # ``provider_config`` is exposed so callers / tests can introspect
+        # the chosen path. ``self.api_key`` is preserved for back-compat with
+        # subclasses that read it directly (e.g. ApiServiceAnthropicUsage).
+        if api_key is not None:
+            self.api_key = api_key
+            self.provider_config: Optional[ProviderConfig] = None
+            client_auth_kwargs = {"api_key": api_key}
+        else:
+            try:
+                self.provider_config = detect_provider()
+            except ProviderResolutionError:
+                # Preserve legacy behaviour: if no detect-able creds, fall
+                # back to the env var read so existing callers that relied
+                # on ANTHROPIC_API_KEY-only setups still construct a client
+                # (it will just fail at call time if the key is bogus).
+                self.provider_config = None
+                self.api_key = os.environ.get("ANTHROPIC_API_KEY")
+                client_auth_kwargs = {"api_key": self.api_key}
+            else:
+                if self.provider_config.kind == PROVIDER_CLAUDE_CODE:
+                    self.api_key = None
+                    client_auth_kwargs = {"auth_token": self.provider_config.auth_token}
+                else:
+                    self.api_key = self.provider_config.api_key
+                    client_auth_kwargs = {"api_key": self.provider_config.api_key}
 
         self.model = config.app_data.get('model', self.DEFAULT_MODEL)
         self.max_tokens = config.app_data.get('max_tokens', self.DEFAULT_MAX_TOKENS)
@@ -60,9 +108,12 @@ class BaseApiServiceAnthropic(BaseFixtureServiceRest):
         self.async_client: Optional[AsyncAnthropic] = None
 
         if self.use_base_client:
-            self.base_client = Anthropic(api_key=self.api_key, max_retries=0)
-            self.async_client = AsyncAnthropic(api_key=self.api_key, max_retries=0)
+            self.base_client = Anthropic(max_retries=0, **client_auth_kwargs)
+            self.async_client = AsyncAnthropic(max_retries=0, **client_auth_kwargs)
         else:
+            # Subclass uses its own transport (e.g. ApiServiceAnthropicUsage
+            # talks to the admin API directly via httpx with its own key).
+            # Skip SDK client construction entirely.
             super(BaseApiServiceAnthropic, self).__init__(config, **kwargs)
 
     # region Backoff helpers
@@ -166,6 +217,47 @@ class BaseApiServiceAnthropic(BaseFixtureServiceRest):
 
     # endregion
 
+    # region Provider fallback (Max → API on quota / rate-limit)
+
+    def _looks_like_quota_error(self, exc: BaseException) -> bool:
+        if isinstance(exc, RateLimitError):
+            return True
+        if isinstance(exc, APIStatusError):
+            msg = str(exc).lower()
+            return any(p in msg for p in _USAGE_LIMIT_PATTERNS)
+        return False
+
+    def _maybe_swap_to_fallback(self, exc: BaseException) -> bool:
+        """If the current provider has a fallback wired and ``exc`` looks
+        like a quota/rate-limit hit, rebuild ``base_client`` and
+        ``async_client`` against the fallback provider and return True.
+
+        One-directional: Max → API. The new ProviderConfig has no further
+        fallback so a second quota hit on the API path properly raises.
+        """
+        if self.provider_config is None or self.provider_config.fallback is None:
+            return False
+        if not self._looks_like_quota_error(exc):
+            return False
+
+        fb = self.provider_config.fallback
+        log.warning(
+            "Anthropic %s on provider=%s — falling back to %s",
+            type(exc).__name__, self.provider_config.kind, fb.kind,
+        )
+        self.provider_config = fb
+        if fb.kind == PROVIDER_CLAUDE_CODE:
+            kw = {"auth_token": fb.auth_token}
+            self.api_key = None
+        else:
+            kw = {"api_key": fb.api_key}
+            self.api_key = fb.api_key
+        self.base_client = Anthropic(max_retries=0, **kw)
+        self.async_client = AsyncAnthropic(max_retries=0, **kw)
+        return True
+
+    # endregion
+
     def send_message(
         self,
         prompt: str,
@@ -207,7 +299,12 @@ class BaseApiServiceAnthropic(BaseFixtureServiceRest):
         if system:
             payload["system"] = system
 
-        return self._with_backoff(self.base_client.messages.create, **payload)
+        try:
+            return self._with_backoff(self.base_client.messages.create, **payload)
+        except APIStatusError as exc:
+            if self._maybe_swap_to_fallback(exc):
+                return self._with_backoff(self.base_client.messages.create, **payload)
+            raise
 
     async def send_message_async(
         self,
@@ -253,7 +350,12 @@ class BaseApiServiceAnthropic(BaseFixtureServiceRest):
         if system:
             payload["system"] = system
 
-        return await self._with_backoff_async(self.async_client.messages.create, **payload)
+        try:
+            return await self._with_backoff_async(self.async_client.messages.create, **payload)
+        except APIStatusError as exc:
+            if self._maybe_swap_to_fallback(exc):
+                return await self._with_backoff_async(self.async_client.messages.create, **payload)
+            raise
 
     def count_tokens(
         self,
@@ -281,8 +383,13 @@ class BaseApiServiceAnthropic(BaseFixtureServiceRest):
         if not self.base_client:
             raise RuntimeError("Anthropic sync client is not initialized.")
 
-        return self._with_backoff(
-            self.base_client.messages.count_tokens,
-            model=model or self.model,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        kwargs = {
+            "model": model or self.model,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        try:
+            return self._with_backoff(self.base_client.messages.count_tokens, **kwargs)
+        except APIStatusError as exc:
+            if self._maybe_swap_to_fallback(exc):
+                return self._with_backoff(self.base_client.messages.count_tokens, **kwargs)
+            raise

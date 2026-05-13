@@ -24,6 +24,10 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from agents.projects.agent.provider import (
+    detect_provider,
+    log_chosen_provider,
+)
 from agents.projects.orchestrator.routing import detect_local_os_labels
 from agents.projects.orchestrator.workspace import WorkspaceOrchestrator
 from agents.projects.profiles.registry import ProfileRegistry
@@ -38,9 +42,16 @@ def from_env(profiles_dir: Optional[Path] = None) -> WorkspaceOrchestrator:
     """Build a WorkspaceOrchestrator from environment variables.
 
     Required env vars:
-        ANTHROPIC_API_KEY
         TRELLO_API_KEY
         TRELLO_API_TOKEN
+
+    Anthropic credential — set ONE (auto-detected, see
+    agents/projects/agent/provider.py):
+        CLAUDE_CODE_OAUTH_TOKEN  Claude Max session token from
+                                 `claude setup-token`. Bills against Max.
+        ANTHROPIC_API_KEY        Anthropic Console API key. Bills against API.
+        KANBAN_PROVIDER          Optional override: `claude_code` |
+                                 `anthropic_api` to force a specific path.
 
     Board source — exactly one is required:
         TRELLO_WORKSPACE_ID    Trello org short name or 24-char id
@@ -67,7 +78,8 @@ def from_env(profiles_dir: Optional[Path] = None) -> WorkspaceOrchestrator:
                                 satisfies. Auto-detected from platform.system()
                                 when unset (e.g. {os:windows, os:win, os:any}).
     """
-    api_key = os.environ["ANTHROPIC_API_KEY"]
+    provider_cfg = detect_provider()
+    log_chosen_provider(provider_cfg)
     trello_key = os.environ["TRELLO_API_KEY"]
     trello_token = os.environ["TRELLO_API_TOKEN"]
 
@@ -132,7 +144,7 @@ def from_env(profiles_dir: Optional[Path] = None) -> WorkspaceOrchestrator:
     return WorkspaceOrchestrator(
         client=client,
         registry=registry,
-        api_key=api_key,
+        api_key=provider_cfg,
         secret_store=secret_store,
         os_labels=os_labels,
         workspace=workspace,
