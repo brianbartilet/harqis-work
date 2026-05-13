@@ -138,3 +138,13 @@ pytest workflows/social/tests/test_social_linkedin_monthly.py -v -m smoke
 # Live integration tests (requires full credentials)
 pytest workflows/social/tests/test_social_linkedin_monthly.py -v -m integration
 ```
+
+---
+
+## Manifesto alignment
+
+See [`docs/MANIFESTO.md`](../../docs/MANIFESTO.md) and [`docs/thesis/MANIFESTO-REPO-UPDATES.md`](../../docs/thesis/MANIFESTO-REPO-UPDATES.md). The same metadata is persisted on each beat entry's `'manifesto'` key in `tasks_config.py`.
+
+| Task | code_role | para_bucket | express_target | review_artifact | hfl_signal |
+| --- | --- | --- | --- | --- | --- |
+| `generate_monthly_linkedin_post` | distill+express | area | `api:linkedin+message:gmail+file:markdown` | `es_log+file` | `True` |

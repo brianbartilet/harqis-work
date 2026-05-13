@@ -6,6 +6,20 @@
 >pip install --upgrade --force-reinstall --no-cache-dir git+https://github.com/brianbartilet/harqis-core.git#egg=harqis-core
 ```
 
+## Manifesto alignment
+
+Every task in this tree carries a `'manifesto'` metadata block on its beat entry. Fields:
+
+| Field | Meaning |
+| --- | --- |
+| `code_role` | `capture` / `organize` / `distill` / `express` (or `'+'`-joined hybrids) — the CODE phase from [`docs/MANIFESTO.md`](../docs/MANIFESTO.md). |
+| `para_bucket` | `project` / `area` / `resource` / `archive` — PARA bucket. Most live workflows are `area`s. |
+| `express_target` | Short string describing where the output lands: `hud_feed`, `rainmeter:<METER>`, `es_log`, `api:<service>`, `file:<purpose>`, `vectorstore:<name>`, `message:<channel>`. |
+| `review_artifact` | What a human or downstream task reads to verify the run happened. Usually `es_log` plus the express surface. |
+| `hfl_signal` | `True` when the task produces personal-signal data eligible for the Homework-for-Life corpus (see [`workflows/hfl/`](hfl/README.md)). |
+
+`scripts/manifesto_audit.py` validates the metadata across all active workflows. Per-workflow alignment tables live in each `workflows/<name>/README.md` under "Manifesto alignment". Design rationale: [`docs/thesis/MANIFESTO-REPO-UPDATES.md`](../docs/thesis/MANIFESTO-REPO-UPDATES.md).
+
 ## Queue topology
 
 Queue names live in `workflows/queues.py`. The wire-level topology (which queues are direct vs fanout) is declared in `workflows/config.py` via `SPROUT.conf.task_queues`. The two are paired — every name in the enum must have a matching declaration, otherwise Celery routes to a non-existent queue.

@@ -10,7 +10,7 @@ Two complementary code paths:
 |---|---|---|---|
 | `broadcast_collect_daily_dumps` | every Celery worker subscribed to `default_broadcast` | itself | walks local paths, builds tar in Python, streams to harqis-server via `ssh + tar -xf -` (or `shutil.copy2` if the worker IS harqis-server) |
 | `pull_daily_dumps_from_remotes` | harqis-server only (queue=`host`) | every device under `[dumps.pull_targets.*]` (Android via Termux SSHD, etc.) | SSH + `find -newermt` to list, then `ssh + tar -cf -` piped into local extraction |
-| `analyze_daily_dumps` | harqis-server only (queue=`host`) | the inbox | placeholder — logs file counts. Marked `# AGENT WIRE-UP HERE` for the future kanban hand-off |
+| `analyze_daily_dumps` | harqis-server only (queue=`host`) | the inbox | walks the day's machine folders, then pushes a per-machine summary line to the HUD feed via `@feed()`. The kanban / Trello hand-off marker is preserved in `tasks/analyze.py` as `# FUTURE: kanban agent hand-off` for a later enhancement. |
 
 ## Schedule
 
@@ -114,7 +114,17 @@ A file qualifies for inclusion if:
 
 ## What's intentionally NOT here yet
 
-- **The analyzer agent** — `analyze_daily_dumps` only logs. The kanban hand-off is sketched in `tasks/analyze.py` between the markers `# AGENT WIRE-UP HERE`. Drop in the Trello-card creation when ready.
+- **A kanban / Trello hand-off agent** — `analyze_daily_dumps` now pushes a per-machine summary to the HUD feed (the manifesto-required Express path is in place). A richer Trello-card-per-machine flow is still optional; the marker in `tasks/analyze.py` reads `# FUTURE: kanban agent hand-off` so the enhancement is greppable.
 - **Compression** — files ship uncompressed inside the tar stream. Add `mode="w|gz"` in `transport.py::ship_via_ssh_tar` if bandwidth becomes the bottleneck.
 - **Per-source overrides for the destination folder name** — currently the source root's basename is used verbatim. If two paths on the same machine have the same basename, they'll collide. Easy to add a `source_aliases = { "/p1" = "logs", "/p2" = "screenshots" }` map under `[<machine>.daily_dumps]` if needed.
 - **A new `dumps_broadcast` queue** — we reuse `default_broadcast` to keep onboarding zero-config (every machine that subscribes to default_broadcast gets dumps automatically). Switch to a dedicated queue if dumps traffic becomes noisy on the broadcast channel.
+
+## Manifesto alignment
+
+See [`docs/MANIFESTO.md`](../../docs/MANIFESTO.md) and [`docs/thesis/MANIFESTO-REPO-UPDATES.md`](../../docs/thesis/MANIFESTO-REPO-UPDATES.md). The same metadata is persisted on each beat entry's `'manifesto'` key in `tasks_config.py`.
+
+| Task | code_role | para_bucket | express_target | review_artifact | hfl_signal |
+| --- | --- | --- | --- | --- | --- |
+| `broadcast_collect_daily_dumps` | capture | area | `file:dump_inbox` | `es_log` | `True` |
+| `pull_daily_dumps_from_remotes` | capture | area | `file:dump_inbox` | `es_log` | `True` |
+| `analyze_daily_dumps` | distill+express | area | `hud_feed` | `es_log+hud_feed` | `True` |
