@@ -50,6 +50,13 @@ WORKFLOW_PURCHASES = {
             "queue": WorkflowQueue.TCG,
             "expires": 60 * 60 * 8
         },
+        'manifesto': {
+            'code_role': 'organize',
+            'para_bucket': 'area',
+            'express_target': 'file:tcg_mappings',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': False,
+        },
     },
 
     'run-job--generate_tcg_listings': {
@@ -65,8 +72,15 @@ WORKFLOW_PURCHASES = {
             "queue": WorkflowQueue.TCG,
             "expires": 60 * 60 * 8
         },
+        'manifesto': {
+            'code_role': 'express',
+            'para_bucket': 'area',
+            'express_target': 'api:tcg_mp',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': False,
+        },
     },
-    
+
     'run-job--update_tcg_listings_prices': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.update_tcg_listings_prices',
         'schedule': crontab(day_of_week="mon", hour='4', minute=0),
@@ -78,6 +92,13 @@ WORKFLOW_PURCHASES = {
         "options": {
             "queue": WorkflowQueue.TCG,
             "expires": 60 * 60 * 24
+        },
+        'manifesto': {
+            'code_role': 'express',
+            'para_bucket': 'area',
+            'express_target': 'api:tcg_mp',
+            'review_artifact': 'es_log',
+            'hfl_signal': False,
         },
     },
 
@@ -95,6 +116,13 @@ WORKFLOW_PURCHASES = {
             "queue": WorkflowQueue.TCG,
             "expires": 60 * 60 * 24
         },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'file:scryfall_bulk',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': False,
+        },
     },
 
     'run-job--generate_audit_for_tcg_orders': {
@@ -106,6 +134,13 @@ WORKFLOW_PURCHASES = {
         "options": {
             "queue": WorkflowQueue.TCG,
             "expires": 60 * 60 * 4
+        },
+        'manifesto': {
+            'code_role': 'distill',
+            'para_bucket': 'area',
+            'express_target': 'es_log',
+            'review_artifact': 'es_log',
+            'hfl_signal': False,
         },
     },
 

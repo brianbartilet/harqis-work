@@ -18,6 +18,13 @@ WORKFLOW_SOCIAL = {
             'queue': WorkflowQueue.PEON,
             'expires': 60 * 60 * 24 * 7,
         },
+        'manifesto': {
+            'code_role': 'distill+express',
+            'para_bucket': 'area',
+            'express_target': 'api:linkedin+message:gmail+file:markdown',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+        },
     },
 
 }

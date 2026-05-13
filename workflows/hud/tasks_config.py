@@ -50,6 +50,13 @@ WORKFLOWS_HUD = {
             "os": ["windows"],
             "expires": 60 * 5
         },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:FOREX_ACCOUNT',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': False,
+        },
     },
 
     'run-job--show_tcg_orders': {
@@ -64,6 +71,13 @@ WORKFLOWS_HUD = {
             "queue": WorkflowQueue.HUD,
             "os": ["windows"],
             "expires": 60 * 30
+        },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:TCG_ORDERS',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': False,
         },
     },
 
@@ -84,6 +98,13 @@ WORKFLOWS_HUD = {
             "queue": WorkflowQueue.HUD,
             "os": ["windows"],
             "expires": 60 * 60 * 24,
+        },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:TCG_SELL_CART',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': False,
         },
     },
 
@@ -111,6 +132,13 @@ WORKFLOWS_HUD = {
             "os": ["windows"],
             "expires": 60 * 30,
         },
+        'manifesto': {
+            'code_role': 'capture+distill',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:JIRA_BOARD',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': True,
+        },
     },
 
     'run-job--get_desktop_logs': {
@@ -126,6 +154,13 @@ WORKFLOWS_HUD = {
             "os": ["windows"],
             "expires": 60 * 60
         },
+        'manifesto': {
+            'code_role': 'distill+express',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:DESKTOP_LOGS',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': True,
+        },
     },
 
     'run-job--take_screenshots_for_gpt_capture': {
@@ -138,6 +173,13 @@ WORKFLOWS_HUD = {
             "queue": WorkflowQueue.PEON,
             "os": ["windows"],
             "expires": 60 * 10
+        },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'file:screenshots',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
         },
     },
     
@@ -152,6 +194,13 @@ WORKFLOWS_HUD = {
             "os": ["windows"],
             "expires": 60 * 30
         },
+        'manifesto': {
+            'code_role': 'capture+distill',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:CALENDAR_INFO',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': True,
+        },
     },
 
     'run-job--get_failed_jobs': {
@@ -161,6 +210,13 @@ WORKFLOWS_HUD = {
             "queue": WorkflowQueue.HUD,
             "os": ["windows"],
             "expires": 60 * 15
+        },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:FAILED_JOBS',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': False,
         },
     },
 
@@ -180,6 +236,13 @@ WORKFLOWS_HUD = {
             "os": ["windows"],
             "expires": 60 * 2
         },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:MOUSE_BINDINGS',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': True,
+        },
     },
 
     'run-job--build_summary_mouse_bindings': {
@@ -193,6 +256,13 @@ WORKFLOWS_HUD = {
             "os": ["windows"],
             "expires": 60 * 60
         },
+        'manifesto': {
+            'code_role': 'distill',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:MOUSE_BINDINGS',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': True,
+        },
     },
 
     'run-job--show_hud_profiles': {
@@ -202,6 +272,13 @@ WORKFLOWS_HUD = {
             "queue": WorkflowQueue.HUD,
             "os": ["windows"],
             "expires": 60 * 60
+        },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:HUD_PROFILES',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': False,
         },
     },
 
@@ -215,7 +292,14 @@ WORKFLOWS_HUD = {
             "queue": WorkflowQueue.HUD,
             "os": ["windows"],
             "expires": 60 * 60
-        }
+        },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:YNAB_BUDGETS',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': False,
+        },
     },
 
     # ── show_pc_daily_sales ──────────────────────────────────────────────────
@@ -239,6 +323,13 @@ WORKFLOWS_HUD = {
             "queue": WorkflowQueue.HUD,
             "os": ["windows"],
             "expires": 60 * 60,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:PC_DAILY_SALES',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': False,
         },
     },
 
@@ -264,6 +355,13 @@ WORKFLOWS_HUD = {
             "os": ["windows"],
             "expires": 60 * 15,
         },
+        'manifesto': {
+            'code_role': 'capture+distill',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:API_COSTS',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': False,
+        },
     },
 
     'run-job--show_ai_helper': {
@@ -278,7 +376,14 @@ WORKFLOWS_HUD = {
             "queue": WorkflowQueue.HUD,
             "os": ["windows"],
             "expires": 60 * 60
-        }
+        },
+        'manifesto': {
+            'code_role': 'organize',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:AI_HELPER',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': False,
+        },
     },
 
     # ── show_daily_radar ─────────────────────────────────────────────────────
@@ -338,6 +443,13 @@ WORKFLOWS_HUD = {
             "os": ["windows"],
             "expires": 60 * 60 * 2,
         },
+        'manifesto': {
+            'code_role': 'distill+express',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:DAILY_RADAR',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': True,
+        },
     },
 
     'run-job--get_schedules': {
@@ -349,7 +461,14 @@ WORKFLOWS_HUD = {
         "options": {
             "queue": WorkflowQueue.HUD,
             "os": ["windows"],
-            "expires": 60 * 60}
+            "expires": 60 * 60},
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:SCHEDULES',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': True,
+        },
     },
 
 }

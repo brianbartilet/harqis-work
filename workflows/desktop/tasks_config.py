@@ -50,6 +50,13 @@ WORKFLOWS_DESKTOP = {
             "expires": 60 * 60 * 6,
             "queue": WorkflowQueue.DEFAULT_BROADCAST
         },
+        'manifesto': {
+            'code_role': 'organize',
+            'para_bucket': 'area',
+            'express_target': 'es_log',
+            'review_artifact': 'es_log',
+            'hfl_signal': False,
+        },
     },
 
     'run-job--run_n8n_sequence': {
@@ -61,6 +68,13 @@ WORKFLOWS_DESKTOP = {
             "queue": WorkflowQueue.N8N,
             "os": ["windows", "macos", "linux"],
         },
+        'manifesto': {
+            'code_role': 'organize',
+            'para_bucket': 'area',
+            'express_target': 'hud_feed',
+            'review_artifact': 'es_log+hud_feed',
+            'hfl_signal': False,
+        },
     },
 
     'run-job--set_desktop_hud_to_back': {
@@ -71,6 +85,13 @@ WORKFLOWS_DESKTOP = {
             "expires": 60 * 60,
             "queue": WorkflowQueue.HUD,
             "os": ["windows"],
+        },
+        'manifesto': {
+            'code_role': 'organize',
+            'para_bucket': 'area',
+            'express_target': 'hud_feed',
+            'review_artifact': 'es_log+hud_feed',
+            'hfl_signal': False,
         },
     },
 
@@ -84,6 +105,13 @@ WORKFLOWS_DESKTOP = {
             "expires": 60 * 60,
             "queue": WorkflowQueue.PEON
         },
+        'manifesto': {
+            'code_role': 'organize',
+            'para_bucket': 'area',
+            'express_target': 'hud_feed',
+            'review_artifact': 'es_log+hud_feed',
+            'hfl_signal': False,
+        },
     },
 
     'run-job--run_capture_logging': {
@@ -95,6 +123,13 @@ WORKFLOWS_DESKTOP = {
         "options": {
             "queue": WorkflowQueue.PEON,
             "expires": 60 * 60
+        },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'hud_feed+file:screenshots',
+            'review_artifact': 'es_log+hud_feed',
+            'hfl_signal': True,
         },
     },
 
@@ -110,6 +145,13 @@ WORKFLOWS_DESKTOP = {
             "queue": WorkflowQueue.PEON,
             "expires": 60 * 60 * 24,
         },
+        'manifesto': {
+            'code_role': 'distill+express',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:DESKTOP_LOGS+file:daily',
+            'review_artifact': 'es_log+hud_widget+file',
+            'hfl_signal': True,
+        },
     },
 
     'run-job--generate_weekly_desktop_summary': {
@@ -123,6 +165,13 @@ WORKFLOWS_DESKTOP = {
         "options": {
             "queue": WorkflowQueue.PEON,
             "expires": 60 * 60 * 24 * 7,
+        },
+        'manifesto': {
+            'code_role': 'distill+express',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:DESKTOP_LOGS+file:weekly',
+            'review_artifact': 'es_log+hud_widget+file',
+            'hfl_signal': True,
         },
     },
 

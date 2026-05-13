@@ -30,6 +30,13 @@ WORKFLOW_KNOWLEDGE = {
             'queue': WorkflowQueue.AGENT,
             'expires': 60 * 60 * 6,  # 6h — skip if a previous run is still pending
         },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'vectorstore:knowledge',
+            'review_artifact': 'es_log',
+            'hfl_signal': True,
+        },
     },
 
     # Staggered nightly so the three ingestors don't fight for the Gemini
@@ -49,6 +56,13 @@ WORKFLOW_KNOWLEDGE = {
             'queue': WorkflowQueue.AGENT,
             'expires': 60 * 60 * 6,
         },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'vectorstore:knowledge',
+            'review_artifact': 'es_log',
+            'hfl_signal': False,
+        },
     },
 
     'run-job--ingest_github_repos': {
@@ -67,6 +81,13 @@ WORKFLOW_KNOWLEDGE = {
             'queue': WorkflowQueue.AGENT,
             'expires': 60 * 60 * 6,
         },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'vectorstore:knowledge',
+            'review_artifact': 'es_log',
+            'hfl_signal': False,
+        },
     },
 
     'run-job--ingest_gdrive_docs': {
@@ -81,6 +102,13 @@ WORKFLOW_KNOWLEDGE = {
         'options': {
             'queue': WorkflowQueue.AGENT,
             'expires': 60 * 60 * 6,
+        },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'vectorstore:knowledge',
+            'review_artifact': 'es_log',
+            'hfl_signal': True,
         },
     },
 
@@ -100,6 +128,13 @@ WORKFLOW_KNOWLEDGE = {
         'options': {
             'queue': WorkflowQueue.ADHOC,
             'expires': 60 * 60,
+        },
+        'manifesto': {
+            'code_role': 'distill+express',
+            'para_bucket': 'area',
+            'express_target': 'es_log',
+            'review_artifact': 'es_log',
+            'hfl_signal': True,
         },
     },
 

@@ -32,6 +32,13 @@ WORKFLOW_DUMPS = {
             'queue': WorkflowQueue.DEFAULT_BROADCAST,
             'expires': 60 * 60 * 8,
         },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'file:dump_inbox',
+            'review_artifact': 'es_log',
+            'hfl_signal': True,
+        },
     },
 
     # ── 00:05 every day — harqis-server pulls from Android et al. ───────────
@@ -44,11 +51,20 @@ WORKFLOW_DUMPS = {
             'os': ['windows', 'macos', 'linux'],
             'expires': 60 * 60 * 8,
         },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'file:dump_inbox',
+            'review_artifact': 'es_log',
+            'hfl_signal': True,
+        },
     },
 
-    # ── 01:00 every day — placeholder analyzer ──────────────────────────────
-    # Runs an hour after collection completes. Today this just logs the inbox
-    # state; the kanban-card-creation hook lives in analyze.py.
+    # ── 01:00 every day — inbox analyzer + HUD summary tile ─────────────────
+    # Runs an hour after collection completes. Walks the day's inbox, then
+    # pushes a per-machine summary line to the HUD feed (closes the manifesto
+    # dead-weight gap — see docs/thesis/MANIFESTO-REPO-UPDATES.md §4.5).
+    # Trello hand-off remains a future follow-up; the marker stays in code.
     'run-job--analyze_daily_dumps': {
         'task': 'workflows.dumps.tasks.analyze_daily_dumps',
         'schedule': crontab(hour=1, minute=0),
@@ -56,6 +72,13 @@ WORKFLOW_DUMPS = {
             'queue': WorkflowQueue.HOST,
             'os': ['windows', 'macos', 'linux'],
             'expires': 60 * 60 * 8,
+        },
+        'manifesto': {
+            'code_role': 'distill+express',
+            'para_bucket': 'area',
+            'express_target': 'hud_feed',
+            'review_artifact': 'es_log+hud_feed',
+            'hfl_signal': True,
         },
     },
 
