@@ -21,6 +21,10 @@ from typing import Optional
 
 from agents.projects.agent.base import AgentExecutionError, BaseKanbanAgent
 from agents.projects.agent.persona import sign_comment
+from agents.projects.agent.provider import (
+    PROVIDER_ANTHROPIC_API,
+    ProviderConfig,
+)
 from agents.projects.agent.question import (
     AgentPausedForQuestion,
     QUESTION_LABEL,
@@ -58,7 +62,7 @@ class BoardOrchestrator:
         self,
         client: TrelloClient,
         registry: ProfileRegistry,
-        api_key: str,
+        api_key,  # str (legacy) or ProviderConfig
         board_id: str,
         secret_store: SecretStore,
         audit_log_path: Path,
@@ -73,7 +77,26 @@ class BoardOrchestrator:
     ):
         self.client = client
         self.registry = registry
-        self.api_key = api_key
+        # `api_key` is either a bare string (legacy callers) or a
+        # ProviderConfig (new auto-detect path). Normalize so the rest of
+        # the class can always reach `self.provider_config`.
+        if isinstance(api_key, ProviderConfig):
+            self.provider_config: ProviderConfig = api_key
+        else:
+            self.provider_config = ProviderConfig(
+                kind=PROVIDER_ANTHROPIC_API,
+                api_key=api_key,
+                source="legacy api_key str",
+                billing_hint="Anthropic Console API key",
+            )
+        # Kept for back-compat: any caller that read `.api_key` as a string
+        # still gets one (Max sessions return the auth_token here so legacy
+        # callers can still inject *something* — they'll need updating).
+        self.api_key = (
+            self.provider_config.api_key
+            if self.provider_config.api_key
+            else self.provider_config.auth_token
+        )
         self.board_id = board_id
         self._secret_store = secret_store
         self._audit_log_path = audit_log_path
@@ -225,8 +248,7 @@ class BoardOrchestrator:
 
         try:
             scoped = self._secret_store.scoped_for_profile(profile)
-            if "ANTHROPIC_API_KEY" not in scoped:
-                scoped["ANTHROPIC_API_KEY"] = self.api_key
+            self.provider_config.inject_into(scoped)
         except KeyError as e:
             logger.error("Missing required secret for profile %s: %s", profile.id, e)
             try:
@@ -278,7 +300,7 @@ class BoardOrchestrator:
                 profile=profile,
                 card=card,
                 provider=agent_client,
-                api_key=self.api_key,
+                api_key=self.provider_config,
                 scoped_secrets=scoped,
                 audit=audit,
             )
@@ -475,8 +497,7 @@ class BoardOrchestrator:
 
         try:
             scoped = self._secret_store.scoped_for_profile(profile)
-            if "ANTHROPIC_API_KEY" not in scoped:
-                scoped["ANTHROPIC_API_KEY"] = self.api_key
+            self.provider_config.inject_into(scoped)
         except KeyError as e:
             logger.error("Missing required secret for profile %s on resume: %s", profile.id, e)
             return False
@@ -520,7 +541,7 @@ class BoardOrchestrator:
                 profile=profile,
                 card=card,
                 provider=agent_client,
-                api_key=self.api_key,
+                api_key=self.provider_config,
                 scoped_secrets=scoped,
                 audit=audit,
                 prior_messages=prior_messages,
