@@ -38,10 +38,15 @@ pip install anthropic pyyaml requests
 Create `.env/agents.env` (or add to existing `.env/apps.env`):
 
 ```bash
-# Required
-ANTHROPIC_API_KEY=sk-ant-...
+# Required — Trello
 TRELLO_API_KEY=...
 TRELLO_API_TOKEN=...
+
+# Required — Anthropic credential. Set ONE; auto-detected at orchestrator
+# boot. See "Provider auto-detection" below.
+ANTHROPIC_API_KEY=sk-ant-...                   # bills against Anthropic Console
+# CLAUDE_CODE_OAUTH_TOKEN=...                  # bills against your Claude Max
+# KANBAN_PROVIDER=anthropic_api                # optional override
 
 # Board source — pick ONE of these
 TRELLO_WORKSPACE_ID=harqis-work          # auto-discover every board in the org
@@ -447,3 +452,61 @@ agents/projects/
 │
 └── tests/                     # 218+ unit tests; see "Run tests" above
 ```
+
+---
+
+## Provider auto-detection
+
+The orchestrator picks its Anthropic auth path automatically at boot. You don't pass an API key on the command line; you set environment variables and the orchestrator chooses.
+
+### Two providers
+
+| Provider | Credential env var | Bills against | When to use |
+| --- | --- | --- | --- |
+| `claude_code` | `CLAUDE_CODE_OAUTH_TOKEN` | Your Claude Max subscription | Personal workstation, low/moderate card volume, want a fixed monthly cost |
+| `anthropic_api` | `ANTHROPIC_API_KEY` | Anthropic Console org / API credits | Headless VPS, high concurrency, scales with traffic |
+
+Both ultimately call the same `anthropic.Anthropic(...)` SDK — the only difference is whether the SDK authenticates with `auth_token=` (bearer, Max) or `api_key=` (x-api-key, Console). The tool-use loop, prompt, profiles, and audit pipeline are identical.
+
+### Precedence (first match wins)
+
+1. **`KANBAN_PROVIDER` explicit override.** Set to `claude_code` or `anthropic_api` to force a path. Errors at startup if the matching credential is missing — no silent fallback when the operator was explicit.
+2. **`CLAUDE_CODE_OAUTH_TOKEN` is present** in the env → `claude_code`. This is the "Max if available, else …" default.
+3. **`ANTHROPIC_API_KEY` is present** → `anthropic_api`.
+4. Else → hard startup error with instructions.
+
+The chosen provider is logged once at boot:
+
+```
+Kanban provider resolved: claude_code (source: CLAUDE_CODE_OAUTH_TOKEN env; billing: Claude Max subscription)
+```
+
+### Generating the Max token
+
+On any machine logged in to Claude Max via `claude` CLI, run:
+
+```bash
+claude setup-token
+```
+
+It prints a long-lived bearer token. Drop it in `.env/agents.env`:
+
+```bash
+CLAUDE_CODE_OAUTH_TOKEN=oauth-...
+```
+
+You only do this once per host. The token survives logouts of the interactive `claude` CLI session — it's a separate programmatic credential minted from your Max account.
+
+### Caveats to know
+
+- **Max rate limits are lower than API tier.** If you bump `KANBAN_NUM_AGENTS > 1` while routed to `claude_code`, bursts can trip 429s. The orchestrator logs a warning at boot when Max is selected. Set `KANBAN_PROVIDER=anthropic_api` to opt out for high-volume runs.
+- **Subprocess tools (Bash, MCP servers) inherit the same credential** under the right env-var name (`CLAUDE_CODE_OAUTH_TOKEN` for Max, `ANTHROPIC_API_KEY` for API). Profiles that explicitly declare their own credential under `secrets.required` always win — the orchestrator only fills gaps.
+- **The `claude --status` probe is informational only.** If the CLI looks Max-logged-in but you haven't run `claude setup-token`, the orchestrator logs a one-line hint and continues with API auth. It does not auto-mint tokens (that would require interactive consent in a browser, which is wrong for a worker process).
+
+### Per-profile override (future)
+
+Per-profile provider selection (`provider: claude_code` in a profile YAML) is not implemented yet. The current shape applies one provider to the whole orchestrator. If you need per-card billing isolation, open an issue and we'll thread the selection through `BaseKanbanAgent` (the constructor already accepts a `ProviderConfig` directly, so the wiring is already there).
+
+### Same pattern applies to `workflows/` Anthropic callers
+
+The Anthropic-calling tasks under `workflows/*/tasks/` (e.g. `workflows/social/tasks/social_linkedin_monthly.py`, `workflows/knowledge/tasks/answer.py`, `workflows/hud/tasks/hud_radar.py`) all construct their client through `apps/antropic/...`. The same detect-and-inject design extends naturally to those — see `agents/projects/agent/provider.py` for the reference implementation; promoting it to a shared helper under `apps/antropic/` or `core/` is the natural follow-up.
