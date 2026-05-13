@@ -260,18 +260,22 @@ def feed(
     - Uses temp-based lock to prevent concurrent corruption (safe for GDrive logs)
     - Returns the wrapped function's value as-is (string OR dict)
     """
+    def _noop_decorator(func: Callable[..., T]) -> Callable[..., Any]:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs) -> Any:
+            return func(*args, **kwargs)
+        return wrapper
+
+    raw_feed_path = (CONFIG.get("feed") or {}).get("path_to_feed") or ""
+    if not raw_feed_path or "${" in raw_feed_path:
+        log.warning("DESKTOP_PATH_FEED not configured; @feed is a no-op.")
+        return _noop_decorator
+
     try:
-        feed_dir = Path(CONFIG["feed"]["path_to_feed"]).resolve()
+        feed_dir = Path(raw_feed_path).resolve()
         _ensure_dir(feed_dir)
-    except FileNotFoundError:
+    except (FileNotFoundError, OSError):
         log.warning("The location for the feed is unavailable. Skipping this entry.")
-
-        def _noop_decorator(func: Callable[..., T]) -> Callable[..., Any]:
-            @functools.wraps(func)
-            def wrapper(*args, **kwargs) -> Any:
-                return func(*args, **kwargs)
-            return wrapper
-
         return _noop_decorator
 
     lock_cfg = FeedLockConfig(
