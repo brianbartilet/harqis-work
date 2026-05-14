@@ -884,3 +884,12 @@ For questions or feedback: **[LinkedIn](https://www.linkedin.com/in/dbbartilet/)
 ## License
 
 Distributed under the [MIT License](LICENSE).
+
+
+---
+
+## Changelog
+
+| Date | Change | PR |
+|------|--------|----|
+| 2025-05-01 | Test PR — added Changelog section to README | [#test](https://github.com/brianbartilet/harqis-work/pulls) |
