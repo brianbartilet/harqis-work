@@ -12,6 +12,7 @@ Skill files live in `.claude/skills/*/SKILL.md`. The first line of each file is 
 | Skill | Command | Description |
 |---|---|---|
 | **agent-prompt** | `/agent-prompt <prompt_name>` | Run a named AI prompt from `agents/prompts/` against the codebase. `prompt_name` is the filename without extension (e.g. `code_smells`, `docs_agent`, `desktop_analysis`). |
+| **clarify-feature** | `/clarify-feature` | Structured Q&A gate for new features and enhancements to `harqis-work`. **Auto-invokes** when a card description contains feature-intent language ("add a feature", "implement", "enhance", etc.). Reads relevant code, asks a grouped set of clarifying questions via `ask_human`, produces a written Feature Spec, and requires explicit sign-off before any code is written. Does NOT fire for scaffolding commands (`/create-new-workflow`, `/create-new-service-app`, etc.) or cards tagged `skip:clarify`. |
 | **commit** | `/commit [<subject hint>] [<pathspec>...] [--type <t>] [--scope <s>] [--no-untracked] [--dry-run]` | Stage all working-tree changes and commit with a Conventional-Commit message inferred from the diff, following [COMMIT-MESSAGE-GUIDE.md](COMMIT-MESSAGE-GUIDE.md). **Calling `/commit` is your sign-off — no confirmation prompt.** Auto-detects type and scope from the layer of changed files (`apps/<name>`, `workflows/<name>`, `agents/projects`, `mcp`, `frontend`, `repo`). Pass pathspecs to limit staging. Skips `.env*` files for safety. Never pushes, never amends, never bypasses hooks. |
 | **create-new-hud** | `/create-new-hud <hud_title> <description_or_screenshot_path> [--reference <existing_hud>] [--no-prompt]` | Scaffold a new Rainmeter HUD widget under `workflows/hud/tasks/hud_<slug>.py` from a description (or screenshot). Asks for the title, header links, sample dump output, dimensions (with reference-widget defaults), `ScheduleCategory` (calendar visibility), Celery schedule, and queue (extending `WorkflowQueue` if a new queue is named). Wires up the section dict, schedule entry, `__init__.py` import, README row, and any new app endpoints needed for the data fetch. |
 | **deploy-harqis** | `/deploy-harqis <host\|node> [-q queues] [-p profile] [--hw labels] [--down] [--no-frontend] [--no-mcp] [--no-kanban] [--num-agents N] [--dry-run]` | End-to-end reusable deploy of the harqis-work platform — **cross-platform**, auto-detects macOS / Linux / Windows. `host` brings up the full stack (Docker + Beat scheduler + worker + frontend + MCP + Kanban + Flower); the host's Kanban orchestrator defaults to `agent:default` so the host also acts as 1 default-queue agent worker. `node` runs a Celery worker plus a profile-scoped Kanban orchestrator (the skill **asks** for `-p` if missing). `--hw` filters by `hw:*` labels (auto-detected from OS otherwise). Tear down with `--down`. |
@@ -447,6 +448,61 @@ Searches Zapier's 9,000+ app catalogue via the Zapier MCP server, enables action
 | `execute_zapier_write_action` | Run a create/send/update action |
 | `execute_zapier_read_action` | Run a search/find/get action |
 | `get_zapier_action_schema` | Get full parameter schema for an action |
+
+---
+
+### \`/clarify-feature\`
+
+Runs a structured clarification protocol for new features and enhancements to \`harqis-work\`.
+**Auto-invoked** — you do not call it explicitly. Any card that describes a new feature or
+enhancement will trigger it automatically before the agent writes a single line of code.
+
+\`\`\`
+/clarify-feature          # explicit invocation (usually not needed — auto-fires)
+\`\`\`
+
+**Trigger phrases (auto-detection):**
+
+Fires when the card description contains any of these (case-insensitive):
+\`add a feature\`, \`i want to\`, \`build me\`, \`implement\`, \`new feature\`,
+\`requirements for\`, \`can you add\`, \`i need a\`, \`feature request\`,
+\`enhance\`, \`extend\`, \`update X to also\`, \`make X do\`.
+
+**Does NOT fire for:**
+
+- \`/create-new-workflow\` — owns its own clarification pass
+- \`/create-new-service-app\` (or \`create-new-app-service\`) — owns its own clarification
+- \`/create-new-hud\`, \`/create-new-n8n-workflow\`, \`/create-new-kanban-profile\`
+- \`/commit\`, \`/deploy-harqis\`, \`/run-tests\`
+- Cards tagged \`skip:clarify\` — skip the gate and proceed directly to implementation
+
+**Protocol (6 steps):**
+
+1. **Read** — 2–3 targeted \`read_file\` / \`grep\` calls to understand the existing code.
+2. **Ask** — one grouped message via \`ask_human\` covering goal, scope, inputs/outputs,
+   dependencies, edge cases, and acceptance criteria.
+3. **Wait** — card pauses in \`In Progress\` with \`agent:question\` label. No files written.
+4. **Spec** — synthesise answers into the Feature Spec template (in \`SKILL.md\`).
+5. **Sign-off** — ask *"Does this match your intent? Reply yes to begin."*
+6. **Implement** — only after explicit approval.
+
+**Question categories covered (one round, all at once):**
+
+| Category | Topics |
+|---|---|
+| A — Goal & motivation | problem, trigger, one-off vs recurring |
+| B — Scope & boundaries | which files, what must NOT change, replace vs extend |
+| C — Inputs & outputs | data source, side-effects, error behaviour |
+| D — Integration & deps | new apps, env vars, Python packages |
+| E — Edge cases | nulls, rate limits, privacy |
+| F — Acceptance criteria | "done" definition, existing tests, new tests |
+
+**Hard rules:**
+
+- No code before sign-off — not even a stub.
+- No silent assumptions — every ambiguity goes into the spec's "Open questions" block.
+- One Q&A round — ask everything at once; a follow-up is allowed only if truly unavoidable.
+- \`skip:clarify\` is the user's escape hatch for well-specified cards.
 
 ---
 
