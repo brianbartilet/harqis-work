@@ -24,6 +24,7 @@ from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 
 from workflows.hud.tasks.sections import sections__check_desktop, sections__check_world_checks
+from workflows.hud.tasks.hud_utils import open_text_action
 from workflows.hud.prompts import load_prompt
 
 _DESKTOP_ANALYSIS_PROMPT = load_prompt('desktop_analysis')
@@ -268,7 +269,7 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
     ini['meterLink_dump']['W'] = '80'
     ini['meterLink_dump']['H'] = '55'
     ini['meterLink_dump']['Text'] = '|DUMP'
-    ini['meterLink_dump']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(dump_path)
+    ini['meterLink_dump']['LeftMouseUpAction'] = open_text_action(dump_path)
     ini['meterLink_dump']['tooltiptext'] = dump_path
     # endregion
 

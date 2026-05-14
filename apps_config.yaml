@@ -162,6 +162,7 @@ RAINMETER:
   static_path: ${RAINMETER_STATIC_PATH}
   write_skin_to_path: ${RAINMETER_WRITE_SKINS_TO_PATH}
   write_skin_to_feed: ${RAINMETER_WRITE_FEED_TO_PATH}
+  text_editor_bin: ${RAINMETER_TEXT_EDITOR_BIN}
   skin_name: 'HARQIS_DESKTOP'
 
 

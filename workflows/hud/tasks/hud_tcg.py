@@ -28,6 +28,8 @@ from apps.google_apps.references.constants import ScheduleCategory
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.scryfall.config import APP_NAME as APP_NAME_SCRYFALL
 from apps.tcg_mp.config import APP_NAME as APP_NAME_TCG_MP
+
+from workflows.hud.tasks.hud_utils import open_text_action
 from apps.apps_config import CONFIG_MANAGER
 
 from workflows.purchases.helpers.helper import load_scryfall_bulk_data
@@ -649,7 +651,7 @@ def show_tcg_sell_cart(ini=ConfigHelperRainmeter(),
     ini['meterLink_dump']['W'] = '80'
     ini['meterLink_dump']['H'] = '55'
     ini['meterLink_dump']['Text'] = '|DUMP'
-    ini['meterLink_dump']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(dump_path)
+    ini['meterLink_dump']['LeftMouseUpAction'] = open_text_action(dump_path)
     ini['meterLink_dump']['tooltiptext'] = dump_path
 
     # Status buckets — kept for the dump header counts. The user asked to

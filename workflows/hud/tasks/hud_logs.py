@@ -13,6 +13,7 @@ from apps.desktop.helpers.feed import feed
 from datetime import  datetime
 
 from workflows.hud.tasks.sections import sections__check_logs
+from workflows.hud.tasks.hud_utils import open_text_action
 
 from workflows.desktop.tasks_config import WORKFLOWS_DESKTOP
 from workflows.hud.tasks_config import WORKFLOWS_HUD
@@ -214,7 +215,7 @@ def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
                                           hud, "dump.txt"
                                           ))
     ini['meterLink']['text'] = "DUMP"
-    ini['meterLink']['leftmouseupaction'] = '!Execute ["{0}"]'.format(dump_path)
+    ini['meterLink']['leftmouseupaction'] = open_text_action(dump_path)
     ini['meterLink']['tooltiptext'] = dump_path
     ini['meterLink']['W'] = '100'
 

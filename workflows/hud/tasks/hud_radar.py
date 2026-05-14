@@ -63,6 +63,7 @@ from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 
 from workflows.hud.prompts import load_prompt
+from workflows.hud.tasks.hud_utils import open_text_action
 # Fixed visible height. Matches JIRA BOARD's 14-line cap so the two
 # work-block widgets sit at the same vertical footprint. The marquee
 # scrolls everything past the visible window so longer briefings don't
@@ -175,7 +176,7 @@ def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
     )
 
     ini["meterLink"]["text"] = "DUMP"
-    ini["meterLink"]["leftmouseupaction"] = '!Execute ["{0}"]'.format(own_dump_path)
+    ini["meterLink"]["leftmouseupaction"] = open_text_action(own_dump_path)
     ini["meterLink"]["tooltiptext"] = own_dump_path
     ini["meterLink"]["W"] = "80"
     # endregion

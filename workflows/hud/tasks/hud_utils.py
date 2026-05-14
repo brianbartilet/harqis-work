@@ -22,6 +22,18 @@ from workflows.hud.tasks.sections import sections__utilities_desktop, sections__
 from workflows.hud.dto.constants import Profile, AppExe, HUD_NAME_MOUSE_BINDINGS, HUD_NAME_AHK_BINDINGS, APP_TO_PROFILE
 
 
+def open_text_action(path: str) -> str:
+    """Build a Rainmeter `!Execute` bang that opens a text dump.
+
+    Honors RAINMETER.text_editor_bin (env: RAINMETER_TEXT_EDITOR_BIN) when set,
+    otherwise lets the Windows shell pick the default association.
+    """
+    editor = (RAINMETER_CONFIG.get('text_editor_bin') or '').strip()
+    if editor and not editor.startswith('${'):
+        return '!Execute ["{0}" "{1}"]'.format(editor, path)
+    return '!Execute ["{0}"]'.format(path)
+
+
 def _get_profile_for_process_name(proc_name: str) -> Profile:
     """
     Given a process exe name like 'docker.exe', return the mapped Profile.
@@ -198,7 +210,7 @@ def show_mouse_bindings(ini=ConfigHelperRainmeter(), **kwargs):
     ini['meterLink_dump']['W'] = '80'
     ini['meterLink_dump']['H'] = '55'
     ini['meterLink_dump']['Text'] = '|DUMP'
-    ini['meterLink_dump']['LeftMouseUpAction'] = '!Execute ["{0}"]'.format(dump_path)
+    ini['meterLink_dump']['LeftMouseUpAction'] = open_text_action(dump_path)
     ini['meterLink_dump']['tooltiptext'] = dump_path
 
     # endregion
