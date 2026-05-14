@@ -84,6 +84,37 @@ def test_poll_intake_skips_unmatched_cards(orchestrator, mock_client, mock_regis
 
 
 @pytest.mark.smoke
+def test_claim_comment_includes_billing_label(
+    mock_client, mock_registry, open_profile, sample_card,
+):
+    """The claim comment must surface which Anthropic billing path is in use
+    so card watchers can see at a glance whether the run is on Max or API."""
+    from agents.projects.agent.provider import ProviderConfig, PROVIDER_CLAUDE_CODE
+
+    provider_cfg = ProviderConfig(
+        kind=PROVIDER_CLAUDE_CODE,
+        auth_token="oauth-xyz",
+        source="CLAUDE_CODE_OAUTH_TOKEN env",
+        billing_hint="Claude Max subscription",
+    )
+    orch = BoardOrchestrator(
+        client=mock_client, registry=mock_registry, api_key=provider_cfg,
+        board_id="b", secret_store=SecretStore(),
+        audit_log_path=Path("logs/test_audit.jsonl"),
+        os_labels=set(),
+    )
+    open_profile.lifecycle.auto_approve = False
+    with patch("agents.projects.orchestrator.board.BaseKanbanAgent") as mock_agent_cls:
+        mock_agent_cls.return_value.run.return_value = "result"
+        orch.process_card(sample_card)
+
+    comments = [c.args[1] for c in mock_client.add_comment.call_args_list]
+    claim_comment = next(c for c in comments if "claimed-by" in c)
+    assert_that("billing:" in claim_comment, equal_to(True))
+    assert_that("Claude Max" in claim_comment, equal_to(True))
+
+
+@pytest.mark.smoke
 def test_process_card_moves_to_in_review_when_not_auto_approved(
     orchestrator, mock_client, open_profile, sample_card
 ):
@@ -174,6 +205,97 @@ def test_process_card_moves_to_failed_on_anthropic_rate_limit(
     assert_that(Lists.FAILED in destinations, equal_to(True))
     comments = [c.args[1] for c in mock_client.add_comment.call_args_list]
     assert_that(any("rate limit" in c.lower() for c in comments), equal_to(True))
+
+
+@pytest.mark.smoke
+def test_use_worktree_overrides_profile_working_directory(
+    mock_client, mock_registry, open_profile, sample_card, tmp_path,
+):
+    """When use_worktree=True, the agent constructed by process_card sees a
+    profile whose working_directory points at the allocated worktree — not
+    the orchestrator's cwd. This is what isolates parallel `git checkout -b`
+    calls from each other."""
+    open_profile.lifecycle.auto_approve = False
+
+    orch = BoardOrchestrator(
+        client=mock_client,
+        registry=mock_registry,
+        api_key="test_api_key",
+        board_id="board-wt",
+        secret_store=SecretStore(),
+        audit_log_path=Path("logs/test_audit.jsonl"),
+        os_labels=set(),
+        profile_filter=None,
+        use_worktree=True,
+    )
+
+    fake_wt_path = tmp_path / "fake-worktree"
+    fake_wt_path.mkdir()
+
+    from agents.projects.orchestrator.worktree import Worktree
+    fake_wt = Worktree(path=fake_wt_path, base_repo=tmp_path, card_id=sample_card.id)
+
+    with patch.object(orch, "_maybe_allocate_worktree", return_value=fake_wt) as mock_alloc, \
+         patch("agents.projects.orchestrator.board.worktree_release") as mock_release, \
+         patch("agents.projects.orchestrator.board.BaseKanbanAgent") as mock_agent_cls:
+        mock_agent_cls.return_value.run.return_value = "ok"
+        orch.process_card(sample_card)
+
+    mock_alloc.assert_called_once_with(sample_card)
+    mock_release.assert_called_once_with(fake_wt)
+    # The profile passed to BaseKanbanAgent must have working_directory
+    # rewritten to the worktree path.
+    kwargs = mock_agent_cls.call_args.kwargs
+    assert_that(
+        kwargs["profile"].context.working_directory, equal_to(str(fake_wt_path)),
+    )
+    # And the original profile in the registry is untouched (no mutation).
+    assert_that(open_profile.context.working_directory, equal_to(""))
+
+
+@pytest.mark.smoke
+def test_worktree_released_even_when_agent_fails(
+    mock_client, mock_registry, open_profile, sample_card, tmp_path,
+):
+    orch = BoardOrchestrator(
+        client=mock_client, registry=mock_registry, api_key="k",
+        board_id="b", secret_store=SecretStore(),
+        audit_log_path=Path("logs/test_audit.jsonl"),
+        os_labels=set(), use_worktree=True,
+    )
+    fake_wt_path = tmp_path / "wt"; fake_wt_path.mkdir()
+    from agents.projects.orchestrator.worktree import Worktree
+    fake_wt = Worktree(path=fake_wt_path, base_repo=tmp_path, card_id=sample_card.id)
+
+    with patch.object(orch, "_maybe_allocate_worktree", return_value=fake_wt), \
+         patch("agents.projects.orchestrator.board.worktree_release") as mock_release, \
+         patch("agents.projects.orchestrator.board.BaseKanbanAgent") as mock_agent_cls:
+        mock_agent_cls.return_value.run.side_effect = RuntimeError("boom")
+        orch.process_card(sample_card)
+
+    mock_release.assert_called_once_with(fake_wt)
+
+
+@pytest.mark.smoke
+def test_use_worktree_default_off_for_single_agent(mock_client, mock_registry):
+    orch = BoardOrchestrator(
+        client=mock_client, registry=mock_registry, api_key="k",
+        board_id="b", secret_store=SecretStore(),
+        audit_log_path=Path("logs/test_audit.jsonl"),
+        os_labels=set(), num_agents=1,
+    )
+    assert_that(orch._use_worktree, equal_to(False))
+
+
+@pytest.mark.smoke
+def test_use_worktree_default_on_for_parallel_agents(mock_client, mock_registry):
+    orch = BoardOrchestrator(
+        client=mock_client, registry=mock_registry, api_key="k",
+        board_id="b", secret_store=SecretStore(),
+        audit_log_path=Path("logs/test_audit.jsonl"),
+        os_labels=set(), num_agents=4,
+    )
+    assert_that(orch._use_worktree, equal_to(True))
 
 
 @pytest.mark.smoke

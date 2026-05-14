@@ -73,6 +73,10 @@ def from_env(profiles_dir: Optional[Path] = None) -> WorkspaceOrchestrator:
         KANBAN_DRY_RUN         set to "1" to skip actual agent execution
         KANBAN_AUDIT_LOG       audit JSONL path (default: logs/projects_audit.jsonl)
         KANBAN_NUM_AGENTS      concurrent agent workers per board (default: 1)
+        KANBAN_USE_WORKTREE    `1` / `0` to force per-card git worktree isolation
+                                on/off. Default: on when KANBAN_NUM_AGENTS > 1.
+                                Worktrees fix the .git/index.lock race during
+                                parallel `git checkout -b`.
         KANBAN_PROFILE_FILTER  only process cards whose resolved profile id matches
         KANBAN_OS_LABELS       comma-separated `os:*` labels this orchestrator
                                 satisfies. Auto-detected from platform.system()

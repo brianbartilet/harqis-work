@@ -16,6 +16,7 @@ import logging
 import os
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
@@ -24,6 +25,14 @@ from agents.projects.agent.persona import sign_comment
 from agents.projects.agent.provider import (
     PROVIDER_ANTHROPIC_API,
     ProviderConfig,
+)
+from agents.projects.orchestrator.worktree import (
+    Worktree,
+    WorktreeError,
+    allocate as worktree_allocate,
+    prune_stale as worktree_prune_stale,
+    release as worktree_release,
+    repo_root as worktree_repo_root,
 )
 from agents.projects.agent.question import (
     AgentPausedForQuestion,
@@ -74,6 +83,12 @@ class BoardOrchestrator:
         # one Trello account login is reused on every board.
         profile_clients: Optional[dict[str, TrelloClient]] = None,
         client_factory: Optional[callable] = None,
+        # Per-card git worktree isolation. Defaults to True when running
+        # with parallel agents (num_agents > 1) so each card gets its
+        # own working dir + index — fixes .git/index.lock races during
+        # `git checkout -b`. Override via KANBAN_USE_WORKTREE=1|0.
+        use_worktree: Optional[bool] = None,
+        worktree_base_ref: str = "HEAD",
     ):
         self.client = client
         self.registry = registry
@@ -111,6 +126,21 @@ class BoardOrchestrator:
             profile_clients if profile_clients is not None else {}
         )
         self._client_factory = client_factory
+
+        # ── Worktree isolation ────────────────────────────────────────────────
+        # Env override beats the constructor default; explicit False from
+        # the caller still wins over both.
+        env_choice = os.environ.get("KANBAN_USE_WORKTREE")
+        if use_worktree is None:
+            if env_choice is not None:
+                self._use_worktree = env_choice.strip().lower() in ("1", "true", "yes", "on")
+            else:
+                self._use_worktree = self.num_agents > 1
+        else:
+            self._use_worktree = bool(use_worktree)
+        self._worktree_base_ref = worktree_base_ref
+        self._repo_root_cache: Optional[Path] = None
+        self._pruned_stale_worktrees = False
 
     # ── Routing ───────────────────────────────────────────────────────────────
 
@@ -185,6 +215,51 @@ class BoardOrchestrator:
     ) -> None:
         target = self.client_for_profile(profile) if profile else self.client
         target.move_card(card_id, column)
+
+    # ── Worktree isolation ────────────────────────────────────────────────────
+
+    def _maybe_allocate_worktree(self, card: KanbanCard) -> Optional[Worktree]:
+        """Allocate a per-card worktree when isolation is enabled.
+
+        Returns None when worktree isolation is off, when the orchestrator
+        is not running inside a git repo, or when allocation fails (logged
+        — the card still runs, just without isolation).
+        """
+        if not self._use_worktree:
+            return None
+        if self._repo_root_cache is None:
+            try:
+                self._repo_root_cache = worktree_repo_root()
+            except WorktreeError as e:
+                logger.warning(
+                    "Worktree isolation requested but not in a git repo: %s — "
+                    "falling back to shared working tree", e,
+                )
+                self._use_worktree = False
+                return None
+        if not self._pruned_stale_worktrees:
+            worktree_prune_stale(self._repo_root_cache)
+            self._pruned_stale_worktrees = True
+        try:
+            return worktree_allocate(
+                self._repo_root_cache, card.id, base_ref=self._worktree_base_ref,
+            )
+        except WorktreeError as e:
+            logger.error(
+                "Failed to allocate worktree for card %s: %s — "
+                "falling back to shared working tree", card.id, e,
+            )
+            return None
+
+    @staticmethod
+    def _profile_with_worktree(profile: AgentProfile, wt: Worktree) -> AgentProfile:
+        """Return a copy of ``profile`` whose context.working_directory points
+        at the allocated worktree. The original profile (cached in the
+        registry) is untouched."""
+        return replace(
+            profile,
+            context=replace(profile.context, working_directory=str(wt.path)),
+        )
 
     # ── Single card processing ────────────────────────────────────────────────
 
@@ -273,7 +348,12 @@ class BoardOrchestrator:
 
         try:
             self._move(card.id, Lists.PENDING, profile)
-            self._post_comment(card.id, f"claimed-by: {profile.name}", profile)
+            self._post_comment(
+                card.id,
+                f"claimed-by: {profile.name}\n"
+                f"billing: {self.provider_config.short_label()}",
+                profile,
+            )
             audit.card_lifecycle(INTAKE_LIST, Lists.PENDING)
             telemetry.emit_card_claimed(
                 board_id=self.board_id, card_id=card.id, profile_id=profile.id,
@@ -295,45 +375,51 @@ class BoardOrchestrator:
             profile_id=profile.id, model_id=profile.model.model_id,
         )
 
+        wt = self._maybe_allocate_worktree(card)
+        agent_profile = self._profile_with_worktree(profile, wt) if wt else profile
         try:
-            agent = BaseKanbanAgent(
-                profile=profile,
-                card=card,
-                provider=agent_client,
-                api_key=self.provider_config,
-                scoped_secrets=scoped,
-                audit=audit,
-            )
-            result = agent.run()
-        except AgentPausedForQuestion as paused:
-            logger.info(
-                "Card %s paused for human reply (stateful=%s)",
-                card.id, paused.stateful,
-            )
-            audit.card_lifecycle(Lists.IN_PROGRESS, f"{Lists.IN_PROGRESS} (waiting)")
-            telemetry.emit_card_paused(
-                board_id=self.board_id, card_id=card.id,
-                profile_id=profile.id, stateful=paused.stateful,
-            )
-            return f"[paused-for-question] {paused.question}"
-        except Exception as e:
-            self._handle_error(card, profile, e, audit)
-            return None
+            try:
+                agent = BaseKanbanAgent(
+                    profile=agent_profile,
+                    card=card,
+                    provider=agent_client,
+                    api_key=self.provider_config,
+                    scoped_secrets=scoped,
+                    audit=audit,
+                )
+                result = agent.run()
+            except AgentPausedForQuestion as paused:
+                logger.info(
+                    "Card %s paused for human reply (stateful=%s)",
+                    card.id, paused.stateful,
+                )
+                audit.card_lifecycle(Lists.IN_PROGRESS, f"{Lists.IN_PROGRESS} (waiting)")
+                telemetry.emit_card_paused(
+                    board_id=self.board_id, card_id=card.id,
+                    profile_id=profile.id, stateful=paused.stateful,
+                )
+                return f"[paused-for-question] {paused.question}"
+            except Exception as e:
+                self._handle_error(card, profile, e, audit)
+                return None
 
-        try:
-            self._post_comment(card.id, f"## Result\n\n{result}", profile)
-            destination = success_destination(profile)
-            self._move(card.id, destination, profile)
-            audit.card_lifecycle(Lists.IN_PROGRESS, destination)
-            telemetry.emit_agent_finished(
-                board_id=self.board_id, card_id=card.id, profile_id=profile.id,
-                destination=destination, duration_seconds=_now() - started,
-            )
-            logger.info("Card %s → %s", card.id, destination)
-        except Exception as e:
-            logger.error("Failed to post result for card %s: %s", card.id, e)
+            try:
+                self._post_comment(card.id, f"## Result\n\n{result}", profile)
+                destination = success_destination(profile)
+                self._move(card.id, destination, profile)
+                audit.card_lifecycle(Lists.IN_PROGRESS, destination)
+                telemetry.emit_agent_finished(
+                    board_id=self.board_id, card_id=card.id, profile_id=profile.id,
+                    destination=destination, duration_seconds=_now() - started,
+                )
+                logger.info("Card %s → %s", card.id, destination)
+            except Exception as e:
+                logger.error("Failed to post result for card %s: %s", card.id, e)
 
-        return result
+            return result
+        finally:
+            if wt is not None:
+                worktree_release(wt)
 
     def _handle_error(
         self,
@@ -536,35 +622,41 @@ class BoardOrchestrator:
             profile.id, card.id, prior_messages is not None, len(human_replies),
         )
 
+        wt = self._maybe_allocate_worktree(card)
+        agent_profile = self._profile_with_worktree(profile, wt) if wt else profile
         try:
-            agent = BaseKanbanAgent(
-                profile=profile,
-                card=card,
-                provider=agent_client,
-                api_key=self.provider_config,
-                scoped_secrets=scoped,
-                audit=audit,
-                prior_messages=prior_messages,
-                prior_iteration=prior_iteration,
-                resume_user_message=resume_user_message,
-            )
-            result = agent.run()
-        except AgentPausedForQuestion as paused:
-            logger.info(
-                "Card %s asked another question on resume (stateful=%s)",
-                card.id, paused.stateful,
-            )
-            return True
-        except Exception as e:
-            self._handle_error(card, profile, e, audit)
-            return False
+            try:
+                agent = BaseKanbanAgent(
+                    profile=agent_profile,
+                    card=card,
+                    provider=agent_client,
+                    api_key=self.provider_config,
+                    scoped_secrets=scoped,
+                    audit=audit,
+                    prior_messages=prior_messages,
+                    prior_iteration=prior_iteration,
+                    resume_user_message=resume_user_message,
+                )
+                result = agent.run()
+            except AgentPausedForQuestion as paused:
+                logger.info(
+                    "Card %s asked another question on resume (stateful=%s)",
+                    card.id, paused.stateful,
+                )
+                return True
+            except Exception as e:
+                self._handle_error(card, profile, e, audit)
+                return False
 
-        try:
-            self._post_comment(card.id, f"## Result\n\n{result}", profile)
-            destination = success_destination(profile)
-            self._move(card.id, destination, profile)
-            audit.card_lifecycle(Lists.IN_PROGRESS, destination)
-            logger.info("Card %s → %s (after resume)", card.id, destination)
-        except Exception as e:
-            logger.error("Failed to post resume result for card %s: %s", card.id, e)
-        return True
+            try:
+                self._post_comment(card.id, f"## Result\n\n{result}", profile)
+                destination = success_destination(profile)
+                self._move(card.id, destination, profile)
+                audit.card_lifecycle(Lists.IN_PROGRESS, destination)
+                logger.info("Card %s → %s (after resume)", card.id, destination)
+            except Exception as e:
+                logger.error("Failed to post resume result for card %s: %s", card.id, e)
+            return True
+        finally:
+            if wt is not None:
+                worktree_release(wt)

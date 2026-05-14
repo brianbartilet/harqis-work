@@ -50,6 +50,7 @@ import os
 import shutil
 import subprocess
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -96,6 +97,20 @@ class ProviderConfig:
             base += f" [fallback ready: {self.fallback.kind}]"
         return base
 
+    def short_label(self) -> str:
+        """One-line label suitable for status displays and Trello comments.
+
+        Examples:
+            "Claude Max subscription"
+            "Anthropic API key"
+            "Claude Max subscription (→ Anthropic API fallback ready)"
+        """
+        primary = self.billing_hint or self.kind
+        if self.fallback:
+            fb = self.fallback.billing_hint or self.fallback.kind
+            return f"{primary} (→ {fb} fallback ready)"
+        return primary
+
     def inject_into(self, scoped: dict) -> None:
         """Add the right credential under the right env-var name to a scoped
         secrets dict that gets handed to subprocess-tool environments
@@ -116,38 +131,56 @@ class ProviderConfig:
                 scoped[ENV_API_KEY] = self.api_key
 
 
-def _claude_cli_max_hint() -> Optional[str]:
-    """Best-effort probe to detect a Max-logged-in `claude` CLI session.
+def _claude_cli_max_hint(home: Optional[Path] = None) -> Optional[str]:
+    """Best-effort heuristic: is the `claude` CLI installed and used interactively?
 
-    Returns a short hint string when the user appears Max-authenticated
-    but hasn't generated a programmatic token, otherwise None.
+    Returns a hint string when the CLI is present AND there's evidence the
+    user has run it (a populated ``~/.claude/`` directory). The caller uses
+    this to nudge the operator: "you may have a Max session — run
+    ``claude setup-token`` to share that billing with workflows".
 
-    Never raises; never affects resolution — purely informational.
+    We cannot reliably detect *Max specifically* without the keychain —
+    Claude Code stores OAuth credentials there on macOS and there is no
+    non-interactive query. So the hint is conservative: it tells the user
+    a token is worth generating IF they have Max, rather than claiming we
+    detected Max. The old probe shelled out to ``claude --status`` which
+    is not a real flag, so the hint never fired.
+
+    Never raises; never affects resolution.
     """
     claude_path = shutil.which("claude")
     if not claude_path:
         return None
+    # Confirm the binary is the real Claude Code CLI, not some unrelated
+    # `claude` on PATH. A successful ``--version`` is enough — its output
+    # mentions "Claude Code".
     try:
-        result = subprocess.run(
-            [claude_path, "--status"],
-            capture_output=True,
-            text=True,
-            timeout=5,
+        ver = subprocess.run(
+            [claude_path, "--version"],
+            capture_output=True, text=True, timeout=5,
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
-    if result.returncode != 0:
+    if ver.returncode != 0 or "claude" not in (ver.stdout + ver.stderr).lower():
         return None
-    blob = (result.stdout + "\n" + result.stderr).lower()
-    looks_logged_in = "logged in" in blob or "authenticated" in blob
-    looks_like_max = "max" in blob or "oauth" in blob or "subscription" in blob
-    if looks_logged_in and looks_like_max:
-        return (
-            "`claude` CLI appears to be Max-logged-in but "
-            "CLAUDE_CODE_OAUTH_TOKEN is not set. Run `claude setup-token` "
-            "once to bill runs against your Max quota."
-        )
-    return None
+
+    home_dir = home or Path.home() / ".claude"
+    # `~/.claude/projects` or `history.jsonl` only get populated by interactive
+    # sessions — their presence is a strong signal the user actually uses the
+    # CLI on this machine (vs. it just being installed system-wide).
+    interactive_signal = (
+        (home_dir / "projects").is_dir() or (home_dir / "history.jsonl").exists()
+    )
+    if not interactive_signal:
+        return None
+
+    return (
+        f"`claude` CLI is installed ({ver.stdout.strip() or 'version unknown'}) "
+        f"and has interactive state at {home_dir}. If this machine has an "
+        f"active Claude Max subscription, run `claude setup-token` and export "
+        f"the result as CLAUDE_CODE_OAUTH_TOKEN to bill runs against Max "
+        f"instead of your API key."
+    )
 
 
 def _build_max(token: str, source: str) -> ProviderConfig:
@@ -232,11 +265,16 @@ def detect_provider(
         return cfg
 
     if api_key:
+        cfg = _build_api(api_key, source=f"{ENV_API_KEY} env")
         if probe_cli:
             hint = _claude_cli_max_hint()
             if hint:
-                logger.info("provider: %s", hint)
-        return _build_api(api_key, source=f"{ENV_API_KEY} env")
+                # Louder than info() — this is the case where the operator
+                # is silently paying API rates while a Max subscription may
+                # be sitting unused on the same machine.
+                logger.warning("provider: %s", hint)
+                cfg = replace(cfg, billing_hint=cfg.billing_hint + " (Max available — unused)")
+        return cfg
 
     raise ProviderResolutionError(
         f"No Anthropic credential found. Set one of:\n"

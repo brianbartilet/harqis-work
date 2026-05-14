@@ -257,3 +257,116 @@ def test_canonical_provider_var_wins_over_legacy():
         probe_cli=False,
     )
     assert cfg.kind == PROVIDER_ANTHROPIC_API
+
+
+# ── short_label() — used in Trello claim comments ─────────────────────────────
+
+def test_short_label_max_alone():
+    cfg = detect_provider(env={ENV_MAX_TOKEN: "oauth-xyz"}, probe_cli=False)
+    assert cfg.short_label() == "Claude Max subscription"
+
+
+def test_short_label_api_alone():
+    cfg = detect_provider(env={ENV_API_KEY: "sk-abc"}, probe_cli=False)
+    assert cfg.short_label() == "Anthropic Console API key"
+
+
+def test_short_label_max_with_api_fallback_mentions_fallback():
+    cfg = detect_provider(
+        env={ENV_MAX_TOKEN: "oauth-xyz", ENV_API_KEY: "sk-abc"},
+        probe_cli=False,
+    )
+    label = cfg.short_label()
+    assert "Claude Max" in label
+    assert "fallback" in label
+    assert "Anthropic Console API key" in label
+
+
+# ── _claude_cli_max_hint() — heuristic probe ──────────────────────────────────
+
+def test_cli_hint_returns_none_when_claude_binary_missing(monkeypatch):
+    from apps.antropic import provider as p
+    monkeypatch.setattr(p.shutil, "which", lambda _: None)
+    assert p._claude_cli_max_hint() is None
+
+
+def test_cli_hint_returns_none_when_version_fails(monkeypatch, tmp_path):
+    from apps.antropic import provider as p
+
+    def fake_run(*args, **kwargs):
+        class R:
+            returncode = 1
+            stdout = ""
+            stderr = "boom"
+        return R()
+
+    monkeypatch.setattr(p.shutil, "which", lambda _: "/usr/local/bin/claude")
+    monkeypatch.setattr(p.subprocess, "run", fake_run)
+    assert p._claude_cli_max_hint(home=tmp_path) is None
+
+
+def test_cli_hint_returns_none_without_interactive_state(monkeypatch, tmp_path):
+    """Binary works but ~/.claude is empty — no nudge (likely fresh install)."""
+    from apps.antropic import provider as p
+
+    def fake_run(*args, **kwargs):
+        class R:
+            returncode = 0
+            stdout = "2.1.141 (Claude Code)\n"
+            stderr = ""
+        return R()
+
+    monkeypatch.setattr(p.shutil, "which", lambda _: "/usr/local/bin/claude")
+    monkeypatch.setattr(p.subprocess, "run", fake_run)
+    assert p._claude_cli_max_hint(home=tmp_path) is None
+
+
+def test_cli_hint_fires_when_binary_and_interactive_state_present(
+    monkeypatch, tmp_path,
+):
+    """The whole point of the fix — when both signals line up, we tell the
+    user a Max token might be worth generating."""
+    from apps.antropic import provider as p
+    (tmp_path / "projects").mkdir()
+
+    def fake_run(*args, **kwargs):
+        class R:
+            returncode = 0
+            stdout = "2.1.141 (Claude Code)\n"
+            stderr = ""
+        return R()
+
+    monkeypatch.setattr(p.shutil, "which", lambda _: "/usr/local/bin/claude")
+    monkeypatch.setattr(p.subprocess, "run", fake_run)
+    hint = p._claude_cli_max_hint(home=tmp_path)
+    assert hint is not None
+    assert "setup-token" in hint
+    assert "CLAUDE_CODE_OAUTH_TOKEN" in hint
+
+
+def test_api_resolution_with_hint_logs_warning_and_marks_unused_max(
+    monkeypatch, caplog,
+):
+    """When API is selected but the hint fires, the boot log goes to WARNING
+    (not INFO) so users see it, AND the billing_hint is annotated so it
+    shows up in claim comments."""
+    from apps.antropic import provider as p
+    monkeypatch.setattr(
+        p, "_claude_cli_max_hint",
+        lambda *a, **kw: "Run `claude setup-token` to bill against Max.",
+    )
+    import logging
+    with caplog.at_level(logging.WARNING, logger="apps.antropic.provider"):
+        cfg = p.detect_provider(env={ENV_API_KEY: "sk-abc"}, probe_cli=True)
+
+    assert cfg.kind == PROVIDER_ANTHROPIC_API
+    assert "Max available" in cfg.billing_hint
+    assert any("setup-token" in r.message for r in caplog.records)
+
+
+def test_api_resolution_without_hint_keeps_clean_label(monkeypatch):
+    """No CLI/no interactive state → billing label stays clean."""
+    from apps.antropic import provider as p
+    monkeypatch.setattr(p, "_claude_cli_max_hint", lambda *a, **kw: None)
+    cfg = p.detect_provider(env={ENV_API_KEY: "sk-abc"}, probe_cli=True)
+    assert cfg.billing_hint == "Anthropic Console API key"
