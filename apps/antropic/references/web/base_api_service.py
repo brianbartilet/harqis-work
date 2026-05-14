@@ -15,6 +15,7 @@ from apps.antropic.provider import (
     ProviderConfig,
     ProviderResolutionError,
     detect_provider,
+    scrub_competing_env,
 )
 
 from typing import TypeVar, Any, Callable, Optional
@@ -82,6 +83,13 @@ class BaseApiServiceAnthropic(BaseFixtureServiceRest):
         else:
             try:
                 self.provider_config = detect_provider()
+                # Drop the competing-credential env var so the SDK can't
+                # silently env-fallback past the auth path we just resolved.
+                # Without this, anthropic.Anthropic(auth_token=...) still
+                # picks up ANTHROPIC_API_KEY from os.environ and sends BOTH
+                # auth headers — the gateway then honours X-Api-Key and bills
+                # the Console org even though Max was chosen.
+                scrub_competing_env(self.provider_config)
             except ProviderResolutionError:
                 # Preserve legacy behaviour: if no detect-able creds, fall
                 # back to the env var read so existing callers that relied
