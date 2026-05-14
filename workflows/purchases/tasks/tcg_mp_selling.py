@@ -549,7 +549,7 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 
             time.sleep(2)
             existing = api_service__search.search_card(card_echo["emid"], tradable_only=1)
             matching = [c for c in existing if c["foil"] == card_echo["foil"]]
-            quantity = len(matching) if len(matching) > 1 else 1
+            quantity = len(matching)
 
             edit_result = _retry_edit_listing(
                 api_publish,
