@@ -212,7 +212,7 @@ def _render_api_costs_dump(
 @log_result()
 @init_meter(RAINMETER_CONFIG, hud_item_name='API COSTS',
             new_sections_dict=sections__api_costs, play_sound=False,
-            schedule_categories=[ScheduleCategory.FINANCE, ])
+            schedule_categories=[ScheduleCategory.ORGANIZE, ScheduleCategory.FINANCE])
 @feed()
 def show_api_costs(ini=ConfigHelperRainmeter(),
                    months: int = 3,
