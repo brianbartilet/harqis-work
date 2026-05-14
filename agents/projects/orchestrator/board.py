@@ -351,6 +351,7 @@ class BoardOrchestrator:
             self._post_comment(
                 card.id,
                 f"claimed-by: {profile.name}\n"
+                f"model: {profile.model.model_id}\n"
                 f"billing: {self.provider_config.short_label()}",
                 profile,
             )
