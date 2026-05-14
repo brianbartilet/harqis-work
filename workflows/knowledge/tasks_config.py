@@ -10,13 +10,49 @@ Two tasks:
 Cost guard: `answer` pins Haiku 4.5 via `kwargs.model`. Per the project
 convention (see memory: anthropic_model_override), do not change the
 Anthropic default — pass the model from here.
+
+────────────────────────────────────────────────────────────────────────
+DISABLED 2026-05-14 — beat schedule is empty (`WORKFLOW_KNOWLEDGE = {}`)
+────────────────────────────────────────────────────────────────────────
+ES rollups showed ingest_notion_pages / ingest_jira_issues /
+ingest_gdrive_docs failing 5 nights in a row with `RuntimeError`.
+ingest_github_repos looked "passing" only because tasks_config had
+`repos: []` so it short-circuited before touching Gemini.
+
+Two stacked blockers — BOTH must be fixed before re-enabling:
+
+  1. Stale Gemini embedding model. `apps/gemini/references/web/api/embed.py`
+     hard-codes `DEFAULT_EMBED_MODEL = 'models/text-embedding-004'`, which
+     Google retired. The v1beta endpoint returns 404 NOT_FOUND. The
+     `_embed_batch()` helper (copy-pasted across all 4 ingest tasks) then
+     sees no `embeddings` key in the response and raises RuntimeError.
+     Fix: bump default to `'models/gemini-embedding-001'` (current GA;
+     `gemini-embedding-2` is also available).
+
+  2. Gemini project credits depleted. Even with the correct model name,
+     a live probe returns 429 RESOURCE_EXHAUSTED ("prepayment credits are
+     depleted"). Top up at https://ai.studio/projects, OR switch the
+     embedder (sentence-transformers locally, OpenAI, Cohere). Gemini's
+     free tier no longer covers embeddings.
+
+To re-enable: rename `_DISABLED__WORKFLOW_KNOWLEDGE` → `WORKFLOW_KNOWLEDGE`
+below. Beat picks it up on the next scheduler restart. See
+workflows/knowledge/README.md "Status" for the full write-up.
+
+Note: `run-job--knowledge_answer_morning_brief` is included in the
+disable because `retriever.embed_query` uses the same Gemini embedder
+for question vectors — top up + model bump are required for it too.
 """
 
 from celery.schedules import crontab
 from workflows.queues import WorkflowQueue
 
 
-WORKFLOW_KNOWLEDGE = {
+# Empty exported schedule — see DISABLED header above.
+WORKFLOW_KNOWLEDGE: dict = {}
+
+
+_DISABLED__WORKFLOW_KNOWLEDGE = {
 
     'run-job--ingest_notion_pages': {
         'task': 'workflows.knowledge.tasks.ingest_notion.ingest_notion_pages',
