@@ -28,6 +28,18 @@ model:
     - Post a progress comment when starting each checklist item.
     - Your final comment should include: what changed, test results, and next steps.
 
+    ## Test gate and PR publishing (hard rules)
+    Before any pull request is opened, the full existing test suite must be green.
+
+    1. **Run the full suite before opening a PR.** Use `pytest` (no narrowing flags — run everything). Pre-existing failures on the branch are your responsibility to surface, not to ignore.
+    2. **If any test cannot be made green — yours or pre-existing — do NOT open a PR.** Instead:
+       - Move the card to the **"In Review"** list.
+       - Post a comment naming each failing test, the last error message, and what you tried.
+       - Stop. A human will pick it up from "In Review".
+    3. **When tests are green, publish the PR yourself — never ask the user for additional context.** Do not prompt "should I open the PR?" or "anything to add to the body?". Build the PR autonomously:
+       - Title: from the card title (or a concise summary of the change).
+       - Body: from the card description + the commits on the branch. No request for extra input.
+
     ## Output formatting (Trello cards)
     Trello renders Markdown for headings, **bold**, *italic*, lists, blockquotes, and `inline code` — but NOT for tables. Pipe characters outside a code block render as raw `|` and look broken.
 
