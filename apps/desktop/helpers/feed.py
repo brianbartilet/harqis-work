@@ -2,6 +2,7 @@ import functools
 import hashlib
 import json
 import os
+import sys
 import tempfile
 import time
 from dataclasses import dataclass
@@ -24,6 +25,31 @@ DEFAULT_ENCODING = "utf-8"
 DEFAULT_LOCK_DIRNAME = "feed-locks"          # stored under %TEMP%
 DEFAULT_LOCK_SLEEP_SECS = 0.1
 DEFAULT_STALE_LOCK_MAX_AGE_SECS = 300.0      # 5 minutes
+
+# Per-OS feed-path override env var. One shared .env/apps.env (or, once
+# GH#11 lands, a machines.local.toml [<machine>.env_vars] block) can carry
+# a path for every host; the running OS picks its own:
+#
+#   DESKTOP_PATH_FEED_DARWIN   -> macOS  (e.g. ~/Library/CloudStorage/...)
+#   DESKTOP_PATH_FEED_WINDOWS  -> Windows (e.g. G:\My Drive\LOGS)
+#   DESKTOP_PATH_FEED_LINUX    -> Linux
+#
+# The OS-specific var wins when set; otherwise we fall back to the
+# OS-agnostic CONFIG["feed"]["path_to_feed"] (${DESKTOP_PATH_FEED}).
+_OS_FEED_KEY = {"darwin": "DARWIN", "win32": "WINDOWS"}.get(sys.platform, "LINUX")
+_OS_FEED_ENV = f"DESKTOP_PATH_FEED_{_OS_FEED_KEY}"
+
+
+def _resolve_feed_path() -> str:
+    """Pick the feed dir for *this* OS.
+
+    Order: OS-specific override env var → OS-agnostic config value.
+    Returns the raw (unresolved) string, or "" when nothing is configured.
+    """
+    os_specific = (os.environ.get(_OS_FEED_ENV) or "").strip()
+    if os_specific:
+        return os_specific
+    return ((CONFIG.get("feed") or {}).get("path_to_feed") or "").strip()
 
 
 @dataclass(frozen=True)
@@ -266,17 +292,32 @@ def feed(
             return func(*args, **kwargs)
         return wrapper
 
-    raw_feed_path = (CONFIG.get("feed") or {}).get("path_to_feed") or ""
+    raw_feed_path = _resolve_feed_path()
     if not raw_feed_path or "${" in raw_feed_path:
-        log.warning("DESKTOP_PATH_FEED not configured; @feed is a no-op.")
+        log.warning(
+            "Feed path not configured (%s / DESKTOP_PATH_FEED); @feed is a "
+            "no-op.", _OS_FEED_ENV,
+        )
         return _noop_decorator
 
-    try:
-        feed_dir = Path(raw_feed_path).resolve()
-        _ensure_dir(feed_dir)
-    except (FileNotFoundError, OSError):
-        log.warning("The location for the feed is unavailable. Skipping this entry.")
+    # The directory MUST already exist on this OS. We deliberately do NOT
+    # create it: a path shaped for a different OS (e.g. Windows
+    # ``G:\My Drive\LOGS`` on a POSIX worker) is just a non-existent
+    # relative path here — Path.is_dir() is False and we skip cleanly
+    # WITHOUT resolve()+mkdir, so no junk directory is ever created in the
+    # cwd. Same skip path covers an unmounted drive, a typo, or a host
+    # that simply has no feed sink. Note: don't .resolve() before this
+    # check — resolve() would rebase a foreign relative path onto cwd.
+    feed_dir = Path(raw_feed_path)
+    if not feed_dir.is_dir():
+        log.warning(
+            "Feed path %r is not an existing directory on this host "
+            "(platform=%s); @feed is a no-op. Create the directory or set "
+            "%s to a valid path for this OS.",
+            raw_feed_path, sys.platform, _OS_FEED_ENV,
+        )
         return _noop_decorator
+    feed_dir = feed_dir.resolve()
 
     lock_cfg = FeedLockConfig(
         lock_timeout_secs=lock_timeout_secs,
