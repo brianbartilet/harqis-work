@@ -577,12 +577,88 @@ def kill_stray_celery() -> None:
                 pass
 
 
+def kill_stray_processes(needle: str, *, label: str) -> int:
+    """Force-kill every process whose command line contains ``needle``.
+
+    Best-effort SIGTERM → 5s grace → SIGKILL escalation, same shape as
+    kill_stray_celery() but parameterised so a single service (frontend,
+    mcp, kanban) can be cleaned without touching the celery sweep.
+
+    Returns the count killed.
+    """
+    self_pid = os.getpid()
+    pids = sorted({p for p in _all_processes_matching(needle) if p != self_pid})
+    if not pids:
+        return 0
+    print(f"  Killing {len(pids)} stray {label} process(es): "
+          f"{','.join(str(p) for p in pids)}")
+    if IS_WIN:
+        for pid in pids:
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                capture_output=True, check=False,
+            )
+        return len(pids)
+    for pid in pids:
+        try:
+            os.kill(pid, 15)
+        except OSError:
+            pass
+    for _ in range(20):
+        if not any(is_alive(p) for p in pids):
+            return len(pids)
+        time.sleep(0.25)
+    survivors = [p for p in pids if is_alive(p)]
+    if survivors:
+        print(f"  SIGTERM ignored — escalating SIGKILL: "
+              f"{','.join(str(p) for p in survivors)}")
+        for pid in survivors:
+            try:
+                os.kill(pid, 9)
+            except OSError:
+                pass
+    return len(pids)
+
+
+def restart_service(service: str, machine: dict, args: argparse.Namespace) -> bool:
+    """Forcefully restart one service.
+
+    Order matters:
+      1. ``stop_service`` — SIGTERM the tracked PID (if any) and drop its
+         pidfile / Terminal tab.
+      2. ``kill_stray_processes`` — sweep anything matching this service's
+         command-line needle. Catches orphans launched outside deploy.py
+         (e.g. a manual ``python -m …`` run) and stale forks whose tracked
+         PID has already exited.
+      3. Clear any leftover pidfile so ``start_service`` doesn't short-
+         circuit with "Already running".
+      4. ``start_service`` — spawn a fresh daemon.
+    """
+    if service not in SERVICES:
+        print(f"  Unknown service: {service}. Known: {', '.join(SERVICES)}")
+        return False
+    print(f"==> Restart: {service}")
+    stop_service(service)
+    needle = _STATUS_NEEDLES.get(service, service)
+    kill_stray_processes(needle, label=service)
+    pf = pid_path(service)
+    if pf.exists():
+        try:
+            pf.unlink()
+        except OSError:
+            pass
+    return start_service(service, machine, args)
+
+
 _STATUS_NEEDLES = {
     "scheduler": "core.apps.sprout:SPROUT beat",
     "worker":    "core.apps.sprout:SPROUT worker",
     "flower":    "core.apps.sprout:SPROUT flower",
-    "frontend":  "frontend\\main.py",
-    "mcp":       "mcp\\server.py",
+    # Use os.sep so the substring matches the real command line on each OS —
+    # the previous hard-coded "\\" only matched on Windows, so on macOS/Linux
+    # `--status` and the stray-sweep silently missed running frontend/mcp.
+    "frontend":  f"frontend{os.sep}main.py",
+    "mcp":       f"mcp{os.sep}server.py",
     "kanban":    "agents.projects.orchestrator.local",
 }
 
@@ -864,6 +940,11 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--down",       action="store_true", help="Stop services")
     g.add_argument("--status",     action="store_true", help="Show running services")
     g.add_argument("--stop",       metavar="SERVICE",   help="Stop one service by name")
+    g.add_argument("--restart",    metavar="SERVICE",
+                   help="Forcefully restart one service: stop tracked PID, sweep "
+                        "strays by command-line match, clear stale pidfile, spawn "
+                        "fresh. Use this when a daemon was launched outside deploy.py "
+                        "or held stale env (e.g. `--restart frontend`).")
     g.add_argument("--register",   action="store_true", help="Register OS auto-start units")
     g.add_argument("--unregister", action="store_true", help="Remove OS auto-start units")
     return p
@@ -883,6 +964,13 @@ def main() -> None:
 
     if args.stop:
         stop_service(args.stop)
+        return
+
+    if args.restart:
+        machine = load_machine_config(args.machine)
+        if args.role:
+            machine["role"] = args.role
+        restart_service(args.restart, machine, args)
         return
 
     machine = load_machine_config(args.machine)
@@ -924,6 +1012,21 @@ def main() -> None:
     # before spawning new daemons (avoids piling up console windows on Windows).
     if not args.docker_only:
         kill_stray_celery()
+        # The celery sweep only matches celery/launcher needles. The long-
+        # running app daemons (frontend FastAPI, MCP server, Kanban
+        # orchestrator) have separate command-line patterns — sweep them too
+        # and clear their pidfiles so the upcoming start_service loop spawns
+        # fresh code rather than short-circuiting with "Already running" on
+        # a tracked PID that is still serving the previous boot's bytecode.
+        for _svc in ("frontend", "mcp", "kanban"):
+            if _svc in services:
+                kill_stray_processes(_STATUS_NEEDLES[_svc], label=_svc)
+                _pf = pid_path(_svc)
+                if _pf.exists():
+                    try:
+                        _pf.unlink()
+                    except OSError:
+                        pass
 
     if role == "host" and not args.docker_only and not single_instance:
         docker_up()

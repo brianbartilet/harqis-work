@@ -25,6 +25,7 @@ from workflows.desktop.tasks_config import WORKFLOWS_DESKTOP
 from workflows.social.tasks_config import WORKFLOW_SOCIAL
 from workflows.knowledge.tasks_config import WORKFLOW_KNOWLEDGE
 from workflows.dumps.tasks_config import WORKFLOW_DUMPS
+from workflows.workers.tasks_config import WORKFLOW_WORKERS
 
 # Set Celery to use the same timezone settings as the Django project
 SPROUT.conf.enable_utc = USE_TZ
@@ -34,7 +35,15 @@ SPROUT.autodiscover_tasks(['workflows'])
 
 # Configuration dictionary mapping environment variable values to specific task mappings.
 # Be careful to use duplicate keys in the dictionary, as it will overwrite the previous key.
-CONFIG_DICTIONARY = WORKFLOW_PURCHASES | WORKFLOWS_HUD | WORKFLOWS_DESKTOP | WORKFLOW_SOCIAL | WORKFLOW_KNOWLEDGE | WORKFLOW_DUMPS
+CONFIG_DICTIONARY = (
+    WORKFLOW_PURCHASES
+    | WORKFLOWS_HUD
+    | WORKFLOWS_DESKTOP
+    | WORKFLOW_SOCIAL
+    | WORKFLOW_KNOWLEDGE
+    | WORKFLOW_DUMPS
+    | WORKFLOW_WORKERS
+)
 
 # Configure the Celery beat schedule based on the current environment's task mapping.
 SPROUT.conf.beat_schedule = CONFIG_DICTIONARY
@@ -60,16 +69,20 @@ SPROUT.conf.task_queues = (
     Queue(WorkflowQueue.N8N.value),
     Broadcast(WorkflowQueue.DEFAULT_BROADCAST.value),
     Broadcast(WorkflowQueue.HUD_BROADCAST.value),
+    Broadcast(WorkflowQueue.WORKERS_BROADCAST.value),
 )
 SPROUT.conf.task_default_queue = WorkflowQueue.DEFAULT.value
 
-# Routing rules — tasks named `workflows.hud.tasks.broadcast_*` go to the
-# fanout queue and run on every subscribed worker. Everything else under
-# `workflows.hud.tasks.*` keeps the existing single-worker behaviour.
-# Order matters: more-specific patterns first.
+# Routing rules — more-specific patterns MUST come before catch-alls.
+# Order matters: the first matching rule wins.
+#
+#   workflows.workers.tasks.broadcast_* → workers_broadcast (fanout)
+#   workflows.hud.tasks.broadcast_*    → hud_broadcast     (fanout)
+#   workflows.hud.tasks.*              → hud               (direct)
 SPROUT.conf.task_routes = {
-    "workflows.hud.tasks.broadcast_*": {"queue": WorkflowQueue.HUD_BROADCAST.value},
-    "workflows.hud.tasks.*":           {"queue": WorkflowQueue.HUD.value},
+    "workflows.workers.tasks.broadcast_*": {"queue": WorkflowQueue.WORKERS_BROADCAST.value},
+    "workflows.hud.tasks.broadcast_*":     {"queue": WorkflowQueue.HUD_BROADCAST.value},
+    "workflows.hud.tasks.*":               {"queue": WorkflowQueue.HUD.value},
 }
 
 
