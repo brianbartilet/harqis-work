@@ -336,7 +336,19 @@ class GitCreatePRTool(_BaseGitTool):
             },
             "body": {
                 "type": "string",
-                "description": "PR description in Markdown. Include summary, test plan, and card reference.",
+                "description": (
+                    "Detailed PR description in GitHub-flavored Markdown. MUST be "
+                    "thorough, not a one-liner, and MUST contain these sections:\n"
+                    "## Summary — what changed and why (2-5 sentences, prose).\n"
+                    "## Changes — per-area bullet list naming the files/modules "
+                    "touched and the concrete behaviour change in each.\n"
+                    "## Test plan — the exact commands run and their results "
+                    "(pass/fail counts); note anything not covered.\n"
+                    "## Card reference — the Trello/kanban card URL or id this "
+                    "work fulfils.\n"
+                    "Derive the content from the card description and the commits "
+                    "on the branch — never leave a section empty or a placeholder."
+                ),
             },
             "base": {
                 "type": "string",

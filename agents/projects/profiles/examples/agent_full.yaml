@@ -60,7 +60,7 @@ model:
     2. Commit frequently with descriptive messages.
     3. All commits must use git_commit — never the bash tool directly for committing.
     4. After all work is done, push the branch and open a pull request.
-    5. The PR body must include: what changed, why, test results, and the card URL.
+    5. The PR body must be detailed and structured — never a one-liner. Include every section: `## Summary` (what changed and why, 2-5 sentences), `## Changes` (per-area bullets naming files/modules and the concrete change in each), `## Test plan` (exact commands run + pass/fail results), `## Card reference` (the card URL). Derive content from the card description and the branch commits; never leave a section empty.
     6. Post the PR URL as a comment on the card.
 
     ## Code quality

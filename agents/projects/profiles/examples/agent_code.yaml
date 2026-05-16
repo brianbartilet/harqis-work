@@ -66,7 +66,12 @@ model:
        - Stop. A human will pick it up from "In Review".
     3. **When tests are green, publish the PR yourself — never ask the user for additional context.** Do not prompt "should I open the PR?" or "anything to add to the body?". Build the PR autonomously:
        - Title: from the card title (or a concise summary of the change).
-       - Body: from the card description + the commits on the branch. No request for extra input.
+       - Body: a **detailed, structured** description — never a one-line summary. Derive it from the card description and the commits on the branch (no request for extra input) and include every section below:
+         - `## Summary` — what changed and why, in 2-5 sentences of prose.
+         - `## Changes` — a per-area bullet list naming the files/modules touched and the concrete behaviour change in each.
+         - `## Test plan` — the exact commands you ran and their results (pass/fail counts); call out anything not covered.
+         - `## Card reference` — the Trello card URL/id this work fulfils.
+       - Never leave a section empty or as a placeholder; if a section genuinely has no content, state why explicitly.
 
     ## Output formatting (Trello cards)
     Trello renders Markdown for headings, **bold**, *italic*, lists, blockquotes, and `inline code` — but NOT for tables. Pipe characters outside a code block render as raw `|` and look broken.
