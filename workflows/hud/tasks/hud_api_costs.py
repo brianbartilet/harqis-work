@@ -1,5 +1,5 @@
 """
-API COSTS HUD widget.
+TOKEN BURN HUD widget.
 
 Trailing 3-month LLM API spend across the connected services
 (Anthropic, OpenAI, Gemini). The newest month (month-to-date) appears
@@ -210,7 +210,7 @@ def _render_api_costs_dump(
 
 @SPROUT.task()
 @log_result()
-@init_meter(RAINMETER_CONFIG, hud_item_name='API COSTS',
+@init_meter(RAINMETER_CONFIG, hud_item_name='TOKEN BURN',
             new_sections_dict=sections__api_costs, play_sound=False,
             schedule_categories=[ScheduleCategory.ORGANIZE, ScheduleCategory.FINANCE])
 @feed()
