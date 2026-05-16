@@ -36,11 +36,28 @@ the 'run_sample_workflow_add' function with specified arguments.
 """
 WORKFLOWS_HUD = {
 
-    'run-job--show_forex_account': {
+    'run-job--show_forex_account--on': {
         'task': 'workflows.hud.tasks.hud_forex.show_forex_account',
         'schedule': crontab(
             day_of_week="mon,tue,wed,thu,fri",
             minute='*/15'),
+        'kwargs': {
+            "cfg_id__oanda":"OANDA",
+            "cfg_id__calendar": "GOOGLE_APPS",
+            },
+        "options": {
+            "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
+            "expires": 60 * 5
+        },
+    },
+
+    'run-job--show_forex_account--off': {
+        'task': 'workflows.hud.tasks.hud_forex.show_forex_account',
+        'schedule': crontab(
+            day_of_week="sat",
+            hour=0,
+            minute=0),
         'kwargs': {
             "cfg_id__oanda":"OANDA",
             "cfg_id__calendar": "GOOGLE_APPS",
@@ -73,9 +90,23 @@ WORKFLOWS_HUD = {
     # cadence keeps load + noise low while still surfacing fresh bids.
     # `expires`: 60 * 60 * 24 — a missed Sunday run can still fire any time
     # within the same day; after that the result is stale.
-    'run-job--show_tcg_sell_cart': {
+    'run-job--show_tcg_sell_cart--on': {
         'task': 'workflows.hud.tasks.hud_tcg.show_tcg_sell_cart',
         'schedule': crontab(day_of_week='sun,sat', hour="*/4", minute=0),
+        'kwargs': {
+            "cfg_id__tcg_mp": "TCG_MP",
+            "worker_count": 2
+        },
+        "options": {
+            "queue": WorkflowQueue.HUD,
+            "os": ["windows"],
+            "expires": 60 * 60 * 24,
+        },
+    },
+
+    'run-job--show_tcg_sell_cart--off': {
+        'task': 'workflows.hud.tasks.hud_tcg.show_tcg_sell_cart',
+        'schedule': crontab(day_of_week='mon', minute=0),
         'kwargs': {
             "cfg_id__tcg_mp": "TCG_MP",
             "worker_count": 2
@@ -115,7 +146,7 @@ WORKFLOWS_HUD = {
 
     'run-job--get_desktop_logs': {
         'task': 'workflows.hud.tasks.hud_gpt.get_desktop_logs',
-        'schedule': crontab(minute='5'),
+        'schedule': crontab(minute=5),
         'kwargs': {
             "cfg_id__desktop": "DESKTOP",
             "cfg_id__calendar": "GOOGLE_APPS",
