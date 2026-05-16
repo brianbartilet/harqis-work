@@ -1050,6 +1050,15 @@ def main() -> None:
     machine = load_machine_config(args.machine)
     if args.role:
         machine["role"] = args.role
+
+    # Per-machine env_vars must reach `docker compose` too — not just the
+    # celery daemons (which get them via spawn_detached extra_env). docker_up()
+    # inherits os.environ, so export the resolved table now; this is what makes
+    # docker-compose.yml's ${HARQIS_DATA_ROOT} (ES bind path) resolve from
+    # machines[.local].toml. Per the Phase-0 migration, per-machine values
+    # win over .env/apps.env (loaded earlier in load_env_into_os).
+    os.environ.update(machine_env_vars(machine))
+
     services = select_services(machine, args)
     name = machine.get("_name", "(adhoc)")
     role = machine["role"]

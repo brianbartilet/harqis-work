@@ -13,7 +13,7 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
     volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
+      - ${HARQIS_DATA_ROOT:-./.harqis-data}/rabbitmq:/var/lib/rabbitmq
     healthcheck:
       test: rabbitmq-diagnostics ping
       interval: 30s
@@ -27,7 +27,7 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - ${HARQIS_DATA_ROOT:-./.harqis-data}/redis:/data
     healthcheck:
       test: redis-cli ping
       interval: 30s
@@ -73,7 +73,7 @@ services:
     ports:
       - "${HOST_PORT_N8N:-5678}:5678"
     volumes:
-      - n8n_data:/home/node/.n8n
+      - ${HARQIS_DATA_ROOT:-./.harqis-data}/n8n:/home/node/.n8n
       - ./workflows.mapping:/data/workflows.mapping:ro
       - ./scripts.mapping:/data/scripts.mapping:ro
     environment:
@@ -104,7 +104,12 @@ services:
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: "-Xms256m -Xmx512m"
     volumes:
-      - elastic_data:/usr/share/elasticsearch/data
+      # Bind ES data onto a host path so it can live on a dedicated disk
+      # (e.g. /Volumes/harqis-data on the Mac mini). HARQIS_DATA_ROOT is
+      # loaded from .env/apps.env by scripts/deploy.py before compose runs.
+      # The host dir MUST be APFS/HFS+ (ES needs POSIX locking + fsync) and
+      # shared into Docker Desktop's file-sharing list.
+      - ${HARQIS_DATA_ROOT:-./.harqis-data}/es-store:/usr/share/elasticsearch/data
     healthcheck:
       test: >
         curl -s http://localhost:9200/_cluster/health |
@@ -179,8 +184,14 @@ services:
     depends_on:
       - n8n
 
-volumes:
-  rabbitmq_data:
-  redis_data:
-  n8n_data:
-  elastic_data:
+# No Docker-managed named volumes. Every stateful container binds its data
+# under ${HARQIS_DATA_ROOT} (default ./.harqis-data; set per-host in
+# machines[.local].toml [<machine>.env_vars] and exported by scripts/deploy.py):
+#
+#   ${HARQIS_DATA_ROOT}/rabbitmq   -> /var/lib/rabbitmq
+#   ${HARQIS_DATA_ROOT}/redis      -> /data            (redis)
+#   ${HARQIS_DATA_ROOT}/n8n        -> /home/node/.n8n
+#   ${HARQIS_DATA_ROOT}/es-store   -> /usr/share/elasticsearch/data
+#
+# owntracks (mosquitto/recorder) keep their repo-relative ./apps/own_tracks
+# bind mounts — that data lives with the app's config tree by design.
