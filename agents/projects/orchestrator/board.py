@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Optional
 
 from agents.projects.agent.base import AgentExecutionError, BaseKanbanAgent
-from agents.projects.agent.persona import sign_comment
+from agents.projects.agent.persona import build_claim_message, sign_comment
 from agents.projects.agent.provider import (
     PROVIDER_ANTHROPIC_API,
     ProviderConfig,
@@ -350,9 +350,7 @@ class BoardOrchestrator:
             self._move(card.id, Lists.PENDING, profile)
             self._post_comment(
                 card.id,
-                f"claimed-by: {profile.name}\n"
-                f"model: {profile.model.model_id}\n"
-                f"billing: {self.provider_config.short_label()}",
+                build_claim_message(profile, self.provider_config),
                 profile,
             )
             audit.card_lifecycle(INTAKE_LIST, Lists.PENDING)

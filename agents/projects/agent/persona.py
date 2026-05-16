@@ -19,6 +19,7 @@ because Trello already shows the member.
 
 from __future__ import annotations
 
+from apps.antropic.provider import ProviderConfig
 from agents.projects.profiles.schema import AgentProfile, PersonaConfig
 
 
@@ -65,3 +66,23 @@ def sign_comment(profile: AgentProfile, body: str) -> str:
     if not sig:
         return body
     return f"{sig}\n\n{body}"
+
+
+def build_claim_message(
+    profile: AgentProfile, provider_config: ProviderConfig
+) -> str:
+    """Standard claim-comment body for any agent that picks up a card.
+
+    Carries the agent's identity, runtime model, and billing source so a
+    human reading the board can tell *which* agent (and which Anthropic
+    auth path — Max subscription vs API key) is serving the card.
+
+    Lives here in the agent base layer so every agent — the kanban
+    orchestrator today, anything else that grows a claim path tomorrow —
+    emits the same identification format.
+    """
+    return (
+        f"claimed-by: {profile.name}\n"
+        f"model: {profile.model.model_id}\n"
+        f"billing: {provider_config.short_label()}"
+    )

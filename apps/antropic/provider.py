@@ -284,10 +284,62 @@ def detect_provider(
     )
 
 
+def scrub_competing_env(cfg: ProviderConfig, env: Optional[dict] = None) -> list[str]:
+    """Remove competing-credential env vars from the process env after detection.
+
+    The Anthropic Python SDK reads ``ANTHROPIC_API_KEY`` from ``os.environ``
+    whenever its ``api_key`` constructor arg is left at the default ``None``.
+    Code that builds the client with ``Anthropic(auth_token=<max>)`` and
+    forgets to also pass ``api_key=None`` will silently end up with BOTH
+    auth headers on every request — and Anthropic's gateway honours
+    ``X-Api-Key`` first, billing the Console org instead of Max.
+
+    The fix at the construction site is fragile (every callsite has to
+    remember). The robust fix is to ensure that *if* Max is the chosen
+    primary, ``ANTHROPIC_API_KEY`` is no longer reachable from the SDK's
+    env-fallback path. The fallback ``ProviderConfig`` keeps its captured
+    ``api_key`` value in the dataclass, so code that explicitly switches
+    on quota error can still build an API-key client — only the implicit
+    env channel is closed.
+
+    Symmetry: when ``anthropic_api`` is the chosen primary we also drop
+    any stray ``CLAUDE_CODE_OAUTH_TOKEN`` in env, so subprocess tools
+    (Bash, MCP) inherited from the parent don't reach for a Max session
+    that the orchestrator deliberately rejected.
+
+    Returns the list of env-var names that were actually removed (useful
+    for tests and audit logs). Safe to call repeatedly.
+    """
+    e = env if env is not None else os.environ
+    removed: list[str] = []
+    if cfg.kind == PROVIDER_CLAUDE_CODE:
+        if ENV_API_KEY in e:
+            del e[ENV_API_KEY]
+            removed.append(ENV_API_KEY)
+    elif cfg.kind == PROVIDER_ANTHROPIC_API:
+        if ENV_MAX_TOKEN in e:
+            del e[ENV_MAX_TOKEN]
+            removed.append(ENV_MAX_TOKEN)
+    return removed
+
+
 def log_chosen_provider(cfg: ProviderConfig) -> None:
     """Single log line on boot — makes the routing decision visible without
-    having to inspect env at runtime."""
+    having to inspect env at runtime.
+
+    Also scrubs the competing-credential env var from ``os.environ`` so the
+    Anthropic SDK can't silently env-fallback to it (see
+    ``scrub_competing_env`` for the full rationale).
+    """
     logger.info("Anthropic provider resolved: %s", cfg.describe())
+    removed = scrub_competing_env(cfg)
+    if removed:
+        logger.info(
+            "Anthropic provider: scrubbed %s from os.environ to prevent SDK "
+            "env-fallback (chosen=%s; fallback still reachable via "
+            "ProviderConfig.fallback.api_key when wired)",
+            ", ".join(removed), cfg.kind,
+        )
     if cfg.kind == PROVIDER_CLAUDE_CODE and cfg.fallback is None:
         logger.info(
             "Note: Claude Max rate limits are lower than API tier. If you "

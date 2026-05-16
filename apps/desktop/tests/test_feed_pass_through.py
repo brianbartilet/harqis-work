@@ -88,6 +88,79 @@ def test__feed_decorator_passes_dict_through(tmp_path):
     assert "summary" not in captured_block["block_text"]
 
 
+def test__feed_decorator_noop_on_nonexistent_path(tmp_path):
+    """A configured path that doesn't exist on this OS must be a no-op.
+
+    Covers the cross-OS case too: DESKTOP_PATH_FEED=``G:\\My Drive\\LOGS``
+    (a Windows drive path) on a POSIX worker is just a non-existent
+    relative path here. The decorator must skip cleanly, pass the wrapped
+    value through, and crucially NOT create a junk directory in the cwd
+    (regression: Path(...).resolve()+mkdir used to do exactly that).
+    """
+    from apps.desktop.helpers import feed as feed_module
+
+    calls = []
+
+    def fake_prepend(*, path, block_text, encoding, lock_cfg):
+        calls.append(path)
+
+    fake_config = {"feed": {"path_to_feed": r"G:\My Drive\LOGS"}}
+    cwd_before = set(os.listdir("."))
+
+    with patch.object(feed_module, "CONFIG", fake_config), \
+         patch.object(feed_module, "_prepend_with_lock", fake_prepend), \
+         patch.dict(os.environ, {}, clear=False):
+        os.environ.pop(feed_module._OS_FEED_ENV, None)
+
+        @feed_module.feed(filename_prefix="hud-logs")
+        def my_task():
+            return {"text": "should not be written", "summary": "x"}
+
+        result = my_task()
+
+    assert result == {"text": "should not be written", "summary": "x"}
+    assert calls == []
+    assert not Path(r"G:\My Drive\LOGS").exists()
+    assert set(os.listdir(".")) == cwd_before
+
+
+def test__feed_decorator_os_specific_env_wins(tmp_path, monkeypatch):
+    """The OS-specific override env var beats the OS-agnostic config.
+
+    One shared apps.env can carry a Windows path in DESKTOP_PATH_FEED and
+    a real macOS/Linux path in DESKTOP_PATH_FEED_<OS>; the running host
+    must pick its own and write there.
+    """
+    from apps.desktop.helpers import feed as feed_module
+
+    captured = {}
+
+    def fake_prepend(*, path, block_text, encoding, lock_cfg):
+        captured["path"] = path
+        captured["block_text"] = block_text
+
+    real_dir = tmp_path / "os-specific-feed"
+    real_dir.mkdir()
+
+    # Config points at a foreign Windows path; the OS override points at a
+    # real existing dir for this platform and must win.
+    fake_config = {"feed": {"path_to_feed": r"G:\My Drive\LOGS"}}
+    monkeypatch.setenv(feed_module._OS_FEED_ENV, str(real_dir))
+
+    with patch.object(feed_module, "CONFIG", fake_config), \
+         patch.object(feed_module, "_prepend_with_lock", fake_prepend):
+
+        @feed_module.feed(filename_prefix="hud-logs")
+        def my_task():
+            return {"text": "written via OS override", "summary": "s"}
+
+        result = my_task()
+
+    assert result["text"] == "written via OS override"
+    assert str(real_dir) in str(captured["path"])
+    assert "written via OS override" in captured["block_text"]
+
+
 def test__feed_decorator_passes_string_through(tmp_path):
     """Legacy: tasks returning a string keep working unchanged."""
     from apps.desktop.helpers import feed as feed_module
