@@ -22,6 +22,7 @@ from core.utilities.logging.custom_logger import create_logger
 from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 
+from workflows.hfl.prompts import load_prompt
 from workflows.hfl.tasks.capture import resolve_corpus_dir
 from workflows.hfl.tasks.retrieve import _entries_for_file
 
@@ -29,18 +30,10 @@ _log = create_logger("hfl.summarize")
 
 _DEFAULT_HAIKU = "claude-haiku-4-5-20251001"
 
-_SYSTEM_PROMPT = (
-    "You are summarizing a week of one person's Homework-for-Life entries — "
-    "short daily 'story moments' captured in the spirit of Matthew Dicks' "
-    "Storyworthy. Produce a tight weekly rollup with three sections:\n"
-    "1. Themes — recurring patterns across the week (3-5 bullets).\n"
-    "2. Stories worth keeping — 2-4 entries that have the most narrative weight, "
-    "each one or two sentences.\n"
-    "3. Open threads — anything the entries hint at but don't resolve, that the "
-    "person might want to revisit.\n"
-    "Be specific. Avoid generic life-coach language. If the entries are sparse "
-    "or all on one theme, say so plainly."
-)
+# Prompt lives in the prompts/ layer as a .md file (repo convention — see
+# workflows/<category>/prompts/). .strip() keeps the value byte-identical
+# to the former inline string regardless of the file's trailing newline.
+_SYSTEM_PROMPT = load_prompt("summarize_week").strip()
 
 
 def _collect_window(window_days: int) -> tuple[list[dict[str, str]], list[Path]]:

@@ -1,9 +1,12 @@
 """
 Beat schedule for the Homework-for-Life workflow.
 
-Three tasks:
+Four tasks:
   - capture_hfl_entry    : adhoc — invoked manually or from an LLM/agent to
                            persist one daily story moment to the corpus.
+  - analyze_hfl_media    : daily — vision pass over recent dumps-inbox
+                           images/videos; appends one corpus entry per
+                           story-worthy item (Haiku).
   - summarize_hfl_week   : weekly rollup of the past 7 days of entries (Haiku).
   - retrieve_hfl_corpus  : retrieval API — wired here as an ADHOC slot so it
                            can be invoked via .delay() / MCP; the schedule is
@@ -37,6 +40,33 @@ WORKFLOW_HFL = {
         },
         'manifesto': {
             'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+        },
+    },
+
+    # Daily vision pass — 22:00 local. Walks the last `window_days` of
+    # dumps-inbox media and appends one HFL entry per story-worthy item.
+    # AGENT queue (vision = LLM call); harqis-server consumes `agent` and
+    # holds the inbox. Haiku only — cost-bounded by frame count + max_files.
+    'run-job--analyze_hfl_media': {
+        'task': 'workflows.hfl.tasks.analyze_media.analyze_hfl_media',
+        'schedule': crontab(hour=22, minute=0),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'window_days': 1,
+            'max_files': 40,
+            'frames_per_video': 4,
+        },
+        'options': {
+            'queue': WorkflowQueue.AGENT,
+            'expires': 60 * 60 * 12,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
             'para_bucket': 'area',
             'express_target': 'file:hfl_corpus',
             'review_artifact': 'es_log+file',

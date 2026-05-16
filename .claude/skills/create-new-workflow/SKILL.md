@@ -361,7 +361,16 @@ It should print `True`. If it prints `False`, the import in `__init__.py` is wro
 
 ## Step 6 — Generate AI prompts (if Claude / Anthropic is used)
 
-If the workflow includes an AI reasoning, extraction, or generation step, create a prompt file:
+**Hard rule — no inline prompts.** If a task sends *any* system or instruction
+prompt to an LLM, that prompt text MUST live in a `.md` file under the
+workflow's `prompts/` layer and be pulled in via `load_prompt(...)`. Never
+assign a multi-line prompt string to a module constant or pass a string
+literal to `system=`/`messages=`. This applies to every task that calls
+Claude/Anthropic — there is no "if applicable" escape hatch. (A short,
+fully dynamic user message built from runtime values is the only exception;
+its fixed instruction scaffolding still belongs in the `.md` file.)
+
+Create the prompt file:
 
 ```
 workflows/<category>/prompts/<task_name>.md
