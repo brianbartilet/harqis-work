@@ -10,6 +10,13 @@
 # ── Per-machine deploy override (gitignored sibling of machines.toml) ────────
 machines.local.toml
 
+# ── Migration reference files (working-tree only — never committed) ──────────
+# Drop-in "after" snapshots used while migrating values out of apps.env into
+# the per-machine TOMLs. See docs/info/WORKER-CONFIG-DISTRIBUTION.md §3.
+.env/apps.env.new
+/machines.toml.new
+/machines.local.toml.new
+
 # ── Python virtualenv ────────────────────────────────────────────────────────
 .venv
 venv
