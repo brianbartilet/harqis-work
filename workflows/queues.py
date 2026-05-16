@@ -18,6 +18,7 @@ class WorkflowQueue(StrEnum):
     AGENT = "agent"
     WORKER = "worker"
     N8N = "n8n"     # n8n container ops (backup/restore/deploy) — pinned to harqis-server
+    HFL = "hfl"     # Homework-for-Life: capture/ingest/summarize/recall — harqis-server
 
     # ── Broadcast (fanout) queues — every subscribed worker handles each task ──
     # Use for cluster-wide actions: config reload, cache invalidation, "every HUD

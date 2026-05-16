@@ -60,6 +60,7 @@ APP_REGISTRARS = [
     ("Playwright",       "apps.playwright.mcp",     "register_playwright_tools"),
     ("SQLite-Vec",       "apps.sqlite_vec.mcp",     "register_sqlite_vec_tools"),
     ("Knowledge / RAG",  "workflows.knowledge.mcp", "register_knowledge_tools"),
+    ("Memory Recall",    "workflows.hfl.mcp",       "register_memory_tools"),
 ]
 
 # Per-node app surface filter.

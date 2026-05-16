@@ -29,7 +29,7 @@ queues = ["default", "default_broadcast"]
 # ── Always-on hub: TCG/PEON/AGENT workloads, full host stack ─────────────────
 [harqis-server]
 role = "host"
-queues = ["default", "tcg", "agent", "host", "adhoc", "default_broadcast", "n8n"]
+queues = ["default", "tcg", "host", "adhoc", "default_broadcast", "n8n"]
 kanban_num_agents = 4
 
 # ── Windows work box: DEFAULT + HUD, no Kanban here ──────────────────────────
@@ -40,7 +40,7 @@ disable = ["kanban"]
 
 [windows-work-all]
 role = "host"
-queues = ["host", "default", "hud", "peon", "adhoc", "default_broadcast"]
+queues = ["host", "default", "hud", "peon", "adhoc", "default_broadcast", "agent"]
 # Beat must run on exactly one machine cluster-wide (harqis-server is the
 # canonical Beat runner per the "always-on hub" comment), so disable scheduler
 # here. Kanban runs as an agent worker — orchestrator + agent are the same

@@ -1,19 +1,22 @@
 """
 Beat schedule for the Homework-for-Life workflow.
 
-Four tasks:
+Five tasks:
   - capture_hfl_entry    : adhoc — invoked manually or from an LLM/agent to
                            persist one daily story moment to the corpus.
   - analyze_hfl_media    : daily — vision pass over recent dumps-inbox
                            images/videos; appends one corpus entry per
                            story-worthy item (Haiku).
+  - ingest_git_activity  : daily — distils the day's GitHub commits across
+                           recently-updated repos into one corpus entry
+                           (Haiku, raw fallback).
   - summarize_hfl_week   : weekly rollup of the past 7 days of entries (Haiku).
   - retrieve_hfl_corpus  : retrieval API — wired here as an ADHOC slot so it
                            can be invoked via .delay() / MCP; the schedule is
                            Sunday once-a-week (effectively disabled).
 
-This workflow is scaffolded but NOT imported in `workflows/config.py`.
-Activation is a deliberate flip — see workflows/hfl/README.md §Activation.
+This workflow is active — `WORKFLOW_HFL` is merged into
+`workflows/config.py`'s beat schedule.
 """
 from celery.schedules import crontab
 
@@ -35,7 +38,7 @@ WORKFLOW_HFL = {
             'tags': [],
         },
         'options': {
-            'queue': WorkflowQueue.ADHOC,
+            'queue': WorkflowQueue.HFL,
             'expires': 60 * 60,
         },
         'manifesto': {
@@ -62,7 +65,38 @@ WORKFLOW_HFL = {
             'frames_per_video': 4,
         },
         'options': {
-            'queue': WorkflowQueue.AGENT,
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 60 * 12,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+        },
+    },
+
+    # Daily git activity — midnight 00:00 local (Beat runs only on
+    # harqis-server, the canonical Beat host). window_days=1 means the
+    # 00:00 run captures the day that just ended. Distils the day's GitHub
+    # commits (recently-updated repos, bounded) into one corpus entry that
+    # flows into summarize_hfl_week + the memory_recall MCP. AGENT queue
+    # (Haiku); harqis-server consumes `agent` and holds the GitHub token.
+    # Skipped entirely (no LLM, no entry) on a no-commit day.
+    'run-job--ingest_git_activity': {
+        'task': 'workflows.hfl.tasks.ingest_git.ingest_git_activity',
+        'schedule': crontab(hour=0, minute=0),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'window_days': 1,
+            'max_repos': 30,
+            'commits_per_repo': 50,
+            'max_commits': 200,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
             'expires': 60 * 60 * 12,
         },
         'manifesto': {
@@ -84,7 +118,7 @@ WORKFLOW_HFL = {
             'window_days': 7,
         },
         'options': {
-            'queue': WorkflowQueue.AGENT,
+            'queue': WorkflowQueue.HFL,
             'expires': 60 * 60 * 12,
         },
         'manifesto': {
@@ -107,7 +141,7 @@ WORKFLOW_HFL = {
             'since': None,
         },
         'options': {
-            'queue': WorkflowQueue.ADHOC,
+            'queue': WorkflowQueue.HFL,
             'expires': 60 * 60,
         },
         'manifesto': {
