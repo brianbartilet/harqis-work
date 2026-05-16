@@ -78,3 +78,15 @@ python -c "from workflows.knowledge.tasks.answer import answer_question; \
 2. Tag chunks with a unique `source=` label so retrieval can scope to it.
 3. Register the task on a beat schedule in `tasks_config.py`.
 4. (Optional) Add a source-scoped MCP tool in `apps/sqlite_vec/mcp.py` if it needs a dedicated entry point.
+
+## Manifesto alignment
+
+See [`docs/MANIFESTO.md`](../../docs/MANIFESTO.md) and [`docs/thesis/MANIFESTO-REPO-UPDATES.md`](../../docs/thesis/MANIFESTO-REPO-UPDATES.md). The same metadata is persisted on each beat entry's `'manifesto'` key in `tasks_config.py`.
+
+| Task | code_role | para_bucket | express_target | review_artifact | hfl_signal |
+| --- | --- | --- | --- | --- | --- |
+| `ingest_notion_pages` | capture | area | `vectorstore:knowledge` | `es_log` | `True` |
+| `ingest_jira_issues` | capture | area | `vectorstore:knowledge` | `es_log` | `False` |
+| `ingest_github_repos` | capture | area | `vectorstore:knowledge` | `es_log` | `False` |
+| `ingest_gdrive_docs` | capture | area | `vectorstore:knowledge` | `es_log` | `True` |
+| `knowledge_answer_morning_brief` | distill+express | area | `es_log` | `es_log` | `True` |

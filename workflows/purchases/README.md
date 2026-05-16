@@ -90,3 +90,15 @@ celery -A workflows.config call workflows.purchases.tasks.tcg_mp_selling.generat
 - Worker functions re-import all dependencies inside the function body — required for `multiprocessing` on Windows (no `fork`).
 - `logger.warn()` (deprecated) is used in `tcg_mp_selling.py` and should be updated to `logger.warning()`.
 - The `_retry_edit_listing` function handles transient API failures with retry logic.
+
+## Manifesto alignment
+
+See [`docs/MANIFESTO.md`](../../docs/MANIFESTO.md) and [`docs/thesis/MANIFESTO-REPO-UPDATES.md`](../../docs/thesis/MANIFESTO-REPO-UPDATES.md). The same metadata is persisted on each beat entry's `'manifesto'` key in `tasks_config.py`.
+
+| Task | code_role | para_bucket | express_target | review_artifact | hfl_signal |
+| --- | --- | --- | --- | --- | --- |
+| `generate_tcg_mappings` | organize | area | `file:tcg_mappings` | `es_log+file` | `False` |
+| `generate_tcg_listings` | express | area | `api:tcg_mp` | `es_log+file` | `False` |
+| `update_tcg_listings_prices` | express | area | `api:tcg_mp` | `es_log` | `False` |
+| `download_scryfall_bulk_data` | capture | area | `file:scryfall_bulk` | `es_log+file` | `False` |
+| `generate_audit_for_tcg_orders` | distill | area | `es_log` | `es_log` | `False` |

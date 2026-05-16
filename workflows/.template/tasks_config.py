@@ -40,6 +40,19 @@ WORKFLOW_TEMPLATE = {
         'task': 'workflows.template.tasks.do_random.add_random_numbers',
         'schedule': timedelta(seconds=10),
         'args': [],
+        # ── Manifesto metadata ─────────────────────────────────────────────
+        # Every active task entry MUST carry this block. Fields are described
+        # in workflows/README.md and validated by scripts/manifesto_audit.py.
+        # Replace the values when you adapt this template — the placeholders
+        # below will pass the audit but they describe a demo task that does
+        # nothing useful.
+        'manifesto': {
+            'code_role': 'capture',           # capture | organize | distill | express (or '+'-joined hybrid)
+            'para_bucket': 'project',         # project | area | resource | archive
+            'express_target': 'es_log',       # e.g. 'hud_feed', 'rainmeter:<METER>', 'api:<service>', 'file:<purpose>'
+            'review_artifact': 'es_log',      # e.g. 'es_log+hud_widget', 'es_log+file'
+            'hfl_signal': False,              # True if this task produces HFL-relevant personal signal
+        },
     },
 
     # endregion

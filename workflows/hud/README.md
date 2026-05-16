@@ -171,3 +171,27 @@ celery -A workflows.config call workflows.hud.tasks.hud_calendar.show_calendar_i
 - `show_mouse_bindings` reads the active foreground window to set the appropriate iCUE/Rainmeter profile.
 - `get_desktop_logs` sends activity log content to GPT/Claude for summarization.
 - HUD feed data is written to `DESKTOP_PATH_FEED` (env var) and picked up by Rainmeter.
+
+## Manifesto alignment
+
+See [`docs/MANIFESTO.md`](../../docs/MANIFESTO.md) and [`docs/thesis/MANIFESTO-REPO-UPDATES.md`](../../docs/thesis/MANIFESTO-REPO-UPDATES.md). The same metadata is persisted on each beat entry's `'manifesto'` key in `tasks_config.py`.
+
+| Task | code_role | para_bucket | express_target | review_artifact | hfl_signal |
+| --- | --- | --- | --- | --- | --- |
+| `show_forex_account` | capture | area | `rainmeter:FOREX_ACCOUNT` | `es_log+hud_widget` | `False` |
+| `show_tcg_orders` | capture | area | `rainmeter:TCG_ORDERS` | `es_log+hud_widget` | `False` |
+| `show_tcg_sell_cart` | capture | area | `rainmeter:TCG_SELL_CART` | `es_log+hud_widget` | `False` |
+| `show_jira_board` | capture+distill | area | `rainmeter:JIRA_BOARD` | `es_log+hud_widget` | `True` |
+| `get_desktop_logs` | distill+express | area | `rainmeter:DESKTOP_LOGS` | `es_log+hud_widget` | `True` |
+| `take_screenshots_for_gpt_capture` | capture | area | `file:screenshots` | `es_log+file` | `True` |
+| `show_calendar_information` | capture+distill | area | `rainmeter:CALENDAR_INFO` | `es_log+hud_widget` | `True` |
+| `get_failed_jobs` | capture | area | `rainmeter:FAILED_JOBS` | `es_log+hud_widget` | `False` |
+| `show_mouse_bindings` | capture | area | `rainmeter:MOUSE_BINDINGS` | `es_log+hud_widget` | `True` |
+| `build_summary_mouse_bindings` | distill | area | `rainmeter:MOUSE_BINDINGS` | `es_log+hud_widget` | `True` |
+| `show_hud_profiles` | capture | area | `rainmeter:HUD_PROFILES` | `es_log+hud_widget` | `False` |
+| `show_ynab_budgets_info` | capture | area | `rainmeter:YNAB_BUDGETS` | `es_log+hud_widget` | `False` |
+| `show_pc_daily_sales` | capture+distill | area | `rainmeter:PC_DAILY_SALES` | `es_log+hud_widget` | `False` |
+| `show_api_costs` | capture+distill | area | `rainmeter:API_COSTS` | `es_log+hud_widget` | `False` |
+| `show_ai_helper` | organize | area | `rainmeter:AI_HELPER` | `es_log+hud_widget` | `False` |
+| `show_daily_radar` | distill+express | area | `rainmeter:DAILY_RADAR` | `es_log+hud_widget` | `True` |
+| `get_schedules` | capture | area | `rainmeter:SCHEDULES` | `es_log+hud_widget` | `True` |

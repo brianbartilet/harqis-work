@@ -91,3 +91,17 @@ Log filenames use the format: `YYYY-MM-DD-HH-MM`.
 - `copy_files_targeted` reads its file list from `machines.local.toml` `[sync] items` — same source of truth as `scripts/sync-to-host.ps1`. No hardcoded paths in source.
 - `git_pull_on_paths` uses `REPO_ROOT` (resolved from this module's location) instead of a hard-coded path, so it works on Windows and macOS without per-host edits.
 - The `set_desktop_hud_to_back` task prevents the Rainmeter HUD from overlapping active windows.
+
+## Manifesto alignment
+
+See [`docs/MANIFESTO.md`](../../docs/MANIFESTO.md) and [`docs/thesis/MANIFESTO-REPO-UPDATES.md`](../../docs/thesis/MANIFESTO-REPO-UPDATES.md). The same metadata is persisted on each beat entry's `'manifesto'` key in `tasks_config.py`; `scripts/manifesto_audit.py` validates it.
+
+| Task | code_role | para_bucket | express_target | review_artifact | hfl_signal |
+| --- | --- | --- | --- | --- | --- |
+| `git_pull_on_paths` | organize | area | `es_log` | `es_log` | `False` |
+| `run_n8n_sequence` | organize | area | `hud_feed` | `es_log+hud_feed` | `False` |
+| `set_desktop_hud_to_back` | organize | area | `hud_feed` | `es_log+hud_feed` | `False` |
+| `copy_files_targeted` | organize | area | `hud_feed` | `es_log+hud_feed` | `False` |
+| `run_capture_logging` | capture | area | `hud_feed+file:screenshots` | `es_log+hud_feed` | `True` |
+| `generate_daily_desktop_summary` | distill+express | area | `rainmeter:DESKTOP_LOGS+file:daily` | `es_log+hud_widget+file` | `True` |
+| `generate_weekly_desktop_summary` | distill+express | area | `rainmeter:DESKTOP_LOGS+file:weekly` | `es_log+hud_widget+file` | `True` |
