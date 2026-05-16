@@ -10,6 +10,15 @@ LOG_FILE = Path(__file__).parent / "command_runner.log"
 
 _RUNNER_TOKEN = os.environ.get("RUNNER_TOKEN", "")
 
+# n8n runs in a Docker container and reaches the host via the
+# `host.docker.internal:host-gateway` extra_host (see docker-compose.yml).
+# That traffic arrives on the docker bridge gateway, NOT loopback — so a
+# 127.0.0.1 bind would refuse it. Default to 0.0.0.0 so the n8n container can
+# POST to http://host.docker.internal:5252/run. Access is still gated by
+# RUNNER_TOKEN; override RUNNER_HOST=127.0.0.1 to lock back to host-only.
+_RUNNER_HOST = os.environ.get("RUNNER_HOST", "0.0.0.0")
+_RUNNER_PORT = int(os.environ.get("RUNNER_PORT", "5252"))
+
 
 def log(msg: str) -> None:
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -87,8 +96,10 @@ def run_cmd():
 
 
 def start_server():
-    log(f"Starting Flask server on PID {os.getpid()}")
-    app.run(host="127.0.0.1", port=5252, debug=False)
+    log(f"Starting Flask server on PID {os.getpid()} "
+        f"at {_RUNNER_HOST}:{_RUNNER_PORT} "
+        f"(n8n container -> http://host.docker.internal:{_RUNNER_PORT}/run)")
+    app.run(host=_RUNNER_HOST, port=_RUNNER_PORT, debug=False)
 
 
 if __name__ == "__main__":

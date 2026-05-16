@@ -91,6 +91,10 @@ SERVICES: dict[str, dict] = {
     "mcp":       {"cmd": ["mcp"],               "roles": {"host"}},
     "kanban":    {"cmd": ["kanban"],            "roles": {"host", "node"}},
     "flower":    {"cmd": ["flower"],            "roles": {"host"}},
+    # n8n `cmd` nodes POST shell commands here. Binds 0.0.0.0:5252 so the
+    # dockerised n8n reaches it via host.docker.internal. Host-only: it sits
+    # next to the n8n container / scheduler, not on worker nodes.
+    "command-runner": {"cmd": ["command-runner"], "roles": {"host"}},
 }
 
 
@@ -734,6 +738,7 @@ _STATUS_NEEDLES = {
     "frontend":  f"frontend{os.sep}main.py",
     "mcp":       f"mcp{os.sep}server.py",
     "kanban":    "agents.projects.orchestrator.local",
+    "command-runner": f"n8n{os.sep}utilities{os.sep}command_runner.py",
 }
 
 
@@ -1101,7 +1106,7 @@ def main() -> None:
         # and clear their pidfiles so the upcoming start_service loop spawns
         # fresh code rather than short-circuiting with "Already running" on
         # a tracked PID that is still serving the previous boot's bytecode.
-        for _svc in ("frontend", "mcp", "kanban"):
+        for _svc in ("frontend", "mcp", "kanban", "command-runner"):
             if _svc in services:
                 kill_stray_processes(_STATUS_NEEDLES[_svc], label=_svc)
                 _pf = pid_path(_svc)

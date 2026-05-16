@@ -244,6 +244,30 @@ def cmd_kanban(args: argparse.Namespace) -> None:
     _exec(*cli)
 
 
+def cmd_command_runner(args: argparse.Namespace) -> None:
+    """Launch the n8n command-runner Flask server (workflows/n8n/utilities).
+
+    n8n's `cmd` nodes POST shell commands to this server which executes them
+    and returns stdout/stderr/exit-code. Binds RUNNER_HOST:RUNNER_PORT
+    (default 0.0.0.0:5252) so the dockerised n8n can reach it at
+    http://host.docker.internal:5252/run. Requires RUNNER_TOKEN in the
+    environment (from .env/apps.env) — without it the server rejects every
+    request.
+    """
+    setup_env()
+    host = os.environ.get("RUNNER_HOST", "0.0.0.0")
+    port = os.environ.get("RUNNER_PORT", "5252")
+    print(
+        f"[launch] n8n command-runner (Flask {host}:{port}; "
+        f"n8n container -> http://host.docker.internal:{port}/run)",
+        flush=True,
+    )
+    _exec(
+        _python(),
+        str(REPO_ROOT / "workflows" / "n8n" / "utilities" / "command_runner.py"),
+    )
+
+
 def cmd_trigger_hud_tasks(args: argparse.Namespace) -> None:
     """Replaces run_hud_tasks.bat — fires HUD tasks via Flower's REST API.
     Flower creds come from FLOWER_USER / FLOWER_PASSWORD in .env/apps.env.
@@ -329,6 +353,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     m = sub.add_parser("mcp", help="MCP server (stdio)")
     m.set_defaults(func=cmd_mcp)
+
+    cr = sub.add_parser("command-runner", help="n8n command-runner Flask server")
+    cr.set_defaults(func=cmd_command_runner)
 
     k = sub.add_parser("kanban", help="Kanban orchestrator")
     k.add_argument("-p", "--profile", help="Profile filter (e.g. agent:default)")
