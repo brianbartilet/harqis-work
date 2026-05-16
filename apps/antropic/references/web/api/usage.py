@@ -142,17 +142,34 @@ class ApiServiceAnthropicUsage(BaseApiServiceAnthropic):
             DtoAnthropicUsageSummary with per-model breakdown and cost estimates.
         """
         bucket_width = self._BUCKET_WIDTH.get(granularity, "1d")
-        params = [
-            ("starting_at", start_time),
-            ("ending_at", end_time),
-            ("bucket_width", bucket_width),
-            ("group_by[]", "model"),
-            ("workspace_ids[]", workspace_id),
-            ("api_key_ids[]", api_key_id),
-            ("models[]", model),
-        ]
-        data = self._get("organizations/usage_report/messages", params)
-        return self._parse_summary(data, start_time, end_time)
+
+        # The usage report returns at most 7 buckets per response and
+        # signals more with `has_more` + a `next_page` token. Without
+        # following it a monthly (1d) query only ever sees the first
+        # 7 days, undercounting the total. Walk every page and merge
+        # the bucket lists before parsing.
+        all_buckets: list = []
+        page: Optional[str] = None
+        while True:
+            params = [
+                ("starting_at", start_time),
+                ("ending_at", end_time),
+                ("bucket_width", bucket_width),
+                ("group_by[]", "model"),
+                ("workspace_ids[]", workspace_id),
+                ("api_key_ids[]", api_key_id),
+                ("models[]", model),
+                ("page", page),
+            ]
+            data = self._get("organizations/usage_report/messages", params)
+            all_buckets.extend(data.get("data", data.get("usage", [])) or [])
+            if not data.get("has_more"):
+                break
+            page = data.get("next_page")
+            if not page:
+                break
+
+        return self._parse_summary({"data": all_buckets}, start_time, end_time)
 
     def get_month_to_date(self, workspace_id: str = None,
                           api_key_id: str = None) -> DtoAnthropicUsageSummary:
