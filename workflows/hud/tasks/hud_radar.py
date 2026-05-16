@@ -314,11 +314,14 @@ def _run_claude_synthesis(cfg_id__anthropic: str,
     )
 
     try:
-        response = anthropic._with_backoff(
-            anthropic.base_client.messages.create,
+        # send_message() (not the raw client) so the built-in Max -> API
+        # fallback engages: a Claude Code OAuth-token rate-limit/quota hit
+        # is caught as APIStatusError and retried against ANTHROPIC_API_KEY.
+        # The low-level _with_backoff path only retries then re-raises.
+        response = anthropic.send_message(
+            prompt=user_text,
             model=model,
             max_tokens=4096,
-            messages=[{"role": "user", "content": user_text}],
         )
         return response.content[0].text
     except Exception as e:

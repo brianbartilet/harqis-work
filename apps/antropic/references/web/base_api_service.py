@@ -296,13 +296,48 @@ class BaseApiServiceAnthropic(BaseFixtureServiceRest):
         Raises:
             RuntimeError: If the sync client is not initialized.
         """
+        return self.send_messages(
+            messages=[{"role": "user", "content": prompt}],
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+        )
+
+    def send_messages(
+        self,
+        messages: list,
+        model: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        system: Optional[str] = None,
+    ):
+        """
+        Send a pre-built messages list to Claude (synchronous, multimodal).
+
+        Same retry + Max -> API fallback behaviour as send_message(), but
+        accepts a full ``messages`` array so callers can pass image/text
+        content blocks (e.g. desktop-log screenshot analysis) that a plain
+        ``prompt`` string can't express. send_message() delegates here after
+        wrapping its prompt in a single user turn.
+
+        Args:
+            messages:   Anthropic messages array (roles + content blocks).
+            model:      Optional override of model name.
+            max_tokens: Optional override for max tokens.
+            system:     Optional system prompt for instruction context.
+
+        Returns:
+            Response object from Anthropic SDK.
+
+        Raises:
+            RuntimeError: If the sync client is not initialized.
+        """
         if not self.base_client:
             raise RuntimeError("Anthropic sync client is not initialized.")
 
         payload = {
             "model": model or self.model,
             "max_tokens": max_tokens or self.max_tokens,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
         }
         if system:
             payload["system"] = system

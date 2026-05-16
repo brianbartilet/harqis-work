@@ -215,11 +215,14 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
         log.info(f"Sending to Anthropic: {n_images} image(s), ~{n_text_chars // 1024} KB text")
 
         try:
-            response = anthropic._with_backoff(
-                anthropic.base_client.messages.create,
+            # send_messages() (not the raw client) so the Max -> API fallback
+            # engages on a Claude Code OAuth-token rate-limit/quota hit. This
+            # call is multimodal (image+text blocks) so it needs the messages-
+            # list variant rather than send_message()'s prompt-string form.
+            response = anthropic.send_messages(
+                messages=[{"role": "user", "content": content}],
                 model=resolved_model,
                 max_tokens=8192,
-                messages=[{"role": "user", "content": content}],
             )
             return [response.content[0].text]
         except Exception as e:
