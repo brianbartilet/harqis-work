@@ -47,7 +47,6 @@ disable = ["kanban", "scheduler"]
 # here. Kanban runs as an agent worker — orchestrator + agent are the same
 # process today; OS auto-detection keeps it claiming only os:windows cards
 # (or unlabelled cards via cooperative-claim race with other orchestrators).
-disable = ["scheduler"]
 # Concurrent in-process agent workers per board. Bump for more throughput.
 kanban_num_agents = 4
 # Optionally narrow this orchestrator to a single profile slice. Uncomment to
