@@ -43,7 +43,8 @@ this scaffold closes.
 | `capture_hfl_entry` | Appends one structured entry to today's corpus file. Empty `moment` is a no-op. | `file:hfl_corpus` | Adhoc — invoked via `.delay()`, an MCP tool, an agent, or a hotkey. The scheduled slot fires Sunday 03:33 with empty kwargs (i.e. is a no-op). |
 | `retrieve_hfl_corpus` | Substring + tag scan over the corpus, optional date filter. Returns up to `k` entries, most recent first. | `es_log` (callers consume the return value) | Adhoc — same pattern as capture. |
 | `summarize_hfl_week` | Weekly Haiku 4.5 rollup of the past N days; writes `_summary-YYYY-Www.md` alongside the daily files. | `file:hfl_summary+es_log` | Sundays 21:00 local. |
-| `ingest_ai_activity` | Distils the operator's own prompts from configured OpenAI assistant threads into ONE corpus entry for the day (the questions asked / things researched). Haiku-distilled, raw fallback. No thread ids or no prompts in window → no entry, no LLM call. | `file:hfl_corpus` | Daily 23:00 local (active — no-op until `OPENAI_HFL_THREAD_IDS` is set). |
+| `ingest_chatgpt_activity` | **Primary daily research log.** Auto-discovers the operator's ChatGPT conversations created/updated that day via the ChatGPT web app's private backend (no thread ids), distils the questions asked into ONE corpus entry. Haiku-distilled, raw fallback. No token / no prompts → no entry, no call. | `file:hfl_corpus` | Daily 23:00 local (active — no-op until `CHATGPT_WEB_ACCESS_TOKEN` is set). |
+| `ingest_ai_activity` | Alternate source (OpenAI **Platform API** assistant threads, via `OPENAI_HFL_THREAD_IDS`). Superseded by `ingest_chatgpt_activity` — kept in code but its beat entry is **disabled** (commented-out) to avoid a nightly no-op. | `file:hfl_corpus` | Disabled (uncomment in `tasks_config.py` if you also want Platform-API threads). |
 
 Each carries the manifesto metadata block on the beat entry — see
 `workflows/hfl/tasks_config.py`.
@@ -129,30 +130,49 @@ When ready to turn this workflow on:
    workflow once it has critical mass — see
    `docs/thesis/MANIFESTO-REPO-UPDATES.md` §7.
 
-### Activating `ingest_ai_activity` (daily AI-research entry)
+### Activating `ingest_chatgpt_activity` (primary daily research log)
 
-This task is **active** in `tasks_config.py` but is a clean no-op until
-you give it thread ids. The OpenAI Assistants API has **no list-threads
-endpoint**, so it can only read threads whose ids it is given. To make it
-produce entries:
+This task is **active** in `tasks_config.py` and is a clean no-op until
+you give it a ChatGPT session token. It auto-discovers every ChatGPT
+conversation you created/updated that day — no thread ids to manage.
 
-1. **Decide which assistant threads to summarize.** These are persistent
-   `thread_…` ids (the conversations whose *user* messages represent your
-   prompts/research), not assistant ids.
-2. **Set the thread ids.** Add to `.env/apps.env` (comma-separated):
+> ⚠️ **Unofficial backend.** OpenAI's official Platform API cannot list
+> threads or see ChatGPT-app chats at all. The only thing that can is the
+> ChatGPT **web app's own private backend** (`chatgpt.com/backend-api`),
+> which this task calls. It is undocumented and can change/break with any
+> web deploy (the task degrades to a no-op, never a broken beat).
+> Automating it is your own account + your own data for a personal log —
+> the defensible case — but it is a grey area vs. the sanctioned API.
+
+To make it produce entries:
+
+1. **Grab a session token.** While logged in to chatgpt.com, open
+   `https://chatgpt.com/api/auth/session` and copy the `accessToken`
+   value.
+2. **Set it** in `.env/apps.env`:
    ```
-   OPENAI_HFL_THREAD_IDS=thread_aaa,thread_bbb
+   CHATGPT_WEB_ACCESS_TOKEN=<accessToken>
+   # Optional — only if Cloudflare blocks scripted requests:
+   CHATGPT_WEB_COOKIE=cf_clearance=...; __Secure-next-auth.session-token=...
+   CHATGPT_WEB_USER_AGENT=<the exact UA string from your browser>
    ```
-   or pass `thread_ids=[...]` in the beat entry's `kwargs` instead.
-3. **Restart Beat + an `hfl`-subscribed worker.** The `run-job--ingest_ai_activity`
-   entry is already active in `workflows/hfl/tasks_config.py`; it runs
+3. **Restart Beat + an `hfl`-subscribed worker.** The
+   `run-job--ingest_chatgpt_activity` entry is already active; it runs
    daily at 23:00 local, distils that day's prompts with Haiku, and
-   appends one entry to the day's corpus file (no thread ids / no
-   prompts → clean no-op).
+   appends one entry to the day's corpus file.
 
-Only your own (`role == "user"`) messages are read — the questions you
-asked, not the assistant's answers. Anthropic is intentionally out of
-scope: its API exposes no prompt-content history, only usage/cost.
+The token **expires** (days). When it does the task logs an HTTP 401 and
+no-ops — re-grab it from `/api/auth/session` and re-paste. Only your own
+(`role == "user"`) messages are read — the questions you asked, not
+ChatGPT's answers. Claude (Haiku) is used solely as the distiller.
+
+### Alternate: `ingest_ai_activity` (OpenAI Platform-API threads)
+
+Disabled by default (commented-out beat entry). Reads specific Platform-API
+assistant threads listed in `OPENAI_HFL_THREAD_IDS` — only useful if you
+drive research through the official API rather than the ChatGPT app.
+Uncomment its block in `tasks_config.py` and set the env var to enable it
+alongside the ChatGPT-web task.
 
 ---
 

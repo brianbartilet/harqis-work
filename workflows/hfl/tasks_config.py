@@ -153,40 +153,5 @@ WORKFLOW_HFL = {
         },
     },
 
-    # ── ingest_ai_activity ───────────────────────────────────────────────────
-    # Daily AI-research → corpus. 23:00 local (end of day; Beat runs only on
-    # harqis-server). window_days=1 → the 23:00 run captures the day in
-    # progress. Distils the operator's own prompts from configured OpenAI
-    # assistant threads into ONE corpus entry that flows into
-    # summarize_hfl_week + the memory_recall MCP. Haiku only (cost-bounded).
-    # Skipped entirely (no LLM, no entry) when no thread ids are configured
-    # or no operator prompts fall in the window.
-    #
-    # Active. Requires OPENAI_HFL_THREAD_IDS in .env/apps.env (or a
-    # thread_ids kwarg) — with neither set the task is a clean no-op
-    # (no LLM call, no entry). See workflows/hfl/README.md §Activation.
-    'run-job--ingest_ai_activity': {
-        'task': 'workflows.hfl.tasks.ingest_ai.ingest_ai_activity',
-        'schedule': crontab(hour=23, minute=0),
-        'kwargs': {
-            'cfg_id__anthropic': 'ANTHROPIC',
-            'model': 'claude-haiku-4-5-20251001',
-            'window_days': 1,
-            'thread_ids': None,          # None → resolves OPENAI_HFL_THREAD_IDS
-            'messages_per_thread': 50,
-            'max_messages': 300,
-        },
-        'options': {
-            'queue': WorkflowQueue.HFL,
-            'expires': 60 * 60 * 12,
-        },
-        'manifesto': {
-            'code_role': 'capture+distill+express',
-            'para_bucket': 'area',
-            'express_target': 'file:hfl_corpus',
-            'review_artifact': 'es_log+file',
-            'hfl_signal': True,
-        },
-    },
 
 }
