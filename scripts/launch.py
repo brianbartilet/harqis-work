@@ -25,8 +25,11 @@ Background orchestration (start multiple, manage PIDs) is in scripts/deploy.py.
 from __future__ import annotations
 
 import argparse
+import glob
 import os
+import shelve
 import sys
+import time
 from pathlib import Path
 
 
@@ -179,8 +182,71 @@ def cmd_worker(args: argparse.Namespace) -> None:
     )
 
 
+# celery beat's default PersistentScheduler shelve. No --schedule flag is
+# passed below, and setup_env() chdir's to REPO_ROOT, so the shelve lives
+# at <repo>/celerybeat-schedule(.db / .dir / .dat / .bak depending on the
+# platform dbm backend).
+_BEAT_SCHEDULE_BASE = REPO_ROOT / "celerybeat-schedule"
+
+
+def _heal_beat_schedule() -> None:
+    """Rotate a corrupt celerybeat-schedule aside so beat can self-recover.
+
+    Why: the shelve is a pickle db of per-task last-run times. A SIGKILL
+    landing mid-write (deploy stop → SIGTERM → SIGKILL escalation, which
+    fires on every 4-hourly stack restart) truncates the pickle. On the
+    NEXT start, Celery's PersistentScheduler does ``self._store['entries']``
+    and dies with ``UnpicklingError: pickle data was truncated`` /
+    ``KeyError: 'entries'`` — CRITICAL, process exits before it can log or
+    write a pidfile. The scheduler then stays dead through every redeploy
+    until a human clears the file. This probe breaks that permanent-death
+    loop: read the shelve exactly the way Celery will; if it can't be
+    unpickled, rename every matching file aside (kept, not deleted, for
+    forensics) and let beat regenerate a fresh one. Healthy db: a few KB,
+    probe is microseconds, no-op.
+    """
+    base = str(_BEAT_SCHEDULE_BASE)
+    if not glob.glob(base + "*") and not os.path.exists(base):
+        return  # fresh host — nothing to heal
+
+    reason = ""
+    try:
+        db = shelve.open(base, flag="r")
+        try:
+            db.get("entries", None)      # the exact key Celery unpickles
+            for key in db:               # force-read every pickled value
+                _ = db[key]
+        finally:
+            db.close()
+    except Exception as exc:             # UnpicklingError, KeyError, dbm.error…
+        reason = f"{type(exc).__name__}: {exc}"
+
+    if not reason:
+        return  # schedule db is readable — leave it alone
+
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    rotated = []
+    for path in glob.glob(base + "*") or [base]:
+        if not os.path.exists(path):
+            continue
+        dest = f"{path}.corrupt-{stamp}"
+        try:
+            os.rename(path, dest)
+            rotated.append(os.path.basename(dest))
+        except OSError as exc:
+            print(f"[launch] scheduler: could not rotate {path}: {exc}",
+                  flush=True)
+    print(
+        f"[launch] scheduler: corrupt celerybeat-schedule rotated aside "
+        f"({reason}); beat will regenerate a fresh schedule. Kept: "
+        f"{', '.join(rotated) or '(none)'}",
+        flush=True,
+    )
+
+
 def cmd_scheduler(args: argparse.Namespace) -> None:
     setup_env()
+    _heal_beat_schedule()
     print("[launch] scheduler (celery beat)", flush=True)
     _exec(
         _python(), "-m", "celery",

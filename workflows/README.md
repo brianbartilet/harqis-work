@@ -20,6 +20,31 @@ Every task in this tree carries a `'manifesto'` metadata block on its beat entry
 
 `scripts/manifesto_audit.py` validates the metadata across all active workflows. Per-workflow alignment tables live in each `workflows/<name>/README.md` under "Manifesto alignment". Design rationale: [`docs/thesis/MANIFESTO-REPO-UPDATES.md`](../docs/thesis/MANIFESTO-REPO-UPDATES.md).
 
+### `manifesto` is stripped before Celery sees it
+
+`'manifesto'` is **our** metadata — it is **not** a Celery beat-schedule key and must never reach Celery. Celery's `ScheduleEntry.__init__` accepts only a fixed set of per-entry keys; anything else is a hard error. Hand a raw entry dict (with `manifesto`) to `SPROUT.conf.beat_schedule` and beat dies on **every** startup, before it can log or write a pidfile:
+
+```
+TypeError: ScheduleEntry.__init__() got an unexpected keyword argument 'manifesto'
+```
+
+`workflows/config.py` prevents this. `CONFIG_DICTIONARY` keeps the **full** entries (so `manifesto_audit.py`, the registry, and docs tooling can read `manifesto`), but only a sanitized projection is assigned to Celery:
+
+```python
+_CELERY_ENTRY_KEYS = frozenset(
+    {"task", "schedule", "args", "kwargs", "options", "relative"}
+)
+# per entry: keep only keys in _CELERY_ENTRY_KEYS, drop manifesto + any
+# other custom metadata, then -> SPROUT.conf.beat_schedule
+```
+
+Implications when editing `workflows/*/tasks_config.py`:
+
+- **Keep `manifesto` at the top level of the entry** (sibling of `task` / `schedule` / `options`). It is read by tooling and stripped at the Celery boundary — do **not** bury it inside `options` (Celery *would* forward `options` contents and may choke).
+- Any **new** non-Celery metadata key you add to an entry is automatically dropped from the Celery schedule too — it survives in `CONFIG_DICTIONARY` for tooling, no Celery change needed.
+- If you add a key that Celery *should* honour (rare), add it to `_CELERY_ENTRY_KEYS` in `workflows/config.py` — it is a strict whitelist.
+- Symptom of a regression here (whitelist bypassed / entry assigned raw): scheduler "closes from the deploy" — beat exits instantly, `--status` shows `scheduler stopped`, no `scheduler.pid`, `scheduler.log` dead-ends at the startup banner.
+
 ## Queue topology
 
 Queue names live in `workflows/queues.py`. The wire-level topology (which queues are direct vs fanout) is declared in `workflows/config.py` via `SPROUT.conf.task_queues`. The two are paired — every name in the enum must have a matching declaration, otherwise Celery routes to a non-existent queue.

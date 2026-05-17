@@ -47,8 +47,32 @@ CONFIG_DICTIONARY = (
     | WORKFLOW_WORKERS
 )
 
-# Configure the Celery beat schedule based on the current environment's task mapping.
-SPROUT.conf.beat_schedule = CONFIG_DICTIONARY
+# Celery's ScheduleEntry.__init__ only accepts these per-entry keys. Our
+# tasks_config.py entries also carry a custom ``manifesto`` metadata block
+# (code_role / para_bucket / … — consumed by registry/docs tooling, NOT by
+# Celery). Handing the raw dict to Celery makes beat do
+# ``ScheduleEntry(**entry)`` and die on startup with
+# ``TypeError: ScheduleEntry.__init__() got an unexpected keyword argument
+# 'manifesto'`` — every deploy, before it can log or write a pidfile.
+# Whitelist the Celery-safe keys here so the metadata can stay in
+# CONFIG_DICTIONARY for other consumers without ever reaching Celery.
+_CELERY_ENTRY_KEYS = frozenset(
+    {"task", "schedule", "args", "kwargs", "options", "relative"}
+)
+
+
+def _celery_safe_schedule(config: dict) -> dict:
+    """Project each beat entry down to keys Celery's ScheduleEntry accepts."""
+    return {
+        name: {k: v for k, v in entry.items() if k in _CELERY_ENTRY_KEYS}
+        for name, entry in config.items()
+    }
+
+
+# Configure the Celery beat schedule based on the current environment's task
+# mapping. CONFIG_DICTIONARY keeps the full entries (incl. ``manifesto``);
+# only the sanitized projection is handed to Celery.
+SPROUT.conf.beat_schedule = _celery_safe_schedule(CONFIG_DICTIONARY)
 
 # ── Queue topology ────────────────────────────────────────────────────────────
 # Explicit declaration — Celery now creates exactly these queues on RabbitMQ at
