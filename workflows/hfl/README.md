@@ -86,10 +86,30 @@ What happened:   The ${VAR} folder appearing at repo root turned out to be
 Why it stayed:   Small details reveal big problems.
 Possible use:    #lesson  #linkedin-idea
 Tags:            #debugging #root-cause #python
+References:
+                 - https://github.com/owner/repo/commit/abc1234
+                 - C:\dump\2026-05-13\screenshot.png
 ```
 
-Retrieval splits files on `## ` headers, so the format must be preserved
-if entries are hand-edited.
+The format is the formal `HflEntry` DTO (`workflows/hfl/dto/entry.py`) —
+`_render_entry` delegates to it, so every producer emits an identical,
+round-trippable block. Retrieval splits files on `## ` headers, so the
+format must be preserved if entries are hand-edited.
+
+**`References:` (optional).** URLs or host file paths pointing at the
+source material behind the moment. The block is rendered **only when
+present** — entries without references are byte-identical to the
+pre-DTO format. References are searchable via `retrieve` and, on the
+weekly run, `summarize_hfl_week` resolves them (bounded HTTP/file fetch,
+text-only, size/timeout caps) and injects the excerpts into the rollup
+prompt so the summary is grounded in the source — see
+`workflows/hfl/references.py`. `analyze_hfl_media` auto-sets this to the
+source dump file path (the dumps→media→corpus provenance loop).
+
+> Privacy/cost note: resolved file and URL content is sent to Anthropic
+> in the weekly prompt. v1 bounds it (existence check, text-only,
+> per-ref + total byte caps) but does **not** path-allowlist — any
+> readable text file referenced will be resolvable.
 
 ---
 
@@ -176,6 +196,45 @@ alongside the ChatGPT-web task.
 
 ---
 
+## Elasticsearch entry index (dual-write)
+
+The Markdown corpus is the source of truth. Ingest sources scaffolded by
+`/create-new-ingest-source-hfl` **dual-write**: they append the corpus
+entry *and* index the structured `HflEntry` to a queryable Elasticsearch
+index via `workflows/hfl/es_store.py`.
+
+- **Write:** `index_hfl_entry(entry, *, source, synthesized)` →
+  `core.apps.es_logging.app.elasticsearch.post`. Deterministic doc id
+  (`<YYYYMMDD>-<source>-<moment-hash>`) so re-runs upsert, never
+  duplicate. Best-effort: any ES failure is logged and swallowed — the
+  corpus entry and the beat run are unaffected.
+- **Read:** `query_hfl_entries(query, since, until, tags, source, limit)`
+  → `get_index_data` (Query DSL). Returns `[]` on any failure.
+- **Index name:** env `HFL_ES_INDEX` (default `harqis-hfl-entries`).
+  Reuses the existing `ELASTIC_LOGGING` app config — no new credentials.
+- **Retrieval (MCP):** `memory_recall_es` in `workflows/hfl/mcp.py` reads
+  this index by window/query/tags/source (optional Haiku synthesis;
+  `found=false` + no LLM on empty). The corpus-based `memory_recall`
+  is unchanged and still serves the Markdown tiers.
+
+> Note: the legacy entry-writers (`capture`, `ingest_git`, `ingest_ai`,
+> `ingest_chatgpt`, `analyze_media`) are **not** back-filled to ES — only
+> sources scaffolded by `/create-new-ingest-source-hfl` dual-write today.
+> Centrally dual-writing `capture.py` is a clean follow-up if the whole
+> corpus should land in ES.
+
+## Adding a new ingest source
+
+Run `/create-new-ingest-source-hfl <source_name> [<spec_or_url>]
+[--app <name>] [--schedule "<cron>"] [--window-days N] [--no-mcp]`. It
+scaffolds the task (the `ingest_chatgpt` template), prompt, `__init__`
+registration, `tasks_config` beat entry, tests, and a paired read-only
+MCP live-view tool — dual-writing corpus + ES. It composes with
+`/create-new-service-app` for a missing source API and never uses
+`/create-new-workflow`.
+
+---
+
 ## Manifesto alignment
 
 | Task | code_role | para_bucket | express_target | review_artifact | hfl_signal |
@@ -196,3 +255,6 @@ there.
 - [`docs/thesis/MANIFESTO-REPO-UPDATES.md`](../../docs/thesis/MANIFESTO-REPO-UPDATES.md) §3.3, §4.4
 - [`workflows/knowledge/`](../knowledge/README.md) — RAG path the corpus
   joins once it has mass
+- `/create-new-ingest-source-hfl` —
+  [`.claude/skills/create-new-ingest-source-hfl/SKILL.md`](../../.claude/skills/create-new-ingest-source-hfl/SKILL.md)
+  scaffolds new dual-writing ingest sources

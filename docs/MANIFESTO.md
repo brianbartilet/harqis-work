@@ -78,6 +78,9 @@ What happened:
 Why it stayed with me:
 Possible use:
 Tags:  #work-story #debugging #automation #career #personal #funny #lesson #linkedin-idea
+References:            (optional — URLs / host paths to source material;
+                        rendered only when present; resolved by the weekly
+                        summarizer to ground the rollup in the source)
 ```
 
 **Rules for builders:**
@@ -85,6 +88,7 @@ Tags:  #work-story #debugging #automation #career #personal #funny #lesson #link
 - Any new integration that produces personal signal (calendar, location, finance, comms) should consider how its output participates in the HFL corpus.
 - Workflows that summarize, tag, or surface entries are first-class — they are the "Distill" half of CODE applied to lived experience.
 - The smallest useful entry is one line. Don't gate capture on having something profound to say.
+- **Provenance convention:** an `hfl_signal` entry-writer should set `References` to its source artifact (the `express_target` it distilled — a dump file path, commit URL, conversation link). This closes the Capture→Distill→Express loop within one hop: references are not dead weight because the weekly summarizer resolves them. The `manifesto` metadata block on beat entries stays pure intent-routing — this convention lives in the entry, not that block.
 
 ### 3. The 7 Habits — Stephen R. Covey
 

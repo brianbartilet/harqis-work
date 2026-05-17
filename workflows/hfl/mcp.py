@@ -43,6 +43,7 @@ from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 from workflows.dumps.config import get_dumps_target
 from workflows.dumps.files import iter_recent_files
+from workflows.hfl.es_store import query_hfl_entries
 from workflows.hfl.prompts import load_prompt
 from workflows.hfl.tasks.capture import resolve_corpus_dir
 from workflows.hfl.tasks.ingest_git import (
@@ -567,4 +568,95 @@ def register_memory_tools(mcp: FastMCP):
             "synthesized": d.get("synthesized", False),
             "model": model if d.get("synthesized") else None,
             "period": _period_dict(start_d, end_d, label),
+        }
+
+    @mcp.tool()
+    def memory_recall_es(
+        query: str = "",
+        period: str = "",
+        since: str = "",
+        until: str = "",
+        tags: Optional[list[str]] = None,
+        source: str = "",
+        limit: int = 50,
+        synthesize: bool = True,
+        cfg_id__anthropic: str = "ANTHROPIC",
+        model: str = _DEFAULT_HAIKU,
+        max_tokens: int = 1500,
+    ) -> dict:
+        """Recall HFL entries from the Elasticsearch entry index.
+
+        The corpus-based `memory_recall` reads the Markdown files; this
+        tool reads the structured `harqis-hfl-entries` ES index that
+        ingest sources dual-write to (see workflows/hfl/es_store.py). Use
+        it for tag/source-filtered or large-window queries where the ES
+        projection is faster than scanning files. Returns found=false
+        with empty text and makes NO model call when nothing matched (ES
+        unreachable also yields found=false — never raises).
+
+        Args:
+            query:  free-text over moment/what_happened/why_it_stayed.
+            period: same vocabulary as memory_recall (overrides since/until).
+            since:  ISO "YYYY-MM-DD" or relative "-Nd" (used if period empty).
+            until:  ISO "YYYY-MM-DD" (defaults to today).
+            tags:   every tag must be present (AND).
+            source: exact ingest source filter (e.g. "git", "chatgpt").
+            limit:  max entries returned, newest first.
+            synthesize: True → Haiku narrative markdown; False → raw entries.
+        """
+        logger.info("memory_recall_es q=%r period=%r tags=%r source=%r",
+                    query, period, tags, source)
+        start, end, label = _resolve_window(period, since, until)
+        rows = query_hfl_entries(
+            query=query,
+            since=str(start) if start else (since or None),
+            until=str(end) if end else (until or None),
+            tags=tags,
+            source=source or None,
+            limit=limit,
+        )
+        if not rows:
+            logger.info("memory_recall_es: no ES matches — returning empty")
+            return {
+                "found": False, "text": "", "hits": [],
+                "period": _period_dict(start, end, label),
+                "synthesized": False,
+            }
+
+        # Shape ES rows into the same {date, header, body} the corpus
+        # renderer/synthesizer already understands.
+        entries: list[dict] = []
+        for r in rows:
+            hdr = f"{r.get('entry_date') or ''} {r.get('moment') or ''}".strip()
+            body = "\n".join(
+                line for line in (
+                    f"Moment:          {r.get('moment','')}",
+                    f"What happened:   {r.get('what_happened','')}",
+                    f"Why it stayed:   {r.get('why_it_stayed','')}",
+                    f"Possible use:    {r.get('possible_use','')}",
+                    f"Tags:            {' '.join('#'+t for t in (r.get('tags') or []))}",
+                    f"Source:          {r.get('source','')}",
+                ) if line.strip()
+            )
+            entries.append({"date": r.get("entry_date") or "", "header": hdr,
+                            "body": body, "path": "es:" + (r.get("source") or "")})
+
+        synthesized = False
+        if synthesize:
+            text = _synthesize(label, start, end, entries, [], [],
+                               model, cfg_id__anthropic, max_tokens)
+            synthesized = text is not None
+            if text is None:
+                text = _raw_render(entries, [], [])
+        else:
+            text = _raw_render(entries, [], [])
+
+        return {
+            "found": True,
+            "text": text,
+            "hits": [{"type": "es-entry", **r} for r in rows],
+            "count": len(rows),
+            "period": _period_dict(start, end, label),
+            "synthesized": synthesized,
+            "model": model if synthesized else None,
         }

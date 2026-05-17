@@ -298,6 +298,10 @@ def analyze_hfl_media(
                 why_it_stayed=str(parsed.get("why_it_stayed", "")),
                 possible_use=str(parsed.get("possible_use", "")),
                 tags=tags,
+                # Provenance: point the entry back at the source dump file
+                # (manifesto §1 — close the dumps→media→corpus loop; the
+                # summarize resolver can re-read it for the weekly rollup).
+                references=[str(item.path)],
             )
             day_file = corpus_dir / f"{item.mtime.strftime('%Y-%m-%d')}.md"
             with day_file.open("a", encoding="utf-8") as fh:

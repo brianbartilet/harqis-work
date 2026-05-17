@@ -32,6 +32,8 @@ from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import create_logger
 
+from workflows.hfl.dto import HflEntry
+
 _log = create_logger("hfl.capture")
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -57,6 +59,7 @@ def resolve_corpus_dir() -> Path:
 
 
 def _format_tags(tags: Optional[Iterable[str]]) -> str:
+    """Kept for backward compatibility; HflEntry now owns tag formatting."""
     if not tags:
         return ""
     cleaned = [t.strip().lstrip("#") for t in tags if t and t.strip()]
@@ -71,15 +74,24 @@ def _render_entry(
     why_it_stayed: str,
     possible_use: str,
     tags: Optional[Iterable[str]],
+    references: Optional[Iterable[str]] = None,
 ) -> str:
-    return (
-        f"## {when.strftime('%Y-%m-%d %H:%M')}\n"
-        f"Moment:          {moment.strip()}\n"
-        f"What happened:   {what_happened.strip()}\n"
-        f"Why it stayed:   {why_it_stayed.strip()}\n"
-        f"Possible use:    {possible_use.strip()}\n"
-        f"Tags:            {_format_tags(tags)}\n\n"
-    )
+    """Render one corpus entry block.
+
+    Thin delegator to the formal HflEntry DTO (the single source of truth
+    for the on-disk format). With no `references` the output is
+    byte-identical to the pre-DTO format — existing producers (the ingest
+    tasks, analyze_media) are unaffected unless they pass references.
+    """
+    return HflEntry(
+        when=when,
+        moment=moment,
+        what_happened=what_happened,
+        why_it_stayed=why_it_stayed,
+        possible_use=possible_use,
+        tags=tuple(tags) if tags else (),
+        references=tuple(references) if references else (),
+    ).to_markdown()
 
 
 @SPROUT.task()
@@ -91,12 +103,20 @@ def capture_hfl_entry(
     why_it_stayed: str = "",
     possible_use: str = "",
     tags: Optional[list[str]] = None,
+    references: Optional[list[str]] = None,
     when_iso: Optional[str] = None,
 ) -> dict[str, Any]:
     """Append a single HFL entry to the day's corpus file.
 
+    Args:
+        references: optional URLs / host file paths / links pointing at
+            source material for this moment. Stored in the entry (and made
+            searchable by retrieve); summarize_hfl_week resolves them to
+            enrich the weekly rollup. The manifesto provenance convention:
+            an hfl_signal entry should reference its source artifact.
+
     Returns a small dict for the Elasticsearch review trail:
-        {"path": str, "bytes_written": int, "moment": str}
+        {"path": str, "bytes_written": int, "moment": str, "references": int}
 
     Empty `moment` is a no-op — the manifesto's rule is "the smallest useful
     entry is one line", and one line is the moment headline.
@@ -117,6 +137,7 @@ def capture_hfl_entry(
         why_it_stayed=why_it_stayed,
         possible_use=possible_use,
         tags=tags,
+        references=references,
     )
 
     with target.open("a", encoding="utf-8") as fh:
@@ -127,4 +148,5 @@ def capture_hfl_entry(
         "path": str(target),
         "bytes_written": bytes_written,
         "moment": moment.strip()[:120],
+        "references": len(references) if references else 0,
     }

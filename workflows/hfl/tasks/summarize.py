@@ -22,7 +22,9 @@ from core.utilities.logging.custom_logger import create_logger
 from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 
+from workflows.hfl.dto import HflEntry
 from workflows.hfl.prompts import load_prompt
+from workflows.hfl.references import resolve_references as _resolve_references
 from workflows.hfl.tasks.capture import resolve_corpus_dir
 from workflows.hfl.tasks.retrieve import _entries_for_file
 
@@ -66,6 +68,50 @@ def _format_for_prompt(entries: list[dict[str, str]]) -> str:
     )
 
 
+def _build_reference_appendix(
+    entries: list[dict[str, str]],
+    *,
+    timeout: float,
+    max_bytes: int,
+    max_total: int,
+) -> tuple[str, int, int]:
+    """Resolve every entry's references into a bounded prompt appendix.
+
+    Returns (appendix_text, resolved_ok, refs_seen). The appendix is empty
+    when no entry carries references. Unresolved references are still
+    listed (annotated) so the model knows the source existed.
+    """
+    blocks: list[str] = []
+    refs_seen = 0
+    resolved_ok = 0
+    for e in entries:
+        entry = HflEntry.from_markdown(e["header"], e["body"])
+        if not entry.references:
+            continue
+        refs_seen += len(entry.references)
+        results = _resolve_references(
+            entry.references,
+            timeout=timeout, max_bytes=max_bytes, max_total=max_total,
+        )
+        lines = [f'For entry "{e["date"]} — {e["header"]}":']
+        for r in results:
+            if r["ok"] and r["content"]:
+                resolved_ok += 1
+                lines.append(f'  [{r["ref"]}] ({r["reason"]})')
+                lines.append(f'  """{r["content"]}"""')
+            else:
+                lines.append(f'  [{r["ref"]}] (unresolved: {r["reason"]})')
+        blocks.append("\n".join(lines))
+    if not blocks:
+        return "", 0, 0
+    appendix = (
+        "\n\nReferenced material (resolved from entry references — use it "
+        "to ground the summary; do not quote verbatim):\n\n"
+        + "\n\n".join(blocks)
+    )
+    return appendix, resolved_ok, refs_seen
+
+
 @SPROUT.task()
 @log_result()
 def summarize_hfl_week(
@@ -74,11 +120,21 @@ def summarize_hfl_week(
     model: str = _DEFAULT_HAIKU,
     window_days: int = 7,
     max_tokens: int = 1024,
+    resolve_references: bool = True,
+    ref_timeout: float = 10.0,
+    ref_max_bytes: int = 20_000,
+    ref_max_total: int = 60_000,
 ) -> dict[str, Any]:
     """Generate a weekly rollup of the last `window_days` of HFL entries.
 
+    When `resolve_references` is True, each entry's `References:` are
+    fetched (bounded by ref_timeout / ref_max_bytes / ref_max_total) and
+    the resolved excerpts are appended to the prompt so the summary is
+    grounded in the source material, not just the one-line moments.
+
     Returns:
-        {"summary_path": str, "entries_seen": int, "files_seen": int, "model": str}
+        {"summary_path": str, "entries_seen": int, "files_seen": int,
+         "model": str, "references_seen": int, "references_resolved": int}
     """
     entries, files = _collect_window(window_days)
     if not entries:
@@ -91,10 +147,22 @@ def summarize_hfl_week(
             "skipped": "empty",
         }
 
+    appendix, refs_ok, refs_seen = ("", 0, 0)
+    if resolve_references:
+        try:
+            appendix, refs_ok, refs_seen = _build_reference_appendix(
+                entries, timeout=ref_timeout,
+                max_bytes=ref_max_bytes, max_total=ref_max_total,
+            )
+        except Exception as exc:  # noqa: BLE001 - references must not break the rollup
+            _log.warning("hfl.summarize: reference resolution failed (%s)", exc)
+            appendix, refs_ok, refs_seen = ("", 0, 0)
+
     user_msg = (
         f"Window: last {window_days} days "
         f"({entries[0]['date']} → {entries[-1]['date']}).\n\n"
         f"Entries:\n\n{_format_for_prompt(entries)}"
+        f"{appendix}"
     )
 
     client = BaseApiServiceAnthropic(get_anthropic_config(cfg_id__anthropic))
@@ -126,4 +194,6 @@ def summarize_hfl_week(
         "entries_seen": len(entries),
         "files_seen": len(files),
         "model": model,
+        "references_seen": refs_seen,
+        "references_resolved": refs_ok,
     }
