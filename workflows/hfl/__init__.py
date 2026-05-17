@@ -8,3 +8,6 @@
 import workflows.hfl.tasks.capture        # noqa: F401
 import workflows.hfl.tasks.retrieve       # noqa: F401
 import workflows.hfl.tasks.summarize      # noqa: F401
+import workflows.hfl.tasks.analyze_media  # noqa: F401
+import workflows.hfl.tasks.ingest_git     # noqa: F401
+import workflows.hfl.tasks.ingest_ai      # noqa: F401
