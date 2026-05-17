@@ -36,11 +36,12 @@ kanban_num_agents = 4
 [windows-work]
 role = "host"
 queues = ["default", "hud", "default_broadcast"]
-disable = ["kanban"]
+disable = ["kanban", "scheduler"]
 
 [windows-work-all]
 role = "host"
 queues = ["host", "default", "hud", "peon", "adhoc", "default_broadcast", "agent"]
+disable = ["kanban", "scheduler"]
 # Beat must run on exactly one machine cluster-wide (harqis-server is the
 # canonical Beat runner per the "always-on hub" comment), so disable scheduler
 # here. Kanban runs as an agent worker — orchestrator + agent are the same
