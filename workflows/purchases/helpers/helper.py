@@ -35,7 +35,7 @@ def load_scryfall_bulk_data(folder_path: str) -> Optional[Dict[str, Any]]:
     """
     folder = Path(folder_path)
     if not folder.exists():
-        return None
+        raise Exception(f"Path for bulk data does not resolve please check {folder_path}.")
 
     timestamp_pattern = re.compile(r"all-cards-(\d{14})\.json$")
 

@@ -80,7 +80,8 @@ WORKFLOW_PURCHASES = {
             'hfl_signal': False,
         },
     },
-
+    """ RUN THIS MANUALLY WHEN SOLD LISTINGS ARE REMOVED FROM INVENTORY
+    
     'run-job--update_tcg_listings_prices': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.update_tcg_listings_prices',
         'schedule': crontab(day_of_week="mon", hour='4', minute=0),
@@ -101,12 +102,12 @@ WORKFLOW_PURCHASES = {
             'hfl_signal': False,
         },
     },
-
+    """
     'run-job--download_scryfall_bulk_data': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.download_scryfall_bulk_data',
         'schedule': crontab(
             day_of_month='1',
-            hour=2,
+            hour=0,
             minute=0
         ),
         'kwargs': {
