@@ -418,8 +418,8 @@ WORKFLOWS_HUD = {
     },
 
     # ── show_daily_radar ─────────────────────────────────────────────────────
-    # Fires at 08:00, 12:00, 16:00, 20:00, and 00:00 — every 4h across the
-    # waking day plus a midnight wrap-up, skipping the dead 04:00 tick.
+    # Fires at 08:00, 12:00, and 16:00 — every 4h across the working day:
+    # a morning briefing, a midday refresh, and a mid-afternoon refresh.
     # Combines ideas #1, #3, #4, #12, #17 from data/AGENTS_IDEAS.md —
     # desktop context, commitment watcher, email priority, notification
     # triage, and morning-briefing-style top priorities. Inputs are
@@ -427,14 +427,16 @@ WORKFLOWS_HUD = {
     # Trello (open cards on configured boards), Jira (tickets the user
     # is involved in updated in the last 8h), ES failed-jobs (last 8h),
     # plus the DESKTOP LOGS dump.txt tail.
-    # `model`: Sonnet 4.6 — once-per-shift briefing benefits from the
-    # stronger synthesis over Haiku; cost is still small at every-4-hours
-    # cadence on text-only inputs.
+    # `model`: Haiku 4.5 — deliberately the cheap model. This task runs on
+    # CLAUDE_CODE_OAUTH_TOKEN (Claude Max), a quota *shared* with the
+    # operator's interactive Claude Code sessions; Sonnet 4.6 here at a
+    # frequent cadence drained that pool and starved interactive work.
+    # Haiku + a 3×/day cadence keeps the radar's share of the Max limit small.
     # `expires`: 60 * 60 * 2 — half-cadence; a missed run can fire within
     # 2 hours, after that the next scheduled tick refreshes.
     'run-job--show_daily_radar': {
         'task': 'workflows.hud.tasks.hud_radar.show_daily_radar',
-        'schedule': crontab(hour='0,8,12,16,20', minute=0),
+        'schedule': crontab(hour='8,12,16', minute=0),
         'kwargs': {
             # Priority list of sources to pull. Order doubles as prompt-
             # input precedence (first entry's section comes first to the
@@ -456,7 +458,7 @@ WORKFLOWS_HUD = {
                 "es_failed_jobs",
             ],
             "cfg_id__anthropic": "ANTHROPIC",
-            "model": "claude-sonnet-4-6",
+            "model": "claude-haiku-4-5-20251001",
             # Analysis window for every time-bounded collector (Gmail,
             # Jira recent updates, ES failed jobs) AND the [START]/[END]
             # range shown on the HUD. Bump or drop here — no code edit
