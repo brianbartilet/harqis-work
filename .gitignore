@@ -54,7 +54,7 @@ data/
 mcp/claude_desktop_config.json
 
 # ── Celery ───────────────────────────────────────────────────────────────────
-celerybeat-schedule.db
+*celerybeat-schedule.db*
 
 # ── Python cache ─────────────────────────────────────────────────────────────
 __pycache__/

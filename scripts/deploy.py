@@ -143,7 +143,11 @@ def load_machine_config(name: str | None) -> dict:
 
     if name is None:
         host = socket.gethostname()
-        name = cfg.get("hostnames", {}).get(host, "default")
+        # macOS reports the hostname with original case (e.g.
+        # "harqis-ones-Mac-mini.local") while [hostnames] keys are lowercase.
+        # Exact match wins for back-compat; fall back to a case-insensitive hit.
+        hostnames = cfg.get("hostnames", {})
+        name = hostnames.get(host) or hostnames.get(host.lower(), "default")
     machine = cfg.get(name)
     if machine is None:
         machine = cfg.get("default", {"role": "host", "queues": ["default"]})
