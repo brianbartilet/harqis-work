@@ -45,6 +45,7 @@ this scaffold closes.
 | `summarize_hfl_week` | Weekly Haiku 4.5 rollup of the past N days; writes `_summary-YYYY-Www.md` alongside the daily files. | `file:hfl_summary+es_log` | Sundays 21:00 local. |
 | `ingest_chatgpt_activity` | **Primary daily research log.** Auto-discovers the operator's ChatGPT conversations created/updated that day via the ChatGPT web app's private backend (no thread ids), distils the questions asked into ONE corpus entry. Haiku-distilled, raw fallback. No token / no prompts → no entry, no call. | `file:hfl_corpus` | Daily 23:00 local (active — no-op until `CHATGPT_WEB_ACCESS_TOKEN` is set). |
 | `ingest_ai_activity` | Alternate source (OpenAI **Platform API** assistant threads, via `OPENAI_HFL_THREAD_IDS`). Superseded by `ingest_chatgpt_activity` — kept in code but its beat entry is **disabled** (commented-out) to avoid a nightly no-op. | `file:hfl_corpus` | Disabled (uncomment in `tasks_config.py` if you also want Platform-API threads). |
+| `ingest_browsing_activity` | Daily web-browsing digest. Reads the Chrome + Edge `History` SQLite DBs directly (copy-to-temp to dodge the browser lock; no app/credential), distils the day's visits into ONE corpus entry with the most-visited pages as `references`. Haiku-distilled, raw fallback. No history DB / no visits → no entry, no call. No domain filtering by default (`exclude_domains` kwarg to redact). | `file:hfl_corpus+es:hfl-entries` | Daily 23:00 local (active — `os: windows`; no config needed). |
 
 Each carries the manifesto metadata block on the beat entry — see
 `workflows/hfl/tasks_config.py`.
@@ -194,6 +195,27 @@ drive research through the official API rather than the ChatGPT app.
 Uncomment its block in `tasks_config.py` and set the env var to enable it
 alongside the ChatGPT-web task.
 
+### `ingest_browsing_activity` (daily browsing digest)
+
+**Active by default, no configuration.** Reads the *Default* profile
+`History` SQLite DB for Chrome and Edge on the Windows worker (the beat
+entry is `os: windows`), copies each DB (+ `-wal`/`-shm` sidecars) to a
+temp file to dodge the browser's exclusive lock, windows by visit time,
+distils with Haiku, and **dual-writes** corpus + the `harqis-hfl-entries`
+ES index. The most-visited pages are stored as the entry's `references`.
+
+- No history DB found / no visits in the window → clean no-op (no LLM).
+- No domain filtering by default — pass `exclude_domains=("host", …)` in
+  the beat kwargs to redact specific hosts, or trim `max_visits` /
+  `browsers` to bound volume.
+- Non-default profiles or a non-Windows layout: set absolute paths in
+  `HFL_BROWSING_CHROME_HISTORY` / `HFL_BROWSING_EDGE_HISTORY`.
+- Recency caveat: visits still buffered in the browser's `-wal` sidecar
+  (not yet checkpointed) may miss the very latest pages — fine for a
+  once-a-day digest.
+- Live view (no write): the `browsing_activity` MCP tool in
+  `workflows/hfl/mcp.py`.
+
 ---
 
 ## Elasticsearch entry index (dual-write)
@@ -217,11 +239,13 @@ index via `workflows/hfl/es_store.py`.
   `found=false` + no LLM on empty). The corpus-based `memory_recall`
   is unchanged and still serves the Markdown tiers.
 
-> Note: the legacy entry-writers (`capture`, `ingest_git`, `ingest_ai`,
-> `ingest_chatgpt`, `analyze_media`) are **not** back-filled to ES — only
-> sources scaffolded by `/create-new-ingest-source-hfl` dual-write today.
-> Centrally dual-writing `capture.py` is a clean follow-up if the whole
-> corpus should land in ES.
+> Status: `capture`, `ingest_git`, `ingest_ai`, `analyze_media`, and
+> `summarize` now dual-write via the shared `append_entry` helper in
+> `capture.py` (`append_entry` → corpus write + `index_hfl_entry`,
+> returning `(bytes, doc_id)`). `ingest_browsing` dual-writes the same
+> way. **`ingest_chatgpt` is the one remaining gap** — it still uses the
+> bare `_render_entry`+write path and is not yet ES-indexed; routing it
+> through `append_entry` is the clean follow-up.
 
 ## Adding a new ingest source
 
@@ -242,6 +266,7 @@ MCP live-view tool — dual-writing corpus + ES. It composes with
 | `capture_hfl_entry` | capture | area | `file:hfl_corpus` | `es_log+file` | `True` |
 | `retrieve_hfl_corpus` | distill+express | area | `es_log` | `es_log` | `True` |
 | `summarize_hfl_week` | distill+express | area | `file:hfl_summary+es_log` | `es_log+file` | `True` |
+| `ingest_browsing_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` |
 
 This block is also persisted on each beat entry's `'manifesto'` key — see
 `workflows/hfl/tasks_config.py`. `scripts/manifesto_audit.py` reads from

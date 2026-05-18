@@ -124,18 +124,20 @@ def append_entry(
     *,
     source: str,
     synthesized: bool = False,
-) -> int:
+) -> tuple[int, Optional[str]]:
     """Append `entry` to the day's corpus file and best-effort dual-write
     it to the ES entry index (workflows/hfl/es_store.py).
 
     The corpus write is the source of truth and happens first; ES indexing
     is additive and never raises (any failure is swallowed + logged by
-    index_hfl_entry). Returns the bytes written to the corpus file.
+    index_hfl_entry). Returns ``(bytes_written, doc_id)`` where ``doc_id``
+    is the ES document id, or ``None`` if indexing was skipped/failed (the
+    corpus write is unaffected either way).
     """
     with day_file.open("a", encoding="utf-8") as fh:
         bytes_written = fh.write(entry.to_markdown())
-    index_hfl_entry(entry, source=source, synthesized=synthesized)
-    return bytes_written
+    doc_id = index_hfl_entry(entry, source=source, synthesized=synthesized)
+    return bytes_written, doc_id
 
 
 @SPROUT.task()
@@ -184,7 +186,7 @@ def capture_hfl_entry(
         references=references,
     )
 
-    bytes_written = append_entry(target, entry, source="capture")
+    bytes_written, _doc_id = append_entry(target, entry, source="capture")
 
     _log.info("Captured HFL entry to %s (%d bytes)", target, bytes_written)
     return {

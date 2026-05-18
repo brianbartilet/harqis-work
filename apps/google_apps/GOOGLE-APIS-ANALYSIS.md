@@ -226,22 +226,29 @@ Google provides **$200/month free credit** automatically to all accounts with a 
 
 ### Google Photos
 
-**Verdict: Free — limited write API**
+**Verdict: NOT viable for automated library read (post-2025 restriction)**
+
+> **Probed 2026-05-18 against this repo's own OAuth client** (`.env/credentials.json`):
+> OAuth granted `photoslibrary.readonly`, but `mediaItems:search` returned
+> **HTTP 403 `PERMISSION_DENIED` — "Request had insufficient authentication
+> scopes."** Confirmed: Google's **31 Mar 2025** change removed library-wide
+> read from `photoslibrary.readonly`.
 
 | Capability | Notes |
 |-----------|-------|
 | List albums | Free |
-| List photos/media items | Free |
-| Search by date, content category | Free |
-| Upload photos | Free |
+| **List/search library media items** | **Restricted since 2025-03-31** — `mediaItems.list`/`.search` over the full library no longer work with `photoslibrary.readonly`. Requires the interactive **Picker API** (user picks per session — not automatable) or `photoslibrary.readonly.appcreateddata` (only media THIS app uploaded). |
+| Upload photos | Free (`.appendonly`) |
 | Create albums | Free |
-| **Download original files** | **Not supported via API** |
+| **Download original files** | **Not supported via API** (deprecated 2020) |
 | **Delete photos** | **Not supported via API** |
 
-- Auth: OAuth (`https://www.googleapis.com/auth/photoslibrary.readonly` or `.appendonly` or full)
-- **Important caveat**: The Photos Library API cannot download full-resolution originals or delete photos — Google deprecated those capabilities in 2020
+- Auth: OAuth — but `photoslibrary.readonly` no longer implies full-library read.
+- **For an HFL "what did I shoot today" ingest this API is a dead end.** Use a
+  local sync/Takeout folder fed into `workflows/dumps` → `analyze_hfl_media`
+  instead (no Photos API).
 - Enable: [Photos Library API](https://console.cloud.google.com/apis/library/photoslibrary.googleapis.com)
-- **Feasibility: Medium** — useful for listing/searching your library and uploading, but limited compared to manual use
+- **Feasibility: Low** — uploads/albums only; no automated personal-library read.
 
 ---
 

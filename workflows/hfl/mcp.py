@@ -46,6 +46,10 @@ from workflows.dumps.files import iter_recent_files
 from workflows.hfl.es_store import query_hfl_entries
 from workflows.hfl.prompts import load_prompt
 from workflows.hfl.tasks.capture import resolve_corpus_dir
+from workflows.hfl.tasks.ingest_browsing import (
+    collect_browsing_activity,
+    distill_browsing_activity,
+)
 from workflows.hfl.tasks.ingest_git import (
     collect_github_activity,
     distill_git_activity,
@@ -659,4 +663,86 @@ def register_memory_tools(mcp: FastMCP):
             "period": _period_dict(start, end, label),
             "synthesized": synthesized,
             "model": model if synthesized else None,
+        }
+
+    @mcp.tool()
+    def browsing_activity(
+        period: str = "",
+        since: str = "",
+        until: str = "",
+        synthesize: bool = True,
+        browsers: str = "chrome,edge",
+        max_visits: int = 600,
+        exclude_domains: str = "",
+        cfg_id__anthropic: str = "ANTHROPIC",
+        model: str = _DEFAULT_HAIKU,
+    ) -> dict:
+        """Live view of the operator's Chrome/Edge browsing in a window.
+
+        Same gathering the scheduled ingest_browsing_activity uses, but
+        read-only (no corpus or ES write). Defaults to the last 7 days when
+        no window is given. Returns found=false with NO LLM call when there
+        is no history DB or no visits.
+
+        Args:
+            period: same vocabulary as memory_recall (overrides since/until).
+            since:  ISO "YYYY-MM-DD" or relative "-Nd".
+            until:  ISO "YYYY-MM-DD" (defaults to today).
+            synthesize: True → Haiku narrative; False → raw per-domain bullets.
+            browsers: comma-separated subset of "chrome,edge".
+            exclude_domains: comma-separated hosts to drop (default: none).
+        """
+        logger.info(
+            "browsing_activity period=%r since=%r until=%r", period, since, until
+        )
+        start, end, label = _resolve_window(period, since, until)
+        end_d = end or _today()
+        start_d = start or (end_d - timedelta(days=6))
+        bset = tuple(
+            b.strip().lower() for b in browsers.split(",") if b.strip()
+        ) or ("chrome", "edge")
+        deny = tuple(
+            d.strip() for d in exclude_domains.split(",") if d.strip()
+        )
+        try:
+            activity = collect_browsing_activity(
+                since=start_d, until=end_d, browsers=bset,
+                max_visits=max_visits, exclude_domains=deny,
+            )
+        except Exception as exc:  # noqa: BLE001 - surface, don't crash the tool
+            logger.warning("browsing_activity: history unavailable (%s)", exc)
+            return {"found": False, "text": "", "error": "history unavailable",
+                    "period": _period_dict(start_d, end_d, label)}
+
+        if not activity["history_found"]:
+            return {"found": False, "text": "", "domains": [],
+                    "visit_count": 0, "error": "no history db",
+                    "period": _period_dict(start_d, end_d, label)}
+        if activity["visit_count"] == 0:
+            return {"found": False, "text": "", "domains": [],
+                    "visit_count": 0,
+                    "period": _period_dict(start_d, end_d, label)}
+
+        d = distill_browsing_activity(
+            activity, synthesize=synthesize, model=model,
+            cfg_id=cfg_id__anthropic,
+        )
+        if synthesize and d.get("synthesized"):
+            text = (
+                f"**{d['moment']}**\n\n{d['what_happened']}\n\n"
+                f"_{d.get('why_it_stayed','')}_"
+            ).strip()
+        else:
+            text = d["what_happened"]  # raw per-domain bullets
+
+        return {
+            "found": True,
+            "text": text,
+            "domains": activity["domains"][:25],
+            "visit_count": activity["visit_count"],
+            "domain_count": activity["domain_count"],
+            "browsers_read": activity["browsers_read"],
+            "synthesized": d.get("synthesized", False),
+            "model": model if d.get("synthesized") else None,
+            "period": _period_dict(start_d, end_d, label),
         }

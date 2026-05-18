@@ -12,3 +12,4 @@ import workflows.hfl.tasks.analyze_media  # noqa: F401
 import workflows.hfl.tasks.ingest_git     # noqa: F401
 import workflows.hfl.tasks.ingest_ai      # noqa: F401
 import workflows.hfl.tasks.ingest_chatgpt  # noqa: F401
+import workflows.hfl.tasks.ingest_browsing  # noqa: F401

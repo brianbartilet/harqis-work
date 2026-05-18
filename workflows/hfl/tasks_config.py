@@ -153,5 +153,38 @@ WORKFLOW_HFL = {
         },
     },
 
+    # Daily browsing digest — 23:00 local, same slot as the other ingest
+    # sources. Reads the Chrome + Edge `History` SQLite DBs on the Windows
+    # worker (no credential — local file access), distils the day's browsing
+    # into ONE entry (Haiku) and dual-writes corpus + ES. No history DB / no
+    # visits → clean no-op (no LLM). Ships ACTIVE: nothing to configure, the
+    # source is always present on the operator's machine. `os: windows`
+    # because the History DBs live there. No domain filtering by default —
+    # pass `exclude_domains` to redact specific hosts.
+    'run-job--ingest_browsing_activity': {
+        'task': 'workflows.hfl.tasks.ingest_browsing.ingest_browsing_activity',
+        'schedule': crontab(hour=23, minute=0),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'window_days': 1,
+            'browsers': ('chrome', 'edge'),
+            'max_visits': 600,
+            'exclude_domains': (),
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'os': ['windows'],
+            'expires': 60 * 60 * 12,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+        },
+    },
+
 
 }
