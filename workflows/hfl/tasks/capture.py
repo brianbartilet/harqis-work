@@ -33,6 +33,7 @@ from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import create_logger
 
 from workflows.hfl.dto import HflEntry
+from workflows.hfl.es_store import index_hfl_entry
 
 _log = create_logger("hfl.capture")
 
@@ -66,6 +67,29 @@ def _format_tags(tags: Optional[Iterable[str]]) -> str:
     return " ".join(f"#{t}" for t in cleaned)
 
 
+def _build_entry(
+    *,
+    when: datetime,
+    moment: str,
+    what_happened: str,
+    why_it_stayed: str,
+    possible_use: str,
+    tags: Optional[Iterable[str]] = None,
+    references: Optional[Iterable[str]] = None,
+) -> HflEntry:
+    """Construct the formal HflEntry DTO — the single source of truth for
+    both the on-disk Markdown shape and the ES projection."""
+    return HflEntry(
+        when=when,
+        moment=moment,
+        what_happened=what_happened,
+        why_it_stayed=why_it_stayed,
+        possible_use=possible_use,
+        tags=tuple(tags) if tags else (),
+        references=tuple(references) if references else (),
+    )
+
+
 def _render_entry(
     *,
     when: datetime,
@@ -83,15 +107,35 @@ def _render_entry(
     byte-identical to the pre-DTO format — existing producers (the ingest
     tasks, analyze_media) are unaffected unless they pass references.
     """
-    return HflEntry(
+    return _build_entry(
         when=when,
         moment=moment,
         what_happened=what_happened,
         why_it_stayed=why_it_stayed,
         possible_use=possible_use,
-        tags=tuple(tags) if tags else (),
-        references=tuple(references) if references else (),
+        tags=tags,
+        references=references,
     ).to_markdown()
+
+
+def append_entry(
+    day_file: Path,
+    entry: HflEntry,
+    *,
+    source: str,
+    synthesized: bool = False,
+) -> int:
+    """Append `entry` to the day's corpus file and best-effort dual-write
+    it to the ES entry index (workflows/hfl/es_store.py).
+
+    The corpus write is the source of truth and happens first; ES indexing
+    is additive and never raises (any failure is swallowed + logged by
+    index_hfl_entry). Returns the bytes written to the corpus file.
+    """
+    with day_file.open("a", encoding="utf-8") as fh:
+        bytes_written = fh.write(entry.to_markdown())
+    index_hfl_entry(entry, source=source, synthesized=synthesized)
+    return bytes_written
 
 
 @SPROUT.task()
@@ -130,7 +174,7 @@ def capture_hfl_entry(
     corpus_dir.mkdir(parents=True, exist_ok=True)
     target = corpus_dir / f"{when.strftime('%Y-%m-%d')}.md"
 
-    block = _render_entry(
+    entry = _build_entry(
         when=when,
         moment=moment,
         what_happened=what_happened,
@@ -140,8 +184,7 @@ def capture_hfl_entry(
         references=references,
     )
 
-    with target.open("a", encoding="utf-8") as fh:
-        bytes_written = fh.write(block)
+    bytes_written = append_entry(target, entry, source="capture")
 
     _log.info("Captured HFL entry to %s (%d bytes)", target, bytes_written)
     return {

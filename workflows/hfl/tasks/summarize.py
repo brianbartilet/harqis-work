@@ -23,6 +23,7 @@ from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 
 from workflows.hfl.dto import HflEntry
+from workflows.hfl.es_store import index_hfl_entry
 from workflows.hfl.prompts import load_prompt
 from workflows.hfl.references import resolve_references as _resolve_references
 from workflows.hfl.tasks.capture import resolve_corpus_dir
@@ -188,6 +189,26 @@ def summarize_hfl_week(
         f"{len(entries)} entries across {len(files)} files\n\n"
     )
     out_path.write_text(header + summary_text + "\n", encoding="utf-8")
+
+    # Dual-write the rollup as one synthesized entry so the weekly view is
+    # queryable via the memory_recall_es MCP alongside the per-day entries
+    # (manifesto: summarize's express_target is file:hfl_summary+es_log).
+    # Best-effort — the file write above is the source of truth.
+    index_hfl_entry(
+        HflEntry(
+            when=datetime.now(),
+            moment=f"HFL weekly summary — {iso_year}-W{iso_week:02d}",
+            what_happened=summary_text,
+            why_it_stayed=(
+                f"Rollup of {len(entries)} entries across {len(files)} "
+                f"files ({entries[0]['date']} → {entries[-1]['date']})."
+            ),
+            possible_use="weekly-review",
+            tags=("weekly", "summary", f"{iso_year}-W{iso_week:02d}"),
+        ),
+        source="summarize",
+        synthesized=True,
+    )
 
     return {
         "summary_path": str(out_path),

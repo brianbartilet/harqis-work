@@ -45,7 +45,11 @@ from apps.open_ai.references.models.assistants.common import ListQuery
 from apps.open_ai.references.services.assistants.messages import ServiceMessages
 
 from workflows.hfl.prompts import load_prompt
-from workflows.hfl.tasks.capture import _render_entry, resolve_corpus_dir
+from workflows.hfl.tasks.capture import (
+    _build_entry,
+    append_entry,
+    resolve_corpus_dir,
+)
 from workflows.hfl.tasks.ingest_git import _parse_model_json
 
 _log = create_logger("hfl.ingest_ai")
@@ -309,7 +313,7 @@ def ingest_ai_activity(
     corpus_dir = resolve_corpus_dir()
     corpus_dir.mkdir(parents=True, exist_ok=True)
     day_file = corpus_dir / f"{when.strftime('%Y-%m-%d')}.md"
-    block = _render_entry(
+    entry = _build_entry(
         when=when,
         moment=d["moment"],
         what_happened=d["what_happened"],
@@ -317,8 +321,10 @@ def ingest_ai_activity(
         possible_use=d["possible_use"] or "research-log",
         tags=tags,
     )
-    with day_file.open("a", encoding="utf-8") as fh:
-        fh.write(block)
+    append_entry(
+        day_file, entry,
+        source="ai", synthesized=d.get("synthesized", False),
+    )
 
     _log.info("ingest_ai: entry written (%d prompts, %d threads) → %s",
               activity["message_count"], activity["thread_count"], day_file)

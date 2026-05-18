@@ -43,7 +43,11 @@ from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropi
 from workflows.dumps.config import get_dumps_target
 from workflows.dumps.files import iter_recent_files
 from workflows.hfl.prompts import load_prompt
-from workflows.hfl.tasks.capture import _render_entry, resolve_corpus_dir
+from workflows.hfl.tasks.capture import (
+    _build_entry,
+    append_entry,
+    resolve_corpus_dir,
+)
 
 _log = create_logger("hfl.analyze_media")
 
@@ -291,7 +295,7 @@ def analyze_hfl_media(
                 if t and t not in tags:
                     tags.append(t)
 
-            block = _render_entry(
+            entry = _build_entry(
                 when=item.mtime,
                 moment=str(parsed.get("moment", "")),
                 what_happened=str(parsed.get("what_happened", "")),
@@ -304,8 +308,8 @@ def analyze_hfl_media(
                 references=[str(item.path)],
             )
             day_file = corpus_dir / f"{item.mtime.strftime('%Y-%m-%d')}.md"
-            with day_file.open("a", encoding="utf-8") as fh:
-                fh.write(block)
+            # Vision pass = an LLM (Haiku) distillation → synthesized.
+            append_entry(day_file, entry, source="media", synthesized=True)
             entries += 1
             _log.info("hfl.media: entry from %s → %s", item.path.name, day_file)
 

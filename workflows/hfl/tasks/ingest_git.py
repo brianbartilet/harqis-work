@@ -38,7 +38,11 @@ from apps.github.config import CONFIG as GITHUB_CONFIG
 from apps.github.references.web.api.repos import ApiServiceGitHubRepos
 
 from workflows.hfl.prompts import load_prompt
-from workflows.hfl.tasks.capture import _render_entry, resolve_corpus_dir
+from workflows.hfl.tasks.capture import (
+    _build_entry,
+    append_entry,
+    resolve_corpus_dir,
+)
 
 _log = create_logger("hfl.ingest_git")
 
@@ -273,7 +277,7 @@ def ingest_git_activity(
     corpus_dir = resolve_corpus_dir()
     corpus_dir.mkdir(parents=True, exist_ok=True)
     day_file = corpus_dir / f"{when.strftime('%Y-%m-%d')}.md"
-    block = _render_entry(
+    entry = _build_entry(
         when=when,
         moment=d["moment"],
         what_happened=d["what_happened"],
@@ -281,8 +285,10 @@ def ingest_git_activity(
         possible_use=d["possible_use"] or "standup",
         tags=tags,
     )
-    with day_file.open("a", encoding="utf-8") as fh:
-        fh.write(block)
+    append_entry(
+        day_file, entry,
+        source="git", synthesized=d.get("synthesized", False),
+    )
 
     _log.info("ingest_git: entry written (%d commits, %d repos) → %s",
               activity["commit_count"], activity["repo_count"], day_file)
