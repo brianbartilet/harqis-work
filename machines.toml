@@ -101,3 +101,18 @@ kanban_profile = "agent:code"
 #     paths = [ "<absolute-path>", ... ]
 #
 # Full reference: workflows/dumps/README.md
+
+
+# ── Git auto-push (workflows/desktop/tasks/commands.py :: git_auto_push_paths) ─
+# Schema only — real paths belong in machines.local.toml.
+#
+# A daily 02:00 broadcast task fans out to every worker on the
+# default_broadcast queue. Each worker iterates its own list of local repo
+# paths, runs add+commit+push, and rebases on non-fast-forward. Non-git or
+# missing paths are silent skips; rebase conflicts auto-abort so the tree
+# stays clean for the next run. Auth is delegated to the local git config
+# (SSH key / credential helper) — terminal prompts are disabled so missing
+# creds fail fast instead of hanging the daemon.
+#
+#     [<machine>.git_autopush]
+#     paths = [ "<absolute-path-to-git-repo>", "<absolute-path-to-git-repo>" ]

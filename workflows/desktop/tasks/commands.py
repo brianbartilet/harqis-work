@@ -1,4 +1,5 @@
 import os, subprocess, sys, tomllib
+from datetime import datetime
 from pathlib import Path
 
 from core.apps.sprout.app.celery import SPROUT
@@ -9,6 +10,7 @@ from apps.rainmeter.references.helpers.config_builder import _refresh_app
 from apps.desktop.helpers.feed import feed
 
 from apps.apps_config import CONFIG_MANAGER
+from workflows.dumps.config import load_merged_config, resolve_local_machine_name
 
 # Repo root resolved at import time — workflows/desktop/tasks/commands.py → 4 parents up.
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -146,5 +148,104 @@ def run_n8n_sequence() -> str:
             print(f"\nError running {path}: {e}")
 
     return " | ".join(str(s) for s in scripts)
+
+
+# ── Auto-push: fanout across workers, each commits + pushes its local paths ──
+
+def _git(args: list[str], cwd: str, timeout: int = 60) -> subprocess.CompletedProcess:
+    """Run git with terminal prompts disabled so creds-missing fails fast."""
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    return subprocess.run(
+        ["git", *args], cwd=cwd, env=env, timeout=timeout,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+
+
+def _push_one_repo(path: str) -> tuple[str, str]:
+    """Add+commit+push one repo. Returns (status, detail).
+
+    status: 'pushed' | 'no-changes' | 'skipped' | 'error'.
+    Never raises — the daily broadcast must not die on one bad path.
+    """
+    p = Path(path)
+    if not p.is_dir() or not (p / ".git").exists():
+        return "skipped", "not a git repo"
+
+    try:
+        # 1. Stage every working-tree change (tracked + untracked).
+        _git(["add", "-A"], cwd=path)
+
+        # 2. Anything to commit?
+        staged = _git(["diff", "--cached", "--name-only"], cwd=path)
+        has_staged = bool(staged.stdout.strip())
+
+        if has_staged:
+            stat = _git(["diff", "--cached", "--shortstat"], cwd=path).stdout.strip()
+            stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+            msg = f"chore(auto): sync {stamp} — {stat}" if stat else f"chore(auto): sync {stamp}"
+            c = _git(["commit", "-m", msg], cwd=path)
+            if c.returncode != 0:
+                return "error", f"commit failed: {(c.stderr or c.stdout).strip()[:200]}"
+
+        # 3. Anything to push? (covers the case where commit ran AND the case
+        #    where local was already ahead of upstream from a prior failed run.)
+        ahead = _git(
+            ["rev-list", "--count", "@{upstream}..HEAD"], cwd=path
+        )
+        if ahead.returncode != 0 or ahead.stdout.strip() == "0":
+            return ("no-changes", "nothing to push") if not has_staged else ("pushed", "committed but no upstream delta")
+
+        # 4. Push. On non-fast-forward, sync via rebase, abort cleanly on conflict.
+        push = _git(["push"], cwd=path)
+        if push.returncode == 0:
+            return "pushed", msg if has_staged else "pushed prior local commits"
+
+        stderr = (push.stderr or "").lower()
+        if "non-fast-forward" in stderr or "fetch first" in stderr or "rejected" in stderr:
+            pull = _git(["pull", "--rebase", "--autostash"], cwd=path, timeout=120)
+            if pull.returncode != 0:
+                # Conflicts: abort so the tree is left clean for the next run.
+                _git(["rebase", "--abort"], cwd=path)
+                return "error", f"rebase conflicted — aborted; manual resolve needed: {pull.stderr.strip()[:200]}"
+            push2 = _git(["push"], cwd=path)
+            if push2.returncode == 0:
+                return "pushed", "rebased and pushed"
+            return "error", f"push after rebase failed: {push2.stderr.strip()[:200]}"
+
+        return "error", f"push failed: {push.stderr.strip()[:200]}"
+    except subprocess.TimeoutExpired as exc:
+        return "error", f"timeout running {' '.join(exc.cmd)}"
+    except Exception as exc:  # noqa: BLE001 — broadcast must keep iterating
+        return "error", f"unexpected: {exc!r}"
+
+
+def _resolve_auto_push_paths() -> list[str]:
+    """Read this machine's git_autopush.paths from machines.local.toml."""
+    cfg = load_merged_config()
+    machine = resolve_local_machine_name(cfg)
+    block = (cfg.get(machine, {}) or {}).get("git_autopush", {}) or {}
+    return [str(p) for p in (block.get("paths") or [])]
+
+
+@log_result()
+@SPROUT.task()
+def git_auto_push_paths() -> str:
+    """Broadcast: each worker iterates its own `[<machine>.git_autopush].paths`
+    from machines.local.toml, stages+commits+pushes each repo. Missing/non-git
+    paths are skipped. Push rejections trigger a `pull --rebase --autostash`
+    and a single retry; conflicts abort cleanly and surface as 'error'.
+
+    Returns a one-line summary per path (`<path>: <status> — <detail>`).
+    """
+    paths = _resolve_auto_push_paths()
+    if not paths:
+        return "no paths configured"
+
+    lines: list[str] = []
+    for path in paths:
+        status, detail = _push_one_repo(path)
+        lines.append(f"{path}: {status} — {detail}")
+        print(f"\n=== {path} ===\n{status}: {detail}")
+    return " | ".join(lines)
 
 

@@ -59,6 +59,27 @@ WORKFLOWS_DESKTOP = {
         },
     },
 
+    # Daily 02:00 — every worker on default_broadcast stages+commits+pushes
+    # the repos listed under its `[<machine>.git_autopush].paths` block in
+    # machines.local.toml. Non-git paths and clean trees are silent no-ops;
+    # rebase conflicts auto-abort so the tree stays clean for the next run.
+    'run-job--git_auto_push_paths': {
+        'task': 'workflows.desktop.tasks.commands.git_auto_push_paths',
+        'schedule': crontab(hour=2, minute=0),
+        'args': [],
+        "options": {
+            "expires": 60 * 60 * 24,
+            "queue": WorkflowQueue.DEFAULT_BROADCAST,
+        },
+        'manifesto': {
+            'code_role': 'organize',
+            'para_bucket': 'area',
+            'express_target': 'git_remote+es_log',
+            'review_artifact': 'es_log',
+            'hfl_signal': False,
+        },
+    },
+
     'run-job--run_n8n_sequence': {
         'task': 'workflows.desktop.tasks.commands.run_n8n_sequence',
         'schedule': crontab(hour='0', minute='0'),
