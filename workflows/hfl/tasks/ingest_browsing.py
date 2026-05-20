@@ -7,6 +7,18 @@ Homework-for-Life entry (Haiku), and dual-writes it (Markdown corpus +
 the harqis-hfl-entries ES index) so the day's browsing flows into
 summarize_hfl_week + the memory_recall MCP automatically.
 
+Fanout (hfl_broadcast)
+----------------------
+This task is broadcast to every Celery worker subscribed to the
+``hfl_broadcast`` queue (see workflows/config.py + machines.toml). Each
+worker independently reads ITS OWN local browser history and produces one
+entry per day, so a multi-machine setup captures each device's browsing
+without any cross-machine coordination. Workers with no `History` DB (e.g.
+headless servers) no-op cleanly — no LLM, no entry. The ES doc id is
+deterministic on (date, source="browsing", moment-hash), so two machines'
+distinct browsing produces two distinct docs; the corpus daily file gets
+one ``## …`` block appended per contributing machine.
+
 Why this exists (and the caveats — read these):
   - There is no "browsing history API". Chromium browsers keep history in
     a local SQLite DB; this task reads it directly. No app integration is

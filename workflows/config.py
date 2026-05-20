@@ -97,6 +97,7 @@ SPROUT.conf.task_queues = (
     Broadcast(WorkflowQueue.DEFAULT_BROADCAST.value),
     Broadcast(WorkflowQueue.HUD_BROADCAST.value),
     Broadcast(WorkflowQueue.WORKERS_BROADCAST.value),
+    Broadcast(WorkflowQueue.HFL_BROADCAST.value),
 )
 SPROUT.conf.task_default_queue = WorkflowQueue.DEFAULT.value
 
@@ -126,6 +127,7 @@ _BROADCAST_QUEUES = (
     WorkflowQueue.HUD_BROADCAST.value,
     WorkflowQueue.WORKERS_BROADCAST.value,
     WorkflowQueue.AGENT_BROADCAST.value,
+    WorkflowQueue.HFL_BROADCAST.value,
 )
 
 

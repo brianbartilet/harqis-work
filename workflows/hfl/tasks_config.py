@@ -11,9 +11,12 @@ Five tasks:
                            recently-updated repos into one corpus entry
                            (Haiku, raw fallback).
   - summarize_hfl_week   : weekly rollup of the past 7 days of entries (Haiku).
-  - retrieve_hfl_corpus  : retrieval API — wired here as an ADHOC slot so it
-                           can be invoked via .delay() / MCP; the schedule is
-                           Sunday once-a-week (effectively disabled).
+  - retrieve_hfl_corpus  : retrieval API + weekly digest. Beat fires Sundays
+                           at 20:00 with email_to=brian.bartilet@gmail.com to
+                           mail the past 7 days' raw entries (closes the
+                           capture→ingest→retrieve loop). MCP / .delay()
+                           callers can still invoke it with email_to=None for
+                           pure programmatic recall.
 
 This workflow is active — `WORKFLOW_HFL` is merged into
 `workflows/config.py`'s beat schedule.
@@ -130,37 +133,48 @@ WORKFLOW_HFL = {
         },
     },
 
-    # Retrieval — ADHOC. Schedule disabled (Sunday 03:34); real callers invoke
-    # via .delay() or MCP tool.
+    # Retrieval — weekly Sunday digest at 20:00 local, one hour before
+    # summarize_hfl_week. Mails the past 7 days of raw HFL entries to the
+    # operator so the capture → ingest → retrieve → notify loop closes
+    # automatically. MCP / .delay() callers can still hit this task with
+    # email_to=None for pure programmatic recall (no mail). expires=23h so a
+    # missed Sunday slot is dropped before the next week's tick lines up.
     'run-job--retrieve_hfl_corpus': {
         'task': 'workflows.hfl.tasks.retrieve.retrieve_hfl_corpus',
-        'schedule': crontab(day_of_week='sun', hour=3, minute=34),
+        'schedule': crontab(day_of_week='sun', hour=20, minute=0),
         'kwargs': {
             'query': '',
-            'k': 8,
-            'since': None,
+            'k': 50,
+            'since': '-7d',
+            'email_to': 'brian.bartilet@gmail.com',
+            'cfg_id__gmail': 'GOOGLE_GMAIL_SEND',
         },
         'options': {
             'queue': WorkflowQueue.HFL,
-            'expires': 60 * 60,
+            'expires': 60 * 60 * 23,
         },
         'manifesto': {
             'code_role': 'distill+express',
             'para_bucket': 'area',
-            'express_target': 'es_log',
+            'express_target': 'es_log+email',
             'review_artifact': 'es_log',
             'hfl_signal': True,
         },
     },
 
     # Daily browsing digest — 23:00 local, same slot as the other ingest
-    # sources. Reads the Chrome + Edge `History` SQLite DBs on the Windows
+    # sources. Reads the Chrome + Edge `History` SQLite DBs on the local
     # worker (no credential — local file access), distils the day's browsing
-    # into ONE entry (Haiku) and dual-writes corpus + ES. No history DB / no
-    # visits → clean no-op (no LLM). Ships ACTIVE: nothing to configure, the
-    # source is always present on the operator's machine. `os: windows`
-    # because the History DBs live there. No domain filtering by default —
-    # pass `exclude_domains` to redact specific hosts.
+    # into ONE entry (Haiku) and dual-writes corpus + ES.
+    #
+    # Fanout via `hfl_broadcast`: every subscribed worker runs this at 23:00
+    # against its own browser history, so each machine contributes one entry
+    # per day. Workers with no history DB / no visits no-op cleanly (no LLM,
+    # no entry). Each entry's ES doc id is deterministic on
+    # (date, source="browsing", moment-hash) so two machines with distinct
+    # browsing produce two docs; an unlikely identical moment-hash would
+    # upsert, which is harmless. No domain filtering by default — pass
+    # `exclude_domains` to redact specific hosts.
     'run-job--ingest_browsing_activity': {
         'task': 'workflows.hfl.tasks.ingest_browsing.ingest_browsing_activity',
         'schedule': crontab(hour=23, minute=0),
@@ -173,8 +187,7 @@ WORKFLOW_HFL = {
             'exclude_domains': (),
         },
         'options': {
-            'queue': WorkflowQueue.HFL,
-            'os': ['windows'],
+            'queue': WorkflowQueue.HFL_BROADCAST,
             'expires': 60 * 60 * 12,
         },
         'manifesto': {

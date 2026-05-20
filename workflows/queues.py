@@ -28,3 +28,5 @@ class WorkflowQueue(StrEnum):
     HUD_BROADCAST = "hud_broadcast"
     WORKERS_BROADCAST= "workers_broadcast"
     AGENT_BROADCAST = "agents_broadcast"
+    HFL_BROADCAST = "hfl_broadcast"   # HFL ingest tasks fanned out to every worker
+                                      # (each captures its own local signal)
