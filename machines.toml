@@ -29,7 +29,7 @@ queues = ["default", "default_broadcast"]
 # ── Always-on hub: TCG/PEON/AGENT workloads, full host stack ─────────────────
 [harqis-server]
 role = "host"
-queues = ["default", "tcg", "host", "adhoc", "default_broadcast", "n8n"]
+queues = ["default", "tcg", "host", "adhoc", "hfl", "default_broadcast", "n8n"]
 kanban_num_agents = 4
 
 # ── Windows work box: DEFAULT + HUD, no Kanban here ──────────────────────────
