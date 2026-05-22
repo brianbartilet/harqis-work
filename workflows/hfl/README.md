@@ -46,6 +46,7 @@ this scaffold closes.
 | `ingest_chatgpt_activity` | **Primary daily research log.** Auto-discovers the operator's ChatGPT conversations created/updated that day via the ChatGPT web app's private backend (no thread ids), distils the questions asked into ONE corpus entry. Haiku-distilled, raw fallback. No token / no prompts → no entry, no call. | `file:hfl_corpus` | Daily 23:00 local (active — no-op until `CHATGPT_WEB_ACCESS_TOKEN` is set). |
 | `ingest_ai_activity` | Alternate source (OpenAI **Platform API** assistant threads, via `OPENAI_HFL_THREAD_IDS`). Superseded by `ingest_chatgpt_activity` — kept in code but its beat entry is **disabled** (commented-out) to avoid a nightly no-op. | `file:hfl_corpus` | Disabled (uncomment in `tasks_config.py` if you also want Platform-API threads). |
 | `ingest_browsing_activity` | Daily web-browsing digest. Reads the Chrome + Edge `History` SQLite DBs directly (copy-to-temp to dodge the browser lock; no app/credential), distils the day's visits into ONE corpus entry with the most-visited pages as `references`. Haiku-distilled, raw fallback. No history DB / no visits → no entry, no call. No domain filtering by default (`exclude_domains` kwarg to redact). | `file:hfl_corpus+es:hfl-entries` | Daily 23:00 local (active — `os: windows`; no config needed). |
+| `collect_time_capsule` | **On-demand, time-ranged archive ingest.** Sweeps a directory (and subdirs) for files dated within a period, extracts text / docs / Haiku vision captions into a bounded manifest + digest. The COLLECT half of the `/time-capsule-synthesizer` skill (Claude synthesizes ONE rollup entry from the digest, then dual-writes it via `capture_hfl_entry`). Not scheduled. | `file:hfl_corpus+es:hfl-entries` (via the skill) | Adhoc — driven by `/time-capsule-synthesizer`. |
 
 Each carries the manifesto metadata block on the beat entry — see
 `workflows/hfl/tasks_config.py`.
@@ -246,6 +247,43 @@ index via `workflows/hfl/es_store.py`.
 > way. **`ingest_chatgpt` is the one remaining gap** — it still uses the
 > bare `_render_entry`+write path and is not yet ES-indexed; routing it
 > through `append_entry` is the clean follow-up.
+
+### On-demand archive ingest (`/time-capsule-synthesizer`)
+
+A retrospective, time-ranged complement to the recurring ingest sources above.
+Point it at a directory and a flexible period — `May 2020`, `August 1, 2002`,
+`June-July 2019`, `2019-06-01..2019-07-31`, `since 2020-01-01`, `last 90 days` —
+and it sweeps the whole tree (by file `mtime`) for that window, ingests every
+file's content, and synthesizes **one** "time capsule" rollup entry (the notable
+events, actions, reminders, and artifacts of the period) with the contributing
+files as `references`.
+
+It's a **hybrid** (`workflows/hfl/tasks/time_capsule.py` + the skill):
+
+1. **COLLECT** (`run_collect` / the `collect_time_capsule` task) — walks the tree
+   via `workflows/dumps/files.iter_recent_files`, classifies each file, and
+   extracts a bounded representation: a head snippet for text/logs/code; a short
+   **Haiku** vision caption for images + sampled video frames (reuses
+   `analyze_media`'s encoders); extracted text for documents. Writes
+   `logs/time-capsule/<slug>.{manifest.json,digest.md}` and prints the digest.
+2. **SYNTHESIZE** — Claude reads the digest and composes the rollup fields
+   (grounded in the files; no invention), writing them to `<slug>.synthesis.json`.
+3. **WRITE** (`run_write`) — dual-writes the entry through `capture.append_entry`
+   (corpus + the `harqis-hfl-entries` ES index, `source="time-capsule"`).
+
+- **Default root** is `/Volumes/harqis-data` (the harqis-server data volume, per
+  `machines.local.toml`). The skill must run on a host where `--root` is mounted
+  (harqis-server for the default); it reports `root-unreachable` otherwise, with a
+  dispatch fallback for advanced cross-host use.
+- **One rollup per run** (not per file/day); empty window → no entry, no LLM call.
+- **Document parsers are optional** (`pypdf`, `python-docx`, `openpyxl`,
+  `python-pptx` in `requirements.txt`). A missing parser, or missing `cv2`, or an
+  unreadable file → that file degrades to metadata-only; the sweep never crashes.
+- **Audio is metadata-only for now** — no transcriber is wired. Audio files are
+  recorded (name, mtime, size) but not transcribed; choosing a transcriber
+  (e.g. faster-whisper, or a cloud STT) is the clean follow-up.
+- Cost is Haiku-only and bounded by `--max-files` / `--max-caption-files` /
+  `--no-caption`.
 
 ## Adding a new ingest source
 
