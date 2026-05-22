@@ -72,15 +72,45 @@ def load_env_file(path: Path = ENV_FILE) -> dict[str, str]:
     return out
 
 
+def _machine_env_vars() -> dict[str, str]:
+    """Per-machine env_vars from machines.toml / machines.local.toml for this host.
+
+    Resolved via deploy.py's machine-config loader (lazy import so this
+    lightweight launcher stays independent of the orchestration layer at import
+    time). Returns {} on any failure — a missing or malformed machines.toml, or
+    a remote worker using CONFIG_SOURCE=redis/http, must never break startup.
+    """
+    try:
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        import deploy  # lazy, optional — the orchestration layer above us
+        return deploy.machine_env_vars(deploy.load_machine_config(None))
+    except Exception:
+        return {}
+
+
 def setup_env() -> None:
     """Idempotent env setup: load apps.env, set PYTHONPATH and standard vars.
 
     apps.env values override any inherited shell env — the repo's pinned
-    config is the source of truth for daemons. Defaults below (PYTHONPATH,
-    ROOT_DIRECTORY, etc.) stay `setdefault` since they're last-resort
-    fallbacks, not overrides.
+    config is the source of truth for daemons. Per-machine env_vars from
+    machines.toml/.local.toml are then layered on top (they win over apps.env).
+    Defaults below (PYTHONPATH, ROOT_DIRECTORY, etc.) stay `setdefault` since
+    they're last-resort fallbacks, not overrides.
     """
     for key, value in load_env_file().items():
+        os.environ[key] = value
+
+    # Per-machine env_vars (machines.toml / machines.local.toml) win over the
+    # shared apps.env. These are deploy-topology values — local paths, ports,
+    # hostnames — that legitimately differ per machine. Applying them here, at
+    # the one chokepoint every daemon passes through, means: (a) a manually
+    # launched daemon gets them too, not only deploy.py-spawned ones; and (b) a
+    # stale apps.env duplicate can never clobber the per-machine value (the bug
+    # that fed the Mac worker a Windows Scryfall path). Precedence:
+    # machine_env_vars > apps.env > inherited shell.
+    # See docs/info/WORKER-CONFIG-DISTRIBUTION.md §3.
+    for key, value in _machine_env_vars().items():
         os.environ[key] = value
 
     # Pin cwd to repo root: core's file loader (IFileLoader) walks up from
