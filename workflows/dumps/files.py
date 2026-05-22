@@ -16,16 +16,41 @@ from pathlib import Path
 from typing import Iterator
 
 
-def previous_day_window(now: datetime | None = None) -> tuple[datetime, datetime]:
-    """Return (start, end) datetimes for the local previous calendar day.
+def collect_window(
+    window_days: int = 1,
+    include_today: bool = False,
+    now: datetime | None = None,
+) -> tuple[datetime, datetime]:
+    """Return (start, end) naive local-time bounds for a collect run.
 
-    Both bounds are timezone-naive local-time `datetime` objects.
-    `start` is yesterday 00:00:00, `end` is today 00:00:00 (exclusive).
+    Args:
+        window_days:   how many calendar days the window spans (>= 1).
+        include_today: when True the window extends through *now* (so files
+                       edited today are in scope); when False it stops at
+                       today 00:00 (the classic "previous full day(s)" batch).
+        now:           override the clock (testing).
+
+    Examples (window_days=1):
+        include_today=False → [yesterday 00:00, today 00:00)   ← daily batch
+        include_today=True  → [today 00:00,     now]           ← same-day catch-up
     """
     now = now or datetime.now()
+    days = max(1, int(window_days))
     today_midnight = datetime(now.year, now.month, now.day)
-    yesterday_midnight = today_midnight - timedelta(days=1)
-    return yesterday_midnight, today_midnight
+    if include_today:
+        end = now
+        start = today_midnight - timedelta(days=days - 1)
+    else:
+        end = today_midnight
+        start = today_midnight - timedelta(days=days)
+    return start, end
+
+
+def previous_day_window(now: datetime | None = None) -> tuple[datetime, datetime]:
+    """Return (start, end) for the local previous calendar day — i.e.
+    `collect_window(window_days=1, include_today=False)`. Kept for callers
+    that want the classic once-a-day batch window."""
+    return collect_window(window_days=1, include_today=False, now=now)
 
 
 @dataclass(frozen=True)

@@ -41,6 +41,33 @@ WORKFLOW_DUMPS = {
         },
     },
 
+    # ── Intra-day catch-up — every 4h during the working day, ships TODAY's ─
+    # edits without waiting for the next 00:00 batch. Same broadcast task, but
+    # `include_today=True` widens the window to [today 00:00, now] so same-day
+    # changes (and a missed midnight run) propagate to the host the same day.
+    # Files land in a `<machine>-daily-dumps-<today>` folder; each run re-ships
+    # the day's growing set (overwrites), so keep dump paths scoped. Tune the
+    # cadence here if 4h is too coarse/frequent.
+    'run-job--broadcast_collect_today_dumps': {
+        'task': 'workflows.dumps.tasks.broadcast_collect_daily_dumps',
+        'schedule': crontab(hour='8,12,16,20', minute=30),
+        'kwargs': {
+            'window_days': 1,
+            'include_today': True,
+        },
+        'options': {
+            'queue': WorkflowQueue.DEFAULT_BROADCAST,
+            'expires': 60 * 60 * 4,
+        },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'file:dump_inbox',
+            'review_artifact': 'es_log',
+            'hfl_signal': True,
+        },
+    },
+
     # ── 00:05 every day — harqis-server pulls from Android et al. ───────────
     # Staggered 5 min after the broadcast so most pushes have landed first.
     'run-job--pull_daily_dumps_from_remotes': {

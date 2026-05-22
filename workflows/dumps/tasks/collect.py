@@ -18,10 +18,10 @@ from workflows.dumps.config import (
     get_local_dumps_config,
 )
 from workflows.dumps.files import (
+    collect_window,
     format_dump_dir_name,
     group_by_source,
     iter_recent_files,
-    previous_day_window,
 )
 from workflows.dumps.transport import copy_locally, ship_via_ssh_tar
 
@@ -31,11 +31,21 @@ _log = create_logger("dumps.collect")
 @SPROUT.task(name="workflows.dumps.tasks.broadcast_collect_daily_dumps")
 @log_result()
 def broadcast_collect_daily_dumps(**kwargs) -> dict:
-    """Collect yesterday's files on this worker and ship to harqis-server.
+    """Collect recent files on this worker and ship to harqis-server.
+
+    Kwargs:
+        window_days:   calendar days the collect window spans (default 1).
+        include_today: when True, extend the window through *now* so files
+                       edited today are collected (default False — the classic
+                       previous-full-day batch). Set True for an intra-day
+                       catch-up run that ships same-day edits.
 
     Returns a dict with `machine`, `files_count`, `bytes_total`, and
     `destination` so the result is greppable in Elasticsearch / Flower.
     """
+    window_days = int(kwargs.get("window_days", 1))
+    include_today = bool(kwargs.get("include_today", False))
+
     local = get_local_dumps_config()
     if not local.paths:
         _log.info("dumps: no [%s.daily_dumps] paths configured — skipping",
@@ -47,9 +57,11 @@ def broadcast_collect_daily_dumps(**kwargs) -> dict:
             "skipped": "no paths configured",
         }
 
-    start, end = previous_day_window()
-    _log.info("dumps: %s scanning %d path(s) for files in [%s, %s)",
-              local.machine_name, len(local.paths), start, end)
+    start, end = collect_window(window_days=window_days, include_today=include_today)
+    _log.info("dumps: %s scanning %d path(s) for files in [%s, %s) "
+              "(window_days=%d, include_today=%s)",
+              local.machine_name, len(local.paths), start, end,
+              window_days, include_today)
 
     files = list(iter_recent_files(local.paths, start, end))
     if not files:
