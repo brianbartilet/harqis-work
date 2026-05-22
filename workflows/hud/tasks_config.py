@@ -436,7 +436,7 @@ WORKFLOWS_HUD = {
     # 2 hours, after that the next scheduled tick refreshes.
     'run-job--show_daily_radar': {
         'task': 'workflows.hud.tasks.hud_radar.show_daily_radar',
-        'schedule': crontab(hour='8,12,16', minute=0),
+        'schedule': crontab(hour='8,12,16,20', minute=0),
         'kwargs': {
             # Priority list of sources to pull. Order doubles as prompt-
             # input precedence (first entry's section comes first to the

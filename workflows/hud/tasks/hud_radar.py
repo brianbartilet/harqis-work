@@ -94,7 +94,7 @@ _DESKTOP_LOGS_HUD_FOLDER = "DESKTOPLOGS"
     hud_item_name="DAILY RADAR",
     new_sections_dict=sections__daily_radar,
     play_sound=True,
-    schedule_categories=[ScheduleCategory.WORK, ScheduleCategory.ORGANIZE],
+    schedule_categories=[ScheduleCategory.PINNED],
     # Overwrite dump.txt on every tick — the radar is a fresh briefing per
     # run, not a rolling log like DESKTOP LOGS. Older briefings would push
     # the current one off-screen and make the marquee scroll backwards
