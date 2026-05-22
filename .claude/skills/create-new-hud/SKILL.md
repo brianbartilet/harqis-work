@@ -658,6 +658,7 @@ HUD widget created. Manual steps to activate:
   Module + schedule (Step 5–6):
   [ ] workflows/hud/__init__.py imports workflows.hud.tasks.hud_<slug>
   [ ] workflows/hud/tasks_config.py contains 'run-job--show_<slug>' entry
+  [ ] Regenerate the frontend registry so the task appears in the dashboard: /generate-registry
   [ ] Restart Celery Beat AND the worker
 
   Docs (Step 7 + 7b):

@@ -97,7 +97,7 @@ import workflows.hfl.tasks.ingest_<source_name>  # noqa: F401
 
 ## Step 5 — Add the beat schedule entry
 
-Add to `workflows/hfl/tasks_config.py` a `run-job--ingest_<source_name>_activity` entry: the resolved `--schedule` (default `crontab(hour=23, minute=0)`), `kwargs` (`cfg_id__anthropic`, `model` Haiku, `window_days`, caps), `options` `{'queue': WorkflowQueue.HFL, 'expires': 60*60*12}`, and the `manifesto` block (`code_role: 'capture+distill+express'`, `para_bucket: 'area'`, `express_target: 'file:hfl_corpus+es:hfl-entries'`, `review_artifact: 'es_log+file'`, `hfl_signal: True`). Ship it **active** only if the credential is set; otherwise ship it commented-out with a one-line activation note (mirror how `ingest_ai` / `ingest_chatgpt` were handled).
+Add to `workflows/hfl/tasks_config.py` a `run-job--ingest_<source_name>_activity` entry: the resolved `--schedule` (default `crontab(hour=23, minute=0)`), `kwargs` (`cfg_id__anthropic`, `model` Haiku, `window_days`, caps), `options` `{'queue': WorkflowQueue.HFL, 'expires': 60*60*12}`, and the `manifesto` block (`code_role: 'capture+distill+express'`, `para_bucket: 'area'`, `express_target: 'file:hfl_corpus+es:hfl-entries'`, `review_artifact: 'es_log+file'`, `hfl_signal: True`). Ship it **active** only if the credential is set; otherwise ship it commented-out with a one-line activation note (mirror how `ingest_ai` / `ingest_chatgpt` were handled). Comment disabled entries with **`#` lines only** — never a `"""..."""` block, which concatenates with the next key and hides the whole workflow from the frontend registry (see `workflows/README.md`). Once the entry is active, regenerate the frontend registry (`/generate-registry`) so it appears in the dashboard.
 
 ---
 

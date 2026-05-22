@@ -435,6 +435,8 @@ WORKFLOW_<CATEGORY> = {
 }
 ```
 
+Disable tasks with **`#` line comments only** (as above) — never a `"""..."""` block inside the dict. A bare triple-quoted string is not a comment: Python concatenates it with the next key, producing one malformed key that swallows the following task *and* hides the whole workflow from the frontend registry. See `workflows/README.md` → "Frontend registry mapping".
+
 Infer the schedule and queue:
 - **timedelta** for sub-minute or short-interval tasks
 - **crontab** for hourly/daily/weekly tasks
@@ -602,6 +604,7 @@ Workflow created. Manual steps to activate:
   Schedule activation:
   [ ] Review and uncomment the schedule in workflows/<category>/tasks_config.py
   [ ] Uncomment the import + merge line in workflows/config.py
+  [ ] Regenerate the frontend registry so the task appears in the dashboard: /generate-registry (or python frontend/generate_registry.py)
   [ ] Restart Celery Beat AND the worker to pick up the new task (worker reload is required for the new __init__.py import)
 
   Testing:
