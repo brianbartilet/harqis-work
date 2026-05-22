@@ -80,29 +80,31 @@ WORKFLOW_PURCHASES = {
             'hfl_signal': False,
         },
     },
-    """ RUN THIS MANUALLY WHEN SOLD LISTINGS ARE REMOVED FROM INVENTORY
-    
-    'run-job--update_tcg_listings_prices': {
-        'task': 'workflows.purchases.tasks.tcg_mp_selling.update_tcg_listings_prices',
-        'schedule': crontab(day_of_week="mon", hour='4', minute=0),
-        'kwargs': {
-            "cfg_id__tcg_mp": "TCG_MP",
-            "cfg_id__echo_mtg": "ECHO_MTG",
-            "cfg_id__echo_mtg_fe": "ECHO_MTG_FE"
-        },
-        "options": {
-            "queue": WorkflowQueue.TCG,
-            "expires": 60 * 60 * 24
-        },
-        'manifesto': {
-            'code_role': 'express',
-            'para_bucket': 'area',
-            'express_target': 'api:tcg_mp',
-            'review_artifact': 'es_log',
-            'hfl_signal': False,
-        },
-    },
-    """
+    # DISABLED — run manually when sold listings are removed from inventory.
+    # Use a real `#` comment block, NOT a triple-quoted string: a bare """...."""
+    # inside a dict literal concatenates with the next key string, corrupting the
+    # dict and hiding the whole workflow from frontend/generate_registry.py.
+    # To re-enable, uncomment and restore the trailing comma on the entry above.
+    # 'run-job--update_tcg_listings_prices': {
+    #     'task': 'workflows.purchases.tasks.tcg_mp_selling.update_tcg_listings_prices',
+    #     'schedule': crontab(day_of_week="mon", hour='4', minute=0),
+    #     'kwargs': {
+    #         "cfg_id__tcg_mp": "TCG_MP",
+    #         "cfg_id__echo_mtg": "ECHO_MTG",
+    #         "cfg_id__echo_mtg_fe": "ECHO_MTG_FE"
+    #     },
+    #     "options": {
+    #         "queue": WorkflowQueue.TCG,
+    #         "expires": 60 * 60 * 24
+    #     },
+    #     'manifesto': {
+    #         'code_role': 'express',
+    #         'para_bucket': 'area',
+    #         'express_target': 'api:tcg_mp',
+    #         'review_artifact': 'es_log',
+    #         'hfl_signal': False,
+    #     },
+    # },
     'run-job--download_scryfall_bulk_data': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.download_scryfall_bulk_data',
         'schedule': crontab(

@@ -45,6 +45,62 @@ Implications when editing `workflows/*/tasks_config.py`:
 - If you add a key that Celery *should* honour (rare), add it to `_CELERY_ENTRY_KEYS` in `workflows/config.py` — it is a strict whitelist.
 - Symptom of a regression here (whitelist bypassed / entry assigned raw): scheduler "closes from the deploy" — beat exits instantly, `--status` shows `scheduler stopped`, no `scheduler.pid`, `scheduler.log` dead-ends at the startup banner.
 
+## Frontend registry mapping
+
+`frontend/generate_registry.py` globs `workflows/*/tasks_config.py` and projects each workflow's beat schedule into `frontend/registry.json` — the catalogue the frontend reads to list and hand-trigger jobs. The JSON is **gitignored and regenerated locally**; `frontend/registry.py` loads it at runtime. Regenerate after editing any beat schedule:
+
+```shell
+python frontend/generate_registry.py     # from repo root, venv active — or the /generate-registry skill
+```
+
+Per task, the generator treats `tasks_config.py` as authoritative for some fields and preserves your hand-edits to `registry.json` for the rest:
+
+| Field | Source |
+| --- | --- |
+| `task_path`, `queue`, `kwargs` | **Always overwritten** from the beat entry (`task`, `options.queue`, `kwargs`). |
+| `schedule` (human string) | Derived from the entry `schedule` on first sight, then **preserved** from `registry.json`. |
+| `label`, `description`, `manual_only` | **Preserved** from `registry.json` — edit them there; regeneration won't clobber them. |
+
+### How a workflow is discovered
+
+The generator calls `_find_beat_dict()`, which returns **the first module-level dict whose keys *all* start with `run-job--`**. This contract has sharp edges:
+
+- **All-or-nothing.** If even one key in the dict does not start with `run-job--`, the whole dict is rejected and the **entire workflow disappears** from the registry (and the frontend) — every valid task in it goes down too.
+- **Underscore = skipped.** Module-level names beginning with `_` are ignored. This is the supported way to disable a whole workflow without deleting it — e.g. `knowledge` exports an empty `WORKFLOW_KNOWLEDGE = {}` and parks the real entries under `_DISABLED__WORKFLOW_KNOWLEDGE`.
+- **Empty is skipped.** Empty files (`finance`) and empty dicts are silently skipped.
+- **Prefix is stripped.** `run-job--download_scryfall_bulk_data` becomes the registry task key `download_scryfall_bulk_data`.
+
+### Manual-only tasks
+
+A task that exists in `registry.json` but has **no** matching `run-job--` entry in the beat schedule is preserved as `manual_only` — runnable from the frontend, never scheduled by beat (e.g. hfl `ingest_ai_activity`, hud `show_forex_account`). To add one, hand-edit `registry.json`; the generator keeps it on the next run.
+
+### ⚠️ Never disable a task with a triple-quoted string
+
+To disable a single task, comment it out with real `#` line comments. **Do not** wrap it in a `"""..."""` block inside the dict literal:
+
+```python
+WORKFLOW_PURCHASES = {
+    'run-job--generate_tcg_listings': { ... },
+    """ disabled task ...                          # ⛔ NOT a comment
+    'run-job--update_tcg_listings_prices': { ... },
+    """
+    'run-job--download_scryfall_bulk_data': { ... },
+}
+```
+
+A bare triple-quoted string is **not** a comment — Python concatenates adjacent string literals, so the `"""..."""` merges with the next key (`'run-job--download_scryfall_bulk_data'`) into **one** malformed dict key. Two things break at once:
+
+1. The swallowed task (`download_scryfall_bulk_data`) silently vanishes — it is no longer a key.
+2. The merged key no longer starts with `run-job--`, so `_find_beat_dict` rejects the dict and the **entire `purchases` workflow** drops out of the frontend (the "all-or-nothing" rule above). This is exactly the bug that hid `purchases` until it was fixed.
+
+The fix is always the same — `#` on every line:
+
+```python
+    # DISABLED — run manually. Use # comments, never a """ block (see above).
+    # 'run-job--update_tcg_listings_prices': { ... },
+    'run-job--download_scryfall_bulk_data': { ... },
+```
+
 ## Queue topology
 
 Queue names live in `workflows/queues.py`. The wire-level topology (which queues are direct vs fanout) is declared in `workflows/config.py` via `SPROUT.conf.task_queues`. The two are paired — every name in the enum must have a matching declaration, otherwise Celery routes to a non-existent queue.
