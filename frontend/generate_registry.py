@@ -188,9 +188,17 @@ def _crontab_to_str(c: crontab) -> str:
 
 # ── Metadata helpers ──────────────────────────────────────────────────────────
 
+# Key segments that are acronyms — rendered ALL-CAPS instead of Title Case
+# (e.g. "hfl" → "HFL", "hud" → "HUD"), so workflow/task labels read naturally.
+_ACRONYMS = {"hfl", "hud", "n8n", "tcg", "ai", "gpt", "mcp", "api"}
+
+
 def _label_from_key(key: str) -> str:
-    """snake_case → Title Case label for new tasks."""
-    return key.replace("_", " ").title()
+    """snake_case → Title Case label for new tasks; acronyms upper-cased."""
+    return " ".join(
+        word.upper() if word.lower() in _ACRONYMS else word.title()
+        for word in key.replace("_", " ").split()
+    )
 
 
 def _load_existing_registry() -> dict:
