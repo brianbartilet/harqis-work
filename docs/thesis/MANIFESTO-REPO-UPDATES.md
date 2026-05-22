@@ -11,7 +11,7 @@
 | Each task's CODE phase, PARA bucket, Express target, Review artifact, HFL flag are implicit (inferred from name or code body) | Blocks Habit 2 ("end in mind") and dead-weight detection | Add an optional `'manifesto'` block to every beat entry across all six active workflows |
 | `analyze_daily_dumps` captures inbox state and stops — no Express path, only an Elasticsearch debug log | Hard manifesto violation: "captures that never get expressed are dead weight" | Replace the `# AGENT WIRE-UP HERE` stub with a real Express path (HUD-feed summary tile + structured ES log) |
 | Homework-for-Life is named in the manifesto as a first-class data source, but no workflow captures, retrieves, or summarizes entries | Principle 2 is undelivered | Scaffold a new `workflows/hfl/` (inactive — importable but not in beat schedule yet) with capture / retrieve / summarize tasks |
-| No automated way to enforce manifesto alignment or surface drift | Principle 7 ("sharpen the saw") requires a check, not a vibe | Add `scripts/manifesto_audit.py` — walks all `tasks_config.py`, validates the metadata, exits non-zero on violations |
+| No automated way to enforce manifesto alignment or surface drift | Principle 7 ("sharpen the saw") requires a check, not a vibe | Add `scripts/agents/manifesto_audit.py` — walks all `tasks_config.py`, validates the metadata, exits non-zero on violations |
 | `workflows/.template/` scaffold lacks the new metadata and produces dead-weight tasks by default (no Express target, no log_result) | New workflows would drift from the manifesto on day one | Update `workflows/.template/tasks_config.py` and the demo task so `/create-new-workflow` output is manifesto-aligned |
 | Workflow READMEs are substantive on *what* each task does but silent on *which manifesto phase* it occupies | Habit 5 cost — a reader has to read code to learn the phase | Add a "Manifesto alignment" section to every workflow README, plus an updated root `workflows/README.md` |
 
@@ -163,7 +163,7 @@ Touched files (all additive — no behavioral change):
 - `workflows/purchases/tasks_config.py` — 5 entries
 - `workflows/social/tasks_config.py` — 1 entry
 
-### 4.3 `scripts/manifesto_audit.py`
+### 4.3 `scripts/agents/manifesto_audit.py`
 
 A small CLI that walks every `workflows/*/tasks_config.py`, loads the dicts, and validates:
 
@@ -230,7 +230,7 @@ Per the manifesto's PAER loop, externalizing each phase:
 - **Plan.** Decision: thesis + full implementation across all six active workflows, additive metadata only. Out of scope: rewriting task bodies, activating finance, standardizing decorator order, building DAG tooling.
 - **Analyze.** Read every `tasks_config.py`, every `tasks/*.py` entry point, every workflow README. Output: §3 of this doc.
 - **Execute.** §4 of this doc — the actual diff.
-- **Review.** This PR description itself; the `scripts/manifesto_audit.py` exit code; the operator's read of the per-workflow alignment tables. If any of the three surface drift, the fix is to update either the metadata or the manifesto, whichever is wrong.
+- **Review.** This PR description itself; the `scripts/agents/manifesto_audit.py` exit code; the operator's read of the per-workflow alignment tables. If any of the three surface drift, the fix is to update either the metadata or the manifesto, whichever is wrong.
 
 ---
 
@@ -241,7 +241,7 @@ Per the manifesto's PAER loop, externalizing each phase:
 | Celery beat rejects the new `'manifesto'` key | Very low — Celery beat reads named keys only and ignores extras | Smoke-import `workflows.config` before commit; rollback is a one-line removal per file if it ever fires |
 | `analyze_daily_dumps` Express path errors when the inbox is empty | Low — the existing return path already handles empty inboxes; `@feed()` no-ops on unresolved config (see the earlier feed.py fix) | The new code paths the same dict through a small renderer with explicit `if not machines` short-circuit; tests in `workflows/dumps/tests/` |
 | HFL scaffold accidentally gets enabled and writes to a misconfigured corpus path | Low — workflow is not in `workflows/config.py` import list, so beat never sees it; the capture task validates its corpus path before writing | Activation is a separate, named PR |
-| Metadata drifts from reality over time | Medium — same risk as any inline doc | `scripts/manifesto_audit.py` is the safety net; consider wiring it into pre-commit later |
+| Metadata drifts from reality over time | Medium — same risk as any inline doc | `scripts/agents/manifesto_audit.py` is the safety net; consider wiring it into pre-commit later |
 
 ---
 
@@ -263,7 +263,7 @@ Tracked here so they aren't lost:
 This PR is ready to merge when:
 
 - [ ] `python -c "import workflows.config"` runs clean (smoke-import, proves Celery is happy with the new metadata key).
-- [ ] `python scripts/manifesto_audit.py` exits 0.
+- [ ] `python scripts/agents/manifesto_audit.py` exits 0.
 - [ ] Every active `tasks_config.py` carries a `'manifesto'` block on every entry.
 - [ ] `workflows/hfl/` exists with the four scaffold files, is **not** imported in `workflows/config.py`.
 - [ ] `workflows/dumps/tasks/analyze.py` no longer carries `AGENT WIRE-UP HERE` as a TODO blocker; the comment may remain as a future-hand-off marker but the Express path is real.

@@ -1,19 +1,46 @@
 # scripts/
 
-Operational scripts for **harqis-work**. The legacy per-OS / per-queue
-shell + batch wrappers have been collapsed into two cross-platform Python
-entry points.
+Operational scripts for **harqis-work**, organised by purpose:
+
+- **Deploy / runtime** scripts live at the **root of `scripts/`** — they bring
+  the stack up, launch daemons, and sync config between machines.
+- **Agent-support** scripts live under [`scripts/agents/`](#scriptsagents) — the
+  Claude-driven automation (docs regen, improvement scout, weekly PR), the
+  repo-quality / health / test tooling those agents drive, and the worktree /
+  window cleanup that keeps the agent fleet tidy.
+
+## Root — deploy & runtime
 
 | Path | Purpose |
 |---|---|
 | [`launch.py`](#launchpy) | Single-process launcher — runs one daemon in the foreground (`worker`, `scheduler`, `flower`, `frontend`, `mcp`, `kanban`, `trigger-hud-tasks`, `push-config`, `serve-config`). |
 | [`deploy.py`](#deploypy) | Multi-daemon orchestrator — reads `machines.toml` from the repo root, brings the whole stack up/down, optionally registers OS auto-start units. |
+| [`sync-to-host.ps1`](#sync-to-hostps1) | Push gitignored config (`.env/`, `frontend/.env`, `machines.local.toml`) to a remote checkout via `tar \| ssh`. Driven by the `[sync]` / `[ssh.*]` blocks in `machines.local.toml`. |
 | [`../machines.toml`](#machinestoml) | Per-machine topology (role, queue list, disabled services). Lives at the repo root so per-machine `machines.local.toml` overrides sit next to it. Auto-detected from hostname. |
-| [`run_agent_prompt.py`](#run_agent_promptpy) | Claude-driven docs / code-smell regenerator. Unchanged. |
 | [`tailscale/`](#tailscale) | Tailscale ACL policy. Unchanged. |
 
-Both Python scripts use `pathlib`, work on Windows / macOS / Linux, and
-require Python 3.11+ (uses `tomllib` from stdlib).
+## `scripts/agents/`
+
+| Path | Purpose |
+|---|---|
+| [`run_agent_prompt.py`](#run_agent_promptpy) | Claude-driven docs / code-smell regenerator. Invoked by the `agent-prompts.yml` CI workflow. |
+| `daily_improvement_scout.py` | Daily repo inspection — code-quality, config, workflow-health gaps. Shells out to `manifesto_audit.py`. |
+| `weekly_claude_pr.py` | Weekly orchestration — runs the scout, delegates to local Claude Code, opens a draft PR. |
+| `weekly_lessons_extraction.py` | Weekly HFL pattern detection (cron). Runs `lessons_extractor.py`. |
+| `manifesto_audit.py` | Validates the `'manifesto'` metadata block on every `workflows/*/tasks_config.py` beat entry. Non-zero exit on hard violations. |
+| `run_test_suite.py` | Exploratory / continuous test runner with coverage + perf tracking. |
+| `check_env_health.py` | Environment / dependency / config diagnostics → JSON report. |
+| `smoke-tests.sh` | Daily app smoke tests + Telegram summary. |
+| `cleanup-worktrees.sh` | Delete merged / idle git worktrees left by agent runs. |
+| `close-completed-windows.sh` | Close idle Terminal windows post-deploy (macOS). Also called by `deploy.py`'s post-deploy hook. |
+| `cleanup-loop.sh` | Runs `close-completed-windows.sh` every 30s (driven by the launchd job). |
+| `install-cleanup-job.sh` | Install / uninstall the `cleanup-windows` launchd agent. |
+| `launchd/` | macOS launchd plists for the agent cleanup job. |
+
+Both Python entry points (`launch.py`, `deploy.py`) use `pathlib`, work on
+Windows / macOS / Linux, and require Python 3.11+ (uses `tomllib` from stdlib).
+Scripts under `agents/` resolve the repo root via `Path(__file__).resolve().parents[2]`
+(two levels up from `scripts/agents/`).
 
 ---
 
@@ -245,14 +272,43 @@ python scripts/launch.py push-config
 
 ---
 
+## `sync-to-host.ps1`
+
+Streams a configured set of gitignored files to a remote harqis-work checkout
+over a single SSH connection (`tar -cf - … | ssh user@host "tar -xf - -C <path>"`),
+so one password prompt covers the whole push. Targets and the file list live in
+`machines.local.toml`:
+
+```toml
+[sync]
+default_machine = "harqis-mac-mini"
+items           = [".env", "frontend/.env", "machines.local.toml"]
+
+[ssh.harqis-mac-mini]
+user = "harqis-one"
+host = "harqis-ones-mac-mini.local"
+path = "~/GIT/harqis-work"
+```
+
+```powershell
+powershell -NoProfile -File scripts/sync-to-host.ps1            # default_machine
+powershell -NoProfile -File scripts/sync-to-host.ps1 -MachineKey <key>
+powershell -NoProfile -File scripts/sync-to-host.ps1 --list      # show targets
+```
+
+The `/sync-host` skill wraps this for the current OS.
+
+---
+
 ## `run_agent_prompt.py`
 
-Unchanged. Claude-powered regenerator for top-level docs.
+`scripts/agents/run_agent_prompt.py` — Claude-powered regenerator for top-level
+docs.
 
 ```bash
-python scripts/run_agent_prompt.py --agent docs          # regenerate README.md
-python scripts/run_agent_prompt.py --agent code_smells   # regenerate CODE_SMELLS.md
-python scripts/run_agent_prompt.py --agent both
+python scripts/agents/run_agent_prompt.py --agent docs          # regenerate README.md
+python scripts/agents/run_agent_prompt.py --agent code_smells   # regenerate CODE_SMELLS.md
+python scripts/agents/run_agent_prompt.py --agent both
 ```
 
 ---

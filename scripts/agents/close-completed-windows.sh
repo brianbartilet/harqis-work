@@ -1,6 +1,6 @@
 #!/bin/bash
 # Close idle/unused Terminal windows (post-deploy cleanup, macOS)
-# Usage: bash scripts/close-completed-windows.sh
+# Usage: bash scripts/agents/close-completed-windows.sh
 # Closes: idle -zsh shells + completed harqis-work windows (no active processes)
 
 osascript <<'APPLESCRIPT'

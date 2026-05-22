@@ -252,14 +252,14 @@ max_turns: 20  # Allow deep reasoning
 Update your deployment/cron configs:
 
 ```python
-# scripts/weekly_claude_pr.py
+# scripts/agents/weekly_claude_pr.py
 CLAUDE_MODEL = "sonnet-4.5"  # Explicitly name the version
 CLAUDE_BUDGET = 2  # Input + output token budget in 100s
 CLAUDE_TEMPERATURE = 0.7  # Exploration for Analyze phase
 ```
 
 ```python
-# scripts/daily_improvement_scout.py
+# scripts/agents/daily_improvement_scout.py
 CLAUDE_MODEL = "haiku"  # Quick scans
 CLAUDE_BUDGET = 1
 CLAUDE_TEMPERATURE = 0.5  # Less exploration needed

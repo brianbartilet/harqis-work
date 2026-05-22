@@ -7,10 +7,10 @@ and exploratory test scenarios. Reports back on test health, performance regress
 and potential weak areas.
 
 Usage:
-    python scripts/run_test_suite.py --quick          # Fast smoke tests
-    python scripts/run_test_suite.py --full           # All tests with coverage
-    python scripts/run_test_suite.py --exploratory    # Hypothesis + fuzzy tests
-    python scripts/run_test_suite.py --performance    # Perf benchmarks
+    python scripts/agents/run_test_suite.py --quick          # Fast smoke tests
+    python scripts/agents/run_test_suite.py --full           # All tests with coverage
+    python scripts/agents/run_test_suite.py --exploratory    # Hypothesis + fuzzy tests
+    python scripts/agents/run_test_suite.py --performance    # Perf benchmarks
 """
 
 import sys
@@ -20,7 +20,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class TestRunner:

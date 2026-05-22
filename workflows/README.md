@@ -18,7 +18,7 @@ Every task in this tree carries a `'manifesto'` metadata block on its beat entry
 | `review_artifact` | What a human or downstream task reads to verify the run happened. Usually `es_log` plus the express surface. |
 | `hfl_signal` | `True` when the task produces personal-signal data eligible for the Homework-for-Life corpus (see [`workflows/hfl/`](hfl/README.md)). |
 
-`scripts/manifesto_audit.py` validates the metadata across all active workflows. Per-workflow alignment tables live in each `workflows/<name>/README.md` under "Manifesto alignment". Design rationale: [`docs/thesis/MANIFESTO-REPO-UPDATES.md`](../docs/thesis/MANIFESTO-REPO-UPDATES.md).
+`scripts/agents/manifesto_audit.py` validates the metadata across all active workflows. Per-workflow alignment tables live in each `workflows/<name>/README.md` under "Manifesto alignment". Design rationale: [`docs/thesis/MANIFESTO-REPO-UPDATES.md`](../docs/thesis/MANIFESTO-REPO-UPDATES.md).
 
 ### `manifesto` is stripped before Celery sees it
 

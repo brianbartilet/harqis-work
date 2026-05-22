@@ -49,7 +49,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          python scripts/run_agent_prompt.py --agent ${{ github.event.inputs.agent }}
+          python scripts/agents/run_agent_prompt.py --agent ${{ github.event.inputs.agent }}
 
       # -----------------------------------------------------------------------
       # 4. Detect whether any files changed

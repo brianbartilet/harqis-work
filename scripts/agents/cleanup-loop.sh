@@ -1,6 +1,6 @@
 #!/bin/bash
 # Periodic cleanup loop: runs cleanup script every 30 seconds
-# Usage: bash scripts/cleanup-loop.sh
+# Usage: bash scripts/agents/cleanup-loop.sh
 
 echo "Starting cleanup loop (runs cleanup every 30 seconds, Ctrl+C to stop)..."
 

@@ -1,5 +1,5 @@
 """
-scripts/manifesto_audit.py
+scripts/agents/manifesto_audit.py
 
 Validates that every Celery beat entry under `workflows/*/tasks_config.py`
 carries the manifesto metadata block defined in docs/MANIFESTO.md and
@@ -16,7 +16,7 @@ Soft warnings (logged, exit code unaffected):
   - Unknown values for `code_role`, `para_bucket`.
 
 Usage:
-    python scripts/manifesto_audit.py [--quiet]
+    python scripts/agents/manifesto_audit.py [--quiet]
 
 Skips workflows whose `tasks_config.py` is empty (e.g. workflows/finance/
 which is scaffolded but inactive).
@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 from typing import Any, Iterable
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS_DIR = REPO_ROOT / "workflows"
 
 # Ensure `from workflows.queues import WorkflowQueue` resolves when this script

@@ -5,9 +5,9 @@ Reads a prompt from prompts/ (repo root), builds repo context, calls Claude,
 and writes the result to the appropriate output file.
 
 Usage:
-    python scripts/run_agent_prompt.py --agent docs
-    python scripts/run_agent_prompt.py --agent code_smells
-    python scripts/run_agent_prompt.py --agent both
+    python scripts/agents/run_agent_prompt.py --agent docs
+    python scripts/agents/run_agent_prompt.py --agent code_smells
+    python scripts/agents/run_agent_prompt.py --agent both
 """
 import argparse
 import os
@@ -20,7 +20,7 @@ import anthropic
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 MODEL = "claude-opus-4-6"
 MAX_FILE_CHARS = 60_000   # per file guard — truncates beyond this
 MAX_CONTEXT_CHARS = 180_000  # total context guard
