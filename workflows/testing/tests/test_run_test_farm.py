@@ -16,6 +16,7 @@ from workflows.testing.tasks.test_farm import (
     _fingerprint,
     _slug,
     _cell,
+    _sort_key,
     _render_md,
     _resolve_claude_bin,
 )
@@ -117,7 +118,7 @@ def test__render_md_contains_summary_table_and_sections():
         "gherkin": "```gherkin\nFeature: X\n```",
         "generated_at": "2026-05-22 09:00",
     }]
-    md = _render_md(entries, board_id=1790, statuses=["In Review"],
+    md = _render_md(entries, [], board_id=1790, statuses=["In Review"],
                     generated_at="2026-05-22 09:00")
     assert "# BDD Test Case Farm" in md
     assert "## Summary" in md
@@ -126,6 +127,38 @@ def test__render_md_contains_summary_table_and_sections():
     assert "| Ticket Id | ICON-42 |" in md
     assert "| Last generated | 2026-05-22 09:00 |" in md
     assert "Feature: X" in md                    # embedded gherkin
+
+
+def test__sort_key_orders_by_type_then_status():
+    rows = [
+        {"issuetype": "Bug", "status": "New", "key": "B-NEW"},
+        {"issuetype": "Story", "status": "In Progress", "key": "S-INP"},
+        {"issuetype": "Bug", "status": "Quality Review", "key": "B-QR"},
+        {"issuetype": "Story", "status": "Open", "key": "S-OPEN"},   # unknown status → last
+        {"issuetype": "Story", "status": "Quality Review", "key": "S-QR"},
+    ]
+    ordered = [r["key"] for r in sorted(rows, key=_sort_key)]
+    # Stories before Bugs; within type: Quality Review, In Progress, New, then other.
+    assert ordered == ["S-QR", "S-INP", "S-OPEN", "B-QR", "B-NEW"]
+
+
+def test__render_md_retained_excluded_from_summary_but_kept_as_section():
+    active = [{**_extract_fields(_fake_issue()),
+               "gherkin": "```gherkin\nFeature: Active\n```", "generated_at": "2026-05-22 09:00"}]
+    retained = [{"key": "ICON-9", "summary": "Old closed thing", "assignee": "X",
+                 "priority": "Low", "issuetype": "Bug", "status": "Closed",
+                 "fix_versions": [], "gherkin": "```gherkin\nFeature: Old\n```",
+                 "generated_at": "2026-05-01 09:00"}]
+    md = _render_md(active, retained, board_id=1790, statuses=["In Review"],
+                    generated_at="2026-05-22 09:00")
+    # Active ticket is in the summary; retained one is not.
+    assert "[ICON-42](#icon-42)" in md
+    assert "[ICON-9](#icon-9)" not in md
+    # Retained section is still present, under the Retained heading, marked.
+    assert "Retained — no longer in the active focus columns" in md
+    assert '<a id="icon-9"></a>' in md
+    assert "Feature: Old" in md
+    assert "_(retained)_" in md
 
 
 def test__resolve_claude_bin_with_override():

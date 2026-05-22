@@ -33,11 +33,17 @@ Jira board (sprint, statuses, Bug/Story)
 issue types `Bug`, `Story` (mirrors `hud_jira`).
 
 **Output document** — `logs/BDD-TEST-FARM.md`:
-- A top **summary nav table**: Summary · FixVersion · Issue Type · Status · link
-  to the ticket's test section.
-- One **section per ticket**: Ticket Id, Name, Priority, Assignee, Issue Type,
-  Status, Fix Version(s), Last generated — followed by the generated Gherkin
-  (+ AC↔scenario mapping and coverage tally).
+- A top **summary nav table** (active tickets only): Summary · FixVersion ·
+  Issue Type · Status · link to the ticket's test section. Sorted by **issue
+  type** (Story → Bug), then **status** (Quality Review → In Progress → New →
+  other).
+- One **section per ticket** (same order as the summary): Ticket Id, Name,
+  Priority, Assignee, Issue Type, Status, Fix Version(s), Last generated —
+  followed by the generated Gherkin (+ AC↔scenario mapping and coverage tally).
+- **Retention:** when a ticket leaves the active focus columns (closed / moved /
+  out of sprint), its scenarios are kept under a **"Retained"** group at the
+  bottom (marked, last-known status) but dropped from the summary table. State
+  is never pruned, so retained scenarios persist across runs.
 
 **Change detection (idempotency):** a sidecar `logs/.bdd-test-farm.state.json`
 maps each ticket key → a fingerprint (hash of the tracked fields + description).
