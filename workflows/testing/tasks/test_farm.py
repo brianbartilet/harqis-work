@@ -286,6 +286,18 @@ def _cell(text: str) -> str:
     return (text or "").replace("|", "\\|").replace("\n", " ").strip()
 
 
+def _ticket_url(domain: str, key: str) -> str:
+    """Browse URL for a Jira ticket, or '' when the domain isn't configured.
+
+    Mirrors the link convention in ``workflows/hud/tasks/hud_jira`` (which reads
+    ``cfg__jira.app_data['domain']``): a ticket lives at
+    ``https://{domain}/browse/{KEY}``.
+    """
+    if not domain or not key:
+        return ""
+    return f"https://{domain.strip('/')}/browse/{key}"
+
+
 # Summary ordering: issue type (Story → Bug), then status (Quality Review →
 # In Progress → New → anything else), then key for a stable tie-break.
 _ISSUETYPE_ORDER: tuple = ("Story", "Bug")
@@ -326,7 +338,7 @@ def _render_section(e: dict, *, retained: bool = False) -> List[str]:
 
 
 def _render_md(active: List[dict], retained: List[dict], *,
-               board_id, statuses, generated_at: str) -> str:
+               board_id, statuses, generated_at: str, jira_domain: str = "") -> str:
     """Render the living document: header + summary nav table + sections.
 
     The summary table lists ACTIVE tickets only (sorted by issue type then
@@ -353,15 +365,18 @@ def _render_md(active: List[dict], retained: List[dict], *,
     out.append("")
 
     # ── Summary nav table — ACTIVE only, sorted by issue type then status.
-    #    Fields per spec: Summary, FixVersion, Issue Type, Status, section link.
+    #    Fields per spec: Summary, FixVersion, Issue Type, Status, section link,
+    #    plus a "Web" link straight to the live Jira ticket.
     out.append("## Summary")
     out.append("")
-    out.append("| Summary | FixVersion | Issue Type | Status | Tests |")
-    out.append("|---------|------------|------------|--------|-------|")
+    out.append("| Summary | FixVersion | Issue Type | Status | Tests | Web |")
+    out.append("|---------|------------|------------|--------|-------|-----|")
     for e in active_sorted:
         fv = ", ".join(e["fix_versions"]) or "-"
+        url = _ticket_url(jira_domain, e["key"])
+        web = f"[Web]({url})" if url else "-"
         out.append(f"| {_cell(e['summary'])} | {_cell(fv)} | {e['issuetype']} "
-                   f"| {e['status']} | [{e['key']}](#{_slug(e['key'])}) |")
+                   f"| {e['status']} | [{e['key']}](#{_slug(e['key'])}) | {web} |")
     out.append("")
     out.append("---")
     out.append("")
@@ -434,6 +449,10 @@ def run_test_farm(board_id: int, **kwargs):
 
     cfg__jira = CONFIG_MANAGER.get(cfg_id__jira)
     api_boards = ApiServiceJiraBoards(cfg__jira)
+    # Jira domain for per-ticket "Web" links in the summary table (same source
+    # the HUD reads — apps_config.yaml::JIRA.app_data.domain). Empty is fine:
+    # the renderer falls back to "-" when it can't build a browse URL.
+    jira_domain = (getattr(cfg__jira, "app_data", None) or {}).get("domain") or ""
 
     # Reuse the HUD's sprint scope; filter issue type server-side (Bug/Story
     # are real type names). Status is filtered client-side by *column membership*
@@ -477,7 +496,8 @@ def run_test_farm(board_id: int, **kwargs):
 
     def _flush() -> None:
         """Re-render the living document from the current entry state."""
-        md = _render_md(entries, retained, board_id=board_id, statuses=statuses, generated_at=now)
+        md = _render_md(entries, retained, board_id=board_id, statuses=statuses,
+                        generated_at=now, jira_domain=jira_domain)
         _LOGS_DIR.mkdir(parents=True, exist_ok=True)
         _FARM_MD.write_text(md, encoding="utf-8")
 

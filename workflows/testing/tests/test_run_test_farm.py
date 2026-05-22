@@ -129,6 +129,30 @@ def test__render_md_contains_summary_table_and_sections():
     assert "Feature: X" in md                    # embedded gherkin
 
 
+def test__render_md_web_column_links_to_jira_ticket():
+    entries = [{
+        **_extract_fields(_fake_issue()),
+        "gherkin": "```gherkin\nFeature: X\n```",
+        "generated_at": "2026-05-22 09:00",
+    }]
+    md = _render_md(entries, [], board_id=1790, statuses=["In Review"],
+                    generated_at="2026-05-22 09:00", jira_domain="jira.example.com")
+    assert "| Summary | FixVersion | Issue Type | Status | Tests | Web |" in md
+    assert "[Web](https://jira.example.com/browse/ICON-42)" in md
+
+
+def test__render_md_web_column_falls_back_without_domain():
+    entries = [{
+        **_extract_fields(_fake_issue()),
+        "gherkin": "```gherkin\nFeature: X\n```",
+        "generated_at": "2026-05-22 09:00",
+    }]
+    md = _render_md(entries, [], board_id=1790, statuses=["In Review"],
+                    generated_at="2026-05-22 09:00")  # no jira_domain
+    assert "| Summary | FixVersion | Issue Type | Status | Tests | Web |" in md
+    assert "/browse/ICON-42" not in md   # no broken link emitted
+
+
 def test__sort_key_orders_by_type_then_status():
     rows = [
         {"issuetype": "Bug", "status": "New", "key": "B-NEW"},
