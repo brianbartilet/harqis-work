@@ -88,7 +88,11 @@ SERVICES: dict[str, dict] = {
     "scheduler": {"cmd": ["scheduler"],         "roles": {"host"},         "console": True},
     "worker":    {"cmd": ["worker"],            "roles": {"host", "node"}, "console": True},
     "frontend":  {"cmd": ["frontend"],          "roles": {"host"}},
-    "mcp":       {"cmd": ["mcp"],               "roles": {"host"}},
+    # HARQIS MCP is a stdio server: clients (Hermes, Claude Desktop, etc.)
+    # spawn it on demand and keep stdin/stdout attached. Running it as a
+    # detached deploy daemon closes stdin immediately, so it exits cleanly
+    # after registering tools and looks falsely "stopped" in status output.
+    "mcp":       {"cmd": ["mcp"],               "roles": {"host"}, "mode": "stdio"},
     "kanban":    {"cmd": ["kanban"],            "roles": {"host", "node"}},
     "flower":    {"cmd": ["flower"],            "roles": {"host"}},
     # n8n `cmd` nodes POST shell commands here. Binds 0.0.0.0:5252 so the
@@ -479,6 +483,11 @@ def _service_uses_console(service: str, args: argparse.Namespace) -> bool:
     return bool(getattr(args, "console", False)) and SERVICES[service].get("console", False)
 
 
+def _service_is_stdio(service: str) -> bool:
+    """True iff the service is an on-demand stdio endpoint, not a daemon."""
+    return SERVICES.get(service, {}).get("mode") == "stdio"
+
+
 def build_service_cmd(service: str, machine: dict, args: argparse.Namespace) -> list[str]:
     use_console = _service_uses_console(service, args)
     base = [python_exe(console=use_console), str(LAUNCH_PY), *SERVICES[service]["cmd"]]
@@ -497,6 +506,13 @@ def build_service_cmd(service: str, machine: dict, args: argparse.Namespace) -> 
 
 def start_service(service: str, machine: dict, args: argparse.Namespace) -> bool:
     """Spawn the daemon. Returns True on launch (or if already running)."""
+    if _service_is_stdio(service):
+        pid_path(service).unlink(missing_ok=True)
+        print(
+            f"  Skipped daemon start: {service} uses stdio/on-demand transport; "
+            "MCP clients launch it when needed."
+        )
+        return True
     existing = read_pid(service)
     if existing:
         print(f"  Already running: {service} (PID {existing})")
@@ -529,7 +545,10 @@ def start_service(service: str, machine: dict, args: argparse.Namespace) -> bool
 def stop_service(service: str) -> None:
     pid = read_pid(service)
     if not pid:
-        print(f"  Not running: {service}")
+        if _service_is_stdio(service):
+            print(f"  No daemon to stop: {service} uses stdio/on-demand transport")
+        else:
+            print(f"  Not running: {service}")
         # Even if no PID file, a tagged Terminal tab may still be open
         # (e.g. PID file got deleted manually). Sweep that one tab anyway.
         _close_macos_terminal_windows([service])
@@ -720,6 +739,15 @@ def restart_service(service: str, machine: dict, args: argparse.Namespace) -> bo
         print(f"  Unknown service: {service}. Known: {', '.join(SERVICES)}")
         return False
     print(f"==> Restart: {service}")
+    if _service_is_stdio(service):
+        stop_service(service)
+        kill_stray_processes(_STATUS_NEEDLES.get(service, service), label=service)
+        pid_path(service).unlink(missing_ok=True)
+        print(
+            f"  {service} uses stdio/on-demand transport; no deploy daemon was started. "
+            "MCP clients launch it when needed."
+        )
+        return True
     stop_service(service)
     needle = _STATUS_NEEDLES.get(service, service)
     kill_stray_processes(needle, label=service)
@@ -759,6 +787,8 @@ def show_status() -> None:
             status = f"running (forked) -> {log_path(service)}"
         elif pid:
             status = "stale PID file (process gone)"
+        elif _service_is_stdio(service):
+            status = "stdio/on-demand (not a deploy daemon; launched by MCP clients)"
         else:
             status = "stopped"
         print(f"{service:<12} {str(pid or '-'):>8}  {alive_str:<24}  {status}")
