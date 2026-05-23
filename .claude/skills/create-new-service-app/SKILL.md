@@ -1,5 +1,7 @@
 Scaffold a complete app integration under `apps/` — either from an OpenAPI spec / docs URL (full generation) or as a named stub (skeleton only).
 
+For real implementations, use an isolated git worktree or feature branch so the main repo stays clean while the integration is being built and validated.
+
 ## Arguments
 
 `$ARGUMENTS` format (parse left to right):

@@ -1,5 +1,7 @@
 Design and implement an RPA-style Celery workflow that chains harqis-work app integrations to automate a task. The workflow passes data between services — output of one app becomes the input of the next.
 
+When this is a non-trivial implementation, do the work in an isolated git worktree or feature branch so the main working tree stays clean until review/commit time.
+
 ## Arguments
 
 `$ARGUMENTS` format (parse left to right):

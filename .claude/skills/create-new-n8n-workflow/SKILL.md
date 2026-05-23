@@ -1,5 +1,7 @@
 Build and deploy an n8n workflow from a drawio diagram, XML/BPMN file, or text description directly into the local n8n instance running at `localhost:5678`.
 
+If you're also changing repo files for the workflow, prefer a git worktree or feature branch so the main working tree remains isolated until the workflow is validated.
+
 ## Arguments
 
 `$ARGUMENTS` format:
