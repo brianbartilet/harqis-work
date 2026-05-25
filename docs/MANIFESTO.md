@@ -68,6 +68,12 @@ This repo treats Homework for Life as a **first-class data source**, not a journ
 - "Pull together my LinkedIn-idea moments from the last 90 days."
 - "Reconstruct the timeline for the OANDA forex agent rollout."
 
+Three capabilities follow from treating lived signal as queryable data, not prose:
+
+- **Retrospective curation.** Past entries — and on-demand sweeps of an archive by date — let the operator reconstruct the events and timeline of any period by looking *back* over it, not just recall a single day. Recall is a first-class read path, not a side effect of capture.
+- **Artifact retrieval.** Entries anchor to the files, commits, media, and links behind each moment (the `References` block below), so the corpus doubles as a retrieval index for the *artifacts* of the past — the source dump, the screenshot, the commit — not only the words about them.
+- **Enrichment from integrations.** The same `apps/` integrations that capture state can be queried at recall time to enrich a period with context the corpus never stored on its own — the surrounding commits, the browsing trail, the media sitting in the inbox.
+
 **Daily entry shape (the format we standardize on):**
 
 ```text
@@ -85,7 +91,7 @@ References:            (optional — URLs / host paths to source material;
 
 **Rules for builders:**
 
-- Any new integration that produces personal signal (calendar, location, finance, comms) should consider how its output participates in the HFL corpus.
+- Any new integration that produces personal signal (calendar, location, finance, comms) should consider how its output participates in the HFL corpus — both as a scheduled feed-in *and* as a live source the recall path can query to enrich a period on demand.
 - Workflows that summarize, tag, or surface entries are first-class — they are the "Distill" half of CODE applied to lived experience.
 - The smallest useful entry is one line. Don't gate capture on having something profound to say.
 - **Provenance convention:** an `hfl_signal` entry-writer should set `References` to its source artifact (the `express_target` it distilled — a dump file path, commit URL, conversation link). This closes the Capture→Distill→Express loop within one hop: references are not dead weight because the weekly summarizer resolves them. The `manifesto` metadata block on beat entries stays pure intent-routing — this convention lives in the entry, not that block.

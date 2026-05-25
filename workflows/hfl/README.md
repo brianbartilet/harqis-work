@@ -266,9 +266,15 @@ It's a **hybrid** (`workflows/hfl/tasks/time_capsule.py` + the skill):
    **Haiku** vision caption for images + sampled video frames (reuses
    `analyze_media`'s encoders); extracted text for documents. Writes
    `logs/time-capsule/<slug>.{manifest.json,digest.md}` and prints the digest.
-2. **SYNTHESIZE** — Claude reads the digest and composes the rollup fields
-   (grounded in the files; no invention), writing them to `<slug>.synthesis.json`.
-3. **WRITE** (`run_write`) — dual-writes the entry through `capture.append_entry`
+2. **ENRICH** — cross-references the same window against already-captured signal:
+   existing HFL entries (`es_store.query_hfl_entries`) and live `apps/` integration
+   data (e.g. `ingest_git.collect_github_activity`) so the rollup builds on — and
+   de-duplicates against — what the corpus already holds. Best-effort; `--no-enrich`
+   skips it.
+3. **SYNTHESIZE** — Claude reads the digest (+ enrichment) and composes the rollup
+   fields (grounded in the files/signal; no invention), writing them to
+   `<slug>.synthesis.json`.
+4. **WRITE** (`run_write`) — dual-writes the entry through `capture.append_entry`
    (corpus + the `harqis-hfl-entries` ES index, `source="time-capsule"`).
 
 - **Default root** is `/Volumes/harqis-data` (the harqis-server data volume, per
