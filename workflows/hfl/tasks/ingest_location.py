@@ -431,7 +431,7 @@ def ingest_location_activity(
         day_file, entry, source="location", synthesized=d.get("synthesized", False),
     )
 
-    _log.info("ingest_location: entry written (%d stays, %d fixes) → %s",
+    _log.info("ingest_location: entry written (%d stays, %d fixes) -> %s",
               activity["stay_count"], activity["point_count"], day_file)
     return {
         "entries_written": 1,
