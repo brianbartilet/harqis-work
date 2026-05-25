@@ -814,6 +814,25 @@ def docker_down() -> None:
     _docker_compose("down")
 
 
+def _bootstrap_elasticsearch() -> None:
+    """Run the ES single-node bootstrap after docker compose up. Non-fatal."""
+    bootstrap_py = SCRIPTS_DIR / "bootstrap_elasticsearch.py"
+    if not bootstrap_py.exists():
+        print("  WARNING: scripts/bootstrap_elasticsearch.py not found — skipping ES bootstrap.")
+        return
+    py = str(VENV_PY) if VENV_PY.exists() else sys.executable
+    result = subprocess.run(
+        [py, str(bootstrap_py)],
+        cwd=REPO_ROOT,
+        check=False,
+    )
+    if result.returncode != 0:
+        print(
+            "  WARNING: ES bootstrap returned non-zero — cluster may have yellow "
+            "shards. Re-run: python scripts/bootstrap_elasticsearch.py"
+        )
+
+
 # ── OS-native service registration ────────────────────────────────────────────
 
 def register_services(machine: dict, args: argparse.Namespace, services: list[str]) -> None:
@@ -1150,8 +1169,9 @@ def main() -> None:
                     except OSError:
                         pass
 
-    if role == "host" and not args.docker_only and not single_instance:
+    if role == "host" and not single_instance:
         docker_up()
+        _bootstrap_elasticsearch()
     elif role == "node" and not single_instance:
         print("[node] Skipping Docker — broker is on the host.")
 
@@ -1171,6 +1191,8 @@ def main() -> None:
         register_services(machine, args, services)
 
     if args.docker_only:
+        # docker_up + bootstrap already ran above for host role; just skip
+        # spawning Python services.
         return
 
     if register_started_immediately:

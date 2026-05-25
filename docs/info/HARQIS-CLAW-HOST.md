@@ -960,6 +960,25 @@ status:failed AND @timestamp:[now-24h TO now]
 task_name:workflows.hud.tasks.hud_gpt.get_desktop_logs
 ```
 
+**Single-node replica configuration** — the Docker Compose stack runs one
+Elasticsearch node. Indices with `number_of_replicas: 1` (the ES default)
+will stay permanently yellow because no second node exists to hold the replica
+shard. `scripts/deploy.py` runs `scripts/bootstrap_elasticsearch.py`
+automatically after `docker compose up` on the host to prevent this:
+
+- Installs a composable index template (`harqis-single-node`) covering
+  `harqis-*` and `tcg-mp-*` patterns: `replicas=0`, `shards=1`.
+- Patches all existing matching indices to `replicas=0`.
+
+The bootstrap is idempotent and non-fatal — if ES is briefly unreachable the
+deploy continues and prints a warning. Re-run manually if needed:
+
+```bash
+python scripts/bootstrap_elasticsearch.py
+python scripts/bootstrap_elasticsearch.py --dry-run   # preview only
+ES_WAIT_SECONDS=60 python scripts/bootstrap_elasticsearch.py  # longer wait
+```
+
 ### Telegram alerts
 
 ```python
