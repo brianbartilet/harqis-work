@@ -1,7 +1,24 @@
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from apps.own_tracks.references.web.base_api_service import BaseApiServiceOwnTracks
 from core.web.services.core.decorators.deserializer import deserialized
+
+
+def _to_recorder_time(value) -> Optional[str]:
+    """Normalise a from/to bound for the Recorder's /locations endpoint.
+
+    The OwnTracks Recorder expects ISO date/time strings for ``from``/``to``
+    and rejects a raw Unix epoch with ``impossible date/time ranges``. Accept
+    either form: an int/float epoch (the documented ``from_ts``/``to_ts``
+    contract) is converted to a UTC ISO timestamp; a non-empty string is
+    assumed already-ISO and passed through. ``None``/empty → ``None``.
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(value, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    return str(value)
 
 
 class ApiServiceOwnTracksLocations(BaseApiServiceOwnTracks):
@@ -70,10 +87,12 @@ class ApiServiceOwnTracksLocations(BaseApiServiceOwnTracks):
             .add_query_string('user', user) \
             .add_query_string('device', device)
 
-        if from_ts:
-            self.request.add_query_string('from', from_ts)
-        if to_ts:
-            self.request.add_query_string('to', to_ts)
+        from_iso = _to_recorder_time(from_ts)
+        to_iso = _to_recorder_time(to_ts)
+        if from_iso:
+            self.request.add_query_string('from', from_iso)
+        if to_iso:
+            self.request.add_query_string('to', to_iso)
 
         return self.client.execute_request(self.request.build())
 

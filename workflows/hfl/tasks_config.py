@@ -199,5 +199,39 @@ WORKFLOW_HFL = {
         },
     },
 
+    # Daily location timeline — 23:05 local. Pulls the day's GPS track from the
+    # local OwnTracks Recorder (apps/own_tracks), clusters fixes into
+    # reverse-geocoded stay-points (Nominatim, free), and distils ONE
+    # "where I was today" timeline entry (Haiku) — dual-written corpus + ES.
+    # HFL queue (the Recorder + device config live on harqis-server, the Beat
+    # host — this is a centralized source, not a per-machine broadcast like
+    # browsing). Active, clean no-op until OwnTracks reports: no device
+    # configured / Recorder unreachable / no stay-points → no LLM, no entry.
+    # Device read from OWN_TRACKS_DEFAULT_USER / OWN_TRACKS_DEFAULT_DEVICE.
+    'run-job--ingest_location_activity': {
+        'task': 'workflows.hfl.tasks.ingest_location.ingest_location_activity',
+        'schedule': crontab(hour=23, minute=5),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'window_days': 1,
+            'radius_m': 150,
+            'min_dwell_min': 15,
+            'max_gap_min': 90,
+            'max_points': 5000,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 60 * 12,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+        },
+    },
+
 
 }

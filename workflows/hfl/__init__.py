@@ -13,4 +13,5 @@ import workflows.hfl.tasks.ingest_git     # noqa: F401
 import workflows.hfl.tasks.ingest_ai      # noqa: F401
 import workflows.hfl.tasks.ingest_chatgpt  # noqa: F401
 import workflows.hfl.tasks.ingest_browsing  # noqa: F401
+import workflows.hfl.tasks.ingest_location  # noqa: F401
 import workflows.hfl.tasks.time_capsule    # noqa: F401
