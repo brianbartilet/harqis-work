@@ -27,6 +27,7 @@ Operational scripts for **harqis-work**, organised by purpose:
 | `daily_improvement_scout.py` | Daily repo inspection — code-quality, config, workflow-health gaps. Shells out to `manifesto_audit.py`. |
 | `weekly_claude_pr.py` | Weekly orchestration — runs the scout, delegates to local Claude Code, opens a draft PR. |
 | `weekly_lessons_extraction.py` | Weekly HFL pattern detection (cron). Runs `lessons_extractor.py`. |
+| `migrate_to_core_scan.py` | Deterministic harvest-candidate scan for the `/migrate-to-core` skill — ranks `apps/` + `scripts/agents/` by genericness vs. coupling (workflows/mcp/sprout) and maps what's already upstream in harqis-core. Writes `.harqis-data/migrate_to_core_scan.json`. Ignores `workflows/` + the AI scaffold. |
 | `manifesto_audit.py` | Validates the `'manifesto'` metadata block on every `workflows/*/tasks_config.py` beat entry. Non-zero exit on hard violations. |
 | `run_test_suite.py` | Exploratory / continuous test runner with coverage + perf tracking. |
 | `check_env_health.py` | Environment / dependency / config diagnostics → JSON report. |
