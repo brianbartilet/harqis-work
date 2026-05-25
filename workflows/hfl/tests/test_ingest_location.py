@@ -22,7 +22,13 @@ from workflows.hfl.tasks.ingest_location import (
     collect_location_activity,
     distill_location_activity,
     ingest_location_activity,
+    nearest_fix,
 )
+
+
+def _svc_returning(data):
+    """A stand-in ApiServiceOwnTracksLocations whose get_history returns data."""
+    return lambda *a, **k: type("S", (), {"get_history": lambda self, **kw: data})()
 
 
 def _track(start: datetime, fixes):
@@ -182,3 +188,28 @@ def test__distill_location_raw_fallback_no_api():
     assert "Test Plaza" in _activity_body(activity)
     for key in ("moment", "what_happened", "possible_use", "tags"):
         assert key in d
+
+
+def test__nearest_fix_picks_closest_in_time(monkeypatch):
+    """nearest_fix returns the fix nearest the target time (used to geo-tag
+    photos by capture time)."""
+    monkeypatch.setenv("OWN_TRACKS_DEFAULT_USER", "u")
+    monkeypatch.setenv("OWN_TRACKS_DEFAULT_DEVICE", "d")
+    target = datetime(2026, 5, 1, 12, 0, 0)
+    t = int(target.timestamp())
+    data = {"data": [
+        {"lat": 1.0, "lon": 100.0, "tst": t - 3600},   # 60 min before
+        {"lat": 2.0, "lon": 200.0, "tst": t + 120},     # 2 min after — closest
+        {"lat": 3.0, "lon": 300.0, "tst": t + 4000},    # ~67 min after
+    ]}
+    monkeypatch.setattr(
+        "workflows.hfl.tasks.ingest_location.ApiServiceOwnTracksLocations",
+        _svc_returning(data),
+    )
+    assert nearest_fix(target) == (2.0, 200.0)
+
+
+def test__nearest_fix_none_when_no_device(monkeypatch):
+    monkeypatch.delenv("OWN_TRACKS_DEFAULT_USER", raising=False)
+    monkeypatch.delenv("OWN_TRACKS_DEFAULT_DEVICE", raising=False)
+    assert nearest_fix(datetime(2026, 5, 1, 12, 0)) is None

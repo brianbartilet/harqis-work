@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -48,6 +49,11 @@ from workflows.hfl.tasks.capture import (
     append_entry,
     resolve_corpus_dir,
 )
+from workflows.hfl.tasks.ingest_location import (
+    _osm_link,
+    _reverse_geocode,
+    nearest_fix,
+)
 
 _log = create_logger("hfl.analyze_media")
 
@@ -63,6 +69,15 @@ except Exception:  # pragma: no cover - import guard
     cv2 = None
     np = None
     _HAVE_CV2 = False
+
+# Pillow is optional too — EXIF GPS/timestamp enrichment degrades to
+# OwnTracks-by-time (or no location) without it.
+try:  # pragma: no cover - import guard
+    from PIL import Image as _PILImage
+    _HAVE_PIL = True
+except Exception:  # pragma: no cover - import guard
+    _PILImage = None
+    _HAVE_PIL = False
 
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 _VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm"}
@@ -188,6 +203,93 @@ def _parse_model_json(text: str) -> dict | None:
         return None
 
 
+def _dms_to_deg(dms, ref) -> float | None:
+    """Convert an EXIF GPS (degrees, minutes, seconds) triple + N/S/E/W ref to
+    signed decimal degrees, or None."""
+    try:
+        d, m, s = (float(x) for x in dms)
+    except (TypeError, ValueError):
+        return None
+    deg = d + m / 60.0 + s / 3600.0
+    return -deg if str(ref).upper() in ("S", "W") else deg
+
+
+def _exif_location_and_time(path: Path) -> tuple[tuple[float, float] | None, datetime | None]:
+    """Best-effort ``(coords, capture_dt)`` from an image's EXIF.
+
+    coords from the GPS IFD (when the camera recorded location), capture_dt
+    from DateTimeOriginal (falling back to DateTime). Either may be None; any
+    failure (no Pillow, no EXIF, unreadable) yields ``(None, None)``.
+    """
+    if not _HAVE_PIL:
+        return None, None
+    try:
+        with _PILImage.open(path) as img:
+            exif = img.getexif()
+        if not exif:
+            return None, None
+        coords = None
+        try:
+            gps = exif.get_ifd(0x8825)  # GPSInfo IFD
+        except Exception:  # noqa: BLE001
+            gps = {}
+        if gps:
+            lat = _dms_to_deg(gps.get(2), gps.get(1))
+            lon = _dms_to_deg(gps.get(4), gps.get(3))
+            if lat is not None and lon is not None and (lat or lon):
+                coords = (lat, lon)
+        raw = None
+        try:
+            raw = exif.get_ifd(0x8769).get(36867)  # Exif IFD → DateTimeOriginal
+        except Exception:  # noqa: BLE001
+            raw = None
+        raw = raw or exif.get(306)  # DateTime (main IFD)
+        capture_dt = None
+        if raw:
+            try:
+                capture_dt = datetime.strptime(str(raw).strip(), "%Y:%m:%d %H:%M:%S")
+            except ValueError:
+                capture_dt = None
+        return coords, capture_dt
+    except Exception as exc:  # noqa: BLE001 - EXIF is best-effort
+        _log.debug("hfl.media: EXIF read failed for %s (%s)", path, exc)
+        return None, None
+
+
+def _resolve_media_location(
+    path: Path, mtime: datetime, is_image: bool, *, geocode_cache: dict
+) -> tuple[str | None, tuple[float, float] | None, str | None]:
+    """Resolve where a media file was captured → ``(place, coords, source)``.
+
+    EXIF GPS first (most precise, the camera's own fix); otherwise the nearest
+    OwnTracks fix to the capture time (EXIF DateTimeOriginal when present, else
+    mtime) — which also geo-tags screenshots and EXIF-stripped media. The
+    coordinate is reverse-geocoded to a place label (Nominatim, cached). All
+    best-effort: any failure → ``(None, None, None)`` and the media is still
+    analyzed, just without a place.
+    """
+    coords: tuple[float, float] | None = None
+    source: str | None = None
+    capture_dt = mtime
+    try:
+        if is_image:
+            exif_coords, exif_dt = _exif_location_and_time(path)
+            if exif_dt:
+                capture_dt = exif_dt
+            if exif_coords:
+                coords, source = exif_coords, "exif"
+        if coords is None:
+            fix = nearest_fix(capture_dt)
+            if fix:
+                coords, source = fix, "owntracks"
+        if coords:
+            place = _reverse_geocode(coords[0], coords[1], cache=geocode_cache)
+            return place, coords, source
+    except Exception as exc:  # noqa: BLE001 - enrichment never breaks the pipeline
+        _log.info("hfl.media: location enrich failed for %s (%s)", path, exc)
+    return None, None, None
+
+
 @SPROUT.task()
 @log_result()
 def analyze_hfl_media(
@@ -242,6 +344,7 @@ def analyze_hfl_media(
     corpus_dir.mkdir(parents=True, exist_ok=True)
 
     images = videos = entries = skipped = 0
+    geo_cache: dict = {}  # reverse-geocode cache shared across this run's media
 
     for item in media:
         suffix = item.path.suffix.lower()
@@ -259,12 +362,23 @@ def analyze_hfl_media(
                 skipped += 1
                 continue
 
+            place, coords, geo_src = _resolve_media_location(
+                item.path, item.mtime, not is_video, geocode_cache=geo_cache,
+            )
+            if place:
+                loc_line = f"Location: {place}\n"
+            elif coords:
+                loc_line = f"Location: {coords[0]:.4f},{coords[1]:.4f}\n"
+            else:
+                loc_line = ""
+
             instruction = {
                 "type": "text",
                 "text": (
                     f"File: {item.path.name}\n"
                     f"Captured: {item.mtime.strftime('%Y-%m-%d %H:%M')}\n"
-                    f"Folder path: {item.relative.as_posix()}\n\n"
+                    f"Folder path: {item.relative.as_posix()}\n"
+                    f"{loc_line}\n"
                     "Analyze this media per your instructions and reply with "
                     "the JSON object only."
                 ),
@@ -294,6 +408,15 @@ def analyze_hfl_media(
                 t = str(t).strip().lstrip("#")
                 if t and t not in tags:
                     tags.append(t)
+            # Location enrichment → a place tag the corpus can be queried by.
+            if place:
+                place_tag = re.sub(r"[^a-z0-9]+", "-", place.split(",")[0].lower()).strip("-")
+                if place_tag and place_tag not in tags:
+                    tags.append(place_tag)
+
+            references = [str(item.path)]
+            if coords:
+                references.append(_osm_link(coords[0], coords[1]))
 
             entry = _build_entry(
                 when=item.mtime,
@@ -302,10 +425,10 @@ def analyze_hfl_media(
                 why_it_stayed=str(parsed.get("why_it_stayed", "")),
                 possible_use=str(parsed.get("possible_use", "")),
                 tags=tags,
-                # Provenance: point the entry back at the source dump file
-                # (manifesto §1 — close the dumps→media→corpus loop; the
-                # summarize resolver can re-read it for the weekly rollup).
-                references=[str(item.path)],
+                # Provenance: the source dump file (manifesto §1 — the
+                # dumps→media→corpus loop) plus, when known, an OSM pin for
+                # where it was captured (EXIF GPS or the OwnTracks fix).
+                references=references,
             )
             day_file = corpus_dir / f"{item.mtime.strftime('%Y-%m-%d')}.md"
             # Vision pass = an LLM (Haiku) distillation → synthesized.
