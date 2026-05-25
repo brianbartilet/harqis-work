@@ -5,7 +5,9 @@ description: >
   ingest their content (text, logs, images, video, audio, documents), and synthesize
   ONE Homework-for-Life "time capsule" entry summarizing the notable events, actions,
   reminders, and artifacts of that period — with the contributing files recorded as
-  metadata. Hybrid: a Celery-style collect task does the bounded sweep + per-file Haiku
+  metadata, enriched with already-captured signal for the same window (existing HFL
+  entries in Elasticsearch + live apps/ integration data such as GitHub commits).
+  Hybrid: a Celery-style collect task does the bounded sweep + per-file Haiku
   vision/extraction, then Claude synthesizes the rollup and dual-writes it (corpus + ES).
   Trigger phrases: "time capsule for <period>", "synthesize <month/year> from <dir>",
   "ingest the archive for <period>", "backfill HFL from <dir> since <date>".
@@ -16,6 +18,13 @@ Given a directory and a flexible date period, this skill sweeps the tree by file
 ingests every file's content/context, and synthesizes a single rollup `HflEntry` (the
 notable events, actions, reminders, and artifacts) — dual-written to the Markdown corpus
 and the `harqis-hfl-entries` Elasticsearch index, with the source files as `references`.
+
+This is the **retrospective** arm of Homework for Life (`docs/MANIFESTO.md` §2). It serves
+the three things the corpus is for: it **curates** the events/timeline of a past period by
+looking *back* over it; it makes the corpus a **retrieval index** for that period's files
+and artifacts (recorded as `references`); and it **enriches** the rollup with what was
+already captured for the same window — prior HFL entries (the ES index) and live `apps/`
+integration signal (Step 1.5).
 
 The heavy lifting (walking the tree, reading text, captioning images/video with Haiku,
 extracting document text) is done by `workflows/hfl/tasks/time_capsule.py`; **you**
@@ -33,10 +42,11 @@ extracting document text) is done by `workflows/hfl/tasks/time_capsule.py`; **yo
 | Token | Required | Description |
 |---|---|---|
 | `<period>` | Yes | A date or span. Flexible: `May 2020`, `August 1, 2002`, `June-July 2019`, `2019-06-01..2019-07-31`, `since 2020-01-01`, `2020-01-01 to today`, `last 90 days`. Quote multi-word periods. |
-| `--root <dir>` | No | Directory to sweep. Default `/Volumes/harqis-data` (the harqis-server data root, per `machines.local.toml`). Must be reachable on the host you run this on. |
+| `--root <dir>` | No | Directory to sweep. Default `/Volumes/harqis-data` (the harqis-server data root, per `machines.local.toml`). The dumps **inbox** (`machines.local.toml [dumps].harqis_server_inbox`, default `/Users/harqis-one/dumps`) is the other natural root — every machine's daily dumps land there. Must be reachable on the host you run this on. |
 | `--max-files N` | No | Cap on files analyzed (most-recent-first). Default `500`. |
 | `--no-caption` | No | Skip Haiku vision captions for images/video (faster, free; images become metadata-only). |
-| `--dry-run` | No | Run COLLECT only — produce the manifest + digest, do NOT write an HFL entry. |
+| `--no-enrich` | No | Skip Step 1.5 — synthesize from the file digest alone, without cross-referencing already-captured HFL entries or `apps/` integration signal. |
+| `--dry-run` | No | Run COLLECT (+ ENRICH) only — produce the manifest + digest + enrichment, do NOT write an HFL entry. |
 
 Pick the repo venv Python for every command below:
 `.venv/Scripts/python.exe` on Windows, `.venv/bin/python` on macOS/Linux. (Referred to as `PY` here.)
@@ -77,7 +87,42 @@ Handle the result:
   it's long). It has per-day counts, per-kind totals, and one line per file
   (`[kind] mtime path — snippet/caption/note`).
 
-If `--dry-run`: report the digest + artifact paths and stop here.
+(If `--dry-run`, still run Step 1.5 next, then report the digest + enrichment + artifact
+paths and stop — do NOT write an entry.)
+
+---
+
+## Step 1.5 — ENRICH (cross-reference what's already captured)
+
+Skip if `--no-enrich`. Otherwise, before synthesizing, pull the signal the corpus
+*already* holds for the same window so the rollup builds on it rather than ignoring or
+duplicating it. Use the date parts (`YYYY-MM-DD`) of `JSON_RESULT.window.start` /
+`.window.end` from Step 1 (the end is exclusive — fine for these bounded queries).
+
+**(a) Existing HFL entries (Elasticsearch).** Query the `harqis-hfl-entries` index for
+entries already captured in this window by the daily ingest sources (chatgpt, git,
+browsing, dumps) or a prior capsule:
+
+```bash
+PY -c "import sys,json; sys.path.insert(0,'scripts'); import launch; launch.setup_env(); from workflows.hfl.es_store import query_hfl_entries; print('JSON_RESULT='+json.dumps(query_hfl_entries(since=sys.argv[1], until=sys.argv[2], limit=50), default=str))" "<START>" "<END>"
+```
+
+**(b) App-integration signal.** Pull live context from an `apps/` integration for the
+same dates. GitHub commits are the canonical example and work for any historical window:
+
+```bash
+PY -c "import sys,json; sys.path.insert(0,'scripts'); import launch; launch.setup_env(); from datetime import date; from workflows.hfl.tasks.ingest_git import collect_github_activity; print('JSON_RESULT='+json.dumps(collect_github_activity(since=date.fromisoformat(sys.argv[1]), until=date.fromisoformat(sys.argv[2])), default=str))" "<START>" "<END>"
+```
+
+This call is **best-effort**: if it errors (no GitHub token, offline) or returns
+`commit_count: 0`, note that and proceed without it. The same pattern fits any `apps/`
+integration that has a windowed collector — the read-only MCP live-view tools in
+`workflows/hfl/mcp.py` mirror these (`memory_recall_es`, `git_activity`,
+`browsing_activity`). `browsing_activity` only helps for *recent* windows (browser
+history doesn't reach back years) — skip it for old backfills.
+
+Carry the results into Step 2 as **cross-reference context** — not new files to ingest,
+and never something to fabricate from.
 
 ---
 
@@ -85,7 +130,15 @@ If `--dry-run`: report the digest + artifact paths and stop here.
 
 From the digest, write ONE period rollup. Be concrete and grounded — name the actual
 projects, places, people, documents, errors, milestones the files reveal. Do not invent
-anything not supported by a file. Fields:
+anything not supported by a file.
+
+If Step 1.5 returned anything, fold it in: let **existing HFL entries** anchor the
+narrative (synthesize a higher-level rollup that *references* them — don't restate them
+verbatim), and let **app-integration signal** (commits, etc.) corroborate the files or
+fill gaps they don't show. Enrichment is grounding, not licence to invent: a claim
+sourced from git/ES must trace to that result just as a file claim traces to the digest.
+
+Fields:
 
 - **moment** — a one-line headline for the period (≤120 chars, present tense).
 - **what_happened** — 3–8 sentences: the notable **events, actions, and artifacts** of
@@ -97,7 +150,9 @@ anything not supported by a file. Fields:
   `what_happened` (no separate field exists).
 - **tags** — 3–8 short tags (no `#`): projects, clients, places, themes.
 - **references** — the most notable contributing **file paths** from the manifest
-  (cap ~15: pick the artifacts that anchor the story, not every file).
+  (cap ~15: pick the artifacts that anchor the story, not every file). You may also
+  include a few enrichment anchors — a key commit URL from Step 1.5(b), or a prior
+  entry's source — when they're part of the story's provenance.
 - **when_iso** — use the `suggested_when_iso` from Step 1 (the period's last day, clamped
   to today) unless a specific day is clearly the centre of gravity.
 
@@ -174,3 +229,7 @@ queue. If no result backend is available, fall back to running on harqis-server.
    `root-unreachable` guidance — do not silently produce an empty capsule.
 7. **Provenance artifacts are kept.** Leave the `logs/time-capsule/<slug>.{manifest.json,
    digest.md,synthesis.json}` files in place; they are the run's audit trail.
+8. **Enrichment is cross-reference, not re-ingest.** Step 1.5 pulls already-captured
+   signal (ES entries + `apps/` integration data) only to ground and de-duplicate the
+   rollup — never to fabricate. Skip it cleanly (`--no-enrich`, an empty result, or a
+   failed best-effort call) without aborting the run.
