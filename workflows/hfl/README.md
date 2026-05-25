@@ -5,10 +5,10 @@
 > Life as a **first-class data source** — captured, retrievable, summarizable —
 > not a journaling app.
 
-This scaffold ships **inactive**: the package exists and the tasks are
-importable, but `workflows/config.py` does not yet pull `WORKFLOW_HFL` into
-the beat schedule. Activation is a deliberate, separate decision. See
-§Activation below.
+This workflow is **active** — `workflows/config.py` merges `WORKFLOW_HFL` into
+the beat schedule, so the ingest tasks run on the Beat host. Individual sources
+stay clean no-ops until configured (a ChatGPT token, OwnTracks reporting, a
+phone dumps-pull target); §Activation covers what each one needs.
 
 ---
 
@@ -47,10 +47,70 @@ this scaffold closes.
 | `ingest_ai_activity` | Alternate source (OpenAI **Platform API** assistant threads, via `OPENAI_HFL_THREAD_IDS`). Superseded by `ingest_chatgpt_activity` — kept in code but its beat entry is **disabled** (commented-out) to avoid a nightly no-op. | `file:hfl_corpus` | Disabled (uncomment in `tasks_config.py` if you also want Platform-API threads). |
 | `ingest_browsing_activity` | Daily web-browsing digest. Reads the Chrome + Edge `History` SQLite DBs directly (copy-to-temp to dodge the browser lock; no app/credential), distils the day's visits into ONE corpus entry with the most-visited pages as `references`. Haiku-distilled, raw fallback. No history DB / no visits → no entry, no call. No domain filtering by default (`exclude_domains` kwarg to redact). | `file:hfl_corpus+es:hfl-entries` | Daily 23:00 local (active — `os: windows`; no config needed). |
 | `ingest_location_activity` | Daily location timeline. Pulls the day's GPS track from the local OwnTracks Recorder (`apps/own_tracks`), clusters fixes into **stay-points** (dwell ≥ N min), reverse-geocodes each via OpenStreetMap Nominatim (free, no key), and distils ONE "where I was today" timeline entry. Haiku-distilled, raw fallback. No device configured / Recorder unreachable / no stays → no entry, no call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:05 local (active — clean no-op until OwnTracks reports). |
+| `analyze_hfl_media` | **Daily media vision pass.** Walks the dumps inbox for recent images/videos (pulled from phones + machines by `workflows/dumps/`), sends each to Haiku vision for a story moment, and **geo-tags** it — EXIF GPS, else the nearest OwnTracks fix by capture time → Nominatim place. One entry per story-worthy item; the source dump file + an OSM pin are the `references`. No new media → no entry, no call. | `file:hfl_corpus+es:hfl-entries` | Daily 22:00 local (active). |
 | `collect_time_capsule` | **On-demand, time-ranged archive ingest.** Sweeps a directory (and subdirs) for files dated within a period, extracts text / docs / Haiku vision captions into a bounded manifest + digest. The COLLECT half of the `/time-capsule-synthesizer` skill (Claude synthesizes ONE rollup entry from the digest, then dual-writes it via `capture_hfl_entry`). Not scheduled. | `file:hfl_corpus+es:hfl-entries` (via the skill) | Adhoc — driven by `/time-capsule-synthesizer`. |
 
 Each carries the manifesto metadata block on the beat entry — see
 `workflows/hfl/tasks_config.py`.
+
+---
+
+## Android phone → HFL (the two streams)
+
+A phone feeds HFL through **two independent streams that meet on a shared key —
+the timestamp**. Nothing custom runs on the phone beyond the OwnTracks app and a
+Termux SSH daemon.
+
+**1. Location (OwnTracks).** The app publishes GPS fixes (MQTT or HTTP) to the
+`mosquitto` broker → `owntracks-recorder` on harqis-server (see
+[`apps/own_tracks/README.md`](../../apps/own_tracks/README.md)). Two consumers:
+- `ingest_location_activity` (23:05) turns the day's track into a "where I was
+  today" timeline entry.
+- `ingest_location.nearest_fix()` answers "where was the phone at time T?" —
+  used to geo-tag photos (below).
+
+**2. Media (photos / videos / screenshots).** `pull_daily_dumps_from_remotes`
+(`workflows/dumps/`, 00:05) **copies** the phone's `DCIM/Camera` +
+`Pictures/Screenshots` over Tailscale (Termux SSHD) into the harqis-server dumps
+inbox. The originals stay on the phone; the **copies are retained as files** —
+one dated folder per day, never auto-deleted:
+
+```
+<harqis_server_inbox>/nothing-phone-daily-dumps-2026-05-25/
+  Camera/…   Screenshots/…
+```
+
+`analyze_hfl_media` (22:00) then *reads* (never moves/deletes) each new file,
+captions it with Haiku vision, and **geo-tags** it — EXIF GPS first, else the
+nearest OwnTracks fix to its capture time → Nominatim place — writing one entry
+per story-worthy item with the file path + an OSM pin as `references`.
+
+**The join.** A photo carries a capture *time*; OwnTracks carries a timestamped
+*track*. Matching the two locates even screenshots and EXIF-stripped media — so a
+screenshot taken downtown comes out tagged with the place.
+
+**Daily cadence (harqis-server):**
+
+| Time | Task | Result |
+| --- | --- | --- |
+| 00:05 | `pull_daily_dumps_from_remotes` | phone photos/screenshots → dumps inbox (retained) |
+| 22:00 | `analyze_hfl_media` | each story-worthy photo → geo-tagged entry |
+| 23:00 | `ingest_browsing_activity` / `ingest_chatgpt_activity` | browsing + research → entries |
+| 23:05 | `ingest_location_activity` | day's movement → one timeline entry |
+
+**Setup** (one-time): the OwnTracks app + `OWN_TRACKS_DEFAULT_USER/DEVICE` (the
+location stream — §Activation); a `[dumps.pull_targets.<phone>]` block in
+`machines.local.toml` pointing at the phone's Termux SSHD over Tailscale (the
+media stream — see [`workflows/dumps/README.md`](../dumps/README.md)). Set the
+camera to **JPEG, not HEIC** — `analyze_hfl_media` only reads
+`jpg/jpeg/png/webp/gif` (+ `mp4/mov/mkv/webm`), and Pillow can't read HEIC EXIF
+without `pillow-heif`. (Termux's sshd must be alive at 00:05 — a `termux-wake-lock`
+plus the Termux:Boot addon keeps it up across sleeps/reboots.)
+
+**Querying it (MCP tools in `workflows/hfl/mcp.py`):** `memory_recall` /
+`memory_recall_es` (what happened in a window), `location_activity` (live
+timeline), `memory_list_media` (photos/videos in a window). The weekly
+`summarize_hfl_week` rollup is emailed each Sunday.
 
 ---
 
@@ -131,7 +191,9 @@ for EXIF (optional); see `apps/own_tracks` for the location source.
 
 ## Activation
 
-When ready to turn this workflow on:
+The beat wiring (step 2 below) is **already in place** on `main`; this section
+is the reference for what each source still needs — and for bringing the
+workflow up on a fresh fork:
 
 1. **Wire the corpus path.** Either add an `HFL:` block to
    `apps_config.yaml`:
