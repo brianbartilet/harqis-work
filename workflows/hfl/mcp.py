@@ -746,3 +746,84 @@ def register_memory_tools(mcp: FastMCP):
             "model": model if d.get("synthesized") else None,
             "period": _period_dict(start_d, end_d, label),
         }
+
+    @mcp.tool()
+    def location_activity(
+        period: str = "",
+        since: str = "",
+        until: str = "",
+        synthesize: bool = True,
+        user: str = "",
+        device: str = "",
+        radius_m: int = 150,
+        min_dwell_min: int = 15,
+        cfg_id__anthropic: str = "ANTHROPIC",
+        model: str = _DEFAULT_HAIKU,
+    ) -> dict:
+        """Live view of the operator's OwnTracks location timeline in a window.
+
+        Same gathering the scheduled ingest_location_activity uses, but
+        read-only (no corpus or ES write). Pulls the day's GPS track from the
+        local OwnTracks Recorder, clusters it into reverse-geocoded stay-points
+        (where the operator dwelled), and distils a movement timeline. Defaults
+        to the last 7 days when no window is given. Returns found=false with NO
+        LLM call when no device is configured or there are no stay-points.
+
+        Args:
+            period: same vocabulary as memory_recall (overrides since/until).
+            since:  ISO "YYYY-MM-DD" or relative "-Nd".
+            until:  ISO "YYYY-MM-DD" (defaults to today).
+            synthesize: True → Haiku timeline narrative; False → raw stay list.
+            user:   OwnTracks username (default OWN_TRACKS_DEFAULT_USER).
+            device: OwnTracks device (default OWN_TRACKS_DEFAULT_DEVICE).
+        """
+        logger.info("location_activity period=%r since=%r until=%r",
+                    period, since, until)
+        # Imported lazily: keeps own_tracks + httpx off the MCP import path.
+        from workflows.hfl.tasks.ingest_location import (
+            collect_location_activity,
+            distill_location_activity,
+        )
+        start, end, label = _resolve_window(period, since, until)
+        end_d = end or _today()
+        start_d = start or (end_d - timedelta(days=6))
+        try:
+            activity = collect_location_activity(
+                since=start_d, until=end_d,
+                user=user or None, device=device or None,
+                radius_m=radius_m, min_dwell_min=min_dwell_min,
+            )
+        except Exception as exc:  # noqa: BLE001 - surface, don't crash the tool
+            logger.warning("location_activity: recorder unavailable (%s)", exc)
+            return {"found": False, "text": "", "error": "recorder unavailable",
+                    "period": _period_dict(start_d, end_d, label)}
+
+        if activity.get("reason") == "no-device-configured":
+            return {"found": False, "text": "", "stays": [], "stay_count": 0,
+                    "error": "no device configured",
+                    "period": _period_dict(start_d, end_d, label)}
+        if activity["stay_count"] == 0:
+            return {"found": False, "text": "", "stays": [], "stay_count": 0,
+                    "period": _period_dict(start_d, end_d, label)}
+
+        d = distill_location_activity(
+            activity, synthesize=synthesize, model=model, cfg_id=cfg_id__anthropic,
+        )
+        if synthesize and d.get("synthesized"):
+            text = (
+                f"**{d['moment']}**\n\n{d['what_happened']}\n\n"
+                f"_{d.get('why_it_stayed','')}_"
+            ).strip()
+        else:
+            text = d["what_happened"]  # raw stay timeline
+
+        return {
+            "found": True,
+            "text": text,
+            "stays": activity["stays"],
+            "stay_count": activity["stay_count"],
+            "point_count": activity["point_count"],
+            "synthesized": d.get("synthesized", False),
+            "model": model if d.get("synthesized") else None,
+            "period": _period_dict(start_d, end_d, label),
+        }

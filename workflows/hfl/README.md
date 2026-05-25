@@ -46,6 +46,7 @@ this scaffold closes.
 | `ingest_chatgpt_activity` | **Primary daily research log.** Auto-discovers the operator's ChatGPT conversations created/updated that day via the ChatGPT web app's private backend (no thread ids), distils the questions asked into ONE corpus entry. Haiku-distilled, raw fallback. No token / no prompts → no entry, no call. | `file:hfl_corpus` | Daily 23:00 local (active — no-op until `CHATGPT_WEB_ACCESS_TOKEN` is set). |
 | `ingest_ai_activity` | Alternate source (OpenAI **Platform API** assistant threads, via `OPENAI_HFL_THREAD_IDS`). Superseded by `ingest_chatgpt_activity` — kept in code but its beat entry is **disabled** (commented-out) to avoid a nightly no-op. | `file:hfl_corpus` | Disabled (uncomment in `tasks_config.py` if you also want Platform-API threads). |
 | `ingest_browsing_activity` | Daily web-browsing digest. Reads the Chrome + Edge `History` SQLite DBs directly (copy-to-temp to dodge the browser lock; no app/credential), distils the day's visits into ONE corpus entry with the most-visited pages as `references`. Haiku-distilled, raw fallback. No history DB / no visits → no entry, no call. No domain filtering by default (`exclude_domains` kwarg to redact). | `file:hfl_corpus+es:hfl-entries` | Daily 23:00 local (active — `os: windows`; no config needed). |
+| `ingest_location_activity` | Daily location timeline. Pulls the day's GPS track from the local OwnTracks Recorder (`apps/own_tracks`), clusters fixes into **stay-points** (dwell ≥ N min), reverse-geocodes each via OpenStreetMap Nominatim (free, no key), and distils ONE "where I was today" timeline entry. Haiku-distilled, raw fallback. No device configured / Recorder unreachable / no stays → no entry, no call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:05 local (active — clean no-op until OwnTracks reports). |
 | `collect_time_capsule` | **On-demand, time-ranged archive ingest.** Sweeps a directory (and subdirs) for files dated within a period, extracts text / docs / Haiku vision captions into a bounded manifest + digest. The COLLECT half of the `/time-capsule-synthesizer` skill (Claude synthesizes ONE rollup entry from the digest, then dual-writes it via `capture_hfl_entry`). Not scheduled. | `file:hfl_corpus+es:hfl-entries` (via the skill) | Adhoc — driven by `/time-capsule-synthesizer`. |
 
 Each carries the manifesto metadata block on the beat entry — see
@@ -217,6 +218,41 @@ ES index. The most-visited pages are stored as the entry's `references`.
 - Live view (no write): the `browsing_activity` MCP tool in
   `workflows/hfl/mcp.py`.
 
+### `ingest_location_activity` (daily location timeline)
+
+**Active by default; a clean no-op until OwnTracks is reporting.** Pulls the
+day's GPS track from the local OwnTracks Recorder, clusters fixes into
+**stay-points** (places where you dwelled), reverse-geocodes them via
+OpenStreetMap **Nominatim** (free, no API key), distils ONE "where I was today"
+timeline with Haiku, and **dual-writes** corpus + the `harqis-hfl-entries` ES
+index. The longest-dwell stay is stored as the entry's `references` (an
+OpenStreetMap pin).
+
+To make it produce entries:
+
+1. **Turn on OwnTracks.** Start the broker + recorder
+   (`docker compose up -d mosquitto recorder`) and point the OwnTracks
+   Android/iOS app at the broker — see
+   [`apps/own_tracks/README.md`](../../apps/own_tracks/README.md).
+2. **Name the device** in `.env/apps.env` so the task knows which track to read:
+   ```
+   OWN_TRACKS_DEFAULT_USER=brian
+   OWN_TRACKS_DEFAULT_DEVICE=android
+   ```
+3. **Restart Beat + an `hfl`-subscribed worker.** It runs daily at 23:05 local,
+   clusters the day's fixes, distils the timeline, and appends one entry to the
+   day's corpus file.
+
+- No device configured / Recorder unreachable / no stay-points → clean no-op
+  (no LLM, no entry).
+- Tuning kwargs: `radius_m` (stay cluster radius, default 150 m),
+  `min_dwell_min` (default 15), `max_gap_min` (signal-gap split, default 90),
+  `max_points` (cap, default 5000).
+- Nominatim is best-effort and rate-limited (≤1 req/s, cached per run); a
+  geocode miss degrades that stay to coordinates-only.
+- Live view (no write): the `location_activity` MCP tool in
+  `workflows/hfl/mcp.py`.
+
 ---
 
 ## Elasticsearch entry index (dual-write)
@@ -243,8 +279,8 @@ index via `workflows/hfl/es_store.py`.
 > Status: `capture`, `ingest_git`, `ingest_ai`, `analyze_media`, and
 > `summarize` now dual-write via the shared `append_entry` helper in
 > `capture.py` (`append_entry` → corpus write + `index_hfl_entry`,
-> returning `(bytes, doc_id)`). `ingest_browsing` dual-writes the same
-> way. **`ingest_chatgpt` is the one remaining gap** — it still uses the
+> returning `(bytes, doc_id)`). `ingest_browsing` and `ingest_location`
+> dual-write the same way. **`ingest_chatgpt` is the one remaining gap** — it still uses the
 > bare `_render_entry`+write path and is not yet ES-indexed; routing it
 > through `append_entry` is the clean follow-up.
 
@@ -311,6 +347,7 @@ MCP live-view tool — dual-writing corpus + ES. It composes with
 | `retrieve_hfl_corpus` | distill+express | area | `es_log` | `es_log` | `True` |
 | `summarize_hfl_week` | distill+express | area | `file:hfl_summary+es_log` | `es_log+file` | `True` |
 | `ingest_browsing_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` |
+| `ingest_location_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` |
 
 This block is also persisted on each beat entry's `'manifesto'` key — see
 `workflows/hfl/tasks_config.py`. `scripts/agents/manifesto_audit.py` reads from
