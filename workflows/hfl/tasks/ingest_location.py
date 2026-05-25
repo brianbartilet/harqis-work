@@ -282,6 +282,55 @@ def collect_location_activity(
     }
 
 
+# ── point lookup (for geo-tagging other artifacts, e.g. photos) ───────────────
+
+def nearest_fix(
+    when: datetime,
+    *,
+    user: Optional[str] = None,
+    device: Optional[str] = None,
+    slack_min: int = 120,
+) -> Optional[tuple[float, float]]:
+    """Return the ``(lat, lon)`` of the OwnTracks fix closest in time to
+    ``when``, or ``None``.
+
+    Used to geo-tag artifacts that carry a timestamp but no coordinates of
+    their own (a screenshot, an EXIF-stripped photo): match the capture time
+    to where the device was. Only fixes within ``slack_min`` of ``when`` count.
+    Best-effort — no device configured, Recorder unreachable, or no nearby fix
+    all return ``None``.
+    """
+    u, d = _resolve_device(user, device)
+    if not u or not d:
+        return None
+    target = when.timestamp()
+    lo = int(target - slack_min * 60)
+    hi = int(target + slack_min * 60)
+    try:
+        svc = ApiServiceOwnTracksLocations(OWN_TRACKS_CONFIG)
+        result = svc.get_history(user=u, device=d, from_ts=lo, to_ts=hi)
+    except Exception as exc:  # noqa: BLE001 - geo-tag is best-effort
+        _log.info("ingest_location.nearest_fix: recorder unavailable (%s)", exc)
+        return None
+    rows = (result or {}).get("data", []) if isinstance(result, dict) else []
+    best: Optional[tuple[float, float]] = None
+    best_dt = slack_min * 60 + 1
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        lat, lon, tst = r.get("lat"), r.get("lon"), r.get("tst")
+        if lat is None or lon is None or tst is None:
+            continue
+        try:
+            delta = abs(int(tst) - target)
+        except (TypeError, ValueError):
+            continue
+        if delta < best_dt:
+            best_dt = delta
+            best = (float(lat), float(lon))
+    return best
+
+
 # ── distillation ──────────────────────────────────────────────────────────────
 
 def _fmt_clock(ts: int) -> str:

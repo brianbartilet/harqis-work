@@ -107,7 +107,20 @@ weekly run, `summarize_hfl_week` resolves them (bounded HTTP/file fetch,
 text-only, size/timeout caps) and injects the excerpts into the rollup
 prompt so the summary is grounded in the source — see
 `workflows/hfl/references.py`. `analyze_hfl_media` auto-sets this to the
-source dump file path (the dumps→media→corpus provenance loop).
+source dump file path (the dumps→media→corpus provenance loop), and — when
+the media can be geo-located — also appends an OpenStreetMap pin for where it
+was captured.
+
+**Location-enriched media.** `analyze_hfl_media` resolves *where* each photo/
+video was taken and folds the place into the entry: it reads **EXIF GPS** first
+(the camera's own fix), and otherwise matches the capture time to the nearest
+**OwnTracks** fix (`ingest_location.nearest_fix`) — so screenshots and
+EXIF-stripped media get located too. The coordinate is reverse-geocoded
+(OpenStreetMap Nominatim, the shared `_reverse_geocode` helper), and the place
+is passed to the Haiku prompt, added as a tag, and pinned in `References`. All
+best-effort: no EXIF, no OwnTracks device, or an unreachable Recorder/geocoder
+just yields a place-less entry (the media is still analyzed). Requires Pillow
+for EXIF (optional); see `apps/own_tracks` for the location source.
 
 > Privacy/cost note: resolved file and URL content is sent to Anthropic
 > in the weekly prompt. v1 bounds it (existence check, text-only,
