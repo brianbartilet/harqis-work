@@ -20,16 +20,17 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOGS_DIR = REPO_ROOT / "logs"
 FARM_MD = LOGS_DIR / "BDD-TEST-FARM.md"
 EMAIL_LOG_DIR = LOGS_DIR / "test_farm_email"
-DEFAULT_TO = "brian.bartilet@juliusbaer.com"
+DEFAULT_TO = "brian.bartilet@juliusbaer.com,brian.bartilet@gmail.com"
 DEFAULT_FROM = "brian.bartilet@gmail.com"
 DEFAULT_BOARD_ID = 1790
 DEFAULT_GMAIL_CONFIG = "GOOGLE_GMAIL_SEND"
+DEFAULT_TELEGRAM_CONFIG = "TELEGRAM"
 
 
 def _bootstrap_env() -> None:
@@ -266,6 +267,31 @@ def send_email(to_addr: str, subject: str, plain_text: str, html_text: str, cfg_
     return svc.send_email(to=to_addr, subject=subject, body=plain_text, body_html=html_text)
 
 
+def send_telegram_notification(
+    subject: str,
+    to_addr: str,
+    generation_summary: str,
+    html_path: Path,
+    cfg_id: str,
+    chat_id: str | None = None,
+) -> Any:
+    from apps.apps_config import CONFIG_MANAGER
+    from apps.telegram.references.web.api.messages import ApiServiceTelegramMessages
+
+    cfg = CONFIG_MANAGER.get(cfg_id)
+    target_chat = chat_id or cfg.app_data.get("default_chat_id")
+    if not target_chat:
+        raise RuntimeError(f"Telegram default_chat_id is missing for {cfg_id}")
+    text = (
+        f"✅ {subject}\n"
+        f"Sent to: {to_addr}\n"
+        f"Artifact: {html_path}\n"
+        f"{generation_summary}"
+    )
+    svc = ApiServiceTelegramMessages(cfg)
+    return svc.send_message(chat_id=target_chat, text=text)
+
+
 def write_artifacts(subject: str, markdown_text: str, html_text: str) -> tuple[Path, Path]:
     EMAIL_LOG_DIR.mkdir(parents=True, exist_ok=True)
     stem = datetime.now().strftime("%Y-%m-%d") + "-test-farm"
@@ -283,6 +309,9 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     p.add_argument("--to", default=DEFAULT_TO)
     p.add_argument("--from-account", default=DEFAULT_FROM, help="documented sender account; Gmail token controls actual sender")
     p.add_argument("--gmail-config", default=DEFAULT_GMAIL_CONFIG)
+    p.add_argument("--telegram-config", default=DEFAULT_TELEGRAM_CONFIG)
+    p.add_argument("--telegram-chat-id", default=None, help="override TELEGRAM default_chat_id")
+    p.add_argument("--no-telegram", action="store_true", help="skip Telegram completion notification")
     p.add_argument("--board-id", type=int, default=DEFAULT_BOARD_ID)
     p.add_argument("--jira-config", default="JIRA")
     p.add_argument("--claude-model", default="sonnet")
@@ -330,6 +359,17 @@ def main(argv: Iterable[str] | None = None) -> int:
     result = send_email(args.to, subject, plain_text, html_text, args.gmail_config)
     msg_id = result.get("id", "unknown") if isinstance(result, dict) else "unknown"
     print(f"Sent {subject} from {args.from_account} to {args.to}; gmail_message_id={msg_id}")
+    if not args.no_telegram:
+        tg_result = send_telegram_notification(
+            subject,
+            args.to,
+            generation_summary,
+            html_path,
+            args.telegram_config,
+            args.telegram_chat_id,
+        )
+        tg_msg_id = tg_result.get("message_id", "unknown") if isinstance(tg_result, dict) else "unknown"
+        print(f"Telegram notification sent; message_id={tg_msg_id}")
     print(f"HTML: {html_path}")
     print(f"TEXT: {txt_path}")
     print(generation_summary)

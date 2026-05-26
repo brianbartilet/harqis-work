@@ -27,7 +27,7 @@ Operational scripts for **harqis-work**, organised by purpose:
 | `daily_improvement_scout.py` | Daily repo inspection — code-quality, config, workflow-health gaps. Shells out to `manifesto_audit.py`. |
 | `weekly_claude_pr.py` | Weekly orchestration — runs the scout, delegates to local Claude Code, opens a draft PR. |
 | `weekly_lessons_extraction.py` | Weekly HFL pattern detection (cron). Runs `lessons_extractor.py`. |
-| `daily_test_farm_email.py` | Daily BDD test farm sequence — refreshes `run_test_farm`, renders `logs/BDD-TEST-FARM.md`, and sends the HTML report via `GOOGLE_GMAIL_SEND`. |
+| `daily_test_farm_email.py` | Daily BDD test farm sequence — refreshes `run_test_farm`, renders `logs/BDD-TEST-FARM.md`, sends the HTML report via `GOOGLE_GMAIL_SEND`, and posts a Telegram completion notice. |
 | `migrate_to_core_scan.py` | Deterministic harvest-candidate scan for the `/migrate-to-core` skill — ranks `apps/` + `scripts/agents/` by genericness vs. coupling (workflows/mcp/sprout) and maps what's already upstream in harqis-core. Writes `.harqis-data/migrate_to_core_scan.json`. Ignores `workflows/` + the AI scaffold. |
 | `manifesto_audit.py` | Validates the `'manifesto'` metadata block on every `workflows/*/tasks_config.py` beat entry. Non-zero exit on hard violations. |
 | `run_test_suite.py` | Exploratory / continuous test runner with coverage + perf tracking. |
@@ -56,7 +56,10 @@ python scripts/agents/daily_test_farm_email.py --dry-run --skip-generate
 The script reuses `workflows.testing.tasks.test_farm.run_test_farm`, which invokes the
 repo-local `/generate-gherkin-scenarios` Claude skill through the local Claude Code Max
 subscription. It renders `logs/BDD-TEST-FARM.md` to HTML, writes audit artifacts under
-`logs/test_farm_email/`, and sends via the `GOOGLE_GMAIL_SEND` app config.
+`logs/test_farm_email/`, sends via the `GOOGLE_GMAIL_SEND` app config, and sends a
+Telegram completion notification via the `TELEGRAM` app config. By default, the report
+is addressed to both `brian.bartilet@juliusbaer.com` and `brian.bartilet@gmail.com`.
+Use `--no-telegram` for email-only test runs.
 
 ---
 
