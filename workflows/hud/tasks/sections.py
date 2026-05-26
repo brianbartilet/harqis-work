@@ -173,6 +173,13 @@ sections__api_costs = {
 sections__utilities_ahk = {}
 
 
+sections__sensors = {
+    # Only the template default `meterLink` is used — carries KIBANA, opening
+    # the dev console for the harqis-sensor-telemetry index. No extra top-row
+    # slots (mirrors sections__daily_radar).
+}
+
+
 sections__daily_radar = {
     # Only the template default `meterLink` is used — carries DUMP, opening
     # the rendered dump.txt for the DAILY RADAR widget. No additional

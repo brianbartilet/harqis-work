@@ -13,3 +13,4 @@ if sys.platform == "win32":
     import workflows.hud.tasks.hud_jira
     import workflows.hud.tasks.hud_api_costs
     import workflows.hud.tasks.hud_radar
+    import workflows.hud.tasks.hud_sensors
