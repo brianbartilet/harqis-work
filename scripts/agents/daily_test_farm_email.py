@@ -230,6 +230,33 @@ def markdown_to_html(markdown_text: str, title: str) -> str:
 """
 
 
+def preflight_gmail(cfg_id: str) -> None:
+    """Fail fast if the HARQIS Gmail send OAuth token cannot refresh."""
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from google.auth.exceptions import RefreshError
+    from apps.apps_config import CONFIG_MANAGER
+
+    cfg = CONFIG_MANAGER.get(cfg_id)
+    storage = Path(os.environ["PATH_APP_CONFIG_SECRETS"]) / cfg.app_data.get("storage")
+    scopes = cfg.app_data.get("scopes") or []
+    if not storage.exists():
+        raise RuntimeError(f"Gmail token storage is missing for {cfg_id}: {storage}")
+
+    creds = Credentials.from_authorized_user_file(storage, scopes)
+    if creds.valid:
+        return
+    if not (creds.expired and creds.refresh_token):
+        raise RuntimeError(f"Gmail token for {cfg_id} is not refreshable; re-authorize {storage.name}")
+    try:
+        creds.refresh(Request())
+    except RefreshError as e:
+        raise RuntimeError(
+            f"Gmail token refresh failed for {cfg_id}; re-authorize {storage.name}: {e}"
+        ) from e
+    storage.write_text(creds.to_json(), encoding="utf-8")
+
+
 def send_email(to_addr: str, subject: str, plain_text: str, html_text: str, cfg_id: str) -> dict:
     from apps.apps_config import CONFIG_MANAGER
     from apps.google_apps.references.web.api.gmail import ApiServiceGoogleGmail
@@ -299,6 +326,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         print(generation_summary)
         return 0
 
+    preflight_gmail(args.gmail_config)
     result = send_email(args.to, subject, plain_text, html_text, args.gmail_config)
     msg_id = result.get("id", "unknown") if isinstance(result, dict) else "unknown"
     print(f"Sent {subject} from {args.from_account} to {args.to}; gmail_message_id={msg_id}")
