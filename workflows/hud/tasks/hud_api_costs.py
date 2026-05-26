@@ -7,12 +7,16 @@ first; older calendar months follow. Each month shows a total at the
 top, then one section per service that incurred non-zero cost in that
 month, with a per-model breakdown below.
 
-Anthropic numbers come from the real admin usage API (requires
-ANTHROPIC_ADMIN_KEY). OpenAI / Gemini are stubbed at zero until cost
-endpoints are added to those apps — when a service's monthly total is
-zero, its section is omitted entirely (filter rule). A month with no
-spend across any service still renders its header so the trailing-3
-layout stays consistent.
+Anthropic numbers come from the real admin **cost report** API — actual
+billed USD, the same figures the console shows (requires
+ANTHROPIC_ADMIN_KEY). This is deliberately NOT the token-estimate path:
+estimating cost from token counts times a static price table drifted from
+billing (cache-write pricing especially), so the widget undercounted. See
+``ApiServiceAnthropicUsage.get_cost_by_model``. OpenAI / Gemini are stubbed
+at zero until cost endpoints are added to those apps — when a service's
+monthly total is zero, its section is omitted entirely (filter rule). A
+month with no spend across any service still renders its header so the
+trailing-3 layout stays consistent.
 """
 
 from datetime import datetime, timezone
@@ -120,16 +124,17 @@ def _trailing_month_windows(n: int = 3,
 # ── Service fetchers ─────────────────────────────────────────────────────────
 
 def _fetch_anthropic_by_model(year: int, month: int, cfg) -> Dict[str, float]:
-    """Per-model USD cost for a calendar month. Returns {} on failure."""
+    """Per-model **billed** USD cost for a calendar month. Returns {} on failure.
+
+    Uses the Anthropic admin *cost report* (actual billed amounts) rather than
+    the token-estimate path: the estimate drifted materially from billing
+    (cache-write pricing in particular), so the HUD showed less than the real
+    spend. ``get_cost_by_model`` returns the same figures as the console.
+    """
     start, end = _month_window(year, month)
     try:
         svc = ApiServiceAnthropicUsage(cfg)
-        summary = svc.get_usage(start_time=start, end_time=end)
-        return {
-            entry.model: float(entry.estimated_cost_usd or 0.0)
-            for entry in summary.by_model
-            if (entry.estimated_cost_usd or 0.0) > 0
-        }
+        return svc.get_cost_by_model(start_time=start, end_time=end)
     except Exception as exc:
         log.warning("anthropic cost fetch failed for %s-%s: %s", year, month, exc)
         return {}

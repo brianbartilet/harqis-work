@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 import httpx
 
@@ -196,6 +196,57 @@ class ApiServiceAnthropicUsage(BaseApiServiceAnthropic):
             granularity="day",
         )
 
+    def get_cost_by_model(self, start_time: str, end_time: str = None) -> Dict[str, float]:
+        """Actual **billed** USD cost per model from the Admin cost report API.
+
+        Endpoint: GET /v1/organizations/cost_report
+
+        Unlike :meth:`get_usage` — which *estimates* cost from token counts
+        times a static price table and drifts from billing (notably on cache
+        pricing) — this returns Anthropic's actual billed amounts, the same
+        numbers the console shows.
+
+        Two response quirks this handles:
+
+        * **Amounts are in cents.** Each result row's ``amount`` is a
+          cents string (e.g. ``"5232.96"`` = $52.33); divide by 100.
+        * **No ``model`` grouping.** The cost report only groups by
+          ``description`` (and ``workspace_id``); ``group_by[]=model`` returns
+          empty. Each ``description`` row still carries a ``model`` field, so
+          costs are aggregated per model here. Rows with no model (service
+          tooling, etc.) bucket under ``"other"`` so the total stays complete.
+
+        Pagination is followed via ``has_more`` / ``next_page``.
+
+        Returns ``{model: usd}`` with only non-zero entries. Propagates the
+        ``_get`` error on a non-2xx response (callers wanting a soft failure
+        should catch it — the HUD fetcher does).
+        """
+        by_model: Dict[str, float] = {}
+        page: Optional[str] = None
+        while True:
+            params = [
+                ("starting_at", start_time),
+                ("ending_at", end_time),
+                ("group_by[]", "description"),
+                ("page", page),
+            ]
+            data = self._get("organizations/cost_report", params)
+            for bucket in (data.get("data") or []):
+                for row in (bucket.get("results") or []):
+                    try:
+                        amount_cents = float(row.get("amount") or 0.0)
+                    except (TypeError, ValueError):
+                        continue
+                    model = row.get("model") or "other"
+                    by_model[model] = by_model.get(model, 0.0) + amount_cents / 100.0
+            if not data.get("has_more"):
+                break
+            page = data.get("next_page")
+            if not page:
+                break
+        return {m: round(c, 6) for m, c in by_model.items() if c > 0}
+
     def _parse_summary(self, data: dict, start_time: str,
                        end_time: str) -> DtoAnthropicUsageSummary:
         """Parse raw Admin API response into DtoAnthropicUsageSummary with cost estimates.
@@ -225,9 +276,22 @@ class ApiServiceAnthropicUsage(BaseApiServiceAnthropic):
             input_tokens = item.get("uncached_input_tokens", item.get("input_tokens"))
             entry.input_tokens = (entry.input_tokens or 0) + (input_tokens or 0)
             entry.output_tokens = (entry.output_tokens or 0) + (item.get("output_tokens") or 0)
+            # Cache-creation tokens: the live usage report nests these under a
+            # `cache_creation` object ({ephemeral_5m_input_tokens,
+            # ephemeral_1h_input_tokens}); older mocks/tests use a flat
+            # `cache_creation_input_tokens`. Read the nested shape first, then
+            # fall back to the flat key — otherwise cache-write tokens are
+            # silently dropped (counted as 0) and cost is undercounted.
+            cc = item.get("cache_creation")
+            if isinstance(cc, dict):
+                cache_creation = (
+                    (cc.get("ephemeral_5m_input_tokens") or 0)
+                    + (cc.get("ephemeral_1h_input_tokens") or 0)
+                )
+            else:
+                cache_creation = item.get("cache_creation_input_tokens") or 0
             entry.cache_creation_input_tokens = (
-                (entry.cache_creation_input_tokens or 0)
-                + (item.get("cache_creation_input_tokens") or 0)
+                (entry.cache_creation_input_tokens or 0) + cache_creation
             )
             entry.cache_read_input_tokens = (
                 (entry.cache_read_input_tokens or 0)

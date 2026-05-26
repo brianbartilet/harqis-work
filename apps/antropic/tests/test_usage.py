@@ -96,3 +96,72 @@ def test_by_model_entries_have_cost(given):
         assert_that(entry.model, not_none())
         assert entry.estimated_cost_usd is not None
         assert entry.estimated_cost_usd >= 0.0
+
+
+# ── Cost report (actual billed USD) — offline, mocked transport ──────────────
+
+class _FakeResp:
+    """Minimal stand-in for an httpx.Response used by ApiServiceAnthropicUsage._get."""
+    def __init__(self, payload, ok=True, status=200):
+        self._payload = payload
+        self.is_success = ok
+        self.status_code = status
+        self.text = str(payload)
+
+    def json(self):
+        return self._payload
+
+
+def test_get_cost_by_model_parses_cents_and_aggregates(given, monkeypatch):
+    """amount is cents (÷100); per-model aggregated across pages; null model → 'other'."""
+    page1 = {"data": [{"results": [
+        {"amount": "5232.96", "currency": "USD", "model": "claude-sonnet-4-6"},
+        {"amount": "100.00",  "currency": "USD", "model": None},
+    ]}], "has_more": True, "next_page": "PAGE2"}
+    page2 = {"data": [{"results": [
+        {"amount": "1786.00", "currency": "USD", "model": "claude-haiku-4-5-20251001"},
+        {"amount": "1000.00", "currency": "USD", "model": "claude-sonnet-4-6"},
+    ]}], "has_more": False}
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        page = dict(params or []).get("page")
+        return _FakeResp(page2 if page == "PAGE2" else page1)
+
+    monkeypatch.setattr("apps.antropic.references.web.api.usage.httpx.get", fake_get)
+    out = given.get_cost_by_model("2026-05-01T00:00:00Z", "2026-06-01T00:00:00Z")
+
+    assert out["claude-sonnet-4-6"] == pytest.approx(62.3296)          # (5232.96+1000)/100
+    assert out["claude-haiku-4-5-20251001"] == pytest.approx(17.86)
+    assert out["other"] == pytest.approx(1.0)                          # null-model bucket
+
+
+def test_get_cost_by_model_skips_zero(given, monkeypatch):
+    payload = {"data": [{"results": [
+        {"amount": "0", "currency": "USD", "model": "claude-opus-4-7"},
+    ]}], "has_more": False}
+    monkeypatch.setattr("apps.antropic.references.web.api.usage.httpx.get",
+                        lambda *a, **k: _FakeResp(payload))
+    out = given.get_cost_by_model("2026-05-01T00:00:00Z")
+    assert "claude-opus-4-7" not in out
+
+
+def test_parse_summary_reads_nested_cache_creation(given):
+    """Live usage report nests cache-creation tokens — must not be dropped to 0."""
+    data = {"data": [{"results": [
+        {"model": "claude-sonnet-4-6", "uncached_input_tokens": 1000,
+         "output_tokens": 50, "cache_read_input_tokens": 200,
+         "cache_creation": {"ephemeral_5m_input_tokens": 489496,
+                            "ephemeral_1h_input_tokens": 10}},
+    ]}]}
+    summary = given._parse_summary(data, "s", "e")
+    assert summary.total_cache_creation_tokens == 489506
+
+
+def test_parse_summary_legacy_flat_cache_creation(given):
+    """Backward-compat: older flat cache_creation_input_tokens still parsed."""
+    data = {"data": [
+        {"model": "claude-sonnet-4-6", "input_tokens": 100,
+         "cache_creation_input_tokens": 777},
+    ]}
+    summary = given._parse_summary(data, "s", "e")
+    assert summary.total_cache_creation_tokens == 777
