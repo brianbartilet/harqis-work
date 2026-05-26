@@ -47,3 +47,11 @@ python-multipart>=0.0.9
 
 # moomoo-api: install separately to avoid protobuf conflict
 #     pip install moomoo-api --no-deps
+
+# workflows/workers/tasks/broadcast_report_location.py — _resolve_via_gps_serial()
+# reads NMEA from a serial GPS HAT / USB dongle (e.g. on a Raspberry Pi fleet
+# node). Both are small, pure-Python, no native build. The resolver imports them
+# lazily and skips gracefully if absent, and only runs when WORKER_GPS_SERIAL_PORT
+# is set — so non-GPS nodes never exercise them. See docs/info/EDGE-LTE-FLEET-LOCATION.md
+pyserial>=3.5
+pynmea2>=1.19.0
