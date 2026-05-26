@@ -106,7 +106,7 @@ WORKFLOWS_HUD = {
     # within the same day; after that the result is stale.
     'run-job--show_tcg_sell_cart--on': {
         'task': 'workflows.hud.tasks.hud_tcg.show_tcg_sell_cart',
-        'schedule': crontab(day_of_week='sun,sat', hour="*/4", minute=0),
+        'schedule': crontab(day_of_week='fri,sun,sat', hour="1,8,12,20", minute=0),
         'kwargs': {
             "cfg_id__tcg_mp": "TCG_MP",
             "worker_count": 2
@@ -122,20 +122,6 @@ WORKFLOWS_HUD = {
             'express_target': 'rainmeter:TCG_SELL_CART',
             'review_artifact': 'es_log+hud_widget',
             'hfl_signal': False,
-        },
-    },
-
-    'run-job--show_tcg_sell_cart--off': {
-        'task': 'workflows.hud.tasks.hud_tcg.show_tcg_sell_cart',
-        'schedule': crontab(day_of_week='mon', minute=0),
-        'kwargs': {
-            "cfg_id__tcg_mp": "TCG_MP",
-            "worker_count": 2
-        },
-        "options": {
-            "queue": WorkflowQueue.HUD,
-            "os": ["windows"],
-            "expires": 60 * 60 * 24,
         },
     },
 
