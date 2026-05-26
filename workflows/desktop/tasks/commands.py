@@ -101,8 +101,16 @@ def copy_files_targeted(**kwargs) -> str:
 @feed()
 @SPROUT.task()
 def set_desktop_hud_to_back() -> str:
-    # Resolve %APPDATA%\Rainmeter\Rainmeter.ini
-    rainmeter_ini = Path(os.environ["APPDATA"]) / "Rainmeter" / "Rainmeter.ini"
+    # Resolve %APPDATA%\Rainmeter\Rainmeter.ini. APPDATA only exists in an
+    # interactive Windows session — a worker launched as a service / scheduled
+    # task may not inherit it, so skip cleanly instead of raising KeyError
+    # (which logged this task as failing on nearly every run).
+    appdata = os.environ.get("APPDATA")
+    if not appdata:
+        msg = "skipped: APPDATA not set (non-interactive Windows env)"
+        print(msg)
+        return msg
+    rainmeter_ini = Path(appdata) / "Rainmeter" / "Rainmeter.ini"
     set_rainmeter_always_on_top(str(rainmeter_ini))
     _refresh_app()
 
