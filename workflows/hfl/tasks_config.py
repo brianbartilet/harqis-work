@@ -203,10 +203,11 @@ WORKFLOW_HFL = {
     # local OwnTracks Recorder (apps/own_tracks), clusters fixes into
     # reverse-geocoded stay-points (Nominatim, free), and distils ONE
     # "where I was today" timeline entry (Haiku) — dual-written corpus + ES.
-    # HFL queue (the Recorder + device config live on harqis-server, the Beat
-    # host — this is a centralized source, not a per-machine broadcast like
-    # browsing). Active, clean no-op until OwnTracks reports: no device
-    # configured / Recorder unreachable / no stay-points → no LLM, no entry.
+    # HFL queue: the Recorder + device config live on harqis-server, the Beat
+    # host; this is centralized, not a per-machine broadcast like browsing.
+    # Active, clean no-op until OwnTracks reports: no device configured /
+    # Recorder unreachable / no fixes → no LLM, no entry. Days with fixes but
+    # no stay-points write a movement-only breadcrumb.
     # Device read from OWN_TRACKS_DEFAULT_USER / OWN_TRACKS_DEFAULT_DEVICE.
     'run-job--ingest_location_activity': {
         'task': 'workflows.hfl.tasks.ingest_location.ingest_location_activity',

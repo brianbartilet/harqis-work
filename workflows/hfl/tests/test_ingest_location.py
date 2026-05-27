@@ -16,6 +16,7 @@ from workflows.hfl.tasks.ingest_location import (
     _activity_body,
     _cluster_stays,
     _haversine_m,
+    _movement_only_entry,
     _osm_link,
     _place_tags,
     _short_place,
@@ -61,6 +62,43 @@ def test__ingest_location_activity_no_stays(monkeypatch):
     result = ingest_location_activity(cfg_id__anthropic="ANTHROPIC")
     assert result["entries_written"] == 0
     assert result["skipped"] == "no stays"
+
+
+def test__ingest_location_activity_movement_only_fallback(monkeypatch, tmp_path):
+    """GPS fixes with no qualifying stay still write a location breadcrumb."""
+    monkeypatch.setenv("OWN_TRACKS_DEFAULT_USER", "brian")
+    monkeypatch.setenv("OWN_TRACKS_DEFAULT_DEVICE", "android")
+
+    now = datetime.now().replace(microsecond=0)
+    # 10 min near one point: enough signal to prove GPS is alive, but below the
+    # default 15-min dwell threshold.
+    track = _track(now, [(0, 1.3000, 103.8000), (5, 1.3001, 103.8001),
+                         (10, 1.3000, 103.8000)])
+    monkeypatch.setattr(
+        "workflows.hfl.tasks.ingest_location.ApiServiceOwnTracksLocations",
+        lambda *a, **k: type("S", (), {"get_history": lambda self, **kw: {"data": track}})(),
+    )
+    monkeypatch.setattr(
+        "workflows.hfl.tasks.ingest_location.resolve_corpus_dir", lambda: tmp_path
+    )
+    indexed = []
+    monkeypatch.setattr(
+        "workflows.hfl.tasks.capture.index_hfl_entry",
+        lambda entry, *, source, synthesized=False: indexed.append((source, synthesized)) or "doc-1",
+    )
+
+    result = ingest_location_activity(cfg_id__anthropic="ANTHROPIC")
+
+    assert result["entries_written"] == 1
+    assert result["stays"] == 0
+    assert result["points"] == 3
+    assert result["synthesized"] is False
+    assert result["indexed"] is True
+    assert indexed == [("location", False)]
+    written = (tmp_path / f"{datetime.now():%Y-%m-%d}.md").read_text(encoding="utf-8")
+    assert "Recorded movement but no qualifying location stay" in written
+    assert "movement-only" in written
+    assert "openstreetmap.org" not in written
 
 
 def test__ingest_location_activity_dual_write_contract(monkeypatch, tmp_path):
@@ -171,6 +209,21 @@ def test__place_tags_and_osm_link():
     assert tags[0] == "location"
     assert "marina-bay-sands" in tags and "vivocity" in tags
     assert _osm_link(1.2345, 103.8) .startswith("https://www.openstreetmap.org/?mlat=1.23450")
+
+
+def test__movement_only_entry_is_deterministic_no_api():
+    activity = {
+        "point_count": 7,
+        "stay_count": 0,
+        "stays": [],
+        "window": {"from": 1_700_000_000, "to": 1_700_003_600},
+    }
+    entry = _movement_only_entry(activity, min_dwell_min=15)
+    assert entry["skip"] is False
+    assert entry["synthesized"] is False
+    assert "7 GPS fix" in entry["what_happened"]
+    assert "15 minutes" in entry["what_happened"]
+    assert "movement-only" in entry["tags"]
 
 
 def test__distill_location_raw_fallback_no_api():

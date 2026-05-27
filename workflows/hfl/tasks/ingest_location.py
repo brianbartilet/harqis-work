@@ -13,7 +13,9 @@ Source: the OwnTracks Recorder REST API (apps/own_tracks ::
 ApiServiceOwnTracksLocations.get_history). Which device is read is set by
 OWN_TRACKS_DEFAULT_USER / OWN_TRACKS_DEFAULT_DEVICE (.env/apps.env),
 overridable per-call. No device configured, Recorder unreachable, or no fixes
-in the window -> clean no-op (no LLM, no entry; the beat never breaks).
+in the window -> clean no-op (no LLM, no entry; the beat never breaks). A
+window with fixes but no qualifying stay-points writes a lightweight
+movement-only entry so GPS-active days do not silently disappear.
 
 Reverse geocoding honours the Nominatim usage policy: a descriptive
 User-Agent, <=1 request/second, and results cached per rounded coordinate
@@ -21,7 +23,7 @@ within a run. Any geocode failure degrades to coordinates-only — the entry
 still renders.
 
 Cost: Haiku only — never raise the Anthropic DEFAULT_MODEL. No LLM call on an
-empty / no-stay window.
+empty window or movement-only fallback.
 
 The collectors (collect_location_activity / distill_location_activity) are
 plain functions so the MCP tool (workflows/hfl/mcp.py :: location_activity)
@@ -348,6 +350,40 @@ def _activity_body(activity: dict) -> str:
     return "\n".join(lines)
 
 
+def _movement_only_entry(activity: dict, *, min_dwell_min: int) -> dict[str, Any]:
+    """Return deterministic HFL fields for GPS-active days with no stays.
+
+    This is intentionally non-LLM: the point track proves the day had location
+    signal, but without a stable stay-point there is no safe place narrative to
+    synthesize. Keep it as an audit/timeline breadcrumb.
+    """
+    point_count = int(activity.get("point_count") or 0)
+    window = activity.get("window") or {}
+    start = window.get("from")
+    end = window.get("to")
+    if start and end:
+        window_text = f"between {_fmt_clock(int(start))} and {_fmt_clock(int(end))}"
+    else:
+        window_text = "during the ingest window"
+    return {
+        "skip": False,
+        "moment": "Recorded movement but no qualifying location stay",
+        "what_happened": (
+            f"OwnTracks recorded {point_count} GPS fix(es) {window_text}, "
+            f"but none formed a stay-point of at least {min_dwell_min} minutes. "
+            "The location stream was alive; the day just did not cross the "
+            "configured dwell threshold for a place timeline."
+        ),
+        "why_it_stayed": (
+            "This keeps a GPS-active day visible in HFL instead of letting the "
+            "location pipeline silently no-op when movement is too brief or fragmented."
+        ),
+        "possible_use": "timeline, diagnostics",
+        "tags": ["location", "movement-only", "owntracks", "no-stays"],
+        "synthesized": False,
+    }
+
+
 def distill_location_activity(
     activity: dict,
     *,
@@ -423,8 +459,9 @@ def ingest_location_activity(
 ) -> dict[str, Any]:
     """Append one HFL corpus entry summarizing the day's location timeline.
 
-    No device configured, Recorder unreachable, or no stay-points in the
-    window → no entry, no LLM call.
+    No device configured, Recorder unreachable, or no fixes in the window → no
+    entry, no LLM call. Fixes with no stay-points produce a deterministic
+    movement-only entry.
     """
     until = datetime.now().date()
     since = until - timedelta(days=window_days)
@@ -444,24 +481,32 @@ def ingest_location_activity(
         _log.info("ingest_location: no OwnTracks user/device configured — skip")
         return {"skipped": "no device configured", "entries_written": 0}
 
-    if activity["stay_count"] == 0:
+    if activity["stay_count"] == 0 and activity["point_count"] == 0:
         _log.info("ingest_location: no stay-points in last %d day(s)", window_days)
         return {"skipped": "no stays", "entries_written": 0,
                 "points": activity["point_count"]}
 
-    d = distill_location_activity(
-        activity, synthesize=True, model=model,
-        cfg_id=cfg_id__anthropic, max_tokens=900,
-    )
-    if d.get("skip"):
-        _log.info("ingest_location: distilled as skip — %d stays not story-worthy",
-                  activity["stay_count"])
-        return {"skipped": "distilled-skip", "entries_written": 0,
-                "stay_count": activity["stay_count"]}
+    if activity["stay_count"] == 0:
+        _log.info(
+            "ingest_location: %d fix(es) but no stay-points; writing movement-only entry",
+            activity["point_count"],
+        )
+        d = _movement_only_entry(activity, min_dwell_min=min_dwell_min)
+        references: list[str] = []
+    else:
+        d = distill_location_activity(
+            activity, synthesize=True, model=model,
+            cfg_id=cfg_id__anthropic, max_tokens=900,
+        )
+        if d.get("skip"):
+            _log.info("ingest_location: distilled as skip — %d stays not story-worthy",
+                      activity["stay_count"])
+            return {"skipped": "distilled-skip", "entries_written": 0,
+                    "stay_count": activity["stay_count"]}
 
-    # Provenance: a map pin at the longest-dwell stay (the day's centre of gravity).
-    anchor = max(activity["stays"], key=lambda s: s["dwell_min"])
-    references = [_osm_link(anchor["lat"], anchor["lon"])]
+        # Provenance: a map pin at the longest-dwell stay (the day's centre of gravity).
+        anchor = max(activity["stays"], key=lambda s: s["dwell_min"])
+        references = [_osm_link(anchor["lat"], anchor["lon"])]
 
     when = datetime.now()
     corpus_dir = resolve_corpus_dir()
