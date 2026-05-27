@@ -139,6 +139,7 @@ class TestDtoWorkerLocation:
 from workflows.workers.tasks.broadcast_report_location import (  # noqa: E402
     _resolve_via_env,
     _resolve_via_ip_geolocation,
+    _resolve_via_gps_serial,
     _resolve_location,
 )
 
@@ -404,3 +405,114 @@ class TestWorkersRoutingTopology:
             entry.get("options", {}).get("queue"),
             equal_to("workers_broadcast"),
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# _resolve_via_gps_serial  (Part A of the LTE-fleet feature)
+# ─────────────────────────────────────────────────────────────────────────────
+
+import sys as _sys  # noqa: E402
+import types as _types  # noqa: E402
+
+
+def _make_gps_fakes(lines):
+    """Build fake ``serial`` + ``pynmea2`` modules for the resolver to import.
+
+    ``serial.Serial`` yields ``lines`` from ``readline()`` (b"" = timeout tick).
+    ``pynmea2.parse`` returns a fixed Singapore fix for any GGA sentence and
+    raises for anything else.
+    """
+    serial_mod = _types.ModuleType("serial")
+
+    class _FakeSerial:
+        def __init__(self, *a, **k):
+            self._lines = list(lines)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def readline(self):
+            return self._lines.pop(0) if self._lines else b""
+
+    serial_mod.Serial = _FakeSerial
+
+    pynmea2_mod = _types.ModuleType("pynmea2")
+
+    class _ParseError(Exception):
+        pass
+
+    class _Msg:
+        latitude = 1.3521
+        longitude = 103.8198
+        altitude = "15.0"
+
+    def _parse(line):
+        if "GGA" in line:
+            return _Msg()
+        raise _ParseError("unsupported sentence")
+
+    pynmea2_mod.ParseError = _ParseError
+    pynmea2_mod.parse = _parse
+    return serial_mod, pynmea2_mod
+
+
+class TestResolveViaGpsSerial:
+    def test_returns_none_when_port_unset(self, monkeypatch):
+        monkeypatch.delenv("WORKER_GPS_SERIAL_PORT", raising=False)
+        assert_that(_resolve_via_gps_serial(), none())
+
+    def test_returns_none_when_libs_missing(self, monkeypatch):
+        monkeypatch.setenv("WORKER_GPS_SERIAL_PORT", "/dev/ttyUSB0")
+        # Force `import serial` to fail regardless of whether pyserial is installed.
+        with patch.dict(_sys.modules, {"serial": None}):
+            assert_that(_resolve_via_gps_serial(), none())
+
+    def test_parses_gga_fix(self, monkeypatch):
+        monkeypatch.setenv("WORKER_GPS_SERIAL_PORT", "/dev/ttyUSB0")
+        monkeypatch.setenv("WORKER_GPS_MAX_LINES", "5")
+        serial_mod, pynmea2_mod = _make_gps_fakes([
+            b"$GPGSV,junk\r\n",
+            b"$GPGGA,123519,0121.126,N,10349.188,E,1,08,0.9,15.0,M,,,,*47\r\n",
+        ])
+        with patch.dict(_sys.modules, {"serial": serial_mod, "pynmea2": pynmea2_mod}):
+            fix = _resolve_via_gps_serial()
+        assert_that(fix, is_not(none()))
+        assert_that(fix.source, equal_to("gps_serial"))
+        assert_that(fix.lat, equal_to(1.3521))
+        assert_that(fix.altitude, equal_to(15.0))
+        assert_that(fix.is_valid(), equal_to(True))
+
+    def test_returns_none_on_no_fix(self, monkeypatch):
+        monkeypatch.setenv("WORKER_GPS_SERIAL_PORT", "/dev/ttyUSB0")
+        monkeypatch.setenv("WORKER_GPS_MAX_LINES", "3")
+        serial_mod, pynmea2_mod = _make_gps_fakes([b"$GPGSV,junk\r\n", b"", b""])
+        with patch.dict(_sys.modules, {"serial": serial_mod, "pynmea2": pynmea2_mod}):
+            assert_that(_resolve_via_gps_serial(), none())
+
+
+class TestGpsSerialCascadeOrder:
+    """The GPS-serial resolver sits after env and before ip-geo / OwnTracks."""
+
+    def test_gps_serial_wins_over_ip_and_owntracks(self, monkeypatch):
+        monkeypatch.delenv("WORKER_LAT", raising=False)
+        monkeypatch.delenv("WORKER_LON", raising=False)
+        with patch(
+            "workflows.workers.tasks.broadcast_report_location._resolve_via_gps_serial",
+            return_value=GeoPoint(lat=1.0, lon=2.0, source="gps_serial"),
+        ):
+            fix = _resolve_location(owntracks_cfg_id="OWN_TRACKS")
+        assert_that(fix.source, equal_to("gps_serial"))
+        assert_that(fix.lat, equal_to(1.0))
+
+    def test_env_still_wins_over_gps_serial(self, monkeypatch):
+        monkeypatch.setenv("WORKER_LAT", "10.0")
+        monkeypatch.setenv("WORKER_LON", "20.0")
+        with patch(
+            "workflows.workers.tasks.broadcast_report_location._resolve_via_gps_serial",
+            return_value=GeoPoint(lat=1.0, lon=2.0, source="gps_serial"),
+        ):
+            fix = _resolve_location(owntracks_cfg_id="OWN_TRACKS")
+        assert_that(fix.source, equal_to("env"))
