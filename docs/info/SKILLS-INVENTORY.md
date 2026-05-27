@@ -14,6 +14,7 @@ Skill files live in `.claude/skills/*/SKILL.md`. The first line of each file is 
 | **agent-prompt** | `/agent-prompt <prompt_name>` | Run a named AI prompt from `agents/prompts/` against the codebase. `prompt_name` is the filename without extension (e.g. `code_smells`, `docs_agent`, `desktop_analysis`). |
 | **clarify-feature** | `/clarify-feature` | Structured Q&A gate for new features and enhancements to `harqis-work`. **Auto-invokes** when a card description contains feature-intent language ("add a feature", "implement", "enhance", etc.). Reads relevant code, asks a grouped set of clarifying questions via `ask_human`, produces a written Feature Spec, and requires explicit sign-off before any code is written. Does NOT fire for scaffolding commands (`/create-new-workflow`, `/create-new-service-app`, etc.) or cards tagged `skip:clarify`. |
 | **commit** | `/commit [<subject hint>] [<pathspec>...] [--type <t>] [--scope <s>] [--no-untracked] [--dry-run]` | Stage all working-tree changes and commit with a Conventional-Commit message inferred from the diff, following [COMMIT-MESSAGE-GUIDE.md](COMMIT-MESSAGE-GUIDE.md). **Calling `/commit` is your sign-off — no confirmation prompt.** Auto-detects type and scope from the layer of changed files (`apps/<name>`, `workflows/<name>`, `agents/projects`, `mcp`, `frontend`, `repo`). Pass pathspecs to limit staging. Skips `.env*` files for safety. Never pushes, never amends, never bypasses hooks. |
+| **create-data-only-from-hud** | `/create-data-only-from-hud <task_fn> [--staleness <secs>] [--dry-run]` | Generate a **data-only fallback twin** of a HUD render task so its `@feed` dump + `@log_result` ES record keep flowing on the always-on host when the Windows `hud` worker is offline. Refactors the source task's data path into a win32-free `collect_<slug>()` (single source of truth — no drift), generates a gated twin in `workflows/hud/tasks/hud_data_only.py` routed to the `host` queue, and mirrors the schedule. The twin gates on the original's `@log_result` heartbeat (`workflows/hud/fallback.py`) and runs **only** when the original went stale — no duplicate logs while Windows is healthy. Refuses desktop-capture tasks that read Windows-local state. |
 | **create-new-hud** | `/create-new-hud <hud_title> <description_or_screenshot_path> [--reference <existing_hud>] [--no-prompt]` | Scaffold a new Rainmeter HUD widget under `workflows/hud/tasks/hud_<slug>.py` from a description (or screenshot). Asks for the title, header links, sample dump output, dimensions (with reference-widget defaults), `ScheduleCategory` (calendar visibility), Celery schedule, and queue (extending `WorkflowQueue` if a new queue is named). Wires up the section dict, schedule entry, `__init__.py` import, README row, and any new app endpoints needed for the data fetch. |
 | **deploy-harqis** | `/deploy-harqis <host\|node> [-q queues] [-p profile] [--hw labels] [--down] [--no-frontend] [--no-mcp] [--no-kanban] [--num-agents N] [--dry-run]` | End-to-end reusable deploy of the harqis-work platform — **cross-platform**, auto-detects macOS / Linux / Windows. `host` brings up the full stack (Docker + Beat scheduler + worker + frontend + MCP + Kanban + Flower); the host's Kanban orchestrator defaults to `agent:default` so the host also acts as 1 default-queue agent worker. `node` runs a Celery worker plus a profile-scoped Kanban orchestrator (the skill **asks** for `-p` if missing). `--hw` filters by `hw:*` labels (auto-detected from OS otherwise). Tear down with `--down`. |
 | **generate-registry** | `/generate-registry` | Regenerate `frontend/registry.py` by scanning all `workflows/*/tasks_config.py` files. Run after adding or removing any Celery task. |
@@ -91,6 +92,28 @@ Stages all working-tree changes and commits in one shot with a Conventional-Comm
 - If the staged set spans unrelated scopes, the post-commit summary suggests `git reset HEAD~` + a split using pathspecs.
 
 `--dry-run` drafts and prints the message but does not commit. Anything staged in Step 1 stays staged so you can inspect and commit manually if you prefer.
+
+---
+
+### `/create-data-only-from-hud`
+
+Generates a **data-only fallback twin** of an existing HUD render task. HUD tasks are routed to the Windows-only `hud` queue; when that box is offline the task body never runs, so the `@feed` dump + `@log_result` Elasticsearch record are lost — not because the sinks are Windows-bound (ES is a network service; the host has the same Google-Drive LOGS mount), but because nothing executes. The twin runs the same data computation on the always-on host, skipping the Rainmeter render.
+
+```
+/create-data-only-from-hud show_daily_radar
+/create-data-only-from-hud show_tcg_orders --staleness 5400
+/create-data-only-from-hud show_jira_board --dry-run
+```
+
+**What it does:**
+
+1. **Eligibility gate** — refuses desktop-capture tasks (`show_mouse_bindings`, `get_desktop_logs`, `take_screenshots_for_gpt_capture`, `build_summary_mouse_bindings`, `show_hud_profiles`) that read Windows-local state and would produce nothing useful on the host.
+2. **Refactor + reuse** — extracts the source task's data path (fetch + dump composition + summary/metrics) into a win32-free `collect_<slug>()` under `workflows/hud/collectors/`, and rewrites `show_<slug>` to call it. Single source of truth — the Windows render and the host twin never drift.
+3. **Generates the twin** in `workflows/hud/tasks/hud_data_only.py`: `@SPROUT.task` / `@fallback_gate(...)` / `@log_result` / `@feed(filename_prefix="hud-data-only")`. The gate (`workflows/hud/fallback.py`) reads the original's `@log_result` heartbeat doc and short-circuits — no feed block, no ES doc — while Windows is healthy.
+4. **Mirrors the schedule** onto the `host` queue (with a `hud_data_only.* → host` route added above the `hud` catch-all in `workflows/config.py`), staleness = the original's largest inter-fire gap + grace, so the twin engages only after Windows genuinely misses a run.
+5. Wires `__init__.py` (twin imported outside the win32 guard), updates `workflows/hud/README.md`, and adds an offline collector test.
+
+**Shared runtime** (committed, reused by every twin — not regenerated): `workflows/hud/fallback.py` (`windows_handled_recently` + `fallback_gate`, fails open) and the `workflows/hud/collectors/` package. `force=True` on a twin bypasses the gate for manual testing.
 
 ---
 

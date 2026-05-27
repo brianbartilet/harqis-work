@@ -11,6 +11,8 @@
 
 Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for `workflows.hud.tasks.*`). One exception: `take_screenshots_for_gpt_capture` is pinned to `peon` via an explicit `options.queue` override in the beat entry. All HUD tasks carry `options.os = ["windows"]` since they write Rainmeter `.ini` files and use Win32 APIs.
 
+**Data-only fallback twins** (`workflows.hud.tasks.hud_data_only.*`) are the exception to the Windows pinning: they run on the always-on host's `host` queue (a more-specific route declared above the `hud` catch-all in `workflows/config.py`) so a HUD task's `@feed` dump + `@log_result` ES record survive while the Windows box is offline. See [Data-only fallback (host)](#data-only-fallback-host) below.
+
 ## Scheduled Tasks
 
 | Task | Schedule | Description |
@@ -31,6 +33,7 @@ Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for
 | `show_api_costs` | Every 2 hours | TOKEN BURN — trailing 3-month LLM API spend grouped per month → service → model. Anthropic from the admin usage API (`ANTHROPIC_ADMIN_KEY`); OpenAI / Gemini stubbed at zero until cost endpoints exist. Service section omitted when its monthly total is 0. Queue: `hud`. |
 | `show_ai_helper` | Daily at midnight | AI helper widget initialization |
 | `get_schedules` | Every 4 hours | Upcoming calendar schedule |
+| `show_daily_radar_data_only` | 08:00 / 12:00 / 16:00 / 20:00 (host) | **Data-only fallback twin** of `show_daily_radar`. Runs on the `host` queue and writes the briefing to the `hud-data-only-*` feed + ES **only when** the Windows worker hasn't rendered the radar within ~12h+10min (the overnight inter-fire gap + grace). No Rainmeter render. Gated on the original's `@log_result` heartbeat. Queue: `host`. |
 | `show_daily_radar` | 08:00 / 12:00 / 16:00 / 20:00 / 00:00 daily | DAILY RADAR — combines AGENTS_IDEAS #1/#3/#4/#12/#17 into one briefing. **Input sweep**: Gmail (last 8h, GOOGLE_GMAIL scope), Calendar (today, GOOGLE_APPS), Google Tasks (open, GOOGLE_TASKS), Trello (open cards), Jira (tickets updated in window), GitHub PRs involving me (last 8h, `involves:@me`), OwnTracks last location (context only), ES failed-jobs, plus the DESKTOP LOGS dump.txt tail. Sent to Claude Sonnet 4.6 for synthesis. Output preserves section breaks (`wrap_preserving_breaks`, wrap width 65) so bullets and `===` rules survive into the HUD. Width matches DESKTOP LOGS (`width_multiplier=2.25`); height fixed at `ItemLines=16`; marquee scrolls anything beyond. Single DUMP header link. `play_sound=True`. `[START]`/`[END]` bracket the 8h window. Visible during WORK and ORGANIZE calendar blocks. Queue: `hud`. |
 
 ## Task Files
@@ -46,8 +49,11 @@ Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for
 | `tasks/hud_utils.py` | `show_mouse_bindings`, `build_summary_mouse_bindings`, `show_hud_profiles`, `show_ai_helper` |
 | `tasks/hud_finance.py` | `show_ynab_budgets_info`, `show_pc_daily_sales` |
 | `tasks/hud_api_costs.py` | `show_api_costs` |
-| `tasks/hud_radar.py` | `show_daily_radar` |
-| `tasks/daily_radar_agent.py` | Data-gathering helpers consumed by `show_daily_radar` (Gmail / Calendar / Tasks / Trello / Jira / ES collectors, prompt formatter, and `wrap_preserving_breaks` output wrapper) |
+| `tasks/hud_radar.py` | `show_daily_radar` (render only — data path delegated to `collectors/daily_radar.py`) |
+| `tasks/daily_radar_agent.py` | Data-gathering helpers consumed by `collect_daily_radar` (Gmail / Calendar / Tasks / Trello / Jira / GitHub / OwnTracks / ES collectors, prompt formatter, and `wrap_preserving_breaks` output wrapper) |
+| `tasks/hud_data_only.py` | Data-only fallback twins routed to the `host` queue (`show_daily_radar_data_only`, …). Win32-free — imported outside the `__init__.py` win32 guard. |
+| `collectors/daily_radar.py` | `collect_daily_radar` — win32-free DAILY RADAR data path (source sweep + Claude synthesis + dump composition) shared by the Windows render task and the host twin. |
+| `fallback.py` | `windows_handled_recently` + the `fallback_gate` decorator — read the `@log_result` heartbeat so a twin runs only when the Windows original went stale. Fails open. |
 | `tasks/sections.py` | HUD section layout helpers |
 | `prompts/daily_radar.md` | DAILY RADAR synthesis prompt (combines ideas #1, #3, #4, #12, #17 from `data/AGENTS_IDEAS.md`) |
 | `prompts/desktop_analysis.md` | DESKTOP LOGS evidence-only activity analysis prompt |
@@ -155,6 +161,30 @@ Data sources are declared in `daily_radar_agent.py::SOURCE_REGISTRY`. Each entry
 - `source_overrides={"gmail": "GOOGLE_GMAIL_WORK"}` — redirect a single source to a different `apps_config.yaml` key.
 - `source_params={"owntracks": {"user": "brian"}}` — pass source-specific kwargs to a collector. Merged on top of the spec's `default_params`.
 - Drop a name from `sources` to disable that feed; reorder to change which sections the LLM weighs first.
+
+## Data-only fallback (host)
+
+HUD render tasks run only on the Windows `hud` queue. When that box is offline the task body never executes, so the `@feed` dump and `@log_result` Elasticsearch record are lost — **not** because the sinks are Windows-bound (`@log_result` writes to a network ES service; `@feed` resolves per-OS and the host has the same Google-Drive LOGS mount via `DESKTOP_PATH_FEED_DARWIN`), but because nothing runs. *Data-only twins* close that gap by running the same data computation on the always-on host, skipping the Rainmeter render.
+
+The split (built per task by the `/create-data-only-from-hud` skill):
+
+```
+collectors/<slug>.py   collect_<slug>()  ── win32-free data path (fetch + dump + metrics)
+        ▲                       ▲
+        │ calls                 │ calls
+hud_<slug>.py            hud_data_only.py
+show_<slug>              <fn>_data_only            ── @SPROUT.task / @fallback_gate / @log_result / @feed
+ (Windows: hud queue,     (host queue, no render)
+  collector + render)
+```
+
+- **Single source of truth:** both the Windows render task and the host twin call the same `collect_<slug>()`, so they never drift.
+- **Fallback-only gating:** `@fallback_gate(original_task_name, max_staleness_secs)` (in `fallback.py`) reads the original's `@log_result` heartbeat doc (`harqis-elastic-logging`, keyed by `name`, field `date`). If the original ran within the staleness window, the twin short-circuits — **no feed block, no twin ES doc** — so healthy-Windows cycles produce zero duplicates. Staleness = the original's largest inter-fire gap + grace; the twin engages one cadence after Windows genuinely stops. Fails **open** (ES down/missing doc → run the twin).
+- **Routing:** twins live at `workflows.hud.tasks.hud_data_only.*` and are routed to `host` by a rule declared **above** the `workflows.hud.tasks.*` catch-all in `workflows/config.py` (else the catch-all would send them to `hud`). Beat entries are grouped at the bottom of the existing `WORKFLOWS_HUD` dict in `tasks_config.py` — kept in that one dict (not a separate `WORKFLOWS_HUD_DATA_ONLY`) so `frontend/generate_registry.py`, which reads only the first `run-job--*` dict per file, still catalogues them.
+- **Distinct feed file:** twins write `hud-data-only-YYYYMMDD.txt` (the Windows tasks write `hud-logs-*`), so host and Windows dumps never interleave.
+- **Eligibility:** only API/data-backed tasks get a twin. Desktop-capture tasks (`show_mouse_bindings`, `get_desktop_logs`, screenshots, `build_summary_mouse_bindings`, `show_hud_profiles`) read Windows-local state and stay Windows-only. The DAILY RADAR twin runs the full 8-source sweep minus the DESKTOP LOGS section (that dump.txt is Windows-local; `collect_inputs` reads it as empty on the host).
+
+Manually trigger a twin (bypassing the gate) for testing: pass `force=True`.
 
 ## Running
 

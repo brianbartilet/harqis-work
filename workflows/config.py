@@ -112,6 +112,11 @@ SPROUT.conf.task_default_queue = WorkflowQueue.DEFAULT.value
 SPROUT.conf.task_routes = {
     "workflows.workers.tasks.broadcast_*": {"queue": WorkflowQueue.WORKERS_BROADCAST.value},
     "workflows.hud.tasks.broadcast_*":     {"queue": WorkflowQueue.HUD_BROADCAST.value},
+    # Data-only fallback twins run on the always-on host, NOT the Windows hud
+    # queue. This more-specific rule MUST precede the hud catch-all below
+    # (first match wins) or the twins would be routed to `hud` and never run
+    # when Windows is offline — defeating their purpose.
+    "workflows.hud.tasks.hud_data_only.*": {"queue": WorkflowQueue.HOST.value},
     "workflows.hud.tasks.*":               {"queue": WorkflowQueue.HUD.value},
 }
 

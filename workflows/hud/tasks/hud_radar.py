@@ -40,7 +40,6 @@ model is explicit and obvious to anyone editing the schedule.
 """
 
 import os
-from datetime import datetime, timedelta
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
@@ -55,32 +54,19 @@ from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.desktop.helpers.feed import feed
 
 from apps.google_apps.references.constants import ScheduleCategory
-# Per-source cfg ids and default params live in
-# `daily_radar_agent.SOURCE_REGISTRY`; this task only orchestrates which
-# sources to pull (via `sources=[...]`) and what to override.
 
-from apps.antropic.config import get_config as get_anthropic_config
-from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
-
-from workflows.hud.prompts import load_prompt
 # Fixed visible height. Matches JIRA BOARD's 14-line cap so the two
 # work-block widgets sit at the same vertical footprint. The marquee
 # scrolls everything past the visible window so longer briefings don't
 # grow the widget. Override via the `max_hud_lines` kwarg if a different
 # monitor wants more or less.
 DAILY_RADAR_MAX_HUD_LINES: int = 16
+
 from workflows.hud.tasks.sections import sections__daily_radar
-from workflows.hud.tasks.daily_radar_agent import (
-    ANALYSIS_WINDOW_HOURS,
-    DEFAULT_SOURCES,
-    collect_inputs,
-    format_inputs_as_prompt_text,
-    summarise_inputs,
-    wrap_preserving_breaks,
-)
-
-
-_DAILY_RADAR_PROMPT = load_prompt("daily_radar")
+# Data-gathering, Claude synthesis, and dump composition live in the win32-free
+# collector so the always-on host fallback twin (show_daily_radar_data_only,
+# workflows/hud/tasks/hud_data_only.py) can reuse the exact same data path.
+from workflows.hud.collectors.daily_radar import collect_daily_radar
 
 # DESKTOP LOGS skin folder — we need its dump.txt as one of our inputs.
 # The folder name is the sanitized hud_item_name from hud_gpt.get_desktop_logs.
@@ -144,12 +130,6 @@ def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
     """
     log.info("show_daily_radar kwargs: %s", list(kwargs.keys()))
 
-    sources = kwargs.get("sources", DEFAULT_SOURCES)
-    source_overrides = kwargs.get("source_overrides") or {}
-    source_params = kwargs.get("source_params") or {}
-    cfg_id__anthropic = kwargs.get("cfg_id__anthropic", "ANTHROPIC")
-    model = kwargs.get("model", "claude-sonnet-4-6")
-    window_hours = int(kwargs.get("window_hours", ANALYSIS_WINDOW_HOURS))
     max_hud_lines_cap = int(kwargs.get("max_hud_lines", DAILY_RADAR_MAX_HUD_LINES))
 
     # region Compute the DESKTOP LOGS dump.txt path (input #1 — idea #1).
@@ -161,6 +141,14 @@ def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
         _DESKTOP_LOGS_HUD_FOLDER,
         "dump.txt",
     )
+    # endregion
+
+    # region Gather + synthesize via the shared win32-free collector. The
+    # collector runs the source pulls, the Claude call, and the dump
+    # composition; the host fallback twin reuses it verbatim. On Windows the
+    # DESKTOP LOGS dump path is passed in; on the host it's absent (empty).
+    result = collect_daily_radar(desktop_dump_path=desktop_dump_path, **kwargs)
+    dump = result["text"]
     # endregion
 
     # region Header link — only the default `meterLink` slot (the user
@@ -178,49 +166,6 @@ def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
     ini["meterLink"]["leftmouseupaction"] = '!Execute ["{0}"]'.format(own_dump_path)
     ini["meterLink"]["tooltiptext"] = own_dump_path
     ini["meterLink"]["W"] = "80"
-    # endregion
-
-    # region Gather inputs — every collector is wrapped in its own try/except
-    # inside daily_radar_agent.collect_inputs, so a single failing source
-    # (e.g. Trello creds missing) never breaks the render.
-    payload = collect_inputs(
-        sources=sources,
-        desktop_dump_path=desktop_dump_path,
-        hours=window_hours,
-        source_overrides=source_overrides,
-        source_params=source_params,
-    )
-    prompt_inputs = format_inputs_as_prompt_text(payload)
-    # endregion
-
-    # region Send to Claude — Sonnet 4.6 is pinned by the beat schedule.
-    briefing = _run_claude_synthesis(
-        cfg_id__anthropic=cfg_id__anthropic,
-        model=model,
-        inputs_block=prompt_inputs,
-    )
-    # endregion
-
-    # region Compose dump — preserve the prompt's section breaks (the old
-    # core.utilities.data.strings.wrap_text joined everything with spaces
-    # and collapsed the structure into a single paragraph). The helper
-    # wraps each line independently and passes blank lines through so the
-    # bulleted lists and `===` rules survive into the HUD.
-    #
-    # [START] / [END] mark the actual analysis window the radar covers
-    # (now - window_hours → now), not the run timestamp. The user wanted
-    # the bookends to convey the data range so they can see at a glance
-    # what slice of the day the briefing reflects.
-    now = datetime.now()
-    window_start = now - timedelta(hours=window_hours)
-    fmt = "%Y-%m-%d %H:%M"
-    # Wrap width tuned to width_multiplier=2.25 (DESKTOP LOGS column width).
-    body = wrap_preserving_breaks(briefing, width=65)
-    dump = "\n[START] {0}\n\n{1}\n\n[END]   {2}\n\n".format(
-        window_start.strftime(fmt),
-        body,
-        now.strftime(fmt),
-    )
     # endregion
 
     # region Dimensions — width matches DESKTOP LOGS (2.25) so the two
@@ -262,75 +207,9 @@ def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
     ini["Variables"]["ItemLines"] = "{0}".format(max_hud_lines)
     ini["Variables"]["MaxLines"] = "{0}".format(max_hud_lines)
 
-    metrics = summarise_inputs(payload)
-    metrics["item_lines"] = max_hud_lines
-    metrics["model"] = model
-
-    # Build the summary from whatever sources actually ran — `summarise_inputs`
-    # emits one `{name}_count` per source with a `count_field`, plus the
-    # owntracks-only `has_location` flag. Iterate `sources_active` so a
-    # custom `sources=[...]` doesn't blow up the .format(**metrics) call
-    # by referencing keys that aren't present.
-    count_bits = []
-    for name in metrics.get("sources_active") or []:
-        key = "{0}_count".format(name)
-        if key in metrics:
-            count_bits.append("{0}={1}".format(name, metrics[key]))
-    if metrics.get("has_location"):
-        count_bits.append("loc=1")
-    errored = metrics.get("sources_errored") or []
-    err_bit = " err=[{0}]".format(",".join(errored)) if errored else ""
-
-    return {
-        "text": dump,
-        "summary": "daily radar · window {0}h · {1}{2} · {3}".format(
-            window_hours, " ".join(count_bits), err_bit, model,
-        ),
-        "metrics": metrics,
-        "links": {
-            "dump": own_dump_path,
-            "desktop_logs_dump": desktop_dump_path,
-        },
-    }
-
-
-def _run_claude_synthesis(cfg_id__anthropic: str,
-                         model: str,
-                         inputs_block: str) -> str:
-    """Send the assembled inputs to Claude and return the briefing text.
-
-    Falls back to a printable error string if the API call fails — the HUD
-    keeps rendering even when the network or quota is down.
-    """
-    try:
-        anthropic = BaseApiServiceAnthropic(get_anthropic_config(cfg_id__anthropic))
-    except Exception as e:
-        log.error("DAILY RADAR: anthropic init failed: %s", e)
-        return "DAILY RADAR offline — anthropic init failed: {0}".format(e)
-
-    user_text = "{prompt}\n\n{inputs}".format(
-        prompt=_DAILY_RADAR_PROMPT,
-        inputs=inputs_block,
-    )
-
-    try:
-        # send_message() (not the raw client) so the built-in Max -> API
-        # fallback engages: a Claude Code OAuth-token rate-limit/quota hit
-        # is caught as APIStatusError and retried against ANTHROPIC_API_KEY.
-        # The low-level _with_backoff path only retries then re-raises.
-        response = anthropic.send_message(
-            prompt=user_text,
-            model=model,
-            max_tokens=4096,
-        )
-        return response.content[0].text
-    except Exception as e:
-        cause = e.__cause__ or e.__context__
-        log.error(
-            "DAILY RADAR: anthropic call failed [%s]: %s%s",
-            type(e).__name__, e,
-            " | caused by [{0}]: {1}".format(type(cause).__name__, cause) if cause else "",
-        )
-        return "DAILY RADAR offline — anthropic call failed [{0}]: {1}".format(
-            type(e).__name__, e,
-        )
+    # Merge the render-only fields into the collector's result so the return
+    # shape (and the @log_result ES payload) is identical to before the
+    # extraction: links.dump (the Rainmeter skin dump path) + metrics.item_lines.
+    result.setdefault("links", {})["dump"] = own_dump_path
+    result.setdefault("metrics", {})["item_lines"] = max_hud_lines
+    return result

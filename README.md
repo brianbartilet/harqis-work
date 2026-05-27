@@ -83,6 +83,7 @@ HARQIS-Work includes a layer of Claude-powered AI agents that go beyond schedule
 | **Workflow / scheduled task** — Celery RPA chaining apps with cron + queue routing | `/create-new-workflow [<category>] <description_or_diagram>` |
 | **Visual workflow outside Celery** — n8n flows for branching automations or vendor connectors not in `apps/` | `/create-new-n8n-workflow <description_or_diagram>` |
 | **HUD widget** — Rainmeter desktop display fed by an app or workflow | `/create-new-hud <title> <description_or_screenshot>` |
+| **HUD fallback twin** — keep a HUD task's `@feed`/ES logs flowing on the always-on host when the Windows box is offline | `/create-data-only-from-hud <task_fn>` |
 
 Re-run `/generate-registry` after a workflow or HUD task lands so the dashboard picks it up. See [`docs/info/SKILLS-INVENTORY.md`](docs/info/SKILLS-INVENTORY.md) for every skill (operations, deploy, agent profiles, Zapier wiring, commits, tests).
 
@@ -313,6 +314,8 @@ def show_calendar_information(**kwargs):
 ## Desktop HUD
 
 HARQIS drives a live desktop heads-up display using [Rainmeter](https://www.rainmeter.net/) on Windows. Celery tasks in `workflows/hud/` push data from connected services into Rainmeter skin files.
+
+> **Offline resilience:** HUD render tasks run only on the Windows `hud` queue. Selected data-backed panels also have **data-only fallback twins** (`workflows/hud/tasks/hud_data_only.py`) that run on the always-on host so their `@feed` + Elasticsearch logs keep flowing when the Windows box is off — they gate on the original's heartbeat and stay silent while Windows is up. Add one with `/create-data-only-from-hud <task_fn>`. See [`workflows/hud/README.md`](workflows/hud/README.md#data-only-fallback-host).
 
 ![HARQIS Desktop HUD](docs/images/windows-hud-sample.png)
 

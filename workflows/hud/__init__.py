@@ -13,3 +13,8 @@ if sys.platform == "win32":
     import workflows.hud.tasks.hud_jira
     import workflows.hud.tasks.hud_api_costs
     import workflows.hud.tasks.hud_radar
+
+# Data-only fallback twins run on the always-on host (non-Windows included),
+# so import unconditionally. The module is win32-free (collectors + feed +
+# fallback gate + log_result — no Rainmeter), so this is safe on every OS.
+import workflows.hud.tasks.hud_data_only  # noqa: E402,F401
