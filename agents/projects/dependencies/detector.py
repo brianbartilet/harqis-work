@@ -106,6 +106,7 @@ class DependencyDetector:
         # Magic: The Gathering / TCG
         (r"\bECHO\s*MTG\b|\bECHOMTG\b",           "ECHO_MTG_BEARER_TOKEN"),
         (r"\bTCG\s*MP\b|\bTCGPLAYER\b",           "TCG_MP_PASSWORD"),
+        (r"\bJUST\s*TCG\b|\bJUSTTCG\b",           "JUSTTCG_API_KEY"),
         # Cloud / infrastructure
         (r"\bORGO\b",                             "ORGO_API_KEY"),
         (r"\bOWN\s*TRACKS\b|\bOWNTRACKS\b",       "OWN_TRACKS_PASSWORD"),

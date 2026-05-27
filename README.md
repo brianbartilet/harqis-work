@@ -44,6 +44,7 @@ At its core the platform has three layers:
 | `grok` | xAI Grok — chat completions, live web search, X post search, embeddings | REST (native SDK) | Yes | [API Docs](https://docs.x.ai/api-reference) · [Console](https://console.x.ai/) |
 | `investagrams` | Philippine stock analytics | Web scraping | No | [Site](https://www.investagrams.com/) |
 | `jira` | Jira project management | REST API (DC/Bearer) | Yes | [API Docs](https://developer.atlassian.com/server/jira/platform/rest-apis/) · [Site](https://www.atlassian.com/software/jira) |
+| `justtcg` | Multi-game TCG pricing analytics (MTG, Pokémon, Yu-Gi-Oh!, Lorcana…) — prices + 24h/7d/30d/90d/1y change & trend stats | REST API | Yes | [API Docs](https://justtcg.com/docs) · [Site](https://justtcg.com/) |
 | `linkedin` | LinkedIn — profile, posts, sharing | REST API (OAuth2) | Yes | [API Docs](https://learn.microsoft.com/en-gb/linkedin/shared/api-guide/concepts) · [Portal](https://www.linkedin.com/developers/apps) |
 | `moo` | Futu/Moo trading stub | Stub | No | [API Docs](https://openapi.futunn.com/futu-api-doc/en/) · [Site](https://www.futunn.com/) |
 | `notion` | Notion — pages, databases, blocks, search | REST API | Yes | [API Docs](https://developers.notion.com/reference/intro) · [Site](https://www.notion.so/) |
@@ -408,6 +409,7 @@ harqis-work/
 │   ├── google_drive/               # Google Drive upload/download/export
 │   ├── grok/                       # xAI Grok LLM (chat, web search, X search, embeddings)
 │   ├── jira/                       # Jira project management
+│   ├── justtcg/                    # Multi-game TCG pricing analytics API
 │   ├── linkedin/                   # LinkedIn API
 │   ├── notion/                     # Notion pages, databases, blocks
 │   ├── oanda/                      # Forex trading
@@ -742,6 +744,7 @@ TCG_MP_USERNAME=
 TCG_MP_PASSWORD=
 TCG_MP_USER_ID=
 TCG_SAVE=                         # local save dir for TCG marketplace exports
+JUSTTCG_API_KEY=                  # JustTCG pricing API key (tcg_...)
 
 # ── Web scraping / market research ────────────────────────────────────────────
 APIFY_API_KEY=

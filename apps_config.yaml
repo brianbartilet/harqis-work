@@ -646,4 +646,18 @@ STRIPE:
   return_data_only: True
 
 
+JUSTTCG:
+  app_id: 'justtcg'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.justtcg.com/v1/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: False
+  app_data:
+    api_key: ${JUSTTCG_API_KEY}
+  return_data_only: True
+
+
 

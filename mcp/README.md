@@ -398,6 +398,29 @@ Wraps `apps/scryfall/references/web/api/` services. Requires valid `SCRYFALL` se
 
 ---
 
+### JustTCG (`apps/justtcg/mcp.py`)
+
+Wraps `apps/justtcg/references/web/api/` services. Requires valid `JUSTTCG` section in `apps_config.yaml`.
+Multi-game TCG pricing analytics (MTG, Pokémon, Yu-Gi-Oh!, Lorcana, One Piece, Digimon, Union Arena).
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `list_justtcg_games` | — | Supported games + aggregate value stats |
+| `list_justtcg_sets` | `game?`, `q?`, `limit?`, `offset?` | Sets within a game (filter by game id / name) |
+| `get_justtcg_card` | `card_id?`, `variant_id?`, `tcgplayer_id?`, `condition?`, `printing?` | One card + its priced variants |
+| `search_justtcg_cards` | `q?`, `game?`, `set_id?`, `condition?`, `printing?`, `order_by?`, `order?`, `limit?`, `offset?` | Search/browse; sort by `order_by` (`price`/`24h`/`7d`/`30d`) |
+| `batch_justtcg_cards` | `items` | Batch lookup (plan cap 20/100/200) |
+
+Pricing lives per-variant: `price`, `priceChange24hr`/`7d`/`30d`, `avgPrice`, `minPrice7d`/`maxPrice7d`,
+`trendSlope7d`, `priceRelativeTo30dRange`, `minPriceAllTime`, etc.
+
+**Example prompts:**
+- *"What are the biggest 7-day Pokémon card price movers on JustTCG?"*
+- *"Get the current JustTCG price for the card with TCGplayer id 106999."*
+- *"Look up Charizard in the Base Set Shadowless set and show the Near Mint Holofoil price."*
+
+---
+
 ### Telegram (`apps/telegram/mcp.py`)
 
 Wraps `apps/telegram/references/web/api/` services. Requires valid `TELEGRAM` section in `apps_config.yaml`.

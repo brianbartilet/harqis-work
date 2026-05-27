@@ -69,6 +69,7 @@ _APP_LOADERS: dict[str, str] = {
     "google_drive":"apps.google_drive.mcp.register_google_drive_tools",
     "grok":        "apps.grok.mcp.register_grok_tools",
     "jira":        "apps.jira.mcp.register_jira_tools",
+    "justtcg":     "apps.justtcg.mcp.register_justtcg_tools",
     "linkedin":    "apps.linkedin.mcp.register_linkedin_tools",
     "notion":      "apps.notion.mcp.register_notion_tools",
     "oanda":       "apps.oanda.mcp.register_oanda_tools",
