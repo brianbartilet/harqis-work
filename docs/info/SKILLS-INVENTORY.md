@@ -529,6 +529,16 @@ Fires when the card description contains any of these (case-insensitive):
 
 ---
 
+## External skill ecosystems worth tracking
+
+Skills and plugins worth evaluating but not yet adopted — kept here so they don't get lost.
+
+| Project | Link | Type | Why it's interesting |
+|---|---|---|---|
+| **obra/superpowers** | [github.com/obra/superpowers](https://github.com/obra/superpowers) · [CLAUDE.md](https://github.com/obra/superpowers/blob/main/CLAUDE.md) · [install](https://claude.com/plugins/superpowers) | Claude Code plugin (official marketplace) | Opinionated 7-phase methodology: brainstorming → worktrees → plans → subagent-driven dev → strict TDD → code review → branch finish. Auto-triggering skills, zero deps. Ships `using-git-worktrees`, `subagent-driven-development`, `systematic-debugging`, `verification-before-completion`, `writing-skills` — all gaps in our catalog. Direct trigger overlap with `/clarify-feature` (their `brainstorming`) and `/max-plan` (their `writing-plans`) — would need conflict triage before global install. Install: `/plugin install superpowers@claude-plugins-official`. |
+
+---
+
 ## Adding a New Skill
 
 1. Create `.claude/skills/<skill-name>.md`. The **first line** (before any heading) is the one-line description shown in the skill picker.
