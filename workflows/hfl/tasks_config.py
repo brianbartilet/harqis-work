@@ -217,6 +217,36 @@ WORKFLOW_HFL = {
     # no stay-points become named route summaries when movement is meaningful;
     # only low-distance/noisy tracks use the movement-only breadcrumb.
     # Device read from OWN_TRACKS_DEFAULT_USER / OWN_TRACKS_DEFAULT_DEVICE.
+    # Adhoc Phase 1 of the HFL knowledge-graph rollout — see
+    # workflows/hfl/KNOWLEDGE_GRAPH.md. Schedule is effectively disabled
+    # (Sunday 03:35) so the graphify subprocess only fires when explicitly
+    # invoked (.delay() from an agent, an MCP tool, or `/run-tests` smoke).
+    # No-op cleanly when the graphify CLI is not on PATH — no Beat breakage.
+    # Promoted to a real weekly schedule when Phase 1 is validated; see the
+    # KNOWLEDGE_GRAPH.md "Phase promotion" section.
+    'run-job--build_hfl_knowledge_graph': {
+        'task': 'workflows.hfl.tasks.build_knowledge_graph.build_hfl_knowledge_graph',
+        'schedule': crontab(day_of_week='sun', hour=3, minute=35),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'max_files': 500,
+            'timeout_sec': 60 * 30,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 60 * 6,
+        },
+        'manifesto': {
+            'code_role': 'distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_graph+es:hfl-graph',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+            'tenant_safe': True,
+        },
+    },
+
     'run-job--ingest_location_activity': {
         'task': 'workflows.hfl.tasks.ingest_location.ingest_location_activity',
         'schedule': crontab(hour=23, minute=5),
