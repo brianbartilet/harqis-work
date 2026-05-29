@@ -9,16 +9,20 @@ place-label, and raw-fallback distiller with no network.
 """
 
 from datetime import date, datetime, timedelta
+import re
 
 import pytest
 
 from workflows.hfl.tasks.ingest_location import (
     _activity_body,
+    _analyze_route_activity,
     _cluster_stays,
     _haversine_m,
+    _location_window,
     _movement_only_entry,
     _osm_link,
     _place_tags,
+    _route_summary_entry,
     _short_place,
     collect_location_activity,
     distill_location_activity,
@@ -99,6 +103,91 @@ def test__ingest_location_activity_movement_only_fallback(monkeypatch, tmp_path)
     assert "Recorded movement but no qualifying location stay" in written
     assert "movement-only" in written
     assert "openstreetmap.org" not in written
+
+
+def test__ingest_location_activity_travel_route_fallback(monkeypatch, tmp_path):
+    """Travel-heavy GPS days without stays write a route summary, not generic movement-only."""
+    monkeypatch.setenv("OWN_TRACKS_DEFAULT_USER", "brian")
+    monkeypatch.setenv("OWN_TRACKS_DEFAULT_DEVICE", "android")
+
+    now = datetime.now().replace(hour=0, minute=30, second=0, microsecond=0)
+    # Sparse, moving points with a large Singapore -> Metro Manila jump. No run
+    # stays within 150m for 15 minutes, but the route itself is meaningful.
+    track = _track(now, [
+        (0, 1.389, 103.987), (10, 1.390, 103.988),
+        (360, 14.520, 121.000), (370, 14.530, 121.010),
+        (480, 14.620, 121.100), (540, 14.650, 121.120),
+        (600, 14.660, 121.130), (660, 14.670, 121.140),
+        (720, 14.570, 121.080), (780, 14.560, 121.070),
+    ])
+    monkeypatch.setattr(
+        "workflows.hfl.tasks.ingest_location.ApiServiceOwnTracksLocations",
+        lambda *a, **k: type("S", (), {"get_history": lambda self, **kw: {"data": track}})(),
+    )
+    monkeypatch.setattr(
+        "workflows.hfl.tasks.ingest_location._reverse_geocode",
+        lambda lat, lon, **kw: "Changi Village, Singapore" if lat < 5 else "Metro Manila, Philippines",
+    )
+    monkeypatch.setattr(
+        "workflows.hfl.tasks.ingest_location.resolve_corpus_dir", lambda: tmp_path
+    )
+    indexed = []
+    monkeypatch.setattr(
+        "workflows.hfl.tasks.capture.index_hfl_entry",
+        lambda entry, *, source, synthesized=False: indexed.append((source, synthesized)) or "doc-1",
+    )
+
+    result = ingest_location_activity(cfg_id__anthropic="ANTHROPIC")
+
+    assert result["entries_written"] == 1
+    assert result["stays"] == 0
+    assert result["synthesized"] is False
+    assert indexed == [("location", False)]
+    written = (tmp_path / f"{datetime.now():%Y-%m-%d}.md").read_text(encoding="utf-8")
+    assert "Travelled from Changi Village, Singapore to Metro Manila, Philippines" in written
+    assert "travel-heavy day" in written
+    assert "movement-only" not in written
+    assert "#location #travel" in written
+    assert not re.search(r"\d+\.\d{3,}\s*,\s*\d+\.\d{3,}", written)
+    assert "openstreetmap.org" not in written
+
+
+def test__location_window_one_day_is_exact_current_day():
+    today = date(2026, 5, 29)
+    assert _location_window(1, today=today) == (today, today)
+    assert _location_window(2, today=today) == (date(2026, 5, 28), today)
+
+
+def test__route_analysis_below_threshold_is_not_travel():
+    now = datetime(2026, 5, 29, 8, 0, 0)
+    points = _track(now, [(i, 1.3000 + i * 0.00001, 103.8000) for i in range(10)])
+    analysis = _analyze_route_activity(
+        {"_points": points},
+        do_geocode=False,
+        min_direct_distance_m=20_000,
+        min_path_distance_m=30_000,
+        min_jump_m=50_000,
+    )
+    assert analysis["travel"] is False
+
+
+def test__route_summary_entry_uses_places_not_coordinates():
+    now = datetime(2026, 5, 29, 8, 0, 0)
+    analysis = {
+        "travel": True,
+        "point_count": 12,
+        "direct_distance_m": 2_300_000,
+        "max_jump_m": 2_300_000,
+        "anchors": [
+            {"tst": int(now.timestamp()), "lat": 1.3, "lon": 103.8, "place": "Singapore"},
+            {"tst": int((now + timedelta(hours=4)).timestamp()), "lat": 14.5, "lon": 121.0, "place": "Metro Manila"},
+        ],
+    }
+    entry = _route_summary_entry(analysis)
+    body = "\n".join(str(entry[k]) for k in ("moment", "what_happened", "why_it_stayed"))
+    assert "Travelled from Singapore to Metro Manila" in entry["moment"]
+    assert "2300 km" in body
+    assert not re.search(r"\d+\.\d{3,}\s*,\s*\d+\.\d{3,}", body)
 
 
 def test__ingest_location_activity_dual_write_contract(monkeypatch, tmp_path):

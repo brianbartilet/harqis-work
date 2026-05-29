@@ -204,6 +204,180 @@ def _place_tags(stays: list[dict]) -> list[str]:
     return tags[:6]
 
 
+def _route_tags(analysis: dict) -> list[str]:
+    tags = ["location", "travel", "owntracks", "route"]
+    for anchor in analysis.get("anchors", []):
+        place = (anchor.get("place") or "").lower()
+        for token in re.findall(r"[a-z][a-z0-9-]{2,}", place):
+            if token in {"the", "and", "city", "district", "province", "region"}:
+                continue
+            if token not in tags:
+                tags.append(token)
+            if len(tags) >= 8:
+                return tags
+    return tags
+
+
+def _fmt_distance_km(metres: float) -> str:
+    km = metres / 1000.0
+    return f"{km:.0f} km" if km >= 100 else f"{km:.1f} km"
+
+
+def _dedupe_route_anchors(anchors: list[dict], *, radius_m: int = 800) -> list[dict]:
+    kept: list[dict] = []
+    for anchor in anchors:
+        if any(
+            _haversine_m(anchor["lat"], anchor["lon"], k["lat"], k["lon"]) <= radius_m
+            and anchor.get("kind") not in {"first", "last"}
+            for k in kept
+        ):
+            continue
+        kept.append(anchor)
+    return kept
+
+
+def _select_route_anchors(
+    points: list[dict], *, min_move_m: int = 5_000, max_anchors: int = 6
+) -> list[dict]:
+    """Pick a small chronological set of route anchors from raw fixes.
+
+    The goal is HFL prose, not a track log: first point, large jump boundaries,
+    meaningfully moved samples, and final point. Coordinates stay internal and
+    are only used for reverse-geocoding labels.
+    """
+    if not points:
+        return []
+    selected: list[dict] = [dict(points[0], kind="first")]
+
+    jumps: list[tuple[float, int]] = []
+    for i in range(1, len(points)):
+        jump_m = _haversine_m(points[i - 1]["lat"], points[i - 1]["lon"], points[i]["lat"], points[i]["lon"])
+        if jump_m >= 50_000:
+            jumps.append((jump_m, i))
+    for _jump_m, i in sorted(jumps, reverse=True)[:2]:
+        selected.append(dict(points[i - 1], kind="before-jump"))
+        selected.append(dict(points[i], kind="after-jump"))
+
+    last = selected[-1]
+    for p in points[1:-1]:
+        if _haversine_m(last["lat"], last["lon"], p["lat"], p["lon"]) >= min_move_m:
+            selected.append(dict(p, kind="moved-sample"))
+            last = p
+        if len(selected) >= max_anchors - 1:
+            break
+
+    selected.append(dict(points[-1], kind="last"))
+    selected.sort(key=lambda p: p["tst"])
+    return _dedupe_route_anchors(selected)[:max_anchors]
+
+
+def _analyze_route_activity(
+    activity: dict,
+    *,
+    min_points: int = 10,
+    min_direct_distance_m: int = 20_000,
+    min_path_distance_m: int = 30_000,
+    min_jump_m: int = 50_000,
+    do_geocode: bool = True,
+) -> dict[str, Any]:
+    """Detect travel-worthy movement from raw OwnTracks fixes.
+
+    Stays are handled elsewhere. This catches travel days where the trace is
+    meaningful but too fragmented to form a 15-minute stay-point.
+    """
+    points = list(activity.get("_points") or [])
+    points.sort(key=lambda p: p["tst"])
+    if len(points) < min_points:
+        return {"travel": False, "reason": "too-few-points", "point_count": len(points)}
+
+    direct_m = _haversine_m(points[0]["lat"], points[0]["lon"], points[-1]["lat"], points[-1]["lon"])
+    jumps = [
+        _haversine_m(points[i - 1]["lat"], points[i - 1]["lon"], points[i]["lat"], points[i]["lon"])
+        for i in range(1, len(points))
+    ]
+    path_m = sum(jumps)
+    max_jump_m = max(jumps) if jumps else 0.0
+    travel = (
+        direct_m >= min_direct_distance_m
+        or path_m >= min_path_distance_m
+        or max_jump_m >= min_jump_m
+    )
+    if not travel:
+        return {
+            "travel": False,
+            "reason": "movement-below-route-threshold",
+            "point_count": len(points),
+            "direct_distance_m": direct_m,
+            "path_distance_m": path_m,
+            "max_jump_m": max_jump_m,
+        }
+
+    anchors = _select_route_anchors(points)
+    if do_geocode and anchors:
+        cache: dict = {}
+        for anchor in anchors:
+            place = _reverse_geocode(anchor["lat"], anchor["lon"], cache=cache)
+            if place:
+                anchor["place"] = place
+
+    return {
+        "travel": True,
+        "point_count": len(points),
+        "direct_distance_m": direct_m,
+        "path_distance_m": path_m,
+        "max_jump_m": max_jump_m,
+        "anchors": anchors,
+    }
+
+
+def _route_summary_entry(analysis: dict) -> dict[str, Any]:
+    """Return deterministic HFL fields for travel days with no stay-points."""
+    anchors = analysis.get("anchors") or []
+    labelled = [a for a in anchors if a.get("place")]
+    start = labelled[0]["place"] if labelled else "the starting area"
+    end = labelled[-1]["place"] if labelled else "the ending area"
+
+    route_bits: list[str] = []
+    seen: set[str] = set()
+    for anchor in anchors:
+        label = anchor.get("place")
+        if not label or label in seen:
+            continue
+        seen.add(label)
+        route_bits.append(f"{_fmt_clock(anchor['tst'])} — {label}")
+    route_text = "; ".join(route_bits[:6]) if route_bits else "route anchors were detected but could not be reverse-geocoded"
+
+    distance_text = _fmt_distance_km(max(
+        float(analysis.get("direct_distance_m") or 0),
+        float(analysis.get("max_jump_m") or 0),
+    ))
+    return {
+        "skip": False,
+        "moment": f"Travelled from {start} to {end}",
+        "what_happened": (
+            f"OwnTracks recorded {analysis.get('point_count', 0)} GPS fix(es) across a "
+            f"travel-heavy day, including a movement span of about {distance_text}. "
+            f"Route anchors: {route_text}. No single place crossed the configured "
+            "stay-point threshold, but the path itself was story-worthy."
+        ),
+        "why_it_stayed": (
+            "This preserves the shape of a real travel day in HFL instead of reducing "
+            "a useful location trace to a generic breadcrumb."
+        ),
+        "possible_use": "timeline, travel diary, diagnostics",
+        "tags": _route_tags(analysis),
+        "synthesized": False,
+    }
+
+
+def _location_window(window_days: int, *, today: Optional[date] = None) -> tuple[date, date]:
+    """Return the inclusive calendar-day window for a location ingest run."""
+    end = today or datetime.now().date()
+    days = max(1, int(window_days or 1))
+    start = end - timedelta(days=days - 1)
+    return start, end
+
+
 def _resolve_device(
     user: Optional[str], device: Optional[str]
 ) -> tuple[Optional[str], Optional[str]]:
@@ -281,6 +455,9 @@ def collect_location_activity(
         "stays": stays,
         "stay_count": len(stays),
         "window": {"from": from_ts, "to": to_ts},
+        # Internal-only raw fixes for deterministic route summarization. HFL
+        # prose and normal responses must not expose raw coordinates.
+        "_points": points,
     }
 
 
@@ -463,8 +640,7 @@ def ingest_location_activity(
     entry, no LLM call. Fixes with no stay-points produce a deterministic
     movement-only entry.
     """
-    until = datetime.now().date()
-    since = until - timedelta(days=window_days)
+    since, until = _location_window(window_days)
 
     try:
         activity = collect_location_activity(
@@ -487,12 +663,21 @@ def ingest_location_activity(
                 "points": activity["point_count"]}
 
     if activity["stay_count"] == 0:
-        _log.info(
-            "ingest_location: %d fix(es) but no stay-points; writing movement-only entry",
-            activity["point_count"],
-        )
-        d = _movement_only_entry(activity, min_dwell_min=min_dwell_min)
-        references: list[str] = []
+        route = _analyze_route_activity(activity)
+        if route.get("travel"):
+            _log.info(
+                "ingest_location: %d fix(es) form a travel route; writing route summary",
+                activity["point_count"],
+            )
+            d = _route_summary_entry(route)
+            references: list[str] = []
+        else:
+            _log.info(
+                "ingest_location: %d fix(es) but no stay-points; writing movement-only entry",
+                activity["point_count"],
+            )
+            d = _movement_only_entry(activity, min_dwell_min=min_dwell_min)
+            references = []
     else:
         d = distill_location_activity(
             activity, synthesize=True, model=model,
