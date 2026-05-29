@@ -47,3 +47,10 @@ python-multipart>=0.0.9
 
 # moomoo-api: install separately to avoid protobuf conflict
 #     pip install moomoo-api --no-deps
+
+# workflows/hfl/tasks/build_knowledge_graph.py — Graphify CLI subprocess.
+# Install separately (it pins NetworkX/Tree-sitter wheels that the harqis-core
+# resolver doesn't need to know about). The task is a clean no-op when the CLI
+# is absent, so this floor is informational rather than required:
+#     pip install graphifyy   # note the double y in the package name
+# CLI binary is `graphify`. See workflows/hfl/KNOWLEDGE_GRAPH.md.
