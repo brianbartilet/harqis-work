@@ -95,6 +95,73 @@ count — "ship + first month of operating it."
 | `ingest_weather_activity` | Weather + air quality at each stay-point | `ingest_location_activity` output + open-meteo API | ~3 h | Cheap join — location already produces stay-points. |
 | `ingest_print_queue` | What was printed today | OS-specific (CUPS / print spooler) | ~5 h | Surprisingly story-rich: what I printed = what I was prepping for in meatspace. |
 
+### Finance & commerce (most apps already exist — composition, not new integrations)
+
+> Brainstorm captured 2026-05-29 as a follow-up to the main backlog. **Key
+> principle: density-without-signal is the trap.** A typical YNAB day has
+> 15 transactions; 13 are routine (coffee, parking, groceries) and 2 are
+> story-worthy. Every task below has to filter aggressively before calling
+> Haiku, or HFL becomes a transaction log.
+>
+> Existing apps available (no new integration needed for most candidates):
+> `apps/ynab`, `apps/stripe`, `apps/tcg_mp`, `apps/echo_mtg`, `apps/justtcg`,
+> `apps/oanda`, `apps/alpha_vantage`, `apps/investagrams`, `apps/aaa`.
+
+**Direct ingest — receipts, purchases, sold items, YNAB transactions:**
+
+| Candidate | What it captures | Reuses | Friction | Filtering principle |
+|---|---|---|---|---|
+| `ingest_ynab_activity` | Daily YNAB transaction digest distilled to story-worthy events | `apps/ynab/` | ~3 h | Skip recurring routine spend (same merchant + similar amount in last 30 days); keep first-of-kind, large outliers, new categories |
+| `ingest_receipts_activity` | Vision pass over receipt photos in dumps inbox → merchant, total, items, link to YNAB tx by date+amount | `analyze_hfl_media` pattern + `apps/ynab/` | ~5 h | Filename or path matches `receipt*`, `*tax*`, `*invoice*`, or Haiku vision identifies "looks like a receipt" |
+| `ingest_sold_items_activity` | TCG MP sales: cards sold today, gross/net, P&L vs cost basis | `apps/tcg_mp/`, `apps/echo_mtg/` (cost basis) | ~3 h | One entry per day; if zero sales, no LLM call, no entry |
+| `ingest_large_purchase` | Purchases above a configurable threshold get their own entry separate from the daily digest | `apps/ynab/` | ~2 h | Threshold default: $100 (configurable per category — $500 for "Travel", $50 for "Books") |
+
+**Cross-source enrichment — where the actual story lives:**
+
+| Candidate | What it captures | Reuses | Friction | Why it matters |
+|---|---|---|---|---|
+| `ingest_purchase_context` | Joins YNAB transaction location with `ingest_location_activity` stay-points | YNAB + existing location task | ~3 h | "Bought books at Foyles while at the London office" — place + purchase together = memory anchor |
+| `ingest_receipt_to_transaction` | Matches dumps-inbox receipt photos to YNAB transactions by date+amount, attaches receipt path as `references` | YNAB + receipts ingest above | ~2 h | Receipts that match a YNAB row aren't a new entry — they enrich the existing one. Avoids duplicate noise. |
+
+**Income / business signal:**
+
+| Candidate | What it captures | Reuses | Friction | Notes |
+|---|---|---|---|---|
+| `ingest_paycheck_activity` | Paycheck-day detector: salary/contractor income transactions trigger a monthly recap | `apps/ynab/` | ~2 h | Triggers ~1×/month; high-signal moment. Pair with budget summary. |
+| `ingest_stripe_payouts` | Stripe payouts received — side-business / SaaS income (meshes with the multi-tenant AaaS plan from PR #27) | `apps/stripe/` | ~2 h | Becomes interesting once the AaaS tier has paying tenants. |
+| `ingest_refund_activity` | Refunds and returns received — closes a loop on a prior purchase | `apps/ynab/` | ~1 h | Always cross-references a prior HFL entry — story closure beat. |
+
+**Behavioural signal — best paired with the knowledge graph from PR #29:**
+
+| Candidate | What it captures | Reuses | Friction | Notes |
+|---|---|---|---|---|
+| `ingest_unusual_spend` | Anomaly detection — today's spend in category X was 2σ above 90-day mean | `apps/ynab/` + stats | ~4 h | Filters out routine while catching "I spent $400 at IKEA, must have moved something around at home." |
+| `ingest_new_merchant` | First-time merchant detection — "first time at X, $Y" | `apps/ynab/` | ~2 h | High-signal weekly entry by definition. Pair with location → "first visit to Cafe X in Cebu". |
+| `ingest_subscription_activity` | Detects new + canceled subscriptions from YNAB transaction patterns | `apps/ynab/` | ~3 h | Subscription start/cancel are real life-decisions. Detection: same merchant + similar amount + monthly cadence. |
+| `ingest_budget_alerts` | YNAB category significantly over- or under-spent vs budget at month-end | `apps/ynab/` | ~2 h | One end-of-month entry per category that breached. Reflective-prompt material. |
+
+**Investments:**
+
+| Candidate | What it captures | Reuses | Friction | Notes |
+|---|---|---|---|---|
+| `ingest_trades_activity` | Closed positions today: OANDA forex + Investagrams/AAA stock + EchoMTG cards | `apps/oanda/`, `apps/investagrams/`, `apps/aaa/`, `apps/echo_mtg/` | ~5 h | Already have all the apps; composition only. P&L per closed position + a daily aggregate. |
+| `ingest_portfolio_milestones` | Portfolio crossed a new high/low; dividend received; allocation drifted past a band | `apps/alpha_vantage/` + brokers | ~4 h | Rare-firing, high-signal. "Portfolio crossed $X for first time" is exactly a story beat. |
+| `ingest_price_alerts` | JustTCG / Alpha Vantage hit a configured target → "X dropped below $Y, watch alert fired" | `apps/justtcg/`, `apps/alpha_vantage/` | ~3 h | Watchlist as YAML config. Each alert = one micro-entry. Dedupe alerts that re-fire daily. |
+
+**Specialized harqis-work signal — operator-role narrative:**
+
+| Candidate | What it captures | Reuses | Friction | Notes |
+|---|---|---|---|---|
+| `ingest_tcg_inventory_changes` | Cards entered or exited the EchoMTG inventory today | `apps/echo_mtg/` | ~2 h | Operator-narrative entry: "added 14 cards from the Modern Horizons 3 pack break." |
+| `ingest_tcg_market_moves` | Significant price moves for cards in inventory (JustTCG) | `apps/justtcg/` + `apps/echo_mtg/` | ~3 h | Filters out routine noise; alerts only on inventory-relevant cards moving > N%. |
+
+**If finance becomes the focus instead of the calendar/email/health batch, the starter pair is:**
+
+1. `ingest_ynab_activity` — the single highest-signal financial source; most other finance candidates downstream of it. ~3 h.
+2. `ingest_sold_items_activity` — uniquely yours; selling cards is active income, not passive expense. Closing a sale with P&L vs cost basis is genuinely story-worthy. ~3 h.
+
+After those, the **highest-leverage cross-source one** is `ingest_purchase_context` — joining location to YNAB makes both layers retroactively richer. Cheapest way to demonstrate that the knowledge graph from PR #29 delivers on the "connect the dots" promise.
+
 ### High-friction (mention, defer indefinitely)
 
 | Candidate | Why it's hard |
@@ -129,6 +196,14 @@ Decisions made when the first new source ships should hold for the rest of the b
 - **Skip-on-no-data** — every new task must no-op cleanly when there's nothing to ingest (no LLM call, no entry, no ES write). The HFL ingest pattern is non-negotiable here.
 - **Model pin** — always pass `model="claude-haiku-4-5-20251001"` from `tasks_config.py`. Never touch `BaseApiServiceAnthropic.DEFAULT_MODEL`.
 - **Dual write** — `file:hfl_corpus + es:hfl-entries` is the established express target. Source-specific exceptions need a documented reason.
+
+**Finance-specific (apply once the first finance ingest ships):**
+
+- **Routine filter** — "skip if same merchant + similar amount in last 30 days" is the universal noise-killer for financial sources. Document once and reuse.
+- **Money privacy** — never log card numbers / account numbers / full transaction IDs. Last 4 + merchant name + amount is enough.
+- **Currency** — every entry stores `amount`, `currency`, and `amount_usd` (cached FX from OANDA) so cross-currency queries work.
+- **Tag convention** — `#finance` plus the YNAB category as a sub-tag (`#finance/groceries`, `#finance/income`).
+- **Tenant safety default** — finance data is the most leak-sensitive of any HFL source; all finance ingest tasks get `manifesto.tenant_safe: True` automatically, no exceptions.
 
 ---
 
