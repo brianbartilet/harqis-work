@@ -47,6 +47,7 @@ this scaffold closes.
 | `ingest_ai_activity` | Alternate source (OpenAI **Platform API** assistant threads, via `OPENAI_HFL_THREAD_IDS`). Superseded by `ingest_chatgpt_activity` — kept in code but its beat entry is **disabled** (commented-out) to avoid a nightly no-op. | `file:hfl_corpus` | Disabled (uncomment in `tasks_config.py` if you also want Platform-API threads). |
 | `ingest_browsing_activity` | Daily web-browsing digest. Reads the Chrome + Edge `History` SQLite DBs directly (copy-to-temp to dodge the browser lock; no app/credential), distils the day's visits into ONE corpus entry with the most-visited pages as `references`. Haiku-distilled, raw fallback. No history DB / no visits → no entry, no call. No domain filtering by default (`exclude_domains` kwarg to redact). | `file:hfl_corpus+es:hfl-entries` | Daily 23:00 local (active — `os: windows`; no config needed). |
 | `ingest_location_activity` | Daily location timeline. Pulls the day's GPS track from the local OwnTracks Recorder (`apps/own_tracks`), clusters fixes into **stay-points** (dwell ≥ N min), reverse-geocodes each via OpenStreetMap Nominatim (free, no key), and distils ONE "where I was today" timeline entry. Haiku-distilled, raw fallback. No device configured / Recorder unreachable / no fixes → no entry, no call; fixes with no qualifying stay write a movement-only breadcrumb. | `file:hfl_corpus+es:hfl-entries` | Daily 23:05 local (active — clean no-op until OwnTracks reports). |
+| `ingest_spotify_activity` | Daily Spotify listening digest. Pulls the day's plays from the Spotify Web API (`apps/spotify`, OAuth2 refresh-token), with the operator's rolling top tracks/artists as context, and distils ONE "soundtrack of the day" entry — mood **inferred** by Haiku from track/artist/genre names (no audio-features; deprecated for new apps). Haiku-distilled, raw fallback. No credentials / no plays → no entry, no call. `recently-played` caps at 50/day. | `file:hfl_corpus+es:hfl-entries` | Daily 23:10 local (**shipped commented-out** — uncomment in `tasks_config.py` once `SPOTIFY_*` creds are set; `tenant_safe`). |
 | `analyze_hfl_media` | **Daily media vision pass.** Walks the dumps inbox for recent images/videos (pulled from phones + machines by `workflows/dumps/`), sends each to Haiku vision for a story moment, and **geo-tags** it — EXIF GPS, else the nearest OwnTracks fix by capture time → Nominatim place. One entry per story-worthy item; the source dump file + an OSM pin are the `references`. No new media → no entry, no call. | `file:hfl_corpus+es:hfl-entries` | Daily 22:00 local (active). |
 | `collect_time_capsule` | **On-demand, time-ranged archive ingest.** Sweeps a directory (and subdirs) for files dated within a period, extracts text / docs / Haiku vision captions into a bounded manifest + digest. The COLLECT half of the `/time-capsule-synthesizer` skill (Claude synthesizes ONE rollup entry from the digest, then dual-writes it via `capture_hfl_entry`). Not scheduled. | `file:hfl_corpus+es:hfl-entries` (via the skill) | Adhoc — driven by `/time-capsule-synthesizer`. |
 
@@ -328,6 +329,43 @@ To make it produce entries:
 - Live view (no write): the `location_activity` MCP tool in
   `workflows/hfl/mcp.py`.
 
+### `ingest_spotify_activity` (daily listening soundtrack)
+
+**Shipped commented-out** in `tasks_config.py` (the `SPOTIFY_*` creds aren't set
+yet). Pulls the day's plays from the Spotify Web API (`apps/spotify`), uses the
+operator's rolling top tracks/artists as distillation context, and **dual-writes**
+ONE "soundtrack of the day" entry — corpus + the `harqis-hfl-entries` ES index.
+Mood is **inferred** by Haiku from track/artist/genre names (Spotify deprecated
+`audio-features`/valence for new apps in Nov 2024).
+
+To make it produce entries:
+
+1. **Mint the credentials.** Create a Spotify app, request the
+   `user-read-recently-played` + `user-top-read` scopes, and mint a long-lived
+   refresh token once — see [`apps/spotify/README.md`](../../apps/spotify/README.md).
+   Set in `.env/apps.env`:
+   ```
+   SPOTIFY_CLIENT_ID=
+   SPOTIFY_CLIENT_SECRET=
+   SPOTIFY_REFRESH_TOKEN=
+   ```
+2. **Uncomment** the `run-job--ingest_spotify_activity` block in
+   `workflows/hfl/tasks_config.py`, then run `/generate-registry` so it appears
+   in the dashboard.
+3. **Restart Beat + an `hfl`-subscribed worker.** It runs daily at 23:10 local
+   (alongside browsing 23:00 / location 23:05), centralized on the Beat host
+   (one Spotify account — not a per-machine broadcast).
+
+- No credentials / no plays in the window → clean no-op (no LLM, no entry).
+- `recently-played` caps at the last 50 plays and is a time-cursor endpoint —
+  a heavy listening day loses the earliest tracks; the top tracks/artists layer
+  covers "what defined the period" regardless. `played_at` is UTC, mapped to the
+  local calendar day.
+- Tuning kwargs: `window_days` (default 1), `max_tracks` (cap, ≤50),
+  `top_limit` (top tracks/artists pulled for context, default 10).
+- Live view (no write): the `spotify_activity` MCP tool in
+  `workflows/hfl/mcp.py`.
+
 ---
 
 ## Elasticsearch entry index (dual-write)
@@ -423,6 +461,7 @@ MCP live-view tool — dual-writing corpus + ES. It composes with
 | `summarize_hfl_week` | distill+express | area | `file:hfl_summary+es_log` | `es_log+file` | `True` |
 | `ingest_browsing_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` |
 | `ingest_location_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` |
+| `ingest_spotify_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 
 This block is also persisted on each beat entry's `'manifesto'` key — see
 `workflows/hfl/tasks_config.py`. `scripts/agents/manifesto_audit.py` reads from

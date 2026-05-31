@@ -115,6 +115,9 @@ class DependencyDetector:
         (r"\bAPIFY\b",                            "APIFY_API_KEY"),
         # Trading / brokerage
         (r"\bMOO\b|\bFUTU\b",                     "MOO_PWD_MD5"),
+        # Music / media — OAuth2 refresh-token flow; the refresh token is the
+        # most specific readiness signal (client_id/secret fail loudly otherwise).
+        (r"\bSPOTIFY\b",                          "SPOTIFY_REFRESH_TOKEN"),
     ]
 
     _WORKFLOW_PATTERNS = [

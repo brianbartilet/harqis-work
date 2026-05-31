@@ -43,6 +43,7 @@ count — "ship + first month of operating it."
 | `retrieve_hfl_corpus` | Substring + tag scan (mailed weekly) |
 | `collect_time_capsule` | Bounded archive ingest (driven by skill) |
 | `build_hfl_knowledge_graph` | Graphify-based weekly graph (Phase 1, adhoc) |
+| `ingest_spotify_activity` | Daily Spotify listening → soundtrack-of-the-day (new `apps/spotify`; beat shipped commented-out pending `SPOTIFY_*` creds) |
 
 ---
 
@@ -70,7 +71,6 @@ count — "ship + first month of operating it."
 | Candidate | What it captures | Reuses | Friction | Notes |
 |---|---|---|---|---|
 | `ingest_kindle_highlights` | Weekly Kindle highlights export — what stuck enough to underline | (new) `apps/kindle/` | ~4 h | What you highlight = literal future story material. Weekly schedule, not daily. |
-| `ingest_spotify_activity` | Daily listening history — duration, top tracks, mood proxy | (new) `apps/spotify/` | ~3 h | "Listened to X for 2h while debugging" is a real HFL beat. Adds emotional tone layer. |
 | `ingest_podcast_activity` | Pocket Casts / Apple Podcasts listening + auto-bookmarked timestamps | (new) `apps/pocketcasts/` | ~4 h | Bookmarks are higher-signal than full listening; consider bookmarks-only mode. |
 
 ### Health & rhythm (great context for everything else)

@@ -57,6 +57,7 @@ At its core the platform has three layers:
 | `rainmeter` | Windows desktop HUD skinning | Local | No | [Docs](https://docs.rainmeter.net/) · [Site](https://www.rainmeter.net/) |
 | `reddit` | Reddit — subreddits, posts, comments, inbox | REST API (OAuth2) | Yes | [API Docs](https://www.reddit.com/dev/api/) · [Apps](https://www.reddit.com/prefs/apps) |
 | `scryfall` | MTG card database | REST API | Yes | [API Docs](https://scryfall.com/docs/api) · [Site](https://scryfall.com/) |
+| `spotify` | Spotify listening history — recently-played, top tracks/artists | REST API (OAuth2) | Yes | [API Docs](https://developer.spotify.com/documentation/web-api) · [Dashboard](https://developer.spotify.com/dashboard) |
 | `stripe` | Stripe payments — balance, charges, customers, invoices, subscriptions, events | REST API | Yes | [API Docs](https://docs.stripe.com/api) · [Dashboard](https://dashboard.stripe.com/) |
 | `tcg_mp` | TCG Marketplace | REST API | Yes | [Site](https://thetcgmarketplace.com/) |
 | `telegram` | Telegram Bot messaging | REST API | Yes | [API Docs](https://core.telegram.org/bots/api) · [Site](https://telegram.org/) |
@@ -424,6 +425,7 @@ harqis-work/
 │   ├── rainmeter/                  # Windows desktop HUD
 │   ├── reddit/                     # Reddit API
 │   ├── scryfall/                   # MTG card database
+│   ├── spotify/                    # Spotify listening history (recently-played, top tracks/artists)
 │   ├── stripe/                     # Stripe payments — balance, charges, customers, invoices, subscriptions
 │   ├── tcg_mp/                     # TCG Marketplace
 │   ├── telegram/                   # Telegram Bot
@@ -751,6 +753,11 @@ JUSTTCG_API_KEY=                  # JustTCG pricing API key (tcg_...)
 
 # ── Web scraping / market research ────────────────────────────────────────────
 APIFY_API_KEY=
+
+# ── Music / media ─────────────────────────────────────────────────────────────
+SPOTIFY_CLIENT_ID=               # Spotify app client id (developer dashboard)
+SPOTIFY_CLIENT_SECRET=           # Spotify app client secret
+SPOTIFY_REFRESH_TOKEN=           # OAuth2 refresh token (minted once — see apps/spotify/README.md)
 
 # ── Cloud / infrastructure ────────────────────────────────────────────────────
 ORGO_API_KEY=

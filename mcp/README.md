@@ -398,6 +398,23 @@ Wraps `apps/scryfall/references/web/api/` services. Requires valid `SCRYFALL` se
 
 ---
 
+### Spotify (`apps/spotify/mcp.py`)
+
+Wraps `apps/spotify/references/web/api/` services. Requires valid `SPOTIFY` section in `apps_config.yaml` (OAuth2 refresh-token flow). Read-only personal listening signal.
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `spotify_recently_played` | `limit?` | Last ≤50 plays, newest first, each with `played_at` + `track` |
+| `spotify_currently_playing` | — | Track playing now, or `{}` if nothing is |
+| `spotify_top_tracks` | `time_range?`, `limit?` | Top tracks over short/medium/long_term |
+| `spotify_top_artists` | `time_range?`, `limit?` | Top artists over short/medium/long_term |
+
+**Example prompts:**
+- *"What have I listened to on Spotify recently?"*
+- *"What are my top artists this month?"*
+
+---
+
 ### JustTCG (`apps/justtcg/mcp.py`)
 
 Wraps `apps/justtcg/references/web/api/` services. Requires valid `JUSTTCG` section in `apps_config.yaml`.

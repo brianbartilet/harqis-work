@@ -827,3 +827,96 @@ def register_memory_tools(mcp: FastMCP):
             "model": model if d.get("synthesized") else None,
             "period": _period_dict(start_d, end_d, label),
         }
+
+    @mcp.tool()
+    def spotify_activity(
+        period: str = "",
+        since: str = "",
+        until: str = "",
+        synthesize: bool = True,
+        max_tracks: int = 50,
+        top_limit: int = 10,
+        cfg_id__anthropic: str = "ANTHROPIC",
+        model: str = _DEFAULT_HAIKU,
+    ) -> dict:
+        """Live view of the operator's Spotify listening in a window.
+
+        Same gathering the scheduled ingest_spotify_activity uses, but
+        read-only (no corpus or ES write). Defaults to the last 7 days when
+        no window is given. Returns found=false with NO LLM call when there
+        are no credentials or no plays. recently-played caps at the last 50
+        plays — a window wider than that only sees the most recent 50.
+
+        Args:
+            period: same vocabulary as memory_recall (overrides since/until).
+            since:  ISO "YYYY-MM-DD" or relative "-Nd".
+            until:  ISO "YYYY-MM-DD" (defaults to today).
+            synthesize: True → Haiku narrative; False → raw track bullets.
+            max_tracks: cap on recently-played items (1-50).
+            top_limit: how many top tracks/artists to pull for context.
+        """
+        logger.info(
+            "spotify_activity period=%r since=%r until=%r", period, since, until
+        )
+        # Imported lazily: keeps the spotify client + httpx off the MCP import path.
+        from apps.spotify.config import CONFIG as SPOTIFY_CONFIG
+        from apps.spotify.references.web.api.player import ApiServiceSpotifyPlayer
+        from apps.spotify.references.web.api.personalization import (
+            ApiServiceSpotifyPersonalization,
+        )
+        from workflows.hfl.tasks.ingest_spotify import (
+            _credentials_present,
+            collect_spotify_activity,
+            distill_spotify_activity,
+        )
+
+        start, end, label = _resolve_window(period, since, until)
+        end_d = end or _today()
+        start_d = start or (end_d - timedelta(days=6))
+
+        if not _credentials_present():
+            return {"found": False, "text": "", "tracks": [], "track_count": 0,
+                    "error": "no credentials",
+                    "period": _period_dict(start_d, end_d, label)}
+        try:
+            player = ApiServiceSpotifyPlayer(SPOTIFY_CONFIG)
+            personalization = ApiServiceSpotifyPersonalization(
+                SPOTIFY_CONFIG, access_token=player.access_token
+            )
+            activity = collect_spotify_activity(
+                since=start_d, until=end_d,
+                player_svc=player, personalization_svc=personalization,
+                max_tracks=max_tracks, top_limit=top_limit,
+            )
+        except Exception as exc:  # noqa: BLE001 - surface, don't crash the tool
+            logger.warning("spotify_activity: api unavailable (%s)", exc)
+            return {"found": False, "text": "", "error": "spotify unavailable",
+                    "period": _period_dict(start_d, end_d, label)}
+
+        if activity["track_count"] == 0:
+            return {"found": False, "text": "", "tracks": [], "track_count": 0,
+                    "period": _period_dict(start_d, end_d, label)}
+
+        d = distill_spotify_activity(
+            activity, synthesize=synthesize, model=model, cfg_id=cfg_id__anthropic,
+        )
+        if synthesize and d.get("synthesized"):
+            text = (
+                f"**{d['moment']}**\n\n{d['what_happened']}\n\n"
+                f"_{d.get('why_it_stayed','')}_"
+            ).strip()
+        else:
+            text = d["what_happened"]  # raw track bullets
+
+        return {
+            "found": True,
+            "text": text,
+            "tracks": activity["tracks"],
+            "track_count": activity["track_count"],
+            "distinct_artists": activity["distinct_artists"],
+            "total_ms": activity["total_ms"],
+            "top_artists": activity["top_artists"],
+            "synthesized": d.get("synthesized", False),
+            "model": model if d.get("synthesized") else None,
+            "period": _period_dict(start_d, end_d, label),
+        }

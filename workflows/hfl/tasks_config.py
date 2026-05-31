@@ -234,5 +234,41 @@ WORKFLOW_HFL = {
         },
     },
 
+    # Daily Spotify listening — 23:10 local, alongside browsing (23:00) and
+    # location (23:05). Pulls the day's plays from the Spotify Web API
+    # (apps/spotify), distils them into ONE "soundtrack of the day" entry
+    # (Haiku, mood inferred — no audio-features) and dual-writes corpus + ES.
+    # Centralized single-account source on the Beat host (HFL queue, NOT a
+    # per-machine broadcast like browsing). recently-played caps at 50/day.
+    # Clean no-op until credentials are set: no Spotify creds → no entry, no
+    # network call; zero plays in the window → no entry, no LLM call.
+    #
+    # Active — clean no-op until SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET /
+    # SPOTIFY_REFRESH_TOKEN are set in .env/apps.env (mint the refresh token
+    # once; see apps/spotify/README.md).
+    'run-job--ingest_spotify_activity': {
+        'task': 'workflows.hfl.tasks.ingest_spotify.ingest_spotify_activity',
+        'schedule': crontab(hour=23, minute=10),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'window_days': 1,
+            'max_tracks': 50,
+            'top_limit': 10,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 60 * 12,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+            'tenant_safe': True,
+        },
+    },
+
 
 }
