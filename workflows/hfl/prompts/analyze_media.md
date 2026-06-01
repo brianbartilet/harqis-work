@@ -11,6 +11,14 @@ context — e.g. a project name, "Screenshots", "Camera", a client folder), and
 — when known — a Location (the place it was captured, from the photo's GPS or
 the operator's location track at that time).
 
+When the instruction includes a ``Source: Android screenshot`` line, the media
+is a phone screenshot. Treat visible app chrome (status bar, notification
+badges, keyboard, bottom nav) as context clues — not as the story. Focus on
+what the operator was doing *in* the app: the conversation, the search, the
+article, the task. Summarise the content rather than literally reading text
+aloud, and skip if the screen shows only a home-screen, lock-screen, or
+settings dialog with no narrative thread.
+
 Reply with a SINGLE JSON object and nothing else — no prose, no markdown
 fences. Schema:
 
@@ -50,3 +58,7 @@ Example (a screenshot of a stack trace in an IDE, from folder
 Example (a blurry photo of a parking lot, no context):
 
 {"skip": true, "moment": "", "what_happened": "", "why_it_stayed": "", "possible_use": "", "tags": []}
+
+Example (Android screenshot, Source: Android screenshot, folder `android-phone/Screenshots`, showing a Trello card being created for a side-project sprint):
+
+{"skip": false, "moment": "Kicked off the new side-project sprint from the phone while commuting", "what_happened": "A Trello card creation screen is open on an Android phone. The card title reads 'MVP auth flow'. The board name at the top indicates the side-project workspace. This was a quick capture of a planning moment away from the desk.", "why_it_stayed": "Starting a sprint from the phone during a commute shows the project has enough pull to demand attention outside work hours.", "possible_use": "retro", "tags": ["android", "screenshot", "trello", "side-project", "planning"]}
