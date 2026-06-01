@@ -345,5 +345,42 @@ WORKFLOW_HFL = {
         },
     },
 
+    # Android app micro-ingest — DISABLED until inbox is configured.
+    #
+    # Reads *.jsonl files from the configured inbox (HFL_ANDROID_INBOX_PATH or
+    # apps_config.yaml :: HFL.android_inbox.path) and appends one HFL corpus
+    # entry per active source (maps / photos / payments / delivery / listening /
+    # browser) encountered in the batch.  No credentials required — the task
+    # reads JSONL files that the operator drops into the inbox (e.g. via an
+    # Android share-sheet Tasker automation or a manual export). Empty inbox
+    # or missing inbox directory → no entries, no write (clean no-op).
+    #
+    # To activate:
+    #   1. Set HFL_ANDROID_INBOX_PATH to a writable directory on the Beat host,
+    #      OR add HFL.android_inbox.path to apps_config.yaml.
+    #   2. Uncomment the schedule entry below (or keep it commented and invoke
+    #      ingest_android_app_records.delay() from an agent / hotkey).
+    #
+    # 'run-job--ingest_android_app_records': {
+    #     'task': 'workflows.hfl.tasks.ingest_android_apps.ingest_android_app_records',
+    #     'schedule': crontab(hour=23, minute=20),
+    #     'kwargs': {
+    #         'max_records': 500,
+    #         'clear_after': False,
+    #     },
+    #     'options': {
+    #         'queue': WorkflowQueue.HFL,
+    #         'expires': 60 * 60 * 12,
+    #     },
+    #     'manifesto': {
+    #         'code_role': 'capture+distill+express',
+    #         'para_bucket': 'area',
+    #         'express_target': 'file:hfl_corpus',
+    #         'review_artifact': 'es_log+file',
+    #         'hfl_signal': True,
+    #         'tenant_safe': True,
+    #     },
+    # },
+
 
 }
