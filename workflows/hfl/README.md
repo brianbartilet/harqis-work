@@ -49,6 +49,7 @@ this scaffold closes.
 | `ingest_location_activity` | Daily location timeline. Pulls the day's GPS track from the local OwnTracks Recorder (`apps/own_tracks`), clusters fixes into **stay-points** (dwell ≥ N min), reverse-geocodes each via OpenStreetMap Nominatim (free, no key), and distils ONE "where I was today" timeline entry. Haiku-distilled, raw fallback. No device configured / Recorder unreachable / no fixes → no entry, no call; fixes with no qualifying stay write a movement-only breadcrumb. | `file:hfl_corpus+es:hfl-entries` | Daily 23:05 local (active — clean no-op until OwnTracks reports). |
 | `ingest_spotify_activity` | Daily Spotify listening digest. Pulls the day's plays from the Spotify Web API (`apps/spotify`, OAuth2 refresh-token), with the operator's rolling top tracks/artists as context, and distils ONE "soundtrack of the day" entry — mood **inferred** by Haiku from track/artist/genre names (no audio-features; deprecated for new apps). Haiku-distilled, raw fallback. No credentials / no plays → no entry, no call. `recently-played` caps at 50/day. | `file:hfl_corpus+es:hfl-entries` | Daily 23:10 local (**shipped commented-out** — uncomment in `tasks_config.py` once `SPOTIFY_*` creds are set; `tenant_safe`). |
 | `ingest_plaud_activity` | Daily **voice-recordings** ingest. Pulls the day's Plaud recordings via the `apps/plaud` adapter (cloud API → local export-folder fallback) and writes **ONE entry per recording** (not a daily digest). Transcript precedence: Plaud's own transcript, else OpenAI **Whisper** on the raw audio (bounded by `max_transcribe`). Raw recordings + a consolidated `YYYY-MM-DD-summary.md` are archived to `harqis-ones-mac-mini` over key-based SSH. Haiku-distilled, raw fallback. No `PLAUD_TOKEN`/`PLAUD_EXPORT_DIR` → no entry, no call; no recordings → no entry, no call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:15 local (active — clean no-op until acquisition is configured; `tenant_safe`). |
+| `ingest_notification_activity` | **Android notification attention digest.** Reads privacy-first JSONL drop files written by Tasker / MacroDroid / Termux (one record per notification event: app name, category, timestamp only — no titles or message bodies). Aggregates the day's notification pattern (per-app counts, category mix, peak hours) and distils ONE "attention climate" entry — an interruption-signal beat — via Haiku. No drop file / empty inbox → clean no-op. | `file:hfl_corpus+es:hfl-entries` | Daily 23:15 local (**disabled by default** — uncomment in `tasks_config.py` after setting up the JSONL inbox; see §Activating `ingest_notification_activity`). |
 | `analyze_hfl_media` | **Daily media vision pass.** Walks the dumps inbox for recent images/videos (pulled from phones + machines by `workflows/dumps/`), sends each to Haiku vision for a story moment, and **geo-tags** it — EXIF GPS, else the nearest OwnTracks fix by capture time → Nominatim place. One entry per story-worthy item; the source dump file + an OSM pin are the `references`. No new media → no entry, no call. | `file:hfl_corpus+es:hfl-entries` | Daily 22:00 local (active). |
 | `collect_time_capsule` | **On-demand, time-ranged archive ingest.** Sweeps a directory (and subdirs) for files dated within a period, extracts text / docs / Haiku vision captions into a bounded manifest + digest. The COLLECT half of the `/time-capsule-synthesizer` skill (Claude synthesizes ONE rollup entry from the digest, then dual-writes it via `capture_hfl_entry`). Not scheduled. | `file:hfl_corpus+es:hfl-entries` (via the skill) | Adhoc — driven by `/time-capsule-synthesizer`. |
 
@@ -101,6 +102,7 @@ screenshot taken downtown comes out tagged with the place.
 | 23:05 | `ingest_location_activity` | day's movement → one timeline entry |
 | 23:10 | `ingest_spotify_activity` | day's plays → one soundtrack entry |
 | 23:15 | `ingest_plaud_activity` | day's voice recordings → one entry each + Mac-mini archive |
+| 23:15 | `ingest_notification_activity` (disabled) | JSONL drop → notification attention entry |
 
 **Setup** (one-time): the OwnTracks app + `OWN_TRACKS_DEFAULT_USER/DEVICE` (the
 location stream — §Activation); a `[dumps.pull_targets.<phone>]` block in
@@ -332,6 +334,62 @@ To make it produce entries:
 - Live view (no write): the `location_activity` MCP tool in
   `workflows/hfl/mcp.py`.
 
+### `ingest_notification_activity` (Android notification attention digest)
+
+**Disabled by default** (commented-out beat entry). Reads JSONL drop files
+produced by Tasker / MacroDroid / Termux — one JSON record per notification
+event — and distils the day's notification pattern into ONE "attention climate"
+entry (Haiku). **No message bodies or notification titles are ever stored or
+sent to any LLM** — only app name, category, and hour-of-day counts.
+
+**JSONL record format** (one object per line, written by the Android side):
+
+```json
+{"ts": "2026-06-01T09:15:22", "app": "com.whatsapp", "app_label": "WhatsApp", "category": "msg"}
+```
+
+Fields:
+- `ts` — ISO timestamp of the notification event (required)
+- `app` — package name e.g. `com.whatsapp` (required)
+- `app_label` — human-readable app name e.g. `WhatsApp` (required; falls back to `app`)
+- `category` — one of `msg | call | alarm | sys | media | other` (default `other`)
+
+Fields `title`, `text`, `body`, `big_text`, `ticker` and other content fields
+are silently stripped server-side even if accidentally included.
+
+**Drop-file naming:** `android_notifications_{YYYYMMDD}.jsonl`, one file per day.
+
+To activate:
+
+1. **Set the inbox directory** in `.env/apps.env`:
+   ```
+   HFL_ANDROID_NOTIFICATIONS_DIR=/path/to/android_notifications_inbox
+   ```
+   Or rely on the fallback: `{HFL_CORPUS_PATH}/android_notifications_inbox/`
+   (the directory is not created automatically — create it once).
+
+2. **Wire Tasker / MacroDroid / Termux** to append JSONL records to the drop
+   file. A minimal Tasker profile: on *Notification Received* → *Run Shell*:
+   ```sh
+   printf '{"ts":"%s","app":"%app_pkg","app_label":"%app_name","category":"msg"}\n' \
+     "$(date +%Y-%m-%dT%H:%M:%S)" >> \
+     "$HFL_ANDROID_NOTIFICATIONS_DIR/android_notifications_$(date +%Y%m%d).jsonl"
+   ```
+
+3. **Uncomment** the `run-job--ingest_notification_activity` block in
+   `workflows/hfl/tasks_config.py`, then run `/generate-registry` so it
+   appears in the dashboard.
+
+4. **Restart Beat + an `hfl`-subscribed worker.** It fires daily at 23:15
+   local (after browsing 23:00 / location 23:05 / Spotify 23:10).
+
+- No drop file / empty file / unreadable file → clean no-op (no LLM, no entry).
+- Privacy: `title`, `text`, `body`, and related content fields are stripped
+  unconditionally on read — the LLM never sees notification content.
+- Tuning kwargs: `window_days` (default 1), `max_records` (safety cap, default 2000).
+- The beat entry and the task itself are fully independent — the task can also
+  be triggered ad-hoc via `.delay()` or an MCP tool at any time.
+
 ### `ingest_spotify_activity` (daily listening soundtrack)
 
 **Shipped commented-out** in `tasks_config.py` (the `SPOTIFY_*` creds aren't set
@@ -504,6 +562,7 @@ MCP live-view tool — dual-writing corpus + ES. It composes with
 | `ingest_location_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` |
 | `ingest_spotify_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `ingest_plaud_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
+| `ingest_notification_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` |
 
 This block is also persisted on each beat entry's `'manifesto'` key — see
 `workflows/hfl/tasks_config.py`. `scripts/agents/manifesto_audit.py` reads from
