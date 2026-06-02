@@ -156,12 +156,13 @@ def _generate_post_with_claude(
     if not client.base_client:
         raise RuntimeError("Anthropic client failed to initialize")
 
-    response = client._with_backoff(
-        client.base_client.messages.create,
-        model=client.model,
-        max_tokens=2048,
-        system=system_prompt,
+    # Use the public send_messages() wrapper so we get both backoff retries
+    # AND the Max -> API provider fallback on rate-limit/quota errors.
+    # Calling _with_backoff directly would retry the throttled provider only.
+    response = client.send_messages(
         messages=[{"role": "user", "content": user_message}],
+        system=system_prompt,
+        max_tokens=2048,
     )
 
     return response.content[0].text.strip()
