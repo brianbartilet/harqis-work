@@ -9,6 +9,13 @@ the same rapidView id as ``run-job--show_jira_board`` in
 because that host (``windows-work-all``) is where ``claude`` is installed and
 logged in (the task runs the /generate-gherkin-scenarios skill headless against
 the Max subscription).
+
+``send_test_farm_report`` is the delivery half: it runs at 09:30 on weekdays
+(after the 09:00 generation), renders the just-refreshed
+``logs/BDD-TEST-FARM.md`` and emails it (``GOOGLE_GMAIL_SEND``) + posts a
+Telegram notice. It runs ``--skip-generate`` so it never re-generates — same
+``peon`` / windows host so it reads the markdown that host just produced and
+shares the Gmail/Telegram configs.
 """
 from celery.schedules import crontab
 
@@ -46,6 +53,37 @@ WORKFLOW_TESTING = {
             'para_bucket': 'area',
             'express_target': 'file:logs/BDD-TEST-FARM.md',
             'review_artifact': 'es_log+markdown',
+            'hfl_signal': False,
+        },
+    },
+
+    # ── send_test_farm_report ─────────────────────────────────────────────────
+    # Delivery half of the farm: weekdays at 09:30 (30 min after run_test_farm),
+    # render the just-refreshed logs/BDD-TEST-FARM.md to HTML, email it via
+    # GOOGLE_GMAIL_SEND and post a Telegram completion notice. Shells out to
+    # scripts/agents/daily_test_farm_email.py with --skip-generate, so it reuses
+    # the 09:00 markdown and never triggers a second Claude generation pass.
+    #
+    # Same peon/windows pin as run_test_farm so it reads the markdown that host
+    # produced and shares the Gmail/Telegram configs.
+    #
+    # `expires`: 8 hours — a missed 09:30 run can still deliver later in the day.
+    'run-job--send_test_farm_report': {
+        'task': 'workflows.testing.tasks.test_farm_email.send_test_farm_report',
+        'schedule': crontab(hour=9, minute=30, day_of_week='mon-fri'),
+        'kwargs': {
+            'skip_generate': True,        # reuse the 09:00 markdown — no re-generation
+        },
+        'options': {
+            'queue': WorkflowQueue.PEON,
+            'os': ['windows'],
+            'expires': 60 * 60 * 8,       # 8 hours
+        },
+        'manifesto': {
+            'code_role': 'express',
+            'para_bucket': 'area',
+            'express_target': 'email:GOOGLE_GMAIL_SEND+telegram:TELEGRAM',
+            'review_artifact': 'es_log+email_html',
             'hfl_signal': False,
         },
     },
