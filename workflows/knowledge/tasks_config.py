@@ -72,6 +72,7 @@ _DISABLED__WORKFLOW_KNOWLEDGE = {
             'express_target': 'vectorstore:knowledge',
             'review_artifact': 'es_log',
             'hfl_signal': True,
+            'tenant_safe': True,
         },
     },
 
@@ -98,6 +99,7 @@ _DISABLED__WORKFLOW_KNOWLEDGE = {
             'express_target': 'vectorstore:knowledge',
             'review_artifact': 'es_log',
             'hfl_signal': False,
+            'tenant_safe': True,
         },
     },
 
@@ -123,6 +125,7 @@ _DISABLED__WORKFLOW_KNOWLEDGE = {
             'express_target': 'vectorstore:knowledge',
             'review_artifact': 'es_log',
             'hfl_signal': False,
+            'tenant_safe': True,
         },
     },
 
@@ -145,6 +148,7 @@ _DISABLED__WORKFLOW_KNOWLEDGE = {
             'express_target': 'vectorstore:knowledge',
             'review_artifact': 'es_log',
             'hfl_signal': True,
+            'tenant_safe': True,
         },
     },
 
@@ -171,6 +175,7 @@ _DISABLED__WORKFLOW_KNOWLEDGE = {
             'express_target': 'es_log',
             'review_artifact': 'es_log',
             'hfl_signal': True,
+            'tenant_safe': True,
         },
     },
 

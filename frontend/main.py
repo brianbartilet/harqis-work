@@ -34,6 +34,8 @@ from auth import (
     is_rate_limited,
     record_failed_login,
     clear_failed_logins,
+    clerk_enabled,
+    tenant_from_request,
 )
 from config import get_settings, warn_insecure_defaults
 
@@ -68,6 +70,33 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Referrer-Policy"]        = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"]     = "geolocation=(), microphone=(), camera=()"
     return response
+
+
+# ── Tenant binding (additive — only active when Clerk is configured) ─────────
+@app.middleware("http")
+async def bind_tenant(request: Request, call_next):
+    """Bind a tenant for the request lifetime when a Clerk Bearer is present.
+
+    Single-tenant mode (CLERK_PUBLISHABLE_KEY unset): this middleware is a
+    no-op — `tenant_from_request` returns None and the downstream code path
+    sees no tenant context, identical to today's behaviour.
+    """
+    if not clerk_enabled():
+        return await call_next(request)
+    ctx = tenant_from_request(request)
+    if ctx is None:
+        return await call_next(request)
+    try:
+        from tenant.context import set_current_tenant, clear_current_tenant
+    except ImportError:
+        return await call_next(request)
+    token = set_current_tenant(ctx)
+    try:
+        response = await call_next(request)
+        response.headers["X-Tenant-Slug"] = ctx.slug
+        return response
+    finally:
+        clear_current_tenant(token)
 
 _here = Path(__file__).parent
 templates = Jinja2Templates(directory=str(_here / "templates"))
@@ -105,6 +134,26 @@ async def root(request: Request):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/api/tenant/whoami")
+async def whoami(request: Request):
+    """Echo back the bound tenant (or 'single-tenant' when Clerk is off).
+
+    Useful for the frontend chip + as the smoke endpoint for verifying that
+    the bind_tenant middleware is wired correctly.
+    """
+    try:
+        from tenant.context import current_tenant
+        ctx = current_tenant()
+    except ImportError:
+        ctx = None
+    if ctx is None:
+        return {"mode": "single-tenant", "tenant": None}
+    return {
+        "mode": "multi-tenant",
+        "tenant": {"id": ctx.tenant_id, "slug": ctx.slug, "plan": ctx.plan},
+    }
 
 
 @app.get("/debug/config")

@@ -50,7 +50,23 @@
 
   {% block head %}{% endblock %}
 </head>
-<body class="h-full bg-slate-950 text-slate-100 antialiased">
+<body class="h-full bg-slate-950 text-slate-100 antialiased"
+      hx-headers='{"X-Requested-With": "harqis-dashboard"}'>
+  {# Tenant indicator chip — hydrated client-side from /api/tenant/whoami.
+     Stays hidden in single-tenant mode (the endpoint returns mode=single-tenant). #}
+  <div id="tenant-chip"
+       class="hidden fixed top-2 right-2 z-50 px-2 py-1 rounded text-[10px] font-mono
+              bg-indigo-900/70 border border-indigo-500/40 text-indigo-200"
+       title="Tenant scope for this session"></div>
+  <script>
+    fetch('/api/tenant/whoami').then(r => r.ok ? r.json() : null).then(d => {
+      if (!d || d.mode !== 'multi-tenant' || !d.tenant) return;
+      const el = document.getElementById('tenant-chip');
+      el.textContent = 'tenant: ' + d.tenant.slug + ' · ' + d.tenant.plan;
+      el.classList.remove('hidden');
+    }).catch(() => {});
+  </script>
+
   {% block content %}{% endblock %}
 
   <script>

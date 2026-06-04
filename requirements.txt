@@ -47,3 +47,18 @@ python-multipart>=0.0.9
 
 # moomoo-api: install separately to avoid protobuf conflict
 #     pip install moomoo-api --no-deps
+
+# ── Multi-tenant AaaS foundation (tenant/ package) ────────────────────────────
+# Optional at runtime: if DATABASE_URL is unset these are imported lazily and
+# the dashboard runs in legacy single-tenant mode. Listed here so multi-tenant
+# deploys can `pip install -r requirements.txt` without extra steps.
+#   cryptography   → Fernet-symmetric encryption for tenant_secrets
+#   pyjwt[crypto]  → verify RS256 Clerk JWTs against the JWKS endpoint
+#   sqlalchemy     → Tenant/TenantSecret/TenantUsage ORM
+#   psycopg2-binary → Postgres driver for production deploys (SQLite works for dev)
+# cryptography + sqlalchemy are likely already transitively present via
+# harqis-core, but pinning here keeps the floor explicit.
+cryptography>=41.0
+pyjwt[crypto]>=2.8
+sqlalchemy>=2.0
+psycopg2-binary>=2.9; sys_platform != "darwin"

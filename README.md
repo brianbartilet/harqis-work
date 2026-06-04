@@ -878,6 +878,104 @@ Lightweight JSON-like files exposing Celery tasks and shell commands to n8n and 
 
 ---
 
+## Multi-tenant mode (AaaS)
+
+harqis-work ships with an **opt-in** multi-tenant SaaS path alongside the
+default single-tenant deployment. When the env vars below are unset the host
+runs identically to today — fork-per-client deploys are unaffected.
+
+### Enable
+
+```bash
+# 1. Add tenant deps (cryptography / pyjwt / sqlalchemy / psycopg2)
+pip install -r requirements.txt
+
+# 2. Append the env block below to .env/apps.env and fill in
+$EDITOR .env/apps.env
+
+# 3. Apply the schema
+python -m tenant.migrations.apply
+
+# 4. Create the first tenant
+python -m tenant.create_cli acme --clerk-org org_xxx --plan starter
+```
+
+Env block to append (all unset → single-tenant mode, unchanged from today):
+
+```bash
+# Tenant storage — Postgres in prod, sqlite for local dev
+DATABASE_URL=
+# Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# Comma-separated list supported for rotation: key_new,key_old
+MASTER_FERNET_KEY=
+
+# Clerk — from https://dashboard.clerk.com → API Keys
+CLERK_PUBLISHABLE_KEY=
+CLERK_JWKS_URL=
+CLERK_AUDIENCE=
+CLERK_SECRET_KEY=
+
+# Billing defaults (cents). Edit tenant/create_cli.py::_PLANS for per-plan overrides.
+BILLING_BASE_CENTS=4900
+BILLING_OVERAGE_CENTS_PER_EXEC=1
+STRIPE_SECRET_KEY=
+STRIPE_PUBLISHABLE_KEY=
+STRIPE_WEBHOOK_SECRET=
+```
+
+### What it gives you
+
+- **Tenant binding** — Clerk-issued JWTs are verified against the JWKS
+  endpoint; the resulting tenant context is bound for the request lifetime
+  (FastAPI middleware in `frontend/main.py`) and propagated into Celery
+  task kwargs at dispatch.
+- **Per-tenant secret vault** — `tenant_secrets` table, Fernet-encrypted.
+  `tenant.config_resolver.resolve_app_config()` prefers tenant secrets over
+  `${ENV_VAR}` substitution in `apps_config.yaml`. Apps marked
+  `tenant_overridable: true` in the YAML opt in (currently: `ANTHROPIC`,
+  `JIRA`, `NOTION`, `GOOGLE_DRIVE`, `GEMINI`, `GITHUB`).
+- **Execution metering** — `tenant.metering.register_metering(celery_app)`
+  attaches signal handlers that write one `tenant_usage` row per task
+  exec. Stripe usage-record submission is stubbed (logs the call); the
+  billing follow-up PR swaps in the real client.
+- **Manifesto guard** — workflows that read tenant-scoped data declare
+  `manifesto.tenant_safe: True`. The metering prerun handler refuses to
+  enqueue tenant_safe tasks without a bound tenant, preventing accidental
+  cross-tenant leaks. Pilot: all 5 tasks in `workflows/knowledge/`.
+
+### Billing model (default)
+
+Hybrid: **$49 flat base + $0.01 / Celery task exec overage**. Plans
+(`starter` / `pro` / `scale`) live in `tenant/create_cli.py::_PLANS` —
+edit there to change the defaults. Billing math runs from `tenant_usage`
+rows; nothing in this PR moves real money.
+
+### Files
+
+| Path | Purpose |
+|---|---|
+| `tenant/`                                    | Top-level package; opt-in primitives |
+| `tenant/models.py`                           | `Tenant`, `TenantSecret`, `TenantUsage` SQLAlchemy |
+| `tenant/context.py`                          | `current_tenant()` ContextVar |
+| `tenant/secrets.py`                          | Fernet encrypt/decrypt + upsert helpers |
+| `tenant/config_resolver.py`                  | `apps_config.yaml` override hook |
+| `tenant/metering.py`                         | Celery signal handlers → usage rows + Stripe stub |
+| `tenant/migrations/0001_create_tenant_tables.sql` | Schema bootstrap |
+| `tenant/create_cli.py`                       | Operator helper until self-serve UI lands |
+| `apps/clerk/references/jwt_verify.py`        | JWKS-cached Clerk JWT verifier |
+
+### Not in this PR (intentional)
+
+- Self-serve signup / secret CRUD UI
+- Real Stripe wire-up (currently logs the would-be usage-record call)
+- ES index sharding by tenant
+- Webhook handling for `user.deleted` → tenant cleanup
+- Migration of existing single-tenant ES data into a default `_legacy` tenant
+
+These ship in two follow-up PRs (knowledge multi-tenantize + billing wire-up).
+
+---
+
 ## Known Issues
 
 - `logger.warn()` (deprecated) used in `tcg_mp_selling.py` — should be `logger.warning()`
