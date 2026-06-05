@@ -21,7 +21,11 @@ from workflows.dumps.config import (
 )
 from workflows.dumps.tasks.analyze import analyze_daily_dumps
 from workflows.dumps.tasks.collect import broadcast_collect_daily_dumps
-from workflows.dumps.tasks.pull import pull_daily_dumps_from_remotes
+from workflows.dumps.tasks.pull import (
+    _redact_ssh_user,
+    _send_pull_failure_notification,
+    pull_daily_dumps_from_remotes,
+)
 from workflows.dumps.transport import _archive_name, copy_locally
 from workflows.dumps.files import CollectedFile
 from datetime import datetime
@@ -105,3 +109,13 @@ def test__get_dumps_target_returns_none_when_unconfigured():
     # Pass an empty config dict to bypass the live machines.toml lookup.
     target = get_dumps_target(cfg={})
     assert target is None
+
+
+def test__pull_failure_notification_skips_when_no_failures():
+    result = _send_pull_failure_notification([], "2026-06-04 00:00:00", "2026-06-05 00:00:00")
+    assert result == {"sent": False, "skipped": "no failures"}
+
+
+def test__redact_ssh_user_keeps_host_for_operator_hint():
+    error = "ssh find failed on u0_a368@nothing-phone.tailnet.ts.net:/storage (exit 255)"
+    assert _redact_ssh_user(error) == "ssh find failed on <user>@nothing-phone.tailnet.ts.net:/storage (exit 255)"

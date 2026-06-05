@@ -109,7 +109,7 @@ A file qualifies for inclusion if:
 | `[dumps] harqis_server_ssh / harqis_server_inbox missing` | `machines.local.toml` doesn't have a `[dumps]` block | Add the block (see above). |
 | Broadcast task logs `no paths configured` | `[<machine>.daily_dumps] paths` empty or missing | Add per-machine paths. |
 | `ssh tar-extract failed` | harqis-server unreachable / wrong inbox path / no key auth | `ssh harqis-one@harqis-mac-mini.tailnet.ts.net 'ls ~/dumps'` to verify connectivity. |
-| Pull task logs `find failed on <device>` | Termux SSHD off / different port / Tailscale not connected on phone | `ssh -p 8022 user@phone.tailnet.ts.net 'echo ok'` from harqis-server. |
+| Pull task logs `find failed on <device>` | Termux SSHD off / different port / Tailscale not connected on phone | `ssh -p 8022 user@phone.tailnet.ts.net 'echo ok'` from harqis-server. The pull task sends a best-effort Telegram alert to the configured default chat when this failure occurs. |
 | Files arrive but in the wrong machine folder | `[hostnames]` mapping in `machines.local.toml` doesn't list this machine's `socket.gethostname()` | Add it: `"<this-hostname>" = "<machine-name>"`. |
 
 ## What's intentionally NOT here yet
