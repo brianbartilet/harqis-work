@@ -85,6 +85,16 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
     api_service__scryfall_cards = ApiServiceScryfallCards(cfg__scryfall)
 
     cards_echo = api_service__echo_mtg_inventory.get_collection(tradable_only=1)
+    # get_collection is @deserialized(List[dict], child='items'); on a malformed
+    # echo response (no 'items' key) the decorator falls back to the raw Response,
+    # which then blows up with a cryptic "'Response' object is not iterable" when
+    # we loop below. Fail loudly with the real cause instead.
+    if not isinstance(cards_echo, list):
+        raise RuntimeError(
+            "echo mtg get_collection did not return a list (got {0}) — the "
+            "inventory response is missing 'items'; aborting mapping generation".format(
+                type(cards_echo).__name__)
+        )
     cards_echo = cards_echo if limit is None else cards_echo[:limit]
     cards_scryfall_bulk_data = load_scryfall_bulk_data(
         api_service__scryfall_cards.config.app_data['path_folder_static_file'])
