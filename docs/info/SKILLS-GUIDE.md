@@ -200,127 +200,93 @@ Flag any violations and suggest fixes.
 
 ---
 
-## Skills & OpenClaw Integration
+## Skills & Hermes Integration
 
-The host running `harqis-work` is also the **OpenClaw Server** — the machine where the
-OpenClaw agent workspace and Claude Code share the same filesystem. This co-location means a
-skill can read OpenClaw identity and memory files as live dynamic context, giving every Claude
-Code session on this machine the same persistent identity that OpenClaw agents have.
+The host running `harqis-work` is also the **Hermes Host** — the machine where the
+Hermes agent memory (`~/.hermes/`) and Claude Code share the same filesystem. This co-location
+means a skill can read Hermes memory and lessons as live dynamic context, giving every Claude
+Code session on this machine the same accumulated context that Hermes agents have.
+
+> Hermes supersedes the deprecated OpenClaw Gateway. Memory is now **local per-machine** under
+> `~/.hermes/` — there is no sync repo to pull. See [`HERMES.md`](HERMES.md).
 
 ### Co-location layout
 
 ```
-$HOME/GIT/
-├── harqis-work/
+$HOME/
+├── GIT/harqis-work/
 │   ├── .claude/
 │   │   ├── settings.local.json   ← Claude Code permissions for this machine
-│   │   └── commands/             ← project slash-commands
+│   │   └── skills/               ← project slash-commands
 │   └── mcp/server.py             ← MCP server (55 tools) — runs locally
 │
-└── harqis-openclaw-sync/
-    └── .openclaw/workspace/
-        ├── SOUL.md               ← agent personality
-        ├── USER.md               ← who the agent assists
-        ├── AGENTS.md             ← session rules and behaviour
-        ├── MEMORY.md             ← long-term narrative memory index
-        ├── TOOLS.md              ← environment: paths, SSH hosts, services
-        ├── HEARTBEAT.md          ← periodic monitoring tasks
-        └── memory/
-            └── YYYY-MM-DD.md    ← daily notes
+└── .hermes/                      ← Hermes memory (local, not synced, not committed)
+    ├── memory/
+    │   ├── agent_lessons.md      ← recurring lessons distilled from past runs
+    │   └── ...                   ← long-term narrative memory
+    ├── plans/                    ← plans from /max-plan and planning passes
+    ├── scripts/                  ← cron-invoked helper scripts
+    └── logs/                     ← job logs
 ```
 
 The MCP server (`mcp/server.py`) also runs on this machine and is the tool endpoint for both
 Claude Code sessions and remote worker agents. Skills that call MCP tools do so via the local
 process — no network hop required.
 
-### Injecting OpenClaw context into a skill
+### Injecting Hermes context into a skill
 
-Use the `` !`command` `` dynamic context syntax to read OpenClaw files at invoke time. The shell
+Use the `` !`command` `` dynamic context syntax to read Hermes memory at invoke time. The shell
 command runs before Claude sees the skill body, so the content is part of the prompt rather than
 something the agent has to go and fetch.
 
 ```yaml
 ---
-name: openclaw-context
-description: Load OpenClaw identity and memory into the current session
+name: hermes-context
+description: Load Hermes memory and distilled lessons into the current session
 user-invocable: false
-allowed-tools: Read Bash(git -C * pull --ff-only)
+allowed-tools: Read Bash(cat *)
 ---
 
-## OpenClaw Identity
+## Hermes Memory
 
-### SOUL
-!`cat $HOME/GIT/harqis-openclaw-sync/.openclaw/workspace/SOUL.md`
+### Lessons
+!`cat $HOME/.hermes/memory/agent_lessons.md 2>/dev/null || echo "(no lessons yet)"`
 
-### USER
-!`cat $HOME/GIT/harqis-openclaw-sync/.openclaw/workspace/USER.md`
-
-### MEMORY
-!`cat $HOME/GIT/harqis-openclaw-sync/.openclaw/workspace/MEMORY.md`
-
-### Today's Notes
-!`cat $HOME/GIT/harqis-openclaw-sync/.openclaw/workspace/memory/$(date +%Y-%m-%d).md 2>/dev/null || echo "(no notes yet today)"`
+### Long-term memory
+!`cat $HOME/.hermes/memory/MEMORY.md 2>/dev/null || echo "(no narrative memory yet)"`
 
 ---
 
-You now have the OpenClaw agent's identity and memory in context. Apply USER.md to tailor
-responses. Respect the rules in SOUL.md and AGENTS.md for the rest of this session.
+You now have the Hermes agent's accumulated memory and lessons in context. Apply the lessons to
+this session's work.
 ```
 
 Setting `user-invocable: false` keeps this skill hidden from the `/` menu. Claude auto-invokes
-it when the session description matches — or you can invoke it explicitly with `/openclaw-context`
+it when the session description matches — or you can invoke it explicitly with `/hermes-context`
 if you have overridden `user-invocable`.
 
-### Pulling the sync repo before loading context
+Because Hermes memory is local per-machine, there is **no sync step** — nothing to pull before
+reading (this was the deprecated OpenClaw model). The files are always current on the machine
+that wrote them.
 
-To ensure memory is current (another machine may have pushed updates), pull before reading:
+### Writing back to memory
 
-```yaml
----
-name: sync-openclaw
-description: Pull the latest OpenClaw memory from the sync repo and load identity into context
-disable-model-invocation: true
-allowed-tools: Bash(git -C * pull --ff-only) Read
----
-
-Pulling latest OpenClaw workspace:
-!`git -C $HOME/GIT/harqis-openclaw-sync pull --ff-only 2>&1`
-
-## Identity loaded after pull
-
-### SOUL
-!`cat $HOME/GIT/harqis-openclaw-sync/.openclaw/workspace/SOUL.md`
-
-### USER
-!`cat $HOME/GIT/harqis-openclaw-sync/.openclaw/workspace/USER.md`
-
-### MEMORY
-!`cat $HOME/GIT/harqis-openclaw-sync/.openclaw/workspace/MEMORY.md`
-```
-
-This is set to `disable-model-invocation: true` so it only runs when you explicitly type
-`/sync-openclaw` — pulling the repo on every auto-invocation would be too noisy.
-
-### Writing back to daily memory
-
-A skill can also append session learnings to the OpenClaw daily note and auto-commit:
+A skill can append session learnings to the local Hermes memory. No commit/push — the tree is
+local and uncommitted:
 
 ```yaml
 ---
 name: log-memory
-description: Append a note to today's OpenClaw daily memory file and commit it
+description: Append a note to the local Hermes memory
 disable-model-invocation: true
-allowed-tools: Bash(echo * >> *) Bash(git -C * add *) Bash(git -C * commit *) Bash(git -C * push *)
+allowed-tools: Bash(echo * >> *)
 arguments: [note]
 ---
 
-Appending note to today's OpenClaw memory:
-!`echo "\n## $(date '+%H:%M') — Claude Code session\n$note" >> $HOME/GIT/harqis-openclaw-sync/.openclaw/workspace/memory/$(date +%Y-%m-%d).md`
+Appending note to Hermes memory:
+!`echo "\n## $(date '+%Y-%m-%d %H:%M') — Claude Code session\n$note" >> $HOME/.hermes/memory/agent_lessons.md`
 
-Committing:
-!`git -C $HOME/GIT/harqis-openclaw-sync add .openclaw/workspace/memory/ && git -C $HOME/GIT/harqis-openclaw-sync commit -m "(openclaw-commit) session note $(date +%Y-%m-%d)" && git -C $HOME/GIT/harqis-openclaw-sync push origin main`
-
-Memory note saved and pushed.
+Memory note saved locally.
 ```
 
 ### MCP tools inside skills
@@ -352,11 +318,12 @@ Format as a morning brief: calendar first, then email summary, then financial sn
 | Skills and commands | `harqis-work/.claude/skills/` | Maintainer — manual |
 | Claude Code permissions | `harqis-work/.claude/settings.local.json` | Maintainer — manual |
 | Claude Code auto-memory | `~/.claude/projects/.../memory/` | Claude Code — local only, never committed |
-| OpenClaw identity files | `harqis-openclaw-sync/.openclaw/workspace/` | OpenClaw agent — auto-commit + push |
+| Hermes agent memory | `~/.hermes/` | Hermes agent — local only, never committed |
 | MCP server | `harqis-work/mcp/server.py` | Maintainer — manual |
 
 Skills bridge these two systems: they live in `harqis-work/.claude/` (maintainer-controlled) but
-can read from and write to the OpenClaw sync repo at runtime using dynamic context and tool calls.
+can read from and write to the local Hermes memory (`~/.hermes/`) at runtime using dynamic context
+and tool calls.
 
 ---
 

@@ -17,7 +17,7 @@ Fork the `harqis-work` repository into a fresh, business-/client-scoped baseline
 | `--visibility public\|private\|internal` | No | Visibility for the auto-created GitHub repo. **Default: `private`** — forks may carry client business context and should not be public unless explicitly opted in. `internal` is org-only. |
 | `--description "<text>"` | No | One-paragraph project description for the new README. Also passed to `gh repo create --description`. If omitted, ask the user (Step 0). |
 | `--keep <list>` | No | Comma-separated list of workflow categories to preserve from the source (default: only `.template` is kept). Example: `--keep .template,n8n`. |
-| `--strip <list>` | No | Comma-separated list of additional top-level folders to remove from the fork (in addition to the always-stripped `.claude` and `.openclaw`). |
+| `--strip <list>` | No | Comma-separated list of additional top-level folders to remove from the fork (in addition to the always-stripped `.claude`, `.hermes`, and legacy `.openclaw`). |
 | `--apps-keep <list>` | No | Comma-separated list of `apps/<name>` integrations to keep. **Default: the curated minimal set** (see "App keep list" below). Pass to override — e.g. `--apps-keep .template,airtable,trello,telegram`. Always include `.template` so consumers can scaffold new apps. App-name aliases: `anthropic` → `antropic` (normalised silently). |
 | `--apps-keep-all` | No | Skip app filtering entirely — copy every app under `apps/` from the source. Use when the consuming team explicitly wants the full inventory. |
 | `--no-create-repo` | No | Skip `gh repo create`. The skill still runs `git init` + initial commit; the user wires the remote manually. |
@@ -111,7 +111,8 @@ Build two explicit lists before copying. Print them to the user for confirmation
 
 ```
 .claude/                  # local Claude Code agent config — fork team installs their own
-.openclaw/                # local OpenClaw agent state — host-machine specific
+.hermes/                  # local Hermes agent state (plans, etc.) — host-machine specific
+.openclaw/                # legacy OpenClaw agent state (deprecated) — host-machine specific
 .idea/                    # IDE-local
 .run/                     # IDE run configs
 .venv/                    # Python virtualenv
@@ -143,7 +144,7 @@ workflows/social/
 Walk `agents/` and strip:
 - Anything under `agents/projects/profiles/` that is NOT inside `examples/` (private profiles stay with the source).
 - Any `*.local.yaml` / `*.local.json` files.
-- Any `agents/openclaw/memory/` directory contents.
+- Any `agents/openclaw/memory/` directory contents (legacy, if present).
 
 ### Strip apps not in the keep list (default behaviour — see Step 7b for the full cascade)
 
@@ -223,7 +224,7 @@ KEEP (will be copied):
   Dockerfile, docker-compose.yml, requirements.txt, LICENSE, .gitignore, .dockerignore, .github/
 
 STRIP (will not be copied):
-  .claude/, .openclaw/, .idea/, .run/, .venv/, .pytest_cache/, __pycache__/
+  .claude/, .hermes/, .openclaw/, .idea/, .run/, .venv/, .pytest_cache/, __pycache__/
   workflows/desktop/, workflows/finance/, workflows/hud/, workflows/mobile/,
   workflows/n8n/, workflows/purchases/, workflows/social/
   agents/projects/profiles/<private profiles>
@@ -249,7 +250,7 @@ Use `robocopy` on Windows (PowerShell) or `rsync` on POSIX, with explicit exclud
 **PowerShell (Windows default for this repo):**
 
 ```powershell
-$excludeDirs = @('.claude','.openclaw','.idea','.run','.venv','.pytest_cache','__pycache__','data')
+$excludeDirs = @('.claude','.hermes','.openclaw','.idea','.run','.venv','.pytest_cache','__pycache__','data')
 $excludeWorkflowDirs = @('desktop','finance','hud','mobile','n8n','purchases','social')   # extend with --strip values; subtract --keep
 
 robocopy <source> <target> /E `
@@ -261,7 +262,7 @@ robocopy <source> <target> /E `
 
 ```bash
 rsync -a \
-  --exclude='.claude' --exclude='.openclaw' --exclude='.idea' --exclude='.run' \
+  --exclude='.claude' --exclude='.hermes' --exclude='.openclaw' --exclude='.idea' --exclude='.run' \
   --exclude='.venv' --exclude='.pytest_cache' --exclude='__pycache__' \
   --exclude='*.pyc' --exclude='app.log*' --exclude='app-debug.log' \
   --exclude='celerybeat-schedule.*' --exclude='data/' \
@@ -278,6 +279,7 @@ After copy, verify:
 ls <target>
 ls <target>/workflows
 test ! -d <target>/.claude && echo "ok: .claude stripped"
+test ! -d <target>/.hermes && echo "ok: .hermes stripped"
 test ! -d <target>/.openclaw && echo "ok: .openclaw stripped"
 test -d <target>/workflows/.template && echo "ok: template kept"
 ```
@@ -473,7 +475,7 @@ Required sections (in order):
    ```
 9. **License** — preserve the upstream LICENSE reference.
 
-The new README must NOT reference `.claude/`, `.openclaw/`, or any of the stripped
+The new README must NOT reference `.claude/`, `.hermes/`, `.openclaw/`, or any of the stripped
 workflow categories. Search for and rewrite/remove those mentions before saving.
 
 ---
@@ -484,7 +486,7 @@ Run a grep over the fork for anything that points at stripped folders. Remove or
 rewrite each hit.
 
 ```bash
-grep -rE "(\.claude/|\.openclaw/|workflows/(desktop|finance|hud|mobile|n8n|purchases|social))" <target>/docs <target>/scripts <target>/agents <target>/README.md
+grep -rE "(\.claude/|\.hermes/|\.openclaw/|workflows/(desktop|finance|hud|mobile|n8n|purchases|social))" <target>/docs <target>/scripts <target>/agents <target>/README.md
 ```
 
 For each hit:
@@ -800,7 +802,7 @@ become a `Stale doc references` block in the checklist so the consuming team
 knows what they may want to edit before publishing.
 
 ```bash
-grep -rE "(\.claude/|\.openclaw/|workflows/(desktop|finance|hud|mobile|n8n|purchases|social))" \
+grep -rE "(\.claude/|\.hermes/|\.openclaw/|workflows/(desktop|finance|hud|mobile|n8n|purchases|social))" \
   <target>/docs <target>/scripts <target>/agents <target>/README.md 2>/dev/null
 ```
 
@@ -825,7 +827,7 @@ What's in it:
   ✓ .env/apps.env.example          (env vars for stripped apps removed; redacted)
 
 What was removed:
-  ✗ .claude/, .openclaw/           (local AI-tooling configs)
+  ✗ .claude/, .hermes/, .openclaw/ (local AI-tooling configs)
   ✗ logs/, data/                   (host-local runtime artifacts)
   ✗ workflows/{desktop,finance,hud,mobile,n8n,purchases,social}/
   ✗ apps/{<list of stripped app folders>}/   (per --apps-keep; default = curated 16-app set)
@@ -866,10 +868,10 @@ Next steps for the host operator:
 
 ## What NOT to do
 
-- Do NOT copy `.claude/`, `.openclaw/`, `.venv/`, IDE folders, log files, or `data/` — these are always local.
+- Do NOT copy `.claude/`, `.hermes/`, `.openclaw/`, `.venv/`, IDE folders, log files, or `data/` — these are always local.
 - Do NOT carry forward real credentials (`apps_config.yaml`, `.env/*` non-`.example` files).
 - Do NOT preserve the upstream's pre-built workflow categories unless `--keep` lists them. The fork's value is the clean slate.
 - Do NOT modify the source repo. All operations are read-only against `<source>` and write-only into `<target>`.
 - Do NOT make a fork's GitHub repo public unless the user explicitly passes `--visibility public`. Default is `private` — forks may carry client business context.
 - Do NOT force-push (`--force` / `--force-with-lease`) under any circumstance. The first push to a freshly created repo should never need force.
-- Do NOT add Claude Code config (`.claude/`) or AI agent state (`.openclaw/`) to the fork — the consuming team installs its own.
+- Do NOT add Claude Code config (`.claude/`) or AI agent state (`.hermes/`, legacy `.openclaw/`) to the fork — the consuming team installs its own.

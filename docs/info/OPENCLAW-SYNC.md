@@ -1,5 +1,15 @@
 # OpenClaw Sync — Multi-Machine Setup
 
+> ⚠️ **Deprecated — kept for historical reference only.** OpenClaw (the Gateway runtime
+> and the `harqis-openclaw-sync` workspace repo) has been superseded by **Hermes**. Hermes
+> stores agent memory, plans, scripts, and logs locally under `~/.hermes/` on each
+> machine — there is **no cross-machine sync repo** to maintain. Do not stand up the
+> OpenClaw sync described below for new machines.
+>
+> **Current docs:** [HERMES.md](HERMES.md) (agent runtime + `~/.hermes/` model) ·
+> [HERMES-HOST.md](HERMES-HOST.md) (host deployment). See the
+> [Migrating from OpenClaw](HERMES.md#migrating-from-openclaw) mapping table.
+
 How OpenClaw Gateway state, config, and agent memory are kept in sync across multiple machines in conjunction with HARQIS-Work.
 
 ---

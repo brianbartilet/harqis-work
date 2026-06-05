@@ -225,7 +225,7 @@ Example prompts:
 ## TODO / Improvements
 
 - [ ] Add Celery task for periodic location polling
-- [ ] Add `get_location` workflow task usable by HARQIS-CLAW
+- [ ] Add `get_location` workflow task usable by Hermes
 - [ ] Enable MQTT authentication (add username/password to `mosquitto.conf`)
 - [ ] Expose Recorder behind nginx with auth for remote access
 

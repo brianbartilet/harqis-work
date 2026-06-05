@@ -14,7 +14,7 @@ At its core the platform has three layers:
 
 - **App integrations** (`apps/`) — REST clients and service wrappers for every connected third-party (Google Workspace, Discord, Jira, Trello, OANDA, YNAB, LinkedIn, Reddit, and more), each exposable as an MCP tool so AI agents can call them directly.
 - **Scheduled workflows** (`workflows/`) — Celery Beat tasks that run on a defined schedule: pushing live data to a desktop HUD, processing MTG card resale pipelines, syncing git repos, posting monthly LinkedIn summaries, and more.
-- **AI agent layer** (`agents/`) — Claude-powered agents that operate autonomously: a Kanban agent that picks up Trello/Jira cards and executes them as tool-use loops, and an OpenClaw persistent agent reachable over Telegram, Discord, and WhatsApp with its own synced memory and identity.
+- **AI agent layer** (`agents/`) — Claude-powered agents that operate autonomously: a Kanban agent that picks up Trello/Jira cards and executes them as tool-use loops, and the Hermes agent runtime — reachable over Telegram, with its own local memory under `~/.hermes/` (supersedes the deprecated OpenClaw agent).
 - **Core framework** — built on [HARQIS-core](https://github.com/brianbartilet/harqis-core), which provides the base service fixtures, configuration loading, and test infrastructure that every app integration extends.
 
 > **Guiding principles:** read [`docs/MANIFESTO.md`](docs/MANIFESTO.md) before scoping new work or letting an LLM agent change code. It defines the mission, vision, and the four operating principles (CODE + PARA, Homework for Life, the 7 Habits, the PAER loop) that govern what gets built here and how.
@@ -159,51 +159,47 @@ Tests: `pytest agents/projects/tests/ -m "not integration"` — 75 unit tests, f
 
 ---
 
-### OpenClaw Agent
+### Hermes Agent
 
-[OpenClaw](https://openclaw.ai) is a local AI agent runtime that hosts Claude agents and connects them to messaging channels (WhatsApp, Telegram, Discord) with a persistent, file-based memory and identity system.
+**Hermes** is the agent runtime that hosts Claude agents on top of this platform, registers the harqis-work MCP server, and schedules cron jobs (with or without a reasoning loop). It supersedes the deprecated OpenClaw Gateway; agent memory, plans, and logs now live locally under `~/.hermes/` on each machine (no separate sync repo).
 
 #### Primary use case: wiring and manual triggering
 
-OpenClaw's role in this platform is **not** to build integrations — that happens in `harqis-work`. Its role is to **wire things together** and act as the human-facing control surface:
+Hermes's role in this platform is **not** to build integrations — that happens in `harqis-work`. Its role is to **wire things together** and act as the human-facing control surface:
 
 - **Trigger workflows on demand** — invoke any Celery task in `harqis-work` manually via a chat message without opening a terminal (e.g. "run the TCG price update now", "kick off the LinkedIn post job")
-- **Local scheduling for single apps** — set up lightweight, ad-hoc schedules for a single app or task that don't warrant a full Celery Beat entry (e.g. "remind me to check OANDA at 9am", "poll my inbox every hour today")
+- **Local scheduling for single apps** — set up lightweight, ad-hoc cron jobs (agent or `no_agent` mode) for a single app or task that don't warrant a full Celery Beat entry (e.g. "remind me to check OANDA at 9am", "poll my inbox every hour today")
 - **Wire integrations into conversational flows** — chain MCP tools from `harqis-work` across a conversation turn: fetch data from one app, process it, push the result to another, without writing a new workflow
 
 **Separation of concerns:**
 
-| Repo | Role | What lives here |
+| Layer | Role | What lives here |
 |---|---|---|
 | `harqis-work` | **Build** — the platform structure | App integrations, Celery workflows, MCP server, scheduled tasks, core config |
-| `harqis-openclaw-sync` | **Wire** — the pipes and control surface | Agent identity, memory, rules, ad-hoc schedules, manual trigger scripts |
+| Hermes (`~/.hermes/`) | **Wire** — the pipes and control surface | Agent memory, lessons, plans, ad-hoc cron jobs, manual trigger scripts |
 
-The rule of thumb: if it needs to run reliably on a cron or be reused by multiple consumers, it belongs in `harqis-work`. If it's a one-off connection, a manual trigger, or a conversational shortcut, it belongs in OpenClaw.
+The rule of thumb: if it needs to run reliably on a cron or be reused by multiple consumers, it belongs in `harqis-work`. If it's a one-off connection, a manual trigger, or a conversational shortcut, it belongs in Hermes.
 
-#### Workspace layout
+#### Memory layout
 
-The OpenClaw workspace is **not stored in this repo**. It lives in its own dedicated sync repository — [`harqis-openclaw-sync`](https://github.com/brianbartilet/harqis-openclaw-sync) — so that the agent's identity, memory, and rules are shared consistently across every host (Mac Mini, VPS, Windows worker nodes) without mixing agent state into the platform codebase.
+Hermes memory is **not stored in this repo** and is **not synced across machines** — it is local per-machine under the user's home directory, so the platform codebase stays free of agent state.
 
 ```
-harqis-openclaw-sync/          ← separate git repo, cloned alongside harqis-work
-└── .openclaw/workspace/
-    ├── SOUL.md        # Agent personality and core values
-    ├── USER.md        # Who the agent assists and how
-    ├── AGENTS.md      # Session startup rules, memory discipline, group chat etiquette
-    ├── MEMORY.md      # Long-term narrative memory index
-    ├── TOOLS.md       # Machine-specific tool notes (SSH, cameras, TTS, paths)
-    ├── HEARTBEAT.md   # Periodic background task checklist (email, calendar, monitoring)
-    └── memory/
-        └── YYYY-MM-DD.md  # Daily session notes (auto-committed by the agent)
+~/.hermes/                     ← local per-machine (not committed, not synced)
+├── memory/
+│   ├── agent_lessons.md   # recurring lessons distilled from past runs (weekly)
+│   └── ...                # long-term narrative memory
+├── plans/                 # plans written by /max-plan and planning passes
+├── scripts/               # cron-invoked helper scripts
+└── logs/                  # job logs
 ```
 
-**Why it's separate:** the agent auto-commits and pushes to `harqis-openclaw-sync` after every memory update. Keeping it out of `harqis-work` means the platform repo stays under manual maintainer control while the agent writes its own memory continuously. Losing one repo does not affect the other.
+**Why it's local:** Hermes writes memory continuously without touching the platform repo, so `harqis-work` stays under manual maintainer control. There is no auto-commit/auto-pull sync job to operate.
 
-**Cross-machine sync:** an auto-pull job runs every 30 minutes on each host (macOS LaunchAgent, Windows Task Scheduler, Linux cron) and pulls both repos. This is what makes HARQIS-CLAW behave identically on any node — it always has the latest identity and memory files before starting a session.
-
-> Setup, sync scripts, and per-OS wiring details: [`docs/info/AI-TOOLS-WIRING.md`](docs/info/AI-TOOLS-WIRING.md)  
-> Host deployment and service inventory: [`docs/info/HARQIS-CLAW-HOST.md`](docs/info/HARQIS-CLAW-HOST.md)  
-> Sync repo architecture: [`docs/info/OPENCLAW-SYNC.md`](docs/info/OPENCLAW-SYNC.md)
+> Hermes runtime, MCP, and cron model: [`docs/info/HERMES.md`](docs/info/HERMES.md)  
+> Setup and per-OS wiring details: [`docs/info/AI-TOOLS-WIRING.md`](docs/info/AI-TOOLS-WIRING.md)  
+> Host deployment and service inventory: [`docs/info/HERMES-HOST.md`](docs/info/HERMES-HOST.md)  
+> Legacy OpenClaw sync model (**deprecated**): [`docs/info/OPENCLAW-SYNC.md`](docs/info/OPENCLAW-SYNC.md)
 
 ---
 
@@ -274,7 +270,7 @@ Declared in `workflows/queues.py` (`WorkflowQueue` enum) and registered with Rab
 | `tcg` | TCG marketplace pipeline — Scryfall bulk, card matching, listings, pricing |
 | `adhoc` | One-off / manual triggers (no schedule) |
 | `host` | Tasks that must run on the host (Docker, broker access) |
-| `agent` | AI agent task dispatch (Kanban / OpenClaw worker invocations) |
+| `agent` | AI agent task dispatch (Kanban / Hermes worker invocations) |
 | `worker` | Generic background worker pool (cross-app jobs) |
 | `n8n` | n8n container ops (backup / restore / deploy) — pinned to `harqis-server` |
 
@@ -505,7 +501,7 @@ agents/projects/profiles/
 
 ## Platform Runtime
 
-> Full deployment guide: [`docs/info/HARQIS-CLAW-HOST.md`](docs/info/HARQIS-CLAW-HOST.md)
+> Full deployment guide: [`docs/info/HERMES-HOST.md`](docs/info/HERMES-HOST.md)
 
 ### Goal
 
@@ -514,19 +510,19 @@ HARQIS-Work is designed to run as an **always-on, self-managing automation hub**
 The three driving principles:
 1. **Everything is a tool** — every app integration is callable via MCP, so Claude agents can use any service as naturally as a function call
 2. **Schedules, not crons** — Celery Beat replaces fragile shell crons; tasks are Python functions with typed inputs, retries, and live logs
-3. **Identity travels with the agent** — OpenClaw's workspace (SOUL.md, MEMORY.md, AGENTS.md) is git-synced across machines so the agent behaves identically on any node
+3. **The agent reasons; the platform persists** — Hermes keeps its memory and lessons locally under `~/.hermes/` and calls the platform's MCP tools, so reasoning stays separate from the durable integration layer
 
 ### How Everything Is Wired Together
 
 ```
   Messaging channels                    Developer / Operator
-  (Telegram · Discord · WhatsApp)       (Claude Desktop · Claude Code CLI)
+  (Telegram · cron delivery)            (Claude Desktop · Claude Code CLI)
            │                                        │
            ▼                                        ▼
    ┌──────────────────────────────────────────────────────────┐
-   │                  OpenClaw Agent Runtime                  │
-   │         SOUL.md · AGENTS.md · MEMORY.md · USER.md        │
-   │       identity synced via harqis-openclaw-sync repo      │
+   │                  Hermes Agent Runtime                    │
+   │       memory · lessons · plans · cron (agent/no_agent)   │
+   │            local per-machine under ~/.hermes/            │
    └─────────────────────────┬────────────────────────────────┘
                              │  calls tools via
                              ▼
@@ -550,7 +546,7 @@ The three driving principles:
                                    │ Telegram alerts · n8n    │
                                    └──────────────────────────┘
 
-  ── All of the above runs on the HARQIS-CLAW Host ──────────────
+  ── All of the above runs on the Hermes Host ──────────────────
   ── Worker nodes (VPS, N100 Windows) connect via Tailscale VPN ─
 ```
 
@@ -558,7 +554,7 @@ The three driving principles:
 
 | Component | Where | What it does |
 |---|---|---|
-| **OpenClaw agent** | [`harqis-openclaw-sync`](https://github.com/brianbartilet/harqis-openclaw-sync) — `.openclaw/workspace/` | Persistent AI agent identity, memory, heartbeat tasks, and behavioral rules — shared across all hosts via auto-sync |
+| **Hermes agent** | `~/.hermes/` (local per-machine) | Agent runtime: persistent memory, distilled lessons, plans, and cron jobs (agent / `no_agent` modes) — see [`docs/info/HERMES.md`](docs/info/HERMES.md) |
 | **MCP server** | `mcp/server.py` | Exposes all 20+ app integrations as callable tools over the Model Context Protocol |
 | **Celery Beat** | `workflows/config.py` | Runs all scheduled automation — HUD updates, MTG resale pipeline, desktop sync |
 | **RabbitMQ + Redis** | Docker stack | Celery broker and result backend |
@@ -584,7 +580,7 @@ python scripts/deploy.py
 python mcp/server.py
 ```
 
-See [`docs/info/HARQIS-CLAW-HOST.md`](docs/info/HARQIS-CLAW-HOST.md) for the full deployment guide, Tailscale ACL setup, worker node configuration, monitoring runbook, and multi-agent topology.
+See [`docs/info/HERMES-HOST.md`](docs/info/HERMES-HOST.md) for the full deployment guide, Tailscale ACL setup, worker node configuration, monitoring runbook, and multi-agent topology.
 
 ---
 

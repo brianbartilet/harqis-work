@@ -74,7 +74,7 @@ February was all about intelligence — adding AI reasoning into the automation 
 
 🚀 Milestones:
 • The Kanban agent system ran its first fully autonomous coding task end-to-end, from Trello card to code commit
-• HARQIS-CLAW memory sync is now cross-machine — identical agent personality on Mac Mini, VPS, and Windows laptop
+• Migrated the agent runtime to Hermes — local per-machine memory and lessons under ~/.hermes/, MCP-driven tools, and cron-scheduled jobs
 
 🛠 Under the hood:
 • Dockerfile ENV block fixed so CI tests no longer fail on missing config at import time

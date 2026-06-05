@@ -37,7 +37,7 @@ The repo is the operator's externalized memory. Two mental models govern how kno
 
 | Step         | What it means              | Where it lives in this repo                                                                  |
 | ------------ | -------------------------- | --------------------------------------------------------------------------------------------- |
-| **Capture**  | Save useful information    | `apps/*` integrations pulling state; HUD feeds; OpenClaw memory; scheduled syncs              |
+| **Capture**  | Save useful information    | `apps/*` integrations pulling state; HUD feeds; Hermes memory; scheduled syncs                |
 | **Organize** | Sort for action            | `workflows/*` chaining captures into pipelines; Trello/Jira boards routed through the Kanban agent |
 | **Distill**  | Make notes easier to reuse | Tagged feed entries; summarization tasks; structured DTOs over raw API blobs                  |
 | **Express**  | Create output              | Posts, decisions, reports, code changes, HUD updates, Telegram/Discord/WhatsApp replies       |
