@@ -170,12 +170,14 @@ def summarize_hfl_week(
     if not client.base_client:
         raise RuntimeError("Anthropic client failed to initialize")
 
-    response = client._with_backoff(
-        client.base_client.messages.create,
+    # Public send_messages() wrapper: backoff retries AND the Max -> API
+    # provider fallback on rate-limit/quota. Calling _with_backoff directly
+    # would retry the throttled provider only.
+    response = client.send_messages(
+        messages=[{"role": "user", "content": user_msg}],
         model=model,
         max_tokens=max_tokens,
         system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_msg}],
     )
     summary_text = response.content[0].text.strip() if response.content else ""
 

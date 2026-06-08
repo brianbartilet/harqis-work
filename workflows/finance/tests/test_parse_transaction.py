@@ -14,7 +14,7 @@ from apps.ynab.references.dto.transaction import DtoSaveTransaction
 
 def test__add_ynab_transactions_from_pdf_credit():
     add_ynab_transactions_from_pdf(
-        input_pdf="transaction_history_01052026_230908.pdf",
+        input_pdf="transaction_history_07062026_232941.pdf",
         ynab_budget_name="Daily Bankroll - SGD",
         ynab_account_name="DBS Vantage",
         split=True,
@@ -25,7 +25,7 @@ def test__add_ynab_transactions_from_pdf_credit():
 
 def test__add_ynab_transactions_from_pdf_debit():
     add_ynab_transactions_from_pdf(
-        input_pdf="transaction_history_14042026_104112.pdf",
+        input_pdf="transaction_history_07062026_231100.pdf",
         ynab_budget_name="Daily Bankroll - SGD",
         ynab_account_name="PAYROLL",
         split=True,

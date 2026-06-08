@@ -168,14 +168,15 @@ def generate_daily_desktop_summary(hud_item_name='DESKTOP LOGS', logs_output_pat
         )
 
     try:
-        response = anthropic._with_backoff(
-            anthropic.base_client.messages.create,
-            model=resolved_model,
-            max_tokens=8192,
+        # send_messages(): backoff retries AND Max -> API fallback on
+        # rate-limit/quota. _with_backoff alone retries the throttled provider only.
+        response = anthropic.send_messages(
             messages=[{
                 "role": "user",
                 "content": f"{_DAILY_SUMMARY_PROMPT}\n\nActivity log dump:\n```\n{dump_content}\n```",
             }],
+            model=resolved_model,
+            max_tokens=8192,
         )
         summary_md = response.content[0].text
     except Exception as e:
@@ -272,11 +273,12 @@ def generate_weekly_desktop_summary(logs_daily_path='logs/daily', logs_output_pa
     )
 
     try:
-        response = anthropic._with_backoff(
-            anthropic.base_client.messages.create,
+        # send_messages(): backoff retries AND Max -> API fallback on
+        # rate-limit/quota. _with_backoff alone retries the throttled provider only.
+        response = anthropic.send_messages(
+            messages=[{"role": "user", "content": prompt}],
             model=resolved_model,
             max_tokens=8192,
-            messages=[{"role": "user", "content": prompt}],
         )
         summary_md = response.content[0].text
     except Exception as e:

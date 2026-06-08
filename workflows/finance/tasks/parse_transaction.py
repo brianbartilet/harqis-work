@@ -55,11 +55,10 @@ def _parse_pdf_with_claude(pdf_path: Path, cfg_id__anthropic: str = "ANTHROPIC")
     if not client.base_client:
         raise RuntimeError("Anthropic client failed to initialize")
 
-    response = client._with_backoff(
-        client.base_client.messages.create,
-        model=client.model,
-        max_tokens=16000,
-        system=system_prompt,
+    # Use the public send_messages() wrapper so we get both backoff retries
+    # AND the Max -> API provider fallback on rate-limit/quota errors.
+    # Calling _with_backoff directly would retry the throttled provider only.
+    response = client.send_messages(
         messages=[
             {
                 "role": "user",
@@ -79,6 +78,8 @@ def _parse_pdf_with_claude(pdf_path: Path, cfg_id__anthropic: str = "ANTHROPIC")
                 ],
             }
         ],
+        system=system_prompt,
+        max_tokens=16000,
     )
 
     raw = response.content[0].text.strip()
