@@ -3,9 +3,10 @@
 Turn a Trello or Jira board into an AI task interface. Humans create cards; Claude agents pick them up, execute work with scoped tools, and post results back — all visible on the same board. Every agent behavior is declared in a YAML profile; no agent code changes are needed to add a new agent type.
 
 **Related docs:**
-- [HARQIS-CLAW-HOST.md](HARQIS-CLAW-HOST.md) — host deployment, service inventory, worker nodes
-- [SKILLS-GUIDE.md](SKILLS-GUIDE.md) — Claude Code skills and OpenClaw integration
-- [AI-TOOLS-WIRING.md](AI-TOOLS-WIRING.md) — Claude Code and OpenClaw workspace setup
+- [HERMES.md](HERMES.md) — Hermes agent runtime, `~/.hermes/` layout, MCP + cron
+- [HERMES-HOST.md](HERMES-HOST.md) — host deployment, service inventory, worker nodes
+- [SKILLS-GUIDE.md](SKILLS-GUIDE.md) — Claude Code skills and Hermes integration
+- [AI-TOOLS-WIRING.md](AI-TOOLS-WIRING.md) — Claude Code and Hermes setup
 - [mcp/README.md](../../mcp/README.md) — full MCP tool catalog (all 16 app modules)
 
 ---
@@ -859,7 +860,7 @@ Currently the orchestrator runs agents in-process. The planned extension is Cele
 - `SecretStore.pack()` / `unpack()` (Fernet encryption) is already implemented for encrypted worker payloads
 - `profile.hardware.queue` field is in the schema, ready for Celery routing
 - Worker nodes would run `agents.projects.workers.run_agent` as a Celery task
-- See [`HARQIS-CLAW-HOST.md`](HARQIS-CLAW-HOST.md) for the planned multi-node topology
+- See [`HERMES-HOST.md`](HERMES-HOST.md) for the planned multi-node topology
 
 ### Webhook trigger mode
 

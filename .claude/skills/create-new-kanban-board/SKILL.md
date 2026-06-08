@@ -250,7 +250,7 @@ Body:   Review the attached spreadsheet and post sign-off as a comment.
 
 ---
 
-> 📚 **Full docs:** [`agents/projects/README.md`](https://github.com/brianbartilet/harqis-work/blob/main/agents/projects/README.md) — covers profile inheritance, Discord integration, Elasticsearch telemetry, MCP tool scoping, OpenClaw identity wiring, and the production scaling path.
+> 📚 **Full docs:** [`agents/projects/README.md`](https://github.com/brianbartilet/harqis-work/blob/main/agents/projects/README.md) — covers profile inheritance, Discord integration, Elasticsearch telemetry, MCP tool scoping, Hermes memory wiring, and the production scaling path.
 ```
 
 Create the card via `apps.trello.references.web.api.cards.create_card(list_id=<templates-id>, name=..., desc=..., id_labels=<every-label-id-from-step-5>)`. Attaching every label gives the user a one-stop visual reference for the colour scheme without having to open Board → Labels.

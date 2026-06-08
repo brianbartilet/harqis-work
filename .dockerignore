@@ -38,5 +38,7 @@ docs/
 *.md
 !README.md
 
-# OpenClaw agent state — host-only, never inside the image
+# Hermes agent state — host-only, never inside the image
+.hermes/
+# OpenClaw agent state (deprecated) — host-only, never inside the image
 .openclaw/

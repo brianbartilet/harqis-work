@@ -13,7 +13,7 @@ Sweep the root `README.md` (or a targeted doc) against the live state of the cod
 | Token | Effect |
 |---|---|
 | (nothing) | Walk root `README.md` |
-| `<path>` | Walk that file (e.g. `scripts/README.md`, `workflows/README.md`, `docs/info/HARQIS-CLAW-HOST.md`, `apps/<app>/README.md`) |
+| `<path>` | Walk that file (e.g. `scripts/README.md`, `workflows/README.md`, `docs/info/HERMES-HOST.md`, `apps/<app>/README.md`) |
 | `--dry-run` | Report drift only, write nothing |
 | `--related-only` | Skip the target itself, only sweep files that reference it |
 
@@ -25,7 +25,7 @@ For each H2/H3 section, cross-check against the table below. If a section isn't 
 |---|---|---|
 | **App Inventory** | `apps/*/` directory listing, `apps_config.yaml`, each app's `config.py` `APP_NAME` | New app dirs not listed; removed apps still listed; integration type mismatch (REST/Selenium/Local) |
 | **AI Agents · Project Kanban** | `agents/projects/profiles/`, `agents/projects/orchestrator/local.py` (CLI defaults) | Profile count, profile names, `--num-agents` defaults, lifecycle steps |
-| **AI Agents · OpenClaw** | `agents/openclaw/` if present, `harqis-openclaw-sync` link, channels listed | New mediums (Telegram/Discord/WhatsApp/etc.) added or removed |
+| **AI Agents · Hermes** | `docs/info/HERMES.md`, `~/.hermes/` layout, `hermes mcp` + cron usage in `scripts/` | Memory/plans/cron model changes; delivery channels added or removed |
 | **MCP Server** | `mcp/server.py` `@mcp.tool()` count, exposed apps | Tool count, list of exposed app modules |
 | **Workflow Inventory** | `workflows/*/tasks_config.py` — count entries per `WORKFLOWS_*` dict | Task counts per workflow, status (active vs. stub), description |
 | **Celery Task Queues** | `workflows/queues.py` (`WorkflowQueue` enum), `workflows/config.py` (`task_queues` and `task_routes`) | Missing/added queues, direct vs. fanout split, route patterns |
@@ -47,7 +47,8 @@ If `<target>` is a path other than the root README, walk that file's sections in
 | `workflows/README.md` | `workflows/config.py`, `workflows/queues.py`, each workflow's `tasks_config.py` |
 | `apps/<app>/README.md` | That app's `config.py`, `references/web/api/*` modules, test count |
 | `mcp/README.md` | `mcp/server.py` tool registrations |
-| `docs/info/HARQIS-CLAW-HOST.md` | `scripts/deploy.py`, `machines.toml`, Docker compose, `apps_config.yaml` |
+| `docs/info/HERMES-HOST.md` | `scripts/deploy.py`, `machines.toml`, Docker compose, `apps_config.yaml` |
+| `docs/info/HERMES.md` | `scripts/agents/*` (lessons/cron), `~/.hermes/` usage, `hermes mcp` references |
 | `frontend/README.md` | `frontend/registry.py`, `frontend/main.py` |
 
 ## Cross-reference fan-out
@@ -55,7 +56,7 @@ If `<target>` is a path other than the root README, walk that file's sections in
 Whenever you edit a doc, `grep` for the doc's path across all `*.md` files in the repo. Any other doc that mentions the target may need a parallel update — for example, editing `scripts/README.md` should also refresh:
 - The root `README.md` "Running Services" / "Architecture" sections that reference `scripts/`
 - Slash-command docs in `.claude/skills/*/SKILL.md` that mention `python scripts/deploy.py …`
-- `docs/info/HARQIS-CLAW-HOST.md` if it linked to the moved file
+- `docs/info/HERMES-HOST.md` if it linked to the moved file
 
 Apply the same drift check to those files. **Skip the cross-reference step** when invoked with `--related-only` (the user is doing only the cascading update).
 

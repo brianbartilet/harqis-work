@@ -318,12 +318,13 @@ get access beyond what the profile declares.
 | `agent:code` | trello, discord |
 | `agent:finance` | oanda, ynab, google_apps |
 
-### OpenClaw (identity / long-term memory)
+### Hermes (long-term memory)
 
-Set `OPENCLAW_SYNC_PATH` in env to the `harqis-openclaw-sync` repo root.
-The orchestrator can prepend `SOUL.md` + `USER.md` + `MEMORY.md` +
-today's daily note to the system prompt so every agent inherits the same
-identity context. See `agent/persona.py` and the OpenClaw docs.
+Long-term agent memory and distilled lessons live under `~/.hermes/` (local
+per-machine — Hermes supersedes the deprecated OpenClaw sync model). Per-agent
+*identity* on the board is handled separately by the persona signature block
+(`agent/persona.py`, Mode B), which prepends a signature to Trello comments so a
+human can see which agent acted. See [`docs/info/HERMES.md`](../../docs/info/HERMES.md).
 
 ---
 

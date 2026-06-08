@@ -64,8 +64,8 @@ __pycache__/
 apps/own_tracks/recorder_store/
 /apps/own_tracks/mosquitto/data/mosquitto.db
 
-# ── OpenClaw ─────────────────────────────────────────────────────────────────
-.openclaw/*
-!.openclaw/workspace
-!.openclaw/workspace/**
-/.openclaw/workspace/
+# ── Hermes (agent runtime — local per-machine state) ─────────────────────────
+.hermes/
+
+# ── OpenClaw (deprecated — superseded by Hermes; kept ignored for legacy state)
+.openclaw/
