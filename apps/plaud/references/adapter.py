@@ -1,0 +1,481 @@
+"""Plaud acquisition adapter.
+
+Two interchangeable backends behind one interface so callers never care which
+served the data:
+
+  * :class:`PlaudCloudBackend` — PRIMARY. Talks DIRECTLY to the (unofficial)
+    ``api.plaud.ai`` REST surface over HTTP with a bearer token — no SDK
+    package, just ``requests``. Lists recordings, resolves temporary download
+    URLs, fetches audio, and surfaces Plaud's own transcript/summary when the
+    listing includes them.
+  * :class:`PlaudFolderBackend` — FALLBACK. Reads a local export folder the user
+    populates manually from the Plaud desktop app (audio + optional sibling
+    transcript/summary text files).
+
+:class:`PlaudAdapter` tries the cloud first and transparently falls back to the
+folder when the cloud is unconfigured, unauthenticated, or errors. The
+unofficial cloud surface is isolated in ``PlaudCloudBackend`` so it can be
+swapped for Plaud's official OAuth API later without touching any caller.
+
+⚠️  ``api.plaud.ai`` is an UNOFFICIAL, reverse-engineered surface (endpoints and
+field names per the openplaud project, mid-2026) — not a documented contract.
+Endpoints/fields may drift; everything is wrapped defensively and field mapping
+is tolerant of key drift, so a changed surface degrades to the folder backend
+rather than crashing the pipeline. Override the base URL with ``PLAUD_API_BASE``
+for non-US regions. Grab the bearer from ``web.plaud.ai`` →
+``localStorage.getItem("tokenstr")`` and set it as ``PLAUD_TOKEN``.
+"""
+from __future__ import annotations
+
+import hashlib
+import logging
+import os
+import re
+from abc import ABC, abstractmethod
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import List, Optional
+
+from apps.plaud.references.dto.recording import DtoPlaudRecording
+
+logger = logging.getLogger("harqis-mcp.plaud")
+
+_AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".opus"}
+_TRANSCRIPT_EXTS = (".txt", ".md", ".srt", ".vtt")
+_SUMMARY_SUFFIXES = ("-summary", "_summary", ".summary")
+
+
+# ── helpers ─────────────────────────────────────────────────────────────────
+
+def _iso(dt: datetime) -> str:
+    """UTC ISO-8601 with second precision (matches the OwnTracks convention)."""
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-") or "recording"
+
+
+def _in_window(started_at: Optional[str], since: Optional[str], until: Optional[str]) -> bool:
+    """Inclusive date-window filter on an ISO ``started_at``. Missing bounds are
+    treated as open; an unparseable/absent timestamp is kept (never silently
+    dropped — better to ingest than to lose a recording)."""
+    if not started_at:
+        return True
+    if since and started_at < since:
+        return False
+    if until and started_at > until:
+        return False
+    return True
+
+
+# ── interface ───────────────────────────────────────────────────────────────
+
+class PlaudBackend(ABC):
+    """Common interface for both acquisition paths."""
+
+    name: str = "base"
+
+    @abstractmethod
+    def available(self) -> bool:
+        """Cheap readiness check (token present / folder exists)."""
+
+    @abstractmethod
+    def list_recordings(self, since: Optional[str] = None,
+                        until: Optional[str] = None) -> List[DtoPlaudRecording]:
+        """Return recordings whose ``started_at`` falls within [since, until]."""
+
+    @abstractmethod
+    def ensure_audio_local(self, rec: DtoPlaudRecording, dest_dir: str) -> Optional[str]:
+        """Make the audio available on disk under ``dest_dir``; return its path.
+
+        Folder recordings already are local; cloud recordings are downloaded.
+        Returns ``None`` if the audio cannot be obtained.
+        """
+
+
+# ── cloud (primary, unofficial) ──────────────────────────────────────────────
+
+class PlaudCloudBackend(PlaudBackend):
+    """Talks directly to the unofficial ``api.plaud.ai`` REST surface over HTTP
+    (bearer token, no SDK). Isolated so the rest of the pipeline is insulated
+    from upstream breakage and a future swap to Plaud's official OAuth API.
+
+    Endpoints (reverse-engineered, per the openplaud project — mid-2026):
+      * ``GET /file/simple/web``        — paginated recording list
+      * ``GET /file/temp-url/{file_id}`` — short-lived signed audio URL
+    """
+
+    name = "cloud"
+
+    _DEFAULT_BASE = "https://api.plaud.ai"
+    _PAGE_LIMIT = 200          # per-page size for the list endpoint
+    _MAX_PAGES = 50            # hard backstop so a bad cursor can't loop forever
+    _TIMEOUT = 30             # seconds per HTTP call
+
+    def __init__(self, token: Optional[str], base_url: Optional[str] = None):
+        # Env resolution happens once in build_adapter(); the backend uses
+        # exactly what it's handed so it's predictable and unit-testable.
+        self._token = (token or "").strip()
+        self._base = (base_url or os.environ.get("PLAUD_API_BASE")
+                      or self._DEFAULT_BASE).rstrip("/")
+        self._session = None  # lazily constructed requests.Session
+
+    def available(self) -> bool:
+        return bool(self._token)
+
+    def _get_session(self):
+        if self._session is not None:
+            return self._session
+        if not self._token:
+            raise RuntimeError("PLAUD_TOKEN not configured")
+        try:
+            import requests
+        except ImportError as e:  # requests is a core dep, but stay honest
+            raise RuntimeError(
+                "the 'requests' package is required for the Plaud cloud backend "
+                "(pip install requests); or use the PLAUD_EXPORT_DIR folder backend"
+            ) from e
+        s = requests.Session()
+        s.headers.update({
+            "Authorization": f"Bearer {self._token}",
+            "Accept": "application/json",
+            # web.plaud.ai sends a browser UA; mirror it so the unofficial
+            # surface doesn't reject the call as a non-browser client.
+            "User-Agent": "Mozilla/5.0 (harqis-work plaud ingest)",
+        })
+        self._session = s
+        return s
+
+    # Plaud's JSON envelope reports success as status 0 (some endpoints omit it).
+    _SUCCESS_STATUS = (0, None)
+
+    def _get(self, path: str, **params):
+        """GET a JSON endpoint, unwrap the ``{status, msg, data}`` envelope, and
+        transparently follow Plaud's regional redirect (envelope ``status -302``)
+        exactly once.
+
+        Returns the unwrapped ``data`` payload for an enveloped response, or the
+        raw body otherwise. Raises on a non-success envelope so a server-side
+        error is never silently read as 'no recordings'.
+        """
+        body = self._raw_get(path, **params)
+        if not isinstance(body, dict):
+            return body
+        if body.get("status") in self._SUCCESS_STATUS:
+            return body.get("data", body)
+        # Wrong region: Plaud answers -302 and hands back the correct API host
+        # (e.g. https://api-apse1.plaud.ai). Re-point and retry once; the new
+        # base sticks on the instance so later calls go straight there.
+        new_base = self._region_base(body)
+        if new_base and new_base != self._base:
+            logger.info("plaud cloud: region redirect %s -> %s", self._base, new_base)
+            self._base = new_base
+            body = self._raw_get(path, **params)
+            if isinstance(body, dict) and body.get("status") in self._SUCCESS_STATUS:
+                return body.get("data", body)
+        raise RuntimeError(
+            f"api.plaud.ai error: status={body.get('status')} "
+            f"msg={body.get('msg')!r} (base={self._base})"
+        )
+
+    def _raw_get(self, path: str, **params):
+        session = self._get_session()
+        resp = session.get(f"{self._base}{path}", params=params, timeout=self._TIMEOUT)
+        resp.raise_for_status()
+        return resp.json()
+
+    @staticmethod
+    def _region_base(body: dict) -> Optional[str]:
+        """Extract the correct regional API host from a -302 region-mismatch body:
+        ``{"data": {"domains": {"api": "https://api-apse1.plaud.ai"}}}``."""
+        data = body.get("data") if isinstance(body, dict) else None
+        domains = data.get("domains") if isinstance(data, dict) else None
+        api = domains.get("api") if isinstance(domains, dict) else None
+        return api.rstrip("/") if isinstance(api, str) and api else None
+
+    def list_recordings(self, since: Optional[str] = None,
+                        until: Optional[str] = None) -> List[DtoPlaudRecording]:
+        out: List[DtoPlaudRecording] = []
+        skip = 0
+        for _ in range(self._MAX_PAGES):
+            data = self._get(
+                "/file/simple/web",
+                skip=skip, limit=self._PAGE_LIMIT,
+                is_trash=0, sort_by="start_time", is_desc="true",
+            )
+            # `data` is already unwrapped (the recording array, or an envelope
+            # nesting it); _extract_list tolerates either shape.
+            items = self._extract_list(data)
+            if not items:
+                break
+            stop = False
+            for item in items:
+                rec = self._normalize(item)
+                # Newest-first ordering: once we pass below `since` every
+                # remaining page is older, so we can stop early.
+                if since and rec.started_at and rec.started_at < since:
+                    stop = True
+                    continue
+                if _in_window(rec.started_at, since, until):
+                    out.append(rec)
+            if stop or len(items) < self._PAGE_LIMIT:
+                break
+            skip += len(items)
+        logger.info("plaud cloud: %d recording(s) in window", len(out))
+        return out
+
+    def ensure_audio_local(self, rec: DtoPlaudRecording, dest_dir: str) -> Optional[str]:
+        if rec.audio_path and os.path.exists(rec.audio_path):
+            return rec.audio_path
+        Path(dest_dir).mkdir(parents=True, exist_ok=True)
+        try:
+            url = self._resolve_audio_url(rec)
+            if not url:
+                logger.warning("plaud cloud: no download URL for %s", rec.id)
+                return None
+            session = self._get_session()
+            with session.get(url, timeout=self._TIMEOUT, stream=True) as r:
+                r.raise_for_status()
+                ext = rec.audio_format or "mp3"
+                dest = os.path.join(dest_dir, f"{rec.id}.{ext}")
+                with open(dest, "wb") as fh:
+                    for chunk in r.iter_content(chunk_size=1 << 16):
+                        if chunk:
+                            fh.write(chunk)
+        except Exception as e:  # noqa: BLE001 — unofficial surface, stay defensive
+            logger.warning("plaud cloud download failed for %s: %s", rec.id, e)
+            return None
+        rec.audio_path = dest
+        return dest
+
+    def _resolve_audio_url(self, rec: DtoPlaudRecording) -> Optional[str]:
+        """A recording's signed URL: use one already on the DTO, else ask
+        ``/file/temp-url/{id}`` (prefers WAV; falls back to whatever it returns)."""
+        if rec.audio_url:
+            return rec.audio_url
+        if not rec.id:
+            return None
+        # is_opus=1 returns the ORIGINAL recording (opus/.ogg), which always
+        # exists; is_opus=0 asks for a server-side WAV transcode that may not.
+        # Whisper accepts opus, so prefer the original.
+        data = self._get(f"/file/temp-url/{rec.id}", is_opus=1)
+        if not isinstance(data, dict):
+            return None
+        for key in ("temp_url_opus", "temp_url", "url", "download_url"):
+            val = data.get(key)
+            if val:
+                if key == "temp_url_opus":
+                    rec.audio_format = rec.audio_format or "ogg"
+                elif key == "temp_url":
+                    rec.audio_format = "wav"
+                return val
+        return None
+
+    @staticmethod
+    def _extract_list(body) -> list:
+        """Pull the recording array out of a list response, tolerant of envelope
+        drift across the unofficial surface."""
+        if isinstance(body, list):
+            return body
+        if isinstance(body, dict):
+            for key in ("data_file_list", "data", "files", "list", "items", "result"):
+                val = body.get(key)
+                if isinstance(val, list):
+                    return val
+                if isinstance(val, dict):  # e.g. {"data": {"list": [...]}}
+                    for k2 in ("data_file_list", "list", "files", "items"):
+                        if isinstance(val.get(k2), list):
+                            return val[k2]
+        return []
+
+    @staticmethod
+    def _normalize(item) -> DtoPlaudRecording:
+        """Map a raw api.plaud.ai record (dict or object) to the normalized DTO.
+
+        Field names follow the live ``/file/simple/web`` surface (id, filename,
+        start_time, duration, fullname, keywords) with legacy/alternate keys kept
+        as fallbacks so the mapping survives key drift. ``start_time``/``duration``
+        are epoch MILLISECONDS in this API; the unit is detected once from the
+        timestamp magnitude and applied to both.
+        """
+        def g(*keys, default=None):
+            for k in keys:
+                if isinstance(item, dict) and item.get(k) is not None:
+                    return item[k]
+                if hasattr(item, k) and getattr(item, k) is not None:
+                    return getattr(item, k)
+            return default
+
+        rid = str(g("id", "file_id", "recording_id", "uuid", default="")) or None
+
+        started_raw = g("start_time", "started_at", "created_at", "create_time", "date")
+        in_ms = isinstance(started_raw, (int, float)) and started_raw > 1e12
+        if isinstance(started_raw, (int, float)):
+            started = _iso(datetime.fromtimestamp(
+                started_raw / 1000 if in_ms else started_raw, tz=timezone.utc))
+        else:
+            started = started_raw if isinstance(started_raw, str) else None
+
+        duration = g("duration", "duration_seconds", "length")
+        if isinstance(duration, (int, float)):
+            duration = int(duration / 1000) if in_ms else int(duration)
+
+        # Real extension lives on `fullname` (e.g. "<id>.ogg"); fall back to an
+        # explicit format field, then mp3.
+        ext = os.path.splitext(str(g("fullname", default="") or ""))[1].lstrip(".").lower()
+        audio_format = ext or (g("format", "audio_format", default="mp3") or "mp3").lower()
+
+        return DtoPlaudRecording(
+            id=rid,
+            title=g("filename", "title", "name", default=rid),
+            started_at=started,
+            duration_seconds=duration,
+            audio_url=g("audio_url", "download_url", "url"),
+            audio_format=audio_format,
+            transcript=g("transcript", "transcription", "transcript_text", "trans_result"),
+            summary=g("summary", "summary_text", "ai_summary"),
+            tags=list(g("keywords", "tags", default=[]) or []),
+            origin="cloud",
+        )
+
+
+# ── folder (fallback, fully supported) ────────────────────────────────────────
+
+class PlaudFolderBackend(PlaudBackend):
+    """Reads recordings the user exported from the Plaud desktop app into a
+    watched folder. Audio files are paired with sibling transcript/summary text
+    files by filename stem."""
+
+    name = "folder"
+
+    def __init__(self, export_dir: Optional[str]):
+        self._dir = (export_dir or "").strip()
+
+    def available(self) -> bool:
+        return bool(self._dir) and os.path.isdir(self._dir)
+
+    def list_recordings(self, since: Optional[str] = None,
+                        until: Optional[str] = None) -> List[DtoPlaudRecording]:
+        if not self.available():
+            return []
+        out: List[DtoPlaudRecording] = []
+        for path in sorted(Path(self._dir).rglob("*")):
+            if not path.is_file() or path.suffix.lower() not in _AUDIO_EXTS:
+                continue
+            rec = self._from_audio_file(path)
+            if _in_window(rec.started_at, since, until):
+                out.append(rec)
+        logger.info("plaud folder: %d recording(s) in window from %s", len(out), self._dir)
+        return out
+
+    def ensure_audio_local(self, rec: DtoPlaudRecording, dest_dir: str) -> Optional[str]:
+        # Folder recordings are already local; nothing to download.
+        return rec.audio_path if rec.audio_path and os.path.exists(rec.audio_path) else None
+
+    def _from_audio_file(self, path: Path) -> DtoPlaudRecording:
+        stem = path.stem
+        mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+        transcript, summary = self._sidecar_text(path)
+        # Deterministic id so re-runs upsert rather than duplicate.
+        rid = f"{mtime.strftime('%Y%m%d')}-{_slug(stem)}"
+        return DtoPlaudRecording(
+            id=rid,
+            title=stem,
+            started_at=_iso(mtime),
+            audio_path=str(path),
+            audio_format=path.suffix.lower().lstrip("."),
+            transcript=transcript,
+            summary=summary,
+            origin="folder",
+        )
+
+    def _sidecar_text(self, audio: Path) -> tuple[Optional[str], Optional[str]]:
+        """Find sibling transcript/summary text files sharing the audio stem."""
+        transcript = summary = None
+        stem = audio.stem
+        for sibling in audio.parent.iterdir():
+            if not sibling.is_file() or sibling.suffix.lower() not in _TRANSCRIPT_EXTS:
+                continue
+            sib_stem = sibling.stem
+            if not sib_stem.startswith(stem):
+                continue
+            try:
+                text = sibling.read_text(encoding="utf-8", errors="replace").strip()
+            except OSError:
+                continue
+            if any(sib_stem.lower().endswith(sfx) for sfx in _SUMMARY_SUFFIXES):
+                summary = text
+            elif sib_stem == stem and transcript is None:
+                transcript = text
+        return transcript, summary
+
+
+# ── adapter (cloud → folder) ──────────────────────────────────────────────────
+
+class PlaudAdapter:
+    """Acquisition facade: try cloud first, fall back to the export folder."""
+
+    def __init__(self, cloud: PlaudCloudBackend, folder: PlaudFolderBackend):
+        self._cloud = cloud
+        self._folder = folder
+
+    def _active_backend(self) -> Optional[PlaudBackend]:
+        if self._cloud.available():
+            return self._cloud
+        if self._folder.available():
+            return self._folder
+        return None
+
+    @property
+    def active_backend(self) -> Optional[PlaudBackend]:
+        """The backend that would actually serve data (cloud if ready, else
+        folder). Exposed for diagnostics that need to call it DIRECTLY and see
+        a real error — `list_recordings` deliberately swallows a cloud failure
+        and falls back to the folder, which would mask a bad/expired token."""
+        return self._active_backend()
+
+    def list_recordings(self, since: Optional[str] = None,
+                        until: Optional[str] = None) -> List[DtoPlaudRecording]:
+        """List recordings in [since, until]. Tries cloud, then folder.
+
+        Args:
+            since: inclusive lower bound, ISO-8601 (e.g. "2026-06-08T00:00:00").
+            until: inclusive upper bound, ISO-8601.
+        """
+        if self._cloud.available():
+            try:
+                return self._cloud.list_recordings(since, until)
+            except Exception as e:  # noqa: BLE001 — unofficial cloud surface
+                logger.warning(
+                    "plaud cloud unavailable (%s) — falling back to export folder", e
+                )
+        return self._folder.list_recordings(since, until)
+
+    def ensure_audio_local(self, rec: DtoPlaudRecording, dest_dir: str) -> Optional[str]:
+        backend = self._cloud if rec.origin == "cloud" else self._folder
+        return backend.ensure_audio_local(rec, dest_dir)
+
+    @property
+    def status(self) -> dict:
+        return {
+            "cloud_ready": self._cloud.available(),
+            "folder_ready": self._folder.available(),
+            "active": (self._active_backend().name if self._active_backend() else None),
+        }
+
+
+def build_adapter(config) -> PlaudAdapter:
+    """Construct a :class:`PlaudAdapter` from an app config (``apps.plaud.config.CONFIG``).
+
+    Reads ``app_data.token`` / ``app_data.export_dir`` with ``PLAUD_TOKEN`` /
+    ``PLAUD_EXPORT_DIR`` env vars as fallbacks.
+    """
+    app_data = getattr(config, "app_data", {}) or {}
+    token = app_data.get("token") or os.environ.get("PLAUD_TOKEN", "")
+    api_base = app_data.get("api_base") or os.environ.get("PLAUD_API_BASE", "")
+    export_dir = app_data.get("export_dir") or os.environ.get("PLAUD_EXPORT_DIR", "")
+    return PlaudAdapter(
+        PlaudCloudBackend(token, base_url=api_base or None),
+        PlaudFolderBackend(export_dir),
+    )

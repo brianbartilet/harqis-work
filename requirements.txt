@@ -19,6 +19,14 @@ python-docx>=1.1.0
 openpyxl>=3.1.0
 python-pptx>=0.6.23
 
+# apps/plaud/references/adapter.py — the Plaud cloud backend talks directly to
+# the unofficial api.plaud.ai REST surface over HTTP using `requests` (a core
+# dep, already pulled in transitively). There is NO `plaud-api`/`plaud` PyPI
+# package — don't try to install one. Set PLAUD_TOKEN to use the cloud path, or
+# PLAUD_EXPORT_DIR to use the local export-folder fallback. requests is listed
+# explicitly here so the cloud path never depends on it arriving transitively:
+requests>=2.31.0
+
 # openai>=1.50 introduced client.responses (Responses API). apps/open_ai/references/web/api/responses.py
 # and code_interpreter.py call native_client.responses.{create,retrieve,delete,input_items.list};
 # without this floor, those tests fail with AttributeError.
