@@ -313,6 +313,22 @@ Wraps Perplexity Sonar — chat completions with built-in live web search and in
 
 ---
 
+### Plaud (`apps/plaud/mcp.py`)
+
+Wraps the Plaud AI voice recorder. Tries the (unofficial) cloud API first and falls back to a local export folder. [Dev API](https://docs.plaud.ai/). Requires a valid `PLAUD` section in `apps_config.yaml` (`PLAUD_TOKEN` and/or `PLAUD_EXPORT_DIR`).
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `list_plaud_recordings` | `since?`, `until?` (ISO-8601) | Recordings in the window: `{id, title, started_at, duration_seconds, audio_format, has_transcript, has_summary, origin}` |
+| `get_plaud_transcript` | `recording_id` | `{id, transcript, summary}` (empty if Plaud has not produced them) |
+| `plaud_status` | — | `{cloud_ready, folder_ready, active}` |
+
+**Example prompts:**
+- *"List my Plaud recordings from yesterday."*
+- *"Is the Plaud cloud connection working or are we on the export folder?"*
+
+---
+
 ### Google Apps (`apps/google_apps/mcp.py`)
 
 Wraps `apps/google_apps/references/web/api/` services.

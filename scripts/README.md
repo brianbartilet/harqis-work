@@ -16,6 +16,7 @@ Operational scripts for **harqis-work**, organised by purpose:
 | [`launch.py`](#launchpy) | Single-process launcher — runs one daemon in the foreground (`worker`, `scheduler`, `flower`, `frontend`, `mcp`, `kanban`, `trigger-hud-tasks`, `push-config`, `serve-config`). |
 | [`deploy.py`](#deploypy) | Multi-daemon orchestrator — reads `machines.toml` from the repo root, brings the whole stack up/down, optionally registers OS auto-start units. |
 | [`sync-to-host.ps1`](#sync-to-hostps1) | Push gitignored config (`.env/`, `frontend/.env`, `machines.local.toml`) to a remote checkout via `tar \| ssh`. Driven by the `[sync]` / `[ssh.*]` blocks in `machines.local.toml`. |
+| [`check_plaud_token.py`](#check_plaud_tokenpy) | Read-only smoke check for the Plaud adapter — prints active backend (cloud vs export folder) and lists recordings in a window so you can confirm `PLAUD_TOKEN` works before the nightly `ingest_plaud_activity` job. |
 | [`../machines.toml`](#machinestoml) | Per-machine topology (role, queue list, disabled services). Lives at the repo root so per-machine `machines.local.toml` overrides sit next to it. Auto-detected from hostname. |
 | [`tailscale/`](#tailscale) | Tailscale ACL policy. Unchanged. |
 
@@ -316,6 +317,28 @@ powershell -NoProfile -File scripts/sync-to-host.ps1 --list      # show targets
 ```
 
 The `/sync-host` skill wraps this for the current OS.
+
+---
+
+## `check_plaud_token.py`
+
+Read-only smoke check for the Plaud acquisition adapter (`apps/plaud`). Prints
+which backend is active (cloud API vs local export folder) and lists the
+recordings it can see in a window — without transcribing, distilling, writing to
+the HFL corpus/ES, or archiving. Use it to confirm `PLAUD_TOKEN` (or
+`PLAUD_EXPORT_DIR`) works before the nightly `ingest_plaud_activity` job runs.
+
+```bash
+python scripts/check_plaud_token.py                       # last 7 days
+python scripts/check_plaud_token.py --days 30
+python scripts/check_plaud_token.py --since 2026-06-01 --until 2026-06-09
+```
+
+Exit codes: `0` backend ready + listing ok · `1` acquisition errored (bad/expired
+token, api.plaud.ai unreachable) · `2` no backend configured. Grab the token from
+web.plaud.ai → DevTools Console `localStorage.getItem("tokenstr")` and set
+`PLAUD_TOKEN` in `.env/apps.env`. The cloud path calls api.plaud.ai directly over
+HTTP (no SDK package); non-US accounts set `PLAUD_API_BASE`.
 
 ---
 

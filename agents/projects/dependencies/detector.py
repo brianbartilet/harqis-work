@@ -118,6 +118,8 @@ class DependencyDetector:
         # Music / media — OAuth2 refresh-token flow; the refresh token is the
         # most specific readiness signal (client_id/secret fail loudly otherwise).
         (r"\bSPOTIFY\b",                          "SPOTIFY_REFRESH_TOKEN"),
+        # Voice capture — Plaud cloud token (folder fallback needs no secret)
+        (r"\bPLAUD\b",                            "PLAUD_TOKEN"),
     ]
 
     _WORKFLOW_PATTERNS = [

@@ -53,6 +53,7 @@ At its core the platform has three layers:
 | `orgo` | Cloud VM desktop control for AI agents | REST API | Yes | [API Docs](https://docs.orgo.ai/api-reference/introduction) · [Site](https://orgo.ai/) |
 | `own_tracks` | GPS location tracking | REST API + Docker/MQTT | Yes | [API Docs](https://owntracks.org/booklet/tech/http/) · [Site](https://owntracks.org/) |
 | `perplexity` | Perplexity Sonar — chat with live web search, search API, embeddings | REST API | No | [API Docs](https://docs.perplexity.ai/) · [Site](https://www.perplexity.ai/) |
+| `plaud` | Plaud AI voice recorder — recordings + transcripts (cloud API, export-folder fallback) | Adapter | Smoke | [Dev API](https://docs.plaud.ai/) · [Site](https://www.plaud.ai/) |
 | `playwright` | Headless browser automation — screenshot, click, fill, evaluate | Local | No | [Docs](https://playwright.dev/python/) |
 | `rainmeter` | Windows desktop HUD skinning | Local | No | [Docs](https://docs.rainmeter.net/) · [Site](https://www.rainmeter.net/) |
 | `reddit` | Reddit — subreddits, posts, comments, inbox | REST API (OAuth2) | Yes | [API Docs](https://www.reddit.com/dev/api/) · [Apps](https://www.reddit.com/prefs/apps) |
@@ -417,6 +418,7 @@ harqis-work/
 │   ├── orgo/                       # Cloud VM desktop control
 │   ├── own_tracks/                 # GPS location tracking
 │   ├── perplexity/                 # Perplexity Sonar (chat + search + embeddings)
+│   ├── plaud/                      # Plaud AI voice recorder (cloud + export folder)
 │   ├── playwright/                 # Headless browser automation
 │   ├── rainmeter/                  # Windows desktop HUD
 │   ├── reddit/                     # Reddit API
@@ -764,6 +766,12 @@ OWN_TRACKS_USERNAME=
 OWN_TRACKS_PASSWORD=
 OWN_TRACKS_DEFAULT_USER=
 OWN_TRACKS_DEFAULT_DEVICE=
+
+# ── Voice capture (Plaud) ─────────────────────────────────────────────────────
+PLAUD_TOKEN=                      # cloud API bearer token (preferred)
+PLAUD_EXPORT_DIR=                 # local export folder (fallback)
+PLAUD_ARCHIVE_HOST=               # archive host (default: harqis-ones-mac-mini)
+PLAUD_ARCHIVE_PATH=               # remote archive dir (unset → archive skipped)
 
 # ── Desktop capture / Rainmeter (Windows) ─────────────────────────────────────
 ACTIONS_LOG_PATH=                 # absolute path

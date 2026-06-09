@@ -82,16 +82,22 @@ def index_hfl_entry(
     *,
     source: str,
     synthesized: bool = False,
+    doc_id: Optional[str] = None,
 ) -> Optional[str]:
     """Index one HFL entry into the ES entry index. Best-effort.
 
     Returns the doc id on success, None on skip/failure (never raises).
     An empty `moment` is a no-op — mirrors capture's "smallest useful
     entry is one line" rule so empty entries don't pollute the index.
+
+    `doc_id` overrides the default content-derived id. Sources with a stable
+    per-item key (e.g. a recording id) pass it so re-runs upsert even when the
+    distilled `moment` text changes between runs. Defaults to the
+    date+moment+source hash.
     """
     if not entry.moment.strip():
         return None
-    doc_id = _doc_id(entry, source)
+    doc_id = doc_id or _doc_id(entry, source)
     try:
         # Imported lazily: the es_logging module resolves ELASTIC_LOGGING
         # config at import time; keep that cost off the hot import path and

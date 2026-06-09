@@ -43,6 +43,7 @@ APP_REGISTRARS = [
     ("Trello",           "apps.trello.mcp",         "register_trello_tools"),
     ("Jira",             "apps.jira.mcp",           "register_jira_tools"),
     ("OwnTracks",        "apps.own_tracks.mcp",     "register_own_tracks_tools"),
+    ("Plaud",            "apps.plaud.mcp",          "register_plaud_tools"),
     ("Orgo",             "apps.orgo.mcp",           "register_orgo_tools"),
     ("Discord",          "apps.discord.mcp",        "register_discord_tools"),
     ("Reddit",           "apps.reddit.mcp",         "register_reddit_tools"),

@@ -77,6 +77,7 @@ _APP_LOADERS: dict[str, str] = {
     "orgo":        "apps.orgo.mcp.register_orgo_tools",
     "own_tracks":  "apps.own_tracks.mcp.register_own_tracks_tools",
     "perplexity":  "apps.perplexity.mcp.register_perplexity_tools",
+    "plaud":       "apps.plaud.mcp.register_plaud_tools",
     "playwright":  "apps.playwright.mcp.register_playwright_tools",
     "reddit":      "apps.reddit.mcp.register_reddit_tools",
     "scryfall":    "apps.scryfall.mcp.register_scryfall_tools",

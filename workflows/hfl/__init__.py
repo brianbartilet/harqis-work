@@ -15,4 +15,5 @@ import workflows.hfl.tasks.ingest_chatgpt  # noqa: F401
 import workflows.hfl.tasks.ingest_browsing  # noqa: F401
 import workflows.hfl.tasks.ingest_location  # noqa: F401
 import workflows.hfl.tasks.ingest_spotify   # noqa: F401
+import workflows.hfl.tasks.ingest_plaud     # noqa: F401
 import workflows.hfl.tasks.time_capsule    # noqa: F401

@@ -48,6 +48,7 @@ this scaffold closes.
 | `ingest_browsing_activity` | Daily web-browsing digest. Reads the Chrome + Edge `History` SQLite DBs directly (copy-to-temp to dodge the browser lock; no app/credential), distils the day's visits into ONE corpus entry with the most-visited pages as `references`. Haiku-distilled, raw fallback. No history DB / no visits → no entry, no call. No domain filtering by default (`exclude_domains` kwarg to redact). | `file:hfl_corpus+es:hfl-entries` | Daily 23:00 local (active — `os: windows`; no config needed). |
 | `ingest_location_activity` | Daily location timeline. Pulls the day's GPS track from the local OwnTracks Recorder (`apps/own_tracks`), clusters fixes into **stay-points** (dwell ≥ N min), reverse-geocodes each via OpenStreetMap Nominatim (free, no key), and distils ONE "where I was today" timeline entry. Haiku-distilled, raw fallback. No device configured / Recorder unreachable / no fixes → no entry, no call; fixes with no qualifying stay write a movement-only breadcrumb. | `file:hfl_corpus+es:hfl-entries` | Daily 23:05 local (active — clean no-op until OwnTracks reports). |
 | `ingest_spotify_activity` | Daily Spotify listening digest. Pulls the day's plays from the Spotify Web API (`apps/spotify`, OAuth2 refresh-token), with the operator's rolling top tracks/artists as context, and distils ONE "soundtrack of the day" entry — mood **inferred** by Haiku from track/artist/genre names (no audio-features; deprecated for new apps). Haiku-distilled, raw fallback. No credentials / no plays → no entry, no call. `recently-played` caps at 50/day. | `file:hfl_corpus+es:hfl-entries` | Daily 23:10 local (**shipped commented-out** — uncomment in `tasks_config.py` once `SPOTIFY_*` creds are set; `tenant_safe`). |
+| `ingest_plaud_activity` | Daily **voice-recordings** ingest. Pulls the day's Plaud recordings via the `apps/plaud` adapter (cloud API → local export-folder fallback) and writes **ONE entry per recording** (not a daily digest). Transcript precedence: Plaud's own transcript, else OpenAI **Whisper** on the raw audio (bounded by `max_transcribe`). Raw recordings + a consolidated `YYYY-MM-DD-summary.md` are archived to `harqis-ones-mac-mini` over key-based SSH. Haiku-distilled, raw fallback. No `PLAUD_TOKEN`/`PLAUD_EXPORT_DIR` → no entry, no call; no recordings → no entry, no call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:15 local (active — clean no-op until acquisition is configured; `tenant_safe`). |
 | `analyze_hfl_media` | **Daily media vision pass.** Walks the dumps inbox for recent images/videos (pulled from phones + machines by `workflows/dumps/`), sends each to Haiku vision for a story moment, and **geo-tags** it — EXIF GPS, else the nearest OwnTracks fix by capture time → Nominatim place. One entry per story-worthy item; the source dump file + an OSM pin are the `references`. No new media → no entry, no call. | `file:hfl_corpus+es:hfl-entries` | Daily 22:00 local (active). |
 | `collect_time_capsule` | **On-demand, time-ranged archive ingest.** Sweeps a directory (and subdirs) for files dated within a period, extracts text / docs / Haiku vision captions into a bounded manifest + digest. The COLLECT half of the `/time-capsule-synthesizer` skill (Claude synthesizes ONE rollup entry from the digest, then dual-writes it via `capture_hfl_entry`). Not scheduled. | `file:hfl_corpus+es:hfl-entries` (via the skill) | Adhoc — driven by `/time-capsule-synthesizer`. |
 
@@ -98,6 +99,8 @@ screenshot taken downtown comes out tagged with the place.
 | 22:00 | `analyze_hfl_media` | each story-worthy photo → geo-tagged entry |
 | 23:00 | `ingest_browsing_activity` / `ingest_chatgpt_activity` | browsing + research → entries |
 | 23:05 | `ingest_location_activity` | day's movement → one timeline entry |
+| 23:10 | `ingest_spotify_activity` | day's plays → one soundtrack entry |
+| 23:15 | `ingest_plaud_activity` | day's voice recordings → one entry each + Mac-mini archive |
 
 **Setup** (one-time): the OwnTracks app + `OWN_TRACKS_DEFAULT_USER/DEVICE` (the
 location stream — §Activation); a `[dumps.pull_targets.<phone>]` block in
@@ -366,6 +369,44 @@ To make it produce entries:
 - Live view (no write): the `spotify_activity` MCP tool in
   `workflows/hfl/mcp.py`.
 
+### `ingest_plaud_activity` (daily voice recordings)
+
+**Shipped active** in `tasks_config.py` — a clean no-op until acquisition is
+configured. Pulls the day's recordings via the `apps/plaud` adapter (cloud API
+primary → local export-folder fallback) and **dual-writes ONE entry per
+recording** (not a daily digest) — corpus + the `harqis-hfl-entries` ES index,
+`source="plaud"`, with a per-recording deterministic doc id (`YYYYMMDD-plaud-<id>`)
+so re-runs upsert instead of duplicating.
+
+To make it produce entries:
+
+1. **Configure acquisition** (either is enough) in `.env/apps.env`:
+   ```
+   PLAUD_TOKEN=          # cloud API (preferred) — see apps/plaud/README.md
+   PLAUD_EXPORT_DIR=     # local export-folder fallback
+   ```
+2. **Transcription fallback (optional).** When Plaud has no transcript for a
+   recording, the audio is transcribed with OpenAI **Whisper** — needs
+   `OPENAI_API_KEY` (already set for other apps). Bounded by `max_transcribe`
+   (default 20/run) to cap cost. Set `allow_whisper=False` to disable.
+3. **Archive (optional).** Raw recordings + a consolidated `YYYY-MM-DD-summary.md`
+   are pushed to the archive host over **key-based SSH**:
+   ```
+   PLAUD_ARCHIVE_HOST=harqis-ones-mac-mini
+   PLAUD_ARCHIVE_PATH=          # remote base dir — unset → archive skipped
+   ```
+4. **Restart Beat + an `hfl`-subscribed worker.** Runs daily at 23:15 local,
+   centralized on the Beat host (one Plaud account — not a per-machine broadcast).
+
+- No `PLAUD_TOKEN`/`PLAUD_EXPORT_DIR` → no entry, no network call; no recordings
+  in the window → no entry, no LLM call.
+- A failed archive (host unreachable / `PLAUD_ARCHIVE_PATH` unset) never costs a
+  captured entry — corpus + ES are written first, and the archive result is
+  surfaced in the task return dict, not raised (HFL never breaks the beat).
+- Tuning kwargs: `window_days` (1), `max_recordings` (50), `max_transcribe` (20),
+  `whisper_model` (`whisper-1`), `allow_whisper`, `archive`.
+- Live view (no write): the `plaud_activity` MCP tool in `workflows/hfl/mcp.py`.
+
 ---
 
 ## Elasticsearch entry index (dual-write)
@@ -462,6 +503,7 @@ MCP live-view tool — dual-writing corpus + ES. It composes with
 | `ingest_browsing_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` |
 | `ingest_location_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` |
 | `ingest_spotify_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
+| `ingest_plaud_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 
 This block is also persisted on each beat entry's `'manifesto'` key — see
 `workflows/hfl/tasks_config.py`. `scripts/agents/manifesto_audit.py` reads from

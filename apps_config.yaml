@@ -676,4 +676,19 @@ SPOTIFY:
   return_data_only: True
 
 
+PLAUD:
+  app_id: 'plaud'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.plaud.ai/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: False
+  app_data:
+    token: ${PLAUD_TOKEN}
+    export_dir: ${PLAUD_EXPORT_DIR}
+  return_data_only: True
+
+
 

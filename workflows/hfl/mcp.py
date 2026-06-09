@@ -920,3 +920,75 @@ def register_memory_tools(mcp: FastMCP):
             "model": model if d.get("synthesized") else None,
             "period": _period_dict(start_d, end_d, label),
         }
+
+    @mcp.tool()
+    def plaud_activity(
+        period: str = "",
+        since: str = "",
+        until: str = "",
+        max_recordings: int = 50,
+    ) -> dict:
+        """Live view of the operator's Plaud voice recordings in a time window.
+
+        Read-only: lists recordings via the Plaud adapter (cloud API → export
+        folder) WITHOUT transcribing, distilling, or writing anything. Use the
+        scheduled ingest_plaud_activity for the corpus/ES write. Defaults to the
+        last 7 days when no window is given. Returns found=false (no work) when
+        no acquisition backend is configured or there are no recordings.
+
+        Args:
+            period: same vocabulary as memory_recall (overrides since/until).
+            since:  ISO "YYYY-MM-DD" or relative "-Nd".
+            until:  ISO "YYYY-MM-DD" (defaults to today).
+            max_recordings: cap on recordings returned.
+        """
+        logger.info("plaud_activity period=%r since=%r until=%r", period, since, until)
+        # Imported lazily: keeps the plaud adapter off the MCP import path.
+        from apps.plaud.config import CONFIG as PLAUD_CONFIG
+        from apps.plaud.references.adapter import build_adapter
+        from workflows.hfl.tasks.ingest_plaud import collect_plaud_recordings
+
+        start, end, label = _resolve_window(period, since, until)
+        end_d = end or _today()
+        start_d = start or (end_d - timedelta(days=6))
+
+        adapter = build_adapter(PLAUD_CONFIG)
+        if not adapter.status.get("active"):
+            return {"found": False, "recordings": [], "count": 0,
+                    "error": "no backend",
+                    "period": _period_dict(start_d, end_d, label)}
+        try:
+            collected = collect_plaud_recordings(
+                since=start_d, until=end_d, adapter=adapter,
+                max_recordings=max_recordings,
+            )
+        except Exception as exc:  # noqa: BLE001 - surface, don't crash the tool
+            logger.warning("plaud_activity: plaud unavailable (%s)", exc)
+            return {"found": False, "recordings": [], "count": 0,
+                    "error": "plaud unavailable",
+                    "period": _period_dict(start_d, end_d, label)}
+
+        recs = collected["recordings"]
+        if not recs:
+            return {"found": False, "recordings": [], "count": 0,
+                    "backend": collected.get("backend"),
+                    "period": _period_dict(start_d, end_d, label)}
+
+        return {
+            "found": True,
+            "count": collected["count"],
+            "backend": collected.get("backend"),
+            "recordings": [
+                {
+                    "id": r.id,
+                    "title": r.title,
+                    "started_at": r.started_at,
+                    "duration_seconds": r.duration_seconds,
+                    "has_transcript": r.has_transcript,
+                    "has_summary": bool(r.summary),
+                    "origin": r.origin,
+                }
+                for r in recs
+            ],
+            "period": _period_dict(start_d, end_d, label),
+        }

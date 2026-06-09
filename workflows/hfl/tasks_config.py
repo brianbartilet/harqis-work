@@ -270,5 +270,48 @@ WORKFLOW_HFL = {
         },
     },
 
+    # Daily Plaud voice recordings — 23:15 local, after spotify (23:10). Pulls
+    # the day's recordings from the Plaud adapter (apps/plaud — cloud API
+    # primary, local export-folder fallback), and writes ONE HFL entry PER
+    # recording (not a daily digest) — dual-written corpus + ES, source "plaud".
+    # Transcript precedence: Plaud's own transcript first; if absent, the audio
+    # is transcribed with OpenAI Whisper (bounded by max_transcribe). Raw
+    # recordings + a consolidated YYYY-MM-DD-summary.md are archived to
+    # harqis-ones-mac-mini over SSH (PLAUD_ARCHIVE_PATH; skipped if unset).
+    # Centralized single-account source on the Beat host (HFL queue, NOT a
+    # per-machine broadcast). Clean no-op until acquisition is configured: no
+    # PLAUD_TOKEN and no PLAUD_EXPORT_DIR → no entry, no network call; zero
+    # recordings in the window → no entry, no LLM call.
+    #
+    # Active — clean no-op until PLAUD_TOKEN (cloud) or PLAUD_EXPORT_DIR
+    # (export-folder fallback) is set in .env/apps.env. Whisper fallback needs
+    # OPENAI_API_KEY; archive needs PLAUD_ARCHIVE_PATH (+ key-based SSH).
+    'run-job--ingest_plaud_activity': {
+        'task': 'workflows.hfl.tasks.ingest_plaud.ingest_plaud_activity',
+        'schedule': crontab(hour=23, minute=15),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'window_days': 1,
+            'max_recordings': 50,
+            'max_transcribe': 20,
+            'whisper_model': 'whisper-1',
+            'allow_whisper': True,
+            'archive': True,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 60 * 12,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+            'tenant_safe': True,
+        },
+    },
+
 
 }
