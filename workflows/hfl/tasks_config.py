@@ -345,5 +345,40 @@ WORKFLOW_HFL = {
         },
     },
 
+    # ── Android notification digest (disabled) ─────────────────────────────
+    # Daily Android notification metadata → HFL attention-signal entry.
+    # Reads JSONL drop files written by Tasker / MacroDroid / Termux from
+    # HFL_ANDROID_NOTIFICATIONS_DIR (falls back to {HFL_CORPUS_PATH}/
+    # android_notifications_inbox/). Clean no-op when no drop file exists.
+    #
+    # To activate:
+    #   1. Set HFL_ANDROID_NOTIFICATIONS_DIR in .env/apps.env (or rely on
+    #      the corpus-subdir fallback).
+    #   2. Uncomment the entry below and restart Beat + an hfl-subscribed
+    #      worker.
+    #   3. Run /generate-registry so the task appears in the dashboard.
+    #   See workflows/hfl/README.md §Activating ingest_notification_activity.
+    #
+    # 'run-job--ingest_notification_activity': {
+    #     'task': 'workflows.hfl.tasks.ingest_notifications.ingest_notification_activity',
+    #     'schedule': crontab(hour=23, minute=15),
+    #     'kwargs': {
+    #         'cfg_id__anthropic': 'ANTHROPIC',
+    #         'model': 'claude-haiku-4-5-20251001',
+    #         'window_days': 1,
+    #         'max_records': 2000,
+    #     },
+    #     'options': {
+    #         'queue': WorkflowQueue.HFL,
+    #         'expires': 60 * 60 * 12,
+    #     },
+    #     'manifesto': {
+    #         'code_role': 'capture+distill+express',
+    #         'para_bucket': 'area',
+    #         'express_target': 'file:hfl_corpus+es:hfl-entries',
+    #         'review_artifact': 'es_log+file',
+    #         'hfl_signal': True,
+    #     },
+    # },
 
 }
