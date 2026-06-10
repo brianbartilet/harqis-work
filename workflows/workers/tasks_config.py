@@ -52,6 +52,13 @@ WORKFLOW_WORKERS = {
             "queue":   WorkflowQueue.WORKERS_BROADCAST,
             "expires": 60 * 15,   # drop if not consumed within one cadence
         },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'es:worker-locations',
+            'review_artifact': 'es:worker-locations',
+            'hfl_signal': False,
+        },
     },
 
 }

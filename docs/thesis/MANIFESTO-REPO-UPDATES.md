@@ -114,7 +114,7 @@ The fix is to elevate the audit from one-shot to declarative. Each beat entry gr
 
 ```python
 'manifesto': {
-    'code_role':       'capture',           # capture | organize | distill | express
+    'code_role':       'capture',           # capture | organize | distill | express (or '+'-joined, e.g. 'capture+distill+express')
     'para_bucket':     'area',              # project | area | resource | archive
     'express_target':  'rainmeter:FOREX_ACCOUNT',
     'review_artifact': 'es_log+hud_widget',
@@ -148,7 +148,7 @@ Every entry in every active workflow's `tasks_config.py` gains a `'manifesto'` k
 
 | Field | Values |
 | --- | --- |
-| `code_role` | `'capture'`, `'organize'`, `'distill'`, `'express'` (or a `'+'`-joined hybrid for the rare task that does two phases, e.g. `'distill+express'` for `show_daily_radar`) |
+| `code_role` | `'capture'`, `'organize'`, `'distill'`, `'express'`, or a `'+'`-joined hybrid for a task spanning multiple phases — e.g. `'distill+express'` for `show_daily_radar`, or `'capture+distill+express'` for the HFL ingest tasks. The audit splits on `'+'` and validates each part. |
 | `para_bucket` | `'project'`, `'area'`, `'resource'`, `'archive'` — almost every workflow is an Area; new initiatives become Projects until they stabilize |
 | `express_target` | Free-form short string. Conventions: `'hud_feed'`, `'rainmeter:<METER_NAME>'`, `'es_log'`, `'api:<service>'`, `'file:<purpose>'`, `'vectorstore:<name>'`, `'message:<channel>'`, `'none'` (only for archive-status tasks) |
 | `review_artifact` | What a human or downstream task can read to verify the run happened. Usually `'es_log'`, often `'es_log+hud_widget'` or `'es_log+file'` |

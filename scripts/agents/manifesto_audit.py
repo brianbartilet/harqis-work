@@ -11,8 +11,6 @@ Hard violations (non-zero exit):
   - A task missing a non-empty `review_artifact`.
 
 Soft warnings (logged, exit code unaffected):
-  - `hfl_signal: True` task not yet wired into the HFL ingestor (currently
-    inactive — see workflows/hfl/README.md).
   - Unknown values for `code_role`, `para_bucket`.
 
 Usage:
@@ -120,12 +118,6 @@ def _audit_entry(workflow: str, key: str, entry: dict[str, Any]) -> tuple[list[s
     if not review:
         hard.append(f"{workflow}::{key}: manifesto.review_artifact empty (PAER violation)")
 
-    if m.get("hfl_signal") is True and workflow != "hfl":
-        soft.append(
-            f"{workflow}::{key}: hfl_signal=True but workflows/hfl/ is not yet "
-            f"activated (see workflows/hfl/README.md -> Activation)"
-        )
-
     return hard, soft
 
 
@@ -145,7 +137,9 @@ def main() -> int:
     parser.add_argument(
         "--include-inactive",
         action="store_true",
-        help="Also audit workflows/hfl/ (scaffolded but not in beat schedule).",
+        help="Force-audit workflows/hfl/ even if filtered out. (No-op now that hfl "
+             "is active and picked up by the default sweep; kept for any future "
+             "scaffolded-but-empty workflow.)",
     )
     args = parser.parse_args()
 

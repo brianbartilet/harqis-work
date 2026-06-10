@@ -74,6 +74,13 @@ WORKFLOWS_HUD = {
             "os": ["windows"],
             "expires": 60 * 5
         },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:OANDA_ACCOUNT',
+            'review_artifact': 'es_log+hud_widget',
+            'hfl_signal': False,
+        },
     },
 
     'run-job--show_tcg_orders': {
