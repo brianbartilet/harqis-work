@@ -17,6 +17,7 @@ Operational scripts for **harqis-work**, organised by purpose:
 | [`deploy.py`](#deploypy) | Multi-daemon orchestrator — reads `machines.toml` from the repo root, brings the whole stack up/down, optionally registers OS auto-start units. |
 | [`sync-to-host.ps1`](#sync-to-hostps1) | Push gitignored config (`.env/`, `frontend/.env`, `machines.local.toml`) to a remote checkout via `tar \| ssh`. Driven by the `[sync]` / `[ssh.*]` blocks in `machines.local.toml`. |
 | [`check_plaud_token.py`](#check_plaud_tokenpy) | Read-only smoke check for the Plaud adapter — prints active backend (cloud vs export folder) and lists recordings in a window so you can confirm `PLAUD_TOKEN` works before the nightly `ingest_plaud_activity` job. |
+| [`pull_dumps.py`](#pull_dumpspy) | Manually pull Android/device dumps from `[dumps.pull_targets.*]` — a date range (one daily-dumps folder per day, same layout as the nightly job) or a full sweep of every file. Run on harqis-server; supports `--dry-run`. |
 | [`../machines.toml`](#machinestoml) | Per-machine topology (role, queue list, disabled services). Lives at the repo root so per-machine `machines.local.toml` overrides sit next to it. Auto-detected from hostname. |
 | [`tailscale/`](#tailscale) | Tailscale ACL policy. Unchanged. |
 
@@ -339,6 +340,41 @@ token, api.plaud.ai unreachable) · `2` no backend configured. Grab the token fr
 web.plaud.ai → DevTools Console `localStorage.getItem("tokenstr")` and set
 `PLAUD_TOKEN` in `.env/apps.env`. The cloud path calls api.plaud.ai directly over
 HTTP (no SDK package); non-US accounts set `PLAUD_API_BASE`.
+
+---
+
+## `pull_dumps.py`
+
+Manual companion to the nightly `pull_daily_dumps_from_remotes` task (the dumps
+pull from `[dumps.pull_targets.*]` devices — typically Android over Termux SSHD).
+Use it to **back-fill** a date range or do a **full sweep** of every file. Same
+list→`ssh+tar`→extract path as the nightly job, so what lands in the inbox is
+indistinguishable from a nightly pull and flows straight into `analyze_hfl_media`
+and the memory MCP.
+
+> ⚠️ Run this **on harqis-server** (the dumps host). The inbox is a *local* path
+> there (`[dumps] harqis_server_inbox`); running it elsewhere extracts into a
+> folder on the wrong machine.
+
+```bash
+python scripts/pull_dumps.py                      # yesterday (same as nightly)
+python scripts/pull_dumps.py --days 7             # last 7 days, one folder per day
+python scripts/pull_dumps.py --since 2026-05-01 --until 2026-05-31
+python scripts/pull_dumps.py --full               # EVERY file → one folder/device
+python scripts/pull_dumps.py --days 30 --single-folder   # range in one folder
+python scripts/pull_dumps.py --device pixel-7 --dry-run --days 3
+```
+
+Layout:
+- **range (default)** → `<device>-daily-dumps-YYYY-MM-DD` per day (back-fills the
+  inbox exactly as if the nightly job had run each night).
+- **`--single-folder`** → one `<device>-range-dumps-<from>_<to>` folder (one SSH
+  cycle, no per-day split).
+- **`--full`** → one `<device>-full-dumps-YYYY-MM-DD` folder (no date split — the
+  remote `find` stays portable, so per-file dates aren't read for bucketing).
+
+`--dry-run` lists + counts (real remote `find`) but transfers nothing. Exit codes:
+`0` ok / dry-run · `1` a device errored · `2` nothing configured.
 
 ---
 

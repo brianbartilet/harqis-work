@@ -115,8 +115,8 @@ def ship_via_ssh_tar(
 def list_remote_recent_files(
     ssh_target: str,
     paths: list[str],
-    start_iso: str,
-    end_iso: str,
+    start_iso: str | None,
+    end_iso: str | None,
     *,
     ssh_port: int = 22,
 ) -> dict[str, list[str]]:
@@ -125,13 +125,21 @@ def list_remote_recent_files(
     Uses POSIX `find -newermt` which Termux + GNU find both support. Returns a
     dict of {source_root: [file_path, ...]} with all paths absolute on the
     remote side. Raises on ssh failure.
+
+    Bounds are optional and applied independently — passing both as `None`
+    drops the time predicate entirely and lists EVERY file under each root
+    (the "full sweep" used by the manual backfill).
     """
     out: dict[str, list[str]] = {}
     for source_root in paths:
+        predicate = ""
+        if start_iso is not None:
+            predicate += f" -newermt {shlex.quote(start_iso)}"
+        if end_iso is not None:
+            predicate += f" ! -newermt {shlex.quote(end_iso)}"
         find_cmd = (
-            f"find {shlex.quote(source_root)} -type f "
-            f"-newermt {shlex.quote(start_iso)} "
-            f"! -newermt {shlex.quote(end_iso)} "
+            f"find {shlex.quote(source_root)} -type f"
+            f"{predicate} "
             f"-print0"
         )
         result = subprocess.run(
