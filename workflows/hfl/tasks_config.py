@@ -313,5 +313,35 @@ WORKFLOW_HFL = {
         },
     },
 
+    # Android voice memo inbox — adhoc. The beat slot (Sunday 03:34) is
+    # effectively disabled; real invocation is via ingest_voice_memos.delay()
+    # from an agent or a Celery webhook triggered by the Termux voice_sender
+    # helper (workflows/mobile/android/voice_sender.py). Scans the voice inbox
+    # (VOICE_INBOX_PATH or logs/voice_inbox/) for JSON transcript payloads and
+    # distils each into one corpus entry (Haiku, raw fallback). No inbox /
+    # empty inbox -> clean no-op. Processed files are archived to
+    # inbox/processed/. Raw transcript is never written to corpus or ES.
+    # Active — clean no-op until a JSON transcript file appears in the inbox.
+    'run-job--ingest_voice_memos': {
+        'task': 'workflows.hfl.tasks.ingest_voice.ingest_voice_memos',
+        'schedule': crontab(day_of_week='sun', hour=3, minute=34),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'max_memos': 20,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 60,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+        },
+    },
+
 
 }
