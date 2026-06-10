@@ -35,6 +35,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
+from urllib.parse import urlparse
 
 from apps.plaud.references.dto.recording import DtoPlaudRecording
 
@@ -234,10 +235,11 @@ class PlaudCloudBackend(PlaudBackend):
             if not url:
                 logger.warning("plaud cloud: no download URL for %s", rec.id)
                 return None
-            session = self._get_session()
-            with session.get(url, timeout=self._TIMEOUT, stream=True) as r:
+            import requests
+
+            with requests.get(url, timeout=self._TIMEOUT, stream=True) as r:
                 r.raise_for_status()
-                ext = rec.audio_format or "mp3"
+                ext = self._extension_from_url(url) or rec.audio_format or "mp3"
                 dest = os.path.join(dest_dir, f"{rec.id}.{ext}")
                 with open(dest, "wb") as fh:
                     for chunk in r.iter_content(chunk_size=1 << 16):
@@ -265,12 +267,20 @@ class PlaudCloudBackend(PlaudBackend):
         for key in ("temp_url_opus", "temp_url", "url", "download_url"):
             val = data.get(key)
             if val:
-                if key == "temp_url_opus":
+                ext = self._extension_from_url(val)
+                if ext:
+                    rec.audio_format = ext
+                elif key == "temp_url_opus":
                     rec.audio_format = rec.audio_format or "ogg"
                 elif key == "temp_url":
                     rec.audio_format = "wav"
                 return val
         return None
+
+    @staticmethod
+    def _extension_from_url(url: str) -> Optional[str]:
+        suffix = Path(urlparse(url).path).suffix.lower()
+        return suffix.lstrip(".") if suffix in _AUDIO_EXTS else None
 
     @staticmethod
     def _extract_list(body) -> list:

@@ -10,6 +10,7 @@ import os
 import pytest
 from hamcrest import assert_that, equal_to, instance_of, not_none
 
+from apps.plaud.references.dto.recording import DtoPlaudRecording
 from apps.plaud.references.adapter import (
     PlaudAdapter,
     PlaudCloudBackend,
@@ -105,6 +106,72 @@ def test_cloud_extract_list_tolerates_envelope_drift():
     assert_that(extract([{"file_id": "2"}]), equal_to([{"file_id": "2"}]))
     assert_that(extract({"data": {"list": [{"file_id": "3"}]}}), equal_to([{"file_id": "3"}]))
     assert_that(extract({"status": "ok"}), equal_to([]))
+
+
+@pytest.mark.smoke
+def test_cloud_temp_url_uses_url_extension_when_opus_key_is_empty(monkeypatch):
+    backend = PlaudCloudBackend(token="secret")
+    monkeypatch.setattr(
+        backend,
+        "_get",
+        lambda *args, **kwargs: {
+            "temp_url_opus": None,
+            "temp_url": "https://bucket.example/rec.ogg?signature=ok",
+        },
+    )
+    rec = DtoPlaudRecording(id="rec1", title="Recording", audio_format="mp3")
+
+    url = backend._resolve_audio_url(rec)
+
+    assert_that(url, equal_to("https://bucket.example/rec.ogg?signature=ok"))
+    assert_that(rec.audio_format, equal_to("ogg"))
+
+
+@pytest.mark.smoke
+def test_cloud_download_uses_clean_client_for_signed_urls(monkeypatch, tmp_path):
+    """S3 presigned URLs fail if the Plaud bearer Authorization header leaks in."""
+
+    class _AuthSession:
+        def get(self, *args, **kwargs):
+            raise AssertionError("signed URL download reused Plaud auth session")
+
+    class _Response:
+        status_code = 200
+        headers = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def raise_for_status(self):
+            return None
+
+        def iter_content(self, chunk_size):
+            yield b"audio"
+
+    def clean_get(url, **kwargs):
+        assert_that(url, equal_to("https://bucket.example/rec.ogg?signature=ok"))
+        assert_that("headers" not in kwargs or "Authorization" not in (kwargs.get("headers") or {}), equal_to(True))
+        return _Response()
+
+    import requests
+
+    monkeypatch.setattr(requests, "get", clean_get)
+    backend = PlaudCloudBackend(token="secret")
+    monkeypatch.setattr(backend, "_get_session", lambda: _AuthSession())
+    rec = DtoPlaudRecording(
+        id="rec1",
+        title="Recording",
+        audio_url="https://bucket.example/rec.ogg?signature=ok",
+        audio_format="ogg",
+    )
+
+    path = backend.ensure_audio_local(rec, str(tmp_path))
+
+    assert_that(path, not_none())
+    assert_that((tmp_path / "rec1.ogg").read_bytes(), equal_to(b"audio"))
 
 
 @pytest.mark.sanity
