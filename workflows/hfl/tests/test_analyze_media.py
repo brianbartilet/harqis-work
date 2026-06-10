@@ -12,6 +12,7 @@ from pathlib import Path
 from workflows.hfl.tasks.analyze_media import (
     _dms_to_deg,
     _resolve_media_location,
+    classify_android_media_candidate,
 )
 
 _MOD = "workflows.hfl.tasks.analyze_media"
@@ -61,3 +62,56 @@ def test__resolve_media_location_none_when_no_geo(monkeypatch):
     assert _resolve_media_location(
         Path("x.png"), datetime(2026, 5, 1, 8, 0), True, geocode_cache={},
     ) == (None, None, None)
+
+
+# ---------------------------------------------------------------------------
+# classify_android_media_candidate
+# ---------------------------------------------------------------------------
+
+def test__classify_android_screenshot():
+    """Path containing 'Screenshots' folder → screenshot capture type."""
+    result = classify_android_media_candidate(Path("android-phone/Screenshots/shot.png"))
+    assert result == {"capture_type": "screenshot", "device_type": "android"}
+
+
+def test__classify_android_screenshot_case_insensitive():
+    """Classification is case-insensitive for the folder name."""
+    result = classify_android_media_candidate(Path("Pixel6/SCREENSHOTS/2026-01-01.jpg"))
+    assert result == {"capture_type": "screenshot", "device_type": "android"}
+
+
+def test__classify_android_camera_photo():
+    """Path containing 'DCIM' or 'Camera' → photo capture type."""
+    assert classify_android_media_candidate(
+        Path("android-phone/DCIM/Camera/IMG_001.jpg")
+    ) == {"capture_type": "photo", "device_type": "android"}
+    assert classify_android_media_candidate(
+        Path("android-phone/Camera/photo.jpg")
+    ) == {"capture_type": "photo", "device_type": "android"}
+
+
+def test__classify_android_screen_recording():
+    """Path containing 'Screen recordings' or 'Screenrecord' → screen_recording."""
+    assert classify_android_media_candidate(
+        Path("phone/Screen recordings/clip.mp4")
+    ) == {"capture_type": "screen_recording", "device_type": "android"}
+    assert classify_android_media_candidate(
+        Path("phone/Screenrecord/clip.mp4")
+    ) == {"capture_type": "screen_recording", "device_type": "android"}
+
+
+def test__classify_android_non_android_paths():
+    """Desktop or unrecognised folders → None (not Android)."""
+    assert classify_android_media_candidate(Path("desktop/Downloads/file.png")) is None
+    assert classify_android_media_candidate(Path("macbook/Documents/scan.jpg")) is None
+    assert classify_android_media_candidate(Path("shot.png")) is None
+
+
+def test__classify_android_filename_not_matched():
+    """The filename itself is excluded from classification — only parent dirs matter."""
+    # A file named 'screenshot.png' at the root should NOT match.
+    assert classify_android_media_candidate(Path("screenshot.png")) is None
+    # But the same name inside a Screenshots folder should.
+    assert classify_android_media_candidate(
+        Path("Screenshots/screenshot.png")
+    ) == {"capture_type": "screenshot", "device_type": "android"}

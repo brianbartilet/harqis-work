@@ -992,3 +992,92 @@ def register_memory_tools(mcp: FastMCP):
             ],
             "period": _period_dict(start_d, end_d, label),
         }
+
+    @mcp.tool()
+    def android_activity(
+        period: str = "",
+        since: str = "",
+        until: str = "",
+        synthesize: bool = True,
+        max_log_files: int = 24,
+        cfg_id__anthropic: str = "ANTHROPIC",
+        model: str = _DEFAULT_HAIKU,
+    ) -> dict:
+        """Live view of the operator's Android screen activity in a window.
+
+        Same gathering the scheduled ingest_android_media_activity uses, but
+        read-only (no corpus or ES write). Parses android_actions log files
+        from HFL_ANDROID_SCREEN_LOG_DIR, classifies foreground app sessions by
+        category, and returns the attention arc of the period. Defaults to the
+        last 7 days when no window is given.
+
+        Privacy: OCR text is never included in the response. Only app
+        categories and session counts are surfaced.
+
+        Returns found=false with NO LLM call when HFL_ANDROID_SCREEN_LOG_DIR
+        is unset or no log files are found.
+
+        Args:
+            period: same vocabulary as memory_recall (overrides since/until).
+            since:  ISO "YYYY-MM-DD" or relative "-Nd".
+            until:  ISO "YYYY-MM-DD" (defaults to today).
+            synthesize: True → Haiku narrative; False → raw session bullets.
+            max_log_files: cap on log files to parse (default 24 = one day).
+        """
+        logger.info(
+            "android_activity period=%r since=%r until=%r", period, since, until
+        )
+        # Imported lazily: keeps android log parsing off the MCP import path.
+        from workflows.hfl.tasks.ingest_android_media import (
+            collect_android_media_activity,
+            distill_android_media_activity,
+        )
+
+        logs_dir = os.environ.get("HFL_ANDROID_SCREEN_LOG_DIR", "").strip()
+        if not logs_dir:
+            return {"found": False, "text": "", "top_apps": [],
+                    "session_count": 0, "app_switches": 0,
+                    "error": "HFL_ANDROID_SCREEN_LOG_DIR not set",
+                    "period": _period_dict(_today(), _today(), "")}
+
+        start, end, label = _resolve_window(period, since, until)
+        end_d = end or _today()
+        start_d = start or (end_d - timedelta(days=6))
+
+        try:
+            activity = collect_android_media_activity(
+                since=start_d, until=end_d,
+                logs_dir=logs_dir, max_log_files=max_log_files,
+            )
+        except Exception as exc:  # noqa: BLE001 - surface, don't crash the tool
+            logger.warning("android_activity: collection failed (%s)", exc)
+            return {"found": False, "text": "", "error": "collection failed",
+                    "period": _period_dict(start_d, end_d, label)}
+
+        if activity["log_files_found"] == 0 or activity["session_count"] == 0:
+            return {"found": False, "text": "", "top_apps": [],
+                    "session_count": 0, "app_switches": 0,
+                    "period": _period_dict(start_d, end_d, label)}
+
+        d = distill_android_media_activity(
+            activity, synthesize=synthesize, model=model,
+            cfg_id=cfg_id__anthropic,
+        )
+        if synthesize and d.get("synthesized"):
+            text = (
+                f"**{d['moment']}**\n\n{d['what_happened']}\n\n"
+                f"_{d.get('why_it_stayed','')}_"
+            ).strip()
+        else:
+            text = d["what_happened"]  # raw session bullets
+
+        return {
+            "found": True,
+            "text": text,
+            "top_apps": activity["top_apps"],
+            "session_count": activity["session_count"],
+            "app_switches": activity["app_switches"],
+            "synthesized": d.get("synthesized", False),
+            "model": model if d.get("synthesized") else None,
+            "period": _period_dict(start_d, end_d, label),
+        }

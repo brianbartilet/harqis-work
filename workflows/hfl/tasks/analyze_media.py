@@ -84,6 +84,39 @@ _VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm"}
 _MEDIA_MAX_EDGE = 1568          # Anthropic's recommended max image edge
 _RAW_IMAGE_MAX_BYTES = 4_500_000  # below the API's 5 MB/image hard limit
 
+# Android canonical folder names used to classify dump-originated media.
+# These appear in the relative path from the dumps inbox root.
+_ANDROID_SCREENSHOT_DIRS = frozenset({"screenshots", "screenshot"})
+_ANDROID_CAMERA_DIRS = frozenset({"camera", "dcim"})
+_ANDROID_SCREENREC_DIRS = frozenset({"screen recordings", "screenrecord"})
+_ANDROID_CAPTURE_HINT = {
+    "screenshot": "Source: Android screenshot\n",
+    "photo": "Source: Android camera photo\n",
+    "screen_recording": "Source: Android screen recording\n",
+}
+
+
+def classify_android_media_candidate(relative: Path) -> dict | None:
+    """Classify a media file path as Android-origin and return source metadata.
+
+    Reads only the folder path — never file contents. Returns a dict with
+    ``capture_type`` ("screenshot", "photo", "screen_recording") and
+    ``device_type`` ("android") when the path's parent directories match
+    canonical Android folder names. Returns None when unrecognised.
+
+    Used to inject a ``Source:`` line into the Haiku instruction so the model
+    can interpret app-UI screenshots, notification bars, and status icons as
+    phone-specific story signals, without ever surfacing raw image text.
+    """
+    parts = frozenset(p.lower() for p in relative.parts[:-1])  # exclude filename
+    if parts & _ANDROID_SCREENSHOT_DIRS:
+        return {"capture_type": "screenshot", "device_type": "android"}
+    if parts & _ANDROID_CAMERA_DIRS:
+        return {"capture_type": "photo", "device_type": "android"}
+    if parts & _ANDROID_SCREENREC_DIRS:
+        return {"capture_type": "screen_recording", "device_type": "android"}
+    return None
+
 
 def _media_type_for(suffix: str) -> str:
     return {
@@ -343,7 +376,7 @@ def analyze_hfl_media(
     corpus_dir = resolve_corpus_dir()
     corpus_dir.mkdir(parents=True, exist_ok=True)
 
-    images = videos = entries = skipped = 0
+    images = videos = entries = skipped = android_items = 0
     geo_cache: dict = {}  # reverse-geocode cache shared across this run's media
 
     for item in media:
@@ -372,12 +405,23 @@ def analyze_hfl_media(
             else:
                 loc_line = ""
 
+            # Inject Android source classification so the model can interpret
+            # phone-specific UI elements (status bar, app chrome, notifications)
+            # as story context without exposing raw on-screen text to callers.
+            android_meta = classify_android_media_candidate(item.relative)
+            if android_meta:
+                android_items += 1
+                source_line = _ANDROID_CAPTURE_HINT.get(android_meta["capture_type"], "")
+            else:
+                source_line = ""
+
             instruction = {
                 "type": "text",
                 "text": (
                     f"File: {item.path.name}\n"
                     f"Captured: {item.mtime.strftime('%Y-%m-%d %H:%M')}\n"
                     f"Folder path: {item.relative.as_posix()}\n"
+                    f"{source_line}"
                     f"{loc_line}\n"
                     "Analyze this media per your instructions and reply with "
                     "the JSON object only."
@@ -413,6 +457,12 @@ def analyze_hfl_media(
                 place_tag = re.sub(r"[^a-z0-9]+", "-", place.split(",")[0].lower()).strip("-")
                 if place_tag and place_tag not in tags:
                     tags.append(place_tag)
+            # Android source metadata → device + capture-type tags so the
+            # corpus is queryable by origin without surfacing raw image text.
+            if android_meta:
+                for atag in ("android", android_meta["capture_type"].replace("_", "-")):
+                    if atag not in tags:
+                        tags.append(atag)
 
             references = [str(item.path)]
             if coords:
@@ -451,6 +501,7 @@ def analyze_hfl_media(
         "videos": videos,
         "skipped": skipped,
         "scanned": len(media),
+        "android_items": android_items,
         "model": model,
         "window_days": window_days,
     }

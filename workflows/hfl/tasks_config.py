@@ -313,5 +313,37 @@ WORKFLOW_HFL = {
         },
     },
 
+    # Daily Android screen activity — 23:15 local, one slot after Spotify (23:10).
+    # Parses the hourly android_actions-YYYYMMDD_HH.log files written by the
+    # Android capture agent (mobile/android/tasks/capture.py), classifies
+    # foreground app sessions by category, and distils ONE "attention arc of the
+    # day" entry (Haiku) — dual-written corpus + ES. Privacy-safe: OCR text is
+    # never passed to the model or written to the corpus; only app categories
+    # and session counts are surfaced.
+    # Centralized single-device source on the Beat host (HFL queue).
+    # Clean no-op until HFL_ANDROID_SCREEN_LOG_DIR is set and points to a dir
+    # with log files. No directory → no entry, no I/O, no LLM call.
+    'run-job--ingest_android_media_activity': {
+        'task': 'workflows.hfl.tasks.ingest_android_media.ingest_android_media_activity',
+        'schedule': crontab(hour=23, minute=15),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'window_days': 1,
+            'max_log_files': 24,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 60 * 12,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+        },
+    },
+
 
 }
