@@ -153,3 +153,17 @@ def _declare_on_beat(sender=None, **_):
 @worker_init.connect
 def _declare_on_worker(sender=None, **_):
     _ensure_broadcast_exchanges(sender.app)
+
+
+# ── HFL auto-express (Option B / Phase 1) ─────────────────────────────────────
+# Connect the task_success → HFL signal-buffer handler. Imported HERE, at the
+# bottom of the module, for two reasons:
+#   1. The handler recovers each task's `manifesto` block from CONFIG_DICTIONARY
+#      (defined above) at runtime — the block is stripped from the Celery
+#      schedule by _celery_safe_schedule, so this is the only place it survives.
+#   2. workflows.config is the module the sprout app imports on BOTH beat and
+#      worker startup (core/apps/sprout/__init__.py), so importing the handler
+#      here guarantees the signal connects in both processes.
+# express_signals imports CONFIG_DICTIONARY lazily, so this import is not
+# circular. See docs/thesis/HFL-AUTO-EXPRESS.md.
+import workflows.hfl.express_signals  # noqa: E402,F401

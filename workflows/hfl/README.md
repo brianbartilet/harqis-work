@@ -438,6 +438,21 @@ index via `workflows/hfl/es_store.py`.
 > bare `_render_entry`+write path and is not yet ES-indexed; routing it
 > through `append_entry` is the clean follow-up.
 
+### Auto-express from `manifesto.hfl_express` (signal buffer)
+
+A second capture source feeds this same index — not from a dedicated ingest
+task, but from **any** scheduled task that opts in via its manifesto block.
+A `task_success` handler (`workflows/hfl/express_signals.py`) watches for tasks
+whose manifesto declares `hfl_express: 'buffer'` and appends one cheap, no-LLM
+**signal** to a staging index `harqis-hfl-signals` (`workflows/hfl/signal_store.py`)
+on each successful run. A daily `rollup_hfl_signals` task (planned — Phase 2)
+groups the day's signals by source and distills them into proper entries via the
+same `index_hfl_entry` funnel, so the corpus stays story-grained.
+
+Self-expressing ingestors (everything above) set `hfl_express: 'self'` or omit
+it, so the hook skips them — no double-write. Design + phasing:
+[`docs/thesis/HFL-AUTO-EXPRESS.md`](../../docs/thesis/HFL-AUTO-EXPRESS.md).
+
 ### On-demand archive ingest (`/time-capsule-synthesizer`)
 
 A retrospective, time-ranged complement to the recurring ingest sources above.
