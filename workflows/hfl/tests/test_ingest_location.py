@@ -17,13 +17,18 @@ from workflows.hfl.tasks.ingest_location import (
     _activity_body,
     _analyze_route_activity,
     _cluster_stays,
+    _dedupe_route_anchors,
+    _fmt_distance_km,
     _haversine_m,
     _location_window,
     _movement_only_entry,
     _osm_link,
     _place_tags,
+    _reverse_geocode,
     _route_summary_entry,
+    _select_route_anchors,
     _short_place,
+    _track_health,
     collect_location_activity,
     distill_location_activity,
     ingest_location_activity,
@@ -355,3 +360,210 @@ def test__nearest_fix_none_when_no_device(monkeypatch):
     monkeypatch.delenv("OWN_TRACKS_DEFAULT_USER", raising=False)
     monkeypatch.delenv("OWN_TRACKS_DEFAULT_DEVICE", raising=False)
     assert nearest_fix(datetime(2026, 5, 1, 12, 0)) is None
+
+
+# ── Privacy ───────────────────────────────────────────────────────────────────
+
+def test__activity_body_redacts_coordinates_when_no_place():
+    """When geocoding fails (no 'place' key on a stay), _activity_body must
+    NOT fall back to raw lat/lon — it must emit a redacted placeholder."""
+    activity = {
+        "stays": [
+            {"lat": 1.3456, "lon": 103.8765, "arrive": 1_700_000_000,
+             "depart": 1_700_003_600, "dwell_min": 60, "fixes": 10}
+            # no "place" key → geocode unavailable
+        ]
+    }
+    body = _activity_body(activity)
+    assert "[location unavailable]" in body
+    assert not re.search(r"\d+\.\d{3,}", body), "raw coordinates must not appear"
+
+
+# ── _track_health ─────────────────────────────────────────────────────────────
+
+def test__track_health_empty_and_single_point():
+    assert _track_health([]) == {"path_km": 0.0, "duration_min": 0.0,
+                                  "gap_count": 0, "max_gap_min": 0.0}
+    single = [{"lat": 1.3, "lon": 103.8, "tst": 1_700_000_000}]
+    assert _track_health(single)["path_km"] == 0.0
+
+
+def test__track_health_basic_path_distance():
+    """A ~550 m one-way trip should report roughly 0.55 km of path distance."""
+    now = datetime(2026, 5, 29, 8, 0, 0)
+    points = _track(now, [
+        (0, 1.3000, 103.8000),
+        (5, 1.3050, 103.8000),   # ~550 m north
+    ])
+    health = _track_health(points)
+    assert 0.4 < health["path_km"] < 0.7
+    assert health["gap_count"] == 0
+    assert health["duration_min"] == pytest.approx(5.0, abs=0.1)
+
+
+def test__track_health_detects_gaps():
+    """Gaps > 30 min between consecutive fixes are counted."""
+    now = datetime(2026, 5, 29, 8, 0, 0)
+    points = _track(now, [
+        (0, 1.30, 103.80),
+        (10, 1.30, 103.80),   # 10-min gap — not counted
+        (50, 1.30, 103.80),   # 40-min gap — counted
+        (90, 1.30, 103.80),   # 40-min gap — counted
+    ])
+    health = _track_health(points)
+    assert health["gap_count"] == 2
+    assert health["max_gap_min"] == pytest.approx(40.0, abs=1.0)
+
+
+# ── _movement_only_entry enrichment ──────────────────────────────────────────
+
+def test__movement_only_entry_includes_distance_when_significant():
+    """When _points covers > 0.1 km, what_happened mentions the approximate
+    distance — without exposing raw coordinates."""
+    now = datetime(2026, 5, 29, 8, 0, 0)
+    # ~5.5 km roundtrip (2.75 km each way)
+    points = _track(now, [
+        (0, 1.3000, 103.8000),
+        (5, 1.3250, 103.8000),
+        (10, 1.3000, 103.8000),
+    ])
+    activity = {
+        "point_count": 3,
+        "stay_count": 0,
+        "stays": [],
+        "window": {"from": int(now.timestamp()), "to": int(now.timestamp()) + 600},
+        "_points": points,
+    }
+    entry = _movement_only_entry(activity, min_dwell_min=15)
+    assert entry["synthesized"] is False
+    assert "km" in entry["what_happened"]
+    assert not re.search(r"\d+\.\d{3,}", entry["what_happened"]), "no raw coords"
+
+
+def test__movement_only_entry_flags_coverage_gaps():
+    """_movement_only_entry warns about signal gaps when >30 min gaps exist."""
+    now = datetime(2026, 5, 29, 8, 0, 0)
+    points = _track(now, [
+        (0, 1.30, 103.80),
+        (60, 1.31, 103.80),  # 60-min gap → counted
+    ])
+    activity = {
+        "point_count": 2,
+        "stay_count": 0,
+        "stays": [],
+        "window": {"from": int(now.timestamp()), "to": int(now.timestamp()) + 3600},
+        "_points": points,
+    }
+    entry = _movement_only_entry(activity, min_dwell_min=15)
+    assert "coverage gap" in entry["what_happened"]
+
+
+def test__movement_only_entry_no_coverage_note_for_tiny_track():
+    """Very short tracks (< 0.1 km, no gaps) produce no coverage note —
+    the text stays clean and the existing assertions remain valid."""
+    now = datetime(2026, 5, 29, 8, 0, 0)
+    # ~30 m roundtrip — below the 0.1 km threshold
+    points = _track(now, [
+        (0, 1.3000, 103.8000),
+        (5, 1.3001, 103.8001),
+        (10, 1.3000, 103.8000),
+    ])
+    activity = {
+        "point_count": 3,
+        "stay_count": 0,
+        "stays": [],
+        "window": {"from": int(now.timestamp()), "to": int(now.timestamp()) + 600},
+        "_points": points,
+    }
+    entry = _movement_only_entry(activity, min_dwell_min=15)
+    assert "3 GPS fix" in entry["what_happened"]
+    assert "15 minutes" in entry["what_happened"]
+    assert "km" not in entry["what_happened"]
+
+
+# ── _reverse_geocode cache ────────────────────────────────────────────────────
+
+def test__reverse_geocode_uses_cache(monkeypatch):
+    """Two calls whose coordinates round to the same ~100 m grid cell must
+    share one HTTP request — the second is served from cache."""
+    import httpx as _httpx
+    import workflows.hfl.tasks.ingest_location as _m
+
+    monkeypatch.setattr(_m, "_LAST_GEOCODE_TS", 0.0)
+
+    call_count = []
+
+    class FakeResp:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"name": "Test Market", "address": {"suburb": "Downtown"}}
+
+    monkeypatch.setattr(
+        _httpx, "get",
+        lambda *a, **k: (call_count.append(1) or FakeResp()),
+    )
+
+    cache: dict = {}
+    # Both round to (1.3, 103.8) at 3 decimal places (~100 m grid)
+    r1 = _reverse_geocode(1.30001, 103.80001, cache=cache, min_interval=0.0)
+    r2 = _reverse_geocode(1.30002, 103.80002, cache=cache, min_interval=0.0)
+
+    assert r1 == r2 == "Test Market, Downtown"
+    assert len(call_count) == 1, "second call must hit cache, not the network"
+
+
+# ── nearest_fix error path ────────────────────────────────────────────────────
+
+def test__nearest_fix_returns_none_on_recorder_exception(monkeypatch):
+    """nearest_fix must return None (not raise) when the Recorder is
+    unreachable — it is best-effort geo-tagging."""
+    monkeypatch.setenv("OWN_TRACKS_DEFAULT_USER", "brian")
+    monkeypatch.setenv("OWN_TRACKS_DEFAULT_DEVICE", "android")
+
+    def _raise_conn(*a, **k):
+        raise ConnectionError("refused")
+
+    monkeypatch.setattr(
+        "workflows.hfl.tasks.ingest_location.ApiServiceOwnTracksLocations",
+        lambda *a, **k: type("S", (), {"get_history": _raise_conn})(),
+    )
+    assert nearest_fix(datetime(2026, 5, 1, 12, 0, 0)) is None
+
+
+# ── route anchor helpers ──────────────────────────────────────────────────────
+
+def test__select_route_anchors_includes_first_and_last():
+    """_select_route_anchors always includes the first and last fix."""
+    now = datetime(2026, 5, 29, 8, 0, 0)
+    points = _track(now, [(i * 5, 1.30 + i * 0.001, 103.80) for i in range(20)])
+    anchors = _select_route_anchors(points)
+    kinds = {a["kind"] for a in anchors}
+    assert "first" in kinds
+    assert "last" in kinds
+    assert len(anchors) <= 6
+
+
+def test__dedupe_route_anchors_removes_nearby_moved_samples():
+    """Moved-sample anchors within 800 m of an earlier kept anchor are
+    removed; first/last anchors are always kept."""
+    base_ts = int(datetime(2026, 5, 29, 8, 0, 0).timestamp())
+    anchors = [
+        {"lat": 1.300, "lon": 103.800, "tst": base_ts, "kind": "first"},
+        # ~111 m from first — within 800 m, should be dropped
+        {"lat": 1.301, "lon": 103.800, "tst": base_ts + 300, "kind": "moved-sample"},
+        # far away
+        {"lat": 1.500, "lon": 103.900, "tst": base_ts + 1200, "kind": "last"},
+    ]
+    deduped = _dedupe_route_anchors(anchors, radius_m=800)
+    assert len(deduped) < len(anchors)
+    assert deduped[0]["kind"] == "first"
+    assert deduped[-1]["kind"] == "last"
+
+
+# ── _fmt_distance_km ──────────────────────────────────────────────────────────
+
+def test__fmt_distance_km_formatting():
+    assert _fmt_distance_km(500) == "0.5 km"
+    assert _fmt_distance_km(1_500) == "1.5 km"
+    assert _fmt_distance_km(100_000) == "100 km"
+    assert _fmt_distance_km(2_300_000) == "2300 km"

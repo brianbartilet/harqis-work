@@ -223,6 +223,36 @@ def _fmt_distance_km(metres: float) -> str:
     return f"{km:.0f} km" if km >= 100 else f"{km:.1f} km"
 
 
+def _track_health(points: list[dict]) -> dict:
+    """Summarize coverage quality from raw GPS fixes.
+
+    Returns path_km (total step-distance), duration_min (first→last),
+    gap_count (inter-fix gaps > 30 min — phone off / signal lost),
+    and max_gap_min. All zero/0.0 for an empty or single-point list.
+    Coordinates stay internal; only derived scalars are returned.
+    """
+    if len(points) < 2:
+        return {"path_km": 0.0, "duration_min": 0.0, "gap_count": 0, "max_gap_min": 0.0}
+    pts = sorted(points, key=lambda p: p["tst"])
+    path_m = sum(
+        _haversine_m(
+            pts[i - 1]["lat"], pts[i - 1]["lon"],
+            pts[i]["lat"], pts[i]["lon"],
+        )
+        for i in range(1, len(pts))
+    )
+    gaps_min = [
+        (pts[i]["tst"] - pts[i - 1]["tst"]) / 60.0
+        for i in range(1, len(pts))
+    ]
+    return {
+        "path_km": path_m / 1000.0,
+        "duration_min": (pts[-1]["tst"] - pts[0]["tst"]) / 60.0,
+        "gap_count": sum(1 for g in gaps_min if g > 30),
+        "max_gap_min": max(gaps_min),
+    }
+
+
 def _dedupe_route_anchors(anchors: list[dict], *, radius_m: int = 800) -> list[dict]:
     kept: list[dict] = []
     for anchor in anchors:
@@ -519,7 +549,8 @@ def _fmt_clock(ts: int) -> str:
 def _activity_body(activity: dict) -> str:
     lines: list[str] = []
     for s in activity["stays"]:
-        place = s.get("place") or f"{s['lat']:.4f},{s['lon']:.4f}"
+        # Use the reverse-geocoded label; never fall back to raw coordinates.
+        place = s.get("place") or "[location unavailable]"
         lines.append(
             f"- {_fmt_clock(s['arrive'])}->{_fmt_clock(s['depart'])} "
             f"({s['dwell_min']} min)  {place}"
@@ -533,6 +564,9 @@ def _movement_only_entry(activity: dict, *, min_dwell_min: int) -> dict[str, Any
     This is intentionally non-LLM: the point track proves the day had location
     signal, but without a stable stay-point there is no safe place narrative to
     synthesize. Keep it as an audit/timeline breadcrumb.
+
+    When ``_points`` is present in the activity dict, includes path distance
+    and coverage-gap diagnostics in the body — no coordinates are exposed.
     """
     point_count = int(activity.get("point_count") or 0)
     window = activity.get("window") or {}
@@ -542,12 +576,26 @@ def _movement_only_entry(activity: dict, *, min_dwell_min: int) -> dict[str, Any
         window_text = f"between {_fmt_clock(int(start))} and {_fmt_clock(int(end))}"
     else:
         window_text = "during the ingest window"
+
+    health = _track_health(list(activity.get("_points") or []))
+    coverage_parts: list[str] = []
+    if health["path_km"] >= 0.1:
+        coverage_parts.append(
+            f"covering approximately {_fmt_distance_km(health['path_km'] * 1000)}"
+        )
+    if health["gap_count"] > 0:
+        coverage_parts.append(
+            f"{health['gap_count']} coverage gap(s) of >30 min detected "
+            "(signal lost or device off)"
+        )
+    coverage_note = ("; " + "; ".join(coverage_parts)) if coverage_parts else ""
+
     return {
         "skip": False,
         "moment": "Recorded movement but no qualifying location stay",
         "what_happened": (
-            f"OwnTracks recorded {point_count} GPS fix(es) {window_text}, "
-            f"but none formed a stay-point of at least {min_dwell_min} minutes. "
+            f"OwnTracks recorded {point_count} GPS fix(es) {window_text}{coverage_note}. "
+            f"None formed a stay-point of at least {min_dwell_min} minutes. "
             "The location stream was alive; the day just did not cross the "
             "configured dwell threshold for a place timeline."
         ),
@@ -649,7 +697,8 @@ def ingest_location_activity(
             max_gap_min=max_gap_min, max_points=max_points,
         )
     except Exception as exc:  # noqa: BLE001 - Recorder down must not break beat
-        _log.error("ingest_location: OwnTracks Recorder unavailable (%s)", exc)
+        _log.error("ingest_location: OwnTracks Recorder unavailable (%s: %s)",
+                   type(exc).__name__, exc)
         return {"skipped": "recorder unavailable", "entries_written": 0,
                 "error": str(exc)[:200]}
 
