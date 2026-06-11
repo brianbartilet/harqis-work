@@ -1,11 +1,14 @@
 """Tests for the Plaud acquisition adapter.
 
 The folder backend is exercised fully with a temp directory (no credentials
-needed). The cloud backend's field-mapping (api.plaud.ai JSON → DTO) is unit
-tested offline; its live listing is an integration check skipped unless
-PLAUD_TOKEN is set.
+needed). The cloud backend's field-mapping (api.plaud.ai JSON → DTO) and the
+token mint/cache/refresh lifecycle are unit tested offline with mocked HTTP;
+its live listing is an integration check skipped unless PLAUD_TOKEN is set.
 """
+import base64
+import json
 import os
+import time
 
 import pytest
 from hamcrest import assert_that, equal_to, instance_of, not_none
@@ -172,6 +175,160 @@ def test_cloud_download_uses_clean_client_for_signed_urls(monkeypatch, tmp_path)
 
     assert_that(path, not_none())
     assert_that((tmp_path / "rec1.ogg").read_bytes(), equal_to(b"audio"))
+
+
+# ── token mint / cache / refresh lifecycle ────────────────────────────────────
+
+def _fake_jwt(exp: float, iat: float | None = None) -> str:
+    """Unsigned JWT with just the claims the adapter reads (iat/exp)."""
+    payload = base64.urlsafe_b64encode(
+        json.dumps({"iat": iat or time.time(), "exp": exp}).encode()
+    ).rstrip(b"=").decode()
+    return f"eyJhbGciOiJIUzI1NiJ9.{payload}.sig"
+
+
+class _AuthResponse:
+    def __init__(self, body):
+        self._body = body
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self._body
+
+
+def _creds_backend(tmp_path, **kwargs) -> PlaudCloudBackend:
+    return PlaudCloudBackend(
+        token=kwargs.pop("token", ""),
+        email="user@example.com",
+        password="hunter2",
+        token_cache=str(tmp_path / "plaud_token.json"),
+        **kwargs,
+    )
+
+
+@pytest.mark.smoke
+def test_available_with_credentials_only(tmp_path):
+    backend = _creds_backend(tmp_path)
+    assert_that(backend.available(), equal_to(True))
+    assert_that(backend.auth_mode, equal_to("credentials"))
+
+
+@pytest.mark.smoke
+def test_mint_posts_credentials_and_caches_token(monkeypatch, tmp_path):
+    fresh = _fake_jwt(exp=time.time() + 300 * 24 * 3600)
+    calls = []
+
+    def fake_post(url, data=None, **kwargs):
+        calls.append((url, data))
+        return _AuthResponse({"status": 0, "access_token": fresh,
+                              "token_type": "Bearer"})
+
+    import requests
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    backend = _creds_backend(tmp_path)
+
+    token = backend._resolve_token()
+
+    assert_that(token, equal_to(fresh))
+    assert_that(calls[0][0], equal_to("https://api.plaud.ai/auth/access-token"))
+    assert_that(calls[0][1], equal_to({"username": "user@example.com",
+                                       "password": "hunter2"}))
+    cached = json.loads((tmp_path / "plaud_token.json").read_text())
+    assert_that(cached["access_token"], equal_to(fresh))
+    assert_that(cached["expires_at"], not_none())
+
+
+@pytest.mark.smoke
+def test_valid_cached_token_skips_mint(monkeypatch, tmp_path):
+    cached_token = _fake_jwt(exp=time.time() + 200 * 24 * 3600)
+    (tmp_path / "plaud_token.json").write_text(json.dumps({
+        "access_token": cached_token,
+        "expires_at": time.time() + 200 * 24 * 3600,
+    }))
+
+    def no_post(*args, **kwargs):
+        raise AssertionError("minted despite a valid cached token")
+
+    import requests
+
+    monkeypatch.setattr(requests, "post", no_post)
+    backend = _creds_backend(tmp_path)
+    assert_that(backend._resolve_token(), equal_to(cached_token))
+
+
+@pytest.mark.smoke
+def test_near_expiry_cached_token_is_reminted(monkeypatch, tmp_path):
+    (tmp_path / "plaud_token.json").write_text(json.dumps({
+        "access_token": _fake_jwt(exp=time.time() + 24 * 3600),
+        "expires_at": time.time() + 24 * 3600,  # inside the 30-day buffer
+    }))
+    fresh = _fake_jwt(exp=time.time() + 300 * 24 * 3600)
+
+    import requests
+
+    monkeypatch.setattr(requests, "post", lambda *a, **k: _AuthResponse(
+        {"status": 0, "access_token": fresh}))
+    backend = _creds_backend(tmp_path)
+    assert_that(backend._resolve_token(), equal_to(fresh))
+
+
+@pytest.mark.smoke
+def test_expired_envelope_mints_and_retries_once(monkeypatch, tmp_path):
+    """A -419 'token expired' answer mid-listing mints a fresh token and the
+    request is retried with the new bearer."""
+    fresh = _fake_jwt(exp=time.time() + 300 * 24 * 3600)
+    bodies = iter([
+        {"status": -419, "msg": "workspace token expired"},
+        {"status": 0, "data_file_list": [{"file_id": "r1", "filename": "Memo"}]},
+    ])
+    backend = _creds_backend(tmp_path, token="stale-manual-token")
+    monkeypatch.setattr(backend, "_raw_get", lambda path, **p: next(bodies))
+
+    import requests
+
+    monkeypatch.setattr(requests, "post", lambda *a, **k: _AuthResponse(
+        {"status": 0, "access_token": fresh}))
+
+    recs = backend.list_recordings()
+
+    assert_that(len(recs), equal_to(1))
+    assert_that(recs[0].id, equal_to("r1"))
+    cached = json.loads((tmp_path / "plaud_token.json").read_text())
+    assert_that(cached["access_token"], equal_to(fresh))
+
+
+@pytest.mark.smoke
+def test_mint_failure_falls_back_to_manual_token(monkeypatch, tmp_path):
+    import requests
+
+    monkeypatch.setattr(requests, "post", lambda *a, **k: _AuthResponse(
+        {"status": -1, "msg": "invalid credentials"}))
+    backend = _creds_backend(tmp_path, token="manual-token-still-alive")
+    assert_that(backend._resolve_token(), equal_to("manual-token-still-alive"))
+
+
+@pytest.mark.smoke
+def test_no_credentials_uses_manual_token(tmp_path):
+    backend = PlaudCloudBackend(token="manual-only",
+                                token_cache=str(tmp_path / "plaud_token.json"))
+    assert_that(backend.auth_mode, equal_to("manual-token"))
+    assert_that(backend._resolve_token(), equal_to("manual-only"))
+
+
+@pytest.mark.smoke
+def test_corrupt_cache_triggers_remint(monkeypatch, tmp_path):
+    (tmp_path / "plaud_token.json").write_text("{not json")
+    fresh = _fake_jwt(exp=time.time() + 300 * 24 * 3600)
+
+    import requests
+
+    monkeypatch.setattr(requests, "post", lambda *a, **k: _AuthResponse(
+        {"status": 0, "access_token": fresh}))
+    backend = _creds_backend(tmp_path)
+    assert_that(backend._resolve_token(), equal_to(fresh))
 
 
 @pytest.mark.sanity

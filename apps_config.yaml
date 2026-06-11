@@ -686,6 +686,8 @@ PLAUD:
     timeout: 60
     stream: False
   app_data:
+    email: ${PLAUD_EMAIL}
+    password: ${PLAUD_PASSWORD}
     token: ${PLAUD_TOKEN}
     export_dir: ${PLAUD_EXPORT_DIR}
   return_data_only: True

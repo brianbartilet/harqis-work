@@ -13,14 +13,18 @@ Usage:
 
 Exit codes (CI / automation friendly):
     0  a backend is ready and the listing succeeded
-    1  the acquisition call errored (e.g. bad/expired token, api.plaud.ai down)
-    2  no backend ready (neither PLAUD_TOKEN nor PLAUD_EXPORT_DIR configured)
+    1  the acquisition call errored (e.g. bad credentials, api.plaud.ai down)
+    2  no backend ready (no PLAUD_EMAIL+PLAUD_PASSWORD, PLAUD_TOKEN, or
+       PLAUD_EXPORT_DIR configured)
 
-Token: grab the bearer from web.plaud.ai → DevTools → Console
-       `localStorage.getItem("tokenstr")` (or the Network tab's Authorization
-       header), then set PLAUD_TOKEN in .env/apps.env. The cloud path calls
-       api.plaud.ai directly over HTTP (no SDK package); for non-US accounts set
-       PLAUD_API_BASE. No token? Use the PLAUD_EXPORT_DIR folder backend.
+Auth: set PLAUD_EMAIL + PLAUD_PASSWORD in .env/apps.env (preferred — the
+      adapter mints and auto-refreshes its own ~300-day token; this script
+      exercises that mint path and prints the expiry). Alternatively set a
+      manual PLAUD_TOKEN (web.plaud.ai → DevTools → Console →
+      `localStorage.getItem("tokenstr")`), which expires periodically. For
+      non-US accounts the regional redirect is followed automatically; you can
+      also pin PLAUD_API_BASE. No cloud auth? Use the PLAUD_EXPORT_DIR folder
+      backend.
 """
 from __future__ import annotations
 
@@ -74,9 +78,21 @@ def main() -> int:
           f"folder_ready={status['folder_ready']} active={status['active']!r}")
 
     if not status.get("active"):
-        print("\nNo acquisition backend ready. Set PLAUD_TOKEN (cloud) or "
-              "PLAUD_EXPORT_DIR (export folder) in .env/apps.env.", file=sys.stderr)
+        print("\nNo acquisition backend ready. Set PLAUD_EMAIL+PLAUD_PASSWORD "
+              "or PLAUD_TOKEN (cloud), or PLAUD_EXPORT_DIR (export folder) in "
+              ".env/apps.env.", file=sys.stderr)
         return 2
+
+    if status["active"] == "cloud":
+        # Exercises the mint path when credentials are configured: a missing or
+        # near-expiry cached token is re-minted right here.
+        info = adapter.active_backend.token_info()
+        line = f"Cloud auth: mode={info.get('mode')!r}"
+        if info.get("expires_at"):
+            line += f" token_expires={info['expires_at']}"
+        if info.get("error"):
+            line += f" error={info['error']!r}"
+        print(line)
 
     since_iso, until_iso = _window(args)
     print(f"Listing recordings in [{since_iso} .. {until_iso}] via "
@@ -92,10 +108,11 @@ def main() -> int:
         print(f"ERROR: {status['active']} acquisition failed "
               f"({type(exc).__name__}): {exc}", file=sys.stderr)
         if status["active"] == "cloud":
-            print("The cloud path calls api.plaud.ai directly. Check the token is "
-                  "current (re-grab from web.plaud.ai), that you have network "
-                  "access, and (non-US accounts) that PLAUD_API_BASE is set. Or "
-                  "fall back to the PLAUD_EXPORT_DIR folder backend.",
+            print("The cloud path calls api.plaud.ai directly. Check "
+                  "PLAUD_EMAIL/PLAUD_PASSWORD are correct (or, on the manual "
+                  "path, re-grab PLAUD_TOKEN from web.plaud.ai), that you have "
+                  "network access, and (non-US accounts) that PLAUD_API_BASE "
+                  "is set. Or fall back to the PLAUD_EXPORT_DIR folder backend.",
                   file=sys.stderr)
         return 1
 

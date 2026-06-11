@@ -12,7 +12,7 @@ disabled on firmware ≥ V2.1). So acquisition runs through a two-backend adapte
 
 | Backend | Role | Mechanism |
 |---|---|---|
-| **Cloud** (`PlaudCloudBackend`) | Primary | Unofficial [`plaud-api`](https://github.com/arbuzmell/plaud-api) client against `api.plaud.ai`, bearer-token auth |
+| **Cloud** (`PlaudCloudBackend`) | Primary | Direct HTTP against the unofficial `api.plaud.ai` surface; mints its own bearer token from account credentials (or uses a manual one) |
 | **Folder** (`PlaudFolderBackend`) | Fallback | Watches a local folder you export to from the Plaud desktop app |
 
 `PlaudAdapter` tries the cloud first and transparently falls back to the folder.
@@ -60,6 +60,8 @@ PLAUD:
     timeout: 60
     stream: False
   app_data:
+    email: ${PLAUD_EMAIL}
+    password: ${PLAUD_PASSWORD}
     token: ${PLAUD_TOKEN}
     export_dir: ${PLAUD_EXPORT_DIR}
   return_data_only: True
@@ -68,19 +70,35 @@ PLAUD:
 Environment variables (`.env/apps.env`):
 
 ```env
-PLAUD_TOKEN=          # bearer token lifted from web.plaud.ai localStorage ("tokenstr")
+PLAUD_EMAIL=          # web.plaud.ai login — enables automatic token minting (preferred)
+PLAUD_PASSWORD=       #   "
+PLAUD_TOKEN=          # manual bearer from web.plaud.ai localStorage ("tokenstr") — expires
 PLAUD_EXPORT_DIR=     # local folder you export Plaud recordings into (fallback)
 ```
 
-Either is sufficient on its own: set `PLAUD_TOKEN` for cloud, `PLAUD_EXPORT_DIR`
-for the manual-export fallback, or both (cloud preferred).
+Any one is sufficient. Auth precedence inside the cloud backend:
+
+1. **Credentials** (`PLAUD_EMAIL` + `PLAUD_PASSWORD`) — the backend mints its
+   own ~300-day JWT via `POST /auth/access-token` (the web app's login call),
+   caches it in the git-ignored `logs/plaud_token.json`, re-mints within 30
+   days of expiry, and transparently re-mints + retries once when the API
+   answers `-419 token expired`. Set-and-forget.
+2. **Manual token** (`PLAUD_TOKEN`) — used when no credentials are set, and as
+   a fallback if a mint attempt fails. Expires periodically (re-paste by hand).
+
+The regional redirect (`-302` → e.g. `api-apse1.plaud.ai`) is followed
+automatically for both the auth and data calls; `PLAUD_API_BASE` can pin it.
+
+Verify any of this with `python scripts/check_plaud_token.py` — it prints the
+active backend, auth mode, and token expiry, and lists a window of recordings
+without writing anything.
 
 ## Available Services
 
 | Class | Methods | Purpose |
 |---|---|---|
 | `PlaudAdapter` | `list_recordings(since, until)`, `ensure_audio_local(rec, dest_dir)`, `status` | Acquisition facade (cloud → folder) |
-| `PlaudCloudBackend` | `available`, `list_recordings`, `ensure_audio_local` | Unofficial `plaud-api` wrapper (isolated) |
+| `PlaudCloudBackend` | `available`, `list_recordings`, `ensure_audio_local`, `token_info` | Unofficial `api.plaud.ai` client with token mint/refresh (isolated) |
 | `PlaudFolderBackend` | `available`, `list_recordings`, `ensure_audio_local` | Export-folder reader; pairs sidecar transcript/summary files |
 
 ## MCP Tools
@@ -98,16 +116,16 @@ Example prompts:
 ## Tests
 
 ```bash
-pytest apps/plaud/tests/ -m smoke          # folder backend, no credentials needed
-pytest apps/plaud/tests/ -m sanity         # live cloud check (needs PLAUD_TOKEN + plaud-api)
+pytest apps/plaud/tests/ -m smoke          # folder backend + mocked token lifecycle, no credentials
+pytest apps/plaud/tests/ -m sanity         # live cloud check (needs PLAUD_TOKEN)
 ```
 
 ## Notes
 
-- **`plaud-api` is unofficial and may break.** Its exact method names are flagged
-  in `adapter.py` — verify against the installed version when wiring real
-  credentials. The package is an optional/lazy import: if it is absent or errors,
-  the adapter falls back to the export folder rather than crashing.
+- **The cloud surface is unofficial and may break.** Endpoints and field names
+  were reverse-engineered from the web app (per the openplaud / plaud-toolkit
+  projects) — everything is wrapped defensively, and a changed surface degrades
+  to the export-folder backend rather than crashing the pipeline.
 - **Folder pairing:** an audio file `Foo.mp3` pairs with `Foo.txt`/`Foo.md`
   (transcript) and `Foo-summary.md` / `Foo_summary.txt` (summary) in the same
   directory. Recording id is derived deterministically from the file date + stem,

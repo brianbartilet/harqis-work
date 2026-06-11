@@ -22,15 +22,26 @@ field names per the openplaud project, mid-2026) — not a documented contract.
 Endpoints/fields may drift; everything is wrapped defensively and field mapping
 is tolerant of key drift, so a changed surface degrades to the folder backend
 rather than crashing the pipeline. Override the base URL with ``PLAUD_API_BASE``
-for non-US regions. Grab the bearer from ``web.plaud.ai`` →
-``localStorage.getItem("tokenstr")`` and set it as ``PLAUD_TOKEN``.
+for non-US regions.
+
+Auth (preferred → fallback):
+  1. ``PLAUD_EMAIL`` + ``PLAUD_PASSWORD`` — the backend MINTS its own ~300-day
+     JWT via ``POST /auth/access-token`` (the web app's own login call, per the
+     plaud-toolkit project), caches it in a git-ignored file, re-mints within
+     30 days of expiry and transparently on a ``-419 token expired`` response.
+  2. ``PLAUD_TOKEN`` — manual bearer lifted from ``web.plaud.ai`` →
+     ``localStorage.getItem("tokenstr")``; expires periodically and must be
+     re-pasted by hand, so credentials are the recommended path.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
+import json
 import logging
 import os
 import re
+import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,6 +56,11 @@ _AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".opus"}
 _TRANSCRIPT_EXTS = (".txt", ".md", ".srt", ".vtt")
 _SUMMARY_SUFFIXES = ("-summary", "_summary", ".summary")
 
+# Minted-token cache (git-ignored under logs/). Re-mint inside this buffer so a
+# token never expires mid-window between nightly runs.
+_TOKEN_REFRESH_BUFFER_S = 30 * 24 * 3600
+_DEFAULT_TOKEN_CACHE = Path(__file__).resolve().parents[3] / "logs" / "plaud_token.json"
+
 
 # ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -55,6 +71,18 @@ def _iso(dt: datetime) -> str:
 
 def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-") or "recording"
+
+
+def _jwt_claims(token: str) -> dict:
+    """Best-effort decode of a JWT payload (NO signature check — only used to
+    read our own token's ``iat``/``exp`` for cache freshness). Returns {} on
+    any malformed input."""
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload))
+    except Exception:  # noqa: BLE001 - diagnostics only, never fatal
+        return {}
 
 
 def _in_window(started_at: Optional[str], since: Optional[str], until: Optional[str]) -> bool:
@@ -114,22 +142,140 @@ class PlaudCloudBackend(PlaudBackend):
     _MAX_PAGES = 50            # hard backstop so a bad cursor can't loop forever
     _TIMEOUT = 30             # seconds per HTTP call
 
-    def __init__(self, token: Optional[str], base_url: Optional[str] = None):
+    def __init__(self, token: Optional[str], base_url: Optional[str] = None,
+                 email: Optional[str] = None, password: Optional[str] = None,
+                 token_cache: Optional[str] = None):
         # Env resolution happens once in build_adapter(); the backend uses
         # exactly what it's handed so it's predictable and unit-testable.
-        self._token = (token or "").strip()
+        self._manual_token = (token or "").strip()
+        self._email = (email or "").strip()
+        self._password = (password or "").strip()
+        self._token_cache = Path(token_cache) if token_cache else _DEFAULT_TOKEN_CACHE
         self._base = (base_url or os.environ.get("PLAUD_API_BASE")
                       or self._DEFAULT_BASE).rstrip("/")
         self._session = None  # lazily constructed requests.Session
 
     def available(self) -> bool:
-        return bool(self._token)
+        return bool(self._manual_token or self._can_mint())
+
+    # ── token lifecycle (mint → cache → manual fallback) ──────────────────────
+
+    @property
+    def auth_mode(self) -> Optional[str]:
+        """'credentials' (auto-mint), 'manual-token', or None."""
+        if self._can_mint():
+            return "credentials"
+        return "manual-token" if self._manual_token else None
+
+    def _can_mint(self) -> bool:
+        return bool(self._email and self._password)
+
+    def _resolve_token(self) -> str:
+        """Current bearer: valid cached minted token → fresh mint → manual
+        PLAUD_TOKEN. A mint failure falls back to the manual token when one is
+        set (it may still be alive) instead of raising."""
+        if self._can_mint():
+            cached = self._load_cached_token()
+            if cached:
+                return cached
+            try:
+                return self._mint_token()
+            except Exception as exc:  # noqa: BLE001 - unofficial surface
+                if not self._manual_token:
+                    raise
+                logger.warning(
+                    "plaud auth: mint failed (%s) — trying manual PLAUD_TOKEN", exc)
+        return self._manual_token
+
+    def _load_cached_token(self) -> Optional[str]:
+        """Cached minted token, only if comfortably outside the refresh buffer.
+        A missing/corrupt/stale cache simply means 'mint again'."""
+        try:
+            data = json.loads(self._token_cache.read_text(encoding="utf-8"))
+            token = str(data.get("access_token") or "")
+            expires_at = float(data.get("expires_at") or 0)
+        except Exception:  # noqa: BLE001 - cache is disposable by design
+            return None
+        if token and expires_at - time.time() > _TOKEN_REFRESH_BUFFER_S:
+            return token
+        return None
+
+    def _mint_token(self) -> str:
+        """Mint a fresh ~300-day JWT via ``POST /auth/access-token`` (the web
+        app's own login call — form-encoded username/password). Follows the
+        regional redirect once, caches the token, and resets the session so the
+        next request carries the new bearer. Raises on failure; NEVER logs the
+        password or the token itself."""
+        body = self._post_auth()
+        if isinstance(body, dict) and not body.get("access_token"):
+            new_base = self._region_base(body)
+            if new_base and new_base != self._base:
+                logger.info("plaud auth: region redirect %s -> %s", self._base, new_base)
+                self._base = new_base
+                body = self._post_auth()
+        token = ""
+        if isinstance(body, dict):
+            token = str(body.get("access_token")
+                        or (body.get("data") or {}).get("access_token") or "")
+        if not token:
+            status = body.get("status") if isinstance(body, dict) else "?"
+            msg = body.get("msg") if isinstance(body, dict) else None
+            raise RuntimeError(
+                f"auth/access-token failed: status={status} msg={msg!r} "
+                f"(base={self._base})")
+        claims = _jwt_claims(token)
+        try:
+            self._token_cache.parent.mkdir(parents=True, exist_ok=True)
+            self._token_cache.write_text(json.dumps({
+                "access_token": token,
+                "issued_at": claims.get("iat"),
+                "expires_at": claims.get("exp"),
+                "base_url": self._base,
+            }), encoding="utf-8")
+        except OSError as exc:
+            # No cache just means re-minting next run — not worth failing over.
+            logger.warning("plaud auth: could not cache token (%s)", exc)
+        self._session = None  # rebuild with the fresh bearer
+        logger.info("plaud auth: minted token (expires %s)",
+                    datetime.fromtimestamp(claims["exp"], tz=timezone.utc).date()
+                    if claims.get("exp") else "unknown")
+        return token
+
+    def _post_auth(self):
+        import requests
+
+        resp = requests.post(
+            f"{self._base}/auth/access-token",
+            data={"username": self._email, "password": self._password},
+            headers={"Accept": "application/json",
+                     "User-Agent": "Mozilla/5.0 (harqis-work plaud ingest)"},
+            timeout=self._TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def token_info(self) -> dict:
+        """Diagnostics (check_plaud_token.py): active auth mode + bearer expiry."""
+        info: dict = {"mode": self.auth_mode}
+        try:
+            token = self._resolve_token()
+        except Exception as exc:  # noqa: BLE001 - diagnostics must not raise
+            info["error"] = str(exc)
+            return info
+        exp = _jwt_claims(token).get("exp")
+        if exp:
+            info["expires_at"] = datetime.fromtimestamp(
+                exp, tz=timezone.utc).strftime("%Y-%m-%d")
+        return info
 
     def _get_session(self):
         if self._session is not None:
             return self._session
-        if not self._token:
-            raise RuntimeError("PLAUD_TOKEN not configured")
+        token = self._resolve_token()
+        if not token:
+            raise RuntimeError(
+                "Plaud cloud auth not configured (no PLAUD_EMAIL/PLAUD_PASSWORD "
+                "and no PLAUD_TOKEN)")
         try:
             import requests
         except ImportError as e:  # requests is a core dep, but stay honest
@@ -139,7 +285,7 @@ class PlaudCloudBackend(PlaudBackend):
             ) from e
         s = requests.Session()
         s.headers.update({
-            "Authorization": f"Bearer {self._token}",
+            "Authorization": f"Bearer {token}",
             "Accept": "application/json",
             # web.plaud.ai sends a browser UA; mirror it so the unofficial
             # surface doesn't reject the call as a non-browser client.
@@ -175,10 +321,28 @@ class PlaudCloudBackend(PlaudBackend):
             body = self._raw_get(path, **params)
             if isinstance(body, dict) and body.get("status") in self._SUCCESS_STATUS:
                 return body.get("data", body)
+        # Expired bearer (-419): mint a fresh one and retry once. Only possible
+        # with credentials; a manual-token-only setup still surfaces the error.
+        if self._is_token_expired(body) and self._can_mint():
+            logger.info("plaud cloud: token expired — minting a fresh one")
+            self._mint_token()
+            body = self._raw_get(path, **params)
+            if isinstance(body, dict) and body.get("status") in self._SUCCESS_STATUS:
+                return body.get("data", body)
         raise RuntimeError(
             f"api.plaud.ai error: status={body.get('status')} "
             f"msg={body.get('msg')!r} (base={self._base})"
         )
+
+    _EXPIRED_STATUS = (-419,)
+
+    @staticmethod
+    def _is_token_expired(body) -> bool:
+        if not isinstance(body, dict):
+            return False
+        if body.get("status") in PlaudCloudBackend._EXPIRED_STATUS:
+            return True
+        return "token expired" in str(body.get("msg") or "").lower()
 
     def _raw_get(self, path: str, **params):
         session = self._get_session()
@@ -478,14 +642,19 @@ class PlaudAdapter:
 def build_adapter(config) -> PlaudAdapter:
     """Construct a :class:`PlaudAdapter` from an app config (``apps.plaud.config.CONFIG``).
 
-    Reads ``app_data.token`` / ``app_data.export_dir`` with ``PLAUD_TOKEN`` /
-    ``PLAUD_EXPORT_DIR`` env vars as fallbacks.
+    Reads ``app_data.email``/``password``/``token``/``export_dir`` with
+    ``PLAUD_EMAIL`` / ``PLAUD_PASSWORD`` / ``PLAUD_TOKEN`` / ``PLAUD_EXPORT_DIR``
+    env vars as fallbacks. Credentials (auto-mint) are preferred over the
+    manual token — see :class:`PlaudCloudBackend`.
     """
     app_data = getattr(config, "app_data", {}) or {}
     token = app_data.get("token") or os.environ.get("PLAUD_TOKEN", "")
+    email = app_data.get("email") or os.environ.get("PLAUD_EMAIL", "")
+    password = app_data.get("password") or os.environ.get("PLAUD_PASSWORD", "")
     api_base = app_data.get("api_base") or os.environ.get("PLAUD_API_BASE", "")
     export_dir = app_data.get("export_dir") or os.environ.get("PLAUD_EXPORT_DIR", "")
     return PlaudAdapter(
-        PlaudCloudBackend(token, base_url=api_base or None),
+        PlaudCloudBackend(token, base_url=api_base or None,
+                          email=email, password=password),
         PlaudFolderBackend(export_dir),
     )

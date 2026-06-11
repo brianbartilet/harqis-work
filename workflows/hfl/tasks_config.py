@@ -280,12 +280,14 @@ WORKFLOW_HFL = {
     # harqis-ones-mac-mini over SSH (PLAUD_ARCHIVE_PATH; skipped if unset).
     # Centralized single-account source on the Beat host (HFL queue, NOT a
     # per-machine broadcast). Clean no-op until acquisition is configured: no
-    # PLAUD_TOKEN and no PLAUD_EXPORT_DIR → no entry, no network call; zero
+    # cloud auth and no PLAUD_EXPORT_DIR → no entry, no network call; zero
     # recordings in the window → no entry, no LLM call.
     #
-    # Active — clean no-op until PLAUD_TOKEN (cloud) or PLAUD_EXPORT_DIR
-    # (export-folder fallback) is set in .env/apps.env. Whisper fallback needs
-    # OPENAI_API_KEY; archive needs PLAUD_ARCHIVE_PATH (+ key-based SSH).
+    # Active — cloud auth is PLAUD_EMAIL+PLAUD_PASSWORD (preferred — the
+    # adapter mints/refreshes its own ~300-day token) or a manual PLAUD_TOKEN;
+    # PLAUD_EXPORT_DIR is the export-folder fallback. All in .env/apps.env.
+    # Whisper fallback needs OPENAI_API_KEY; archive needs PLAUD_ARCHIVE_PATH
+    # (+ key-based SSH).
     'run-job--ingest_plaud_activity': {
         'task': 'workflows.hfl.tasks.ingest_plaud.ingest_plaud_activity',
         'schedule': crontab(hour=23, minute=15),

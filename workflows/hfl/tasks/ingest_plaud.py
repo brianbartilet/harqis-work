@@ -19,9 +19,10 @@ Two extras beyond the standard ingest pattern (clearly seamed below):
   - Archive: raw recordings + a consolidated YYYY-MM-DD-summary.md are pushed to
     harqis-ones-mac-mini over SSH (passwordless key) — `_archive_day`.
 
-No acquisition backend ready (no PLAUD_TOKEN and no PLAUD_EXPORT_DIR) → no entry,
-no network call (clean no-op, mirrors ingest_chatgpt on a no-token day). No
-recordings in the window → no entry, no LLM call.
+No acquisition backend ready (no PLAUD_EMAIL+PLAUD_PASSWORD, no PLAUD_TOKEN,
+and no PLAUD_EXPORT_DIR) → no entry, no network call (clean no-op, mirrors
+ingest_chatgpt on a no-token day). No recordings in the window → no entry, no
+LLM call.
 
 Never breaks the beat: every external failure (Plaud, Whisper, Anthropic, the
 Mac-mini archive) is caught and turned into a logged skip / surfaced in the
@@ -29,7 +30,9 @@ result dict — the corpus + ES writes always happen first, so a failed archive
 never costs a captured entry.
 
 Config (env, resolved by deploy.py / .env/apps.env):
-  PLAUD_TOKEN          cloud API bearer token (preferred acquisition path)
+  PLAUD_EMAIL          web.plaud.ai login — adapter mints/refreshes its own
+  PLAUD_PASSWORD       ~300-day token (preferred; see apps/plaud/README.md)
+  PLAUD_TOKEN          manual cloud bearer (fallback; expires periodically)
   PLAUD_EXPORT_DIR     local export folder (fallback acquisition path)
   OPENAI_API_KEY       Whisper transcription fallback
   PLAUD_ARCHIVE_HOST   SSH host for the archive (default: harqis-ones-mac-mini)
