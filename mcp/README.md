@@ -454,6 +454,44 @@ Pricing lives per-variant: `price`, `priceChange24hr`/`7d`/`30d`, `avgPrice`, `m
 
 ---
 
+### Pokemon TCG (`apps/pokemon_tcg/mcp.py`)
+
+Wraps `apps/pokemon_tcg/references/web/api/` services ([API docs](https://docs.pokemontcg.io)).
+Requires valid `POKEMON_TCG` section in `apps_config.yaml` (the API key is optional — keyless
+access works at lower rate limits).
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `search_pokemon_tcg_cards` | `q`, `page?`, `page_size?`, `order_by?`, `select?` | Cards matching a Lucene-style query |
+| `get_pokemon_tcg_cards_by_dex` | `dex_number`, `rarity?` | A Pokemon's printings by National Dex number, newest set first |
+| `list_pokemon_tcg_sets` | `q?`, `order_by?` | Expansion sets (newest first by default) |
+| `list_pokemon_tcg_rarities` | — | Every exact rarity string (no literal "Full Art" exists) |
+
+**Example prompts:**
+- *"Which sets contain a Charizard Special Illustration Rare?"*
+- *"List every Pokemon TCG rarity string."*
+- *"Show Pikachu's Illustration Rare printings, newest first."*
+
+---
+
+### MPC (`apps/mpc/mcp.py`)
+
+Order-file tooling for the [MakePlayingCards.com autofill driver](../apps/mpc/README.md)
+(Playwright port of [mpc-autofill](https://github.com/chilli-axe/mpc-autofill)). Requires valid
+`MPC` section in `apps_config.yaml`. The browser driver itself is not exposed over MCP — run it
+via `workflows/tcg` or pytest.
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `build_mpc_order_xml` | `fronts_dir`, `cardback_path`, `output_path`, `stock?`, `name_prefix?` | Order XML path(s), auto-split at 612 cards, with validation problems |
+| `validate_mpc_order` | `xml_path` | Order summary + problem list (slot coverage, missing files, caps) |
+
+**Example prompts:**
+- *"Build an MPC order XML from the rendered cards in workflows/tcg/output/cards."*
+- *"Validate the order file pokedex_proxies_1.xml."*
+
+---
+
 ### Telegram (`apps/telegram/mcp.py`)
 
 Wraps `apps/telegram/references/web/api/` services. Requires valid `TELEGRAM` section in `apps_config.yaml`.

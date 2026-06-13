@@ -107,6 +107,8 @@ class DependencyDetector:
         (r"\bECHO\s*MTG\b|\bECHOMTG\b",           "ECHO_MTG_BEARER_TOKEN"),
         (r"\bTCG\s*MP\b|\bTCGPLAYER\b",           "TCG_MP_PASSWORD"),
         (r"\bJUST\s*TCG\b|\bJUSTTCG\b",           "JUSTTCG_API_KEY"),
+        (r"\bPOKEMON\s*TCG\b|\bPOKEMONTCG\b",     "POKEMON_TCG_API_KEY"),
+        (r"\bMAKE\s*PLAYING\s*CARDS\b|\bMPC\b",   "MPC_PASSWORD"),
         # Cloud / infrastructure
         (r"\bORGO\b",                             "ORGO_API_KEY"),
         (r"\bOWN\s*TRACKS\b|\bOWNTRACKS\b",       "OWN_TRACKS_PASSWORD"),

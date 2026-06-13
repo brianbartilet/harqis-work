@@ -47,6 +47,7 @@ At its core the platform has three layers:
 | `justtcg` | Multi-game TCG pricing analytics (MTG, Pokémon, Yu-Gi-Oh!, Lorcana…) — prices + 24h/7d/30d/90d/1y change & trend stats | REST API | Yes | [API Docs](https://justtcg.com/docs) · [Site](https://justtcg.com/) |
 | `linkedin` | LinkedIn — profile, posts, sharing | REST API (OAuth2) | Yes | [API Docs](https://learn.microsoft.com/en-gb/linkedin/shared/api-guide/concepts) · [Portal](https://www.linkedin.com/developers/apps) |
 | `moo` | Futu/Moo trading stub | Stub | No | [API Docs](https://openapi.futunn.com/futu-api-doc/en/) · [Site](https://www.futunn.com/) |
+| `mpc` | MakePlayingCards.com proxy-card autofill (Playwright port of mpc-autofill — saves projects, never checks out) | Browser automation | Yes | [Upstream](https://github.com/chilli-axe/mpc-autofill) · [Site](https://www.makeplayingcards.com/) |
 | `notion` | Notion — pages, databases, blocks, search | REST API | Yes | [API Docs](https://developers.notion.com/reference/intro) · [Site](https://www.notion.so/) |
 | `oanda` | Forex trading | REST API | Yes | [API Docs](https://developer.oanda.com/rest-live-v20/introduction/) · [Site](https://www.oanda.com/) |
 | `open_ai` | OpenAI — Responses API, Code Interpreter, Assistants v2 (deprecated) | REST (native SDK) | Yes | [API Docs](https://platform.openai.com/docs/api-reference) · [Site](https://platform.openai.com/) |
@@ -55,6 +56,7 @@ At its core the platform has three layers:
 | `perplexity` | Perplexity Sonar — chat with live web search, search API, embeddings | REST API | No | [API Docs](https://docs.perplexity.ai/) · [Site](https://www.perplexity.ai/) |
 | `plaud` | Plaud AI voice recorder — recordings + transcripts (cloud API, export-folder fallback) | Adapter | Smoke | [Dev API](https://docs.plaud.ai/) · [Site](https://www.plaud.ai/) |
 | `playwright` | Headless browser automation — screenshot, click, fill, evaluate | Local | No | [Docs](https://playwright.dev/python/) |
+| `pokemon_tcg` | Pokemon TCG card database — cards by National Dex number, sets, rarities (+ offline JSON-dump fallback) | REST API | Yes | [API Docs](https://docs.pokemontcg.io) · [Site](https://pokemontcg.io/) |
 | `rainmeter` | Windows desktop HUD skinning | Local | No | [Docs](https://docs.rainmeter.net/) · [Site](https://www.rainmeter.net/) |
 | `reddit` | Reddit — subreddits, posts, comments, inbox | REST API (OAuth2) | Yes | [API Docs](https://www.reddit.com/dev/api/) · [Apps](https://www.reddit.com/prefs/apps) |
 | `scryfall` | MTG card database | REST API | Yes | [API Docs](https://scryfall.com/docs/api) · [Site](https://scryfall.com/) |
@@ -412,6 +414,7 @@ harqis-work/
 │   ├── jira/                       # Jira project management
 │   ├── justtcg/                    # Multi-game TCG pricing analytics API
 │   ├── linkedin/                   # LinkedIn API
+│   ├── mpc/                        # MakePlayingCards.com proxy-card autofill (Playwright)
 │   ├── notion/                     # Notion pages, databases, blocks
 │   ├── oanda/                      # Forex trading
 │   ├── open_ai/                    # OpenAI GPT
@@ -420,6 +423,7 @@ harqis-work/
 │   ├── perplexity/                 # Perplexity Sonar (chat + search + embeddings)
 │   ├── plaud/                      # Plaud AI voice recorder (cloud + export folder)
 │   ├── playwright/                 # Headless browser automation
+│   ├── pokemon_tcg/                # Pokemon TCG card database (cards, sets, rarities)
 │   ├── rainmeter/                  # Windows desktop HUD
 │   ├── reddit/                     # Reddit API
 │   ├── scryfall/                   # MTG card database
@@ -437,7 +441,8 @@ harqis-work/
 │   ├── hud/                        # Desktop HUD tasks (15 tasks)
 │   ├── mobile/                     # Android screen capture
 │   ├── n8n/                        # n8n utility helpers
-│   └── purchases/                  # TCG card resale pipeline
+│   ├── purchases/                  # TCG card resale pipeline
+│   └── tcg/                        # Pokedex proxy-printing pipeline (MPC)
 │
 ├── frontend/                       # Web dashboard (FastAPI + HTMX + Alpine.js)
 │   ├── main.py
@@ -748,6 +753,11 @@ TCG_MP_PASSWORD=
 TCG_MP_USER_ID=
 TCG_SAVE=                         # local save dir for TCG marketplace exports
 JUSTTCG_API_KEY=                  # JustTCG pricing API key (tcg_...)
+POKEMON_TCG_API_KEY=              # Pokemon TCG API key (optional — keyless works at lower limits)
+POKEMON_TCG_DATA_DUMP_PATH=       # local clone of PokemonTCG/pokemon-tcg-data (offline fallback)
+MPC_EMAIL=                        # makeplayingcards.com account (proxy printing)
+MPC_PASSWORD=
+MPC_BROWSER_PROFILE_DIR=          # optional persistent Chromium profile (keeps MPC session)
 
 # ── Web scraping / market research ────────────────────────────────────────────
 APIFY_API_KEY=

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<!--
+  Pokedex proxy card front — rendered at exactly 822x1122 px (MPC poker size
+  with bleed @ 300 DPI). All layout is in px against that fixed canvas; the
+  outer 36px of every edge is bleed and gets trimmed by MPC, so nothing
+  essential sits within 60px of the edges.
+
+  Jinja2 context:
+    name, dex_number (int), types ([str]), type_color, type_color_dark,
+    artwork_data_uri (may be ''), printings ([{set_name, number, rarity, tier}]),
+    more_count (int), has_printings (bool)
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 822px; height: 1122px; }
+  body {
+    font-family: 'Segoe UI', 'Arial', sans-serif;
+    background: linear-gradient(160deg, {{ type_color }} 0%, {{ type_color_dark }} 100%);
+    color: #1a1a2e;
+  }
+  .card {
+    position: absolute; inset: 0;
+    padding: 64px 60px;            /* bleed (36px) + safety margin */
+    display: flex; flex-direction: column;
+  }
+  .frame {
+    flex: 1; display: flex; flex-direction: column;
+    background: rgba(255, 255, 255, 0.93);
+    border: 4px solid rgba(0, 0, 0, 0.55);
+    border-radius: 28px;
+    padding: 28px 32px;
+    overflow: hidden;
+  }
+  .header { display: flex; align-items: baseline; justify-content: space-between; }
+  .name { font-size: 56px; font-weight: 800; letter-spacing: 0.5px; }
+  .dex  { font-size: 40px; font-weight: 700; color: #555; }
+  .types { margin-top: 10px; display: flex; gap: 12px; }
+  .type-badge {
+    font-size: 26px; font-weight: 700; color: #fff; text-transform: uppercase;
+    letter-spacing: 2px; padding: 6px 22px; border-radius: 999px;
+    background: {{ type_color_dark }};
+    border: 2px solid rgba(0,0,0,0.25);
+  }
+  /* Artwork yields space to long printing lists so nothing clips. */
+  .art {
+    margin: 14px auto 6px auto;
+    width: {{ 380 if printings|length <= 6 else 250 }}px;
+    height: {{ 380 if printings|length <= 6 else 250 }}px;
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .art img { max-width: 100%; max-height: 100%; filter: drop-shadow(0 6px 10px rgba(0,0,0,0.3)); }
+  .art .placeholder {
+    width: 300px; height: 300px; border-radius: 50%;
+    background: linear-gradient(#e74c3c 0 46%, #1a1a2e 46% 54%, #f5f5f5 54% 100%);
+    position: relative; opacity: 0.35;
+  }
+  .art .placeholder::after {
+    content: ''; position: absolute; top: 50%; left: 50%;
+    width: 70px; height: 70px; border: 14px solid #1a1a2e; border-radius: 50%;
+    background: #f5f5f5; transform: translate(-50%, -50%);
+  }
+  .rule { border: none; border-top: 3px solid {{ type_color_dark }}; opacity: 0.6; margin: 8px 0 12px 0; }
+  .list-title {
+    font-size: 24px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px;
+    color: #333; margin-bottom: 10px;
+  }
+  .list-area { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  .printings { list-style: none; }
+  .printings li {
+    display: flex; align-items: center; gap: 14px;
+    font-size: {{ 27 if printings|length <= 8 else 24 }}px; line-height: 1.55;
+  }
+  .printings .box {
+    width: 26px; height: 26px; flex: 0 0 26px;
+    border: 3px solid #333; border-radius: 5px; background: #fff;
+  }
+  .printings .set { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .printings .num { color: #666; font-size: 24px; white-space: nowrap; }
+  .printings .rarity {
+    margin-left: auto; font-size: 20px; font-weight: 700; white-space: nowrap;
+    color: {{ type_color_dark }};
+  }
+  .printings li.tier2 .set, .printings li.tier2 .rarity { opacity: 0.75; font-style: italic; }
+  .more { font-size: 24px; color: #666; margin-top: 8px; font-style: italic; }
+  .none {
+    margin-top: 20px; text-align: center; font-size: 34px; font-weight: 700;
+    color: #888; font-style: italic;
+  }
+  .footer {
+    margin-top: auto; padding-top: 10px; text-align: center;
+    font-size: 20px; color: #999; letter-spacing: 1px;
+  }
+</style>
+</head>
+<body>
+  <div class="card"><div class="frame">
+    <div class="header">
+      <div class="name">{{ name }}</div>
+      <div class="dex">#{{ '%04d' % dex_number }}</div>
+    </div>
+    <div class="types">
+      {% for t in types %}<span class="type-badge">{{ t }}</span>{% endfor %}
+    </div>
+    <div class="art">
+      {% if artwork_data_uri %}<img src="{{ artwork_data_uri }}" alt="">
+      {% else %}<div class="placeholder"></div>{% endif %}
+    </div>
+    <hr class="rule">
+    <div class="list-title">Chase printings</div>
+    <div class="list-area">
+    {% if has_printings %}
+    <ul class="printings">
+      {% for p in printings %}
+      <li class="{{ 'tier2' if p.tier == 2 else '' }}">
+        <span class="box"></span>
+        <span class="set">{{ p.set_name }}</span>
+        <span class="num">#{{ p.number }}</span>
+        <span class="rarity">{{ p.rarity }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if more_count > 0 %}<div class="more">+{{ more_count }} more…</div>{% endif %}
+    {% else %}
+    <div class="none">No special prints yet</div>
+    {% endif %}
+    </div>
+    <div class="footer">PROXY · PERSONAL COLLECTION TRACKER · NOT FOR SALE</div>
+  </div></div>
+</body>
+</html>

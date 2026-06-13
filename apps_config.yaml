@@ -660,6 +660,30 @@ JUSTTCG:
   return_data_only: True
 
 
+POKEMON_TCG:
+  app_id: 'pokemon_tcg'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.pokemontcg.io/v2/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: False
+  app_data:
+    api_key: ${POKEMON_TCG_API_KEY}
+    dump_path: ${POKEMON_TCG_DATA_DUMP_PATH}
+  return_data_only: True
+
+
+MPC:
+  app_id: 'mpc'
+  base_url: 'https://www.makeplayingcards.com'
+  app_data:
+    email: ${MPC_EMAIL}
+    password: ${MPC_PASSWORD}
+    user_data_dir: ${MPC_BROWSER_PROFILE_DIR}
+
+
 SPOTIFY:
   app_id: 'spotify_account_main'
   client: 'rest'

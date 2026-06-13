@@ -39,6 +39,8 @@ APP_REGISTRARS = [
     ("Echo MTG",         "apps.echo_mtg.mcp",       "register_echo_mtg_tools"),
     ("Scryfall",         "apps.scryfall.mcp",       "register_scryfall_tools"),
     ("JustTCG",          "apps.justtcg.mcp",        "register_justtcg_tools"),
+    ("Pokemon TCG",      "apps.pokemon_tcg.mcp",    "register_pokemon_tcg_tools"),
+    ("MPC",              "apps.mpc.mcp",            "register_mpc_tools"),
     ("Telegram",         "apps.telegram.mcp",       "register_telegram_tools"),
     ("Trello",           "apps.trello.mcp",         "register_trello_tools"),
     ("Jira",             "apps.jira.mcp",           "register_jira_tools"),
