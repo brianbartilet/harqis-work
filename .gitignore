@@ -33,6 +33,8 @@ venv
 logs/
 screenshots/
 data/
+!apps/pokemon_tcg/references/data/
+!apps/pokemon_tcg/references/data/*.py
 
 # ── Build / packaging artifacts ──────────────────────────────────────────────
 *.bak*
