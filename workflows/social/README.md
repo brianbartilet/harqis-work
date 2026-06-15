@@ -34,7 +34,7 @@ Automated social media reporting and content generation.
 | `cfg_id__linkedin` | `LINKEDIN` | Config key for LinkedIn |
 | `cfg_id__gmail` | `GOOGLE_GMAIL_SEND` | Config key for Gmail send |
 | `cfg_id__anthropic` | `ANTHROPIC` | Config key for Anthropic |
-| `recipient_email` | `brian.bartilet@gmail.com` | Notification recipient |
+| `recipient_email` | `$HARQIS_OWNER_EMAIL` (else `owner@example.com`) | Notification recipient |
 | `skip_draft` | `False` | Skip creating the LinkedIn draft |
 | `skip_email` | `False` | Skip the Gmail notification |
 

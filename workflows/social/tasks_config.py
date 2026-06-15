@@ -1,3 +1,5 @@
+import os
+
 from celery.schedules import crontab
 from workflows.queues import WorkflowQueue
 
@@ -10,7 +12,7 @@ WORKFLOW_SOCIAL = {
             'cfg_id__linkedin': 'LINKEDIN',
             'cfg_id__gmail': 'GOOGLE_GMAIL_SEND',
             'cfg_id__anthropic': 'ANTHROPIC',
-            'recipient_email': 'brian.bartilet@gmail.com',
+            'recipient_email': os.environ.get('HARQIS_OWNER_EMAIL', 'owner@example.com'),
             'skip_draft': False,
             'skip_email': False,
         },

@@ -12,6 +12,7 @@ This script scans both families and forwards the newest radar section found.
 from __future__ import annotations
 
 import datetime as dt
+import os
 import re
 import signal
 import subprocess
@@ -21,8 +22,14 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-LOGS_DIR = Path("/Users/harqis-one/Library/CloudStorage/GoogleDrive-brian.bartilet@gmail.com/My Drive/LOGS")
-HARQIS_REPO = Path("/Users/harqis-one/GIT/harqis-work")
+# Paths come from the environment so nothing host-specific (user dir, cloud
+# account) ships in the public source. The Google Drive LOGS mount is OS-correct:
+# DESKTOP_PATH_FEED_DARWIN on macOS (this cron's host), else DESKTOP_PATH_FEED —
+# same convention as workflows/desktop feed.py. Set these in .env/apps.env.
+_feed = (os.environ.get("DESKTOP_PATH_FEED_DARWIN") if sys.platform == "darwin" else None) \
+    or os.environ.get("DESKTOP_PATH_FEED", "/path/to/GoogleDrive/My Drive/LOGS")
+LOGS_DIR = Path(_feed)
+HARQIS_REPO = Path(os.environ.get("ENV_ROOT") or Path(__file__).resolve().parents[2])
 FILE_RE = re.compile(r"^hud-(?:logs|data-only)-(\d{8})\.txt$")
 START_RE = re.compile(
     r"^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) :: show_daily_radar(?:_data_only)?\s*$",

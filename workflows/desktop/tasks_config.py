@@ -19,9 +19,18 @@ References:
 - For solutions to common issues such as the Celery Beat UnpicklingError, consult: https://stackoverflow.com/questions/31468354/unpicklingerror-on-celerybeat-startup
 """
 
+import os
 from datetime import timedelta
+from pathlib import Path
+
 from celery.schedules import crontab
 from workflows.queues import WorkflowQueue
+
+# Repo root resolved at runtime (DESKTOP_PATH_DEV when injected, else derived
+# from this file's location) so no host-specific user path ships in source.
+_REPO_ROOT = Path(os.environ.get("DESKTOP_PATH_DEV") or Path(__file__).resolve().parents[2])
+_LOGS_DAILY = str(_REPO_ROOT / "logs" / "daily")
+_LOGS_WEEKLY = str(_REPO_ROOT / "logs" / "weekly")
 
 """
 A dictionary mapping task identifiers to their configuration for scheduling.
@@ -159,7 +168,7 @@ WORKFLOWS_DESKTOP = {
         'schedule': crontab(hour=23, minute=55),
         'kwargs': {
             "hud_item_name": "DESKTOP LOGS",
-            "logs_output_path": "C:/Users/brian/GIT/harqis-work/logs/daily",
+            "logs_output_path": _LOGS_DAILY,
             "model": "claude-haiku-4-5-20251001",
         },
         "options": {
@@ -179,8 +188,8 @@ WORKFLOWS_DESKTOP = {
         'task': 'workflows.desktop.tasks.capture.generate_weekly_desktop_summary',
         'schedule': crontab(day_of_week='sun', hour=23, minute=58),
         'kwargs': {
-            "logs_daily_path": "C:/Users/brian/GIT/harqis-work/logs/daily",
-            "logs_output_path": "C:/Users/brian/GIT/harqis-work/logs/weekly",
+            "logs_daily_path": _LOGS_DAILY,
+            "logs_output_path": _LOGS_WEEKLY,
             "model": "claude-haiku-4-5-20251001",
         },
         "options": {

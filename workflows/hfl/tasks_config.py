@@ -12,7 +12,7 @@ Five tasks:
                            (Haiku, raw fallback).
   - summarize_hfl_week   : weekly rollup of the past 7 days of entries (Haiku).
   - retrieve_hfl_corpus  : retrieval API + weekly digest. Beat fires Sundays
-                           at 20:00 with email_to=brian.bartilet@gmail.com to
+                           at 20:00 with email_to=$HARQIS_OWNER_EMAIL to
                            mail the past 7 days' raw entries (closes the
                            capture→ingest→retrieve loop). MCP / .delay()
                            callers can still invoke it with email_to=None for
@@ -21,6 +21,8 @@ Five tasks:
 This workflow is active — `WORKFLOW_HFL` is merged into
 `workflows/config.py`'s beat schedule.
 """
+import os
+
 from celery.schedules import crontab
 
 from workflows.queues import WorkflowQueue
@@ -146,7 +148,7 @@ WORKFLOW_HFL = {
             'query': '',
             'k': 50,
             'since': '-7d',
-            'email_to': 'brian.bartilet@gmail.com',
+            'email_to': os.environ.get('HARQIS_OWNER_EMAIL', 'owner@example.com'),
             'cfg_id__gmail': 'GOOGLE_GMAIL_SEND',
         },
         'options': {

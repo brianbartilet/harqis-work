@@ -26,8 +26,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 LOGS_DIR = REPO_ROOT / "logs"
 FARM_MD = LOGS_DIR / "BDD-TEST-FARM.md"
 EMAIL_LOG_DIR = LOGS_DIR / "test_farm_email"
-DEFAULT_TO = "brian.bartilet@juliusbaer.com,brian.bartilet@gmail.com"
-DEFAULT_FROM = "brian.bartilet@gmail.com"
+# Generic placeholders only — the real recipients/sender are resolved in main()
+# AFTER _bootstrap_env() loads .env/apps.env, from TEST_FARM_EMAIL_TO /
+# TEST_FARM_EMAIL_FROM. Nothing identifying ships in the public source tree.
+DEFAULT_TO = "owner@example.com"
+DEFAULT_FROM = "owner@example.com"
 DEFAULT_BOARD_ID = 1790
 DEFAULT_GMAIL_CONFIG = "GOOGLE_GMAIL_SEND"
 DEFAULT_TELEGRAM_CONFIG = "TELEGRAM"
@@ -306,8 +309,8 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Run BDD test farm and email rendered scenarios.")
     p.add_argument("--dry-run", action="store_true", help="render artifacts but do not send email")
     p.add_argument("--skip-generate", action="store_true", help="use existing logs/BDD-TEST-FARM.md")
-    p.add_argument("--to", default=DEFAULT_TO)
-    p.add_argument("--from-account", default=DEFAULT_FROM, help="documented sender account; Gmail token controls actual sender")
+    p.add_argument("--to", default=None, help=f"recipients (default: $TEST_FARM_EMAIL_TO, else {DEFAULT_TO})")
+    p.add_argument("--from-account", default=None, help="documented sender account; Gmail token controls actual sender")
     p.add_argument("--gmail-config", default=DEFAULT_GMAIL_CONFIG)
     p.add_argument("--telegram-config", default=DEFAULT_TELEGRAM_CONFIG)
     p.add_argument("--telegram-chat-id", default=None, help="override TELEGRAM default_chat_id")
@@ -329,6 +332,10 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
 def main(argv: Iterable[str] | None = None) -> int:
     args = parse_args(argv)
     _bootstrap_env()
+
+    # Resolve recipients/sender now that apps.env is loaded (CLI > env > placeholder).
+    args.to = args.to or os.environ.get("TEST_FARM_EMAIL_TO", DEFAULT_TO)
+    args.from_account = args.from_account or os.environ.get("TEST_FARM_EMAIL_FROM", DEFAULT_FROM)
 
     date_label = datetime.now().strftime("%d-%m-%Y")
     subject = f"TEST FARM {date_label}"

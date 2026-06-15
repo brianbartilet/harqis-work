@@ -17,6 +17,7 @@ Target month is configurable via kwargs (defaults to the previous calendar month
 """
 
 import calendar
+import os
 import subprocess
 from datetime import date
 from pathlib import Path
@@ -246,7 +247,7 @@ def generate_monthly_linkedin_post(**kwargs):
     cfg_id__linkedin: str = kwargs.get("cfg_id__linkedin", "LINKEDIN")
     cfg_id__gmail: str = kwargs.get("cfg_id__gmail", "GOOGLE_GMAIL_SEND")
     cfg_id__anthropic: str = kwargs.get("cfg_id__anthropic", "ANTHROPIC")
-    recipient_email: str = kwargs.get("recipient_email", "brian.bartilet@gmail.com")
+    recipient_email: str = kwargs.get("recipient_email") or os.environ.get("HARQIS_OWNER_EMAIL", "owner@example.com")
     skip_draft: bool = bool(kwargs.get("skip_draft", False))
     skip_email: bool = bool(kwargs.get("skip_email", False))
 
