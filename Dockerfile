@@ -35,13 +35,15 @@ USER harqis
 # Cache layer: only requirements first.
 COPY --chown=harqis:harqis requirements.txt .
 
-# harqis-core pins anyio==4.3.0 and openai==1.14.1, but we need newer versions
-# (mcp needs anyio>=4.5; apps/open_ai uses the Responses API added in openai>=1.50).
+# harqis-core pins anyio==4.3.0, openai==1.14.1, and pydantic==2.6.4, but we need
+# newer versions (mcp needs anyio>=4.5; apps/open_ai uses the Responses API added
+# in openai>=1.50; fastmcp/pydantic-settings need pydantic>=2.7 for `Secret`, or
+# mcp/server.py crashes with `ImportError: cannot import name 'Secret'`).
 # Install base deps first, then force-upgrade the conflicting transitive pins,
 # then add mcp on top. Keep these on one RUN to avoid blowing up the layer count.
 RUN pip install --upgrade pip \
     && pip install -r requirements.txt \
-    && pip install --upgrade "anyio>=4.5" "openai>=1.50.0" \
+    && pip install --upgrade "anyio>=4.5" "openai>=1.50.0" "pydantic>=2.9,<3" \
     && pip install "mcp>=1.0.0"
 
 # Application code (after deps so code edits don't bust the pip cache).

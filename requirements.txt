@@ -54,12 +54,14 @@ uvicorn[standard]>=0.29.0
 jinja2>=3.1.0
 python-multipart>=0.0.9
 
-# mcp: install separately — harqis-core pins anyio==4.3.0 but mcp requires anyio>=4.5.
-# Run AFTER `pip install -r requirements.txt`:
-#     pip install --upgrade "anyio>=4.5" "mcp>=1.0.0"
-# Without this, scripts/launch.py mcp crashes with
+# mcp: install separately — harqis-core pins anyio==4.3.0 but mcp requires anyio>=4.5,
+# and it also pins pydantic==2.6.4 but fastmcp/pydantic-settings need pydantic>=2.7
+# (for `Secret`). Run AFTER `pip install -r requirements.txt`:
+#     pip install --upgrade "anyio>=4.5" "pydantic>=2.9,<3" "mcp>=1.0.0"
+# Without the anyio bump, scripts/launch.py mcp crashes with
 # `ModuleNotFoundError: No module named 'mcp.server.fastmcp'` because the
-# local `mcp/server.py` shadows the (uninstalled) PyPI package.
+# local `mcp/server.py` shadows the (uninstalled) PyPI package; without the
+# pydantic bump it crashes with `ImportError: cannot import name 'Secret'`.
 
 # moomoo-api: install separately to avoid protobuf conflict
 #     pip install moomoo-api --no-deps
