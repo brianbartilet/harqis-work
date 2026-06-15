@@ -30,6 +30,7 @@ Operational scripts for **harqis-work**, organised by purpose:
 | `weekly_claude_pr.py` | Weekly orchestration — runs the scout, delegates to local Claude Code, opens a draft PR. |
 | `weekly_lessons_extraction.py` | Weekly HFL pattern detection (cron). Runs `lessons_extractor.py`. |
 | `daily_test_farm_email.py` | Daily BDD test farm sequence — refreshes `run_test_farm`, renders `logs/BDD-TEST-FARM.md`, sends the HTML report via `GOOGLE_GMAIL_SEND`, and posts a Telegram completion notice. |
+| `reauth_gmail_send.py` | Interactive re-authorization of a HARQIS Google OAuth credential (default `GOOGLE_GMAIL_SEND`). Opens browser consent and rewrites the token under `.env/`. Run when a daily job fails with `invalid_grant: Token has been expired or revoked`. |
 | `migrate_to_core_scan.py` | Deterministic harvest-candidate scan for the `/migrate-to-core` skill — ranks `apps/` + `scripts/agents/` by genericness vs. coupling (workflows/mcp/sprout) and maps what's already upstream in harqis-core. Writes `.harqis-data/migrate_to_core_scan.json`. Ignores `workflows/` + the AI scaffold. |
 | `manifesto_audit.py` | Validates the `'manifesto'` metadata block on every `workflows/*/tasks_config.py` beat entry. Non-zero exit on hard violations. |
 | `run_test_suite.py` | Exploratory / continuous test runner with coverage + perf tracking. |
@@ -59,9 +60,29 @@ The script reuses `workflows.testing.tasks.test_farm.run_test_farm`, which invok
 repo-local `/generate-gherkin-scenarios` Claude skill through the local Claude Code Max
 subscription. It renders `logs/BDD-TEST-FARM.md` to HTML, writes audit artifacts under
 `logs/test_farm_email/`, sends via the `GOOGLE_GMAIL_SEND` app config, and sends a
-Telegram completion notification via the `TELEGRAM` app config. By default, the report
-is addressed to both `brian.bartilet@juliusbaer.com` and `brian.bartilet@gmail.com`.
+Telegram completion notification via the `TELEGRAM` app config. Recipients and sender
+are read from `TEST_FARM_EMAIL_TO` / `TEST_FARM_EMAIL_FROM` in `.env/apps.env` (or
+`--to` / `--from-account`); they fall back to a generic placeholder when unset.
 Use `--no-telegram` for email-only test runs.
+
+### `scripts/agents/reauth_gmail_send.py`
+
+Re-authorize a HARQIS Google OAuth credential when its refresh token has been
+revoked or hard-expired (Google expires refresh tokens after 7 days while the
+OAuth consent screen is in **Testing** publishing status). Symptom: a daily job
+fails at the Gmail preflight with `invalid_grant: Token has been expired or
+revoked`. **Run interactively** — it opens a browser for Google consent:
+
+```bash
+python scripts/agents/reauth_gmail_send.py                       # GOOGLE_GMAIL_SEND
+python scripts/agents/reauth_gmail_send.py --config GOOGLE_GMAIL  # any google_apps cred
+```
+
+It reads the credential's `scopes` / `credentials` / `storage` from
+`apps_config.yaml`, drops the stale token, runs the `InstalledAppFlow` local
+server, and writes a fresh token to the credential's storage file under `.env/`.
+The durable fix for recurrence is to set the OAuth consent screen to **In
+production** in the Google Cloud Console so refresh tokens stop expiring weekly.
 
 ---
 
