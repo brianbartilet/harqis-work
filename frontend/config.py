@@ -38,6 +38,17 @@ class Settings(BaseSettings):
     # Enables the Secure flag on session cookies (requires HTTPS end-to-end).
     behind_proxy:  bool = False
 
+    # ── Multi-tenant mode (all optional — leave unset for single-tenant) ──────
+    # If DATABASE_URL is unset the tenant tables are never touched and the
+    # dashboard behaves identically to today. Setting it activates the
+    # tenant context binding for Clerk-authenticated requests.
+    database_url: str = ""
+    master_fernet_key: str = ""
+    clerk_publishable_key: str = ""
+    clerk_jwks_url: str = ""
+    clerk_secret_key: str = ""
+    clerk_audience: str = ""
+
     model_config = SettingsConfigDict(
         env_file=[str(_APPS_ENV), str(_LOCAL_ENV)],
         env_file_encoding="utf-8",
