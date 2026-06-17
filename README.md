@@ -61,6 +61,7 @@ At its core the platform has three layers:
 | `reddit` | Reddit — subreddits, posts, comments, inbox | REST API (OAuth2) | Yes | [API Docs](https://www.reddit.com/dev/api/) · [Apps](https://www.reddit.com/prefs/apps) |
 | `scryfall` | MTG card database | REST API | Yes | [API Docs](https://scryfall.com/docs/api) · [Site](https://scryfall.com/) |
 | `spotify` | Spotify listening history — recently-played, top tracks/artists | REST API (OAuth2) | Yes | [API Docs](https://developer.spotify.com/documentation/web-api) · [Dashboard](https://developer.spotify.com/dashboard) |
+| `sqlite_vec` | Local vector store — persist embeddings + KNN search for RAG (upsert/search/stats), no server | Local | Yes | [Upstream](https://github.com/asg017/sqlite-vec) |
 | `stripe` | Stripe payments — balance, charges, customers, invoices, subscriptions, events | REST API | Yes | [API Docs](https://docs.stripe.com/api) · [Dashboard](https://dashboard.stripe.com/) |
 | `tcg_mp` | TCG Marketplace | REST API | Yes | [Site](https://thetcgmarketplace.com/) |
 | `telegram` | Telegram Bot messaging | REST API | Yes | [API Docs](https://core.telegram.org/bots/api) · [Site](https://telegram.org/) |
@@ -131,8 +132,10 @@ YAML files in `agents/projects/profiles/`. Each profile declares model, tools, p
 | Profile | Extra tools vs base | MCP apps |
 |---|---|---|
 | `base` | read_file, glob, grep, post_comment, move_card, check_item | — |
+| `agent:default` | + ask_human (read-only; no write/bash) — fallback for unlabelled cards, bound to the host in-process worker | — |
 | `agent:code` | + write_file, bash | Jira, Trello, Gmail, Calendar, Discord, YNAB, OANDA, Reddit, Echo MTG, Scryfall, TCG MP |
 | `agent:write` | + write_file (no bash) | Google Apps, Trello, Discord, Telegram |
+| `agent:full` | + write_file, bash, git (branch/commit/push/PR), ask_human — generalist catch-all that opens PRs as `claude[bot]` | Google Apps, Trello, Discord, Jira, Telegram |
 
 New agent type = new YAML file. No orchestrator code changes.
 
@@ -158,7 +161,7 @@ ANTHROPIC_API_KEY=...    TRELLO_API_KEY=...    TRELLO_API_TOKEN=...
 
 Board columns: `Backlog → Pending → In Progress → Done / Failed / Blocked`
 
-Tests: `pytest agents/projects/tests/ -m "not integration"` — 75 unit tests, fully offline.
+Tests: `pytest agents/projects/tests/ -m "not integration"` — 290 unit tests, fully offline.
 
 ---
 
@@ -251,10 +254,16 @@ Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and 
 
 | Workflow | Status | Tasks | Description |
 |----------|--------|-------|-------------|
-| `hud` | Active | 15 | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins |
-| `purchases` | Active | 3 (+1 disabled) | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
-| `desktop` | Active | 7 | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
+| `hud` | Active | 20 | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins |
+| `purchases` | Active | 6 (+1 disabled) | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
+| `desktop` | Active | 9 | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
+| `hfl` | Active | 10 | Homework-for-Life: capture/ingest story moments — git activity, media vision, location timeline (OwnTracks) → corpus + Elasticsearch |
+| `knowledge` | Active | 5 | RAG / knowledge base — Notion → vector-store ingest, on-demand `answer` (Haiku-pinned), MCP knowledge tools |
+| `dumps` | Active | 4 | Daily dump collection — fanout per-node ship + harqis-server pull (Android/Termux) → analysis |
 | `social` | Active | 1 | Monthly LinkedIn post — git history → Claude → LinkedIn draft + Gmail notification |
+| `tcg` | Active | 1 (manual) | Pokedex proxy-printing pipeline (MPC) — manual/pytest-triggered, ships empty beat dict |
+| `testing` | Active | 2 | Test farm — headless `/generate-gherkin-scenarios` against Jira boards (Max subscription, weekdays 09:00) |
+| `workers` | Active | 1 | Worker-pool fanout — each worker reports its own location to the `harqis-worker-locations` ES index |
 | `mobile` | Active | 1 (unscheduled) | Android screen capture and OCR logging |
 | `finance` | Stub | 0 | No tasks defined |
 | `n8n` | Utilities | — | Shell utilities and ngrok helpers for n8n integration |
@@ -276,6 +285,7 @@ Declared in `workflows/queues.py` (`WorkflowQueue` enum) and registered with Rab
 | `agent` | AI agent task dispatch (Kanban / Hermes worker invocations) |
 | `worker` | Generic background worker pool (cross-app jobs) |
 | `n8n` | n8n container ops (backup / restore / deploy) — pinned to `harqis-server` |
+| `hfl` | Homework-for-Life capture / ingest / summarize / recall — pinned to `harqis-server` |
 
 **Broadcast (fanout)** — every subscribed worker runs each task; tasks **must** be idempotent. A worker only receives broadcasts when its `queues` list includes the broadcast name (otherwise the exchange isn't declared and beat publishes fail with `NOT_FOUND`):
 
@@ -283,8 +293,9 @@ Declared in `workflows/queues.py` (`WorkflowQueue` enum) and registered with Rab
 |-------|---------|
 | `default_broadcast` | Cluster-wide jobs that every node must run locally — e.g. `git_pull_on_paths` so each node refreshes its own working tree |
 | `hud_broadcast` | HUD-level fanout — `workflows.hud.tasks.broadcast_*` (auto-routed); reload skin config / refresh-all-HUDs cluster-wide |
-| `workers_broadcast` | Worker-pool-wide control messages (declared in enum; reserved) |
+| `workers_broadcast` | Worker-pool-wide fanout — e.g. `broadcast_report_location` so every worker reports its own location |
 | `agents_broadcast` | Agent-pool-wide control messages (declared in enum; reserved) |
+| `hfl_broadcast` | HFL ingest fanout — each worker captures its own local signal |
 
 > Routing override: a task can target any queue via `options={"queue": WorkflowQueue.X}` in its Beat schedule entry, regardless of `task_routes` patterns.
 >
@@ -294,8 +305,12 @@ Declared in `workflows/queues.py` (`WorkflowQueue` enum) and registered with Rab
 
 ```python
 # workflows/config.py
-CONFIG_DICTIONARY = WORKFLOW_PURCHASES | WORKFLOWS_HUD | WORKFLOWS_DESKTOP | WORKFLOW_SOCIAL | WORKFLOW_KNOWLEDGE
-SPROUT.conf.beat_schedule = CONFIG_DICTIONARY
+CONFIG_DICTIONARY = (
+    WORKFLOW_PURCHASES | WORKFLOWS_HUD | WORKFLOWS_DESKTOP | WORKFLOW_SOCIAL
+    | WORKFLOW_KNOWLEDGE | WORKFLOW_DUMPS | WORKFLOW_HFL | WORKFLOW_WORKERS
+    | WORKFLOW_TESTING | WORKFLOW_TCG
+)
+SPROUT.conf.beat_schedule = _celery_safe_schedule(CONFIG_DICTIONARY)
 ```
 
 ### Task decorator pattern
@@ -389,7 +404,7 @@ harqis-work/
 │   │   ├── profiles/               # YAML agent profile schema + registry
 │   │   │   └── examples/           # base, agent:code, agent:write profiles
 │   │   ├── security/               # SecretStore, OutputSanitizer, AuditLogger
-│   │   └── tests/                  # 75 unit + 2 integration tests
+│   │   └── tests/                  # 290 unit + 2 integration tests
 │   └── prompts/                    # Shared AI prompt templates (.md files)
 │
 ├── apps/                           # App integrations (one folder per service)
@@ -535,7 +550,7 @@ The three driving principles:
                              ▼
    ┌──────────────────────────────────────────────────────────┐
    │                   MCP Server  (mcp/)                     │
-   │    55 tools across 16 modules — OANDA, YNAB, Gmail,      │
+   │   317 tools across 39 modules — OANDA, YNAB, Gmail,      │
    │    Telegram, Discord, Trello, Jira, Scryfall, TCG …      │
    └──────┬──────────────────────────────────┬────────────────┘
           │ reads / writes                   │ triggers
@@ -562,7 +577,7 @@ The three driving principles:
 | Component | Where | What it does |
 |---|---|---|
 | **Hermes agent** | `~/.hermes/` (local per-machine) | Agent runtime: persistent memory, distilled lessons, plans, and cron jobs (agent / `no_agent` modes) — see [`docs/info/HERMES.md`](docs/info/HERMES.md) |
-| **MCP server** | `mcp/server.py` | Exposes all 20+ app integrations as callable tools over the Model Context Protocol |
+| **MCP server** | `mcp/server.py` | Exposes all 37 app integrations (plus knowledge & memory-recall tools) as callable tools over the Model Context Protocol |
 | **Celery Beat** | `workflows/config.py` | Runs all scheduled automation — HUD updates, MTG resale pipeline, desktop sync |
 | **RabbitMQ + Redis** | Docker stack | Celery broker and result backend |
 | **Frontend** | `frontend/main.py` | Web dashboard — manually trigger any task, inspect run history |
@@ -831,7 +846,7 @@ pytest -m sanity
 ```
 
 All app tests are **live integration tests** — no mocking. Requires valid credentials.
-Kanban agent tests are fully offline (75 unit tests, 2 integration tests).
+Kanban agent tests are fully offline (290 unit tests, 2 integration tests).
 
 ---
 
