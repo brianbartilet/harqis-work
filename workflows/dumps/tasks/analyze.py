@@ -120,6 +120,13 @@ def _scan_day(inbox: Path, date_suffix: str) -> list[dict]:
     return machines
 
 
+def _filter_machines(machines: list[dict], machine: str | None = None) -> list[dict]:
+    """Limit scanned dump stats to one machine/device name when requested."""
+    if not machine:
+        return machines
+    return [m for m in machines if m.get("machine") == machine]
+
+
 def _human_bytes(n: int) -> str:
     for unit in ("B", "KB", "MB", "GB", "TB"):
         if n < 1024 or unit == "TB":
@@ -200,6 +207,7 @@ def analyze_daily_dumps(**kwargs) -> dict:
 
     Kwargs (all optional; see module docstring for precedence):
         days, date, start, end, month — retro window. None ⇒ yesterday.
+        machine — optional exact machine/device folder prefix filter.
         missing_only — render only the days with NO dumps (gap report) instead
                        of the full per-day breakdown.
     """
@@ -243,7 +251,8 @@ def analyze_daily_dumps(**kwargs) -> dict:
         empty_text = f"Daily dumps - {dates[0]} - inbox {inbox} not yet created.\n"
         return {"text": empty_text, "date": dates[0], "machines": 0}
 
-    per_day = {d: _scan_day(inbox, d) for d in dates}
+    machine_filter = kwargs.get("machine")
+    per_day = {d: _filter_machines(_scan_day(inbox, d), machine_filter) for d in dates}
     missing_only = bool(kwargs.get("missing_only"))
 
     # ─────────────────────────────────────────────────────────────────────────

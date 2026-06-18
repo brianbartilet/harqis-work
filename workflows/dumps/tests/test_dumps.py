@@ -20,6 +20,7 @@ from workflows.dumps.config import (
     load_merged_config,
 )
 from workflows.dumps.tasks.analyze import (
+    _filter_machines,
     _render_gaps,
     _render_multi,
     _resolve_target_dates,
@@ -191,6 +192,15 @@ def test__scan_day_buckets_machines_for_one_date(tmp_path: Path):
     machines = _scan_day(inbox, "2026-05-09")
     assert sorted(m["machine"] for m in machines) == ["alpha", "beta"]
     assert all(m["files_count"] == 1 for m in machines)
+
+
+def test__filter_machines_limits_to_exact_machine_name():
+    machines = [
+        {"machine": "alpha", "files_count": 1, "bytes_total": 1},
+        {"machine": "nothing-phone", "files_count": 2, "bytes_total": 2},
+    ]
+    assert _filter_machines(machines, "nothing-phone") == [machines[1]]
+    assert _filter_machines(machines) == machines
 
 
 def test__render_multi_marks_missed_days_and_totals():

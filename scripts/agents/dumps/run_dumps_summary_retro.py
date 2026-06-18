@@ -63,6 +63,9 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--missing-only", action="store_true", dest="missing_only",
                    help="Report only the days with NO dumps (gap report) instead "
                         "of the full per-day breakdown.")
+    p.add_argument("--machine", "--device", dest="machine",
+                   help="Limit the scan to one exact machine/device dump prefix "
+                        "(for example, nothing-phone).")
     return p.parse_args()
 
 
@@ -79,6 +82,7 @@ def main() -> int:
         ("start", args.start),
         ("end", args.end),
         ("month", args.month),
+        ("machine", args.machine),
     ) if v is not None}
     if args.missing_only:
         kwargs["missing_only"] = True
