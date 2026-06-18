@@ -1216,7 +1216,7 @@ def main() -> None:
     if started > 0:
         print("\nRunning post-deploy cleanup (closing stray console windows)...")
         if IS_WIN:
-            cleanup_script = SCRIPTS_DIR / "agents" / "close-completed-windows.ps1"
+            cleanup_script = SCRIPTS_DIR / "agents" / "fleet" / "close-completed-windows.ps1"
             if cleanup_script.exists():
                 try:
                     subprocess.run(
@@ -1228,7 +1228,7 @@ def main() -> None:
             else:
                 print(f"Warning: cleanup script not found at {cleanup_script}")
         elif IS_MAC:
-            cleanup_script = SCRIPTS_DIR / "agents" / "close-completed-windows.sh"
+            cleanup_script = SCRIPTS_DIR / "agents" / "fleet" / "close-completed-windows.sh"
             if cleanup_script.exists():
                 try:
                     subprocess.run(["bash", str(cleanup_script)], check=False)

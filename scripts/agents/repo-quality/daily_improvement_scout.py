@@ -23,7 +23,7 @@ from datetime import datetime
 from dataclasses import dataclass, asdict
 from typing import Optional
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 ENV_DIR = REPO_ROOT / ".env"
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 
@@ -133,7 +133,7 @@ def inspect_manifesto_compliance(batch: InspectionBatch):
     """Check manifesto audit for violations and warnings."""
     try:
         result = subprocess.run(
-            [sys.executable, SCRIPTS_DIR / "agents" / "manifesto_audit.py"],
+            [sys.executable, SCRIPTS_DIR / "agents" / "repo-quality" / "manifesto_audit.py"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -145,9 +145,9 @@ def inspect_manifesto_compliance(batch: InspectionBatch):
                 "manifesto",
                 "critical",
                 "Manifesto audit failed or found hard violations",
-                "scripts/agents/manifesto_audit.py",
+                "scripts/agents/repo-quality/manifesto_audit.py",
                 "Fix missing manifesto blocks in workflow entries",
-                f"Run: python scripts/agents/manifesto_audit.py"
+                f"Run: python scripts/agents/repo-quality/manifesto_audit.py"
             )
         elif "FAIL" in result.stdout:
             # Extract violation count from output
@@ -160,7 +160,7 @@ def inspect_manifesto_compliance(batch: InspectionBatch):
                         f"Manifesto compliance issues detected",
                         "workflows/ (check manifesto_audit output)",
                         "Ensure all run-job entries have proper manifesto blocks",
-                        f"Run: python scripts/agents/manifesto_audit.py to see violations"
+                        f"Run: python scripts/agents/repo-quality/manifesto_audit.py to see violations"
                     )
                     break
         
@@ -179,16 +179,16 @@ def inspect_manifesto_compliance(batch: InspectionBatch):
             "manifesto",
             "warning",
             "Manifesto audit timeout",
-            "scripts/agents/manifesto_audit.py",
+            "scripts/agents/repo-quality/manifesto_audit.py",
             "Audit may indicate processing bottleneck",
-            "Run manually: python scripts/agents/manifesto_audit.py"
+            "Run manually: python scripts/agents/repo-quality/manifesto_audit.py"
         )
     except Exception as e:
         batch.add(
             "manifesto",
             "warning",
             f"Manifesto audit error: {type(e).__name__}",
-            "scripts/agents/manifesto_audit.py",
+            "scripts/agents/repo-quality/manifesto_audit.py",
             "Unable to verify compliance",
             "Check if script is executable and dependencies installed"
         )

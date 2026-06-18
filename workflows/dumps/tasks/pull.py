@@ -9,7 +9,7 @@ writes to.
 
 The scheduled `pull_daily_dumps_from_remotes` covers the previous day. For
 backfills and ad-hoc syncs there is `pull_dumps_manual` (see also
-`scripts/agents/pull_dumps.py`), which pulls a date RANGE (one daily-dumps folder per
+`scripts/agents/dumps/pull_dumps.py`), which pulls a date RANGE (one daily-dumps folder per
 day, identical layout to the nightly job) or does a FULL sweep of every file on
 the device. Both share the same list→tar→extract core, so a manual pull is
 indistinguishable from a nightly one to everything downstream (analyze_media,

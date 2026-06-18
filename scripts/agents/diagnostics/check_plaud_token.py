@@ -7,9 +7,9 @@ window. Does NOT transcribe, distil, write to the HFL corpus/ES, or archive —
 it only lists, so it's safe to run any time.
 
 Usage:
-    python scripts/agents/check_plaud_token.py                       # last 7 days
-    python scripts/agents/check_plaud_token.py --days 30
-    python scripts/agents/check_plaud_token.py --since 2026-06-01 --until 2026-06-09
+    python scripts/agents/diagnostics/check_plaud_token.py                       # last 7 days
+    python scripts/agents/diagnostics/check_plaud_token.py --days 30
+    python scripts/agents/diagnostics/check_plaud_token.py --since 2026-06-01 --until 2026-06-09
 
 Exit codes (CI / automation friendly):
     0  a backend is ready and the listing succeeded
@@ -35,8 +35,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# scripts/agents/check_plaud_token.py → repo root is parents[2].
-REPO_ROOT = Path(__file__).resolve().parents[2]
+# scripts/agents/diagnostics/check_plaud_token.py → repo root is parents[3].
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # Mirror mcp/server.py's bootstrap so `apps.*` imports + config resolution work
 # whether run via deploy.py or directly from a shell.

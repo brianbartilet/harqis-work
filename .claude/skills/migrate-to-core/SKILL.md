@@ -20,7 +20,7 @@ auto-merge. harqis-work installs harqis-core from `main` (unpinned,
 is **merge order: core PR first → reinstall → un-draft the harqis-work PR**.
 
 The deterministic sweep (enumerate candidates, score coupling, map what's already
-upstream) is done by `scripts/agents/migrate_to_core_scan.py`; **you** (Claude) do
+upstream) is done by `scripts/agents/repo-quality/migrate_to_core_scan.py`; **you** (Claude) do
 the *purpose* judgment and author the PRs. This keeps a monthly headless run cheap
 and the synthesis high-quality.
 
@@ -72,7 +72,7 @@ MIT-licensed, additive PRs to `main`.
 ## Step 1 — Sweep harqis-work (deterministic scan)
 
 ```bash
-PY scripts/agents/migrate_to_core_scan.py
+PY scripts/agents/repo-quality/migrate_to_core_scan.py
 ```
 
 Reads `apps/*` and `scripts/agents/*.py`; **never** `workflows/` or `apps/antropic`
@@ -199,7 +199,7 @@ This skill is built to run unattended. Two ways to schedule it on **harqis-serve
 (the host with the core clone + push rights):
 
 - The `/schedule` skill → a monthly routine running `claude -p "/migrate-to-core"`.
-- A cron/launchd job mirroring `scripts/agents/weekly_claude_pr.py` (scan → local
+- A cron/launchd job mirroring `scripts/agents/repo-quality/weekly_claude_pr.py` (scan → local
   `claude -p` with `--max-turns` / `--max-budget-usd` / `--allowedTools` → PRs).
 
 Either way it stays review-gated: the run only ever opens PRs.

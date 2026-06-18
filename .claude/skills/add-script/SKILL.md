@@ -3,13 +3,13 @@ name: add-script
 description: >
   Apply the harqis-work /scripts organization whenever a script is created, added, or
   moved under scripts/. Deploy/runtime scripts live at the root of scripts/; agent-support
-  scripts (Claude-driven automation, repo-quality/health/test tooling, agent worktree/window
-  cleanup) live under scripts/agents/. Enforces the REPO_ROOT depth convention, README
-  upkeep, and a reference sweep so nothing breaks.
+  scripts live under scripts/agents/ inside a context subfolder (repo-quality, learning,
+  testing, diagnostics, dumps, fleet). Enforces the REPO_ROOT depth convention (parents[3]
+  for agents/<bucket>/), README upkeep, and a reference sweep so nothing breaks.
 
   Trigger phrases (non-exhaustive): "add a script", "create a script", "new script in
   scripts/", "put this in scripts", "build a script for the agent", "helper script",
-  "move <x> into scripts", "organize scripts".
+  "move <x> into scripts", "organize scripts", "which agents folder".
 
 user-invocable: true
 allowed-tools: Bash Read Glob Grep Edit Write
@@ -22,28 +22,49 @@ right place and stay wired up. This skill is the rulebook.
 
 ---
 
-## The two buckets
+## The two top-level buckets
 
 | Bucket | Location | What belongs here |
 |---|---|---|
 | **Deploy / runtime** | `scripts/` (root) | Bringing the stack up/down, launching daemons, syncing config between machines, network/infra policy. Examples: `deploy.py`, `launch.py`, `sync-to-host.ps1`, `tailscale/`. |
-| **Agent-support** | `scripts/agents/` | Claude-driven automation (docs regen, improvement scout, weekly PR), the repo-quality / health / test tooling those agents drive, and the worktree/terminal-window cleanup that keeps the agent fleet tidy. Examples: `run_agent_prompt.py`, `daily_improvement_scout.py`, `weekly_claude_pr.py`, `manifesto_audit.py`, `run_test_suite.py`, `check_env_health.py`, the `cleanup-*` / `close-completed-windows` scripts, `launchd/`. |
+| **Agent-support** | `scripts/agents/<bucket>/` | Claude-driven automation, the repo-quality / health / test tooling those agents drive, the HFL learning loop, and the worktree/window cleanup that keeps the fleet tidy. Always lives inside a **context subfolder** (below) — never loose at `scripts/agents/` root. |
 
-**Decision rule:** if the script's primary job is *deploying or running the platform*, it's
-root. If it *exists to support the agent system or repo automation* (even indirectly, like
-cleaning up agent worktrees or auditing repo metadata), it goes under `agents/`. When
-genuinely ambiguous, ask the user with the two buckets laid out — don't guess silently.
+**Top-level decision rule:** if the script's primary job is *deploying or running the
+platform*, it's root. If it *exists to support the agent system or repo automation* (even
+indirectly, like cleaning up agent worktrees or auditing repo metadata), it goes under
+`agents/<bucket>/`. When genuinely ambiguous, ask the user with the two buckets laid out.
+
+## The agents/ context subfolders
+
+Every `scripts/agents/` script lives in exactly one context folder. Pick by what the
+script is *for*:
+
+| Subfolder | Context | Examples |
+|---|---|---|
+| `repo-quality/` | Audits, scans, and Claude-driven repo maintenance / improvement / PRs | `manifesto_audit{,_agent}.py`, `daily_improvement_scout.py`, `weekly_claude_pr.py`, `run_agent_prompt.py`, `migrate_to_core_{scan,agent}.py` |
+| `learning/` | Agent reasoning capture + the HFL lessons loop | `reasoning_capture.py`, `agent_learning_hook.py`, `lessons_extractor.py`, `weekly_lessons_extraction.py` |
+| `testing/` | Test execution + reporting | `run_test_suite.py`, `daily_test_farm_email.py`, `smoke-tests.sh` |
+| `diagnostics/` | Environment + credential health checks / re-auth | `check_env_health.py`, `check_plaud_token.py`, `reauth_gmail_send.py` |
+| `dumps/` | Device dump ops (pull/back-fill/summarize) | `pull_dumps.py`, `run_dumps_summary_retro.py` |
+| `fleet/` | Agent worktree / terminal-window / process cleanup | `cleanup-worktrees.sh`, `close-completed-windows.sh`, `cleanup-loop.sh`, `install-cleanup-job.sh`, `launchd/` |
+
+**Subfolder decision rule:** match the script's *domain* to a row above. Keep tightly
+coupled pairs together (a deterministic tool and its Claude-delegated runner — e.g.
+`migrate_to_core_scan.py` + `migrate_to_core_agent.py` — live in the same folder). If a
+new script fits none of these cleanly, propose a new subfolder name to the user with a
+one-line rationale rather than dropping it loose at `agents/` root or forcing a bad fit.
 
 ---
 
 ## Rules for a NEW script
 
-1. **Place it by bucket** (above). Default new agent/automation tooling to `scripts/agents/`.
+1. **Place it by bucket, then by context subfolder** (above). New agent/automation tooling
+   goes to `scripts/agents/<bucket>/`, never loose at `scripts/agents/` root.
 
 2. **REPO_ROOT depth — this is the #1 thing that breaks on a move.** A script computes the
    repo root from its own depth:
    - At `scripts/<name>.py` → `Path(__file__).resolve().parents[1]`
-   - At `scripts/agents/<name>.py` → `Path(__file__).resolve().parents[2]`
+   - At `scripts/agents/<bucket>/<name>.py` → `Path(__file__).resolve().parents[3]`
 
    Use `parents[N]` (explicit), not `.parent.parent`, so the depth is obvious and greppable.
 
@@ -55,24 +76,26 @@ genuinely ambiguous, ask the user with the two buckets laid out — don't guess 
    in the tracked `machines.toml`.
 
 5. **Document it.** Add a row to the correct table in [`scripts/README.md`](../../../scripts/README.md)
-   ("Root — deploy & runtime" or "scripts/agents/") with a one-line purpose. If the script
-   has a CLI, add a short usage section.
+   — the root table, or the `### <bucket>/` sub-table under "scripts/agents/" — with a
+   one-line purpose. If the script has a CLI, add a short usage section.
 
 6. **Docstring / header usage lines** must show the real invocation path
-   (`python scripts/agents/<name>.py …`, not a bare `<name>.py`).
+   (`python scripts/agents/<bucket>/<name>.py …`, not a bare `<name>.py`).
 
 ---
 
-## Rules for MOVING a script (root ↔ agents/, or in)
+## Rules for MOVING a script (root ↔ agents/<bucket>/, or between buckets)
 
 Moving is higher-risk than adding because absolute paths and `__file__` depth break silently.
 Run this checklist every time:
 
 1. **`git mv`** (preserves history) — don't delete + recreate.
 
-2. **Fix `REPO_ROOT` depth** in the moved Python script (`parents[1]` ⇄ `parents[2]`). Same
-   for any `Path(__file__).parent / "sibling.py"` — those stay correct only if the sibling
-   moves too.
+2. **Fix `REPO_ROOT` depth** to match the new location: `parents[1]` at `scripts/` root,
+   `parents[3]` at `scripts/agents/<bucket>/`. Update both the `parents[N]` call and any
+   `# … → repo root is parents[N]` comment. Also fix any pathlib cross-call that names the
+   old location (e.g. `SCRIPTS_DIR / "agents" / "x.py"` → `… / "agents" / "<bucket>" / "x.py"`)
+   — these are NOT plain `scripts/agents/x.py` strings, so a path sweep won't catch them.
 
 3. **Sweep for references** across the whole repo (exclude `.venv`, `__pycache__`):
    ```
@@ -95,9 +118,11 @@ Run this checklist every time:
    cells as `\|` (e.g. `tar \| ssh`).
 
 6. **Verify.** Run the moved script (or a path-resolution one-liner) to confirm `REPO_ROOT`
-   still points at the repo root:
+   still points at the repo root, and grep that no un-bucketed path survives:
    ```
-   python -c "from pathlib import Path; print(Path('scripts/agents/<name>.py').resolve().parents[2].name)"  # → harqis-work
+   python -c "from pathlib import Path; print(Path('scripts/agents/<bucket>/<name>.py').resolve().parents[3].name)"  # → harqis-work
+   # expect NO hits at scripts/agents/<name> without a bucket:
+   git grep -nE "scripts/agents/[a-z_]+[-a-z_]*\.(py|sh|ps1)" | grep -vE "scripts/agents/(repo-quality|learning|testing|diagnostics|dumps|fleet)/"
    ```
 
 ---

@@ -13,12 +13,12 @@ total to the HUD feed; missed days render as "0 machines (no dumps)".
 self-guards to harqis-server, so running it elsewhere is a no-op (exit 2).
 
 Usage:
-    python scripts/agents/run_dumps_summary_retro.py                       # yesterday (same as nightly)
-    python scripts/agents/run_dumps_summary_retro.py --days 7              # last 7 full days
-    python scripts/agents/run_dumps_summary_retro.py --date 2026-06-12     # one specific day
-    python scripts/agents/run_dumps_summary_retro.py --start 2026-05-01 --end 2026-05-31
-    python scripts/agents/run_dumps_summary_retro.py --month 2026-05       # whole calendar month
-    python scripts/agents/run_dumps_summary_retro.py --days 30 --missing-only  # only the gaps
+    python scripts/agents/dumps/run_dumps_summary_retro.py                       # yesterday (same as nightly)
+    python scripts/agents/dumps/run_dumps_summary_retro.py --days 7              # last 7 full days
+    python scripts/agents/dumps/run_dumps_summary_retro.py --date 2026-06-12     # one specific day
+    python scripts/agents/dumps/run_dumps_summary_retro.py --start 2026-05-01 --end 2026-05-31
+    python scripts/agents/dumps/run_dumps_summary_retro.py --month 2026-05       # whole calendar month
+    python scripts/agents/dumps/run_dumps_summary_retro.py --days 30 --missing-only  # only the gaps
 
 Flags (map 1:1 to the task kwargs; precedence: date → start/end → month → days):
     --days N          last N full days ending yesterday
@@ -37,10 +37,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# scripts/agents/run_dumps_summary_retro.py → repo root is parents[2]. Mirror
+# scripts/agents/dumps/run_dumps_summary_retro.py → repo root is parents[3]. Mirror
 # pull_dumps.py's bootstrap so `workflows.*`/`apps.*` imports + config resolution
 # work whether run via deploy.py or directly from a shell.
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(REPO_ROOT / ".env" / "apps.env")
 import os  # noqa: E402  (after load_dotenv so APP_CONFIG_FILE can be defaulted)
 

@@ -61,7 +61,7 @@ WORKFLOW_TESTING = {
     # Delivery half of the farm: weekdays at 09:30 (30 min after run_test_farm),
     # render the just-refreshed logs/BDD-TEST-FARM.md to HTML, email it via
     # GOOGLE_GMAIL_SEND and post a Telegram completion notice. Shells out to
-    # scripts/agents/daily_test_farm_email.py with --skip-generate, so it reuses
+    # scripts/agents/testing/daily_test_farm_email.py with --skip-generate, so it reuses
     # the 09:00 markdown and never triggers a second Claude generation pass.
     #
     # Same peon/windows pin as run_test_farm so it reads the markdown that host

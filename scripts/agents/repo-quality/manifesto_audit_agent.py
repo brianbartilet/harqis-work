@@ -5,7 +5,7 @@ Runs locally (no API cost). Audits HARQIS-work repo for CODE+PARA compliance,
 generates findings, and creates PR branches for significant issues.
 
 Usage:
-  python scripts/agents/manifesto_audit_agent.py
+  python scripts/agents/repo-quality/manifesto_audit_agent.py
 
 Output:
   - /Volumes/harqis-data/manifesto_audit_<date>.md (narrative findings)
@@ -20,7 +20,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = Path("/Volumes/harqis-data")
 CLAUDE_CODE_BIN = Path.home() / ".local" / "bin" / "claude"
 

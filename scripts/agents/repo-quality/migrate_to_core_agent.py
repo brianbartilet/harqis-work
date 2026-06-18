@@ -17,10 +17,10 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 CORE_DEFAULT = Path.home() / "GIT" / "harqis-core"
 SKILL_PATH = REPO_ROOT / ".claude" / "skills" / "migrate-to-core" / "SKILL.md"
-SCAN_SCRIPT = REPO_ROOT / "scripts" / "agents" / "migrate_to_core_scan.py"
+SCAN_SCRIPT = REPO_ROOT / "scripts" / "agents" / "repo-quality" / "migrate_to_core_scan.py"
 DATA_DIR = Path("/Volumes/harqis-data/migrate-to-core")
 CLAUDE_BIN = Path.home() / ".local" / "bin" / "claude"
 
@@ -76,7 +76,7 @@ Operating constraints:
 - Core repo: {core_path}
 - Timestamp: {timestamp}
 - Use the repo venv Python for Python commands when available: `.venv/bin/python` on macOS/Linux or `.venv/Scripts/python.exe` on Windows.
-- Run the deterministic scan first: `scripts/agents/migrate_to_core_scan.py`.
+- Run the deterministic scan first: `scripts/agents/repo-quality/migrate_to_core_scan.py`.
 - Ingest harqis-core before proposing anything: README.md, core/docs/FEATURES.md, and the relevant core subpackages.
 - Open at most {max_pairs} candidate PR pairs.
 - Never auto-merge anything.

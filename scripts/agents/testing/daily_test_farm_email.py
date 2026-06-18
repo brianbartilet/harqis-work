@@ -3,8 +3,8 @@
 Daily Test Farm email sequence.
 
 Usage:
-  python scripts/agents/daily_test_farm_email.py
-  python scripts/agents/daily_test_farm_email.py --dry-run --skip-generate
+  python scripts/agents/testing/daily_test_farm_email.py
+  python scripts/agents/testing/daily_test_farm_email.py --dry-run --skip-generate
 
 Runs the existing BDD test farm workflow, renders logs/BDD-TEST-FARM.md to HTML,
 and sends it via the HARQIS GOOGLE_GMAIL_SEND configuration.
@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 LOGS_DIR = REPO_ROOT / "logs"
 FARM_MD = LOGS_DIR / "BDD-TEST-FARM.md"
 EMAIL_LOG_DIR = LOGS_DIR / "test_farm_email"

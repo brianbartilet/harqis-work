@@ -24,7 +24,7 @@ Two complementary code paths:
 
 The 5-minute stagger lets most pushes from worker-attached devices land before the host-side pull runs (so the analyze task at 01:00 sees a complete picture). The 8-hour expiry drops anything stuck in the queue before the next day's run, so backlogs can't pile up.
 
-The weekly catch-up re-summarizes the trailing 7 days so a missed daily run (host offline, broker outage) shows up as `0 machines (no dumps)` on the feed instead of vanishing. For an ad-hoc range / month / specific day, run [`scripts/agents/run_dumps_summary_retro.py`](../../scripts/README.md#run_dumps_summary_retropy) on harqis-server.
+The weekly catch-up re-summarizes the trailing 7 days so a missed daily run (host offline, broker outage) shows up as `0 machines (no dumps)` on the feed instead of vanishing. For an ad-hoc range / month / specific day, run [`scripts/agents/dumps/run_dumps_summary_retro.py`](../../scripts/README.md#run_dumps_summary_retropy) on harqis-server.
 
 ## Directory layout produced
 

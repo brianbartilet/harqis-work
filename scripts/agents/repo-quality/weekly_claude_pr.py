@@ -14,7 +14,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).parents[2]
+REPO_ROOT = Path(__file__).parents[3]
 HARQIS_DATA = REPO_ROOT / ".harqis-data"
 CLAUDE_BIN = "/Users/harqis-one/.local/bin/claude"
 
@@ -22,7 +22,7 @@ def run_improvement_scout():
     """Run continuous scanning via daily_improvement_scout.py"""
     print(f"[{datetime.now().isoformat()}] Running improvement scout...")
     result = subprocess.run(
-        ["python", "scripts/agents/daily_improvement_scout.py"],
+        ["python", "scripts/agents/repo-quality/daily_improvement_scout.py"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

@@ -120,7 +120,7 @@ WORKFLOW_DUMPS = {
     # to the HUD feed, surfacing any "0 machines (no dumps)" days so they're
     # visible instead of silently lost. Idempotent — re-reading existing dump
     # folders, writing only a feed summary. For ad-hoc ranges (a whole month,
-    # a specific day) run scripts/agents/run_dumps_summary_retro.py on harqis-server.
+    # a specific day) run scripts/agents/dumps/run_dumps_summary_retro.py on harqis-server.
     'run-job--analyze_dumps_weekly_catchup': {
         'task': 'workflows.dumps.tasks.analyze_daily_dumps',
         'schedule': crontab(hour=1, minute=30, day_of_week=1),

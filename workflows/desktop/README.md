@@ -94,7 +94,7 @@ Log filenames use the format: `YYYY-MM-DD-HH-MM`.
 
 ## Manifesto alignment
 
-See [`docs/MANIFESTO.md`](../../docs/MANIFESTO.md) and [`docs/thesis/MANIFESTO-REPO-UPDATES.md`](../../docs/thesis/MANIFESTO-REPO-UPDATES.md). The same metadata is persisted on each beat entry's `'manifesto'` key in `tasks_config.py`; `scripts/agents/manifesto_audit.py` validates it.
+See [`docs/MANIFESTO.md`](../../docs/MANIFESTO.md) and [`docs/thesis/MANIFESTO-REPO-UPDATES.md`](../../docs/thesis/MANIFESTO-REPO-UPDATES.md). The same metadata is persisted on each beat entry's `'manifesto'` key in `tasks_config.py`; `scripts/agents/repo-quality/manifesto_audit.py` validates it.
 
 | Task | code_role | para_bucket | express_target | review_artifact | hfl_signal |
 | --- | --- | --- | --- | --- | --- |

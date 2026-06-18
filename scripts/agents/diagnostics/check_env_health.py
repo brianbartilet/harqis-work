@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 ENV_DIR = REPO_ROOT / ".env"
 
 

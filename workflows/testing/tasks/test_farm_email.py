@@ -7,7 +7,7 @@ Celery beat task — the *delivery* half of the BDD "test case farm".
 ``logs/BDD-TEST-FARM.md`` at 09:00 on weekdays but notifies no one. This task
 runs a few minutes later, renders that already-current markdown to HTML, emails
 it via ``GOOGLE_GMAIL_SEND`` and posts a Telegram completion notice — by
-shelling out to ``scripts/agents/daily_test_farm_email.py`` in ``--skip-generate``
+shelling out to ``scripts/agents/testing/daily_test_farm_email.py`` in ``--skip-generate``
 mode so there is **no** second (duplicate, costly) Claude generation pass.
 
 Why shell out instead of importing the script:
@@ -26,7 +26,7 @@ and reads the markdown that host just produced.
 
 References:
 - workflows/testing/tasks/test_farm.py — the generation half (run at 09:00).
-- scripts/agents/daily_test_farm_email.py — the render/email/telegram sequence.
+- scripts/agents/testing/daily_test_farm_email.py — the render/email/telegram sequence.
 """
 import sys
 import subprocess
@@ -40,7 +40,7 @@ _log = create_logger("testing.test_farm_email")
 
 # __file__ = repo/workflows/testing/tasks/test_farm_email.py → parents[3] = root.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_EMAIL_SCRIPT = _REPO_ROOT / "scripts" / "agents" / "daily_test_farm_email.py"
+_EMAIL_SCRIPT = _REPO_ROOT / "scripts" / "agents" / "testing" / "daily_test_farm_email.py"
 
 # Render + Gmail send + Telegram post; comfortably above a normal run.
 _DEFAULT_TIMEOUT: int = 300
@@ -51,7 +51,7 @@ _DEFAULT_TIMEOUT: int = 300
 def send_test_farm_report(**kwargs):
     """Render ``logs/BDD-TEST-FARM.md`` and deliver it by email + Telegram.
 
-    Delegates to ``scripts/agents/daily_test_farm_email.py`` — the single source
+    Delegates to ``scripts/agents/testing/daily_test_farm_email.py`` — the single source
     of truth for the render → Gmail → Telegram sequence — so this task never
     triggers a second Claude generation pass.
 

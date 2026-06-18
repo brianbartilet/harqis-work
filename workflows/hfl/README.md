@@ -506,7 +506,7 @@ MCP live-view tool — dual-writing corpus + ES. It composes with
 | `ingest_plaud_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 
 This block is also persisted on each beat entry's `'manifesto'` key — see
-`workflows/hfl/tasks_config.py`. `scripts/agents/manifesto_audit.py` reads from
+`workflows/hfl/tasks_config.py`. `scripts/agents/repo-quality/manifesto_audit.py` reads from
 there.
 
 ---

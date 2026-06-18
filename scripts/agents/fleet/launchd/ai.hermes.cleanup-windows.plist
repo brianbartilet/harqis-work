@@ -7,7 +7,7 @@
 	<key>ProgramArguments</key>
 	<array>
 		<string>/bin/bash</string>
-		<string>/Users/harqis-one/GIT/harqis-work/scripts/agents/cleanup-loop.sh</string>
+		<string>/Users/harqis-one/GIT/harqis-work/scripts/agents/fleet/cleanup-loop.sh</string>
 	</array>
 	<key>RunAtLoad</key>
 	<true/>

@@ -12,16 +12,16 @@ nightly pull and flows straight into analyze_hfl_media / the memory MCP.
 local folder on the wrong machine.
 
 Usage:
-    python scripts/agents/pull_dumps.py                       # yesterday (same as nightly)
-    python scripts/agents/pull_dumps.py --days 7              # last 7 days, one folder/day
-    python scripts/agents/pull_dumps.py --since 2026-05-01 --until 2026-05-31
-    python scripts/agents/pull_dumps.py --full               # EVERY file, one folder
-    python scripts/agents/pull_dumps.py --full --by-file-day # sweep, but per-day folders
-    python scripts/agents/pull_dumps.py --since 2024-06-01 --until 2024-06-30 --by-file-day
-    python scripts/agents/pull_dumps.py --days 30 --single-folder
-    python scripts/agents/pull_dumps.py --days 30 --missing-only --dry-run  # report gaps
-    python scripts/agents/pull_dumps.py --days 30 --missing-only            # fill gaps
-    python scripts/agents/pull_dumps.py --device pixel-7 --dry-run --days 3
+    python scripts/agents/dumps/pull_dumps.py                       # yesterday (same as nightly)
+    python scripts/agents/dumps/pull_dumps.py --days 7              # last 7 days, one folder/day
+    python scripts/agents/dumps/pull_dumps.py --since 2026-05-01 --until 2026-05-31
+    python scripts/agents/dumps/pull_dumps.py --full               # EVERY file, one folder
+    python scripts/agents/dumps/pull_dumps.py --full --by-file-day # sweep, but per-day folders
+    python scripts/agents/dumps/pull_dumps.py --since 2024-06-01 --until 2024-06-30 --by-file-day
+    python scripts/agents/dumps/pull_dumps.py --days 30 --single-folder
+    python scripts/agents/dumps/pull_dumps.py --days 30 --missing-only --dry-run  # report gaps
+    python scripts/agents/dumps/pull_dumps.py --days 30 --missing-only            # fill gaps
+    python scripts/agents/dumps/pull_dumps.py --device pixel-7 --dry-run --days 3
 
 Flags:
     --days N          last N days including today (ignored if --since given)
@@ -49,10 +49,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# scripts/agents/pull_dumps.py → repo root is parents[2]. Mirror mcp/server.py's
+# scripts/agents/dumps/pull_dumps.py → repo root is parents[3]. Mirror mcp/server.py's
 # bootstrap so `workflows.*`/`apps.*` imports + config resolution work whether
 # run via deploy.py or directly from a shell.
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(REPO_ROOT / ".env" / "apps.env")
 import os  # noqa: E402  (after load_dotenv so APP_CONFIG_FILE can be defaulted)
 

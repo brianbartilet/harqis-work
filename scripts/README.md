@@ -4,10 +4,11 @@ Operational scripts for **harqis-work**, organised by purpose:
 
 - **Deploy / runtime** scripts live at the **root of `scripts/`** — they bring
   the stack up, launch daemons, and sync config between machines.
-- **Agent-support** scripts live under [`scripts/agents/`](#scriptsagents) — the
-  Claude-driven automation (docs regen, improvement scout, weekly PR), the
-  repo-quality / health / test tooling those agents drive, and the worktree /
-  window cleanup that keeps the agent fleet tidy.
+- **Agent-support** scripts live under [`scripts/agents/`](#scriptsagents),
+  grouped into **context subfolders** — `repo-quality/`, `learning/`,
+  `testing/`, `diagnostics/`, `dumps/`, and `fleet/`. These are the Claude-driven
+  automation, the repo-quality / health / test tooling those agents drive, the
+  HFL learning loop, and the worktree / window cleanup that keeps the fleet tidy.
 
 ## Root — deploy & runtime
 
@@ -21,22 +22,58 @@ Operational scripts for **harqis-work**, organised by purpose:
 
 ## `scripts/agents/`
 
+Agent-support scripts are grouped into **context subfolders**. Each script
+resolves the repo root via `Path(__file__).resolve().parents[3]` (three levels
+up from `scripts/agents/<bucket>/`).
+
+### `repo-quality/` — audits, scans, and Claude-driven repo maintenance
+
 | Path | Purpose |
 |---|---|
-| [`run_agent_prompt.py`](#run_agent_promptpy) | Claude-driven docs / code-smell regenerator. Invoked by the `agent-prompts.yml` CI workflow. |
-| `daily_improvement_scout.py` | Daily repo inspection — code-quality, config, workflow-health gaps. Shells out to `manifesto_audit.py`. |
-| `weekly_claude_pr.py` | Weekly orchestration — runs the scout, delegates to local Claude Code, opens a draft PR. |
-| `weekly_lessons_extraction.py` | Weekly HFL pattern detection (cron). Runs `lessons_extractor.py`. |
-| `daily_test_farm_email.py` | Daily BDD test farm sequence — refreshes `run_test_farm`, renders `logs/BDD-TEST-FARM.md`, sends the HTML report via `GOOGLE_GMAIL_SEND`, and posts a Telegram completion notice. |
-| `reauth_gmail_send.py` | Interactive re-authorization of a HARQIS Google OAuth credential (default `GOOGLE_GMAIL_SEND`). Opens browser consent and rewrites the token under `.env/`. Run when a daily job fails with `invalid_grant: Token has been expired or revoked`. |
-| `migrate_to_core_scan.py` | Deterministic harvest-candidate scan for the `/migrate-to-core` skill — ranks `apps/` + `scripts/agents/` by genericness vs. coupling (workflows/mcp/sprout) and maps what's already upstream in harqis-core. Writes `.harqis-data/migrate_to_core_scan.json`. Ignores `workflows/` + the AI scaffold. |
 | `manifesto_audit.py` | Validates the `'manifesto'` metadata block on every `workflows/*/tasks_config.py` beat entry. Non-zero exit on hard violations. |
+| `manifesto_audit_agent.py` | Claude-delegated CODE+PARA compliance audit — runs locally (no API cost), writes findings + opens PR branches for significant issues. |
+| `daily_improvement_scout.py` | Daily repo inspection — code-quality, config, workflow-health gaps. Shells out to `repo-quality/manifesto_audit.py`. |
+| `weekly_claude_pr.py` | Weekly orchestration — runs the scout, delegates to local Claude Code, opens a draft PR. |
+| [`run_agent_prompt.py`](#run_agent_promptpy) | Claude-driven docs / code-smell regenerator. Invoked by the `agent-prompts.yml` CI workflow. |
+| `migrate_to_core_scan.py` | Deterministic harvest-candidate scan for the `/migrate-to-core` skill — ranks `apps/` + `scripts/agents/` by genericness vs. coupling and maps what's already upstream in harqis-core. Writes `.harqis-data/migrate_to_core_scan.json`. |
+| `migrate_to_core_agent.py` | Bi-monthly local Claude Code runner for `/migrate-to-core` (first/third Saturdays). Runs `migrate_to_core_scan.py` first, then opens review-gated PR pairs. |
+
+### `learning/` — agent reasoning capture + lessons loop
+
+| Path | Purpose |
+|---|---|
+| `reasoning_capture.py` | Log structured task reasoning/decisions to the HFL corpus for later pattern detection. |
+| `agent_learning_hook.py` | Load + apply learned agent lessons before a complex task (reads `~/.hermes/memory/agent_lessons.md`). |
+| `lessons_extractor.py` | Weekly autonomous pattern detection over the last 7 days of HFL reasoning → writes insights to `agent_lessons.md`. |
+| `weekly_lessons_extraction.py` | Cron wrapper that runs `lessons_extractor.py` and captures output for logging. |
+
+### `testing/` — test execution + reporting
+
+| Path | Purpose |
+|---|---|
 | `run_test_suite.py` | Exploratory / continuous test runner with coverage + perf tracking. |
-| `check_env_health.py` | Environment / dependency / config diagnostics → JSON report. |
-| [`check_plaud_token.py`](#check_plaud_tokenpy) | Read-only smoke check for the Plaud adapter — prints active backend (cloud vs export folder) and lists recordings in a window so you can confirm `PLAUD_TOKEN` works before the nightly `ingest_plaud_activity` job. |
-| [`pull_dumps.py`](#pull_dumpspy) | Manually pull Android/device dumps from `[dumps.pull_targets.*]` — a date range (one daily-dumps folder per day, same layout as the nightly job) or a full sweep of every file. Run on harqis-server; supports `--dry-run`. |
-| [`run_dumps_summary_retro.py`](#run_dumps_summary_retropy) | Retro-summarize the dumps inbox for a range / month / single day (the nightly `analyze_daily_dumps` only sees yesterday). Per-day breakdown + grand total → HUD feed. Run on harqis-server. |
+| [`daily_test_farm_email.py`](#scriptsagentstestingdaily_test_farm_emailpy) | Daily BDD test farm sequence — refreshes `run_test_farm`, renders `logs/BDD-TEST-FARM.md`, emails the HTML report via `GOOGLE_GMAIL_SEND`, posts a Telegram notice. |
 | `smoke-tests.sh` | Daily app smoke tests + Telegram summary. |
+
+### `diagnostics/` — environment + credential health
+
+| Path | Purpose |
+|---|---|
+| `check_env_health.py` | Environment / dependency / config diagnostics → JSON report. |
+| [`check_plaud_token.py`](#check_plaud_tokenpy) | Read-only smoke check for the Plaud adapter — confirms `PLAUD_TOKEN` works before the nightly `ingest_plaud_activity` job. |
+| [`reauth_gmail_send.py`](#scriptsagentsdiagnosticsreauth_gmail_sendpy) | Interactive re-authorization of a HARQIS Google OAuth credential when its refresh token expires/revokes (`invalid_grant`). |
+
+### `dumps/` — device dump ops
+
+| Path | Purpose |
+|---|---|
+| [`pull_dumps.py`](#pull_dumpspy) | Manually pull Android/device dumps from `[dumps.pull_targets.*]` — date range, full sweep, `--by-file-day`, or `--missing-only` catch-up. Run on harqis-server. |
+| [`run_dumps_summary_retro.py`](#run_dumps_summary_retropy) | Retro-summarize the dumps inbox for a range / month / day (the nightly `analyze_daily_dumps` only sees yesterday). Run on harqis-server. |
+
+### `fleet/` — agent worktree / window cleanup
+
+| Path | Purpose |
+|---|---|
 | `cleanup-worktrees.sh` | Delete merged / idle git worktrees left by agent runs. |
 | `close-completed-windows.sh` | Close idle Terminal windows post-deploy (macOS). Also called by `deploy.py`'s post-deploy hook. |
 | `cleanup-loop.sh` | Runs `close-completed-windows.sh` every 30s (driven by the launchd job). |
@@ -45,16 +82,17 @@ Operational scripts for **harqis-work**, organised by purpose:
 
 Both Python entry points (`launch.py`, `deploy.py`) use `pathlib`, work on
 Windows / macOS / Linux, and require Python 3.11+ (uses `tomllib` from stdlib).
-Scripts under `agents/` resolve the repo root via `Path(__file__).resolve().parents[2]`
-(two levels up from `scripts/agents/`).
+Scripts under `agents/<bucket>/` resolve the repo root via
+`Path(__file__).resolve().parents[3]` (three levels up from
+`scripts/agents/<bucket>/`).
 
-### `scripts/agents/daily_test_farm_email.py`
+### `scripts/agents/testing/daily_test_farm_email.py`
 
 Refresh and email the rendered BDD test farm report:
 
 ```bash
-python scripts/agents/daily_test_farm_email.py
-python scripts/agents/daily_test_farm_email.py --dry-run --skip-generate
+python scripts/agents/testing/daily_test_farm_email.py
+python scripts/agents/testing/daily_test_farm_email.py --dry-run --skip-generate
 ```
 
 The script reuses `workflows.testing.tasks.test_farm.run_test_farm`, which invokes the
@@ -66,7 +104,7 @@ are read from `TEST_FARM_EMAIL_TO` / `TEST_FARM_EMAIL_FROM` in `.env/apps.env` (
 `--to` / `--from-account`); they fall back to a generic placeholder when unset.
 Use `--no-telegram` for email-only test runs.
 
-### `scripts/agents/reauth_gmail_send.py`
+### `scripts/agents/diagnostics/reauth_gmail_send.py`
 
 Re-authorize a HARQIS Google OAuth credential when its refresh token has been
 revoked or hard-expired (Google expires refresh tokens after 7 days while the
@@ -75,8 +113,8 @@ fails at the Gmail preflight with `invalid_grant: Token has been expired or
 revoked`. **Run interactively** — it opens a browser for Google consent:
 
 ```bash
-python scripts/agents/reauth_gmail_send.py                       # GOOGLE_GMAIL_SEND
-python scripts/agents/reauth_gmail_send.py --config GOOGLE_GMAIL  # any google_apps cred
+python scripts/agents/diagnostics/reauth_gmail_send.py                       # GOOGLE_GMAIL_SEND
+python scripts/agents/diagnostics/reauth_gmail_send.py --config GOOGLE_GMAIL  # any google_apps cred
 ```
 
 It reads the credential's `scopes` / `credentials` / `storage` from
@@ -352,9 +390,9 @@ the HFL corpus/ES, or archiving. Use it to confirm `PLAUD_TOKEN` (or
 `PLAUD_EXPORT_DIR`) works before the nightly `ingest_plaud_activity` job runs.
 
 ```bash
-python scripts/agents/check_plaud_token.py                       # last 7 days
-python scripts/agents/check_plaud_token.py --days 30
-python scripts/agents/check_plaud_token.py --since 2026-06-01 --until 2026-06-09
+python scripts/agents/diagnostics/check_plaud_token.py                       # last 7 days
+python scripts/agents/diagnostics/check_plaud_token.py --days 30
+python scripts/agents/diagnostics/check_plaud_token.py --since 2026-06-01 --until 2026-06-09
 ```
 
 Exit codes: `0` backend ready + listing ok · `1` acquisition errored (bad/expired
@@ -379,16 +417,16 @@ and the memory MCP.
 > folder on the wrong machine.
 
 ```bash
-python scripts/agents/pull_dumps.py                      # yesterday (same as nightly)
-python scripts/agents/pull_dumps.py --days 7             # last 7 days, one folder per day
-python scripts/agents/pull_dumps.py --since 2026-05-01 --until 2026-05-31
-python scripts/agents/pull_dumps.py --full               # EVERY file → one folder/device
-python scripts/agents/pull_dumps.py --full --by-file-day # sweep, but per-day folders
-python scripts/agents/pull_dumps.py --since 2026-05-01 --until 2026-05-31 --by-file-day
-python scripts/agents/pull_dumps.py --days 30 --single-folder   # range in one folder
-python scripts/agents/pull_dumps.py --days 30 --missing-only --dry-run  # report the gaps
-python scripts/agents/pull_dumps.py --days 30 --missing-only            # fill the gaps
-python scripts/agents/pull_dumps.py --device pixel-7 --dry-run --days 3
+python scripts/agents/dumps/pull_dumps.py                      # yesterday (same as nightly)
+python scripts/agents/dumps/pull_dumps.py --days 7             # last 7 days, one folder per day
+python scripts/agents/dumps/pull_dumps.py --since 2026-05-01 --until 2026-05-31
+python scripts/agents/dumps/pull_dumps.py --full               # EVERY file → one folder/device
+python scripts/agents/dumps/pull_dumps.py --full --by-file-day # sweep, but per-day folders
+python scripts/agents/dumps/pull_dumps.py --since 2026-05-01 --until 2026-05-31 --by-file-day
+python scripts/agents/dumps/pull_dumps.py --days 30 --single-folder   # range in one folder
+python scripts/agents/dumps/pull_dumps.py --days 30 --missing-only --dry-run  # report the gaps
+python scripts/agents/dumps/pull_dumps.py --days 30 --missing-only            # fill the gaps
+python scripts/agents/dumps/pull_dumps.py --device pixel-7 --dry-run --days 3
 ```
 
 Catch-up (`--missing-only`): for each day in the window, skip any device that
@@ -436,11 +474,11 @@ total to the HUD feed. Missed days surface as `0 machines (no dumps)`.
 > so running it elsewhere is a no-op (exit `2`).
 
 ```bash
-python scripts/agents/run_dumps_summary_retro.py                      # yesterday (same as nightly)
-python scripts/agents/run_dumps_summary_retro.py --days 7             # last 7 full days
-python scripts/agents/run_dumps_summary_retro.py --date 2026-06-12    # one specific day
-python scripts/agents/run_dumps_summary_retro.py --start 2026-05-01 --end 2026-05-31
-python scripts/agents/run_dumps_summary_retro.py --month 2026-05      # whole calendar month
+python scripts/agents/dumps/run_dumps_summary_retro.py                      # yesterday (same as nightly)
+python scripts/agents/dumps/run_dumps_summary_retro.py --days 7             # last 7 full days
+python scripts/agents/dumps/run_dumps_summary_retro.py --date 2026-06-12    # one specific day
+python scripts/agents/dumps/run_dumps_summary_retro.py --start 2026-05-01 --end 2026-05-31
+python scripts/agents/dumps/run_dumps_summary_retro.py --month 2026-05      # whole calendar month
 ```
 
 Flags map 1:1 to the task kwargs; precedence is `date → start/end → month →
@@ -454,13 +492,13 @@ skipped (ran off the hub).
 
 ## `run_agent_prompt.py`
 
-`scripts/agents/run_agent_prompt.py` — Claude-powered regenerator for top-level
+`scripts/agents/repo-quality/run_agent_prompt.py` — Claude-powered regenerator for top-level
 docs.
 
 ```bash
-python scripts/agents/run_agent_prompt.py --agent docs          # regenerate README.md
-python scripts/agents/run_agent_prompt.py --agent code_smells   # regenerate CODE_SMELLS.md
-python scripts/agents/run_agent_prompt.py --agent both
+python scripts/agents/repo-quality/run_agent_prompt.py --agent docs          # regenerate README.md
+python scripts/agents/repo-quality/run_agent_prompt.py --agent code_smells   # regenerate CODE_SMELLS.md
+python scripts/agents/repo-quality/run_agent_prompt.py --agent both
 ```
 
 ---

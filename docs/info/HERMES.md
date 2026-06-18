@@ -74,7 +74,7 @@ machine-local agent state, never committed.
 
 | Path | Written by | Read by |
 |---|---|---|
-| `~/.hermes/memory/agent_lessons.md` | `scripts/agents/lessons_extractor.py` (weekly) | `scripts/agents/agent_learning_hook.py` (before multi-step tasks) |
+| `~/.hermes/memory/agent_lessons.md` | `scripts/agents/learning/lessons_extractor.py` (weekly) | `scripts/agents/learning/agent_learning_hook.py` (before multi-step tasks) |
 | `~/.hermes/scripts/` | maintainer / installer | Hermes cron |
 | `~/.hermes/logs/` | cron jobs | maintainer |
 | `.hermes/plans/` (repo-local) | `/max-plan` | maintainer / agents |
@@ -116,10 +116,10 @@ doesn't spam the delivery channel. Examples already in the repo:
 
 - `scripts/cron/send_latest_daily_radar_dump.py` — extracts the latest Daily Radar dump
   from Google Drive and delivers it to Telegram via Hermes `no_agent` cron.
-- `scripts/agents/migrate_to_core_agent.py` — runs Claude Code locally against the
+- `scripts/agents/repo-quality/migrate_to_core_agent.py` — runs Claude Code locally against the
   canonical `/migrate-to-core` skill on a bi-monthly schedule, so Hermes cron schedules
   the work with **no** Hermes agent/API reasoning loop; quiet on off-cycle Saturdays.
-- `scripts/agents/weekly_lessons_extraction.py` — calls the lessons extractor weekly
+- `scripts/agents/learning/weekly_lessons_extraction.py` — calls the lessons extractor weekly
   (`0 14 * * 0`) via Hermes cron, logging to `~/.hermes/logs/`.
 
 ---
@@ -131,10 +131,10 @@ Hermes agents get better over time through a capture → distill → recall loop
 agent's own work):
 
 1. **Capture** — reasoning entries from agent runs accumulate over the week.
-2. **Distill** — `scripts/agents/lessons_extractor.py` (Sundays ~22:00) scans the past
+2. **Distill** — `scripts/agents/learning/lessons_extractor.py` (Sundays ~22:00) scans the past
    7 days, detects recurring patterns, and appends insights to
    `~/.hermes/memory/agent_lessons.md`.
-3. **Recall** — `scripts/agents/agent_learning_hook.py` loads relevant lessons before a
+3. **Recall** — `scripts/agents/learning/agent_learning_hook.py` loads relevant lessons before a
    multi-step task and applies matching patterns to execution.
 
 ---

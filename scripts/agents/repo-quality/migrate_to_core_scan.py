@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scripts/agents/migrate_to_core_scan.py
+scripts/agents/repo-quality/migrate_to_core_scan.py
 
 Deterministic harvest-candidate scan for the `/migrate-to-core` skill.
 
@@ -27,7 +27,7 @@ Per-candidate coupling signals (these drive the genericness judgment):
   - ``already_upstream``: a module with the same leaf name already lives under ``core/``
 
 Usage:
-    python scripts/agents/migrate_to_core_scan.py [--core-path DIR]
+    python scripts/agents/repo-quality/migrate_to_core_scan.py [--core-path DIR]
         [--json-out PATH] [--quiet]
 
 Resolves harqis-core from ``--core-path``, ``$HARQIS_CORE_PATH``, a repo sibling,
@@ -46,7 +46,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = REPO_ROOT / ".harqis-data"
 
 SCAN_DIRS = ("apps", "scripts/agents")

@@ -42,7 +42,7 @@ WORKFLOW_TEMPLATE = {
         'args': [],
         # ── Manifesto metadata ─────────────────────────────────────────────
         # Every active task entry MUST carry this block. Fields are described
-        # in workflows/README.md and validated by scripts/agents/manifesto_audit.py.
+        # in workflows/README.md and validated by scripts/agents/repo-quality/manifesto_audit.py.
         # Replace the values when you adapt this template — the placeholders
         # below will pass the audit but they describe a demo task that does
         # nothing useful.

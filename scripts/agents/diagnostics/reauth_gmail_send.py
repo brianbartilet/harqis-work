@@ -8,8 +8,8 @@ starts failing with `invalid_grant: Token has been expired or revoked` (the
 classic 7-day expiry of an OAuth app still in "Testing" publishing status).
 
 Usage:
-  python scripts/agents/reauth_gmail_send.py
-  python scripts/agents/reauth_gmail_send.py --config GOOGLE_GMAIL_SEND
+  python scripts/agents/diagnostics/reauth_gmail_send.py
+  python scripts/agents/diagnostics/reauth_gmail_send.py --config GOOGLE_GMAIL_SEND
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import os
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _bootstrap_env() -> None:
