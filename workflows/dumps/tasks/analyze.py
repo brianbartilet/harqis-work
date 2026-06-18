@@ -21,7 +21,11 @@ from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import create_logger
 
 from apps.desktop.helpers.feed import feed
-from workflows.dumps.config import get_dumps_target
+from workflows.dumps.config import (
+    HARQIS_SERVER_MACHINE_NAME,
+    get_dumps_target,
+    resolve_local_machine_name,
+)
 from workflows.dumps.files import previous_day_window
 
 _log = create_logger("dumps.analyze")
@@ -67,6 +71,20 @@ def _render_summary(date_suffix: str, machines: list[dict], inbox_path: str) -> 
 @feed()
 def analyze_daily_dumps(**kwargs) -> dict:
     """Inspect the previous day's dumps and push a summary to the HUD feed."""
+    # Host-guard: the inbox (harqis_server_inbox, e.g. /Volumes/harqis-data/dumps)
+    # physically lives on harqis-server only. The `host` queue is meant to be
+    # consumed by harqis-server alone, but if another box ever subscribes to it
+    # a competing-consumers race would run this here and evaluate a path that
+    # doesn't exist locally -> a bogus "inbox not yet created" summary that also
+    # starves the real run (one consumer per message). Self-defend regardless of
+    # queue topology drift: only the canonical hub analyzes; everyone else no-ops.
+    local_machine = resolve_local_machine_name()
+    if local_machine != HARQIS_SERVER_MACHINE_NAME:
+        _log.info("dumps: analyze skipped on %s - not harqis-server (%s); the "
+                  "inbox lives on the hub only.",
+                  local_machine, HARQIS_SERVER_MACHINE_NAME)
+        return {"text": "", "skipped": True, "machine": local_machine}
+
     target = get_dumps_target()
     if not target:
         _log.error("dumps: [dumps] harqis_server_inbox missing - cannot analyze")

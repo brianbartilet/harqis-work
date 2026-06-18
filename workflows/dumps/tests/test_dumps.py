@@ -47,10 +47,15 @@ def test__pull_daily_dumps_from_remotes():
 
 
 def test__analyze_daily_dumps_runs_without_inbox():
-    """Analyze is safe to run even if the inbox doesn't exist yet — it just logs."""
+    """Analyze is safe to run anywhere — it self-guards off-hub and just logs.
+
+    Three valid outcomes depending on where the test runs:
+      - off harqis-server : host-guard short-circuits -> {"skipped": True}
+      - on harqis-server, no inbox yet : {"date": ..., "machines": 0}
+      - on harqis-server, inbox present : {"date": ..., "details": [...]}
+    """
     result = analyze_daily_dumps()
-    # Either the inbox doesn't exist (returns date+machines=0) or it does (returns details)
-    assert "date" in result or "error" in result
+    assert result.get("skipped") or "date" in result or "error" in result
 
 
 # ── Unit / function ───────────────────────────────────────────────────────────

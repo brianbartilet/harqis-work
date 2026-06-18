@@ -40,7 +40,14 @@ disable = ["kanban", "scheduler"]
 
 [windows-work-all]
 role = "host"
-queues = ["host", "default", "hud", "peon", "adhoc", "default_broadcast", "hfl_broadcast", "agent"]
+# NOTE: the `host` queue is intentionally absent. It carries tasks pinned to the
+# always-on hub (harqis-server) — dumps analyze/pull touch the macOS inbox
+# `/Volumes/harqis-data/dumps`, and the hud data-only twins are host-only (see
+# workflows/config.py task_routes). If this box also consumes `host`, a
+# competing-consumers race lets it grab those tasks and run them against paths
+# that only exist on the Mac mini (e.g. "inbox not yet created"). Keep `host`
+# on harqis-server alone.
+queues = ["default", "hud", "peon", "adhoc", "default_broadcast", "hfl_broadcast", "agent"]
 disable = ["kanban", "scheduler"]
 # Beat must run on exactly one machine cluster-wide (harqis-server is the
 # canonical Beat runner per the "always-on hub" comment), so disable scheduler
