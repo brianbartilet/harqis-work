@@ -349,5 +349,37 @@ WORKFLOW_HFL = {
         },
     },
 
+    # Daily Android session rhythm — 23:15 local. Reads a JSONL event log from a
+    # Tasker/Termux-instrumented Android device (screen on/off, unlock count,
+    # foreground app sessions, charging state, idle blocks) and distils ONE
+    # "attention rhythm of the day" entry (Haiku) — dual-written corpus + ES.
+    # Clean no-op until ANDROID_SESSION_JSONL_PATH is set in .env/apps.env: no
+    # data path configured / file missing / no events in window -> no LLM, no
+    # entry. Privacy: raw package names are mapped to categories before
+    # distillation; no app names or notification bodies enter HFL entries.
+    'run-job--ingest_android_session_activity': {
+        'task': 'workflows.hfl.tasks.ingest_android_session.ingest_android_session_activity',
+        'schedule': crontab(hour=23, minute=15),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'window_days': 1,
+            'min_idle_min': 30,
+            'focus_min_duration_min': 20,
+            'fragment_min_count': 4,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 60 * 12,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+        },
+    },
+
 
 }
