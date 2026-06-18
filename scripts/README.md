@@ -16,8 +16,6 @@ Operational scripts for **harqis-work**, organised by purpose:
 | [`launch.py`](#launchpy) | Single-process launcher — runs one daemon in the foreground (`worker`, `scheduler`, `flower`, `frontend`, `mcp`, `kanban`, `trigger-hud-tasks`, `push-config`, `serve-config`). |
 | [`deploy.py`](#deploypy) | Multi-daemon orchestrator — reads `machines.toml` from the repo root, brings the whole stack up/down, optionally registers OS auto-start units. |
 | [`sync-to-host.ps1`](#sync-to-hostps1) | Push gitignored config (`.env/`, `frontend/.env`, `machines.local.toml`) to a remote checkout via `tar \| ssh`. Driven by the `[sync]` / `[ssh.*]` blocks in `machines.local.toml`. |
-| [`check_plaud_token.py`](#check_plaud_tokenpy) | Read-only smoke check for the Plaud adapter — prints active backend (cloud vs export folder) and lists recordings in a window so you can confirm `PLAUD_TOKEN` works before the nightly `ingest_plaud_activity` job. |
-| [`pull_dumps.py`](#pull_dumpspy) | Manually pull Android/device dumps from `[dumps.pull_targets.*]` — a date range (one daily-dumps folder per day, same layout as the nightly job) or a full sweep of every file. Run on harqis-server; supports `--dry-run`. |
 | [`../machines.toml`](#machinestoml) | Per-machine topology (role, queue list, disabled services). Lives at the repo root so per-machine `machines.local.toml` overrides sit next to it. Auto-detected from hostname. |
 | [`tailscale/`](#tailscale) | Tailscale ACL policy. Unchanged. |
 
@@ -35,6 +33,9 @@ Operational scripts for **harqis-work**, organised by purpose:
 | `manifesto_audit.py` | Validates the `'manifesto'` metadata block on every `workflows/*/tasks_config.py` beat entry. Non-zero exit on hard violations. |
 | `run_test_suite.py` | Exploratory / continuous test runner with coverage + perf tracking. |
 | `check_env_health.py` | Environment / dependency / config diagnostics → JSON report. |
+| [`check_plaud_token.py`](#check_plaud_tokenpy) | Read-only smoke check for the Plaud adapter — prints active backend (cloud vs export folder) and lists recordings in a window so you can confirm `PLAUD_TOKEN` works before the nightly `ingest_plaud_activity` job. |
+| [`pull_dumps.py`](#pull_dumpspy) | Manually pull Android/device dumps from `[dumps.pull_targets.*]` — a date range (one daily-dumps folder per day, same layout as the nightly job) or a full sweep of every file. Run on harqis-server; supports `--dry-run`. |
+| [`run_dumps_summary_retro.py`](#run_dumps_summary_retropy) | Retro-summarize the dumps inbox for a range / month / single day (the nightly `analyze_daily_dumps` only sees yesterday). Per-day breakdown + grand total → HUD feed. Run on harqis-server. |
 | `smoke-tests.sh` | Daily app smoke tests + Telegram summary. |
 | `cleanup-worktrees.sh` | Delete merged / idle git worktrees left by agent runs. |
 | `close-completed-windows.sh` | Close idle Terminal windows post-deploy (macOS). Also called by `deploy.py`'s post-deploy hook. |
@@ -351,9 +352,9 @@ the HFL corpus/ES, or archiving. Use it to confirm `PLAUD_TOKEN` (or
 `PLAUD_EXPORT_DIR`) works before the nightly `ingest_plaud_activity` job runs.
 
 ```bash
-python scripts/check_plaud_token.py                       # last 7 days
-python scripts/check_plaud_token.py --days 30
-python scripts/check_plaud_token.py --since 2026-06-01 --until 2026-06-09
+python scripts/agents/check_plaud_token.py                       # last 7 days
+python scripts/agents/check_plaud_token.py --days 30
+python scripts/agents/check_plaud_token.py --since 2026-06-01 --until 2026-06-09
 ```
 
 Exit codes: `0` backend ready + listing ok · `1` acquisition errored (bad/expired
@@ -378,24 +379,76 @@ and the memory MCP.
 > folder on the wrong machine.
 
 ```bash
-python scripts/pull_dumps.py                      # yesterday (same as nightly)
-python scripts/pull_dumps.py --days 7             # last 7 days, one folder per day
-python scripts/pull_dumps.py --since 2026-05-01 --until 2026-05-31
-python scripts/pull_dumps.py --full               # EVERY file → one folder/device
-python scripts/pull_dumps.py --days 30 --single-folder   # range in one folder
-python scripts/pull_dumps.py --device pixel-7 --dry-run --days 3
+python scripts/agents/pull_dumps.py                      # yesterday (same as nightly)
+python scripts/agents/pull_dumps.py --days 7             # last 7 days, one folder per day
+python scripts/agents/pull_dumps.py --since 2026-05-01 --until 2026-05-31
+python scripts/agents/pull_dumps.py --full               # EVERY file → one folder/device
+python scripts/agents/pull_dumps.py --full --by-file-day # sweep, but per-day folders
+python scripts/agents/pull_dumps.py --since 2026-05-01 --until 2026-05-31 --by-file-day
+python scripts/agents/pull_dumps.py --days 30 --single-folder   # range in one folder
+python scripts/agents/pull_dumps.py --days 30 --missing-only --dry-run  # report the gaps
+python scripts/agents/pull_dumps.py --days 30 --missing-only            # fill the gaps
+python scripts/agents/pull_dumps.py --device pixel-7 --dry-run --days 3
 ```
+
+Catch-up (`--missing-only`): for each day in the window, skip any device that
+already has a non-empty `<device>-daily-dumps-<date>` folder on the server and
+pull **only the gaps** — no wasted SSH cycles re-pulling days you already have.
+Paired with `--dry-run` it's a pure *"what did I miss in the last N days?"*
+report (absent **or** empty folders count as missing, so a failed/partial pull
+gets retried). Per-day range only — not valid with `--full`, `--by-file-day`, or
+`--single-folder`.
 
 Layout:
 - **range (default)** → `<device>-daily-dumps-YYYY-MM-DD` per day (back-fills the
-  inbox exactly as if the nightly job had run each night).
+  inbox exactly as if the nightly job had run each night; one `find`/`tar` cycle
+  per day).
+- **`--by-file-day`** → `<device>-daily-dumps-YYYY-MM-DD` per day too, but pulled
+  in **one** SSH cycle per source root and bucketed on the server by each file's
+  own mtime (`tar` preserves it). Composes with `--full` (whole device, date-split
+  on the server) or a window. The efficient way to back-fill a wide range without
+  N per-day round trips or remote `find -printf`. Same `-daily-dumps-` layout, so
+  `analyze_daily_dumps` / HFL ingest pick it up.
 - **`--single-folder`** → one `<device>-range-dumps-<from>_<to>` folder (one SSH
   cycle, no per-day split).
 - **`--full`** → one `<device>-full-dumps-YYYY-MM-DD` folder (no date split — the
-  remote `find` stays portable, so per-file dates aren't read for bucketing).
+  remote `find` stays portable, so per-file dates aren't read for bucketing). Add
+  `--by-file-day` to date-split the sweep instead.
 
-`--dry-run` lists + counts (real remote `find`) but transfers nothing. Exit codes:
-`0` ok / dry-run · `1` a device errored · `2` nothing configured.
+`--dry-run` lists + counts (real remote `find`) but transfers nothing. With
+`--by-file-day` the per-day split only materializes on a real run (mtimes are
+read locally during extraction). Exit codes: `0` ok / dry-run · `1` a device
+errored · `2` nothing configured.
+
+---
+
+## `run_dumps_summary_retro.py`
+
+Retro companion to the nightly `analyze_daily_dumps` task, which only ever
+summarizes *yesterday*. A missed daily run (host offline, broker outage, the
+host-queue race) leaves a permanent gap; this script re-summarizes a date
+**range**, a whole **month**, or a single **day** from the inbox's existing
+`<machine>-daily-dumps-<date>` folders and pushes a per-day breakdown + grand
+total to the HUD feed. Missed days surface as `0 machines (no dumps)`.
+
+> ⚠️ Run this **on harqis-server** (the dumps host). The inbox is a *local* path
+> there (`[dumps] harqis_server_inbox`). The task self-guards to harqis-server,
+> so running it elsewhere is a no-op (exit `2`).
+
+```bash
+python scripts/agents/run_dumps_summary_retro.py                      # yesterday (same as nightly)
+python scripts/agents/run_dumps_summary_retro.py --days 7             # last 7 full days
+python scripts/agents/run_dumps_summary_retro.py --date 2026-06-12    # one specific day
+python scripts/agents/run_dumps_summary_retro.py --start 2026-05-01 --end 2026-05-31
+python scripts/agents/run_dumps_summary_retro.py --month 2026-05      # whole calendar month
+```
+
+Flags map 1:1 to the task kwargs; precedence is `date → start/end → month →
+days`, and ranges are capped at yesterday (today's folder is still being filled
+by the intra-day collect). A weekly Beat job
+(`run-job--analyze_dumps_weekly_catchup`, Mon 01:30) runs the `--days 7`
+equivalent automatically. Exit codes: `0` ok · `1` error (inbox/config) · `2`
+skipped (ran off the hub).
 
 ---
 

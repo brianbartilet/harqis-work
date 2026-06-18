@@ -13,6 +13,7 @@ import shlex
 import shutil
 import subprocess
 import tarfile
+from datetime import datetime
 from pathlib import Path
 
 from .files import CollectedFile
@@ -156,6 +157,99 @@ def list_remote_recent_files(
         files = [f.decode("utf-8", errors="replace") for f in result.stdout.split(b"\0") if f]
         out[source_root] = files
     return out
+
+
+def _extract_members_by_file_day(
+    tar: tarfile.TarFile,
+    local_inbox: Path,
+    device_name: str,
+    source_basename: str,
+    *,
+    dir_prefix: str = "daily",
+) -> dict[str, int]:
+    """Extract a (possibly streaming) tar, placing each file in a per-day folder
+    derived from its OWN mtime:
+
+        <local_inbox>/<device>-<dir_prefix>-dumps-<YYYY-MM-DD>/<source_basename>/<rel>
+
+    tar preserves mtimes through the archive, so bucketing on `member.mtime`
+    reproduces each file's real calendar day regardless of when the pull ran —
+    that's what lets a single "pull everything" cycle land in date-aligned
+    folders on the server instead of one execution-dated dump. mtime is read in
+    the server's local timezone (`datetime.fromtimestamp`), matching how the
+    rest of the dumps pipeline buckets days. Returns `{day: file_count}`.
+
+    Streaming-safe: members are extracted in iteration order (no seek-back), so
+    this works with a `mode="r|"` pipe straight off ssh stdout.
+    """
+    per_day: dict[str, int] = {}
+    for member in tar:
+        if not member.isfile():
+            continue
+        day = datetime.fromtimestamp(member.mtime).strftime("%Y-%m-%d")
+        dest_base = local_inbox / f"{device_name}-{dir_prefix}-dumps-{day}" / source_basename
+        dest_base.mkdir(parents=True, exist_ok=True)
+        tar.extract(member, path=dest_base)
+        per_day[day] = per_day.get(day, 0) + 1
+    return per_day
+
+
+def pull_via_ssh_tar_by_file_day(
+    ssh_target: str,
+    source_root: str,
+    files: list[str],
+    local_inbox: Path,
+    device_name: str,
+    *,
+    dir_prefix: str = "daily",
+    ssh_port: int = 22,
+) -> dict[str, int]:
+    """Pull `files` from `<ssh_target>:<source_root>` and bucket each into a
+    per-day folder by its own mtime (see `_extract_members_by_file_day`).
+
+    Same single-SSH-round-trip-per-source-root shape as `pull_via_ssh_tar`, but
+    instead of one fixed destination folder the files fan out across
+    `<device>-<dir_prefix>-dumps-<file-date>/<basename(source_root)>/...`. The
+    remote side is unchanged (`tar -cf - --null -T -`), so no `find -printf` /
+    BusyBox-portability concerns — all the date logic happens locally on extract.
+    Returns `{day: file_count}`.
+    """
+    if not files:
+        return {}
+
+    rel_files = []
+    for f in files:
+        try:
+            rel = Path(f).relative_to(source_root)
+        except ValueError:
+            continue
+        rel_files.append(rel.as_posix())
+    if not rel_files:
+        return {}
+    list_payload = ("\0".join(rel_files) + "\0").encode("utf-8")
+
+    source_quoted = shlex.quote(source_root)
+    remote_cmd = f"cd {source_quoted} && tar -cf - --null -T -"
+    ssh_cmd = ["ssh", "-p", str(ssh_port), ssh_target, remote_cmd]
+    src_base = Path(source_root).name
+
+    proc = subprocess.Popen(ssh_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    if proc.stdin is None or proc.stdout is None:
+        raise RuntimeError("subprocess pipes were not created")
+    try:
+        proc.stdin.write(list_payload)
+        proc.stdin.close()
+        with tarfile.open(fileobj=proc.stdout, mode="r|") as tar:
+            per_day = _extract_members_by_file_day(
+                tar, local_inbox, device_name, src_base, dir_prefix=dir_prefix,
+            )
+    finally:
+        proc.wait()
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"ssh remote-tar failed (exit {proc.returncode}) on {ssh_target}:{source_root}"
+        )
+    return per_day
 
 
 def pull_via_ssh_tar(

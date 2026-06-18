@@ -12,17 +12,27 @@ nightly pull and flows straight into analyze_hfl_media / the memory MCP.
 local folder on the wrong machine.
 
 Usage:
-    python scripts/pull_dumps.py                      # yesterday (same as nightly)
-    python scripts/pull_dumps.py --days 7             # last 7 days, one folder/day
-    python scripts/pull_dumps.py --since 2026-05-01 --until 2026-05-31
-    python scripts/pull_dumps.py --full               # EVERY file, one folder
-    python scripts/pull_dumps.py --days 30 --single-folder
-    python scripts/pull_dumps.py --device pixel-7 --dry-run --days 3
+    python scripts/agents/pull_dumps.py                       # yesterday (same as nightly)
+    python scripts/agents/pull_dumps.py --days 7              # last 7 days, one folder/day
+    python scripts/agents/pull_dumps.py --since 2026-05-01 --until 2026-05-31
+    python scripts/agents/pull_dumps.py --full               # EVERY file, one folder
+    python scripts/agents/pull_dumps.py --full --by-file-day # sweep, but per-day folders
+    python scripts/agents/pull_dumps.py --since 2024-06-01 --until 2024-06-30 --by-file-day
+    python scripts/agents/pull_dumps.py --days 30 --single-folder
+    python scripts/agents/pull_dumps.py --days 30 --missing-only --dry-run  # report gaps
+    python scripts/agents/pull_dumps.py --days 30 --missing-only            # fill gaps
+    python scripts/agents/pull_dumps.py --device pixel-7 --dry-run --days 3
 
 Flags:
     --days N          last N days including today (ignored if --since given)
     --since/--until   YYYY-MM-DD window (until inclusive)
     --full            sweep all files (ignores the window); one folder per device
+    --by-file-day     ONE SSH cycle, then bucket each file into
+                      <device>-daily-dumps-<date> by its own mtime (composes with
+                      --full or the window). The efficient way to back-fill a range.
+    --missing-only    catch-up: pull only days whose <device>-daily-dumps-<date>
+                      folder is absent/empty. With --dry-run, just report the gaps.
+                      Per-day range only (not --full / --by-file-day / --single-folder).
     --single-folder   range → one folder per device instead of one per day
     --device NAME     limit to a single pull-target
     --dry-run         list + count only; transfer nothing
@@ -39,10 +49,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# scripts/pull_dumps.py → repo root is parents[1]. Mirror mcp/server.py's
+# scripts/agents/pull_dumps.py → repo root is parents[2]. Mirror mcp/server.py's
 # bootstrap so `workflows.*`/`apps.*` imports + config resolution work whether
 # run via deploy.py or directly from a shell.
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(REPO_ROOT / ".env" / "apps.env")
 import os  # noqa: E402  (after load_dotenv so APP_CONFIG_FILE can be defaulted)
 
@@ -61,8 +71,15 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--until", help='Inclusive upper bound "YYYY-MM-DD" (default today).')
     p.add_argument("--full", action="store_true",
                    help="Sweep EVERY file on the device (ignores the window).")
+    p.add_argument("--by-file-day", action="store_true", dest="by_file_day",
+                   help="One SSH cycle, then bucket each file into "
+                        "<device>-daily-dumps-<date> by its own mtime.")
     p.add_argument("--single-folder", action="store_true",
                    help="Range → one folder per device instead of one per day.")
+    p.add_argument("--missing-only", action="store_true", dest="missing_only",
+                   help="Catch-up: pull only days whose <device>-daily-dumps-<date> "
+                        "folder is absent/empty. Pair with --dry-run to just report "
+                        "the gaps. Per-day range only.")
     p.add_argument("--device", help="Limit to a single [dumps.pull_targets.<name>].")
     p.add_argument("--dry-run", action="store_true", help="List + count only; pull nothing.")
     p.add_argument("--notify", action="store_true", help="Send Telegram alert on failures.")
@@ -80,6 +97,8 @@ def main() -> int:
         days=args.days,
         full=args.full,
         per_day=not args.single_folder,
+        by_file_day=args.by_file_day,
+        missing_only=args.missing_only,
         device=args.device,
         dry_run=args.dry_run,
         notify=args.notify,
@@ -109,7 +128,17 @@ def main() -> int:
         print(line)
 
     days = result.get("days")
-    if days:
+    if days and any("present_devices" in d for d in days):
+        # --missing-only: show which days were gaps (pulled) vs already present.
+        gap_days = [d for d in days if d.get("pulled_devices")]
+        present_days = [d for d in days if not d.get("pulled_devices")]
+        word = "would pull" if result.get("dry_run") else "pulled"
+        print(f"  Gaps: {len(gap_days)} day(s) {word}; "
+              f"{len(present_days)} day(s) already present.")
+        for d in gap_days:
+            who = ", ".join(d["pulled_devices"])
+            print(f"    {d['day']}: {d['files_count']} file(s)  [{who}]")
+    elif days:
         nonempty = [d for d in days if d["files_count"]]
         print(f"  ({len(days)} day folder(s); {len(nonempty)} with files)")
 

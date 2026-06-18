@@ -10,6 +10,7 @@ content modification (close enough for log/screenshot use cases).
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -129,3 +130,22 @@ def group_by_source(files: list[CollectedFile]) -> dict[Path, list[CollectedFile
 def format_dump_dir_name(machine_name: str, day: datetime) -> str:
     """Produce `<machine>-daily-dumps-YYYY-MM-DD` for the given local day."""
     return f"{machine_name}-daily-dumps-{day.strftime('%Y-%m-%d')}"
+
+
+# Inverse of format_dump_dir_name. The trailing `-daily-dumps-<date>` anchor
+# splits cleanly even when the machine name itself contains hyphens (e.g.
+# "windows-work-all"), because the date pattern is pinned to the end.
+_DUMP_DIR_RE = re.compile(r"^(?P<machine>.+)-daily-dumps-(?P<date>\d{4}-\d{2}-\d{2})$")
+
+
+def parse_dump_dir_name(name: str) -> tuple[str, str] | None:
+    """Parse `<machine>-daily-dumps-YYYY-MM-DD` → (machine, 'YYYY-MM-DD').
+
+    Returns None when `name` isn't a dump-dir name, so callers can iterate an
+    inbox and skip unrelated entries. Lets the analyzer match many days in one
+    pass instead of testing each candidate date suffix per entry.
+    """
+    m = _DUMP_DIR_RE.match(name)
+    if not m:
+        return None
+    return m.group("machine"), m.group("date")

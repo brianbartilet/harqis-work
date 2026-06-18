@@ -255,7 +255,7 @@ class PlaudCloudBackend(PlaudBackend):
         return resp.json()
 
     def token_info(self) -> dict:
-        """Diagnostics (check_plaud_token.py): active auth mode + bearer expiry."""
+        """Diagnostics (scripts/agents/check_plaud_token.py): active auth mode + bearer expiry."""
         info: dict = {"mode": self.auth_mode}
         try:
             token = self._resolve_token()

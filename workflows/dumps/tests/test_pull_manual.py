@@ -110,6 +110,57 @@ def test__unknown_device_is_reported(wired):
     assert_that(result.get("error"), contains_string("nope"))
 
 
+# ── missing-only (catch-up) ───────────────────────────────────────────────────
+
+@pytest.mark.smoke
+def test__device_day_has_dumps_detects_empty_vs_filled(tmp_path):
+    day = datetime(2026, 6, 9)
+    assert pullmod._device_day_has_dumps(tmp_path, "pixel-7", day) is False  # absent
+    folder = tmp_path / "pixel-7-daily-dumps-2026-06-09"
+    folder.mkdir()
+    assert pullmod._device_day_has_dumps(tmp_path, "pixel-7", day) is False  # empty
+    (folder / "a.jpg").write_text("x")
+    assert pullmod._device_day_has_dumps(tmp_path, "pixel-7", day) is True   # has file
+
+
+@pytest.mark.smoke
+def test__missing_only_skips_present_days(wired, tmp_path):
+    # Pre-seed 2026-06-09 so it counts as already present (non-empty).
+    seeded = tmp_path / "pixel-7-daily-dumps-2026-06-09" / "old.jpg"
+    seeded.parent.mkdir(parents=True)
+    seeded.write_text("x")
+
+    result = pullmod.pull_dumps_manual(days=3, missing_only=True, now=NOW)
+    # Window = 06-08, 06-09, 06-10. 06-09 present → only 2 pull cycles run.
+    assert_that(result["mode"], equal_to("range-per-day-missing"))
+    assert_that(wired["pull"], has_length(2))
+    pulled = {c["dir"] for c in wired["pull"]}
+    assert "pixel-7-daily-dumps-2026-06-09" not in pulled
+    assert "pixel-7-daily-dumps-2026-06-08" in pulled
+    assert "pixel-7-daily-dumps-2026-06-10" in pulled
+    assert_that(result["days_skipped"], equal_to(1))
+
+
+@pytest.mark.smoke
+def test__missing_only_dry_run_reports_gaps(wired, tmp_path):
+    seeded = tmp_path / "pixel-7-daily-dumps-2026-06-09" / "old.jpg"
+    seeded.parent.mkdir(parents=True)
+    seeded.write_text("x")
+
+    result = pullmod.pull_dumps_manual(days=3, missing_only=True, dry_run=True, now=NOW)
+    assert_that(wired["pull"], has_length(0))   # dry-run transfers nothing
+    by_day = {d["day"]: d for d in result["days"]}
+    assert "pixel-7" in by_day["2026-06-09"]["present_devices"]
+    assert "pixel-7" in by_day["2026-06-08"]["pulled_devices"]
+
+
+@pytest.mark.smoke
+def test__missing_only_rejects_full_sweep(wired):
+    result = pullmod.pull_dumps_manual(full=True, missing_only=True, now=NOW)
+    assert_that(result.get("error"), contains_string("missing_only"))
+    assert_that(wired["pull"], has_length(0))
+
+
 # ── transport: full-sweep find command ────────────────────────────────────────
 
 @pytest.mark.smoke

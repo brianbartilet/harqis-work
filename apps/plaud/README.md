@@ -89,7 +89,7 @@ Any one is sufficient. Auth precedence inside the cloud backend:
 The regional redirect (`-302` → e.g. `api-apse1.plaud.ai`) is followed
 automatically for both the auth and data calls; `PLAUD_API_BASE` can pin it.
 
-Verify any of this with `python scripts/check_plaud_token.py` — it prints the
+Verify any of this with `python scripts/agents/check_plaud_token.py` — it prints the
 active backend, auth mode, and token expiry, and lists a window of recordings
 without writing anything.
 

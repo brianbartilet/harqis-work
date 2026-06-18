@@ -9,7 +9,7 @@ writes to.
 
 The scheduled `pull_daily_dumps_from_remotes` covers the previous day. For
 backfills and ad-hoc syncs there is `pull_dumps_manual` (see also
-`scripts/pull_dumps.py`), which pulls a date RANGE (one daily-dumps folder per
+`scripts/agents/pull_dumps.py`), which pulls a date RANGE (one daily-dumps folder per
 day, identical layout to the nightly job) or does a FULL sweep of every file on
 the device. Both share the same list→tar→extract core, so a manual pull is
 indistinguishable from a nightly one to everything downstream (analyze_media,
@@ -28,7 +28,11 @@ from core.utilities.logging.custom_logger import create_logger
 
 from workflows.dumps.config import PullTarget, get_dumps_target, get_pull_targets
 from workflows.dumps.files import format_dump_dir_name, previous_day_window
-from workflows.dumps.transport import list_remote_recent_files, pull_via_ssh_tar
+from workflows.dumps.transport import (
+    list_remote_recent_files,
+    pull_via_ssh_tar,
+    pull_via_ssh_tar_by_file_day,
+)
 
 _log = create_logger("dumps.pull")
 
@@ -159,6 +163,94 @@ def _pull_devices_window(
     return summary, failures
 
 
+def _pull_devices_by_file_day(
+    pull_targets: list[PullTarget],
+    inbox: Path,
+    *,
+    start: Optional[datetime],
+    end: Optional[datetime],
+    dir_prefix: str = "daily",
+    dry_run: bool = False,
+) -> tuple[dict, list[dict]]:
+    """List + pull one window (or a full sweep when start/end are None) for every
+    device, bucketing each file into a per-day folder by its OWN mtime.
+
+    The efficient "pull everything once, organize on the server" path: one SSH
+    cycle per source root (no per-day round trips), with the date split done
+    locally during extraction. Each file lands in
+    ``<device>-<dir_prefix>-dumps-<file-date>/<source-basename>/...``.
+
+    `dry_run` lists counts only — per-day buckets aren't known without pulling
+    (we don't read remote mtimes), so the day split only materializes on a real
+    run. Returns ``(summary, failures)``; ``summary['days']`` aggregates per-day
+    file counts across all devices.
+    """
+    start_iso = start.strftime("%Y-%m-%d %H:%M:%S") if start else None
+    end_iso = end.strftime("%Y-%m-%d %H:%M:%S") if end else None
+
+    summary: dict = {"pulled_devices": 0, "files_count": 0, "devices": [], "days": []}
+    day_totals: dict[str, int] = {}
+    failures: list[dict] = []
+    for device in pull_targets:
+        _log.info("dumps: %s (by-file-day) from %s (%s) into %s",
+                  "listing" if dry_run else "pulling",
+                  device.name, device.ssh, inbox)
+        try:
+            listing = list_remote_recent_files(
+                ssh_target=device.ssh,
+                paths=device.paths,
+                start_iso=start_iso,
+                end_iso=end_iso,
+                ssh_port=device.port,
+            )
+        except RuntimeError as e:
+            _log.error("dumps: list failed on %s: %s", device.name, e)
+            failures.append({"device": device.name, "stage": "list", "error": str(e)})
+            summary["devices"].append({"name": device.name, "files_count": 0, "error": str(e)})
+            continue
+
+        device_count = 0
+        device_days: dict[str, int] = {}
+        for source_root, files in listing.items():
+            if dry_run:
+                device_count += len(files)
+                continue
+            try:
+                per_day = pull_via_ssh_tar_by_file_day(
+                    ssh_target=device.ssh,
+                    source_root=source_root,
+                    files=files,
+                    local_inbox=inbox,
+                    device_name=device.name,
+                    dir_prefix=dir_prefix,
+                    ssh_port=device.port,
+                )
+            except RuntimeError as e:
+                _log.error("dumps: pull failed on %s:%s: %s", device.name, source_root, e)
+                failures.append({
+                    "device": device.name, "stage": "pull",
+                    "source_root": source_root, "error": str(e),
+                })
+                continue
+            for day, n in per_day.items():
+                device_days[day] = device_days.get(day, 0) + n
+                day_totals[day] = day_totals.get(day, 0) + n
+                device_count += n
+            _log.info("dumps: %s pulled %d files from %s across %d day(s)",
+                      device.name, sum(per_day.values()), source_root, len(per_day))
+
+        summary["devices"].append({
+            "name": device.name,
+            "files_count": device_count,
+            "days": dict(sorted(device_days.items())),
+        })
+        summary["pulled_devices"] += 1
+        summary["files_count"] += device_count
+
+    summary["days"] = [{"day": d, "files_count": c} for d, c in sorted(day_totals.items())]
+    return summary, failures
+
+
 @SPROUT.task(name="workflows.dumps.tasks.pull_daily_dumps_from_remotes")
 @log_result()
 def pull_daily_dumps_from_remotes(**kwargs) -> dict:
@@ -233,6 +325,19 @@ def resolve_manual_window(
     return start, end
 
 
+def _device_day_has_dumps(inbox: Path, device_name: str, day: datetime) -> bool:
+    """True iff ``<inbox>/<device>-daily-dumps-<day>`` exists and holds >=1 file.
+
+    An absent OR empty folder counts as *missing* — so a day that never pulled,
+    or whose pull failed/half-completed, is treated as a gap to refill (rather
+    than silently considered "done"). Stops at the first file found.
+    """
+    folder = inbox / format_dump_dir_name(device_name, day)
+    if not folder.is_dir():
+        return False
+    return any(p.is_file() for p in folder.rglob("*"))
+
+
 def pull_dumps_manual(
     *,
     since: Optional[str] = None,
@@ -240,6 +345,8 @@ def pull_dumps_manual(
     days: Optional[int] = None,
     full: bool = False,
     per_day: bool = True,
+    by_file_day: bool = False,
+    missing_only: bool = False,
     device: Optional[str] = None,
     dry_run: bool = False,
     notify: bool = False,
@@ -251,22 +358,38 @@ def pull_dumps_manual(
     raises; per-device failures are collected into the result.
 
     Modes:
+      * ``by_file_day=True`` — pull everything in ONE SSH cycle per source root
+        (a full sweep, or the resolved since/until/days window) and organize it
+        on the server: each file is bucketed into
+        ``<device>-daily-dumps-YYYY-MM-DD`` by its OWN mtime (tar preserves it).
+        Same date-aligned layout as the nightly job, so analyze_daily_dumps /
+        HFL ingest pick it up — without N per-day round trips or remote
+        ``find -printf``. This is the efficient way to back-fill a wide range.
       * ``full=True``     — every file on the device → ONE folder per device,
-        ``<device>-full-dumps-YYYY-MM-DD`` (today's date). No date split (the
-        remote ``find`` stays portable — no ``-printf`` — so we don't read
-        per-file mtimes for bucketing).
+        ``<device>-full-dumps-YYYY-MM-DD`` (today's date). No date split.
       * range + ``per_day`` (default) — one ``find``/``tar`` cycle per calendar
         day, each into ``<device>-daily-dumps-YYYY-MM-DD`` — byte-identical
         layout to the nightly job, so a range pull backfills the inbox exactly
         as if the job had run each night.
       * range + ``per_day=False`` — the whole range in ONE folder per device,
         ``<device>-range-dumps-<from>_<to>`` (one SSH cycle, no per-day split).
+      * range + ``missing_only`` (default per-day layout) — catch-up: for each
+        day in the window, skip any device that already has a non-empty
+        ``<device>-daily-dumps-<day>`` folder and pull ONLY the gaps. With
+        ``dry_run`` this is a pure "what's missing in the last N days?" report.
+        Only valid with the default per-day range (not ``full`` / ``by_file_day``
+        / ``per_day=False``).
 
     Args:
         since/until: ``YYYY-MM-DD`` window bounds (``until`` inclusive).
         days:        last N days including today (ignored if ``since`` given).
         full:        sweep every file (ignores since/until/days).
         per_day:     range layout — daily folders (True) vs one folder (False).
+        by_file_day: single-cycle pull bucketed by each file's own mtime into
+                     ``<device>-daily-dumps-<date>``. Composes with ``full`` (no
+                     window) or the since/until/days window. Overrides ``per_day``.
+        missing_only: only pull (device, day) pairs whose daily folder is absent
+                     or empty — back-fill just the gaps. Per-day range only.
         device:      limit to a single pull-target by name.
         dry_run:     list only — report counts, transfer nothing.
         notify:      send the Telegram failure alert on errors (off by default
@@ -275,6 +398,11 @@ def pull_dumps_manual(
     target = get_dumps_target()
     if not target:
         return {"pulled_devices": 0, "error": "harqis_server_inbox not set"}
+
+    if missing_only and (full or by_file_day or not per_day):
+        return {"pulled_devices": 0,
+                "error": "missing_only only works with the default per-day range "
+                         "mode (drop full / by_file_day / single-folder)"}
 
     pull_targets = get_pull_targets()
     if device:
@@ -288,7 +416,23 @@ def pull_dumps_manual(
     now = now or datetime.now()
     failures: list[dict] = []
 
-    if full:
+    if by_file_day:
+        # Pull everything once, organize on the server: full sweep (no window)
+        # or the resolved range, then bucket every file by its own mtime.
+        if full:
+            start_w, end_w = None, None
+        else:
+            start_w, end_w = resolve_manual_window(since=since, until=until, days=days, now=now)
+        summary, failures = _pull_devices_by_file_day(
+            pull_targets, inbox, start=start_w, end=end_w, dry_run=dry_run,
+        )
+        summary["mode"] = "full-by-day" if full else "range-by-day"
+        if not full:
+            summary["window"] = {
+                "start": start_w.strftime("%Y-%m-%d"),
+                "end_exclusive": end_w.strftime("%Y-%m-%d"),
+            }
+    elif full:
         run_day = now.strftime("%Y-%m-%d")
         summary, failures = _pull_devices_window(
             pull_targets, inbox, start=None, end=None,
@@ -301,26 +445,48 @@ def pull_dumps_manual(
         if per_day:
             summary = {"pulled_devices": 0, "files_count": 0, "devices": [], "days": []}
             per_device: dict[str, int] = {}
+            days_skipped = 0
             day = start
             while day < end:
                 next_day = day + timedelta(days=1)
-                day_summary, day_failures = _pull_devices_window(
-                    pull_targets, inbox, start=day, end=next_day,
-                    dir_namer=lambda d, _day=day: format_dump_dir_name(d.name, _day),
-                    dry_run=dry_run,
-                )
-                failures.extend(day_failures)
-                summary["files_count"] += day_summary["files_count"]
-                summary["days"].append({
-                    "day": day.strftime("%Y-%m-%d"),
-                    "files_count": day_summary["files_count"],
-                })
-                for dev in day_summary["devices"]:
-                    per_device[dev["name"]] = per_device.get(dev["name"], 0) + dev["files_count"]
+                day_str = day.strftime("%Y-%m-%d")
+
+                # Catch-up: only pull devices whose daily folder is absent/empty.
+                if missing_only:
+                    present = sorted(d.name for d in pull_targets
+                                     if _device_day_has_dumps(inbox, d.name, day))
+                    present_set = set(present)
+                    todo = [d for d in pull_targets if d.name not in present_set]
+                else:
+                    present = []
+                    todo = pull_targets
+
+                if todo:
+                    day_summary, day_failures = _pull_devices_window(
+                        todo, inbox, start=day, end=next_day,
+                        dir_namer=lambda d, _day=day: format_dump_dir_name(d.name, _day),
+                        dry_run=dry_run,
+                    )
+                    failures.extend(day_failures)
+                    day_files = day_summary["files_count"]
+                    for dev in day_summary["devices"]:
+                        per_device[dev["name"]] = per_device.get(dev["name"], 0) + dev["files_count"]
+                else:
+                    day_files = 0
+                    days_skipped += 1
+
+                summary["files_count"] += day_files
+                day_record = {"day": day_str, "files_count": day_files}
+                if missing_only:
+                    day_record["pulled_devices"] = [d.name for d in todo]
+                    day_record["present_devices"] = present
+                summary["days"].append(day_record)
                 day = next_day
             summary["devices"] = [{"name": k, "files_count": v} for k, v in per_device.items()]
             summary["pulled_devices"] = len(per_device)
-            summary["mode"] = "range-per-day"
+            summary["mode"] = "range-per-day-missing" if missing_only else "range-per-day"
+            if missing_only:
+                summary["days_skipped"] = days_skipped
         else:
             label = f"{start.strftime('%Y-%m-%d')}_{(end - timedelta(days=1)).strftime('%Y-%m-%d')}"
             summary, failures = _pull_devices_window(

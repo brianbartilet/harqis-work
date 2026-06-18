@@ -10,17 +10,21 @@ Two complementary code paths:
 |---|---|---|---|
 | `broadcast_collect_daily_dumps` | every Celery worker subscribed to `default_broadcast` | itself | walks local paths, builds tar in Python, streams to harqis-server via `ssh + tar -xf -` (or `shutil.copy2` if the worker IS harqis-server) |
 | `pull_daily_dumps_from_remotes` | harqis-server only (queue=`host`) | every device under `[dumps.pull_targets.*]` (Android via Termux SSHD, etc.) | SSH + `find -newermt` to list, then `ssh + tar -cf -` piped into local extraction |
-| `analyze_daily_dumps` | harqis-server only (queue=`host`) | the inbox | walks the day's machine folders, then pushes a per-machine summary line to the HUD feed via `@feed()`. The kanban / Trello hand-off marker is preserved in `tasks/analyze.py` as `# FUTURE: kanban agent hand-off` for a later enhancement. |
+| `analyze_daily_dumps` | harqis-server only (queue=`host`, self-guards) | the inbox | walks one or more days' machine folders, then pushes a summary to the HUD feed via `@feed()`. Default = yesterday; accepts a retro window (`days` / `date` / `start`+`end` / `month`) and renders a per-day breakdown + grand total for multi-day runs. The kanban / Trello hand-off marker is preserved in `tasks/analyze.py` as `# FUTURE: kanban agent hand-off` for a later enhancement. |
 
 ## Schedule
 
 | Task | Time (local) | Queue | Expires |
 |---|---|---|---|
 | `broadcast_collect_daily_dumps` | 00:00 | `default_broadcast` (fanout) | 8 h |
+| `broadcast_collect_today_dumps` | 08:30/12:30/16:30/20:30 | `default_broadcast` (fanout) | 4 h |
 | `pull_daily_dumps_from_remotes` | 00:05 | `host` | 8 h |
 | `analyze_daily_dumps` | 01:00 | `host` | 8 h |
+| `analyze_dumps_weekly_catchup` | Mon 01:30 (`days=7`) | `host` | 8 h |
 
 The 5-minute stagger lets most pushes from worker-attached devices land before the host-side pull runs (so the analyze task at 01:00 sees a complete picture). The 8-hour expiry drops anything stuck in the queue before the next day's run, so backlogs can't pile up.
+
+The weekly catch-up re-summarizes the trailing 7 days so a missed daily run (host offline, broker outage) shows up as `0 machines (no dumps)` on the feed instead of vanishing. For an ad-hoc range / month / specific day, run [`scripts/agents/run_dumps_summary_retro.py`](../../scripts/README.md#run_dumps_summary_retropy) on harqis-server.
 
 ## Directory layout produced
 

@@ -1,18 +1,22 @@
 """
 Beat schedule for the `dumps` workflow.
 
-Three entries:
+Entries:
   - broadcast_collect_daily_dumps : fanout to every default_broadcast worker;
                                     each ships its own paths to harqis-server.
+  - broadcast_collect_today_dumps : intra-day catch-up (every 4h) — same task,
+                                    include_today=True for same-day edits.
   - pull_daily_dumps_from_remotes : runs on harqis-server only; pulls from
                                     Android (Termux SSHD) and other non-celery
                                     devices listed under [dumps.pull_targets].
-  - analyze_daily_dumps           : placeholder — logs file counts. The agent
-                                    wire-up is marked AGENT WIRE-UP HERE in
-                                    workflows/dumps/tasks/analyze.py.
+  - analyze_daily_dumps           : walks yesterday's inbox, pushes a per-machine
+                                    summary to the HUD feed. Self-guards to
+                                    harqis-server (workflows/dumps/tasks/analyze.py).
+  - analyze_dumps_weekly_catchup  : Mon 01:30 retro — same task with days=7, to
+                                    surface any missed daily runs.
 
-All three fire once a day. Beat runs on harqis-server only (canonical Beat
-runner per machines.toml — every other host has scheduler disabled).
+Beat runs on harqis-server only (canonical Beat runner per machines.toml —
+every other host has scheduler disabled).
 
 `expires`: 8 hours. If a worker doesn't pick up the broadcast within that
 window (machine offline, RabbitMQ outage, etc.), the task is dropped to
@@ -95,6 +99,32 @@ WORKFLOW_DUMPS = {
     'run-job--analyze_daily_dumps': {
         'task': 'workflows.dumps.tasks.analyze_daily_dumps',
         'schedule': crontab(hour=1, minute=0),
+        'options': {
+            'queue': WorkflowQueue.HOST,
+            'os': ['windows', 'macos', 'linux'],
+            'expires': 60 * 60 * 8,
+        },
+        'manifesto': {
+            'code_role': 'distill+express',
+            'para_bucket': 'area',
+            'express_target': 'hud_feed',
+            'review_artifact': 'es_log+hud_feed',
+            'hfl_signal': True,
+        },
+    },
+
+    # ── Mon 01:30 — weekly catch-up: re-summarize the trailing 7 days ────────
+    # The daily run only ever sees yesterday, so a missed daily run (host
+    # offline, broker outage, the host-queue race we fixed) leaves a permanent
+    # gap. This retro pass walks the last 7 days and emits a per-day breakdown
+    # to the HUD feed, surfacing any "0 machines (no dumps)" days so they're
+    # visible instead of silently lost. Idempotent — re-reading existing dump
+    # folders, writing only a feed summary. For ad-hoc ranges (a whole month,
+    # a specific day) run scripts/agents/run_dumps_summary_retro.py on harqis-server.
+    'run-job--analyze_dumps_weekly_catchup': {
+        'task': 'workflows.dumps.tasks.analyze_daily_dumps',
+        'schedule': crontab(hour=1, minute=30, day_of_week=1),
+        'kwargs': {'days': 7},
         'options': {
             'queue': WorkflowQueue.HOST,
             'os': ['windows', 'macos', 'linux'],
