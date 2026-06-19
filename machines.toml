@@ -72,7 +72,7 @@ kanban_num_agents = 4
 # deploy flags: `--down` stops it, `--restart emulator` cycles it, `--status`
 # lists it, `--stop emulator` stops it without touching other services.
 [windows-work-all.emulator]
-enabled = true
+enabled = false
 profiles = ["pixel7-test"]   # one or more profile names; `profile = "x"` also accepted
 wait_for_boot = false        # deploy returns immediately; the emulator boots in the background
 boot_timeout = 300
