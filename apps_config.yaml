@@ -734,7 +734,8 @@ ANDROID_EMULATOR:
       # leave it unset — the 6 GB *data* partition comes from the AVD config.ini.
       headless: false              # always show the emulator UI window
       no_audio: true
-      gpu: host                    # hardware acceleration via the host Intel Iris Xe GPU (windowed/attached launch)
+      gpu: angle_indirect          # GLES->Direct3D11 (ANGLE): HW-accelerated AND renders Chrome/WebView correctly
+                                   # (`host` produced black screens in Chrome's GPU compositor on the Intel Iris Xe)
       no_snapshot: false           # persist device state via quick-boot snapshot across restarts
       hw_keyboard: true            # host hardware-keyboard passthrough (written to the AVD config.ini before boot)
       play_store: true             # enable certified Google Play Store (requires the google_apis_playstore image above)
