@@ -3,7 +3,10 @@ workflows/dumps/tasks/analyze.py
 
 Daily analyzer: walks the inbox for one or more days, then pushes a per-machine
 summary line to the HUD feed so the operator sees the result on the same
-surface they already scan.
+surface they already scan. It also writes a dedicated per-day Markdown file
+(<dir>/YYYY-MM-DD.md) to the repo + Drive-synced sinks — see
+workflows/dumps/summary_store.py. The feed/ES paths are untouched; the md is
+additive (same shape as HFL keeping both a corpus and an ES projection).
 
 Default (no kwargs) analyzes *yesterday* — the once-a-day batch. It also
 accepts a retro window so missed days can be summarized after the fact:
@@ -43,6 +46,7 @@ from workflows.dumps.config import (
     resolve_local_machine_name,
 )
 from workflows.dumps.files import parse_dump_dir_name, previous_day_window
+from workflows.dumps.summary_store import write_day_summary
 
 _log = create_logger("dumps.analyze")
 
@@ -210,6 +214,8 @@ def analyze_daily_dumps(**kwargs) -> dict:
         machine — optional exact machine/device folder prefix filter.
         missing_only — render only the days with NO dumps (gap report) instead
                        of the full per-day breakdown.
+        write_md — write the per-day Markdown summary files (default True).
+                   Pass False to render the feed/ES summary only.
     """
     # Host-guard: the inbox (harqis_server_inbox, e.g. /Volumes/harqis-data/dumps)
     # physically lives on harqis-server only. The `host` queue is meant to be
@@ -254,6 +260,7 @@ def analyze_daily_dumps(**kwargs) -> dict:
     machine_filter = kwargs.get("machine")
     per_day = {d: _filter_machines(_scan_day(inbox, d), machine_filter) for d in dates}
     missing_only = bool(kwargs.get("missing_only"))
+    write_md = bool(kwargs.get("write_md", True))
 
     # ─────────────────────────────────────────────────────────────────────────
     # FUTURE: kanban agent hand-off (optional enhancement)
@@ -285,6 +292,19 @@ def analyze_daily_dumps(**kwargs) -> dict:
             "gaps": gap_dates,
         }
 
+    # Dedicated per-day Markdown sink (workflows/dumps/summary_store.py):
+    # writes <dir>/<date>.md for every day that HAS dumps, to both the repo
+    # sink and the Drive-synced feed sink. Additive — the HUD feed (@feed) and
+    # ES (@log_result) paths above are untouched. A gap day writes no file: its
+    # absence IS the signal, and `missing_only` already reports gaps. Best-effort
+    # per file, so a sink failure never breaks the analyze run.
+    summary_files: list[str] = []
+    if write_md:
+        for d in dates:
+            ms = per_day.get(d) or []
+            if ms:
+                summary_files.extend(write_day_summary(d, ms, str(inbox)))
+
     # Single-day → legacy shape (the daily Beat run relies on this). Multi-day
     # → per-day breakdown + grand total.
     if len(dates) == 1:
@@ -300,6 +320,7 @@ def analyze_daily_dumps(**kwargs) -> dict:
             "files_total": sum(m["files_count"] for m in machines),
             "bytes_total": sum(m["bytes_total"] for m in machines),
             "details": machines,
+            "summary_files": summary_files,
         }
 
     summary_text = _render_multi(dates, per_day, str(inbox))
@@ -316,4 +337,5 @@ def analyze_daily_dumps(**kwargs) -> dict:
         "files_total": sum(m["files_count"] for d in dates for m in per_day[d]),
         "bytes_total": sum(m["bytes_total"] for d in dates for m in per_day[d]),
         "by_day": {d: per_day[d] for d in dates},
+        "summary_files": summary_files,
     }

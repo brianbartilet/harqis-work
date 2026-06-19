@@ -14,6 +14,7 @@ import pytest
 
 from workflows.dumps.config import (
     HARQIS_SERVER_MACHINE_NAME,
+    get_dumps_summary_path,
     get_dumps_target,
     get_local_dumps_config,
     get_pull_targets,
@@ -32,6 +33,11 @@ from workflows.dumps.tasks.pull import (
     _redact_ssh_user,
     _send_pull_failure_notification,
     pull_daily_dumps_from_remotes,
+)
+from workflows.dumps.summary_store import (
+    render_day_markdown,
+    resolve_summary_dirs,
+    write_day_summary,
 )
 from workflows.dumps.transport import _archive_name, copy_locally
 from workflows.dumps.files import CollectedFile, format_dump_dir_name, parse_dump_dir_name
@@ -228,6 +234,78 @@ def test__render_gaps_when_none_missing():
     dates = ["2026-05-01", "2026-05-02"]
     text = _render_gaps(dates, [])
     assert "none; all 2 day(s) have dumps" in text
+
+
+# ── Per-day Markdown summary sink (summary_store) ──────────────────────────────
+
+def test__render_day_markdown_has_header_table_and_total():
+    machines = [
+        {"machine": "pixel-7", "files_count": 88, "bytes_total": 60 * 1024 * 1024},
+        {"machine": "windows-work-all", "files_count": 54, "bytes_total": 5 * 1024 * 1024},
+    ]
+    md = render_day_markdown("2026-06-18", machines, "/inbox",
+                             now=datetime(2026, 6, 19, 1, 0, 0))
+    assert md.startswith("# Daily Dumps — 2026-06-18")
+    assert "2 machine(s) · 142 files" in md
+    assert "| machine | files | bytes |" in md
+    # Sorted by bytes desc — pixel-7 (60 MB) before windows-work-all (5 MB).
+    assert md.index("pixel-7") < md.index("windows-work-all")
+    assert "inbox `/inbox`" in md
+
+
+def test__render_day_markdown_no_machines_renders_empty_marker():
+    md = render_day_markdown("2026-06-18", [], "/inbox")
+    assert "# Daily Dumps — 2026-06-18" in md
+    assert "_No machine dumps found._" in md
+
+
+def test__write_day_summary_writes_md_and_is_idempotent(tmp_path, monkeypatch):
+    monkeypatch.setenv("DUMPS_SUMMARY_PATH", str(tmp_path))
+    # No feed dir on the test host → resolve_summary_dirs is just the repo sink.
+    monkeypatch.delenv("DESKTOP_PATH_FEED", raising=False)
+    monkeypatch.delenv("DESKTOP_PATH_FEED_WINDOWS", raising=False)
+    monkeypatch.delenv("DESKTOP_PATH_FEED_DARWIN", raising=False)
+    monkeypatch.delenv("DESKTOP_PATH_FEED_LINUX", raising=False)
+
+    machines = [{"machine": "alpha", "files_count": 3, "bytes_total": 2048}]
+    written = write_day_summary("2026-06-18", machines, "/inbox")
+
+    target = tmp_path / "2026-06-18.md"
+    assert str(target) in written
+    assert target.exists()
+    first = target.read_text(encoding="utf-8")
+
+    # Re-running overwrites the same file (no duplicate stacking).
+    write_day_summary("2026-06-18", machines, "/inbox")
+    assert target.read_text(encoding="utf-8") == first
+
+
+def test__resolve_summary_dirs_includes_env_repo_sink(tmp_path, monkeypatch):
+    monkeypatch.setenv("DUMPS_SUMMARY_PATH", str(tmp_path))
+    dirs = resolve_summary_dirs()
+    assert tmp_path.resolve() in dirs
+    # De-duplicated — no path appears twice.
+    assert len(dirs) == len({str(d) for d in dirs})
+
+
+def test__machines_toml_summary_path_wins_over_env(tmp_path, monkeypatch):
+    """[dumps] summary_path is the canonical home and beats the env fallback."""
+    import workflows.dumps.summary_store as store
+
+    toml_dir = tmp_path / "from-toml"
+    monkeypatch.setenv("DUMPS_SUMMARY_PATH", str(tmp_path / "from-env"))
+    # _repo_sink imports get_dumps_summary_path lazily from config, so patch the source.
+    monkeypatch.setattr("workflows.dumps.config.get_dumps_summary_path",
+                        lambda cfg=None: str(toml_dir))
+
+    assert store._repo_sink() == toml_dir.resolve()
+
+
+def test__get_dumps_summary_path_none_when_unset():
+    from workflows.dumps.config import get_dumps_summary_path
+    assert get_dumps_summary_path(cfg={}) is None
+    assert get_dumps_summary_path(cfg={"dumps": {}}) is None
+    assert get_dumps_summary_path(cfg={"dumps": {"summary_path": "/x"}}) == "/x"
 
 
 # ── Manual pull: per-file-day bucketing (organize-on-server) ───────────────────

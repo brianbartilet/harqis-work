@@ -469,6 +469,12 @@ host-queue race) leaves a permanent gap; this script re-summarizes a date
 `<machine>-daily-dumps-<date>` folders and pushes a per-day breakdown + grand
 total to the HUD feed. Missed days surface as `0 machines (no dumps)`.
 
+It also writes a per-day Markdown file (`<dir>/YYYY-MM-DD.md`) for each day with
+dumps, to both the repo sink (`DUMPS.summary.path` → `DUMPS_SUMMARY_PATH` →
+`<repo>/logs/dumps/`) and the Drive-synced feed sink (`<feed-dir>/dumps/`) — see
+`workflows/dumps/summary_store.py` and the `/dumps-summary` skill. Pass
+`--no-md` to skip the Markdown and emit the feed/ES summary only.
+
 > ⚠️ Run this **on harqis-server** (the dumps host). The inbox is a *local* path
 > there (`[dumps] harqis_server_inbox`). The task self-guards to harqis-server,
 > so running it elsewhere is a no-op (exit `2`).

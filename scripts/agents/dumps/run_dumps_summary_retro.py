@@ -8,6 +8,12 @@ outage, the host-queue race, etc.). It walks the inbox's existing
 `<machine>-daily-dumps-<date>` folders and pushes a per-day breakdown + grand
 total to the HUD feed; missed days render as "0 machines (no dumps)".
 
+It also writes a dedicated per-day Markdown file (`<dir>/YYYY-MM-DD.md`) for
+every day that has dumps — to both the repo sink (`DUMPS.summary.path` →
+`DUMPS_SUMMARY_PATH` → `<repo>/logs/dumps/`) and the Drive-synced feed sink
+(`<feed-dir>/dumps/`). Pass `--no-md` to skip that and emit the feed/ES summary
+only. See `workflows/dumps/summary_store.py`.
+
 ⚠️  Run this ON harqis-server (the dumps host). The inbox is a LOCAL path there
 (`[dumps] harqis_server_inbox`, e.g. /Volumes/harqis-data/dumps). The task
 self-guards to harqis-server, so running it elsewhere is a no-op (exit 2).
@@ -26,6 +32,7 @@ Flags (map 1:1 to the task kwargs; precedence: date → start/end → month → 
     --start/--end     inclusive YYYY-MM-DD window (capped at yesterday)
     --month YYYY-MM   whole calendar month (capped at yesterday)
     --missing-only    report only the days with NO dumps (gap report)
+    --no-md           skip the per-day Markdown files (feed/ES summary only)
 
 Exit codes: 0 ok · 1 error (e.g. inbox/config) · 2 skipped (ran off the hub).
 """
@@ -66,6 +73,9 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--machine", "--device", dest="machine",
                    help="Limit the scan to one exact machine/device dump prefix "
                         "(for example, nothing-phone).")
+    p.add_argument("--no-md", action="store_false", dest="write_md",
+                   help="Skip writing the per-day Markdown summary files "
+                        "(feed/ES summary only). Markdown is written by default.")
     return p.parse_args()
 
 
@@ -86,6 +96,8 @@ def main() -> int:
     ) if v is not None}
     if args.missing_only:
         kwargs["missing_only"] = True
+    if not args.write_md:
+        kwargs["write_md"] = False
 
     result = analyze_daily_dumps(**kwargs)
 
@@ -99,6 +111,13 @@ def main() -> int:
 
     # The task's rendered summary is the same text it pushed to the HUD feed.
     print(result.get("text", "").rstrip())
+
+    # Per-day Markdown files written to the repo + Drive-synced sinks.
+    summary_files = result.get("summary_files") or []
+    if summary_files:
+        print(f"\nWrote {len(summary_files)} summary file(s):")
+        for path in summary_files:
+            print(f"  {path}")
     return 0
 
 

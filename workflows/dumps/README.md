@@ -10,7 +10,7 @@ Two complementary code paths:
 |---|---|---|---|
 | `broadcast_collect_daily_dumps` | every Celery worker subscribed to `default_broadcast` | itself | walks local paths, builds tar in Python, streams to harqis-server via `ssh + tar -xf -` (or `shutil.copy2` if the worker IS harqis-server) |
 | `pull_daily_dumps_from_remotes` | harqis-server only (queue=`host`) | every device under `[dumps.pull_targets.*]` (Android via Termux SSHD, etc.) | SSH + `find -newermt` to list, then `ssh + tar -cf -` piped into local extraction |
-| `analyze_daily_dumps` | harqis-server only (queue=`host`, self-guards) | the inbox | walks one or more days' machine folders, then pushes a summary to the HUD feed via `@feed()`. Default = yesterday; accepts a retro window (`days` / `date` / `start`+`end` / `month`) and renders a per-day breakdown + grand total for multi-day runs. The kanban / Trello hand-off marker is preserved in `tasks/analyze.py` as `# FUTURE: kanban agent hand-off` for a later enhancement. |
+| `analyze_daily_dumps` | harqis-server only (queue=`host`, self-guards) | the inbox | walks one or more days' machine folders, then (a) pushes a summary to the HUD feed via `@feed()` and (b) writes a per-day Markdown file `<dir>/YYYY-MM-DD.md` to the repo + Drive-synced sinks (`summary_store.py`). Default = yesterday; accepts a retro window (`days` / `date` / `start`+`end` / `month`) and renders a per-day breakdown + grand total for multi-day runs. The kanban / Trello hand-off marker is preserved in `tasks/analyze.py` as `# FUTURE: kanban agent hand-off` for a later enhancement. |
 
 ## Schedule
 
@@ -47,6 +47,28 @@ The weekly catch-up re-summarizes the trailing 7 days so a missed daily run (hos
 
 Naming rule: `<machine-name>-daily-dumps-<YYYY-MM-DD>/<source-folder-basename>/<file-relative-to-source-root>`. The machine name comes from the `[<name>]` block in `machines.toml` (resolved via `[hostnames]`). The `<source-folder-basename>` is the leaf name of each configured path.
 
+## Daily summary Markdown (`summary_store.py`)
+
+Beyond the HUD-feed line and the ES review trail, `analyze_daily_dumps` writes a
+standalone **per-day Markdown file** — `<dir>/YYYY-MM-DD.md` — for every day that
+has dumps. This mirrors the HFL corpus pattern (one file per day; see
+`workflows/hfl/tasks/capture.py`) and gives you a clean, greppable artifact
+rather than a line buried in the shared `hud-logs-*.txt` feed.
+
+Two sinks, written in parallel (idempotent overwrite — re-running a date
+rewrites that one file, no duplicate stacking):
+
+| Sink | Resolution | Notes |
+|---|---|---|
+| Repo | `[dumps] summary_path` (machines.local.toml) → `DUMPS.summary.path` (apps_config) → `DUMPS_SUMMARY_PATH` env → `<repo>/logs/dumps/` | Always written; created if missing. Configure it next to the inbox (see Configuration below). |
+| Feed | `<resolved-feed-dir>/dumps/` | Written only when the feed dir already exists on this host, so it rides the same Drive sync as the HUD feed. Skipped cleanly off-host (same foreign-OS rule `@feed()` uses). |
+
+A day with **no** dumps writes no file — its absence is the signal, and
+`--missing-only` reports gaps explicitly. Run ad-hoc via the
+[`/dumps-summary`](../../.claude/skills/dumps-summary/SKILL.md) skill or
+[`scripts/agents/dumps/run_dumps_summary_retro.py`](../../scripts/README.md#run_dumps_summary_retropy)
+on harqis-server. Pass `--no-md` / `write_md=False` to emit the feed/ES summary only.
+
 ## Configuration
 
 All real values live in `machines.local.toml` (gitignored). `machines.toml` carries only the schema docs.
@@ -58,6 +80,9 @@ All real values live in `machines.local.toml` (gitignored). `machines.toml` carr
 [dumps]
 harqis_server_ssh   = "harqis-one@harqis-mac-mini.tailnet.ts.net"
 harqis_server_inbox = "/Users/harqis-one/dumps"
+# Optional — where analyze_daily_dumps writes the per-day summary Markdown.
+# Defaults to <repo>/logs/dumps/ if unset. Host-local to harqis-server.
+summary_path        = "/Volumes/harqis-data/dumps-summary"
 ```
 
 ### Per-device push config (celery-attached machines)
@@ -131,4 +156,4 @@ See [`docs/MANIFESTO.md`](../../docs/MANIFESTO.md) and [`docs/thesis/MANIFESTO-R
 | --- | --- | --- | --- | --- | --- |
 | `broadcast_collect_daily_dumps` | capture | area | `file:dump_inbox` | `es_log` | `True` |
 | `pull_daily_dumps_from_remotes` | capture | area | `file:dump_inbox` | `es_log` | `True` |
-| `analyze_daily_dumps` | distill+express | area | `hud_feed` | `es_log+hud_feed` | `True` |
+| `analyze_daily_dumps` | distill+express | area | `hud_feed` | `es_log+hud_feed+md` | `True` |

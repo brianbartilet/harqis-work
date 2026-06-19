@@ -23,6 +23,7 @@ Schema (machines.toml.local — gitignored, real values):
     [dumps]
     harqis_server_ssh   = "harqis-one@harqis-mac-mini.tailnet.ts.net"
     harqis_server_inbox = "/Users/harqis-one/dumps"
+    summary_path        = "/Volumes/harqis-data/dumps-summary"   # optional
 
     [windows-work-all.daily_dumps]
     paths = [ "C:/path/to/screenshots", "C:/path/to/logs" ]
@@ -114,6 +115,18 @@ def get_dumps_target(cfg: dict | None = None) -> DumpsTarget | None:
     if not ssh or not inbox:
         return None
     return DumpsTarget(ssh=ssh, inbox=inbox)
+
+
+def get_dumps_summary_path(cfg: dict | None = None) -> str | None:
+    """Return the host-local dir for the per-day summary Markdown, or None.
+
+    Lives in `[dumps] summary_path` in machines.local.toml — right next to
+    `harqis_server_inbox`, since the summary dir is just as host-local to
+    harqis-server as the inbox is. None when unset (callers fall back to the
+    apps_config / env / repo-logs chain in summary_store)."""
+    cfg = cfg if cfg is not None else load_merged_config()
+    path = (cfg.get("dumps", {}) or {}).get("summary_path")
+    return path or None
 
 
 def get_local_dumps_config(cfg: dict | None = None) -> LocalDumpsConfig:
