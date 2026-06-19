@@ -70,6 +70,12 @@ up from `scripts/agents/<bucket>/`).
 | [`pull_dumps.py`](#pull_dumpspy) | Manually pull Android/device dumps from `[dumps.pull_targets.*]` — date range, full sweep, `--by-file-day`, or `--missing-only` catch-up. Run on harqis-server. |
 | [`run_dumps_summary_retro.py`](#run_dumps_summary_retropy) | Retro-summarize the dumps inbox for a range / month / day (the nightly `analyze_daily_dumps` only sees yesterday). Run on harqis-server. |
 
+### `emulator/` — Android emulator ops
+
+| Path | Purpose |
+|---|---|
+| [`run_emulator.py`](#run_emulatorpy) | Start/manage local Android emulators (start / stop / list / create) from a profile. Wraps `workflows.mobile.emulator.tasks`. Self-guards (exit 2) on a host without the SDK. |
+
 ### `fleet/` — agent worktree / window cleanup
 
 | Path | Purpose |
@@ -493,6 +499,29 @@ by the intra-day collect). A weekly Beat job
 (`run-job--analyze_dumps_weekly_catchup`, Mon 01:30) runs the `--days 7`
 equivalent automatically. Exit codes: `0` ok · `1` error (inbox/config) · `2`
 skipped (ran off the hub).
+
+---
+
+## `run_emulator.py`
+
+Start and manage local Android emulators from the shell. A thin CLI over
+`workflows.mobile.emulator.tasks.manage` (which wraps `apps.android_emulator`),
+so the command line, the MCP tools, and the Celery tasks share one
+implementation. Runs synchronously; self-guards on a host without the SDK
+(exit `2`).
+
+```bash
+python scripts/agents/emulator/run_emulator.py start                          # default profile, wait for boot
+python scripts/agents/emulator/run_emulator.py start --profile pixel7-test --port 5556 --no-wait
+python scripts/agents/emulator/run_emulator.py start --no-headless            # show the GUI window
+python scripts/agents/emulator/run_emulator.py list
+python scripts/agents/emulator/run_emulator.py stop emulator-5554
+python scripts/agents/emulator/run_emulator.py create --profile pixel7-test
+```
+
+Profiles live in `apps_config.yaml` under `ANDROID_EMULATOR.profiles`; the SDK
+location is resolved per-host from `ANDROID_SDK_ROOT`/`ANDROID_HOME`. Exit codes:
+`0` ok · `1` error · `2` skipped (no SDK on this host).
 
 ---
 

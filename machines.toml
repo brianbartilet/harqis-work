@@ -18,6 +18,8 @@
 #   kanban_profile  agent profile filter for the kanban orchestrator
 #                   (e.g. "agent:default", "agent:code")
 #   kanban_num_agents  concurrent in-process kanban agents (default: 1)
+#   [<name>.emulator]  optional table — auto-launch an Android emulator on
+#                   deploy (see the [windows-work-all.emulator] example below)
 
 
 # Fallback when no [hostnames] entry matches.
@@ -61,6 +63,19 @@ kanban_num_agents = 4
 # orchestrators in the workspace). Leave commented to run any profile that
 # matches the host's os:* labels.
 # kanban_profile = "agent:code"
+
+# Auto-launch an Android emulator on this box when deploy.py runs. Driven by the
+# [<machine>.emulator] table below — only machines that declare it get one (the
+# emulator self-skips on any host without the Android SDK). The profile(s) come
+# from apps_config.yaml ANDROID_EMULATOR.profiles; persistence, Play Store, the
+# UI window, keyboard, nav, RAM/cores/GPU all live there. Composes with the
+# deploy flags: `--down` stops it, `--restart emulator` cycles it, `--status`
+# lists it, `--stop emulator` stops it without touching other services.
+[windows-work-all.emulator]
+enabled = true
+profiles = ["pixel7-test"]   # one or more profile names; `profile = "x"` also accepted
+wait_for_boot = false        # deploy returns immediately; the emulator boots in the background
+boot_timeout = 300
 
 
 # ── VPS worker nodes — pure workers, no docker / scheduler ───────────────────

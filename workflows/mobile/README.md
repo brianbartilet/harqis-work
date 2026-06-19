@@ -1,5 +1,12 @@
 # Mobile Workflow
 
+Two independent sub-areas under `workflows/mobile/`:
+
+| Sub-area | Runs on | What |
+|---|---|---|
+| `android/` | a physical Android device (Termux) | On-device screen activity logger (below). |
+| [`emulator/`](emulator/README.md) | the desktop (any SDK host) | Start/manage local Android emulators (AVDs) via the SDK CLIs. On-demand tasks + MCP + CLI. |
+
 ## Description
 
 - Android screen activity logger running on-device via [Termux](https://termux.dev/).

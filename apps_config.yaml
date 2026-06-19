@@ -717,4 +717,29 @@ PLAUD:
   return_data_only: True
 
 
+# Local-CLI app (no REST). The SDK location is resolved per-host from
+# ANDROID_SDK_ROOT/ANDROID_HOME env first, so sdk_root here is an optional
+# override. `profiles` are named AVD/launch configs; emulator_start and the
+# Celery tasks take a profile name plus optional per-call overrides.
+ANDROID_EMULATOR:
+  sdk_root: ${ANDROID_SDK_ROOT}
+  default_profile: pixel7-test
+  profiles:
+    pixel7-test:
+      device: pixel_7
+      image: system-images;android-34;google_apis_playstore;x86_64   # Play Store-certified image (com.android.vending works + sign-in)
+      ram_mb: 8192                 # 8 GB guest RAM (host has 64 GB)
+      cores: 6                     # 6 vCPUs (host has 12 logical / 10 physical)
+      # NB: -partition-size (system partition) is capped at 2047 MB by the emulator;
+      # leave it unset — the 6 GB *data* partition comes from the AVD config.ini.
+      headless: false              # always show the emulator UI window
+      no_audio: true
+      gpu: host                    # hardware acceleration via the host Intel Iris Xe GPU (windowed/attached launch)
+      no_snapshot: false           # persist device state via quick-boot snapshot across restarts
+      hw_keyboard: true            # host hardware-keyboard passthrough (written to the AVD config.ini before boot)
+      play_store: true             # enable certified Google Play Store (requires the google_apis_playstore image above)
+      nav_mode: threebutton        # on-screen nav buttons (Back/Home/Recents); applied in-guest after boot
+      port: 5560                    # console 5560 / adb 5561 — avoids Docker/WSL squatting adb port 5555
+
+
 

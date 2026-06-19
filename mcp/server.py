@@ -61,6 +61,7 @@ APP_REGISTRARS = [
     ("GitHub",           "apps.github.mcp",         "register_github_tools"),
     ("Git",              "apps.git.mcp",            "register_git_tools"),
     ("Filesystem",       "apps.filesystem.mcp",     "register_filesystem_tools"),
+    ("Android Emulator", "apps.android_emulator.mcp", "register_android_emulator_tools"),
     ("Browser",          "apps.browser.mcp",        "register_browser_tools"),
     ("Playwright",       "apps.playwright.mcp",     "register_playwright_tools"),
     ("SQLite-Vec",       "apps.sqlite_vec.mcp",     "register_sqlite_vec_tools"),

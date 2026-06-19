@@ -32,11 +32,26 @@ Lifecycle:
                       Scheduled Task on Windows). Idempotent.
     --unregister     Remove the OS auto-start units.
 
+Android emulator (config-gated, per machine):
+    Add an [<machine>.emulator] table in machines.toml and deploy.py will fire up
+    the configured AVD profile(s) on a normal deploy (fire-and-forget, boots in
+    the background). It composes with the lifecycle flags:
+
+        python scripts/deploy.py --restart emulator   # cycle just the emulator
+        python scripts/deploy.py --stop emulator      # stop it, leave services
+        python scripts/deploy.py --status             # also lists running AVDs
+        python scripts/deploy.py --down               # stops it with everything
+
+    The emulator self-skips on any host without the Android SDK, so the table is
+    harmless on machines that can't run it. See [windows-work-all.emulator].
+
 Notes:
 - Docker compose is invoked only when --role host (workers don't run brokers).
 - Each launched daemon is tracked in <repo>/.run/<service>.pid and logs to
   <repo>/logs/<service>.log. Stale PID files (process gone) are auto-cleaned.
 - The actual per-service launch logic lives in scripts/launch.py.
+- The emulator is NOT a tracked daemon — it's driven via the emulator CLI
+  (scripts/agents/emulator/run_emulator.py) and tracked by adb serial.
 """
 from __future__ import annotations
 
@@ -57,6 +72,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 LAUNCH_PY = SCRIPTS_DIR / "launch.py"
+EMULATOR_CLI = SCRIPTS_DIR / "agents" / "emulator" / "run_emulator.py"
 MACHINES_TOML = REPO_ROOT / "machines.toml"
 RUN_DIR = REPO_ROOT / ".run"
 LOG_DIR = REPO_ROOT / "logs"
@@ -833,6 +849,87 @@ def _bootstrap_elasticsearch() -> None:
         )
 
 
+# ── Android emulator (config-gated, per machine) ──────────────────────────────
+# The emulator is NOT a Celery daemon (no PID file — it's tracked by adb serial),
+# so it's handled outside the SERVICES loop: only machines with an
+# [<machine>.emulator] table in machines.toml auto-launch one. deploy.py stays
+# dependency-free by shelling out to scripts/agents/emulator/run_emulator.py
+# (which self-guards: exit 2 on a host without the Android SDK).
+
+def machine_emulators(machine: dict) -> list[dict]:
+    """Emulator profiles to auto-launch for this machine (from machines.toml).
+
+    Returns [] when there's no [<machine>.emulator] table or it's disabled.
+    Accepts either `profile = "x"` or `profiles = ["x", "y"]`.
+
+        [windows-work-all.emulator]
+        enabled = true
+        profiles = ["pixel7-test"]
+        wait_for_boot = false      # deploy returns immediately; boots in background
+        boot_timeout = 300
+    """
+    cfg = machine.get("emulator")
+    if not isinstance(cfg, dict) or not cfg.get("enabled", True):
+        return []
+    profiles = cfg.get("profiles")
+    if not profiles:
+        single = cfg.get("profile")
+        profiles = [single] if single else []
+    return [
+        {"profile": p,
+         "wait_for_boot": bool(cfg.get("wait_for_boot", False)),
+         "boot_timeout": int(cfg.get("boot_timeout", 300))}
+        for p in profiles
+    ]
+
+
+def _run_emulator_cli(*cli_args: str) -> int:
+    """Invoke the emulator CLI with the venv python. Returns its exit code
+    (0 ok · 1 error · 2 skipped/no-SDK)."""
+    if not EMULATOR_CLI.exists():
+        print(f"  WARNING: emulator CLI not found at {EMULATOR_CLI} — skipping.")
+        return 1
+    # console=True → python.exe (not pythonw) so the CLI's stdout is visible
+    # when deploy runs interactively. The emulator itself is spawned detached by
+    # the CLI, so this short-lived call returns promptly.
+    cmd = [python_exe(console=True), str(EMULATOR_CLI), *cli_args]
+    return subprocess.run(cmd, cwd=REPO_ROOT, check=False).returncode
+
+
+def emulator_up(machine: dict) -> None:
+    """Fire up each configured emulator profile (idempotent, fire-and-forget)."""
+    specs = machine_emulators(machine)
+    if not specs:
+        return
+    print("[emulator] Ensuring configured Android emulator(s)...")
+    for spec in specs:
+        cli = ["ensure", "--profile", spec["profile"],
+               "--boot-timeout", str(spec["boot_timeout"])]
+        if not spec["wait_for_boot"]:
+            cli.append("--no-wait")
+        rc = _run_emulator_cli(*cli)
+        note = {0: "ok", 2: "skipped (no Android SDK on this host)"}.get(rc, f"rc={rc}")
+        print(f"  emulator profile={spec['profile']} -> {note}")
+
+
+def emulator_down(machine: dict) -> None:
+    """Stop each configured emulator profile's instance."""
+    specs = machine_emulators(machine)
+    if not specs:
+        return
+    print("[emulator] Stopping configured Android emulator(s)...")
+    for spec in specs:
+        _run_emulator_cli("stop", "--profile", spec["profile"])
+
+
+def emulator_status(machine: dict) -> None:
+    """Print running emulators + AVDs when this machine has emulators configured."""
+    if not machine_emulators(machine):
+        return
+    print("\n[emulator] Android emulator status:")
+    _run_emulator_cli("list")
+
+
 # ── OS-native service registration ────────────────────────────────────────────
 
 def register_services(machine: dict, args: argparse.Namespace, services: list[str]) -> None:
@@ -1092,17 +1189,26 @@ def main() -> None:
 
     if args.status:
         show_status()
+        emulator_status(load_machine_config(args.machine))
         return
 
     if args.stop:
-        stop_service(args.stop)
+        if args.stop == "emulator":
+            emulator_down(load_machine_config(args.machine))
+        else:
+            stop_service(args.stop)
         return
 
     if args.restart:
         machine = load_machine_config(args.machine)
         if args.role:
             machine["role"] = args.role
-        restart_service(args.restart, machine, args)
+        if args.restart == "emulator":
+            print("==> Restart: emulator")
+            emulator_down(machine)
+            emulator_up(machine)
+        else:
+            restart_service(args.restart, machine, args)
         return
 
     machine = load_machine_config(args.machine)
@@ -1135,6 +1241,7 @@ def main() -> None:
         for s in services:
             stop_service(s)
         kill_stray_celery()
+        emulator_down(machine)
         if role == "host" and not args.docker_only and not single_instance:
             docker_down()
         print(f"All services stopped for machine={name}.")
@@ -1211,6 +1318,11 @@ def main() -> None:
           f"for daemons whose launcher forks; check logs/<service>.log to confirm.)")
     print(f"Stop with: python scripts/deploy.py --down")
     print(f"Status:    python scripts/deploy.py --status")
+
+    # Auto-launch any emulator configured for this machine ([<machine>.emulator]).
+    # Fire-and-forget (boots in the background) so deploy doesn't block on it.
+    if not single_instance:
+        emulator_up(machine)
 
     # Post-deploy hook: close console windows with "Process completed"
     if started > 0:
