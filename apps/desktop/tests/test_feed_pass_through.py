@@ -161,6 +161,29 @@ def test__feed_decorator_os_specific_env_wins(tmp_path, monkeypatch):
     assert "written via OS override" in captured["block_text"]
 
 
+def test__feed_decorator_returns_original_value_when_write_fails(tmp_path):
+    """Feed writing is a best-effort side effect; it must not mask task success."""
+    from apps.desktop.helpers import feed as feed_module
+
+    expected = {"text": "survived", "summary": "metadata"}
+
+    def failing_prepend(*, path, block_text, encoding, lock_cfg):
+        raise OSError(11, "Resource deadlock avoided")
+
+    fake_config = {"feed": {"path_to_feed": str(tmp_path)}}
+
+    with patch.object(feed_module, "CONFIG", fake_config), \
+         patch.object(feed_module, "_prepend_with_lock", failing_prepend):
+
+        @feed_module.feed(filename_prefix="test-feed")
+        def my_task():
+            return expected
+
+        result = my_task()
+
+    assert result is expected
+
+
 def test__feed_decorator_passes_string_through(tmp_path):
     """Legacy: tasks returning a string keep working unchanged."""
     from apps.desktop.helpers import feed as feed_module

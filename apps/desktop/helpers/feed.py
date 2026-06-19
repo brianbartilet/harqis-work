@@ -340,12 +340,19 @@ def feed(
             footer = f"\n{make_separator(48, '>')}"
             block = f"{header}{dump}\n\n{footer}\n\n"
 
-            _prepend_with_lock(
-                path=feed_path,
-                block_text=block,
-                encoding=encoding,
-                lock_cfg=lock_cfg,
-            )
+            try:
+                _prepend_with_lock(
+                    path=feed_path,
+                    block_text=block,
+                    encoding=encoding,
+                    lock_cfg=lock_cfg,
+                )
+            except Exception as exc:
+                log.warning(
+                    "Feed write skipped for %s: %s. Returning wrapped result unchanged.",
+                    feed_path,
+                    exc,
+                )
 
             return raw_result
 
