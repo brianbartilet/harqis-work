@@ -77,6 +77,28 @@ profiles = ["pixel7-test"]   # one or more profile names; `profile = "x"` also a
 wait_for_boot = false        # deploy returns immediately; the emulator boots in the background
 boot_timeout = 300
 
+# Connect + mirror a PHYSICAL phone on deploy ([<machine>.device]). On deploy it
+# tries USB first, falls back to a wireless target, and if neither is reachable
+# prints a message and skips gracefully. When connected it mirrors via scrcpy and
+# leaves a watchdog daemon running that auto-reconnects + re-mirrors whenever the
+# device drops (e.g. you leave/return to Wi-Fi range) — no need to re-run deploy.
+# Composes with the flags: `--restart device` / `--stop device` / `--down` /
+# `--status`. NOTE: this is SCHEMA ONLY (public repo) — put the real `serial` /
+# `wireless` values in machines.local.toml (gitignored), e.g.
+#     [windows-work-all.device]
+#     enabled  = true
+#     serial   = "<usb-serial>"        # from `run_emulator.py devices`
+#     wireless = "<phone-ip>:5555"     # wireless fallback target
+[windows-work-all.device]
+enabled = false
+serial = ""                  # preferred USB serial (blank = any attached USB device)
+wireless = ""                # wireless fallback host:port (e.g. 192.168.1.x:5555)
+mirror = true                # launch a scrcpy mirror window after connecting
+reconnect = true             # keep a watchdog that auto-reconnects on drop
+interval = 10                # seconds between connection checks
+title = "QA device"          # mirror window title
+max_size = 1280              # cap the longer screen dimension (px) for smoother Wi-Fi
+
 
 # ── VPS worker nodes — pure workers, no docker / scheduler ───────────────────
 [vps-worker]

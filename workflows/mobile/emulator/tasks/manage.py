@@ -26,7 +26,7 @@ from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import create_logger
 
-from apps.android_emulator import client, config
+from apps.android_emulator import client, config, devices, scrcpy
 
 _log = create_logger("mobile.emulator")
 
@@ -200,3 +200,107 @@ def create_avd(name: Optional[str] = None, profile: Optional[str] = None,
     _log.info("emulator: create_avd name=%s profile=%s -> success=%s",
               name, profile, res.ok)
     return res.as_dict()
+
+
+# ── Physical / wireless devices + screen mirroring ──────────────────────────
+
+@SPROUT.task(name="workflows.mobile.emulator.tasks.list_devices")
+@log_result()
+def list_devices(info: bool = False) -> dict:
+    """All attached devices (emulator + physical + wireless). With info=True,
+    enrich each with model/brand/android/resolution."""
+    skip = _skip_if_no_sdk()
+    if skip:
+        return skip
+    items = devices.list_devices()
+    if info:
+        for d in items:
+            if d.get("state") == "device":
+                d.update({k: v for k, v in devices.device_info(d["serial"]).items()
+                          if k not in d})
+    return {"success": True, "devices": items}
+
+
+@SPROUT.task(name="workflows.mobile.emulator.tasks.mirror_device")
+@log_result()
+def mirror_device(serial: Optional[str] = None, title: Optional[str] = None,
+                  max_size: Optional[int] = None, stay_awake: bool = True,
+                  turn_screen_off: bool = False) -> dict:
+    """Start a scrcpy mirror+control window for a device (default: the only one)."""
+    skip = _skip_if_no_sdk()
+    if skip:
+        return skip
+    res = scrcpy.start_mirror(serial=serial, title=title, max_size=max_size,
+                              stay_awake=stay_awake, turn_screen_off=turn_screen_off)
+    _log.info("emulator: mirror serial=%s -> %s", serial,
+              res.get("pid") or res.get("error"))
+    return res
+
+
+@SPROUT.task(name="workflows.mobile.emulator.tasks.stop_mirror")
+@log_result()
+def stop_mirror(serial: Optional[str] = None) -> dict:
+    """Stop scrcpy mirror(s) (optionally just those targeting `serial`)."""
+    skip = _skip_if_no_sdk()
+    if skip:
+        return skip
+    return scrcpy.stop_mirror(serial=serial)
+
+
+@SPROUT.task(name="workflows.mobile.emulator.tasks.device_up")
+@log_result()
+def device_up(serial: Optional[str] = None, wireless: Optional[str] = None,
+              mirror: bool = True, title: Optional[str] = None,
+              max_size: Optional[int] = None) -> dict:
+    """Auto-connect a device (USB preferred, wireless fallback) and optionally
+    mirror it. Returns {success, serial, via, mirror?} or, when nothing is
+    reachable, {success: False, skipped: True, message} so callers can exit
+    gracefully rather than error."""
+    skip = _skip_if_no_sdk()
+    if skip:
+        return skip
+    conn = devices.connect_auto(serial=serial, wireless=wireless)
+    if not conn.get("success"):
+        return {"success": False, "skipped": True,
+                "message": conn.get("message", "no device available")}
+    out = {"success": True, "serial": conn["serial"], "via": conn["via"]}
+    if mirror:
+        out["mirror"] = scrcpy.start_mirror(serial=conn["serial"], title=title,
+                                            max_size=max_size)
+    _log.info("emulator: device_up via=%s serial=%s", conn["via"], conn["serial"])
+    return out
+
+
+@SPROUT.task(name="workflows.mobile.emulator.tasks.connect_device")
+@log_result()
+def connect_device(target: str) -> dict:
+    """`adb connect host:port` to a wireless-debugging device."""
+    skip = _skip_if_no_sdk()
+    if skip:
+        return skip
+    return devices.connect_wireless(target).as_dict()
+
+
+@SPROUT.task(name="workflows.mobile.emulator.tasks.pair_device")
+@log_result()
+def pair_device(target: str, code: str) -> dict:
+    """`adb pair host:port code` — one-time wireless-debugging pairing."""
+    skip = _skip_if_no_sdk()
+    if skip:
+        return skip
+    return devices.pair_wireless(target, code).as_dict()
+
+
+@SPROUT.task(name="workflows.mobile.emulator.tasks.tcpip_device")
+@log_result()
+def tcpip_device(serial: str, port: int = 5555) -> dict:
+    """Switch a USB device to wireless adb on `port`, returning its Wi-Fi IP so
+    you can connect_device to <ip>:<port> and unplug."""
+    skip = _skip_if_no_sdk()
+    if skip:
+        return skip
+    ip = devices.device_ip(serial)  # before the tcpip restart drops the device
+    res = devices.enable_tcpip(serial, port).as_dict()
+    res["ip"] = ip
+    res["connect_hint"] = f"{ip}:{port}" if ip else None
+    return res

@@ -930,6 +930,108 @@ def emulator_status(machine: dict) -> None:
     _run_emulator_cli("list")
 
 
+# ── Physical-device connect + mirror + auto-reconnect (config-gated) ───────────
+# Driven by an [<machine>.device] table. Connects a phone (USB preferred,
+# wireless fallback), mirrors it via scrcpy, and — when reconnect is on — leaves
+# a tracked watchdog daemon (run_emulator.py device-watch) running that re-
+# connects + re-mirrors whenever the device drops (e.g. you leave/return to Wi-Fi
+# range), with NO need to re-run deploy. If no device is reachable at deploy
+# time, it prints a message and skips gracefully (no watchdog).
+
+_DEVICE_WATCH = "device-watch"  # tracked daemon name (.run/<name>.pid, logs/<name>.log)
+
+
+def machine_device(machine: dict) -> dict | None:
+    """The [<machine>.device] config, or None when absent/disabled."""
+    cfg = machine.get("device")
+    if not isinstance(cfg, dict) or not cfg.get("enabled", True):
+        return None
+    return cfg
+
+
+def _device_conn_args(cfg: dict) -> list[str]:
+    a: list[str] = []
+    if cfg.get("serial"):
+        a += ["--serial", str(cfg["serial"])]
+    if cfg.get("wireless"):
+        a += ["--wireless", str(cfg["wireless"])]
+    return a
+
+
+def _device_mirror_args(cfg: dict) -> list[str]:
+    a: list[str] = []
+    if not cfg.get("mirror", True):
+        a += ["--no-mirror"]
+    if cfg.get("title"):
+        a += ["--title", str(cfg["title"])]
+    if cfg.get("max_size"):
+        a += ["--max-size", str(cfg["max_size"])]
+    return a
+
+
+def device_up(machine: dict) -> None:
+    """Connect + mirror the configured phone; start the reconnect watchdog."""
+    cfg = machine_device(machine)
+    if not cfg:
+        return
+    print("[device] Connecting phone (USB → wireless fallback)...")
+    reconnect = cfg.get("reconnect", True)
+
+    if not reconnect:
+        rc = _run_emulator_cli("device-up", *_device_conn_args(cfg), *_device_mirror_args(cfg))
+        if rc == 2:
+            print("  [device] no device available (USB or wireless) — skipped.")
+        return
+
+    # Foreground probe (connect only) for an immediate console verdict, then
+    # hand off to the background watchdog (which mirrors + monitors + reconnects).
+    rc = _run_emulator_cli("device-up", "--no-mirror", *_device_conn_args(cfg))
+    if rc == 2:
+        print("  [device] no device available (USB or wireless) — skipped (no watchdog).")
+        return
+    if rc != 0:
+        print(f"  [device] connect failed (rc={rc}) — skipped.")
+        return
+
+    if not EMULATOR_CLI.exists():
+        print(f"  WARNING: emulator CLI not found at {EMULATOR_CLI} — skipping watchdog.")
+        return
+    watch_cmd = [python_exe(), str(EMULATOR_CLI), "device-watch",
+                 *_device_conn_args(cfg), *_device_mirror_args(cfg)]
+    if cfg.get("interval"):
+        watch_cmd += ["--interval", str(cfg["interval"])]
+    pid = spawn_detached(watch_cmd, log_path(_DEVICE_WATCH),
+                         pidfile=pid_path(_DEVICE_WATCH),
+                         extra_env=machine_env_vars(machine))
+    pid_path(_DEVICE_WATCH).write_text(str(pid))
+    print(f"  [device] connected; auto-reconnect watchdog started (PID {pid}) "
+          f"→ {log_path(_DEVICE_WATCH)}")
+
+
+def device_down(machine: dict) -> None:
+    """Stop the reconnect watchdog and the scrcpy mirror."""
+    cfg = machine_device(machine)
+    if not cfg:
+        return
+    print("[device] Stopping device watchdog + mirror...")
+    pid = read_pid(_DEVICE_WATCH)
+    if pid:
+        stop_pid(pid, _DEVICE_WATCH)
+    kill_stray_processes(_DEVICE_WATCH, label=_DEVICE_WATCH)
+    pid_path(_DEVICE_WATCH).unlink(missing_ok=True)
+    _run_emulator_cli("mirror-stop")  # close any scrcpy window
+
+
+def device_status(machine: dict) -> None:
+    """Show watchdog + connected devices when this machine has a device config."""
+    if not machine_device(machine):
+        return
+    pid = read_pid(_DEVICE_WATCH)
+    state = f"running (PID {pid})" if pid else "stopped"
+    print(f"\n[device] reconnect watchdog: {state}  ->  {log_path(_DEVICE_WATCH)}")
+    _run_emulator_cli("devices", "--info")
+
+
 # ── OS-native service registration ────────────────────────────────────────────
 
 def register_services(machine: dict, args: argparse.Namespace, services: list[str]) -> None:
@@ -1188,13 +1290,17 @@ def main() -> None:
     load_env_into_os()
 
     if args.status:
+        _m = load_machine_config(args.machine)
         show_status()
-        emulator_status(load_machine_config(args.machine))
+        emulator_status(_m)
+        device_status(_m)
         return
 
     if args.stop:
         if args.stop == "emulator":
             emulator_down(load_machine_config(args.machine))
+        elif args.stop == "device":
+            device_down(load_machine_config(args.machine))
         else:
             stop_service(args.stop)
         return
@@ -1207,6 +1313,10 @@ def main() -> None:
             print("==> Restart: emulator")
             emulator_down(machine)
             emulator_up(machine)
+        elif args.restart == "device":
+            print("==> Restart: device")
+            device_down(machine)
+            device_up(machine)
         else:
             restart_service(args.restart, machine, args)
         return
@@ -1242,6 +1352,7 @@ def main() -> None:
             stop_service(s)
         kill_stray_celery()
         emulator_down(machine)
+        device_down(machine)
         if role == "host" and not args.docker_only and not single_instance:
             docker_down()
         print(f"All services stopped for machine={name}.")
@@ -1323,6 +1434,9 @@ def main() -> None:
     # Fire-and-forget (boots in the background) so deploy doesn't block on it.
     if not single_instance:
         emulator_up(machine)
+        # Connect + mirror a physical phone ([<machine>.device]) and leave the
+        # auto-reconnect watchdog running.
+        device_up(machine)
 
     # Post-deploy hook: close console windows with "Process completed"
     if started > 0:

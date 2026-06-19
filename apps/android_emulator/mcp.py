@@ -15,7 +15,7 @@ from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 
-from apps.android_emulator import client, config
+from apps.android_emulator import client, config, devices, scrcpy
 
 logger = logging.getLogger("harqis-mcp.android_emulator")
 
@@ -204,6 +204,92 @@ def register_android_emulator_tools(mcp: FastMCP):
         """
         logger.info("Tool called: emulator_delete_avd name=%s", name)
         return client.delete_avd(name).as_dict()
+
+    # ── Physical / wireless devices + screen mirroring ────────────────────
+    @mcp.tool()
+    def device_list(info: bool = False) -> dict:
+        """List ALL attached Android devices — emulators, USB handsets, and
+        wireless — tagged by kind. With info=True, enrich booted devices with
+        model/brand/android/resolution.
+
+        Args:
+            info: Also fetch model/OS/resolution for each ready device.
+        """
+        logger.info("Tool called: device_list info=%s", info)
+        items = devices.list_devices()
+        if info:
+            for d in items:
+                if d.get("state") == "device":
+                    d.update({k: v for k, v in devices.device_info(d["serial"]).items()
+                              if k not in d})
+        return {"success": True, "devices": items}
+
+    @mcp.tool()
+    def device_mirror(serial: Optional[str] = None, title: Optional[str] = None,
+                      max_size: Optional[int] = None, stay_awake: bool = True,
+                      turn_screen_off: bool = False) -> dict:
+        """Open a scrcpy mirror+control window for a device (test a real phone
+        on your screen). scrcpy only mirrors + forwards input via adb, so it
+        doesn't trip RASP/anti-tamper integrity checks.
+
+        Args:
+            serial:          Target device (default: the single attached one).
+            title:           Window title.
+            max_size:        Cap the longer screen dimension (px) for speed.
+            stay_awake:      Keep the device awake while plugged in.
+            turn_screen_off: Blank the device screen but keep mirroring.
+        """
+        logger.info("Tool called: device_mirror serial=%s", serial)
+        return scrcpy.start_mirror(serial=serial, title=title, max_size=max_size,
+                                   stay_awake=stay_awake,
+                                   turn_screen_off=turn_screen_off)
+
+    @mcp.tool()
+    def device_mirror_stop(serial: Optional[str] = None) -> dict:
+        """Stop scrcpy mirror window(s).
+
+        Args:
+            serial: Only stop mirrors targeting this serial (default: all).
+        """
+        logger.info("Tool called: device_mirror_stop serial=%s", serial)
+        return scrcpy.stop_mirror(serial=serial)
+
+    @mcp.tool()
+    def device_connect(target: str) -> dict:
+        """`adb connect host:port` to a wireless-debugging device.
+
+        Args:
+            target: host:port (the connect port from Wireless debugging).
+        """
+        logger.info("Tool called: device_connect target=%s", target)
+        return devices.connect_wireless(target).as_dict()
+
+    @mcp.tool()
+    def device_pair(target: str, code: str) -> dict:
+        """Pair with a device's wireless debugging (one-time, Android 11+).
+
+        Args:
+            target: host:port from "Pair device with pairing code" (its own port).
+            code:   The 6-digit pairing code shown on the device.
+        """
+        logger.info("Tool called: device_pair target=%s", target)
+        return devices.pair_wireless(target, code).as_dict()
+
+    @mcp.tool()
+    def device_tcpip(serial: str, port: int = 5555) -> dict:
+        """Switch a USB device to wireless adb on `port`; returns its Wi-Fi IP
+        so you can device_connect to <ip>:<port> and unplug the cable.
+
+        Args:
+            serial: USB device serial to switch.
+            port:   TCP/IP port to listen on (default 5555).
+        """
+        logger.info("Tool called: device_tcpip serial=%s port=%s", serial, port)
+        ip = devices.device_ip(serial)  # before the tcpip restart drops the device
+        res = devices.enable_tcpip(serial, port).as_dict()
+        res["ip"] = ip
+        res["connect_hint"] = f"{ip}:{port}" if ip else None
+        return res
 
     # ── Device operations ─────────────────────────────────────────────────
     @mcp.tool()

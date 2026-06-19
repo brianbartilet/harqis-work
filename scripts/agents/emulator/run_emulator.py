@@ -80,6 +80,46 @@ def _parse_args() -> argparse.Namespace:
     en.add_argument("--no-wait", action="store_true", help="Don't wait for boot (fire-and-forget; used by deploy).")
     en.add_argument("--boot-timeout", type=int, default=300, help="Boot wait seconds.")
 
+    dv = sub.add_parser("devices", help="List all attached devices (emulator + physical + wireless).")
+    dv.add_argument("--info", action="store_true", help="Also fetch model/OS/resolution per device.")
+
+    mi = sub.add_parser("mirror", help="Open a scrcpy mirror+control window for a device.")
+    mi.add_argument("--serial", help="Target device serial (default: the only attached one).")
+    mi.add_argument("--title", help="Mirror window title.")
+    mi.add_argument("--max-size", type=int, help="Cap the longer screen dimension (px).")
+    mi.add_argument("--no-stay-awake", action="store_true", help="Don't keep the device awake.")
+    mi.add_argument("--screen-off", action="store_true", help="Blank the device screen while mirroring.")
+
+    ms = sub.add_parser("mirror-stop", help="Stop scrcpy mirror window(s).")
+    ms.add_argument("--serial", help="Only stop mirrors for this serial (default: all).")
+
+    co = sub.add_parser("connect", help="adb connect to a wireless-debugging device.")
+    co.add_argument("target", help="host:port (the connect port).")
+
+    pr = sub.add_parser("pair", help="Pair with a device's wireless debugging (Android 11+).")
+    pr.add_argument("target", help="host:port from 'Pair device with pairing code'.")
+    pr.add_argument("code", help="6-digit pairing code shown on the device.")
+
+    tc = sub.add_parser("tcpip", help="Switch a USB device to wireless adb, print its IP:port.")
+    tc.add_argument("serial", help="USB device serial.")
+    tc.add_argument("--port", type=int, default=5555, help="TCP/IP port (default 5555).")
+
+    du = sub.add_parser("device-up", help="Auto-connect (USB→wireless) and optionally mirror, once.")
+    du.add_argument("--serial", help="Preferred USB serial (default: any USB device).")
+    du.add_argument("--wireless", help="Wireless fallback target host:port.")
+    du.add_argument("--no-mirror", action="store_true", help="Connect only; don't launch scrcpy.")
+    du.add_argument("--title", help="Mirror window title.")
+    du.add_argument("--max-size", type=int, help="Cap the longer screen dimension (px).")
+
+    dw = sub.add_parser("device-watch",
+                        help="Daemon: connect + mirror, then auto-reconnect on drops (USB→wireless).")
+    dw.add_argument("--serial", help="Preferred USB serial.")
+    dw.add_argument("--wireless", help="Wireless fallback target host:port.")
+    dw.add_argument("--no-mirror", action="store_true", help="Monitor connection only; no scrcpy.")
+    dw.add_argument("--title", help="Mirror window title.")
+    dw.add_argument("--max-size", type=int, help="Cap the longer screen dimension (px).")
+    dw.add_argument("--interval", type=int, default=10, help="Seconds between connection checks.")
+
     st = sub.add_parser("stop", help="Stop a running emulator by serial or profile.")
     st.add_argument("serial", nargs="?", help="Device serial, e.g. emulator-5554.")
     st.add_argument("--profile", help="Stop the profile's instance (resolves serial from its port).")
@@ -96,8 +136,60 @@ def _parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def _device_watch(args) -> int:
+    """Blocking daemon: connect (USB→wireless) + mirror, then monitor and
+    auto-reconnect whenever the device drops (e.g. you walk out of Wi-Fi range
+    and back). Runs until killed. Exits 0 immediately if nothing is reachable
+    at startup (graceful)."""
+    import time
+    from apps.android_emulator import devices, scrcpy
+
+    def log(m: str) -> None:
+        print(f"[device-watch] {m}", flush=True)
+
+    mirror = not args.no_mirror
+
+    def ensure_mirror(target: str) -> None:
+        if mirror and not scrcpy.mirror_running(target):
+            scrcpy.start_mirror(serial=target, title=args.title, max_size=args.max_size)
+            log(f"mirror launched for {target}")
+
+    conn = devices.connect_auto(serial=args.serial, wireless=args.wireless)
+    if not conn.get("success"):
+        log(conn.get("message", "no device available"))
+        log("nothing to watch — exiting gracefully.")
+        return 0
+    target = conn["serial"]
+    log(f"connected via {conn['via']} -> {target}")
+    ensure_mirror(target)
+    log(f"watching every {args.interval}s; auto-reconnect on drop "
+        "(stop with: deploy.py --stop device).")
+    try:
+        while True:
+            time.sleep(args.interval)
+            states = {d["serial"]: d["state"] for d in devices.list_devices()}
+            if states.get(target) == "device":
+                ensure_mirror(target)  # relaunch if the user closed it / it died
+                continue
+            log(f"{target} dropped (state={states.get(target, 'gone')}) — reconnecting...")
+            if mirror:
+                scrcpy.stop_mirror(target)
+            conn = devices.connect_auto(serial=args.serial, wireless=args.wireless)
+            if conn.get("success"):
+                target = conn["serial"]
+                log(f"reconnected via {conn['via']} -> {target}")
+                ensure_mirror(target)
+            else:
+                log(f"still unavailable; retrying in {args.interval}s")
+    except KeyboardInterrupt:
+        log("stopped.")
+        return 0
+
+
 def main() -> int:
     args = _parse_args()
+    if args.cmd == "device-watch":
+        return _device_watch(args)
     from workflows.mobile.emulator.tasks import manage
 
     if args.cmd == "start":
@@ -123,6 +215,24 @@ def main() -> int:
             profile=args.profile, avd_name=args.avd_name,
             wait_for_boot=not args.no_wait, boot_timeout=args.boot_timeout,
             **({"port": args.port} if args.port else {}))
+    elif args.cmd == "devices":
+        result = manage.list_devices(info=args.info)
+    elif args.cmd == "mirror":
+        result = manage.mirror_device(
+            serial=args.serial, title=args.title, max_size=args.max_size,
+            stay_awake=not args.no_stay_awake, turn_screen_off=args.screen_off)
+    elif args.cmd == "mirror-stop":
+        result = manage.stop_mirror(serial=args.serial)
+    elif args.cmd == "connect":
+        result = manage.connect_device(args.target)
+    elif args.cmd == "pair":
+        result = manage.pair_device(args.target, args.code)
+    elif args.cmd == "tcpip":
+        result = manage.tcpip_device(args.serial, port=args.port)
+    elif args.cmd == "device-up":
+        result = manage.device_up(
+            serial=args.serial, wireless=args.wireless,
+            mirror=not args.no_mirror, title=args.title, max_size=args.max_size)
     elif args.cmd == "stop":
         serial = args.serial
         if not serial and args.profile:
