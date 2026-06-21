@@ -1,0 +1,4 @@
+# Keep the results/ folder tracked in git, but ignore everything generated in it
+# (radar CSVs and any other ad-hoc result artifacts).
+*
+!.gitignore

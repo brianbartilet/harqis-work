@@ -147,6 +147,36 @@ WORKFLOW_PURCHASES = {
         },
     },
 
+    # DISABLED — sold-inventory radar. Runs monthly (matches the manual cadence)
+    # to flag/clean EchoMTG items already sold on TCG MP but still listed. It is
+    # DESTRUCTIVE by default (dry_run=False → marks sold + removes inventory +
+    # delists) and always writes a review list to ES + logs/purchases/. Set
+    # 'dry_run': True for a preview-only run. Use `#` line comments only — never a
+    # triple-quoted block inside the dict (see note above + workflows/README.md).
+    # 'run-job--radar_sold_inventory': {
+    #     'task': 'workflows.purchases.tasks.sold_inventory_radar.radar_sold_inventory',
+    #     'schedule': crontab(day_of_month='1', hour='3', minute=0),
+    #     'kwargs': {
+    #         'cfg_id__tcg_mp': 'TCG_MP',
+    #         'cfg_id__echo_mtg': 'ECHO_MTG',
+    #         'cfg_id__echo_mtg_fe': 'ECHO_MTG_FE',
+    #         'dry_run': False,
+    #         'last_x_days': 60,
+    #         'source': 'hybrid',
+    #     },
+    #     'options': {
+    #         'queue': WorkflowQueue.TCG,
+    #         'expires': 60 * 60 * 8,
+    #     },
+    #     'manifesto': {
+    #         'code_role': 'distill',
+    #         'para_bucket': 'area',
+    #         'express_target': 'es_log+file',
+    #         'review_artifact': 'es_log+file',
+    #         'hfl_signal': False,
+    #     },
+    # },
+
 
 
 
