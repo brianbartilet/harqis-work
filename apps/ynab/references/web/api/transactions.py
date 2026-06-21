@@ -23,7 +23,7 @@ class ApiServiceYNABTransactions(BaseApiServiceYouNeedABudget):
 
     @deserialized(dict, child='data')
     def get_transactions_per_account(self, budget_id, account_id):
-        self.request\
+        self.request.get() \
             .add_uri_parameter(budget_id)\
             .add_uri_parameter('accounts')\
             .add_uri_parameter(account_id)\
@@ -32,7 +32,18 @@ class ApiServiceYNABTransactions(BaseApiServiceYouNeedABudget):
         return self.client.execute_request(self.request.build())
 
     @deserialized(dict, child='data')
-    def create_new_transaction(self, budget_id, transaction: DtoSaveTransaction):
+    def get_transaction(self, budget_id, transaction_id):
+        self.request.get() \
+            .add_uri_parameter(budget_id)\
+            .add_uri_parameter('transactions')\
+            .add_uri_parameter(transaction_id)
+
+        return self.client.execute_request(self.request.build())
+
+    @deserialized(dict, child='data')
+    def create_new_transaction(self, budget_id, transaction):
+        """Create a transaction. ``transaction`` is the full request body, wrapped under
+        ``transaction`` (single) or ``transactions`` (bulk) per the YNAB API."""
         self.request.post() \
             .add_uri_parameter(budget_id)\
             .add_uri_parameter('transactions')\
@@ -41,11 +52,23 @@ class ApiServiceYNABTransactions(BaseApiServiceYouNeedABudget):
         return self.client.execute_request(self.request.build())
 
     @deserialized(dict, child='data')
-    def update_transaction(self, budget_id, transaction: DtoUpdateTransaction):
-        self.request\
+    def update_transaction(self, budget_id, transaction_id, transaction):
+        """Update a single transaction by id. ``transaction`` is the full request body,
+        wrapped under ``transaction`` per the YNAB API."""
+        self.request.put() \
             .add_uri_parameter(budget_id)\
             .add_uri_parameter('transactions')\
+            .add_uri_parameter(transaction_id)\
             .add_json_payload(transaction)
+
+        return self.client.execute_request(self.request.build())
+
+    @deserialized(dict, child='data')
+    def delete_transaction(self, budget_id, transaction_id):
+        self.request.delete() \
+            .add_uri_parameter(budget_id)\
+            .add_uri_parameter('transactions')\
+            .add_uri_parameter(transaction_id)
 
         return self.client.execute_request(self.request.build())
 
