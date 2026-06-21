@@ -6,7 +6,7 @@ Five tasks:
                            persist one daily story moment to the corpus.
   - analyze_hfl_media    : daily — vision pass over recent dumps-inbox
                            images/videos; appends one corpus entry per
-                           story-worthy item (Haiku).
+                            story-worthy item (Haiku).
   - ingest_git_activity  : daily — distils the day's GitHub commits across
                            recently-updated repos into one corpus entry
                            (Haiku, raw fallback).

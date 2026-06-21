@@ -79,7 +79,14 @@ def resolve_local_machine_name(cfg: dict | None = None) -> str:
     """
     cfg = cfg if cfg is not None else load_merged_config()
     host = socket.gethostname()
-    return cfg.get("hostnames", {}).get(host, host)
+    hostnames = cfg.get("hostnames", {}) or {}
+    if host in hostnames:
+        return hostnames[host]
+    lower_host = host.lower()
+    for key, machine_name in hostnames.items():
+        if str(key).lower() == lower_host:
+            return machine_name
+    return host
 
 
 @dataclass
