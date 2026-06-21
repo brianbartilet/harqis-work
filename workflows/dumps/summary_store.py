@@ -1,16 +1,16 @@
 """
 workflows/dumps/summary_store.py
 
-Per-day Markdown sink for the daily-dumps analyzer — mirrors the HFL corpus
-pattern (workflows/hfl/tasks/capture.py: one file per day, idempotent).
+Consolidated Markdown log sink for the daily-dumps analyzer.
 
 `analyze_daily_dumps` already pushes a rendered summary to the HUD feed
 (`@feed()` → shared `hud-logs-YYYYMMDD.txt`) and the structured return to ES
-(`@log_result()`). Neither is a clean, standalone per-day record: the feed is a
-`.txt` shared with every other HUD task, newest-first, and ES isn't a file you
-can open. This module adds a dedicated Markdown artifact — `<dir>/YYYY-MM-DD.md`
-— written for each scanned day. It is *additive*: the feed + ES paths are
-untouched, exactly as HFL keeps both its corpus and its ES projection.
+(`@log_result()`). Neither is a clean, standalone record: the feed is a `.txt`
+shared with every other HUD task, newest-first, and ES isn't a file you can
+open. This module adds a dedicated Markdown artifact — a single, cumulative
+`<dir>/daily-dumps.log` that each scanned day's summary block is *appended* to.
+It is *additive*: the feed + ES paths are untouched, exactly as HFL keeps both
+its corpus and its ES projection.
 
 Two sinks, written in parallel (the operator asked for "both"):
   A. Repo sink   — machines.local.toml `[dumps] summary_path` → apps_config
@@ -22,15 +22,14 @@ Two sinks, written in parallel (the operator asked for "both"):
                    when no feed dir is configured/mounted here — same foreign-OS
                    safety rule @feed() uses.
 
-Writes are idempotent overwrites: a closed day's dumps are final, so re-running
-the retro for a date rewrites that one file rather than stacking duplicates
-(unlike the prepend-blob feed). Each write is atomic (temp + os.replace) so a
-Drive-synced reader never sees a half-written file.
+Writes are plain appends: each run appends the day's rendered Markdown block to
+`daily-dumps.log`, so re-running the retro for a date stacks another entry
+(the operator chose simple append over idempotent replace). One `daily-dumps.log`
+per sink replaces the former per-day `<date>.md` files.
 """
 from __future__ import annotations
 
 import os
-import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -39,6 +38,10 @@ from core.utilities.logging.custom_logger import create_logger
 _log = create_logger("dumps.summary_store")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Single cumulative log file (one per sink) that each day's Markdown block is
+# appended to — replaces the former per-day `<date>.md` artifacts.
+LOG_FILENAME = "daily-dumps.log"
 
 
 def _human_bytes(n: int) -> str:
@@ -169,43 +172,39 @@ def render_day_markdown(
     return "\n".join(lines)
 
 
-def _atomic_write(path: Path, text: str) -> None:
-    """Write `text` to `path` atomically (temp file + os.replace).
-
-    Atomic replace matters for the Drive-synced feed sink: a syncing reader
-    never observes a partially-written file.
-    """
+def _append_text(path: Path, text: str) -> None:
+    """Append `text` to `path` (creating parent dirs). Plain append — the log is
+    cumulative, so a re-run for a closed day simply stacks another block."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w", delete=False, dir=str(path.parent), encoding="utf-8",
-    ) as tmp:
-        tmp.write(text)
-        tmp_path = Path(tmp.name)
-    os.replace(tmp_path, path)
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(text)
 
 
-def write_day_summary(
+def append_day_summary(
     date_suffix: str,
     machines: list[dict],
     inbox_path: str,
     *,
     now: datetime | None = None,
 ) -> list[str]:
-    """Write `<dir>/<date>.md` to every resolved sink. Idempotent overwrite.
+    """Append one day's rendered Markdown block to `<dir>/daily-dumps.log` in
+    every resolved sink.
 
-    Best-effort per sink: a failure on one dir is logged and skipped so it
-    never breaks the beat or starves the other sink. Returns the list of paths
-    actually written.
+    Plain append (not idempotent): re-running a date stacks another entry. Best-
+    effort per sink: a failure on one dir is logged and skipped so it never
+    breaks the beat or starves the other sink. Returns the list of log files
+    appended to.
     """
-    text = render_day_markdown(date_suffix, machines, inbox_path, now=now)
+    block = render_day_markdown(date_suffix, machines, inbox_path, now=now).rstrip() + "\n\n"
     written: list[str] = []
     for d in resolve_summary_dirs():
-        target = d / f"{date_suffix}.md"
+        target = d / LOG_FILENAME
         try:
-            _atomic_write(target, text)
+            _append_text(target, block)
             written.append(str(target))
-            _log.info("dumps: wrote day summary %s (%d machines)",
-                      target, len(machines))
+            _log.info("dumps: appended %s summary to %s (%d machines)",
+                      date_suffix, target, len(machines))
         except Exception as exc:  # noqa: BLE001 - one sink failing must not break others
-            _log.warning("dumps: failed to write day summary %s (%s)", target, exc)
+            _log.warning("dumps: failed to append day summary %s to %s (%s)",
+                         date_suffix, target, exc)
     return written

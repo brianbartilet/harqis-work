@@ -8,11 +8,12 @@ outage, the host-queue race, etc.). It walks the inbox's existing
 `<machine>-daily-dumps-<date>` folders and pushes a per-day breakdown + grand
 total to the HUD feed; missed days render as "0 machines (no dumps)".
 
-It also writes a dedicated per-day Markdown file (`<dir>/YYYY-MM-DD.md`) for
-every day that has dumps — to both the repo sink (`DUMPS.summary.path` →
-`DUMPS_SUMMARY_PATH` → `<repo>/logs/dumps/`) and the Drive-synced feed sink
-(`<feed-dir>/dumps/`). Pass `--no-md` to skip that and emit the feed/ES summary
-only. See `workflows/dumps/summary_store.py`.
+It prints the per-day summary as **Markdown** to stdout, and APPENDS each
+day's Markdown block to a single consolidated `daily-dumps.log` — in both the
+repo sink (`DUMPS.summary.path` → `DUMPS_SUMMARY_PATH` → `<repo>/logs/dumps/`)
+and the Drive-synced feed sink (`<feed-dir>/dumps/`). Re-running a date simply
+appends another block. Pass `--no-md` to skip the log append and emit the
+feed/ES summary only. See `workflows/dumps/summary_store.py`.
 
 ⚠️  Run this ON harqis-server (the dumps host). The inbox is a LOCAL path there
 (`[dumps] harqis_server_inbox`, e.g. /Volumes/harqis-data/dumps). The task
@@ -32,7 +33,7 @@ Flags (map 1:1 to the task kwargs; precedence: date → start/end → month → 
     --start/--end     inclusive YYYY-MM-DD window (capped at yesterday)
     --month YYYY-MM   whole calendar month (capped at yesterday)
     --missing-only    report only the days with NO dumps (gap report)
-    --no-md           skip the per-day Markdown files (feed/ES summary only)
+    --no-md           skip appending to daily-dumps.log (feed/ES summary only)
 
 Exit codes: 0 ok · 1 error (e.g. inbox/config) · 2 skipped (ran off the hub).
 """
@@ -74,8 +75,8 @@ def _parse_args() -> argparse.Namespace:
                    help="Limit the scan to one exact machine/device dump prefix "
                         "(for example, nothing-phone).")
     p.add_argument("--no-md", action="store_false", dest="write_md",
-                   help="Skip writing the per-day Markdown summary files "
-                        "(feed/ES summary only). Markdown is written by default.")
+                   help="Skip appending to daily-dumps.log (feed/ES summary "
+                        "only). The Markdown log is appended by default.")
     return p.parse_args()
 
 
@@ -109,13 +110,16 @@ def main() -> int:
               "Run this on the dumps host.", file=sys.stderr)
         return 2
 
-    # The task's rendered summary is the same text it pushed to the HUD feed.
-    print(result.get("text", "").rstrip())
+    # Markdown output: the per-day Markdown block(s) — same content appended to
+    # daily-dumps.log. Falls back to the plain feed text for views that have no
+    # markdown (gaps/missing-only, empty range, inbox-not-created).
+    markdown = (result.get("markdown") or "").rstrip()
+    print(markdown if markdown else result.get("text", "").rstrip())
 
-    # Per-day Markdown files written to the repo + Drive-synced sinks.
+    # The consolidated daily-dumps.log file(s) appended to (repo + feed sinks).
     summary_files = result.get("summary_files") or []
     if summary_files:
-        print(f"\nWrote {len(summary_files)} summary file(s):")
+        print(f"\nAppended to {len(summary_files)} log file(s):")
         for path in summary_files:
             print(f"  {path}")
     return 0

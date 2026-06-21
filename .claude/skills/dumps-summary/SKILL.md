@@ -1,12 +1,13 @@
 ---
 name: dumps-summary
-description: Summarize the daily dumps inbox to a per-day Markdown file (and the HUD feed). Walks <machine>-daily-dumps-<date> folders on harqis-server, writes <dir>/YYYY-MM-DD.md for each day with dumps to both the repo sink and the Drive-synced feed sink, and prints the per-day breakdown. Mirrors the /hfl corpus pattern. Trigger phrases — "dumps summary", "summarize dumps", "dump summary for <date>", "write the dumps md", "backfill dumps summaries".
+description: Summarize the daily dumps inbox to a consolidated Markdown log (and the HUD feed). Walks <machine>-daily-dumps-<date> folders on harqis-server, appends each day-with-dumps block to a single <dir>/daily-dumps.log in both the repo sink and the Drive-synced feed sink, and prints the Markdown to stdout. Mirrors the /hfl corpus pattern. Trigger phrases — "dumps summary", "summarize dumps", "dump summary for <date>", "write the dumps md", "backfill dumps summaries".
 ---
 
-Generate the per-day daily-dumps summary Markdown file(s) by invoking
+Generate the daily-dumps summary Markdown by invoking
 `scripts/agents/dumps/run_dumps_summary_retro.py`, which calls the
-`analyze_daily_dumps` task. Defaults to yesterday; accepts a date / range /
-month, exactly like the nightly + weekly-catch-up beat runs.
+`analyze_daily_dumps` task. It prints the per-day Markdown to stdout and appends
+each block to a consolidated `daily-dumps.log`. Defaults to yesterday; accepts a
+date / range / month, exactly like the nightly + weekly-catch-up beat runs.
 
 ⚠️ Runs on **harqis-server** only — the dumps inbox is a local path there
 (`[dumps] harqis_server_inbox`). Off-host the task self-guards and exits 2
@@ -19,8 +20,9 @@ forcing it.
 `analyze_daily_dumps` writes three artifacts (the first is what this skill is
 for; the other two are existing, untouched):
 
-1. **Per-day Markdown** — `<dir>/YYYY-MM-DD.md`, one file per day that has
-   dumps, written to BOTH sinks (idempotent overwrite):
+1. **Consolidated Markdown log** — `<dir>/daily-dumps.log`, one cumulative file
+   per sink that each day-with-dumps block is APPENDED to (plain append — a
+   re-run stacks another block), written to BOTH sinks:
    - Repo sink: `DUMPS.summary.path` (apps_config) → `DUMPS_SUMMARY_PATH` env →
      `<repo>/logs/dumps/`.
    - Feed sink: `<resolved-feed-dir>/dumps/` when the feed dir exists on this
@@ -31,7 +33,7 @@ for; the other two are existing, untouched):
    (`@feed()`), as before.
 3. **ES review trail** — the structured return (`@log_result()`), as before.
 
-A day with **no** dumps writes no Markdown file — its absence is the signal, and
+A day with **no** dumps appends nothing — its absence is the signal, and
 `--missing-only` reports gaps explicitly.
 
 ## Arguments
@@ -47,7 +49,7 @@ A day with **no** dumps writes no Markdown file — its absence is the signal, a
 | `--month YYYY-MM` | whole calendar month (capped at yesterday) |
 | `--machine <name>` | limit to one machine/device dump prefix |
 | `--missing-only` | gap report (days with NO dumps) instead of the breakdown |
-| `--no-md` | skip the Markdown files (feed/ES summary only) |
+| `--no-md` | skip appending to daily-dumps.log (feed/ES summary only) |
 
 No arguments → yesterday (same as the nightly beat).
 
@@ -58,9 +60,8 @@ No arguments → yesterday (same as the nightly beat).
    that and stop.
 2. **Run the script**, forwarding `$ARGUMENTS`:
    `python scripts/agents/dumps/run_dumps_summary_retro.py $ARGUMENTS`
-3. **Report**: the printed per-day breakdown + grand total, and the list of
-   summary file paths the script reports ("Wrote N summary file(s)"). Surface
-   any gap days.
+3. **Report**: the printed per-day Markdown, and the list of log file paths the
+   script reports ("Appended to N log file(s)"). Surface any gap days.
 
 ## Exit codes
 
@@ -69,8 +70,8 @@ skipped (ran off harqis-server).
 
 ## Configuration (optional)
 
-To override where the repo-side Markdown lands, set `[dumps] summary_path` in
-`machines.local.toml` (the canonical home — right next to the inbox):
+To override where the repo-side `daily-dumps.log` lands, set `[dumps] summary_path`
+in `machines.local.toml` (the canonical home — right next to the inbox):
 
 ```toml
 [dumps]

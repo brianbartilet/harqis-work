@@ -47,27 +47,28 @@ The weekly catch-up re-summarizes the trailing 7 days so a missed daily run (hos
 
 Naming rule: `<machine-name>-daily-dumps-<YYYY-MM-DD>/<source-folder-basename>/<file-relative-to-source-root>`. The machine name comes from the `[<name>]` block in `machines.toml` (resolved via `[hostnames]`). The `<source-folder-basename>` is the leaf name of each configured path.
 
-## Daily summary Markdown (`summary_store.py`)
+## Daily summary log (`summary_store.py`)
 
-Beyond the HUD-feed line and the ES review trail, `analyze_daily_dumps` writes a
-standalone **per-day Markdown file** — `<dir>/YYYY-MM-DD.md` — for every day that
-has dumps. This mirrors the HFL corpus pattern (one file per day; see
-`workflows/hfl/tasks/capture.py`) and gives you a clean, greppable artifact
-rather than a line buried in the shared `hud-logs-*.txt` feed.
+Beyond the HUD-feed line and the ES review trail, `analyze_daily_dumps` appends
+each day's Markdown summary block to a single, cumulative **`<dir>/daily-dumps.log`**
+for every day that has dumps. One consolidated log replaces the former per-day
+`<date>.md` files — a clean, greppable artifact rather than a line buried in the
+shared `hud-logs-*.txt` feed, and one file to tail rather than many to open.
 
-Two sinks, written in parallel (idempotent overwrite — re-running a date
-rewrites that one file, no duplicate stacking):
+Two sinks, appended in parallel (plain append — re-running a date stacks another
+block; the operator chose append over idempotent replace):
 
 | Sink | Resolution | Notes |
 |---|---|---|
 | Repo | `[dumps] summary_path` (machines.local.toml) → `DUMPS.summary.path` (apps_config) → `DUMPS_SUMMARY_PATH` env → `<repo>/logs/dumps/` | Always written; created if missing. Configure it next to the inbox (see Configuration below). |
 | Feed | `<resolved-feed-dir>/dumps/` | Written only when the feed dir already exists on this host, so it rides the same Drive sync as the HUD feed. Skipped cleanly off-host (same foreign-OS rule `@feed()` uses). |
 
-A day with **no** dumps writes no file — its absence is the signal, and
+A day with **no** dumps appends nothing — its absence is the signal, and
 `--missing-only` reports gaps explicitly. Run ad-hoc via the
 [`/dumps-summary`](../../.claude/skills/dumps-summary/SKILL.md) skill or
 [`scripts/agents/dumps/run_dumps_summary_retro.py`](../../scripts/README.md#run_dumps_summary_retropy)
-on harqis-server. Pass `--no-md` / `write_md=False` to emit the feed/ES summary only.
+on harqis-server (it prints the Markdown to stdout). Pass `--no-md` /
+`write_md=False` to emit the feed/ES summary only.
 
 ## Configuration
 
@@ -80,7 +81,7 @@ All real values live in `machines.local.toml` (gitignored). `machines.toml` carr
 [dumps]
 harqis_server_ssh   = "harqis-one@harqis-mac-mini.tailnet.ts.net"
 harqis_server_inbox = "/Users/harqis-one/dumps"
-# Optional — where analyze_daily_dumps writes the per-day summary Markdown.
+# Optional — where analyze_daily_dumps appends the daily-dumps.log summary.
 # Defaults to <repo>/logs/dumps/ if unset. Host-local to harqis-server.
 summary_path        = "/Volumes/harqis-data/dumps-summary"
 ```

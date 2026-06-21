@@ -35,9 +35,10 @@ from workflows.dumps.tasks.pull import (
     pull_daily_dumps_from_remotes,
 )
 from workflows.dumps.summary_store import (
+    LOG_FILENAME,
+    append_day_summary,
     render_day_markdown,
     resolve_summary_dirs,
-    write_day_summary,
 )
 from workflows.dumps.transport import _archive_name, copy_locally
 from workflows.dumps.files import CollectedFile, format_dump_dir_name, parse_dump_dir_name
@@ -236,7 +237,7 @@ def test__render_gaps_when_none_missing():
     assert "none; all 2 day(s) have dumps" in text
 
 
-# ── Per-day Markdown summary sink (summary_store) ──────────────────────────────
+# ── Consolidated Markdown log sink (summary_store) ─────────────────────────────
 
 def test__render_day_markdown_has_header_table_and_total():
     machines = [
@@ -259,7 +260,7 @@ def test__render_day_markdown_no_machines_renders_empty_marker():
     assert "_No machine dumps found._" in md
 
 
-def test__write_day_summary_writes_md_and_is_idempotent(tmp_path, monkeypatch):
+def test__append_day_summary_appends_to_consolidated_log(tmp_path, monkeypatch):
     monkeypatch.setenv("DUMPS_SUMMARY_PATH", str(tmp_path))
     # No feed dir on the test host → resolve_summary_dirs is just the repo sink.
     monkeypatch.delenv("DESKTOP_PATH_FEED", raising=False)
@@ -268,16 +269,24 @@ def test__write_day_summary_writes_md_and_is_idempotent(tmp_path, monkeypatch):
     monkeypatch.delenv("DESKTOP_PATH_FEED_LINUX", raising=False)
 
     machines = [{"machine": "alpha", "files_count": 3, "bytes_total": 2048}]
-    written = write_day_summary("2026-06-18", machines, "/inbox")
+    written = append_day_summary("2026-06-18", machines, "/inbox")
 
-    target = tmp_path / "2026-06-18.md"
+    target = tmp_path / LOG_FILENAME
     assert str(target) in written
     assert target.exists()
-    first = target.read_text(encoding="utf-8")
+    after_one = target.read_text(encoding="utf-8")
+    assert after_one.count("# Daily Dumps — 2026-06-18") == 1
 
-    # Re-running overwrites the same file (no duplicate stacking).
-    write_day_summary("2026-06-18", machines, "/inbox")
-    assert target.read_text(encoding="utf-8") == first
+    # Plain append — re-running a date stacks another block (allow-dupes).
+    append_day_summary("2026-06-18", machines, "/inbox")
+    after_two = target.read_text(encoding="utf-8")
+    assert after_two.count("# Daily Dumps — 2026-06-18") == 2
+    assert after_two.startswith(after_one)
+
+    # A different day appends a further block to the same log.
+    append_day_summary("2026-06-19", machines, "/inbox")
+    final = target.read_text(encoding="utf-8")
+    assert "# Daily Dumps — 2026-06-19" in final
 
 
 def test__resolve_summary_dirs_includes_env_repo_sink(tmp_path, monkeypatch):

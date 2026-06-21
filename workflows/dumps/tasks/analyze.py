@@ -3,10 +3,10 @@ workflows/dumps/tasks/analyze.py
 
 Daily analyzer: walks the inbox for one or more days, then pushes a per-machine
 summary line to the HUD feed so the operator sees the result on the same
-surface they already scan. It also writes a dedicated per-day Markdown file
-(<dir>/YYYY-MM-DD.md) to the repo + Drive-synced sinks — see
-workflows/dumps/summary_store.py. The feed/ES paths are untouched; the md is
-additive (same shape as HFL keeping both a corpus and an ES projection).
+surface they already scan. It also APPENDS each day's Markdown summary block to
+a single consolidated <dir>/daily-dumps.log in the repo + Drive-synced sinks —
+see workflows/dumps/summary_store.py. The feed/ES paths are untouched; the log
+is additive (same shape as HFL keeping both a corpus and an ES projection).
 
 Default (no kwargs) analyzes *yesterday* — the once-a-day batch. It also
 accepts a retro window so missed days can be summarized after the fact:
@@ -46,7 +46,7 @@ from workflows.dumps.config import (
     resolve_local_machine_name,
 )
 from workflows.dumps.files import parse_dump_dir_name, previous_day_window
-from workflows.dumps.summary_store import write_day_summary
+from workflows.dumps.summary_store import append_day_summary, render_day_markdown
 
 _log = create_logger("dumps.analyze")
 
@@ -214,8 +214,8 @@ def analyze_daily_dumps(**kwargs) -> dict:
         machine — optional exact machine/device folder prefix filter.
         missing_only — render only the days with NO dumps (gap report) instead
                        of the full per-day breakdown.
-        write_md — write the per-day Markdown summary files (default True).
-                   Pass False to render the feed/ES summary only.
+        write_md — append the day's Markdown block to daily-dumps.log (default
+                   True). Pass False to render the feed/ES summary only.
     """
     # Host-guard: the inbox (harqis_server_inbox, e.g. /Volumes/harqis-data/dumps)
     # physically lives on harqis-server only. The `host` queue is meant to be
@@ -292,18 +292,25 @@ def analyze_daily_dumps(**kwargs) -> dict:
             "gaps": gap_dates,
         }
 
-    # Dedicated per-day Markdown sink (workflows/dumps/summary_store.py):
-    # writes <dir>/<date>.md for every day that HAS dumps, to both the repo
-    # sink and the Drive-synced feed sink. Additive — the HUD feed (@feed) and
-    # ES (@log_result) paths above are untouched. A gap day writes no file: its
-    # absence IS the signal, and `missing_only` already reports gaps. Best-effort
-    # per file, so a sink failure never breaks the analyze run.
+    # Consolidated Markdown log sink (workflows/dumps/summary_store.py):
+    # APPENDS each day-with-dumps block to a single <dir>/daily-dumps.log, in
+    # both the repo sink and the Drive-synced feed sink. Additive — the HUD feed
+    # (@feed) and ES (@log_result) paths above are untouched. A gap day appends
+    # nothing: its absence IS the signal, and `missing_only` already reports
+    # gaps. Best-effort per sink, so a failure never breaks the analyze run. The
+    # same per-day Markdown blocks are also returned as `markdown` for the caller
+    # to print (the retro runner's md output).
     summary_files: list[str] = []
+    markdown_blocks: list[str] = []
     if write_md:
         for d in dates:
             ms = per_day.get(d) or []
             if ms:
-                summary_files.extend(write_day_summary(d, ms, str(inbox)))
+                markdown_blocks.append(render_day_markdown(d, ms, str(inbox)).rstrip())
+                summary_files.extend(append_day_summary(d, ms, str(inbox)))
+    # One daily-dumps.log per sink → de-dupe the repeated paths across days.
+    summary_files = sorted(set(summary_files))
+    markdown = "\n\n".join(markdown_blocks)
 
     # Single-day → legacy shape (the daily Beat run relies on this). Multi-day
     # → per-day breakdown + grand total.
@@ -321,6 +328,7 @@ def analyze_daily_dumps(**kwargs) -> dict:
             "bytes_total": sum(m["bytes_total"] for m in machines),
             "details": machines,
             "summary_files": summary_files,
+            "markdown": markdown,
         }
 
     summary_text = _render_multi(dates, per_day, str(inbox))
@@ -338,4 +346,5 @@ def analyze_daily_dumps(**kwargs) -> dict:
         "bytes_total": sum(m["bytes_total"] for d in dates for m in per_day[d]),
         "by_day": {d: per_day[d] for d in dates},
         "summary_files": summary_files,
+        "markdown": markdown,
     }
