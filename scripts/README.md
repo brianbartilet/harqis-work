@@ -61,6 +61,7 @@ up from `scripts/agents/<bucket>/`).
 |---|---|
 | `check_env_health.py` | Environment / dependency / config diagnostics → JSON report. |
 | [`check_plaud_token.py`](#check_plaud_tokenpy) | Read-only smoke check for the Plaud adapter — confirms `PLAUD_TOKEN` works before the nightly `ingest_plaud_activity` job. |
+| [`ynab_unapproved_scan.py`](#ynab_unapproved_scanpy) | Weekly YNAB unapproved-transaction digest for the SGD/PHP Daily Bankroll budgets, limited to the last 30 days. Silent when there are no matches. |
 | [`reauth_gmail_send.py`](#scriptsagentsdiagnosticsreauth_gmail_sendpy) | Interactive re-authorization of a HARQIS Google OAuth credential when its refresh token expires/revokes (`invalid_grant`). |
 
 ### `dumps/` — device dump ops
@@ -406,6 +407,22 @@ token, api.plaud.ai unreachable) · `2` no backend configured. Grab the token fr
 web.plaud.ai → DevTools Console `localStorage.getItem("tokenstr")` and set
 `PLAUD_TOKEN` in `.env/apps.env`. The cloud path calls api.plaud.ai directly over
 HTTP (no SDK package); non-US accounts set `PLAUD_API_BASE`.
+
+---
+
+## `ynab_unapproved_scan.py`
+
+Weekly Hermes cron digest for unapproved YNAB transactions. It reads HARQIS YNAB
+config through `apps/ynab`, scans only the last 30 days, and only these budgets:
+`Daily Bankroll - SGD` and `Daily Bankroll - PHP`.
+
+```bash
+python scripts/agents/diagnostics/ynab_unapproved_scan.py
+```
+
+The script is designed for Hermes `no_agent` cron delivery: stdout is empty when
+there are no matching unapproved transactions, so Telegram stays silent; stdout
+contains a compact mobile digest when matches exist. No credentials are printed.
 
 ---
 
