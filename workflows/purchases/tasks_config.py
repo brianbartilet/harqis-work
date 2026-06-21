@@ -67,7 +67,7 @@ WORKFLOW_PURCHASES = {
             "cfg_id__echo_mtg": "ECHO_MTG",
             "cfg_id__echo_mtg_fe": "ECHO_MTG_FE",
             "language": "EN",   # default; per-card EchoMTG language wins when present
-            "limit": 100
+            #"limit": 100
         },
         "options": {
             "queue": WorkflowQueue.TCG,
