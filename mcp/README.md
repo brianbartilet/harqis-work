@@ -588,7 +588,17 @@ Or add it manually to `~/.claude/settings.json` under `mcpServers`.
 
 ## Adding a new app's tools
 
-1. Create `apps/<app_name>/mcp.py`:
+**Use the `/create-new-mcp` skill** — it is the single source of truth for the MCP layer. Run
+`/create-new-mcp <app_name>` and it will audit the app's service methods, generate the wrappers,
+and wire registration + docs for you. If the app doesn't exist yet, it loops back to
+`/create-new-service-app` first. (That scaffolding skill, in turn, delegates its MCP step to
+`/create-new-mcp`.)
+
+What the skill does — and what to do if wiring it by hand:
+
+1. Create `apps/<app_name>/mcp.py` with a single `register_<app_name>_tools(mcp)` function. Each
+   tool needs a docstring (`Args:` section), entry/result `logger.info` calls, and a defensive
+   return serialization (DTOs via `.__dict__`, never a raw DTO/Response):
 
 ```python
 import logging
@@ -602,19 +612,33 @@ def register_<app_name>_tools(mcp: FastMCP):
 
     @mcp.tool()
     def my_tool(param: str) -> dict:
-        """Describe what Claude should know about this tool."""
+        """Describe what Claude should know about this tool.
+
+        Args:
+            param: what it is.
+        """
         logger.info("Tool called: my_tool param=%s", param)
         service = ApiService<App>(CONFIG)
-        return service.some_method(param)
+        result = service.some_method(param)
+        return result if isinstance(result, dict) else (result.__dict__ if hasattr(result, "__dict__") else {})
 ```
 
-2. Import and register in `mcp/server.py`:
+2. Register in `mcp/server.py` by adding a tuple to the `APP_REGISTRARS` list (the server
+   lazy-imports each module from this registry — there is no inline import/call):
 
 ```python
-from apps.<app_name>.mcp import register_<app_name>_tools
-
-register_<app_name>_tools(mcp)
+    ("<Label>",          "apps.<app_name>.mcp",     "register_<app_name>_tools"),
 ```
+
+3. Add the app to `_APP_LOADERS` in `agents/projects/agent/tools/mcp_bridge.py` so Kanban agents
+   can load it:
+
+```python
+    "<app_name>":  "apps.<app_name>.mcp.register_<app_name>_tools",
+```
+
+If you only added tools to an app that's already registered, steps 2–3 need no change — the
+existing registration picks up the new tools.
 
 ---
 

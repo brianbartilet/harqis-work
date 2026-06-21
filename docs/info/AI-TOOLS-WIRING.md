@@ -42,7 +42,8 @@ From inside the repo, `git rev-parse --show-toplevel` returns the root on any OS
 - `.claude/skills/` — project slash-commands:
   - `/agent-prompt` — run an AI agent prompt from `prompts/` against the codebase
   - `/generate-registry` — regenerate `frontend/registry.py` from all `workflows/*/tasks_config.py` files
-  - `/create-new-service-app` — scaffold a complete app integration under `apps/`; with a spec/URL it generates real implementations, without one it creates a skeleton; chainable to `/create-new-workflow`
+  - `/create-new-service-app` — scaffold a complete app integration under `apps/`; with a spec/URL it generates real implementations, without one it creates a skeleton; delegates the MCP layer to `/create-new-mcp`; chainable to `/create-new-workflow`
+  - `/create-new-mcp` — build/extend the MCP tool surface for an existing `apps/<app>` by wrapping its service endpoints as `@mcp.tool()`s; single source of truth for the MCP layer; loops back to `/create-new-service-app` for missing apps/endpoints
   - `/create-new-workflow` — scaffold a new workflow under `workflows/`
   - `/create-new-n8n-workflow` — build and deploy an n8n workflow from a drawio diagram, XML/BPMN file, or text description; imports directly into the local n8n instance via Docker CLI
   - `/max-plan` — Opus-level planning pass; writes the plan to `.hermes/plans/`

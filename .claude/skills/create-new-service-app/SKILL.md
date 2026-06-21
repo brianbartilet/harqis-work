@@ -2,6 +2,13 @@ Scaffold a complete app integration under `apps/` — either from an OpenAPI spe
 
 For real implementations, use an isolated git worktree or feature branch so the main repo stays clean while the integration is being built and validated.
 
+> **Feedback loop with `/create-new-mcp`.** This skill builds the service layer (config, base
+> service, DTOs, API service classes, tests, app config). The **MCP layer is delegated** to
+> `/create-new-mcp`, which is the single source of truth for `apps/<app>/mcp.py`, the
+> `mcp/server.py` `APP_REGISTRARS` entry, the Kanban bridge `_APP_LOADERS` entry, and the MCP
+> docs. Steps 7, 8, 9, and 15 below are therefore hand-offs to `/create-new-mcp`. Conversely, if
+> `/create-new-mcp` is run against an app that doesn't exist yet, it loops back here first.
+
 ## Arguments
 
 `$ARGUMENTS` format (parse left to right):
@@ -212,74 +219,39 @@ For **Mode B**, map every endpoint from Step 1. For **Mode A**, write one stub `
 
 ---
 
-## Step 7 — Write `apps/APP_NAME/mcp.py`
+## Step 7 — MCP layer (delegated to `/create-new-mcp`)
 
-Expose every useful operation as an MCP tool. Every `@mcp.tool()` must have:
-- A descriptive docstring
-- An `Args:` section for every non-trivial parameter
-- `logger.info(...)` at entry and on result
-- Defensive `isinstance` check on the return value
+Do **not** hand-write `apps/APP_NAME/mcp.py` here. Once the service layer (Steps 2–6) exists,
+hand off the entire MCP layer to the single-source-of-truth skill:
 
-```python
-import logging
-from mcp.server.fastmcp import FastMCP
-from apps.APP_NAME.config import CONFIG
-from apps.APP_NAME.references.web.api.resource import ApiServiceAPP_NAMEResources
+> Invoke **`/create-new-mcp APP_NAME --all`**.
 
-logger = logging.getLogger("harqis-mcp.APP_NAME")
+That skill audits the service methods you just created, generates `apps/APP_NAME/mcp.py`
+(`register_APP_NAME_tools` with logging, `Args:` docstrings, and defensive return serialization),
+and handles registration + MCP docs. It covers:
+- **Step 8** below (`mcp/server.py` `APP_REGISTRARS` tuple) — done by `/create-new-mcp`.
+- **Step 9** below (`mcp_bridge.py` `_APP_LOADERS` entry) — done by `/create-new-mcp`.
+- **Step 15** below (`mcp/README.md` section) — done by `/create-new-mcp`.
 
+For **Mode A** (skeleton), still invoke `/create-new-mcp APP_NAME` — it will generate stub tools
+for the placeholder service method.
 
-def register_APP_NAME_tools(mcp: FastMCP):
-
-    @mcp.tool()
-    def list_APP_NAME_resources() -> list[dict]:
-        """List all APP_NAME resources."""
-        logger.info("Tool called: list_APP_NAME_resources")
-        service = ApiServiceAPP_NAMEResources(CONFIG)
-        result = service.list_resources()
-        result = result if isinstance(result, list) else []
-        logger.info("list_APP_NAME_resources returned %d item(s)", len(result))
-        return [r.__dict__ if hasattr(r, '__dict__') else r for r in result]
-
-    @mcp.tool()
-    def get_APP_NAME_resource(resource_id: str) -> dict:
-        """Get a specific APP_NAME resource by ID.
-
-        Args:
-            resource_id: The unique identifier of the resource.
-        """
-        logger.info("Tool called: get_APP_NAME_resource id=%s", resource_id)
-        service = ApiServiceAPP_NAMEResources(CONFIG)
-        result = service.get_resource(resource_id)
-        return result.__dict__ if hasattr(result, '__dict__') else (result if isinstance(result, dict) else {})
-```
-
-For **Mode A**, write stub tools that return `{"status": "not implemented"}` and a TODO comment.
+After `/create-new-mcp` returns, continue with **Step 9b** (Kanban dependency detector) and the
+remaining service-layer steps below.
 
 ---
 
-## Step 8 — Register in `mcp/server.py`
+## Step 8 — Register in `mcp/server.py`  → handled by `/create-new-mcp` (Step 7)
 
-Read `mcp/server.py`. Find the last `register_*_tools(mcp)` block. Add immediately after it:
-
-```python
-from apps.APP_NAME.mcp import register_APP_NAME_tools
-# ...
-logger.info("Registering APP_NAME tools...")
-register_APP_NAME_tools(mcp)
-```
+`/create-new-mcp` adds the `(label, module_path, func_name)` tuple to the `APP_REGISTRARS` list in
+`mcp/server.py`. Nothing to do here — do not also add an inline import.
 
 ---
 
-## Step 9 — Register in `agents/projects/agent/tools/mcp_bridge.py`
+## Step 9 — Register in the Kanban bridge  → handled by `/create-new-mcp` (Step 7)
 
-Read `agents/projects/agent/tools/mcp_bridge.py`. Find the `_APP_LOADERS` dict. Add a new entry in alphabetical order by key:
-
-```python
-"app_name":    "apps.app_name.mcp.register_app_name_tools",
-```
-
-Where `app_name` is the snake_case app name and `register_app_name_tools` is the function defined in `apps/APP_NAME/mcp.py`. Preserve the column-alignment style of the existing entries.
+`/create-new-mcp` adds the `_APP_LOADERS` entry in
+`agents/projects/agent/tools/mcp_bridge.py`. Nothing to do here.
 
 ---
 
@@ -447,13 +419,10 @@ Read `README.md`. Make **three** targeted edits. These edits are **required** re
 
 ---
 
-## Step 15 — Update `mcp/README.md`
+## Step 15 — Update `mcp/README.md`  → handled by `/create-new-mcp` (Step 7)
 
-Read `mcp/README.md`. Add a new `### APP_NAME` section (alphabetical position) with:
-- Heading linking to the API docs
-- `"Requires valid APP_NAME section in apps_config.yaml."`
-- Tool table: `| tool_name | args | returns |`
-- 2–3 example prompts in italics
+`/create-new-mcp` adds the `### APP_NAME` section to `mcp/README.md` (heading + tool table +
+example prompts). Nothing to do here.
 
 ---
 
@@ -487,9 +456,7 @@ If `--workflow <workflow_name>` was passed, after completing all steps above run
 - [ ] Base service class name is `BaseApiService{PascalCase}`
 - [ ] All service classes inherit from the base service
 - [ ] All DTO fields are `Optional` with `None` defaults
-- [ ] Every MCP tool has a docstring, `Args:` section, entry log, and defensive return check
-- [ ] `mcp/server.py` registration added
-- [ ] Kanban bridge `_APP_LOADERS` entry added in `agents/projects/agent/tools/mcp_bridge.py`
+- [ ] **MCP layer delegated to `/create-new-mcp`** — it owns `mcp.py`, `APP_REGISTRARS`, `_APP_LOADERS`, and `mcp/README.md` (Steps 7/8/9/15)
 - [ ] **Kanban dependency detector** entry added in `agents/projects/dependencies/detector.py:_SERVICE_SECRETS` (skip only if the app has zero env vars) — env var name matches `.env/apps.env` exactly
 - [ ] `apps_config.yaml` updated with APP_NAME_UPPER section
 - [ ] `.env/apps.env` updated with env var placeholder(s)
@@ -498,4 +465,3 @@ If `--workflow <workflow_name>` was passed, after completing all steps above run
 - [ ] **Root `README.md` App Inventory row added** (alphabetical, under `## App Inventory`) ← easy to forget
 - [ ] **Root `README.md` Directory Structure `apps/` line added** (alphabetical) ← easy to forget
 - [ ] **Root `README.md` Configuration block updated** with the new env var(s), values blank ← easy to forget
-- [ ] `mcp/README.md` section added

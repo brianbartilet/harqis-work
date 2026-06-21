@@ -22,8 +22,9 @@ Skill files live in `.claude/skills/*/SKILL.md`. The first line of each file is 
 | **sync-host** | `/sync-host [<machine-key>] [--dry-run\|--list]` | Push a configured set of local files (e.g. `.env/`, `frontend/.env`, `machines.local.toml`) to a remote harqis-work checkout via `tar \| ssh`. One password prompt per run. Targets and item list live in `machines.local.toml` `[ssh.<key>]` and `[sync]` blocks (gitignored); the script ships no defaults. PowerShell-only (uses Windows bsdtar at `%WINDIR%\System32\tar.exe` and a `.NET ProcessStartInfo` stdin pipe to avoid PS pipeline corruption). |
 | **new-fork-repository** | `/create-new-fork-repository <business_or_client_name> [--owner <gh_owner>] [--visibility public\|private\|internal] [--description "..."] [--keep <list>] [--strip <list>] [--apps-keep <list>] [--apps-keep-all] [--target-dir <path>] [--remote <url>] [--no-create-repo] [--no-push] [--no-git-init] [--dry-run]` | Fork `harqis-work` into a clean business-/client-scoped baseline at `harqis-work-fork-<slug>`. Strips host-local AI tooling (`.claude/`, `.hermes/`, `.openclaw/`, `logs/`, `data/`), every pre-built workflow category (keeps only `.template`), and all real credentials (regenerates `.example` variants). **Apps are pruned to a curated 16-item set by default** (override with `--apps-keep` or `--apps-keep-all`); the prune cascades through `apps_config.yaml.example`, `.env/apps.env.example`, `mcp/server.py`'s `APP_REGISTRARS`, agent profiles' `mcp_apps`, and the README app inventory. Rewrites `README.md`, `workflows/README.md`, `workflows/config.py`, `workflows/queues.py`. **Auto-creates a private GitHub repo via `gh repo create` and pushes the initial commit by default** — pass `--no-create-repo` or `--no-push` to opt out, `--visibility public` to publish openly. |
 | **new-kanban-profile** | `/create-new-kanban-profile <profile_name> [--display-name "..."] [--email "..."] [--role "..."] [--no-mode-a]` | Scaffold a new Kanban agent profile YAML under `agents/projects/profiles/examples/`. Includes a persona block (signed comments — Mode B, default-on) and commented-out Mode A scaffolding. Adds blank `TRELLO_AGENT_API_KEY__<SUFFIX>` / `TRELLO_AGENT_API_TOKEN__<SUFFIX>` placeholders to `.env/apps.env`. Prints the manual Trello-account setup checklist. |
+| **new-mcp** | `/create-new-mcp <app_name> [<method_or_resource> ...] [--all] [--check]` | Build or extend the MCP tool surface for an existing `apps/<app>` by wrapping its service-layer endpoints as `@mcp.tool()` functions. Audits the wrapped-vs-unwrapped gap, generates the wrappers, and wires `mcp/server.py` `APP_REGISTRARS` + the Kanban bridge `_APP_LOADERS` + the MCP docs. Single source of truth for the MCP layer; loops back to `/create-new-service-app` if the app/endpoint is missing. `--check` audits only. |
 | **new-n8n-workflow** | `/create-new-n8n-workflow <description_or_diagram>` | Build and deploy an n8n workflow directly into the local n8n instance (`localhost:5678`) from a drawio diagram, XML/BPMN file, or free-text description. |
-| **new-service-app** | `/create-new-service-app <app_name> [<spec_or_url>] [--workflow <name>]` | Scaffold a complete app integration under `apps/`. With a spec URL, generates real service classes, DTOs, and MCP tools from the API. Without a spec, creates a skeleton stub. Pass `--workflow` to also scaffold a Celery task that uses the new app. |
+| **new-service-app** | `/create-new-service-app <app_name> [<spec_or_url>] [--workflow <name>]` | Scaffold a complete app integration under `apps/`. With a spec URL, generates real service classes, DTOs, and tests from the API. Without a spec, creates a skeleton stub. **Delegates the MCP layer to `/create-new-mcp`.** Pass `--workflow` to also scaffold a Celery task that uses the new app. |
 | **new-workflow** | `/create-new-workflow [<category>] <task_description_or_diagram> [--merge <file>] [--new-file <name>]` | Design and implement an RPA-style Celery workflow that chains app integrations. Parses drawio diagrams or text descriptions, resolves missing app and Python package dependencies, writes the task file, registers the schedule, and produces tests. |
 | **run-tests** | `/run-tests [<app_name_or_path>]` | Run the test suite. Without arguments runs the full suite; with an app name (e.g. `echo_mtg`) or a pytest path runs only that scope. |
 | **zapier-mcp** | `/zapier-mcp <task_or_app> [--enable] [--workflow <name>] [--research]` | Search Zapier's 9,000+ app catalogue for actions that match a task, enable them on the Zapier MCP server, infer parameters from context, and optionally wire them into a Celery workflow. Use `--research` for discovery only. |
@@ -327,12 +328,41 @@ apps/<app_name>/
 ```
 
 **Also updates automatically:**
-- `mcp/server.py` — registers tools with the MCP server
-- `agents/projects/agent/tools/mcp_bridge.py` — adds to `_APP_LOADERS`
 - `apps_config.yaml` — appends new app block with `${ENV_VAR}` placeholders
 - `.env/apps.env` — appends empty env var stubs
+- `agents/projects/dependencies/detector.py` — adds `_SERVICE_SECRETS` entry (if the app has env vars)
 - `README.md` — adds row to App Inventory table
-- `mcp/README.md` — adds tool reference section
+
+**MCP layer is delegated to `/create-new-mcp`** (which writes `apps/<app>/mcp.py`, registers in
+`mcp/server.py` `APP_REGISTRARS` + `mcp_bridge.py` `_APP_LOADERS`, and updates `mcp/README.md`).
+
+---
+
+### `/create-new-mcp`
+
+Builds or extends the MCP tool surface for an **existing** `apps/<app_name>`. The single source
+of truth for the MCP layer — `/create-new-service-app` delegates here, and this skill loops back
+to it when the app or a required endpoint doesn't exist yet.
+
+```
+/create-new-mcp ynab                       # audit gaps, propose, confirm, wrap
+/create-new-mcp tcg_mp --all               # wrap every unwrapped service method
+/create-new-mcp scryfall --check           # audit only — print coverage gap, write nothing
+/create-new-mcp echo_mtg inventory notes   # limit to specific resources
+```
+
+**Arguments:**
+
+| Token | Required | Description |
+|---|---|---|
+| `app_name` | Yes | snake_case app under `apps/` |
+| `method_or_resource` | No | Limit to specific service methods/resource files |
+| `--all` | No | Skip the confirm step — wrap every unwrapped public method |
+| `--check` | No | Audit only; print the gap and stop |
+
+**Updates:** `apps/<app>/mcp.py`, `mcp/server.py` (`APP_REGISTRARS`),
+`agents/projects/agent/tools/mcp_bridge.py` (`_APP_LOADERS`), `apps/<app>/README.md`,
+`mcp/README.md`.
 
 ---
 
@@ -496,6 +526,7 @@ Fires when the card description contains any of these (case-insensitive):
 - \`/create-new-workflow\` — owns its own clarification pass
 - \`/create-new-service-app\` (or \`create-new-app-service\`) — owns its own clarification
 - \`/create-new-hud\`, \`/create-new-n8n-workflow\`, \`/create-new-kanban-profile\`
+- \`/create-new-mcp\` — owns its own confirm step
 - \`/commit\`, \`/deploy-harqis\`, \`/run-tests\`
 - Cards tagged \`skip:clarify\` — skip the gate and proceed directly to implementation
 

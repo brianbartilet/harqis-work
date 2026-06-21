@@ -13,9 +13,9 @@ description: >
   Do NOT auto-invoke for: creating a new workflow (/create-new-workflow),
   creating a new app/service (/create-new-service-app), creating a new HUD
   (/create-new-hud), creating a new n8n workflow (/create-new-n8n-workflow),
-  creating a new kanban profile (/create-new-kanban-profile), committing
-  (/commit), deploying (/deploy-harqis), or running tests (/run-tests).
-  Those skills already own their own clarification steps.
+  creating a new kanban profile (/create-new-kanban-profile), extending the MCP
+  surface (/create-new-mcp), committing (/commit), deploying (/deploy-harqis),
+  or running tests (/run-tests). Those skills already own their own clarification steps.
 
 user-invocable: true
 allowed-tools: Read Glob Grep Ask
@@ -42,6 +42,7 @@ any shared component.
 - `/create-new-hud` — owns its own clarification
 - `/create-new-n8n-workflow` — owns its own clarification
 - `/create-new-kanban-profile` — owns its own clarification
+- `/create-new-mcp` — owns its own confirm step (audits gaps, then confirms)
 - `/commit`, `/deploy-harqis`, `/run-tests` — no feature scope to clarify
 
 **Applies to cards in `harqis-work` when:**

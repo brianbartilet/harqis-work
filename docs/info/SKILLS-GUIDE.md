@@ -334,7 +334,8 @@ and tool calls.
 | `/run-tests` | `.claude/skills/run-tests/SKILL.md` | Run tests for an app or the full suite |
 | `/agent-prompt` | `.claude/skills/agent-prompt/SKILL.md` | Run a prompt from `agents/prompts/` against the codebase |
 | `/create-new-workflow` | `.claude/skills/create-new-workflow/SKILL.md` | Scaffold a new workflow under `workflows/` |
-| `/create-new-service-app` | `.claude/skills/create-new-service-app/SKILL.md` | Scaffold an app integration under `apps/` — skeleton or from OpenAPI spec/URL; chainable to `/create-new-workflow` |
+| `/create-new-service-app` | `.claude/skills/create-new-service-app/SKILL.md` | Scaffold an app integration under `apps/` — skeleton or from OpenAPI spec/URL; delegates the MCP layer to `/create-new-mcp`; chainable to `/create-new-workflow` |
+| `/create-new-mcp` | `.claude/skills/create-new-mcp/SKILL.md` | Build/extend the MCP tool surface for an existing `apps/<app>` by wrapping its service endpoints; single source of truth for the MCP layer; loops back to `/create-new-service-app` for missing apps/endpoints |
 | `/create-new-n8n-workflow` | `.claude/skills/create-new-n8n-workflow/SKILL.md` | Build and deploy an n8n workflow from a drawio diagram, XML/BPMN file, or text description into the local n8n instance |
 | `/generate-registry` | `.claude/skills/generate-registry/SKILL.md` | Regenerate `frontend/registry.py` from all `tasks_config.py` files |
 | `/review` | built-in | Review a pull request |
