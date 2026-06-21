@@ -35,3 +35,11 @@ def test_search_card(given_account):
     then.assert_that(len(when), greater_than_or_equal_to(0))
 
 
+@pytest.mark.skip(reason="destructive — deletes a real inventory item")
+def test_remove_item(given_account):
+    inventory_id = '0'  # set to a real inventory_id before running manually
+    when = given_account.remove_item(inventory_id)
+    then = given_account.verify.common
+    then.assert_that(when is not None, greater_than_or_equal_to(True))
+
+

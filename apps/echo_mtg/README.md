@@ -18,9 +18,27 @@
 
 | Class | File | Methods |
 |-------|------|---------|
-| `ApiServiceEchoMTGInventory` | `web/api/inventory.py` | `get_quick_stats()`, `get_collection(start, limit, sort, direction, tradable_only)`, `search_card(emid, tradable_only)` |
+| `ApiServiceEchoMTGInventory` | `web/api/inventory.py` | `get_quick_stats()`, `get_collection(start, limit, sort, direction, tradable_only)`, `search_card(emid, tradable_only)`, `remove_item(inventory_id)` |
+| `ApiServiceEchoMTGEarnings` | `web/api/earnings.py` | `add_sale(emid, acquired_price, sold_price, foil)`, `update_sold_price(earnings_id, value)`, `update_sold_date(earnings_id, value)` |
 | `ApiServiceEchoMTGCardItem` | `web/api/item.py` | `get_card_meta(emid)` |
 | `ApiServiceEchoMTGNotes` | `web/api/notes.py` | `get_note(id)`, `create_note(inventory_id, note)`, `update_note(id, note)`, `delete_note(id)` |
+
+## MCP Tools
+
+Registered by `register_echo_mtg_tools` in `apps/echo_mtg/mcp.py`:
+
+| Tool | Description |
+|------|-------------|
+| `get_echo_mtg_portfolio_stats` | Quick portfolio stats (value, counts) |
+| `get_echo_mtg_collection` | Collection inventory (paginated) |
+| `search_echo_mtg_card` | Search inventory by `emid` |
+| `remove_echo_mtg_item` | **Destructive** — delete an inventory item by `inventory_id` |
+| `mark_echo_mtg_sold` | Record a card as sold → adds it to earnings (`emid`, acquired/sold price, foil) |
+| `update_echo_mtg_sold_price` | Update sold price of an earnings entry |
+| `update_echo_mtg_sold_date` | Update sold date (`YYYY-MM-DD`) of an earnings entry |
+| `get_echo_mtg_note` / `create_echo_mtg_note` / `update_echo_mtg_note` / `delete_echo_mtg_note` | Note CRUD on an inventory item |
+
+> **Earnings endpoints** (`earnings/add`, `earnings/update-sold-price`, `earnings/update-sold-date`) and `inventory/remove` follow the documented [Echo MTG API](https://www.echomtg.com/api/).
 
 ## DTOs
 

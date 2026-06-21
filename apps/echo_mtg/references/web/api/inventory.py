@@ -44,3 +44,20 @@ class ApiServiceEchoMTGInventory(BaseApiServiceAppEchoMtg):
 
         return self.client.execute_request(self.request.build())
 
+    @deserialized(dict)
+    def remove_item(self, inventory_id):
+        """Remove (delete) an item from the inventory.
+
+        Args:
+            inventory_id: The inventory record ID to delete.
+        """
+        payload = {
+            'id': inventory_id,
+        }
+
+        self.request.post() \
+            .add_uri_parameter('remove') \
+            .add_json_payload(payload)
+
+        return self.client.execute_request(self.request.build())
+

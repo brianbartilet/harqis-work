@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from hamcrest import greater_than_or_equal_to, equal_to, matches_regexp
 from apps.tcg_mp.references.web.api.order import ApiServiceTcgMpOrder
@@ -38,6 +40,18 @@ def test_get_order_qr(given):
     image_url_regex = r"^https?://[^\s']+\.(png|jpg|jpeg|gif)$"
     then = given.verify.common
     then.assert_that(when_order['qr'], matches_regexp(image_url_regex))
+
+
+@pytest.mark.skip(reason="Smoke test only — writes a file to save_path.")
+def test_download_order_qr(given):
+    when = given.get_orders()
+    order_id = when[0].data[0]['order_id']
+
+    result = given.download_order_qr(order_id)
+
+    then = given.verify.common
+    then.assert_that(result['order_id'], equal_to(order_id))
+    then.assert_that(os.path.exists(result['file_path']), equal_to(True))
 
 
 

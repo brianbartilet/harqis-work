@@ -21,7 +21,7 @@
 |-------|------|---------|
 | `ApiServiceTcgMpUserViewCart` | `web/api/cart.py` | `get_account_summary()` |
 | `ApiServiceTcgMpMerchant` | `web/api/merchant.py` | `set_listing_status(listing_id, status)` |
-| `ApiServiceTcgMpOrder` | `web/api/order.py` | `get_orders()`, `get_order_detail(id)`, `get_order_qr_code(id)` |
+| `ApiServiceTcgMpOrder` | `web/api/order.py` | `get_orders()`, `get_order_detail(id)`, `get_order_qr_code(id)`, `download_order_qr(id, path=None)` |
 | `ApiServiceTcgMpProducts` | `web/api/product.py` | `search_card(name)`, `get_single_card(id)`, `search_single_card_listings(id)` |
 | `ApiServiceTcgMpPublish` | `web/api/publish.py` | `add_listing(data)`, `edit_listing(id, data)`, `remove_listings(ids)` |
 | `ApiServiceTcgMpUserView` | `web/api/view.py` | `get_listings()` |
@@ -97,6 +97,20 @@ svc = ApiServiceTcgMpOrder()
 orders = svc.get_orders()
 detail = svc.get_order_detail(orders[0].id)
 ```
+
+## MCP Tools
+
+Registered by `register_tcg_mp_tools` in `apps/tcg_mp/mcp.py`:
+
+| Tool | Description |
+|------|-------------|
+| `search_tcg_card` | Search marketplace cards by name (paginated) |
+| `get_tcg_listings` | List the configured user's active listings |
+| `get_tcg_orders` | Orders filtered by status |
+| `get_tcg_order_detail` | Full detail for one order |
+| `create_tcg_listing` | Publish a new listing (`product_id`, `price`, condition, foil, …) |
+| `remove_tcg_listings` | **Destructive** — delete one or more listings by ID |
+| `download_tcg_order_qr` | Download an order's QR image to `save_path`; returns the URL **and** local file path |
 
 ## Workflow Integration
 

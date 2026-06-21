@@ -1,4 +1,7 @@
+import os
 import time
+
+import ijson
 
 from apps.scryfall.references.web.base_api_service import BaseApiServiceAppScryfallMtg
 
@@ -47,3 +50,44 @@ class ApiServiceScryfallBulkData(BaseApiServiceAppScryfallMtg):
                     f"Retrying in {retry_delay}s..."
                 )
                 time.sleep(retry_delay)
+
+    def query_bulk(self, query: str, bulk_data_type: str = "default-cards",
+                   field: str = "name", limit: int = 50, force_download: bool = False):
+        """Download (or reuse) the latest bulk file and return only matching cards.
+
+        Streams the bulk JSON array with ijson so the multi-GB file is never fully
+        loaded into memory. Matching is a case-insensitive substring on ``field``.
+
+        Args:
+            query: Substring to match against ``field``.
+            bulk_data_type: Scryfall bulk type (default ``default-cards``; ``all-cards`` is far larger).
+            field: Card field to match against (default ``name``).
+            limit: Maximum number of cards to return.
+            force_download: Re-download even if the current day's file already exists.
+
+        Returns:
+            A list of matching card dicts (at most ``limit``).
+        """
+        info = self.get_card_data_bulk(bulk_data_type)
+        url = info['download_uri']
+        filename = url.split('/')[-1]
+        folder = self.config.app_data['path_folder_static_file']
+        file_path = os.path.join(folder, filename)
+
+        if force_download or not os.path.exists(file_path):
+            downloader = ServiceDownloadFile(url=url)
+            downloader.download_file(filename, folder)
+            log.warning(f"Bulk file downloaded: {file_path}")
+
+        needle = query.lower()
+        results = []
+        with open(file_path, 'rb') as fh:
+            for card in ijson.items(fh, 'item'):
+                value = card.get(field)
+                if value is not None and needle in str(value).lower():
+                    results.append(card)
+                    if len(results) >= limit:
+                        break
+
+        log.warning(f"query_bulk matched {len(results)} card(s) for '{query}' in '{field}'")
+        return results

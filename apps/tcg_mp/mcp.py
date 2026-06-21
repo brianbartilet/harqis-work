@@ -5,6 +5,7 @@ from apps.tcg_mp.config import CONFIG
 from apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
 from apps.tcg_mp.references.web.api.order import ApiServiceTcgMpOrder
 from apps.tcg_mp.references.web.api.view import ApiServiceTcgMpUserView
+from apps.tcg_mp.references.web.api.publish import ApiServiceTcgMpPublish
 from apps.tcg_mp.references.dto.order import EnumTcgOrderStatus
 
 logger = logging.getLogger("harqis-mcp.tcg_mp")
@@ -75,3 +76,54 @@ def register_tcg_mp_tools(mcp: FastMCP):
         serialized = [item.__dict__ if hasattr(item, "__dict__") else item for item in output]
         logger.info("get_tcg_listings returned %d listing(s)", len(serialized))
         return serialized
+
+    @mcp.tool()
+    def create_tcg_listing(product_id: int, price: float, quantity: int = 1, foil: int = 0,
+                           language: str = "EN", condition: str = "NM", signed: int = 0) -> dict:
+        """Create (publish) a new card listing on the TCG Marketplace.
+
+        Args:
+            product_id: The marketplace product ID to list (from search_tcg_card results).
+            price: Listing price.
+            quantity: Number of copies (default 1).
+            foil: 0 for non-foil, 1 for foil (default 0).
+            language: Card language code (default 'EN').
+            condition: Card condition — e.g. NM, LP, MP, HP, DM (default 'NM').
+            signed: 0 for unsigned, 1 for signed (default 0).
+        """
+        logger.info("Tool called: create_tcg_listing product_id=%s price=%s qty=%s", product_id, price, quantity)
+        service = ApiServiceTcgMpPublish(CONFIG)
+        result = service.add_listing(product_id, price, quantity=quantity, foil=foil,
+                                     language=language, condition=condition, signed=signed)
+        output = result if isinstance(result, dict) else (result.__dict__ if hasattr(result, "__dict__") else {})
+        logger.info("create_tcg_listing done product_id=%s", product_id)
+        return output
+
+    @mcp.tool()
+    def remove_tcg_listings(listing_ids: list[int]) -> dict:
+        """Remove (delete) one or more listings from the TCG Marketplace.
+
+        Destructive: the listings are deleted. Pass the listing IDs from get_tcg_listings.
+
+        Args:
+            listing_ids: A list of listing IDs to remove.
+        """
+        logger.info("Tool called: remove_tcg_listings ids=%s", listing_ids)
+        service = ApiServiceTcgMpPublish(CONFIG)
+        result = service.remove_listings(listing_ids)
+        output = result if isinstance(result, dict) else (result.__dict__ if hasattr(result, "__dict__") else {})
+        logger.info("remove_tcg_listings done count=%d", len(listing_ids))
+        return output
+
+    @mcp.tool()
+    def download_tcg_order_qr(order_id: str) -> dict:
+        """Download an order's QR code image to disk and return its URL and local path.
+
+        Args:
+            order_id: The order ID string.
+        """
+        logger.info("Tool called: download_tcg_order_qr order_id=%s", order_id)
+        service = ApiServiceTcgMpOrder(CONFIG)
+        result = service.download_order_qr(order_id)
+        logger.info("download_tcg_order_qr saved order_id=%s path=%s", order_id, result.get("file_path"))
+        return result
