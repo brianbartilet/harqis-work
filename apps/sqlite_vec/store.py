@@ -43,7 +43,7 @@ except ImportError as exc:  # pragma: no cover
 _DEFAULT_DB = (
     Path(os.environ.get("HARQIS_VECTOR_DB"))
     if os.environ.get("HARQIS_VECTOR_DB")
-    else Path(__file__).resolve().parents[2] / "data" / "vector_store.db"
+    else Path(__file__).resolve().parents[2] / "results" / "vector_store.db"
 )
 
 _CONN_LOCK = threading.Lock()

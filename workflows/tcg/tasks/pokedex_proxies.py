@@ -39,7 +39,10 @@ from apps.pokemon_tcg.references.web.api.cards import ApiServicePokemonTcgCards
 
 _log = create_logger("tcg.pokedex_proxies")
 
-OUTPUT_DIR = Path(__file__).parents[1] / "output"
+# Generated artifacts are consolidated under the repo-root results/ sink
+# (results/tcg/pokemon/output/), tracked-but-ignored like every other output.
+# Templates remain source, alongside this package.
+OUTPUT_DIR = Path(__file__).resolve().parents[3] / "results" / "tcg" / "pokemon" / "output"
 TEMPLATES_DIR = Path(__file__).parents[1] / "templates"
 
 POKEDEX_URL = "https://pokemondb.net/pokedex/all"

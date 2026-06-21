@@ -3,7 +3,7 @@ Tests for the Pokedex proxy-printing pipeline.
 
 The pipeline is manual-trigger by design — these tests ARE the trigger:
 
-    # 1. Preview (~10 sample cards into workflows/tcg/output/preview/):
+    # 1. Preview (~10 sample cards into results/tcg/pokemon/output/preview/):
     pytest workflows/tcg/tests/test_pokedex_proxies.py -k preview -v
 
     # 2. Full run (all ~1025 cards + order XMLs, no MPC upload):

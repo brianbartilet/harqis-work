@@ -70,12 +70,12 @@ What was missing: **a vector store**. This thesis fills that gap with `apps/sqli
                 ┌─────────────────────┴──────────────────────┐
                 │                                            │
                 ▼                                            ▼
-   ┌────────────────────────┐                    ┌──────────────────────┐
-   │ workflows/knowledge    │                    │ apps/sqlite_vec      │
-   │  - retriever.py        │  upsert / search   │  - store.py          │
-   │  - tasks/ingest_*.py   │ ─────────────────▶ │  - mcp.py            │
-   │  - tasks/answer.py     │                    │  data/vector_store.db│
-   │  - prompts/rag_answer  │                    └──────────────────────┘
+   ┌────────────────────────┐                    ┌─────────────────────────┐
+   │ workflows/knowledge    │                    │ apps/sqlite_vec         │
+   │  - retriever.py        │  upsert / search   │  - store.py             │
+   │  - tasks/ingest_*.py   │ ─────────────────▶ │  - mcp.py               │
+   │  - tasks/answer.py     │                    │  results/vector_store.db│
+   │  - prompts/rag_answer  │                    └─────────────────────────┘
    └─────────┬──────────────┘
              │
              ├──── apps/gemini ─────▶ Gemini text-embedding-004
@@ -200,7 +200,7 @@ The asymmetric task types matter: the same query embedded as `RETRIEVAL_QUERY` l
 | Duplicate ingest runs overlap | Beat task uses `expires=6h`; chunk ids are deterministic so overlap just rewrites same rows. |
 | Embedding cost grows unbounded | Page-level dedup via stable ids; `max_pages` cap per run; nightly cadence for incremental ingest. |
 | Generation cost | Haiku 4.5 default ($0.25/M input). Sonnet only on explicit override. Top-k bounded at 5. |
-| Vector store gets corrupt | Single SQLite file — back it up by copying `data/vector_store.db`. Worst case: delete + re-ingest. |
+| Vector store gets corrupt | Single SQLite file — back it up by copying `results/vector_store.db`. Worst case: delete + re-ingest. |
 | Notion API throttling | The wrapper already includes retry backoff (see `apps/notion/references/web/base_api_service.py`). |
 | Stale answers | Cited URLs let the user verify. Re-ingest cadence (nightly) is the staleness ceiling. |
 

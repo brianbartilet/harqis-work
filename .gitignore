@@ -30,11 +30,14 @@ venv
 *pid.*
 .run/*.pid
 *.log*
-logs/
-screenshots/
-data/
-!apps/pokemon_tcg/references/data/
-!apps/pokemon_tcg/references/data/*.py
+
+# ── Tracked output/runtime folders: keep the dir, ignore its contents ────────
+/logs/*
+!/logs/.gitignore
+/screenshots/*
+!/screenshots/.gitignore
+/results/*
+!/results/.gitignore
 
 # ── Build / packaging artifacts ──────────────────────────────────────────────
 *.bak*
@@ -71,6 +74,3 @@ apps/own_tracks/recorder_store/
 
 # ── OpenClaw (deprecated — superseded by Hermes; kept ignored for legacy state)
 .openclaw/
-
-# workflows/tcg — rendered proxy cards, caches, order XMLs (regenerable)
-workflows/tcg/output/

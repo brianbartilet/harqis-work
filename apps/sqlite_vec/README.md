@@ -31,7 +31,7 @@ store.delete_by_source("notion")
 
 ## Storage
 
-Default DB path: `<repo>/data/vector_store.db`. Override with the `HARQIS_VECTOR_DB` env var (or pass `db_path=` per call).
+Default DB path: `<repo>/results/vector_store.db`. Override with the `HARQIS_VECTOR_DB` env var (or pass `db_path=` per call).
 
 Vectors are L2-normalised on write so the `vec0` virtual table's L2 distance behaves like cosine — smaller = more similar.
 

@@ -1,0 +1,4 @@
+# Keep the logs/ folder tracked in git, but ignore everything generated in it
+# (runtime logs, caches, generated reports, token sidecars, etc.).
+*
+!.gitignore

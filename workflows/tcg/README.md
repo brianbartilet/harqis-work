@@ -20,6 +20,10 @@ orders, and autofill them into saved MPC projects for manual checkout.
 4. Playwright + `templates/card_front.html` → 822×1122 px card PNGs
 5. `apps/mpc` → order XML(s) split at 612 + Playwright autofill into saved projects
 
+All generated artifacts land under `results/tcg/pokemon/output/` (the repo-root
+`results/` sink — tracked but gitignored). It's shown as `output/` in the table
+below; override per call with the `output_dir` kwarg.
+
 **Stages (each its own Celery task, all resumable via `output/` caches):**
 
 | Task | Output |
@@ -76,5 +80,5 @@ keyless pacing (≈ 40 min; set `POKEMON_TCG_API_KEY` and pass
 612-card project; auto-save every 5 inserts makes it resumable.
 
 **Caching / resume:** every stage reads its predecessor's JSON/PNG cache from
-`workflows/tcg/output/` (gitignored) and skips work already done — delete a
+`results/tcg/pokemon/output/` (gitignored) and skips work already done — delete a
 cache file to force a refresh (e.g. `printings.json` after a new set drops).

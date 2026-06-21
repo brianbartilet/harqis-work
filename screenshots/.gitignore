@@ -1,0 +1,3 @@
+# Keep the screenshots/ folder tracked in git, but ignore everything inside it.
+*
+!.gitignore
