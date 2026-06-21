@@ -3,6 +3,7 @@ from hamcrest import assert_that, not_none, instance_of, greater_than
 
 from apps.gemini.references.web.api.generate import ApiServiceGeminiGenerate, DEFAULT_MODEL
 from apps.gemini.config import CONFIG
+from apps.gemini.tests._helpers import skip_if_gemini_api_error
 
 
 @pytest.fixture()
@@ -41,6 +42,7 @@ def test_generate_content_with_system_instruction(given):
 @pytest.mark.smoke
 def test_count_tokens(given):
     when = given.count_tokens(prompt='Hello, how are you today?')
+    skip_if_gemini_api_error(when)
     assert_that(when, instance_of(dict))
     assert_that(when.get('totalTokens'), not_none())
     assert_that(when.get('totalTokens'), greater_than(0))

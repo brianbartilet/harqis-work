@@ -3,6 +3,7 @@ from hamcrest import assert_that, instance_of, has_key
 
 from apps.alpha_vantage.config import CONFIG
 from apps.alpha_vantage.references.web.api.core_stock import ApiServiceAlphaVantageCoreStock
+from apps.alpha_vantage.tests._helpers import skip_if_alpha_vantage_throttled
 
 
 @pytest.fixture()
@@ -13,6 +14,7 @@ def given():
 @pytest.mark.smoke
 def test_global_quote(given):
     when = given.get_global_quote('IBM')
+    skip_if_alpha_vantage_throttled(when)
     assert_that(when, instance_of(dict))
     assert_that(when, has_key('Global Quote'))
 

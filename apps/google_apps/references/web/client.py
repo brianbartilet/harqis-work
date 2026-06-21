@@ -9,6 +9,11 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
 from google.auth.exceptions import RefreshError
 
+
+def _interactive_auth_allowed() -> bool:
+    return os.environ.get("GOOGLE_ALLOW_INTERACTIVE_AUTH", "0") == "1" and not os.environ.get("PYTEST_CURRENT_TEST")
+
+
 class GoogleApiClient():
     def __init__(
         self,
@@ -59,6 +64,8 @@ class GoogleApiClient():
                 try:
                     creds.refresh(Request())
                 except RefreshError:
+                    if not _interactive_auth_allowed():
+                        raise
                     print("Rerunning auth flow...")
                     flow = InstalledAppFlow.from_client_secrets_file(
                         self.credentials,
@@ -66,6 +73,11 @@ class GoogleApiClient():
                     )
                     creds = flow.run_local_server(port=0)
             else:
+                if not _interactive_auth_allowed():
+                    raise RuntimeError(
+                        "Google OAuth credentials are missing or invalid; set "
+                        "GOOGLE_ALLOW_INTERACTIVE_AUTH=1 outside pytest to refresh them."
+                    )
                 # The SAFE alternative — does NOT parse pytest args
                 flow = InstalledAppFlow.from_client_secrets_file(
                     self.credentials,

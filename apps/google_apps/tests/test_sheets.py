@@ -1,5 +1,6 @@
 import os
 import pytest
+from google.auth.exceptions import RefreshError
 from hamcrest import assert_that, instance_of, greater_than_or_equal_to, equal_to, is_not, none
 
 from apps.google_apps.references.web.api.sheets import ApiServiceGoogleSheets, SheetInputOption
@@ -30,7 +31,10 @@ def given():
     # NOTE: first run will open a browser for OAuth consent — grant Sheets access.
     config.app_data["scopes"] = _SCOPES
     config.app_data["storage"] = "storage_sheets.json"
-    service = ApiServiceGoogleSheets(config, scopes_list=_SCOPES)
+    try:
+        service = ApiServiceGoogleSheets(config, scopes_list=_SCOPES)
+    except (RefreshError, RuntimeError) as exc:
+        pytest.skip(f"Google Sheets OAuth credentials unavailable: {exc}")
     return service
 
 

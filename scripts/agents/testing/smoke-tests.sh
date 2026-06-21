@@ -1,6 +1,8 @@
 #!/bin/bash
 # Daily smoke tests for harqis-work apps
-# Runs pytest on apps directory and sends Telegram summary + failures
+# Runs pytest smoke-marked tests on apps directory and sends Telegram summary + failures
+
+set -o pipefail
 
 cd /Users/harqis-one/GIT/harqis-work
 
@@ -18,8 +20,13 @@ fi
 echo "Starting smoke tests..."
 start_time=$(date +%s)
 
-# Run pytest on apps directory with json report
-.venv/bin/pytest apps/ -v --tb=short 2>&1 | tee smoke-tests-output.log
+# Run only smoke-marked app tests. The full apps/ tree includes sanity/live-cost
+# tests that can block on third-party actors or interactive OAuth flows.
+# pytest-timeout is installed in the runtime venv; signal mode aborts hanging
+# tests instead of only dumping thread stacks.
+mkdir -p results
+output_log="results/smoke-tests-output.log"
+.venv/bin/pytest apps/ -m smoke -v --tb=short --timeout="${PYTEST_TIMEOUT:-30}" --timeout-method=signal 2>&1 | tee "$output_log"
 test_status=$?
 
 end_time=$(date +%s)
@@ -27,7 +34,7 @@ duration=$((end_time - start_time))
 
 # Parse results BEFORE deleting log file
 # Extract from pytest summary line: "====== X failed, Y passed, Z skipped, N errors ======="
-summary_line=$(tail -1 smoke-tests-output.log 2>/dev/null || echo "")
+summary_line=$(grep -E '(^=+ .* (passed|failed|skipped|error|errors|deselected).* in .*=+$|^=+ no tests ran in .*=+$)' "$output_log" 2>/dev/null | tail -1 || echo "")
 
 # Extract counts from summary using regex
 passed=$(echo "$summary_line" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+' || echo 0)
@@ -37,10 +44,10 @@ errors=$(echo "$summary_line" | grep -oE '[0-9]+ errors?' | grep -oE '[0-9]+' ||
 
 # Fallback to grep if summary line parsing fails
 if [ -z "$passed" ] || [ "$passed" = "0" ]; then
-  passed=$(grep -c "PASSED" smoke-tests-output.log 2>/dev/null || echo 0)
-  failed=$(grep -c "FAILED" smoke-tests-output.log 2>/dev/null || echo 0)
-  skipped=$(grep -c "SKIPPED" smoke-tests-output.log 2>/dev/null || echo 0)
-  errors=$(grep "^ERROR " smoke-tests-output.log 2>/dev/null | grep -c "ERROR" || echo 0)
+  passed=$(grep -c "PASSED" "$output_log" 2>/dev/null || echo 0)
+  failed=$(grep -c "FAILED" "$output_log" 2>/dev/null || echo 0)
+  skipped=$(grep -c "SKIPPED" "$output_log" 2>/dev/null || echo 0)
+  errors=$(grep "^ERROR " "$output_log" 2>/dev/null | grep -c "ERROR" || echo 0)
 fi
 
 # Parse results
@@ -74,10 +81,10 @@ if [ $failed -gt 0 ] || [ $errors -gt 0 ]; then
   echo "Sending failure/error analysis to Telegram..."
 
   # Get failures
-  failures=$(grep "FAILED" smoke-tests-output.log 2>/dev/null | head -20 | sed 's/^/• /' || echo "No failures listed")
+  failures=$(grep "^FAILED " "$output_log" 2>/dev/null | head -20 | sed 's/^/• /' || echo "No failures listed")
 
   # Get errors
-  error_list=$(grep "ERROR" smoke-tests-output.log 2>/dev/null | head -20 | sed 's/^/• /' || echo "No errors listed")
+  error_list=$(grep "^ERROR " "$output_log" 2>/dev/null | head -20 | sed 's/^/• /' || echo "No errors listed")
 
   analysis_msg="📋 *Test Issues Analysis*"
 
@@ -104,7 +111,6 @@ fi
 echo "$summary_msg"
 echo "Telegram messages sent."
 
-# Clean up temp files
-rm -f smoke-tests-output.log
+# Keep results/smoke-tests-output.log for post-run triage.
 
 exit $test_status
