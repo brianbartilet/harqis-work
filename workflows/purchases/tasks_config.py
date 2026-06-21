@@ -66,6 +66,7 @@ WORKFLOW_PURCHASES = {
             "cfg_id__tcg_mp": "TCG_MP",
             "cfg_id__echo_mtg": "ECHO_MTG",
             "cfg_id__echo_mtg_fe": "ECHO_MTG_FE",
+            "language": "EN",   # default; per-card EchoMTG language wins when present
             "limit": 100
         },
         "options": {
@@ -80,36 +81,42 @@ WORKFLOW_PURCHASES = {
             'hfl_signal': False,
         },
     },
-    # DISABLED — run manually when sold listings are removed from inventory.
-    # Use a real `#` comment block, NOT a triple-quoted string: a bare """...."""
-    # inside a dict literal concatenates with the next key string, corrupting the
-    # dict and hiding the whole workflow from frontend/generate_registry.py.
-    # To re-enable, uncomment and restore the trailing comma on the entry above.
-    # 'run-job--update_tcg_listings_prices': {
-    #     'task': 'workflows.purchases.tasks.tcg_mp_selling.update_tcg_listings_prices',
-    #     'schedule': crontab(day_of_week="mon", hour='4', minute=0),
-    #     'kwargs': {
-    #         "cfg_id__tcg_mp": "TCG_MP",
-    #         "cfg_id__echo_mtg": "ECHO_MTG",
-    #         "cfg_id__echo_mtg_fe": "ECHO_MTG_FE"
-    #     },
-    #     "options": {
-    #         "queue": WorkflowQueue.TCG,
-    #         "expires": 60 * 60 * 24
-    #     },
-    #     'manifesto': {
-    #         'code_role': 'express',
-    #         'para_bucket': 'area',
-    #         'express_target': 'api:tcg_mp',
-    #         'review_artifact': 'es_log',
-    #         'hfl_signal': False,
-    #     },
-    # },
+    # ENABLED — weekly price refresh. Runs Mon 04:00, AFTER the daily mappings
+    # (00:00) and listings (01:00), and AFTER the monthly radar (1st 03:00) so the
+    # radar has cleaned sold inventory before quantities are recomputed. It sets
+    # each listing's quantity to the EchoMTG copy count and resets vanished listings
+    # to 0 for recreation — pair with radar_sold_inventory so sold-but-unremoved
+    # copies are cleared first (otherwise quantities overcount / sold cards re-list;
+    # see README "Known issues" #1/#2).
+    'run-job--update_tcg_listings_prices': {
+        'task': 'workflows.purchases.tasks.tcg_mp_selling.update_tcg_listings_prices',
+        'schedule': crontab(day_of_week="mon", hour='4', minute=0),
+        'kwargs': {
+            "cfg_id__tcg_mp": "TCG_MP",
+            "cfg_id__echo_mtg": "ECHO_MTG",
+            "cfg_id__echo_mtg_fe": "ECHO_MTG_FE"
+        },
+        "options": {
+            "queue": WorkflowQueue.TCG,
+            "expires": 60 * 60 * 24
+        },
+        'manifesto': {
+            'code_role': 'express',
+            'para_bucket': 'area',
+            'express_target': 'api:tcg_mp',
+            'review_artifact': 'es_log',
+            'hfl_signal': False,
+        },
+    },
     'run-job--download_scryfall_bulk_data': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.download_scryfall_bulk_data',
+        # Run late on the 1st (22:00), NOT 00:00 — at midnight it collided with the
+        # daily generate_tcg_mappings (00:00), which reads the newest all-cards file
+        # while this writes it (partial-read risk). 22:00 leaves a clean file ready
+        # for the 2nd onward; mappings on the 1st just uses the prior month's bulk.
         'schedule': crontab(
             day_of_month='1',
-            hour=0,
+            hour=22,
             minute=0
         ),
         'kwargs': {
@@ -147,35 +154,41 @@ WORKFLOW_PURCHASES = {
         },
     },
 
-    # DISABLED — sold-inventory radar. Runs monthly (matches the manual cadence)
-    # to flag/clean EchoMTG items already sold on TCG MP but still listed. It is
-    # DESTRUCTIVE by default (dry_run=False → marks sold + removes inventory +
-    # delists) and always writes a review list to ES + logs/purchases/. Set
-    # 'dry_run': True for a preview-only run. Use `#` line comments only — never a
-    # triple-quoted block inside the dict (see note above + workflows/README.md).
-    # 'run-job--radar_sold_inventory': {
-    #     'task': 'workflows.purchases.tasks.sold_inventory_radar.radar_sold_inventory',
-    #     'schedule': crontab(day_of_month='1', hour='3', minute=0),
-    #     'kwargs': {
-    #         'cfg_id__tcg_mp': 'TCG_MP',
-    #         'cfg_id__echo_mtg': 'ECHO_MTG',
-    #         'cfg_id__echo_mtg_fe': 'ECHO_MTG_FE',
-    #         'dry_run': False,
-    #         'last_x_days': 60,
-    #         'source': 'hybrid',
-    #     },
-    #     'options': {
-    #         'queue': WorkflowQueue.TCG,
-    #         'expires': 60 * 60 * 8,
-    #     },
-    #     'manifesto': {
-    #         'code_role': 'distill',
-    #         'para_bucket': 'area',
-    #         'express_target': 'es_log+file',
-    #         'review_artifact': 'es_log+file',
-    #         'hfl_signal': False,
-    #     },
-    # },
+    # ENABLED — sold-inventory radar, monthly (matches the manual cadence), 1st 03:00
+    # (after mappings 00:00 / listings 01:00, before update_tcg_listings_prices Mon 04:00).
+    # DESTRUCTIVE but SAFE-BY-TIER: dry_run=False so it acts, but min_confidence='high'
+    # means it only auto-marks-sold/removes/reconciles the strongest signal —
+    # listing_gone + a corroborating sold order (the mapped listing vanished AND the
+    # product sold). Everything else (medium "still listed" matches, low orphans) is
+    # written to the CSV (results/) + ES for manual approve-and-apply via
+    # /radar-sold-inventory, not auto-actioned. It ALWAYS writes the review CSV.
+    # NOTE: this is unattended destructive cleanup of the high-tier; flip dry_run=True
+    # to make the scheduled run report-only.
+    'run-job--radar_sold_inventory': {
+        'task': 'workflows.purchases.tasks.sold_inventory_radar.radar_sold_inventory',
+        'schedule': crontab(day_of_month='1', hour='3', minute=0),
+        'kwargs': {
+            'cfg_id__tcg_mp': 'TCG_MP',
+            'cfg_id__echo_mtg': 'ECHO_MTG',
+            'cfg_id__echo_mtg_fe': 'ECHO_MTG_FE',
+            'dry_run': False,
+            'min_confidence': 'high',     # auto-act on high-confidence only
+            'orphan_mode': 'corroborated',
+            'last_x_days': 60,
+            'source': 'hybrid',
+        },
+        'options': {
+            'queue': WorkflowQueue.TCG,
+            'expires': 60 * 60 * 8,
+        },
+        'manifesto': {
+            'code_role': 'distill',
+            'para_bucket': 'area',
+            'express_target': 'es_log+file',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': False,
+        },
+    },
 
 
 

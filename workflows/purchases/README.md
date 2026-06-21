@@ -12,20 +12,37 @@ Tasks run on the `tcg` queue.
 
 ## Scheduled Tasks
 
-| Task | Schedule | Description |
+Daily pipeline, in order: **mappings → listings**; the rest hang off it.
+
+| Task | Schedule (`tasks_config.py`) | Description |
 |------|----------|-------------|
-| `download_scryfall_bulk_data` | 1st of month at 2am | Download full Scryfall card database |
+| `generate_tcg_mappings` | Daily 00:00 | Map EchoMTG cards → TCG product + Scryfall; write the per-card note |
+| `generate_tcg_listings` | Daily 01:00 | Create TCG listings for mapped cards (`language` kwarg, default `EN`) |
+| `radar_sold_inventory` | Monthly, 1st 03:00 | **Destructive (high-confidence tier only)** sold-inventory cleanup + full CSV review list |
+| `update_tcg_listings_prices` | Weekly, Mon 04:00 | Recalculate prices; set listing quantity = EchoMTG copy count; reset vanished listings |
+| `download_scryfall_bulk_data` | Monthly, 1st 22:00 | Download full Scryfall card DB (moved off 00:00 to avoid the mappings read race) |
 | `generate_audit_for_tcg_orders` | Every 4 hours | Audit TCG orders across all tracked states (incl. **Cancelled / Not Received**) → ES `tcg-mp-audit-current` + `tcg-mp-status-audit` |
-| `update_tcg_listings_prices` | Daily at 2am and noon | Recalculate and update listing prices |
-| `generate_tcg_mappings` | **Disabled** (commented out) | Regenerate TCG task mapping file |
-| `radar_sold_inventory` | **Disabled** (commented out — monthly) | Flag/clean EchoMTG items already sold on TCG MP but still listed |
+
+**How they work together / sequencing notes:**
+- `mappings` (00:00) must precede `listings` (01:00) — listings consume the notes mappings writes.
+- On the 1st: `radar` (03:00) cleans sold inventory **before** the weekly `update_tcg_listings_prices`
+  (Mon 04:00) recomputes quantities, so quantities don't overcount sold-but-unremoved copies (#1).
+- `radar` is monthly + **high-confidence-only auto-apply** (`min_confidence='high'`,
+  `orphan_mode='corroborated'`): it auto-actions only the strong `listing_gone` + sold-order
+  signal; medium "still listed" matches and low orphans go to the CSV (`results/`) for
+  manual approve-and-apply via `/radar-sold-inventory`. Flip `dry_run=True` for report-only.
+- Residual loop risk (#2): between monthly radar runs the daily `listings` can transiently
+  re-list a freshly sold-but-unremoved card until the next radar/audit — run radar (or the
+  approved-CSV apply) more often for tighter control.
+- `download_scryfall_bulk_data` moved 00:00 → 22:00 on the 1st so it no longer writes the
+  all-cards file while `mappings` reads it.
 
 ## Task Files
 
 | File | Tasks / Functions |
 |------|-------------------|
-| `tasks/tcg_mp_selling.py` | `download_scryfall_bulk_data`, `generate_audit_for_tcg_orders`, `update_tcg_listings_prices`, `generate_tcg_listings` (manual only) |
-| `tasks/sold_inventory_radar.py` | `radar_sold_inventory` — sold-but-still-listed detector + cleanup |
+| `tasks/tcg_mp_selling.py` | `generate_tcg_mappings`, `generate_tcg_listings`, `update_tcg_listings_prices`, `download_scryfall_bulk_data`, `generate_audit_for_tcg_orders` |
+| `tasks/sold_inventory_radar.py` | `radar_sold_inventory` (scan/clean) + `apply_radar_approvals` (approve-and-apply from CSV) |
 
 ## Sold-inventory radar (`radar_sold_inventory`)
 
@@ -35,15 +52,29 @@ listed — the exact state that lets a buyer order a card you can't ship. Replac
 the manual monthly "review all completed/cancelled orders → remove cards in
 EchoMTG by hand" process.
 
-**How it matches** — the per-item EchoMTG note (written by `generate_tcg_mappings`)
-is the join key:
+**Two detections** (the per-item EchoMTG note written by `generate_tcg_mappings` is
+the join key — it carries `tcg_mp_listing_id`, `tcg_mp_card_id`, foil):
 
-```
-sold TCG order line items ──┐
-  (product_id / listing_id) ├─►  note.tcg_mp_listing_id  (exact listing → HIGH confidence)
-                            └─►  note.tcg_mp_card_id + foil (product → MEDIUM confidence)
-                                   AND the item is still in the active TCG listings
-```
+1. **`sold_still_listed`** — the item is **still actively listed** AND its
+   product/listing appears in a sold order (sold yet re-listed → can't fulfil):
+   - HIGH = note's exact `tcg_mp_listing_id` sold and still listed
+   - MEDIUM = note's `tcg_mp_card_id` + foil sold and still listed
+   - action: mark sold + remove inventory + **reconcile listing quantity**
+     (a listing maps to every copy you own, so apply sets the listing's quantity to
+     the EchoMTG copies that remain after removal, and **delists only when 0 remain** —
+     it won't kill a listing you still have copies for). The CSV's `echo_owned_count`
+     shows how many copies you hold.
+2. **`listing_gone`** — the note maps a `tcg_mp_listing_id` that is **no longer
+   active** on TCG MP (and no active listing exists for the product/foil): the listed
+   copy sold or the listing was removed:
+   - HIGH = listing gone **and** the product appears in a sold order
+   - LOW = listing gone with no corroborating sold order (verify — may have sold OR
+     just been removed/disabled)
+   - action: mark sold + remove inventory (**no delist** — listing already gone)
+
+`orphan_mode` controls detection #2: `off` | `corroborated` (default — HIGH only) |
+`all` (include LOW orphans). It is skipped entirely if TCG MP returns **zero** active
+listings (gone-ness is untrustworthy when listings are globally disabled).
 
 **Order source (hybrid):** the ES audit index `tcg-mp-audit-current` (historical,
 cheap) **UNION** a fresh live poll of the order API. Sold-evidence statuses:
@@ -52,56 +83,75 @@ Completed, Picked Up, Cancelled, Not Received.
 **Apps chained:** `apps/tcg_mp` (orders, listings, delist), `apps/echo_mtg`
 (inventory, notes, earnings mark-sold).
 
-**Output (always, even when applying):**
-- a **CSV** review list under `results/sold_inventory_radar-<ts>.csv` — one row per
-  card with both sides: EchoMTG (emid, inventory_id, set, condition, acquired
-  price/date, note join keys) **and** TCG MP (live listing id/price/quantity + the
-  sold order(s) with status/qty/price), plus an **`assessment`** column that
-  explains in plain English why the card was flagged (confidence, which listing/
-  product was sold, in which orders, and the recommended action). `results/` is
-  tracked in git but its contents are gitignored.
-- one ES doc per candidate in `tcg-mp-sold-radar` (same columns as the CSV)
-- a HUD feed summary line (`@feed`)
+**Two-phase, operator-approved flow:**
 
-**Default behaviour is destructive** (`dry_run=False`): each qualifying candidate
-is marked sold in EchoMTG earnings, removed from inventory, and delisted on TCG MP —
-then included in the review list so you can physically verify after the fact. Pass
-`dry_run=True` for a preview-only run, `apply_actions=(...)` to limit which actions
-run, or `min_confidence='high'` to act only on exact-listing matches.
+1. **Scan** (`radar_sold_inventory(dry_run=True)`) → writes a **CSV** review list to
+   `results/sold_inventory_radar-<ts>.csv`, **sorted by listing price (desc)**, lead
+   columns `approved, card_name, listing_price, assessment, confidence, sold_in_orders`
+   then the full EchoMTG + TCG MP detail and join keys. The `approved` column is `no`
+   on every row. (Also one ES doc per row in `tcg-mp-sold-radar` + a `@feed` summary.)
+2. **You edit the CSV** — set `approved` = `yes` on the rows to action, save under `results/`.
+3. **Apply** (`apply_radar_approvals('<approved_csv>')`) → reads that CSV and, for the
+   approved rows only, marks sold in EchoMTG earnings + removes inventory + delists on
+   TCG MP, writing an audit CSV `results/sold_inventory_radar-applied-<ts>.csv` with
+   per-row `action_results`.
+
+`assessment` explains, per row, why it was flagged (confidence, which listing/product
+was sold, in which orders) and the recommended action. `results/` is tracked in git
+but its contents are gitignored.
 
 ```python
-from workflows.purchases.tasks.sold_inventory_radar import radar_sold_inventory
-radar_sold_inventory(dry_run=True, limit=25)            # preview only
-radar_sold_inventory(min_confidence='high')            # act on exact-listing matches only
+from workflows.purchases.tasks.sold_inventory_radar import (
+    radar_sold_inventory, apply_radar_approvals)
+
+radar_sold_inventory(dry_run=True, limit=25)               # 1. scan → review CSV (no changes)
+# 2. edit results/...csv: set approved=yes on chosen rows, save
+apply_radar_approvals('sold_inventory_radar-<ts>.csv', dry_run=True)   # 3a. preview approved
+apply_radar_approvals('sold_inventory_radar-<ts>.csv')                 # 3b. act on approved rows
 ```
 
-## Known issues in `tcg_mp_selling.py` (radar rationale + bug report)
+> The scheduled beat entry runs `radar_sold_inventory` in scan/report mode; applying is
+> always operator-driven via the approved CSV (no unattended destructive runs).
 
-Found while building the radar. The radar + the audit change address the first
-three; the rest are flagged for a future fix (the selling logic was left untouched).
+## Known issues in `tcg_mp_selling.py` — status
 
-1. **Quantity overcount → unfulfillable listings.** `update_tcg_listings_prices`
-   sets a listing's `quantity` to the count of matching foil/non-foil EchoMTG rows.
-   A sold-but-un-removed copy inflates that count, so the listing offers more than
-   you hold. (Primary driver of the problem the radar detects.)
-2. **Sold → auto-relist loop.** When `edit_listing` returns `''` (listing gone,
-   e.g. sold/removed) the worker resets `note.tcg_mp_listing_id = 0`; the next
-   `generate_tcg_listings` then re-creates the listing — re-listing a card you may
-   no longer hold (the scenario documented in the worker's own comment block).
-3. **Audit didn't track Cancelled/Not Received** — now fixed: `generate_audit_for_tcg_orders`
-   polls those two states too (date-bounded), so the radar's ES feed is complete.
-4. **Misleading note-exists log + fragile shape.** `generate_tcg_mappings` logs
-   "Note already exists" in the *not-found* branch and assumes two different shapes
-   of `notes_fetch['note']` (string `'not found'` vs `{'note': ...}`).
-5. **`guid` may be `None` written into the note** when image-GUID extraction fails
-   for every TCG search result — produces a note with `scryfall_guid=None`.
-6. **Deprecated `logger.warn()`** in `_worker_update_tcg_listings_prices` — use `.warning()`.
-7. **`needs_lowest_seller` is never honoured.** `_update_pricing_calc` flags it for
-   down/flat price changes, but the worker never fetches the lowest seller price —
-   it just applies `base_price * conversion_multiplier`. Incomplete feature.
-8. **`force_generate` disables listings without re-enabling.** `generate_tcg_mappings`
-   calls `set_listing_status(0)`; the re-enable is commented out, so a standalone
-   run leaves listings off until `update_tcg_listings_prices` re-enables them.
+Found while building the radar; walked through and resolved/triaged:
+
+1. **Quantity overcount → unfulfillable listings** — *mitigated by data hygiene.*
+   `update_tcg_listings_prices` sets a listing's `quantity` to the count of matching
+   EchoMTG copies, which is **correct** *if inventory is accurate*. The bug was stale
+   inventory (sold copies never removed). `radar_sold_inventory` keeps inventory clean
+   (remove sold copies; the radar's own apply also reconciles listing quantity to the
+   remaining copies). Run radar before/with update-prices — see the schedule. No code
+   change to the quantity logic (it was right); the fix is keeping inventory true.
+2. **Sold → auto-relist loop** — *mitigated by radar + sequencing.* When `edit_listing`
+   returns `''` (listing gone) the worker resets `tcg_mp_listing_id = 0` and
+   `generate_tcg_listings` recreates it. That's **correct** when the listing was merely
+   removed and you still own the card; it's **wrong** only when the card was sold and
+   not removed. The radar's `listing_gone` detection finds exactly that and removes the
+   orphan, so it won't be re-listed. Residual: between monthly radar runs, a freshly
+   sold-but-unremoved card can be transiently re-listed by the daily `generate_tcg_listings`
+   until the next radar/audit — run radar (or approve-and-apply) more often for tighter
+   control. The selling logic was intentionally left unchanged.
+3. **Audit didn't track Cancelled/Not Received** — ✅ **fixed.**
+   `generate_audit_for_tcg_orders` now polls those two states (date-bounded).
+4. **Misleading note-exists log + fragile shape** — ✅ **fixed.** `generate_tcg_mappings`
+   now logs "No note yet … will create" in the not-found branch and handles both note
+   shapes (`'not found'` string vs `{'note': …}` dict) defensively.
+5. **`guid` may be `None` written into the note** — ✅ **fixed.** A guard skips note
+   creation (with a warning) when no Scryfall GUID resolved, so no `scryfall_guid=None`
+   note is ever persisted.
+6. **Deprecated `logger.warn()`** — ✅ **fixed** → `.warning()`.
+7. **`needs_lowest_seller` is never honoured** — *documented, behaviour unchanged.*
+   `_update_pricing_calc` flags it for down/flat 7-day change but the worker prices off
+   `base_price` either way (the lowest-seller lookup is not implemented). The code now
+   says so explicitly. Effective pricing: down/flat → `base_price × multiplier`; upward
+   → adjusted price × multiplier. Fetching + undercutting the marketplace's lowest
+   seller (`ApiServiceTcgMpProducts.search_single_card_listings`) is a deliberate
+   follow-up, not enabled here.
+8. **`force_generate` disables listings without re-enabling** — ✅ **fixed.**
+   `generate_tcg_mappings` now calls `set_listing_status(1)` at the end of a
+   `force_generate` run, so a standalone force run no longer leaves the store off.
 
 ## App Dependencies
 

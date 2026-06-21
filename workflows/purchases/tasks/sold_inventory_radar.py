@@ -43,6 +43,7 @@ This task only READS the live selling pipeline's artifacts (the notes) and acts
 on inventory/listings; it does not modify the ``generate_tcg_*`` logic.
 """
 
+import collections
 import csv
 import json
 from datetime import datetime, timezone, timedelta
@@ -78,7 +79,12 @@ RESULTS_DIR = "results"
 # Flat column order for the CSV review list — EchoMTG side, the note (join key),
 # the live TCG listing, and the sold-order evidence, all on one row per card.
 CSV_FIELDS = [
-    "card_name", "confidence", "assessment", "recommended_action", "applied", "action_results",
+    # ── REVIEW COLUMNS (lead) — set `approved` to yes on rows to action ──
+    # `approved` defaults to "no"; edit the CSV, save it under results/, then the
+    # skill applies only the approved rows. Sorted by listing_price (desc).
+    "approved", "card_name", "listing_price", "assessment", "confidence", "sold_in_orders",
+    # ── detection + action bookkeeping ──
+    "detection", "recommended_action", "applied", "action_results",
     # ── EchoMTG side ──
     "emid", "inventory_id", "note_id", "echo_foil",
     "echo_set", "echo_condition", "echo_acquired_price", "echo_date_acquired",
@@ -89,12 +95,15 @@ CSV_FIELDS = [
     "note_last_updated",
     # ── TCG MP live listing (the still-active, erroneous listing) ──
     "listing_id", "listing_product_id", "listing_name", "listing_set",
-    "listing_price", "listing_quantity", "listing_condition", "listing_foil",
-    # ── TCG MP sold-order evidence ──
-    "sold_in_orders",
+    "listing_quantity", "listing_condition", "listing_foil",
+    # copies of this card you still hold in EchoMTG (a listing maps to all of them)
+    "echo_owned_count",
     # ── values used by the mark-sold action ──
     "acquired_price", "sold_price",
 ]
+
+# Values in the `approved` column that mean "yes, perform the action on this row".
+_APPROVED_TRUE = {"yes", "y", "true", "1", "x", "approved"}
 
 # Order statuses treated as evidence the physical card left your hands. The
 # operator reviews all of these manually today (completed + cancelled etc.).
@@ -125,6 +134,41 @@ def _to_int(value) -> Optional[int]:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _to_float(value) -> float:
+    """Best-effort float coercion; 0.0 when not convertible (for price sorting)."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _owned_counts(inventory: list) -> dict:
+    """Count EchoMTG tradable copies per (emid, foil). A TCG listing maps to ALL
+    copies of the same card, so this count is the listing's intended quantity —
+    selling one copy should set the listing to (count - sold), not delist it."""
+    counts: dict = {}
+    for it in inventory:
+        if not isinstance(it, dict):
+            continue
+        emid = it.get("emid")
+        if emid is None:
+            continue
+        key = (str(emid), _norm_foil(it.get("foil")))
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _status_label(value) -> str:
+    """Map a TCG order status to its human label. The order-detail payload carries
+    a numeric code (3, 4, …); the ES audit payload already stores the label string.
+    Pass numbers through EnumTcgOrderStatus; keep label strings as-is."""
+    code = _to_int(value)
+    if code is not None:
+        st = EnumTcgOrderStatus.from_code(code)
+        return st.label if st else str(value)
+    return str(value) if value is not None else ""
 
 
 def _first(d: dict, *keys, default=None):
@@ -169,7 +213,7 @@ def _extract_order_items(order_detail: dict) -> list[dict]:
         return []
 
     order_id = _first(order_detail, "order_id", "id", default="")
-    status = _first(order_detail, "status", "current_status")
+    status = _status_label(_first(order_detail, "status", "current_status"))
 
     items = []
     for it in raw_items:
@@ -214,13 +258,21 @@ def _build_sold_index(order_details: list[dict]) -> dict:
 
 
 def _match_candidate(item: dict, note: dict, active_listing_ids: set,
-                     active_product_foil: set, sold_index: dict) -> Optional[dict]:
+                     active_product_foil: set, sold_index: dict,
+                     owned_count: Optional[int] = None) -> Optional[dict]:
     """Return a radar candidate for one inventory item, or None.
 
-    A candidate is an inventory item that is STILL actively listed AND maps to a
-    card that appears in a sold order. Confidence:
-      - high   : the note's exact listing_id was sold and is still listed
-      - medium : the note's product_id + foil was sold and is still listed
+    Two detections:
+      • ``sold_still_listed`` — item is STILL actively listed AND its product/listing
+        appears in a sold order (sold yet re-listed → can't fulfil). Confidence:
+          high   = note's exact listing_id sold and still listed
+          medium = note's product_id + foil sold and still listed
+      • ``listing_gone`` — the note maps a ``tcg_mp_listing_id`` that is NO LONGER
+        active on TCG MP (and no active listing exists for the product/foil): the
+        listed copy sold or the listing was removed. Confidence:
+          high   = listing gone AND product_id + foil appears in a sold order
+          low    = listing gone with no corroborating sold order (verify — the
+                   listing may have sold OR just been removed/disabled)
     """
     listing_id = _to_int(note.get("tcg_mp_listing_id"))
     product_id = _to_int(note.get("tcg_mp_card_id"))
@@ -230,21 +282,35 @@ def _match_candidate(item: dict, note: dict, active_listing_ids: set,
         (listing_id is not None and listing_id in active_listing_ids)
         or (product_id is not None and (product_id, foil) in active_product_foil)
     )
-    if not still_listed:
-        return None
+    sold_by_listing = bool(listing_id and listing_id in sold_index["by_listing"])
+    sold_by_product = product_id is not None and (product_id, foil) in sold_index["by_product"]
 
-    matched_orders = []
-    confidence = None
+    detection = confidence = None
+    matched_orders: list = []
+    recommended = "mark_sold + remove_inventory + delist"
 
-    if listing_id and listing_id in sold_index["by_listing"]:
-        confidence = "high"
-        matched_orders = sold_index["by_listing"][listing_id]
-    elif product_id is not None and (product_id, foil) in sold_index["by_product"]:
-        confidence = "medium"
-        matched_orders = sold_index["by_product"][(product_id, foil)]
-
-    if confidence is None:
-        return None
+    if still_listed:
+        # Case A — sold but still listed (erroneous re-list)
+        if sold_by_listing:
+            detection, confidence = "sold_still_listed", "high"
+            matched_orders = sold_index["by_listing"][listing_id]
+        elif sold_by_product:
+            detection, confidence = "sold_still_listed", "medium"
+            matched_orders = sold_index["by_product"][(product_id, foil)]
+        else:
+            return None
+        recommended = "mark_sold + remove_inventory + delist"
+    else:
+        # Case B — the mapped listing is no longer active (orphaned note)
+        if not listing_id:
+            return None  # nothing was ever listed → can't infer a sale
+        detection = "listing_gone"
+        recommended = "mark_sold + remove_inventory"   # listing already gone — no delist
+        if sold_by_product:
+            confidence = "high"
+            matched_orders = sold_index["by_product"][(product_id, foil)]
+        else:
+            confidence = "low"
 
     name = matched_orders[0].get("name") if matched_orders else ""
     sold_price = matched_orders[0].get("price") if matched_orders else None
@@ -252,23 +318,38 @@ def _match_candidate(item: dict, note: dict, active_listing_ids: set,
     foil_label = "foil" if foil else "non-foil"
     orders_desc = "; ".join(
         f"{o.get('order_id')} ({o.get('status')})" for o in matched_orders[:5]
-    ) or "an order"
+    ) or "—"
     n_orders = len({o.get("order_id") for o in matched_orders})
-    if confidence == "high":
+
+    if detection == "sold_still_listed" and confidence == "high":
         assessment = (
             f"HIGH: this card's exact TCG listing {listing_id} was sold in "
             f"{n_orders} order(s) [{orders_desc}], yet the listing is STILL active on "
             f"TCG MP and the card is STILL in EchoMTG inventory — the physical copy "
-            f"was almost certainly already sold. Recommend: mark sold + remove from "
-            f"inventory + delist."
+            f"was almost certainly already sold. Recommend: mark sold + remove + delist."
         )
-    else:  # medium
+    elif detection == "sold_still_listed":
+        owned_txt = (f" You hold {owned_count} copy/copies in EchoMTG — approving this "
+                     f"row removes one and sets the listing quantity to the remainder "
+                     f"(delists only at 0)." if owned_count else "")
         assessment = (
             f"MEDIUM: TCG product {product_id} ({foil_label}) was sold in "
             f"{n_orders} order(s) [{orders_desc}] and a matching card is still "
-            f"actively listed (listing {listing_id or 'n/a'}) and in inventory. "
-            f"Likely a duplicate re-list or oversell — physically verify you still "
-            f"hold a copy before removing."
+            f"actively listed (listing {listing_id or 'n/a'}) and in inventory."
+            f"{owned_txt} Verify you still physically hold a copy before removing."
+        )
+    elif detection == "listing_gone" and confidence == "high":
+        assessment = (
+            f"HIGH: the mapped TCG listing {listing_id} is NO LONGER active and "
+            f"product {product_id} ({foil_label}) appears in {n_orders} sold order(s) "
+            f"[{orders_desc}] — the listed copy sold. Recommend: mark sold + remove "
+            f"from inventory (listing already gone)."
+        )
+    else:  # listing_gone, low
+        assessment = (
+            f"LOW: the mapped TCG listing {listing_id} is no longer active, but no "
+            f"matching sold order was found — it may have sold OR been removed/disabled. "
+            f"Physically verify before marking sold + removing."
         )
 
     return {
@@ -280,8 +361,11 @@ def _match_candidate(item: dict, note: dict, active_listing_ids: set,
         "tcg_mp_listing_id": listing_id,
         "tcg_mp_card_id": product_id,
         "scryfall_guid": note.get("scryfall_guid"),
+        "detection": detection,
         "confidence": confidence,
+        "recommended_action": recommended,
         "assessment": assessment,
+        "echo_owned_count": owned_count,
         "acquired_price": str(_first(item, "acquired_price", "price_acquired", default="0")),
         "sold_price": str(sold_price if sold_price is not None
                           else note.get("tcg_mp_selling_price") or "0"),
@@ -318,10 +402,12 @@ def _candidate_to_row(c: dict) -> dict:
     )
     actions = c.get("actions") or {}
     row = {
+        "approved": c.get("approved", "no"),
         "card_name": c.get("card_name", ""),
         "confidence": c.get("confidence", ""),
         "assessment": c.get("assessment", ""),
-        "recommended_action": "mark_sold + remove_inventory + delist",
+        "detection": c.get("detection", ""),
+        "recommended_action": c.get("recommended_action", "mark_sold + remove_inventory + delist"),
         "applied": c.get("applied", ""),
         "action_results": "; ".join(f"{k}:{v}" for k, v in actions.items()),
         # EchoMTG side
@@ -352,6 +438,7 @@ def _candidate_to_row(c: dict) -> dict:
         "listing_quantity": _lattr(listing, "quantity") if listing is not None else "",
         "listing_condition": _lattr(listing, "crd_condition") if listing is not None else "",
         "listing_foil": _lattr(listing, "crd_foil") if listing is not None else "",
+        "echo_owned_count": c.get("echo_owned_count", ""),
         # sold-order evidence
         "sold_in_orders": orders,
         # mark-sold inputs
@@ -422,6 +509,36 @@ def _gather_es_order_details(status_labels: set) -> dict:
     return details
 
 
+def _reconcile_listing(publish_service, inventory_service, *, emid, foil,
+                       listing_id, price, condition) -> str:
+    """After a sold copy is removed, set the listing's quantity to the number of
+    EchoMTG copies that REMAIN for this card (delist only if none remain).
+
+    A listing maps to all copies of the same card, so when you own multiples and
+    sell one, the right cleanup is to decrement the listing — not kill it. Mirrors
+    update_tcg_listings_prices' quantity = len(matching inventory) logic. Returns a
+    short result tag for the audit row.
+    """
+    try:
+        copies = inventory_service.search_card(emid, tradable_only=1) or []
+        remaining = sum(1 for c in copies if _norm_foil(c.get("foil")) == _norm_foil(foil))
+    except Exception as exc:  # noqa: BLE001
+        return f"error:count:{exc}"
+    if remaining > 0:
+        try:
+            publish_service.edit_listing(listing_id=listing_id, price=price or 0,
+                                         foil=_norm_foil(foil), quantity=remaining,
+                                         condition=condition or "NM")
+            return f"qty->{remaining}"
+        except Exception as exc:  # noqa: BLE001
+            return f"error:edit:{exc}"
+    try:
+        publish_service.remove_listings([listing_id])
+        return "delisted(0 left)"
+    except Exception as exc:  # noqa: BLE001
+        return f"error:delist:{exc}"
+
+
 # ── the task ──────────────────────────────────────────────────────────────────
 
 @log_result()
@@ -442,6 +559,11 @@ def radar_sold_inventory(dry_run: bool = False, last_x_days: int = 60,
         apply_actions: which of 'mark_sold','remove_inventory','delist' to perform
                        (default all three). Ignored when dry_run is True.
         min_confidence: 'low'|'medium'|'high' threshold to act on (default 'low').
+        orphan_mode: how to treat notes whose mapped tcg_mp_listing_id is no longer
+                     active ('listing_gone'): 'off' = ignore; 'corroborated' (default)
+                     = include only when a sold order confirms it (high); 'all' =
+                     include uncorroborated orphans (low) too. Skipped entirely if
+                     TCG MP returns zero active listings (likely globally disabled).
         sold_statuses: optional iterable of EnumTcgOrderStatus to override defaults.
 
     Returns:
@@ -452,6 +574,13 @@ def radar_sold_inventory(dry_run: bool = False, last_x_days: int = 60,
     apply_actions = set(kwargs.get("apply_actions",
                                    ("mark_sold", "remove_inventory", "delist")))
     min_conf = kwargs.get("min_confidence", "low")
+    # When True (default), the listing action sets the listing quantity to the number
+    # of EchoMTG copies that remain (delist only at 0) instead of a blunt delist.
+    reconcile_quantity = bool(kwargs.get("reconcile_quantity", True))
+    # orphan_mode controls the 'listing_gone' detection (note maps a listing that is
+    # no longer active): 'off' = skip it, 'corroborated' (default) = only when a sold
+    # order corroborates (high), 'all' = include uncorroborated orphans (low) too.
+    orphan_mode = kwargs.get("orphan_mode", "corroborated")
     statuses = tuple(kwargs.get("sold_statuses", DEFAULT_SOLD_STATUSES))
     status_labels = {s.label for s in statuses}
 
@@ -494,6 +623,9 @@ def radar_sold_inventory(dry_run: bool = False, last_x_days: int = 60,
     if not isinstance(inventory, list):
         _log.warning("radar: echo inventory did not return a list; aborting")
         return "Sold-radar: echo inventory unavailable"
+    # owned counts per (emid, foil) from the FULL inventory (before any --limit slice),
+    # so a listing mapped to multiple copies reconciles to the right quantity.
+    owned = _owned_counts(inventory)
     if limit is not None:
         inventory = inventory[:limit]
 
@@ -509,8 +641,10 @@ def radar_sold_inventory(dry_run: bool = False, last_x_days: int = 60,
             continue
         if not note:
             continue
+        owned_count = owned.get((str(item.get("emid")), _norm_foil(item.get("foil"))))
         candidate = _match_candidate(item, note, active_listing_ids,
-                                     active_product_foil, sold_index)
+                                     active_product_foil, sold_index,
+                                     owned_count=owned_count)
         if candidate:
             # attach the still-active TCG listing (the erroneous one) for the CSV
             candidate["listing"] = (
@@ -519,8 +653,27 @@ def radar_sold_inventory(dry_run: bool = False, last_x_days: int = 60,
             )
             candidates.append(candidate)
 
-    _log.info("radar: %d candidate(s) from %d inventory item(s)",
-              len(candidates), len(inventory))
+    # ── 3b. orphan (listing_gone) handling ───────────────────────────────────
+    # Guard: if NO active listings came back, "gone" is unreliable (listings may be
+    # globally disabled via set_listing_status(0)), so drop all listing_gone here.
+    if not active_listing_ids:
+        before = len(candidates)
+        candidates = [c for c in candidates if c.get("detection") != "listing_gone"]
+        if before != len(candidates):
+            _log.warning("radar: 0 active listings — dropping %d listing_gone candidate(s) "
+                         "(listings may be disabled; gone-ness not trustworthy)",
+                         before - len(candidates))
+    if orphan_mode == "off":
+        candidates = [c for c in candidates if c.get("detection") != "listing_gone"]
+    elif orphan_mode == "corroborated":
+        # keep listing_gone only when a sold order corroborates it (confidence high)
+        candidates = [c for c in candidates
+                      if c.get("detection") != "listing_gone" or c.get("confidence") == "high"]
+    # orphan_mode == "all" → keep everything
+
+    by_det = collections.Counter(c.get("detection") for c in candidates)
+    _log.info("radar: %d candidate(s) from %d inventory item(s) (%s)",
+              len(candidates), len(inventory), dict(by_det))
 
     # ── 4. act (unless dry run) ──────────────────────────────────────────────
     threshold = _CONFIDENCE_RANK.get(min_conf, 0)
@@ -542,12 +695,23 @@ def radar_sold_inventory(dry_run: bool = False, last_x_days: int = 60,
                 actions["remove_inventory"] = "ok"
             except Exception as exc:  # noqa: BLE001
                 actions["remove_inventory"] = f"error:{exc}"
-        if "delist" in apply_actions and c.get("tcg_mp_listing_id"):
-            try:
-                publish_service.remove_listings([c["tcg_mp_listing_id"]])
-                actions["delist"] = "ok"
-            except Exception as exc:  # noqa: BLE001
-                actions["delist"] = f"error:{exc}"
+        # Listing action — only for still-active listings (sold_still_listed).
+        # listing_gone rows have no live listing to touch.
+        live_lid = _to_int(_lattr(c.get("listing"), "listing_id")) or c.get("tcg_mp_listing_id")
+        if ("delist" in apply_actions and c.get("detection") == "sold_still_listed"
+                and live_lid):
+            if reconcile_quantity:
+                actions["listing"] = _reconcile_listing(
+                    publish_service, inventory_service,
+                    emid=c["emid"], foil=c["foil"], listing_id=live_lid,
+                    price=_to_float(_lattr(c.get("listing"), "price")) or _to_float(c.get("sold_price")),
+                    condition=_lattr(c.get("listing"), "crd_condition", default="NM"))
+            else:
+                try:
+                    publish_service.remove_listings([live_lid])
+                    actions["listing"] = "delisted"
+                except Exception as exc:  # noqa: BLE001
+                    actions["listing"] = f"error:{exc}"
         c["actions"] = actions
         acted += 1
 
@@ -556,6 +720,10 @@ def radar_sold_inventory(dry_run: bool = False, last_x_days: int = 60,
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
     for c in candidates:
         c["applied"] = (not dry_run)
+        c.setdefault("approved", "no")
+
+    # Highest-value listings first so the operator reviews the costly cards up top.
+    candidates.sort(key=lambda c: _to_float(_lattr(c.get("listing"), "price")), reverse=True)
 
     out_file = REPO_ROOT / RESULTS_DIR / f"sold_inventory_radar-{run_id}.csv"
     _write_csv(out_file, candidates)
@@ -573,6 +741,127 @@ def radar_sold_inventory(dry_run: bool = False, last_x_days: int = 60,
     summary = (
         f"Sold-radar: {len(candidates)} candidate(s), "
         f"{'0 acted (dry run)' if dry_run else f'{acted} acted'} — review {out_file}"
+    )
+    _log.info(summary)
+    return summary
+
+
+@log_result()
+@SPROUT.task()
+def apply_radar_approvals(csv_path: str, dry_run: bool = False, **kwargs) -> str:
+    """Perform the radar's recommended actions on the rows you APPROVED.
+
+    Reads a review CSV you edited under results/ and acts ONLY on rows whose
+    ``approved`` column is one of yes/y/true/1/x. For each approved row: mark the
+    card sold in EchoMTG earnings, remove the EchoMTG inventory item, and delist
+    it on TCG MP — using the ids stored in that row (emid, inventory_id,
+    listing_id, foil, acquired/sold price). Writes an audit CSV
+    (``sold_inventory_radar-applied-<ts>.csv``) with per-row results.
+
+    Args:
+        csv_path: Path to the approved CSV. Absolute, or a bare filename / relative
+                  path which is resolved under results/.
+        dry_run: If True, report what WOULD be actioned without calling any API.
+        cfg_id__tcg_mp / cfg_id__echo_mtg: config keys (default 'TCG_MP'/'ECHO_MTG').
+        apply_actions: subset of 'mark_sold','remove_inventory','delist' (default all).
+
+    Returns:
+        A one-line summary string.
+    """
+    cfg_id__tcg_mp = kwargs.get("cfg_id__tcg_mp", "TCG_MP")
+    cfg_id__echo_mtg = kwargs.get("cfg_id__echo_mtg", "ECHO_MTG")
+    apply_actions = set(kwargs.get("apply_actions",
+                                   ("mark_sold", "remove_inventory", "delist")))
+    # When True (default), set the listing quantity to the remaining EchoMTG copy
+    # count after removal (delist only at 0) instead of a blunt delist.
+    reconcile_quantity = bool(kwargs.get("reconcile_quantity", True))
+
+    path = Path(csv_path)
+    if not path.exists():
+        path = REPO_ROOT / RESULTS_DIR / Path(csv_path).name
+    if not path.exists():
+        return f"Sold-radar apply: CSV not found: {csv_path}"
+
+    with open(path, newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    approved = [r for r in rows
+                if str(r.get("approved", "")).strip().lower() in _APPROVED_TRUE]
+    if not approved:
+        return f"Sold-radar apply: no approved rows (set approved=yes) in {path}"
+
+    _log.info("radar apply: %d approved of %d row(s) from %s%s",
+              len(approved), len(rows), path, " [DRY RUN]" if dry_run else "")
+
+    earnings_service = inventory_service = publish_service = None
+    if not dry_run:
+        cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
+        cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
+        earnings_service = ApiServiceEchoMTGEarnings(cfg__echo_mtg)
+        inventory_service = ApiServiceEchoMTGInventory(cfg__echo_mtg)
+        publish_service = ApiServiceTcgMpPublish(cfg__tcg_mp)
+
+    acted = 0
+    for r in approved:
+        emid = r.get("emid")
+        inv = r.get("inventory_id")
+        # Delist only a still-ACTIVE listing (the live `listing_id` column).
+        # listing_gone rows have no live listing — don't try to delist a dead id.
+        live_listing_id = _to_int(r.get("listing_id"))
+        foil = _norm_foil(r.get("echo_foil"))
+        # honour the per-row recommendation (orphans recommend no delist)
+        row_actions = set(apply_actions)
+        if "delist" not in (r.get("recommended_action") or ""):
+            row_actions.discard("delist")
+
+        if dry_run:
+            r["action_results"] = "DRY RUN — would: " + ", ".join(sorted(row_actions))
+            acted += 1
+            continue
+
+        actions: dict = {}
+        if "mark_sold" in row_actions:
+            try:
+                earnings_service.add_sale(emid, r.get("acquired_price") or "0",
+                                          r.get("sold_price") or "0", foil=foil)
+                actions["mark_sold"] = "ok"
+            except Exception as exc:  # noqa: BLE001
+                actions["mark_sold"] = f"error:{exc}"
+        if "remove_inventory" in row_actions:
+            try:
+                inventory_service.remove_item(inv)
+                actions["remove_inventory"] = "ok"
+            except Exception as exc:  # noqa: BLE001
+                actions["remove_inventory"] = f"error:{exc}"
+        if "delist" in row_actions and live_listing_id:
+            if reconcile_quantity:
+                actions["listing"] = _reconcile_listing(
+                    publish_service, inventory_service,
+                    emid=emid, foil=foil, listing_id=live_listing_id,
+                    price=_to_float(r.get("listing_price")) or _to_float(r.get("sold_price")),
+                    condition=(r.get("listing_condition") or "NM"))
+            else:
+                try:
+                    publish_service.remove_listings([live_listing_id])
+                    actions["listing"] = "delisted"
+                except Exception as exc:  # noqa: BLE001
+                    actions["listing"] = f"error:{exc}"
+        r["action_results"] = "; ".join(f"{k}:{v}" for k, v in actions.items())
+        r["applied"] = "true"
+        acted += 1
+
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+    audit = REPO_ROOT / RESULTS_DIR / f"sold_inventory_radar-applied-{run_id}.csv"
+    audit.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = list(rows[0].keys()) if rows else CSV_FIELDS
+    with open(audit, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for r in approved:
+            writer.writerow(r)
+
+    summary = (
+        f"Sold-radar apply: {acted}/{len(approved)} approved row(s) "
+        f"{'previewed (dry run)' if dry_run else 'actioned'} — audit {audit}"
     )
     _log.info(summary)
     return summary

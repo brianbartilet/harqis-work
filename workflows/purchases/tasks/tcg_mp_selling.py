@@ -130,14 +130,19 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
         else:
             tcg_mp_log.info("Checking if notes exist and skipping if so.")
             notes_fetch = api_service__echo_mtg_notes.get_note(card_echo['note_id'])
-            if (notes_fetch['status'] == 'error') and (notes_fetch['note'] == 'not found'):
-                tcg_mp_log.warning("Note already exists for: {0} {1}".format(card_name, card_echo['inventory_id']))
+            # get_note returns {'status':'error','note':'not found'} when no note
+            # exists (a string), or {'note': {'note': '<json>'}} when it does (a dict).
+            if (notes_fetch.get('status') == 'error') and (notes_fetch.get('note') == 'not found'):
+                tcg_mp_log.info("No note yet for %s %s — will create.",
+                                card_name, card_echo['inventory_id'])
             else:
-                # try to recreate invalid ones
+                # A note exists. Keep it if it's valid JSON; fall through to recreate
+                # only when the stored note is corrupt (not valid JSON).
                 try:
-                    json.loads(notes_fetch["note"]["note"])
+                    note_field = notes_fetch.get("note")
+                    json.loads(note_field["note"] if isinstance(note_field, dict) else note_field)
                     continue
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, TypeError, KeyError):
                     pass
 
         tcg_mp_card_id = 0
@@ -175,6 +180,12 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
 
         if not match_found:
             tcg_mp_log.warning("No match found for card: {0}".format(card_name))
+            continue
+
+        if not guid:
+            # Defensive: a matched card should always carry a Scryfall GUID, but
+            # never persist a note with scryfall_guid=None — it breaks later lookups.
+            tcg_mp_log.warning("No scryfall guid resolved for %s — skipping note.", card_name)
             continue
 
         tcg_mp_log.info("Creating json information as note for {0}".format(card_name))
@@ -235,9 +246,11 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
 
     # endregion
 
-    # enable listings
-    #if force_generate:
-    #    api_service__tcg_mp_merchant.set_listing_status(1)
+    # Re-enable listings if we turned them off at the start (force_generate path).
+    # Without this a standalone force run leaves the store disabled until the next
+    # update_tcg_listings_prices run flips it back on.
+    if force_generate:
+        api_service__tcg_mp_merchant.set_listing_status(1)
 
     return "SUCCESS"
 
@@ -260,6 +273,9 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         cfg_id__tcg_mp = task["cfg_id__tcg_mp"]
         cfg_id__echo_mtg = task["cfg_id__echo_mtg"]
         cfg_id__echo_mtg_fe = task["cfg_id__echo_mtg_fe"]
+        # Listing language — prefer the EchoMTG card's own language when present,
+        # else the per-run default (task["language"], itself defaulting to "EN").
+        language = (card_echo.get("language") or task.get("language") or "EN")
 
         # --- imports inside process ---
         from apps.apps_config import CONFIG_MANAGER
@@ -297,6 +313,7 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
                     price=post_price,
                     quantity=1,
                     foil=card_echo["foil"],
+                    language=language,
                     product_id=json_note["tcg_mp_card_id"],
                 )
                 tcg_mp_listing_id_create = response['insertId']
@@ -387,6 +404,9 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
     cfg_id__tcg_mp = kwargs.pop("cfg_id__tcg_mp", "TCG_MP")
     cfg_id__echo_mtg = kwargs.pop("cfg_id__echo_mtg", "ECHO_MTG")
     cfg_id__echo_mtg_fe = kwargs.pop("cfg_id__echo_mtg_fe", "ECHO_MTG_FE")
+    # Default listing language for cards whose EchoMTG record has none. Pass
+    # language='JP' (etc.) to list a non-English batch.
+    language = kwargs.pop("language", "EN")
 
     cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
     api_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
@@ -411,6 +431,7 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
             "cfg_id__tcg_mp": cfg_id__tcg_mp,
             "cfg_id__echo_mtg": cfg_id__echo_mtg,
             "cfg_id__echo_mtg_fe": cfg_id__echo_mtg_fe,
+            "language": language,
         }
         for card in cards_to_list
     ]
@@ -518,7 +539,7 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 
             json_note = json.loads(note["note"]["note"])
             json_note["function"] = update_tcg_listings_prices.__name__
         except Exception:
-            _log_worker_generate_tcg_listings.warn(f"Skipping {card_name}: invalid note")
+            _log_worker_generate_tcg_listings.warning(f"Skipping {card_name}: invalid note")
             return {"status": "skipped", "card": card_name}
 
         if card_echo['foil']:
@@ -534,6 +555,13 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 
             price=round(base_price, 2)
         )
 
+        # NOTE: `needs_lowest_seller` (set for down/flat 7-day change) is NOT yet
+        # implemented as an actual lowest-seller lookup — both branches price off
+        # base_price. Effective behaviour today:
+        #   • down/flat change → base_price * conversion_multiplier
+        #   • upward change     → adjusted price (see _update_pricing_calc) * multiplier
+        # Fetching the marketplace's lowest seller and undercutting is a deliberate
+        # follow-up (ApiServiceTcgMpProducts.search_single_card_listings exists for it).
         if decision.needs_lowest_seller:
             post_price = round(base_price * conversion_multiplier, 2)
         else:

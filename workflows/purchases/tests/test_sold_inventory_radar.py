@@ -4,8 +4,12 @@ import csv
 
 from workflows.purchases.tasks.sold_inventory_radar import (
     radar_sold_inventory,
+    apply_radar_approvals,
     _norm_foil,
     _to_int,
+    _status_label,
+    _owned_counts,
+    _reconcile_listing,
     _parse_note,
     _extract_order_items,
     _build_sold_index,
@@ -116,11 +120,50 @@ def test__match_candidate_high_confidence_listing():
                          active_product_foil={(100, 1)}, sold_index=sold_index)
     assert c is not None
     assert c["confidence"] == "high"
+    assert c["detection"] == "sold_still_listed"
+    assert "delist" in c["recommended_action"]
     assert c["card_name"] == "Sol Ring"
     assert c["matched_orders"][0]["order_id"] == "0001"
     # the assessment explains the flag, naming the listing and the order
     assert c["assessment"].startswith("HIGH")
     assert "0001" in c["assessment"] and "listing 7" in c["assessment"]
+
+
+def test__match_candidate_listing_gone_high_when_product_sold():
+    """Note maps a listing that is no longer active, and the product appears in a
+    sold order → high-confidence listing_gone (mark sold + remove, no delist)."""
+    item = {"emid": "5", "inventory_id": "i5", "note_id": "n5", "foil": 0}
+    note = {"tcg_mp_listing_id": 738828, "tcg_mp_card_id": 945147}
+    sold_index = _build_sold_index([{
+        "order_id": "0009", "status": "Completed",
+        "items": [{"product_id": 945147, "foil": 0, "name": "Orphaned Card"}],
+    }])
+    c = _match_candidate(item, note, active_listing_ids={111},        # 738828 NOT active
+                         active_product_foil={(999, 0)}, sold_index=sold_index)
+    assert c is not None
+    assert c["detection"] == "listing_gone" and c["confidence"] == "high"
+    assert "delist" not in c["recommended_action"]      # listing already gone
+    assert c["assessment"].startswith("HIGH")
+
+
+def test__match_candidate_listing_gone_low_when_uncorroborated():
+    """Listing no longer active and no sold order found → low-confidence orphan."""
+    item = {"emid": "6", "inventory_id": "i6", "note_id": "n6", "foil": 0}
+    note = {"tcg_mp_listing_id": 738828, "tcg_mp_card_id": 945147}
+    c = _match_candidate(item, note, active_listing_ids={111}, active_product_foil={(222, 0)},
+                         sold_index={"by_listing": {}, "by_product": {}})
+    assert c is not None
+    assert c["detection"] == "listing_gone" and c["confidence"] == "low"
+    assert c["assessment"].startswith("LOW")
+
+
+def test__match_candidate_no_listing_mapped_returns_none():
+    """No tcg_mp_listing_id mapped and not listed → nothing to infer."""
+    item = {"emid": "7", "inventory_id": "i7", "note_id": "n7", "foil": 0}
+    note = {"tcg_mp_listing_id": 0, "tcg_mp_card_id": 945147}
+    c = _match_candidate(item, note, active_listing_ids=set(), active_product_foil=set(),
+                         sold_index={"by_listing": {}, "by_product": {}})
+    assert c is None
 
 
 def test__match_candidate_medium_confidence_product():
@@ -136,17 +179,18 @@ def test__match_candidate_medium_confidence_product():
     assert c["assessment"].startswith("MEDIUM") and "non-foil" in c["assessment"]
 
 
-def test__match_candidate_not_listed_returns_none():
+def test__match_candidate_not_listed_but_sold_is_listing_gone():
     item = {"emid": "3", "inventory_id": "i3", "note_id": "n3", "foil": 0}
     note = {"tcg_mp_listing_id": 7, "tcg_mp_card_id": 100}
     sold_index = _build_sold_index([{
         "order_id": "0003", "status": "Completed",
         "items": [{"product_id": 100, "listing_id": 7, "foil": 0, "name": "X"}],
     }])
-    # Not in any active listing set → not a candidate even though it was sold.
+    # Mapped listing 7 is NOT active and the product sold → listing_gone (high).
     c = _match_candidate(item, note, active_listing_ids=set(),
                          active_product_foil=set(), sold_index=sold_index)
-    assert c is None
+    assert c is not None
+    assert c["detection"] == "listing_gone" and c["confidence"] == "high"
 
 
 def test__match_candidate_listed_but_not_sold_returns_none():
@@ -180,6 +224,9 @@ def test__candidate_to_row_has_both_sides():
     row = _candidate_to_row(_sample_candidate())
     # every declared column is present
     assert set(row.keys()) == set(CSV_FIELDS)
+    # approval column defaults to "no" and leads the schema
+    assert row["approved"] == "no"
+    assert CSV_FIELDS[0] == "approved" and CSV_FIELDS[1] == "card_name"
     # EchoMTG side
     assert row["emid"] == "1" and row["echo_set"] == "C21" and row["echo_condition"] == "NM"
     # note join key
@@ -207,4 +254,100 @@ def test__write_csv_empty_writes_header_only(tmp_path):
     _write_csv(out, [])
     lines = out.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 1  # header only
-    assert lines[0].split(",")[0] == "card_name"
+    assert lines[0].split(",")[0] == "approved"
+
+
+def test__owned_counts_groups_by_emid_and_foil():
+    inv = [
+        {"emid": "100", "foil": 0}, {"emid": "100", "foil": 0},   # 2 non-foil copies
+        {"emid": "100", "foil": 1},                               # 1 foil copy
+        {"emid": "200", "foil": 0},
+        {"not": "a card"},
+    ]
+    counts = _owned_counts(inv)
+    assert counts[("100", 0)] == 2
+    assert counts[("100", 1)] == 1
+    assert counts[("200", 0)] == 1
+
+
+class _FakeInventory:
+    def __init__(self, copies):
+        self._copies = copies
+    def search_card(self, emid, tradable_only=1):
+        return self._copies
+
+
+class _FakePublish:
+    def __init__(self):
+        self.calls = []
+    def edit_listing(self, **kw):
+        self.calls.append(("edit", kw))
+    def remove_listings(self, ids):
+        self.calls.append(("remove", ids))
+
+
+def test__reconcile_listing_edits_to_remaining_when_copies_left():
+    # one non-foil copy still held → set listing quantity to 1 (not delist)
+    pub = _FakePublish()
+    inv = _FakeInventory([{"foil": 0}])
+    res = _reconcile_listing(pub, inv, emid="100", foil=0, listing_id=7,
+                             price=4.20, condition="NM")
+    assert res == "qty->1"
+    assert pub.calls[0][0] == "edit" and pub.calls[0][1]["quantity"] == 1
+    assert pub.calls[0][1]["listing_id"] == 7
+
+
+def test__reconcile_listing_delists_when_none_left():
+    pub = _FakePublish()
+    inv = _FakeInventory([])           # no copies remain
+    res = _reconcile_listing(pub, inv, emid="100", foil=0, listing_id=7,
+                             price=4.20, condition="NM")
+    assert res == "delisted(0 left)"
+    assert pub.calls[0] == ("remove", [7])
+
+
+def test__reconcile_listing_counts_only_matching_foil():
+    pub = _FakePublish()
+    inv = _FakeInventory([{"foil": 1}, {"foil": 1}, {"foil": 0}])  # 2 foil, 1 non-foil
+    res = _reconcile_listing(pub, inv, emid="100", foil=1, listing_id=9,
+                             price=1.0, condition="NM")
+    assert res == "qty->2"
+
+
+def test__status_label_maps_codes():
+    assert _status_label(3) == "Completed"
+    assert _status_label("4") == "Cancelled"
+    assert _status_label(8) == "Picked Up"
+    # already-a-label passes through; unknown/blank handled
+    assert _status_label("Completed") == "Completed"
+    assert _status_label(None) == ""
+
+
+def test__apply_radar_approvals_dry_run(tmp_path):
+    """Reads an edited CSV and previews only the approved rows — no API calls."""
+    csv_path = tmp_path / "review.csv"
+    with open(csv_path, "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=CSV_FIELDS, extrasaction="ignore")
+        w.writeheader()
+        w.writerow({"approved": "yes", "card_name": "Sol Ring", "emid": "1",
+                    "inventory_id": "i1", "listing_id": "7", "echo_foil": "0",
+                    "acquired_price": "1.00", "sold_price": "4.00"})
+        w.writerow({"approved": "no", "card_name": "Llanowar Elves", "emid": "2",
+                    "inventory_id": "i2", "listing_id": "8"})
+    summary = apply_radar_approvals(str(csv_path), dry_run=True)
+    assert "1/1 approved" in summary and "dry run" in summary.lower()
+
+
+def test__apply_radar_approvals_no_approved_rows(tmp_path):
+    csv_path = tmp_path / "none.csv"
+    with open(csv_path, "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=CSV_FIELDS, extrasaction="ignore")
+        w.writeheader()
+        w.writerow({"approved": "no", "card_name": "X", "emid": "1", "inventory_id": "i1"})
+    summary = apply_radar_approvals(str(csv_path), dry_run=True)
+    assert "no approved rows" in summary
+
+
+@pytest.mark.skip(reason="Destructive — marks sold, removes inventory, and delists approved rows")
+def test__apply_radar_approvals_apply():
+    apply_radar_approvals("sold_inventory_radar-EDITED.csv", dry_run=False)
