@@ -75,6 +75,12 @@ _log = create_logger("hfl.ingest_plaud")
 _DEFAULT_HAIKU = "claude-haiku-4-5-20251001"
 _DEFAULT_ARCHIVE_HOST = "harqis-ones-mac-mini"
 
+# OpenAI Whisper rejects uploads over 25 MB. Stay just under, and split anything
+# larger into compressed segments (16 kHz mono MP3 ≈ 0.5 MB/min) so every chunk
+# clears the cap — a 10-min segment is ~5 MB. Transcripts are stitched in order.
+_WHISPER_MAX_BYTES = 24 * 1024 * 1024
+_WHISPER_CHUNK_SECONDS = 600
+
 
 def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-") or "recording"
@@ -91,10 +97,41 @@ def _coerce_date(value: Optional[str]) -> Optional[date]:
 
 # ── transcription fallback (seam) ─────────────────────────────────────────────
 
+def _whisper_one(client, audio_path: str, model: str) -> Optional[str]:
+    """Transcribe a single under-cap file. Raises on API error (caller guards)."""
+    with open(audio_path, "rb") as fh:
+        resp = client.audio.transcriptions.create(model=model, file=fh)
+    return (getattr(resp, "text", "") or "").strip() or None
+
+
+def _segment_audio_for_whisper(audio_path: str, out_dir: str) -> list[str]:
+    """Transcode to 16 kHz mono MP3 and split into <=``_WHISPER_CHUNK_SECONDS``
+    segments (~5 MB each at 64 kbps) so every chunk clears Whisper's 25 MB cap.
+
+    Returns the chunk paths in playback order, or [] if ffmpeg is missing/fails
+    (caller then cleanly skips the recording)."""
+    pattern = os.path.join(out_dir, "chunk_%04d.mp3")
+    try:
+        subprocess.run(
+            ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error",
+             "-i", audio_path, "-ac", "1", "-ar", "16000", "-b:a", "64k",
+             "-f", "segment", "-segment_time", str(_WHISPER_CHUNK_SECONDS),
+             pattern],
+            check=True, capture_output=True, timeout=1800,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        err = getattr(exc, "stderr", b"") or b""
+        _log.warning("ingest_plaud: ffmpeg segmenting failed for %s (%s) %s",
+                     audio_path, exc, err.decode("utf-8", "replace")[:200] if err else "")
+        return []
+    return sorted(str(p) for p in Path(out_dir).glob("chunk_*.mp3"))
+
+
 def _transcribe_with_whisper(audio_path: str, *, model: str = "whisper-1") -> Optional[str]:
-    """Transcribe an audio file with OpenAI Whisper. Best-effort: returns None
-    on any failure (missing key, missing package, API error) so the caller
-    cleanly skips rather than breaking the beat."""
+    """Transcribe an audio file with OpenAI Whisper. Files over the 25 MB API cap
+    are transcoded + split into segments (ffmpeg) and stitched. Best-effort:
+    returns None on any failure (missing key, missing package, missing ffmpeg,
+    API error) so the caller cleanly skips rather than breaking the beat."""
     key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not key:
         _log.info("ingest_plaud: OPENAI_API_KEY not set — cannot Whisper-transcribe")
@@ -105,10 +142,23 @@ def _transcribe_with_whisper(audio_path: str, *, model: str = "whisper-1") -> Op
         from openai import OpenAI  # native client (openai>=1.50, see requirements.txt)
 
         client = OpenAI(api_key=key)
-        with open(audio_path, "rb") as fh:
-            resp = client.audio.transcriptions.create(model=model, file=fh)
-        text = getattr(resp, "text", "") or ""
-        return text.strip() or None
+        if os.path.getsize(audio_path) <= _WHISPER_MAX_BYTES:
+            return _whisper_one(client, audio_path, model)
+        # Over the cap: segment into compressed chunks, transcribe each in order.
+        with tempfile.TemporaryDirectory(prefix="plaud-whisper-") as tmp:
+            chunks = _segment_audio_for_whisper(audio_path, tmp)
+            if not chunks:
+                return None
+            _log.info("ingest_plaud: %s over 25MB — transcribing %d chunk(s)",
+                      os.path.basename(audio_path), len(chunks))
+            parts: list[str] = []
+            for i, chunk in enumerate(chunks, 1):
+                text = _whisper_one(client, chunk, model)
+                if text:
+                    parts.append(text)
+                _log.info("ingest_plaud:   chunk %d/%d -> %d chars",
+                          i, len(chunks), len(text or ""))
+            return "\n".join(parts).strip() or None
     except Exception as exc:  # noqa: BLE001 - transcription is best-effort
         _log.warning("ingest_plaud: Whisper transcription failed for %s (%s)",
                      audio_path, exc)

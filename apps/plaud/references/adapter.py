@@ -540,6 +540,10 @@ class PlaudFolderBackend(PlaudBackend):
         for path in sorted(Path(self._dir).rglob("*")):
             if not path.is_file() or path.suffix.lower() not in _AUDIO_EXTS:
                 continue
+            # Skip macOS AppleDouble sidecars (._name) — 4 KB metadata stubs that
+            # share the audio extension on exFAT/SMB volumes, not real audio.
+            if path.name.startswith("._"):
+                continue
             rec = self._from_audio_file(path)
             if _in_window(rec.started_at, since, until):
                 out.append(rec)
