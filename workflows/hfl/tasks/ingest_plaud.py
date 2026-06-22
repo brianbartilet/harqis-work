@@ -451,7 +451,7 @@ def ingest_plaud_activity(
     # audio doesn't accumulate across nightly runs.
     shutil.rmtree(staging_root, ignore_errors=True)
 
-    _log.info("ingest_plaud: %d entr(y/ies) from %d recording(s) (%d Whisper) → %s",
+    _log.info("ingest_plaud: %d entr(y/ies) from %d recording(s) (%d Whisper) -> %s",
               entries_written, len(recordings), transcribed, corpus_dir)
     return {
         "entries_written": entries_written,
