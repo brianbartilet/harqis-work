@@ -26,6 +26,7 @@ against the live `plaud-sdk-public` repo on 2026-06-22**, not inferred.
 9. [Build & deploy](#9-build--deploy)
 10. [Risks & mitigations](#10-risks--mitigations)
 11. [Open questions](#11-open-questions)
+12. [Implementation walkthrough](#12-implementation-walkthrough)
 
 ---
 
@@ -294,3 +295,170 @@ template + a localhost HTTP listener is the fallback (the Mac mini can build it)
    whether it can be fully server-side (no interactive step).
 5. Still unresolved from the parent spec: **why are only factory samples in the
    cloud today** — does provisioning the SDK sync path make this moot?
+
+## 12. Implementation walkthrough
+
+This splits into **two codebases**: a small **Android app** built on Plaud's SDK
+(lives *outside* this repo) and the **harqis-work workflow** that drives it. The
+harqis side is mapped to files that already exist.
+
+### Critical path & the one real blocker
+
+**Partner access at `dev.plaud.ai`** is the gating item (lead time + it unlocks
+the SDK token). Everything else builds in parallel, but nothing *runs* without it.
+
+```
+[Partner access]──┐
+                  ├─▶ Android companion app ──┐
+[Controller phone]┘                           ├─▶ wire + test ─▶ schedule
+[harqis workflow task] ────────────────────────┘
+```
+
+> **Pragmatic recommendation:** stand up **Track A** (ADB UI-automation of the
+> *stock* Plaud app — parent spec §6) FIRST. It needs no partner signup and proves
+> the calendar→record loop end-to-end while the SDK access request is in flight.
+> Then swap the controller from `adb-taps` to `sdk` — the harqis-side task (Phase
+> 2) is identical for both tracks.
+
+### Phase 0 — Prerequisites
+
+1. **Request partner access** → `dev.plaud.ai`. You receive `PLAUD_CLIENT_ID` +
+   `PLAUD_API_KEY` and the backend call to mint a `USER_ACCESS_TOKEN`
+   (`initSDK`). Free tier covers prototyping.
+2. **Dedicate an Android phone**: install the companion app (Phase 1), BLE-pair
+   it to the Note Pro, keep it charged + awake (sleep disabled) + in BLE range.
+3. **Make it reachable from harqis-server over ADB** — the repo already supports
+   this: `apps/android_emulator/devices.py` → `enable_tcpip(serial)` then
+   `connect_wireless("host:5555")` (the `device_tcpip` / `device_connect` MCP
+   tools).
+
+### Phase 1 — Android companion app (the bulk of the work)
+
+A **separate Android Studio project** (Kotlin), not part of harqis-work. The iOS
+template in `plaud-sdk-public/plaud-template-app/` is the reference for the
+manager shapes; you re-implement them against the `.aar`.
+
+**1.1 Project + SDK wiring**
+- New Android project, min SDK per the AAR.
+- Copy the Android `.aar` from the SDK repo's `sdk/` into `app/libs/`:
+  ```gradle
+  implementation files('libs/plaud-sdk.aar')
+  ```
+- Manifest permissions: `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`,
+  `FOREGROUND_SERVICE`, `INTERNET`, location (BLE scan on older Android).
+
+**1.2 Mirror the three managers** (from the verified iOS source, §2):
+- `DeviceManager` → `initSDK(userAccessToken)`, `startScan()`,
+  `connectBleDevice()`, plus an **auto-reconnect watchdog**.
+- `RecordingManager` → thin pass-through to the agent's
+  `startRecord()/stopRecord()/pauseRecord()/resumeRecord()`, and subscribe to the
+  **recording-state stream** (Android equivalent of `statePublisher`).
+- `SyncManager` → `startSync()` / `exportAudio(...)` (optional — Phase 3).
+
+**1.3 Keep BLE alive** — a **foreground service** holding the connection so the
+OS doesn't kill it.
+
+**1.4 The trigger surface** (the only "API" harqis-server needs) — a
+`BroadcastReceiver`:
+
+```kotlin
+// Manifest: <receiver android:name=".RecordReceiver" android:exported="true">
+//   <intent-filter><action android:name="com.harqis.plaud.RECORD"/></intent-filter>
+class RecordReceiver : BroadcastReceiver() {
+  override fun onReceive(ctx: Context, intent: Intent) {
+    when (intent.getStringExtra("action")) {
+      "start"  -> RecordingManager.startRecord()
+      "stop"   -> RecordingManager.stopRecord()
+      "pause"  -> RecordingManager.pauseRecord()
+      "resume" -> RecordingManager.resumeRecord()
+    }
+  }
+}
+```
+
+**1.5 State reporter** (so harqis can verify a toggle took) — emit a logcat line
+on every state change:
+
+```kotlin
+Log.i("HARQIS_PLAUD", "state=recording sessionId=$id")   // or =idle / =paused
+```
+
+### Phase 2 — harqis-work workflow task (grounded in the repo)
+
+The `controller="sdk"` task from the parent spec. Home:
+`workflows/mobile/android/tasks/plaud_calendar_recorder.py` (next to the existing
+android capture task). Scaffold with `/create-new-workflow`.
+
+**2.1 Read the calendar** via `apps/google_apps/references/web/api/calendar.py`
+(`get_google_calendar_events_today`); filter events whose title/desc contains the
+tag (e.g. `#record`).
+
+**2.2 Drive the phone over ADB** using the existing wrapper
+`apps/android_emulator/devices.py` (`_adb(...)`):
+
+```python
+from apps.android_emulator import devices
+
+def _send(serial, action):
+    return devices._adb(["-s", serial, "shell", "am", "broadcast",
+                         "-a", "com.harqis.plaud.RECORD", "--es", "action", action])
+
+def _read_state(serial):
+    r = devices._adb(["-s", serial, "shell", "logcat", "-d", "-s", "HARQIS_PLAUD:I"])
+    # parse the last "state=..." line
+```
+
+**2.3 Idempotent reconcile loop** (the never-break-the-beat pattern from
+`workflows/hfl/tasks/ingest_plaud.py`):
+
+```python
+@SPROUT.task()
+@log_result()
+def plaud_calendar_recorder(*, calendar_filter="#record", serial=None,
+                            dry_run=False) -> dict:
+    serial = serial or os.environ["PLAUD_REC_ADB_SERIAL"]
+    desired = "recording" if _event_active_now(calendar_filter) else "idle"
+    actual  = _read_state(serial)                 # from logcat
+    if desired == actual:
+        return {"action": "none", "state": actual}
+    if dry_run:
+        return {"action": f"would->{desired}", "state": actual}
+    _send(serial, "start" if desired == "recording" else "stop")
+    return {"action": desired, "verified": _read_state(serial) == desired}
+```
+
+Poll mode (run every N minutes, reconcile desired-vs-actual) beats
+event-boundary scheduling — a missed beat self-heals on the next tick.
+
+**2.4 Schedule** in `workflows/mobile/.../tasks_config.py`: a
+`crontab(minute='*/5')` entry on a queue the controller-adjacent host consumes;
+start with `dry_run=True`.
+
+**2.5 Config** in `.env/apps.env`: `PLAUD_REC_ADB_SERIAL`, `PLAUD_REC_EVENT_TAG`,
+`PLAUD_REC_MAX_SESSION_MIN`, `PLAUD_REC_QUIET_HOURS`.
+
+### Phase 3 — Acquisition bonus (optional, high value)
+
+Once `SyncManager.exportAudio` writes audio to a folder on the phone, add a
+**third `PlaudBackend`** in `apps/plaud/references/adapter.py` (alongside cloud +
+folder) that pulls those files via `adb pull` — so `ingest_plaud_activity`
+ingests **straight from the device**, bypassing the unreliable
+phone→cloud→`api.plaud.ai` path. This is the part that actually fixes "recordings
+aren't reaching the server."
+
+### Phase 4 — Test & roll out (maps to parent spec phases 2→5)
+
+1. Companion app: `am broadcast … start` flips the device to recording (watch
+   logcat).
+2. harqis task in `dry_run`: confirm it resolves the right calendar events.
+3. Flip live; verify a real event auto-records and the audio lands.
+4. Guardrails (max-session auto-stop, quiet hours) + Discord/Telegram alert on a
+   failed toggle (both already integrated).
+
+### Realistic effort
+
+- **Android app** — the real work (~days), since the Android template isn't
+  published; integrate the `.aar` by hand using the iOS managers as the spec.
+- **harqis task** — ~half a day; mostly reusing `devices._adb` + the calendar API
+  + the `ingest_plaud` patterns.
+- **Blocker** — partner access lead time (start it early; ship Track A meanwhile).
