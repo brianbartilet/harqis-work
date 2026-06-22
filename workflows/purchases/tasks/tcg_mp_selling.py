@@ -39,6 +39,77 @@ from workflows.purchases.helpers.constants import image_guid_pattern
 tcg_mp_log = create_logger("tcg_mp_selling")
 
 
+# region variant identity helpers
+#
+# A single TCG MP listing consolidates EVERY EchoMTG copy that shares the same
+# sellable identity. Foil finish, language AND condition each map to a *distinct*
+# marketplace listing, so every place that groups copies — mapping inheritance,
+# the generate_tcg_listings adoption guard, and the update_tcg_listings_prices
+# quantity count — must agree on what "same card" means. Grouping only on
+# (emid, foil) over-counts mixed condition/language copies onto one listing (and
+# silently never lists the odd ones out). These helpers are the single source of
+# truth for that grouping and are unit-tested.
+
+def _norm_foil(value) -> int:
+    """Normalise EchoMTG/TCG foil flags (0/1/'0'/'1'/'foil'/'') to int 0|1.
+    Mirrors workflows.purchases.tasks.sold_inventory_radar._norm_foil."""
+    if value in (1, "1", True, "foil", "Foil", "FOIL"):
+        return 1
+    return 0
+
+
+def _acquired_dt(card: dict) -> datetime:
+    """Parse EchoMTG ``date_acquired`` for sorting. Falls back to ``datetime.min``
+    on a missing/malformed value so a bad row sorts oldest instead of raising —
+    the previous inline ``datetime.strptime`` crashed the whole mapping run on one
+    malformed date."""
+    try:
+        return datetime.strptime(card["date_acquired"], "%Y-%m-%d %H:%M:%S")
+    except (KeyError, TypeError, ValueError):
+        return datetime.min
+
+
+def _variant_key(card: dict, default_language: str = "EN", default_condition: str = "NM") -> tuple:
+    """Strict identity tuple (emid, foil, language, condition) for grouping copies
+    that come from the SAME inventory endpoint (get_collection), where fields are
+    consistently present. Defaults mirror add_listing (EN / NM); ``default_language``
+    folds in the per-run language override used by generate_tcg_listings."""
+    return (
+        str(card.get("emid")),
+        _norm_foil(card.get("foil")),
+        (card.get("language") or default_language or "EN").upper(),
+        (card.get("condition") or default_condition or "NM").upper(),
+    )
+
+
+def _same_variant(a: dict, b: dict) -> bool:
+    """Tolerant cross-endpoint variant match. ``foil`` is authoritative — both the
+    get_collection and search_card endpoints expose it. ``language``/``condition``
+    refine the match but are treated as wildcards when EITHER side omits them, so a
+    sparse search_card row can never spuriously fail to match its own get_collection
+    copy and collapse a listing's quantity to 0. Use this whenever one side is a
+    search_card result; use _variant_key for homogeneous get_collection grouping."""
+    if _norm_foil(a.get("foil")) != _norm_foil(b.get("foil")):
+        return False
+    for field in ("language", "condition"):
+        va, vb = a.get(field), b.get(field)
+        if va not in (None, "") and vb not in (None, ""):
+            if str(va).upper() != str(vb).upper():
+                return False
+    return True
+
+
+def _group_by_variant(cards: list, default_language: str = "EN") -> dict:
+    """Group homogeneous get_collection rows by _variant_key. Returns
+    {variant_key: [card, ...]} preserving input order within each group."""
+    groups: dict = {}
+    for card in cards:
+        groups.setdefault(_variant_key(card, default_language=default_language), []).append(card)
+    return groups
+
+# endregion
+
+
 @log_result()
 def task_smoke():
     """Test function to add two numbers and return the result."""
@@ -198,28 +269,35 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
 
-        # try to check if card exists in listings then update it
+        # Consolidate duplicate copies onto ONE marketplace listing: if another copy
+        # of the SAME variant (emid+foil+language+condition) already carries a
+        # listing id, inherit it so generate_tcg_listings won't create a second
+        # listing for the same card. Variant-aware (not just foil) and order-robust:
+        # we scan every sibling, most-recent first, instead of the old drop-newest
+        # heuristic that broke when the processed card was not the newest copy.
         tcg_mp_listing_id = 0
         if not force_generate:
-            existing = api_service__search.search_card(card_echo["emid"], tradable_only=1)
-            if len(existing) > 1:
-                existing_sorted = sorted(
-                    existing,
-                    key=lambda x: datetime.strptime(x["date_acquired"], "%Y-%m-%d %H:%M:%S")
-                )
-                for existing_card in existing_sorted[:-1]:
-                    if existing_card['foil'] == card_echo['foil']:
-                        try:
-                            note = api_service__echo_mtg_notes.get_note(existing_card["note_id"])
-                            json_note = json.loads(note["note"]["note"])
-                            if json_note["tcg_mp_listing_id"] > 0:
-                                tcg_mp_listing_id = json_note["tcg_mp_listing_id"]
-                                break
-                            else:
-                                continue
-                        except Exception:
-                            tcg_mp_log.warning("No existing listing found for card: {0}".format(card_name))
-                            continue
+            try:
+                existing = api_service__search.search_card(card_echo["emid"], tradable_only=1) or []
+            except Exception:
+                tcg_mp_log.warning("Could not search existing copies for: {0}".format(card_name))
+                existing = []
+            siblings = [
+                c for c in existing
+                if c.get("inventory_id") != card_echo.get("inventory_id")
+                and _same_variant(c, card_echo)
+            ]
+            siblings.sort(key=_acquired_dt, reverse=True)
+            for sibling in siblings:
+                try:
+                    note = api_service__echo_mtg_notes.get_note(sibling["note_id"])
+                    sibling_note = json.loads(note["note"]["note"])
+                except Exception:
+                    tcg_mp_log.warning("No existing listing found for card: {0}".format(card_name))
+                    continue
+                if sibling_note.get("tcg_mp_listing_id", 0) > 0:
+                    tcg_mp_listing_id = sibling_note["tcg_mp_listing_id"]
+                    break
 
 
         notes_dto = DtoNotesInformation(
@@ -264,23 +342,36 @@ _log_worker_generate_tcg_listings = create_logger("generate_tcg_listings.worker"
 
 def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 + 0.10), commission_rate = 1.05):
     """
-    Worker executed in a separate process.
+    Worker executed in a separate process. Handles ONE variant group: all EchoMTG
+    copies that share (emid, foil, language, condition) and were flagged as needing
+    a listing.
+
+    Consolidation contract (race-safe, idempotent — closes the duplicate-listing gap):
+      • Re-reads the LIVE EchoMTG copies for this variant (not just the dispatched
+        group) so quantity and existing-listing detection reflect current state.
+      • If ANY copy already maps to a listing, ADOPT that id (and true its quantity
+        up to the live copy count) instead of creating a second listing for the
+        same card.
+      • Otherwise CREATE exactly one listing at quantity = live copy count.
+      • Stamps the resolved listing id + price into EVERY copy's note, so a
+        half-mapped variant self-heals and the next run is a no-op.
+
     conversion_multiplier = currency estimated rate + tcg/ck pricing diff
     """
     card_name = ""
     try:
-        card_echo = task["card_echo"]
+        cards = task["cards"]
+        rep = cards[0]
         cfg_id__tcg_mp = task["cfg_id__tcg_mp"]
         cfg_id__echo_mtg = task["cfg_id__echo_mtg"]
         cfg_id__echo_mtg_fe = task["cfg_id__echo_mtg_fe"]
-        # Listing language — prefer the EchoMTG card's own language when present,
-        # else the per-run default (task["language"], itself defaulting to "EN").
-        language = (card_echo.get("language") or task.get("language") or "EN")
+        default_language = task.get("language") or "EN"
 
         # --- imports inside process ---
         from apps.apps_config import CONFIG_MANAGER
         from apps.echo_mtg.references.web.api.notes import ApiServiceEchoMTGNotes
         from apps.echo_mtg.references.web.api.item import ApiServiceEchoMTGCardItem
+        from apps.echo_mtg.references.web.api.inventory import ApiServiceEchoMTGInventory
         from apps.tcg_mp.references.web.api.publish import ApiServiceTcgMpPublish
 
         cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
@@ -289,64 +380,115 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
 
         api_notes = ApiServiceEchoMTGNotes(cfg__echo_mtg)
         api_cards_fe = ApiServiceEchoMTGCardItem(cfg__echo_mtg_fe)
+        api_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
         api_publish = ApiServiceTcgMpPublish(cfg__tcg_mp)
 
         time.sleep(1)
-        card_meta = api_cards_fe.get_card_meta(card_echo["emid"])
+        card_meta = api_cards_fe.get_card_meta(rep["emid"])
         try:
             card_name = card_meta["name_clean"]
-            note = api_notes.get_note(card_echo["note_id"])
-            json_note = json.loads(note["note"]["note"])
+            rep_note = json.loads(api_notes.get_note(rep["note_id"])["note"]["note"])
         except Exception:
             _log_worker_generate_tcg_listings.warning(f"Skipping {card_name}: invalid note")
-            return {"status": "skipped", "card": card_name, "card_echo_id": card_echo, "meta": card_meta}
+            return {"status": "skipped", "card": card_name}
 
-        if card_echo['foil']:
-            base_price = card_meta['foil_price']
-        else:
-            base_price = card_meta['tcg_mid']
+        product_id = rep_note.get("tcg_mp_card_id", 0)
+        if not product_id:
+            _log_worker_generate_tcg_listings.warning(f"Skipping {card_name}: no tcg_mp_card_id mapping")
+            return {"status": "skipped", "card": card_name}
+
+        language = (rep.get("language") or default_language or "EN").upper()
+        condition = (rep.get("condition") or "NM").upper()
+
+        # Live copies of this exact variant — the source of truth for quantity and
+        # for adopting an already-created listing. Fall back to the dispatched group
+        # if the live lookup fails so we never under-count to a delist.
+        try:
+            live = api_inventory.search_card(rep["emid"], tradable_only=1) or []
+        except Exception:
+            live = []
+        variant_copies = [c for c in live if _same_variant(c, rep)]
+        if not variant_copies:
+            variant_copies = cards
+        quantity = len(variant_copies)
+
+        # Price from the representative card's meta.
+        base_price = card_meta['foil_price'] if rep['foil'] else card_meta['tcg_mid']
+        if base_price is None:
+            raise Exception("No pricing found for: {0}".format(card_name))
         post_price = round(base_price * conversion_multiplier * commission_rate, 2)
 
-        if json_note["tcg_mp_listing_id"] == 0:
+        # Adopt an existing listing from ANY copy of this variant (a sibling that was
+        # already listed, or a mapping-inheritance leftover), else create one.
+        listing_id = 0
+        for c in variant_copies:
             try:
-                response = api_publish.add_listing(
-                    price=post_price,
-                    quantity=1,
-                    foil=card_echo["foil"],
-                    language=language,
-                    product_id=json_note["tcg_mp_card_id"],
-                )
-                tcg_mp_listing_id_create = response['insertId']
-                json_note["tcg_mp_listing_id"] = tcg_mp_listing_id_create
-                json_note["function"] = generate_tcg_listings.__name__
-                created = True
-                _log_worker_generate_tcg_listings.info(f"Created listing for {card_name}.")
+                n = json.loads(api_notes.get_note(c["note_id"])["note"]["note"])
             except Exception:
-                _log_worker_generate_tcg_listings.exception(f"Failed to create listing for {card_name}")
-                created = False
+                continue
+            if n.get("tcg_mp_listing_id", 0) > 0:
+                listing_id = n["tcg_mp_listing_id"]
+                break
+
+        created = False
+        if listing_id == 0:
+            response = api_publish.add_listing(
+                price=post_price,
+                quantity=quantity,
+                foil=rep["foil"],
+                language=language,
+                condition=condition,
+                product_id=product_id,
+            )
+            listing_id = response['insertId']
+            created = True
+            _log_worker_generate_tcg_listings.info(
+                f"Created listing {listing_id} for {card_name} x{quantity}.")
         else:
-            created = False
-            return {
-                "status": "existing_listing",
-                "card": card_name,
-                "created": created,
-                "card_echo_id": card_echo,
-                "meta": card_meta
-            }
+            # Existing listing for this variant (race / half-mapped) — true up its
+            # quantity instead of creating a duplicate listing for the same card.
+            # post_price already includes commission_rate here (unlike the update
+            # worker), so pass it through directly — do NOT re-apply commission.
+            _retry_edit_listing(
+                api_publish,
+                max_attempts=5,
+                price=post_price,
+                quantity=quantity,
+                foil=rep["foil"],
+                language=language,
+                condition=condition,
+                listing_id=listing_id,
+            )
+            _log_worker_generate_tcg_listings.info(
+                f"Adopted existing listing {listing_id} for {card_name} x{quantity}.")
 
-        # add tcg listing id to echo mtg card
-        time.sleep(2)
-        note_json_string = json.dumps(json_note)
-
-        tcg_mp_log.info("Create note for card: {0}".format(card_name))
-        api_notes.update_note(card_echo['note_id'], note_json_string)
+        # Stamp the resolved listing id + price into every copy's note (self-heal).
+        time.sleep(1)
+        notes_updated = 0
+        for c in variant_copies:
+            try:
+                n = json.loads(api_notes.get_note(c["note_id"])["note"]["note"])
+            except Exception:
+                continue
+            if n.get("tcg_mp_listing_id", 0) == listing_id and n.get("tcg_mp_selling_price") == post_price:
+                continue
+            n["tcg_mp_listing_id"] = listing_id
+            n["tcg_mp_selling_price"] = post_price
+            n["function"] = generate_tcg_listings.__name__
+            try:
+                api_notes.update_note(c["note_id"], json.dumps(n))
+                notes_updated += 1
+            except Exception:
+                _log_worker_generate_tcg_listings.exception(
+                    f"Failed to stamp note for {card_name} copy {c.get('inventory_id')}")
 
         return {
             "status": "ok",
             "card": card_name,
             "created": created,
-            "card_echo_id": card_echo,
-            "meta": card_meta
+            "listing_id": listing_id,
+            "quantity": quantity,
+            "notes_updated": notes_updated,
         }
 
     except Exception as e:
@@ -419,21 +561,32 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
     cards_echo.reverse()
 
     cards_to_list = _filter_cards_needing_listing(cards_echo, cfg_id__echo_mtg, worker_count or min(4, psutil.cpu_count()))
-    tcg_mp_log.info(f"{len(cards_to_list)} of {len(cards_echo)} cards need a new listing.")
     if not cards_to_list:
+        tcg_mp_log.info(f"0 of {len(cards_echo)} cards need a new listing.")
         return "SUCCESS"
+
+    # Group the copies needing a listing by variant and dispatch ONE task per
+    # variant — never per copy. This guarantees two unlisted copies of the same card
+    # become one quantity-2 listing instead of racing two workers into two separate
+    # quantity-1 listings (the duplicate-listing bug). The worker reconciles quantity
+    # from the live copy count, so the group only needs a single representative.
+    variant_groups = _group_by_variant(cards_to_list, default_language=language)
+    tcg_mp_log.info(
+        f"{len(cards_to_list)} of {len(cards_echo)} copies need a listing "
+        f"across {len(variant_groups)} distinct variant(s)."
+    )
 
     # api_service__tcg_mp_merchant.set_listing_status(0)
 
     tasks_generate = [
         {
-            "card_echo": card,
+            "cards": group,
             "cfg_id__tcg_mp": cfg_id__tcg_mp,
             "cfg_id__echo_mtg": cfg_id__echo_mtg,
             "cfg_id__echo_mtg_fe": cfg_id__echo_mtg_fe,
             "language": language,
         }
-        for card in cards_to_list
+        for group in variant_groups.values()
     ]
 
     mp_client = MultiProcessingClient(
@@ -567,60 +720,94 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 
         else:
             post_price = round(decision.price * conversion_multiplier, 2)
 
-        json_note["tcg_mp_selling_price"] = post_price
-        # check if original listing still exists if not create another, example scenario would be
-        # 1. previous listing was 1
-        # 2. it was sold and the echo mtg inventory was not updated
-        # 3. copy of the same card is added to the inventory
-        # 4. will still be mapped to the old listing, instead to a new one
+        # The variant's marketplace attributes — passed to edit_listing so a JP/LP
+        # listing is NOT silently flipped back to EN/NM on every price refresh (the
+        # edit endpoint defaults those when omitted; the old code omitted them).
+        language = (card_echo.get("language") or "EN").upper()
+        condition = (card_echo.get("condition") or "NM").upper()
+        listing_id = json_note["tcg_mp_listing_id"]
 
-        # Update price for the existing TCG MP listing.
-        # Quantity reflects only matching foil/non-foil copies so duplicate inventory entries
-        # are consolidated into one listing rather than creating separate listings per copy.
+        # Quantity = live count of EchoMTG copies of the SAME variant, so duplicate
+        # inventory entries consolidate into one listing rather than one listing per
+        # copy. This is the single place quantity is reconciled UP; the sold-inventory
+        # radar reconciles it DOWN — both off the same copy count — which is why the
+        # radar MUST run first (see reconcile_then_update_tcg_listings).
         #
-        # edit_listing returns '' when the listing no longer exists on TCG MP (e.g. sold or
-        # removed externally). In that case reset tcg_mp_listing_id to 0 so that
-        # generate_tcg_listings (scheduled at hour=1, after generate_tcg_mappings at hour=0)
-        # treats this card as new and recreates the listing on the marketplace.
-
+        # edit_listing returns '' when the listing no longer exists on TCG MP (sold or
+        # removed externally). Then reset tcg_mp_listing_id to 0 so generate_tcg_listings
+        # treats the card as new and recreates the listing.
+        quantity = 0
         try:
             time.sleep(2)
-            existing = api_service__search.search_card(card_echo["emid"], tradable_only=1)
-            matching = [c for c in existing if c["foil"] == card_echo["foil"]]
+            existing = api_service__search.search_card(card_echo["emid"], tradable_only=1) or []
+            matching = [c for c in existing if _same_variant(c, card_echo)]
             quantity = len(matching)
 
-            edit_result = _retry_edit_listing(
-                api_publish,
-                max_attempts=10,
-                base_delay=1.0,
-                max_delay=20.0,
-                price=post_price * commission_rate,
-                quantity=quantity,
-                foil=card_echo["foil"],
-                listing_id=json_note["tcg_mp_listing_id"],
-            )
-
-            if not edit_result:
-                # Listing gone from TCG MP; reset so generate_tcg_listings can recreate it.
+            if quantity < 1:
+                # Defensive: never push quantity 0 (that delists). An empty/failed
+                # search must not silently remove a live listing — leave it untouched.
                 _log_worker_generate_tcg_listings.warning(
-                    f"Listing {json_note['tcg_mp_listing_id']} not found for {card_name}; resetting to allow recreation."
+                    f"{card_name}: no matching copies returned; leaving listing {listing_id} untouched."
                 )
-                json_note["tcg_mp_listing_id"] = 0
                 updated = False
             else:
-                updated = True
+                edit_result = _retry_edit_listing(
+                    api_publish,
+                    max_attempts=10,
+                    base_delay=1.0,
+                    max_delay=20.0,
+                    price=round(post_price * commission_rate, 2),
+                    quantity=quantity,
+                    foil=card_echo["foil"],
+                    language=language,
+                    condition=condition,
+                    listing_id=listing_id,
+                )
+
+                if not edit_result:
+                    _log_worker_generate_tcg_listings.warning(
+                        f"Listing {listing_id} not found for {card_name}; resetting to allow recreation."
+                    )
+                    listing_id = 0
+                    updated = False
+                else:
+                    updated = True
         except Exception:
             _log_worker_generate_tcg_listings.exception(f"Failed to update listing for {card_name}")
             updated = False
+            matching = [card_echo]
 
+        # Stamp the (possibly reset) listing id + new price into EVERY copy's note of
+        # this variant — so all copies stay consistent and a vanished listing is reset
+        # across the whole variant, not just the representative.
+        json_note["tcg_mp_listing_id"] = listing_id
+        json_note["tcg_mp_selling_price"] = post_price
         time.sleep(2)
-        note_json_string = json.dumps(json_note)
-        api_notes.update_note(card_echo['note_id'], note_json_string)
+        siblings = matching if matching else [card_echo]
+        notes_updated = 0
+        for c in siblings:
+            note_id = c.get("note_id", card_echo["note_id"])
+            try:
+                if c is card_echo:
+                    payload = json_note
+                else:
+                    payload = json.loads(api_notes.get_note(note_id)["note"]["note"])
+                    payload["tcg_mp_listing_id"] = listing_id
+                    payload["tcg_mp_selling_price"] = post_price
+                    payload["function"] = update_tcg_listings_prices.__name__
+                api_notes.update_note(note_id, json.dumps(payload))
+                notes_updated += 1
+            except Exception:
+                _log_worker_generate_tcg_listings.exception(
+                    f"Failed to stamp note for {card_name} copy {c.get('inventory_id')}")
 
         return {
             "status": "ok",
             "card": card_name,
             "updated": updated,
+            "listing_id": listing_id,
+            "quantity": quantity,
+            "notes_updated": notes_updated,
         }
 
     except Exception as e:
@@ -649,6 +836,17 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
 
     cards_echo = cards_echo if limit is None else cards_echo[:limit]
 
+    # Dedup to ONE task per variant. With N copies of a card the old code dispatched
+    # N tasks that each recomputed the price and edited the SAME listing to the same
+    # quantity — redundant API calls and N parallel writes racing on one listing. The
+    # worker counts copies and stamps every sibling note, so one representative (the
+    # most-recently-acquired copy) per variant fully reconciles the listing.
+    variant_groups = _group_by_variant(cards_echo)
+    representatives = [max(group, key=_acquired_dt) for group in variant_groups.values()]
+    tcg_mp_log.info(
+        f"{len(representatives)} variant listing(s) to update from {len(cards_echo)} tradable copies."
+    )
+
     tasks_update = [
         {
             "card_echo": card,
@@ -656,7 +854,7 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
             "cfg_id__echo_mtg": cfg_id__echo_mtg,
             "cfg_id__echo_mtg_fe": cfg_id__echo_mtg_fe,
         }
-        for card in cards_echo
+        for card in representatives
     ]
 
     mp_client = MultiProcessingClient(
@@ -673,6 +871,50 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
         log=tcg_mp_log,
     )
 
+    return "SUCCESS"
+
+# endregion
+
+
+# region task: reconcile_then_update_tcg_listings (hard-ordered radar -> update)
+
+@log_result()
+@feed()
+@SPROUT.task()
+def reconcile_then_update_tcg_listings(**kwargs):
+    """Hard-ordered sold-inventory reconcile -> price/quantity update.
+
+    Replaces the previous wall-clock gap (radar 02:00, update 04:00) with an
+    in-process chain so update_tcg_listings_prices can NEVER recompute listing
+    quantities before radar_sold_inventory has reconciled sold-but-not-removed
+    copies — the over-listing failure mode. radar runs to completion first; only
+    then does update run. If radar raises, update is SKIPPED (fail-safe: better to
+    leave quantities stale than to re-inflate sold cards).
+
+    kwargs:
+      radar_kwargs:  dict forwarded to radar_sold_inventory (defaults to the
+                     scheduled high-confidence destructive config).
+      update_kwargs: dict forwarded to update_tcg_listings_prices.
+    Any ``cfg_id__*`` at the top level is merged into BOTH for convenience.
+    """
+    # Lazy import to avoid import-time coupling between the two task modules.
+    from workflows.purchases.tasks.sold_inventory_radar import radar_sold_inventory
+
+    cfg_passthrough = {k: v for k, v in kwargs.items() if k.startswith("cfg_id__")}
+    radar_kwargs = {**cfg_passthrough, **(kwargs.get("radar_kwargs") or {})}
+    update_kwargs = {**cfg_passthrough, **(kwargs.get("update_kwargs") or {})}
+
+    tcg_mp_log.info("reconcile_then_update: running sold-inventory radar first.")
+    try:
+        radar_sold_inventory(**radar_kwargs)
+    except Exception:
+        tcg_mp_log.exception(
+            "reconcile_then_update: radar FAILED; skipping price update to avoid over-listing."
+        )
+        return "RADAR_FAILED_UPDATE_SKIPPED"
+
+    tcg_mp_log.info("reconcile_then_update: radar complete; running price/quantity update.")
+    update_tcg_listings_prices(**update_kwargs)
     return "SUCCESS"
 
 # endregion

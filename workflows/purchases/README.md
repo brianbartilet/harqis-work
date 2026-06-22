@@ -12,26 +12,29 @@ Tasks run on the `tcg` queue.
 
 ## Scheduled Tasks
 
-Daily pipeline, in order: **mappings → listings**; the rest hang off it.
+Daily pipeline, in order: **mappings → listings**; the Mon/Thu reconcile→update chain and the rest hang off it.
 
 | Task | Schedule (`tasks_config.py`) | Description |
 |------|----------|-------------|
 | `generate_tcg_mappings` | Daily 00:00 | Map EchoMTG cards → TCG product + Scryfall; write the per-card note |
-| `generate_tcg_listings` | Daily 01:00 | Create TCG listings for mapped cards (`language` kwarg, default `EN`) |
-| `radar_sold_inventory` | Monthly, 1st 03:00 | **Destructive (high-confidence tier only)** sold-inventory cleanup + full CSV review list |
-| `update_tcg_listings_prices` | Weekly, Mon 04:00 | Recalculate prices; set listing quantity = EchoMTG copy count; reset vanished listings |
+| `generate_tcg_listings` | Daily 01:00 | Create TCG listings for mapped cards, **one per variant** (`emid+foil+language+condition`); consolidates duplicate copies into a single quantity-N listing (`language` kwarg, default `EN`) |
+| `reconcile_then_update_tcg_listings` | Mon/Thu 02:00 | **Hard-chained** `radar_sold_inventory` → `update_tcg_listings_prices` in one process; radar reconciles sold inventory **first**, then prices/quantities recompute. Skips the update if radar fails |
 | `download_scryfall_bulk_data` | Monthly, 1st 22:00 | Download full Scryfall card DB (moved off 00:00 to avoid the mappings read race) |
 | `generate_audit_for_tcg_orders` | Every 4 hours | Audit TCG orders across all tracked states (incl. **Cancelled / Not Received**) → ES `tcg-mp-audit-current` + `tcg-mp-status-audit` |
 
+`radar_sold_inventory` and `update_tcg_listings_prices` are **no longer scheduled standalone** — they run as the two ordered steps of `reconcile_then_update_tcg_listings`. Both remain directly callable for manual/CSV-review use (e.g. via `/radar-sold-inventory`).
+
 **How they work together / sequencing notes:**
 - `mappings` (00:00) must precede `listings` (01:00) — listings consume the notes mappings writes.
-- On the 1st: `radar` (03:00) cleans sold inventory **before** the weekly `update_tcg_listings_prices`
-  (Mon 04:00) recomputes quantities, so quantities don't overcount sold-but-unremoved copies (#1).
-- `radar` is monthly + **high-confidence-only auto-apply** (`min_confidence='high'`,
+- `reconcile_then_update_tcg_listings` (Mon/Thu 02:00) runs `radar` to completion **before**
+  `update_tcg_listings_prices` recomputes quantities, so quantities never overcount
+  sold-but-unremoved copies (#1). The hard chain replaces the old wall-clock gap (radar 02:00 /
+  update 04:00); if radar fails, the update is skipped rather than re-inflating stale counts.
+- `radar` runs **high-confidence-only auto-apply** (`min_confidence='high'`,
   `orphan_mode='corroborated'`): it auto-actions only the strong `listing_gone` + sold-order
   signal; medium "still listed" matches and low orphans go to the CSV (`results/`) for
-  manual approve-and-apply via `/radar-sold-inventory`. Flip `dry_run=True` for report-only.
-- Residual loop risk (#2): between monthly radar runs the daily `listings` can transiently
+  manual approve-and-apply via `/radar-sold-inventory`. Flip `radar_kwargs.dry_run=True` for report-only.
+- Residual loop risk (#2): between Mon/Thu chain runs the daily `listings` can transiently
   re-list a freshly sold-but-unremoved card until the next radar/audit — run radar (or the
   approved-CSV apply) more often for tighter control.
 - `download_scryfall_bulk_data` moved 00:00 → 22:00 on the 1st so it no longer writes the
@@ -41,7 +44,7 @@ Daily pipeline, in order: **mappings → listings**; the rest hang off it.
 
 | File | Tasks / Functions |
 |------|-------------------|
-| `tasks/tcg_mp_selling.py` | `generate_tcg_mappings`, `generate_tcg_listings`, `update_tcg_listings_prices`, `download_scryfall_bulk_data`, `generate_audit_for_tcg_orders` |
+| `tasks/tcg_mp_selling.py` | `generate_tcg_mappings`, `generate_tcg_listings`, `update_tcg_listings_prices`, `reconcile_then_update_tcg_listings` (chains radar → update), `download_scryfall_bulk_data`, `generate_audit_for_tcg_orders` |
 | `tasks/sold_inventory_radar.py` | `radar_sold_inventory` (scan/clean) + `apply_radar_approvals` (approve-and-apply from CSV) |
 
 ## Sold-inventory radar (`radar_sold_inventory`)
@@ -117,22 +120,28 @@ apply_radar_approvals('sold_inventory_radar-<ts>.csv')                 # 3b. act
 
 Found while building the radar; walked through and resolved/triaged:
 
-1. **Quantity overcount → unfulfillable listings** — *mitigated by data hygiene.*
+1. **Quantity overcount → unfulfillable listings** — ✅ **hardened (code + data hygiene).**
    `update_tcg_listings_prices` sets a listing's `quantity` to the count of matching
    EchoMTG copies, which is **correct** *if inventory is accurate*. The bug was stale
-   inventory (sold copies never removed). `radar_sold_inventory` keeps inventory clean
-   (remove sold copies; the radar's own apply also reconciles listing quantity to the
-   remaining copies). Run radar before/with update-prices — see the schedule. No code
-   change to the quantity logic (it was right); the fix is keeping inventory true.
-2. **Sold → auto-relist loop** — *mitigated by radar + sequencing.* When `edit_listing`
-   returns `''` (listing gone) the worker resets `tcg_mp_listing_id = 0` and
-   `generate_tcg_listings` recreates it. That's **correct** when the listing was merely
-   removed and you still own the card; it's **wrong** only when the card was sold and
-   not removed. The radar's `listing_gone` detection finds exactly that and removes the
-   orphan, so it won't be re-listed. Residual: between monthly radar runs, a freshly
-   sold-but-unremoved card can be transiently re-listed by the daily `generate_tcg_listings`
-   until the next radar/audit — run radar (or approve-and-apply) more often for tighter
-   control. The selling logic was intentionally left unchanged.
+   inventory (sold copies never removed). Now: (a) `reconcile_then_update_tcg_listings`
+   runs `radar_sold_inventory` to completion **before** the quantity recompute, as a hard
+   chain rather than a wall-clock gap; (b) the update worker **guards against quantity 0**
+   (an empty/failed inventory search leaves the listing untouched instead of delisting);
+   and (c) copy-counting now keys on the full variant (`emid+foil+language+condition`,
+   tolerant across endpoints) so mixed condition/language copies don't over-count onto one
+   listing. The radar's own apply still reconciles listing quantity to remaining copies.
+2. **Sold → auto-relist loop** — ✅ **hardened (chain + variant consolidation).** When
+   `edit_listing` returns `''` (listing gone) the worker resets `tcg_mp_listing_id = 0`
+   (now across **all** copies of the variant) and `generate_tcg_listings` recreates it —
+   **correct** when the listing was merely removed and you still own the card; **wrong**
+   only when the card was sold and not removed. The radar's `listing_gone` detection finds
+   exactly that and removes the orphan **before** recreation can run (same chain). Separately,
+   `generate_tcg_listings` now creates **one listing per variant** at the live copy count and
+   adopts an existing sibling listing instead of racing duplicates, so two unlisted copies of
+   the same card become a single quantity-2 listing. Residual: between Mon/Thu chain runs, a
+   freshly sold-but-unremoved card can be transiently re-listed by the daily
+   `generate_tcg_listings` until the next radar/audit — run radar (or approve-and-apply) more
+   often for tighter control.
 3. **Audit didn't track Cancelled/Not Received** — ✅ **fixed.**
    `generate_audit_for_tcg_orders` now polls those two states (date-bounded).
 4. **Misleading note-exists log + fragile shape** — ✅ **fixed.** `generate_tcg_mappings`
@@ -187,11 +196,13 @@ generate_tcg_listings()
 # Creates new listings on TCG Marketplace
 ```
 
-### 3. Update Prices (daily)
+### 3. Reconcile + Update Prices (Mon/Thu 02:00)
 ```python
-# Runs at 2am and noon daily
+# Scheduled as the hard chain reconcile_then_update_tcg_listings:
+#   radar_sold_inventory(...)  →  update_tcg_listings_prices(...)
 update_tcg_listings_prices()
 # Recalculates pricing using _update_pricing_calc()
+# Sets each listing's quantity = live EchoMTG variant copy count (one task per variant)
 # Uses worker pool for parallel price edits
 ```
 
@@ -227,6 +238,6 @@ See [`docs/MANIFESTO.md`](../../docs/MANIFESTO.md) and [`docs/thesis/MANIFESTO-R
 | --- | --- | --- | --- | --- | --- |
 | `generate_tcg_mappings` | organize | area | `file:tcg_mappings` | `es_log+file` | `False` |
 | `generate_tcg_listings` | express | area | `api:tcg_mp` | `es_log+file` | `False` |
-| `update_tcg_listings_prices` | express | area | `api:tcg_mp` | `es_log` | `False` |
+| `reconcile_then_update_tcg_listings` | express | area | `api:tcg_mp` | `es_log+file` | `False` |
 | `download_scryfall_bulk_data` | capture | area | `file:scryfall_bulk` | `es_log+file` | `False` |
 | `generate_audit_for_tcg_orders` | distill | area | `es_log` | `es_log` | `False` |

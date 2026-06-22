@@ -81,23 +81,32 @@ WORKFLOW_PURCHASES = {
             'hfl_signal': False,
         },
     },
-    # ENABLED — price refresh, Mon+Thu 04:00, AFTER the daily mappings (00:00) and
-    # listings (01:00), and AFTER radar_sold_inventory (same days, 02:00) so the
-    # radar has reconciled sold inventory before quantities are recomputed. It SETS
-    # each listing's quantity to the EchoMTG matching-copy count (it does not read the
-    # live listing qty) and resets vanished listings to 0 for recreation — so radar
-    # MUST run first: a copy sold-but-not-yet-removed from EchoMTG would otherwise
-    # re-inflate the listing back to the stale count (over-listing sold cards; see
-    # README "Known issues" #1/#2). NOTE: the 2h gap is wall-clock, not a hard
-    # dependency — if radar overruns, update can start early; a Celery chain
-    # (radar | update) would make the ordering guaranteed.
-    'run-job--update_tcg_listings_prices': {
-        'task': 'workflows.purchases.tasks.tcg_mp_selling.update_tcg_listings_prices',
-        'schedule': crontab(day_of_week="mon,thu", hour='4', minute=0),
+    # ENABLED — hard-chained sold-inventory reconcile -> price/quantity update,
+    # Mon+Thu 02:00, AFTER the daily mappings (00:00) and listings (01:00). This
+    # single task runs radar_sold_inventory to completion FIRST, then
+    # update_tcg_listings_prices in the same process — replacing the old wall-clock
+    # gap (radar 02:00 / update 04:00) with a guaranteed ordering. Ordering matters
+    # because update SETS each listing's quantity to the EchoMTG matching-copy count
+    # (it does not read the live listing qty): a copy sold-but-not-yet-removed from
+    # EchoMTG would otherwise re-inflate the listing to the stale count (over-listing
+    # sold cards; README "Known issues" #1/#2). If radar fails, update is SKIPPED.
+    # radar's destructive config lives under radar_kwargs (high-confidence only —
+    # everything else goes to the review CSV for /radar-sold-inventory).
+    'run-job--reconcile_then_update_tcg_listings': {
+        'task': 'workflows.purchases.tasks.tcg_mp_selling.reconcile_then_update_tcg_listings',
+        'schedule': crontab(day_of_week="mon,thu", hour='2', minute=0),
         'kwargs': {
             "cfg_id__tcg_mp": "TCG_MP",
             "cfg_id__echo_mtg": "ECHO_MTG",
-            "cfg_id__echo_mtg_fe": "ECHO_MTG_FE"
+            "cfg_id__echo_mtg_fe": "ECHO_MTG_FE",
+            "radar_kwargs": {
+                "dry_run": False,
+                "min_confidence": "high",     # auto-act on high-confidence only
+                "orphan_mode": "corroborated",
+                "last_x_days": 60,
+                "source": "hybrid",
+            },
+            "update_kwargs": {},
         },
         "options": {
             "queue": WorkflowQueue.TCG,
@@ -107,7 +116,7 @@ WORKFLOW_PURCHASES = {
             'code_role': 'express',
             'para_bucket': 'area',
             'express_target': 'api:tcg_mp',
-            'review_artifact': 'es_log',
+            'review_artifact': 'es_log+file',
             'hfl_signal': False,
         },
     },
@@ -157,48 +166,10 @@ WORKFLOW_PURCHASES = {
         },
     },
 
-    # ENABLED — sold-inventory radar, Mon+Thu 02:00 — aligned to (and one step ahead
-    # of) update_tcg_listings_prices (same days, 04:00) so EchoMTG inventory is
-    # reconciled BEFORE update pushes EchoMTG copy counts onto listing quantities.
-    # Runs after the daily mappings (00:00) / listings (01:00). Was monthly (1st
-    # 03:00), which only preceded update when the 1st fell on a Mon/Thu — most update
-    # runs then fired against un-reconciled inventory (the over-listing bug).
-    # DESTRUCTIVE but SAFE-BY-TIER: dry_run=False so it acts, but min_confidence='high'
-    # means it only auto-marks-sold/removes/reconciles the strongest signal —
-    # listing_gone + a corroborating sold order (the mapped listing vanished AND the
-    # product sold). Everything else (medium "still listed" matches, low orphans) is
-    # written to the CSV (results/) + ES for manual approve-and-apply via
-    # /radar-sold-inventory, not auto-actioned. It ALWAYS writes the review CSV.
-    # NOTE: this is unattended destructive cleanup of the high-tier; flip dry_run=True
-    # to make the scheduled run report-only.
-    'run-job--radar_sold_inventory': {
-        'task': 'workflows.purchases.tasks.sold_inventory_radar.radar_sold_inventory',
-        'schedule': crontab(day_of_week="mon,thu", hour='2', minute=0),
-        'kwargs': {
-            'cfg_id__tcg_mp': 'TCG_MP',
-            'cfg_id__echo_mtg': 'ECHO_MTG',
-            'cfg_id__echo_mtg_fe': 'ECHO_MTG_FE',
-            'dry_run': False,
-            'min_confidence': 'high',     # auto-act on high-confidence only
-            'orphan_mode': 'corroborated',
-            'last_x_days': 60,
-            'source': 'hybrid',
-        },
-        'options': {
-            'queue': WorkflowQueue.TCG,
-            'expires': 60 * 60 * 8,
-        },
-        'manifesto': {
-            'code_role': 'distill',
-            'para_bucket': 'area',
-            'express_target': 'es_log+file',
-            'review_artifact': 'es_log+file',
-            'hfl_signal': False,
-        },
-    },
-
-
-
+    # NOTE: radar_sold_inventory is no longer scheduled standalone — it now runs as
+    # the FIRST step of run-job--reconcile_then_update_tcg_listings (Mon+Thu 02:00),
+    # guaranteeing it reconciles inventory before the price/quantity update. Run it
+    # ad hoc via the /radar-sold-inventory skill for the review-CSV workflow.
 
 
 }

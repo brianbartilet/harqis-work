@@ -117,8 +117,8 @@ Registered by `register_tcg_mp_tools` in `apps/tcg_mp/mcp.py`:
 This app is consumed by the `purchases` workflow for the full card resale pipeline:
 
 1. `download_scryfall_bulk_data` — Download Scryfall card database (monthly)
-2. `generate_tcg_listings` — Create new listings from inventory
-3. `update_tcg_listings_prices` — Update listing prices (2am and noon daily)
+2. `generate_tcg_listings` — Create new listings from inventory (one per variant)
+3. `reconcile_then_update_tcg_listings` — Hard-chained sold-inventory reconcile → price/quantity update (Mon/Thu 02:00)
 4. `generate_audit_for_tcg_orders` — Audit pending orders (every 4 hours)
 
 ## Notes
