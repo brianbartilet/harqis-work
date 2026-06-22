@@ -149,6 +149,13 @@ and on the right screen; no formal API contract.
 
 ## 7. Track B — Official Embedded SDK (durable)
 
+> **Detailed design:** see the companion spec
+> [PLAUD-SDK-COMPANION-APP-SPEC.md](PLAUD-SDK-COMPANION-APP-SPEC.md) — component
+> map, verified API surface, app design, and how it also closes the device→cloud
+> sync gap. Recording control (`startRecord()`/`stopRecord()`) is **verified
+> present** in the SDK (`RecordingManager.swift` passes through to
+> `PlaudDeviceAgent.shared`).
+
 Build a minimal companion app on PLAUD's Embedded SDK
 (`github.com/Plaud-AI/plaud-sdk`, Android `.aar`):
 
