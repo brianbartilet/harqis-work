@@ -43,6 +43,7 @@ A single SSH connection ⇒ a single password prompt for all items. Files are ov
    - Pass `--dry-run` / `-n` through.
 3. **Run the script.** It prompts for the SSH password (`auth = "password"` in the toml is informational — `ssh` itself does the prompting). Don't try to feed the password in; let the user type it.
 4. **Report** what was pushed (resolved machine key, item list, remote `user@host:path`) and whether the script exited 0.
+5. **On success, touch the sync marker.** If the script exited 0 (and this was not a `--dry-run`/`--list`), write the current epoch-seconds to `.git/sync-host.last`. The `/commit` skill reads this marker (Step 9) to decide whether `[sync] items` changed since the last sync — keeping it current here means a standalone `/sync-host` clears the "pending config" flag so the next `/commit` doesn't re-offer an already-pushed change.
 
 ## Adding a new target
 
