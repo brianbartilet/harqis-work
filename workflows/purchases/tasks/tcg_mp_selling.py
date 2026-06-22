@@ -706,6 +706,10 @@ def generate_audit_for_tcg_orders(last_x_days=15, **kwargs) -> None:
                                   date_range_from=date_range_from.isoformat(),
                                   date_range_to=date_range_to.isoformat())
     orders_5 = service.get_orders(by_status=EnumTcgOrderStatus.PICKED_UP)
+    # In-transit-to-buyer state — also a "left my hands" status the sold-inventory
+    # radar treats as sold. Transient + low-volume like ARRIVED_BRANCH/DROPPED, so
+    # left unbounded.
+    orders_8 = service.get_orders(by_status=EnumTcgOrderStatus.SHIPPED)
     # Terminal "left my hands" states the sold-inventory radar relies on. These
     # were previously not audited, so cancelled/not-received orders never landed
     # in tcg-mp-audit-current — date-bounded like COMPLETED to keep the poll cheap.
@@ -718,7 +722,7 @@ def generate_audit_for_tcg_orders(last_x_days=15, **kwargs) -> None:
 
     orders = [
         order
-        for page in [orders_1, orders_2, orders_3, orders_4, orders_5, orders_6, orders_7]
+        for page in [orders_1, orders_2, orders_3, orders_4, orders_5, orders_6, orders_7, orders_8]
         if page
         for order in (page[0].data or [])
     ]

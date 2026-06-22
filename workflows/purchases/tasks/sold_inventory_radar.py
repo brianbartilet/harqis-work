@@ -16,8 +16,11 @@ Background — the failure mode this guards against (documented in
      the listing — re-listing a card you no longer physically hold.
   => A buyer can order a card you can't ship.
 
-This task cross-references terminal/sold TCG orders (Completed, Picked Up,
-Cancelled, Not Received) against the current EchoMTG tradable inventory and the
+This task cross-references sold/in-flight TCG orders — every status from drop-off
+onward (Dropped Off, Arrived Branch, Shipped, Picked Up, Completed) plus the
+terminal Cancelled / Not Received, i.e. anything that means the card has left your
+hands; Pending Drop Off / Pending Payment are excluded as still-in-inventory —
+against the current EchoMTG tradable inventory and the
 current active TCG listings, using the per-item EchoMTG note (written by
 ``generate_tcg_mappings``) as the join key:
 
@@ -105,11 +108,22 @@ CSV_FIELDS = [
 # Values in the `approved` column that mean "yes, perform the action on this row".
 _APPROVED_TRUE = {"yes", "y", "true", "1", "x", "approved"}
 
-# Order statuses treated as evidence the physical card left your hands. The
-# operator reviews all of these manually today (completed + cancelled etc.).
+# Order statuses treated as evidence the physical card left your hands. Drives BOTH
+# the live order poll and the ES-audit filter (see status_labels in the task body).
+#
+# TCG MP lifecycle (apps/tcg_mp/references/dto/order.py): the card is still in your
+# inventory only while the order is Pending Drop Off (1) or Pending Payment (11) —
+# you haven't handed it over yet. Every state from Dropped Off (6) onward means the
+# copy has physically left you: Dropped Off → Arrived Branch (7) → Shipped /
+# "In Transit" (2) → Picked Up (8) / Completed (3). Cancelled (4) / Not Received (5)
+# are terminal "gone" states too. So all of the below count as sold-and-gone;
+# PENDING_DROP_OFF and PENDING_PAYMENT are deliberately excluded (still yours).
 DEFAULT_SOLD_STATUSES = (
-    EnumTcgOrderStatus.COMPLETED,
+    EnumTcgOrderStatus.DROPPED,          # dropped at branch — no longer in hand
+    EnumTcgOrderStatus.ARRIVED_BRANCH,   # at the branch — no longer in hand
+    EnumTcgOrderStatus.SHIPPED,          # in transit to buyer — gone
     EnumTcgOrderStatus.PICKED_UP,
+    EnumTcgOrderStatus.COMPLETED,
     EnumTcgOrderStatus.CANCELLED,
     EnumTcgOrderStatus.NOT_RECEIVED,
 )

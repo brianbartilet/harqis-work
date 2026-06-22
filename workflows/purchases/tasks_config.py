@@ -81,13 +81,16 @@ WORKFLOW_PURCHASES = {
             'hfl_signal': False,
         },
     },
-    # ENABLED — weekly price refresh. Runs Mon 04:00, AFTER the daily mappings
-    # (00:00) and listings (01:00), and AFTER the monthly radar (1st 03:00) so the
-    # radar has cleaned sold inventory before quantities are recomputed. It sets
-    # each listing's quantity to the EchoMTG copy count and resets vanished listings
-    # to 0 for recreation — pair with radar_sold_inventory so sold-but-unremoved
-    # copies are cleared first (otherwise quantities overcount / sold cards re-list;
-    # see README "Known issues" #1/#2).
+    # ENABLED — price refresh, Mon+Thu 04:00, AFTER the daily mappings (00:00) and
+    # listings (01:00), and AFTER radar_sold_inventory (same days, 02:00) so the
+    # radar has reconciled sold inventory before quantities are recomputed. It SETS
+    # each listing's quantity to the EchoMTG matching-copy count (it does not read the
+    # live listing qty) and resets vanished listings to 0 for recreation — so radar
+    # MUST run first: a copy sold-but-not-yet-removed from EchoMTG would otherwise
+    # re-inflate the listing back to the stale count (over-listing sold cards; see
+    # README "Known issues" #1/#2). NOTE: the 2h gap is wall-clock, not a hard
+    # dependency — if radar overruns, update can start early; a Celery chain
+    # (radar | update) would make the ordering guaranteed.
     'run-job--update_tcg_listings_prices': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.update_tcg_listings_prices',
         'schedule': crontab(day_of_week="mon,thu", hour='4', minute=0),
@@ -154,8 +157,12 @@ WORKFLOW_PURCHASES = {
         },
     },
 
-    # ENABLED — sold-inventory radar, monthly (matches the manual cadence), 1st 03:00
-    # (after mappings 00:00 / listings 01:00, before update_tcg_listings_prices Mon 04:00).
+    # ENABLED — sold-inventory radar, Mon+Thu 02:00 — aligned to (and one step ahead
+    # of) update_tcg_listings_prices (same days, 04:00) so EchoMTG inventory is
+    # reconciled BEFORE update pushes EchoMTG copy counts onto listing quantities.
+    # Runs after the daily mappings (00:00) / listings (01:00). Was monthly (1st
+    # 03:00), which only preceded update when the 1st fell on a Mon/Thu — most update
+    # runs then fired against un-reconciled inventory (the over-listing bug).
     # DESTRUCTIVE but SAFE-BY-TIER: dry_run=False so it acts, but min_confidence='high'
     # means it only auto-marks-sold/removes/reconciles the strongest signal —
     # listing_gone + a corroborating sold order (the mapped listing vanished AND the
@@ -166,7 +173,7 @@ WORKFLOW_PURCHASES = {
     # to make the scheduled run report-only.
     'run-job--radar_sold_inventory': {
         'task': 'workflows.purchases.tasks.sold_inventory_radar.radar_sold_inventory',
-        'schedule': crontab(day_of_month='1', hour='3', minute=0),
+        'schedule': crontab(day_of_week="mon,thu", hour='2', minute=0),
         'kwargs': {
             'cfg_id__tcg_mp': 'TCG_MP',
             'cfg_id__echo_mtg': 'ECHO_MTG',
