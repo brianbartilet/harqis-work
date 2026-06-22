@@ -18,7 +18,7 @@ Exit codes (CI / automation friendly):
        PLAUD_EXPORT_DIR configured)
 
 Auth: set PLAUD_EMAIL + PLAUD_PASSWORD in .env/apps.env (preferred — the
-      adapter mints and auto-refreshes its own ~300-day token; this script
+      adapter mints and auto-refreshes its own token (~30-day TTL on APSE1); this script
       exercises that mint path and prints the expiry). Alternatively set a
       manual PLAUD_TOKEN (web.plaud.ai → DevTools → Console →
       `localStorage.getItem("tokenstr")`), which expires periodically. For

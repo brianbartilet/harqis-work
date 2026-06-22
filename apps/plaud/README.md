@@ -79,10 +79,11 @@ PLAUD_EXPORT_DIR=     # local folder you export Plaud recordings into (fallback)
 Any one is sufficient. Auth precedence inside the cloud backend:
 
 1. **Credentials** (`PLAUD_EMAIL` + `PLAUD_PASSWORD`) — the backend mints its
-   own ~300-day JWT via `POST /auth/access-token` (the web app's login call),
-   caches it in the git-ignored `logs/plaud_token.json`, re-mints within 30
-   days of expiry, and transparently re-mints + retries once when the API
-   answers `-419 token expired`. Set-and-forget.
+   own JWT (~30-day TTL on the live APSE1 surface) via `POST /auth/access-token`
+   (the web app's login call), caches it in the git-ignored
+   `logs/plaud_token.json`, re-mints within a few days of expiry, and
+   transparently re-mints + retries once when the API answers `-419 token
+   expired`. Set-and-forget.
 2. **Manual token** (`PLAUD_TOKEN`) — used when no credentials are set, and as
    a fallback if a mint attempt fails. Expires periodically (re-paste by hand).
 

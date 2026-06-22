@@ -286,7 +286,7 @@ WORKFLOW_HFL = {
     # recordings in the window → no entry, no LLM call.
     #
     # Active — cloud auth is PLAUD_EMAIL+PLAUD_PASSWORD (preferred — the
-    # adapter mints/refreshes its own ~300-day token) or a manual PLAUD_TOKEN;
+    # adapter mints/refreshes its own ~30-day token) or a manual PLAUD_TOKEN;
     # PLAUD_EXPORT_DIR is the export-folder fallback. All in .env/apps.env.
     # Whisper fallback needs OPENAI_API_KEY; archive needs PLAUD_ARCHIVE_PATH
     # (+ key-based SSH).

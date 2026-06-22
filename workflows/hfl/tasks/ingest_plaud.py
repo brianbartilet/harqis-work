@@ -31,7 +31,7 @@ never costs a captured entry.
 
 Config (env, resolved by deploy.py / .env/apps.env):
   PLAUD_EMAIL          web.plaud.ai login — adapter mints/refreshes its own
-  PLAUD_PASSWORD       ~300-day token (preferred; see apps/plaud/README.md)
+  PLAUD_PASSWORD       ~30-day token (preferred; see apps/plaud/README.md)
   PLAUD_TOKEN          manual cloud bearer (fallback; expires periodically)
   PLAUD_EXPORT_DIR     local export folder (fallback acquisition path)
   OPENAI_API_KEY       Whisper transcription fallback

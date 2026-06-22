@@ -25,10 +25,11 @@ rather than crashing the pipeline. Override the base URL with ``PLAUD_API_BASE``
 for non-US regions.
 
 Auth (preferred → fallback):
-  1. ``PLAUD_EMAIL`` + ``PLAUD_PASSWORD`` — the backend MINTS its own ~300-day
-     JWT via ``POST /auth/access-token`` (the web app's own login call, per the
-     plaud-toolkit project), caches it in a git-ignored file, re-mints within
-     30 days of expiry and transparently on a ``-419 token expired`` response.
+  1. ``PLAUD_EMAIL`` + ``PLAUD_PASSWORD`` — the backend MINTS its own JWT
+     (~30-day TTL on the live APSE1 surface) via ``POST /auth/access-token``
+     (the web app's own login call, per the plaud-toolkit project), caches it in
+     a git-ignored file, re-mints within a few days of expiry and transparently
+     on a ``-419 token expired`` response.
   2. ``PLAUD_TOKEN`` — manual bearer lifted from ``web.plaud.ai`` →
      ``localStorage.getItem("tokenstr")``; expires periodically and must be
      re-pasted by hand, so credentials are the recommended path.
@@ -57,8 +58,10 @@ _TRANSCRIPT_EXTS = (".txt", ".md", ".srt", ".vtt")
 _SUMMARY_SUFFIXES = ("-summary", "_summary", ".summary")
 
 # Minted-token cache (git-ignored under logs/). Re-mint inside this buffer so a
-# token never expires mid-window between nightly runs.
-_TOKEN_REFRESH_BUFFER_S = 30 * 24 * 3600
+# token never expires mid-window between nightly runs. The live APSE1 surface
+# issues ~30-day tokens, so the buffer MUST stay well under that TTL — otherwise
+# the cache is never fresh enough to serve and the backend re-mints on every run.
+_TOKEN_REFRESH_BUFFER_S = 3 * 24 * 3600
 _DEFAULT_TOKEN_CACHE = Path(__file__).resolve().parents[3] / "logs" / "plaud_token.json"
 
 
@@ -201,7 +204,7 @@ class PlaudCloudBackend(PlaudBackend):
         return None
 
     def _mint_token(self) -> str:
-        """Mint a fresh ~300-day JWT via ``POST /auth/access-token`` (the web
+        """Mint a fresh JWT (~30-day TTL on APSE1) via ``POST /auth/access-token`` (the web
         app's own login call — form-encoded username/password). Follows the
         regional redirect once, caches the token, and resets the session so the
         next request carries the new bearer. Raises on failure; NEVER logs the
