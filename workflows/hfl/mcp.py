@@ -575,6 +575,89 @@ def register_memory_tools(mcp: FastMCP):
         }
 
     @mcp.tool()
+    def radar_activity(
+        period: str = "",
+        since: str = "",
+        until: str = "",
+        synthesize: bool = True,
+        prefix: str = "hud-logs",
+        max_briefings: int = 24,
+        cfg_id__anthropic: str = "ANTHROPIC",
+        model: str = _DEFAULT_HAIKU,
+    ) -> dict:
+        """Live view of the operator's DAILY RADAR briefings in a window.
+
+        Same gathering the scheduled ingest_radar_activity uses, but
+        read-only (no corpus or ES write). Reads the DAILY RADAR HUD's own
+        briefings back out of the shared desktop feed file
+        (<feed_dir>/hud-logs-YYYYMMDD.txt) — it does NOT re-run the radar.
+        Defaults to the last 7 days when no window is given. Returns
+        found=false with NO LLM call when no feed dir is configured on this
+        host or there are no radar briefings in the window.
+
+        Args:
+            period: same vocabulary as memory_recall (overrides since/until).
+            since:  ISO "YYYY-MM-DD" or relative "-Nd".
+            until:  ISO "YYYY-MM-DD" (defaults to today).
+            synthesize: True → Haiku narrative; False → raw briefing digest.
+            prefix: @feed() filename prefix the radar writes under.
+            max_briefings: cap on briefings folded into the digest.
+        """
+        logger.info("radar_activity period=%r since=%r until=%r", period, since, until)
+        # Imported lazily: keeps the feed/anthropic imports off the MCP path.
+        from workflows.hfl.tasks.ingest_radar import (
+            collect_radar_activity,
+            distill_radar_activity,
+            _resolve_feed_dir,
+        )
+
+        start, end, label = _resolve_window(period, since, until)
+        end_d = end or _today()
+        start_d = start or (end_d - timedelta(days=6))
+
+        if _resolve_feed_dir() is None:
+            return {"found": False, "text": "", "briefings": [],
+                    "briefing_count": 0, "error": "no feed dir",
+                    "period": _period_dict(start_d, end_d, label)}
+        try:
+            activity = collect_radar_activity(
+                since=start_d, until=end_d, prefix=prefix,
+                max_briefings=max_briefings,
+            )
+        except Exception as exc:  # noqa: BLE001 - surface, don't crash the tool
+            logger.warning("radar_activity: feed unreadable (%s)", exc)
+            return {"found": False, "text": "", "error": "feed unreadable",
+                    "period": _period_dict(start_d, end_d, label)}
+
+        if activity["briefing_count"] == 0:
+            return {"found": False, "text": "", "briefings": [],
+                    "briefing_count": 0,
+                    "period": _period_dict(start_d, end_d, label)}
+
+        d = distill_radar_activity(
+            activity, synthesize=synthesize, model=model,
+            cfg_id=cfg_id__anthropic,
+        )
+        if synthesize and d.get("synthesized"):
+            text = (
+                f"**{d['moment']}**\n\n{d['what_happened']}\n\n"
+                f"_{d.get('why_it_stayed','')}_"
+            ).strip()
+        else:
+            text = d["what_happened"]  # raw briefing digest
+
+        return {
+            "found": True,
+            "text": text,
+            "briefings": activity["briefings"],
+            "briefing_count": activity["briefing_count"],
+            "feed_files": activity["feed_files"],
+            "synthesized": d.get("synthesized", False),
+            "model": model if d.get("synthesized") else None,
+            "period": _period_dict(start_d, end_d, label),
+        }
+
+    @mcp.tool()
     def memory_recall_es(
         query: str = "",
         period: str = "",
