@@ -1,7 +1,8 @@
 """
 apps/antropic/provider.py
 
-Resolve which Anthropic auth path to use, with optional Max → API fallback.
+Resolve which Anthropic auth path to use. API-key is the primary path for all
+programmatic use; Max is interactive-only and opt-in.
 
 This is the shared helper consumed by:
   * the kanban orchestrator (``agents/projects/``) — at orchestrator boot
@@ -10,47 +11,51 @@ This is the shared helper consumed by:
 
 Two providers are supported:
 
-  * ``claude_code``  — bearer-token auth using a long-lived Claude Code OAuth
-    token. Bills against the host's logged-in Claude Max subscription.
+  * ``anthropic_api`` — classic ``x-api-key`` auth. Bills against the
+    Anthropic Console org that owns the key, under the commercial API terms.
+    This is the correct, **primary** path for ALL programmatic / automated
+    use (workflow tasks, scheduled jobs, the kanban orchestrator).
+    Token source: ``ANTHROPIC_API_KEY``.
+
+  * ``claude_code`` — bearer-token auth using a long-lived Claude Code OAuth
+    token, authenticating a *consumer* Claude Max subscription. Max is
+    licensed for INTERACTIVE Claude Code use; routing unattended/automated
+    traffic through it is outside its intended use. This path is therefore
+    only selected when the operator opts in explicitly (see precedence) or
+    when it is the only credential present on the host.
     Token source: ``CLAUDE_CODE_OAUTH_TOKEN`` env var, produced once by
     ``claude setup-token`` on a Max-logged-in machine.
-
-  * ``anthropic_api`` — classic ``x-api-key`` auth. Bills against the
-    Anthropic Console org that owns the key.
-    Token source: ``ANTHROPIC_API_KEY``.
 
 Precedence (first match wins):
 
     1. ``ANTHROPIC_PROVIDER`` (or legacy ``KANBAN_PROVIDER``) explicit
        override (``claude_code`` / ``anthropic_api``). Errors if the required
        credential for that provider is missing — no silent fallback when the
-       operator was explicit.
-    2. ``CLAUDE_CODE_OAUTH_TOKEN`` is set → ``claude_code``.
-    3. ``ANTHROPIC_API_KEY`` is set → ``anthropic_api``.
+       operator was explicit. Use ``claude_code`` here to deliberately route
+       an interactive session through Max.
+    2. ``ANTHROPIC_API_KEY`` is set → ``anthropic_api``. This is the default
+       for all programmatic use and is chosen even when a Max token is also
+       present in the environment.
+    3. ``CLAUDE_CODE_OAUTH_TOKEN`` is set and no API key → ``claude_code``,
+       with a warning that a consumer subscription is being used for
+       programmatic calls.
     4. Hard error with instructions.
 
-When BOTH credentials are present, the resolved primary (Max) carries a
-``fallback`` ``ProviderConfig`` pointing at the API path — callers (the
-kanban agent loop, and any workflow task that wants resilience) can swap
-to it on usage-limit / rate-limit errors. The fallback is intentionally
-one-directional: Max → API, never API → Max (Max is a different account,
-not a higher-capacity tier).
-
-A *soft* probe runs ``claude --status`` to log a hint when the user
-appears to be Max-logged-in but hasn't generated a programmatic token
-("you look logged in to Claude Max — run `claude setup-token` to bill
-runs against Max instead of your API key"). The probe never changes the
-resolution; it just logs.
+Automatic Max → API fallback is wired ONLY for the explicit ``claude_code``
+override path (a human who opted into Max but still wants resilience): when an
+API key is also present, the resolved Max config carries a ``fallback``
+``ProviderConfig`` pointing at the API path that callers can swap to on
+usage-limit / rate-limit errors. The fallback is one-directional: Max → API,
+never API → Max (Max is a different account, not a higher-capacity tier).
+Auto-detected API selection carries no fallback — an automated job must never
+silently bill the Max plan.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import shutil
-import subprocess
 from dataclasses import dataclass, replace
-from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -78,10 +83,10 @@ class ProviderConfig:
 
     Exactly one of ``api_key`` / ``auth_token`` is set, matching ``kind``.
 
-    ``fallback`` is set when *both* a Max token and an API key were present
-    in the environment at detection time — callers can swap to it on
-    usage-limit / rate-limit errors. Always points one direction:
-    Max (claude_code) → API (anthropic_api).
+    ``fallback`` is set only on the explicit ``claude_code`` override path
+    when an API key is also present — callers can swap to it on usage-limit /
+    rate-limit errors. Always points one direction: Max (claude_code) → API
+    (anthropic_api). Auto-detected API selection never carries a fallback.
     """
 
     kind: str            # PROVIDER_CLAUDE_CODE or PROVIDER_ANTHROPIC_API
@@ -131,58 +136,6 @@ class ProviderConfig:
                 scoped[ENV_API_KEY] = self.api_key
 
 
-def _claude_cli_max_hint(home: Optional[Path] = None) -> Optional[str]:
-    """Best-effort heuristic: is the `claude` CLI installed and used interactively?
-
-    Returns a hint string when the CLI is present AND there's evidence the
-    user has run it (a populated ``~/.claude/`` directory). The caller uses
-    this to nudge the operator: "you may have a Max session — run
-    ``claude setup-token`` to share that billing with workflows".
-
-    We cannot reliably detect *Max specifically* without the keychain —
-    Claude Code stores OAuth credentials there on macOS and there is no
-    non-interactive query. So the hint is conservative: it tells the user
-    a token is worth generating IF they have Max, rather than claiming we
-    detected Max. The old probe shelled out to ``claude --status`` which
-    is not a real flag, so the hint never fired.
-
-    Never raises; never affects resolution.
-    """
-    claude_path = shutil.which("claude")
-    if not claude_path:
-        return None
-    # Confirm the binary is the real Claude Code CLI, not some unrelated
-    # `claude` on PATH. A successful ``--version`` is enough — its output
-    # mentions "Claude Code".
-    try:
-        ver = subprocess.run(
-            [claude_path, "--version"],
-            capture_output=True, text=True, timeout=5,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if ver.returncode != 0 or "claude" not in (ver.stdout + ver.stderr).lower():
-        return None
-
-    home_dir = home or Path.home() / ".claude"
-    # `~/.claude/projects` or `history.jsonl` only get populated by interactive
-    # sessions — their presence is a strong signal the user actually uses the
-    # CLI on this machine (vs. it just being installed system-wide).
-    interactive_signal = (
-        (home_dir / "projects").is_dir() or (home_dir / "history.jsonl").exists()
-    )
-    if not interactive_signal:
-        return None
-
-    return (
-        f"`claude` CLI is installed ({ver.stdout.strip() or 'version unknown'}) "
-        f"and has interactive state at {home_dir}. If this machine has an "
-        f"active Claude Max subscription, run `claude setup-token` and export "
-        f"the result as CLAUDE_CODE_OAUTH_TOKEN to bill runs against Max "
-        f"instead of your API key."
-    )
-
-
 def _build_max(token: str, source: str) -> ProviderConfig:
     return ProviderConfig(
         kind=PROVIDER_CLAUDE_CODE,
@@ -212,9 +165,11 @@ def detect_provider(
         env: Optional environment override (defaults to ``os.environ``).
              Used by tests to inject a clean env without touching the
              process env.
-        probe_cli: When True (default), also probe ``claude --status`` to
-                   log a soft hint when Max appears logged in but no
-                   programmatic token is set. Disabled in tests.
+        probe_cli: Accepted for backward compatibility and ignored. Earlier
+                   versions probed the local ``claude`` CLI to nudge the
+                   operator toward billing runs against a Max subscription;
+                   that nudge was removed because routing automated traffic
+                   through a consumer Max plan is outside its intended use.
 
     Raises:
         ProviderResolutionError: when no usable credential is configured.
@@ -255,26 +210,27 @@ def detect_provider(
             )
         return _build_api(api_key, source=f"{ENV_PROVIDER_OVERRIDE} override")
 
-    if max_token:
-        cfg = _build_max(max_token, source=f"{ENV_MAX_TOKEN} env")
-        if api_key:
-            cfg = replace(
-                cfg,
-                fallback=_build_api(api_key, source="fallback after Max quota"),
-            )
-        return cfg
-
+    # Auto-detect. The API key is the primary credential for all programmatic
+    # use: it bills the Anthropic Console org under the commercial API terms.
+    # It is chosen even when a Max OAuth token is also present, and carries no
+    # automatic fallback — an unattended job must never silently bill the
+    # consumer Max plan. To deliberately route an interactive session through
+    # Max, set ANTHROPIC_PROVIDER=claude_code (handled in the override block).
     if api_key:
-        cfg = _build_api(api_key, source=f"{ENV_API_KEY} env")
-        if probe_cli:
-            hint = _claude_cli_max_hint()
-            if hint:
-                # Louder than info() — this is the case where the operator
-                # is silently paying API rates while a Max subscription may
-                # be sitting unused on the same machine.
-                logger.warning("provider: %s", hint)
-                cfg = replace(cfg, billing_hint=cfg.billing_hint + " (Max available — unused)")
-        return cfg
+        return _build_api(api_key, source=f"{ENV_API_KEY} env")
+
+    if max_token:
+        # No API key configured at all. Resolve to Max so the host still
+        # works, but warn: routing automated/programmatic calls through a
+        # consumer Max subscription is outside its intended (interactive) use.
+        logger.warning(
+            "provider: only %s is set — resolving to the Claude Max consumer "
+            "subscription. Max is intended for interactive Claude Code use; "
+            "set %s to bill the Anthropic API for automated/programmatic calls "
+            "(recommended to stay within Anthropic's usage terms).",
+            ENV_MAX_TOKEN, ENV_API_KEY,
+        )
+        return _build_max(max_token, source=f"{ENV_MAX_TOKEN} env")
 
     raise ProviderResolutionError(
         f"No Anthropic credential found. Set one of:\n"
@@ -342,7 +298,9 @@ def log_chosen_provider(cfg: ProviderConfig) -> None:
         )
     if cfg.kind == PROVIDER_CLAUDE_CODE and cfg.fallback is None:
         logger.info(
-            "Note: Claude Max rate limits are lower than API tier. If you "
-            "hit a quota error there is no fallback configured — set "
-            "ANTHROPIC_API_KEY to enable Max -> API fallback."
+            "Note: this run is authenticated against a consumer Claude Max "
+            "subscription, which is intended for interactive Claude Code use. "
+            "For automated/programmatic workloads set ANTHROPIC_API_KEY so "
+            "calls bill the Anthropic API (this also enables Max -> API "
+            "fallback when Max is chosen via ANTHROPIC_PROVIDER=claude_code)."
         )

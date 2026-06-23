@@ -39,14 +39,18 @@ def test_api_key_alone_resolves_to_anthropic_api():
     assert cfg.auth_token is None
 
 
-def test_max_wins_when_both_credentials_are_set():
-    """Default auto-detect prefers Max over API — that's the whole point of
-    the feature ("if Claude Max is available use that, else API key")."""
+def test_api_wins_when_both_credentials_are_set():
+    """Auto-detect prefers the API key over a Max token: programmatic traffic
+    must bill the commercial API, never the consumer Max subscription. Max is
+    opt-in only (ANTHROPIC_PROVIDER=claude_code)."""
     cfg = detect_provider(
         env={ENV_MAX_TOKEN: "oauth-xyz", ENV_API_KEY: "sk-abc"},
         probe_cli=False,
     )
-    assert cfg.kind == PROVIDER_CLAUDE_CODE
+    assert cfg.kind == PROVIDER_ANTHROPIC_API
+    assert cfg.api_key == "sk-abc"
+    # No automatic fallback to Max — an automated job must not silently bill it.
+    assert cfg.fallback is None
 
 
 def test_empty_string_treated_as_unset():
@@ -168,19 +172,16 @@ def test_describe_contains_kind_and_source():
 
 # ── Max → API fallback wiring ─────────────────────────────────────────────────
 
-def test_both_credentials_attaches_api_fallback_to_max_primary():
-    """When both creds are set the primary is Max with an API fallback —
-    that's how the agent loop knows to swap on quota errors."""
+def test_both_credentials_auto_resolve_to_api_without_fallback():
+    """When both creds are set, auto-detect picks the API key with no
+    fallback. Max is never auto-selected, so there is nothing to fall back
+    *from* — the only way to use Max is the explicit override below."""
     cfg = detect_provider(
         env={ENV_MAX_TOKEN: "oauth-xyz", ENV_API_KEY: "sk-abc"},
         probe_cli=False,
     )
-    assert cfg.kind == PROVIDER_CLAUDE_CODE
-    assert cfg.fallback is not None
-    assert cfg.fallback.kind == PROVIDER_ANTHROPIC_API
-    assert cfg.fallback.api_key == "sk-abc"
-    # Fallback is one-directional — the API fallback has no further fallback.
-    assert cfg.fallback.fallback is None
+    assert cfg.kind == PROVIDER_ANTHROPIC_API
+    assert cfg.fallback is None
 
 
 def test_max_only_has_no_fallback():
@@ -227,8 +228,13 @@ def test_explicit_api_override_does_not_attach_max_fallback():
 
 
 def test_describe_mentions_fallback_when_present():
+    # Fallback only attaches on the explicit claude_code override (Max opt-in).
     cfg = detect_provider(
-        env={ENV_MAX_TOKEN: "oauth-xyz", ENV_API_KEY: "sk-abc"},
+        env={
+            ENV_PROVIDER_OVERRIDE: "claude_code",
+            ENV_MAX_TOKEN: "oauth-xyz",
+            ENV_API_KEY: "sk-abc",
+        },
         probe_cli=False,
     )
     assert "fallback ready" in cfg.describe()
@@ -272,8 +278,13 @@ def test_short_label_api_alone():
 
 
 def test_short_label_max_with_api_fallback_mentions_fallback():
+    # Fallback only attaches on the explicit claude_code override (Max opt-in).
     cfg = detect_provider(
-        env={ENV_MAX_TOKEN: "oauth-xyz", ENV_API_KEY: "sk-abc"},
+        env={
+            ENV_PROVIDER_OVERRIDE: "claude_code",
+            ENV_MAX_TOKEN: "oauth-xyz",
+            ENV_API_KEY: "sk-abc",
+        },
         probe_cli=False,
     )
     label = cfg.short_label()
@@ -282,91 +293,16 @@ def test_short_label_max_with_api_fallback_mentions_fallback():
     assert "Anthropic Console API key" in label
 
 
-# ── _claude_cli_max_hint() — heuristic probe ──────────────────────────────────
+# ── API selection is clean and never nudges toward Max ────────────────────────
 
-def test_cli_hint_returns_none_when_claude_binary_missing(monkeypatch):
+def test_api_resolution_keeps_clean_label_and_does_not_probe(monkeypatch):
+    """API selection must not annotate the billing label or warn — the old
+    "Max available — unused" nudge promoted routing programmatic traffic
+    through the consumer Max plan, so it was removed."""
     from apps.antropic import provider as p
-    monkeypatch.setattr(p.shutil, "which", lambda _: None)
-    assert p._claude_cli_max_hint() is None
-
-
-def test_cli_hint_returns_none_when_version_fails(monkeypatch, tmp_path):
-    from apps.antropic import provider as p
-
-    def fake_run(*args, **kwargs):
-        class R:
-            returncode = 1
-            stdout = ""
-            stderr = "boom"
-        return R()
-
-    monkeypatch.setattr(p.shutil, "which", lambda _: "/usr/local/bin/claude")
-    monkeypatch.setattr(p.subprocess, "run", fake_run)
-    assert p._claude_cli_max_hint(home=tmp_path) is None
-
-
-def test_cli_hint_returns_none_without_interactive_state(monkeypatch, tmp_path):
-    """Binary works but ~/.claude is empty — no nudge (likely fresh install)."""
-    from apps.antropic import provider as p
-
-    def fake_run(*args, **kwargs):
-        class R:
-            returncode = 0
-            stdout = "2.1.141 (Claude Code)\n"
-            stderr = ""
-        return R()
-
-    monkeypatch.setattr(p.shutil, "which", lambda _: "/usr/local/bin/claude")
-    monkeypatch.setattr(p.subprocess, "run", fake_run)
-    assert p._claude_cli_max_hint(home=tmp_path) is None
-
-
-def test_cli_hint_fires_when_binary_and_interactive_state_present(
-    monkeypatch, tmp_path,
-):
-    """The whole point of the fix — when both signals line up, we tell the
-    user a Max token might be worth generating."""
-    from apps.antropic import provider as p
-    (tmp_path / "projects").mkdir()
-
-    def fake_run(*args, **kwargs):
-        class R:
-            returncode = 0
-            stdout = "2.1.141 (Claude Code)\n"
-            stderr = ""
-        return R()
-
-    monkeypatch.setattr(p.shutil, "which", lambda _: "/usr/local/bin/claude")
-    monkeypatch.setattr(p.subprocess, "run", fake_run)
-    hint = p._claude_cli_max_hint(home=tmp_path)
-    assert hint is not None
-    assert "setup-token" in hint
-    assert "CLAUDE_CODE_OAUTH_TOKEN" in hint
-
-
-def test_api_resolution_with_hint_logs_warning_and_marks_unused_max(
-    monkeypatch, caplog,
-):
-    """When API is selected but the hint fires, the boot log goes to WARNING
-    (not INFO) so users see it, AND the billing_hint is annotated so it
-    shows up in claim comments."""
-    from apps.antropic import provider as p
-    monkeypatch.setattr(
-        p, "_claude_cli_max_hint",
-        lambda *a, **kw: "Run `claude setup-token` to bill against Max.",
-    )
-    import logging
-    with caplog.at_level(logging.WARNING, logger="apps.antropic.provider"):
-        cfg = p.detect_provider(env={ENV_API_KEY: "sk-abc"}, probe_cli=True)
-
-    assert cfg.kind == PROVIDER_ANTHROPIC_API
-    assert "Max available" in cfg.billing_hint
-    assert any("setup-token" in r.message for r in caplog.records)
-
-
-def test_api_resolution_without_hint_keeps_clean_label(monkeypatch):
-    """No CLI/no interactive state → billing label stays clean."""
-    from apps.antropic import provider as p
-    monkeypatch.setattr(p, "_claude_cli_max_hint", lambda *a, **kw: None)
     cfg = p.detect_provider(env={ENV_API_KEY: "sk-abc"}, probe_cli=True)
+    assert cfg.kind == PROVIDER_ANTHROPIC_API
     assert cfg.billing_hint == "Anthropic Console API key"
+    assert cfg.fallback is None
+    # The CLI-probe nudge function was removed entirely.
+    assert not hasattr(p, "_claude_cli_max_hint")

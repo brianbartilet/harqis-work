@@ -67,15 +67,17 @@ def test_api_only_env_uses_api_key_auth(monkeypatch):
     assert svc.api_key == "sk-env"
 
 
-def test_both_creds_attaches_fallback(monkeypatch):
+def test_both_creds_auto_resolve_to_api_without_fallback(monkeypatch):
+    """Auto-detect picks the API key over the Max token (programmatic traffic
+    bills the commercial API), with no fallback. Max is opt-in only."""
     monkeypatch.setenv(ENV_MAX_TOKEN, "oauth-xyz")
     monkeypatch.setenv(ENV_API_KEY, "sk-env")
     monkeypatch.delenv("ANTHROPIC_PROVIDER", raising=False)
     monkeypatch.delenv("KANBAN_PROVIDER", raising=False)
     svc = BaseApiServiceAnthropic(_fake_config())
-    assert svc.provider_config.kind == PROVIDER_CLAUDE_CODE
-    assert svc.provider_config.fallback is not None
-    assert svc.provider_config.fallback.kind == PROVIDER_ANTHROPIC_API
+    assert svc.provider_config.kind == PROVIDER_ANTHROPIC_API
+    assert svc.api_key == "sk-env"
+    assert svc.provider_config.fallback is None
 
 
 def test_no_creds_does_not_explode(monkeypatch):
@@ -108,9 +110,10 @@ def _make_status_error(status: int, message: str) -> APIStatusError:
 
 
 def test_swap_on_rate_limit_when_fallback_present(monkeypatch):
+    # Fallback exists only on the explicit claude_code override (Max opt-in).
+    monkeypatch.setenv("ANTHROPIC_PROVIDER", "claude_code")
     monkeypatch.setenv(ENV_MAX_TOKEN, "oauth-xyz")
     monkeypatch.setenv(ENV_API_KEY, "sk-env")
-    monkeypatch.delenv("ANTHROPIC_PROVIDER", raising=False)
     monkeypatch.delenv("KANBAN_PROVIDER", raising=False)
     svc = BaseApiServiceAnthropic(_fake_config())
 
@@ -126,9 +129,9 @@ def test_swap_on_rate_limit_when_fallback_present(monkeypatch):
 def test_swap_on_usage_limit_string_match(monkeypatch):
     """400-class APIStatusError with 'usage limit' in the message also
     triggers the swap — that's how Anthropic reports Max-quota exhaustion."""
+    monkeypatch.setenv("ANTHROPIC_PROVIDER", "claude_code")
     monkeypatch.setenv(ENV_MAX_TOKEN, "oauth-xyz")
     monkeypatch.setenv(ENV_API_KEY, "sk-env")
-    monkeypatch.delenv("ANTHROPIC_PROVIDER", raising=False)
     monkeypatch.delenv("KANBAN_PROVIDER", raising=False)
     svc = BaseApiServiceAnthropic(_fake_config())
 
@@ -155,9 +158,9 @@ def test_no_swap_when_no_fallback(monkeypatch):
 def test_no_swap_on_generic_4xx(monkeypatch):
     """A 400 that ISN'T a quota/rate-limit must not trigger the swap —
     we don't want to spend Max calls on actual bad-request bugs."""
+    monkeypatch.setenv("ANTHROPIC_PROVIDER", "claude_code")
     monkeypatch.setenv(ENV_MAX_TOKEN, "oauth-xyz")
     monkeypatch.setenv(ENV_API_KEY, "sk-env")
-    monkeypatch.delenv("ANTHROPIC_PROVIDER", raising=False)
     monkeypatch.delenv("KANBAN_PROVIDER", raising=False)
     svc = BaseApiServiceAnthropic(_fake_config())
 
@@ -172,9 +175,9 @@ def test_no_swap_on_generic_4xx(monkeypatch):
 def test_send_message_retries_once_on_quota_and_succeeds(monkeypatch):
     """The end-to-end happy path: first call raises a quota error, swap
     happens, second call (on the fallback client) returns successfully."""
+    monkeypatch.setenv("ANTHROPIC_PROVIDER", "claude_code")
     monkeypatch.setenv(ENV_MAX_TOKEN, "oauth-xyz")
     monkeypatch.setenv(ENV_API_KEY, "sk-env")
-    monkeypatch.delenv("ANTHROPIC_PROVIDER", raising=False)
     monkeypatch.delenv("KANBAN_PROVIDER", raising=False)
     svc = BaseApiServiceAnthropic(_fake_config())
 

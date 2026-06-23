@@ -18,15 +18,15 @@ from workflows.testing.tasks.test_farm import (
     _cell,
     _sort_key,
     _render_md,
-    _resolve_claude_bin,
+    _response_text,
 )
 
 
 # ── Workflow (integration) ────────────────────────────────────────────────────
 
-@pytest.mark.skip(reason="Live: hits Jira + spawns the claude CLI per changed "
-                         "ticket (consumes Max-subscription quota) and rewrites "
-                         "logs/BDD-TEST-FARM.md. Run manually with a real board_id.")
+@pytest.mark.skip(reason="Live: hits Jira + calls the Anthropic API (billed) per "
+                         "changed ticket and rewrites logs/BDD-TEST-FARM.md. "
+                         "Run manually with a real board_id.")
 def test__run_test_farm():
     # Reuse the same rapidView id as run-job--show_jira_board.
     run_test_farm(board_id=1790, cfg_id__jira="JIRA")
@@ -185,5 +185,18 @@ def test__render_md_retained_excluded_from_summary_but_kept_as_section():
     assert "_(retained)_" in md
 
 
-def test__resolve_claude_bin_with_override():
-    assert _resolve_claude_bin("C:/custom/claude.exe") == "C:/custom/claude.exe"
+def test__response_text_concatenates_text_blocks():
+    from types import SimpleNamespace
+    resp = SimpleNamespace(content=[
+        SimpleNamespace(text="```gherkin\nFeature: X\n```"),
+        SimpleNamespace(text="| AC | Covered by |"),
+    ])
+    out = _response_text(resp)
+    assert "Feature: X" in out
+    assert "| AC | Covered by |" in out
+
+
+def test__response_text_empty_when_no_blocks():
+    from types import SimpleNamespace
+    assert _response_text(SimpleNamespace(content=[])) == ""
+    assert _response_text(SimpleNamespace(content=None)) == ""

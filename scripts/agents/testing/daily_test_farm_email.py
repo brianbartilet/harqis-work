@@ -15,8 +15,6 @@ import argparse
 import html
 import os
 import re
-import shutil
-import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -60,55 +58,24 @@ def _call_task(task_obj, *args, **kwargs):
     return task_obj(*args, **kwargs)
 
 
-def _claude_oauth_env() -> dict[str, str]:
-    """Environment for Claude Code Max/OAuth runs, not API-key billing."""
-    env = dict(os.environ)
-    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
-        env.pop(key, None)
-    return env
-
-
-def preflight_claude(claude_bin: str | None, model: str) -> str:
-    """Verify local Claude Code is installed and authenticated before emailing."""
-    bin_path = claude_bin or shutil.which("claude")
-    if not bin_path:
-        raise RuntimeError("claude CLI not found on PATH; cannot refresh the test farm via local Max subscription")
-
-    proc = subprocess.run(
-        [bin_path, "-p", "Reply exactly: OK", "--model", model, "--max-turns", "1"],
-        cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=60, env=_claude_oauth_env(),
-    )
-    if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "").strip().splitlines()
-        msg = detail[0] if detail else f"exit {proc.returncode}"
-        raise RuntimeError(f"claude CLI Max/OAuth preflight failed: {msg}")
-    return bin_path
-
-
 def refresh_test_farm(args: argparse.Namespace) -> str:
     from workflows.testing.tasks.test_farm import run_test_farm
 
-    old_api_key = os.environ.pop("ANTHROPIC_API_KEY", None)
-    old_auth_token = os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
-    try:
-        return str(_call_task(
-            run_test_farm,
-            board_id=args.board_id,
-            cfg_id__jira=args.jira_config,
-            claude_model=args.claude_model,
-            claude_bin=args.claude_bin,
-            max_thinking_tokens=args.max_thinking_tokens,
-            per_ticket_timeout=args.per_ticket_timeout,
-            inter_ticket_delay=args.inter_ticket_delay,
-            max_results=args.max_results,
-            limit=args.limit,
-            force=args.force,
-        ))
-    finally:
-        if old_api_key is not None:
-            os.environ["ANTHROPIC_API_KEY"] = old_api_key
-        if old_auth_token is not None:
-            os.environ["ANTHROPIC_AUTH_TOKEN"] = old_auth_token
+    # Generation bills the Anthropic API (ANTHROPIC_API_KEY). The env is left
+    # untouched: the provider resolver picks the API key for this unattended
+    # run; the consumer Max subscription is interactive-only and is never
+    # auto-selected when an API key is present.
+    return str(_call_task(
+        run_test_farm,
+        board_id=args.board_id,
+        cfg_id__jira=args.jira_config,
+        model=args.model,
+        max_tokens=args.max_tokens,
+        inter_ticket_delay=args.inter_ticket_delay,
+        max_results=args.max_results,
+        limit=args.limit,
+        force=args.force,
+    ))
 
 
 def _render_inline(text: str) -> str:
@@ -317,15 +284,12 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     p.add_argument("--no-telegram", action="store_true", help="skip Telegram completion notification")
     p.add_argument("--board-id", type=int, default=DEFAULT_BOARD_ID)
     p.add_argument("--jira-config", default="JIRA")
-    p.add_argument("--claude-model", default="sonnet")
-    p.add_argument("--claude-bin", default=None)
-    p.add_argument("--max-thinking-tokens", type=int, default=None)
-    p.add_argument("--per-ticket-timeout", type=int, default=420)
+    p.add_argument("--model", default="claude-sonnet-4-6", help="Anthropic model id for generation")
+    p.add_argument("--max-tokens", type=int, default=4000, help="output cap per ticket")
     p.add_argument("--inter-ticket-delay", type=int, default=5)
     p.add_argument("--max-results", type=int, default=200)
     p.add_argument("--limit", type=int, default=None, help="max new ticket generations this run")
     p.add_argument("--force", action="store_true", help="force regeneration of all tickets")
-    p.add_argument("--no-claude-preflight", action="store_true", help="skip local Claude auth probe before generation")
     return p.parse_args(argv)
 
 
@@ -343,8 +307,6 @@ def main(argv: Iterable[str] | None = None) -> int:
     if args.skip_generate:
         generation_summary = "Skipped test farm generation; using existing markdown."
     else:
-        if not args.no_claude_preflight:
-            args.claude_bin = preflight_claude(args.claude_bin, args.claude_model)
         generation_summary = refresh_test_farm(args)
 
     if not FARM_MD.exists():
