@@ -247,3 +247,27 @@ def stats(*, db_path: Optional[Path] = None) -> dict[str, Any]:
         by_source[src] = n
     total = sum(by_source.values())
     return {"total": total, "by_source": by_source, "path": str(db)}
+
+
+def get_meta_by_source(source: str, *, db_path: Optional[Path] = None) -> list[dict[str, Any]]:
+    """Metadata-only read of every chunk in a source — no vectors fetched.
+
+    Returns [{id, ref, meta}] for each chunk. Used by incremental ingest to
+    decide what to skip (e.g. compare a Confluence page's stored `version`
+    against the live one) and by the cross-source linker to walk one corpus
+    without paying for a KNN scan. Returns [] if the store doesn't exist yet.
+    """
+    db = db_path or _DEFAULT_DB
+    if not db.exists():
+        return []
+    conn = _open(db, dim=1)
+    out: list[dict[str, Any]] = []
+    for cid, ref, meta_json in conn.execute(
+        "SELECT id, ref, meta_json FROM chunks WHERE source = ?", (source,)
+    ):
+        out.append({
+            "id": cid,
+            "ref": ref,
+            "meta": json.loads(meta_json) if meta_json else None,
+        })
+    return out

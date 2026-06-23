@@ -1,71 +1,97 @@
-# Knowledge / RAG workflow
+# Knowledge / RAG workflow — "Knowledge Radar"
 
-Local Retrieval-Augmented-Generation pipeline. Ingests source corpora into a single sqlite-vec store and answers questions over them with Anthropic Claude.
+Local Retrieval-Augmented-Generation pipeline. Ingests source corpora
+(Confluence, Notion, Jira, GitHub, Google Drive) into a single sqlite-vec store
+and, on top of plain Q&A, surfaces **relations and inferences across sources** —
+what connects to what, what you're working on now, where the knowledge gaps are.
 
-For the design rationale, full pipeline diagram, and the broader capability roadmap, see [`docs/thesis/HARQIS-RAG-WORKFLOW.md`](../../docs/thesis/RAG-WORKFLOW.md).
+For the design rationale and full pipeline diagram see
+[`docs/thesis/RAG-WORKFLOW.md`](../../docs/thesis/RAG-WORKFLOW.md). For the
+Phase-1 + Phase-3 POC built on top of it (Confluence ingest + cross-source
+intelligence) see [`docs/thesis/KNOWLEDGE-RADAR-PHASE1-3.md`](../../docs/thesis/KNOWLEDGE-RADAR-PHASE1-3.md).
 
-## Status — beat schedule is currently DISABLED (2026-05-14)
+## Status — embedder fixed; beat schedule still OFF by choice
 
-`WORKFLOW_KNOWLEDGE` in [`tasks_config.py`](tasks_config.py) exports an empty
-dict. Celery beat has no entries for this workflow. The task functions
-themselves are intact, so manual / on-demand invocation (`.delay()`, the MCP
-tool, the `python -c …` snippets below) still works — and will surface the
-same blockers.
+The **stale-model blocker is resolved**: `apps/gemini/.../embed.py` now defaults
+to `models/gemini-embedding-001`, and the four copy-pasted `_embed_batch`
+helpers are DRYed into [`embed.py`](embed.py) (one place to swap provider/model,
+via `HARQIS_KNOWLEDGE_EMBED_PROVIDER` / `HARQIS_KNOWLEDGE_EMBED_MODEL`).
 
-**Why disabled:** ES rollups showed the three Gemini-dependent ingestors
-(`ingest_notion_pages`, `ingest_jira_issues`, `ingest_gdrive_docs`) failing
-5 nights in a row with `RuntimeError`. `ingest_github_repos` was logged as
-"passing" only because the beat config had `repos: []`, which short-circuits
-the task before it ever touches Gemini.
+`WORKFLOW_KNOWLEDGE` in [`tasks_config.py`](tasks_config.py) still exports `{}`
+(beat entries live in `_DISABLED__WORKFLOW_KNOWLEDGE`). The remaining gate is
+**operational, not code**: Gemini embedding credits must be funded (a live probe
+returned `429 RESOURCE_EXHAUSTED` — *"prepayment credits are depleted"*), or
+point the embedder at another provider. Task functions are intact, so manual /
+MCP invocation works today once embeddings are funded.
 
-**Two stacked root causes — both must be resolved before re-enabling:**
-
-1. **Stale embedding model.** `apps/gemini/references/web/api/embed.py:6`
-   hard-codes `DEFAULT_EMBED_MODEL = 'models/text-embedding-004'`, which
-   Google retired. The endpoint now returns `404 NOT_FOUND`. The
-   `_embed_batch()` helper (copy-pasted across all four ingestors) then
-   sees `{'error': …}` instead of `{'embeddings': […]}`, and the length
-   mismatch raises `RuntimeError`.
-   Fix: bump to `'models/gemini-embedding-001'` (current GA — `gemini-embedding-2`
-   is also available).
-2. **Gemini credits depleted.** Even with a valid model name, a live probe
-   returns `429 RESOURCE_EXHAUSTED`: *"Your prepayment credits are depleted."*
-   Top up at <https://ai.studio/projects>, or swap the embedder for a
-   different provider (sentence-transformers locally, OpenAI, Cohere).
-   Gemini's free tier no longer covers embeddings.
-
-**To re-enable:** in `tasks_config.py`, rename `_DISABLED__WORKFLOW_KNOWLEDGE`
-back to `WORKFLOW_KNOWLEDGE` and restart the beat scheduler. The entry
-definitions are preserved verbatim — no values were lost.
-
-**Bonus cleanup worth doing at the same time:** `_embed_batch` is copy-pasted
-four times (`ingest_notion.py:67`, `ingest_jira.py:81`, `ingest_gdrive.py:41`,
-`ingest_github.py:44`). DRY it into `workflows/knowledge/embed.py` so the
-next model rename is one edit, not four.
+**To re-enable beat:** fund/redirect embeddings, then rename
+`_DISABLED__WORKFLOW_KNOWLEDGE` → `WORKFLOW_KNOWLEDGE` and restart the scheduler.
 
 ## Layout
 
 ```
 workflows/knowledge/
-├── chunking.py          # text splitting + Notion block extraction
+├── embed.py             # single embedder (provider/model env-driven) — DRYs all ingest
+├── chunking.py          # text splitting + Notion blocks + Confluence storage→text
+├── entities.py          # deterministic JIRA/PR/URL/service/acronym extraction
 ├── retriever.py         # embed query + KNN against sqlite_vec
+├── watchlist.py         # watchlists.yaml loader
+├── watchlists.yaml      # standing-interest topics (keywords + services + prompt)
 ├── prompts/
-│   └── rag_answer.md    # system prompt for the answer step
+│   ├── rag_answer.md    # system prompt for the answer step
+│   └── topic_map.md     # system prompt for the topic learning brief
 └── tasks/
-    ├── ingest_notion.py # Notion → embed → upsert (Celery beat: nightly)
-    └── answer.py        # question → retrieve → Anthropic → answer (sync helper + Celery task)
+    ├── ingest_*.py      # confluence / notion / jira / github / gdrive → embed → upsert
+    ├── answer.py        # question → retrieve → Anthropic → cited answer
+    ├── topic_map.py     # learn a topic + its integrations/dependencies/value (Phase 3)
+    ├── topic_scan.py    # run a watchlist → ranked hit cards (Phase 1/2)
+    └── cross_link.py    # working-context / relations / orphan tickets / stale docs (Phase 3)
 ```
+
+## Sources (corpus labels)
+
+| source | task | notes |
+| --- | --- | --- |
+| `confluence` | `ingest_confluence_pages` | **incremental** by page version; CQL-scoped to spaces |
+| `notion` | `ingest_notion_pages` | full workspace search |
+| `jira` | `ingest_jira_issues` | issues + comments (ADF-flattened) |
+| `github` | `ingest_github_repos` | PRs + issues + review comments |
+| `gdrive` | `ingest_gdrive_docs` | Google Docs (text export) |
+| `hfl` | (read-only) | your Homework-for-Life timeline, queried live for cross-linking |
+
+## MCP tools
+
+`knowledge_search`, `knowledge_ask` (cited Q&A), plus the radar surface:
+`knowledge_list_sources`, `knowledge_topic_map`, `knowledge_relations`,
+`knowledge_working_context`, `knowledge_orphan_tickets`, `knowledge_stale_docs`,
+`knowledge_scan_watchlist`. Confluence has its own `confluence_search` /
+`confluence_get_page` / `confluence_list_spaces`.
 
 ## Run it once, locally
 
-```bash
-# 1. Make sure NOTION + GEMINI + ANTHROPIC are configured in apps_config.yaml
-# 2. Trigger an ingest (synchronous, no broker needed)
-python -c "from workflows.knowledge.tasks.ingest_notion import ingest_notion_pages; print(ingest_notion_pages())"
+Bootstrap env first (see the `harqis-env-context` skill) so `${...}` placeholders
+resolve, then:
 
-# 3. Ask a question
+```bash
+# 1. Ingest Confluence (incremental — only changed/new pages re-embed)
+python -c "from workflows.knowledge.tasks.ingest_confluence import ingest_confluence_pages; \
+           print(ingest_confluence_pages(space_keys=['ENG','OPS'], max_pages=200))"
+
+# 2. Ask a cited question over a source
 python -c "from workflows.knowledge.tasks.answer import answer_question; \
-           print(answer_question('What did I decide about merge-freeze?', source='notion'))"
+           print(answer_question('How does token refresh work?', source='confluence'))"
+
+# 3. Learn a topic + its integrations/dependencies/value (Phase 3)
+python -c "from workflows.knowledge.tasks.topic_map import topic_map; \
+           print(topic_map('Payments settlement flow')['brief'])"
+
+# 4. What am I working on, and what connects to it? (HFL + index)
+python -c "from workflows.knowledge.tasks.cross_link import working_context; \
+           print(working_context(since='-7d', summarize=True)['brief'])"
+
+# 5. Knowledge gaps + staleness
+python -c "from workflows.knowledge.tasks.cross_link import orphan_jira, stale_docs; \
+           print(orphan_jira()['orphan_count'], stale_docs()['candidate_count'])"
 ```
 
 ## Cost guard
@@ -85,8 +111,10 @@ See [`docs/MANIFESTO.md`](../../docs/MANIFESTO.md) and [`docs/thesis/MANIFESTO-R
 
 | Task | code_role | para_bucket | express_target | review_artifact | hfl_signal |
 | --- | --- | --- | --- | --- | --- |
+| `ingest_confluence_pages` | capture | area | `vectorstore:knowledge` | `es_log` | `False` |
 | `ingest_notion_pages` | capture | area | `vectorstore:knowledge` | `es_log` | `True` |
 | `ingest_jira_issues` | capture | area | `vectorstore:knowledge` | `es_log` | `False` |
 | `ingest_github_repos` | capture | area | `vectorstore:knowledge` | `es_log` | `False` |
 | `ingest_gdrive_docs` | capture | area | `vectorstore:knowledge` | `es_log` | `True` |
+| `knowledge_cross_link_report` | distill+express | area | `es_log` | `es_log` | `True` |
 | `knowledge_answer_morning_brief` | distill+express | area | `es_log` | `es_log` | `True` |

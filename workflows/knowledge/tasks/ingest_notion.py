@@ -27,7 +27,6 @@ from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import create_logger
 
 from apps.apps_config import CONFIG_MANAGER
-from apps.gemini.references.web.api.embed import ApiServiceGeminiEmbed
 from apps.notion.references.web.api.search import ApiServiceNotionSearch
 from apps.notion.references.web.api.blocks import ApiServiceNotionBlocks
 from apps.sqlite_vec import store
@@ -37,6 +36,7 @@ from workflows.knowledge.chunking import (
     extract_notion_block_text,
     iter_notion_blocks,
 )
+from workflows.knowledge.embed import embed_documents
 
 _log = create_logger("knowledge.ingest_notion")
 
@@ -64,21 +64,6 @@ def _page_to_text(page_id: str, blocks_service: ApiServiceNotionBlocks) -> str:
     return "\n\n".join(parts)
 
 
-def _embed_batch(embedder: ApiServiceGeminiEmbed, texts: list[str]) -> list[list[float]]:
-    resp = embedder.batch_embed_contents(texts=texts, task_type="RETRIEVAL_DOCUMENT")
-    data = resp.__dict__ if hasattr(resp, "__dict__") else resp
-    embeddings = data.get("embeddings", []) if isinstance(data, dict) else []
-    out: list[list[float]] = []
-    for e in embeddings:
-        values = e.get("values") if isinstance(e, dict) else getattr(e, "values", None)
-        if values is None:
-            raise RuntimeError(f"Gemini batch returned an item with no values: {e!r}")
-        out.append(list(values))
-    if len(out) != len(texts):
-        raise RuntimeError(f"Gemini batch returned {len(out)} embeddings for {len(texts)} texts")
-    return out
-
-
 @SPROUT.task()
 @log_result()
 def ingest_notion_pages(**kwargs):
@@ -103,11 +88,6 @@ def ingest_notion_pages(**kwargs):
     notion_cfg = CONFIG_MANAGER.get(cfg_id__notion)
     search = ApiServiceNotionSearch(notion_cfg)
     blocks = ApiServiceNotionBlocks(notion_cfg)
-
-    # Use Gemini's free-tier-friendly embedder. Lazy-init to surface config
-    # errors as a clear failure during the task rather than at import time.
-    from apps.gemini.config import CONFIG as GEMINI_CONFIG
-    embedder = ApiServiceGeminiEmbed(GEMINI_CONFIG)
 
     pages_seen = 0
     chunks_written = 0
@@ -137,7 +117,7 @@ def ingest_notion_pages(**kwargs):
 
             for batch_start in range(0, len(chunks), _BATCH_SIZE):
                 batch = chunks[batch_start : batch_start + _BATCH_SIZE]
-                vectors = _embed_batch(embedder, batch)
+                vectors = embed_documents(batch)
                 for offset, (chunk, vec) in enumerate(zip(batch, vectors)):
                     idx = batch_start + offset
                     store.upsert(

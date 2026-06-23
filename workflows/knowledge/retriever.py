@@ -1,34 +1,23 @@
 """
 Query-side retriever.
 
-Embeds a question with Gemini using `RETRIEVAL_QUERY` (asymmetric — different
-encoding from the `RETRIEVAL_DOCUMENT` task type used during ingestion), runs
-KNN against the local sqlite-vec store, and returns the hits as-is.
+Embeds a question with `RETRIEVAL_QUERY` (asymmetric — different encoding from
+the `RETRIEVAL_DOCUMENT` task type used during ingestion), runs KNN against the
+local sqlite-vec store, and returns the hits as-is.
 
-This is the same shape every RAG capability in `docs/thesis/HARQIS-RAG-WORKFLOW.md`
-relies on — Notion, Jira, code QA all share this retriever.
+This is the same shape every RAG capability in `docs/thesis/RAG-WORKFLOW.md`
+relies on — Notion, Jira, Confluence, code QA all share this retriever. The
+embedding provider/model lives in `workflows/knowledge/embed.py` (one place to
+swap), not here.
 """
 
 from __future__ import annotations
 
 from typing import Any, Optional
 
-from apps.gemini.config import CONFIG as GEMINI_CONFIG
-from apps.gemini.references.web.api.embed import ApiServiceGeminiEmbed
 from apps.sqlite_vec import store
 
-
-def embed_query(text: str) -> list[float]:
-    """Embed a query as `RETRIEVAL_QUERY` — pairs with `RETRIEVAL_DOCUMENT` ingestion."""
-    embedder = ApiServiceGeminiEmbed(GEMINI_CONFIG)
-    resp = embedder.embed_content(text=text, task_type="RETRIEVAL_QUERY")
-    data = resp.__dict__ if hasattr(resp, "__dict__") else resp
-    embedding_obj = data.get("embedding") if isinstance(data, dict) else None
-    if hasattr(embedding_obj, "values"):
-        return list(embedding_obj.values)
-    if isinstance(embedding_obj, dict):
-        return list(embedding_obj.get("values", []))
-    raise RuntimeError(f"Unexpected Gemini embed response shape: {data!r}")
+from workflows.knowledge.embed import embed_query
 
 
 def retrieve(

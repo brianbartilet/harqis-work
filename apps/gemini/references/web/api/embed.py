@@ -3,7 +3,10 @@ from typing import List, Optional
 from core.web.services.core.decorators.deserializer import deserialized
 from apps.gemini.references.web.base_api_service import BaseApiServiceGemini
 
-DEFAULT_EMBED_MODEL = 'models/text-embedding-004'
+# text-embedding-004 was retired by Google (endpoint returns 404). The current
+# GA embedding model is gemini-embedding-001. Override per-call or via the
+# HARQIS_KNOWLEDGE_EMBED_MODEL env (see workflows/knowledge/embed.py).
+DEFAULT_EMBED_MODEL = 'models/gemini-embedding-001'
 
 
 class ApiServiceGeminiEmbed(BaseApiServiceGemini):

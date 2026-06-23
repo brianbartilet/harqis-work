@@ -345,6 +345,27 @@ JIRA:
   return_data_only: True
 
 
+CONFLUENCE:
+  app_id: 'confluence'
+  client: 'rest'
+  parameters:
+    # Placeholder — BaseApiServiceConfluence rebuilds this from `domain` +
+    # `context_path` at runtime (Cloud: https://<domain>/wiki/rest/api/).
+    base_url: 'https://placeholder/wiki/rest/api/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: True
+  app_data:
+    domain: ${CONFLUENCE_DOMAIN}
+    api_token: ${CONFLUENCE_API_TOKEN}
+    # Cloud: set email -> Basic auth. Server/DC: leave email unset (Bearer PAT)
+    # and set context_path to '' if the API is served at the host root.
+    email: ${CONFLUENCE_EMAIL}
+    context_path: '/wiki'
+  return_data_only: True
+
+
 TRELLO:
   app_id: 'trello'
   client: 'rest'
