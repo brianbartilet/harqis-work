@@ -359,10 +359,13 @@ CONFLUENCE:
   app_data:
     domain: ${CONFLUENCE_DOMAIN}
     api_token: ${CONFLUENCE_API_TOKEN}
-    # Cloud: set email -> Basic auth. Server/DC: leave email unset (Bearer PAT)
-    # and set context_path to '' if the API is served at the host root.
     email: ${CONFLUENCE_EMAIL}
-    context_path: '/wiki'
+    # Auth + path. Cloud: auth_mode 'basic' (email:token) + context_path '/wiki'.
+    # Server/DC (PAT): auth_mode 'bearer' + context_path '' (API at host root).
+    # auth_mode overrides the email-presence default, so a configured email is
+    # ignored for Bearer instances.
+    auth_mode: 'bearer'
+    context_path: ''
   return_data_only: True
 
 

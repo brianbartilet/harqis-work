@@ -45,6 +45,12 @@ _BATCH_SIZE = 50
 _SOURCE = "confluence"
 
 
+def _log_safe(s: str) -> str:
+    """ASCII-safe rendering for log lines — page titles often carry emoji that a
+    cp1252 console handler can't encode (the stored text/meta keep full UTF-8)."""
+    return (s or "").encode("ascii", "replace").decode("ascii")
+
+
 def _labels(page: dict[str, Any]) -> list[str]:
     results = (((page.get("metadata") or {}).get("labels") or {}).get("results")) or []
     return [r.get("name", "") for r in results if r.get("name")]
@@ -209,8 +215,8 @@ def ingest_confluence_pages(**kwargs):
                     chunks_written += 1
 
             pages_ingested += 1
-            _log.info("ingest_confluence_pages: %s '%s' v%d — %d chunks",
-                      page_id, meta_base["title"][:60], meta_base["version"], len(chunks))
+            _log.info("ingest_confluence_pages: %s '%s' v%d - %d chunks",
+                      page_id, _log_safe(meta_base["title"])[:60], meta_base["version"], len(chunks))
 
         start += page_size
         if start >= int(resp.get("totalSize", resp.get("size", 0)) or 0):

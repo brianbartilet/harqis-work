@@ -30,6 +30,7 @@ any caller.
 from __future__ import annotations
 
 import os
+import time
 from typing import Any, Callable
 
 from core.utilities.logging.custom_logger import create_logger
@@ -38,6 +39,36 @@ _log = create_logger("knowledge.embed")
 
 _DEFAULT_MODEL = "models/gemini-embedding-001"
 _DEFAULT_BATCH = 50
+_MAX_RETRIES = 4          # transient 5xx/UNAVAILABLE/429 happen on long ingests
+_BACKOFF_BASE = 1.5       # seconds: 1.5, 3, 6, 12
+
+
+def _is_transient(msg: str) -> bool:
+    m = msg.lower()
+    return any(t in m for t in ("unavailable", "503", "500", "429",
+                                "resource_exhausted", "deadline", "timeout",
+                                "internal error"))
+
+
+def _retry(fn: Callable[[], Any], *, what: str) -> Any:
+    """Call fn() with exponential backoff on transient embedding failures.
+
+    Re-raises immediately on non-transient errors (bad model name, auth) so we
+    don't mask real config problems behind four slow retries.
+    """
+    last: Exception | None = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            return fn()
+        except Exception as exc:  # noqa: BLE001
+            last = exc
+            if not _is_transient(str(exc)) or attempt == _MAX_RETRIES - 1:
+                raise
+            delay = _BACKOFF_BASE * (2 ** attempt)
+            _log.warning("embed: transient failure on %s (attempt %d/%d) — retrying in %.1fs: %s",
+                         what, attempt + 1, _MAX_RETRIES, delay, str(exc)[:120])
+            time.sleep(delay)
+    raise last  # unreachable, but keeps type-checkers happy
 
 
 def _model() -> str:
@@ -86,29 +117,37 @@ def _gemini_documents(texts: list[str]) -> list[list[float]]:
     out: list[list[float]] = []
     for start in range(0, len(texts), _batch_size()):
         slice_ = texts[start : start + _batch_size()]
-        resp = embedder.batch_embed_contents(
-            texts=slice_, model=model, task_type="RETRIEVAL_DOCUMENT"
-        )
-        data = resp.__dict__ if hasattr(resp, "__dict__") else resp
-        embeddings = data.get("embeddings", []) if isinstance(data, dict) else []
-        batch = [_values(e) for e in embeddings]
-        if len(batch) != len(slice_):
-            raise RuntimeError(
-                f"Gemini batch returned {len(batch)} embeddings for {len(slice_)} texts "
-                f"(model={model}). Response head: {str(data)[:200]!r}"
+
+        def _do(slice_=slice_):
+            resp = embedder.batch_embed_contents(
+                texts=slice_, model=model, task_type="RETRIEVAL_DOCUMENT"
             )
-        out.extend(batch)
+            data = resp.__dict__ if hasattr(resp, "__dict__") else resp
+            embeddings = data.get("embeddings", []) if isinstance(data, dict) else []
+            batch = [_values(e) for e in embeddings]
+            if len(batch) != len(slice_):
+                raise RuntimeError(
+                    f"Gemini batch returned {len(batch)} embeddings for {len(slice_)} texts "
+                    f"(model={model}). Response head: {str(data)[:200]!r}"
+                )
+            return batch
+
+        out.extend(_retry(_do, what=f"batch[{start}:{start+len(slice_)}]"))
     return out
 
 
 def _gemini_query(text: str) -> list[float]:
     embedder = _gemini_embedder()
-    resp = embedder.embed_content(text=text, model=_model(), task_type="RETRIEVAL_QUERY")
-    data = resp.__dict__ if hasattr(resp, "__dict__") else resp
-    embedding_obj = data.get("embedding") if isinstance(data, dict) else None
-    if embedding_obj is None:
-        raise RuntimeError(f"Unexpected Gemini embed response shape: {data!r}")
-    return _values(embedding_obj)
+
+    def _do():
+        resp = embedder.embed_content(text=text, model=_model(), task_type="RETRIEVAL_QUERY")
+        data = resp.__dict__ if hasattr(resp, "__dict__") else resp
+        embedding_obj = data.get("embedding") if isinstance(data, dict) else None
+        if embedding_obj is None:
+            raise RuntimeError(f"Unexpected Gemini embed response shape: {data!r}")
+        return _values(embedding_obj)
+
+    return _retry(_do, what="query")
 
 
 # --------------------------------------------------------------------------- #

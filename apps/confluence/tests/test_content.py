@@ -55,6 +55,14 @@ def test_server_empty_context_path_serves_at_root():
     assert_that(svc.client.base_url, equal_to("https://wiki.acme.com/rest/api/"))
 
 
+def test_auth_mode_bearer_overrides_configured_email():
+    # Server/DC PAT: email is set but auth_mode forces Bearer, API at root path.
+    cfg = _cfg("confluence.acme.io", email="me@acme.com", context_path="")
+    cfg.app_data["auth_mode"] = "bearer"
+    svc = ApiServiceConfluenceContent(cfg)
+    assert svc.client.base_url == "https://confluence.acme.io/rest/api/"
+
+
 def test_context_path_is_normalised():
     # Leading/trailing slashes and bare names both normalise to "/name".
     svc = ApiServiceConfluenceContent(_cfg("acme.atlassian.net", email="me@acme.com",

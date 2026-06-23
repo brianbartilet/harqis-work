@@ -15,9 +15,12 @@ class BaseApiServiceConfluence(BaseFixtureServiceRest):
       - Server → host is `<domain>`, API lives under `/rest/api/`, auth is a
                  Bearer personal access token.
 
-    Auth method is chosen the same way the Jira service chooses it:
-      - email present in app_data → Cloud Basic auth
-      - email absent              → Server/DC Bearer token
+    Auth method, in order of precedence:
+      1. `auth_mode` in app_data ('basic' | 'bearer') — explicit override.
+      2. else inferred: email present → Cloud Basic auth; absent → Bearer.
+
+    Server/DC personal access tokens are Bearer even when an account email is
+    also configured, so set `auth_mode: 'bearer'` to force it regardless of email.
 
     `context_path` (default '/wiki') lets a Server/DC install that exposes the
     API at the root override the Cloud prefix — set it to '' in app_data.
@@ -34,7 +37,10 @@ class BaseApiServiceConfluence(BaseFixtureServiceRest):
 
         self.client.base_url = f"https://{domain}{context_path}/rest/api/"
 
-        if email:
+        auth_mode = kwargs.get('auth_mode', config.app_data.get('auth_mode', '') or '')
+        auth_mode = auth_mode.strip().lower() or ('basic' if email else 'bearer')
+
+        if auth_mode == 'basic':
             import base64
             credentials = base64.b64encode(f"{email}:{api_token}".encode()).decode()
             auth_header = f'Basic {credentials}'
