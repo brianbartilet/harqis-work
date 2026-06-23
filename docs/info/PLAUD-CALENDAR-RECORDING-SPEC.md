@@ -12,6 +12,7 @@
 2. [Key Constraint (read this first)](#2-key-constraint-read-this-first)
 3. [Where this fits in the existing pipeline](#3-where-this-fits-in-the-existing-pipeline)
 4. [Feasibility summary](#4-feasibility-summary)
+   - [4.1 Evaluated: official Plaud MCP CLI (retrieval only)](#41-evaluated-official-plaud-mcp-cli-retrieval-only)
 5. [Architecture](#5-architecture)
 6. [Track A — ADB UI-automation MVP](#6-track-a--adb-ui-automation-mvp)
 7. [Track B — Official Embedded SDK (durable)](#7-track-b--official-embedded-sdk-durable)
@@ -96,6 +97,7 @@ already works.
 | Real phone + Plaud app + ADB UI automation | ⚠️ Fast MVP | UI-coordinate fragile; breaks on app updates; no signup needed |
 | BLE GATT reverse-engineering (Pi + `bleak`) | ⚠️ High effort | No public protocol; must self-sniff; fragile |
 | Zapier / IFTTT / cloud API | ❌ Impossible | Trigger/retrieval only |
+| Official Plaud MCP CLI (`@plaud-ai/mcp`) | ❌ Impossible (for trigger) | OAuth, no signup, but **read-only** — no `startRecord`. Useful for *acquisition*, not control — see [§4.1](#41-evaluated-official-plaud-mcp-cli-retrieval-only) |
 | Android emulator + ADB | ❌ Impossible | No BLE radio in emulator |
 | Servo/solenoid long-press rig | ⚠️ Last resort | Phone-free but open-loop; timed long-press (start 1 vibration, stop 2) |
 | Native scheduled recording in app | ❌ Not available | Note Pro hardware has no built-in schedule; Desktop "Automatic Recording" records the *computer*, not the device |
@@ -103,6 +105,44 @@ already works.
 **Recommended:** ship **Track A (ADB)** as the MVP to prove the calendar→record
 loop end-to-end this week, then migrate to **Track B (SDK)** for durability once
 the value is confirmed and partner access is granted.
+
+### 4.1 Evaluated: official Plaud MCP CLI (retrieval only)
+
+PLAUD ships an official, OAuth-authenticated MCP server
+([`@plaud-ai/mcp`](https://docs.plaud.ai/plaud-mcp-cli/mcp), `npx -y
+@plaud-ai/mcp@latest install`; or the remote `https://mcp.plaud.ai/mcp`). It was
+evaluated as a possible implementation surface for this feature (2026-06-23)
+because, unlike the SDK partner program, it needs **no signup** — just a browser
+OAuth login with an ordinary Plaud account.
+
+**Verdict: it does not unblock the recording trigger.** Its entire tool surface
+is read-only — `list_files`, `get_file` (with a 24h `presigned_url`),
+`get_transcript`, `get_note`, `get_current_user`, `login`/`logout`. There is
+**no `startRecord`/`stopRecord`**, so it shares the exact ceiling of the
+unofficial cloud API and Zapier (§2): it talks to the Plaud *cloud*, not the
+device, and cannot tell the recorder to begin. The always-on BLE controller
+phone (Track A/B) remains the irreducible requirement for the trigger.
+
+It also does **not** resolve open question #5 (only factory samples in the
+cloud). The MCP reads the same cloud the unofficial API does — if the device
+isn't uploading, the MCP sees nothing new either. Only the SDK's `SyncManager`
+([companion spec §7](PLAUD-SDK-COMPANION-APP-SPEC.md#7-bonus-this-closes-the-devicecloud-sync-gap))
+or the stock app actually syncing closes that gap.
+
+**Where it *is* worth adopting (acquisition, not control):** it is the official
+OAuth equivalent of the **unofficial** `api.plaud.ai` surface our
+`PlaudCloudBackend` currently reverse-engineers
+([apps/plaud/references/adapter.py](../../apps/plaud/references/adapter.py)) —
+`list_files` ≈ `/file/simple/web`, `get_file.presigned_url` ≈
+`/file/temp-url/{id}`, and `get_transcript`/`get_note` ≈ Plaud's own
+transcript/summary. It is therefore a strong candidate as a **sanctioned
+acquisition backend** behind the existing `PlaudBackend` interface, more durable
+than the scraped surface, and relevant to companion-spec open question #3
+(acquisition strategy). Caveat: it is an *MCP server* (stdio/npx or remote
+HTTP), not a REST API the Python adapter can call with `requests` — wiring it
+into `ingest_plaud` means driving it as an MCP client or shelling the CLI, more
+plumbing than the current cloud backend. **Recommend tracking this as a separate
+read-side spike, independent of the recording trigger.**
 
 ## 5. Architecture
 
