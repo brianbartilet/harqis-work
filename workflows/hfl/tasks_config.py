@@ -349,5 +349,40 @@ WORKFLOW_HFL = {
         },
     },
 
+    # Daily DAILY RADAR digest — 23:20 local, after the other ingest sources.
+    # Reads the day's DAILY RADAR HUD briefings back out of the shared desktop
+    # feed file (<feed_dir>/hud-logs-YYYYMMDD.txt, the @feed() sink the radar
+    # writes to) and distils them into ONE "what the day was about" entry
+    # (Haiku) — dual-written corpus + ES, source "radar". It does NOT re-run
+    # the radar (which pulls ~9 sources + Sonnet every few hours); it ingests
+    # the briefings already produced. The feed file is Drive-synced, so the
+    # Beat host reads briefings a Windows radar wrote. Centralized single
+    # source on the Beat host (HFL queue, NOT a per-machine broadcast).
+    # Active — clean no-op until there's signal: no feed dir configured on
+    # this host (DESKTOP_PATH_FEED / DESKTOP_PATH_FEED_<OS>) → no entry, no
+    # I/O; no radar briefings in the window → no entry, no LLM call.
+    'run-job--ingest_radar_activity': {
+        'task': 'workflows.hfl.tasks.ingest_radar.ingest_radar_activity',
+        'schedule': crontab(hour=23, minute=20),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'window_days': 1,
+            'prefix': 'hud-logs',
+            'max_briefings': 24,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 60 * 12,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+        },
+    },
+
 
 }
