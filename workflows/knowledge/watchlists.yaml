@@ -1,0 +1,75 @@
+# Knowledge-radar watchlists.
+#
+# A watchlist is a standing interest: keywords + a semantic prompt + the set of
+# service/system names that anchor deterministic cross-linking. `topic_scan`
+# runs a watchlist against the indexed corpus (Confluence/Jira/GitHub/HFL) and
+# returns hit cards — "what you should know" without you searching.
+#
+# These are illustrative, bank-style examples (no real systems). Edit freely;
+# the repo is public, so keep anything sensitive in a local override and out of
+# git. `services:` doubles as the entity vocabulary the linker matches on, so
+# list the system/service names your teams actually use.
+
+watchlists:
+  - id: payments-integration
+    title: Payments service integrations & dependencies
+    sources: [confluence, jira, github, hfl]
+    keywords:
+      - payment gateway
+      - settlement
+      - ISO 20022
+      - idempotency key
+      - reconciliation
+      - webhook retry
+    services:
+      - Payments
+      - Ledger
+      - Settlement
+      - FraudCheck
+      - NotificationService
+    semantic_prompt: >
+      Surface docs, tickets, PRs, or captured work about the payments service
+      and everything it integrates with — settlement, ledger posting, fraud
+      checks, downstream notifications — plus the contracts, retries, and
+      failure modes between them.
+    cadence: daily
+
+  - id: mobile-startup-security
+    title: Mobile app startup / RASP / device integrity
+    sources: [confluence, jira, github, hfl]
+    keywords:
+      - RASP
+      - jailbreak
+      - root detection
+      - emulator detection
+      - device integrity
+      - startup security check
+    services:
+      - MobileGateway
+      - DeviceTrust
+      - AuthService
+    semantic_prompt: >
+      Surface anything about mobile app startup failures, runtime app
+      self-protection (RASP), root/jailbreak and emulator detection, device
+      integrity checks, and the debugging workarounds the team has used.
+    cadence: daily
+
+  - id: auth-oauth
+    title: Authentication, OAuth & token lifecycle
+    sources: [confluence, jira, github]
+    keywords:
+      - OAuth
+      - token refresh
+      - SSO
+      - JWT expiry
+      - refresh token rotation
+      - consent screen
+    services:
+      - AuthService
+      - IdentityProvider
+      - TokenStore
+    semantic_prompt: >
+      Surface how authentication and token lifecycle work across services —
+      OAuth flows, refresh-token rotation, SSO, JWT expiry handling — and any
+      incidents or decisions about them.
+    cadence: weekly

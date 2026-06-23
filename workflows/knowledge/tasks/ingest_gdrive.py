@@ -25,32 +25,17 @@ from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import create_logger
 
-from apps.gemini.references.web.api.embed import ApiServiceGeminiEmbed
 from apps.google_apps.references.web.api.drive import ApiServiceGoogleDrive
 from apps.google_drive.config import CONFIG as GDRIVE_CONFIG
 from apps.sqlite_vec import store
 
 from workflows.knowledge.chunking import chunk_text
+from workflows.knowledge.embed import embed_documents
 
 _log = create_logger("knowledge.ingest_gdrive")
 
 _BATCH_SIZE = 50
 _DOC_MIME = "application/vnd.google-apps.document"
-
-
-def _embed_batch(embedder: ApiServiceGeminiEmbed, texts: list[str]) -> list[list[float]]:
-    resp = embedder.batch_embed_contents(texts=texts, task_type="RETRIEVAL_DOCUMENT")
-    data = resp.__dict__ if hasattr(resp, "__dict__") else resp
-    embeddings = data.get("embeddings", []) if isinstance(data, dict) else []
-    out: list[list[float]] = []
-    for e in embeddings:
-        values = e.get("values") if isinstance(e, dict) else getattr(e, "values", None)
-        if values is None:
-            raise RuntimeError(f"Gemini batch returned an item with no values: {e!r}")
-        out.append(list(values))
-    if len(out) != len(texts):
-        raise RuntimeError(f"Gemini batch returned {len(out)} embeddings for {len(texts)} texts")
-    return out
 
 
 def _doc_url(file_id: str) -> str:
@@ -93,9 +78,6 @@ def ingest_gdrive_docs(**kwargs):
 
     svc = ApiServiceGoogleDrive(GDRIVE_CONFIG)
 
-    from apps.gemini.config import CONFIG as GEMINI_CONFIG
-    embedder = ApiServiceGeminiEmbed(GEMINI_CONFIG)
-
     query = _build_query(folder_id, modified_after)
     files = svc.list_files(query=query, page_size=min(max_files, 1000))
     files = files[:max_files]
@@ -134,7 +116,7 @@ def ingest_gdrive_docs(**kwargs):
 
         for batch_start in range(0, len(chunks), _BATCH_SIZE):
             slice_ = chunks[batch_start : batch_start + _BATCH_SIZE]
-            vectors = _embed_batch(embedder, slice_)
+            vectors = embed_documents(slice_)
             for offset, (chunk, vec) in enumerate(zip(slice_, vectors)):
                 idx = batch_start + offset
                 store.upsert(

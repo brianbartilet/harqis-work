@@ -148,6 +148,59 @@ _DISABLED__WORKFLOW_KNOWLEDGE = {
         },
     },
 
+    # Confluence ingest (Phase 1). Staggered after Drive (03:15). Incremental
+    # by page version — only changed/new pages are re-embedded. Set space_keys
+    # and fill CONFLUENCE_* in .env/apps.env before enabling.
+    'run-job--ingest_confluence_pages': {
+        'task': 'workflows.knowledge.tasks.ingest_confluence.ingest_confluence_pages',
+        'schedule': crontab(hour=3, minute=30),
+        'kwargs': {
+            'cfg_id__confluence': 'CONFLUENCE',
+            'space_keys': [],          # set explicitly, e.g. ['ENG', 'OPS']
+            'cql_extra': '',           # e.g. "lastmodified >= '2026-06-01'"
+            'max_pages': 500,
+            'rebuild': False,
+        },
+        'options': {
+            'queue': WorkflowQueue.AGENT,
+            'expires': 60 * 60 * 6,
+        },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'vectorstore:knowledge',
+            'review_artifact': 'es_log',
+            'hfl_signal': False,
+        },
+    },
+
+    # Cross-source radar (Phase 3): working-context + orphan tickets + stale
+    # docs, rolled into one ES-logged report. Weekday mornings.
+    'run-job--knowledge_cross_link_report': {
+        'task': 'workflows.knowledge.tasks.cross_link.cross_link_report',
+        'schedule': crontab(hour=7, minute=45, day_of_week='1-5'),
+        'kwargs': {
+            'since': '-7d',
+            'k': 8,
+            'min_doc_similarity': 0.55,
+            'min_code_similarity': 0.6,
+            'limit': 50,
+            'summarize': True,
+            'model': 'claude-haiku-4-5-20251001',
+        },
+        'options': {
+            'queue': WorkflowQueue.ADHOC,
+            'expires': 60 * 60,
+        },
+        'manifesto': {
+            'code_role': 'distill+express',
+            'para_bucket': 'area',
+            'express_target': 'es_log',
+            'review_artifact': 'es_log',
+            'hfl_signal': True,
+        },
+    },
+
     # Adhoc/manual answer slot — useful when you want a daily "morning brief"
     # of a fixed question. Defaults to disabled (very-rare crontab).
     'run-job--knowledge_answer_morning_brief': {

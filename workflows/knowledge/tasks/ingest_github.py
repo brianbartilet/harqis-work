@@ -28,32 +28,17 @@ from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import create_logger
 
-from apps.gemini.references.web.api.embed import ApiServiceGeminiEmbed
 from apps.github.config import CONFIG as GITHUB_CONFIG
 from apps.github.references.web.api.repos import ApiServiceGitHubRepos
 from apps.sqlite_vec import store
 
 from workflows.knowledge.chunking import chunk_text
+from workflows.knowledge.embed import embed_documents
 
 _log = create_logger("knowledge.ingest_github")
 
 _BATCH_SIZE = 50
 _DEFAULT_COMMENTS = 20  # "first 20 review comments" from the thesis
-
-
-def _embed_batch(embedder: ApiServiceGeminiEmbed, texts: list[str]) -> list[list[float]]:
-    resp = embedder.batch_embed_contents(texts=texts, task_type="RETRIEVAL_DOCUMENT")
-    data = resp.__dict__ if hasattr(resp, "__dict__") else resp
-    embeddings = data.get("embeddings", []) if isinstance(data, dict) else []
-    out: list[list[float]] = []
-    for e in embeddings:
-        values = e.get("values") if isinstance(e, dict) else getattr(e, "values", None)
-        if values is None:
-            raise RuntimeError(f"Gemini batch returned an item with no values: {e!r}")
-        out.append(list(values))
-    if len(out) != len(texts):
-        raise RuntimeError(f"Gemini batch returned {len(out)} embeddings for {len(texts)} texts")
-    return out
 
 
 def _comments_for_pr(svc: ApiServiceGitHubRepos, owner: str, repo: str,
@@ -120,7 +105,6 @@ def _ingest_doc(
     text: str,
     url: str,
     meta_base: dict[str, Any],
-    embedder: ApiServiceGeminiEmbed,
 ) -> int:
     chunks = chunk_text(text)
     if not chunks:
@@ -128,7 +112,7 @@ def _ingest_doc(
     written = 0
     for batch_start in range(0, len(chunks), _BATCH_SIZE):
         slice_ = chunks[batch_start : batch_start + _BATCH_SIZE]
-        vectors = _embed_batch(embedder, slice_)
+        vectors = embed_documents(slice_)
         for offset, (chunk, vec) in enumerate(zip(slice_, vectors)):
             idx = batch_start + offset
             store.upsert(
@@ -177,9 +161,6 @@ def ingest_github_repos(**kwargs):
 
     svc = ApiServiceGitHubRepos(GITHUB_CONFIG)
 
-    from apps.gemini.config import CONFIG as GEMINI_CONFIG
-    embedder = ApiServiceGeminiEmbed(GEMINI_CONFIG)
-
     prs_seen = 0
     issues_seen = 0
     chunks_written = 0
@@ -206,7 +187,7 @@ def ingest_github_repos(**kwargs):
                 }
                 chunks_written += _ingest_doc(
                     chunk_id_prefix=f"{owner}/{repo}#PR{pr.number}",
-                    text=text, url=pr.html_url, meta_base=meta, embedder=embedder,
+                    text=text, url=pr.html_url, meta_base=meta,
                 )
                 prs_seen += 1
                 _log.info("ingest_github_repos: %s#PR%d — %d comments", spec, pr.number, len(comments))
@@ -227,7 +208,7 @@ def ingest_github_repos(**kwargs):
                 }
                 chunks_written += _ingest_doc(
                     chunk_id_prefix=f"{owner}/{repo}#I{issue.number}",
-                    text=text, url=issue.html_url, meta_base=meta, embedder=embedder,
+                    text=text, url=issue.html_url, meta_base=meta,
                 )
                 issues_seen += 1
                 _log.info("ingest_github_repos: %s#I%d — %d comments", spec, issue.number, len(comments))

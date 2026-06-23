@@ -8,11 +8,19 @@ workflow targets. Swap this module wholesale when a real tokenizer is justified.
 
 from __future__ import annotations
 
+from html.parser import HTMLParser
 from typing import Any, Iterator
 
 
 _DEFAULT_CHUNK_CHARS = 2000   # ~500 tokens at 4 chars/token, matches Gemini's sweet spot
 _DEFAULT_OVERLAP = 200
+
+# Confluence storage-format block tags — emit a paragraph break after each so
+# the downstream chunker stays paragraph-aware.
+_CONFLUENCE_BLOCK_TAGS = {
+    "p", "br", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6",
+    "blockquote", "table", "ac:structured-macro", "ac:layout-cell", "ac:layout-section",
+}
 
 
 def chunk_text(
@@ -73,6 +81,71 @@ def extract_notion_block_text(block: dict[str, Any]) -> str:
         return body.get("title", "")
 
     return ""
+
+
+class _ConfluenceStorageStripper(HTMLParser):
+    """Flatten Confluence storage-format XHTML to plain text.
+
+    Storage format is XHTML plus Atlassian macros (``<ac:...>``,
+    ``<ri:...>``). We keep visible text and CDATA payloads (code blocks live in
+    ``<ac:plain-text-body><![CDATA[...]]></ac:plain-text-body>``), insert
+    paragraph breaks at block boundaries, and drop everything else. No external
+    HTML library — the stdlib parser is enough for retrieval-grade text.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in _CONFLUENCE_BLOCK_TAGS:
+            self._parts.append("\n\n")
+
+    def handle_endtag(self, tag):
+        if tag in _CONFLUENCE_BLOCK_TAGS:
+            self._parts.append("\n\n")
+
+    def handle_data(self, data):
+        if data:
+            self._parts.append(data)
+
+    # CDATA inside <ac:plain-text-body> arrives via handle_data when
+    # convert_charrefs is on, but unknown declarations (the raw CDATA marker)
+    # come through here on some Python builds — capture them too.
+    def unknown_decl(self, data):
+        if data.startswith("CDATA["):
+            self._parts.append(data[6:])
+
+    def text(self) -> str:
+        return "".join(self._parts)
+
+
+def strip_confluence_storage(storage_html: str) -> str:
+    """Convert a Confluence page's storage-format body to plain text.
+
+    Collapses runs of blank lines so the paragraph-aware chunker doesn't see
+    dozens of empty paragraphs from nested macro markup. Robust to None/empty.
+    """
+    if not storage_html:
+        return ""
+    parser = _ConfluenceStorageStripper()
+    try:
+        parser.feed(storage_html)
+    except Exception:  # noqa: BLE001 — malformed markup shouldn't kill an ingest
+        pass
+    raw = parser.text()
+    # Normalise whitespace: trim each line, drop empties, rejoin paragraphs.
+    lines = [ln.strip() for ln in raw.splitlines()]
+    out: list[str] = []
+    blank = False
+    for ln in lines:
+        if ln:
+            out.append(ln)
+            blank = False
+        elif not blank and out:
+            out.append("")  # single paragraph separator
+            blank = True
+    return "\n".join(out).strip()
 
 
 def flatten_adf(node: Any) -> str:
