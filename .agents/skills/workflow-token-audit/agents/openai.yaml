@@ -1,0 +1,4 @@
+interface:
+  display_name: "Workflow Token Audit"
+  short_description: "Estimate scheduled workflow model and API usage."
+  default_prompt: "Estimate daily, weekly, and monthly API/model token usage for active HARQIS workflows."
