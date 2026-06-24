@@ -494,6 +494,9 @@ WORKFLOWS_HUD = {
             'express_target': 'rainmeter:SCHEDULES',
             'review_artifact': 'es_log+hud_widget',
             'hfl_signal': True,
+            # Option B / Phase 1 opt-in: each successful run buffers a signal
+            # (workflows/hfl/express_signals.py) for the daily HFL rollup.
+            'hfl_express': 'buffer',
         },
     },
 
