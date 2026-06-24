@@ -92,15 +92,19 @@ SPROUT.conf.beat_schedule = _celery_safe_schedule(CONFIG_DICTIONARY)
 # they run N times on N workers simultaneously.
 SPROUT.conf.task_queues = (
     Queue(WorkflowQueue.DEFAULT.value),
+    Queue(WorkflowQueue.HOST.value),
     Queue(WorkflowQueue.HUD.value),
     Queue(WorkflowQueue.TCG.value),
     Queue(WorkflowQueue.ADHOC.value),
     Queue(WorkflowQueue.PEON.value),
+    Queue(WorkflowQueue.AGENT.value),
+    Queue(WorkflowQueue.WORKER.value),
     Queue(WorkflowQueue.N8N.value),
     Queue(WorkflowQueue.HFL.value),
     Broadcast(WorkflowQueue.DEFAULT_BROADCAST.value),
     Broadcast(WorkflowQueue.HUD_BROADCAST.value),
     Broadcast(WorkflowQueue.WORKERS_BROADCAST.value),
+    Broadcast(WorkflowQueue.AGENT_BROADCAST.value),
     Broadcast(WorkflowQueue.HFL_BROADCAST.value),
 )
 SPROUT.conf.task_default_queue = WorkflowQueue.DEFAULT.value

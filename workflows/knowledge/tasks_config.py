@@ -1,55 +1,37 @@
 """
 Beat schedule for the knowledge / RAG workflow.
 
-Two tasks:
-  - ingest_notion_pages: nightly Notion → vector store sync
-  - answer:              on-demand RAG answer (kept here so beat-driven
-                         scheduled questions remain possible — most callers
-                         invoke it directly via .delay() or the MCP tool)
+Cost guard: source ingestors can fan out across SaaS systems and embedding
+credits. The exported `WORKFLOW_KNOWLEDGE` therefore includes only bounded
+scheduled work by default, with live behavior controlled by env vars:
 
-Cost guard: `answer` pins Haiku 4.5 via `kwargs.model`. Per the project
-convention (see memory: anthropic_model_override), do not change the
-Anthropic default — pass the model from here.
+  - knowledge_cross_link_report: weekday morning synthesis over existing data
+    unless HARQIS_KNOWLEDGE_ENABLE_REPORT=0
+  - ingest_confluence_pages: enabled only when
+    HARQIS_KNOWLEDGE_CONFLUENCE_SPACES is set and
+    HARQIS_KNOWLEDGE_ENABLE_CONFLUENCE is not false
+  - ingest_jira_issues: enabled only when
+    HARQIS_KNOWLEDGE_JIRA_PROJECTS is set and
+    HARQIS_KNOWLEDGE_ENABLE_JIRA is not false
+  - knowledge_answer_morning_brief: enabled only when
+    HARQIS_KNOWLEDGE_ENABLE_MORNING_BRIEF is true
 
-────────────────────────────────────────────────────────────────────────
-DISABLED 2026-05-14 — beat schedule is empty (`WORKFLOW_KNOWLEDGE = {}`)
-────────────────────────────────────────────────────────────────────────
-ES rollups showed ingest_notion_pages / ingest_jira_issues /
-ingest_gdrive_docs failing 5 nights in a row with `RuntimeError`.
-ingest_github_repos looked "passing" only because tasks_config had
-`repos: []` so it short-circuited before touching Gemini.
+The parked `_DISABLED__WORKFLOW_KNOWLEDGE` entries are valid task definitions,
+but they are intentionally not exported until each source has an explicit scope
+and cost guard. In particular, Confluence with empty `space_keys`, Jira with
+empty `project_keys`, and Drive with `folder_id=None` can scan every visible item
+for that integration.
 
-Two stacked blockers — BOTH must be fixed before re-enabling:
-
-  1. Stale Gemini embedding model. `apps/gemini/references/web/api/embed.py`
-     hard-codes `DEFAULT_EMBED_MODEL = 'models/text-embedding-004'`, which
-     Google retired. The v1beta endpoint returns 404 NOT_FOUND. The
-     `_embed_batch()` helper (copy-pasted across all 4 ingest tasks) then
-     sees no `embeddings` key in the response and raises RuntimeError.
-     Fix: bump default to `'models/gemini-embedding-001'` (current GA;
-     `gemini-embedding-2` is also available).
-
-  2. Gemini project credits depleted. Even with the correct model name,
-     a live probe returns 429 RESOURCE_EXHAUSTED ("prepayment credits are
-     depleted"). Top up at https://ai.studio/projects, OR switch the
-     embedder (sentence-transformers locally, OpenAI, Cohere). Gemini's
-     free tier no longer covers embeddings.
-
-To re-enable: rename `_DISABLED__WORKFLOW_KNOWLEDGE` → `WORKFLOW_KNOWLEDGE`
-below. Beat picks it up on the next scheduler restart. See
-workflows/knowledge/README.md "Status" for the full write-up.
-
-Note: `run-job--knowledge_answer_morning_brief` is included in the
-disable because `retriever.embed_query` uses the same Gemini embedder
-for question vectors — top up + model bump are required for it too.
+Historical blocker: the old Gemini embedding model was retired, and this file
+was disabled after repeated ingest failures. The model has since moved to the
+shared env-driven embedder; embeddings still need funded/provider-backed runtime
+configuration on hosts that execute ingest tasks.
 """
+
+import os
 
 from celery.schedules import crontab
 from workflows.queues import WorkflowQueue
-
-
-# Empty exported schedule — see DISABLED header above.
-WORKFLOW_KNOWLEDGE: dict = {}
 
 
 _DISABLED__WORKFLOW_KNOWLEDGE = {
@@ -63,7 +45,7 @@ _DISABLED__WORKFLOW_KNOWLEDGE = {
             'rebuild': False,
         },
         'options': {
-            'queue': WorkflowQueue.AGENT,
+            'queue': WorkflowQueue.HOST,
             'expires': 60 * 60 * 6,  # 6h — skip if a previous run is still pending
         },
         'manifesto': {
@@ -89,7 +71,7 @@ _DISABLED__WORKFLOW_KNOWLEDGE = {
             'rebuild': False,
         },
         'options': {
-            'queue': WorkflowQueue.AGENT,
+            'queue': WorkflowQueue.HOST,
             'expires': 60 * 60 * 6,
         },
         'manifesto': {
@@ -114,7 +96,7 @@ _DISABLED__WORKFLOW_KNOWLEDGE = {
             'rebuild': False,
         },
         'options': {
-            'queue': WorkflowQueue.AGENT,
+            'queue': WorkflowQueue.HOST,
             'expires': 60 * 60 * 6,
         },
         'manifesto': {
@@ -136,7 +118,7 @@ _DISABLED__WORKFLOW_KNOWLEDGE = {
             'rebuild': False,
         },
         'options': {
-            'queue': WorkflowQueue.AGENT,
+            'queue': WorkflowQueue.HOST,
             'expires': 60 * 60 * 6,
         },
         'manifesto': {
@@ -162,7 +144,7 @@ _DISABLED__WORKFLOW_KNOWLEDGE = {
             'rebuild': False,
         },
         'options': {
-            'queue': WorkflowQueue.AGENT,
+            'queue': WorkflowQueue.HOST,
             'expires': 60 * 60 * 6,
         },
         'manifesto': {
@@ -189,7 +171,7 @@ _DISABLED__WORKFLOW_KNOWLEDGE = {
             'model': 'claude-haiku-4-5-20251001',
         },
         'options': {
-            'queue': WorkflowQueue.ADHOC,
+            'queue': WorkflowQueue.HOST,
             'expires': 60 * 60,
         },
         'manifesto': {
@@ -215,7 +197,7 @@ _DISABLED__WORKFLOW_KNOWLEDGE = {
             'max_tokens': 1024,
         },
         'options': {
-            'queue': WorkflowQueue.ADHOC,
+            'queue': WorkflowQueue.HOST,
             'expires': 60 * 60,
         },
         'manifesto': {
@@ -228,3 +210,110 @@ _DISABLED__WORKFLOW_KNOWLEDGE = {
     },
 
 }
+
+def _csv_env(name: str) -> list[str]:
+    raw = os.environ.get(name, "").strip()
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _int_env(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _float_env(name: str, default: float) -> float:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _entry_with_kwargs(name: str, **overrides) -> dict:
+    base = _DISABLED__WORKFLOW_KNOWLEDGE[name]
+    return {**base, 'kwargs': {**base['kwargs'], **overrides}}
+
+
+def _enabled_workflow_knowledge() -> dict:
+    """Export the live-safe scheduled knowledge surface.
+
+    Broad source ingestors stay opt-in. Confluence and Jira are exported only
+    when the host supplies scoped source filters. The report stays on by
+    default, but scheduled LLM work remains env-controlled.
+    """
+    enabled = {}
+
+    if _bool_env("HARQIS_KNOWLEDGE_ENABLE_REPORT", True):
+        enabled['run-job--knowledge_cross_link_report'] = _entry_with_kwargs(
+            'run-job--knowledge_cross_link_report',
+            since=os.environ.get("HARQIS_KNOWLEDGE_REPORT_SINCE", "-7d").strip() or "-7d",
+            k=_int_env("HARQIS_KNOWLEDGE_REPORT_K", 8),
+            min_doc_similarity=_float_env("HARQIS_KNOWLEDGE_REPORT_MIN_DOC_SIMILARITY", 0.55),
+            min_code_similarity=_float_env("HARQIS_KNOWLEDGE_REPORT_MIN_CODE_SIMILARITY", 0.6),
+            limit=_int_env("HARQIS_KNOWLEDGE_REPORT_LIMIT", 50),
+            summarize=_bool_env("HARQIS_KNOWLEDGE_REPORT_SUMMARIZE", False),
+            model=os.environ.get(
+                "HARQIS_KNOWLEDGE_REPORT_MODEL",
+                'claude-haiku-4-5-20251001',
+            ).strip() or 'claude-haiku-4-5-20251001',
+        )
+
+    confluence_spaces = _csv_env("HARQIS_KNOWLEDGE_CONFLUENCE_SPACES")
+    if confluence_spaces and _bool_env("HARQIS_KNOWLEDGE_ENABLE_CONFLUENCE", True):
+        kwargs = {
+            'space_keys': confluence_spaces,
+            'max_pages': _int_env("HARQIS_KNOWLEDGE_CONFLUENCE_MAX_PAGES", 200),
+        }
+        cql_extra = os.environ.get("HARQIS_KNOWLEDGE_CONFLUENCE_CQL_EXTRA", "").strip()
+        if cql_extra:
+            kwargs['cql_extra'] = cql_extra
+        enabled['run-job--ingest_confluence_pages'] = _entry_with_kwargs(
+            'run-job--ingest_confluence_pages',
+            **kwargs,
+        )
+
+    jira_projects = _csv_env("HARQIS_KNOWLEDGE_JIRA_PROJECTS")
+    if jira_projects and _bool_env("HARQIS_KNOWLEDGE_ENABLE_JIRA", True):
+        enabled['run-job--ingest_jira_issues'] = _entry_with_kwargs(
+            'run-job--ingest_jira_issues',
+            project_keys=jira_projects,
+            max_issues=_int_env("HARQIS_KNOWLEDGE_JIRA_MAX_ISSUES", 100),
+            max_comments=_int_env("HARQIS_KNOWLEDGE_JIRA_MAX_COMMENTS", 20),
+            jql_extra=os.environ.get("HARQIS_KNOWLEDGE_JIRA_JQL_EXTRA", "").strip(),
+        )
+
+    if _bool_env("HARQIS_KNOWLEDGE_ENABLE_MORNING_BRIEF", False):
+        enabled['run-job--knowledge_answer_morning_brief'] = _entry_with_kwargs(
+            'run-job--knowledge_answer_morning_brief',
+            question=os.environ.get(
+                "HARQIS_KNOWLEDGE_MORNING_BRIEF_QUESTION",
+                "What did I write down last week that I haven't actioned yet?",
+            ).strip() or "What did I write down last week that I haven't actioned yet?",
+            k=_int_env("HARQIS_KNOWLEDGE_MORNING_BRIEF_K", 8),
+            source=os.environ.get("HARQIS_KNOWLEDGE_MORNING_BRIEF_SOURCE", "confluence").strip() or "confluence",
+            cfg_id__anthropic=os.environ.get("HARQIS_KNOWLEDGE_MORNING_BRIEF_ANTHROPIC_CFG", "ANTHROPIC").strip() or "ANTHROPIC",
+            model=os.environ.get(
+                "HARQIS_KNOWLEDGE_MORNING_BRIEF_MODEL",
+                'claude-haiku-4-5-20251001',
+            ).strip() or 'claude-haiku-4-5-20251001',
+            max_tokens=_int_env("HARQIS_KNOWLEDGE_MORNING_BRIEF_MAX_TOKENS", 1024),
+        )
+
+    return enabled
+
+
+WORKFLOW_KNOWLEDGE = _enabled_workflow_knowledge()

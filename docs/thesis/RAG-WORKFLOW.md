@@ -2,7 +2,7 @@
 
 A practical, locally-runnable Retrieval-Augmented-Generation stack built on top of the existing harqis-work platform. This document explains **what** RAG is, **why** the components were chosen the way they were, **how** the pieces fit together, and **what** you can build on top once the smallest viable RAG is in place.
 
-> **Operational status (2026-05-14):** the nightly ingest beat schedule is currently disabled. Two stacked blockers — Gemini retired the embedding model the code hard-codes, and the Gemini project's prepayment credits are depleted. The pipeline design below stands; only the schedule is paused. See [`workflows/knowledge/README.md`](../../workflows/knowledge/README.md#status--beat-schedule-is-currently-disabled-2026-05-14) for the full write-up and the re-enable steps.
+> **Operational status (2026-06-24):** the Knowledge beat schedule is guarded rather than fully disabled. `knowledge_cross_link_report` is available for weekday reports, Confluence ingest is scheduled only when `HARQIS_KNOWLEDGE_CONFLUENCE_SPACES` is set, and scheduled LLM summaries require `HARQIS_KNOWLEDGE_REPORT_SUMMARIZE=1`. Live ingest still requires funded/configured embeddings and persistent `HARQIS_VECTOR_DB`. See [`workflows/knowledge/README.md`](../../workflows/knowledge/README.md#status--guarded-beat-schedule-enabled) for the deployment checklist.
 
 ---
 
@@ -593,4 +593,4 @@ python -c "from workflows.knowledge.tasks.answer import answer_question; import 
 python mcp/server.py
 ```
 
-Once the beat scheduler is running (`python scripts/deploy.py`), the four ingestors run nightly at 02:30 / 02:45 / 03:00 / 03:15 and keep the store warm without manual intervention.
+Once the beat scheduler is running, Knowledge uses the guarded schedule from `workflows/knowledge/tasks_config.py`: the weekday cross-link report is enabled by default, Confluence ingest runs only when `HARQIS_KNOWLEDGE_CONFLUENCE_SPACES` is set, and the older Notion/Jira/GitHub/GDrive ingestors remain parked until each has an explicit live scope and cost guard.

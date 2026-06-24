@@ -1,4 +1,4 @@
-# Knowledge / RAG workflow — "Knowledge Radar"
+# Knowledge / RAG workflow — "Knowledge Accumulator and Radar"
 
 Local Retrieval-Augmented-Generation pipeline. Ingests source corpora
 (Confluence, Notion, Jira, GitHub, Google Drive) into a single sqlite-vec store
@@ -10,22 +10,93 @@ For the design rationale and full pipeline diagram see
 Phase-1 + Phase-3 POC built on top of it (Confluence ingest + cross-source
 intelligence) see [`docs/thesis/KNOWLEDGE-RADAR-PHASE1-3.md`](../../docs/thesis/KNOWLEDGE-RADAR-PHASE1-3.md).
 
-## Status — embedder fixed; beat schedule still OFF by choice
+## Status — guarded beat schedule enabled
 
 The **stale-model blocker is resolved**: `apps/gemini/.../embed.py` now defaults
 to `models/gemini-embedding-001`, and the four copy-pasted `_embed_batch`
 helpers are DRYed into [`embed.py`](embed.py) (one place to swap provider/model,
 via `HARQIS_KNOWLEDGE_EMBED_PROVIDER` / `HARQIS_KNOWLEDGE_EMBED_MODEL`).
 
-`WORKFLOW_KNOWLEDGE` in [`tasks_config.py`](tasks_config.py) still exports `{}`
-(beat entries live in `_DISABLED__WORKFLOW_KNOWLEDGE`). The remaining gate is
-**operational, not code**: Gemini embedding credits must be funded (a live probe
-returned `429 RESOURCE_EXHAUSTED` — *"prepayment credits are depleted"*), or
-point the embedder at another provider. Task functions are intact, so manual /
-MCP invocation works today once embeddings are funded.
+`WORKFLOW_KNOWLEDGE` in [`tasks_config.py`](tasks_config.py) now exports the safe
+scheduled surface:
 
-**To re-enable beat:** fund/redirect embeddings, then rename
-`_DISABLED__WORKFLOW_KNOWLEDGE` → `WORKFLOW_KNOWLEDGE` and restart the scheduler.
+- `knowledge_cross_link_report` is scheduled on weekday mornings unless
+  `HARQIS_KNOWLEDGE_ENABLE_REPORT=0`. It defaults to structured output only;
+  set `HARQIS_KNOWLEDGE_REPORT_SUMMARIZE=1` to allow the scheduled LLM brief.
+- `ingest_confluence_pages` is scheduled only when
+  `HARQIS_KNOWLEDGE_CONFLUENCE_SPACES` is set, so beat cannot accidentally scan
+  every visible Confluence page. Set `HARQIS_KNOWLEDGE_ENABLE_CONFLUENCE=0` as a
+  host-side kill switch even when spaces are configured.
+- Notion, Jira, GitHub, Google Drive, and the fixed morning brief stay parked in
+  `_DISABLED__WORKFLOW_KNOWLEDGE` until each has an explicit scope/cost guard.
+
+Live server env checklist:
+
+```bash
+HARQIS_VECTOR_DB=/persistent/harqis/vector_store.db
+HARQIS_KNOWLEDGE_ENABLE_REPORT=1
+HARQIS_KNOWLEDGE_REPORT_SUMMARIZE=0
+HARQIS_KNOWLEDGE_REPORT_LIMIT=50
+HARQIS_KNOWLEDGE_CONFLUENCE_SPACES=ENG,OPS
+HARQIS_KNOWLEDGE_CONFLUENCE_MAX_PAGES=200
+HARQIS_KNOWLEDGE_CONFLUENCE_CQL_EXTRA="lastmodified >= '2026-06-01'"
+HARQIS_KNOWLEDGE_JIRA_PROJECTS=IC,CH,HA,DEVCLOUD
+HARQIS_KNOWLEDGE_JIRA_MAX_ISSUES=50
+HARQIS_KNOWLEDGE_JIRA_MAX_COMMENTS=20
+HARQIS_KNOWLEDGE_JIRA_JQL_EXTRA="updated >= -30d"
+HARQIS_KNOWLEDGE_ENABLE_MORNING_BRIEF=1
+HARQIS_KNOWLEDGE_MORNING_BRIEF_SOURCE=confluence
+HARQIS_KNOWLEDGE_MORNING_BRIEF_K=8
+```
+
+The remaining operational gate is embeddings: Gemini embedding credits must be
+funded, or the embedder must point at another provider. Keep `HARQIS_VECTOR_DB`
+on persistent storage instead of relying on the repo-local `results/vector_store.db`
+default.
+
+Deploy the host with the `host` queue so it can consume the scheduled Knowledge tasks:
+
+```bash
+python scripts/deploy.py --role host -q default,host,hfl
+```
+
+Beat runs only on the host. Do not run the scheduler on worker nodes. Knowledge ingests and reports are routed to `host` so they use the same persistent vector store and server-side credentials.
+
+## Enabling additional ingestors
+
+The broad source ingestors are kept in `_DISABLED__WORKFLOW_KNOWLEDGE` in
+[`tasks_config.py`](tasks_config.py). To make one live, do not simply rename the
+whole parked dict. Add an explicit guarded export in `_enabled_workflow_knowledge()`
+that supplies a narrow scope from env vars, following the Confluence pattern.
+
+| Source | Required live scope before scheduling | Why it is parked |
+| --- | --- | --- |
+| `notion` | Workspace/page filter or safe page cap | Current task searches the workspace broadly. |
+| `jira` | `HARQIS_KNOWLEDGE_JIRA_PROJECTS` and preferably `HARQIS_KNOWLEDGE_JIRA_JQL_EXTRA` | Env-gated live export exists; empty `project_keys` would scan all visible projects. |
+| `github` | Explicit `repos` list | Empty `repos` is a no-op; broad org scans need a cost guard. |
+| `gdrive` | `folder_id` and/or `modified_after` | `folder_id=None` means whole Drive. |
+| `knowledge_answer_morning_brief` | `HARQIS_KNOWLEDGE_ENABLE_MORNING_BRIEF=1` plus fixed question/source/model env | Env-gated live export exists; scheduled LLM answer calls should be intentional. |
+
+The pattern for a new live source is:
+
+1. Add env vars for the source scope, for example `HARQIS_KNOWLEDGE_JIRA_PROJECTS`.
+2. Parse those env vars in `tasks_config.py`.
+3. Only export the beat entry when the scope is non-empty and the source kill switch is not false.
+4. Override the parked entry with `_entry_with_kwargs(...)` instead of mutating the parked dict.
+5. Add a regression test in `workflows/knowledge/tests/test_tasks_config.py`.
+
+Example shape:
+
+```python
+jira_projects = _csv_env("HARQIS_KNOWLEDGE_JIRA_PROJECTS")
+if jira_projects and _bool_env("HARQIS_KNOWLEDGE_ENABLE_JIRA", True):
+    enabled["run-job--ingest_jira_issues"] = _entry_with_kwargs(
+        "run-job--ingest_jira_issues",
+        project_keys=jira_projects,
+        jql_extra=os.environ.get("HARQIS_KNOWLEDGE_JIRA_JQL_EXTRA", "").strip(),
+        max_issues=_int_env("HARQIS_KNOWLEDGE_JIRA_MAX_ISSUES", 100),
+    )
+```
 
 ## Layout
 

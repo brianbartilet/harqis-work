@@ -66,7 +66,7 @@ Per task, the generator treats `tasks_config.py` as authoritative for some field
 The generator calls `_find_beat_dict()`, which returns **the first module-level dict whose keys *all* start with `run-job--`**. This contract has sharp edges:
 
 - **All-or-nothing.** If even one key in the dict does not start with `run-job--`, the whole dict is rejected and the **entire workflow disappears** from the registry (and the frontend) — every valid task in it goes down too.
-- **Underscore = skipped.** Module-level names beginning with `_` are ignored. This is the supported way to disable a whole workflow without deleting it — e.g. `knowledge` exports an empty `WORKFLOW_KNOWLEDGE = {}` and parks the real entries under `_DISABLED__WORKFLOW_KNOWLEDGE`.
+- **Underscore = skipped.** Module-level names beginning with `_` are ignored. This is the supported way to park disabled entries without deleting them — e.g. `knowledge` exports a guarded `WORKFLOW_KNOWLEDGE` while keeping broad source ingestors under `_DISABLED__WORKFLOW_KNOWLEDGE`.
 - **Empty is skipped.** Empty files (`finance`) and empty dicts are silently skipped.
 - **Prefix is stripped.** `run-job--download_scryfall_bulk_data` becomes the registry task key `download_scryfall_bulk_data`.
 

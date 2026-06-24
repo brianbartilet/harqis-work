@@ -19,9 +19,9 @@ Pipeline (per run):
 Idempotent: re-running re-ingests only what changed. `rebuild=True` drops the
 source first for a clean reindex.
 
-Default schedule: nightly 03:30 (staggered after the other ingestors). The beat
-entry ships disabled — enable it in tasks_config.py once Confluence creds are
-set in .env/apps.env and Gemini embedding credits are funded.
+Default schedule: nightly 03:30 when the host sets
+HARQIS_KNOWLEDGE_CONFLUENCE_SPACES. Without scoped spaces, the beat entry is not
+exported.
 """
 
 from __future__ import annotations

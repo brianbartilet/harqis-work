@@ -69,9 +69,9 @@ similarity misses for IDs/acronyms.
   `knowledge_working_context`, `knowledge_orphan_tickets`,
   `knowledge_stale_docs`, `knowledge_scan_watchlist`, `knowledge_list_sources`
   (+ `confluence_*`).
-- **Beat** (shipped disabled): `ingest_confluence_pages` nightly;
-  `knowledge_cross_link_report` weekday mornings (working-context + orphans +
-  stale, ES-logged).
+- **Beat** (guarded): `knowledge_cross_link_report` weekday mornings by default;
+  `ingest_confluence_pages` nightly only when `HARQIS_KNOWLEDGE_CONFLUENCE_SPACES`
+  is set. Scheduled LLM summaries require `HARQIS_KNOWLEDGE_REPORT_SUMMARIZE=1`.
 
 ## What's deliberately NOT in this POC
 
@@ -85,5 +85,7 @@ similarity misses for IDs/acronyms.
 ## Operational gate
 
 Embeddings must be funded (or `HARQIS_KNOWLEDGE_EMBED_PROVIDER` pointed
-elsewhere) and `CONFLUENCE_*` set in the gitignored `.env/apps.env`. The code
-path is complete and unit-tested offline; live ingest needs those two inputs.
+elsewhere), `CONFLUENCE_*` must be set in the gitignored `.env/apps.env`, and
+`HARQIS_VECTOR_DB` should point at persistent server storage. Live Confluence
+scheduling additionally requires `HARQIS_KNOWLEDGE_CONFLUENCE_SPACES`; without
+that env var, Beat will not scan Confluence.
