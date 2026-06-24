@@ -6,7 +6,7 @@ Operational scripts for **harqis-work**, organised by purpose:
   the stack up, launch daemons, and sync config between machines.
 - **Agent-support** scripts live under [`scripts/agents/`](#scriptsagents),
   grouped into **context subfolders** — `repo-quality/`, `learning/`,
-  `testing/`, `diagnostics/`, `dumps/`, and `fleet/`. These are the Claude-driven
+  `testing/`, `diagnostics/`, `dumps/`, and `fleet/`. These are the agent-driven
   automation, the repo-quality / health / test tooling those agents drive, the
   HFL learning loop, and the worktree / window cleanup that keeps the fleet tidy.
 
@@ -26,17 +26,18 @@ Agent-support scripts are grouped into **context subfolders**. Each script
 resolves the repo root via `Path(__file__).resolve().parents[3]` (three levels
 up from `scripts/agents/<bucket>/`).
 
-### `repo-quality/` — audits, scans, and Claude-driven repo maintenance
+### `repo-quality/` - audits, scans, and agent-driven repo maintenance
 
 | Path | Purpose |
 |---|---|
 | `manifesto_audit.py` | Validates the `'manifesto'` metadata block on every `workflows/*/tasks_config.py` beat entry. Non-zero exit on hard violations. |
-| `manifesto_audit_agent.py` | Claude-delegated CODE+PARA compliance audit — runs locally (no API cost), writes findings + opens PR branches for significant issues. |
+| `manifesto_audit_agent.py` | Agent-delegated CODE+PARA compliance audit - runs locally (no API cost), writes findings + opens PR branches for significant issues. |
 | `daily_improvement_scout.py` | Daily repo inspection — code-quality, config, workflow-health gaps. Shells out to `repo-quality/manifesto_audit.py`. |
-| `weekly_claude_pr.py` | Weekly orchestration — runs the scout, delegates to local Claude Code, opens a draft PR. |
-| [`run_agent_prompt.py`](#run_agent_promptpy) | Claude-driven docs / code-smell regenerator. Invoked by the `agent-prompts.yml` CI workflow. |
+| `weekly_claude_pr.py` | Weekly orchestration - runs the scout, delegates to the local agent client, opens a draft PR. |
+| [`run_agent_prompt.py`](#run_agent_promptpy) | Agent-driven docs / code-smell regenerator. Invoked by the `agent-prompts.yml` CI workflow. |
 | `migrate_to_core_scan.py` | Deterministic harvest-candidate scan for the `/migrate-to-core` skill — ranks `apps/` + `scripts/agents/` by genericness vs. coupling and maps what's already upstream in harqis-core. Writes `.harqis-data/migrate_to_core_scan.json`. |
-| `migrate_to_core_agent.py` | Bi-monthly local Claude Code runner for `/migrate-to-core` (first/third Saturdays). Runs `migrate_to_core_scan.py` first, then opens review-gated PR pairs. |
+| `migrate_to_core_agent.py` | Bi-monthly local agent runner for `/migrate-to-core` (first/third Saturdays). Runs `migrate_to_core_scan.py` first, then opens review-gated PR pairs. |
+| [`sync_agent_skills.py`](#sync_agent_skillspy) | Mirrors canonical `.agents/skills` into generated `.claude/skills` for Claude compatibility. |
 
 ### `learning/` — agent reasoning capture + lessons loop
 
@@ -93,6 +94,23 @@ Scripts under `agents/<bucket>/` resolve the repo root via
 `Path(__file__).resolve().parents[3]` (three levels up from
 `scripts/agents/<bucket>/`).
 
+
+### `scripts/agents/repo-quality/sync_agent_skills.py`
+
+Mirror the canonical source-controlled skills from `.agents/skills` into
+`.claude/skills` for Claude compatibility. The generated `.claude/skills` tree is
+ignored by git so skill bodies stay DRY in source control.
+
+```bash
+python scripts/agents/repo-quality/sync_agent_skills.py
+python scripts/agents/repo-quality/sync_agent_skills.py --check
+```
+
+The `--check` mode validates every canonical `SKILL.md` has YAML frontmatter and
+returns non-zero when the generated Claude copy is missing or stale.
+
+---
+
 ### `scripts/agents/testing/daily_test_farm_email.py`
 
 Refresh and email the rendered BDD test farm report:
@@ -103,7 +121,7 @@ python scripts/agents/testing/daily_test_farm_email.py --dry-run --skip-generate
 ```
 
 The script reuses `workflows.testing.tasks.test_farm.run_test_farm`, which invokes the
-repo-local `/generate-gherkin-scenarios` Claude skill through the local Claude Code Max
+repo-local `/generate-gherkin-scenarios` skill through the local agent client Max
 subscription. It renders `logs/BDD-TEST-FARM.md` to HTML, writes audit artifacts under
 `logs/test_farm_email/`, sends via the `GOOGLE_GMAIL_SEND` app config, and sends a
 Telegram completion notification via the `TELEGRAM` app config. Recipients and sender
@@ -546,7 +564,7 @@ location is resolved per-host from `ANDROID_SDK_ROOT`/`ANDROID_HOME`. Exit codes
 
 ## `run_agent_prompt.py`
 
-`scripts/agents/repo-quality/run_agent_prompt.py` — Claude-powered regenerator for top-level
+`scripts/agents/repo-quality/run_agent_prompt.py` - agent-powered regenerator for top-level
 docs.
 
 ```bash

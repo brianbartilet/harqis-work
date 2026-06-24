@@ -1,6 +1,8 @@
 # ── IDE / editor ─────────────────────────────────────────────────────────────
 .idea
 .claude/settings.local.json
+.claude/skills/
+.codex/config.toml
 
 # ── Secrets / env files ──────────────────────────────────────────────────────
 .env/*
