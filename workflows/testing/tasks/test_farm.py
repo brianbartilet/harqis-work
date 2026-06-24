@@ -36,7 +36,7 @@ References:
 - workflows/hud/tasks/hud_jira.py — board fetch + status/type context (mirrored).
 - workflows/finance/tasks/parse_transaction.py — AI-in-the-loop task pattern.
 - apps/antropic/references/web/base_api_service.py — the API client used here.
-- .claude/skills/generate-gherkin-scenarios/SKILL.md — source of the conventions
+- .agents/skills/generate-gherkin-scenarios/SKILL.md — source of the conventions
   inlined into the system prompt below.
 """
 

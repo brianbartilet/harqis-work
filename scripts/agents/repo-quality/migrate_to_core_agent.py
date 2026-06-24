@@ -2,7 +2,7 @@
 """
 Bi-monthly HARQIS migrate-to-core runner.
 
-Runs Claude Code locally against the canonical .claude skill so Hermes cron can
+Runs Claude Code locally against the canonical .agents skill so Hermes cron can
 schedule the work with no Hermes agent/API reasoning loop. The script is quiet on
 off-cycle Saturdays so no_agent cron delivery stays silent.
 """
@@ -19,7 +19,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CORE_DEFAULT = Path.home() / "GIT" / "harqis-core"
-SKILL_PATH = REPO_ROOT / ".claude" / "skills" / "migrate-to-core" / "SKILL.md"
+SKILL_PATH = REPO_ROOT / ".agents" / "skills" / "migrate-to-core" / "SKILL.md"
 SCAN_SCRIPT = REPO_ROOT / "scripts" / "agents" / "repo-quality" / "migrate_to_core_scan.py"
 DATA_DIR = Path("/Volumes/harqis-data/migrate-to-core")
 CLAUDE_BIN = Path.home() / ".local" / "bin" / "claude"
