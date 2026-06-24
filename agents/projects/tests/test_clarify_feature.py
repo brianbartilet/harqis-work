@@ -29,7 +29,7 @@ from agents.projects.trello.models import KanbanCard
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 REPO_ROOT = Path(__file__).parent.parent.parent.parent
-SKILL_MD = REPO_ROOT / ".claude" / "skills" / "clarify-feature" / "SKILL.md"
+SKILL_MD = REPO_ROOT / ".agents" / "skills" / "clarify-feature" / "SKILL.md"
 KANBAN_PROMPT = REPO_ROOT / "agents" / "prompts" / "kanban_agent_default.md"
 PROFILES_DIR = REPO_ROOT / "agents" / "projects" / "profiles" / "examples"
 

@@ -195,9 +195,9 @@ def test_prune_stale_cleans_registration_after_dir_removed(repo: Path):
 
     # The registration entry still lingers — listed by `git worktree list`.
     listing_before = _git(["worktree", "list", "--porcelain"], cwd=repo)
-    assert_that(str(wt.path), is_in(listing_before))
+    assert_that(wt.path.as_posix(), is_in(listing_before))
 
     prune_stale(repo)
 
     listing_after = _git(["worktree", "list", "--porcelain"], cwd=repo)
-    assert_that(str(wt.path), is_not(is_in(listing_after)))
+    assert_that(wt.path.as_posix(), is_not(is_in(listing_after)))

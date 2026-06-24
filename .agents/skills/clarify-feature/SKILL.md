@@ -21,6 +21,21 @@ direct message) describes a **new feature, requirement, or enhancement** to an e
 part of `harqis-work` — an existing app, workflow, agent, MCP tool, frontend panel, or
 any shared component.
 
+**Trigger phrases include:**
+- "add a feature"
+- "I want to"
+- "build me"
+- "implement"
+- "new feature"
+- "requirements for"
+- "can you add"
+- "I need a ..."
+- "feature request"
+- "enhance"
+- "extend"
+- "update X to also"
+- "make X do"
+
 **It does NOT fire for scaffolding/creation commands:**
 - `/create-new-workflow` — owns its own Step-0 clarification pass
 - `/create-new-service-app` (or `create-new-app-service`) — owns its own clarification
