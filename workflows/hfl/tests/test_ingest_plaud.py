@@ -120,6 +120,22 @@ def test_recording_with_summary_no_transcript_still_ingests(monkeypatch, tmp_pat
     assert_that(result["entries_written"], equal_to(1))
 
 
+@pytest.mark.smoke
+def test_archive_day_uses_local_copy_for_localhost(monkeypatch, tmp_path):
+    archive_base = tmp_path / "archive"
+    staging_dir = tmp_path / "2026-06-24"
+    staging_dir.mkdir()
+    (staging_dir / "2026-06-24-summary.md").write_text("ok", encoding="utf-8")
+    monkeypatch.setenv("PLAUD_ARCHIVE_HOST", "localhost")
+    monkeypatch.setenv("PLAUD_ARCHIVE_PATH", str(archive_base))
+
+    result = ip._archive_day(staging_dir, "2026-06-24")
+
+    assert_that(result["archived"], equal_to(True))
+    assert_that(result["mode"], equal_to("local-copy"))
+    assert_that((archive_base / "2026-06-24" / "2026-06-24-summary.md").exists(), equal_to(True))
+
+
 @pytest.mark.skip(reason="Manual only — live Plaud + Whisper + Anthropic + scp archive")
 def test_full_pipeline_live():
     ip.ingest_plaud_activity()

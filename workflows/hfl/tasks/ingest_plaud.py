@@ -48,6 +48,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import socket
 import subprocess
 import tempfile
 from datetime import date, datetime, timedelta
@@ -296,9 +297,33 @@ def _build_day_summary_md(day: str, items: list[dict]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _archive_day(staging_dir: Path, day: str) -> dict[str, Any]:
-    """scp the day's staging folder (audio + summary.md) to the archive host.
+def _is_local_archive_host(host: str) -> bool:
+    """Return True when the configured archive host is this machine.
 
+    The HARQIS Mac mini often has PLAUD_ARCHIVE_PATH mounted locally. In that
+    case routing the archive through SSH-to-self makes the nightly job depend on
+    local public-key auth even though a direct filesystem copy is enough.
+    """
+    normalized = (host or "").strip().split("@")[-1].lower().rstrip(".")
+    if normalized in {"", "localhost", "127.0.0.1", "::1"}:
+        return True
+    candidates = {
+        socket.gethostname(),
+        socket.getfqdn(),
+        os.environ.get("HOSTNAME", ""),
+    }
+    try:
+        candidates.add(subprocess.check_output(["scutil", "--get", "LocalHostName"], text=True).strip())
+    except Exception:  # noqa: BLE001 - macOS helper may not exist off-host
+        pass
+    return normalized in {c.lower().rstrip(".") for c in candidates if c}
+
+
+def _archive_day(staging_dir: Path, day: str) -> dict[str, Any]:
+    """Archive the day's staging folder (audio + summary.md).
+
+    If the configured target is this host and PLAUD_ARCHIVE_PATH is an absolute
+    local path, copy directly. Otherwise scp to the configured archive host.
     Best-effort: returns {"archived": bool, "error"?: str}. Never raises — a
     failed archive must not cost an already-captured HFL entry.
     """
@@ -306,6 +331,17 @@ def _archive_day(staging_dir: Path, day: str) -> dict[str, Any]:
     if not remote_base:
         return {"archived": False, "skipped": "PLAUD_ARCHIVE_PATH not set"}
     host = os.environ.get("PLAUD_ARCHIVE_HOST", "").strip() or _DEFAULT_ARCHIVE_HOST
+    if Path(remote_base).is_absolute() and _is_local_archive_host(host):
+        target_dir = Path(remote_base) / staging_dir.name
+        try:
+            target_dir.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(staging_dir, target_dir, dirs_exist_ok=True)
+            _log.info("ingest_plaud: archived %s → %s", day, target_dir)
+            return {"archived": True, "host": host, "remote_base": remote_base, "mode": "local-copy"}
+        except Exception as exc:  # noqa: BLE001 - archive must never break the beat
+            _log.error("ingest_plaud: local archive to %s failed (%s)", target_dir, exc)
+            return {"archived": False, "error": str(exc)[:200], "mode": "local-copy"}
+
     target = f"{host}:{remote_base.rstrip('/')}/"
     try:
         # -r recursive, -B batch (never prompt for a password — key-only),
@@ -317,14 +353,14 @@ def _archive_day(staging_dir: Path, day: str) -> dict[str, Any]:
             timeout=600,
         )
         _log.info("ingest_plaud: archived %s → %s", day, target)
-        return {"archived": True, "host": host, "remote_base": remote_base}
+        return {"archived": True, "host": host, "remote_base": remote_base, "mode": "scp"}
     except subprocess.CalledProcessError as exc:
         err = (exc.stderr or b"").decode("utf-8", "replace").strip()[:200]
         _log.error("ingest_plaud: archive to %s failed: %s", target, err)
-        return {"archived": False, "error": err or "scp failed"}
+        return {"archived": False, "error": err or "scp failed", "mode": "scp"}
     except Exception as exc:  # noqa: BLE001 - archive must never break the beat
         _log.error("ingest_plaud: archive to %s failed (%s)", target, exc)
-        return {"archived": False, "error": str(exc)[:200]}
+        return {"archived": False, "error": str(exc)[:200], "mode": "scp"}
 
 
 # ── task ──────────────────────────────────────────────────────────────────────
