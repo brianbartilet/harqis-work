@@ -51,9 +51,28 @@ The repo is the operator's externalized memory. Two mental models govern how kno
 | **Resources** | Topics of reference                                 | `docs/info/*`, `docs/thesis/*`, story banks, debugging journals |
 | **Archive**   | Inactive but possibly useful                        | Removed forks, deprecated apps, old workflows                   |
 
+**How CODE and PAER nest:**
+
+CODE defines the knowledge lifecycle. PAER defines how to work each stage of that lifecycle. For non-trivial systems, do not treat PAER as something that happens only after Capture→Organize→Distill→Express; apply a right-sized PAER loop inside each CODE step.
+
+```text
+Capture  → Plan → Analyze → Execute → Review
+Organize → Plan → Analyze → Execute → Review
+Distill  → Plan → Analyze → Execute → Review
+Express  → Plan → Analyze → Execute → Review
+```
+
+Examples:
+
+- **Capture PAER:** plan which signal matters, analyze source/auth/privacy risks, execute ingestion, review completeness and noise.
+- **Organize PAER:** plan the destination, analyze PARA bucket/tags/routes, execute routing/indexing, review retrievability.
+- **Distill PAER:** plan the reusable insight, analyze what matters vs noise, execute summary/extraction, review fidelity.
+- **Express PAER:** plan the output surface, analyze audience/timing/risk, execute delivery, review whether the output landed and was useful.
+
 **Rules for builders (human or LLM):**
 
 - Anything captured must have a defined Express path within one hop. Captures that never get expressed are dead weight.
+- For non-trivial workflows, run a lightweight PAER loop at each CODE stage, not only once at the end.
 - When in doubt where something goes, it is a Resource, not a Project.
 - Don't create a fifth bucket. The four are deliberately small.
 
@@ -157,7 +176,7 @@ When an LLM (Claude Code, an agent under `agents/`, a skill invocation, a workfl
 2. **File the output in PARA.** Decide which bucket it belongs to. If it's a Project, name the deadline / done-state. If it's a Resource, link from the relevant index.
 3. **Apply Habit 5 first.** Read the existing apps, workflows, skills, and configs that touch this area before generating anything. Don't invent abstractions that already exist.
 4. **Apply Habit 2 next.** State the Express output in one sentence before designing the Capture. If you can't, stop and ask.
-5. **Run PAER explicitly.** Plan → Analyze → Execute → Review, with artifacts at each step. The Review step writes back into memory, docs, or this manifesto if a principle needs updating.
+5. **Run PAER explicitly.** Plan → Analyze → Execute → Review, with artifacts at each step. For non-trivial workflows, apply this loop inside each CODE stage (Capture, Organize, Distill, Express), not only once at the end. The Review step writes back into memory, docs, or this manifesto if a principle needs updating.
 6. **Favor reuse over reinvention.** Existing app integrations, skills, and helpers always win over freshly generated code.
 7. **Default to no comments, no extra docs, no speculative abstractions.** Add only what the immediate task requires. (This rule is already in `CLAUDE.md`; this manifesto restates it because it is load-bearing.)
 
