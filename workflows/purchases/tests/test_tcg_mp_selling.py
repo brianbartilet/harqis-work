@@ -5,7 +5,10 @@ from workflows.purchases.tasks.tcg_mp_selling import (generate_tcg_mappings, gen
                                                       update_tcg_listings_prices,
                                                       reconcile_then_update_tcg_listings,
                                                       _norm_foil, _acquired_dt, _variant_key,
-                                                      _same_variant, _group_by_variant)
+                                                      _same_variant, _group_by_variant,
+                                                      _listing_matches_variant, _choose_primary_listing,
+                                                      _remove_duplicate_variant_listings,
+                                                      _choose_update_representative)
 from apps.apps_config import CONFIG_MANAGER
 from apps.tcg_mp.references.web.api.publish import ApiServiceTcgMpPublish
 
@@ -98,6 +101,8 @@ def test__norm_foil_variants():
 
 def test__acquired_dt_parses_and_falls_back():
     assert _acquired_dt({"date_acquired": "2026-06-22 10:30:00"}) == datetime(2026, 6, 22, 10, 30, 0)
+    assert _acquired_dt({"date_acquired_html": "2026-06-21"}) == datetime(2026, 6, 21, 0, 0, 0)
+    assert _acquired_dt({"date_acquired": "6/21/2026"}) == datetime(2026, 6, 21, 0, 0, 0)
     # Missing / malformed never raises — sorts oldest.
     assert _acquired_dt({}) == datetime.min
     assert _acquired_dt({"date_acquired": "garbage"}) == datetime.min
@@ -146,3 +151,84 @@ def test__group_by_variant_consolidates_and_splits():
     assert len(groups) == 4
     nm_group = groups[("100", 0, "EN", "NM")]
     assert {c["inventory_id"] for c in nm_group} == {"a", "b"}
+
+
+def test__choose_update_representative_prefers_noted_copy():
+    group = [
+        {"inventory_id": "note-less", "note_id": 0, "date_acquired_html": "2026-06-25"},
+        {"inventory_id": "noted", "note_id": 219818, "date_acquired_html": "2026-06-21"},
+    ]
+    assert _choose_update_representative(group)["inventory_id"] == "noted"
+
+
+def test__choose_update_representative_uses_latest_noted_copy():
+    group = [
+        {"inventory_id": "older", "note_id": 1, "date_acquired_html": "2026-06-20"},
+        {"inventory_id": "newer", "note_id": 2, "date_acquired_html": "2026-06-25"},
+    ]
+    assert _choose_update_representative(group)["inventory_id"] == "newer"
+
+
+class _Listing:
+    def __init__(self, listing_id, product_id=787650, quantity=1,
+                 foil="0", language="EN", condition="NM"):
+        self.listing_id = listing_id
+        self.product_id = product_id
+        self.quantity = quantity
+        self.crd_foil = foil
+        self.crd_language = language
+        self.crd_condition = condition
+
+
+class _Publish:
+    def __init__(self):
+        self.removed = []
+
+    def remove_listings(self, ids):
+        self.removed.append(ids)
+
+
+def test__variant_key_uses_echo_lang_field():
+    card = {"emid": "174033", "foil": 0, "lang": "JP", "condition": "NM"}
+    assert _variant_key(card) == ("174033", 0, "JP", "NM")
+
+
+def test__same_variant_compares_language_or_lang():
+    assert _same_variant(
+        {"emid": "174033", "foil": 0, "lang": "EN", "condition": "NM"},
+        {"emid": "174033", "foil": 0, "language": "EN", "condition": "NM"},
+    ) is True
+    assert _same_variant(
+        {"emid": "174033", "foil": 0, "lang": "JP", "condition": "NM"},
+        {"emid": "174033", "foil": 0, "language": "EN", "condition": "NM"},
+    ) is False
+
+
+def test__listing_matches_variant_by_product_finish_language_condition():
+    listing = _Listing(785652, quantity=3)
+    assert _listing_matches_variant(
+        listing, product_id=787650, foil=0, language="EN", condition="NM"
+    ) is True
+    assert _listing_matches_variant(
+        listing, product_id=787650, foil=1, language="EN", condition="NM"
+    ) is False
+    assert _listing_matches_variant(
+        listing, product_id=787650, foil=0, language="JP", condition="NM"
+    ) is False
+
+
+def test__choose_primary_listing_prefers_note_listing_then_highest_quantity():
+    stale = _Listing(785650, quantity=2)
+    current = _Listing(785652, quantity=3)
+    assert _choose_primary_listing([stale, current], preferred_listing_id=785650) is stale
+    assert _choose_primary_listing([stale, current], preferred_listing_id=0) is current
+
+
+def test__remove_duplicate_variant_listings_keeps_primary():
+    publish = _Publish()
+    stale = _Listing(785650, quantity=2)
+    current = _Listing(785652, quantity=3)
+    removed = _remove_duplicate_variant_listings(publish, [stale, current], 785652)
+    assert removed == [785650]
+    assert publish.removed == [[785650]]
+

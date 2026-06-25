@@ -43,8 +43,7 @@ WORKFLOW_PURCHASES = {
             "cfg_id__tcg_mp": "TCG_MP",
             "cfg_id__echo_mtg": "ECHO_MTG",
             "cfg_id__echo_mtg_fe": "ECHO_MTG_FE",
-            "cfg_id__scryfall": "SCRYFALL",
-            "limit": 100
+            "cfg_id__scryfall": "SCRYFALL"
         },
         "options": {
             "queue": WorkflowQueue.TCG,

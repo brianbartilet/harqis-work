@@ -59,14 +59,26 @@ def _norm_foil(value) -> int:
 
 
 def _acquired_dt(card: dict) -> datetime:
-    """Parse EchoMTG ``date_acquired`` for sorting. Falls back to ``datetime.min``
-    on a missing/malformed value so a bad row sorts oldest instead of raising —
-    the previous inline ``datetime.strptime`` crashed the whole mapping run on one
-    malformed date."""
-    try:
-        return datetime.strptime(card["date_acquired"], "%Y-%m-%d %H:%M:%S")
-    except (KeyError, TypeError, ValueError):
+    """Parse EchoMTG acquisition dates for sorting; malformed rows sort oldest."""
+    raw = card.get("date_acquired_html") or card.get("date_acquired")
+    if not raw:
         return datetime.min
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y"):
+        try:
+            return datetime.strptime(str(raw), fmt)
+        except ValueError:
+            continue
+    return datetime.min
+
+
+def _language_value(card: dict, default=None):
+    value = card.get("language") or card.get("lang") or default
+    return str(value).upper() if value not in (None, "") else None
+
+
+def _condition_value(card: dict, default=None):
+    value = card.get("condition") or default
+    return str(value).upper() if value not in (None, "") else None
 
 
 def _variant_key(card: dict, default_language: str = "EN", default_condition: str = "NM") -> tuple:
@@ -77,25 +89,27 @@ def _variant_key(card: dict, default_language: str = "EN", default_condition: st
     return (
         str(card.get("emid")),
         _norm_foil(card.get("foil")),
-        (card.get("language") or default_language or "EN").upper(),
-        (card.get("condition") or default_condition or "NM").upper(),
+        _language_value(card, default_language) or "EN",
+        _condition_value(card, default_condition) or "NM",
     )
 
 
 def _same_variant(a: dict, b: dict) -> bool:
     """Tolerant cross-endpoint variant match. ``foil`` is authoritative — both the
-    get_collection and search_card endpoints expose it. ``language``/``condition``
-    refine the match but are treated as wildcards when EITHER side omits them, so a
-    sparse search_card row can never spuriously fail to match its own get_collection
-    copy and collapse a listing's quantity to 0. Use this whenever one side is a
-    search_card result; use _variant_key for homogeneous get_collection grouping."""
+    get_collection and search_card endpoints expose it. ``language``/``lang`` and
+    ``condition`` refine the match but are treated as wildcards when EITHER side
+    omits them, so sparse search_card rows never collapse quantity to 0."""
     if _norm_foil(a.get("foil")) != _norm_foil(b.get("foil")):
         return False
-    for field in ("language", "condition"):
-        va, vb = a.get(field), b.get(field)
-        if va not in (None, "") and vb not in (None, ""):
-            if str(va).upper() != str(vb).upper():
-                return False
+
+    la, lb = _language_value(a), _language_value(b)
+    if la is not None and lb is not None and la != lb:
+        return False
+
+    ca, cb = _condition_value(a), _condition_value(b)
+    if ca is not None and cb is not None and ca != cb:
+        return False
+
     return True
 
 
@@ -106,6 +120,83 @@ def _group_by_variant(cards: list, default_language: str = "EN") -> dict:
     for card in cards:
         groups.setdefault(_variant_key(card, default_language=default_language), []).append(card)
     return groups
+
+
+def _obj_value(obj, *names, default=None):
+    for name in names:
+        if isinstance(obj, dict):
+            value = obj.get(name)
+        else:
+            value = getattr(obj, name, None)
+        if value not in (None, ""):
+            return value
+    return default
+
+
+def _listing_matches_variant(listing, *, product_id, foil, language, condition) -> bool:
+    if _obj_value(listing, "product_id") != product_id:
+        return False
+    if _norm_foil(_obj_value(listing, "crd_foil", "foil")) != _norm_foil(foil):
+        return False
+
+    listing_language = _obj_value(listing, "crd_language", "language")
+    if listing_language not in (None, "") and language not in (None, ""):
+        if str(listing_language).upper() != str(language).upper():
+            return False
+
+    listing_condition = _obj_value(listing, "crd_condition", "condition")
+    if listing_condition not in (None, "") and condition not in (None, ""):
+        if str(listing_condition).upper() != str(condition).upper():
+            return False
+
+    return True
+
+
+def _find_live_variant_listings(view_service, *, product_id, foil, language, condition) -> list:
+    try:
+        listings = view_service.get_listings() or []
+    except Exception:
+        return []
+    return [
+        listing for listing in listings
+        if _listing_matches_variant(
+            listing, product_id=product_id, foil=foil,
+            language=language, condition=condition,
+        )
+    ]
+
+
+def _choose_primary_listing(listings: list, preferred_listing_id=0):
+    if not listings:
+        return None
+    preferred = int(preferred_listing_id or 0)
+    for listing in listings:
+        if int(_obj_value(listing, "listing_id", default=0) or 0) == preferred:
+            return listing
+
+    def rank(listing):
+        quantity = int(_obj_value(listing, "quantity", default=0) or 0)
+        listing_id = int(_obj_value(listing, "listing_id", default=0) or 0)
+        return quantity, listing_id
+
+    return max(listings, key=rank)
+
+
+def _remove_duplicate_variant_listings(api_publish, listings: list, primary_listing_id: int) -> list[int]:
+    duplicate_ids = [
+        int(_obj_value(listing, "listing_id"))
+        for listing in listings
+        if int(_obj_value(listing, "listing_id", default=0) or 0) != int(primary_listing_id or 0)
+    ]
+    if duplicate_ids:
+        api_publish.remove_listings(duplicate_ids)
+    return duplicate_ids
+
+
+def _choose_update_representative(group: list) -> dict:
+    """Choose a variant representative that can supply listing metadata."""
+    noted = [card for card in group if card.get("note_id")]
+    return max(noted or group, key=_acquired_dt)
 
 # endregion
 
@@ -373,6 +464,7 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         from apps.echo_mtg.references.web.api.item import ApiServiceEchoMTGCardItem
         from apps.echo_mtg.references.web.api.inventory import ApiServiceEchoMTGInventory
         from apps.tcg_mp.references.web.api.publish import ApiServiceTcgMpPublish
+        from apps.tcg_mp.references.web.api.view import ApiServiceTcgMpUserView
 
         cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
         cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
@@ -382,6 +474,7 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         api_cards_fe = ApiServiceEchoMTGCardItem(cfg__echo_mtg_fe)
         api_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
         api_publish = ApiServiceTcgMpPublish(cfg__tcg_mp)
+        api_view = ApiServiceTcgMpUserView(cfg__tcg_mp)
 
         time.sleep(1)
         card_meta = api_cards_fe.get_card_meta(rep["emid"])
@@ -397,8 +490,8 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
             _log_worker_generate_tcg_listings.warning(f"Skipping {card_name}: no tcg_mp_card_id mapping")
             return {"status": "skipped", "card": card_name}
 
-        language = (rep.get("language") or default_language or "EN").upper()
-        condition = (rep.get("condition") or "NM").upper()
+        language = _language_value(rep, default_language) or "EN"
+        condition = _condition_value(rep, "NM") or "NM"
 
         # Live copies of this exact variant — the source of truth for quantity and
         # for adopting an already-created listing. Fall back to the dispatched group
@@ -419,7 +512,9 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         post_price = round(base_price * conversion_multiplier * commission_rate, 2)
 
         # Adopt an existing listing from ANY copy of this variant (a sibling that was
-        # already listed, or a mapping-inheritance leftover), else create one.
+        # already listed, or a mapping-inheritance leftover), else fall back to the
+        # live TCG MP listing table before creating. This closes the gap where an
+        # old active duplicate exists but no current EchoMTG note points at it.
         listing_id = 0
         for c in variant_copies:
             try:
@@ -430,7 +525,16 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
                 listing_id = n["tcg_mp_listing_id"]
                 break
 
+        live_listings = _find_live_variant_listings(
+            api_view, product_id=product_id, foil=rep["foil"],
+            language=language, condition=condition,
+        )
+        primary_listing = _choose_primary_listing(live_listings, listing_id)
+        if primary_listing is not None:
+            listing_id = int(_obj_value(primary_listing, "listing_id"))
+
         created = False
+        duplicate_listing_ids = []
         if listing_id == 0:
             response = api_publish.add_listing(
                 price=post_price,
@@ -445,8 +549,8 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
             _log_worker_generate_tcg_listings.info(
                 f"Created listing {listing_id} for {card_name} x{quantity}.")
         else:
-            # Existing listing for this variant (race / half-mapped) — true up its
-            # quantity instead of creating a duplicate listing for the same card.
+            # Existing listing for this variant (race / half-mapped / live duplicate)
+            # — true up its quantity instead of creating another listing.
             # post_price already includes commission_rate here (unlike the update
             # worker), so pass it through directly — do NOT re-apply commission.
             _retry_edit_listing(
@@ -459,8 +563,13 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
                 condition=condition,
                 listing_id=listing_id,
             )
+            if live_listings:
+                duplicate_listing_ids = _remove_duplicate_variant_listings(
+                    api_publish, live_listings, listing_id
+                )
             _log_worker_generate_tcg_listings.info(
-                f"Adopted existing listing {listing_id} for {card_name} x{quantity}.")
+                f"Adopted existing listing {listing_id} for {card_name} x{quantity}; "
+                f"removed duplicate listing(s): {duplicate_listing_ids}.")
 
         # Stamp the resolved listing id + price into every copy's note (self-heal).
         time.sleep(1)
@@ -489,6 +598,7 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
             "listing_id": listing_id,
             "quantity": quantity,
             "notes_updated": notes_updated,
+            "duplicate_listing_ids": duplicate_listing_ids,
         }
 
     except Exception as e:
@@ -673,12 +783,14 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 
         from apps.echo_mtg.references.web.api.item import ApiServiceEchoMTGCardItem
         from apps.tcg_mp.references.web.api.publish import ApiServiceTcgMpPublish
         from apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
+        from apps.tcg_mp.references.web.api.view import ApiServiceTcgMpUserView
 
         cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
         cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
         cfg__echo_mtg_fe = CONFIG_MANAGER.get(cfg_id__echo_mtg_fe)
 
         api_publish = ApiServiceTcgMpPublish(cfg__tcg_mp)
+        api_view = ApiServiceTcgMpUserView(cfg__tcg_mp)
         api_notes = ApiServiceEchoMTGNotes(cfg__echo_mtg)
         api_cards_fe = ApiServiceEchoMTGCardItem(cfg__echo_mtg_fe)
         api_service__search = ApiServiceEchoMTGInventory(cfg__echo_mtg)
@@ -723,8 +835,8 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 
         # The variant's marketplace attributes — passed to edit_listing so a JP/LP
         # listing is NOT silently flipped back to EN/NM on every price refresh (the
         # edit endpoint defaults those when omitted; the old code omitted them).
-        language = (card_echo.get("language") or "EN").upper()
-        condition = (card_echo.get("condition") or "NM").upper()
+        language = _language_value(card_echo, "EN") or "EN"
+        condition = _condition_value(card_echo, "NM") or "NM"
         listing_id = json_note["tcg_mp_listing_id"]
 
         # Quantity = live count of EchoMTG copies of the SAME variant, so duplicate
@@ -737,11 +849,20 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 
         # removed externally). Then reset tcg_mp_listing_id to 0 so generate_tcg_listings
         # treats the card as new and recreates the listing.
         quantity = 0
+        duplicate_listing_ids = []
         try:
             time.sleep(2)
             existing = api_service__search.search_card(card_echo["emid"], tradable_only=1) or []
             matching = [c for c in existing if _same_variant(c, card_echo)]
             quantity = len(matching)
+
+            live_listings = _find_live_variant_listings(
+                api_view, product_id=json_note.get("tcg_mp_card_id"),
+                foil=card_echo["foil"], language=language, condition=condition,
+            )
+            primary_listing = _choose_primary_listing(live_listings, listing_id)
+            if primary_listing is not None:
+                listing_id = int(_obj_value(primary_listing, "listing_id"))
 
             if quantity < 1:
                 # Defensive: never push quantity 0 (that delists). An empty/failed
@@ -771,6 +892,10 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 
                     listing_id = 0
                     updated = False
                 else:
+                    if live_listings:
+                        duplicate_listing_ids = _remove_duplicate_variant_listings(
+                            api_publish, live_listings, listing_id
+                        )
                     updated = True
         except Exception:
             _log_worker_generate_tcg_listings.exception(f"Failed to update listing for {card_name}")
@@ -808,6 +933,7 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 
             "listing_id": listing_id,
             "quantity": quantity,
             "notes_updated": notes_updated,
+            "duplicate_listing_ids": duplicate_listing_ids,
         }
 
     except Exception as e:
@@ -842,7 +968,13 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
     # worker counts copies and stamps every sibling note, so one representative (the
     # most-recently-acquired copy) per variant fully reconciles the listing.
     variant_groups = _group_by_variant(cards_echo)
-    representatives = [max(group, key=_acquired_dt) for group in variant_groups.values()]
+    # Prefer a copy with a note as the representative. Note-less copies still count
+    # toward quantity inside the worker, but they cannot supply tcg_mp_card_id /
+    # tcg_mp_listing_id; choosing one would skip the entire variant.
+    representatives = [
+        _choose_update_representative(group)
+        for group in variant_groups.values()
+    ]
     tcg_mp_log.info(
         f"{len(representatives)} variant listing(s) to update from {len(cards_echo)} tradable copies."
     )

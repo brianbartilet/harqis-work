@@ -185,6 +185,13 @@ def _status_label(value) -> str:
     return str(value) if value is not None else ""
 
 
+def _status_is_allowed(value, allowed_labels: set) -> bool:
+    """Return True when a raw status value belongs to the allowed sold-status set."""
+    if not allowed_labels:
+        return True
+    return _status_label(value) in allowed_labels
+
+
 def _first(d: dict, *keys, default=None):
     """Return the first present, non-None value among ``keys`` in ``d``."""
     for k in keys:
@@ -259,6 +266,8 @@ def _build_sold_index(order_details: list[dict]) -> dict:
             occ = {
                 "order_id": item["order_id"],
                 "status": item["status"],
+                "product_id": item["product_id"],
+                "listing_id": item["listing_id"],
                 "name": item["name"],
                 "price": item["price"],
                 "qty": item["qty"],
@@ -271,9 +280,46 @@ def _build_sold_index(order_details: list[dict]) -> dict:
     return {"by_listing": by_listing, "by_product": by_product}
 
 
+def _sold_quantity_budgets(sold_index: dict) -> dict:
+    """Return mutable remaining sold quantities by exact listing and product/foil.
+
+    A consolidated listing can map to multiple EchoMTG copies. Without a quantity
+    budget, one sold line for qty=1 would match every copy stamped with the same
+    listing id. Exact listing matches consume both the listing and product budgets
+    so the same sold unit cannot be used again through product fallback.
+    """
+    by_listing: dict = {}
+    by_product: dict = {}
+    for listing_id, occurrences in sold_index.get("by_listing", {}).items():
+        by_listing[listing_id] = sum(_to_int(o.get("qty")) or 1 for o in occurrences)
+    for key, occurrences in sold_index.get("by_product", {}).items():
+        by_product[key] = sum(_to_int(o.get("qty")) or 1 for o in occurrences)
+    return {"by_listing": by_listing, "by_product": by_product}
+
+
+def _claim_sold_unit(note: dict, foil, budgets: dict) -> bool:
+    """Consume one sold quantity for this note/product if available."""
+    listing_id = _to_int(note.get("tcg_mp_listing_id"))
+    product_id = _to_int(note.get("tcg_mp_card_id"))
+    product_key = (product_id, _norm_foil(foil)) if product_id is not None else None
+
+    if listing_id and budgets["by_listing"].get(listing_id, 0) > 0:
+        budgets["by_listing"][listing_id] -= 1
+        if product_key and budgets["by_product"].get(product_key, 0) > 0:
+            budgets["by_product"][product_key] -= 1
+        return True
+
+    if product_key and budgets["by_product"].get(product_key, 0) > 0:
+        budgets["by_product"][product_key] -= 1
+        return True
+
+    return False
+
+
 def _match_candidate(item: dict, note: dict, active_listing_ids: set,
                      active_product_foil: set, sold_index: dict,
-                     owned_count: Optional[int] = None) -> Optional[dict]:
+                     owned_count: Optional[int] = None,
+                     product_candidate_count: Optional[int] = None) -> Optional[dict]:
     """Return a radar candidate for one inventory item, or None.
 
     Two detections:
@@ -284,7 +330,10 @@ def _match_candidate(item: dict, note: dict, active_listing_ids: set,
       • ``listing_gone`` — the note maps a ``tcg_mp_listing_id`` that is NO LONGER
         active on TCG MP (and no active listing exists for the product/foil): the
         listed copy sold or the listing was removed. Confidence:
-          high   = listing gone AND product_id + foil appears in a sold order
+          high   = listing gone AND product_id + foil appears in a sold order AND
+                   exactly one EchoMTG candidate maps to that product/foil
+          medium = product-only sold evidence exists but multiple EchoMTG candidates
+                   map to that product/foil, so the exact physical copy is ambiguous
           low    = listing gone with no corroborating sold order (verify — the
                    listing may have sold OR just been removed/disabled)
     """
@@ -320,8 +369,11 @@ def _match_candidate(item: dict, note: dict, active_listing_ids: set,
             return None  # nothing was ever listed → can't infer a sale
         detection = "listing_gone"
         recommended = "mark_sold + remove_inventory"   # listing already gone — no delist
-        if sold_by_product:
+        if sold_by_listing:
             confidence = "high"
+            matched_orders = sold_index["by_listing"][listing_id]
+        elif sold_by_product:
+            confidence = "high" if (product_candidate_count or 0) == 1 else "medium"
             matched_orders = sold_index["by_product"][(product_id, foil)]
         else:
             confidence = "low"
@@ -356,8 +408,17 @@ def _match_candidate(item: dict, note: dict, active_listing_ids: set,
         assessment = (
             f"HIGH: the mapped TCG listing {listing_id} is NO LONGER active and "
             f"product {product_id} ({foil_label}) appears in {n_orders} sold order(s) "
-            f"[{orders_desc}] — the listed copy sold. Recommend: mark sold + remove "
-            f"from inventory (listing already gone)."
+            f"[{orders_desc}] with exactly one EchoMTG candidate for that product/foil "
+            f"— the listed copy sold. Recommend: mark sold + remove from inventory "
+            f"(listing already gone)."
+        )
+    elif detection == "listing_gone" and confidence == "medium":
+        assessment = (
+            f"MEDIUM: the mapped TCG listing {listing_id} is NO LONGER active and "
+            f"product {product_id} ({foil_label}) appears in {n_orders} sold order(s) "
+            f"[{orders_desc}], but {product_candidate_count or 'multiple'} EchoMTG "
+            f"candidate copies map to that product/foil. Product-only evidence cannot "
+            f"identify the exact physical copy; review before marking sold + removing."
         )
     else:  # listing_gone, low
         assessment = (
@@ -380,6 +441,7 @@ def _match_candidate(item: dict, note: dict, active_listing_ids: set,
         "recommended_action": recommended,
         "assessment": assessment,
         "echo_owned_count": owned_count,
+        "product_candidate_count": product_candidate_count,
         "acquired_price": str(_first(item, "acquired_price", "price_acquired", default="0")),
         "sold_price": str(sold_price if sold_price is not None
                           else note.get("tcg_mp_selling_price") or "0"),
@@ -479,6 +541,7 @@ def _gather_live_order_details(service: ApiServiceTcgMpOrder, statuses, last_x_d
     today = datetime.today().date()
     date_from = (today - timedelta(days=last_x_days)).isoformat()
     date_to = today.isoformat()
+    status_labels = {s.label for s in statuses}
 
     details: dict = {}
     for status in statuses:
@@ -496,6 +559,9 @@ def _gather_live_order_details(service: ApiServiceTcgMpOrder, statuses, last_x_d
             try:
                 detail = service.get_order_detail(order_id)
                 if isinstance(detail, dict):
+                    raw_status = _first(detail, "status", "current_status", default=status.code)
+                    if not _status_is_allowed(raw_status, status_labels):
+                        continue
                     detail.setdefault("order_id", order_id)
                     details[order_id] = detail
             except Exception as exc:  # noqa: BLE001
@@ -512,9 +578,12 @@ def _gather_es_order_details(status_labels: set) -> dict:
         _log.warning("radar: could not read %s (%s)", AUDIT_CURRENT_INDEX, exc)
         return details
     for doc in docs or []:
-        if status_labels and doc.get("current_status") not in status_labels:
-            continue
         payload = doc.get("last_raw_payload")
+        raw_status = doc.get("current_status")
+        if isinstance(payload, dict):
+            raw_status = _first(payload, "status", "current_status", default=raw_status)
+        if not _status_is_allowed(raw_status, status_labels):
+            continue
         if isinstance(payload, dict):
             order_id = payload.get("order_id") or doc.get("external_id")
             if order_id and order_id not in details:
@@ -643,7 +712,8 @@ def radar_sold_inventory(dry_run: bool = False, last_x_days: int = 60,
     if limit is not None:
         inventory = inventory[:limit]
 
-    candidates: list[dict] = []
+    parsed_inventory_notes: list[tuple[dict, dict]] = []
+    product_candidate_counts: dict = collections.Counter()
     for item in inventory:
         note_id = item.get("note_id")
         if not note_id:
@@ -655,11 +725,25 @@ def radar_sold_inventory(dry_run: bool = False, last_x_days: int = 60,
             continue
         if not note:
             continue
-        owned_count = owned.get((str(item.get("emid")), _norm_foil(item.get("foil"))))
+        parsed_inventory_notes.append((item, note))
+        product_id = _to_int(note.get("tcg_mp_card_id"))
+        if product_id is not None:
+            product_candidate_counts[(product_id, _norm_foil(item.get("foil")))] += 1
+
+    candidates: list[dict] = []
+    sold_budgets = _sold_quantity_budgets(sold_index)
+    for item, note in parsed_inventory_notes:
+        product_id = _to_int(note.get("tcg_mp_card_id"))
+        foil = _norm_foil(item.get("foil"))
+        owned_count = owned.get((str(item.get("emid")), foil))
+        product_candidate_count = product_candidate_counts.get((product_id, foil), 0)
         candidate = _match_candidate(item, note, active_listing_ids,
                                      active_product_foil, sold_index,
-                                     owned_count=owned_count)
+                                     owned_count=owned_count,
+                                     product_candidate_count=product_candidate_count)
         if candidate:
+            if candidate.get("confidence") != "low" and not _claim_sold_unit(note, item.get("foil"), sold_budgets):
+                continue
             # attach the still-active TCG listing (the erroneous one) for the CSV
             candidate["listing"] = (
                 listing_by_id.get(candidate.get("tcg_mp_listing_id"))
@@ -879,3 +963,5 @@ def apply_radar_approvals(csv_path: str, dry_run: bool = False, **kwargs) -> str
     )
     _log.info(summary)
     return summary
+
+

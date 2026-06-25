@@ -2,21 +2,29 @@ import pytest
 
 import csv
 
+import workflows.purchases.tasks.sold_inventory_radar as radar_module
+from apps.tcg_mp.references.dto.order import EnumTcgOrderStatus
 from workflows.purchases.tasks.sold_inventory_radar import (
     radar_sold_inventory,
     apply_radar_approvals,
     _norm_foil,
     _to_int,
     _status_label,
+    _status_is_allowed,
     _owned_counts,
     _reconcile_listing,
     _parse_note,
     _extract_order_items,
     _build_sold_index,
+    _sold_quantity_budgets,
+    _claim_sold_unit,
     _match_candidate,
     _candidate_to_row,
     _write_csv,
+    _gather_es_order_details,
+    _gather_live_order_details,
     CSV_FIELDS,
+    DEFAULT_SOLD_STATUSES,
 )
 
 
@@ -109,6 +117,57 @@ def test__build_sold_index_keys():
     assert idx["by_listing"][7][0]["order_id"] == "0001"
 
 
+def test__build_sold_index_handles_multi_item_order_without_listing_ids():
+    detail = {
+        "order_id": "0000366974",
+        "status": 3,
+        "items": [
+            {"product_id": 763727, "crd_foil": "0", "crd_name": "Leyline", "qty": 1},
+            {"product_id": 1135109, "crd_foil": "0", "crd_name": "The Sentry", "qty": 1},
+            {"product_id": 1135251, "crd_foil": "1", "crd_name": "Origin", "qty": 1},
+            {"product_id": 1135166, "crd_foil": "1", "crd_name": "Warleader's Call", "qty": 1},
+        ],
+    }
+    idx = _build_sold_index([detail])
+    assert idx["by_listing"] == {}
+    assert set(idx["by_product"]) == {
+        (763727, 0), (1135109, 0), (1135251, 1), (1135166, 1)
+    }
+
+
+def test__sold_quantity_budget_limits_consolidated_listing_to_sold_qty():
+    idx = _build_sold_index([{
+        "order_id": "0001", "status": "Completed",
+        "items": [{"product_id": 100, "listing_id": 7, "foil": 0, "qty": 1}],
+    }])
+    budgets = _sold_quantity_budgets(idx)
+    note = {"tcg_mp_listing_id": 7, "tcg_mp_card_id": 100}
+
+    assert _claim_sold_unit(note, 0, budgets) is True
+    assert _claim_sold_unit(note, 0, budgets) is False
+    assert budgets["by_listing"][7] == 0
+    assert budgets["by_product"][(100, 0)] == 0
+
+
+def test__sold_quantity_budget_allows_each_item_in_multi_item_order():
+    idx = _build_sold_index([{
+        "order_id": "0000366974", "status": "Completed",
+        "items": [
+            {"product_id": 763727, "foil": 0, "qty": 1},
+            {"product_id": 1135109, "foil": 0, "qty": 1},
+            {"product_id": 1135251, "foil": 1, "qty": 1},
+            {"product_id": 1135166, "foil": 1, "qty": 1},
+        ],
+    }])
+    budgets = _sold_quantity_budgets(idx)
+
+    assert _claim_sold_unit({"tcg_mp_card_id": 763727}, 0, budgets) is True
+    assert _claim_sold_unit({"tcg_mp_card_id": 1135109}, 0, budgets) is True
+    assert _claim_sold_unit({"tcg_mp_card_id": 1135251}, 1, budgets) is True
+    assert _claim_sold_unit({"tcg_mp_card_id": 1135166}, 1, budgets) is True
+    assert _claim_sold_unit({"tcg_mp_card_id": 763727}, 0, budgets) is False
+
+
 def test__match_candidate_high_confidence_listing():
     item = {"emid": "1", "inventory_id": "i1", "note_id": "n1", "foil": 1}
     note = {"tcg_mp_listing_id": 7, "tcg_mp_card_id": 100}
@@ -139,11 +198,29 @@ def test__match_candidate_listing_gone_high_when_product_sold():
         "items": [{"product_id": 945147, "foil": 0, "name": "Orphaned Card"}],
     }])
     c = _match_candidate(item, note, active_listing_ids={111},        # 738828 NOT active
-                         active_product_foil={(999, 0)}, sold_index=sold_index)
+                         active_product_foil={(999, 0)}, sold_index=sold_index,
+                         product_candidate_count=1)
     assert c is not None
     assert c["detection"] == "listing_gone" and c["confidence"] == "high"
     assert "delist" not in c["recommended_action"]      # listing already gone
     assert c["assessment"].startswith("HIGH")
+
+
+def test__match_candidate_listing_gone_medium_when_product_sold_but_ambiguous():
+    """Product-only evidence is not enough for auto-action when multiple EchoMTG
+    candidates map to the same product/foil."""
+    item = {"emid": "5", "inventory_id": "i5", "note_id": "n5", "foil": 0}
+    note = {"tcg_mp_listing_id": 738828, "tcg_mp_card_id": 945147}
+    sold_index = _build_sold_index([{
+        "order_id": "0009", "status": "Completed",
+        "items": [{"product_id": 945147, "foil": 0, "name": "Ambiguous Card"}],
+    }])
+    c = _match_candidate(item, note, active_listing_ids={111},
+                         active_product_foil={(999, 0)}, sold_index=sold_index,
+                         product_candidate_count=2)
+    assert c is not None
+    assert c["detection"] == "listing_gone" and c["confidence"] == "medium"
+    assert c["assessment"].startswith("MEDIUM")
 
 
 def test__match_candidate_listing_gone_low_when_uncorroborated():
@@ -323,6 +400,66 @@ def test__status_label_maps_codes():
     assert _status_label(None) == ""
 
 
+def test__default_sold_statuses_exclude_pending_drop_off():
+    labels = {s.label for s in DEFAULT_SOLD_STATUSES}
+    assert EnumTcgOrderStatus.PENDING_DROP_OFF not in DEFAULT_SOLD_STATUSES
+    assert "Pending Drop Off" not in labels
+    assert _status_is_allowed(1, labels) is False
+    assert _status_is_allowed("1", labels) is False
+    assert _status_is_allowed("Pending Drop Off", labels) is False
+
+
+class _FakeOrderPage:
+    def __init__(self, data):
+        self.data = data
+
+
+class _FakeOrderService:
+    def get_orders(self, **kwargs):
+        return [_FakeOrderPage([{"order_id": "pending-detail"}])]
+
+    def get_order_detail(self, order_id):
+        return {
+            "order_id": order_id,
+            "status": EnumTcgOrderStatus.PENDING_DROP_OFF.code,
+            "items": [{"product_id": 100, "listing_id": 7}],
+        }
+
+
+def test__gather_live_order_details_filters_pending_drop_off_detail():
+    details = _gather_live_order_details(
+        _FakeOrderService(),
+        statuses=(EnumTcgOrderStatus.DROPPED,),
+        last_x_days=60,
+    )
+    assert details == {}
+
+
+def test__gather_es_order_details_filters_pending_drop_off(monkeypatch):
+    docs = [
+        {
+            "external_id": "pending-label",
+            "current_status": "Pending Drop Off",
+            "last_raw_payload": {"order_id": "pending-label", "items": []},
+        },
+        {
+            "external_id": "pending-code",
+            "current_status": "Completed",
+            "last_raw_payload": {"order_id": "pending-code", "status": 1, "items": []},
+        },
+        {
+            "external_id": "dropped",
+            "current_status": "Dropped Off",
+            "last_raw_payload": {"order_id": "dropped", "status": 6, "items": []},
+        },
+    ]
+    monkeypatch.setattr(radar_module, "get_index_data", lambda *args, **kwargs: docs)
+
+    details = _gather_es_order_details({s.label for s in DEFAULT_SOLD_STATUSES})
+
+    assert set(details) == {"dropped"}
+
+
 def test__apply_radar_approvals_dry_run(tmp_path):
     """Reads an edited CSV and previews only the approved rows — no API calls."""
     csv_path = tmp_path / "review.csv"
@@ -351,3 +488,5 @@ def test__apply_radar_approvals_no_approved_rows(tmp_path):
 @pytest.mark.skip(reason="Destructive — marks sold, removes inventory, and delists approved rows")
 def test__apply_radar_approvals_apply():
     apply_radar_approvals("sold_inventory_radar-EDITED.csv", dry_run=False)
+
+
