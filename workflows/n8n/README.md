@@ -58,8 +58,16 @@ Keys follow: `run-job--<task_name>`
 
 The task is routed to the dedicated **`n8n` queue** (declared in `workflows/queues.py` and `workflows/config.py`), which is consumed only by `harqis-server` per `machines.toml`. This pins n8n container ops to the always-on hub and keeps them off worker nodes.
 
+The deploy scripts target the same bind-mounted data path as `docker-compose.yml`:
+
+```text
+${HARQIS_DATA_ROOT:-./.harqis-data}/n8n:/home/node/.n8n
+```
+
+If `HARQIS_DATA_ROOT` is unset, the scripts resolve n8n state to `<repo>/.harqis-data/n8n`. If it is set, the scripts use `<HARQIS_DATA_ROOT>/n8n`. They no longer touch the old `n8n_data` Docker volume path.
+
 ## Notes
 
 - n8n must be running locally (default `http://localhost:5678`) for the `run_n8n_sequence` desktop task to work.
 - ngrok is only needed for inbound webhooks from external services (ElevenLabs, Slack, etc.).
-- The `N8N_API_KEY` env var is required for programmatic API access to n8n.
+- Programmatic workflow import should use Docker CLI import (`docker cp` + `docker exec n8n n8n import:workflow`); the previous REST API key path is stale.

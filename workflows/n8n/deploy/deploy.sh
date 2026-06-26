@@ -4,9 +4,19 @@ set -euo pipefail
 echo "[INFO] n8n deploy starting..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE_FILE="$SCRIPT_DIR/../../../docker-compose.yml"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+COMPOSE_FILE="$REPO_ROOT/docker-compose.yml"
 OLD_DATA_DIR="$(cd "$SCRIPT_DIR/../backups/n8n" 2>/dev/null && pwd || true)"
-VOLUME_NAME="harqis-work_n8n_data"
+
+if [[ -n "${HARQIS_DATA_ROOT:-}" ]]; then
+  case "$HARQIS_DATA_ROOT" in
+    /*) DATA_ROOT="$HARQIS_DATA_ROOT" ;;
+    *) DATA_ROOT="$REPO_ROOT/$HARQIS_DATA_ROOT" ;;
+  esac
+else
+  DATA_ROOT="$REPO_ROOT/.harqis-data"
+fi
+N8N_DATA_DIR="$DATA_ROOT/n8n"
 
 # ---------- sanity checks ----------
 if [[ ! -f "$COMPOSE_FILE" ]]; then
@@ -29,22 +39,18 @@ else
   exit 1
 fi
 
-# ---------- ensure volume exists ----------
-if ! docker volume inspect "$VOLUME_NAME" >/dev/null 2>&1; then
-  echo "[INFO] Creating Docker volume '$VOLUME_NAME'..."
-  docker volume create "$VOLUME_NAME" >/dev/null
-else
-  echo "[INFO] Docker volume '$VOLUME_NAME' already exists."
-fi
+# ---------- ensure bind-mounted data directory exists ----------
+echo "[INFO] Ensuring n8n data directory exists: $N8N_DATA_DIR"
+mkdir -p "$N8N_DATA_DIR"
 
 # ---------- one-time migration from old bind folder (if it exists) ----------
 if [[ -n "$OLD_DATA_DIR" && -d "$OLD_DATA_DIR" ]]; then
   echo "[INFO] Found existing directory with previous data: $OLD_DATA_DIR"
-  echo "[INFO] Copying its contents into volume '$VOLUME_NAME' (safe even if already copied)..."
+  echo "[INFO] Copying its contents into n8n data directory '$N8N_DATA_DIR' (safe even if already copied)..."
 
   docker run --rm \
-    -v "$VOLUME_NAME:/data" \
-    -v "$OLD_DATA_DIR:/source" \
+    -v "$N8N_DATA_DIR:/data" \
+    -v "$OLD_DATA_DIR:/source:ro" \
     alpine sh -c "cd /source && cp -a . /data"
 
   echo "[INFO] Migration copy finished."

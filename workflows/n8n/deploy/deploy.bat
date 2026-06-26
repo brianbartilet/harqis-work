@@ -4,9 +4,16 @@ setlocal ENABLEDELAYEDEXPANSION
 echo [INFO] n8n deploy starting...
 
 set "SCRIPT_DIR=%~dp0"
-set "COMPOSE_FILE=%SCRIPT_DIR%..\..\..\docker-compose.yml"
+for %%I in ("%SCRIPT_DIR%..\..\..") do set "REPO_ROOT=%%~fI"
+set "COMPOSE_FILE=%REPO_ROOT%\docker-compose.yml"
 set "OLD_DATA_DIR=%SCRIPT_DIR%..\backups\n8n"
-set "VOLUME_NAME=harqis-work_n8n_data"
+
+if defined HARQIS_DATA_ROOT (
+    for %%I in ("%HARQIS_DATA_ROOT%") do set "DATA_ROOT=%%~fI"
+) else (
+    set "DATA_ROOT=%REPO_ROOT%\.harqis-data"
+)
+set "N8N_DATA_DIR=%DATA_ROOT%\n8n"
 
 if not exist "%COMPOSE_FILE%" (
     echo [ERROR] docker-compose.yml not found at: %COMPOSE_FILE%
@@ -27,25 +34,20 @@ if %errorlevel%==0 (
     set "DC=docker-compose"
 )
 
-REM ensure volume
-docker volume inspect %VOLUME_NAME% >nul 2>&1
-if errorlevel 1 (
-    echo [INFO] Creating Docker volume "%VOLUME_NAME%"...
-    docker volume create %VOLUME_NAME% >nul
-) else (
-    echo [INFO] Docker volume "%VOLUME_NAME%" already exists.
-)
+REM ensure bind-mounted data directory
+echo [INFO] Ensuring n8n data directory exists: %N8N_DATA_DIR%
+if not exist "%N8N_DATA_DIR%" mkdir "%N8N_DATA_DIR%"
 
 REM one-time migration from old folder if it exists
 if exist "%OLD_DATA_DIR%" (
     dir /b "%OLD_DATA_DIR%" >nul 2>&1
     if not errorlevel 1 (
         echo [INFO] Found previous data in "%OLD_DATA_DIR%".
-        echo [INFO] Copying its contents into volume "%VOLUME_NAME%"...
+        echo [INFO] Copying its contents into n8n data directory "%N8N_DATA_DIR%"...
 
         docker run --rm ^
-          -v %VOLUME_NAME%:/data ^
-          -v "%OLD_DATA_DIR%:/source" ^
+          -v "%N8N_DATA_DIR%:/data" ^
+          -v "%OLD_DATA_DIR%:/source:ro" ^
           alpine sh -c "cd /source && cp -a . /data"
 
         echo [INFO] Migration copy finished.
