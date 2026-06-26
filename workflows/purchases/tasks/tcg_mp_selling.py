@@ -157,6 +157,8 @@ def _find_live_variant_listings(view_service, *, product_id, foil, language, con
         listings = view_service.get_listings() or []
     except Exception:
         return []
+    if not isinstance(listings, list):
+        return []
     return [
         listing for listing in listings
         if _listing_matches_variant(
@@ -500,6 +502,8 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
             live = api_inventory.search_card(rep["emid"], tradable_only=1) or []
         except Exception:
             live = []
+        if not isinstance(live, list):
+            live = []
         variant_copies = [c for c in live if _same_variant(c, rep)]
         if not variant_copies:
             variant_copies = cards
@@ -643,6 +647,9 @@ def _filter_cards_needing_listing(cards: list, cfg_id__echo_mtg: str, worker_cou
     only to have the worker immediately return {"status": "existing_listing"}.
     """
     tasks = [{"card_echo": card, "cfg_id__echo_mtg": cfg_id__echo_mtg} for card in cards]
+    if worker_count == 1:
+        return [card for card in (_worker_fetch_note_for_listing(task) for task in tasks) if card is not None]
+
     mp_client = MultiProcessingClient(tasks=tasks, worker_count=worker_count)
     mp_client.execute_tasks(_worker_fetch_note_for_listing, timeout_secs=60 * 30)
     return [card for card in mp_client.get_tasks_output() if card is not None]
@@ -661,11 +668,19 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
     language = kwargs.pop("language", "EN")
 
     cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
+    cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
     api_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
+    api_merchant = ApiServiceTcgMpMerchant(cfg__tcg_mp)
 
     cards_echo = api_inventory.get_collection(tradable_only=1) or []
+    if not isinstance(cards_echo, list):
+        raise RuntimeError(
+            "echo mtg get_collection did not return a list (got {0})".format(
+                type(cards_echo).__name__)
+        )
     if not cards_echo:
         tcg_mp_log.info("No tradable cards found.")
+        api_merchant.set_listing_status(1)
         return "SUCCESS"
     cards_echo = cards_echo if limit is None else cards_echo[:limit]
     cards_echo.reverse()
@@ -673,6 +688,7 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
     cards_to_list = _filter_cards_needing_listing(cards_echo, cfg_id__echo_mtg, worker_count or min(4, psutil.cpu_count()))
     if not cards_to_list:
         tcg_mp_log.info(f"0 of {len(cards_echo)} cards need a new listing.")
+        api_merchant.set_listing_status(1)
         return "SUCCESS"
 
     # Group the copies needing a listing by variant and dispatch ONE task per
@@ -699,18 +715,22 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
         for group in variant_groups.values()
     ]
 
-    mp_client = MultiProcessingClient(
-        tasks=tasks_generate,
-        worker_count=worker_count or min(4, psutil.cpu_count()),
-    )
+    if worker_count == 1:
+        results = [_worker_generate_tcg_listings(task) for task in tasks_generate]
+    else:
+        mp_client = MultiProcessingClient(
+            tasks=tasks_generate,
+            worker_count=worker_count or min(4, psutil.cpu_count()),
+        )
 
-    mp_client.execute_tasks(_worker_generate_tcg_listings, timeout_secs=60 * 120)
-    results = mp_client.get_tasks_output()
+        mp_client.execute_tasks(_worker_generate_tcg_listings, timeout_secs=60 * 120)
+        results = mp_client.get_tasks_output()
     log_mp_summary(
         results,
         title="TCG listing generation",
         log=_log_worker_generate_tcg_listings,
     )
+    api_merchant.set_listing_status(1)
 
     return "SUCCESS"
 
@@ -956,8 +976,14 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
     api_service__tcg_mp_merchant = ApiServiceTcgMpMerchant(cfg__tcg_mp)
 
     cards_echo = api_inventory.get_collection(tradable_only=1) or []
+    if not isinstance(cards_echo, list):
+        raise RuntimeError(
+            "echo mtg get_collection did not return a list (got {0})".format(
+                type(cards_echo).__name__)
+        )
     if not cards_echo:
         tcg_mp_log.info("No tradable cards found.")
+        api_service__tcg_mp_merchant.set_listing_status(1)
         return "SUCCESS"
 
     cards_echo = cards_echo if limit is None else cards_echo[:limit]

@@ -6,7 +6,7 @@ from workflows.purchases.tasks.tcg_mp_selling import (generate_tcg_mappings, gen
                                                       reconcile_then_update_tcg_listings,
                                                       _norm_foil, _acquired_dt, _variant_key,
                                                       _same_variant, _group_by_variant,
-                                                      _listing_matches_variant, _choose_primary_listing,
+                                                      _listing_matches_variant, _find_live_variant_listings, _choose_primary_listing,
                                                       _remove_duplicate_variant_listings,
                                                       _choose_update_representative)
 from apps.apps_config import CONFIG_MANAGER
@@ -215,6 +215,31 @@ def test__listing_matches_variant_by_product_finish_language_condition():
     assert _listing_matches_variant(
         listing, product_id=787650, foil=0, language="JP", condition="NM"
     ) is False
+
+
+class _ViewReturnsRawResponse:
+    def get_listings(self):
+        return object()
+
+
+class _ViewReturnsListings:
+    def get_listings(self):
+        return [_Listing(785652, quantity=3), _Listing(785650, quantity=2, language="JP")]
+
+
+def test__find_live_variant_listings_returns_empty_for_raw_response():
+    assert _find_live_variant_listings(
+        _ViewReturnsRawResponse(), product_id=787650, foil=0,
+        language="EN", condition="NM"
+    ) == []
+
+
+def test__find_live_variant_listings_filters_matching_variants():
+    matches = _find_live_variant_listings(
+        _ViewReturnsListings(), product_id=787650, foil=0,
+        language="EN", condition="NM"
+    )
+    assert [m.listing_id for m in matches] == [785652]
 
 
 def test__choose_primary_listing_prefers_note_listing_then_highest_quantity():
