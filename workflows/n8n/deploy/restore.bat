@@ -4,9 +4,16 @@ setlocal ENABLEDELAYEDEXPANSION
 echo [INFO] n8n restore starting...
 
 set "SCRIPT_DIR=%~dp0"
-set "COMPOSE_FILE=%SCRIPT_DIR%..\..\..\docker-compose.yml"
+for %%I in ("%SCRIPT_DIR%..\..\..") do set "REPO_ROOT=%%~fI"
+set "COMPOSE_FILE=%REPO_ROOT%\docker-compose.yml"
 set "BACKUP_DIR=%SCRIPT_DIR%..\backups"
-set "VOLUME_NAME=harqis-work_n8n_data"
+
+if defined HARQIS_DATA_ROOT (
+    for %%I in ("%HARQIS_DATA_ROOT%") do set "DATA_ROOT=%%~fI"
+) else (
+    set "DATA_ROOT=%REPO_ROOT%\.harqis-data"
+)
+set "N8N_DATA_DIR=%DATA_ROOT%\n8n"
 
 if not exist "%COMPOSE_FILE%" (
     echo [ERROR] docker-compose.yml not found at: %COMPOSE_FILE%
@@ -70,23 +77,22 @@ REM ---------- stop n8n container ----------
 echo [INFO] Stopping n8n container...
 %DC% -f "%COMPOSE_FILE%" stop n8n
 
-REM ---------- recreate volume ----------
-echo [INFO] Recreating Docker volume "%VOLUME_NAME%"...
-docker volume rm -f %VOLUME_NAME% >nul 2>&1
-docker volume create %VOLUME_NAME% >nul
+REM ---------- restore into bind-mounted data directory ----------
+echo [INFO] Recreating n8n data directory "%N8N_DATA_DIR%"...
+if exist "%N8N_DATA_DIR%" rmdir /s /q "%N8N_DATA_DIR%"
+mkdir "%N8N_DATA_DIR%"
 
-REM ---------- restore into volume ----------
-echo [INFO] Restoring backup into volume "%VOLUME_NAME%"...
+echo [INFO] Restoring backup into n8n data directory "%N8N_DATA_DIR%"...
 docker run --rm ^
-  -v %VOLUME_NAME%:/data ^
-  -v "%BACKUP_FILE%:/backup.tgz" ^
+  -v "%N8N_DATA_DIR%:/data" ^
+  -v "%BACKUP_FILE%:/backup.tgz:ro" ^
   alpine sh -c "cd /data && tar xzf /backup.tgz"
 
-echo [INFO] Restore into volume complete.
+echo [INFO] Restore into data directory complete.
 
 REM ---------- repair sqlite + fix permissions ----------
 echo [INFO] Checking SQLite integrity and fixing permissions...
-docker run --rm -v %VOLUME_NAME%:/data alpine sh -c "apk add --no-cache sqlite >/dev/null 2>&1 && DB=/data/database.sqlite && chown 1000:1000 $DB 2>/dev/null || true && chmod 0600 $DB && rm -f /data/database.sqlite-shm /data/database.sqlite-wal /data/crash.journal && if ! sqlite3 $DB 'SELECT COUNT(*) FROM workflow_entity;' >/dev/null 2>&1; then echo '[INFO] Schema corruption detected - repairing...' && sqlite3 $DB .dump > /tmp/db_dump.sql && mv $DB ${DB}.corrupt_bak && sqlite3 $DB < /tmp/db_dump.sql && chown 1000:1000 $DB && chmod 0600 $DB && echo '[INFO] Repair complete.'; else echo '[INFO] SQLite schema OK.'; fi"
+docker run --rm -v "%N8N_DATA_DIR%:/data" alpine sh -c "apk add --no-cache sqlite >/dev/null 2>&1 && DB=/data/database.sqlite && chown 1000:1000 $DB 2>/dev/null || true && chmod 0600 $DB && rm -f /data/database.sqlite-shm /data/database.sqlite-wal /data/crash.journal && if ! sqlite3 $DB 'SELECT COUNT(*) FROM workflow_entity;' >/dev/null 2>&1; then echo '[INFO] Schema corruption detected - repairing...' && sqlite3 $DB .dump > /tmp/db_dump.sql && mv $DB ${DB}.corrupt_bak && sqlite3 $DB < /tmp/db_dump.sql && chown 1000:1000 $DB && chmod 0600 $DB && echo '[INFO] Repair complete.'; else echo '[INFO] SQLite schema OK.'; fi"
 
 REM ---------- start n8n container ----------
 echo [INFO] Starting n8n container...

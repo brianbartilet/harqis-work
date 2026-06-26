@@ -4,9 +4,19 @@ set -euo pipefail
 echo "[INFO] n8n restore starting..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE_FILE="$SCRIPT_DIR/../../../docker-compose.yml"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+COMPOSE_FILE="$REPO_ROOT/docker-compose.yml"
 BACKUP_DIR="$SCRIPT_DIR/../backups"
-VOLUME_NAME="harqis-work_n8n_data"
+
+if [[ -n "${HARQIS_DATA_ROOT:-}" ]]; then
+  case "$HARQIS_DATA_ROOT" in
+    /*) DATA_ROOT="$HARQIS_DATA_ROOT" ;;
+    *) DATA_ROOT="$REPO_ROOT/$HARQIS_DATA_ROOT" ;;
+  esac
+else
+  DATA_ROOT="$REPO_ROOT/.harqis-data"
+fi
+N8N_DATA_DIR="$DATA_ROOT/n8n"
 
 # ---------- sanity checks ----------
 if [[ ! -f "$COMPOSE_FILE" ]]; then
@@ -58,19 +68,18 @@ echo "[INFO] Using backup file: $BACKUP_FILE"
 echo "[INFO] Stopping n8n container..."
 $DC -f "$COMPOSE_FILE" stop n8n
 
-# ---------- recreate volume ----------
-echo "[INFO] Recreating Docker volume '$VOLUME_NAME'..."
-docker volume rm -f "$VOLUME_NAME" >/dev/null 2>&1 || true
-docker volume create "$VOLUME_NAME" >/dev/null
+# ---------- restore into bind-mounted data directory ----------
+echo "[INFO] Recreating n8n data directory '$N8N_DATA_DIR'..."
+rm -rf "$N8N_DATA_DIR"
+mkdir -p "$N8N_DATA_DIR"
 
-# ---------- restore into volume ----------
-echo "[INFO] Restoring backup into volume '$VOLUME_NAME'..."
+echo "[INFO] Restoring backup into n8n data directory '$N8N_DATA_DIR'..."
 docker run --rm \
-  -v "$VOLUME_NAME:/data" \
+  -v "$N8N_DATA_DIR:/data" \
   -v "$BACKUP_FILE:/backup.tgz:ro" \
   alpine sh -c "cd /data && tar xzf /backup.tgz"
 
-echo "[INFO] Restore into volume complete."
+echo "[INFO] Restore into data directory complete."
 
 # ---------- repair sqlite + fix permissions ----------
 # Fixes duplicate-index schema corruption that can occur after unclean shutdowns.
@@ -78,7 +87,7 @@ echo "[INFO] Restore into volume complete."
 # files that would cause n8n to report a prior crash on startup.
 echo "[INFO] Checking SQLite integrity and fixing permissions..."
 docker run --rm \
-  -v "$VOLUME_NAME:/data" \
+  -v "$N8N_DATA_DIR:/data" \
   alpine sh -c '
     apk add --no-cache sqlite >/dev/null 2>&1
 
