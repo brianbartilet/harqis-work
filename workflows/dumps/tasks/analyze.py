@@ -32,6 +32,8 @@ marker stays as `# FUTURE: kanban agent hand-off` below.
 from __future__ import annotations
 
 import calendar
+import hashlib
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -42,7 +44,9 @@ from core.utilities.logging.custom_logger import create_logger
 from apps.desktop.helpers.feed import feed
 from workflows.dumps.config import (
     HARQIS_SERVER_MACHINE_NAME,
+    ExpectedDumpSource,
     get_dumps_target,
+    get_expected_dump_sources,
     resolve_local_machine_name,
 )
 from workflows.dumps.files import parse_dump_dir_name, previous_day_window
@@ -203,6 +207,101 @@ def _render_gaps(dates: list[str], gap_dates: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+_SAFE_MARKER_RE = re.compile(r"[^A-Za-z0-9_.-]+")
+
+
+def _find_missing_expected_sources(
+    expected: list[ExpectedDumpSource],
+    machines: list[dict],
+) -> list[dict]:
+    """Return expected dump sources absent from the scanned day output.
+
+    Empty dump folders count as missing: a folder with zero files can happen
+    after a partial/failed transfer and should not look healthy.
+    """
+    observed_with_files = {
+        str(machine.get("machine"))
+        for machine in machines
+        if int(machine.get("files_count") or 0) > 0
+    }
+    return [
+        {
+            "name": source.name,
+            "source_type": source.source_type,
+            "paths_count": len(source.paths),
+        }
+        for source in expected
+        if source.name not in observed_with_files
+    ]
+
+
+def _missing_notification_marker(inbox: Path, date_suffix: str, missing: list[dict]) -> Path:
+    names = ",".join(sorted(str(item.get("name", "")) for item in missing))
+    digest = hashlib.sha1(names.encode("utf-8")).hexdigest()[:12]
+    safe_date = _SAFE_MARKER_RE.sub("-", date_suffix)
+    return inbox / ".notifications" / f"missing-dumps-{safe_date}-{digest}.sent"
+
+
+def _send_missing_dumps_notification(
+    *,
+    date_suffix: str,
+    missing: list[dict],
+    observed: list[dict],
+    inbox: Path,
+    notify_once: bool = True,
+) -> dict:
+    """Send a best-effort Telegram alert when configured dump sources are absent."""
+    if not missing:
+        return {"sent": False, "skipped": "no missing sources"}
+
+    marker = _missing_notification_marker(inbox, date_suffix, missing)
+    if notify_once and marker.exists():
+        return {"sent": False, "skipped": "already notified", "marker": str(marker)}
+
+    observed_names = sorted(
+        str(machine.get("machine"))
+        for machine in observed
+        if int(machine.get("files_count") or 0) > 0
+    )
+    lines = [
+        "HARQIS daily dumps missing configured source(s)",
+        f"Date: {date_suffix}",
+        f"Inbox: {inbox}",
+        "",
+        "Missing:",
+    ]
+    for item in missing[:10]:
+        source_type = item.get("source_type", "source")
+        lines.append(f"- {item.get('name', 'unknown')} ({source_type})")
+    if len(missing) > 10:
+        lines.append(f"- ... {len(missing) - 10} more missing source(s)")
+    lines.append("")
+    lines.append("Observed: " + (", ".join(observed_names) if observed_names else "none"))
+    lines.append("Likely check: worker queue/host power for broadcast machines; Termux sshd + Tailscale for Android pull targets.")
+
+    try:
+        from apps.telegram.config import CONFIG as TELEGRAM_CONFIG
+        from apps.telegram.references.web.api.messages import ApiServiceTelegramMessages
+
+        chat_id = TELEGRAM_CONFIG.app_data.get("default_chat_id")
+        if not chat_id:
+            return {"sent": False, "error": "telegram default_chat_id missing"}
+        result = ApiServiceTelegramMessages(TELEGRAM_CONFIG).send_message(
+            chat_id=chat_id,
+            text="\n".join(lines),
+        )
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(datetime.now().isoformat(timespec="seconds") + "\n", encoding="utf-8")
+        return {
+            "sent": True,
+            "message_id": result.get("message_id") if isinstance(result, dict) else None,
+            "marker": str(marker),
+        }
+    except Exception as exc:  # notification failure must not break analyze
+        _log.error("dumps: Telegram missing-source notification failed: %s", exc)
+        return {"sent": False, "error": str(exc)[:500]}
+
+
 @SPROUT.task(name="workflows.dumps.tasks.analyze_daily_dumps")
 @log_result()
 @feed()
@@ -216,6 +315,10 @@ def analyze_daily_dumps(**kwargs) -> dict:
                        of the full per-day breakdown.
         write_md — append the day's Markdown block to daily-dumps.log (default
                    True). Pass False to render the feed/ES summary only.
+        notify_missing — send Telegram when configured sources are missing.
+                         Defaults on for the normal single-day daily run.
+        notify_once — suppress duplicate missing-source alerts for the same
+                      date/source set using an inbox marker file (default True).
     """
     # Host-guard: the inbox (harqis_server_inbox, e.g. /Volumes/harqis-data/dumps)
     # physically lives on harqis-server only. The `host` queue is meant to be
@@ -261,6 +364,11 @@ def analyze_daily_dumps(**kwargs) -> dict:
     per_day = {d: _filter_machines(_scan_day(inbox, d), machine_filter) for d in dates}
     missing_only = bool(kwargs.get("missing_only"))
     write_md = bool(kwargs.get("write_md", True))
+    notify_missing = bool(kwargs.get(
+        "notify_missing",
+        len(dates) == 1 and not missing_only and not machine_filter,
+    ))
+    notify_once = bool(kwargs.get("notify_once", True))
 
     # ─────────────────────────────────────────────────────────────────────────
     # FUTURE: kanban agent hand-off (optional enhancement)
@@ -320,7 +428,7 @@ def analyze_daily_dumps(**kwargs) -> dict:
         summary_text = _render_summary(date_suffix, machines, str(inbox))
         _log.info("dumps: analyze finished - %d machine dump(s) for %s, summary "
                   "pushed to HUD feed.", len(machines), date_suffix)
-        return {
+        result = {
             "text": summary_text,
             "date": date_suffix,
             "machines": len(machines),
@@ -330,6 +438,19 @@ def analyze_daily_dumps(**kwargs) -> dict:
             "summary_files": summary_files,
             "markdown": markdown,
         }
+        if notify_missing:
+            expected = get_expected_dump_sources()
+            missing = _find_missing_expected_sources(expected, machines)
+            result["expected_sources"] = len(expected)
+            result["missing_sources"] = missing
+            result["missing_notification"] = _send_missing_dumps_notification(
+                date_suffix=date_suffix,
+                missing=missing,
+                observed=machines,
+                inbox=inbox,
+                notify_once=notify_once,
+            )
+        return result
 
     summary_text = _render_multi(dates, per_day, str(inbox))
     days_with = [d for d in dates if per_day.get(d)]

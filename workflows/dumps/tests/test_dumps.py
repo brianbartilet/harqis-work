@@ -14,18 +14,23 @@ import pytest
 
 from workflows.dumps.config import (
     HARQIS_SERVER_MACHINE_NAME,
+    ExpectedDumpSource,
     get_dumps_summary_path,
     get_dumps_target,
+    get_expected_dump_sources,
     get_local_dumps_config,
     get_pull_targets,
     load_merged_config,
 )
 from workflows.dumps.tasks.analyze import (
     _filter_machines,
+    _find_missing_expected_sources,
+    _missing_notification_marker,
     _render_gaps,
     _render_multi,
     _resolve_target_dates,
     _scan_day,
+    _send_missing_dumps_notification,
     analyze_daily_dumps,
 )
 from workflows.dumps.tasks.collect import broadcast_collect_daily_dumps
@@ -123,6 +128,38 @@ def test__get_pull_targets_returns_list():
         assert t.name and t.ssh and t.paths
 
 
+def test__get_expected_dump_sources_includes_workers_and_pull_targets():
+    cfg = {
+        "windows-work-all": {
+            "daily_dumps": {"paths": ["C:/dump"]},
+        },
+        "disabled-box": {
+            "enabled": False,
+            "daily_dumps": {"paths": ["/disabled"]},
+        },
+        "empty-box": {
+            "daily_dumps": {"paths": []},
+        },
+        "dumps": {
+            "pull_targets": {
+                "nothing-phone": {
+                    "ssh": "u0_a368@phone.tailnet.ts.net",
+                    "port": 8022,
+                    "paths": ["/storage/emulated/0/DCIM/Camera"],
+                },
+                "bad-phone": {"ssh": "x@y", "paths": []},
+            }
+        },
+    }
+
+    sources = get_expected_dump_sources(cfg)
+
+    assert [(s.name, s.source_type) for s in sources] == [
+        ("nothing-phone", "pull"),
+        ("windows-work-all", "worker"),
+    ]
+
+
 def test__get_dumps_target_returns_none_when_unconfigured():
     """If [dumps] harqis_server_ssh / inbox aren't set, returns None (not a crash)."""
     # Pass an empty config dict to bypass the live machines.toml lookup.
@@ -208,6 +245,41 @@ def test__filter_machines_limits_to_exact_machine_name():
     ]
     assert _filter_machines(machines, "nothing-phone") == [machines[1]]
     assert _filter_machines(machines) == machines
+
+
+def test__find_missing_expected_sources_treats_absent_and_empty_as_missing():
+    expected = [
+        ExpectedDumpSource("windows-work-all", "worker", ["C:/dump"]),
+        ExpectedDumpSource("nothing-phone", "pull", ["/storage/emulated/0/DCIM/Camera"]),
+        ExpectedDumpSource("empty-folder", "worker", ["/logs"]),
+    ]
+    machines = [
+        {"machine": "windows-work-all", "files_count": 3, "bytes_total": 99},
+        {"machine": "empty-folder", "files_count": 0, "bytes_total": 0},
+    ]
+
+    missing = _find_missing_expected_sources(expected, machines)
+
+    assert missing == [
+        {"name": "nothing-phone", "source_type": "pull", "paths_count": 1},
+        {"name": "empty-folder", "source_type": "worker", "paths_count": 1},
+    ]
+
+
+def test__send_missing_dumps_notification_dedupes_existing_marker(tmp_path):
+    missing = [{"name": "nothing-phone", "source_type": "pull", "paths_count": 2}]
+    marker = _missing_notification_marker(tmp_path, "2026-06-25", missing)
+    marker.parent.mkdir(parents=True)
+    marker.write_text("sent\n", encoding="utf-8")
+
+    result = _send_missing_dumps_notification(
+        date_suffix="2026-06-25",
+        missing=missing,
+        observed=[],
+        inbox=tmp_path,
+    )
+
+    assert result == {"sent": False, "skipped": "already notified", "marker": str(marker)}
 
 
 def test__render_multi_marks_missed_days_and_totals():

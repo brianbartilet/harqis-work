@@ -113,6 +113,14 @@ class PullTarget:
     port: int = 22
 
 
+@dataclass(frozen=True)
+class ExpectedDumpSource:
+    """A configured source that should produce a daily dump folder."""
+    name: str
+    source_type: str  # "worker" for celery broadcast, "pull" for host pulls
+    paths: list[str]
+
+
 def get_dumps_target(cfg: dict | None = None) -> DumpsTarget | None:
     """Return the harqis-server SSH target + inbox path, or None if unset."""
     cfg = cfg if cfg is not None else load_merged_config()
@@ -168,3 +176,38 @@ def get_pull_targets(cfg: dict | None = None) -> list[PullTarget]:
             port=int(entry.get("port", 22)),
         ))
     return out
+
+
+def get_expected_dump_sources(cfg: dict | None = None) -> list[ExpectedDumpSource]:
+    """Return configured machines/devices expected to produce daily dumps.
+
+    Celery-attached machines are expected when their machine section has a
+    non-empty ``daily_dumps.paths`` list. Non-celery devices are the configured
+    pull targets. Schema-only / disabled sections and empty path lists are not
+    expected to produce output.
+    """
+    cfg = cfg if cfg is not None else load_merged_config()
+    sources: list[ExpectedDumpSource] = []
+
+    for name, entry in cfg.items():
+        if name in {"default", "dumps", "hostnames", "shared", "sync", "ssh"}:
+            continue
+        if not isinstance(entry, dict) or entry.get("enabled") is False:
+            continue
+        daily = entry.get("daily_dumps") or {}
+        paths = list(daily.get("paths") or []) if isinstance(daily, dict) else []
+        if paths:
+            sources.append(ExpectedDumpSource(
+                name=name,
+                source_type="worker",
+                paths=paths,
+            ))
+
+    for target in get_pull_targets(cfg):
+        sources.append(ExpectedDumpSource(
+            name=target.name,
+            source_type="pull",
+            paths=target.paths,
+        ))
+
+    return sorted(sources, key=lambda s: (s.source_type, s.name))
