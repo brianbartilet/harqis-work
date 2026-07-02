@@ -397,6 +397,7 @@ def test__status_label_maps_codes():
     assert _status_label(8) == "Picked Up"
     # already-a-label passes through; unknown/blank handled
     assert _status_label("Completed") == "Completed"
+    assert _status_label(9) == "In Transit"
     assert _status_label(None) == ""
 
 
@@ -404,6 +405,8 @@ def test__default_sold_statuses_exclude_pending_drop_off():
     labels = {s.label for s in DEFAULT_SOLD_STATUSES}
     assert EnumTcgOrderStatus.PENDING_DROP_OFF not in DEFAULT_SOLD_STATUSES
     assert "Pending Drop Off" not in labels
+    assert "In Transit" in labels
+    assert _status_is_allowed(9, labels) is True
     assert _status_is_allowed(1, labels) is False
     assert _status_is_allowed("1", labels) is False
     assert _status_is_allowed("Pending Drop Off", labels) is False

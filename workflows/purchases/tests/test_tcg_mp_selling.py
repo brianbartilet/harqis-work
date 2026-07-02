@@ -8,7 +8,10 @@ from workflows.purchases.tasks.tcg_mp_selling import (generate_tcg_mappings, gen
                                                       _same_variant, _group_by_variant,
                                                       _listing_matches_variant, _find_live_variant_listings, _choose_primary_listing,
                                                       _remove_duplicate_variant_listings,
-                                                      _choose_update_representative)
+                                                      _choose_update_representative,
+                                                      _available_listing_quantity,
+                                                      _order_detail_items,
+                                                      _reserved_quantities_by_product_foil)
 from apps.apps_config import CONFIG_MANAGER
 from apps.tcg_mp.references.web.api.publish import ApiServiceTcgMpPublish
 
@@ -256,4 +259,41 @@ def test__remove_duplicate_variant_listings_keeps_primary():
     removed = _remove_duplicate_variant_listings(publish, [stale, current], 785652)
     assert removed == [785650]
     assert publish.removed == [[785650]]
+
+class _OrderPage:
+    def __init__(self, data):
+        self.data = data
+
+
+class _ReservedOrderService:
+    def get_orders(self, by_status):
+        return [_OrderPage([{"order_id": "0001"}, {"order_id": "0002"}])]
+
+    def get_order_detail(self, order_id):
+        quantities = {"0001": 2, "0002": 1}
+        return {
+            "order_id": order_id,
+            "items": [
+                {"product_id": 787544, "crd_foil": "0", "qty": quantities[order_id]},
+                {"product_id": 999999, "crd_foil": "1", "qty": 1},
+            ],
+        }
+
+
+def test__order_detail_items_extracts_product_foil_quantity():
+    detail = {"items": [{"productId": "787544", "foil": "0", "quantity": "2"}]}
+    assert _order_detail_items(detail) == [{"product_id": 787544, "foil": 0, "qty": 2}]
+
+
+def test__reserved_quantities_sum_pending_commitments_by_product_and_foil():
+    reserved = _reserved_quantities_by_product_foil(_ReservedOrderService())
+    assert reserved[(787544, 0)] == 6  # two pending statuses each return qty 2 + qty 1
+    assert reserved[(999999, 1)] == 4
+
+
+def test__available_listing_quantity_subtracts_pending_commitments():
+    reserved = {(787544, 0): 2}
+    assert _available_listing_quantity(3, reserved, 787544, 0) == 1
+    assert _available_listing_quantity(2, reserved, 787544, 0) == 0
+    assert _available_listing_quantity(2, reserved, 787544, 1) == 2
 

@@ -36,6 +36,7 @@ class EnumTcgOrderStatus(Enum):
     DROPPED =               (6,  "Dropped Off")
     ARRIVED_BRANCH =        (7,  "Arrived Branch")
     PICKED_UP =             (8,  "Picked Up")
+    IN_TRANSIT =            (9,  "In Transit")
     PENDING_PAYMENT =       (11, "Pending Payment")
 
     @property

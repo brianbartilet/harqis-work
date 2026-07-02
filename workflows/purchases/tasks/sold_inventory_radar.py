@@ -123,6 +123,7 @@ DEFAULT_SOLD_STATUSES = (
     EnumTcgOrderStatus.ARRIVED_BRANCH,   # at the branch — no longer in hand
     EnumTcgOrderStatus.SHIPPED,          # in transit to buyer — gone
     EnumTcgOrderStatus.PICKED_UP,
+    EnumTcgOrderStatus.IN_TRANSIT,
     EnumTcgOrderStatus.COMPLETED,
     EnumTcgOrderStatus.CANCELLED,
     EnumTcgOrderStatus.NOT_RECEIVED,

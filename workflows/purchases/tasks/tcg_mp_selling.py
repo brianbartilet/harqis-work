@@ -200,6 +200,89 @@ def _choose_update_representative(group: list) -> dict:
     noted = [card for card in group if card.get("note_id")]
     return max(noted or group, key=_acquired_dt)
 
+PENDING_COMMITMENT_STATUSES = (
+    EnumTcgOrderStatus.PENDING_DROP_OFF,
+    EnumTcgOrderStatus.PENDING_PAYMENT,
+)
+
+
+def _int_value(value, default=0) -> int:
+    try:
+        if value in (None, ""):
+            return default
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _order_summaries(pages) -> list:
+    summaries = []
+    for page in pages or []:
+        if not page:
+            continue
+        data = getattr(page, "data", None)
+        if data is None and isinstance(page, dict):
+            data = page.get("data")
+        if isinstance(data, list):
+            summaries.extend(data)
+    return summaries
+
+
+def _order_detail_items(order_detail: dict) -> list[dict]:
+    if not isinstance(order_detail, dict):
+        return []
+    raw_items = order_detail.get("items")
+    if not isinstance(raw_items, list):
+        return []
+    items = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        product_id = _int_value(_obj_value(item, "product_id", "crd_product_id", "productId"), None)
+        if product_id is None:
+            continue
+        items.append({
+            "product_id": product_id,
+            "foil": _norm_foil(_obj_value(item, "crd_foil", "foil", default=0)),
+            "qty": _int_value(_obj_value(item, "qty", "quantity", default=1), 1),
+        })
+    return items
+
+
+def _reserved_quantities_by_product_foil(order_service, statuses=PENDING_COMMITMENT_STATUSES) -> dict:
+    """Quantities committed to open orders but not yet removed from EchoMTG.
+
+    Pending Drop Off / Pending Payment cards are no longer available to list, but
+    they can still be present in EchoMTG until handoff/reconcile. Subtracting
+    these quantities prevents the updater from re-offering committed copies.
+    """
+    reserved: dict = {}
+    for status in statuses:
+        try:
+            pages = order_service.get_orders(by_status=status)
+        except Exception:
+            tcg_mp_log.warning("Could not fetch %s orders for reserve count", status.label)
+            continue
+        for summary in _order_summaries(pages):
+            order_id = _obj_value(summary, "order_id")
+            if not order_id:
+                continue
+            try:
+                detail = order_service.get_order_detail(order_id)
+            except Exception:
+                tcg_mp_log.warning("Could not fetch order detail %s for reserve count", order_id)
+                continue
+            for item in _order_detail_items(detail):
+                key = (item["product_id"], item["foil"])
+                reserved[key] = reserved.get(key, 0) + item["qty"]
+    return reserved
+
+
+def _available_listing_quantity(total_quantity: int, reserved_quantities: dict,
+                                product_id, foil) -> int:
+    key = (_int_value(product_id, None), _norm_foil(foil))
+    reserved = reserved_quantities.get(key, 0) if key[0] is not None else 0
+    return max(0, int(total_quantity or 0) - int(reserved or 0))
 # endregion
 
 
@@ -507,7 +590,11 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         variant_copies = [c for c in live if _same_variant(c, rep)]
         if not variant_copies:
             variant_copies = cards
-        quantity = len(variant_copies)
+        total_quantity = len(variant_copies)
+        reserved_quantities = task.get("reserved_quantities") or {}
+        quantity = _available_listing_quantity(
+            total_quantity, reserved_quantities, product_id, rep["foil"]
+        )
 
         # Price from the representative card's meta.
         base_price = card_meta['foil_price'] if rep['foil'] else card_meta['tcg_mid']
@@ -539,7 +626,14 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
 
         created = False
         duplicate_listing_ids = []
-        if listing_id == 0:
+        if quantity < 1:
+            if listing_id:
+                api_publish.remove_listings([listing_id])
+                listing_id = 0
+            _log_worker_generate_tcg_listings.info(
+                f"Skipped listing for {card_name}; all {total_quantity} copy/copies are committed to open orders."
+            )
+        elif listing_id == 0:
             response = api_publish.add_listing(
                 price=post_price,
                 quantity=quantity,
@@ -601,6 +695,8 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
             "created": created,
             "listing_id": listing_id,
             "quantity": quantity,
+            "total_quantity": locals().get("total_quantity", quantity),
+            "reserved_quantity": max(0, locals().get("total_quantity", quantity) - quantity),
             "notes_updated": notes_updated,
             "duplicate_listing_ids": duplicate_listing_ids,
         }
@@ -671,6 +767,8 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
     api_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
     api_merchant = ApiServiceTcgMpMerchant(cfg__tcg_mp)
+    order_service = ApiServiceTcgMpOrder(cfg__tcg_mp)
+    reserved_quantities = _reserved_quantities_by_product_foil(order_service)
 
     cards_echo = api_inventory.get_collection(tradable_only=1) or []
     if not isinstance(cards_echo, list):
@@ -711,6 +809,7 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
             "cfg_id__echo_mtg": cfg_id__echo_mtg,
             "cfg_id__echo_mtg_fe": cfg_id__echo_mtg_fe,
             "language": language,
+            "reserved_quantities": reserved_quantities,
         }
         for group in variant_groups.values()
     ]
@@ -874,7 +973,11 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 
             time.sleep(2)
             existing = api_service__search.search_card(card_echo["emid"], tradable_only=1) or []
             matching = [c for c in existing if _same_variant(c, card_echo)]
-            quantity = len(matching)
+            total_quantity = len(matching)
+            reserved_quantities = task.get("reserved_quantities") or {}
+            quantity = _available_listing_quantity(
+                total_quantity, reserved_quantities, json_note.get("tcg_mp_card_id"), card_echo["foil"]
+            )
 
             live_listings = _find_live_variant_listings(
                 api_view, product_id=json_note.get("tcg_mp_card_id"),
@@ -885,11 +988,16 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 
                 listing_id = int(_obj_value(primary_listing, "listing_id"))
 
             if quantity < 1:
-                # Defensive: never push quantity 0 (that delists). An empty/failed
-                # search must not silently remove a live listing — leave it untouched.
-                _log_worker_generate_tcg_listings.warning(
-                    f"{card_name}: no matching copies returned; leaving listing {listing_id} untouched."
-                )
+                if total_quantity < 1:
+                    _log_worker_generate_tcg_listings.warning(
+                        f"{card_name}: no matching copies returned; leaving listing {listing_id} untouched."
+                    )
+                elif listing_id:
+                    api_publish.remove_listings([listing_id])
+                    listing_id = 0
+                    _log_worker_generate_tcg_listings.info(
+                        f"Removed listing for {card_name}; all {total_quantity} copy/copies are committed to open orders."
+                    )
                 updated = False
             else:
                 edit_result = _retry_edit_listing(
@@ -952,6 +1060,8 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 
             "updated": updated,
             "listing_id": listing_id,
             "quantity": quantity,
+            "total_quantity": locals().get("total_quantity", quantity),
+            "reserved_quantity": max(0, locals().get("total_quantity", quantity) - quantity),
             "notes_updated": notes_updated,
             "duplicate_listing_ids": duplicate_listing_ids,
         }
@@ -974,6 +1084,8 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
     api_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
     api_service__tcg_mp_merchant = ApiServiceTcgMpMerchant(cfg__tcg_mp)
+    order_service = ApiServiceTcgMpOrder(cfg__tcg_mp)
+    reserved_quantities = _reserved_quantities_by_product_foil(order_service)
 
     cards_echo = api_inventory.get_collection(tradable_only=1) or []
     if not isinstance(cards_echo, list):
@@ -1011,6 +1123,7 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
             "cfg_id__tcg_mp": cfg_id__tcg_mp,
             "cfg_id__echo_mtg": cfg_id__echo_mtg,
             "cfg_id__echo_mtg_fe": cfg_id__echo_mtg_fe,
+            "reserved_quantities": reserved_quantities,
         }
         for card in representatives
     ]
@@ -1110,6 +1223,7 @@ def generate_audit_for_tcg_orders(last_x_days=15, **kwargs) -> None:
     # radar treats as sold. Transient + low-volume like ARRIVED_BRANCH/DROPPED, so
     # left unbounded.
     orders_8 = service.get_orders(by_status=EnumTcgOrderStatus.SHIPPED)
+    orders_9 = service.get_orders(by_status=EnumTcgOrderStatus.IN_TRANSIT)
     # Terminal "left my hands" states the sold-inventory radar relies on. These
     # were previously not audited, so cancelled/not-received orders never landed
     # in tcg-mp-audit-current — date-bounded like COMPLETED to keep the poll cheap.
@@ -1122,7 +1236,7 @@ def generate_audit_for_tcg_orders(last_x_days=15, **kwargs) -> None:
 
     orders = [
         order
-        for page in [orders_1, orders_2, orders_3, orders_4, orders_5, orders_6, orders_7, orders_8]
+        for page in [orders_1, orders_2, orders_3, orders_4, orders_5, orders_6, orders_7, orders_8, orders_9]
         if page
         for order in (page[0].data or [])
     ]
