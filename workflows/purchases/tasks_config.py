@@ -126,7 +126,7 @@ WORKFLOW_PURCHASES = {
         # while this writes it (partial-read risk). 22:00 leaves a clean file ready
         # for the 2nd onward; mappings on the 1st just uses the prior month's bulk.
         'schedule': crontab(
-            day_of_month='1',
+            day_of_month='1,15,25',
             hour=22,
             minute=0
         ),
