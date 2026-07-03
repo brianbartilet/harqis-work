@@ -194,9 +194,9 @@ def init_meter(
                 # fields the wrapped task returned (`summary`, `metrics`, …).
                 return _build_return(hud_item_name, changed, ini_path, note_path, extra_fields)
 
-            except Exception as e:
-                log.error(f"Failed HUD initialization: {e}")
-                raise e
+            except Exception:
+                log.exception("Failed HUD initialization")
+                raise
 
         inner._hud_item_name = hud_item_name
         inner._hud_config = config

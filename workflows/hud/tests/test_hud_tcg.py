@@ -4,6 +4,7 @@ from apps.tcg_mp.references.dto.listing import DtoWantToBuyListing
 from apps.tcg_mp.references.web.api.buy import _parse_want_to_buy_listings
 from workflows.hud.tasks.hud_tcg import (
     _is_acceptable_bid,
+    _sort_info_from_scryfall_image,
     show_tcg_orders,
     show_tcg_sell_cart,
 )
@@ -23,6 +24,57 @@ def test__show_tcg_sell_cart_dry_run():
         cfg_id__tcg_mp="TCG_MP",
         worker_count=3,
     )
+
+def test__sort_info_from_scryfall_image__missing_guid_uses_name_index():
+    image_url = "https://thetcgmarketplace.com:3500/uploads/products/Magic%20The%20Gathering/Marvel%20Super%20Heroes/msh_23%20Monica%20Rambeau%20Photon%2C%20Living%20Light.webp"
+    bulk = {
+        "abc": {
+            "name": "Monica Rambeau // Photon, Living Light",
+            "color_identity": ["W"],
+            "cmc": 2.0,
+            "type_line": "Legendary Creature",
+        }
+    }
+
+    assert _sort_info_from_scryfall_image(
+        bulk, "Monica Rambeau // Photon, Living Light", image_url
+    ) == ("W", 2)
+
+
+def test__sort_info_from_scryfall_image__missing_guid_and_name_falls_back():
+    image_url = "https://thetcgmarketplace.com/uploads/products/foo.webp"
+
+    assert _sort_info_from_scryfall_image(
+        {}, "Unknown Card", image_url
+    ) == ("X", 0)
+
+def test__sort_info_from_scryfall_image__split_face_name_uses_name_index():
+    bulk = {
+        "abc": {
+            "name": "Emeritus of Truce // Swords to Plowshares",
+            "color_identity": ["W"],
+            "cmc": 4.0,
+            "type_line": "Creature",
+        }
+    }
+
+    assert _sort_info_from_scryfall_image(
+        bulk, "Swords to Plowshares", "https://thetcgmarketplace.com/uploads/foo.webp"
+    ) == ("W", 4)
+
+def test__sort_info_from_scryfall_image__uuid_uses_bulk_metadata():
+    guid = "12345678-1234-4123-8123-123456789abc"
+    bulk = {
+        guid: {
+            "color_identity": ["W"],
+            "cmc": 3.0,
+            "type_line": "Legendary Creature",
+        }
+    }
+
+    assert _sort_info_from_scryfall_image(
+        bulk, "Test Card", f"https://img/{guid}.jpg"
+    ) == ("W", 3)
 
 
 # ── Unit / function — _parse_want_to_buy_listings ─────────────────────────────

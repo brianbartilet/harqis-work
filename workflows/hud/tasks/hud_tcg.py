@@ -1,7 +1,9 @@
 import re
 import os
 import psutil
+from contextlib import redirect_stdout
 from datetime import datetime
+from io import StringIO
 from typing import Optional
 
 from core.apps.sprout.app.celery import SPROUT
@@ -35,6 +37,67 @@ from workflows.purchases.helpers.constants import image_guid_pattern
 from workflows.purchases.helpers.mp_logging import log_mp_summary
 from workflows.hud.tasks.sections import sections__tcg_mp_sections, sections__tcg_mp_sell_cart_sections
 
+def _run_file_helper_without_console_status(func, *args, **kwargs):
+    with redirect_stdout(StringIO()):
+        return func(*args, **kwargs)
+
+def _normalize_scryfall_lookup_name(name: str) -> str:
+    cleaned = re.sub(r"^(?:\s*\[[^\]]+\]\s*)?", "", str(name or ""))
+    cleaned = re.sub(r"\s*\([^)]*\)\s*$", "", cleaned)
+    return re.sub(r"\s+", " ", cleaned.strip()).casefold()
+
+
+def _sort_info_from_scryfall_card(scryfall_card: dict):
+    try:
+        colors = scryfall_card['color_identity']
+        cmc = scryfall_card['cmc']
+        if "land" in scryfall_card["type_line"].lower():
+            color_identity = "L"
+        elif len(colors) == 1:
+            color_identity = colors[0]
+        elif len(colors) == 0:
+            color_identity = 'C'
+        elif len(colors) > 1:
+            color_identity = 'M'
+        else:
+            color_identity = 'X'
+    except KeyError:
+        color_identity = 'X'
+        cmc = 0
+
+    return color_identity, int(cmc)
+
+
+def _build_scryfall_sort_index(cards_scryfall_bulk_data: dict) -> dict:
+    sort_index = {}
+    for card in (cards_scryfall_bulk_data or {}).values():
+        names = [card.get("name")]
+        names.extend(card.get("name", "").split(" // "))
+        for name in names:
+            name_key = _normalize_scryfall_lookup_name(name)
+            if name_key and name_key not in sort_index:
+                sort_index[name_key] = card
+    return sort_index
+
+
+def _sort_info_from_scryfall_image(
+    cards_scryfall_bulk_data: dict,
+    card_name: str,
+    image_url: str,
+    cards_scryfall_sort_index: dict | None = None,
+):
+    match = re.search(image_guid_pattern, image_url or "")
+    if match:
+        guid = match.group(1)
+        return _sort_info_from_scryfall_card(cards_scryfall_bulk_data.get(guid, {}))
+
+    sort_index = cards_scryfall_sort_index or _build_scryfall_sort_index(cards_scryfall_bulk_data)
+    scryfall_card = sort_index.get(_normalize_scryfall_lookup_name(card_name))
+    if scryfall_card:
+        return _sort_info_from_scryfall_card(scryfall_card)
+
+    log.warning("No guid or bulk name match found. card=%s url=%s", card_name, image_url)
+    return 'X', 0
 
 @SPROUT.task()
 @log_result()
@@ -61,6 +124,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
 
     cards_scryfall_bulk_data = load_scryfall_bulk_data(
         api_service__scryfall_cards.config.app_data['path_folder_static_file'])
+    cards_scryfall_sort_index = _build_scryfall_sort_index(cards_scryfall_bulk_data)
 
     orders_pending_drop_off = orders
     all_pending = orders_pending_drop_off[0].data
@@ -172,30 +236,9 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
         search = products.search_card(card_name)
         _card = search[0]
         log.info("Extracting guid on tcg mp from image url: {0}".format(_card))
-        url = _card.image
-        match = re.search(image_guid_pattern, url)
-        guid = match.group(1)
-
-        try:
-            log.info("Found GUID: {0} for card: {1}".format(guid, _card))
-            scryfall_card = cards_scryfall_bulk_data[guid]
-            colors = scryfall_card['color_identity']
-            _cmc = scryfall_card['cmc']
-            if "land" in scryfall_card["type_line"].lower():
-                _color_identity = "L"
-            elif len(colors) == 1:
-                _color_identity =  colors[0]
-            elif len(colors) == 0:
-                _color_identity = 'C'
-            elif len(colors) > 1:
-                _color_identity = 'M'
-            else:
-                _color_identity = 'X'
-        except KeyError:
-            _color_identity = 'X'
-            _cmc = 0
-
-        return _color_identity, int(_cmc)
+        return _sort_info_from_scryfall_image(
+            cards_scryfall_bulk_data, card_name, _card.image, cards_scryfall_sort_index
+        )
 
     # remove invalid items
     orders[0].data = [
@@ -330,7 +373,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
         downloads_list = sorted_data_single_card_name + multiple_items_oder
         # start clean
         ext = "*.png"
-        remove_files_with_patterns(to_path, [ext, ])
+        _run_file_helper_without_console_status(remove_files_with_patterns, to_path, [ext, ])
         for item in downloads_list:
             index += 1
             qr_link = service.get_order_qr_code(item['order_id'])
@@ -338,7 +381,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
             name_write = str(item['name']).strip()
             file_name = sanitize_filename("{0}-{1}-{2}.png".format(index, item['order_id'][4:], name_write))
             download_service.download_file(file_name)
-            move_files_any({file_name: to_path})
+            _run_file_helper_without_console_status(move_files_any, {file_name: to_path})
 
     if path := kwargs.get("path_to_qr", cfg__tcg_mp.app_data['save_path']):
         today_folder = datetime.now().strftime("%d-%m-%Y")
@@ -350,13 +393,13 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
         # Mirror the latest run into a stable "now" folder for quick access
         now_path = os.path.join(path, "now")
         if os.path.isdir(now_path):
-            remove_files_with_patterns(now_path, ["*.png"])
+            _run_file_helper_without_console_status(remove_files_with_patterns, now_path, ["*.png"])
         qr_files = [
             os.path.join(dated_path, f)
             for f in os.listdir(dated_path)
             if f.lower().endswith(".png")
         ]
-        copy_files_to_folder(path, "now", qr_files)
+        _run_file_helper_without_console_status(copy_files_to_folder, path, "now", qr_files)
 
     # endregion
 
