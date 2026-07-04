@@ -205,6 +205,21 @@ PENDING_COMMITMENT_STATUSES = (
     EnumTcgOrderStatus.PENDING_PAYMENT,
 )
 
+HANDED_OFF_ORDER_STATUSES = (
+    EnumTcgOrderStatus.DROPPED,
+    EnumTcgOrderStatus.ARRIVED_BRANCH,
+    EnumTcgOrderStatus.SHIPPED,
+    EnumTcgOrderStatus.IN_TRANSIT,
+    EnumTcgOrderStatus.PICKED_UP,
+    EnumTcgOrderStatus.COMPLETED,
+    EnumTcgOrderStatus.NOT_RECEIVED,
+)
+
+DATE_BOUNDED_COMMITMENT_STATUSES = (
+    EnumTcgOrderStatus.COMPLETED,
+    EnumTcgOrderStatus.NOT_RECEIVED,
+)
+
 
 def _int_value(value, default=0) -> int:
     try:
@@ -249,17 +264,33 @@ def _order_detail_items(order_detail: dict) -> list[dict]:
     return items
 
 
-def _reserved_quantities_by_product_foil(order_service, statuses=PENDING_COMMITMENT_STATUSES) -> dict:
+def _reserved_quantities_by_product_foil(order_service, statuses=PENDING_COMMITMENT_STATUSES,
+                                         last_x_days: Optional[int] = None,
+                                         date_bounded_statuses=()) -> dict:
     """Quantities committed to open orders but not yet removed from EchoMTG.
 
     Pending Drop Off / Pending Payment cards are no longer available to list, but
     they can still be present in EchoMTG until handoff/reconcile. Subtracting
     these quantities prevents the updater from re-offering committed copies.
     """
+    date_range_from = date_range_to = None
+    if last_x_days is not None:
+        today = datetime.today().date()
+        date_range_from = (today - timedelta(days=last_x_days)).isoformat()
+        date_range_to = today.isoformat()
+
+    date_bounded = set(date_bounded_statuses or ())
     reserved: dict = {}
     for status in statuses:
         try:
-            pages = order_service.get_orders(by_status=status)
+            if status in date_bounded and date_range_from and date_range_to:
+                pages = order_service.get_orders(
+                    by_status=status,
+                    date_range_from=date_range_from,
+                    date_range_to=date_range_to,
+                )
+            else:
+                pages = order_service.get_orders(by_status=status)
         except Exception:
             tcg_mp_log.warning("Could not fetch %s orders for reserve count", status.label)
             continue
@@ -283,6 +314,28 @@ def _available_listing_quantity(total_quantity: int, reserved_quantities: dict,
     key = (_int_value(product_id, None), _norm_foil(foil))
     reserved = reserved_quantities.get(key, 0) if key[0] is not None else 0
     return max(0, int(total_quantity or 0) - int(reserved or 0))
+
+
+def _safe_listing_quantity(total_quantity: int, pending_quantities: dict,
+                           handed_off_quantities: dict, product_id, foil,
+                           live_quantity=None) -> int:
+    """Available quantity for listing updates.
+
+    Pending orders are always subtracted because the card has been bought but may
+    still be in EchoMTG. Dropped-or-later orders are handled as a cap: if TCG MP
+    still has a live listing, never raise quantity above that live marketplace
+    quantity while an unreconciled handed-off order exists. If the listing is
+    already gone, subtract the handed-off quantity to avoid recreating it from a
+    stale EchoMTG copy.
+    """
+    available = _available_listing_quantity(total_quantity, pending_quantities, product_id, foil)
+    key = (_int_value(product_id, None), _norm_foil(foil))
+    handed_off = handed_off_quantities.get(key, 0) if key[0] is not None else 0
+    if handed_off < 1:
+        return available
+    if live_quantity is not None:
+        return min(available, max(0, _int_value(live_quantity, 0)))
+    return max(0, available - int(handed_off or 0))
 # endregion
 
 
@@ -591,10 +644,6 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         if not variant_copies:
             variant_copies = cards
         total_quantity = len(variant_copies)
-        reserved_quantities = task.get("reserved_quantities") or {}
-        quantity = _available_listing_quantity(
-            total_quantity, reserved_quantities, product_id, rep["foil"]
-        )
 
         # Price from the representative card's meta.
         base_price = card_meta['foil_price'] if rep['foil'] else card_meta['tcg_mid']
@@ -623,6 +672,13 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         primary_listing = _choose_primary_listing(live_listings, listing_id)
         if primary_listing is not None:
             listing_id = int(_obj_value(primary_listing, "listing_id"))
+        live_quantity = _obj_value(primary_listing, "quantity") if primary_listing is not None else None
+        pending_quantities = task.get("pending_quantities") or task.get("reserved_quantities") or {}
+        handed_off_quantities = task.get("handed_off_quantities") or {}
+        quantity = _safe_listing_quantity(
+            total_quantity, pending_quantities, handed_off_quantities,
+            product_id, rep["foil"], live_quantity=live_quantity,
+        )
 
         created = False
         duplicate_listing_ids = []
@@ -768,7 +824,13 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
     api_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
     api_merchant = ApiServiceTcgMpMerchant(cfg__tcg_mp)
     order_service = ApiServiceTcgMpOrder(cfg__tcg_mp)
-    reserved_quantities = _reserved_quantities_by_product_foil(order_service)
+    pending_quantities = _reserved_quantities_by_product_foil(order_service)
+    handed_off_quantities = _reserved_quantities_by_product_foil(
+        order_service,
+        statuses=HANDED_OFF_ORDER_STATUSES,
+        last_x_days=kwargs.pop("handed_off_last_x_days", 60),
+        date_bounded_statuses=DATE_BOUNDED_COMMITMENT_STATUSES,
+    )
 
     cards_echo = api_inventory.get_collection(tradable_only=1) or []
     if not isinstance(cards_echo, list):
@@ -809,7 +871,8 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
             "cfg_id__echo_mtg": cfg_id__echo_mtg,
             "cfg_id__echo_mtg_fe": cfg_id__echo_mtg_fe,
             "language": language,
-            "reserved_quantities": reserved_quantities,
+            "pending_quantities": pending_quantities,
+            "handed_off_quantities": handed_off_quantities,
         }
         for group in variant_groups.values()
     ]
@@ -974,10 +1037,6 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 
             existing = api_service__search.search_card(card_echo["emid"], tradable_only=1) or []
             matching = [c for c in existing if _same_variant(c, card_echo)]
             total_quantity = len(matching)
-            reserved_quantities = task.get("reserved_quantities") or {}
-            quantity = _available_listing_quantity(
-                total_quantity, reserved_quantities, json_note.get("tcg_mp_card_id"), card_echo["foil"]
-            )
 
             live_listings = _find_live_variant_listings(
                 api_view, product_id=json_note.get("tcg_mp_card_id"),
@@ -986,6 +1045,14 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 
             primary_listing = _choose_primary_listing(live_listings, listing_id)
             if primary_listing is not None:
                 listing_id = int(_obj_value(primary_listing, "listing_id"))
+            live_quantity = _obj_value(primary_listing, "quantity") if primary_listing is not None else None
+            pending_quantities = task.get("pending_quantities") or task.get("reserved_quantities") or {}
+            handed_off_quantities = task.get("handed_off_quantities") or {}
+            quantity = _safe_listing_quantity(
+                total_quantity, pending_quantities, handed_off_quantities,
+                json_note.get("tcg_mp_card_id"), card_echo["foil"],
+                live_quantity=live_quantity,
+            )
 
             if quantity < 1:
                 if total_quantity < 1:
@@ -1085,7 +1152,13 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
     api_inventory = ApiServiceEchoMTGInventory(cfg__echo_mtg)
     api_service__tcg_mp_merchant = ApiServiceTcgMpMerchant(cfg__tcg_mp)
     order_service = ApiServiceTcgMpOrder(cfg__tcg_mp)
-    reserved_quantities = _reserved_quantities_by_product_foil(order_service)
+    pending_quantities = _reserved_quantities_by_product_foil(order_service)
+    handed_off_quantities = _reserved_quantities_by_product_foil(
+        order_service,
+        statuses=HANDED_OFF_ORDER_STATUSES,
+        last_x_days=kwargs.pop("handed_off_last_x_days", 60),
+        date_bounded_statuses=DATE_BOUNDED_COMMITMENT_STATUSES,
+    )
 
     cards_echo = api_inventory.get_collection(tradable_only=1) or []
     if not isinstance(cards_echo, list):
@@ -1123,7 +1196,8 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
             "cfg_id__tcg_mp": cfg_id__tcg_mp,
             "cfg_id__echo_mtg": cfg_id__echo_mtg,
             "cfg_id__echo_mtg_fe": cfg_id__echo_mtg_fe,
-            "reserved_quantities": reserved_quantities,
+            "pending_quantities": pending_quantities,
+            "handed_off_quantities": handed_off_quantities,
         }
         for card in representatives
     ]
@@ -1236,9 +1310,8 @@ def generate_audit_for_tcg_orders(last_x_days=15, **kwargs) -> None:
 
     orders = [
         order
-        for page in [orders_1, orders_2, orders_3, orders_4, orders_5, orders_6, orders_7, orders_8, orders_9]
-        if page
-        for order in (page[0].data or [])
+        for pages in [orders_1, orders_2, orders_3, orders_4, orders_5, orders_6, orders_7, orders_8, orders_9]
+        for order in _order_summaries(pages)
     ]
 
     def now_utc_iso() -> str:

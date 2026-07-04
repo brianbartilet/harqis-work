@@ -115,9 +115,10 @@ _APPROVED_TRUE = {"yes", "y", "true", "1", "x", "approved"}
 # inventory only while the order is Pending Drop Off (1) or Pending Payment (11) —
 # you haven't handed it over yet. Every state from Dropped Off (6) onward means the
 # copy has physically left you: Dropped Off → Arrived Branch (7) → Shipped /
-# "In Transit" (2) → Picked Up (8) / Completed (3). Cancelled (4) / Not Received (5)
-# are terminal "gone" states too. So all of the below count as sold-and-gone;
-# PENDING_DROP_OFF and PENDING_PAYMENT are deliberately excluded (still yours).
+# "In Transit" (2) → Picked Up (8) / Completed (3). Not Received (5) is also a
+# terminal "gone" state. Cancelled (4) is deliberately excluded: marketplace
+# orders can only cancel before drop-off, so the physical card stays in inventory.
+# PENDING_DROP_OFF and PENDING_PAYMENT are also excluded (still yours).
 DEFAULT_SOLD_STATUSES = (
     EnumTcgOrderStatus.DROPPED,          # dropped at branch — no longer in hand
     EnumTcgOrderStatus.ARRIVED_BRANCH,   # at the branch — no longer in hand
@@ -125,7 +126,6 @@ DEFAULT_SOLD_STATUSES = (
     EnumTcgOrderStatus.PICKED_UP,
     EnumTcgOrderStatus.IN_TRANSIT,
     EnumTcgOrderStatus.COMPLETED,
-    EnumTcgOrderStatus.CANCELLED,
     EnumTcgOrderStatus.NOT_RECEIVED,
 )
 
@@ -350,6 +350,7 @@ def _match_candidate(item: dict, note: dict, active_listing_ids: set,
     sold_by_product = product_id is not None and (product_id, foil) in sold_index["by_product"]
 
     detection = confidence = None
+    match_basis = ""
     matched_orders: list = []
     recommended = "mark_sold + remove_inventory + delist"
 
@@ -357,9 +358,12 @@ def _match_candidate(item: dict, note: dict, active_listing_ids: set,
         # Case A — sold but still listed (erroneous re-list)
         if sold_by_listing:
             detection, confidence = "sold_still_listed", "high"
+            match_basis = "listing"
             matched_orders = sold_index["by_listing"][listing_id]
         elif sold_by_product:
-            detection, confidence = "sold_still_listed", "medium"
+            detection = "sold_still_listed"
+            confidence = "high" if (product_candidate_count or 0) == 1 else "medium"
+            match_basis = "product_unique" if confidence == "high" else "product"
             matched_orders = sold_index["by_product"][(product_id, foil)]
         else:
             return None
@@ -372,12 +376,15 @@ def _match_candidate(item: dict, note: dict, active_listing_ids: set,
         recommended = "mark_sold + remove_inventory"   # listing already gone — no delist
         if sold_by_listing:
             confidence = "high"
+            match_basis = "listing"
             matched_orders = sold_index["by_listing"][listing_id]
         elif sold_by_product:
             confidence = "high" if (product_candidate_count or 0) == 1 else "medium"
+            match_basis = "product_unique" if confidence == "high" else "product"
             matched_orders = sold_index["by_product"][(product_id, foil)]
         else:
             confidence = "low"
+            match_basis = "orphan"
 
     name = matched_orders[0].get("name") if matched_orders else ""
     sold_price = matched_orders[0].get("price") if matched_orders else None
@@ -388,12 +395,20 @@ def _match_candidate(item: dict, note: dict, active_listing_ids: set,
     ) or "—"
     n_orders = len({o.get("order_id") for o in matched_orders})
 
-    if detection == "sold_still_listed" and confidence == "high":
+    if detection == "sold_still_listed" and confidence == "high" and match_basis == "listing":
         assessment = (
             f"HIGH: this card's exact TCG listing {listing_id} was sold in "
             f"{n_orders} order(s) [{orders_desc}], yet the listing is STILL active on "
             f"TCG MP and the card is STILL in EchoMTG inventory — the physical copy "
             f"was almost certainly already sold. Recommend: mark sold + remove + delist."
+        )
+    elif detection == "sold_still_listed" and confidence == "high":
+        assessment = (
+            f"HIGH: TCG product {product_id} ({foil_label}) was sold in "
+            f"{n_orders} order(s) [{orders_desc}], a matching listing "
+            f"{listing_id or 'n/a'} is STILL active, and exactly one EchoMTG "
+            f"candidate maps to that product/foil — the physical copy was almost "
+            f"certainly already sold. Recommend: mark sold + remove + delist."
         )
     elif detection == "sold_still_listed":
         owned_txt = (f" You hold {owned_count} copy/copies in EchoMTG — approving this "
@@ -439,6 +454,7 @@ def _match_candidate(item: dict, note: dict, active_listing_ids: set,
         "scryfall_guid": note.get("scryfall_guid"),
         "detection": detection,
         "confidence": confidence,
+        "match_basis": match_basis,
         "recommended_action": recommended,
         "assessment": assessment,
         "echo_owned_count": owned_count,

@@ -10,8 +10,10 @@ from workflows.purchases.tasks.tcg_mp_selling import (generate_tcg_mappings, gen
                                                       _remove_duplicate_variant_listings,
                                                       _choose_update_representative,
                                                       _available_listing_quantity,
+                                                      _safe_listing_quantity,
                                                       _order_detail_items,
-                                                      _reserved_quantities_by_product_foil)
+                                                      _reserved_quantities_by_product_foil,
+                                                      HANDED_OFF_ORDER_STATUSES)
 from apps.apps_config import CONFIG_MANAGER
 from apps.tcg_mp.references.web.api.publish import ApiServiceTcgMpPublish
 
@@ -296,4 +298,36 @@ def test__available_listing_quantity_subtracts_pending_commitments():
     assert _available_listing_quantity(3, reserved, 787544, 0) == 1
     assert _available_listing_quantity(2, reserved, 787544, 0) == 0
     assert _available_listing_quantity(2, reserved, 787544, 1) == 2
+
+
+def test__safe_listing_quantity_caps_to_live_listing_for_handed_off_orders():
+    pending = {}
+    handed_off = {(787544, 0): 1}
+    assert _safe_listing_quantity(
+        2, pending, handed_off, 787544, 0, live_quantity=1
+    ) == 1
+
+
+def test__safe_listing_quantity_subtracts_handed_off_when_listing_is_gone():
+    pending = {}
+    handed_off = {(787544, 0): 1}
+    assert _safe_listing_quantity(
+        1, pending, handed_off, 787544, 0, live_quantity=None
+    ) == 0
+
+
+def test__safe_listing_quantity_does_not_double_subtract_after_radar_removed_copy():
+    pending = {}
+    handed_off = {(787544, 0): 1}
+    assert _safe_listing_quantity(
+        1, pending, handed_off, 787544, 0, live_quantity=1
+    ) == 1
+
+
+def test__handed_off_statuses_match_dropoff_or_later_flow():
+    labels = {status.label for status in HANDED_OFF_ORDER_STATUSES}
+    assert "Pending Payment" not in labels
+    assert "Pending Drop Off" not in labels
+    assert "Cancelled" not in labels
+    assert {"Dropped Off", "Shipped", "In Transit", "Arrived Branch", "Picked Up", "Completed", "Not Received"} <= labels
 

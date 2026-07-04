@@ -256,6 +256,22 @@ def test__match_candidate_medium_confidence_product():
     assert c["assessment"].startswith("MEDIUM") and "non-foil" in c["assessment"]
 
 
+def test__match_candidate_high_confidence_product_when_only_echo_candidate():
+    item = {"emid": "2", "inventory_id": "i2", "note_id": "n2", "foil": 0}
+    note = {"tcg_mp_listing_id": 999, "tcg_mp_card_id": 200}
+    sold_index = _build_sold_index([{
+        "order_id": "0002", "status": "In Transit",
+        "items": [{"product_id": 200, "foil": 0, "name": "Llanowar Elves"}],
+    }])
+    c = _match_candidate(
+        item, note, active_listing_ids=set(), active_product_foil={(200, 0)},
+        sold_index=sold_index, product_candidate_count=1,
+    )
+    assert c is not None and c["confidence"] == "high"
+    assert c["match_basis"] == "product_unique"
+    assert c["assessment"].startswith("HIGH")
+
+
 def test__match_candidate_not_listed_but_sold_is_listing_gone():
     item = {"emid": "3", "inventory_id": "i3", "note_id": "n3", "foil": 0}
     note = {"tcg_mp_listing_id": 7, "tcg_mp_card_id": 100}
@@ -404,12 +420,15 @@ def test__status_label_maps_codes():
 def test__default_sold_statuses_exclude_pending_drop_off():
     labels = {s.label for s in DEFAULT_SOLD_STATUSES}
     assert EnumTcgOrderStatus.PENDING_DROP_OFF not in DEFAULT_SOLD_STATUSES
+    assert EnumTcgOrderStatus.CANCELLED not in DEFAULT_SOLD_STATUSES
     assert "Pending Drop Off" not in labels
+    assert "Cancelled" not in labels
     assert "In Transit" in labels
     assert _status_is_allowed(9, labels) is True
     assert _status_is_allowed(1, labels) is False
     assert _status_is_allowed("1", labels) is False
     assert _status_is_allowed("Pending Drop Off", labels) is False
+    assert _status_is_allowed("Cancelled", labels) is False
 
 
 class _FakeOrderPage:
