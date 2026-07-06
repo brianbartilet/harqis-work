@@ -20,6 +20,9 @@
 #   kanban_num_agents  concurrent in-process kanban agents (default: 1)
 #   [<name>.emulator]  optional table — auto-launch an Android emulator on
 #                   deploy (see the [windows-work-all.emulator] example below)
+#   [token_expiry_watchdog] / [<name>.token_expiry_watchdog]
+#                   optional tables for scripts/agents/diagnostics/check_access_tokens.py
+#                   (quiet token-expiry watchdog; real overrides belong in machines.local.toml)
 
 
 # Fallback when no [hostnames] entry matches.
@@ -120,6 +123,23 @@ kanban_profile = "agent:code"
 # "<windows-hostname>"     = "windows-work"
 # "<vps-hostname>"         = "vps-worker"
 
+
+# ── Token expiry watchdog (scripts/agents/diagnostics/check_access_tokens.py) ─
+# Schema only — host-specific overrides belong in machines.local.toml.
+# Quiet success is intentional for Hermes no-agent cron: empty stdout means no
+# Telegram notification; expired/revoked/near-expiry findings print an alert.
+#
+# [token_expiry_watchdog]
+# enabled = true
+# warn_within_days = 2
+# notify_missing = false          # true = alert on missing OAuth storage files too
+# include_checks = ["google_oauth", "spotify_refresh", "plaud_jwt", "jwt_env"]
+# google_configs = ["GOOGLE_APPS", "GOOGLE_GMAIL", "GOOGLE_GMAIL_SEND", "GOOGLE_KEEP", "GOOGLE_TASKS", "GOOGLE_DRIVE"]
+#
+# Per-machine override example:
+# [harqis-server.token_expiry_watchdog]
+# exclude_checks = ["jwt_env"]
+#
 
 # ── Daily dumps workflow (workflows/dumps/) ───────────────────────────────────
 # Schema only — actual values belong in machines.local.toml.

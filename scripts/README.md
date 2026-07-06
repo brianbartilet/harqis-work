@@ -61,6 +61,7 @@ up from `scripts/agents/<bucket>/`).
 | Path | Purpose |
 |---|---|
 | `check_env_health.py` | Environment / dependency / config diagnostics → JSON report. |
+| [`check_access_tokens.py`](#scriptsagentsdiagnosticscheck_access_tokenspy) | Silent token-expiry watchdog for Google OAuth storage, Spotify refresh tokens, Plaud JWTs, and JWT-like app tokens; prints only actionable Telegram alerts. |
 | [`check_plaud_token.py`](#check_plaud_tokenpy) | Read-only smoke check for the Plaud adapter — confirms `PLAUD_TOKEN` works before the nightly `ingest_plaud_activity` job. |
 | [`ynab_unapproved_scan.py`](#ynab_unapproved_scanpy) | Weekly YNAB unapproved-transaction digest for the SGD/PHP Daily Bankroll budgets, limited to the last 30 days. Silent when there are no matches. |
 | [`reauth_gmail_send.py`](#scriptsagentsdiagnosticsreauth_gmail_sendpy) | Interactive re-authorization of a HARQIS Google OAuth credential when its refresh token expires/revokes (`invalid_grant`). |
@@ -128,6 +129,34 @@ Telegram completion notification via the `TELEGRAM` app config. Recipients and s
 are read from `TEST_FARM_EMAIL_TO` / `TEST_FARM_EMAIL_FROM` in `.env/apps.env` (or
 `--to` / `--from-account`); they fall back to a generic placeholder when unset.
 Use `--no-telegram` for email-only test runs.
+
+### `scripts/agents/diagnostics/check_access_tokens.py`
+
+Silent credential watchdog for app tokens that expose an expiry or refresh check.
+It currently sweeps the applicable HARQIS app configs for:
+
+- Google OAuth storage files (`GOOGLE_APPS`, `GOOGLE_GMAIL`, `GOOGLE_GMAIL_SEND`,
+  `GOOGLE_KEEP`, `GOOGLE_TASKS`, `GOOGLE_DRIVE`) by loading the stored OAuth
+  credential and testing refresh when the access token is expired.
+- Spotify by exchanging `SPOTIFY_REFRESH_TOKEN` for a fresh access token.
+- Plaud manual `PLAUD_TOKEN` JWT expiry; email/password auto-mint mode is treated
+  as OK because expired cache tokens can be replaced by the adapter.
+- Any JWT-like `app_data` token value in `apps_config.yaml` with an `exp` claim.
+
+Quiet success is intentional: with Hermes `no_agent=True`, empty stdout means no
+Telegram message. Findings print a compact Telegram-ready alert.
+
+```bash
+python scripts/agents/diagnostics/check_access_tokens.py                 # quiet unless actionable
+python scripts/agents/diagnostics/check_access_tokens.py --dry-run        # show counts
+python scripts/agents/diagnostics/check_access_tokens.py --list-applicable
+python scripts/agents/diagnostics/check_access_tokens.py --json
+```
+
+Tune the sweep in `machines.local.toml` using `[token_expiry_watchdog]` or
+`[<machine>.token_expiry_watchdog]` (`enabled`, `warn_within_days`,
+`notify_missing`, `include_checks`, `exclude_checks`, `google_configs`). The tracked
+`machines.toml` documents the schema; real host-specific choices stay local.
 
 ### `scripts/agents/diagnostics/reauth_gmail_send.py`
 
