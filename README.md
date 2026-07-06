@@ -28,10 +28,12 @@ At its core the platform has three layers:
 | `aaa` | Philippine stock exchange (PSEI) | Selenium | Yes | [Site](https://aaa-equities.com.ph/) |
 | `airtable` | Airtable bases, tables, fields, and full record CRUD with formula filters and upsert | REST API | Yes | [API Docs](https://airtable.com/developers/web/api/introduction) · [Site](https://airtable.com/) |
 | `alpha_vantage` | Stock quotes, FX rates, news & sentiment, fundamentals, technical indicators, crypto, commodities, economic indicators | REST API | Yes | [API Docs](https://www.alphavantage.co/documentation/) · [MCP](https://mcp.alphavantage.co/) · [Site](https://www.alphavantage.co/) |
+| `android_emulator` | Android emulators (AVDs) and physical/wireless devices — ADB shell, install APKs, snapshots, scrcpy screen mirroring | Local | Yes | — |
 | `antropic` | Anthropic Claude API | REST (native SDK) | Yes | [API Docs](https://docs.anthropic.com/en/api/) · [Console](https://console.anthropic.com/) |
 | `apify` | Web scraping platform — run actors, fetch datasets, social-media trends aggregation (Google Trends, IG, FB, TikTok, Reddit) | REST API | Yes | [API Docs](https://docs.apify.com/api/v2) · [Store](https://apify.com/store) · [Console](https://console.apify.com/) |
 | `appsheet` | AppSheet tables — find/add/edit/delete rows via the v2 REST API | REST API | Yes | [API Docs](https://support.google.com/appsheet/answer/10105768) · [Site](https://www.appsheet.com/) |
 | `browser` | HTTP fetching and web scraping (httpx + BeautifulSoup) | Local | No | — |
+| `confluence` | Confluence pages, spaces, full-text search (Cloud and Server / DC) | REST API | Yes | [API Docs](https://developer.atlassian.com/cloud/confluence/rest/) · [Site](https://www.atlassian.com/software/confluence) |
 | `desktop` | Windows desktop automation | Local | No | — |
 | `discord` | Discord bot — messaging, guilds, webhooks | REST API | Yes | [API Docs](https://discord.com/developers/docs/reference) · [Portal](https://discord.com/developers/applications) |
 | `echo_mtg` | MTG collection management | REST API | Yes | [API Docs](https://www.echomtg.com/api/) · [Site](https://www.echomtg.com/) |
@@ -254,12 +256,12 @@ Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and 
 
 | Workflow | Status | Tasks | Description |
 |----------|--------|-------|-------------|
-| `hud` | Active | 20 | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins |
-| `purchases` | Active | 6 (+1 disabled) | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
-| `desktop` | Active | 9 | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
-| `hfl` | Active | 10 | Homework-for-Life: capture/ingest story moments — git activity, media vision, location timeline (OwnTracks) → corpus + Elasticsearch |
-| `knowledge` | Active | 5 | RAG / knowledge base — Notion → vector-store ingest, on-demand `answer` (Haiku-pinned), MCP knowledge tools |
-| `dumps` | Active | 4 | Daily dump collection — fanout per-node ship + harqis-server pull (Android/Termux) → analysis |
+| `hud` | Active | 19 | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins |
+| `purchases` | Active | 5 | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
+| `desktop` | Active | 8 | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
+| `hfl` | Active | 11 | Homework-for-Life: capture/ingest story moments — git activity, media vision, location timeline (OwnTracks) → corpus + Elasticsearch |
+| `knowledge` | Active | 7 | RAG / knowledge base — Notion → vector-store ingest, on-demand `answer` (Haiku-pinned), MCP knowledge tools |
+| `dumps` | Active | 5 | Daily dump collection — fanout per-node ship + harqis-server pull (Android/Termux) → analysis |
 | `social` | Active | 1 | Monthly LinkedIn post — git history → Claude → LinkedIn draft + Gmail notification |
 | `tcg` | Active | 1 (manual) | Pokedex proxy-printing pipeline (MPC) — manual/pytest-triggered, ships empty beat dict |
 | `testing` | Active | 2 | Test farm — headless `/generate-gherkin-scenarios` against Jira boards (Max subscription, weekdays 09:00) |
@@ -395,7 +397,7 @@ cd frontend && python main.py
 harqis-work/
 │
 ├── agents/                         # AI agent layer
-│   ├── kanban/                     # Kanban-driven autonomous agent system
+│   ├── projects/                   # Kanban-driven autonomous agent system
 │   │   ├── adapters/               # Trello + Jira provider implementations
 │   │   ├── agent/                  # Claude tool-use loop + tool registry
 │   │   │   └── tools/              # filesystem, kanban, MCP bridge tools
@@ -412,10 +414,12 @@ harqis-work/
 │   ├── aaa/                        # Philippine stock exchange (Selenium)
 │   ├── airtable/                   # Airtable bases, tables, records (CRUD)
 │   ├── alpha_vantage/              # Stock/FX/news/fundamentals/technicals/crypto/commodities
+│   ├── android_emulator/           # Android AVDs + device control (ADB, scrcpy)
 │   ├── anthropic/                  # Anthropic Claude API
 │   ├── apify/                      # Web scraping actors + social-media trends aggregation
 │   ├── appsheet/                   # AppSheet tables — find/add/edit/delete rows
 │   ├── browser/                    # HTTP fetching and web scraping
+│   ├── confluence/                 # Confluence pages, spaces, search (Cloud + Server/DC)
 │   ├── desktop/                    # Windows desktop automation
 │   ├── discord/                    # Discord bot
 │   ├── echo_mtg/                   # MTG collection management
@@ -451,13 +455,20 @@ harqis-work/
 │
 ├── workflows/                      # Celery task definitions
 │   ├── config.py                   # Master Celery Beat schedule
+│   ├── queues.py                   # WorkflowQueue enum + queue topology
 │   ├── desktop/                    # Git pulls, window mgmt, file sync
+│   ├── dumps/                      # Daily dump collection (Android/Termux → harqis-server)
 │   ├── finance/                    # Stub — no tasks yet
-│   ├── hud/                        # Desktop HUD tasks (15 tasks)
+│   ├── hfl/                        # Homework-for-Life capture/ingest/express pipeline
+│   ├── hud/                        # Desktop HUD tasks (19 tasks)
+│   ├── knowledge/                  # RAG / knowledge-base ingest and query workflows
 │   ├── mobile/                     # Android screen capture
 │   ├── n8n/                        # n8n utility helpers
 │   ├── purchases/                  # TCG card resale pipeline
-│   └── tcg/                        # Pokedex proxy-printing pipeline (MPC)
+│   ├── social/                     # Monthly LinkedIn posting
+│   ├── tcg/                        # Pokedex proxy-printing pipeline (MPC)
+│   ├── testing/                    # Test farm (Gherkin scenario generation)
+│   └── workers/                    # Worker-pool location broadcast
 │
 ├── frontend/                       # Web dashboard (FastAPI + HTMX + Alpine.js)
 │   ├── main.py
@@ -550,7 +561,7 @@ The three driving principles:
                              ▼
    ┌──────────────────────────────────────────────────────────┐
    │                   MCP Server  (mcp/)                     │
-   │   317 tools across 39 modules — OANDA, YNAB, Gmail,      │
+   │   381 tools across 41 modules — OANDA, YNAB, Gmail,      │
    │    Telegram, Discord, Trello, Jira, Scryfall, TCG …      │
    └──────┬──────────────────────────────────┬────────────────┘
           │ reads / writes                   │ triggers
@@ -577,7 +588,7 @@ The three driving principles:
 | Component | Where | What it does |
 |---|---|---|
 | **Hermes agent** | `~/.hermes/` (local per-machine) | Agent runtime: persistent memory, distilled lessons, plans, and cron jobs (agent / `no_agent` modes) — see [`docs/info/HERMES.md`](docs/info/HERMES.md) |
-| **MCP server** | `mcp/server.py` | Exposes all 37 app integrations (plus knowledge & memory-recall tools) as callable tools over the Model Context Protocol |
+| **MCP server** | `mcp/server.py` | Exposes all 39 app integrations (plus knowledge & memory-recall tools) as callable tools over the Model Context Protocol |
 | **Celery Beat** | `workflows/config.py` | Runs all scheduled automation — HUD updates, MTG resale pipeline, desktop sync |
 | **RabbitMQ + Redis** | Docker stack | Celery broker and result backend |
 | **Frontend** | `frontend/main.py` | Web dashboard — manually trigger any task, inspect run history |
@@ -910,7 +921,6 @@ Lightweight JSON-like files exposing Celery tasks and shell commands to n8n and 
 ## Known Issues
 
 - `logger.warn()` (deprecated) used in `tcg_mp_selling.py` — should be `logger.warning()`
-- `generate_tcg_mappings` task is commented out in `purchases/tasks_config.py` — must be triggered manually or via n8n
 - Worker functions in `tcg_mp_selling.py` re-import dependencies inside the function body — required for `multiprocessing` on Windows (no `fork`)
 - `own_tracks` requires the Docker stack running (`apps/own_tracks/docker compose up -d`) before tests pass
 - `moo` app is a hollow stub with no services or tests
