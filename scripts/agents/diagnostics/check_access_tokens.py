@@ -319,20 +319,10 @@ def check_plaud(apps: dict[str, Any], cfg: dict[str, Any]) -> tuple[list[Finding
     results: list[CheckResult] = []
     warn_days = float(cfg.get("warn_within_days", 2))
     data = _app_data(apps, "PLAUD")
-    token = str(data.get("token") or "")
-    if token:
-        exp = _decode_jwt_exp(token)
-        finding = _finding_if_expired("plaud_jwt", "PLAUD", "Manual PLAUD_TOKEN JWT is expired or near expiry.", exp, warn_days,
-                                      "Refresh PLAUD_TOKEN from web.plaud.ai or switch to PLAUD_EMAIL+PLAUD_PASSWORD auto-minting.")
-        if finding:
-            findings.append(finding)
-        elif exp:
-            results.append(CheckResult("plaud_jwt", "PLAUD", "ok", "manual PLAUD_TOKEN JWT has a future exp", _utc(exp)))
-        else:
-            results.append(CheckResult("plaud_jwt", "PLAUD", "unknown", "manual PLAUD_TOKEN is not a JWT with exp; expiry cannot be predicted"))
-        return findings, results
 
-    # If email/password are configured, the Plaud adapter mints short-lived cache tokens.
+    # Preferred Plaud auth is email/password auto-minting. If those are present,
+    # a stale PLAUD_TOKEN fallback should not page Brian; the adapter mints and
+    # caches a fresh token before using the manual token fallback.
     if data.get("email") and data.get("password"):
         cache = REPO_ROOT / "logs" / "plaud_token.json"
         if cache.exists():
@@ -351,6 +341,19 @@ def check_plaud(apps: dict[str, Any], cfg: dict[str, Any]) -> tuple[list[Finding
                 results.append(CheckResult("plaud_jwt", "PLAUD", "unknown", f"could not parse Plaud cache ({type(exc).__name__}); auto-mint credentials configured"))
         else:
             results.append(CheckResult("plaud_jwt", "PLAUD", "ok", "auto-mint credentials configured; no manual token to expire"))
+        return findings, results
+
+    token = str(data.get("token") or "")
+    if token:
+        exp = _decode_jwt_exp(token)
+        finding = _finding_if_expired("plaud_jwt", "PLAUD", "Manual PLAUD_TOKEN JWT is expired or near expiry.", exp, warn_days,
+                                      "Refresh PLAUD_TOKEN from web.plaud.ai or switch to PLAUD_EMAIL+PLAUD_PASSWORD auto-minting.")
+        if finding:
+            findings.append(finding)
+        elif exp:
+            results.append(CheckResult("plaud_jwt", "PLAUD", "ok", "manual PLAUD_TOKEN JWT has a future exp", _utc(exp)))
+        else:
+            results.append(CheckResult("plaud_jwt", "PLAUD", "unknown", "manual PLAUD_TOKEN is not a JWT with exp; expiry cannot be predicted"))
     return findings, results
 
 
