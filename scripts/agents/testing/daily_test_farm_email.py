@@ -21,6 +21,14 @@ from pathlib import Path
 from typing import Any, Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+VENV_PY = REPO_ROOT / ".venv" / "bin" / "python"
+
+# Hermes no-agent jobs can invoke this script with the Hermes runtime Python.
+# Re-exec into the HARQIS-work venv so harqis-core, Celery, Jira, and Gmail
+# dependencies are the same ones used by deployed services.
+if VENV_PY.exists() and Path(sys.executable).resolve() != VENV_PY.resolve():
+    os.execv(str(VENV_PY), [str(VENV_PY), __file__, *sys.argv[1:]])
+
 LOGS_DIR = REPO_ROOT / "logs"
 FARM_MD = LOGS_DIR / "BDD-TEST-FARM.md"
 EMAIL_LOG_DIR = LOGS_DIR / "test_farm_email"
