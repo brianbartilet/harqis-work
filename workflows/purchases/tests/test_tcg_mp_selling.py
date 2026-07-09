@@ -4,11 +4,13 @@ from workflows.purchases.tasks.tcg_mp_selling import (generate_tcg_mappings, gen
                                                       download_scryfall_bulk_data, generate_tcg_listings,
                                                       update_tcg_listings_prices,
                                                       reconcile_then_update_tcg_listings,
-                                                      _norm_foil, _acquired_dt, _variant_key,
+                                                      _norm_foil, _acquired_dt, _normalize_language, _language_value, _variant_key,
                                                       _same_variant, _group_by_variant,
                                                       _listing_matches_variant, _find_live_variant_listings, _choose_primary_listing,
                                                       _remove_duplicate_variant_listings,
                                                       _choose_update_representative,
+                                                      _parse_listing_note_payload,
+                                                      _listable_variant_copies,
                                                       _available_listing_quantity,
                                                       _safe_listing_quantity,
                                                       _order_detail_items,
@@ -198,6 +200,21 @@ def test__variant_key_uses_echo_lang_field():
     assert _variant_key(card) == ("174033", 0, "JP", "NM")
 
 
+def test__language_value_normalizes_echo_language_names_and_codes():
+    assert _normalize_language("English") == "EN"
+    assert _normalize_language("Japanese") == "JP"
+    assert _normalize_language("JPN") == "JP"
+    assert _normalize_language("Simplified Chinese") == "CN"
+    assert _language_value({"language": "Japanese"}, "EN") == "JP"
+    assert _language_value({"lang": "Korean"}, "EN") == "KR"
+    assert _language_value({}, "EN") == "EN"
+
+
+def test__variant_key_uses_normalized_echo_language():
+    card = {"emid": "174033", "foil": 0, "language": "Japanese", "condition": "NM"}
+    assert _variant_key(card) == ("174033", 0, "JP", "NM")
+
+
 def test__same_variant_compares_language_or_lang():
     assert _same_variant(
         {"emid": "174033", "foil": 0, "lang": "EN", "condition": "NM"},
@@ -220,6 +237,13 @@ def test__listing_matches_variant_by_product_finish_language_condition():
     assert _listing_matches_variant(
         listing, product_id=787650, foil=0, language="JP", condition="NM"
     ) is False
+
+
+def test__listing_matches_variant_normalizes_language_aliases():
+    listing = _Listing(785652, quantity=3, language="Japanese")
+    assert _listing_matches_variant(
+        listing, product_id=787650, foil=0, language="JP", condition="NM"
+    ) is True
 
 
 class _ViewReturnsRawResponse:
@@ -261,6 +285,41 @@ def test__remove_duplicate_variant_listings_keeps_primary():
     removed = _remove_duplicate_variant_listings(publish, [stale, current], 785652)
     assert removed == [785650]
     assert publish.removed == [[785650]]
+
+
+class _Notes:
+    def __init__(self, notes):
+        self.notes = notes
+
+    def get_note(self, note_id):
+        return self.notes[note_id]
+
+
+def test__parse_listing_note_payload_requires_tcg_metadata():
+    assert _parse_listing_note_payload({"note": {"note": '{"tcg_mp_card_id": 787544}'}})["tcg_mp_card_id"] == 787544
+    assert _parse_listing_note_payload({"status": "error", "note": "not found"}) is None
+    assert _parse_listing_note_payload({"note": {"note": '{"tcg_mp_card_id": 0}'}}) is None
+    assert _parse_listing_note_payload({"note": {"note": "not-json"}}) is None
+
+
+def test__listable_variant_copies_excludes_collection_only_note_less_copies():
+    rep = {"emid": "100", "foil": 0, "language": "EN", "condition": "NM"}
+    copies = [
+        {**rep, "inventory_id": "listed", "note_id": "n1"},
+        {**rep, "inventory_id": "collection-only"},
+        {**rep, "inventory_id": "wrong-product", "note_id": "n2"},
+        {**rep, "inventory_id": "foil-copy", "foil": 1, "note_id": "n3"},
+    ]
+    notes = _Notes({
+        "n1": {"note": {"note": '{"tcg_mp_card_id": 787544, "tcg_mp_listing_id": 7001}'}},
+        "n2": {"note": {"note": '{"tcg_mp_card_id": 999999, "tcg_mp_listing_id": 7002}'}},
+        "n3": {"note": {"note": '{"tcg_mp_card_id": 787544, "tcg_mp_listing_id": 7003}'}},
+    })
+
+    listable, note_cache = _listable_variant_copies(copies, rep, notes, product_id=787544)
+
+    assert [c["inventory_id"] for c in listable] == ["listed"]
+    assert note_cache["n1"]["tcg_mp_listing_id"] == 7001
 
 class _OrderPage:
     def __init__(self, data):

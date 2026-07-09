@@ -11,6 +11,7 @@ from workflows.purchases.tasks.sold_inventory_radar import (
     _to_int,
     _status_label,
     _status_is_allowed,
+    _copy_has_listing_note,
     _owned_counts,
     _reconcile_listing,
     _parse_note,
@@ -352,9 +353,11 @@ def test__write_csv_empty_writes_header_only(tmp_path):
 
 def test__owned_counts_groups_by_emid_and_foil():
     inv = [
-        {"emid": "100", "foil": 0}, {"emid": "100", "foil": 0},   # 2 non-foil copies
-        {"emid": "100", "foil": 1},                               # 1 foil copy
-        {"emid": "200", "foil": 0},
+        {"emid": "100", "foil": 0, "note_id": "n1"},
+        {"emid": "100", "foil": 0, "note_id": "n2"},              # 2 listed non-foil copies
+        {"emid": "100", "foil": 0},                               # collection-only; not counted
+        {"emid": "100", "foil": 1, "note_id": "n3"},              # 1 listed foil copy
+        {"emid": "200", "foil": 0, "note_id": "n4"},
         {"not": "a card"},
     ]
     counts = _owned_counts(inv)
@@ -370,6 +373,14 @@ class _FakeInventory:
         return self._copies
 
 
+class _FakeNotes:
+    def __init__(self, notes):
+        self.notes = notes
+
+    def get_note(self, note_id):
+        return self.notes[note_id]
+
+
 class _FakePublish:
     def __init__(self):
         self.calls = []
@@ -382,7 +393,7 @@ class _FakePublish:
 def test__reconcile_listing_edits_to_remaining_when_copies_left():
     # one non-foil copy still held → set listing quantity to 1 (not delist)
     pub = _FakePublish()
-    inv = _FakeInventory([{"foil": 0}])
+    inv = _FakeInventory([{"foil": 0, "note_id": "n1"}])
     res = _reconcile_listing(pub, inv, emid="100", foil=0, listing_id=7,
                              price=4.20, condition="NM")
     assert res == "qty->1"
@@ -401,10 +412,45 @@ def test__reconcile_listing_delists_when_none_left():
 
 def test__reconcile_listing_counts_only_matching_foil():
     pub = _FakePublish()
-    inv = _FakeInventory([{"foil": 1}, {"foil": 1}, {"foil": 0}])  # 2 foil, 1 non-foil
+    inv = _FakeInventory([
+        {"foil": 1, "note_id": "n1"},
+        {"foil": 1, "note_id": "n2"},
+        {"foil": 0, "note_id": "n3"},
+    ])  # 2 foil, 1 non-foil
     res = _reconcile_listing(pub, inv, emid="100", foil=1, listing_id=9,
                              price=1.0, condition="NM")
     assert res == "qty->2"
+
+
+def test__copy_has_listing_note_validates_note_metadata_when_service_available():
+    notes = _FakeNotes({
+        "n1": {"note": {"note": '{"tcg_mp_card_id": 787544}'}},
+        "n2": {"note": {"note": '{"tcg_mp_card_id": 999999}'}},
+    })
+    assert _copy_has_listing_note({"note_id": "n1"}, notes, product_id=787544) is True
+    assert _copy_has_listing_note({"note_id": "n2"}, notes, product_id=787544) is False
+    assert _copy_has_listing_note({}, notes, product_id=787544) is False
+
+
+def test__reconcile_listing_ignores_note_less_collection_copies():
+    pub = _FakePublish()
+    inv = _FakeInventory([
+        {"foil": 0, "note_id": "n1"},
+        {"foil": 0},  # collection-only: tradable in EchoMTG, not listed on TCGMP
+        {"foil": 0, "note_id": "n2"},  # note exists but maps a different product
+    ])
+    notes = _FakeNotes({
+        "n1": {"note": {"note": '{"tcg_mp_card_id": 787544}'}},
+        "n2": {"note": {"note": '{"tcg_mp_card_id": 999999}'}},
+    })
+
+    res = _reconcile_listing(
+        pub, inv, emid="100", foil=0, listing_id=7, price=4.20,
+        condition="NM", notes_service=notes, product_id=787544,
+    )
+
+    assert res == "qty->1"
+    assert pub.calls[0][1]["quantity"] == 1
 
 
 def test__status_label_maps_codes():

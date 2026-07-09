@@ -80,6 +80,7 @@ WORKFLOW_PURCHASES = {
             'hfl_signal': False,
         },
     },
+
     # ENABLED — hard-chained sold-inventory reconcile -> price/quantity update,
     # Mon+Thu 02:00, AFTER the daily mappings (00:00) and listings (01:00). This
     # single task runs radar_sold_inventory to completion FIRST, then
@@ -91,6 +92,7 @@ WORKFLOW_PURCHASES = {
     # sold cards; README "Known issues" #1/#2). If radar fails, update is SKIPPED.
     # radar's destructive config lives under radar_kwargs (high-confidence only —
     # everything else goes to the review CSV for /radar-sold-inventory).
+    """
     'run-job--reconcile_then_update_tcg_listings': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.reconcile_then_update_tcg_listings',
         'schedule': crontab(day_of_week="mon,thu", hour='2', minute=0),
@@ -119,6 +121,7 @@ WORKFLOW_PURCHASES = {
             'hfl_signal': False,
         },
     },
+    """
     'run-job--download_scryfall_bulk_data': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.download_scryfall_bulk_data',
         # Run late on the 1st (22:00), NOT 00:00 — at midnight it collided with the

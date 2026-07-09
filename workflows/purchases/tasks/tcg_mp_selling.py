@@ -71,9 +71,60 @@ def _acquired_dt(card: dict) -> datetime:
     return datetime.min
 
 
+_LANGUAGE_ALIASES = {
+    "EN": "EN",
+    "ENG": "EN",
+    "ENGLISH": "EN",
+    "JP": "JP",
+    "JPN": "JP",
+    "JA": "JP",
+    "JAPANESE": "JP",
+    "日本語": "JP",
+    "KR": "KR",
+    "KOR": "KR",
+    "KO": "KR",
+    "KOREAN": "KR",
+    "한국어": "KR",
+    "CN": "CN",
+    "ZH": "CN",
+    "ZHS": "CN",
+    "ZHT": "CN",
+    "CHINESE": "CN",
+    "SIMPLIFIED CHINESE": "CN",
+    "TRADITIONAL CHINESE": "CN",
+    "SC": "CN",
+    "TC": "CN",
+    "FR": "FR",
+    "FRE": "FR",
+    "FRENCH": "FR",
+    "DE": "DE",
+    "GER": "DE",
+    "GERMAN": "DE",
+    "IT": "IT",
+    "ITA": "IT",
+    "ITALIAN": "IT",
+    "ES": "ES",
+    "SPA": "ES",
+    "SPANISH": "ES",
+    "PT": "PT",
+    "POR": "PT",
+    "PORTUGUESE": "PT",
+    "RU": "RU",
+    "RUS": "RU",
+    "RUSSIAN": "RU",
+}
+
+
+def _normalize_language(value, default=None):
+    raw = value if value not in (None, "") else default
+    if raw in (None, ""):
+        return None
+    key = str(raw).strip().upper().replace("_", " ").replace("-", " ")
+    return _LANGUAGE_ALIASES.get(key, key)
+
+
 def _language_value(card: dict, default=None):
-    value = card.get("language") or card.get("lang") or default
-    return str(value).upper() if value not in (None, "") else None
+    return _normalize_language(card.get("language") or card.get("lang"), default)
 
 
 def _condition_value(card: dict, default=None):
@@ -141,7 +192,7 @@ def _listing_matches_variant(listing, *, product_id, foil, language, condition) 
 
     listing_language = _obj_value(listing, "crd_language", "language")
     if listing_language not in (None, "") and language not in (None, ""):
-        if str(listing_language).upper() != str(language).upper():
+        if _normalize_language(listing_language) != _normalize_language(language):
             return False
 
     listing_condition = _obj_value(listing, "crd_condition", "condition")
@@ -199,6 +250,70 @@ def _choose_update_representative(group: list) -> dict:
     """Choose a variant representative that can supply listing metadata."""
     noted = [card for card in group if card.get("note_id")]
     return max(noted or group, key=_acquired_dt)
+
+
+def _parse_listing_note_payload(note_response) -> Optional[dict]:
+    """Return parsed TCG listing metadata from an EchoMTG note, or None.
+
+    In this workflow a note is the explicit opt-in marker for marketplace listing.
+    Tradable EchoMTG copies without this JSON metadata are collection copies and
+    must not inflate TCG MP listing quantity.
+    """
+    if not isinstance(note_response, dict):
+        return None
+    note_field = note_response.get("note")
+    raw = note_field.get("note") if isinstance(note_field, dict) else note_field
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    try:
+        product_id = int(payload.get("tcg_mp_card_id") or 0)
+    except (TypeError, ValueError):
+        return None
+    if product_id < 1:
+        return None
+    return payload
+
+
+def _listable_variant_copies(copies: list, representative: dict, notes_service,
+                             product_id=None) -> tuple[list, dict]:
+    """Filter variant copies down to copies explicitly opted into TCG listing.
+
+    Returns ``(listable_copies, notes_by_note_id)``. Notes are cached so workers
+    can stamp only the copies that actually carry listing metadata.
+    """
+    listable = []
+    notes_by_note_id = {}
+    try:
+        expected_product_id = int(product_id or 0)
+    except (TypeError, ValueError):
+        expected_product_id = 0
+    for copy in copies or []:
+        if not _same_variant(copy, representative):
+            continue
+        note_id = copy.get("note_id")
+        if not note_id:
+            continue
+        try:
+            payload = _parse_listing_note_payload(notes_service.get_note(note_id))
+        except Exception:
+            continue
+        if not payload:
+            continue
+        try:
+            payload_product_id = int(payload.get("tcg_mp_card_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        if expected_product_id and payload_product_id != expected_product_id:
+            continue
+        listable.append(copy)
+        notes_by_note_id[note_id] = payload
+    return listable, notes_by_note_id
 
 PENDING_COMMITMENT_STATUSES = (
     EnumTcgOrderStatus.PENDING_DROP_OFF,
@@ -370,6 +485,7 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
     cfg_id__echo_mtg = kwargs.get("cfg_id__echo_mtg", "ECHO_MTG")
     cfg_id__echo_mtg_fe = kwargs.get("cfg_id__echo_mtg_fe", "ECHO_MTG_FE")
     cfg_id__scryfall = kwargs.get("cfg_id__scryfall", "SCRYFALL")
+    create_missing_notes = bool(kwargs.get("create_missing_notes", False))
 
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
     cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
@@ -429,21 +545,45 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
                 continue
         else:
             tcg_mp_log.info("Checking if notes exist and skipping if so.")
-            notes_fetch = api_service__echo_mtg_notes.get_note(card_echo['note_id'])
+            note_id = card_echo.get("note_id")
+            if not note_id:
+                if not create_missing_notes:
+                    tcg_mp_log.info(
+                        "No listing metadata note for %s %s — skipping.",
+                        card_name, card_echo['inventory_id'])
+                    continue
+                notes_fetch = {"status": "error", "note": "not found"}
+            else:
+                notes_fetch = api_service__echo_mtg_notes.get_note(note_id)
             # get_note returns {'status':'error','note':'not found'} when no note
             # exists (a string), or {'note': {'note': '<json>'}} when it does (a dict).
             if (notes_fetch.get('status') == 'error') and (notes_fetch.get('note') == 'not found'):
-                tcg_mp_log.info("No note yet for %s %s — will create.",
-                                card_name, card_echo['inventory_id'])
+                if not create_missing_notes:
+                    tcg_mp_log.info(
+                        "No listing metadata note for %s %s — skipping.",
+                        card_name, card_echo['inventory_id'])
+                    continue
             else:
                 # A note exists. Keep it if it's valid JSON; fall through to recreate
                 # only when the stored note is corrupt (not valid JSON).
                 try:
                     note_field = notes_fetch.get("note")
+                    existing_note = _parse_listing_note_payload(notes_fetch)
+                    if existing_note:
+                        continue
+                    if not create_missing_notes:
+                        tcg_mp_log.info(
+                            "Note for %s %s is not valid TCG listing metadata — skipping.",
+                            card_name, card_echo['inventory_id'])
+                        continue
                     json.loads(note_field["note"] if isinstance(note_field, dict) else note_field)
                     continue
                 except (json.JSONDecodeError, TypeError, KeyError):
-                    pass
+                    if not create_missing_notes:
+                        tcg_mp_log.info(
+                            "Invalid note for %s %s — skipping.",
+                            card_name, card_echo['inventory_id'])
+                        continue
 
         tcg_mp_card_id = 0
         for item in search_results:
@@ -631,18 +771,20 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         language = _language_value(rep, default_language) or "EN"
         condition = _condition_value(rep, "NM") or "NM"
 
-        # Live copies of this exact variant — the source of truth for quantity and
-        # for adopting an already-created listing. Fall back to the dispatched group
-        # if the live lookup fails so we never under-count to a delist.
+        # Live listable copies of this exact variant — the source of truth for
+        # quantity and for adopting an already-created listing. A valid JSON note
+        # is the operator's explicit marketplace opt-in; note-less collection
+        # copies must not inflate the listing.
         try:
             live = api_inventory.search_card(rep["emid"], tradable_only=1) or []
         except Exception:
             live = []
         if not isinstance(live, list):
             live = []
-        variant_copies = [c for c in live if _same_variant(c, rep)]
+        variant_copies, note_cache = _listable_variant_copies(live, rep, api_notes, product_id)
         if not variant_copies:
             variant_copies = cards
+            note_cache = {}
         total_quantity = len(variant_copies)
 
         # Price from the representative card's meta.
@@ -658,7 +800,9 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         listing_id = 0
         for c in variant_copies:
             try:
-                n = json.loads(api_notes.get_note(c["note_id"])["note"]["note"])
+                n = note_cache.get(c.get("note_id")) or _parse_listing_note_payload(
+                    api_notes.get_note(c["note_id"])
+                )
             except Exception:
                 continue
             if n.get("tcg_mp_listing_id", 0) > 0:
@@ -730,8 +874,12 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         notes_updated = 0
         for c in variant_copies:
             try:
-                n = json.loads(api_notes.get_note(c["note_id"])["note"]["note"])
+                n = note_cache.get(c.get("note_id")) or _parse_listing_note_payload(
+                    api_notes.get_note(c["note_id"])
+                )
             except Exception:
+                continue
+            if not n:
                 continue
             if n.get("tcg_mp_listing_id", 0) == listing_id and n.get("tcg_mp_selling_price") == post_price:
                 continue
@@ -773,8 +921,6 @@ def _worker_fetch_note_for_listing(task: dict):
     """
     from apps.apps_config import CONFIG_MANAGER
     from apps.echo_mtg.references.web.api.notes import ApiServiceEchoMTGNotes
-    import json
-
     card = task["card_echo"]
     cfg_id__echo_mtg = task["cfg_id__echo_mtg"]
 
@@ -782,8 +928,8 @@ def _worker_fetch_note_for_listing(task: dict):
         cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
         api_notes = ApiServiceEchoMTGNotes(cfg__echo_mtg)
         note = api_notes.get_note(card["note_id"])
-        json_note = json.loads(note["note"]["note"])
-        if json_note["tcg_mp_listing_id"] == 0 and json_note["tcg_mp_card_id"] > 0:
+        json_note = _parse_listing_note_payload(note)
+        if json_note and int(json_note.get("tcg_mp_listing_id") or 0) == 0:
             return card
     except Exception:
         pass
@@ -1032,10 +1178,13 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 
         # treats the card as new and recreates the listing.
         quantity = 0
         duplicate_listing_ids = []
+        note_cache = {}
         try:
             time.sleep(2)
             existing = api_service__search.search_card(card_echo["emid"], tradable_only=1) or []
-            matching = [c for c in existing if _same_variant(c, card_echo)]
+            matching, note_cache = _listable_variant_copies(
+                existing, card_echo, api_notes, json_note.get("tcg_mp_card_id")
+            )
             total_quantity = len(matching)
 
             live_listings = _find_live_variant_listings(
@@ -1111,7 +1260,11 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 
                 if c is card_echo:
                     payload = json_note
                 else:
-                    payload = json.loads(api_notes.get_note(note_id)["note"]["note"])
+                    payload = note_cache.get(note_id) or _parse_listing_note_payload(
+                        api_notes.get_note(note_id)
+                    )
+                    if not payload:
+                        continue
                     payload["tcg_mp_listing_id"] = listing_id
                     payload["tcg_mp_selling_price"] = post_price
                     payload["function"] = update_tcg_listings_prices.__name__
@@ -1178,10 +1331,17 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
     # quantity — redundant API calls and N parallel writes racing on one listing. The
     # worker counts copies and stamps every sibling note, so one representative (the
     # most-recently-acquired copy) per variant fully reconciles the listing.
+    # Only noted cards enter the update pipeline. The worker validates the JSON TCG
+    # metadata before mutating anything, and listable quantity is counted from valid
+    # metadata notes only.
+    cards_echo = [card for card in cards_echo if card.get("note_id")]
     variant_groups = _group_by_variant(cards_echo)
-    # Prefer a copy with a note as the representative. Note-less copies still count
-    # toward quantity inside the worker, but they cannot supply tcg_mp_card_id /
-    # tcg_mp_listing_id; choosing one would skip the entire variant.
+    if not variant_groups:
+        tcg_mp_log.info("No tradable cards with listing metadata notes found.")
+        api_service__tcg_mp_merchant.set_listing_status(1)
+        return "SUCCESS"
+
+    # Prefer a copy with a note as the representative.
     representatives = [
         _choose_update_representative(group)
         for group in variant_groups.values()

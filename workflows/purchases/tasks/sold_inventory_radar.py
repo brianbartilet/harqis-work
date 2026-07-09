@@ -159,13 +159,35 @@ def _to_float(value) -> float:
         return 0.0
 
 
+def _copy_has_listing_note(copy: dict, notes_service=None, product_id=None) -> bool:
+    """Return True when this EchoMTG copy is explicitly opted into TCG listing."""
+    note_id = copy.get("note_id") if isinstance(copy, dict) else None
+    if not note_id:
+        return False
+    if notes_service is None:
+        return True
+    try:
+        note = _parse_note(notes_service.get_note(note_id))
+    except Exception:
+        return False
+    if not note:
+        return False
+    expected_product_id = _to_int(product_id)
+    note_product_id = _to_int(note.get("tcg_mp_card_id"))
+    return expected_product_id is None or note_product_id == expected_product_id
+
+
 def _owned_counts(inventory: list) -> dict:
-    """Count EchoMTG tradable copies per (emid, foil). A TCG listing maps to ALL
-    copies of the same card, so this count is the listing's intended quantity —
-    selling one copy should set the listing to (count - sold), not delist it."""
+    """Count EchoMTG tradable/listable copies per (emid, foil).
+
+    A valid EchoMTG note is the operator's listing marker. Note-less copies are
+    collection inventory and must not inflate marketplace quantity.
+    """
     counts: dict = {}
     for it in inventory:
         if not isinstance(it, dict):
+            continue
+        if not _copy_has_listing_note(it):
             continue
         emid = it.get("emid")
         if emid is None:
@@ -610,7 +632,8 @@ def _gather_es_order_details(status_labels: set) -> dict:
 
 
 def _reconcile_listing(publish_service, inventory_service, *, emid, foil,
-                       listing_id, price, condition) -> str:
+                       listing_id, price, condition, notes_service=None,
+                       product_id=None) -> str:
     """After a sold copy is removed, set the listing's quantity to the number of
     EchoMTG copies that REMAIN for this card (delist only if none remain).
 
@@ -621,7 +644,11 @@ def _reconcile_listing(publish_service, inventory_service, *, emid, foil,
     """
     try:
         copies = inventory_service.search_card(emid, tradable_only=1) or []
-        remaining = sum(1 for c in copies if _norm_foil(c.get("foil")) == _norm_foil(foil))
+        remaining = sum(
+            1 for c in copies
+            if _norm_foil(c.get("foil")) == _norm_foil(foil)
+            and _copy_has_listing_note(c, notes_service, product_id)
+        )
     except Exception as exc:  # noqa: BLE001
         return f"error:count:{exc}"
     if remaining > 0:
@@ -820,7 +847,9 @@ def radar_sold_inventory(dry_run: bool = False, last_x_days: int = 60,
                     publish_service, inventory_service,
                     emid=c["emid"], foil=c["foil"], listing_id=live_lid,
                     price=_to_float(_lattr(c.get("listing"), "price")) or _to_float(c.get("sold_price")),
-                    condition=_lattr(c.get("listing"), "crd_condition", default="NM"))
+                    condition=_lattr(c.get("listing"), "crd_condition", default="NM"),
+                    notes_service=notes_service,
+                    product_id=c.get("tcg_mp_card_id"))
             else:
                 try:
                     publish_service.remove_listings([live_lid])
@@ -907,13 +936,14 @@ def apply_radar_approvals(csv_path: str, dry_run: bool = False, **kwargs) -> str
     _log.info("radar apply: %d approved of %d row(s) from %s%s",
               len(approved), len(rows), path, " [DRY RUN]" if dry_run else "")
 
-    earnings_service = inventory_service = publish_service = None
+    earnings_service = inventory_service = publish_service = notes_service = None
     if not dry_run:
         cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
         cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
         earnings_service = ApiServiceEchoMTGEarnings(cfg__echo_mtg)
         inventory_service = ApiServiceEchoMTGInventory(cfg__echo_mtg)
         publish_service = ApiServiceTcgMpPublish(cfg__tcg_mp)
+        notes_service = ApiServiceEchoMTGNotes(cfg__echo_mtg)
 
     acted = 0
     for r in approved:
@@ -953,7 +983,9 @@ def apply_radar_approvals(csv_path: str, dry_run: bool = False, **kwargs) -> str
                     publish_service, inventory_service,
                     emid=emid, foil=foil, listing_id=live_listing_id,
                     price=_to_float(r.get("listing_price")) or _to_float(r.get("sold_price")),
-                    condition=(r.get("listing_condition") or "NM"))
+                    condition=(r.get("listing_condition") or "NM"),
+                    notes_service=notes_service,
+                    product_id=r.get("note_tcg_mp_card_id"))
             else:
                 try:
                     publish_service.remove_listings([live_listing_id])
