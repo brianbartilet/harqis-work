@@ -12,12 +12,13 @@ def given_account():
     return given_service
 
 
-@pytest.mark.skip(reason="sanity check only")
 def test_service_account(given_account):
     when = given_account.get_card_metadata('4b4fa784-010d-4b27-9e35-43ad78e1ed5e')
     then = given_account.verify.common
 
     then.assert_that(when.name, equal_to('Underground River'))
+    tcg_id = "{0}_{1}".format(when.set, when.collector_number)
+    then.assert_that(tcg_id, equal_to('bro_300'))
 
 
 @pytest.mark.smoke

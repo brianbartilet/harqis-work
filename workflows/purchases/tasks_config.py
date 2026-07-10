@@ -43,7 +43,8 @@ WORKFLOW_PURCHASES = {
             "cfg_id__tcg_mp": "TCG_MP",
             "cfg_id__echo_mtg": "ECHO_MTG",
             "cfg_id__echo_mtg_fe": "ECHO_MTG_FE",
-            "cfg_id__scryfall": "SCRYFALL"
+            "cfg_id__scryfall": "SCRYFALL",
+            "create_missing_notes": True,
         },
         "options": {
             "queue": WorkflowQueue.TCG,
@@ -92,7 +93,7 @@ WORKFLOW_PURCHASES = {
     # sold cards; README "Known issues" #1/#2). If radar fails, update is SKIPPED.
     # radar's destructive config lives under radar_kwargs (high-confidence only —
     # everything else goes to the review CSV for /radar-sold-inventory).
-    """
+
     'run-job--reconcile_then_update_tcg_listings': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.reconcile_then_update_tcg_listings',
         'schedule': crontab(day_of_week="mon,thu", hour='2', minute=0),
@@ -121,7 +122,7 @@ WORKFLOW_PURCHASES = {
             'hfl_signal': False,
         },
     },
-    """
+
     'run-job--download_scryfall_bulk_data': {
         'task': 'workflows.purchases.tasks.tcg_mp_selling.download_scryfall_bulk_data',
         # Run late on the 1st (22:00), NOT 00:00 — at midnight it collided with the

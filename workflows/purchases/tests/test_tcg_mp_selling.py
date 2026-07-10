@@ -1,9 +1,13 @@
+import json
 from datetime import datetime
+from types import SimpleNamespace
 
+import workflows.purchases.tasks.tcg_mp_selling as tcg_mp_selling_module
 from workflows.purchases.tasks.tcg_mp_selling import (generate_tcg_mappings, generate_audit_for_tcg_orders,
                                                       download_scryfall_bulk_data, generate_tcg_listings,
                                                       update_tcg_listings_prices,
                                                       reconcile_then_update_tcg_listings,
+                                                      DEFAULT_CREATE_MISSING_MAPPING_NOTES,
                                                       _norm_foil, _acquired_dt, _normalize_language, _language_value, _variant_key,
                                                       _same_variant, _group_by_variant,
                                                       _listing_matches_variant, _find_live_variant_listings, _choose_primary_listing,
@@ -15,6 +19,10 @@ from workflows.purchases.tasks.tcg_mp_selling import (generate_tcg_mappings, gen
                                                       _safe_listing_quantity,
                                                       _order_detail_items,
                                                       _reserved_quantities_by_product_foil,
+                                                      _resolve_config_placeholder,
+                                                      _split_tcg_mp_card_id,
+                                                      _index_scryfall_cards_by_set_collector,
+                                                      _find_scryfall_card_by_set_collector,
                                                       HANDED_OFF_ORDER_STATUSES)
 from apps.apps_config import CONFIG_MANAGER
 from apps.tcg_mp.references.web.api.publish import ApiServiceTcgMpPublish
@@ -22,20 +30,22 @@ from apps.tcg_mp.references.web.api.publish import ApiServiceTcgMpPublish
 
 #  region Value
 def test__generate_tcg_mappings():
-    generate_tcg_mappings(cfg_id__tcg_mp="TCG_MP",
-                          cfg_id__echo_mtg="ECHO_MTG",
-                          cfg_id__echo_mtg_fe="ECHO_MTG_FE",
-                          cfg_id__scryfall="SCRYFALL",
-                          limit=5
-                          )
+    result = generate_tcg_mappings(cfg_id__tcg_mp="TCG_MP",
+                                   cfg_id__echo_mtg="ECHO_MTG",
+                                   cfg_id__echo_mtg_fe="ECHO_MTG_FE",
+                                   cfg_id__scryfall="SCRYFALL",
+                                   limit=5
+                                   )
+    assert result == "SUCCESS"
 
 def test__generate_tcg_mappings_force():
-    generate_tcg_mappings(cfg_id__tcg_mp="TCG_MP",
-                          cfg_id__echo_mtg="ECHO_MTG",
-                          cfg_id__echo_mtg_fe="ECHO_MTG_FE",
-                          cfg_id__scryfall="SCRYFALL",
-                          force_generate=True
-                          )
+    result = generate_tcg_mappings(cfg_id__tcg_mp="TCG_MP",
+                                   cfg_id__echo_mtg="ECHO_MTG",
+                                   cfg_id__echo_mtg_fe="ECHO_MTG_FE",
+                                   cfg_id__scryfall="SCRYFALL",
+                                   force_generate=True
+                                   )
+    assert result == "SUCCESS"
 
 def test__generate_tcg_listings():
     generate_tcg_listings(cfg_id__tcg_mp="TCG_MP",
@@ -298,8 +308,143 @@ class _Notes:
 def test__parse_listing_note_payload_requires_tcg_metadata():
     assert _parse_listing_note_payload({"note": {"note": '{"tcg_mp_card_id": 787544}'}})["tcg_mp_card_id"] == 787544
     assert _parse_listing_note_payload({"status": "error", "note": "not found"}) is None
+    assert _parse_listing_note_payload({"note": {"note": ""}}) is None
+    assert _parse_listing_note_payload({"note": {"note": "{}"}}) is None
     assert _parse_listing_note_payload({"note": {"note": '{"tcg_mp_card_id": 0}'}}) is None
     assert _parse_listing_note_payload({"note": {"note": "not-json"}}) is None
+
+
+def test__generate_tcg_mappings_creates_missing_metadata_notes_by_default():
+    assert DEFAULT_CREATE_MISSING_MAPPING_NOTES is True
+
+
+def test__find_scryfall_card_by_set_collector_prefers_english_exact_match():
+    cards = {
+        "ja-card": {
+            "id": "ja-card",
+            "set": "blb",
+            "collector_number": "280",
+            "lang": "ja",
+        },
+        "en-card": {
+            "id": "en-card",
+            "set": "BLB",
+            "collector_number": "280",
+            "lang": "en",
+        },
+        "other-card": {
+            "id": "other-card",
+            "set": "otj",
+            "collector_number": "280",
+            "lang": "en",
+        },
+    }
+
+    index = _index_scryfall_cards_by_set_collector(cards)
+
+    assert _split_tcg_mp_card_id("BLB_280") == ("blb", "280")
+    assert _find_scryfall_card_by_set_collector(index, "blb", "280")["id"] == "en-card"
+    assert _find_scryfall_card_by_set_collector(index, "blb", "281") is None
+
+
+def test__generate_tcg_mappings_creates_note_for_note_less_card_by_default(monkeypatch):
+    guid = "123e4567-e89b-42d3-a456-426614174000"
+    created_notes = []
+
+    class _ConfigManager:
+        def get(self, _cfg_id):
+            return SimpleNamespace(app_data={"path_folder_static_file": "unused"})
+
+    class _EchoInventory:
+        def __init__(self, _config):
+            pass
+
+        def get_collection(self, tradable_only=0):
+            return [{
+                "emid": "em-1",
+                "inventory_id": "inv-1",
+                "foil": 0,
+                "language": "EN",
+                "condition": "NM",
+            }]
+
+        def search_card(self, _emid, tradable_only=0):
+            return []
+
+    class _EchoNotes:
+        def __init__(self, _config):
+            pass
+
+        def create_note(self, inventory_id, note):
+            created_notes.append((inventory_id, note))
+
+    class _EchoCardItem:
+        def __init__(self, _config):
+            pass
+
+        def get_card_meta(self, _emid):
+            return {"name_clean": "Test Card", "tcgplayer_id": 111}
+
+    class _TcgProducts:
+        def __init__(self, _config):
+            pass
+
+        def search_card(self, _card_name):
+            return [SimpleNamespace(id=222, image=f"https://img.example/{guid}.jpg")]
+
+        def get_single_card(self, _card_id):
+            return SimpleNamespace(card_id="BLB_280")
+
+    class _TcgMerchant:
+        def __init__(self, _config):
+            pass
+
+        def set_listing_status(self, _status):
+            pass
+
+    class _ScryfallCards:
+        def __init__(self, config):
+            self.config = config
+
+    monkeypatch.setattr(tcg_mp_selling_module, "CONFIG_MANAGER", _ConfigManager())
+    monkeypatch.setattr(tcg_mp_selling_module, "ApiServiceEchoMTGInventory", _EchoInventory)
+    monkeypatch.setattr(tcg_mp_selling_module, "ApiServiceEchoMTGNotes", _EchoNotes)
+    monkeypatch.setattr(tcg_mp_selling_module, "ApiServiceEchoMTGCardItem", _EchoCardItem)
+    monkeypatch.setattr(tcg_mp_selling_module, "ApiServiceTcgMpProducts", _TcgProducts)
+    monkeypatch.setattr(tcg_mp_selling_module, "ApiServiceTcgMpMerchant", _TcgMerchant)
+    monkeypatch.setattr(tcg_mp_selling_module, "ApiServiceScryfallCards", _ScryfallCards)
+    monkeypatch.setattr(
+        tcg_mp_selling_module,
+        "load_scryfall_bulk_data",
+        lambda _path: {
+            guid: {
+                "id": guid,
+                "set": "blb",
+                "collector_number": "280",
+                "lang": "en",
+                "tcgplayer_id": 111,
+                "prices": {"usd": "1.23"},
+            }
+        },
+    )
+
+    result = tcg_mp_selling_module.generate_tcg_mappings()
+
+    assert result == "SUCCESS"
+    assert len(created_notes) == 1
+    assert created_notes[0][0] == "inv-1"
+    note_payload = json.loads(created_notes[0][1])
+    assert note_payload["scryfall_guid"] == guid
+    assert note_payload["tcgplayer_id"] == 111
+    assert note_payload["tcg_mp_card_id"] == 222
+    assert note_payload["tcg_mp_listing_id"] == 0
+    assert note_payload["function"] == "generate_tcg_mappings"
+
+
+def test__resolve_config_placeholder_uses_environment(monkeypatch):
+    monkeypatch.setenv("SCRY_TEST_PATH", r"C:\tmp\scryfall")
+    assert _resolve_config_placeholder("${SCRY_TEST_PATH}") == r"C:\tmp\scryfall"
+    assert _resolve_config_placeholder("C:\\already\\resolved") == "C:\\already\\resolved"
 
 
 def test__listable_variant_copies_excludes_collection_only_note_less_copies():

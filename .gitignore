@@ -3,6 +3,7 @@
 .claude/settings.local.json
 .claude/skills/
 .codex/config.toml
+.run
 
 # ── Secrets / env files ──────────────────────────────────────────────────────
 .env/*

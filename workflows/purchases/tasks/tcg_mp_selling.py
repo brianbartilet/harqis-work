@@ -1,6 +1,7 @@
 import time
 import re
 import json
+import os
 import psutil
 import requests
 import random
@@ -37,6 +38,91 @@ from workflows.purchases.helpers.constants import image_guid_pattern
 
 
 tcg_mp_log = create_logger("tcg_mp_selling")
+
+DEFAULT_CREATE_MISSING_MAPPING_NOTES = True
+
+
+def _resolve_config_placeholder(value: str) -> str:
+    """Resolve a literal ${VAR} left in apps_config.yaml.
+
+    PyCharm/pytest can import apps_config before deploy.py layers machine-local
+    env vars into os.environ. Celery deploys already inject those vars, but direct
+    test runs need this defensive fallback for machine-scoped paths such as
+    SCRY_DOWNLOADS_PATH.
+    """
+    if not isinstance(value, str):
+        return value
+    match = re.fullmatch(r"\$\{([^}]+)\}", value.strip())
+    if not match:
+        return value
+
+    key = match.group(1)
+    resolved = os.environ.get(key)
+    if resolved:
+        return resolved
+
+    try:
+        from scripts.deploy import load_machine_config, machine_env_vars
+        resolved = machine_env_vars(load_machine_config(None)).get(key)
+    except Exception:
+        resolved = None
+    if resolved:
+        os.environ[key] = resolved
+        return resolved
+    return value
+
+
+def _normalize_scryfall_set(value) -> str:
+    return str(value or "").strip().lower()
+
+
+def _normalize_scryfall_collector_number(value) -> str:
+    return str(value or "").strip().lower()
+
+
+def _split_tcg_mp_card_id(card_id) -> tuple[Optional[str], Optional[str]]:
+    if not card_id:
+        return None, None
+    parts = str(card_id).strip().split("_", 1)
+    if len(parts) != 2:
+        return None, None
+    card_set = _normalize_scryfall_set(parts[0])
+    collector_number = _normalize_scryfall_collector_number(parts[1])
+    if not card_set or not collector_number:
+        return None, None
+    return card_set, collector_number
+
+
+def _index_scryfall_cards_by_set_collector(cards_scryfall_bulk_data) -> dict[tuple[str, str], dict]:
+    index = {}
+    if not isinstance(cards_scryfall_bulk_data, dict):
+        return index
+
+    for card in cards_scryfall_bulk_data.values():
+        if not isinstance(card, dict):
+            continue
+        card_set = _normalize_scryfall_set(card.get("set"))
+        collector_number = _normalize_scryfall_collector_number(card.get("collector_number"))
+        if not card_set or not collector_number:
+            continue
+        key = (card_set, collector_number)
+        existing = index.get(key)
+        if existing is None or (
+                str(existing.get("lang") or "").lower() != "en"
+                and str(card.get("lang") or "").lower() == "en"):
+            index[key] = card
+
+    return index
+
+
+def _find_scryfall_card_by_set_collector(cards_by_set_collector: dict, card_set, collector_number) -> Optional[dict]:
+    key = (
+        _normalize_scryfall_set(card_set),
+        _normalize_scryfall_collector_number(collector_number),
+    )
+    if not all(key):
+        return None
+    return cards_by_set_collector.get(key)
 
 
 # region variant identity helpers
@@ -485,7 +571,12 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
     cfg_id__echo_mtg = kwargs.get("cfg_id__echo_mtg", "ECHO_MTG")
     cfg_id__echo_mtg_fe = kwargs.get("cfg_id__echo_mtg_fe", "ECHO_MTG_FE")
     cfg_id__scryfall = kwargs.get("cfg_id__scryfall", "SCRYFALL")
-    create_missing_notes = bool(kwargs.get("create_missing_notes", False))
+    # This job is the metadata seeding step: tradable EchoMTG cards that do not
+    # yet have TCG JSON metadata should receive the note here. Downstream listing,
+    # update, and radar tasks then require that valid note before they process a
+    # card. Pass create_missing_notes=False only for an audit/skip pass.
+    create_missing_notes = bool(kwargs.get(
+        "create_missing_notes", DEFAULT_CREATE_MISSING_MAPPING_NOTES))
 
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
     cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
@@ -512,8 +603,10 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
                 type(cards_echo).__name__)
         )
     cards_echo = cards_echo if limit is None else cards_echo[:limit]
-    cards_scryfall_bulk_data = load_scryfall_bulk_data(
+    scryfall_bulk_path = _resolve_config_placeholder(
         api_service__scryfall_cards.config.app_data['path_folder_static_file'])
+    cards_scryfall_bulk_data = load_scryfall_bulk_data(scryfall_bulk_path)
+    cards_scryfall_by_set_collector = _index_scryfall_cards_by_set_collector(cards_scryfall_bulk_data)
 
     # turn off listings
     if force_generate:
@@ -536,13 +629,16 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
             tcg_mp_log.warning("Error getting metadata: {0}".format(e))
             continue
 
+        note_id_for_update = card_echo.get("note_id") if force_generate else None
         if force_generate:
-            tcg_mp_log.warning("Try to delete existing note")
-            try:
-                api_service__echo_mtg_notes.delete_note(card_echo['note_id'])
-            except Exception:
-                tcg_mp_log.exception("Error deleting existing note. Skipping...")
-                continue
+            if note_id_for_update:
+                tcg_mp_log.info(
+                    "Force-regenerating existing note for %s %s.",
+                    card_name, card_echo['inventory_id'])
+            else:
+                tcg_mp_log.info(
+                    "Force-regenerating missing note for %s %s.",
+                    card_name, card_echo['inventory_id'])
         else:
             tcg_mp_log.info("Checking if notes exist and skipping if so.")
             note_id = card_echo.get("note_id")
@@ -564,33 +660,40 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
                         card_name, card_echo['inventory_id'])
                     continue
             else:
-                # A note exists. Keep it if it's valid JSON; fall through to recreate
-                # only when the stored note is corrupt (not valid JSON).
-                try:
-                    note_field = notes_fetch.get("note")
-                    existing_note = _parse_listing_note_payload(notes_fetch)
-                    if existing_note:
-                        continue
-                    if not create_missing_notes:
-                        tcg_mp_log.info(
-                            "Note for %s %s is not valid TCG listing metadata — skipping.",
-                            card_name, card_echo['inventory_id'])
-                        continue
-                    json.loads(note_field["note"] if isinstance(note_field, dict) else note_field)
+                # A note exists. Keep it only when it is valid TCG listing metadata.
+                # Empty JSON/non-TCG notes are stale placeholders and must be replaced
+                # by the mapping job; otherwise cards with empty notes never recover.
+                existing_note = _parse_listing_note_payload(notes_fetch)
+                if existing_note:
                     continue
-                except (json.JSONDecodeError, TypeError, KeyError):
-                    if not create_missing_notes:
-                        tcg_mp_log.info(
-                            "Invalid note for %s %s — skipping.",
-                            card_name, card_echo['inventory_id'])
-                        continue
+                if not create_missing_notes:
+                    tcg_mp_log.info(
+                        "Note for %s %s is not valid TCG listing metadata — skipping.",
+                        card_name, card_echo['inventory_id'])
+                    continue
+                note_id_for_update = note_id
+                tcg_mp_log.info(
+                    "Replacing non-TCG metadata note for %s %s.",
+                    card_name, card_echo['inventory_id'])
 
         tcg_mp_card_id = 0
         for item in search_results:
-            tcg_mp_log.info("Attempting to extract guid on tcg mp from image url: {0}".format(card_name))
+            tcg_mp_log.info("Attempting to resolve TCG MP print id for card: {0}".format(card_name))
             try:
-                tcg_mp_log.info("Extracting guid on tcg mp from image url: {0}".format(card_name))
+                tcg_mp_log.info("Retrieving TCG MP card details for card: {0}".format(card_name))
                 tcg_mp_card_id = item.id
+
+                card = api_service__tcg_mp_products.get_single_card(tcg_mp_card_id)
+                tcg_mp_print_id = getattr(card, "card_id", None)
+                card_set, card_collector_number = _split_tcg_mp_card_id(tcg_mp_print_id)
+                if not card_set or not card_collector_number:
+                    tcg_mp_log.warning(
+                        "TCG MP card_id does not contain set/collector number. card=%s card_id=%s",
+                        card_name, tcg_mp_print_id)
+                    continue
+
+                """
+                # DEPRECATED: move to use card_id since url does not have the scryfall id and images moved as server resources
                 url = item.image
                 match = re.search(image_guid_pattern, url or "")
                 if not match:
@@ -598,25 +701,38 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
                     continue
                 guid = match.group(1)
                 tcg_mp_log.info("Found GUID: {0} for card: {1}".format(guid, card_name))
-            except TypeError:
-                tcg_mp_log.exception("No guid found for card skipping: {0}".format(card_name))
+                """
+
+            except Exception:
+                tcg_mp_log.exception(
+                    "Could not resolve TCG MP print id for card=%s product_id=%s",
+                    card_name, tcg_mp_card_id)
+                continue
 
             tcg_mp_log.info("Attempting to find card on scryfall: id: {0} name: {1}".format(card_tcg_id, card_name))
-            try:
-                scryfall_card = cards_scryfall_bulk_data[guid]
-                scryfall_card_tcg_id = scryfall_card['tcgplayer_id']
-                echo_tcg_id = card_meta['tcgplayer_id']
-                if scryfall_card_tcg_id == echo_tcg_id:
-                    match_found = True
-                    break
-                else:
-                    match_found = False
-            except KeyError:
-                scryfall_card = None
-
+            scryfall_card = _find_scryfall_card_by_set_collector(
+                cards_scryfall_by_set_collector,
+                card_set,
+                card_collector_number,
+            )
             if not scryfall_card:
-                tcg_mp_log.warning("Scryfall unable to get card metadata skipping {0}".format(card_name))
+                tcg_mp_log.warning(
+                    "Scryfall unable to get exact set/collector match for %s: %s/%s",
+                    card_name, card_set, card_collector_number)
                 continue
+
+            guid = scryfall_card.get("id")
+            scryfall_card_tcg_id = _int_value(scryfall_card.get('tcgplayer_id'), None)
+            echo_tcg_id = _int_value(card_meta.get('tcgplayer_id'), None)
+            if scryfall_card_tcg_id and echo_tcg_id and scryfall_card_tcg_id != echo_tcg_id:
+                tcg_mp_log.warning(
+                    "Scryfall set/collector match has different tcgplayer_id for %s: "
+                    "scryfall=%s echo=%s set=%s collector=%s",
+                    card_name, scryfall_card_tcg_id, echo_tcg_id, card_set, card_collector_number)
+                continue
+
+            match_found = True
+            break
 
         if not match_found:
             tcg_mp_log.warning("No match found for card: {0}".format(card_name))
@@ -684,8 +800,18 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
         note_json_string = notes_dto.get_json()
 
         try:
-            tcg_mp_log.info("Create note for card: {0}".format(card_name))
-            api_service__echo_mtg_notes.create_note(card_echo['inventory_id'], note_json_string)
+            if note_id_for_update:
+                tcg_mp_log.info("Update note for card: {0}".format(card_name))
+                try:
+                    api_service__echo_mtg_notes.update_note(note_id_for_update, note_json_string)
+                except Exception:
+                    tcg_mp_log.warning(
+                        "Error updating note %s for %s; trying create.",
+                        note_id_for_update, card_name)
+                    api_service__echo_mtg_notes.create_note(card_echo['inventory_id'], note_json_string)
+            else:
+                tcg_mp_log.info("Create note for card: {0}".format(card_name))
+                api_service__echo_mtg_notes.create_note(card_echo['inventory_id'], note_json_string)
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
             tcg_mp_log.warning("Error creating note: {0}".format(error))
