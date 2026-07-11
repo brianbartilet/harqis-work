@@ -41,6 +41,11 @@ tcg_mp_log = create_logger("tcg_mp_selling")
 
 DEFAULT_CREATE_MISSING_MAPPING_NOTES = True
 
+_TCG_MP_TRANSIENT_EXCEPTIONS = (
+    requests.exceptions.Timeout,
+    requests.exceptions.ConnectionError,
+)
+
 
 def _resolve_config_placeholder(value: str) -> str:
     """Resolve a literal ${VAR} left in apps_config.yaml.
@@ -960,7 +965,11 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
                 f"Skipped listing for {card_name}; all {total_quantity} copy/copies are committed to open orders."
             )
         elif listing_id == 0:
-            response = api_publish.add_listing(
+            response, adopted_after_timeout = _retry_add_listing(
+                api_publish,
+                api_view=api_view,
+                max_attempts=5,
+                card_name=card_name,
                 price=post_price,
                 quantity=quantity,
                 foil=rep["foil"],
@@ -969,9 +978,21 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
                 product_id=product_id,
             )
             listing_id = response['insertId']
-            created = True
-            _log_worker_generate_tcg_listings.info(
-                f"Created listing {listing_id} for {card_name} x{quantity}.")
+            created = not adopted_after_timeout
+            if adopted_after_timeout:
+                live_listings = _find_live_variant_listings(
+                    api_view, product_id=product_id, foil=rep["foil"],
+                    language=language, condition=condition,
+                )
+                duplicate_listing_ids = _remove_duplicate_variant_listings(
+                    api_publish, live_listings, listing_id
+                )
+                _log_worker_generate_tcg_listings.info(
+                    f"Adopted listing {listing_id} for {card_name} x{quantity} after add timeout; "
+                    f"removed duplicate listing(s): {duplicate_listing_ids}.")
+            else:
+                _log_worker_generate_tcg_listings.info(
+                    f"Created listing {listing_id} for {card_name} x{quantity}.")
         else:
             # Existing listing for this variant (race / half-mapped / live duplicate)
             # — true up its quantity instead of creating another listing.
@@ -1197,19 +1218,74 @@ def _update_pricing_calc(change_7_day: float, price: float, threshold_pct: float
     return PricingDecision(price=round(final_price, 2))
 
 
+def _retry_delay(attempt: int, base_delay: float, max_delay: float) -> float:
+    delay = min(max_delay, base_delay * (2 ** (attempt - 1)))
+    return delay * (0.7 + random.random() * 0.6)
+
+
+def _primary_live_listing(api_view, *, product_id, foil, language, condition, preferred_listing_id=0):
+    if api_view is None:
+        return None
+    live_listings = _find_live_variant_listings(
+        api_view,
+        product_id=product_id,
+        foil=foil,
+        language=language,
+        condition=condition,
+    )
+    return _choose_primary_listing(live_listings, preferred_listing_id)
+
+
+def _retry_add_listing(api_publish, *, api_view=None, max_attempts=5, base_delay=1.0,
+                       max_delay=30.0, card_name="", **kwargs):
+    response = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = api_publish.add_listing(**kwargs)
+            return response, False
+        except _TCG_MP_TRANSIENT_EXCEPTIONS as e:
+            primary_listing = _primary_live_listing(
+                api_view,
+                product_id=kwargs.get("product_id"),
+                foil=kwargs.get("foil"),
+                language=kwargs.get("language"),
+                condition=kwargs.get("condition"),
+            )
+            if primary_listing is not None:
+                return {"insertId": int(_obj_value(primary_listing, "listing_id"))}, True
+
+            if attempt == max_attempts:
+                raise
+
+            delay = _retry_delay(attempt, base_delay, max_delay)
+            context = f" for {card_name}" if card_name else ""
+            _log_worker_generate_tcg_listings.warning(
+                f"Transient add_listing error{context} on attempt {attempt}/{max_attempts}: {e}; "
+                f"retrying after {delay:.1f}s.")
+            time.sleep(delay)
+
+            primary_listing = _primary_live_listing(
+                api_view,
+                product_id=kwargs.get("product_id"),
+                foil=kwargs.get("foil"),
+                language=kwargs.get("language"),
+                condition=kwargs.get("condition"),
+            )
+            if primary_listing is not None:
+                return {"insertId": int(_obj_value(primary_listing, "listing_id"))}, True
+    return response, False
+
+
 def _retry_edit_listing(api_publish, *, max_attempts=10, base_delay=1.0, max_delay=30.0, **kwargs):
     r = None
     for attempt in range(1, max_attempts + 1):
         try:
             r = api_publish.edit_listing(**kwargs)
             return r
-        except (requests.exceptions.ConnectTimeout,
-                requests.exceptions.ReadTimeout,
-                requests.exceptions.ConnectionError) as e:
+        except _TCG_MP_TRANSIENT_EXCEPTIONS:
 
             # exponential backoff + jitter
-            delay = min(max_delay, base_delay * (2 ** (attempt - 1)))
-            delay = delay * (0.7 + random.random() * 0.6)  # jitter 0.7x–1.3x
+            delay = _retry_delay(attempt, base_delay, max_delay)
 
             if attempt == max_attempts:
                 raise

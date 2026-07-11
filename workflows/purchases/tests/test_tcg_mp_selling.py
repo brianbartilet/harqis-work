@@ -2,6 +2,8 @@ import json
 from datetime import datetime
 from types import SimpleNamespace
 
+import requests
+
 import workflows.purchases.tasks.tcg_mp_selling as tcg_mp_selling_module
 from workflows.purchases.tasks.tcg_mp_selling import (generate_tcg_mappings, generate_audit_for_tcg_orders,
                                                       download_scryfall_bulk_data, generate_tcg_listings,
@@ -12,6 +14,7 @@ from workflows.purchases.tasks.tcg_mp_selling import (generate_tcg_mappings, gen
                                                       _same_variant, _group_by_variant,
                                                       _listing_matches_variant, _find_live_variant_listings, _choose_primary_listing,
                                                       _remove_duplicate_variant_listings,
+                                                      _retry_add_listing,
                                                       _choose_update_representative,
                                                       _parse_listing_note_payload,
                                                       _listable_variant_copies,
@@ -295,6 +298,109 @@ def test__remove_duplicate_variant_listings_keeps_primary():
     removed = _remove_duplicate_variant_listings(publish, [stale, current], 785652)
     assert removed == [785650]
     assert publish.removed == [[785650]]
+
+
+class _PublishTimeoutThenSuccess:
+    def __init__(self):
+        self.calls = 0
+
+    def add_listing(self, **kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            raise requests.exceptions.ReadTimeout("read timed out")
+        return {"insertId": 9001}
+
+
+class _PublishAlwaysTimeout:
+    def __init__(self):
+        self.calls = 0
+
+    def add_listing(self, **kwargs):
+        self.calls += 1
+        raise requests.exceptions.ReadTimeout("read timed out")
+
+
+class _ViewListingAfterTimeout:
+    def get_listings(self):
+        return [_Listing(9002, quantity=1)]
+
+
+class _ViewListingAfterBackoff:
+    def __init__(self):
+        self.calls = 0
+
+    def get_listings(self):
+        self.calls += 1
+        if self.calls == 1:
+            return []
+        return [_Listing(9003, quantity=1)]
+
+
+def test__retry_add_listing_retries_transient_timeout():
+    publish = _PublishTimeoutThenSuccess()
+
+    response, adopted = _retry_add_listing(
+        publish,
+        max_attempts=2,
+        base_delay=0,
+        max_delay=0,
+        price=1.23,
+        quantity=1,
+        foil=0,
+        language="EN",
+        condition="NM",
+        product_id=787650,
+    )
+
+    assert response["insertId"] == 9001
+    assert adopted is False
+    assert publish.calls == 2
+
+
+def test__retry_add_listing_adopts_live_listing_after_timeout():
+    publish = _PublishAlwaysTimeout()
+
+    response, adopted = _retry_add_listing(
+        publish,
+        api_view=_ViewListingAfterTimeout(),
+        max_attempts=3,
+        base_delay=0,
+        max_delay=0,
+        price=1.23,
+        quantity=1,
+        foil=0,
+        language="EN",
+        condition="NM",
+        product_id=787650,
+    )
+
+    assert response["insertId"] == 9002
+    assert adopted is True
+    assert publish.calls == 1
+
+
+def test__retry_add_listing_checks_live_listings_before_second_add():
+    publish = _PublishAlwaysTimeout()
+    view = _ViewListingAfterBackoff()
+
+    response, adopted = _retry_add_listing(
+        publish,
+        api_view=view,
+        max_attempts=2,
+        base_delay=0,
+        max_delay=0,
+        price=1.23,
+        quantity=1,
+        foil=0,
+        language="EN",
+        condition="NM",
+        product_id=787650,
+    )
+
+    assert response["insertId"] == 9003
+    assert adopted is True
+    assert publish.calls == 1
+    assert view.calls == 2
 
 
 class _Notes:
