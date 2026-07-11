@@ -1200,7 +1200,7 @@ class PricingDecision:
     needs_lowest_seller: bool = False
 
 
-def _update_pricing_calc(change_7_day: float, price: float, threshold_pct: float = 15.0,) -> PricingDecision:
+def _update_pricing_calc(change_7_day: float, price: float, threshold_pct: float = 8.0,) -> PricingDecision:
     change = float(change_7_day)
 
     # Rule 1: down / flat → need lowest seller
@@ -1294,7 +1294,7 @@ def _retry_edit_listing(api_publish, *, max_attempts=10, base_delay=1.0, max_del
     return r
 
 
-def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.2 + 0), commission_rate = 1.05):
+def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.3 + 0), commission_rate = (1.05 + 0)):
     """
     Worker executed in a separate process.
     conversion_multiplier = currency estimated rate + tcg/ck pricing diff
