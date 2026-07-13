@@ -1,3 +1,5 @@
+import pytest
+
 from workflows.finance.tasks.parse_transaction import (
     add_ynab_transactions_from_pdf,
     _to_ynab_amount,
@@ -12,6 +14,7 @@ from apps.ynab.references.dto.transaction import DtoSaveTransaction
 # These call the real Anthropic + YNAB APIs.
 # Place the PDF in workflows/finance/transactions/ before running.
 
+@pytest.mark.skip(reason="Manual integration test: requires local PDF plus real Anthropic and YNAB APIs")
 def test__add_ynab_transactions_from_pdf_credit():
     add_ynab_transactions_from_pdf(
         input_pdf="transaction_history_07062026_232941.pdf",
@@ -23,6 +26,7 @@ def test__add_ynab_transactions_from_pdf_credit():
     )
 
 
+@pytest.mark.skip(reason="Manual integration test: requires local PDF plus real Anthropic and YNAB APIs")
 def test__add_ynab_transactions_from_pdf_debit():
     add_ynab_transactions_from_pdf(
         input_pdf="transaction_history_07062026_231100.pdf",
@@ -34,6 +38,7 @@ def test__add_ynab_transactions_from_pdf_debit():
     )
 
 
+@pytest.mark.skip(reason="Manual integration test: requires local PDF plus real Anthropic and YNAB APIs")
 def test__add_ynab_transactions_from_pdf_split():
     add_ynab_transactions_from_pdf(
         input_pdf="transaction_history_07042026_223941.pdf",
