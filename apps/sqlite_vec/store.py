@@ -25,11 +25,16 @@ from __future__ import annotations
 import json
 import math
 import os
-import sqlite3
+import importlib
 import struct
 import threading
 from pathlib import Path
 from typing import Any, Iterable, Optional
+
+try:
+    sqlite3: Any = importlib.import_module("pysqlite3.dbapi2")
+except ImportError:  # pragma: no cover - depends on host Python build
+    sqlite3 = importlib.import_module("sqlite3")
 
 try:
     import sqlite_vec  # type: ignore
@@ -47,10 +52,10 @@ _DEFAULT_DB = (
 )
 
 _CONN_LOCK = threading.Lock()
-_CONN_CACHE: dict[str, sqlite3.Connection] = {}
+_CONN_CACHE: dict[str, Any] = {}
 
 
-def _open(db_path: Path, dim: int) -> sqlite3.Connection:
+def _open(db_path: Path, dim: int) -> Any:
     """Open (or reuse) a connection with sqlite-vec loaded and tables ensured."""
     key = f"{db_path}:{dim}"
     with _CONN_LOCK:

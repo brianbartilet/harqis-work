@@ -121,6 +121,7 @@ WORKFLOW_HFL = {
             'cfg_id__anthropic': 'ANTHROPIC',
             'model': 'claude-haiku-4-5-20251001',
             'window_days': 7,
+            'resolve_references': False,
         },
         'options': {
             'queue': WorkflowQueue.HFL,

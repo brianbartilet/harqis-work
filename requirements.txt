@@ -2,6 +2,7 @@ git+https://github.com/brianbartilet/harqis-core.git#egg=harqis-core
 pytest-dotenv>=0.5.2
 redis>=5.0.0
 sqlite-vec>=0.1.6
+pysqlite3>=0.6.0; sys_platform == "darwin"
 
 # workflows/hfl/tasks/analyze_media.py — samples video frames for the HFL
 # vision pass. Headless build (no GUI libs) for server hosts; pulls numpy.
