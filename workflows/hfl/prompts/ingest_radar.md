@@ -1,6 +1,6 @@
-You turn one day's worth of the operator's own DAILY RADAR briefings into
+You turn one day's worth of the operator's own HERMES RADAR synthesis briefings into
 a single Homework-for-Life story moment, in the spirit of Matthew Dicks'
-Storyworthy. The DAILY RADAR is a Rainmeter HUD widget that fires every
+Storyworthy. HERMES RADAR is a Rainmeter HUD widget whose synthesis fires every
 few hours and synthesizes the operator's working context — overdue
 commitments, email priority, failed jobs, stuck Trello/Jira cards, the
 top-3 priorities and suggested first move — into a short briefing. You are

@@ -34,7 +34,9 @@ Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for
 | `show_ai_helper` | Daily at midnight | AI helper widget initialization |
 | `get_schedules` | Every 4 hours | Upcoming calendar schedule |
 | `show_daily_radar_data_only` | 08:00 / 12:00 / 16:00 / 20:00 (host) | **Data-only fallback twin** of `show_daily_radar`. Runs on the `host` queue and writes the briefing to the `hud-data-only-*` feed + ES **only when** the Windows worker hasn't rendered the radar within ~12h+10min (the overnight inter-fire gap + grace). No Rainmeter render. Gated on the original's `@log_result` heartbeat. Queue: `host`. |
-| `show_daily_radar` | 08:00 / 12:00 / 16:00 / 20:00 / 00:00 daily | DAILY RADAR — combines AGENTS_IDEAS #1/#3/#4/#12/#17 into one briefing. **Input sweep**: Gmail (last 8h, GOOGLE_GMAIL scope), Calendar (today, GOOGLE_APPS), Google Tasks (open, GOOGLE_TASKS), Trello (open cards), Jira (tickets updated in window), GitHub PRs involving me (last 8h, `involves:@me`), OwnTracks last location (context only), ES failed-jobs, plus the DESKTOP LOGS dump.txt tail. Sent to Claude Sonnet 4.6 for synthesis. Output preserves section breaks (`wrap_preserving_breaks`, wrap width 65) so bullets and `===` rules survive into the HUD. Width matches DESKTOP LOGS (`width_multiplier=2.25`); height fixed at `ItemLines=16`; marquee scrolls anything beyond. Single DUMP header link. `play_sound=True`. `[START]`/`[END]` bracket the 8h window. Visible during WORK and ORGANIZE calendar blocks. Queue: `hud`. |
+| `export_hermes_radar_snapshot` | Every 15 min (host) | Reads Hermes' local Telegram assistant history and scheduled-delivery audit, removes user/tool/reasoning data plus credentials, identifiers, and local paths, then atomically writes `hermes-radar.json` to the shared feed. No Telegram poll and no LLM. Queue: `host`. |
+| `refresh_hermes_radar` | :05 / :20 / :35 / :50 (Windows) | Rerenders `RECENT HERMES PUSHES` from the shared snapshot, newest first, last 8h, max 10. Preserves the last four-hour synthesis and valid push block when the snapshot is stale/unavailable. No LLM. Queue: `hud`. |
+| `show_daily_radar` | 08:00 / 12:00 / 16:00 / 20:00 daily | **HERMES RADAR** deep synthesis. Keeps the established task name and `DAILYRADAR` Rainmeter folder for feed/heartbeat/forwarder compatibility, while the visible title and Express target are HERMES RADAR. Combines AGENTS_IDEAS #1/#3/#4/#12/#17 using the existing 8-hour source sweep and Haiku 4.5, then composes it below the latest sanitized push section. Queue: `hud`. |
 
 ## Task Files
 
@@ -49,13 +51,15 @@ Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for
 | `tasks/hud_utils.py` | `show_mouse_bindings`, `build_summary_mouse_bindings`, `show_hud_profiles`, `show_ai_helper` |
 | `tasks/hud_finance.py` | `show_ynab_budgets_info`, `show_pc_daily_sales` |
 | `tasks/hud_api_costs.py` | `show_api_costs` |
-| `tasks/hud_radar.py` | `show_daily_radar` (render only — data path delegated to `collectors/daily_radar.py`) |
+| `tasks/hud_radar.py` | `show_daily_radar` (four-hour synthesis render), `refresh_hermes_radar` (15-minute JSON-only render) |
+| `tasks/hermes_radar_export.py` | `export_hermes_radar_snapshot` — host-safe scheduled exporter |
 | `tasks/daily_radar_agent.py` | Data-gathering helpers consumed by `collect_daily_radar` (Gmail / Calendar / Tasks / Trello / Jira / GitHub / OwnTracks / ES collectors, prompt formatter, and `wrap_preserving_breaks` output wrapper) |
 | `tasks/hud_data_only.py` | Data-only fallback twins routed to the `host` queue (`show_daily_radar_data_only`, …). Win32-free — imported outside the `__init__.py` win32 guard. |
-| `collectors/daily_radar.py` | `collect_daily_radar` — win32-free DAILY RADAR data path (source sweep + Claude synthesis + dump composition) shared by the Windows render task and the host twin. |
+| `collectors/daily_radar.py` | `collect_daily_radar` — win32-free HERMES RADAR synthesis path (legacy module name retained) shared by the Windows render task and host twin. |
+| `collectors/hermes_pushes.py` | Sanitization, Hermes state/cron audit collection, atomic shared snapshot I/O, freshness states, dedupe/limit, and HERMES RADAR composition. |
 | `fallback.py` | `windows_handled_recently` + the `fallback_gate` decorator — read the `@log_result` heartbeat so a twin runs only when the Windows original went stale. Fails open. |
 | `tasks/sections.py` | HUD section layout helpers |
-| `prompts/daily_radar.md` | DAILY RADAR synthesis prompt (combines ideas #1, #3, #4, #12, #17 from `data/AGENTS_IDEAS.md`) |
+| `prompts/daily_radar.md` | HERMES RADAR synthesis prompt (legacy filename retained; combines ideas #1, #3, #4, #12, #17 from `data/AGENTS_IDEAS.md`) |
 | `prompts/desktop_analysis.md` | DESKTOP LOGS evidence-only activity analysis prompt |
 
 ## App Dependencies
@@ -70,7 +74,7 @@ Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for
 | `rainmeter` | Desktop HUD skin rendering |
 | `desktop` | Screenshot capture, log reading |
 | `open_ai` / `antropic` | Log analysis and AI helper |
-| `trello` | Open cards on the agents kanban board(s) — feeds DAILY RADAR notification triage |
+| `trello` | Open cards on the agents kanban board(s) — feeds HERMES RADAR notification triage |
 
 ## DTOs / Constants
 
@@ -87,7 +91,25 @@ AI tasks use markdown prompts from `workflows/hud/prompts/` (loaded via `from wo
 - `desktop_analysis.md` — Prompt for log analysis (`get_desktop_logs`). Evidence-only summarisation of the rolling activity log + screenshots.
 - `daily_radar.md` — Prompt for `show_daily_radar`. Combines five productivity ideas (`#1` desktop context, `#3` overlooked commitments, `#4` email priority, `#12` notification triage, `#17` daily command center from `data/AGENTS_IDEAS.md`) into a single 8-hour briefing with `TOP 3 PRIORITIES`, `OVERLOOKED COMMITMENTS`, `EMAIL PRIORITY`, `NOTIFICATION TRIAGE`, `DESKTOP CONTEXT`, and `SUGGESTED FIRST MOVE` sections.
 
-### DAILY RADAR architecture
+### HERMES RADAR architecture
+
+The panel has two independent paths that meet only at render time:
+
+1. **15-minute notification path (no LLM):** the host reads local Hermes
+   assistant/session state plus cron output/status, keeps only Telegram-bound
+   outbound content, sanitizes and deduplicates it, and atomically writes
+   `<shared feed>/hermes-radar.json`. Windows rerenders at :05/:20/:35/:50 so
+   the shared drive has time to sync.
+2. **Four-hour synthesis path:** `show_daily_radar` keeps its established task,
+   feed marker, ES heartbeat, fallback gate, and `DAILYRADAR` folder. It runs the
+   existing source sweep at 08:00/12:00/16:00/20:00 and places the result under
+   `DAILY BRIEFING`.
+
+The exporter never calls `getUpdates`, never connects Windows to
+`~/.hermes/state.db`, and never writes a partial/failed snapshot. Snapshot read
+states are explicit: fresh, stale after 35 minutes, or unavailable. Stale data
+remains visible with a warning; unavailable refreshes preserve the last valid
+push block and synthesis.
 
 ```
                          ┌──────────────────────────────┐
@@ -116,30 +138,31 @@ AI tasks use markdown prompts from `workflows/hud/prompts/` (loaded via `from wo
        │                              │
        │                              ▼
        │             ┌──────────────────────────────┐
-       │             │  Anthropic Claude Sonnet 4.6 │
+       │             │  Anthropic Claude Haiku 4.5  │
        │             │  (prompts/daily_radar.md +   │
        │             │   inputs block)              │
        │             └─────────────┬────────────────┘
        │                           │ briefing
        │                           ▼
-       │          DAILY RADAR/dump.txt (prepended, auto-scrolling marquee)
+       │          HERMES RADAR (DAILYRADAR/dump.txt compatibility path)
        │
        └─── 4h cron tick (run-job--show_daily_radar)
 ```
 
 Behavior:
 
-- **Cadence:** every 4 hours (`crontab(hour='*/4', minute=0)`).
+- **Cadence:** pushes export every 15 minutes and render five minutes later; deep synthesis runs at 08:00, 12:00, 16:00, and 20:00.
+- **Push scope:** last 8 hours, newest first, maximum 10; interactive assistant replies plus Telegram-configured cron outputs and delivery/job failures. User messages, tool traces, reasoning, system prompts, secrets, IDs, raw local paths, and looped radar dumps are excluded.
 - **Analysis window:** last 8 hours of email / failed jobs / Jira updates (configurable via `window_hours`).
-- **Sound:** `play_sound=True` — Rainmeter beeps on each update.
+- **Sound:** the four-hour synthesis uses `play_sound=True`; 15-minute notification-only refreshes stay silent.
 - **Scroll:** `MeasureLuaScriptScroll` (auto-scrolling marquee, identical to DESKTOP LOGS).
 - **Width:** `width_multiplier=2.25` — matches DESKTOP LOGS so the two pinned widgets line up side by side.
-- **Height:** FIXED at `DAILY_RADAR_MAX_HUD_LINES` (30) — tall enough to keep ~5 of the radar's 7 content sections on-screen at once. Earlier defaults (15 like MOUSE BINDINGS, 22 mid-iteration) hid too much of the briefing behind the marquee. The marquee still scrolls anything past 30 lines so longer briefings don't grow the widget. **Note**: this widget sets BOTH `Variables.ItemLines` (sizes the meter background) AND `Variables.MaxLines` (controls how many lines `TextCycle.lua` renders at once, default 16). Other widgets only set `ItemLines` and inherit the Lua-script default for the marquee window. If you copy this widget as a template, keep them in sync — setting only `ItemLines` inflates the background while the visible scrolling text stays capped at 16.
+- **Height:** fixed at `DAILY_RADAR_MAX_HUD_LINES` (16). The widget sets both `Variables.ItemLines` and `Variables.MaxLines`; the marquee scrolls content beyond that stable footprint.
 - **Wrap width:** 65 chars, tuned to the 2.25 column width.
 - **Readability:** `wrap_preserving_breaks` keeps the prompt's section structure intact (each `===` rule, blank-line break, and bullet line survives — the previous `wrap_text` flattened everything to one paragraph).
-- **Header links:** one only — `DUMP`, opens the rendered `DAILY RADAR/dump.txt` for inspection.
+- **Header links:** one only — `DUMP`, opens the established `DAILYRADAR/dump.txt` compatibility path.
 - **Resilience:** every collector is wrapped in its own try/except so a missing Trello board, expired OAuth token, or offline ES does not break the render — the affected section renders `"<source> unavailable: <reason>"` instead. The Trello collector specifically guards against non-list responses from `@deserialized` (regression: `'Response' object is not subscriptable`).
-- **Cost:** Sonnet 4.6 pinned in the beat schedule (`model="claude-sonnet-4-6"`). Sonnet's stronger synthesis is worth the cost for a once-per-shift briefing; if cost becomes a concern, pass `model="claude-haiku-4-5-20251001"` from the beat kwargs.
+- **Cost:** the 15-minute path makes zero model calls. The four-hour synthesis pins `claude-haiku-4-5-20251001` in the beat schedule.
 
 ### Source registry (extensibility)
 
@@ -182,7 +205,7 @@ show_<slug>              <fn>_data_only            ── @SPROUT.task / @fallba
 - **Fallback-only gating:** `@fallback_gate(original_task_name, max_staleness_secs)` (in `fallback.py`) reads the original's `@log_result` heartbeat doc (`harqis-elastic-logging`, keyed by `name`, field `date`). If the original ran within the staleness window, the twin short-circuits — **no feed block, no twin ES doc** — so healthy-Windows cycles produce zero duplicates. Staleness = the original's largest inter-fire gap + grace; the twin engages one cadence after Windows genuinely stops. Fails **open** (ES down/missing doc → run the twin).
 - **Routing:** twins live at `workflows.hud.tasks.hud_data_only.*` and are routed to `host` by a rule declared **above** the `workflows.hud.tasks.*` catch-all in `workflows/config.py` (else the catch-all would send them to `hud`). Beat entries are grouped at the bottom of the existing `WORKFLOWS_HUD` dict in `tasks_config.py` — kept in that one dict (not a separate `WORKFLOWS_HUD_DATA_ONLY`) so `frontend/generate_registry.py`, which reads only the first `run-job--*` dict per file, still catalogues them.
 - **Distinct feed file:** twins write `hud-data-only-YYYYMMDD.txt` (the Windows tasks write `hud-logs-*`), so host and Windows dumps never interleave.
-- **Eligibility:** only API/data-backed tasks get a twin. Desktop-capture tasks (`show_mouse_bindings`, `get_desktop_logs`, screenshots, `build_summary_mouse_bindings`, `show_hud_profiles`) read Windows-local state and stay Windows-only. The DAILY RADAR twin runs the full 8-source sweep minus the DESKTOP LOGS section (that dump.txt is Windows-local; `collect_inputs` reads it as empty on the host).
+- **Eligibility:** only API/data-backed tasks get a twin. Desktop-capture tasks (`show_mouse_bindings`, `get_desktop_logs`, screenshots, `build_summary_mouse_bindings`, `show_hud_profiles`) read Windows-local state and stay Windows-only. The HERMES RADAR compatibility twin (`show_daily_radar_data_only`) runs the full 8-source sweep minus the DESKTOP LOGS section (that dump.txt is Windows-local; `collect_inputs` reads it as empty on the host).
 
 Manually trigger a twin (bypassing the gate) for testing: pass `force=True`.
 
@@ -223,5 +246,7 @@ See [`docs/MANIFESTO.md`](../../docs/MANIFESTO.md) and [`docs/thesis/MANIFESTO-R
 | `show_pc_daily_sales` | capture+distill | area | `rainmeter:PC_DAILY_SALES` | `es_log+hud_widget` | `False` |
 | `show_api_costs` | capture+distill | area | `rainmeter:API_COSTS` | `es_log+hud_widget` | `False` |
 | `show_ai_helper` | organize | area | `rainmeter:AI_HELPER` | `es_log+hud_widget` | `False` |
-| `show_daily_radar` | distill+express | area | `rainmeter:DAILY_RADAR` | `es_log+hud_widget` | `True` |
+| `show_daily_radar` | distill+express | area | `rainmeter:HERMES_RADAR` | `es_log+hud_widget` | `True` |
+| `export_hermes_radar_snapshot` | capture+organize | area | `shared-feed:hermes-radar.json` | `sanitized_json_snapshot` | `False` |
+| `refresh_hermes_radar` | express | area | `rainmeter:HERMES_RADAR` | `hud_widget` | `False` |
 | `get_schedules` | capture | area | `rainmeter:SCHEDULES` | `es_log+hud_widget` | `True` |

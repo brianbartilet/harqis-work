@@ -77,10 +77,20 @@ def test__radar_sets_both_itemlines_and_maxlines():
     bug only set ItemLines, so growing the cap inflated the empty
     background while the scrolling text region stayed capped at 16."""
     import inspect
-    from workflows.hud.tasks.hud_radar import show_daily_radar
-    src = inspect.getsource(show_daily_radar)
+    from workflows.hud.tasks.hud_radar import _configure_radar_ini
+    src = inspect.getsource(_configure_radar_ini)
     assert 'ini["Variables"]["ItemLines"]' in src
     assert 'ini["Variables"]["MaxLines"]' in src
+
+
+def test__visible_title_changes_without_moving_compatibility_folder():
+    import inspect
+    from workflows.hud.tasks.hud_radar import show_daily_radar
+
+    source = inspect.getsource(show_daily_radar)
+    assert 'hud_item_name="HERMES RADAR"' in source
+    assert 'hud_folder_name="DAILY RADAR"' in source
+    assert 'result["feed_text"] = briefing' in source
 
 
 # ── Workflow (integration) ────────────────────────────────────────────────────

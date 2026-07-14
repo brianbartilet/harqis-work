@@ -1,0 +1,265 @@
+import json
+import os
+import sqlite3
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import pytest
+
+from workflows.hud.collectors.hermes_pushes import (
+    BRIEFING_HEADING,
+    EMPTY_STATE,
+    RECENT_HEADING,
+    STALE_STATE,
+    UNAVAILABLE_STATE,
+    _extract_delivered_cron_text,
+    build_snapshot,
+    collect_cron_pushes,
+    collect_interactive_pushes,
+    compose_hermes_radar,
+    export_snapshot,
+    load_snapshot,
+    sanitize_preview,
+)
+
+
+def _create_state_db(path: Path, messages: list[tuple[str, str, str]]) -> None:
+    connection = sqlite3.connect(path)
+    connection.executescript(
+        """
+        CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT);
+        CREATE TABLE messages (
+            id INTEGER PRIMARY KEY,
+            session_id TEXT,
+            role TEXT,
+            content TEXT,
+            timestamp TEXT
+        );
+        INSERT INTO sessions VALUES ('telegram-session', 'telegram');
+        INSERT INTO sessions VALUES ('cli-session', 'cli');
+        """
+    )
+    for session_id, role, content_timestamp in messages:
+        content, timestamp = content_timestamp.split("|", 1)
+        connection.execute(
+            "INSERT INTO messages(session_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
+            (session_id, role, content, timestamp),
+        )
+    connection.commit()
+    connection.close()
+
+
+def test_sanitize_preview_removes_secrets_ids_paths_and_markdown():
+    text = (
+        "**Done** token=abc123 /Users/example/private.txt "
+        "chat_id=-123456 job_id=internal-42 "
+        "request_id=123e4567-e89b-42d3-a456-426614174000 "
+        "unlabelled=123456789012 MEDIA:/tmp/report.png Bearer very-secret-token"
+    )
+    preview = sanitize_preview(text)
+    assert "abc123" not in preview
+    assert "123456" not in preview
+    assert "internal-42" not in preview
+    assert "123e4567" not in preview
+    assert "123456789012" not in preview
+    assert "/Users" not in preview
+    assert "/tmp" not in preview
+    assert "very-secret-token" not in preview
+    assert "**" not in preview
+    assert "[REDACTED]" in preview
+
+
+def test_collect_interactive_pushes_only_exports_recent_assistant_telegram(tmp_path):
+    now = datetime(2026, 7, 14, 12, tzinfo=timezone.utc)
+    db = tmp_path / "state.db"
+    _create_state_db(
+        db,
+        [
+            ("telegram-session", "assistant", f"Recent reply|{(now - timedelta(minutes=5)).timestamp()}"),
+            ("telegram-session", "user", f"Private user input|{(now - timedelta(minutes=4)).isoformat()}"),
+            ("cli-session", "assistant", f"CLI reply|{(now - timedelta(minutes=3)).isoformat()}"),
+            ("telegram-session", "assistant", f"Old reply|{(now - timedelta(hours=9)).isoformat()}"),
+            ("telegram-session", "assistant", f"HERMES RADAR dump loop|{(now - timedelta(minutes=2)).isoformat()}"),
+        ],
+    )
+
+    items = collect_interactive_pushes(db, since=now - timedelta(hours=8), now=now)
+
+    assert [item["preview"] for item in items] == ["Recent reply"]
+    assert items[0]["kind"] == "interactive"
+
+
+def test_collect_cron_pushes_uses_only_telegram_jobs_and_reports_failure(tmp_path):
+    now = datetime(2026, 7, 14, 12, tzinfo=timezone.utc)
+    jobs_path = tmp_path / "jobs.json"
+    output = tmp_path / "output"
+    delivered_dir = output / "telegram-job"
+    local_dir = output / "local-job"
+    loop_dir = output / "loop-job"
+    for directory in (delivered_dir, local_dir, loop_dir):
+        directory.mkdir(parents=True)
+
+    jobs_path.write_text(
+        json.dumps(
+            {
+                "jobs": [
+                    {
+                        "id": "telegram-job",
+                        "name": "Daily status",
+                        "deliver": "telegram:configured",
+                        "last_run_at": now.isoformat(),
+                        "last_status": "ok",
+                        "last_delivery_error": "gateway unavailable",
+                    },
+                    {"id": "local-job", "name": "Local only", "deliver": "local"},
+                    {
+                        "id": "loop-job",
+                        "name": "daily-radar-dump-to-telegram",
+                        "deliver": "telegram:configured",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    delivered = delivered_dir / "run.md"
+    delivered.write_text("This output should be replaced by the delivery failure", encoding="utf-8")
+    local = local_dir / "run.md"
+    local.write_text("Never export this", encoding="utf-8")
+    loop = loop_dir / "run.md"
+    loop.write_text("Looped radar dump", encoding="utf-8")
+    timestamp = now.timestamp()
+    for path in (delivered, local, loop):
+        os.utime(path, (timestamp, timestamp))
+
+    items = collect_cron_pushes(
+        jobs_path, output, since=now - timedelta(hours=8), now=now
+    )
+
+    assert len(items) == 1
+    assert items[0]["source"] == "Daily status"
+    assert items[0]["status"] == "delivery_failed"
+    assert "Delivery failed" in items[0]["preview"]
+    assert "gateway unavailable" in items[0]["preview"]
+
+
+def test_cron_audit_parser_exports_response_only_and_fails_closed():
+    audit = """# Cron Job: status
+
+**Job ID:** private-id
+
+## Prompt
+
+Never expose this prompt token=private-value
+
+## Response
+This heading is part of the prompt example and must stay private.
+
+## Response
+
+Safe delivered update
+"""
+    assert _extract_delivered_cron_text(audit) == "Safe delivered update"
+    assert (
+        _extract_delivered_cron_text(
+            "# Cron Job: unknown\n\n**Job ID:** private-id\n"
+        )
+        is None
+    )
+
+
+def test_build_snapshot_sorts_deduplicates_limits_and_excludes_user_content(tmp_path):
+    now = datetime(2026, 7, 14, 12, tzinfo=timezone.utc)
+    home = tmp_path / "hermes"
+    (home / "cron" / "output").mkdir(parents=True)
+    _create_state_db(
+        home / "state.db",
+        [
+            ("telegram-session", "assistant", f"Duplicate reply|{(now - timedelta(minutes=1)).isoformat()}"),
+            ("telegram-session", "assistant", f"Duplicate reply|{(now - timedelta(minutes=2)).isoformat()}"),
+            ("telegram-session", "assistant", f"Second reply|{(now - timedelta(minutes=3)).isoformat()}"),
+            ("telegram-session", "user", f"Never exported|{(now - timedelta(minutes=4)).isoformat()}"),
+        ],
+    )
+    (home / "cron" / "jobs.json").write_text('{"jobs": []}', encoding="utf-8")
+
+    snapshot = build_snapshot(hermes_home=home, now=now, max_items=2)
+
+    assert snapshot["schema_version"] == 1
+    assert [item["preview"] for item in snapshot["items"]] == [
+        "Duplicate reply",
+        "Second reply",
+    ]
+    assert "Never exported" not in json.dumps(snapshot)
+
+
+def test_export_failure_preserves_last_valid_snapshot(tmp_path):
+    destination = tmp_path / "hermes-radar.json"
+    destination.write_text('{"last": "valid"}', encoding="utf-8")
+
+    with pytest.raises(sqlite3.OperationalError):
+        export_snapshot(snapshot_path=destination, hermes_home=tmp_path / "missing")
+
+    assert destination.read_text(encoding="utf-8") == '{"last": "valid"}'
+
+
+def test_load_snapshot_marks_stale_and_compose_preserves_previous_on_unavailable(tmp_path):
+    now = datetime(2026, 7, 14, 12, tzinfo=timezone.utc)
+    snapshot_path = tmp_path / "hermes-radar.json"
+    snapshot_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": (now - timedelta(hours=1)).isoformat(),
+                "window_hours": 8,
+                "max_items": 10,
+                "items": [
+                    {
+                        "timestamp": (now - timedelta(minutes=5)).isoformat(),
+                        "source": "Hermes chat",
+                        "kind": "interactive",
+                        "status": "delivered",
+                        "preview": "Useful update",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    stale = load_snapshot(snapshot_path, now=now)
+    rendered = compose_hermes_radar("Priority synthesis", stale)
+    assert stale["state"] == "stale"
+    assert RECENT_HEADING in rendered
+    assert "Useful update" in rendered
+    assert STALE_STATE in rendered
+    assert f"{BRIEFING_HEADING}\n\nPriority synthesis" in rendered
+
+    unavailable = load_snapshot(tmp_path / "missing.json", now=now)
+    preserved = compose_hermes_radar(
+        "Priority synthesis", unavailable, previous_rendered=rendered
+    )
+    assert "Useful update" in preserved
+    assert UNAVAILABLE_STATE in preserved
+
+
+def test_empty_snapshot_has_explicit_empty_state():
+    rendered = compose_hermes_radar(
+        "Synthesis", {"state": "fresh", "items": []}
+    )
+    assert EMPTY_STATE in rendered
+
+
+def test_hermes_radar_schedules_keep_fast_path_model_free():
+    from workflows.hud.tasks_config import WORKFLOWS_HUD
+
+    deep = WORKFLOWS_HUD["run-job--show_daily_radar"]
+    exporter = WORKFLOWS_HUD["run-job--export_hermes_radar_snapshot"]
+    refresh = WORKFLOWS_HUD["run-job--refresh_hermes_radar"]
+
+    assert set(deep["schedule"].hour) == {8, 12, 16, 20}
+    assert set(exporter["schedule"].minute) == {0, 15, 30, 45}
+    assert set(refresh["schedule"].minute) == {5, 20, 35, 50}
+    assert "model" not in exporter["kwargs"]
+    assert "model" not in refresh["kwargs"]
+    assert deep["manifesto"]["express_target"] == "rainmeter:HERMES_RADAR"

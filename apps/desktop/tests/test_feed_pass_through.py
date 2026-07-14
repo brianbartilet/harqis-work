@@ -37,6 +37,16 @@ def test__extract_dump_text__dict_with_text_key():
     assert out == "rendered dump\n"
 
 
+def test__extract_dump_text__feed_text_overrides_rendered_text():
+    out = _extract_dump_text(
+        {
+            "text": "HUD text with private notification previews",
+            "feed_text": "synthesis-only shared feed",
+        }
+    )
+    assert out == "synthesis-only shared feed"
+
+
 def test__extract_dump_text__dict_without_text_falls_back():
     """A dict missing `text` is JSON-stringified (legacy safe-stringify)."""
     out = _extract_dump_text({"foo": 1, "bar": 2})

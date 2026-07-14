@@ -147,6 +147,6 @@ def test__distill_radar_activity_raw_fallback_no_api():
     d = distill_radar_activity(activity, synthesize=False)
     assert d["skip"] is False
     assert d["synthesized"] is False
-    assert "1 DAILY RADAR briefing" in d["moment"]
+    assert "1 HERMES RADAR briefing" in d["moment"]
     for key in ("moment", "what_happened", "possible_use", "tags"):
         assert key in d

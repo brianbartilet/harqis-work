@@ -47,6 +47,7 @@ BEEP_DURATION_MS = 300
 def init_meter(
     config: Mapping[str, str],
     hud_item_name: str,
+    hud_folder_name: Optional[str] = None,
     template_name: str = "base.ini",
     include_notes_bin: bool = True,
     notes_file: str = "dump.txt",
@@ -80,7 +81,10 @@ def init_meter(
     skins_root = Path(config["write_skin_to_path"]).resolve()
 
     skin_dir = skins_root / skin_name
-    hud_dirname = sanitize_name(hud_item_name)  # safer than only stripping spaces
+    # `hud_folder_name` lets a skin change its visible title without moving the
+    # established Rainmeter folder/dump path. Existing callers keep the legacy
+    # behavior because the override defaults to the display name.
+    hud_dirname = sanitize_name(hud_folder_name or hud_item_name)
     ini_dir = skin_dir / hud_dirname
     ini_filename = f"{hud_dirname}.ini"
     ini_path = ini_dir / ini_filename
@@ -120,7 +124,9 @@ def init_meter(
                 extra_fields: Dict[str, object] = {}
                 if isinstance(raw, dict):
                     notes_text = raw.get("text", "")
-                    extra_fields = {k: v for k, v in raw.items() if k != "text"}
+                    extra_fields = {
+                        k: v for k, v in raw.items() if k not in {"text", "feed_text"}
+                    }
                 else:
                     notes_text = raw
                 if not isinstance(notes_text, str):
@@ -199,6 +205,7 @@ def init_meter(
                 raise
 
         inner._hud_item_name = hud_item_name
+        setattr(inner, "_hud_folder_name", hud_folder_name or hud_item_name)
         inner._hud_config = config
 
         return inner

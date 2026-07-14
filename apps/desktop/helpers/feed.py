@@ -257,10 +257,14 @@ def _extract_dump_text(raw_result: Any) -> str:
 
     HUD tasks may return either a string (legacy: just the dump text) or a
     dict shaped like ``{"text": "<dump>", "summary": ..., "metrics": ...}``.
-    The feed file should always contain the dump text, never the JSON of
-    the metadata, so we prefer ``text`` when the return is a dict and fall
-    back to the safe-stringify path otherwise.
+    A task may provide ``feed_text`` when its shared feed must intentionally
+    differ from the rendered HUD text (for example, HERMES RADAR keeps the
+    legacy synthesis feed free of recent Telegram previews). The feed file
+    never receives the JSON metadata.
     """
+    if isinstance(raw_result, dict) and "feed_text" in raw_result:
+        text = raw_result.get("feed_text", "")
+        return text if isinstance(text, str) else _safe_stringify(text)
     if isinstance(raw_result, dict) and "text" in raw_result:
         text = raw_result.get("text", "")
         return text if isinstance(text, str) else _safe_stringify(text)
