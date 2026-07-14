@@ -280,7 +280,7 @@ def parse_radar_sections(text: str) -> dict[str, list[str]]:
         if not stripped:
             flush_item()
             continue
-        if stripped.upper().startswith("DAILY RADAR"):
+        if stripped.upper().startswith(("DAILY RADAR", "HERMES RADAR")):
             continue
         is_heading = (
             stripped == stripped.upper()

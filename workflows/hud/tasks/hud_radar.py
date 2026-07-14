@@ -1,50 +1,17 @@
-"""
-DAILY RADAR HUD widget — every-4-hours productivity briefing.
+"""HERMES RADAR HUD — recent Hermes pushes plus four-hour synthesis.
 
-Combines five agent ideas (#1, #3, #4, #12, #17 from data/AGENTS_IDEAS.md)
-into a single Rainmeter widget:
-
-  - Desktop context for the last 8 hours (tail of DESKTOP LOGS dump.txt).
-  - Overlooked commitments scanned from email + desktop log.
-  - Email priority for the last 8 hours.
-  - Notification triage: failed Celery jobs + stuck Trello cards.
-  - Morning-briefing-style top 3 priorities + suggested first move.
-
-Width matches DESKTOP LOGS (`width_multiplier=2.25`) so the two pinned
-widgets line up side by side. Height is FIXED at
-`DAILY_RADAR_MAX_HUD_LINES` (30) — enough vertical space to see ~5 of the
-radar's 7 content sections at once. Tighter defaults (15 like MOUSE
-BINDINGS, 22 from the earlier attempt) hid too much of the briefing
-behind the marquee. The marquee (`MeasureLuaScriptScroll`) still scrolls
-content past the 30-line window so longer briefings don't grow the widget.
-
-Two skin variables size the widget — they MUST stay in sync:
-
-  * `ItemLines` — drives the meter/background height (the visible panel size).
-  * `MaxLines`  — read by `TextCycle.lua` (the marquee script). Controls how
-                  many lines render at once. Defaults to 16 in the Lua
-                  script, so without setting it the marquee window stays
-                  capped at 16 even when `ItemLines` grows the background.
-
-Earlier iterations only set `ItemLines`, which made `max_hud_lines` look
-like it only inflated the empty background. Both are now set together.
-The widget surfaces on both WORK and ORGANIZE calendar blocks via
-schedule_categories=[WORK, ORGANIZE]. play_sound=True triggers Rainmeter's
-beep on each update.
-
-Model: claude-sonnet-4-6 — text-only inputs at every-4-hours cadence;
-Sonnet's stronger synthesis (over Haiku) produces a noticeably more
-useful briefing for a once-per-shift widget. Pinned in the beat schedule
-entry (workflows/hud/tasks_config.py::run-job--show_daily_radar) so the
-model is explicit and obvious to anyone editing the schedule.
+The established DAILYRADAR Rainmeter folder and task names remain unchanged for
+compatibility. The visible panel title is HERMES RADAR. A lightweight refresh
+runs every 15 minutes from a sanitized shared JSON snapshot; the existing
+multi-source Claude synthesis still runs at 08:00, 12:00, 16:00, and 20:00.
 """
 
 import os
+from pathlib import Path
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import logger as log
-from core.utilities.resources.decorators import get_decorator_attrs
 
 from apps.rainmeter.references.helpers.config_builder import (
     ConfigHelperRainmeter,
@@ -52,138 +19,53 @@ from apps.rainmeter.references.helpers.config_builder import (
 )
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.desktop.helpers.feed import feed
-
 from apps.google_apps.references.constants import ScheduleCategory
 
-# Fixed visible height. Matches JIRA BOARD's 14-line cap so the two
-# work-block widgets sit at the same vertical footprint. The marquee
-# scrolls everything past the visible window so longer briefings don't
-# grow the widget. Override via the `max_hud_lines` kwarg if a different
-# monitor wants more or less.
-DAILY_RADAR_MAX_HUD_LINES: int = 16
-
 from workflows.hud.tasks.sections import sections__daily_radar
-# Data-gathering, Claude synthesis, and dump composition live in the win32-free
-# collector so the always-on host fallback twin (show_daily_radar_data_only,
-# workflows/hud/tasks/hud_data_only.py) can reuse the exact same data path.
 from workflows.hud.collectors.daily_radar import collect_daily_radar
-
-# DESKTOP LOGS skin folder — we need its dump.txt as one of our inputs.
-# The folder name is the sanitized hud_item_name from hud_gpt.get_desktop_logs.
-_DESKTOP_LOGS_HUD_FOLDER = "DESKTOPLOGS"
-
-
-@SPROUT.task()
-@log_result()
-@init_meter(
-    RAINMETER_CONFIG,
-    hud_item_name="DAILY RADAR",
-    new_sections_dict=sections__daily_radar,
-    play_sound=True,
-    schedule_categories=[ScheduleCategory.PINNED],
-    # Overwrite dump.txt on every tick — the radar is a fresh briefing per
-    # run, not a rolling log like DESKTOP LOGS. Older briefings would push
-    # the current one off-screen and make the marquee scroll backwards
-    # through stale content.
-    prepend_if_exists=False,
+from workflows.hud.collectors.hermes_pushes import (
+    compose_hermes_radar,
+    extract_briefing,
+    load_snapshot,
 )
-@feed()
-def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
-    """Render the DAILY RADAR briefing.
 
-    Data sources are driven by `SOURCE_REGISTRY` in
-    `workflows.hud.tasks.daily_radar_agent`. The radar pulls each source
-    in the order given by `sources`; default cfg ids + per-source params
-    come from the registry. Override only what you need to via the two
-    map kwargs below.
+DAILY_RADAR_MAX_HUD_LINES: int = 16
+_DESKTOP_LOGS_HUD_FOLDER = "DESKTOPLOGS"
+# Compatibility path used by forwarding scripts and existing Rainmeter installs.
+_RADAR_HUD_FOLDER = "DAILYRADAR"
 
-    Kwargs:
-        sources:           Priority list of source names. Defaults to
-                           `DEFAULT_SOURCES` (gmail, calendar, gtasks,
-                           trello, jira, github, owntracks, es_failed_jobs).
-                           Drop entries to disable; reorder to change
-                           prompt-input precedence.
-        source_overrides:  Map of `{source_name: cfg_id}` to redirect a
-                           single source's config without touching the
-                           registry. Example:
-                           `{"gmail": "GOOGLE_GMAIL_WORK"}`. Sources not
-                           present use the registry default. Defaults to {}.
-        source_params:     Map of `{source_name: {param: value}}` to pass
-                           source-specific kwargs to a collector. Merged
-                           on top of the registry's `default_params`.
-                           Example: `{"owntracks": {"user": "brian"}}`.
-                           Defaults to {}.
-        cfg_id__anthropic: Config key for Anthropic. Default 'ANTHROPIC'.
-        model:             Anthropic model id. Default Sonnet 4.6 —
-                           stronger synthesis than Haiku for a once-per-
-                           shift briefing; the beat schedule pins this
-                           explicitly so the model choice is obvious.
-        window_hours:      Analysis window in hours. Default 8.
-        max_hud_lines:     Fixed visible HUD height. Default
-                           `DAILY_RADAR_MAX_HUD_LINES`. Content beyond
-                           this scrolls via the auto-scrolling marquee.
 
-    To plug in a new source: add the collector + formatter to
-    `daily_radar_agent.py`, append a `SourceSpec` to the registry, and
-    add its name to `sources` here (or in the beat schedule). No edits
-    to this function needed.
-    """
-    log.info("show_daily_radar kwargs: %s", list(kwargs.keys()))
-
-    max_hud_lines_cap = int(kwargs.get("max_hud_lines", DAILY_RADAR_MAX_HUD_LINES))
-
-    # region Compute the DESKTOP LOGS dump.txt path (input #1 — idea #1).
-    # Matches the path get_desktop_logs writes to via @init_meter so the
-    # radar always reads the freshest desktop analysis on disk.
-    desktop_dump_path = os.path.join(
+def _radar_dump_path() -> str:
+    return os.path.join(
         RAINMETER_CONFIG["write_skin_to_path"],
         RAINMETER_CONFIG["skin_name"],
-        _DESKTOP_LOGS_HUD_FOLDER,
-        "dump.txt",
-    )
-    # endregion
-
-    # region Gather + synthesize via the shared win32-free collector. The
-    # collector runs the source pulls, the Claude call, and the dump
-    # composition; the host fallback twin reuses it verbatim. On Windows the
-    # DESKTOP LOGS dump path is passed in; on the host it's absent (empty).
-    result = collect_daily_radar(desktop_dump_path=desktop_dump_path, **kwargs)
-    dump = result["text"]
-    # endregion
-
-    # region Header link — only the default `meterLink` slot (the user
-    # explicitly asked for "only one link for the DUMP text").
-    meta = get_decorator_attrs(show_daily_radar, prefix="")
-    hud_folder = str(meta["_hud_item_name"]).replace(" ", "").upper()
-    own_dump_path = os.path.join(
-        RAINMETER_CONFIG["write_skin_to_path"],
-        RAINMETER_CONFIG["skin_name"],
-        hud_folder,
+        _RADAR_HUD_FOLDER,
         "dump.txt",
     )
 
+
+def _read_existing_dump(path: str) -> str:
+    try:
+        return Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _configure_radar_ini(
+    ini: ConfigHelperRainmeter, *, dump_path: str, max_hud_lines: int
+) -> None:
+    """Apply the shared HERMES RADAR link, dimensions, and marquee settings."""
     ini["meterLink"]["text"] = "DUMP"
-    ini["meterLink"]["leftmouseupaction"] = '!Execute ["{0}"]'.format(own_dump_path)
-    ini["meterLink"]["tooltiptext"] = own_dump_path
+    ini["meterLink"]["leftmouseupaction"] = '!Execute ["{0}"]'.format(dump_path)
+    ini["meterLink"]["tooltiptext"] = dump_path
     ini["meterLink"]["W"] = "80"
-    # endregion
 
-    # region Dimensions — width matches DESKTOP LOGS (2.25) so the two
-    # pinned widgets line up side by side; height is FIXED like MOUSE
-    # BINDINGS (no compute_max_hud_lines dynamic expansion). The marquee
-    # scrolls everything past `max_hud_lines_cap` so the widget's footprint
-    # stays predictable across runs regardless of briefing length.
     width_multiplier = 2.25
-    max_hud_lines = max_hud_lines_cap  # fixed height, like MOUSE BINDINGS
-
     ini["meterSeperator"]["W"] = "({0}*186*#Scale#)".format(width_multiplier)
-
     ini["MeterDisplay"]["W"] = "({0}*186*#Scale#)".format(width_multiplier)
     ini["MeterDisplay"]["H"] = "((42*#Scale#)+(#ItemLines#*22)*#Scale#)"
     ini["MeterDisplay"]["X"] = "14"
-    # MeasureLuaScriptScroll → auto-scroll marquee, same as DESKTOP LOGS.
     ini["MeterDisplay"]["MeasureName"] = "MeasureLuaScriptScroll"
-
     ini["MeterBackground"]["Shape"] = (
         "Rectangle 0,0,({0}*190),((#ItemLines#*22)),2 | Fill Color #fillColor# "
         "| StrokeWidth (1*#Scale#) | Stroke Color [#darkColor] "
@@ -197,19 +79,83 @@ def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
     ini["Rainmeter"]["SkinHeight"] = "((42*#Scale#)+(#ItemLines#*22)*#Scale#)"
     ini["meterTitle"]["W"] = "({0}*190*#Scale#)".format(width_multiplier)
     ini["meterTitle"]["X"] = "({0}*198*#Scale#)/2".format(width_multiplier)
-    # endregion
-    # `ItemLines` drives the meter background height (the visible panel
-    # size). `MaxLines` is read by TextCycle.lua and controls how many
-    # lines the marquee renders at once — defaulting to 16 inside the Lua
-    # script. Without setting it explicitly, bumping `ItemLines` only
-    # grows the empty background while the text window stays capped at 16.
-    # Keep the two in sync so the marquee actually uses the panel we paint.
-    ini["Variables"]["ItemLines"] = "{0}".format(max_hud_lines)
-    ini["Variables"]["MaxLines"] = "{0}".format(max_hud_lines)
+    ini["Variables"]["ItemLines"] = str(max_hud_lines)
+    ini["Variables"]["MaxLines"] = str(max_hud_lines)
 
-    # Merge the render-only fields into the collector's result so the return
-    # shape (and the @log_result ES payload) is identical to before the
-    # extraction: links.dump (the Rainmeter skin dump path) + metrics.item_lines.
+
+@SPROUT.task()
+@log_result()
+@init_meter(
+    RAINMETER_CONFIG,
+    hud_item_name="HERMES RADAR",
+    hud_folder_name="DAILY RADAR",
+    new_sections_dict=sections__daily_radar,
+    play_sound=True,
+    schedule_categories=[ScheduleCategory.PINNED],
+    prepend_if_exists=False,
+)
+@feed()
+def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
+    """Run the four-hour productivity synthesis and include recent pushes."""
+    log.info("show_daily_radar kwargs: %s", list(kwargs.keys()))
+    max_hud_lines = int(kwargs.get("max_hud_lines", DAILY_RADAR_MAX_HUD_LINES))
+    own_dump_path = _radar_dump_path()
+    previous_rendered = _read_existing_dump(own_dump_path)
+
+    desktop_dump_path = os.path.join(
+        RAINMETER_CONFIG["write_skin_to_path"],
+        RAINMETER_CONFIG["skin_name"],
+        _DESKTOP_LOGS_HUD_FOLDER,
+        "dump.txt",
+    )
+    result = collect_daily_radar(desktop_dump_path=desktop_dump_path, **kwargs)
+    briefing = result["text"]
+    snapshot = load_snapshot(kwargs.get("snapshot_path"))
+    # Preserve the established synthesis-only feed contract used by HFL and
+    # the legacy Telegram forwarder. Notification previews stay in the HUD
+    # dump and sanitized JSON snapshot only.
+    result["feed_text"] = briefing
+    result["text"] = compose_hermes_radar(
+        briefing, snapshot, previous_rendered=previous_rendered
+    )
+
+    _configure_radar_ini(ini, dump_path=own_dump_path, max_hud_lines=max_hud_lines)
     result.setdefault("links", {})["dump"] = own_dump_path
     result.setdefault("metrics", {})["item_lines"] = max_hud_lines
+    result["metrics"]["hermes_pushes"] = len(snapshot.get("items", []))
     return result
+
+
+@SPROUT.task()
+@init_meter(
+    RAINMETER_CONFIG,
+    hud_item_name="HERMES RADAR",
+    hud_folder_name="DAILY RADAR",
+    new_sections_dict=sections__daily_radar,
+    play_sound=False,
+    schedule_categories=[ScheduleCategory.PINNED],
+    prepend_if_exists=False,
+)
+def refresh_hermes_radar(ini=ConfigHelperRainmeter(), **kwargs):
+    """Rerender pushes every 15 minutes without source pulls or an LLM call."""
+    max_hud_lines = int(kwargs.get("max_hud_lines", DAILY_RADAR_MAX_HUD_LINES))
+    own_dump_path = _radar_dump_path()
+    previous_rendered = _read_existing_dump(own_dump_path)
+    briefing = extract_briefing(previous_rendered)
+    snapshot = load_snapshot(kwargs.get("snapshot_path"))
+    text = compose_hermes_radar(
+        briefing, snapshot, previous_rendered=previous_rendered
+    )
+
+    _configure_radar_ini(ini, dump_path=own_dump_path, max_hud_lines=max_hud_lines)
+    return {
+        "text": text,
+        "summary": "Refreshed HERMES RADAR from the sanitized snapshot",
+        "metrics": {
+            "item_lines": max_hud_lines,
+            "hermes_pushes": len(snapshot.get("items", [])),
+            "snapshot_state": snapshot.get("state", "unavailable"),
+            "llm_calls": 0,
+        },
+        "links": {"dump": own_dump_path},
+    }

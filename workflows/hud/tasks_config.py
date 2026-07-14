@@ -410,9 +410,10 @@ WORKFLOWS_HUD = {
         },
     },
 
-    # ── show_daily_radar ─────────────────────────────────────────────────────
-    # Fires at 08:00, 12:00, and 16:00 — every 4h across the working day:
-    # a morning briefing, a midday refresh, and a mid-afternoon refresh.
+    # ── HERMES RADAR ─────────────────────────────────────────────────────────
+    # The deep productivity synthesis runs at 08:00, 12:00, 16:00, and 20:00.
+    # Separate deterministic tasks export/rerender recent Hermes Telegram
+    # pushes every 15 minutes without polling Telegram or invoking an LLM.
     # Combines ideas #1, #3, #4, #12, #17 from data/AGENTS_IDEAS.md —
     # desktop context, commitment watcher, email priority, notification
     # triage, and morning-briefing-style top priorities. Inputs are
@@ -424,7 +425,7 @@ WORKFLOWS_HUD = {
     # CLAUDE_CODE_OAUTH_TOKEN (Claude Max), a quota *shared* with the
     # operator's interactive Claude Code sessions; Sonnet 4.6 here at a
     # frequent cadence drained that pool and starved interactive work.
-    # Haiku + a 3×/day cadence keeps the radar's share of the Max limit small.
+    # Haiku + a 4×/day cadence keeps the radar's share of the Max limit small.
     # `expires`: 60 * 60 * 2 — half-cadence; a missed run can fire within
     # 2 hours, after that the next scheduled tick refreshes.
     'run-job--show_daily_radar': {
@@ -472,9 +473,55 @@ WORKFLOWS_HUD = {
         'manifesto': {
             'code_role': 'distill+express',
             'para_bucket': 'area',
-            'express_target': 'rainmeter:DAILY_RADAR',
+            'express_target': 'rainmeter:HERMES_RADAR',
             'review_artifact': 'es_log+hud_widget',
             'hfl_signal': True,
+        },
+    },
+
+    # Host-side capture. Reads Hermes' local delivery audit/state, sanitizes it,
+    # and atomically writes one compact JSON artifact to the configured shared
+    # feed. No Telegram API call and no model call.
+    'run-job--export_hermes_radar_snapshot': {
+        'task': 'workflows.hud.tasks.hermes_radar_export.export_hermes_radar_snapshot',
+        'schedule': crontab(minute='*/15'),
+        'kwargs': {
+            'window_hours': 8,
+            'max_items': 10,
+        },
+        'options': {
+            'queue': WorkflowQueue.HOST,
+            'expires': 60 * 10,
+        },
+        'manifesto': {
+            'code_role': 'capture+organize',
+            'para_bucket': 'area',
+            'express_target': 'shared-feed:hermes-radar.json',
+            'review_artifact': 'sanitized_json_snapshot',
+            'hfl_signal': False,
+        },
+    },
+
+    # Windows render follows five minutes after the exporter to allow shared-
+    # drive sync. It only reads JSON and rewrites the established DAILYRADAR
+    # skin folder; the visible title is HERMES RADAR.
+    'run-job--refresh_hermes_radar': {
+        'task': 'workflows.hud.tasks.hud_radar.refresh_hermes_radar',
+        'schedule': crontab(minute='5,20,35,50'),
+        'kwargs': {
+            'max_hud_lines': 16,
+        },
+        'options': {
+            'queue': WorkflowQueue.HUD,
+            'os': ['windows'],
+            'expires': 60 * 10,
+        },
+        'manifesto': {
+            'code_role': 'express',
+            'para_bucket': 'area',
+            'express_target': 'rainmeter:HERMES_RADAR',
+            'review_artifact': 'hud_widget',
+            'hfl_signal': False,
         },
     },
 

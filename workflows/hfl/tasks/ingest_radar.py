@@ -1,7 +1,7 @@
 """
 workflows/hfl/tasks/ingest_radar.py
 
-Daily DAILY RADAR briefings → HFL corpus. The DAILY RADAR HUD widget
+Daily HERMES RADAR briefings → HFL corpus. The HERMES RADAR HUD widget
 (workflows/hud/tasks/hud_radar.py :: show_daily_radar) fires every few
 hours and writes its synthesized briefing to the shared per-day desktop
 feed file via the @feed() decorator. This task reads that day's radar
@@ -59,7 +59,8 @@ _log = create_logger("hfl.ingest_radar")
 
 _DEFAULT_HAIKU = "claude-haiku-4-5-20251001"
 
-# The @feed() filename_prefix and the radar's task name. show_daily_radar is
+# The @feed() filename_prefix and compatibility task name. The visible panel is
+# HERMES RADAR; show_daily_radar intentionally remains stable for feed parsing.
 # decorated with a bare @feed(), so it lands in the default "hud-logs" file
 # alongside other HUD tasks; we filter to its own blocks by func name.
 _DEFAULT_FEED_PREFIX = "hud-logs"
@@ -206,7 +207,7 @@ def distill_radar_activity(
         body = "\n".join(preview[:12]).strip()
         return {
             "skip": False,
-            "moment": f"{count} DAILY RADAR briefing(s) over the day",
+            "moment": f"{count} HERMES RADAR briefing(s) over the day",
             "what_happened": body or f"{count} radar briefings captured.",
             "why_it_stayed": "",
             "possible_use": "retro",
@@ -218,7 +219,7 @@ def distill_radar_activity(
         return _fallback()
 
     user_msg = (
-        f"Today's DAILY RADAR briefings ({count} run(s), newest last):\n\n"
+        f"Today's HERMES RADAR briefings ({count} run(s), newest last):\n\n"
         f"{_activity_body(activity)}"
     )
     try:
@@ -257,7 +258,7 @@ def ingest_radar_activity(
     prefix: str = _DEFAULT_FEED_PREFIX,
     max_briefings: int = 24,
 ) -> dict[str, Any]:
-    """Append one HFL corpus entry summarizing the day's DAILY RADAR briefings.
+    """Append one HFL corpus entry summarizing the day's HERMES RADAR briefings.
 
     No feed dir configured on this host → no entry, no network call.
     No radar briefings in the window → no entry, no LLM call.
