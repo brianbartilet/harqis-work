@@ -63,11 +63,21 @@ def test__init_meter_overwrites_dump_per_tick():
 
 def test__radar_uses_fixed_height():
     """Layout uses a fixed visible-line cap (not the dynamic JIRA-BOARD
-    shape). Default 14 matches JIRA BOARD's footprint so the two work-
-    block widgets sit at the same height. If this needs to change,
-    update the constant AND the beat-schedule kwarg in lockstep."""
+    shape). The 19-line default is approximately 20% taller than the prior
+    16-line footprint. If this needs to change, update the constant AND the
+    beat-schedule kwargs in lockstep."""
     from workflows.hud.tasks.hud_radar import DAILY_RADAR_MAX_HUD_LINES
-    assert DAILY_RADAR_MAX_HUD_LINES == 16
+    from workflows.hud.tasks_config import WORKFLOWS_HUD
+
+    assert DAILY_RADAR_MAX_HUD_LINES == 19
+    assert (
+        WORKFLOWS_HUD["run-job--show_daily_radar"]["kwargs"]["max_hud_lines"]
+        == DAILY_RADAR_MAX_HUD_LINES
+    )
+    assert (
+        WORKFLOWS_HUD["run-job--refresh_hermes_radar"]["kwargs"]["max_hud_lines"]
+        == DAILY_RADAR_MAX_HUD_LINES
+    )
 
 
 def test__radar_sets_both_itemlines_and_maxlines():

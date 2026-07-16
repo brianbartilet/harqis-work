@@ -157,7 +157,7 @@ Behavior:
 - **Sound:** the four-hour synthesis uses `play_sound=True`; 15-minute notification-only refreshes stay silent.
 - **Scroll:** `MeasureLuaScriptScroll` (auto-scrolling marquee, identical to DESKTOP LOGS).
 - **Width:** `width_multiplier=2.25` — matches DESKTOP LOGS so the two pinned widgets line up side by side.
-- **Height:** fixed at `DAILY_RADAR_MAX_HUD_LINES` (16). The widget sets both `Variables.ItemLines` and `Variables.MaxLines`; the marquee scrolls content beyond that stable footprint.
+- **Height:** fixed at `DAILY_RADAR_MAX_HUD_LINES` (19), approximately 20% more visible lines than the previous 16-line footprint. The widget sets both `Variables.ItemLines` and `Variables.MaxLines`; the marquee scrolls content beyond that stable footprint.
 - **Wrap width:** 65 chars, tuned to the 2.25 column width.
 - **Readability:** `wrap_preserving_breaks` keeps the prompt's section structure intact (each `===` rule, blank-line break, and bullet line survives — the previous `wrap_text` flattened everything to one paragraph).
 - **Header links:** one only — `DUMP`, opens the established `DAILYRADAR/dump.txt` compatibility path.

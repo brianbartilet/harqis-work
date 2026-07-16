@@ -459,11 +459,10 @@ WORKFLOWS_HUD = {
             # needed — to widen/narrow the slice of the day the radar
             # reflects.
             "window_hours": 8,
-            # Fixed visible height. 16 keeps the radar near JIRA BOARD's
-            # vertical footprint while leaving enough room for ~2-3
-            # sections + the long DESKTOP CONTEXT paragraph. The marquee
-            # scrolls everything past this window.
-            "max_hud_lines": 16,
+            # Fixed visible height. 19 is an approximately 20% increase over
+            # the previous 16-line footprint. The marquee scrolls everything
+            # past this window.
+            "max_hud_lines": 19,
         },
         "options": {
             "queue": WorkflowQueue.HUD,
@@ -509,7 +508,7 @@ WORKFLOWS_HUD = {
         'task': 'workflows.hud.tasks.hud_radar.refresh_hermes_radar',
         'schedule': crontab(minute='5,20,35,50'),
         'kwargs': {
-            'max_hud_lines': 16,
+            'max_hud_lines': 19,
         },
         'options': {
             'queue': WorkflowQueue.HUD,

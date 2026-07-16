@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import codecs
+import ctypes
 import functools
 import hashlib
 import os
 import sys
 import tempfile
 import time
-import ctypes
 
 if sys.platform == "win32":
     import winsound
@@ -268,8 +269,29 @@ def _ensure_dirs_and_resources(
             # Copy ALL .lua files from bin → ini_dir
             for src in bin_dir.glob("*.lua"):
                 dst = ini_dir / src.name
-                if not dst.exists() or src.stat().st_mtime > dst.stat().st_mtime:
-                    dst.write_bytes(src.read_bytes())
+                deployed_is_unicode = (
+                    dst.exists()
+                    and dst.read_bytes().startswith(codecs.BOM_UTF16_LE)
+                )
+                if (
+                    not deployed_is_unicode
+                    or src.stat().st_mtime > dst.stat().st_mtime
+                ):
+                    # Rainmeter only treats strings returned by a Script measure
+                    # as UTF-8 when the Lua script itself is UTF-16 LE with a
+                    # BOM. Otherwise it widens the returned bytes using the
+                    # Windows ANSI code page, turning e.g. "—" into "â€”".
+                    # Keep the repository sources reviewable as UTF-8, but deploy
+                    # the encoding Rainmeter uses to opt into Unicode strings.
+                    dst.write_bytes(_rainmeter_lua_bytes(src.read_bytes()))
+
+
+def _rainmeter_lua_bytes(source: bytes) -> bytes:
+    """Encode a repository Lua source for Rainmeter's Unicode script mode."""
+    if source.startswith(codecs.BOM_UTF16_LE):
+        return source
+    text = source.decode("utf-8-sig")
+    return codecs.BOM_UTF16_LE + text.encode("utf-16-le")
 
 
 def _copytree(src: Path, dst: Path) -> None:

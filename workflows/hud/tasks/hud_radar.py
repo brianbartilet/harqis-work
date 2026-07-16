@@ -29,7 +29,7 @@ from workflows.hud.collectors.hermes_pushes import (
     load_snapshot,
 )
 
-DAILY_RADAR_MAX_HUD_LINES: int = 16
+DAILY_RADAR_MAX_HUD_LINES: int = 19
 _DESKTOP_LOGS_HUD_FOLDER = "DESKTOPLOGS"
 # Compatibility path used by forwarding scripts and existing Rainmeter installs.
 _RADAR_HUD_FOLDER = "DAILYRADAR"
