@@ -15,17 +15,23 @@ added to ``SPROUT.conf.task_routes`` in ``workflows/config.py``.
 
 Location resolution (device-agnostic cascade)
 ----------------------------------------------
-The resolver tries three methods in order and returns the first non-None fix:
+The resolver tries four methods in order and returns the first non-None fix:
 
 1. **Environment variables** (``WORKER_LAT`` / ``WORKER_LON``) — a static
    coordinate pinned by the operator.  Works on *any* device: Windows, Linux,
    macOS, Android (Termux).  Fastest, zero network.
 
-2. **IP-geolocation** (``ip-api.com``) — free, unauthenticated lookup of the
+2. **Serial GPS HAT** (``WORKER_GPS_SERIAL_PORT``) — a real, live fix read as
+   NMEA from a serial GPS receiver (e.g. a Raspberry Pi GPS HAT or USB dongle
+   on a moving fleet node).  Opt-in: skipped entirely when the env var is
+   unset, so behaviour on machines without a HAT is unchanged.  More precise
+   than the coarse fallbacks below, so it sits right after the operator pin.
+
+3. **IP-geolocation** (``ip-api.com``) — free, unauthenticated lookup of the
    worker's public egress IP.  Accurate to city level; sufficient for fleet
    dashboards.  Disabled when ``WORKER_SKIP_IP_GEO=true``.
 
-3. **OwnTracks Recorder REST API** — queries the local/remote Recorder for
+4. **OwnTracks Recorder REST API** — queries the local/remote Recorder for
    the most-recent GPS fix for the configured user+device.  Requires the
    ``OWN_TRACKS`` block in ``apps_config.yaml`` and the Recorder to be
    reachable from the worker.
@@ -192,18 +198,112 @@ def _resolve_via_owntracks(owntracks_cfg_id: str = "OWN_TRACKS") -> Optional[Geo
         return None
 
 
+def _resolve_via_gps_serial() -> Optional[GeoPoint]:
+    """Return a GeoPoint from a serial NMEA GPS device (e.g. a Pi GPS HAT).
+
+    Opt-in and gated on the ``WORKER_GPS_SERIAL_PORT`` env var (e.g.
+    ``/dev/serial0`` on a Pi, ``/dev/ttyUSB0`` for a USB GPS dongle, ``COM3`` on
+    Windows).  When unset this resolver is skipped entirely, so behaviour on
+    machines without a GPS HAT is unchanged.
+
+    Reads NMEA sentences for a bounded window and returns the first valid fix.
+    ``latitude``/``longitude`` come from any GGA/RMC sentence; altitude is taken
+    from GGA and ground speed (km/h) from RMC when present.  ``pyserial`` and
+    ``pynmea2`` are imported lazily inside a try/except — if they are not
+    installed the resolver returns ``None`` (matching the OwnTracks-import
+    fallback), so the dependency is only needed on nodes with a GPS HAT.
+
+    Tunables (env): ``WORKER_GPS_BAUD`` (default 9600),
+    ``WORKER_GPS_MAX_LINES`` (default 60 lines read before giving up).
+
+    Returns ``None`` on missing port, missing libs, read timeout, or no fix.
+    """
+    port = os.environ.get("WORKER_GPS_SERIAL_PORT")
+    if not port:
+        return None
+
+    try:
+        import serial  # pyserial
+        import pynmea2
+    except Exception as exc:
+        _log.debug("GPS serial libs unavailable (pyserial/pynmea2): %s", exc)
+        return None
+
+    try:
+        baud = int(os.environ.get("WORKER_GPS_BAUD", "9600") or "9600")
+        max_lines = int(os.environ.get("WORKER_GPS_MAX_LINES", "60") or "60")
+    except (TypeError, ValueError):
+        baud, max_lines = 9600, 60
+
+    try:
+        with serial.Serial(port, baudrate=baud, timeout=1) as ser:
+            altitude = None
+            speed_kmh = None
+            for _ in range(max_lines):
+                raw = ser.readline()
+                if not raw:
+                    continue  # timeout tick — keep reading until max_lines
+                try:
+                    line = raw.decode("ascii", errors="replace").strip()
+                except Exception:
+                    continue
+                if not line.startswith("$"):
+                    continue
+                try:
+                    msg = pynmea2.parse(line)
+                except Exception:
+                    continue  # malformed/unsupported sentence
+
+                # Capture altitude (GGA) / ground speed (RMC) when present.
+                alt = getattr(msg, "altitude", None)
+                if alt not in (None, ""):
+                    try:
+                        altitude = float(alt)
+                    except (TypeError, ValueError):
+                        pass
+                spd_knots = getattr(msg, "spd_over_grnd", None)
+                if spd_knots not in (None, ""):
+                    try:
+                        speed_kmh = float(spd_knots) * 1.852
+                    except (TypeError, ValueError):
+                        pass
+
+                lat = getattr(msg, "latitude", None)
+                lon = getattr(msg, "longitude", None)
+                # A real fix has non-zero lat/lon (empty NMEA fields parse to 0.0).
+                if lat and lon:
+                    point = GeoPoint(
+                        lat=float(lat),
+                        lon=float(lon),
+                        altitude=altitude,
+                        speed_kmh=speed_kmh,
+                        source="gps_serial",
+                    )
+                    if point.is_valid():
+                        return point
+            return None
+    except Exception as exc:
+        _log.debug("GPS serial read failed on %s: %s", port, exc)
+        return None
+
+
 def _resolve_location(owntracks_cfg_id: str = "OWN_TRACKS") -> GeoPoint:
     """Run the resolver cascade and return the best available fix.
 
     Priority:
       1. Environment variables (``WORKER_LAT`` / ``WORKER_LON``)
-      2. IP-geolocation (``ip-api.com``)
-      3. OwnTracks Recorder REST API
+      2. Serial GPS HAT (``WORKER_GPS_SERIAL_PORT``)
+      3. IP-geolocation (``ip-api.com``)
+      4. OwnTracks Recorder REST API
 
     Always returns a ``GeoPoint`` — callers never need a None check.
     When all resolvers fail, ``source="unavailable"`` signals the absence.
     """
     fix = _resolve_via_env()
+    if fix is not None:
+        return fix
+
+    fix = _resolve_via_gps_serial()
     if fix is not None:
         return fix
 
@@ -272,7 +372,7 @@ def broadcast_report_location(**kwargs) -> dict:
         platform_os     : normalised OS family (windows / linux / darwin / android)
         platform_detail : full platform string
         time_sent       : ISO-8601 UTC timestamp
-        location_source : how the fix was obtained (env / ip_geolocation / owntracks / unavailable)
+        location_source : how the fix was obtained (env / gps_serial / ip_geolocation / owntracks / unavailable)
         new_location    : GeoPoint dict (lat/lon/accuracy/…) or None
         last_location   : previous GeoPoint dict, or None (first run)
         owntracks_user  : OwnTracks username, if known
