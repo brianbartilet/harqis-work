@@ -41,7 +41,23 @@ def _get_celery() -> Celery:
 
 
 def dispatch(task_path: str, kwargs: dict, queue: str) -> str:
-    """Send a task to the broker. Returns the Celery task UUID."""
+    """Send a task to the broker. Returns the Celery task UUID.
+
+    If a tenant context is bound at call time, `_tenant_id` and
+    `_tenant_slug` are injected into kwargs. The Celery worker's prerun
+    handler (tenant.metering) pops them before the user task sees its
+    kwargs, so existing task signatures are unaffected.
+    """
+    try:
+        from tenant.context import current_tenant
+        from tenant.metering import inject_tenant_kwargs
+
+        ctx = current_tenant()
+        if ctx is not None:
+            kwargs = inject_tenant_kwargs(kwargs, ctx)
+    except ImportError:
+        pass  # tenant package not installed → legacy single-tenant mode
+
     result = _get_celery().send_task(task_path, kwargs=kwargs, queue=queue)
     return result.id
 

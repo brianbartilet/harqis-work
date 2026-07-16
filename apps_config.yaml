@@ -298,6 +298,7 @@ YNAB:
   return_data_only: True
 
 ANTHROPIC:
+  # tenant_overridable: true — per-tenant API key supported via tenant.config_resolver
   app_id: "claude_work"
   client: 'rest'
   parameters:
@@ -330,6 +331,7 @@ OWN_TRACKS:
 
 
 JIRA:
+  # tenant_overridable: true — per-tenant host/user/token supported via tenant.config_resolver
   app_id: 'jira'
   client: 'rest'
   parameters:
@@ -478,6 +480,7 @@ LINKEDIN:
 
 
 NOTION:
+  # tenant_overridable: true — per-tenant integration token supported via tenant.config_resolver
   app_id: 'notion'
   client: 'rest'
   parameters:
@@ -509,6 +512,7 @@ GOOGLE_TASKS:
 
 
 GOOGLE_DRIVE:
+  # tenant_overridable: true — per-tenant OAuth refresh-token supported via tenant.config_resolver
   app_id: 'drive'
   client: 'rest'
   parameters:
@@ -540,6 +544,7 @@ GOOGLE_TRANSLATION:
 
 
 GEMINI:
+  # tenant_overridable: true — per-tenant API key supported via tenant.config_resolver
   app_id: 'gemini'
   client: 'rest'
   parameters:
@@ -597,6 +602,7 @@ GROK:
 
 
 GITHUB:
+    # tenant_overridable: true — per-tenant PAT supported via tenant.config_resolver
     app_id: 'github'
     client: 'rest'
     parameters:

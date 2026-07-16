@@ -52,6 +52,9 @@ WORKFLOW_TEMPLATE = {
             'express_target': 'es_log',       # e.g. 'hud_feed', 'rainmeter:<METER>', 'api:<service>', 'file:<purpose>'
             'review_artifact': 'es_log',      # e.g. 'es_log+hud_widget', 'es_log+file'
             'hfl_signal': False,              # True if this task produces HFL-relevant personal signal
+            # 'tenant_safe': False,           # OPTIONAL — set True when the task reads creds via tenant.config_resolver
+            #                                 # and is safe to run under a multi-tenant context. tenant.metering.register_metering
+            #                                 # refuses to enqueue tenant_safe tasks without a bound tenant.
         },
     },
 
