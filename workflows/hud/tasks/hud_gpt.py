@@ -54,14 +54,14 @@ def _trim_dump_file(path: str, keep_bytes: int) -> None:
             return
         with open(path, 'rb') as f:
             chunk = f.read(keep_bytes)
-        text = chunk.decode('utf-8', errors='ignore')
+        text = chunk.decode('cp1252', errors='ignore')
         last_end = text.rfind("[END]")
         if last_end >= 0:
             line_break = text.find("\n", last_end)
             if line_break >= 0:
                 text = text[: line_break + 1]
         text += "\n[...older entries trimmed; dump.txt capped at ~3 MB]\n"
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, 'w', encoding='cp1252', errors='replace') as f:
             f.write(text)
         log.info("Trimmed dump.txt at %s to ~%d KB", path, len(text) // 1024)
     except OSError as e:

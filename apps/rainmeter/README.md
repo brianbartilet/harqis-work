@@ -112,6 +112,8 @@ def show_forex_account(**kwargs):
 ## Notes
 
 - Rainmeter must be installed and running for skins to activate.
-- Skin files are UTF-8 INI format; Rainmeter.ini uses UTF-16 LE.
+- Skin files are UTF-8 INI format; Rainmeter.ini uses UTF-16 LE. HUD `dump.txt`
+  files default to Windows-1252 because the bundled UTF-8 Lua readers return
+  strings through Rainmeter's ANSI script boundary; feeds and logs remain UTF-8.
 - `bangs.py` uses `subprocess` with `STARTF_USESHOWWINDOW` to prevent CLI windows from appearing on screen.
 - The `hud` workflow's `show_hud_profiles` task calls `run_profile_scheduler()` at midnight to initialize the correct profile.

@@ -38,6 +38,8 @@ from apps.desktop.helpers.feed import _atomic_write_text
 WAIT_SECS_DEFAULT = 10
 BEEP_FREQUENCY = 1200
 BEEP_DURATION_MS = 300
+RAINMETER_NOTES_ENCODING = "cp1252"
+RAINMETER_NOTES_ERRORS = "replace"
 
 
 # ----------------------
@@ -57,7 +59,9 @@ def init_meter(
     play_sound: bool = True,
     always_alert: bool = False,
     schedule_categories: List[ScheduleCategory] = None,
-    prepend_if_exists: bool = False
+    prepend_if_exists: bool = False,
+    notes_encoding: str = RAINMETER_NOTES_ENCODING,
+    notes_errors: str = RAINMETER_NOTES_ERRORS,
 ) -> Callable:
     """
     Decorator: prepares Rainmeter skin dirs, renders an INI from a template,
@@ -132,12 +136,32 @@ def init_meter(
                     notes_text = raw
                 if not isinstance(notes_text, str):
                     notes_text = str(notes_text)
+                rendered_notes = _coerce_text_encoding(
+                    notes_text,
+                    encoding=notes_encoding,
+                    errors=notes_errors,
+                )
+                if prepend_if_exists:
+                    _migrate_existing_notes(
+                        note_path,
+                        encoding=notes_encoding,
+                        errors=notes_errors,
+                    )
 
                 # 5) Detect change vs. existing notes
-                changed = always_alert or _content_changed(note_path, notes_text)
+                changed = always_alert or _content_changed(
+                    note_path,
+                    rendered_notes,
+                    encoding=notes_encoding,
+                )
 
                 # 6) Write notes atomically
-                _atomic_write_text(note_path, notes_text, encoding="utf-8", prepend_if_exists=prepend_if_exists)
+                _atomic_write_text(
+                    note_path,
+                    rendered_notes,
+                    encoding=notes_encoding,
+                    prepend_if_exists=prepend_if_exists,
+                )
 
                 # 7) Update displayed title safely
                 set_config_value(cfg, "meterTitle", "text", hud_item_name)
@@ -269,29 +293,46 @@ def _ensure_dirs_and_resources(
             # Copy ALL .lua files from bin → ini_dir
             for src in bin_dir.glob("*.lua"):
                 dst = ini_dir / src.name
-                deployed_is_unicode = (
+                deployed_is_crash_prone_utf16 = (
                     dst.exists()
                     and dst.read_bytes().startswith(codecs.BOM_UTF16_LE)
                 )
                 if (
-                    not deployed_is_unicode
+                    not dst.exists()
+                    or deployed_is_crash_prone_utf16
                     or src.stat().st_mtime > dst.stat().st_mtime
                 ):
-                    # Rainmeter only treats strings returned by a Script measure
-                    # as UTF-8 when the Lua script itself is UTF-16 LE with a
-                    # BOM. Otherwise it widens the returned bytes using the
-                    # Windows ANSI code page, turning e.g. "—" into "â€”".
-                    # Keep the repository sources reviewable as UTF-8, but deploy
-                    # the encoding Rainmeter uses to opt into Unicode strings.
-                    dst.write_bytes(_rainmeter_lua_bytes(src.read_bytes()))
+                    # Rainmeter 4.5.26 can heap-corrupt while loading our Lua
+                    # scripts as UTF-16 LE. Restore repository UTF-8 bytes even
+                    # when the deployed file is newer, repairing skins written
+                    # by the short-lived Unicode-script deployment.
+                    _atomic_write_bytes(dst, src.read_bytes())
 
 
-def _rainmeter_lua_bytes(source: bytes) -> bytes:
-    """Encode a repository Lua source for Rainmeter's Unicode script mode."""
-    if source.startswith(codecs.BOM_UTF16_LE):
-        return source
-    text = source.decode("utf-8-sig")
-    return codecs.BOM_UTF16_LE + text.encode("utf-16-le")
+def _coerce_text_encoding(text: str, *, encoding: str, errors: str) -> str:
+    """Round-trip text through the encoding consumed by the target reader."""
+    return text.encode(encoding, errors=errors).decode(encoding)
+
+
+def _migrate_existing_notes(path: Path, *, encoding: str, errors: str) -> None:
+    """Convert a legacy UTF-8 append-only dump to the Rainmeter encoding."""
+    if not path.exists() or encoding.lower().replace("_", "-") in {"utf-8", "utf8"}:
+        return
+    raw = path.read_bytes()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return  # already target-encoded (or otherwise not legacy UTF-8)
+    rendered = _coerce_text_encoding(text, encoding=encoding, errors=errors)
+    _atomic_write_text(path, rendered, encoding=encoding)
+
+
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    """Replace a live Rainmeter resource without exposing partial bytes."""
+    with tempfile.NamedTemporaryFile("wb", delete=False, dir=str(path.parent)) as tmp:
+        tmp.write(data)
+        tmp_path = Path(tmp.name)
+    os.replace(tmp_path, path)
 
 
 def _copytree(src: Path, dst: Path) -> None:
