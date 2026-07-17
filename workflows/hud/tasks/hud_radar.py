@@ -63,8 +63,14 @@ def _configure_radar_ini(
     width_multiplier = 2.25
     ini["meterSeperator"]["W"] = "({0}*186*#Scale#)".format(width_multiplier)
     ini["MeterDisplay"]["W"] = "({0}*186*#Scale#)".format(width_multiplier)
-    ini["MeterDisplay"]["H"] = "((42*#Scale#)+(#ItemLines#*22)*#Scale#)"
-    ini["MeterDisplay"]["X"] = "14"
+    # The content meter begins 70 px below the top of the skin. Its height
+    # must therefore be the remaining viewport, not the full SkinHeight;
+    # otherwise wrapped text paints over the HUD below during initial load.
+    # SkinHeight = (42 + ItemLines*22), so subtract Y=70 and a 14 px footer:
+    # (42 + ItemLines*22) - 70 - 14 = ItemLines*22 - 42.
+    ini["MeterDisplay"]["H"] = "((#ItemLines#*22-42)*#Scale#)"
+    ini["MeterDisplay"]["X"] = "(14*#Scale#)"
+    ini["MeterDisplay"]["Y"] = "(70*#Scale#)"
     ini["MeterDisplay"]["MeasureName"] = "MeasureLuaScriptScroll"
     ini["MeterBackground"]["Shape"] = (
         "Rectangle 0,0,({0}*190),((#ItemLines#*22)),2 | Fill Color #fillColor# "

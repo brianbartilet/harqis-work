@@ -93,6 +93,20 @@ def test__radar_sets_both_itemlines_and_maxlines():
     assert 'ini["Variables"]["MaxLines"]' in src
 
 
+def test__radar_content_viewport_stays_inside_skin():
+    """The content meter starts below the header and must not use SkinHeight."""
+    import inspect
+    from workflows.hud.tasks.hud_radar import _configure_radar_ini
+
+    src = inspect.getsource(_configure_radar_ini)
+    assert 'ini["MeterDisplay"]["H"] = "((#ItemLines#*22-42)*#Scale#)"' in src
+    assert 'ini["MeterDisplay"]["Y"] = "(70*#Scale#)"' in src
+    assert (
+        'ini["MeterDisplay"]["H"] = '
+        '"((42*#Scale#)+(#ItemLines#*22)*#Scale#)"'
+    ) not in src
+
+
 def test__visible_title_changes_without_moving_compatibility_folder():
     import inspect
     from workflows.hud.tasks.hud_radar import show_daily_radar
