@@ -41,12 +41,11 @@ from workflows.hud.tasks.daily_radar_agent import (
 
 
 def test__init_meter_overwrites_dump_per_tick():
-    """Regression: the radar is a fresh briefing per tick, not a rolling log.
+    """Regression: the radar is a fresh four-hour mirror, not a rolling log.
 
     `prepend_if_exists=True` (DESKTOP LOGS's setting) would push every new
-    briefing on top of the prior one; the marquee would then scroll backward
-    through stale content and the [START]/[END] bookends would not line up
-    with what's on screen. The decorator MUST be configured to overwrite.
+    snapshot on top of the prior one; the marquee would then scroll through
+    messages older than the strict cutoff. The decorator MUST overwrite.
     """
     from workflows.hud.tasks.hud_radar import show_daily_radar
     # The @init_meter decorator stores its config on the wrapped function

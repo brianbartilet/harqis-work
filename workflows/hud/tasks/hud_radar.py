@@ -1,13 +1,13 @@
-"""HERMES RADAR HUD — recent Hermes pushes plus four-hour synthesis.
+"""HERMES RADAR HUD — four-hour mirror of Telegram-delivered Hermes replies.
 
 The established DAILYRADAR Rainmeter folder and task names remain unchanged for
 compatibility. The visible panel title is HERMES RADAR. A lightweight refresh
-runs every 15 minutes from a sanitized shared JSON snapshot; the existing
-multi-source Claude synthesis still runs at 08:00, 12:00, 16:00, and 20:00.
+runs every 15 minutes from a sanitized shared JSON snapshot. The existing
+multi-source Claude synthesis still runs at 08:00, 12:00, 16:00, and 20:00 for
+feed/HFL consumers, but it is no longer appended to the visible dump.
 """
 
 import os
-from pathlib import Path
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
@@ -25,7 +25,7 @@ from workflows.hud.tasks.sections import sections__daily_radar
 from workflows.hud.collectors.daily_radar import collect_daily_radar
 from workflows.hud.collectors.hermes_pushes import (
     compose_hermes_radar,
-    extract_briefing,
+    displayed_item_count,
     load_snapshot,
 )
 
@@ -42,13 +42,6 @@ def _radar_dump_path() -> str:
         _RADAR_HUD_FOLDER,
         "dump.txt",
     )
-
-
-def _read_existing_dump(path: str) -> str:
-    try:
-        return Path(path).read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return ""
 
 
 def _configure_radar_ini(
@@ -102,11 +95,10 @@ def _configure_radar_ini(
 )
 @feed()
 def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
-    """Run the four-hour productivity synthesis and include recent pushes."""
+    """Run the synthesis for feeds, while rendering only recent Hermes replies."""
     log.info("show_daily_radar kwargs: %s", list(kwargs.keys()))
     max_hud_lines = int(kwargs.get("max_hud_lines", DAILY_RADAR_MAX_HUD_LINES))
     own_dump_path = _radar_dump_path()
-    previous_rendered = _read_existing_dump(own_dump_path)
 
     desktop_dump_path = os.path.join(
         RAINMETER_CONFIG["write_skin_to_path"],
@@ -118,17 +110,15 @@ def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
     briefing = result["text"]
     snapshot = load_snapshot(kwargs.get("snapshot_path"))
     # Preserve the established synthesis-only feed contract used by HFL and
-    # the legacy Telegram forwarder. Notification previews stay in the HUD
-    # dump and sanitized JSON snapshot only.
+    # the legacy Telegram forwarder. Hermes replies stay in the HUD dump and
+    # sanitized JSON snapshot only.
     result["feed_text"] = briefing
-    result["text"] = compose_hermes_radar(
-        briefing, snapshot, previous_rendered=previous_rendered
-    )
+    result["text"] = compose_hermes_radar(snapshot)
 
     _configure_radar_ini(ini, dump_path=own_dump_path, max_hud_lines=max_hud_lines)
     result.setdefault("links", {})["dump"] = own_dump_path
     result.setdefault("metrics", {})["item_lines"] = max_hud_lines
-    result["metrics"]["hermes_pushes"] = len(snapshot.get("items", []))
+    result["metrics"]["hermes_pushes"] = displayed_item_count(snapshot)
     return result
 
 
@@ -143,15 +133,11 @@ def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
     prepend_if_exists=False,
 )
 def refresh_hermes_radar(ini=ConfigHelperRainmeter(), **kwargs):
-    """Rerender pushes every 15 minutes without source pulls or an LLM call."""
+    """Rerender the four-hour Telegram mirror without source pulls or an LLM."""
     max_hud_lines = int(kwargs.get("max_hud_lines", DAILY_RADAR_MAX_HUD_LINES))
     own_dump_path = _radar_dump_path()
-    previous_rendered = _read_existing_dump(own_dump_path)
-    briefing = extract_briefing(previous_rendered)
     snapshot = load_snapshot(kwargs.get("snapshot_path"))
-    text = compose_hermes_radar(
-        briefing, snapshot, previous_rendered=previous_rendered
-    )
+    text = compose_hermes_radar(snapshot)
 
     _configure_radar_ini(ini, dump_path=own_dump_path, max_hud_lines=max_hud_lines)
     return {
@@ -159,7 +145,7 @@ def refresh_hermes_radar(ini=ConfigHelperRainmeter(), **kwargs):
         "summary": "Refreshed HERMES RADAR from the sanitized snapshot",
         "metrics": {
             "item_lines": max_hud_lines,
-            "hermes_pushes": len(snapshot.get("items", [])),
+            "hermes_pushes": displayed_item_count(snapshot),
             "snapshot_state": snapshot.get("state", "unavailable"),
             "llm_calls": 0,
         },

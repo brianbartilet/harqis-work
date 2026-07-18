@@ -1,4 +1,4 @@
-"""Sanitized Hermes Telegram push snapshot and HERMES RADAR composition.
+"""Sanitized four-hour Hermes Telegram mirror for the HERMES RADAR HUD.
 
 The Hermes host exports outbound Telegram-visible assistant replies and scheduled
 job deliveries into a small JSON file in the configured shared desktop feed.
@@ -7,11 +7,11 @@ Windows reads only that artifact; it never opens Hermes state or polls Telegram.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
 import sqlite3
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
@@ -19,16 +19,20 @@ from typing import Any, Iterable, Optional
 from apps.desktop.helpers.feed import _atomic_write_text, _resolve_feed_path
 
 SNAPSHOT_FILENAME = "hermes-radar.json"
-DEFAULT_WINDOW_HOURS = 8
-DEFAULT_MAX_ITEMS = 10
+DEFAULT_WINDOW_HOURS = 4
+# Zero means "do not truncate the number of messages". The time window is the
+# bound for this HUD; dropping messages inside that window would no longer be a
+# faithful Telegram mirror.
+DEFAULT_MAX_ITEMS = 0
 DEFAULT_STALE_MINUTES = 35
-RECENT_HEADING = "RECENT HERMES PUSHES"
-BRIEFING_HEADING = "DAILY BRIEFING"
-EMPTY_STATE = "(no Hermes pushes in the last 8h)"
+RECENT_HEADING = "HERMES UPDATES - LAST 4 HOURS"
+EMPTY_STATE = "(no Hermes updates in the last 4h)"
 STALE_STATE = "(Hermes notification snapshot is stale)"
 UNAVAILABLE_STATE = "(Hermes notification snapshot is unavailable)"
 
 _SPACE_RE = re.compile(r"\s+")
+_HORIZONTAL_SPACE_RE = re.compile(r"[ \t\f\v]+")
+_EXCESS_BLANK_LINES_RE = re.compile(r"\n{3,}")
 _MARKDOWN_RE = re.compile(r"[`*_#>|]+")
 _BOT_TOKEN_RE = re.compile(r"\b\d{6,12}:[A-Za-z0-9_-]{20,}\b")
 _BEARER_RE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{12,}")
@@ -49,7 +53,25 @@ _SAFE_JOB_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 _UNIX_PATH_RE = re.compile(r"(?<!\w)(?:~|/(?:Users|Volumes|home|var|tmp|opt))/[^\s]+")
 _WINDOWS_PATH_RE = re.compile(r"(?i)(?<!\w)[A-Z]:\\[^\s]+")
 _MEDIA_PATH_RE = re.compile(r"(?i)MEDIA:\S+")
-_LOOP_MARKERS = ("RECENT HERMES PUSHES", "HERMES RADAR", "DAILY RADAR DUMP")
+_LOOP_MARKERS = (
+    "RECENT HERMES PUSHES",
+    "HERMES UPDATES LAST 4 HOURS",
+    "HERMES RADAR",
+    "DAILY RADAR DUMP",
+)
+_ASCII_PUNCTUATION_TRANSLATION = str.maketrans(
+    {
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2026": "...",
+        "\u2022": "-",
+        "\u00a0": " ",
+    }
+)
 
 
 def _now_local() -> datetime:
@@ -107,9 +129,9 @@ def resolve_hermes_home(path: Optional[Path | str] = None) -> Path:
     return Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes")).expanduser()
 
 
-def sanitize_preview(value: Any, *, max_chars: int = 220) -> str:
-    """Flatten outbound text and remove secrets, identifiers, and local paths."""
-    text = str(value or "")
+def _redact_sensitive_text(value: Any) -> str:
+    """Remove data that must never leave the Hermes host."""
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
     text = _BOT_TOKEN_RE.sub("[REDACTED]", text)
     text = _BEARER_RE.sub("Bearer [REDACTED]", text)
     text = _SECRET_RE.sub(lambda m: f"{m.group(1)}=[REDACTED]", text)
@@ -124,11 +146,34 @@ def sanitize_preview(value: Any, *, max_chars: int = 220) -> str:
     text = _MEDIA_PATH_RE.sub("[attachment]", text)
     text = _WINDOWS_PATH_RE.sub("[local path]", text)
     text = _UNIX_PATH_RE.sub("[local path]", text)
-    text = _MARKDOWN_RE.sub(" ", text)
-    text = _SPACE_RE.sub(" ", text).strip(" -\n\t")
-    if len(text) > max_chars:
-        text = text[: max_chars - 1].rstrip() + "…"
     return text
+
+
+def _ascii_text(value: str) -> str:
+    """Return Rainmeter-safe ASCII, dropping emoji and unsupported Unicode."""
+    translated = value.translate(_ASCII_PUNCTUATION_TRANSLATION)
+    return (
+        unicodedata.normalize("NFKD", translated)
+        .encode("ascii", errors="ignore")
+        .decode("ascii")
+    )
+
+
+def sanitize_message(value: Any, *, max_chars: int = 4096) -> str:
+    """Redact an outbound reply while preserving its readable line structure."""
+    text = _redact_sensitive_text(value)
+    text = _MARKDOWN_RE.sub(" ", text)
+    text = _ascii_text(text)
+    lines = [_HORIZONTAL_SPACE_RE.sub(" ", line).rstrip() for line in text.splitlines()]
+    text = _EXCESS_BLANK_LINES_RE.sub("\n\n", "\n".join(lines)).strip(" -\n\t")
+    if max_chars > 0 and len(text) > max_chars:
+        text = text[: max_chars - 3].rstrip() + "..."
+    return text
+
+
+def sanitize_preview(value: Any, *, max_chars: int = 220) -> str:
+    """Backward-compatible single-line sanitizer for labels and callers."""
+    return _SPACE_RE.sub(" ", sanitize_message(value, max_chars=0)).strip()[:max_chars]
 
 
 def _is_looped_radar_content(text: str, *, source: str = "") -> bool:
@@ -139,16 +184,16 @@ def _is_looped_radar_content(text: str, *, source: str = "") -> bool:
 def _item(
     *, timestamp: datetime, source: str, text: str, kind: str, status: str = "delivered"
 ) -> Optional[dict[str, str]]:
-    preview = sanitize_preview(text)
+    message = sanitize_message(text)
     source_preview = sanitize_preview(source, max_chars=72) or kind
-    if not preview or _is_looped_radar_content(preview, source=source_preview):
+    if not message or _is_looped_radar_content(message, source=source_preview):
         return None
     return {
         "timestamp": _aware(timestamp).astimezone(timezone.utc).isoformat(),
         "source": source_preview,
         "kind": kind,
         "status": status,
-        "preview": preview,
+        "text": message,
     }
 
 
@@ -334,23 +379,11 @@ def collect_cron_pushes(
     return pushes
 
 
-def _dedupe_and_limit(
+def _sort_and_limit(
     items: Iterable[dict[str, str]], *, max_items: int
 ) -> list[dict[str, str]]:
     ordered = sorted(items, key=lambda item: item["timestamp"], reverse=True)
-    seen: set[str] = set()
-    output: list[dict[str, str]] = []
-    for item in ordered:
-        fingerprint = hashlib.sha256(
-            _SPACE_RE.sub(" ", item["preview"].lower()).encode("utf-8")
-        ).hexdigest()
-        if fingerprint in seen:
-            continue
-        seen.add(fingerprint)
-        output.append(item)
-        if len(output) >= max_items:
-            break
-    return output
+    return ordered[:max_items] if max_items > 0 else ordered
 
 
 def build_snapshot(
@@ -369,11 +402,11 @@ def build_snapshot(
         home / "cron" / "jobs.json", home / "cron" / "output", since=since, now=now
     )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": now.isoformat(),
         "window_hours": window_hours,
         "max_items": max_items,
-        "items": _dedupe_and_limit([*interactive, *scheduled], max_items=max_items),
+        "items": _sort_and_limit([*interactive, *scheduled], max_items=max_items),
     }
 
 
@@ -406,44 +439,55 @@ def load_snapshot(
     *,
     now: Optional[datetime] = None,
     stale_minutes: int = DEFAULT_STALE_MINUTES,
+    window_hours: int = DEFAULT_WINDOW_HOURS,
 ) -> dict[str, Any]:
-    """Validate a shared artifact and label it fresh, stale, or unavailable."""
+    """Validate a shared artifact, enforce the live window, and label freshness."""
     try:
         payload = json.loads(resolve_snapshot_path(snapshot_path).read_text(encoding="utf-8"))
         generated_at = _parse_datetime(payload.get("generated_at"))
         items = payload.get("items")
+        schema_version = payload.get("schema_version")
         if (
-            payload.get("schema_version") != 1
+            schema_version not in {1, 2}
             or generated_at is None
             or not isinstance(items, list)
         ):
             raise ValueError("invalid Hermes radar snapshot schema")
+        now_value = _aware(now or _now_local())
+        cutoff = now_value - timedelta(hours=window_hours)
         validated_items: list[dict[str, str]] = []
         allowed_statuses = {"delivered", "delivery_failed", "job_failed"}
         for item in items:
-            if not isinstance(item, dict) or not {
-                "timestamp", "source", "kind", "status", "preview"
-            }.issubset(item):
+            required = {"timestamp", "source", "kind", "status"}
+            if not isinstance(item, dict) or not required.issubset(item):
                 raise ValueError("invalid Hermes radar item")
             timestamp = _parse_datetime(item.get("timestamp"))
             kind = str(item.get("kind") or "")
             status = str(item.get("status") or "")
             if timestamp is None or kind not in {"interactive", "scheduled"}:
                 raise ValueError("invalid Hermes radar item values")
+            if timestamp < cutoff or timestamp > now_value + timedelta(minutes=5):
+                continue
+            raw_text = item.get("text") if schema_version == 2 else item.get("preview")
+            if raw_text is None:
+                raise ValueError("invalid Hermes radar item text")
             candidate = _item(
                 timestamp=timestamp,
                 source=str(item.get("source") or "Hermes"),
-                text=str(item.get("preview") or ""),
+                text=str(raw_text),
                 kind=kind,
                 status=status if status in allowed_statuses else "delivered",
             )
             if candidate:
                 validated_items.append(candidate)
-        payload["items"] = _dedupe_and_limit(
+        payload["schema_version"] = 2
+        payload["window_hours"] = window_hours
+        payload["max_items"] = DEFAULT_MAX_ITEMS
+        payload["items"] = _sort_and_limit(
             validated_items, max_items=DEFAULT_MAX_ITEMS
         )
         age = (
-            _aware(now or _now_local()).astimezone(timezone.utc)
+            now_value.astimezone(timezone.utc)
             - generated_at.astimezone(timezone.utc)
         )
         payload["state"] = (
@@ -451,56 +495,38 @@ def load_snapshot(
         )
         return payload
     except (OSError, ValueError, TypeError, json.JSONDecodeError, RuntimeError):
-        return {"schema_version": 1, "state": "unavailable", "items": []}
+        return {"schema_version": 2, "state": "unavailable", "items": []}
 
 
 def _format_items(snapshot: dict[str, Any]) -> list[str]:
-    lines: list[str] = []
+    blocks: list[str] = []
     for item in snapshot.get("items", []):
+        # Failure records are useful in the snapshot audit but were not replies
+        # received in Telegram, so they do not belong in the mirror.
+        if item.get("status") != "delivered":
+            continue
         timestamp = _parse_datetime(item.get("timestamp"))
         time_label = timestamp.astimezone().strftime("%H:%M") if timestamp else "--:--"
-        icon = "!" if item.get("status") in {"delivery_failed", "job_failed"} else "•"
-        lines.append(
-            f"[{time_label}] {icon} {item.get('source', 'Hermes')} — {item.get('preview', '')}"
+        source = item.get("source", "Hermes")
+        blocks.append(
+            f"[{time_label}] {source}\n{item.get('text', '')}".rstrip()
         )
-    return lines
+    return blocks
 
 
-def extract_briefing(rendered: str) -> str:
-    marker = f"\n{BRIEFING_HEADING}\n"
-    if marker in rendered:
-        return rendered.split(marker, 1)[1].strip()
-    return rendered.strip()
+def displayed_item_count(snapshot: dict[str, Any]) -> int:
+    """Count successfully delivered replies represented in the HUD mirror."""
+    return sum(1 for item in snapshot.get("items", []) if item.get("status") == "delivered")
 
 
-def extract_recent_section(rendered: str) -> list[str]:
-    start = f"{RECENT_HEADING}\n"
-    end = f"\n\n{BRIEFING_HEADING}\n"
-    if rendered.startswith(start) and end in rendered:
-        body = rendered[len(start) :].split(end, 1)[0].strip()
-        return [line for line in body.splitlines() if line.strip() and not line.startswith("(")]
-    return []
-
-
-def compose_hermes_radar(
-    briefing: str,
-    snapshot: dict[str, Any],
-    *,
-    previous_rendered: str = "",
-) -> str:
-    """Prepend recent pushes while preserving the last valid section on failure."""
+def compose_hermes_radar(snapshot: dict[str, Any]) -> str:
+    """Render delivered Hermes replies from the strict four-hour snapshot."""
     state = snapshot.get("state", "fresh")
-    lines = _format_items(snapshot)
+    blocks = _format_items(snapshot)
     if state == "unavailable":
-        lines = extract_recent_section(previous_rendered) or lines
-        lines.append(UNAVAILABLE_STATE)
-    elif not lines:
-        lines.append(EMPTY_STATE)
+        blocks = [UNAVAILABLE_STATE]
+    elif not blocks:
+        blocks = [EMPTY_STATE]
     if state == "stale":
-        lines.append(STALE_STATE)
-    return (
-        f"{RECENT_HEADING}\n"
-        + "\n".join(lines)
-        + f"\n\n{BRIEFING_HEADING}\n\n"
-        + (briefing.strip() or "(productivity synthesis has not run yet)")
-    )
+        blocks.append(STALE_STATE)
+    return f"{RECENT_HEADING}\n\n" + "\n\n".join(blocks)

@@ -485,8 +485,10 @@ WORKFLOWS_HUD = {
         'task': 'workflows.hud.tasks.hermes_radar_export.export_hermes_radar_snapshot',
         'schedule': crontab(minute='*/15'),
         'kwargs': {
-            'window_hours': 8,
-            'max_items': 10,
+            'window_hours': 4,
+            # The four-hour cutoff bounds the mirror. Do not silently drop
+            # valid replies inside it because activity exceeds an item cap.
+            'max_items': 0,
         },
         'options': {
             'queue': WorkflowQueue.HOST,

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from workflows.hud.collectors.hermes_pushes import (
-    BRIEFING_HEADING,
+    DEFAULT_WINDOW_HOURS,
     EMPTY_STATE,
     RECENT_HEADING,
     STALE_STATE,
@@ -17,8 +17,10 @@ from workflows.hud.collectors.hermes_pushes import (
     collect_cron_pushes,
     collect_interactive_pushes,
     compose_hermes_radar,
+    displayed_item_count,
     export_snapshot,
     load_snapshot,
+    sanitize_message,
     sanitize_preview,
 )
 
@@ -49,24 +51,30 @@ def _create_state_db(path: Path, messages: list[tuple[str, str, str]]) -> None:
     connection.close()
 
 
-def test_sanitize_preview_removes_secrets_ids_paths_and_markdown():
+def test_sanitize_message_removes_secrets_unicode_and_preserves_lines():
     text = (
-        "**Done** token=abc123 /Users/example/private.txt "
+        "**Done** \U0001f680 caf\u00e9\n\n- First item\n- Second item\n"
+        "token=abc123 /Users/example/private.txt "
         "chat_id=-123456 job_id=internal-42 "
         "request_id=123e4567-e89b-42d3-a456-426614174000 "
         "unlabelled=123456789012 MEDIA:/tmp/report.png Bearer very-secret-token"
     )
-    preview = sanitize_preview(text)
-    assert "abc123" not in preview
-    assert "123456" not in preview
-    assert "internal-42" not in preview
-    assert "123e4567" not in preview
-    assert "123456789012" not in preview
-    assert "/Users" not in preview
-    assert "/tmp" not in preview
-    assert "very-secret-token" not in preview
-    assert "**" not in preview
-    assert "[REDACTED]" in preview
+    message = sanitize_message(text)
+    assert "abc123" not in message
+    assert "123456" not in message
+    assert "internal-42" not in message
+    assert "123e4567" not in message
+    assert "123456789012" not in message
+    assert "/Users" not in message
+    assert "/tmp" not in message
+    assert "very-secret-token" not in message
+    assert "**" not in message
+    assert "[REDACTED]" in message
+    assert "\U0001f680" not in message
+    assert "cafe" in message
+    assert "\n\n- First item\n- Second item" in message
+    assert message.isascii()
+    assert sanitize_preview(text).isascii()
 
 
 def test_collect_interactive_pushes_only_exports_recent_assistant_telegram(tmp_path):
@@ -85,7 +93,7 @@ def test_collect_interactive_pushes_only_exports_recent_assistant_telegram(tmp_p
 
     items = collect_interactive_pushes(db, since=now - timedelta(hours=8), now=now)
 
-    assert [item["preview"] for item in items] == ["Recent reply"]
+    assert [item["text"] for item in items] == ["Recent reply"]
     assert items[0]["kind"] == "interactive"
 
 
@@ -139,8 +147,8 @@ def test_collect_cron_pushes_uses_only_telegram_jobs_and_reports_failure(tmp_pat
     assert len(items) == 1
     assert items[0]["source"] == "Daily status"
     assert items[0]["status"] == "delivery_failed"
-    assert "Delivery failed" in items[0]["preview"]
-    assert "gateway unavailable" in items[0]["preview"]
+    assert "Delivery failed" in items[0]["text"]
+    assert "gateway unavailable" in items[0]["text"]
 
 
 def test_cron_audit_parser_exports_response_only_and_fails_closed():
@@ -168,7 +176,7 @@ Safe delivered update
     )
 
 
-def test_build_snapshot_sorts_deduplicates_limits_and_excludes_user_content(tmp_path):
+def test_build_snapshot_sorts_preserves_duplicates_and_excludes_user_content(tmp_path):
     now = datetime(2026, 7, 14, 12, tzinfo=timezone.utc)
     home = tmp_path / "hermes"
     (home / "cron" / "output").mkdir(parents=True)
@@ -183,10 +191,12 @@ def test_build_snapshot_sorts_deduplicates_limits_and_excludes_user_content(tmp_
     )
     (home / "cron" / "jobs.json").write_text('{"jobs": []}', encoding="utf-8")
 
-    snapshot = build_snapshot(hermes_home=home, now=now, max_items=2)
+    snapshot = build_snapshot(hermes_home=home, now=now, max_items=0)
 
-    assert snapshot["schema_version"] == 1
-    assert [item["preview"] for item in snapshot["items"]] == [
+    assert snapshot["schema_version"] == 2
+    assert snapshot["window_hours"] == DEFAULT_WINDOW_HOURS
+    assert [item["text"] for item in snapshot["items"]] == [
+        "Duplicate reply",
         "Duplicate reply",
         "Second reply",
     ]
@@ -203,7 +213,7 @@ def test_export_failure_preserves_last_valid_snapshot(tmp_path):
     assert destination.read_text(encoding="utf-8") == '{"last": "valid"}'
 
 
-def test_load_snapshot_marks_stale_and_compose_preserves_previous_on_unavailable(tmp_path):
+def test_load_snapshot_marks_stale_and_unavailable_does_not_preserve_old_messages(tmp_path):
     now = datetime(2026, 7, 14, 12, tzinfo=timezone.utc)
     snapshot_path = tmp_path / "hermes-radar.json"
     snapshot_path.write_text(
@@ -228,26 +238,87 @@ def test_load_snapshot_marks_stale_and_compose_preserves_previous_on_unavailable
     )
 
     stale = load_snapshot(snapshot_path, now=now)
-    rendered = compose_hermes_radar("Priority synthesis", stale)
+    rendered = compose_hermes_radar(stale)
     assert stale["state"] == "stale"
+    assert stale["schema_version"] == 2
     assert RECENT_HEADING in rendered
     assert "Useful update" in rendered
     assert STALE_STATE in rendered
-    assert f"{BRIEFING_HEADING}\n\nPriority synthesis" in rendered
 
     unavailable = load_snapshot(tmp_path / "missing.json", now=now)
-    preserved = compose_hermes_radar(
-        "Priority synthesis", unavailable, previous_rendered=rendered
-    )
-    assert "Useful update" in preserved
-    assert UNAVAILABLE_STATE in preserved
+    unavailable_rendered = compose_hermes_radar(unavailable)
+    assert "Useful update" not in unavailable_rendered
+    assert UNAVAILABLE_STATE in unavailable_rendered
 
 
 def test_empty_snapshot_has_explicit_empty_state():
-    rendered = compose_hermes_radar(
-        "Synthesis", {"state": "fresh", "items": []}
-    )
+    rendered = compose_hermes_radar({"state": "fresh", "items": []})
     assert EMPTY_STATE in rendered
+
+
+def test_load_snapshot_enforces_four_hour_cutoff_at_render_time(tmp_path):
+    now = datetime(2026, 7, 14, 12, tzinfo=timezone.utc)
+    snapshot_path = tmp_path / "hermes-radar.json"
+    snapshot_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "generated_at": now.isoformat(),
+                "window_hours": 8,
+                "max_items": 0,
+                "items": [
+                    {
+                        "timestamp": (now - timedelta(hours=3, minutes=59)).isoformat(),
+                        "source": "Hermes chat",
+                        "kind": "interactive",
+                        "status": "delivered",
+                        "text": "Inside window",
+                    },
+                    {
+                        "timestamp": (now - timedelta(hours=4, minutes=1)).isoformat(),
+                        "source": "Hermes chat",
+                        "kind": "interactive",
+                        "status": "delivered",
+                        "text": "Outside window",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = load_snapshot(snapshot_path, now=now)
+
+    assert [item["text"] for item in loaded["items"]] == ["Inside window"]
+    assert loaded["window_hours"] == 4
+
+
+def test_radar_renders_delivered_messages_only_with_timestamp_and_multiline_text():
+    snapshot = {
+        "state": "fresh",
+        "items": [
+            {
+                "timestamp": "2026-07-14T12:00:00+00:00",
+                "source": "Hermes chat",
+                "kind": "interactive",
+                "status": "delivered",
+                "text": "First line\n\n- detail",
+            },
+            {
+                "timestamp": "2026-07-14T11:59:00+00:00",
+                "source": "Failed job",
+                "kind": "scheduled",
+                "status": "delivery_failed",
+                "text": "Not received in Telegram",
+            },
+        ],
+    }
+
+    rendered = compose_hermes_radar(snapshot)
+
+    assert "Hermes chat\nFirst line\n\n- detail" in rendered
+    assert "Not received in Telegram" not in rendered
+    assert displayed_item_count(snapshot) == 1
 
 
 def test_hermes_radar_schedules_keep_fast_path_model_free():
@@ -260,6 +331,8 @@ def test_hermes_radar_schedules_keep_fast_path_model_free():
     assert set(deep["schedule"].hour) == {8, 12, 16, 20}
     assert set(exporter["schedule"].minute) == {0, 15, 30, 45}
     assert set(refresh["schedule"].minute) == {5, 20, 35, 50}
+    assert exporter["kwargs"]["window_hours"] == 4
+    assert exporter["kwargs"]["max_items"] == 0
     assert "model" not in exporter["kwargs"]
     assert "model" not in refresh["kwargs"]
     assert deep["manifesto"]["express_target"] == "rainmeter:HERMES_RADAR"
