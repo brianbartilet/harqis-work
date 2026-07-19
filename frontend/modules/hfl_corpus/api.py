@@ -42,6 +42,8 @@ def _document_payload(document: CorpusDocument, *, include_text: bool = False) -
         "created_at": document.created_at.isoformat(),
         "updated_at": document.updated_at.isoformat(),
         "tags": list(document.tags),
+        "tag_counts": [list(item) for item in document.tag_counts],
+        "entry_count": document.entry_count,
         "excerpt": document.excerpt,
     }
     if include_text:

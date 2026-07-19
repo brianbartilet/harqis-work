@@ -19,7 +19,15 @@ from services.safe_paths import (
 )
 
 
-def _document(path, *, tags=("debugging",), text="root cause story"):
+def _document(
+    path,
+    *,
+    tags=("debugging",),
+    tag_counts=None,
+    entry_count=1,
+    references=(),
+    text="root cause story",
+):
     return CorpusDocument(
         relative_path=path,
         path=None,
@@ -28,8 +36,10 @@ def _document(path, *, tags=("debugging",), text="root cause story"):
         created_at=datetime(2026, 7, 10),
         updated_at=datetime(2026, 7, 12),
         tags=tags,
-        references=(),
+        references=references,
         excerpt=text,
+        tag_counts=tag_counts or tuple((tag, 1) for tag in tags),
+        entry_count=entry_count,
     )
 
 
@@ -55,7 +65,49 @@ def test_recursive_index_extracts_dates_tags_and_references(tmp_path, monkeypatc
     assert documents[0].relative_path == "time-capsules/2026-07-10.md"
     assert documents[0].created_at == datetime(2026, 7, 10, 9, 30)
     assert "debugging" in documents[0].tags
+    assert documents[0].tag_counts == (("debugging", 1), ("root-cause", 1))
+    assert documents[0].entry_count == 1
     assert documents[0].references == ("https://example.com/source",)
+
+
+def test_recursive_index_ranks_top_10_tags_by_entry_count(tmp_path, monkeypatch):
+    source = tmp_path / "2026-07-10.md"
+    entries = []
+    for index in range(12):
+        repeated = " #frequent" if index < 5 else ""
+        entries.append(
+            f"## 2026-07-10 {index:02d}:00\n"
+            f"Moment: Entry {index}\n"
+            f"Tags: #tag-{index:02d}{repeated}\n"
+        )
+    source.write_text("\n".join(entries), encoding="utf-8")
+    monkeypatch.setattr(corpus_module, "resolve_corpus_root", lambda: tmp_path)
+
+    document = CorpusIndex(ttl_seconds=0).documents(force=True)[0]
+
+    assert document.entry_count == 12
+    assert len(document.tag_counts) == 10
+    assert document.tag_counts[0] == ("frequent", 5)
+    assert document.tag_counts[-1] == ("tag-08", 1)
+
+
+def test_recursive_index_counts_every_level_two_markdown_header(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "2026-07-10.md"
+    source.write_text(
+        "# Daily log\n"
+        "## First entry\nMoment: One\n"
+        "### Entry detail\n"
+        "## Second entry\nMoment: Two\n"
+        "## Third entry\nMoment: Three\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(corpus_module, "resolve_corpus_root", lambda: tmp_path)
+
+    document = CorpusIndex(ttl_seconds=0).documents(force=True)[0]
+
+    assert document.entry_count == 3
 
 
 def test_search_combines_text_partial_tags_and_dates():
@@ -178,8 +230,35 @@ def test_tag_cloud_links_to_partial_search_without_result_card_tags(
     assert expected in index_response.text
     assert expected in document_response.text
     assert "Find corpus entries with matching tags" not in index_response.text
-    assert 'max-h-[3rem]' in index_response.text
+    assert "max-h-24" in index_response.text
     assert "overflow-y-auto" in index_response.text
+    assert 'gap-2 overflow-y-auto p-1' in index_response.text
+    assert "1 entries" in index_response.text
+    assert "root cause story" not in index_response.text
+    assert 'title="1 entries in this document"' in index_response.text
+
+
+def test_document_orders_entries_before_tags_and_references(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document(
+        "2026-07-10.md",
+        tags=("debugging",),
+        references=("https://example.com/source",),
+    )
+    monkeypatch.setattr(hfl_routes.corpus_index, "get", lambda path: document)
+
+    response = authenticated_client.get("/hfl-corpus/document/2026-07-10.md")
+
+    assert response.status_code == 200
+    entry_position = response.text.index('class="markdown-body')
+    tags_position = response.text.index(">Tags</h2>")
+    references_position = response.text.index(">References</h2>")
+    assert entry_position < tags_position < references_position
+    assert "overflow-wrap: anywhere" in response.text
+    assert "word-break: break-word" in response.text
 
 
 def test_common_tags_defaults_to_top_100():
@@ -211,6 +290,10 @@ def test_corpus_search_uses_compact_date_controls(authenticated_client, monkeypa
     assert 'name="date_to"' in response.text
     assert 'name="created_from"' not in response.text
     assert "if (this.showPicker) this.showPicker()" in response.text
+    tags_heading = '<p class="mb-2 text-xs font-medium text-slate-500">Tags</p>'
+    assert response.text.index('name="date_field"') < response.text.index(tags_heading)
+    assert response.text.index("Search corpus") < response.text.index(tags_heading)
+    assert response.text.index(">Reset</a>") < response.text.index(tags_heading)
     assert "#debugging" in response.text
     assert "bg-blue-950/50" in response.text
     assert ">1</span>" in response.text
@@ -237,6 +320,8 @@ def test_corpus_api_returns_canonical_documents(authenticated_client, monkeypatc
     assert response.status_code == 200
     assert response.json()["document_count"] == 1
     assert response.json()["results"][0]["relative_path"] == "2026-07-10.md"
+    assert response.json()["results"][0]["entry_count"] == 1
+    assert response.json()["results"][0]["tag_counts"] == [["debugging", 1]]
 
 
 def test_hfl_markdown_formats_canonical_provenance_fields():

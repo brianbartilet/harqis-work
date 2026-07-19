@@ -46,6 +46,8 @@ class CorpusDocument:
     tags: tuple[str, ...]
     references: tuple[str, ...]
     excerpt: str
+    tag_counts: tuple[tuple[str, int], ...] = ()
+    entry_count: int = 0
 
 
 def resolve_corpus_root() -> Path:
@@ -70,6 +72,11 @@ def _entry_blocks(text: str) -> list[tuple[str, str]]:
         (match.group(1).strip(), text[match.end(): matches[index + 1].start() if index + 1 < len(matches) else len(text)].strip())
         for index, match in enumerate(matches)
     ]
+
+
+def _entry_count(text: str) -> int:
+    """Count HFL entries from level-two Markdown headers."""
+    return sum(1 for _ in _HEADER.finditer(text))
 
 
 def _entry_metadata(header: str, body: str) -> tuple[datetime | None, tuple[str, ...]]:
@@ -104,17 +111,26 @@ def _entry_metadata(header: str, body: str) -> tuple[datetime | None, tuple[str,
     return when, tuple(references)
 
 
-def _metadata(path: Path, text: str) -> tuple[datetime, tuple[str, ...], tuple[str, ...]]:
+def _metadata(
+    path: Path, text: str
+) -> tuple[
+    datetime,
+    tuple[str, ...],
+    tuple[str, ...],
+    tuple[tuple[str, int], ...],
+    int,
+]:
     timestamps: list[datetime] = []
-    tags: set[str] = set()
+    tag_counts: Counter[str] = Counter()
     references: list[str] = []
-    for header, body in _entry_blocks(text):
+    entries = _entry_blocks(text)
+    for header, body in entries:
         when, entry_references = _entry_metadata(header, body)
         if when:
             timestamps.append(when)
         references.extend(entry_references)
     for tag_line in _TAG_LINE.findall(text):
-        tags.update(token.lower() for token in _TAG_TOKEN.findall(tag_line))
+        tag_counts.update(set(token.lower() for token in _TAG_TOKEN.findall(tag_line)))
 
     if not timestamps:
         match = _DATE_IN_NAME.search(path.name)
@@ -127,7 +143,16 @@ def _metadata(path: Path, text: str) -> tuple[datetime, tuple[str, ...], tuple[s
     created = min(timestamps) if timestamps else datetime.fromtimestamp(
         getattr(stat, "st_birthtime", stat.st_ctime)
     )
-    return created, tuple(sorted(tags)), tuple(dict.fromkeys(references))
+    ranked_tags = tuple(
+        sorted(tag_counts.items(), key=lambda item: (-item[1], item[0]))[:10]
+    )
+    return (
+        created,
+        tuple(sorted(tag_counts)),
+        tuple(dict.fromkeys(references)),
+        ranked_tags,
+        _entry_count(text),
+    )
 
 
 def _excerpt(text: str, limit: int = 240) -> str:
@@ -153,7 +178,9 @@ class CorpusIndex:
                 for path in sorted(root.rglob("*.md"), key=lambda item: item.as_posix().lower()):
                     try:
                         text = path.read_text(encoding="utf-8")
-                        created, tags, references = _metadata(path, text)
+                        created, tags, references, tag_counts, entry_count = _metadata(
+                            path, text
+                        )
                         updated = datetime.fromtimestamp(path.stat().st_mtime)
                     except (OSError, UnicodeDecodeError):
                         continue
@@ -168,6 +195,8 @@ class CorpusIndex:
                             tags=tags,
                             references=references,
                             excerpt=_excerpt(text),
+                            tag_counts=tag_counts,
+                            entry_count=entry_count,
                         )
                     )
             self._root = root

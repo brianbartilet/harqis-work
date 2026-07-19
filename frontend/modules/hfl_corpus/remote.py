@@ -19,6 +19,11 @@ class RemoteCorpusError(RuntimeError):
 
 
 def _document(payload: dict[str, Any]) -> CorpusDocument:
+    tags = tuple(str(tag) for tag in payload.get("tags") or ())
+    tag_counts = tuple(
+        (str(item[0]), int(item[1]))
+        for item in payload.get("tag_counts") or ()
+    )
     return CorpusDocument(
         relative_path=str(payload["relative_path"]),
         path=None,
@@ -26,9 +31,11 @@ def _document(payload: dict[str, Any]) -> CorpusDocument:
         text=str(payload.get("text") or ""),
         created_at=datetime.fromisoformat(str(payload["created_at"])),
         updated_at=datetime.fromisoformat(str(payload["updated_at"])),
-        tags=tuple(str(tag) for tag in payload.get("tags") or ()),
+        tags=tags,
         references=tuple(str(ref) for ref in payload.get("references") or ()),
         excerpt=str(payload.get("excerpt") or ""),
+        tag_counts=tag_counts or tuple((tag, 1) for tag in tags[:10]),
+        entry_count=int(payload.get("entry_count") or 0),
     )
 
 
