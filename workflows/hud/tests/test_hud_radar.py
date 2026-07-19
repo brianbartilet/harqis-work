@@ -41,7 +41,7 @@ from workflows.hud.tasks.daily_radar_agent import (
 
 
 def test__init_meter_overwrites_dump_per_tick():
-    """Regression: the radar is a fresh four-hour mirror, not a rolling log.
+    """Regression: the radar is a fresh 12-hour mirror, not a rolling log.
 
     `prepend_if_exists=True` (DESKTOP LOGS's setting) would push every new
     snapshot on top of the prior one; the marquee would then scroll through
@@ -104,6 +104,19 @@ def test__radar_content_viewport_stays_inside_skin():
         'ini["MeterDisplay"]["H"] = '
         '"((42*#Scale#)+(#ItemLines#*22)*#Scale#)"'
     ) not in src
+
+
+def test__radar_content_padding_preserves_right_margin():
+    """Moving content right must shrink its width by the same amount."""
+    import inspect
+    from workflows.hud.tasks.hud_radar import _configure_radar_ini
+
+    src = inspect.getsource(_configure_radar_ini)
+    assert 'ini["MeterDisplay"]["X"] = "(22*#Scale#)"' in src
+    assert (
+        'ini["MeterDisplay"]["W"] = '
+        '"(({0}*186-8)*#Scale#)".format(width_multiplier)'
+    ) in src
 
 
 def test__visible_title_changes_without_moving_compatibility_folder():

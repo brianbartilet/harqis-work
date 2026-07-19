@@ -259,7 +259,7 @@ def _extract_dump_text(raw_result: Any) -> str:
     dict shaped like ``{"text": "<dump>", "summary": ..., "metrics": ...}``.
     A task may provide ``feed_text`` when its shared feed must intentionally
     differ from the rendered HUD text (for example, HERMES RADAR keeps the
-    legacy synthesis feed separate from its four-hour Telegram mirror). The feed file
+    legacy synthesis feed separate from its scheduled Telegram mirror). The feed file
     never receives the JSON metadata.
     """
     if isinstance(raw_result, dict) and "feed_text" in raw_result:

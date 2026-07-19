@@ -176,38 +176,57 @@ Safe delivered update
     )
 
 
-def test_build_snapshot_sorts_preserves_duplicates_and_excludes_user_content(tmp_path):
+def test_build_snapshot_exports_scheduled_deliveries_and_excludes_conversation(tmp_path):
     now = datetime(2026, 7, 14, 12, tzinfo=timezone.utc)
     home = tmp_path / "hermes"
-    (home / "cron" / "output").mkdir(parents=True)
+    output = home / "cron" / "output" / "scheduled-job"
+    output.mkdir(parents=True)
     _create_state_db(
         home / "state.db",
         [
-            ("telegram-session", "assistant", f"Duplicate reply|{(now - timedelta(minutes=1)).isoformat()}"),
-            ("telegram-session", "assistant", f"Duplicate reply|{(now - timedelta(minutes=2)).isoformat()}"),
-            ("telegram-session", "assistant", f"Second reply|{(now - timedelta(minutes=3)).isoformat()}"),
-            ("telegram-session", "user", f"Never exported|{(now - timedelta(minutes=4)).isoformat()}"),
+            ("telegram-session", "assistant", f"Conversational reply|{(now - timedelta(minutes=1)).isoformat()}"),
+            ("telegram-session", "user", f"Private user input|{(now - timedelta(minutes=2)).isoformat()}"),
         ],
     )
-    (home / "cron" / "jobs.json").write_text('{"jobs": []}', encoding="utf-8")
+    (home / "cron" / "jobs.json").write_text(
+        json.dumps(
+            {
+                "jobs": [
+                    {
+                        "id": "scheduled-job",
+                        "name": "Scheduled status",
+                        "deliver": "telegram:configured",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    newest = output / "newest.md"
+    older = output / "older.md"
+    newest.write_text("Duplicate scheduled update", encoding="utf-8")
+    older.write_text("Duplicate scheduled update", encoding="utf-8")
+    os.utime(newest, ((now - timedelta(minutes=1)).timestamp(),) * 2)
+    os.utime(older, ((now - timedelta(minutes=2)).timestamp(),) * 2)
 
     snapshot = build_snapshot(hermes_home=home, now=now, max_items=0)
 
     assert snapshot["schema_version"] == 2
     assert snapshot["window_hours"] == DEFAULT_WINDOW_HOURS
     assert [item["text"] for item in snapshot["items"]] == [
-        "Duplicate reply",
-        "Duplicate reply",
-        "Second reply",
+        "Duplicate scheduled update",
+        "Duplicate scheduled update",
     ]
-    assert "Never exported" not in json.dumps(snapshot)
+    assert "Conversational reply" not in json.dumps(snapshot)
+    assert "Private user input" not in json.dumps(snapshot)
+    assert {item["kind"] for item in snapshot["items"]} == {"scheduled"}
 
 
 def test_export_failure_preserves_last_valid_snapshot(tmp_path):
     destination = tmp_path / "hermes-radar.json"
     destination.write_text('{"last": "valid"}', encoding="utf-8")
 
-    with pytest.raises(sqlite3.OperationalError):
+    with pytest.raises(OSError):
         export_snapshot(snapshot_path=destination, hermes_home=tmp_path / "missing")
 
     assert destination.read_text(encoding="utf-8") == '{"last": "valid"}'
@@ -220,14 +239,14 @@ def test_load_snapshot_marks_stale_and_unavailable_does_not_preserve_old_message
         json.dumps(
             {
                 "schema_version": 1,
-                "generated_at": (now - timedelta(hours=1)).isoformat(),
+                "generated_at": (now - timedelta(hours=2)).isoformat(),
                 "window_hours": 8,
                 "max_items": 10,
                 "items": [
                     {
                         "timestamp": (now - timedelta(minutes=5)).isoformat(),
-                        "source": "Hermes chat",
-                        "kind": "interactive",
+                        "source": "Scheduled update",
+                        "kind": "scheduled",
                         "status": "delivered",
                         "preview": "Useful update",
                     }
@@ -256,7 +275,7 @@ def test_empty_snapshot_has_explicit_empty_state():
     assert EMPTY_STATE in rendered
 
 
-def test_load_snapshot_enforces_four_hour_cutoff_at_render_time(tmp_path):
+def test_load_snapshot_enforces_twelve_hour_cutoff_at_render_time(tmp_path):
     now = datetime(2026, 7, 14, 12, tzinfo=timezone.utc)
     snapshot_path = tmp_path / "hermes-radar.json"
     snapshot_path.write_text(
@@ -268,16 +287,16 @@ def test_load_snapshot_enforces_four_hour_cutoff_at_render_time(tmp_path):
                 "max_items": 0,
                 "items": [
                     {
-                        "timestamp": (now - timedelta(hours=3, minutes=59)).isoformat(),
-                        "source": "Hermes chat",
-                        "kind": "interactive",
+                        "timestamp": (now - timedelta(hours=11, minutes=59)).isoformat(),
+                        "source": "Scheduled update",
+                        "kind": "scheduled",
                         "status": "delivered",
                         "text": "Inside window",
                     },
                     {
-                        "timestamp": (now - timedelta(hours=4, minutes=1)).isoformat(),
-                        "source": "Hermes chat",
-                        "kind": "interactive",
+                        "timestamp": (now - timedelta(hours=12, minutes=1)).isoformat(),
+                        "source": "Scheduled update",
+                        "kind": "scheduled",
                         "status": "delivered",
                         "text": "Outside window",
                     },
@@ -290,22 +309,29 @@ def test_load_snapshot_enforces_four_hour_cutoff_at_render_time(tmp_path):
     loaded = load_snapshot(snapshot_path, now=now)
 
     assert [item["text"] for item in loaded["items"]] == ["Inside window"]
-    assert loaded["window_hours"] == 4
+    assert loaded["window_hours"] == 12
 
 
-def test_radar_renders_delivered_messages_only_with_timestamp_and_multiline_text():
+def test_radar_renders_delivered_scheduled_messages_only():
     snapshot = {
         "state": "fresh",
         "items": [
             {
                 "timestamp": "2026-07-14T12:00:00+00:00",
-                "source": "Hermes chat",
-                "kind": "interactive",
+                "source": "Scheduled report",
+                "kind": "scheduled",
                 "status": "delivered",
-                "text": "First line\n\n- detail",
+                "text": "Report line\n\n- detail",
             },
             {
                 "timestamp": "2026-07-14T11:59:00+00:00",
+                "source": "Hermes chat",
+                "kind": "interactive",
+                "status": "delivered",
+                "text": "Conversational reply",
+            },
+            {
+                "timestamp": "2026-07-14T11:58:00+00:00",
                 "source": "Failed job",
                 "kind": "scheduled",
                 "status": "delivery_failed",
@@ -316,7 +342,8 @@ def test_radar_renders_delivered_messages_only_with_timestamp_and_multiline_text
 
     rendered = compose_hermes_radar(snapshot)
 
-    assert "Hermes chat\nFirst line\n\n- detail" in rendered
+    assert "Scheduled report\nReport line\n\n- detail" in rendered
+    assert "Conversational reply" not in rendered
     assert "Not received in Telegram" not in rendered
     assert displayed_item_count(snapshot) == 1
 
@@ -329,9 +356,9 @@ def test_hermes_radar_schedules_keep_fast_path_model_free():
     refresh = WORKFLOWS_HUD["run-job--refresh_hermes_radar"]
 
     assert set(deep["schedule"].hour) == {8, 12, 16, 20}
-    assert set(exporter["schedule"].minute) == {0, 15, 30, 45}
-    assert set(refresh["schedule"].minute) == {5, 20, 35, 50}
-    assert exporter["kwargs"]["window_hours"] == 4
+    assert set(exporter["schedule"].minute) == {0}
+    assert set(refresh["schedule"].minute) == {5}
+    assert exporter["kwargs"]["window_hours"] == 12
     assert exporter["kwargs"]["max_items"] == 0
     assert "model" not in exporter["kwargs"]
     assert "model" not in refresh["kwargs"]

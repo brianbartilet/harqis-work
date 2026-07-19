@@ -1,4 +1,4 @@
-"""Host-side exporter for the sanitized four-hour Telegram mirror."""
+"""Host-side exporter for the sanitized scheduled Telegram mirror."""
 
 from core.apps.sprout.app.celery import SPROUT
 from core.utilities.logging.custom_logger import logger as log
@@ -22,12 +22,12 @@ def export_hermes_radar_snapshot(**kwargs):
     )
     destination = resolve_snapshot_path(kwargs.get("snapshot_path"))
     log.info(
-        "export_hermes_radar_snapshot: wrote %s sanitized messages to %s",
+        "export_hermes_radar_snapshot: wrote %s scheduled deliveries to %s",
         len(snapshot["items"]),
         destination.name,
     )
     return {
-        "summary": f"Exported {len(snapshot['items'])} sanitized Hermes messages",
+        "summary": f"Exported {len(snapshot['items'])} scheduled Hermes deliveries",
         "metrics": {"items": len(snapshot["items"])},
         "artifact": destination.name,
     }

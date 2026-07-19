@@ -34,9 +34,9 @@ Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for
 | `show_ai_helper` | Daily at midnight | AI helper widget initialization |
 | `get_schedules` | Every 4 hours | Upcoming calendar schedule |
 | `show_daily_radar_data_only` | 08:00 / 12:00 / 16:00 / 20:00 (host) | **Data-only fallback twin** of `show_daily_radar`. Runs on the `host` queue and writes the briefing to the `hud-data-only-*` feed + ES **only when** the Windows worker hasn't rendered the radar within ~12h+10min (the overnight inter-fire gap + grace). No Rainmeter render. Gated on the original's `@log_result` heartbeat. Queue: `host`. |
-| `export_hermes_radar_snapshot` | Every 15 min (host) | Reads Hermes' local Telegram assistant history and scheduled-delivery audit, removes user/tool/reasoning data plus credentials, identifiers, and local paths, then atomically writes `hermes-radar.json` to the shared feed. No Telegram poll and no LLM. Queue: `host`. |
-| `refresh_hermes_radar` | :05 / :20 / :35 / :50 (Windows) | Rerenders the shared snapshot as a newest-first, timestamped mirror of all delivered Hermes replies from the last 4h. Multiline structure is preserved; secrets, emoji, and unsupported Unicode are removed. No LLM. Queue: `hud`. |
-| `show_daily_radar` | 08:00 / 12:00 / 16:00 / 20:00 daily | **HERMES RADAR** deep synthesis. Keeps the established task name and `DAILYRADAR` Rainmeter folder for feed/heartbeat/forwarder compatibility. The 8-hour Haiku synthesis continues into `feed_text` for HFL/legacy consumers, while the visible dump remains the four-hour Hermes reply mirror. Queue: `hud`. |
+| `export_hermes_radar_snapshot` | Hourly at :00 (host) | Reads Hermes' scheduled-delivery audit, keeps only Telegram-bound jobs from the last 12h, removes credentials, identifiers, and local paths, then atomically writes `hermes-radar.json` to the shared feed. Conversational replies are never exported. No Telegram poll and no LLM. Queue: `host`. |
+| `refresh_hermes_radar` | Hourly at :05 (Windows) | Rerenders the shared snapshot as a newest-first, timestamped mirror of delivered scheduled Telegram updates from the last 12h. Multiline structure is preserved; secrets, emoji, and unsupported Unicode are removed. No LLM. Queue: `hud`. |
+| `show_daily_radar` | 08:00 / 12:00 / 16:00 / 20:00 daily | **HERMES RADAR** deep synthesis. Keeps the established task name and `DAILYRADAR` Rainmeter folder for feed/heartbeat/forwarder compatibility. The 8-hour Haiku synthesis continues into `feed_text` for HFL/legacy consumers, while the visible dump remains the 12-hour scheduled-delivery mirror. Queue: `hud`. |
 
 ## Task Files
 
@@ -51,12 +51,12 @@ Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for
 | `tasks/hud_utils.py` | `show_mouse_bindings`, `build_summary_mouse_bindings`, `show_hud_profiles`, `show_ai_helper` |
 | `tasks/hud_finance.py` | `show_ynab_budgets_info`, `show_pc_daily_sales` |
 | `tasks/hud_api_costs.py` | `show_api_costs` |
-| `tasks/hud_radar.py` | `show_daily_radar` (four-hour synthesis render), `refresh_hermes_radar` (15-minute JSON-only render) |
+| `tasks/hud_radar.py` | `show_daily_radar` (four-hour synthesis feed), `refresh_hermes_radar` (hourly JSON-only render) |
 | `tasks/hermes_radar_export.py` | `export_hermes_radar_snapshot` — host-safe scheduled exporter |
 | `tasks/daily_radar_agent.py` | Data-gathering helpers consumed by `collect_daily_radar` (Gmail / Calendar / Tasks / Trello / Jira / GitHub / OwnTracks / ES collectors, prompt formatter, and `wrap_preserving_breaks` output wrapper) |
 | `tasks/hud_data_only.py` | Data-only fallback twins routed to the `host` queue (`show_daily_radar_data_only`, …). Win32-free — imported outside the `__init__.py` win32 guard. |
 | `collectors/daily_radar.py` | `collect_daily_radar` — win32-free HERMES RADAR synthesis path (legacy module name retained) shared by the Windows render task and host twin. |
-| `collectors/hermes_pushes.py` | Multiline ASCII sanitization, Hermes state/cron audit collection, atomic shared snapshot I/O, strict four-hour filtering, freshness states, and HERMES RADAR composition. |
+| `collectors/hermes_pushes.py` | Multiline ASCII sanitization, Hermes cron audit collection, atomic shared snapshot I/O, strict 12-hour filtering, freshness states, and HERMES RADAR composition. |
 | `fallback.py` | `windows_handled_recently` + the `fallback_gate` decorator — read the `@log_result` heartbeat so a twin runs only when the Windows original went stale. Fails open. |
 | `tasks/sections.py` | HUD section layout helpers |
 | `prompts/daily_radar.md` | HERMES RADAR synthesis prompt (legacy filename retained; combines ideas #1, #3, #4, #12, #17 from `data/AGENTS_IDEAS.md`) |
@@ -95,21 +95,21 @@ AI tasks use markdown prompts from `workflows/hud/prompts/` (loaded via `from wo
 
 The panel has two independent paths that meet only at render time:
 
-1. **15-minute notification path (no LLM):** the host reads local Hermes
-   assistant/session state plus cron output/status, keeps only Telegram-bound
-   outbound content, redacts sensitive values, converts it to ASCII while
+1. **Hourly notification path (no LLM):** the host reads local Hermes cron
+   output/status, keeps only Telegram-bound scheduled deliveries, redacts
+   sensitive values, converts the content to ASCII while
    preserving line structure, and atomically writes
-   `<shared feed>/hermes-radar.json`. Windows rerenders at :05/:20/:35/:50 so
-   the shared drive has time to sync.
+   `<shared feed>/hermes-radar.json`. Windows rerenders at :05 so the shared
+   drive has five minutes to sync after the :00 export.
 2. **Four-hour synthesis path:** `show_daily_radar` keeps its established task,
    feed marker, ES heartbeat, fallback gate, and `DAILYRADAR` folder. It runs the
    existing source sweep at 08:00/12:00/16:00/20:00 and writes the result to the
    synthesis-only feed contract; it does not replace the visible message mirror.
 
-The exporter never calls `getUpdates`, never connects Windows to
-`~/.hermes/state.db`, and never writes a partial/failed snapshot. Snapshot read
-states are explicit: fresh, stale after 35 minutes, or unavailable. The Windows
-loader reapplies the four-hour cutoff, so stale or delayed shared-drive data
+The exporter never calls `getUpdates`, never exports conversational session
+history, and never writes a partial/failed snapshot. Snapshot read
+states are explicit: fresh, stale after 75 minutes, or unavailable. The Windows
+loader reapplies the 12-hour cutoff, so stale or delayed shared-drive data
 cannot keep older replies visible. An unavailable snapshot shows an explicit
 notice instead of preserving an unbounded prior render.
 
@@ -153,19 +153,19 @@ notice instead of preserving an unbounded prior render.
 
 Behavior:
 
-- **Cadence:** pushes export every 15 minutes and render five minutes later; deep synthesis runs at 08:00, 12:00, 16:00, and 20:00.
-- **Push scope:** all delivered interactive assistant replies and Telegram-configured cron outputs from the last 4 hours, newest first. The renderer excludes delivery/job failures because they were not received in Telegram. User messages, tool traces, reasoning, system prompts, secrets, IDs, raw local paths, emoji, unsupported Unicode, and looped radar dumps are excluded.
+- **Cadence:** scheduled deliveries export hourly at :00 and render at :05; deep synthesis runs at 08:00, 12:00, 16:00, and 20:00.
+- **Push scope:** delivered Telegram-configured cron outputs from the last 12 hours, newest first. Conversational replies and delivery/job failures are excluded, along with user messages, tool traces, reasoning, system prompts, secrets, IDs, raw local paths, emoji, unsupported Unicode, and looped radar dumps.
 - **Analysis window:** last 8 hours of email / failed jobs / Jira updates (configurable via `window_hours`).
-- **Sound:** the four-hour synthesis uses `play_sound=True`; 15-minute notification-only refreshes stay silent.
+- **Sound:** the four-hour synthesis uses `play_sound=True`; hourly notification-only refreshes stay silent.
 - **Scroll:** `MeasureLuaScriptScroll` (auto-scrolling marquee, identical to DESKTOP LOGS).
 - **Width:** `width_multiplier=2.25` — matches DESKTOP LOGS so the two pinned widgets line up side by side.
 - **Height:** fixed at `DAILY_RADAR_MAX_HUD_LINES` (19), approximately 20% more visible lines than the previous 16-line footprint. The widget sets both `Variables.ItemLines` and `Variables.MaxLines`; the marquee scrolls content beyond that stable footprint.
 - **Viewport clipping:** the content meter subtracts its 70 px header offset and a 14 px footer from the skin height, preventing wrapped text from painting over adjacent HUD content during initial load.
 - **Wrap width:** 65 chars, tuned to the 2.25 column width.
-- **Readability:** Hermes replies preserve paragraph and list breaks. Smart punctuation is converted to ASCII where possible; remaining non-ASCII characters and emoji are removed before the shared snapshot is written.
+- **Readability:** scheduled deliveries preserve paragraph and list breaks. Smart punctuation is converted to ASCII where possible; remaining non-ASCII characters and emoji are removed before the shared snapshot is written. The content meter uses a 22 px left inset and a matching width reduction to preserve its right margin.
 - **Header links:** one only — `DUMP`, opens the established `DAILYRADAR/dump.txt` compatibility path.
 - **Resilience:** every collector is wrapped in its own try/except so a missing Trello board, expired OAuth token, or offline ES does not break the render — the affected section renders `"<source> unavailable: <reason>"` instead. The Trello collector specifically guards against non-list responses from `@deserialized` (regression: `'Response' object is not subscriptable`).
-- **Cost:** the 15-minute path makes zero model calls. The four-hour synthesis pins `claude-haiku-4-5-20251001` in the beat schedule.
+- **Cost:** the hourly path makes zero model calls. The four-hour synthesis pins `claude-haiku-4-5-20251001` in the beat schedule.
 
 ### Source registry (extensibility)
 

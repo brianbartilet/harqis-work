@@ -412,8 +412,8 @@ WORKFLOWS_HUD = {
 
     # ── HERMES RADAR ─────────────────────────────────────────────────────────
     # The deep productivity synthesis runs at 08:00, 12:00, 16:00, and 20:00.
-    # Separate deterministic tasks export/rerender recent Hermes Telegram
-    # pushes every 15 minutes without polling Telegram or invoking an LLM.
+    # Separate deterministic tasks export/rerender scheduled Hermes Telegram
+    # deliveries hourly without polling Telegram or invoking an LLM.
     # Combines ideas #1, #3, #4, #12, #17 from data/AGENTS_IDEAS.md —
     # desktop context, commitment watcher, email priority, notification
     # triage, and morning-briefing-style top priorities. Inputs are
@@ -478,16 +478,16 @@ WORKFLOWS_HUD = {
         },
     },
 
-    # Host-side capture. Reads Hermes' local delivery audit/state, sanitizes it,
-    # and atomically writes one compact JSON artifact to the configured shared
-    # feed. No Telegram API call and no model call.
+    # Host-side capture. Reads only Hermes' scheduled-delivery audit, sanitizes
+    # it, and atomically writes one compact JSON artifact to the configured
+    # shared feed. No conversational state, Telegram API call, or model call.
     'run-job--export_hermes_radar_snapshot': {
         'task': 'workflows.hud.tasks.hermes_radar_export.export_hermes_radar_snapshot',
-        'schedule': crontab(minute='*/15'),
+        'schedule': crontab(minute=0),
         'kwargs': {
-            'window_hours': 4,
-            # The four-hour cutoff bounds the mirror. Do not silently drop
-            # valid replies inside it because activity exceeds an item cap.
+            'window_hours': 12,
+            # The 12-hour cutoff bounds the mirror. Do not silently drop
+            # valid deliveries inside it because activity exceeds an item cap.
             'max_items': 0,
         },
         'options': {
@@ -503,12 +503,12 @@ WORKFLOWS_HUD = {
         },
     },
 
-    # Windows render follows five minutes after the exporter to allow shared-
-    # drive sync. It only reads JSON and rewrites the established DAILYRADAR
-    # skin folder; the visible title is HERMES RADAR.
+    # Windows render follows five minutes after the hourly exporter to allow
+    # shared-drive sync. It only reads JSON and rewrites the established
+    # DAILYRADAR skin folder; the visible title is HERMES RADAR.
     'run-job--refresh_hermes_radar': {
         'task': 'workflows.hud.tasks.hud_radar.refresh_hermes_radar',
-        'schedule': crontab(minute='5,20,35,50'),
+        'schedule': crontab(minute=5),
         'kwargs': {
             'max_hud_lines': 19,
         },

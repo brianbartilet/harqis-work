@@ -1,8 +1,8 @@
-"""Sanitized four-hour Hermes Telegram mirror for the HERMES RADAR HUD.
+"""Sanitized 12-hour Hermes scheduled-delivery mirror for HERMES RADAR.
 
-The Hermes host exports outbound Telegram-visible assistant replies and scheduled
-job deliveries into a small JSON file in the configured shared desktop feed.
-Windows reads only that artifact; it never opens Hermes state or polls Telegram.
+The Hermes host exports Telegram-bound scheduled job deliveries into a small JSON
+file in the configured shared desktop feed. Windows reads only that artifact; it
+never opens Hermes state or polls Telegram. Conversational replies are excluded.
 """
 
 from __future__ import annotations
@@ -19,14 +19,14 @@ from typing import Any, Iterable, Optional
 from apps.desktop.helpers.feed import _atomic_write_text, _resolve_feed_path
 
 SNAPSHOT_FILENAME = "hermes-radar.json"
-DEFAULT_WINDOW_HOURS = 4
+DEFAULT_WINDOW_HOURS = 12
 # Zero means "do not truncate the number of messages". The time window is the
 # bound for this HUD; dropping messages inside that window would no longer be a
 # faithful Telegram mirror.
 DEFAULT_MAX_ITEMS = 0
-DEFAULT_STALE_MINUTES = 35
-RECENT_HEADING = "HERMES UPDATES - LAST 4 HOURS"
-EMPTY_STATE = "(no Hermes updates in the last 4h)"
+DEFAULT_STALE_MINUTES = 75
+RECENT_HEADING = "HERMES UPDATES - LAST 12 HOURS"
+EMPTY_STATE = "(no Hermes updates in the last 12h)"
 STALE_STATE = "(Hermes notification snapshot is stale)"
 UNAVAILABLE_STATE = "(Hermes notification snapshot is unavailable)"
 
@@ -55,7 +55,7 @@ _WINDOWS_PATH_RE = re.compile(r"(?i)(?<!\w)[A-Z]:\\[^\s]+")
 _MEDIA_PATH_RE = re.compile(r"(?i)MEDIA:\S+")
 _LOOP_MARKERS = (
     "RECENT HERMES PUSHES",
-    "HERMES UPDATES LAST 4 HOURS",
+    "HERMES UPDATES LAST 12 HOURS",
     "HERMES RADAR",
     "DAILY RADAR DUMP",
 )
@@ -393,11 +393,10 @@ def build_snapshot(
     window_hours: int = DEFAULT_WINDOW_HOURS,
     max_items: int = DEFAULT_MAX_ITEMS,
 ) -> dict[str, Any]:
-    """Build a complete snapshot; any source failure prevents replacement."""
+    """Build a scheduled-delivery-only snapshot for the configured window."""
     now = _aware(now or _now_local())
     since = now - timedelta(hours=window_hours)
     home = resolve_hermes_home(hermes_home)
-    interactive = collect_interactive_pushes(home / "state.db", since=since, now=now)
     scheduled = collect_cron_pushes(
         home / "cron" / "jobs.json", home / "cron" / "output", since=since, now=now
     )
@@ -406,7 +405,7 @@ def build_snapshot(
         "generated_at": now.isoformat(),
         "window_hours": window_hours,
         "max_items": max_items,
-        "items": _sort_and_limit([*interactive, *scheduled], max_items=max_items),
+        "items": _sort_and_limit(scheduled, max_items=max_items),
     }
 
 
@@ -501,9 +500,9 @@ def load_snapshot(
 def _format_items(snapshot: dict[str, Any]) -> list[str]:
     blocks: list[str] = []
     for item in snapshot.get("items", []):
-        # Failure records are useful in the snapshot audit but were not replies
-        # received in Telegram, so they do not belong in the mirror.
-        if item.get("status") != "delivered":
+        # Conversational replies can exist in an older shared snapshot during
+        # rollout. Hide them here as well as excluding them from new exports.
+        if item.get("kind") != "scheduled" or item.get("status") != "delivered":
             continue
         timestamp = _parse_datetime(item.get("timestamp"))
         time_label = timestamp.astimezone().strftime("%H:%M") if timestamp else "--:--"
@@ -515,12 +514,16 @@ def _format_items(snapshot: dict[str, Any]) -> list[str]:
 
 
 def displayed_item_count(snapshot: dict[str, Any]) -> int:
-    """Count successfully delivered replies represented in the HUD mirror."""
-    return sum(1 for item in snapshot.get("items", []) if item.get("status") == "delivered")
+    """Count successfully delivered scheduled updates represented in the HUD."""
+    return sum(
+        1
+        for item in snapshot.get("items", [])
+        if item.get("kind") == "scheduled" and item.get("status") == "delivered"
+    )
 
 
 def compose_hermes_radar(snapshot: dict[str, Any]) -> str:
-    """Render delivered Hermes replies from the strict four-hour snapshot."""
+    """Render scheduled Telegram deliveries from the strict 12-hour snapshot."""
     state = snapshot.get("state", "fresh")
     blocks = _format_items(snapshot)
     if state == "unavailable":

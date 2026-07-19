@@ -1,8 +1,8 @@
-"""HERMES RADAR HUD — four-hour mirror of Telegram-delivered Hermes replies.
+"""HERMES RADAR HUD — 12-hour mirror of scheduled Telegram deliveries.
 
 The established DAILYRADAR Rainmeter folder and task names remain unchanged for
 compatibility. The visible panel title is HERMES RADAR. A lightweight refresh
-runs every 15 minutes from a sanitized shared JSON snapshot. The existing
+runs hourly from a sanitized shared JSON snapshot. The existing
 multi-source Claude synthesis still runs at 08:00, 12:00, 16:00, and 20:00 for
 feed/HFL consumers, but it is no longer appended to the visible dump.
 """
@@ -55,14 +55,16 @@ def _configure_radar_ini(
 
     width_multiplier = 2.25
     ini["meterSeperator"]["W"] = "({0}*186*#Scale#)".format(width_multiplier)
-    ini["MeterDisplay"]["W"] = "({0}*186*#Scale#)".format(width_multiplier)
+    # Increase the left inset by 8 px while removing the same amount from the
+    # content width, preserving the established right margin.
+    ini["MeterDisplay"]["W"] = "(({0}*186-8)*#Scale#)".format(width_multiplier)
     # The content meter begins 70 px below the top of the skin. Its height
     # must therefore be the remaining viewport, not the full SkinHeight;
     # otherwise wrapped text paints over the HUD below during initial load.
     # SkinHeight = (42 + ItemLines*22), so subtract Y=70 and a 14 px footer:
     # (42 + ItemLines*22) - 70 - 14 = ItemLines*22 - 42.
     ini["MeterDisplay"]["H"] = "((#ItemLines#*22-42)*#Scale#)"
-    ini["MeterDisplay"]["X"] = "(14*#Scale#)"
+    ini["MeterDisplay"]["X"] = "(22*#Scale#)"
     ini["MeterDisplay"]["Y"] = "(70*#Scale#)"
     ini["MeterDisplay"]["MeasureName"] = "MeasureLuaScriptScroll"
     ini["MeterBackground"]["Shape"] = (
@@ -95,7 +97,7 @@ def _configure_radar_ini(
 )
 @feed()
 def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
-    """Run the synthesis for feeds, while rendering only recent Hermes replies."""
+    """Run the synthesis for feeds while rendering scheduled deliveries only."""
     log.info("show_daily_radar kwargs: %s", list(kwargs.keys()))
     max_hud_lines = int(kwargs.get("max_hud_lines", DAILY_RADAR_MAX_HUD_LINES))
     own_dump_path = _radar_dump_path()
@@ -110,8 +112,8 @@ def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
     briefing = result["text"]
     snapshot = load_snapshot(kwargs.get("snapshot_path"))
     # Preserve the established synthesis-only feed contract used by HFL and
-    # the legacy Telegram forwarder. Hermes replies stay in the HUD dump and
-    # sanitized JSON snapshot only.
+    # the legacy Telegram forwarder. Scheduled deliveries stay in the HUD dump
+    # and sanitized JSON snapshot only.
     result["feed_text"] = briefing
     result["text"] = compose_hermes_radar(snapshot)
 
@@ -133,7 +135,7 @@ def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
     prepend_if_exists=False,
 )
 def refresh_hermes_radar(ini=ConfigHelperRainmeter(), **kwargs):
-    """Rerender the four-hour Telegram mirror without source pulls or an LLM."""
+    """Rerender the 12-hour Telegram mirror without source pulls or an LLM."""
     max_hud_lines = int(kwargs.get("max_hud_lines", DAILY_RADAR_MAX_HUD_LINES))
     own_dump_path = _radar_dump_path()
     snapshot = load_snapshot(kwargs.get("snapshot_path"))
