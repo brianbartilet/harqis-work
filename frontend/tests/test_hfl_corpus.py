@@ -160,7 +160,9 @@ def test_external_and_outside_references_are_classified(tmp_path):
     assert blocked.reason == "outside allowed roots"
 
 
-def test_tag_chips_link_to_partial_tag_search(authenticated_client, monkeypatch):
+def test_tag_cloud_links_to_partial_search_without_result_card_tags(
+    authenticated_client, monkeypatch
+):
     import modules.hfl_corpus.router as hfl_routes
 
     document = _document("2026-07-10.md", tags=("debugging", "root-cause"))
@@ -175,7 +177,22 @@ def test_tag_chips_link_to_partial_tag_search(authenticated_client, monkeypatch)
     expected = 'href="/hfl-corpus?q=%23debugging"'
     assert expected in index_response.text
     assert expected in document_response.text
-    assert "Find corpus entries with matching tags" in index_response.text
+    assert "Find corpus entries with matching tags" not in index_response.text
+    assert 'max-h-[3rem]' in index_response.text
+    assert "overflow-y-auto" in index_response.text
+
+
+def test_common_tags_defaults_to_top_100():
+    documents = tuple(
+        _document(f"{index}.md", tags=(f"tag-{index:03d}",))
+        for index in range(101)
+    )
+
+    tags = common_tags(documents)
+
+    assert len(tags) == 100
+    assert tags[0] == ("tag-000", 1)
+    assert tags[-1] == ("tag-099", 1)
 
 
 def test_corpus_search_uses_compact_date_controls(authenticated_client, monkeypatch):

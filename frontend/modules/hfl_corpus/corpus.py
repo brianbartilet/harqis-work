@@ -221,7 +221,7 @@ def format_hfl_markdown(source: str) -> str:
 
 
 def common_tags(
-    documents: tuple[CorpusDocument, ...], limit: int = 20
+    documents: tuple[CorpusDocument, ...], limit: int = 100
 ) -> list[tuple[str, int]]:
     """Return the most common document tags, ordered by count then name."""
     counts = Counter(tag for document in documents for tag in set(document.tags))
