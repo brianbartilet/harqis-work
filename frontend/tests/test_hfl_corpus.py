@@ -236,6 +236,9 @@ def test_tag_cloud_links_to_partial_search_without_result_card_tags(
     assert "1 entries" in index_response.text
     assert "root cause story" not in index_response.text
     assert 'title="1 entries in this document"' in index_response.text
+    assert index_response.text.index("1 entries</p>") < index_response.text.index(
+        'class="mt-2 flex flex-wrap items-center gap-1.5"'
+    )
 
 
 def test_document_orders_entries_before_tags_and_references(
