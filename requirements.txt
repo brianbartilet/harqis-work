@@ -1,4 +1,28 @@
-git+https://github.com/brianbartilet/harqis-core.git#egg=harqis-core
+harqis-core @ git+https://github.com/brianbartilet/harqis-core.git@dfc29aee4e0a2b3477b20491ea64d533214d1fd7
+
+# Shared application/runtime stack. These are direct harqis-work dependencies;
+# they must not arrive accidentally through harqis-core package metadata.
+anthropic>=0.86,<1
+anyio>=4.7,<5
+cryptography>=46,<47
+Flask>=3.1,<4
+google-api-python-client>=2.187,<3
+google-auth>=2.29,<3
+google-auth-httplib2>=0.2,<1
+google-auth-oauthlib>=1.2,<2
+httplib2>=0.31,<1
+httpx>=0.28.1,<1
+ijson>=3.4,<4
+mcp>=1.26,<2
+numpy>=1.26,<3
+openai>=1.50,<2
+paho-mqtt>=2.1,<3
+pydantic>=2.11,<3
+pydantic-settings>=2.5,<3
+PySide6>=6.8,<7
+python-dotenv>=1.1,<2
+tqdm>=4.66,<5
+pytest>=8,<9
 pytest-dotenv>=0.5.2
 redis>=5.0.0
 sqlite-vec>=0.1.6
@@ -36,15 +60,9 @@ requests>=2.31.0
 beautifulsoup4>=4.12.0
 playwright>=1.43.0
 
-# openai>=1.50 introduced client.responses (Responses API). apps/open_ai/references/web/api/responses.py
-# and code_interpreter.py call native_client.responses.{create,retrieve,delete,input_items.list};
-# without this floor, those tests fail with AttributeError.
-#
-# harqis-core pins openai==1.14.1, so the pip>=24 resolver in CI/Docker rejects an
-# `openai>=1.50.0` line here as a hard conflict. Install separately AFTER
-# `pip install -r requirements.txt`, same pattern as anyio/mcp below:
-#     pip install --upgrade "openai>=1.50.0"
-# The Dockerfile already does this in the chained RUN.
+# openai>=1.50 provides client.responses, used by apps/open_ai. The compatible
+# OpenAI/MCP/Pydantic/HTTPX floors are declared together above so one resolver
+# pass produces a consistent environment.
 
 # Frontend (FastAPI dashboard at scripts/launch.py frontend → frontend/main.py).
 # uvicorn[standard] pulls httptools/websockets/watchfiles for production-grade
@@ -55,14 +73,7 @@ uvicorn[standard]>=0.29.0
 jinja2>=3.1.0
 python-multipart>=0.0.9
 
-# mcp: install separately — harqis-core pins anyio==4.3.0 but mcp requires anyio>=4.5,
-# and it also pins pydantic==2.6.4 but fastmcp/pydantic-settings need pydantic>=2.7
-# (for `Secret`). Run AFTER `pip install -r requirements.txt`:
-#     pip install --upgrade "anyio>=4.5" "pydantic>=2.9,<3" "mcp>=1.0.0"
-# Without the anyio bump, scripts/launch.py mcp crashes with
-# `ModuleNotFoundError: No module named 'mcp.server.fastmcp'` because the
-# local `mcp/server.py` shadows the (uninstalled) PyPI package; without the
-# pydantic bump it crashes with `ImportError: cannot import name 'Secret'`.
-
-# moomoo-api: install separately to avoid protobuf conflict
-#     pip install moomoo-api --no-deps
+# `mcp` supplies `mcp.server.fastmcp`; the separate `fastmcp` distribution is
+# not used by this repository. `moomoo-api` is intentionally excluded because
+# its protobuf==3.* requirement conflicts with the current Google/gRPC stack;
+# install it in an isolated environment if that optional integration is needed.

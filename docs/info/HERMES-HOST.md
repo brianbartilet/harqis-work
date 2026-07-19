@@ -167,15 +167,15 @@ cd harqis-work
 python -m venv .venv
 # macOS/Linux:
 .venv/bin/pip install -r requirements.txt
-.venv/bin/pip install --upgrade anyio && .venv/bin/pip install "mcp>=1.0.0"
+.venv/bin/pip check
 # Windows:
 .venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\pip install --upgrade anyio && .venv\Scripts\pip install "mcp>=1.0.0"
+.venv\Scripts\pip check
 ```
 
-> **Note:** `mcp` is installed in a separate step because `harqis-core` pins `anyio==4.3.0`
-> while `mcp>=1.0.0` requires `anyio>=4.5`. Upgrading anyio after the base install is safe —
-> harqis-core functions correctly with newer anyio versions.
+> `harqis-core` is commit-pinned by `requirements.txt` and publishes bounded
+> direct dependencies. The MCP/OpenAI/Pydantic stack is resolved in the same
+> install pass; no post-install force-upgrades are required.
 
 ### Configure environment
 
@@ -489,7 +489,7 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
-pip install --upgrade anyio && pip install "mcp>=1.0.0"
+pip check
 ```
 
 ### 5.3 Secrets in macOS Keychain
