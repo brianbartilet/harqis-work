@@ -27,6 +27,8 @@ machines.local.toml
 
 # ── Python virtualenv ────────────────────────────────────────────────────────
 .venv
+.venv.backup-*
+.venv.failed-*
 venv
 
 # ── Runtime state (PID files, logs, screenshots, ad-hoc data) ────────────────

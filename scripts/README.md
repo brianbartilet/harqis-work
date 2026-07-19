@@ -235,6 +235,7 @@ python scripts/deploy.py                            # auto-detect from hostname 
 python scripts/deploy.py --down                     # stop services + sweep celery + docker compose down
 python scripts/deploy.py --status                   # tabular status (PID + alive PIDs + log path)
 python scripts/deploy.py --stop SERVICE             # stop one service by name (worker / scheduler / …)
+python scripts/deploy.py --rebuild-venv              # replace .venv transactionally and restore services
 
 # OS auto-start
 python scripts/deploy.py --register                 # register at-logon auto-start, then start now
@@ -261,8 +262,21 @@ python scripts/deploy.py --console                  # CREATE_NEW_CONSOLE for sch
 python scripts/deploy.py --docker-only              # bring docker compose up/down without daemons
 ```
 
-`--down`, `--status`, `--stop`, `--register`, `--unregister` are mutually
-exclusive — pass at most one per invocation.
+`--down`, `--status`, `--stop`, `--restart`, `--register`, `--unregister`, and
+`--rebuild-venv` are mutually exclusive — pass at most one per invocation.
+
+**Clean environment rebuild (`--rebuild-venv`)**
+
+Run this with a base Python or the current `.venv` Python; when necessary the
+script re-executes itself under the base interpreter before touching `.venv`.
+It records running Python services, pauses launchd/systemd supervision, moves
+the old environment to a timestamped `.venv.backup-*` directory, creates an
+isolated environment, installs `requirements.txt`, runs `pip check` and import
+smoke tests, then restores only the services that were running beforehand.
+Any failure moves the incomplete environment to `.venv.failed-*`, restores the
+backup, and returns a non-zero exit code. Detailed output is written to
+`logs/venv-rebuild-*.log`; successful backups are intentionally retained for
+manual recovery or later cleanup.
 
 **Per-role behaviour**
 

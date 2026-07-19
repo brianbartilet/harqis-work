@@ -31,6 +31,8 @@ Lifecycle:
                      (launchd plist on macOS, systemd unit on Linux,
                       Scheduled Task on Windows). Idempotent.
     --unregister     Remove the OS auto-start units.
+    --rebuild-venv   Transactionally replace .venv, verify dependencies, and
+                     restore the services that were running beforehand.
 
 Android emulator (config-gated, per machine):
     Add an [<machine>.emulator] table in machines.toml and deploy.py will fire up
@@ -64,12 +66,14 @@ import subprocess
 import sys
 import time
 import tomllib
+from datetime import datetime
 from pathlib import Path
 
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+VENV_DIR = REPO_ROOT / ".venv"
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 LAUNCH_PY = SCRIPTS_DIR / "launch.py"
 EMULATOR_CLI = SCRIPTS_DIR / "agents" / "emulator" / "run_emulator.py"
@@ -77,16 +81,17 @@ MACHINES_TOML = REPO_ROOT / "machines.toml"
 RUN_DIR = REPO_ROOT / ".run"
 LOG_DIR = REPO_ROOT / "logs"
 ENV_FILE = REPO_ROOT / ".env" / "apps.env"
+REQUIREMENTS_FILE = REPO_ROOT / "requirements.txt"
 
 if os.name == "nt":
     # Prefer pythonw.exe (windowless) over python.exe so spawned daemons
     # don't pop up empty console windows. Fall back to python.exe if pythonw
     # was stripped (some minimal venv setups).
-    _PYTHONW = REPO_ROOT / ".venv" / "Scripts" / "pythonw.exe"
-    _PYTHON_NT = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
+    _PYTHONW = VENV_DIR / "Scripts" / "pythonw.exe"
+    _PYTHON_NT = VENV_DIR / "Scripts" / "python.exe"
     VENV_PY = _PYTHONW if _PYTHONW.exists() else _PYTHON_NT
 else:
-    VENV_PY = REPO_ROOT / ".venv" / "bin" / "python"
+    VENV_PY = VENV_DIR / "bin" / "python"
 
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
@@ -1206,6 +1211,259 @@ def _unregister_scheduled_tasks(services):
         print(f"  Unregistered Run key: {name}")
 
 
+# ── Transactional virtualenv rebuild ─────────────────────────────────────────
+
+_REBUILD_REEXEC_MARKER = "HARQIS_VENV_REBUILD_BASE_INTERPRETER"
+
+
+def _venv_console_python() -> Path:
+    """Return the canonical console Python path for the target virtualenv."""
+    if IS_WIN:
+        return VENV_DIR / "Scripts" / "python.exe"
+    return VENV_DIR / "bin" / "python"
+
+
+def _running_from_target_venv() -> bool:
+    """Whether this deploy process is using the environment it will replace."""
+    try:
+        return Path(sys.prefix).resolve() == VENV_DIR.resolve()
+    except OSError:
+        return False
+
+
+def _reexec_rebuild_with_base_python() -> None:
+    """Escape the target venv before replacing it, especially on Windows."""
+    if not _running_from_target_venv():
+        return
+    if os.environ.get(_REBUILD_REEXEC_MARKER) == "1":
+        raise RuntimeError("rebuild remained inside .venv after base-Python re-exec")
+
+    base_executable = Path(getattr(sys, "_base_executable", sys.executable)).resolve()
+    if not base_executable.exists():
+        raise RuntimeError(f"base Python does not exist: {base_executable}")
+
+    print(f"[venv] Re-executing with base Python: {base_executable}")
+    os.environ[_REBUILD_REEXEC_MARKER] = "1"
+    os.execv(
+        str(base_executable),
+        [str(base_executable), str(Path(__file__).resolve()), *sys.argv[1:]],
+    )
+
+
+def _unique_venv_sibling(label: str) -> Path:
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    candidate = VENV_DIR.with_name(f"{VENV_DIR.name}.{label}-{stamp}")
+    suffix = 1
+    while candidate.exists():
+        candidate = VENV_DIR.with_name(
+            f"{VENV_DIR.name}.{label}-{stamp}-{suffix}"
+        )
+        suffix += 1
+    return candidate
+
+
+def _record_running_services() -> set[str]:
+    """Capture local Python services before the environment is replaced."""
+    running: set[str] = set()
+    for service in SERVICES:
+        if _service_is_stdio(service):
+            continue
+        if read_pid(service) or _process_matching(_STATUS_NEEDLES.get(service, service)):
+            running.add(service)
+    return running
+
+
+def _suspend_supervised_services(active: set[str] | None = None) -> set[str]:
+    """Stop active launchd/systemd units without removing their registration."""
+    if active is None:
+        active = set()
+    for service in SERVICES:
+        if _service_is_stdio(service):
+            continue
+        if IS_MAC:
+            path = _plist_path(service)
+            if not path.exists():
+                continue
+            label = f"work.harqis.{service}"
+            result = subprocess.run(
+                ["launchctl", "list", label], capture_output=True, check=False
+            )
+            if result.returncode == 0:
+                active.add(service)
+                subprocess.run(["launchctl", "unload", str(path)], check=True)
+        elif IS_LIN:
+            unit = f"harqis-{service}.service"
+            result = subprocess.run(
+                ["systemctl", "--user", "is-active", "--quiet", unit],
+                capture_output=True,
+                check=False,
+            )
+            if result.returncode == 0:
+                active.add(service)
+                subprocess.run(["systemctl", "--user", "stop", unit], check=True)
+    return active
+
+
+def _quiesce_services(services: set[str]) -> None:
+    """Stop tracked and forked processes so no interpreter holds .venv open."""
+    for service in sorted(services):
+        if service not in SERVICES or _service_is_stdio(service):
+            continue
+        stop_service(service)
+        kill_stray_processes(_STATUS_NEEDLES.get(service, service), label=service)
+        pid_path(service).unlink(missing_ok=True)
+
+
+def _resume_supervised_services(services: set[str]) -> None:
+    for service in sorted(services):
+        if IS_MAC:
+            subprocess.run(["launchctl", "load", str(_plist_path(service))], check=True)
+        elif IS_LIN:
+            subprocess.run(
+                ["systemctl", "--user", "start", f"harqis-{service}.service"],
+                check=True,
+            )
+
+
+def _restore_service_snapshot(
+    running: set[str],
+    supervised: set[str],
+    machine: dict,
+    args: argparse.Namespace,
+) -> None:
+    """Restore supervision first, then services that had been started manually."""
+    _resume_supervised_services(supervised)
+    for service in sorted(running - supervised):
+        if not start_service(service, machine, args):
+            raise RuntimeError(f"failed to restore service: {service}")
+
+
+def _run_venv_command(command: list[str], log_file: Path, stage: str) -> None:
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    with log_file.open("a", encoding="utf-8") as stream:
+        stream.write(f"\n== {stage} ==\n")
+        stream.flush()
+        result = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            stdout=stream,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=False,
+        )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"{stage} failed with exit code {result.returncode}; see {log_file}"
+        )
+
+
+def _create_clean_venv(base_python: Path, log_file: Path) -> None:
+    _run_venv_command(
+        [str(base_python), "-m", "venv", str(VENV_DIR)],
+        log_file,
+        "create virtualenv",
+    )
+
+
+def _install_venv_requirements(log_file: Path) -> None:
+    python = _venv_console_python()
+    _run_venv_command(
+        [str(python), "-m", "pip", "install", "--upgrade", "pip"],
+        log_file,
+        "upgrade pip",
+    )
+    _run_venv_command(
+        [str(python), "-m", "pip", "install", "-r", str(REQUIREMENTS_FILE)],
+        log_file,
+        "install requirements",
+    )
+
+
+def _verify_clean_venv(log_file: Path) -> None:
+    config = VENV_DIR / "pyvenv.cfg"
+    config_text = config.read_text(encoding="utf-8").lower()
+    if "include-system-site-packages = false" not in config_text:
+        raise RuntimeError(f"new environment is not isolated: {config}")
+
+    python = _venv_console_python()
+    _run_venv_command(
+        [str(python), "-m", "pip", "check"], log_file, "pip check"
+    )
+    _run_venv_command(
+        [
+            str(python),
+            "-c",
+            "import core; import mcp.server.fastmcp; import workflows",
+        ],
+        log_file,
+        "import smoke test",
+    )
+
+
+def rebuild_virtualenv(machine: dict, args: argparse.Namespace) -> Path | None:
+    """Replace .venv transactionally and restore the prior service state."""
+    base_python = Path(getattr(sys, "_base_executable", sys.executable)).resolve()
+    if not base_python.exists():
+        raise RuntimeError(f"base Python does not exist: {base_python}")
+    if not REQUIREMENTS_FILE.exists():
+        raise RuntimeError(f"requirements file does not exist: {REQUIREMENTS_FILE}")
+
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    log_file = LOG_DIR / f"venv-rebuild-{stamp}.log"
+    running = _record_running_services()
+    supervised: set[str] = set()
+    backup: Path | None = None
+    replacement_started = False
+
+    print(f"[venv] Rebuilding {VENV_DIR}")
+    print(f"[venv] Install log: {log_file}")
+    if running:
+        print(f"[venv] Services to restore: {', '.join(sorted(running))}")
+
+    try:
+        _suspend_supervised_services(supervised)
+        running.update(supervised)
+        _quiesce_services(running)
+
+        if VENV_DIR.exists():
+            backup = _unique_venv_sibling("backup")
+            VENV_DIR.rename(backup)
+            print(f"[venv] Previous environment moved to {backup}")
+
+        replacement_started = True
+        _create_clean_venv(base_python, log_file)
+        _install_venv_requirements(log_file)
+        _verify_clean_venv(log_file)
+        _restore_service_snapshot(running, supervised, machine, args)
+    except Exception as exc:
+        print(f"[venv] ERROR: {exc}")
+        # A restore failure may already have started processes from the new
+        # environment. Stop them before swapping directories on rollback.
+        try:
+            _suspend_supervised_services(supervised)
+        except Exception as suspend_exc:
+            print(f"[venv] WARNING: could not pause supervision during rollback: {suspend_exc}")
+        _quiesce_services(running | supervised)
+
+        if replacement_started and VENV_DIR.exists():
+            failed = _unique_venv_sibling("failed")
+            VENV_DIR.rename(failed)
+            print(f"[venv] Failed environment retained at {failed}")
+        if backup is not None and backup.exists():
+            backup.rename(VENV_DIR)
+            print(f"[venv] Restored previous environment from {backup}")
+        try:
+            _restore_service_snapshot(running, supervised, machine, args)
+        except Exception as restore_exc:
+            print(f"[venv] WARNING: service restore after rollback failed: {restore_exc}")
+        raise RuntimeError(f"virtualenv rebuild rolled back; see {log_file}") from exc
+
+    print("[venv] Rebuild verified successfully (pip check + import smoke test).")
+    if backup is not None:
+        print(f"[venv] Recoverable backup retained at {backup}")
+    return backup
+
+
 # ── Service selection ─────────────────────────────────────────────────────────
 
 def select_services(machine: dict, args: argparse.Namespace) -> list[str]:
@@ -1278,6 +1536,12 @@ def build_parser() -> argparse.ArgumentParser:
                         "or held stale env (e.g. `--restart frontend`).")
     g.add_argument("--register",   action="store_true", help="Register OS auto-start units")
     g.add_argument("--unregister", action="store_true", help="Remove OS auto-start units")
+    g.add_argument(
+        "--rebuild-venv",
+        action="store_true",
+        help="Transactionally rebuild .venv, run pip check/import smoke tests, "
+             "and restore services that were running",
+    )
     return p
 
 
@@ -1287,7 +1551,20 @@ def main() -> None:
     args = build_parser().parse_args()
     RUN_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+    if args.rebuild_venv:
+        _reexec_rebuild_with_base_python()
+        os.environ.pop(_REBUILD_REEXEC_MARKER, None)
+
     load_env_into_os()
+
+    if args.rebuild_venv:
+        machine = load_machine_config(args.machine)
+        if args.role:
+            machine["role"] = args.role
+        os.environ.update(machine_env_vars(machine))
+        rebuild_virtualenv(machine, args)
+        return
 
     if args.status:
         _m = load_machine_config(args.machine)

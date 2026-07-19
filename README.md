@@ -632,17 +632,23 @@ See [`docs/info/HERMES-HOST.md`](docs/info/HERMES-HOST.md) for the full deployme
 ```sh
 git clone https://github.com/brianbartilet/harqis-work.git
 cd harqis-work
-python -m venv venv
-source venv/bin/activate        # Linux/macOS
-venv\Scripts\activate           # Windows
+python -m venv .venv
+source .venv/bin/activate       # Linux/macOS
+.venv\Scripts\activate          # Windows
 pip install -r requirements.txt
+pip check
 ```
 
-To force-reinstall `harqis-core` from the latest commit:
+To replace an existing environment cleanly while preserving the prior copy and
+restoring locally running services:
 
 ```sh
-pip install --upgrade --force-reinstall --no-cache-dir git+https://github.com/brianbartilet/harqis-core.git#egg=harqis-core
+python scripts/deploy.py --machine NAME --rebuild-venv
 ```
+
+The rebuild re-executes under the base interpreter, installs the commit-pinned
+`harqis-core` and all Work dependencies in one resolver pass, runs `pip check`
+and import smoke tests, then rolls back automatically if verification fails.
 
 ---
 
