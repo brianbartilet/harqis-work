@@ -7,14 +7,14 @@ Homework-for-Life corpus entries, so visual moments flow into the weekly
 
 Pipeline:
   1. Resolve the dumps inbox (same source `analyze_daily_dumps` uses).
-  2. Walk it windowed by mtime — files modified in the last `window_days`
-     (stateless: overlapping runs may re-analyze; the daily window + daily
-     schedule keeps overlap negligible).
+  2. Walk it windowed by mtime — files modified in the last `window_days` —
+     reserving bounded capacity for Android media before filling by recency.
   3. Images  → base64 vision block. Videos → N evenly-sampled frames
      (OpenCV) as a multi-image block.
   4. Haiku 4.5 returns a structured JSON story moment.
-  5. Each non-skipped result is appended to the corpus as one HFL entry,
-     dated at the file's capture (mtime) time, tagged from the folder path.
+  5. Each non-skipped, not-yet-referenced result is appended to the corpus as
+     one HFL entry, dated at the file's capture (mtime) time and tagged from
+     the folder path. A `media_path` call targets one inbox artifact directly.
 
 Cost: Haiku only — do NOT raise the Anthropic config default (shared by
 Sonnet-class workflows). Frame count and `max_files` bound the vision spend.
@@ -28,8 +28,14 @@ Prompt lives in the prompts/ layer — workflows/hfl/prompts/analyze_media.md.
 from __future__ import annotations
 
 import base64
+import fcntl
+import hashlib
 import json
+import os
 import re
+import shutil
+import stat
+import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -42,7 +48,11 @@ from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 
 from workflows.dumps.config import get_dumps_target
-from workflows.dumps.files import iter_recent_files
+from workflows.dumps.files import (
+    CollectedFile,
+    iter_recent_files,
+    parse_dump_dir_name,
+)
 from workflows.hfl.prompts import load_prompt
 from workflows.hfl.tasks.capture import (
     _build_entry,
@@ -89,6 +99,7 @@ _RAW_IMAGE_MAX_BYTES = 4_500_000  # below the API's 5 MB/image hard limit
 _ANDROID_SCREENSHOT_DIRS = frozenset({"screenshots", "screenshot"})
 _ANDROID_CAMERA_DIRS = frozenset({"camera", "dcim"})
 _ANDROID_SCREENREC_DIRS = frozenset({"screen recordings", "screenrecord"})
+_ANDROID_DUMP_SOURCES = frozenset({"nothing-phone"})
 _ANDROID_CAPTURE_HINT = {
     "screenshot": "Source: Android screenshot\n",
     "photo": "Source: Android camera photo\n",
@@ -101,14 +112,20 @@ def classify_android_media_candidate(relative: Path) -> dict | None:
 
     Reads only the folder path — never file contents. Returns a dict with
     ``capture_type`` ("screenshot", "photo", "screen_recording") and
-    ``device_type`` ("android") when the path's parent directories match
-    canonical Android folder names. Returns None when unrecognised.
+    ``device_type`` ("android") when the first path component identifies a
+    known Android dump source and later parent directories match canonical
+    Android media folders. Returns None when unrecognised.
 
     Used to inject a ``Source:`` line into the Haiku instruction so the model
     can interpret app-UI screenshots, notification bars, and status icons as
     phone-specific story signals, without ever surfacing raw image text.
     """
-    parts = frozenset(p.lower() for p in relative.parts[:-1])  # exclude filename
+    if len(relative.parts) < 2:
+        return None
+    parsed_source = parse_dump_dir_name(relative.parts[0].casefold())
+    if not parsed_source or parsed_source[0] not in _ANDROID_DUMP_SOURCES:
+        return None
+    parts = frozenset(p.casefold() for p in relative.parts[1:-1])
     if parts & _ANDROID_SCREENSHOT_DIRS:
         return {"capture_type": "screenshot", "device_type": "android"}
     if parts & _ANDROID_CAMERA_DIRS:
@@ -116,6 +133,269 @@ def classify_android_media_candidate(relative: Path) -> dict | None:
     if parts & _ANDROID_SCREENREC_DIRS:
         return {"capture_type": "screen_recording", "device_type": "android"}
     return None
+
+
+def _select_media_candidates(
+    collected: list[CollectedFile],
+    *,
+    max_files: int,
+    android_min_files: int,
+) -> list[CollectedFile]:
+    """Reserve Android capacity, then fill unused slots by global recency."""
+    limit = max(0, int(max_files))
+    if limit == 0:
+        return []
+    candidates = sorted(
+        (
+            item for item in collected
+            if item.path.suffix.lower() in _IMAGE_EXTS
+            or item.path.suffix.lower() in _VIDEO_EXTS
+        ),
+        key=lambda item: item.mtime,
+        reverse=True,
+    )
+    reserve = min(limit, max(0, int(android_min_files)))
+    android = [
+        item for item in candidates
+        if classify_android_media_candidate(item.relative)
+    ][:reserve]
+    selected_paths = {item.path for item in android}
+    selected = list(android)
+    for item in candidates:
+        if len(selected) >= limit:
+            break
+        if item.path not in selected_paths:
+            selected.append(item)
+            selected_paths.add(item.path)
+    return sorted(selected, key=lambda item: item.mtime, reverse=True)
+
+
+def _target_media_candidate(inbox: Path, media_path: str | Path) -> CollectedFile:
+    """Build one validated inbox-relative media candidate for targeted ingest."""
+    root = inbox.expanduser().resolve()
+    path = Path(media_path).expanduser().resolve()
+    try:
+        relative = path.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"media path is outside dumps inbox: {path}") from exc
+    if not path.is_file():
+        raise ValueError(f"media path is not a file: {path}")
+    if path.suffix.lower() not in (_IMAGE_EXTS | _VIDEO_EXTS):
+        raise ValueError(f"unsupported media type: {path.suffix}")
+    return CollectedFile(
+        source_root=root,
+        path=path,
+        relative=relative,
+        mtime=datetime.fromtimestamp(path.stat().st_mtime),
+    )
+
+
+def _revalidate_media_candidate(inbox: Path, item: CollectedFile) -> CollectedFile:
+    """Resolve a selected path again immediately before reading it."""
+    return _target_media_candidate(inbox, item.path)
+
+
+def _secure_media_snapshot(
+    inbox: Path, item: CollectedFile,
+) -> tuple[Path, CollectedFile]:
+    """Copy one confined file through a no-follow descriptor chain.
+
+    Every path component is opened relative to the already-open inbox root with
+    ``O_NOFOLLOW``. The model and metadata readers consume the private snapshot,
+    binding validation and reading to the same source descriptor.
+    """
+    root = inbox.expanduser().resolve()
+    resolved = item.path.resolve(strict=True)
+    try:
+        relative = resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"media path is outside dumps inbox: {resolved}") from exc
+    if resolved.suffix.lower() not in (_IMAGE_EXTS | _VIDEO_EXTS):
+        raise ValueError(f"unsupported media type: {resolved.suffix}")
+
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    directory = getattr(os, "O_DIRECTORY", 0)
+    root_fd = os.open(root, os.O_RDONLY | directory)
+    parent_fd = root_fd
+    file_fd: int | None = None
+    snapshot_path: Path | None = None
+    success = False
+    try:
+        for component in relative.parts[:-1]:
+            next_fd = os.open(
+                component,
+                os.O_RDONLY | directory | nofollow,
+                dir_fd=parent_fd,
+            )
+            if parent_fd != root_fd:
+                os.close(parent_fd)
+            parent_fd = next_fd
+        file_fd = os.open(
+            relative.name,
+            os.O_RDONLY | nofollow,
+            dir_fd=parent_fd,
+        )
+        source_stat = os.fstat(file_fd)
+        if not stat.S_ISREG(source_stat.st_mode):
+            raise ValueError(f"media path is not a regular file: {resolved}")
+        with tempfile.NamedTemporaryFile(
+            mode="wb", suffix=resolved.suffix, prefix="hfl-media-", delete=False,
+        ) as snapshot:
+            snapshot_path = Path(snapshot.name)
+            with os.fdopen(file_fd, "rb") as source:
+                file_fd = None
+                shutil.copyfileobj(source, snapshot)
+            snapshot.flush()
+            os.fsync(snapshot.fileno())
+        safe_item = CollectedFile(
+            source_root=root,
+            path=resolved,
+            relative=relative,
+            mtime=datetime.fromtimestamp(source_stat.st_mtime),
+        )
+        success = True
+        return snapshot_path, safe_item
+    finally:
+        if file_fd is not None:
+            os.close(file_fd)
+        if parent_fd != root_fd:
+            os.close(parent_fd)
+        os.close(root_fd)
+        if snapshot_path is not None and not success:
+            snapshot_path.unlink(missing_ok=True)
+
+
+def _completed_media_references(day_file: Path) -> set[str]:
+    """Read references only from independently terminated Markdown entries."""
+    if not day_file.is_file():
+        return set()
+    text = day_file.read_text(encoding="utf-8")
+    starts = [match.start() for match in re.finditer(r"(?m)^## ", text)]
+    references: set[str] = set()
+    for index, start in enumerate(starts):
+        end = starts[index + 1] if index + 1 < len(starts) else len(text)
+        block = text[start:end]
+        if not block.endswith("\n\n"):
+            continue
+        references.update(
+            line.strip()[2:]
+            for line in block.splitlines()
+            if line.strip().startswith("- ")
+        )
+    return references
+
+
+def _media_reference_exists(day_file: Path, media_path: Path) -> bool:
+    """Return whether a complete corpus entry references this media path."""
+    return str(media_path.resolve()) in _completed_media_references(day_file)
+
+
+def _media_state_paths(corpus_dir: Path, media_path: Path) -> tuple[Path, Path]:
+    key = hashlib.sha256(str(media_path.resolve()).encode("utf-8")).hexdigest()
+    state_dir = corpus_dir / ".media-ingest-state"
+    return state_dir / f"{key}.lock", state_dir / f"{key}.done"
+
+
+def _media_state_exists(corpus_dir: Path, media_path: Path) -> bool:
+    """Return true for a completed path or a claim actively locked by a worker."""
+    lock_path, done_path = _media_state_paths(corpus_dir, media_path)
+    if done_path.exists():
+        return True
+    if not lock_path.exists():
+        return False
+    fd = os.open(lock_path, os.O_RDWR)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return False
+    finally:
+        os.close(fd)
+
+
+def _acquire_media_claim(
+    corpus_dir: Path, media_path: Path,
+) -> tuple[Path, Path, int] | None:
+    """Claim a media path with an FD-bound advisory lock.
+
+    The lock is released automatically if the worker dies. Keeping ownership on
+    the open descriptor avoids pathname check-then-act races during finalization.
+    """
+    lock_path, done_path = _media_state_paths(corpus_dir, media_path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    if done_path.exists():
+        return None
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(fd)
+        return None
+    if done_path.exists():
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+        return None
+    os.ftruncate(fd, 0)
+    os.write(fd, f"{media_path.resolve()}\n".encode("utf-8"))
+    return lock_path, done_path, fd
+
+
+def _finish_media_claim(claim: tuple[Path, Path, int], completed: bool) -> None:
+    """Mark completion while holding the claim's FD-bound lock, then release."""
+    lock_path, done_path, fd = claim
+    try:
+        if completed:
+            done_fd = os.open(done_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            try:
+                os.write(done_fd, b"done\n")
+            finally:
+                os.close(done_fd)
+    except FileExistsError:
+        pass
+    except OSError as exc:
+        _log.warning("hfl.media: could not finalize claim %s — %s", lock_path, exc)
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+
+def _filter_processed_media(
+    candidates: list[CollectedFile], corpus_dir: Path,
+) -> tuple[list[CollectedFile], int]:
+    """Remove corpus-referenced or claimed media before quota selection."""
+    pending: list[CollectedFile] = []
+    duplicates = 0
+    references_by_day: dict[Path, set[str]] = {}
+    seen_paths: set[Path] = set()
+    for item in candidates:
+        source_root = item.source_root.expanduser().resolve()
+        canonical_path = item.path.expanduser().resolve()
+        try:
+            canonical_relative = canonical_path.relative_to(source_root)
+        except ValueError as exc:
+            raise OSError(f"media path escaped source root: {canonical_path}") from exc
+        day_file = corpus_dir / f"{item.mtime:%Y-%m-%d}.md"
+        if day_file not in references_by_day:
+            references_by_day[day_file] = _completed_media_references(day_file)
+        if (
+            canonical_path in seen_paths
+            or str(canonical_path) in references_by_day[day_file]
+            or _media_state_exists(corpus_dir, canonical_path)
+        ):
+            duplicates += 1
+        else:
+            seen_paths.add(canonical_path)
+            pending.append(CollectedFile(
+                source_root=source_root,
+                path=canonical_path,
+                relative=canonical_relative,
+                mtime=item.mtime,
+            ))
+    return pending, duplicates
 
 
 def _media_type_for(suffix: str) -> str:
@@ -236,6 +516,19 @@ def _parse_model_json(text: str) -> dict | None:
         return None
 
 
+def _validate_model_result(value: dict | None) -> dict | None:
+    """Accept only the exact story-result schema; malformed output is retryable."""
+    if not isinstance(value, dict) or type(value.get("skip")) is not bool:
+        return None
+    text_fields = ("moment", "what_happened", "why_it_stayed", "possible_use")
+    if any(not isinstance(value.get(field), str) for field in text_fields):
+        return None
+    tags = value.get("tags")
+    if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
+        return None
+    return value
+
+
 def _dms_to_deg(dms, ref) -> float | None:
     """Convert an EXIF GPS (degrees, minutes, seconds) triple + N/S/E/W ref to
     signed decimal degrees, or None."""
@@ -331,10 +624,17 @@ def analyze_hfl_media(
     model: str = _DEFAULT_HAIKU,
     window_days: int = 1,
     max_files: int = 40,
+    android_min_files: int = 10,
     frames_per_video: int = 4,
     max_tokens: int = 1024,
+    media_path: str | None = None,
 ) -> dict[str, Any]:
-    """Analyze recent inbox media and append HFL corpus entries.
+    """Analyze recent or one targeted inbox media file and append HFL entries.
+
+    The scheduled batch reserves ``android_min_files`` slots for Android-origin
+    media, then fills unused capacity by global recency. ``media_path`` bypasses
+    batch selection but must resolve inside the configured dumps inbox. Both
+    modes skip a source path already referenced by its daily corpus file.
 
     Returns:
         {"entries_written", "images", "videos", "skipped", "scanned",
@@ -351,43 +651,86 @@ def analyze_hfl_media(
         return {"skipped": "inbox missing", "entries_written": 0,
                 "scanned": 0}
 
-    end = datetime.now()
-    start = end - timedelta(days=window_days)
-    collected = sorted(
-        iter_recent_files([inbox], start, end),
-        key=lambda c: c.mtime,
-        reverse=True,
-    )
-    media = [
-        c for c in collected
-        if c.path.suffix.lower() in _IMAGE_EXTS
-        or c.path.suffix.lower() in _VIDEO_EXTS
-    ][:max_files]
+    if media_path:
+        try:
+            candidates = [_target_media_candidate(inbox, media_path)]
+        except ValueError as exc:
+            _log.info("hfl.media: targeted ingest rejected (%s)", exc)
+            return {"skipped": "invalid media path", "reason": str(exc),
+                    "entries_written": 0, "scanned": 0, "targeted": True}
+        collected = candidates
+    else:
+        end = datetime.now()
+        start = end - timedelta(days=window_days)
+        collected = list(iter_recent_files([inbox], start, end))
+        candidates = _select_media_candidates(
+            collected, max_files=len(collected), android_min_files=0,
+        )
 
-    if not media:
+    if not candidates:
         _log.info("hfl.media: no media in the last %d day(s)", window_days)
         return {"skipped": "no media", "entries_written": 0,
-                "scanned": len(collected)}
+                "scanned": len(collected), "targeted": bool(media_path)}
+
+    corpus_dir = resolve_corpus_dir()
+    corpus_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        pending, duplicates = _filter_processed_media(candidates, corpus_dir)
+    except OSError as exc:
+        _log.error("hfl.media: cannot verify corpus idempotency — %s", exc)
+        return {"skipped": "corpus unreadable", "reason": str(exc),
+                "entries_written": 0, "scanned": 0,
+                "targeted": bool(media_path)}
+
+    if media_path:
+        media = pending
+        selected_count = 1
+    else:
+        media = _select_media_candidates(
+            pending, max_files=max_files, android_min_files=android_min_files,
+        )
+        selected_count = len(media)
+    if not media:
+        return {"skipped": "already ingested", "entries_written": 0,
+                "scanned": selected_count, "duplicates": duplicates,
+                "targeted": bool(media_path)}
 
     client = BaseApiServiceAnthropic(get_anthropic_config(cfg_id__anthropic))
     if not client.base_client:
         raise RuntimeError("Anthropic client failed to initialize")
 
-    corpus_dir = resolve_corpus_dir()
-    corpus_dir.mkdir(parents=True, exist_ok=True)
-
     images = videos = entries = skipped = android_items = 0
     geo_cache: dict = {}  # reverse-geocode cache shared across this run's media
 
     for item in media:
+        try:
+            item = _revalidate_media_candidate(inbox, item)
+        except (OSError, ValueError) as exc:
+            skipped += 1
+            _log.warning("hfl.media: media path changed or escaped %s — %s", item.path, exc)
+            continue
+        try:
+            claim = _acquire_media_claim(corpus_dir, item.path)
+        except OSError as exc:
+            skipped += 1
+            _log.warning("hfl.media: cannot claim %s — %s", item.path, exc)
+            continue
+        if claim is None:
+            duplicates += 1
+            skipped += 1
+            _log.info("hfl.media: already claimed — skipping %s", item.path)
+            continue
+        completed = False
+        snapshot_path: Path | None = None
         suffix = item.path.suffix.lower()
         is_video = suffix in _VIDEO_EXTS
         try:
+            snapshot_path, item = _secure_media_snapshot(inbox, item)
             if is_video:
-                blocks = _video_blocks(item.path, frames_per_video)
+                blocks = _video_blocks(snapshot_path, frames_per_video)
                 media_kind = "video"
             else:
-                one = _encode_image(item.path)
+                one = _encode_image(snapshot_path)
                 blocks = [one] if one else []
                 media_kind = "image"
 
@@ -396,7 +739,7 @@ def analyze_hfl_media(
                 continue
 
             place, coords, geo_src = _resolve_media_location(
-                item.path, item.mtime, not is_video, geocode_cache=geo_cache,
+                snapshot_path, item.mtime, not is_video, geocode_cache=geo_cache,
             )
             if place:
                 loc_line = f"Location: {place}\n"
@@ -434,17 +777,20 @@ def analyze_hfl_media(
                 system=_SYSTEM_PROMPT,
             )
             text = response.content[0].text if response.content else ""
-            parsed = _parse_model_json(text)
+            parsed = _validate_model_result(_parse_model_json(text))
 
             if is_video:
                 videos += 1
             else:
                 images += 1
 
-            if not parsed or parsed.get("skip") or not str(
-                parsed.get("moment", "")
-            ).strip():
+            if parsed and parsed.get("skip") is True:
                 skipped += 1
+                completed = True
+                continue
+            if not parsed or not str(parsed.get("moment", "")).strip():
+                skipped += 1
+                _log.warning("hfl.media: malformed model response for %s", item.path)
                 continue
 
             tags = _tags_from(item.relative, media_kind)
@@ -464,7 +810,7 @@ def analyze_hfl_media(
                     if atag not in tags:
                         tags.append(atag)
 
-            references = [str(item.path)]
+            references = [str(item.path.resolve())]
             if coords:
                 references.append(_osm_link(coords[0], coords[1]))
 
@@ -484,12 +830,17 @@ def analyze_hfl_media(
             # Vision pass = an LLM (Haiku) distillation → synthesized.
             append_entry(day_file, entry, source="media", synthesized=True)
             entries += 1
+            completed = True
             _log.info("hfl.media: entry from %s → %s", item.path.name, day_file)
 
         except Exception as exc:  # one bad file must not abort the batch
             skipped += 1
             _log.warning("hfl.media: failed on %s — %s", item.path, exc)
             continue
+        finally:
+            if snapshot_path is not None:
+                snapshot_path.unlink(missing_ok=True)
+            _finish_media_claim(claim, completed)
 
     _log.info(
         "hfl.media: %d entries (%d images, %d videos, %d skipped) from %d media",
@@ -500,8 +851,10 @@ def analyze_hfl_media(
         "images": images,
         "videos": videos,
         "skipped": skipped,
-        "scanned": len(media),
+        "scanned": selected_count,
+        "duplicates": duplicates,
         "android_items": android_items,
         "model": model,
         "window_days": window_days,
+        "targeted": bool(media_path),
     }
