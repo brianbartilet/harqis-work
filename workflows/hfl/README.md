@@ -49,6 +49,7 @@ this scaffold closes.
 | `ingest_location_activity` | Daily location timeline. Pulls the day's GPS track from the local OwnTracks Recorder (`apps/own_tracks`), clusters fixes into **stay-points** (dwell ≥ N min), reverse-geocodes each via OpenStreetMap Nominatim (free, no key), and distils ONE "where I was today" timeline entry. Haiku-distilled, raw fallback. No device configured / Recorder unreachable / no fixes → no entry, no call; fixes with no qualifying stay write a movement-only breadcrumb. | `file:hfl_corpus+es:hfl-entries` | Daily 23:05 local (active — clean no-op until OwnTracks reports). |
 | `ingest_spotify_activity` | Daily Spotify listening digest. Pulls the day's plays from the Spotify Web API (`apps/spotify`, OAuth2 refresh-token), with the operator's rolling top tracks/artists as context, and distils ONE "soundtrack of the day" entry — mood **inferred** by Haiku from track/artist/genre names (no audio-features; deprecated for new apps). Haiku-distilled, raw fallback. No credentials / no plays → no entry, no call. `recently-played` caps at 50/day. | `file:hfl_corpus+es:hfl-entries` | Daily 23:10 local (**shipped commented-out** — uncomment in `tasks_config.py` once `SPOTIFY_*` creds are set; `tenant_safe`). |
 | `ingest_plaud_activity` | Daily **voice-recordings** ingest. Pulls the day's Plaud recordings via the `apps/plaud` adapter (cloud API → local export-folder fallback) and writes **ONE entry per recording** (not a daily digest). Transcript precedence: Plaud's own transcript, else OpenAI **Whisper** on the raw audio (bounded by `max_transcribe`). Raw recordings + a consolidated `YYYY-MM-DD-summary.md` are archived to `harqis-ones-mac-mini` over key-based SSH. Haiku-distilled, raw fallback. No `PLAUD_TOKEN`/`PLAUD_EXPORT_DIR` → no entry, no call; no recordings → no entry, no call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:15 local (active — clean no-op until acquisition is configured; `tenant_safe`). |
+| `ingest_looki_activity` | Metadata-first Looki L1 wearable ingest. Polls an overlapping date window and writes **ONE entry per moment** with `looki:<id>` provenance. Looki-generated descriptions remain explicitly unverified; no LLM, media download, coordinates, or signed URL persistence. | `file:hfl_corpus+es:hfl-entries` | **Shipped commented-out**; proposed daily 23:25 local after approved API access and a live schema smoke test. |
 | `ingest_radar_activity` | Daily **HERMES RADAR digest.** Reads the day's compatibility-named `show_daily_radar` synthesis blocks back out of the shared desktop feed file (`<feed_dir>/hud-logs-YYYYMMDD.txt`) and distils them into ONE "what the day was about" entry. It does not ingest the 15-minute Telegram push rerenders or re-run the radar source sweep. The feed file is Drive-synced, so the Beat host reads briefings a Windows radar wrote; files read remain the entry references. Haiku-distilled, raw fallback. No feed dir / no synthesis blocks → no entry, no LLM call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:20 local (active — clean no-op until `DESKTOP_PATH_FEED` is set and the radar has run). |
 | `analyze_hfl_media` | **Daily media vision pass.** Walks the dumps inbox for recent images/videos (pulled from phones + machines by `workflows/dumps/`), reserves 10 of the 40 analysis slots for Android-origin media, then fills unused capacity by global recency. Each item is sent to Haiku vision for a story moment and **geo-tagged** — EXIF GPS, else the nearest OwnTracks fix by capture time → Nominatim place. One entry per story-worthy item; the source dump file + an OSM pin are the `references`. Already-referenced media is skipped before the model call. Passing `media_path=<inbox file>` targets one artifact directly. | `file:hfl_corpus+es:hfl-entries` | Daily 22:00 local (active). |
 | `collect_time_capsule` | **On-demand, time-ranged archive ingest.** Sweeps a directory (and subdirs) for files dated within a period, extracts text / docs / Haiku vision captions into a bounded manifest + digest. The COLLECT half of the `/time-capsule-synthesizer` skill (Claude synthesizes ONE rollup entry from the digest, then dual-writes it via `capture_hfl_entry`). Not scheduled. | `file:hfl_corpus+es:hfl-entries` (via the skill) | Adhoc — driven by `/time-capsule-synthesizer`. |
@@ -424,6 +425,40 @@ To make it produce entries:
 - Tuning kwargs: `window_days` (1), `max_recordings` (50), `max_transcribe` (20),
   `whisper_model` (`whisper-1`), `allow_whisper`, `archive`.
 - Live view (no write): the `plaud_activity` MCP tool in `workflows/hfl/mcp.py`.
+
+### `ingest_looki_activity` (wearable lifelog moments)
+
+**Shipped commented-out** in `tasks_config.py` until approved API access exists
+and a one-day live schema smoke test passes. The task polls the Looki Open API
+through `apps/looki`, then dual-writes **one entry per moment** with deterministic
+provenance (`looki:<id>`) and a collision-resistant ES ID derived from the exact
+source ID (`looki-<first 128 bits / 32 hex chars of SHA-256>`).
+
+To activate:
+
+1. Apply at <https://web.looki.tech/api-keys>, create a key after approval, and
+   set `LOOKI_API_KEY` in `.env/apps.env`.
+2. Call `looki_status`, then `list_looki_moments` for a known date. Confirm IDs,
+   timestamps, titles, and generated descriptions match the adapter contract.
+3. Run `ingest_looki_activity(window_days=1, max_moments=20)` manually and review
+   the HFL Markdown + Elasticsearch projection.
+4. Uncomment `run-job--ingest_looki_activity` in `tasks_config.py`, regenerate
+   registry data if required, and restart Beat plus an `hfl` worker.
+
+Privacy and truth boundary:
+
+- Metadata only; no automatic video download, precise coordinates, or temporary
+  signed URL persistence.
+- Looki-generated text is tagged `unverified-ai` and treated as a recall index.
+- Consequential memories require explicit source-media verification using the
+  Looki MCP file tool; URLs are hidden by default.
+- The two-day overlapping window, atomic claim/done state, and global exact
+  `looki:<id>` corpus check make overlapping workers and retries idempotent.
+  Completed items are re-upserted to ES during overlap polls so a transient
+  projection failure self-repairs.
+
+See [`apps/looki/README.md`](../../apps/looki/README.md) and the design thesis
+[`LOOKI-L1-HARQIS-INGESTION.md`](../../docs/thesis/LOOKI-L1-HARQIS-INGESTION.md).
 
 ---
 

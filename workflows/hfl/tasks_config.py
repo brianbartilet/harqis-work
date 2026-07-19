@@ -319,6 +319,32 @@ WORKFLOW_HFL = {
         },
     },
 
+    # Looki L1 wearable moments — intentionally inactive until approved API
+    # access is configured and one live day has been schema-validated. The task
+    # itself is fully callable and cleanly no-ops without LOOKI_API_KEY.
+    # Metadata only: no media downloads, coordinates, or temporary signed URLs.
+    # Uncomment after the manual smoke test described in apps/looki/README.md.
+    # 'run-job--ingest_looki_activity': {
+    #     'task': 'workflows.hfl.tasks.ingest_looki.ingest_looki_activity',
+    #     'schedule': crontab(hour=23, minute=25),
+    #     'kwargs': {
+    #         'window_days': 2,
+    #         'max_moments': 200,
+    #     },
+    #     'options': {
+    #         'queue': WorkflowQueue.HFL,
+    #         'expires': 60 * 60 * 12,
+    #     },
+    #     'manifesto': {
+    #         'code_role': 'capture+organize+express',
+    #         'para_bucket': 'area',
+    #         'express_target': 'file:hfl_corpus+es:hfl-entries',
+    #         'review_artifact': 'es_log+file',
+    #         'hfl_signal': True,
+    #         'tenant_safe': True,
+    #     },
+    # },
+
     # Daily Android screen activity — 23:15 local, one slot after Spotify (23:10).
     # Parses the hourly android_actions-YYYYMMDD_HH.log files written by the
     # Android capture agent (mobile/android/tasks/capture.py), classifies
