@@ -73,7 +73,7 @@ def test__ingest_browsing_activity_dual_write_contract(monkeypatch, tmp_path):
     monkeypatch.setenv("HFL_BROWSING_CHROME_HISTORY", str(db))
     monkeypatch.setenv("HFL_BROWSING_EDGE_HISTORY", "/nope/Edge/History")
 
-    # Hermetic: no Anthropic call, corpus into tmp, capture the ES write.
+    # Hermetic: no Anthropic call; capture the canonical persistence request.
     monkeypatch.setattr(
         "workflows.hfl.tasks.ingest_browsing.distill_browsing_activity",
         lambda activity, **kw: {
@@ -87,21 +87,19 @@ def test__ingest_browsing_activity_dual_write_contract(monkeypatch, tmp_path):
         "workflows.hfl.tasks.ingest_browsing.resolve_corpus_dir",
         lambda: tmp_path,
     )
-    indexed = []
+    submitted = []
     monkeypatch.setattr(
-        "workflows.hfl.tasks.capture.index_hfl_entry",
-        lambda entry, *, source, synthesized=False: indexed.append(source)
-        or "doc-1",
+        "workflows.hfl.tasks.capture.submit_hfl_entry",
+        lambda entry, *, source, synthesized=False: submitted.append(
+            (entry, source, synthesized)
+        ) or {"doc_id": "doc-1", "bytes_written": 0, "delivery": "forwarded"},
     )
 
     result = ingest_browsing_activity(cfg_id__anthropic="ANTHROPIC")
     assert result["entries_written"] == 1
     assert result["indexed"] is True
-    assert indexed == ["browsing"]  # ES dual-write happened
-    written = (tmp_path / f"{datetime.now():%Y-%m-%d}.md").read_text(
-        encoding="utf-8"
-    )
-    assert "browsed celery docs" in written  # corpus write happened
+    assert [item[1] for item in submitted] == ["browsing"]
+    assert submitted[0][0].moment == "browsed celery docs"
 
 
 @pytest.mark.skip(reason="Manual only — reads the live local Chrome/Edge "

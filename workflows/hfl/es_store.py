@@ -73,6 +73,8 @@ def _to_doc(entry: HflEntry, source: str) -> dict[str, Any]:
         "possible_use": entry.possible_use,
         "tags": list(entry.tags),
         "references": list(entry.references),
+        "machine": entry.machine or None,
+        "entry_id": entry.entry_id or None,
         "synthesized": False,
     }
 

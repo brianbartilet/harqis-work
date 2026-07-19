@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     # Set to True when the app is behind a reverse proxy / Cloudflare Tunnel.
     # Enables the Secure flag on session cookies (requires HTTPS end-to-end).
     behind_proxy:  bool = False
+    # Additional local roots from which authenticated HFL reference downloads
+    # are allowed. Uses the host OS path separator (`;` on Windows, `:` on Unix).
+    hfl_reference_allowed_roots: str = ""
+    hfl_corpus_path: str = ""
+    # When set, the UI reads the canonical Mac corpus API instead of local
+    # disk. The token is shared with that API and must remain in apps.env.
+    hfl_corpus_api_url: str = ""
+    hfl_corpus_api_token: str = ""
 
     model_config = SettingsConfigDict(
         env_file=[str(_APPS_ENV), str(_LOCAL_ENV)],

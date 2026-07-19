@@ -19,3 +19,4 @@ import workflows.hfl.tasks.ingest_plaud     # noqa: F401
 import workflows.hfl.tasks.ingest_radar     # noqa: F401
 import workflows.hfl.tasks.time_capsule    # noqa: F401
 import workflows.hfl.tasks.ingest_android_media  # noqa: F401
+import workflows.hfl.tasks.persist        # noqa: F401

@@ -90,10 +90,12 @@ def test__ingest_location_activity_movement_only_fallback(monkeypatch, tmp_path)
     monkeypatch.setattr(
         "workflows.hfl.tasks.ingest_location.resolve_corpus_dir", lambda: tmp_path
     )
-    indexed = []
+    submitted = []
     monkeypatch.setattr(
-        "workflows.hfl.tasks.capture.index_hfl_entry",
-        lambda entry, *, source, synthesized=False: indexed.append((source, synthesized)) or "doc-1",
+        "workflows.hfl.tasks.capture.submit_hfl_entry",
+        lambda entry, *, source, synthesized=False: submitted.append(
+            (entry, source, synthesized)
+        ) or {"doc_id": "doc-1", "bytes_written": 0, "delivery": "forwarded"},
     )
 
     result = ingest_location_activity(cfg_id__anthropic="ANTHROPIC")
@@ -103,8 +105,8 @@ def test__ingest_location_activity_movement_only_fallback(monkeypatch, tmp_path)
     assert result["points"] == 3
     assert result["synthesized"] is False
     assert result["indexed"] is True
-    assert indexed == [("location", False)]
-    written = (tmp_path / f"{datetime.now():%Y-%m-%d}.md").read_text(encoding="utf-8")
+    assert [(item[1], item[2]) for item in submitted] == [("location", False)]
+    written = submitted[0][0].to_markdown()
     assert "Recorded movement but no qualifying location stay" in written
     assert "movement-only" in written
     assert "openstreetmap.org" not in written
@@ -136,10 +138,12 @@ def test__ingest_location_activity_travel_route_fallback(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "workflows.hfl.tasks.ingest_location.resolve_corpus_dir", lambda: tmp_path
     )
-    indexed = []
+    submitted = []
     monkeypatch.setattr(
-        "workflows.hfl.tasks.capture.index_hfl_entry",
-        lambda entry, *, source, synthesized=False: indexed.append((source, synthesized)) or "doc-1",
+        "workflows.hfl.tasks.capture.submit_hfl_entry",
+        lambda entry, *, source, synthesized=False: submitted.append(
+            (entry, source, synthesized)
+        ) or {"doc_id": "doc-1", "bytes_written": 0, "delivery": "forwarded"},
     )
 
     result = ingest_location_activity(cfg_id__anthropic="ANTHROPIC")
@@ -147,8 +151,8 @@ def test__ingest_location_activity_travel_route_fallback(monkeypatch, tmp_path):
     assert result["entries_written"] == 1
     assert result["stays"] == 0
     assert result["synthesized"] is False
-    assert indexed == [("location", False)]
-    written = (tmp_path / f"{datetime.now():%Y-%m-%d}.md").read_text(encoding="utf-8")
+    assert [(item[1], item[2]) for item in submitted] == [("location", False)]
+    written = submitted[0][0].to_markdown()
     assert "Travelled from Changi Village, Singapore to Metro Manila, Philippines" in written
     assert "travel-heavy day" in written
     assert "movement-only" not in written
@@ -209,7 +213,7 @@ def test__ingest_location_activity_dual_write_contract(monkeypatch, tmp_path):
         "workflows.hfl.tasks.ingest_location.ApiServiceOwnTracksLocations",
         lambda *a, **k: type("S", (), {"get_history": lambda self, **kw: {"data": track}})(),
     )
-    # No network geocode, no Anthropic call, corpus into tmp, capture ES write.
+    # No network geocode, no Anthropic call; capture canonical persistence.
     monkeypatch.setattr(
         "workflows.hfl.tasks.ingest_location._reverse_geocode",
         lambda lat, lon, **kw: "Test Plaza",
@@ -226,17 +230,19 @@ def test__ingest_location_activity_dual_write_contract(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "workflows.hfl.tasks.ingest_location.resolve_corpus_dir", lambda: tmp_path
     )
-    indexed = []
+    submitted = []
     monkeypatch.setattr(
-        "workflows.hfl.tasks.capture.index_hfl_entry",
-        lambda entry, *, source, synthesized=False: indexed.append(source) or "doc-1",
+        "workflows.hfl.tasks.capture.submit_hfl_entry",
+        lambda entry, *, source, synthesized=False: submitted.append(
+            (entry, source, synthesized)
+        ) or {"doc_id": "doc-1", "bytes_written": 0, "delivery": "forwarded"},
     )
 
     result = ingest_location_activity(cfg_id__anthropic="ANTHROPIC")
     assert result["entries_written"] == 1
     assert result["indexed"] is True
-    assert indexed == ["location"]  # ES dual-write happened
-    written = (tmp_path / f"{datetime.now():%Y-%m-%d}.md").read_text(encoding="utf-8")
+    assert [item[1] for item in submitted] == ["location"]
+    written = submitted[0][0].to_markdown()
     assert "Test Plaza" in written  # corpus write happened
     assert "openstreetmap.org" in written  # provenance reference rendered
 

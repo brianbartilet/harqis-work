@@ -91,6 +91,27 @@ def test__from_markdown_tolerates_bad_timestamp():
     assert entry.moment == "hi"
 
 
+def test_canonical_metadata_is_optional_and_round_trips():
+    entry = HflEntry(
+        when=datetime(2026, 7, 19, 9, 30),
+        moment="Canonical entry",
+        source="browsing",
+        machine="windows-work-all",
+        entry_id="hfl-abc123",
+    )
+
+    markdown = entry.to_markdown()
+    header, body = markdown.split("\n", 1)
+    restored = HflEntry.from_markdown(header, body)
+
+    assert "Source:          browsing" in markdown
+    assert "Machine:         windows-work-all" in markdown
+    assert "Entry ID:        hfl-abc123" in markdown
+    assert restored.source == entry.source
+    assert restored.machine == entry.machine
+    assert restored.entry_id == entry.entry_id
+
+
 def test__normalisation_strips_and_dehashes():
     e = HflEntry(
         when=datetime(2026, 5, 17, 23, 0),

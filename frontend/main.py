@@ -1,15 +1,18 @@
 """
-HARQIS Dashboard — FastAPI entry point.
+HARQIS module frontend — FastAPI entry point.
 
 Routes
 ------
-GET  /                              → redirect to /dashboard
+GET  /                              → redirect to /home
 GET  /login                         → login page
 POST /login                         → authenticate and set session cookie
 GET  /logout                        → clear session, redirect to /login
-GET  /dashboard                     → main dashboard (requires auth)
+GET  /home                          → manifesto and module overview
+GET  /workflows                     → workflow task dashboard
 POST /tasks/{workflow}/{key}/trigger → dispatch Celery task, return status HTML
 GET  /tasks/status/{task_id}        → poll task status (HTMX partial)
+GET  /applications                  → app inventory, docs, and pytest controls
+GET  /hfl-corpus                    → recursive corpus browser and search
 GET  /health                        → simple health check
 """
 from pathlib import Path
@@ -25,9 +28,6 @@ import uvicorn
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-
-import celery_client
 from auth import (
     create_session_token,
     get_current_user,
@@ -36,27 +36,26 @@ from auth import (
     clear_failed_logins,
 )
 from config import get_settings, warn_insecure_defaults
+from modules.applications.router import router as applications_router
+from modules.hfl_corpus.api import router as hfl_corpus_api_router
+from modules.hfl_corpus.router import router as hfl_corpus_router
+from modules.home.router import router as home_router
+from modules.workflows.router import router as workflows_router
+from web import require_user as _require_auth, templates
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Regenerate registry.json BEFORE importing TASK_REGISTRY — `from registry
-# import TASK_REGISTRY` snapshots registry.json at import time. If the regen
-# runs after the import, the on-disk JSON has the new tasks but the in-memory
-# dict is stale, and the dashboard renders the old set.
-try:
-    import generate_registry
-    generate_registry.main()
-except Exception as _regen_err:
-    logger.warning("Registry regeneration failed: %s", _regen_err)
-
-from registry import TASK_REGISTRY  # noqa: E402 — must follow regen above
 
 # ── App setup ─────────────────────────────────────────────────────────────────
 settings = get_settings()
 warn_insecure_defaults(settings)
 
-app = FastAPI(title="HARQIS Dashboard", docs_url=None, redoc_url=None)
+app = FastAPI(title="HARQIS Frontend", docs_url=None, redoc_url=None)
+app.include_router(home_router)
+app.include_router(workflows_router)
+app.include_router(applications_router)
+app.include_router(hfl_corpus_api_router)
+app.include_router(hfl_corpus_router)
 
 
 # ── Security headers ──────────────────────────────────────────────────────────
@@ -70,28 +69,10 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 _here = Path(__file__).parent
-templates = Jinja2Templates(directory=str(_here / "templates"))
 
 static_dir = _here / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _find_task(workflow: str, task_key: str) -> Optional[dict]:
-    wf = TASK_REGISTRY.get(workflow)
-    if not wf:
-        return None
-    return next((t for t in wf["tasks"] if t["key"] == task_key), None)
-
-
-def _require_auth(request: Request):
-    """Returns (user, None) or (None, RedirectResponse)."""
-    user = get_current_user(request)
-    if not user:
-        return None, RedirectResponse("/login", status_code=302)
-    return user, None
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -99,7 +80,7 @@ def _require_auth(request: Request):
 @app.get("/", include_in_schema=False)
 async def root(request: Request):
     user = get_current_user(request)
-    return RedirectResponse("/dashboard" if user else "/login", status_code=302)
+    return RedirectResponse("/home" if user else "/login", status_code=302)
 
 
 @app.get("/health")
@@ -185,86 +166,10 @@ async def logout():
     return response
 
 
-# ── Dashboard ─────────────────────────────────────────────────────────────────
-
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request):
-    user, redirect = _require_auth(request)
-    if redirect:
-        return redirect
-    return templates.TemplateResponse(
-        request, "dashboard.html",
-        {
-            "user": user,
-            "workflows": TASK_REGISTRY,
-            "flower_url": settings.flower_url,
-        },
-    )
-
-
-# ── Task trigger ──────────────────────────────────────────────────────────────
-
-@app.post("/tasks/{workflow}/{task_key}/trigger", response_class=HTMLResponse)
-async def trigger_task(request: Request, workflow: str, task_key: str):
+@app.get("/dashboard", include_in_schema=False)
+async def legacy_dashboard(request: Request):
     user = get_current_user(request)
-    if not user:
-        return HTMLResponse(
-            '<p class="text-red-400 text-xs">Session expired — please log in again.</p>'
-        )
-
-    task = _find_task(workflow, task_key)
-    if not task:
-        return HTMLResponse(
-            '<p class="text-red-400 text-xs">Task not found in registry.</p>'
-        )
-
-    try:
-        task_id = celery_client.dispatch(
-            task_path=task["task_path"],
-            kwargs=task.get("kwargs", {}),
-            queue=task["queue"],
-        )
-    except Exception as exc:
-        return templates.TemplateResponse(
-            request, "partials/status_panel.html",
-            {
-                "task_id": None,
-                "state": "DISPATCH_ERROR",
-                "info": {"note": str(exc)},
-                "polling": False,
-            },
-        )
-
-    return templates.TemplateResponse(
-        request, "partials/status_panel.html",
-        {
-            "task_id": task_id,
-            "state": "PENDING",
-            "info": {"note": "Waiting for a worker to pick up the task…"},
-            "polling": True,
-        },
-    )
-
-
-# ── Status poll ───────────────────────────────────────────────────────────────
-
-@app.get("/tasks/status/{task_id}", response_class=HTMLResponse)
-async def task_status(request: Request, task_id: str):
-    if not get_current_user(request):
-        return HTMLResponse("")
-
-    info = await celery_client.get_task_info(task_id)
-    state = info.get("state", "UNKNOWN")
-
-    return templates.TemplateResponse(
-        request, "partials/status_panel.html",
-        {
-            "task_id": task_id,
-            "state": state,
-            "info": info,
-            "polling": not celery_client.is_terminal(state),
-        },
-    )
+    return RedirectResponse("/home" if user else "/login", status_code=302)
 
 
 # ── Open local path (Windows) ─────────────────────────────────────────────────
@@ -355,9 +260,13 @@ async def open_path(request: Request, p: str):
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    reload_enabled = os.environ.get("FRONTEND_RELOAD", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
     uvicorn.run(
         "main:app",
         host=settings.host,
         port=settings.port,
-        reload=True,
+        reload=reload_enabled,
+        reload_dirs=[str(_here)] if reload_enabled else None,
     )

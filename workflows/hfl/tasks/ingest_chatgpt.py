@@ -56,8 +56,9 @@ from core.utilities.logging.custom_logger import create_logger
 from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 
+from workflows.hfl.dto import HflEntry
+from workflows.hfl.persistence import submit_hfl_entry
 from workflows.hfl.prompts import load_prompt
-from workflows.hfl.tasks.capture import _render_entry, resolve_corpus_dir
 from workflows.hfl.tasks.ingest_git import _parse_model_json
 
 _log = create_logger("hfl.ingest_chatgpt")
@@ -402,10 +403,7 @@ def ingest_chatgpt_activity(
     ][:6]
 
     when = datetime.now()
-    corpus_dir = resolve_corpus_dir()
-    corpus_dir.mkdir(parents=True, exist_ok=True)
-    day_file = corpus_dir / f"{when.strftime('%Y-%m-%d')}.md"
-    block = _render_entry(
+    entry = HflEntry(
         when=when,
         moment=d["moment"],
         what_happened=d["what_happened"],
@@ -413,16 +411,25 @@ def ingest_chatgpt_activity(
         possible_use=d["possible_use"] or "research-log",
         tags=tags,
     )
-    with day_file.open("a", encoding="utf-8") as fh:
-        fh.write(block)
+    persistence = submit_hfl_entry(
+        entry,
+        source="chatgpt",
+        synthesized=d.get("synthesized", False),
+    )
 
-    _log.info("ingest_chatgpt: entry written (%d prompts, %d chats) → %s",
-              activity["message_count"], activity["conversation_count"], day_file)
+    _log.info(
+        "ingest_chatgpt: entry %s (%d prompts, %d chats)",
+        persistence.get("delivery"),
+        activity["message_count"],
+        activity["conversation_count"],
+    )
     return {
         "entries_written": 1,
         "conversations": activity["conversation_count"],
         "prompts": activity["message_count"],
         "synthesized": d.get("synthesized", False),
         "model": model if d.get("synthesized") else None,
-        "path": str(day_file),
+        "path": persistence.get("path", ""),
+        "delivery": persistence.get("delivery"),
+        "entry_id": persistence.get("entry_id"),
     }

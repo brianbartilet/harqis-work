@@ -44,6 +44,9 @@ _LABELS = {
     "Possible use": "possible_use",
     "Tags": "tags",
     "References": "references",
+    "Source": "source",
+    "Machine": "machine",
+    "Entry ID": "entry_id",
 }
 
 
@@ -72,6 +75,9 @@ class HflEntry:
     possible_use: str = ""
     tags: tuple[str, ...] = field(default_factory=tuple)
     references: tuple[str, ...] = field(default_factory=tuple)
+    source: str = ""
+    machine: str = ""
+    entry_id: str = ""
 
     def __post_init__(self) -> None:
         # Normalise without mutating (frozen): re-set via object.__setattr__.
@@ -81,6 +87,9 @@ class HflEntry:
         object.__setattr__(self, "possible_use", (self.possible_use or "").strip())
         object.__setattr__(self, "tags", _norm_tags(self.tags))
         object.__setattr__(self, "references", _norm_refs(self.references))
+        object.__setattr__(self, "source", (self.source or "").strip())
+        object.__setattr__(self, "machine", (self.machine or "").strip())
+        object.__setattr__(self, "entry_id", (self.entry_id or "").strip())
 
     # ── render ────────────────────────────────────────────────────────────────
 
@@ -95,14 +104,20 @@ class HflEntry:
         `_render_entry` output — existing producers are unaffected.
         """
         ts = self.when.strftime("%Y-%m-%d %H:%M") if self.when else ""
-        lines = [
-            f"## {ts}",
+        lines = [f"## {ts}"]
+        if self.source:
+            lines.append(f"{'Source:'.ljust(_COL)}{self.source}")
+        if self.machine:
+            lines.append(f"{'Machine:'.ljust(_COL)}{self.machine}")
+        if self.entry_id:
+            lines.append(f"{'Entry ID:'.ljust(_COL)}{self.entry_id}")
+        lines.extend([
             f"{'Moment:'.ljust(_COL)}{self.moment}",
             f"{'What happened:'.ljust(_COL)}{self.what_happened}",
             f"{'Why it stayed:'.ljust(_COL)}{self.why_it_stayed}",
             f"{'Possible use:'.ljust(_COL)}{self.possible_use}",
             f"{'Tags:'.ljust(_COL)}{self._fmt_tags(self.tags)}",
-        ]
+        ])
         if self.references:
             lines.append("References:")
             for r in self.references:
@@ -166,4 +181,7 @@ class HflEntry:
             possible_use=vals.get("possible_use", ""),
             tags=tags,
             references=tuple(r for r in refs if r),
+            source=vals.get("source", ""),
+            machine=vals.get("machine", ""),
+            entry_id=vals.get("entry_id", ""),
         )
