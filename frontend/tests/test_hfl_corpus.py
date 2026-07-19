@@ -1,7 +1,17 @@
 from datetime import datetime
 
+import httpx
+
 from modules.hfl_corpus import corpus as corpus_module
-from modules.hfl_corpus.corpus import CorpusDocument, CorpusIndex, build_tree, search_documents
+from modules.hfl_corpus.corpus import (
+    CorpusDocument,
+    CorpusIndex,
+    build_tree,
+    common_tags,
+    format_hfl_markdown,
+    search_documents,
+)
+from services.markdown import render_markdown
 from services.safe_paths import (
     allowed_reference_roots,
     load_download_token,
@@ -73,6 +83,42 @@ def test_tree_keeps_nested_directories():
     assert tree["directories"][0]["directories"][0]["name"] == "2026"
 
 
+def test_common_tags_are_ranked_by_document_count():
+    documents = (
+        _document("one.md", tags=("career", "debugging")),
+        _document("two.md", tags=("debugging", "root-cause")),
+    )
+
+    assert common_tags(documents) == [
+        ("debugging", 2),
+        ("career", 1),
+        ("root-cause", 1),
+    ]
+
+
+def test_hfl_markdown_formatting_bolds_fields_and_normalizes_references():
+    source = (
+        "## 2026-07-10 09:30\n"
+        "Moment:          Fixed a difficult issue\n"
+        "What happened:   Found the root cause\n"
+        "Why it stayed:   Reusable lesson\n"
+        "Possible use:    Retrospective\n"
+        "Tags:            #debugging\n"
+        "References:\n"
+        "                 - https://example.com/source\n"
+    )
+
+    formatted = format_hfl_markdown(source)
+    rendered = str(render_markdown(formatted))
+
+    assert "**Moment:** Fixed a difficult issue\n\n" in formatted
+    assert "**Tags:** #debugging\n\n" in formatted
+    assert "**References:**\n\n- https://example.com/source" in formatted
+    assert "<strong>Moment:</strong> Fixed a difficult issue" in rendered
+    assert "<strong>References:</strong>" in rendered
+    assert "<li><a href=" in rendered
+
+
 def test_reference_downloads_are_signed_and_root_limited(tmp_path):
     corpus = tmp_path / "corpus"
     corpus.mkdir()
@@ -112,3 +158,137 @@ def test_external_and_outside_references_are_classified(tmp_path):
     assert external.kind == "external"
     assert blocked.kind == "blocked"
     assert blocked.reason == "outside allowed roots"
+
+
+def test_tag_chips_link_to_partial_tag_search(authenticated_client, monkeypatch):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document("2026-07-10.md", tags=("debugging", "root-cause"))
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
+    monkeypatch.setattr(hfl_routes.corpus_index, "get", lambda path: document)
+
+    index_response = authenticated_client.get("/hfl-corpus")
+    document_response = authenticated_client.get(
+        "/hfl-corpus/document/2026-07-10.md"
+    )
+
+    expected = 'href="/hfl-corpus?q=%23debugging"'
+    assert expected in index_response.text
+    assert expected in document_response.text
+    assert "Find corpus entries with matching tags" in index_response.text
+
+
+def test_corpus_search_uses_compact_date_controls(authenticated_client, monkeypatch):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document("2026-07-10.md", tags=("debugging",))
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get(
+        "/hfl-corpus?date_field=updated&date_from=2026-07-13&date_to=2026-07-20"
+    )
+
+    assert response.status_code == 200
+    assert 'name="date_field"' in response.text
+    assert 'name="date_from"' in response.text
+    assert 'name="date_to"' in response.text
+    assert 'name="created_from"' not in response.text
+    assert "if (this.showPicker) this.showPicker()" in response.text
+    assert "#debugging" in response.text
+    assert "bg-blue-950/50" in response.text
+    assert ">1</span>" in response.text
+    assert "0 matches" in response.text
+
+
+def test_corpus_api_requires_bearer_token(authenticated_client):
+    response = authenticated_client.get("/api/hfl/documents")
+
+    assert response.status_code == 401
+
+
+def test_corpus_api_returns_canonical_documents(authenticated_client, monkeypatch):
+    import modules.hfl_corpus.api as hfl_api
+
+    document = _document("2026-07-10.md", tags=("debugging",))
+    monkeypatch.setattr(hfl_api.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get(
+        "/api/hfl/documents?q=%23debug",
+        headers={"Authorization": "Bearer frontend-test-hfl-api-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["document_count"] == 1
+    assert response.json()["results"][0]["relative_path"] == "2026-07-10.md"
+
+
+def test_hfl_markdown_formats_canonical_provenance_fields():
+    formatted = format_hfl_markdown(
+        "## 2026-07-19 09:30\n"
+        "Source:          browsing\n"
+        "Machine:         windows-work-all\n"
+        "Entry ID:        hfl-abc123\n"
+        "Moment:          A useful page\n"
+    )
+
+    assert "**Source:** browsing" in formatted
+    assert "**Machine:** windows-work-all" in formatted
+    assert "**Entry ID:** hfl-abc123" in formatted
+
+
+def test_remote_client_reads_index_without_local_paths(monkeypatch):
+    from modules.hfl_corpus.remote import RemoteCorpusClient
+
+    payload = {
+        "documents": [{
+            "relative_path": "2026-07-19.md",
+            "name": "2026-07-19.md",
+            "created_at": "2026-07-19T09:30:00",
+            "updated_at": "2026-07-19T10:00:00",
+            "tags": ["hfl"],
+            "excerpt": "A canonical entry",
+        }],
+        "results": [],
+        "total_results": 0,
+        "document_count": 1,
+        "tag_cloud": [["hfl", 1]],
+    }
+    monkeypatch.setattr(
+        httpx,
+        "get",
+        lambda url, **kwargs: httpx.Response(
+            200,
+            json=payload,
+            request=httpx.Request("GET", url),
+        ),
+    )
+
+    result = RemoteCorpusClient("http://canonical:8081", "secret").index(params={})
+
+    assert result["document_count"] == 1
+    assert result["documents"][0].path is None
+    assert result["documents"][0].relative_path == "2026-07-19.md"
+
+
+def test_remote_mode_surfaces_failure_without_local_fallback(authenticated_client, monkeypatch):
+    import modules.hfl_corpus.router as hfl_routes
+
+    monkeypatch.setattr(hfl_routes, "_uses_remote_corpus", lambda: True)
+    monkeypatch.setattr(
+        hfl_routes.RemoteCorpusClient,
+        "from_settings",
+        classmethod(lambda cls: (_ for _ in ()).throw(
+            hfl_routes.RemoteCorpusError("canonical host is offline")
+        )),
+    )
+    monkeypatch.setattr(
+        hfl_routes.corpus_index,
+        "documents",
+        lambda: (_ for _ in ()).throw(AssertionError("local fallback used")),
+    )
+
+    response = authenticated_client.get("/hfl-corpus")
+
+    assert response.status_code == 200
+    assert "Canonical corpus unavailable" in response.text
+    assert "canonical host is offline" in response.text

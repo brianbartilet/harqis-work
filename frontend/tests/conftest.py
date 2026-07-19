@@ -17,6 +17,8 @@ if str(FRONTEND_ROOT) not in sys.path:
 os.environ["APP_USERNAME"] = "frontend-test-user"
 os.environ["APP_PASSWORD"] = "frontend-test-password"
 os.environ["APP_SECRET_KEY"] = "frontend-test-secret-key-32-characters"
+os.environ["HFL_CORPUS_API_TOKEN"] = "frontend-test-hfl-api-token"
+os.environ["HFL_CORPUS_API_URL"] = ""
 
 
 @pytest.fixture

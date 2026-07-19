@@ -1,7 +1,7 @@
 """
 Beat schedule for the Homework-for-Life workflow.
 
-Five tasks:
+Twelve tasks:
   - capture_hfl_entry    : adhoc — invoked manually or from an LLM/agent to
                            persist one daily story moment to the corpus.
   - analyze_hfl_media    : daily — vision pass over recent dumps-inbox
@@ -17,6 +17,9 @@ Five tasks:
                            capture→ingest→retrieve loop). MCP / .delay()
                            callers can still invoke it with email_to=None for
                            pure programmatic recall.
+  - ingest_*             : scheduled source-specific capture and distillation.
+  - flush_hfl_outbox     : every five minutes on hfl_broadcast; retries durable
+                           envelopes from every participating worker.
 
 This workflow is active — `WORKFLOW_HFL` is merged into
 `workflows/config.py`'s beat schedule.
@@ -383,6 +386,27 @@ WORKFLOW_HFL = {
             'express_target': 'file:hfl_corpus+es:hfl-entries',
             'review_artifact': 'es_log+file',
             'hfl_signal': True,
+        },
+    },
+
+    # Durable delivery retry for distributed HFL producers. Every worker may
+    # hold a local outbox, so this runs through the HFL broadcast exchange.
+    # The canonical server persists its own retained entries directly; other
+    # workers forward theirs to persist_hfl_entry on the direct hfl queue.
+    'run-job--flush_hfl_outbox': {
+        'task': 'workflows.hfl.tasks.persist.flush_hfl_outbox',
+        'schedule': crontab(minute='*/5'),
+        'kwargs': {'limit': 100},
+        'options': {
+            'queue': WorkflowQueue.HFL_BROADCAST,
+            'expires': 60 * 4,
+        },
+        'manifesto': {
+            'code_role': 'express',
+            'para_bucket': 'resource',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': False,
         },
     },
 

@@ -1,25 +1,52 @@
 {% extends "base.html" %}
-{% block title %}HARQIS — Dashboard{% endblock %}
+{% block title %}HARQIS — Workflows{% endblock %}
+
+{% block header_actions %}
+<button @click="customize = !customize"
+        :class="customize ? 'text-amber-400 hover:text-amber-300' : 'text-slate-400 hover:text-white'"
+        class="hidden sm:flex items-center gap-1.5 text-xs transition">
+  <span x-text="customize ? 'Done' : 'Edit Layout'"></span>
+</button>
+{% endblock %}
+
+{% block subnav %}
+<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+  <nav class="-mb-px flex gap-6 overflow-x-auto" data-sortable-tabs>
+    {% for wf_key, wf in workflows.items() %}
+    <button data-wf-key="{{ wf_key }}"
+            @click="customize || (workflowTab = '{{ wf_key }}')"
+            :class="workflowTab === '{{ wf_key }}'
+              ? 'border-blue-500 text-blue-400'
+              : 'border-transparent text-slate-500 hover:text-slate-300 hover:border-slate-600'"
+            class="flex items-center gap-1.5 whitespace-nowrap border-b-2 py-3 text-sm font-medium transition-colors">
+      <span x-show="customize" x-cloak
+            class="drag-handle cursor-grab text-slate-600 hover:text-slate-400 touch-none"
+            @click.stop>
+        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="5" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/>
+          <circle cx="10" cy="4" r="1.2"/><circle cx="10" cy="8" r="1.2"/><circle cx="10" cy="12" r="1.2"/>
+        </svg>
+      </span>
+      {{ wf.label }}
+      <span class="ml-1.5 rounded-full px-1.5 py-0.5 text-xs bg-slate-800 text-slate-400">{{ wf.tasks | length }}</span>
+    </button>
+    {% endfor %}
+  </nav>
+</div>
+{% endblock %}
 
 {% block content %}
-{# ── Color maps ────────────────────────────────────────────────────────────── #}
-{%- set tab_active = {
-  "blue":    "border-blue-500 text-blue-400",
-  "emerald": "border-emerald-500 text-emerald-400",
-  "violet":  "border-violet-500 text-violet-400"
-} -%}
-{%- set tab_inactive = "border-transparent text-slate-500 hover:text-slate-300 hover:border-slate-600" -%}
-
 {%- set queue_badge = {
   "hud":     "bg-blue-950/60 text-blue-300 ring-1 ring-blue-500/30",
   "tcg":     "bg-emerald-950/60 text-emerald-300 ring-1 ring-emerald-500/30",
   "default": "bg-slate-800 text-slate-400 ring-1 ring-slate-600/40"
 } -%}
 
-<div x-data="{ tab: 'hud', customize: false }" class="min-h-screen flex flex-col">
+<div class="min-h-screen flex flex-col">
 
   {# ── Nav ──────────────────────────────────────────────────────────────── #}
-  <header class="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
+  {% if false %}{# Retained temporarily for template-history readability; never rendered. #}
+  <header class="hidden">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex items-center justify-between h-14">
 
       <div class="flex items-center gap-3">
@@ -67,9 +94,9 @@
         {% for wf_key, wf in workflows.items() %}
         <button
           data-wf-key="{{ wf_key }}"
-          @click="customize || (tab = '{{ wf_key }}')"
-          :class="tab === '{{ wf_key }}'
-            ? 'border-{{ wf.color }}-500 text-{{ wf.color }}-400'
+          @click="customize || (workflowTab = '{{ wf_key }}')"
+          :class="workflowTab === '{{ wf_key }}'
+            ? 'border-blue-500 text-blue-400'
             : 'border-transparent text-slate-500 hover:text-slate-300 hover:border-slate-600'"
           class="flex items-center gap-1.5 whitespace-nowrap border-b-2 py-3 text-sm font-medium transition-colors">
           {# Drag handle — visible only in customize mode #}
@@ -91,6 +118,7 @@
       </nav>
     </div>
   </header>
+  {% endif %}
 
   {# ── Customize mode banner ─────────────────────────────────────────────── #}
   <div x-show="customize" x-cloak
@@ -101,8 +129,16 @@
 
   {# ── Main content ─────────────────────────────────────────────────────── #}
   <main class="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-7">
+      <p class="text-xs uppercase tracking-[0.22em] text-blue-400">Automation inventory</p>
+      <h1 class="mt-2 text-2xl font-semibold text-white">Workflows</h1>
+      <p class="mt-1 text-sm text-slate-400">
+        Celery tasks, schedules, and execution controls for {{ task_count }} automations across {{ workflow_count }} categories.
+      </p>
+    </div>
+
     {% for wf_key, wf in workflows.items() %}
-    <div x-show="tab === '{{ wf_key }}'" x-cloak>
+    <div x-show="workflowTab === '{{ wf_key }}'" x-cloak>
 
       {# Workflow header #}
       <div class="mb-6">
@@ -115,7 +151,7 @@
            data-sortable-grid="{{ wf_key }}">
         {% for task in wf.tasks %}
         <div class="group flex flex-col rounded-xl bg-slate-900 ring-1 ring-slate-800
-                    hover:ring-slate-700 transition-all duration-150"
+                    hover:ring-blue-500/40 transition-all duration-150"
              :class="customize ? 'ring-amber-900/50' : ''"
              data-task-key="{{ task.key }}"
              x-data="{

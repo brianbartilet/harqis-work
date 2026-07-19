@@ -25,7 +25,7 @@ def test_home_renders_manifesto_and_navigation(authenticated_client):
     assert response.status_code == 200
     assert "HARQIS Work Manifesto" in response.text
     assert "Workflows" in response.text
-    assert "Applications" in response.text
+    assert "Apps" in response.text
     assert "HFL Corpus" in response.text
 
 
@@ -43,6 +43,9 @@ def test_workflows_module_preserves_reorderable_subtabs(authenticated_client):
     assert 'data-sortable-tabs' in response.text
     assert "harqis_tab_order" in response.text
     assert "Edit Layout" in response.text
+    assert "Automation inventory" in response.text
+    assert "automations across" in response.text
+    assert "border-blue-500 text-blue-400" in response.text
 
 
 def test_workflow_trigger_preserves_existing_dispatch_endpoint(

@@ -34,6 +34,9 @@ def test_applications_page_and_document_render(authenticated_client):
 
     assert response.status_code == 200
     assert "AAA" in response.text
+    assert 'data-sortable-apps' in response.text
+    assert "harqis_app_order" in response.text
+    assert "Edit Layout" in response.text
     assert document.status_code == 200
     assert "Application documentation" in document.text
 

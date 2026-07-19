@@ -1,40 +1,108 @@
 {% extends "base.html" %}
 {% block title %}HARQIS — Applications{% endblock %}
 
+{% block header_actions %}
+<button @click="customize = !customize"
+        :class="customize ? 'text-amber-400 hover:text-amber-300' : 'text-slate-400 hover:text-white'"
+        class="hidden sm:flex items-center gap-1.5 text-xs transition">
+  <span x-text="customize ? 'Done' : 'Edit Layout'"></span>
+</button>
+{% endblock %}
+
 {% block content %}
 <main class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
   <div class="flex items-end justify-between gap-4 mb-7">
     <div>
-      <p class="text-xs uppercase tracking-[0.22em] text-emerald-400">Integration inventory</p>
+      <p class="text-xs uppercase tracking-[0.22em] text-blue-400">Integration inventory</p>
       <h1 class="mt-2 text-2xl font-semibold text-white">Applications</h1>
       <p class="mt-1 text-sm text-slate-400">Documentation and host-configured pytest checks for {{ applications | length }} integrations.</p>
     </div>
   </div>
 
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  <div x-show="customize" x-cloak
+       class="mb-5 rounded-lg border border-amber-900/50 bg-amber-950/30 px-4 py-2.5 text-center text-xs text-amber-400/80">
+    Drag application cards to arrange them. The layout is saved in this browser.
+    <button onclick="resetAppsLayout()" class="ml-3 underline hover:text-amber-300">Reset to default</button>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-sortable-apps>
     {% for application in applications %}
-    <a href="/applications/{{ application.key }}"
-       class="group rounded-xl bg-slate-900 p-5 ring-1 ring-slate-800 hover:ring-emerald-500/40 transition">
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <h2 class="font-semibold text-white group-hover:text-emerald-300 transition">{{ application.label }}</h2>
-          <p class="mt-1 font-mono text-xs text-slate-600">apps/{{ application.key }}</p>
+    <article data-app-key="{{ application.key }}"
+             class="group relative rounded-xl bg-slate-900 ring-1 ring-slate-800 hover:ring-blue-500/40 transition"
+             :class="customize ? 'ring-amber-900/60' : ''">
+      <span x-show="customize" x-cloak
+            class="drag-handle absolute left-3 top-3 z-10 cursor-grab text-slate-600 hover:text-slate-300 touch-none">
+        <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="5" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/>
+          <circle cx="10" cy="4" r="1.2"/><circle cx="10" cy="8" r="1.2"/><circle cx="10" cy="12" r="1.2"/>
+        </svg>
+      </span>
+      <a href="/applications/{{ application.key }}"
+         @click="if (customize) $event.preventDefault()"
+         class="block p-5" :class="customize ? 'pl-10 cursor-default' : ''">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h2 class="font-semibold text-white group-hover:text-blue-300 transition">{{ application.label }}</h2>
+            <p class="mt-1 font-mono text-xs text-slate-600">apps/{{ application.key }}</p>
+          </div>
+          {% if latest[application.key] %}
+            {% set run = latest[application.key][0] %}
+            <span class="rounded-full px-2 py-0.5 text-xs
+              {% if run.state == 'passed' %}bg-emerald-950 text-emerald-300
+              {% elif run.state in ['failed', 'error', 'timed_out'] %}bg-red-950 text-red-300
+              {% else %}bg-slate-800 text-slate-400{% endif %}">{{ run.state }}</span>
+          {% endif %}
         </div>
-        {% if latest[application.key] %}
-          {% set run = latest[application.key][0] %}
-          <span class="rounded-full px-2 py-0.5 text-xs
-            {% if run.state == 'passed' %}bg-emerald-950 text-emerald-300
-            {% elif run.state in ['failed', 'error', 'timed_out'] %}bg-red-950 text-red-300
-            {% else %}bg-slate-800 text-slate-400{% endif %}">{{ run.state }}</span>
-        {% endif %}
-      </div>
-      <div class="mt-5 flex gap-4 text-xs text-slate-500">
-        <span>{{ application.documents | length }} docs</span>
-        <span>{{ application.tests | length }} tests</span>
-        <span>{{ application.safe_paths | length }} safe</span>
-      </div>
-    </a>
+        <div class="mt-5 flex gap-4 text-xs text-slate-500">
+          <span>{{ application.documents | length }} docs</span>
+          <span>{{ application.tests | length }} tests</span>
+          <span>{{ application.safe_paths | length }} safe</span>
+        </div>
+      </a>
+    </article>
     {% endfor %}
   </div>
 </main>
+
+<script>
+const APPS_LAYOUT_KEY = 'harqis_app_order';
+
+function restoreAppsLayout() {
+  const grid = document.querySelector('[data-sortable-apps]');
+  if (!grid) return;
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(APPS_LAYOUT_KEY)); } catch (error) {}
+  if (!Array.isArray(saved)) return;
+  saved.forEach(function(key) {
+    const card = grid.querySelector('[data-app-key="' + key + '"]');
+    if (card) grid.appendChild(card);
+  });
+}
+
+function initAppsLayout() {
+  const grid = document.querySelector('[data-sortable-apps]');
+  if (!grid || !window.Sortable) return;
+  Sortable.create(grid, {
+    animation: 150,
+    handle: '.drag-handle',
+    ghostClass: 'opacity-30',
+    onEnd: function() {
+      const order = Array.from(grid.querySelectorAll('[data-app-key]')).map(function(card) {
+        return card.dataset.appKey;
+      });
+      localStorage.setItem(APPS_LAYOUT_KEY, JSON.stringify(order));
+    }
+  });
+}
+
+function resetAppsLayout() {
+  localStorage.removeItem(APPS_LAYOUT_KEY);
+  location.reload();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  restoreAppsLayout();
+  initAppsLayout();
+});
+</script>
 {% endblock %}

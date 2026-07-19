@@ -117,6 +117,8 @@ SPROUT.conf.task_default_queue = WorkflowQueue.DEFAULT.value
 #   workflows.hud.tasks.*              → hud               (direct)
 SPROUT.conf.task_routes = {
     "workflows.workers.tasks.broadcast_*": {"queue": WorkflowQueue.WORKERS_BROADCAST.value},
+    "workflows.hfl.tasks.persist.persist_hfl_entry": {"queue": WorkflowQueue.HFL.value},
+    "workflows.hfl.tasks.persist.flush_hfl_outbox": {"queue": WorkflowQueue.HFL_BROADCAST.value},
     "workflows.hud.tasks.broadcast_*":     {"queue": WorkflowQueue.HUD_BROADCAST.value},
     # Data-only fallback twins run on the always-on host, NOT the Windows hud
     # queue. This more-specific rule MUST precede the hud catch-all below

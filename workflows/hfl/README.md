@@ -145,16 +145,41 @@ timeline), `memory_list_media` (photos/videos in a window). The weekly
   _summary-2026-W20.md       # weekly summary written by summarize_hfl_week
 ```
 
+The production corpus root is `/Volumes/harqis-data/hfl` on
+`harqis-server`. It is the only writable corpus. Other workers keep failed
+delivery envelopes under `<repo>/logs/hfl-outbox/`; that directory is a
+durable queue, not a second corpus. `HFL_OUTBOX_PATH` may override that queue
+directory when the repository disk is not the desired durable volume.
+
 ### Corpus path resolution (first hit wins)
 
-1. `apps_config.yaml::HFL.corpus.path` — preferred for distributed/worker
-   nodes that load config remotely.
+1. `apps_config.yaml::HFL.corpus.path` — preferred on the canonical host.
 2. Env var `HFL_CORPUS_PATH` — convenient for local dev.
 3. Fallback: `<repo>/logs/hfl/`.
 
-A future activation step adds an `HFL:` section to `apps_config.yaml` and
-the matching env var to `.env/apps.env`. The scaffold does not require
-either to be present — the fallback path works on day one.
+This resolution is used by canonical persistence and local-only development.
+Distributed producers do not write to their resolved path: they submit an
+entry envelope to `persist_hfl_entry` on the direct `hfl` queue.
+
+### Distributed persistence and recovery
+
+`workflows/hfl/persistence.py` is the write boundary for every producer.
+
+1. The producer adds `Source`, `Machine`, and a deterministic `Entry ID`.
+2. It atomically saves the envelope to `logs/hfl-outbox` before delivery.
+3. On `harqis-server`, it persists directly. On any other machine, it sends
+   `persist_hfl_entry` to the direct `hfl` queue.
+4. The canonical task takes a per-day cross-process file lock, deduplicates by
+   entry ID or legacy content, appends and fsyncs the Markdown, then upserts
+   Elasticsearch.
+5. Broker acceptance or successful local persistence removes the sender's
+   outbox item. Failures retain it. `flush_hfl_outbox` runs every five minutes
+   through `hfl_broadcast`, and the canonical task also retains a server-side
+   copy before retrying a failed write.
+
+Delivery is therefore at-least-once while corpus append is idempotent. Do not
+copy whole daily files between machines; entries from the same date can coexist
+and whole-file copies can overwrite them.
 
 ---
 
@@ -165,6 +190,9 @@ file. Multiple captures on the same day stack:
 
 ```markdown
 ## 2026-05-13 09:14
+Source:          browsing
+Machine:         windows-work-all
+Entry ID:        hfl-8a9f53e231a96a7c135d883b
 Moment:          Almost ignored a small bug in the feed decorator.
 What happened:   The ${VAR} folder appearing at repo root turned out to be
                  an unresolved env var leaking into Path().resolve().
@@ -180,6 +208,12 @@ The format is the formal `HflEntry` DTO (`workflows/hfl/dto/entry.py`) —
 `_render_entry` delegates to it, so every producer emits an identical,
 round-trippable block. Retrieval splits files on `## ` headers, so the
 format must be preserved if entries are hand-edited.
+
+**Canonical metadata (optional).** New persisted entries include `Source`,
+`Machine`, and `Entry ID`. The parser remains backward compatible with legacy
+blocks and rendering an entry without these fields remains byte-identical to
+the previous format. `Entry ID` drives idempotent queue redelivery; `Machine`
+records where the signal was collected, not where it was persisted.
 
 **`References:` (optional).** URLs or host file paths pointing at the
 source material behind the moment. The block is rendered **only when
@@ -217,15 +251,16 @@ The beat wiring (step 2 below) is **already in place** on `main`; this section
 is the reference for what each source still needs — and for bringing the
 workflow up on a fresh fork:
 
-1. **Wire the corpus path.** Either add an `HFL:` block to
+1. **Wire the canonical corpus path on `harqis-server`.** Either add an `HFL:` block to
    `apps_config.yaml`:
    ```yaml
    HFL:
      corpus:
        path: ${HFL_CORPUS_PATH}
    ```
-   and set `HFL_CORPUS_PATH` in `.env/apps.env`, or rely on the
-   `<repo>/logs/hfl/` fallback (fine for a single-host setup).
+   and set `HFL_CORPUS_PATH=/Volumes/harqis-data/hfl` for that machine, or rely
+   on `<repo>/logs/hfl/` for a single-host development setup. Remote workers
+   need broker access, not a writable corpus mount.
 
 2. **Add to the beat schedule.** In `workflows/config.py`:
    ```python
@@ -238,9 +273,9 @@ workflow up on a fresh fork:
    )
    ```
 
-3. **Restart Beat + an `adhoc`-subscribed worker and an `agent`-subscribed
-   worker.** Capture and retrieve land on `adhoc`; the weekly summarizer
-   lands on `agent`.
+3. **Restart Beat and workers.** `harqis-server` must consume `hfl`; every
+   signal-producing machine must consume `hfl_broadcast` so it can capture
+   local signals and flush its outbox. Beat runs on `harqis-server` only.
 
 4. **Optional: drop a hotkey or n8n trigger** that prompts for the daily
    entry and calls `capture_hfl_entry.delay(moment=..., ...)`. The scheduled
@@ -463,10 +498,10 @@ To make it produce entries:
 
 ## Elasticsearch entry index (dual-write)
 
-The Markdown corpus is the source of truth. Ingest sources scaffolded by
-`/create-new-ingest-source-hfl` **dual-write**: they append the corpus
-entry *and* index the structured `HflEntry` to a queryable Elasticsearch
-index via `workflows/hfl/es_store.py`.
+The canonical Markdown corpus is the source of truth. Every ingest source
+submits through `workflows/hfl/persistence.py`, which appends the entry on
+`harqis-server` and indexes the structured `HflEntry` via
+`workflows/hfl/es_store.py`.
 
 - **Write:** `index_hfl_entry(entry, *, source, synthesized)` →
   `core.apps.es_logging.app.elasticsearch.post`. Deterministic doc id
@@ -482,13 +517,10 @@ index via `workflows/hfl/es_store.py`.
   `found=false` + no LLM on empty). The corpus-based `memory_recall`
   is unchanged and still serves the Markdown tiers.
 
-> Status: `capture`, `ingest_git`, `ingest_ai`, `analyze_media`, and
-> `summarize` now dual-write via the shared `append_entry` helper in
-> `capture.py` (`append_entry` → corpus write + `index_hfl_entry`,
-> returning `(bytes, doc_id)`). `ingest_browsing` and `ingest_location`
-> dual-write the same way. **`ingest_chatgpt` is the one remaining gap** — it still uses the
-> bare `_render_entry`+write path and is not yet ES-indexed; routing it
-> through `append_entry` is the clean follow-up.
+All current producers, including ChatGPT and Plaud, use this boundary. The
+legacy `capture.append_entry` signature remains as a compatibility adapter for
+existing task code, but it submits centrally and does not append its supplied
+local path.
 
 ### Auto-express from `manifesto.hfl_express` (signal buffer)
 
@@ -531,8 +563,9 @@ It's a **hybrid** (`workflows/hfl/tasks/time_capsule.py` + the skill):
 3. **SYNTHESIZE** — Claude reads the digest (+ enrichment) and composes the rollup
    fields (grounded in the files/signal; no invention), writing them to
    `<slug>.synthesis.json`.
-4. **WRITE** (`run_write`) — dual-writes the entry through `capture.append_entry`
-   (corpus + the `harqis-hfl-entries` ES index, `source="time-capsule"`).
+4. **WRITE** (`run_write`) — submits through `capture.append_entry` to canonical
+   persistence (corpus + the `harqis-hfl-entries` ES index,
+   `source="time-capsule"`).
 
 - **Default root** is `/Volumes/harqis-data` (the harqis-server data volume, per
   `machines.local.toml`). The skill must run on a host where `--root` is mounted
@@ -558,6 +591,9 @@ MCP live-view tool — dual-writing corpus + ES. It composes with
 `/create-new-service-app` for a missing source API and never uses
 `/create-new-workflow`.
 
+New writers must call `submit_hfl_entry` (or the compatibility
+`capture.append_entry`) rather than opening a daily Markdown file directly.
+
 ---
 
 ## Manifesto alignment
@@ -572,6 +608,7 @@ MCP live-view tool — dual-writing corpus + ES. It composes with
 | `ingest_spotify_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `ingest_plaud_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `ingest_radar_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` |
+| `flush_hfl_outbox` | express | resource | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `False` |
 
 This block is also persisted on each beat entry's `'manifesto'` key — see
 `workflows/hfl/tasks_config.py`. `scripts/agents/repo-quality/manifesto_audit.py` reads from

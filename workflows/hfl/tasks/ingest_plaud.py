@@ -66,9 +66,8 @@ from apps.plaud.references.adapter import build_adapter
 from apps.plaud.references.dto.recording import DtoPlaudRecording
 
 from workflows.hfl.dto import HflEntry
-from workflows.hfl.es_store import index_hfl_entry
+from workflows.hfl.persistence import submit_hfl_entry
 from workflows.hfl.prompts import load_prompt
-from workflows.hfl.tasks.capture import resolve_corpus_dir
 from workflows.hfl.tasks.ingest_git import _parse_model_json
 
 _log = create_logger("hfl.ingest_plaud")
@@ -406,8 +405,6 @@ def ingest_plaud_activity(
         _log.info("ingest_plaud: no recordings in last %d day(s)", window_days)
         return {"skipped": "no recordings", "entries_written": 0, "recordings": 0}
 
-    corpus_dir = resolve_corpus_dir()
-    corpus_dir.mkdir(parents=True, exist_ok=True)
     day_str = until.strftime("%Y-%m-%d")
 
     # Staging dir for audio + the consolidated summary (also what gets archived).
@@ -418,6 +415,7 @@ def ingest_plaud_activity(
     entries_written = 0
     transcribed = 0
     summary_items: list[dict] = []
+    persistence_results: list[dict[str, Any]] = []
 
     for rec in recordings:
         # 1. Transcript: Plaud's own, else Whisper (bounded by max_transcribe).
@@ -457,12 +455,14 @@ def ingest_plaud_activity(
             tags=tags,
             references=[f"plaud:{rec.id}"],
         )
-        day_file = corpus_dir / f"{when_dt.strftime('%Y-%m-%d')}.md"
-        with day_file.open("a", encoding="utf-8") as fh:
-            fh.write(entry.to_markdown())
         doc_id = f"{when_dt.strftime('%Y%m%d')}-plaud-{_slug(rec.id)}"
-        index_hfl_entry(entry, source="plaud",
-                        synthesized=d.get("synthesized", False), doc_id=doc_id)
+        persistence_results.append(submit_hfl_entry(
+            entry,
+            source="plaud",
+            synthesized=d.get("synthesized", False),
+            dedup_key=f"plaud:{rec.id}",
+            es_doc_id=doc_id,
+        ))
         entries_written += 1
 
         summary_items.append({
@@ -487,8 +487,16 @@ def ingest_plaud_activity(
     # audio doesn't accumulate across nightly runs.
     shutil.rmtree(staging_root, ignore_errors=True)
 
-    _log.info("ingest_plaud: %d entr(y/ies) from %d recording(s) (%d Whisper) -> %s",
-              entries_written, len(recordings), transcribed, corpus_dir)
+    delivery_modes = sorted({
+        str(result.get("delivery") or "unknown") for result in persistence_results
+    })
+    _log.info(
+        "ingest_plaud: %d entr(y/ies) from %d recording(s) (%d Whisper) via %s",
+        entries_written,
+        len(recordings),
+        transcribed,
+        ", ".join(delivery_modes) or "none",
+    )
     return {
         "entries_written": entries_written,
         "recordings": len(recordings),
@@ -496,5 +504,9 @@ def ingest_plaud_activity(
         "backend": collected.get("backend"),
         "archive": archive_result,
         "model": model,
-        "path": str(corpus_dir / f"{day_str}.md"),
+        "path": next(
+            (str(result["path"]) for result in persistence_results if result.get("path")),
+            "",
+        ),
+        "delivery": delivery_modes,
     }

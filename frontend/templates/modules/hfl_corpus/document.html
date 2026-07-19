@@ -6,7 +6,7 @@
   <a href="/hfl-corpus" class="text-xs text-slate-500 hover:text-white">← HFL Corpus</a>
   <div class="mt-4 mb-5 flex flex-wrap items-end justify-between gap-4">
     <div class="min-w-0">
-      <p class="text-xs uppercase tracking-[0.22em] text-violet-400">Corpus document</p>
+      <p class="text-xs uppercase tracking-[0.22em] text-blue-400">Corpus document</p>
       <h1 class="mt-2 truncate text-xl font-semibold text-white">{{ document.name }}</h1>
       <p class="mt-1 font-mono text-xs text-slate-600">{{ document.relative_path }}</p>
     </div>
@@ -21,7 +21,7 @@
     {% for tag in document.tags %}
     <a href="/hfl-corpus?q=%23{{ tag }}"
        title="Find corpus entries with matching tags"
-       class="rounded-full bg-violet-950/60 px-2 py-0.5 text-xs text-violet-300 hover:bg-violet-900 hover:text-violet-200 transition">#{{ tag }}</a>
+       class="rounded-full bg-blue-950/60 px-2 py-0.5 text-xs text-blue-300 hover:bg-blue-900 hover:text-blue-200 transition">#{{ tag }}</a>
     {% endfor %}
   </div>
   {% endif %}

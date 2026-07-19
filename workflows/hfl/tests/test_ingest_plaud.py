@@ -81,29 +81,31 @@ def test_writes_one_entry_per_recording(monkeypatch, tmp_path):
     ]
     fake = _FakeAdapter(recs, active="folder")
     monkeypatch.setattr(ip, "build_adapter", lambda _cfg: fake)
-    monkeypatch.setattr(ip, "resolve_corpus_dir", lambda: tmp_path)
     monkeypatch.setattr(ip, "distill_plaud_recording",
                         lambda rec, t, **kw: {"skip": False, "moment": f"M:{rec.id}",
                                               "what_happened": "x", "why_it_stayed": "y",
                                               "possible_use": "voice-note",
                                               "tags": ["alpha"], "synthesized": False})
-    indexed = []
-    monkeypatch.setattr(ip, "index_hfl_entry",
-                        lambda entry, *, source, synthesized=False, doc_id=None:
-                        indexed.append((source, doc_id, entry.moment)) or doc_id)
+    submitted = []
+    monkeypatch.setattr(
+        ip,
+        "submit_hfl_entry",
+        lambda entry, *, source, synthesized=False, dedup_key=None, es_doc_id=None:
+        submitted.append((source, es_doc_id, entry.moment, dedup_key)) or {
+            "delivery": "forwarded", "path": "", "doc_id": es_doc_id,
+        },
+    )
 
     result = ip.ingest_plaud_activity(archive=False, allow_whisper=False)
 
     assert_that(result["entries_written"], equal_to(2))
-    assert_that(indexed, has_length(2))
+    assert_that(submitted, has_length(2))
     # source tag + deterministic per-recording doc id
-    assert_that(indexed[0][0], equal_to("plaud"))
-    assert_that(indexed[0][1], equal_to("20260609-plaud-aaa"))
-    assert_that(indexed[1][1], equal_to("20260609-plaud-bbb"))
-    # corpus file written for the day
-    day_file = tmp_path / "2026-06-09.md"
-    assert_that(day_file.exists(), equal_to(True))
-    assert_that(day_file.read_text(encoding="utf-8"), contains_string("M:aaa"))
+    assert_that(submitted[0][0], equal_to("plaud"))
+    assert_that(submitted[0][1], equal_to("20260609-plaud-aaa"))
+    assert_that(submitted[1][1], equal_to("20260609-plaud-bbb"))
+    assert_that(submitted[0][2], equal_to("M:aaa"))
+    assert_that(submitted[0][3], equal_to("plaud:aaa"))
 
 
 @pytest.mark.smoke
@@ -112,9 +114,11 @@ def test_recording_with_summary_no_transcript_still_ingests(monkeypatch, tmp_pat
     recs = [_rec(id="ccc", transcript=None, summary="vendor agreed to net-30")]
     fake = _FakeAdapter(recs, active="folder")
     monkeypatch.setattr(ip, "build_adapter", lambda _cfg: fake)
-    monkeypatch.setattr(ip, "resolve_corpus_dir", lambda: tmp_path)
-    monkeypatch.setattr(ip, "index_hfl_entry",
-                        lambda entry, *, source, synthesized=False, doc_id=None: doc_id)
+    monkeypatch.setattr(
+        ip,
+        "submit_hfl_entry",
+        lambda entry, **kwargs: {"delivery": "forwarded", "path": ""},
+    )
 
     result = ip.ingest_plaud_activity(archive=False, allow_whisper=False)
     assert_that(result["entries_written"], equal_to(1))

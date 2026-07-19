@@ -19,6 +19,7 @@ async def workflows_page(request: Request):
         return redirect
     workflows = refresh_registry()
     default_workflow = "hud" if "hud" in workflows else next(iter(workflows), "")
+    task_count = sum(len(workflow.get("tasks", [])) for workflow in workflows.values())
     return templates.TemplateResponse(
         request,
         "modules/workflows/index.html",
@@ -28,6 +29,8 @@ async def workflows_page(request: Request):
             "workflows",
             workflows=workflows,
             default_workflow=default_workflow,
+            workflow_count=len(workflows),
+            task_count=task_count,
         ),
     )
 

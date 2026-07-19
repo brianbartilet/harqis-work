@@ -33,7 +33,7 @@ from core.apps.es_logging.app.elasticsearch import log_result
 from core.utilities.logging.custom_logger import create_logger
 
 from workflows.hfl.dto import HflEntry
-from workflows.hfl.es_store import index_hfl_entry
+from workflows.hfl.persistence import submit_hfl_entry
 
 _log = create_logger("hfl.capture")
 
@@ -125,19 +125,21 @@ def append_entry(
     source: str,
     synthesized: bool = False,
 ) -> tuple[int, Optional[str]]:
-    """Append `entry` to the day's corpus file and best-effort dual-write
-    it to the ES entry index (workflows/hfl/es_store.py).
+    """Durably submit ``entry`` to the canonical corpus.
 
-    The corpus write is the source of truth and happens first; ES indexing
-    is additive and never raises (any failure is swallowed + logged by
-    index_hfl_entry). Returns ``(bytes_written, doc_id)`` where ``doc_id``
-    is the ES document id, or ``None`` if indexing was skipped/failed (the
-    corpus write is unaffected either way).
+    ``day_file`` remains in the signature for compatibility with existing
+    producers, but persistence now chooses the canonical server path. Remote
+    workers enqueue to the server and retain a local outbox item if the broker
+    is unavailable. The legacy tuple return keeps existing task contracts
+    stable while all writes share the same persistence boundary.
     """
-    with day_file.open("a", encoding="utf-8") as fh:
-        bytes_written = fh.write(entry.to_markdown())
-    doc_id = index_hfl_entry(entry, source=source, synthesized=synthesized)
-    return bytes_written, doc_id
+    del day_file
+    result = submit_hfl_entry(
+        entry,
+        source=source,
+        synthesized=synthesized,
+    )
+    return int(result.get("bytes_written") or 0), result.get("doc_id")
 
 
 @SPROUT.task()
@@ -172,10 +174,6 @@ def capture_hfl_entry(
 
     when = datetime.fromisoformat(when_iso) if when_iso else datetime.now()
 
-    corpus_dir = resolve_corpus_dir()
-    corpus_dir.mkdir(parents=True, exist_ok=True)
-    target = corpus_dir / f"{when.strftime('%Y-%m-%d')}.md"
-
     entry = _build_entry(
         when=when,
         moment=moment,
@@ -186,12 +184,20 @@ def capture_hfl_entry(
         references=references,
     )
 
-    bytes_written, _doc_id = append_entry(target, entry, source="capture")
+    result = submit_hfl_entry(entry, source="capture")
+    target = result.get("path", "")
+    bytes_written = int(result.get("bytes_written") or 0)
 
-    _log.info("Captured HFL entry to %s (%d bytes)", target, bytes_written)
+    _log.info(
+        "Captured HFL entry via %s (%d bytes)",
+        result.get("delivery", "unknown"),
+        bytes_written,
+    )
     return {
         "path": str(target),
         "bytes_written": bytes_written,
         "moment": moment.strip()[:120],
         "references": len(references) if references else 0,
+        "delivery": result.get("delivery"),
+        "entry_id": result.get("entry_id"),
     }

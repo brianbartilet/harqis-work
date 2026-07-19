@@ -259,7 +259,7 @@ Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and 
 | `hud` | Active | 19 | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins |
 | `purchases` | Active | 5 | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
 | `desktop` | Active | 8 | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
-| `hfl` | Active | 11 | Homework-for-Life: capture/ingest story moments — git activity, media vision, location timeline (OwnTracks) → corpus + Elasticsearch |
+| `hfl` | Active | 12 | Homework-for-Life: distributed capture/ingest → canonical Mac corpus + Elasticsearch, with durable worker outbox replay |
 | `knowledge` | Active | 7 | RAG / knowledge base — Notion → vector-store ingest, on-demand `answer` (Haiku-pinned), MCP knowledge tools |
 | `dumps` | Active | 5 | Daily dump collection — fanout per-node ship + harqis-server pull (Android/Termux) → analysis |
 | `social` | Active | 1 | Monthly LinkedIn post — git history → Claude → LinkedIn draft + Gmail notification |
@@ -297,7 +297,7 @@ Declared in `workflows/queues.py` (`WorkflowQueue` enum) and registered with Rab
 | `hud_broadcast` | HUD-level fanout — `workflows.hud.tasks.broadcast_*` (auto-routed); reload skin config / refresh-all-HUDs cluster-wide |
 | `workers_broadcast` | Worker-pool-wide fanout — e.g. `broadcast_report_location` so every worker reports its own location |
 | `agents_broadcast` | Agent-pool-wide control messages (declared in enum; reserved) |
-| `hfl_broadcast` | HFL ingest fanout — each worker captures its own local signal |
+| `hfl_broadcast` | HFL ingest fanout and durable outbox replay — each worker captures/flushes its own local signal |
 
 > Routing override: a task can target any queue via `options={"queue": WorkflowQueue.X}` in its Beat schedule entry, regardless of `task_routes` patterns.
 >
@@ -374,13 +374,14 @@ Widgets are wired to categories in each task's `@init_meter(..., schedule_catego
 
 ## Frontend Dashboard
 
-A lightweight web dashboard for manually triggering Celery tasks and monitoring run status.
+A lightweight, login-protected module frontend for the manifesto, workflow
+operations, application inventory and tests, and the searchable HFL corpus.
 
 ![HARQIS Dashboard](docs/images/dashboard-sample.png)
 
 > Full setup: [`frontend/README.md`](frontend/README.md)
 
-**Features:** login-protected · tabbed by workflow · one-click task triggering · live HTMX status polling · drag-and-drop card reordering · JSON output rendering · clickable file paths · Flower link
+**Features:** Home manifesto · reorderable workflow and app layouts · one-click task triggering · live HTMX status polling · app documentation and controlled pytest runs · recursive HFL browsing, tag cloud, date search, authenticated canonical-host reads, and signed reference downloads · Flower link
 
 ```sh
 cd frontend && python main.py
@@ -669,6 +670,11 @@ WORKFLOW_CONFIG=                  # default: workflows.config
 APP_USERNAME=
 APP_PASSWORD=
 APP_SECRET_KEY=
+HFL_CORPUS_API_URL=             # empty on canonical Mac; Mac frontend URL on remote readers
+HFL_CORPUS_API_TOKEN=           # shared secret; keep in gitignored apps.env
+HFL_CORPUS_PATH=                # canonical host corpus root; /Volumes/harqis-data/hfl in production
+HFL_OUTBOX_PATH=                # optional durable envelope directory; default logs/hfl-outbox
+HFL_REFERENCE_ALLOWED_ROOTS=    # optional OS-pathsep list for reference downloads
 
 # ── RabbitMQ / Celery broker ──────────────────────────────────────────────────
 DOCKER_HOST_PORT_RABBIT_MQ=       # default: 15672

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import time
+from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -17,12 +18,27 @@ _HEADER = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 _DATE_IN_NAME = re.compile(r"(20\d{2}-\d{2}-\d{2})")
 _TAG_LINE = re.compile(r"^\s*Tags:\s*(.+?)\s*$", re.MULTILINE | re.IGNORECASE)
 _TAG_TOKEN = re.compile(r"(?<!\w)#([\w-]+)", re.UNICODE)
+_HFL_FIELD = re.compile(
+    r"^\s*(Source|Machine|Entry ID|Moment|What happened|Why it stayed|Possible use|Tags|References):\s*(.*?)\s*$",
+    re.IGNORECASE,
+)
+_HFL_FIELD_LABELS = {
+    "moment": "Moment",
+    "what happened": "What happened",
+    "why it stayed": "Why it stayed",
+    "possible use": "Possible use",
+    "tags": "Tags",
+    "references": "References",
+    "source": "Source",
+    "machine": "Machine",
+    "entry id": "Entry ID",
+}
 
 
 @dataclass(frozen=True)
 class CorpusDocument:
     relative_path: str
-    path: Path
+    path: Path | None
     name: str
     text: str
     created_at: datetime
@@ -173,10 +189,52 @@ def parse_date(value: str | None) -> date | None:
         return None
 
 
+def format_hfl_markdown(source: str) -> str:
+    """Prepare canonical HFL fields for readable Markdown presentation.
+
+    Source files remain untouched. Labels become bold paragraphs and indented
+    reference bullets are normalized so the Markdown renderer treats them as
+    a list instead of a code block.
+    """
+    output: list[str] = []
+    in_references = False
+    for raw in (source or "").splitlines():
+        field = _HFL_FIELD.match(raw)
+        if field:
+            label = _HFL_FIELD_LABELS[field.group(1).lower()]
+            value = field.group(2).strip()
+            if output and output[-1] != "":
+                output.append("")
+            output.append(f"**{label}:**" + (f" {value}" if value else ""))
+            output.append("")
+            in_references = label == "References"
+            continue
+
+        stripped = raw.strip()
+        if in_references and stripped.startswith("- "):
+            output.append(stripped)
+            continue
+        if stripped and not stripped.startswith("-"):
+            in_references = False
+        output.append(raw.rstrip())
+    return "\n".join(output).strip() + "\n"
+
+
+def common_tags(
+    documents: tuple[CorpusDocument, ...], limit: int = 20
+) -> list[tuple[str, int]]:
+    """Return the most common document tags, ordered by count then name."""
+    counts = Counter(tag for document in documents for tag in set(document.tags))
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]
+
+
 def search_documents(
     documents: tuple[CorpusDocument, ...],
     *,
     query: str = "",
+    date_field: str = "created",
+    date_from: str = "",
+    date_to: str = "",
     created_from: str = "",
     created_to: str = "",
     updated_from: str = "",
@@ -185,6 +243,11 @@ def search_documents(
     tokens = query.split()
     tag_needles = [token[1:].lower() for token in tokens if token.startswith("#") and len(token) > 1]
     text_needle = " ".join(token for token in tokens if not token.startswith("#")).strip().lower()
+    if date_from or date_to:
+        if date_field == "updated":
+            updated_from, updated_to = date_from, date_to
+        else:
+            created_from, created_to = date_from, date_to
     c_from, c_to = parse_date(created_from), parse_date(created_to)
     u_from, u_to = parse_date(updated_from), parse_date(updated_to)
 
