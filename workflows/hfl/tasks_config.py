@@ -67,6 +67,7 @@ WORKFLOW_HFL = {
             'model': 'claude-haiku-4-5-20251001',
             'window_days': 1,
             'max_files': 40,
+            'android_min_files': 10,
             'frames_per_video': 4,
         },
         'options': {

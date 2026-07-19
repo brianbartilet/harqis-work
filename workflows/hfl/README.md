@@ -50,7 +50,7 @@ this scaffold closes.
 | `ingest_spotify_activity` | Daily Spotify listening digest. Pulls the day's plays from the Spotify Web API (`apps/spotify`, OAuth2 refresh-token), with the operator's rolling top tracks/artists as context, and distils ONE "soundtrack of the day" entry — mood **inferred** by Haiku from track/artist/genre names (no audio-features; deprecated for new apps). Haiku-distilled, raw fallback. No credentials / no plays → no entry, no call. `recently-played` caps at 50/day. | `file:hfl_corpus+es:hfl-entries` | Daily 23:10 local (**shipped commented-out** — uncomment in `tasks_config.py` once `SPOTIFY_*` creds are set; `tenant_safe`). |
 | `ingest_plaud_activity` | Daily **voice-recordings** ingest. Pulls the day's Plaud recordings via the `apps/plaud` adapter (cloud API → local export-folder fallback) and writes **ONE entry per recording** (not a daily digest). Transcript precedence: Plaud's own transcript, else OpenAI **Whisper** on the raw audio (bounded by `max_transcribe`). Raw recordings + a consolidated `YYYY-MM-DD-summary.md` are archived to `harqis-ones-mac-mini` over key-based SSH. Haiku-distilled, raw fallback. No `PLAUD_TOKEN`/`PLAUD_EXPORT_DIR` → no entry, no call; no recordings → no entry, no call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:15 local (active — clean no-op until acquisition is configured; `tenant_safe`). |
 | `ingest_radar_activity` | Daily **HERMES RADAR digest.** Reads the day's compatibility-named `show_daily_radar` synthesis blocks back out of the shared desktop feed file (`<feed_dir>/hud-logs-YYYYMMDD.txt`) and distils them into ONE "what the day was about" entry. It does not ingest the 15-minute Telegram push rerenders or re-run the radar source sweep. The feed file is Drive-synced, so the Beat host reads briefings a Windows radar wrote; files read remain the entry references. Haiku-distilled, raw fallback. No feed dir / no synthesis blocks → no entry, no LLM call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:20 local (active — clean no-op until `DESKTOP_PATH_FEED` is set and the radar has run). |
-| `analyze_hfl_media` | **Daily media vision pass.** Walks the dumps inbox for recent images/videos (pulled from phones + machines by `workflows/dumps/`), sends each to Haiku vision for a story moment, and **geo-tags** it — EXIF GPS, else the nearest OwnTracks fix by capture time → Nominatim place. One entry per story-worthy item; the source dump file + an OSM pin are the `references`. No new media → no entry, no call. | `file:hfl_corpus+es:hfl-entries` | Daily 22:00 local (active). |
+| `analyze_hfl_media` | **Daily media vision pass.** Walks the dumps inbox for recent images/videos (pulled from phones + machines by `workflows/dumps/`), reserves 10 of the 40 analysis slots for Android-origin media, then fills unused capacity by global recency. Each item is sent to Haiku vision for a story moment and **geo-tagged** — EXIF GPS, else the nearest OwnTracks fix by capture time → Nominatim place. One entry per story-worthy item; the source dump file + an OSM pin are the `references`. Already-referenced media is skipped before the model call. Passing `media_path=<inbox file>` targets one artifact directly. | `file:hfl_corpus+es:hfl-entries` | Daily 22:00 local (active). |
 | `collect_time_capsule` | **On-demand, time-ranged archive ingest.** Sweeps a directory (and subdirs) for files dated within a period, extracts text / docs / Haiku vision captions into a bounded manifest + digest. The COLLECT half of the `/time-capsule-synthesizer` skill (Claude synthesizes ONE rollup entry from the digest, then dual-writes it via `capture_hfl_entry`). Not scheduled. | `file:hfl_corpus+es:hfl-entries` (via the skill) | Adhoc — driven by `/time-capsule-synthesizer`. |
 
 Each carries the manifesto metadata block on the beat entry — see
@@ -83,10 +83,27 @@ one dated folder per day, never auto-deleted:
   Camera/…   Screenshots/…
 ```
 
-`analyze_hfl_media` (22:00) then *reads* (never moves/deletes) each new file,
-captions it with Haiku vision, and **geo-tags** it — EXIF GPS first, else the
+`analyze_hfl_media` (22:00) then *reads* (never moves/deletes) each selected
+new file, captioning it with Haiku vision and **geo-tagging** it — EXIF GPS first, else the
 nearest OwnTracks fix to its capture time → Nominatim place — writing one entry
-per story-worthy item with the file path + an OSM pin as `references`.
+per story-worthy item with the file path + an OSM pin as `references`. Android
+media receives a reserved quota so desktop screenshot volume cannot starve the
+phone stream; unused phone slots flow back to the globally newest media. Android
+classification requires the exact configured `nothing-phone-daily-dumps-YYYY-MM-DD`
+source identity plus a canonical Camera/DCIM/Screenshots/Screenrecord folder;
+generic desktop folders and prefix-like source names are not treated as Android.
+
+For an individual screenshot/photo, invoke the same task with
+`media_path=<absolute path inside the dumps inbox>`. Paths outside the inbox are
+rejected. Corpus references plus atomic per-path state in
+`.media-ingest-state/` make retries and overlapping worker runs idempotent; a
+completed path does not append duplicate Markdown or spend another vision call.
+Claims use descriptor-bound advisory locks, so ownership cannot change between
+validation and finalization and a killed worker releases its claim automatically.
+Explicit story-worthiness skips become terminal; malformed model output,
+read/decode errors, API failures, and incomplete append failures release the
+claim for retry. Persistent `.lock` files are harmless lock targets and do not
+mean a worker still owns the media path.
 
 **The join.** A photo carries a capture *time*; OwnTracks carries a timestamped
 *track*. Matching the two locates even screenshots and EXIF-stripped media — so a
