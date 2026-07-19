@@ -1,0 +1,33 @@
+{% set terminal = run.state in ['passed', 'failed', 'timed_out', 'cancelled', 'error'] %}
+<div id="test-run-{{ run.id }}"
+     class="rounded-xl bg-slate-900 p-4 ring-1 ring-slate-800"
+     {% if not terminal %}hx-get="/applications/test-runs/{{ run.id }}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  <div class="flex items-center justify-between gap-3">
+    <div class="flex items-center gap-2 min-w-0">
+      <span class="w-2 h-2 rounded-full shrink-0
+        {% if run.state == 'passed' %}bg-emerald-400
+        {% elif run.state in ['failed', 'error', 'timed_out'] %}bg-red-400
+        {% elif run.state == 'cancelled' %}bg-amber-400
+        {% else %}bg-blue-400 pulse-dot{% endif %}"></span>
+      <span class="text-xs font-semibold uppercase tracking-wide text-slate-300">{{ run.state }}</span>
+      <span class="truncate font-mono text-xs text-slate-600">{{ run.mode }} · {{ run.id[:8] }}</span>
+    </div>
+    {% if not terminal %}
+    <button hx-post="/applications/test-runs/{{ run.id }}/cancel" hx-target="#test-run-{{ run.id }}" hx-swap="outerHTML"
+            class="text-xs text-slate-500 hover:text-red-400">Cancel</button>
+    {% endif %}
+  </div>
+  {% if run.summary %}
+  <div class="mt-3 flex flex-wrap gap-2">
+    {% for key, value in run.summary.items() %}
+    <span class="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-400">{{ value }} {{ key }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if run.output %}
+  <details class="mt-3" {% if run.state in ['failed', 'error', 'timed_out'] %}open{% endif %}>
+    <summary class="cursor-pointer text-xs text-slate-500 hover:text-slate-300">Output</summary>
+    <pre class="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 text-xs text-slate-400 ring-1 ring-slate-800">{{ run.output }}</pre>
+  </details>
+  {% endif %}
+</div>

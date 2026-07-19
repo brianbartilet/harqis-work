@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}HARQIS — Applications{% endblock %}
+
+{% block content %}
+<main class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+  <div class="flex items-end justify-between gap-4 mb-7">
+    <div>
+      <p class="text-xs uppercase tracking-[0.22em] text-emerald-400">Integration inventory</p>
+      <h1 class="mt-2 text-2xl font-semibold text-white">Applications</h1>
+      <p class="mt-1 text-sm text-slate-400">Documentation and host-configured pytest checks for {{ applications | length }} integrations.</p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for application in applications %}
+    <a href="/applications/{{ application.key }}"
+       class="group rounded-xl bg-slate-900 p-5 ring-1 ring-slate-800 hover:ring-emerald-500/40 transition">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2 class="font-semibold text-white group-hover:text-emerald-300 transition">{{ application.label }}</h2>
+          <p class="mt-1 font-mono text-xs text-slate-600">apps/{{ application.key }}</p>
+        </div>
+        {% if latest[application.key] %}
+          {% set run = latest[application.key][0] %}
+          <span class="rounded-full px-2 py-0.5 text-xs
+            {% if run.state == 'passed' %}bg-emerald-950 text-emerald-300
+            {% elif run.state in ['failed', 'error', 'timed_out'] %}bg-red-950 text-red-300
+            {% else %}bg-slate-800 text-slate-400{% endif %}">{{ run.state }}</span>
+        {% endif %}
+      </div>
+      <div class="mt-5 flex gap-4 text-xs text-slate-500">
+        <span>{{ application.documents | length }} docs</span>
+        <span>{{ application.tests | length }} tests</span>
+        <span>{{ application.safe_paths | length }} safe</span>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</main>
+{% endblock %}

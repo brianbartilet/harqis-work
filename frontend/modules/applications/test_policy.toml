@@ -1,0 +1,5 @@
+# Explicit allowlist for tests audited as safe for one-click execution.
+# Paths are relative to the repository root. Apps without entries can still
+# run their full suite or individual files after an impact confirmation.
+
+[safe]

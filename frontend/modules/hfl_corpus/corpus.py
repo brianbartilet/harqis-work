@@ -1,0 +1,233 @@
+"""Recursive HFL corpus index, metadata extraction, and search."""
+
+from __future__ import annotations
+
+import re
+import time
+from dataclasses import dataclass
+from datetime import date, datetime
+from pathlib import Path
+from threading import Lock
+
+from config import get_settings
+from web import REPO_ROOT
+
+
+_HEADER = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
+_DATE_IN_NAME = re.compile(r"(20\d{2}-\d{2}-\d{2})")
+_TAG_LINE = re.compile(r"^\s*Tags:\s*(.+?)\s*$", re.MULTILINE | re.IGNORECASE)
+_TAG_TOKEN = re.compile(r"(?<!\w)#([\w-]+)", re.UNICODE)
+
+
+@dataclass(frozen=True)
+class CorpusDocument:
+    relative_path: str
+    path: Path
+    name: str
+    text: str
+    created_at: datetime
+    updated_at: datetime
+    tags: tuple[str, ...]
+    references: tuple[str, ...]
+    excerpt: str
+
+
+def resolve_corpus_root() -> Path:
+    try:
+        from apps.apps_config import CONFIG_MANAGER
+
+        hfl = CONFIG_MANAGER.get("HFL")
+        configured = (hfl.get("corpus") or {}).get("path") if isinstance(hfl, dict) else None
+        if configured and "${" not in configured:
+            return Path(configured).expanduser().resolve()
+    except Exception:
+        pass
+    configured = get_settings().hfl_corpus_path.strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return (REPO_ROOT / "logs" / "hfl").resolve()
+
+
+def _entry_blocks(text: str) -> list[tuple[str, str]]:
+    matches = list(_HEADER.finditer(text))
+    return [
+        (match.group(1).strip(), text[match.end(): matches[index + 1].start() if index + 1 < len(matches) else len(text)].strip())
+        for index, match in enumerate(matches)
+    ]
+
+
+def _entry_metadata(header: str, body: str) -> tuple[datetime | None, tuple[str, ...]]:
+    """Read only the timestamp and references needed by the frontend index.
+
+    Keeping this narrow parser local avoids importing ``workflows.hfl`` whose
+    package initialiser registers every Celery task as a side effect.
+    """
+    when = None
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            when = datetime.strptime(header.strip(), fmt)
+            break
+        except ValueError:
+            continue
+
+    references: list[str] = []
+    collecting_references = False
+    for raw in body.splitlines():
+        stripped = raw.strip()
+        if collecting_references:
+            if stripped.startswith("- "):
+                reference = stripped[2:].strip()
+                if reference:
+                    references.append(reference)
+                continue
+            if not stripped:
+                continue
+            collecting_references = False
+        if stripped.lower().startswith("references:"):
+            collecting_references = True
+    return when, tuple(references)
+
+
+def _metadata(path: Path, text: str) -> tuple[datetime, tuple[str, ...], tuple[str, ...]]:
+    timestamps: list[datetime] = []
+    tags: set[str] = set()
+    references: list[str] = []
+    for header, body in _entry_blocks(text):
+        when, entry_references = _entry_metadata(header, body)
+        if when:
+            timestamps.append(when)
+        references.extend(entry_references)
+    for tag_line in _TAG_LINE.findall(text):
+        tags.update(token.lower() for token in _TAG_TOKEN.findall(tag_line))
+
+    if not timestamps:
+        match = _DATE_IN_NAME.search(path.name)
+        if match:
+            try:
+                timestamps.append(datetime.strptime(match.group(1), "%Y-%m-%d"))
+            except ValueError:
+                pass
+    stat = path.stat()
+    created = min(timestamps) if timestamps else datetime.fromtimestamp(
+        getattr(stat, "st_birthtime", stat.st_ctime)
+    )
+    return created, tuple(sorted(tags)), tuple(dict.fromkeys(references))
+
+
+def _excerpt(text: str, limit: int = 240) -> str:
+    compact = " ".join(line.strip() for line in text.splitlines() if line.strip())
+    return compact[:limit] + ("…" if len(compact) > limit else "")
+
+
+class CorpusIndex:
+    def __init__(self, ttl_seconds: int = 30) -> None:
+        self.ttl_seconds = ttl_seconds
+        self._loaded_at = 0.0
+        self._root: Path | None = None
+        self._documents: tuple[CorpusDocument, ...] = ()
+        self._lock = Lock()
+
+    def documents(self, force: bool = False) -> tuple[CorpusDocument, ...]:
+        root = resolve_corpus_root()
+        if not force and root == self._root and time.monotonic() - self._loaded_at < self.ttl_seconds:
+            return self._documents
+        with self._lock:
+            documents: list[CorpusDocument] = []
+            if root.exists():
+                for path in sorted(root.rglob("*.md"), key=lambda item: item.as_posix().lower()):
+                    try:
+                        text = path.read_text(encoding="utf-8")
+                        created, tags, references = _metadata(path, text)
+                        updated = datetime.fromtimestamp(path.stat().st_mtime)
+                    except (OSError, UnicodeDecodeError):
+                        continue
+                    documents.append(
+                        CorpusDocument(
+                            relative_path=path.relative_to(root).as_posix(),
+                            path=path,
+                            name=path.name,
+                            text=text,
+                            created_at=created,
+                            updated_at=updated,
+                            tags=tags,
+                            references=references,
+                            excerpt=_excerpt(text),
+                        )
+                    )
+            self._root = root
+            self._documents = tuple(documents)
+            self._loaded_at = time.monotonic()
+            return self._documents
+
+    def get(self, relative_path: str) -> CorpusDocument | None:
+        normalized = (relative_path or "").replace("\\", "/")
+        return next((doc for doc in self.documents() if doc.relative_path == normalized), None)
+
+
+def parse_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def search_documents(
+    documents: tuple[CorpusDocument, ...],
+    *,
+    query: str = "",
+    created_from: str = "",
+    created_to: str = "",
+    updated_from: str = "",
+    updated_to: str = "",
+) -> list[CorpusDocument]:
+    tokens = query.split()
+    tag_needles = [token[1:].lower() for token in tokens if token.startswith("#") and len(token) > 1]
+    text_needle = " ".join(token for token in tokens if not token.startswith("#")).strip().lower()
+    c_from, c_to = parse_date(created_from), parse_date(created_to)
+    u_from, u_to = parse_date(updated_from), parse_date(updated_to)
+
+    results: list[CorpusDocument] = []
+    for document in documents:
+        if text_needle and text_needle not in document.text.lower():
+            continue
+        if tag_needles and not all(any(needle in tag for tag in document.tags) for needle in tag_needles):
+            continue
+        if c_from and document.created_at.date() < c_from:
+            continue
+        if c_to and document.created_at.date() > c_to:
+            continue
+        if u_from and document.updated_at.date() < u_from:
+            continue
+        if u_to and document.updated_at.date() > u_to:
+            continue
+        results.append(document)
+    return sorted(results, key=lambda item: (item.created_at, item.relative_path), reverse=True)
+
+
+def build_tree(documents: tuple[CorpusDocument, ...]) -> dict:
+    root = {"name": "Corpus", "path": "", "directories": {}, "files": []}
+    for document in documents:
+        node = root
+        parts = Path(document.relative_path).parts
+        for index, part in enumerate(parts[:-1]):
+            current_path = Path(*parts[: index + 1]).as_posix()
+            node = node["directories"].setdefault(
+                part,
+                {"name": part, "path": current_path, "directories": {}, "files": []},
+            )
+        node["files"].append(document)
+
+    def finalize(node: dict) -> dict:
+        return {
+            "name": node["name"],
+            "path": node["path"],
+            "directories": [finalize(child) for _, child in sorted(node["directories"].items())],
+            "files": sorted(node["files"], key=lambda item: item.name.lower()),
+        }
+
+    return finalize(root)
+
+
+corpus_index = CorpusIndex()

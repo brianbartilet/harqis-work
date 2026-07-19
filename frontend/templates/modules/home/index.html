@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}HARQIS — Home{% endblock %}
+
+{% block content %}
+<main class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-10">
+  <section>
+    <p class="text-xs uppercase tracking-[0.22em] text-blue-400">Platform modules</p>
+    <h1 class="mt-2 text-2xl font-semibold text-white">A self-hosted second brain on steroids.</h1>
+    <p class="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
+      HARQIS captures useful state, organizes it into workflows, distills it into reusable knowledge,
+      and expresses action back into the systems you use.
+    </p>
+    <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+      {% for module in module_cards %}
+      <a href="{{ module.route }}"
+         class="group rounded-xl bg-slate-900 p-5 ring-1 ring-slate-800 hover:ring-blue-500/50 transition">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="font-semibold text-white">{{ module.label }}</h2>
+          <span class="text-slate-600 group-hover:text-blue-400 transition">→</span>
+        </div>
+        <p class="mt-2 text-sm text-slate-300">{{ module.description }}</p>
+        <p class="mt-2 text-xs leading-relaxed text-slate-500">{{ module.detail }}</p>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section>
+    <div class="mb-4">
+      <p class="text-xs uppercase tracking-[0.22em] text-violet-400">Guiding principles</p>
+      <h2 class="mt-2 text-xl font-semibold text-white">HARQIS Work Manifesto</h2>
+    </div>
+    <article class="markdown-body rounded-xl bg-slate-900/70 p-5 sm:p-8 ring-1 ring-slate-800">
+      {{ manifesto }}
+    </article>
+  </section>
+</main>
+{% endblock %}
