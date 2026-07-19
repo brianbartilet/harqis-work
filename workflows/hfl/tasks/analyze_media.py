@@ -28,7 +28,7 @@ Prompt lives in the prompts/ layer — workflows/hfl/prompts/analyze_media.md.
 from __future__ import annotations
 
 import base64
-import fcntl
+import errno
 import hashlib
 import json
 import os
@@ -39,6 +39,13 @@ import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+if os.name == "nt":
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+else:
+    import fcntl
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
@@ -195,31 +202,57 @@ def _revalidate_media_candidate(inbox: Path, item: CollectedFile) -> CollectedFi
     return _target_media_candidate(inbox, item.path)
 
 
-def _secure_media_snapshot(
-    inbox: Path, item: CollectedFile,
-) -> tuple[Path, CollectedFile]:
-    """Copy one confined file through a no-follow descriptor chain.
+def _windows_final_path(fd: int) -> Path:
+    """Resolve the file actually bound to an open Windows descriptor."""
+    if os.name != "nt":  # pragma: no cover - guarded by the Windows open path
+        raise RuntimeError("Windows file-handle resolution requested on POSIX")
 
-    Every path component is opened relative to the already-open inbox root with
-    ``O_NOFOLLOW``. The model and metadata readers consume the private snapshot,
-    binding validation and reading to the same source descriptor.
-    """
-    root = inbox.expanduser().resolve()
-    resolved = item.path.resolve(strict=True)
-    try:
-        relative = resolved.relative_to(root)
-    except ValueError as exc:
-        raise ValueError(f"media path is outside dumps inbox: {resolved}") from exc
-    if resolved.suffix.lower() not in (_IMAGE_EXTS | _VIDEO_EXTS):
-        raise ValueError(f"unsupported media type: {resolved.suffix}")
+    get_final_path = ctypes.WinDLL("kernel32", use_last_error=True).GetFinalPathNameByHandleW
+    get_final_path.argtypes = (
+        wintypes.HANDLE,
+        wintypes.LPWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+    )
+    get_final_path.restype = wintypes.DWORD
+    handle = wintypes.HANDLE(msvcrt.get_osfhandle(fd))
+    size = 512
+    while True:
+        buffer = ctypes.create_unicode_buffer(size)
+        length = get_final_path(handle, buffer, size, 0)
+        if length == 0:
+            raise ctypes.WinError(ctypes.get_last_error())
+        if length < size:
+            raw_path = buffer.value
+            break
+        size = length + 1
 
-    nofollow = getattr(os, "O_NOFOLLOW", 0)
-    directory = getattr(os, "O_DIRECTORY", 0)
+    if raw_path.startswith("\\\\?\\UNC\\"):
+        raw_path = "\\\\" + raw_path[8:]
+    elif raw_path.startswith("\\\\?\\"):
+        raw_path = raw_path[4:]
+    return Path(raw_path)
+
+
+def _open_confined_media(root: Path, resolved: Path, relative: Path) -> int:
+    """Open one media file without permitting a symlink/reparse-point escape."""
+    if os.name == "nt":
+        fd = os.open(resolved, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+        try:
+            opened_path = _windows_final_path(fd)
+            opened_path.relative_to(root)
+            if os.path.normcase(str(opened_path)) != os.path.normcase(str(resolved)):
+                raise ValueError(f"media path changed during secure open: {resolved}")
+        except Exception:
+            os.close(fd)
+            raise
+        return fd
+
+    nofollow = os.O_NOFOLLOW
+    directory = os.O_DIRECTORY
     root_fd = os.open(root, os.O_RDONLY | directory)
     parent_fd = root_fd
     file_fd: int | None = None
-    snapshot_path: Path | None = None
-    success = False
     try:
         for component in relative.parts[:-1]:
             next_fd = os.open(
@@ -235,6 +268,40 @@ def _secure_media_snapshot(
             os.O_RDONLY | nofollow,
             dir_fd=parent_fd,
         )
+        return file_fd
+    except Exception:
+        if file_fd is not None:
+            os.close(file_fd)
+        raise
+    finally:
+        if parent_fd != root_fd:
+            os.close(parent_fd)
+        os.close(root_fd)
+
+
+def _secure_media_snapshot(
+    inbox: Path, item: CollectedFile,
+) -> tuple[Path, CollectedFile]:
+    """Copy one confined file through a platform-secure descriptor.
+
+    POSIX opens every path component relative to the inbox with ``O_NOFOLLOW``.
+    Windows validates the final path bound to the open OS handle. The model and
+    metadata readers consume the private snapshot, binding validation and read
+    access to the same source descriptor on both platforms.
+    """
+    root = inbox.expanduser().resolve()
+    resolved = item.path.resolve(strict=True)
+    try:
+        relative = resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"media path is outside dumps inbox: {resolved}") from exc
+    if resolved.suffix.lower() not in (_IMAGE_EXTS | _VIDEO_EXTS):
+        raise ValueError(f"unsupported media type: {resolved.suffix}")
+
+    file_fd: int | None = _open_confined_media(root, resolved, relative)
+    snapshot_path: Path | None = None
+    success = False
+    try:
         source_stat = os.fstat(file_fd)
         if not stat.S_ISREG(source_stat.st_mode):
             raise ValueError(f"media path is not a regular file: {resolved}")
@@ -258,9 +325,6 @@ def _secure_media_snapshot(
     finally:
         if file_fd is not None:
             os.close(file_fd)
-        if parent_fd != root_fd:
-            os.close(parent_fd)
-        os.close(root_fd)
         if snapshot_path is not None and not success:
             snapshot_path.unlink(missing_ok=True)
 
@@ -296,6 +360,37 @@ def _media_state_paths(corpus_dir: Path, media_path: Path) -> tuple[Path, Path]:
     return state_dir / f"{key}.lock", state_dir / f"{key}.done"
 
 
+def _try_lock_fd(fd: int) -> bool:
+    """Acquire a non-blocking advisory lock on one descriptor."""
+    if os.name == "nt":
+        if os.fstat(fd).st_size == 0:
+            os.write(fd, b"\0")
+            os.fsync(fd)
+        os.lseek(fd, 0, os.SEEK_SET)
+        try:
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        except OSError as exc:
+            if exc.errno in {errno.EACCES, errno.EAGAIN, errno.EDEADLK}:
+                return False
+            raise
+        return True
+
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return False
+    return True
+
+
+def _unlock_fd(fd: int) -> None:
+    """Release a descriptor lock acquired by :func:`_try_lock_fd`."""
+    if os.name == "nt":
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+    else:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
 def _media_state_exists(corpus_dir: Path, media_path: Path) -> bool:
     """Return true for a completed path or a claim actively locked by a worker."""
     lock_path, done_path = _media_state_paths(corpus_dir, media_path)
@@ -305,11 +400,9 @@ def _media_state_exists(corpus_dir: Path, media_path: Path) -> bool:
         return False
     fd = os.open(lock_path, os.O_RDWR)
     try:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+        if not _try_lock_fd(fd):
             return True
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        _unlock_fd(fd)
         return False
     finally:
         os.close(fd)
@@ -328,13 +421,11 @@ def _acquire_media_claim(
     if done_path.exists():
         return None
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+    if not _try_lock_fd(fd):
         os.close(fd)
         return None
     if done_path.exists():
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        _unlock_fd(fd)
         os.close(fd)
         return None
     os.ftruncate(fd, 0)
@@ -358,7 +449,7 @@ def _finish_media_claim(claim: tuple[Path, Path, int], completed: bool) -> None:
         _log.warning("hfl.media: could not finalize claim %s — %s", lock_path, exc)
     finally:
         try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
+            _unlock_fd(fd)
         finally:
             os.close(fd)
 

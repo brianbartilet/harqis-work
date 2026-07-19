@@ -11,6 +11,8 @@ from inspect import signature
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from workflows.dumps.files import CollectedFile
 from workflows.hfl.tasks_config import WORKFLOW_HFL
 from workflows.hfl.tasks.analyze_media import (
@@ -28,6 +30,16 @@ from workflows.hfl.tasks.analyze_media import (
 )
 
 _MOD = "workflows.hfl.tasks.analyze_media"
+
+
+def _symlink_or_skip(link: Path, target: Path) -> None:
+    """Create a test symlink or skip on Windows without symlink privilege."""
+    try:
+        link.symlink_to(target)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows symlink privilege is unavailable")
+        raise
 
 
 def test__dms_to_deg_signs_and_values():
@@ -238,7 +250,7 @@ def test__canonical_aliases_do_not_consume_multiple_quota_slots(tmp_path):
     media = source / "shot.png"
     media.write_bytes(b"png")
     alias = source / "alias.png"
-    alias.symlink_to(media)
+    _symlink_or_skip(alias, media)
     when = datetime.now()
     candidates = [
         CollectedFile(tmp_path, media, media.relative_to(tmp_path), when),
@@ -350,7 +362,7 @@ def test__target_media_candidate_rejects_symlink_escape(tmp_path):
     outside = tmp_path / "outside.png"
     outside.write_bytes(b"png")
     link = inbox / "shot.png"
-    link.symlink_to(outside)
+    _symlink_or_skip(link, outside)
 
     try:
         _target_media_candidate(inbox, link)
@@ -367,6 +379,9 @@ def test__secure_snapshot_blocks_swap_between_resolve_and_open(tmp_path, monkeyp
     media.write_bytes(b"inside")
     outside = tmp_path / "private.png"
     outside.write_bytes(b"outside")
+    probe = inbox / "symlink-probe.png"
+    _symlink_or_skip(probe, outside)
+    probe.unlink()
     item = CollectedFile(
         source_root=inbox,
         path=media,
@@ -378,21 +393,48 @@ def test__secure_snapshot_blocks_swap_between_resolve_and_open(tmp_path, monkeyp
 
     def swapping_open(path, flags, mode=0o777, *, dir_fd=None):
         nonlocal swapped
-        if path == media.name and dir_fd is not None and not swapped:
+        is_source_open = (
+            (dir_fd is not None and path == media.name)
+            or (dir_fd is None and Path(path) == media)
+        )
+        if is_source_open and not swapped:
             swapped = True
             media.unlink()
             media.symlink_to(outside)
+        if dir_fd is None:
+            return real_open(path, flags, mode)
         return real_open(path, flags, mode, dir_fd=dir_fd)
 
     monkeypatch.setattr(f"{_MOD}.os.open", swapping_open)
 
     try:
         _secure_media_snapshot(inbox, item)
-    except OSError:
+    except (OSError, ValueError):
         pass
     else:
-        raise AssertionError("O_NOFOLLOW must reject the swapped final component")
+        raise AssertionError("secure open must reject the swapped final component")
     assert swapped is True
+
+
+def test__secure_snapshot_copies_confined_file(tmp_path):
+    inbox = tmp_path / "dumps"
+    media = inbox / "desktop" / "shot.png"
+    media.parent.mkdir(parents=True)
+    media.write_bytes(b"inside")
+    item = CollectedFile(
+        source_root=inbox,
+        path=media,
+        relative=media.relative_to(inbox),
+        mtime=datetime.now(),
+    )
+
+    snapshot, safe_item = _secure_media_snapshot(inbox, item)
+    try:
+        assert snapshot.read_bytes() == b"inside"
+        assert safe_item.path == media.resolve()
+        assert safe_item.relative == media.relative_to(inbox)
+    finally:
+        snapshot.unlink(missing_ok=True)
 
 
 def test__batch_revalidates_symlink_before_media_read(tmp_path, monkeypatch):
@@ -402,7 +444,7 @@ def test__batch_revalidates_symlink_before_media_read(tmp_path, monkeypatch):
     inside.parent.mkdir(parents=True)
     inside.write_bytes(b"inside")
     link = inbox / "selected.png"
-    link.symlink_to(inside)
+    _symlink_or_skip(link, inside)
     outside = tmp_path / "private.png"
     outside.write_bytes(b"outside")
     item = CollectedFile(
@@ -424,7 +466,7 @@ def test__batch_revalidates_symlink_before_media_read(tmp_path, monkeypatch):
 
         def __init__(self, _config):
             inside.unlink()
-            inside.symlink_to(outside)
+            _symlink_or_skip(inside, outside)
 
         def send_messages(self, **_kwargs):
             raise AssertionError("escaped media must never reach the model")
