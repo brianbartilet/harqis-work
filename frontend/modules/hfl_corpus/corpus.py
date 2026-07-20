@@ -74,10 +74,24 @@ class CorpusDocument:
         needle = (selected_tag or "").casefold()
         if not needle:
             return self.tag_counts
+
+        counts = dict(self.tag_counts)
+        for tag in self.tags:
+            if needle not in tag.casefold() or tag in counts:
+                continue
+            counts[tag] = sum(
+                1
+                for entry in self.entries
+                if any(tag.casefold() == entry_tag.casefold() for entry_tag in entry.tags)
+            )
+
         return tuple(
             sorted(
-                self.tag_counts,
-                key=lambda item: (needle not in item[0].casefold()),
+                counts.items(),
+                key=lambda item: (
+                    needle not in item[0].casefold(),
+                    item[0].casefold() != needle,
+                ),
             )
         )
 

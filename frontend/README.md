@@ -8,7 +8,8 @@ The frontend currently exposes four modules:
 
 | Module | Route | Purpose |
 |---|---|---|
-| Home | `/home` | Renders `docs/MANIFESTO.md` and introduces the platform modules. |
+| Home | `/home` | Introduces the platform modules. |
+| Manifesto | `/manifesto` | Renders `docs/MANIFESTO.md` and the HARQIS guiding principles. |
 | Workflows | `/workflows` | Displays Celery workflow categories, task triggers, schedules, status, and run history. |
 | Apps | `/applications` | Inventories `apps/*`, renders documentation, and runs controlled pytest checks using host configuration. |
 | HFL Corpus | `/hfl-corpus` | Browses and searches the recursive Homework-for-Life Markdown corpus and its references. |
@@ -362,7 +363,8 @@ root. Reference files are not uploaded or mirrored.
 | Method | Route | Description |
 |---|---|---|
 | GET | `/` | Redirect to Home or login. |
-| GET | `/home` | Manifesto and module overview. |
+| GET | `/home` | Module overview. |
+| GET | `/manifesto` | Manifesto and guiding principles. |
 | GET | `/workflows` | Workflow sub-tabs and task cards. |
 | POST | `/tasks/{workflow}/{task}/trigger` | Dispatch a registry task. |
 | GET | `/tasks/status/{task_id}` | Poll Flower task state. |

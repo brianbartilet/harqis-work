@@ -3,8 +3,11 @@ from modules.registry import MODULES, module_by_key
 
 def test_module_registry_has_fixed_primary_navigation():
     assert [module.key for module in MODULES] == [
-        "home", "workflows", "applications", "hfl_corpus"
+        "home", "manifesto", "workflows", "applications", "hfl_corpus"
     ]
+    manifesto = module_by_key("manifesto")
+    assert manifesto is not None
+    assert manifesto.route == "/manifesto"
     assert module_by_key("hfl_corpus").route == "/hfl-corpus"
 
 
@@ -13,20 +16,33 @@ def test_module_pages_require_authentication():
     from main import app
 
     with TestClient(app) as client:
-        for route in ("/home", "/workflows", "/applications", "/hfl-corpus"):
+        for route in (
+            "/home", "/manifesto", "/workflows", "/applications", "/hfl-corpus"
+        ):
             response = client.get(route, follow_redirects=False)
             assert response.status_code == 302
             assert response.headers["location"] == "/login"
 
 
-def test_home_renders_manifesto_and_navigation(authenticated_client):
+def test_home_renders_module_navigation_without_manifesto(authenticated_client):
     response = authenticated_client.get("/home")
 
     assert response.status_code == 200
-    assert "HARQIS Work Manifesto" in response.text
+    assert "HARQIS Work Manifesto" not in response.text
+    assert 'href="/manifesto"' in response.text
     assert "Workflows" in response.text
     assert "Apps" in response.text
     assert "HFL Corpus" in response.text
+
+
+def test_manifesto_module_renders_guiding_principles(authenticated_client):
+    response = authenticated_client.get("/manifesto")
+
+    assert response.status_code == 200
+    assert "Guiding principles" in response.text
+    assert "HARQIS Work Manifesto" in response.text
+    assert 'class="rounded-md px-3 py-1.5 text-xs font-medium transition' in response.text
+    assert 'href="/manifesto"' in response.text
 
 
 def test_legacy_dashboard_redirects_to_home(authenticated_client):
@@ -84,4 +100,4 @@ def test_hfl_corpus_module_renders_an_empty_index(authenticated_client, monkeypa
 
     assert response.status_code == 200
     assert "HFL Corpus" in response.text
-    assert "0 Markdown files" in response.text
+    assert "0 files" in response.text

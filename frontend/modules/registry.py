@@ -19,8 +19,15 @@ MODULES: tuple[ModuleDefinition, ...] = (
         key="home",
         label="Home",
         route="/home",
+        description="A map of the HARQIS Work platform.",
+        detail="Browse the platform's automation, integration, knowledge, and operating-principle modules.",
+    ),
+    ModuleDefinition(
+        key="manifesto",
+        label="Manifesto",
+        route="/manifesto",
         description="The operating principles behind HARQIS Work.",
-        detail="The manifesto and a map of the platform's automation, integration, and knowledge modules.",
+        detail="CODE, PARA, the 7 Habits, and the principles that guide how HARQIS captures, distills, and expresses work.",
     ),
     ModuleDefinition(
         key="workflows",

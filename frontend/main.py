@@ -7,7 +7,8 @@ GET  /                              → redirect to /home
 GET  /login                         → login page
 POST /login                         → authenticate and set session cookie
 GET  /logout                        → clear session, redirect to /login
-GET  /home                          → manifesto and module overview
+GET  /home                          → module overview
+GET  /manifesto                     → manifesto and guiding principles
 GET  /workflows                     → workflow task dashboard
 POST /tasks/{workflow}/{key}/trigger → dispatch Celery task, return status HTML
 GET  /tasks/status/{task_id}        → poll task status (HTMX partial)
@@ -40,6 +41,7 @@ from modules.applications.router import router as applications_router
 from modules.hfl_corpus.api import router as hfl_corpus_api_router
 from modules.hfl_corpus.router import router as hfl_corpus_router
 from modules.home.router import router as home_router
+from modules.manifesto.router import router as manifesto_router
 from modules.workflows.router import router as workflows_router
 from web import require_user as _require_auth, templates
 
@@ -52,6 +54,7 @@ warn_insecure_defaults(settings)
 
 app = FastAPI(title="HARQIS Frontend", docs_url=None, redoc_url=None)
 app.include_router(home_router)
+app.include_router(manifesto_router)
 app.include_router(workflows_router)
 app.include_router(applications_router)
 app.include_router(hfl_corpus_api_router)

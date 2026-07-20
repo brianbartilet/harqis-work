@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}HARQIS — Manifesto{% endblock %}
+
+{% block content %}
+<main class="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+  <div class="mb-5">
+    <p class="text-xs uppercase tracking-[0.22em] text-blue-400">Guiding principles</p>
+    <h1 class="mt-2 text-2xl font-semibold text-white">HARQIS Work Manifesto</h1>
+  </div>
+  <article class="markdown-body rounded-xl border border-blue-800/70 bg-slate-900/70 p-5 sm:p-8">
+    {{ manifesto }}
+  </article>
+</main>
+{% endblock %}

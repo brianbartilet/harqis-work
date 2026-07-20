@@ -39,7 +39,7 @@
   {% if document.entry_count %}
   <nav id="tag-navigator"
        data-selected-tag="{{ selected_tag }}"
-       class="fixed inset-x-4 bottom-4 z-30 mx-auto max-w-3xl rounded-2xl bg-slate-900/95 p-4 shadow-2xl shadow-black/60 ring-1 ring-slate-700 backdrop-blur"
+       class="fixed inset-x-4 bottom-4 z-30 mx-auto max-w-3xl rounded-2xl border border-blue-800/70 bg-slate-900/95 p-4 shadow-2xl shadow-black/60 backdrop-blur"
        aria-label="Document tag navigator">
     <div class="max-h-20 overflow-y-auto">
       <p class="mb-2 text-xs font-medium text-slate-500">Document tags</p>
@@ -95,13 +95,14 @@
         tagButtons.forEach((item) => {
           const active = item === button;
           item.setAttribute('aria-pressed', active ? 'true' : 'false');
-          item.classList.toggle('bg-lime-400', active);
-          item.classList.toggle('text-slate-950', active);
+          item.classList.toggle('bg-emerald-950/70', active);
+          item.classList.toggle('text-emerald-200', active);
           item.classList.toggle('ring-1', active);
-          item.classList.toggle('ring-lime-200', active);
+          item.classList.toggle('ring-emerald-700/60', active);
           item.classList.toggle('bg-blue-950/60', !active);
           item.classList.toggle('text-blue-300', !active);
         });
+        button.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
         const disabled = anchors.length <= 1;
         previous.disabled = disabled;
         next.disabled = disabled;

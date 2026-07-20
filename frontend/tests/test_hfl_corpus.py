@@ -358,7 +358,7 @@ def test_selected_tag_is_highlighted_and_reveals_matching_entry_preview(
     response = authenticated_client.get("/hfl-corpus?q=%23debug")
 
     assert response.status_code == 200
-    assert 'bg-lime-400 text-slate-950' in response.text
+    assert 'bg-emerald-950/70 text-emerald-200' in response.text
     assert "1 matching entries" in response.text
     assert "Moment:</span> <span" in response.text
     assert "A useful moment" in response.text
@@ -366,6 +366,73 @@ def test_selected_tag_is_highlighted_and_reveals_matching_entry_preview(
     assert "Something worth remembering" in response.text
     assert "?tag=debugging#hfl-entry-1-test-entry" in response.text
     assert response.text.index("#debugging") < response.text.index("#root-cause")
+
+
+def test_selected_cloud_tag_missing_from_top_counts_is_rendered_first_and_highlighted(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    entries = (
+        CorpusEntry(
+            anchor="hfl-entry-1-selected",
+            header="Selected",
+            moment="Selected tag moment",
+            what_happened="The selected tag is outside the top ten",
+            tags=("selected-tag",),
+        ),
+    )
+    document = _document(
+        "2026-07-10.md",
+        tags=("selected-tag", "popular"),
+        tag_counts=(("popular", 9),),
+        entries=entries,
+    )
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get("/hfl-corpus?q=%23selected-tag")
+
+    assert response.status_code == 200
+    selected = response.text.index("#selected-tag")
+    popular = response.text.index("#popular")
+    assert selected < popular
+    assert 'data-result-tag="selected-tag"' in response.text
+    selected_tag_markup = response.text.split('data-result-tag="selected-tag"', 1)[1].split("</a>", 1)[0]
+    assert "bg-emerald-950/70" in selected_tag_markup
+
+
+def test_matching_entry_preview_links_to_anchored_document_entry(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document("2026-07-10.md", tags=("debugging",))
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get("/hfl-corpus?q=%23debugging")
+
+    assert response.status_code == 200
+    assert 'data-matching-entry="hfl-entry-1-test-entry"' in response.text
+    assert "?tag=debugging#hfl-entry-1-test-entry" in response.text
+
+
+def test_corpus_index_uses_full_width_search_and_left_directory_layout(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document("2026-07-10.md")
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get("/hfl-corpus")
+
+    assert response.status_code == 200
+    assert "1 files" in response.text
+    assert "Markdown files" not in response.text
+    assert response.text.index(">Directory tree</h2>") < response.text.index(">Results</h2>")
+    assert 'data-index-search-panel' in response.text
+    assert "max-w-7xl" in response.text
+    assert "border-blue-800/70" in response.text
 
 
 def test_document_adds_entry_anchors_and_wraparound_tag_navigation(
@@ -409,6 +476,7 @@ def test_document_adds_entry_anchors_and_wraparound_tag_navigation(
     assert 'data-anchors="hfl-entry-1-first,hfl-entry-2-second"' in response.text
     assert "(currentIndex + 1) % anchors.length" in response.text
     assert "(currentIndex - 1 + anchors.length) % anchors.length" in response.text
+    assert "button.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })" in response.text
 
 
 def test_document_without_entries_keeps_content_and_hides_navigator(

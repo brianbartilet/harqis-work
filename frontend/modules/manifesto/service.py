@@ -1,4 +1,4 @@
-"""Manifesto content for the Home module."""
+"""Manifesto content loader."""
 
 from __future__ import annotations
 
