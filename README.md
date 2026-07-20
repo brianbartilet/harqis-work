@@ -815,6 +815,9 @@ OWN_TRACKS_PASSWORD=
 OWN_TRACKS_DEFAULT_USER=
 OWN_TRACKS_DEFAULT_DEVICE=
 
+# ── Wearable lifelog capture (Looki L1) ───────────────────────────────────────
+LOOKI_API_KEY=                    # approved developer key from https://web.looki.tech/api-keys
+
 # ── Voice capture (Plaud) ─────────────────────────────────────────────────────
 PLAUD_TOKEN=                      # cloud API bearer token (preferred)
 PLAUD_EXPORT_DIR=                 # local export folder (fallback)

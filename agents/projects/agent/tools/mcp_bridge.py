@@ -71,6 +71,7 @@ _APP_LOADERS: dict[str, str] = {
     "jira":        "apps.jira.mcp.register_jira_tools",
     "justtcg":     "apps.justtcg.mcp.register_justtcg_tools",
     "linkedin":    "apps.linkedin.mcp.register_linkedin_tools",
+    "looki":       "apps.looki.mcp.register_looki_tools",
     "mpc":         "apps.mpc.mcp.register_mpc_tools",
     "notion":      "apps.notion.mcp.register_notion_tools",
     "oanda":       "apps.oanda.mcp.register_oanda_tools",

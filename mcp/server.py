@@ -47,6 +47,7 @@ APP_REGISTRARS = [
     ("Confluence",       "apps.confluence.mcp",     "register_confluence_tools"),
     ("OwnTracks",        "apps.own_tracks.mcp",     "register_own_tracks_tools"),
     ("Plaud",            "apps.plaud.mcp",          "register_plaud_tools"),
+    ("Looki",            "apps.looki.mcp",          "register_looki_tools"),
     ("Orgo",             "apps.orgo.mcp",           "register_orgo_tools"),
     ("Discord",          "apps.discord.mcp",        "register_discord_tools"),
     ("Reddit",           "apps.reddit.mcp",         "register_reddit_tools"),

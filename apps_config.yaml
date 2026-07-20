@@ -741,6 +741,22 @@ PLAUD:
   return_data_only: True
 
 
+# Looki L1 developer API. Access is approval-controlled at
+# https://web.looki.tech/api-keys and uses X-API-Key authentication.
+LOOKI:
+  app_id: 'looki'
+  client: 'rest'
+  parameters:
+    base_url: 'https://open.looki.tech/api/v1/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 30
+    stream: False
+  app_data:
+    api_key: ${LOOKI_API_KEY}
+  return_data_only: False
+
+
 # Local-CLI app (no REST). The SDK location is resolved per-host from
 # ANDROID_SDK_ROOT/ANDROID_HOME env first, so sdk_root here is an optional
 # override. `profiles` are named AVD/launch configs; emulator_start and the
