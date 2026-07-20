@@ -43,6 +43,7 @@ class CorpusEntry:
     moment: str
     what_happened: str
     tags: tuple[str, ...]
+    text: str = ""
 
 
 @dataclass(frozen=True)
@@ -69,6 +70,12 @@ class CorpusDocument:
             for entry in self.entries
             if any(needle in tag.casefold() for tag in entry.tags)
         )
+
+    def matching_text_entries(self, phrase: str) -> tuple[CorpusEntry, ...]:
+        needle = (phrase or "").strip().casefold()
+        if not needle:
+            return ()
+        return tuple(entry for entry in self.entries if needle in entry.text.casefold())
 
     def ordered_tag_counts(self, selected_tag: str) -> tuple[tuple[str, int], ...]:
         needle = (selected_tag or "").casefold()
@@ -149,6 +156,7 @@ def parse_entries(text: str) -> tuple[CorpusEntry, ...]:
                 moment=fields.get("moment", ""),
                 what_happened=fields.get("what happened", ""),
                 tags=tags,
+                text=f"{header}\n{body}",
             )
         )
     return tuple(entries)

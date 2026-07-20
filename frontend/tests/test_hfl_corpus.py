@@ -83,6 +83,8 @@ def test_recursive_index_extracts_dates_tags_and_references(tmp_path, monkeypatc
     assert documents[0].entries[0].moment == "Fixed a hard bug"
     assert documents[0].entries[0].what_happened == "Found the root cause"
     assert documents[0].entries[0].anchor == "hfl-entry-1-2026-07-10-09-30"
+    assert documents[0].matching_text_entries("USEFUL LESSON") == documents[0].entries
+    assert documents[0].matching_text_entries("useful retrospective") == ()
     assert documents[0].references == ("https://example.com/source",)
 
 
@@ -329,6 +331,30 @@ def test_corpus_search_uses_compact_date_controls(authenticated_client, monkeypa
     assert "0 matches" in response.text
 
 
+def test_corpus_search_is_sticky_above_aligned_directory_and_results(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document("2026-07-10.md")
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get("/hfl-corpus")
+
+    search_position = response.text.index('<form method="get" action="/hfl-corpus"')
+    grid_position = response.text.index(
+        'lg:grid-cols-[minmax(14rem,1fr)_minmax(0,3fr)]'
+    )
+    assert search_position < grid_position
+    assert "sticky top-24" in response.text
+    assert "md:top-14" in response.text
+    assert "fixed inset-x-4 bottom-4" not in response.text
+    assert ">Document results</h2>" in response.text
+    assert response.text.index(">Directory tree</h2>") < response.text.index(
+        ">Document results</h2>"
+    )
+
+
 def test_corpus_defaults_to_latest_10_but_search_shows_all_results(
     authenticated_client, monkeypatch
 ):
@@ -429,10 +455,54 @@ def test_corpus_index_uses_full_width_search_and_left_directory_layout(
     assert response.status_code == 200
     assert "1 file" in response.text
     assert "Markdown files" not in response.text
-    assert response.text.index(">Directory tree</h2>") < response.text.index(">Results</h2>")
+    assert response.text.index(">Directory tree</h2>") < response.text.index(">Document results</h2>")
     assert 'data-index-search-panel' in response.text
-    assert "max-w-7xl" in response.text
+    assert "sticky top-24" in response.text
     assert "border-blue-800/70" in response.text
+
+
+def test_plain_text_search_shows_clickable_matching_entry_previews(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    entries = (
+        CorpusEntry(
+            anchor="hfl-entry-1-first",
+            header="First",
+            moment="Solved a difficult issue",
+            what_happened="The team investigated it",
+            tags=("debugging",),
+            text="First\nWhy it stayed: A reusable root cause lesson",
+        ),
+        CorpusEntry(
+            anchor="hfl-entry-2-second",
+            header="Second",
+            moment="A different memory",
+            what_happened="Nothing related",
+            tags=("career",),
+            text="Second\nWhy it stayed: Something else",
+        ),
+    )
+    document = _document(
+        "2026-07-10.md",
+        tags=("career", "debugging"),
+        entry_count=2,
+        entries=entries,
+        text="Why it stayed: A reusable root cause lesson",
+    )
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get("/hfl-corpus?q=reusable+root+cause")
+
+    assert response.status_code == 200
+    assert "1 matching entries" in response.text
+    assert "Solved a difficult issue" in response.text
+    assert "A different memory" not in response.text
+    assert (
+        'href="http://testserver/hfl-corpus/document/2026-07-10.md#hfl-entry-1-first"'
+        in response.text
+    )
 
 
 def test_document_adds_entry_anchors_and_wraparound_tag_navigation(
@@ -557,6 +627,7 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
                 "moment": "A remote moment",
                 "what_happened": "It crossed hosts",
                 "tags": ["hfl"],
+                "text": "Why it stayed: Remote corpus parity",
             }],
             "excerpt": "A canonical entry",
         }],
@@ -581,6 +652,7 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
     assert result["documents"][0].path is None
     assert result["documents"][0].relative_path == "2026-07-19.md"
     assert result["documents"][0].entries[0].moment == "A remote moment"
+    assert result["documents"][0].matching_text_entries("CORPUS PARITY")
 
 
 def test_remote_mode_surfaces_failure_without_local_fallback(authenticated_client, monkeypatch):

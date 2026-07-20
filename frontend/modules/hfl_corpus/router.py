@@ -35,6 +35,12 @@ def _selected_tag(query: str) -> str:
     return tags[-1].casefold() if tags else ""
 
 
+def _text_query(query: str) -> str:
+    return " ".join(
+        token for token in query.split() if not token.startswith("#")
+    ).strip()
+
+
 def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
     anchors = iter(entry.anchor for entry in document.entries)
 
@@ -118,6 +124,7 @@ async def hfl_corpus_page(
             document_count=document_count,
             query=q,
             selected_tag=_selected_tag(q),
+            text_query=_text_query(q),
             date_field=date_field,
             date_from=date_from,
             date_to=date_to,

@@ -31,6 +31,7 @@ def _document(payload: dict[str, Any]) -> CorpusDocument:
             moment=str(item.get("moment") or ""),
             what_happened=str(item.get("what_happened") or ""),
             tags=tuple(str(tag) for tag in item.get("tags") or ()),
+            text=str(item.get("text") or ""),
         )
         for item in payload.get("entries") or ()
     )

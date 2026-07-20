@@ -35,7 +35,12 @@ def _authorize(request: Request) -> None:
         raise HTTPException(status_code=401, detail="Invalid HFL corpus API token")
 
 
-def _document_payload(document: CorpusDocument, *, include_text: bool = False) -> dict:
+def _document_payload(
+    document: CorpusDocument,
+    *,
+    include_text: bool = False,
+    include_entries: bool = False,
+) -> dict:
     payload = {
         "relative_path": document.relative_path,
         "name": document.name,
@@ -44,9 +49,10 @@ def _document_payload(document: CorpusDocument, *, include_text: bool = False) -
         "tags": list(document.tags),
         "tag_counts": [list(item) for item in document.tag_counts],
         "entry_count": document.entry_count,
-        "entries": [asdict(entry) for entry in document.entries],
         "excerpt": document.excerpt,
     }
+    if include_entries:
+        payload["entries"] = [asdict(entry) for entry in document.entries]
     if include_text:
         payload["text"] = document.text
     return payload
@@ -73,7 +79,10 @@ async def hfl_api_documents(
     )
     return {
         "documents": [_document_payload(document) for document in documents],
-        "results": [_document_payload(document) for document in results],
+        "results": [
+            _document_payload(document, include_entries=bool(q))
+            for document in results
+        ],
         "total_results": len(results),
         "document_count": len(documents),
         "tag_cloud": common_tags(documents),
@@ -100,7 +109,11 @@ async def hfl_api_document(request: Request, relative_path: str):
             item["href"] = None
         references.append(item)
     return {
-        "document": _document_payload(document, include_text=True),
+        "document": _document_payload(
+            document,
+            include_text=True,
+            include_entries=True,
+        ),
         "references": references,
     }
 
