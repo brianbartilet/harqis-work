@@ -4,7 +4,7 @@ The HARQIS frontend is an authenticated, module-based interface for operating
 and inspecting the automation platform. It is built with FastAPI, Jinja2,
 HTMX, Alpine.js, Tailwind CSS, and SortableJS, with no JavaScript build step.
 
-The frontend currently exposes four modules:
+The frontend currently exposes five modules:
 
 | Module | Route | Purpose |
 |---|---|---|
@@ -78,6 +78,8 @@ frontend/
 ├── modules/
 │   ├── registry.py               # Fixed top-level ModuleDefinition registry
 │   ├── home/
+│   │   └── router.py
+│   ├── manifesto/
 │   │   ├── router.py
 │   │   └── service.py
 │   ├── workflows/
@@ -99,6 +101,7 @@ frontend/
 │   ├── dashboard.html            # Workflow dashboard compatibility template
 │   ├── modules/
 │   │   ├── home/
+│   │   ├── manifesto/
 │   │   ├── workflows/
 │   │   ├── applications/
 │   │   └── hfl_corpus/

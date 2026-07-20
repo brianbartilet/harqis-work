@@ -427,7 +427,7 @@ def test_corpus_index_uses_full_width_search_and_left_directory_layout(
     response = authenticated_client.get("/hfl-corpus")
 
     assert response.status_code == 200
-    assert "1 files" in response.text
+    assert "1 file" in response.text
     assert "Markdown files" not in response.text
     assert response.text.index(">Directory tree</h2>") < response.text.index(">Results</h2>")
     assert 'data-index-search-panel' in response.text
