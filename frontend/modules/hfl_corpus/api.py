@@ -44,6 +44,7 @@ def _document_payload(document: CorpusDocument, *, include_text: bool = False) -
         "tags": list(document.tags),
         "tag_counts": [list(item) for item in document.tag_counts],
         "entry_count": document.entry_count,
+        "entries": [asdict(entry) for entry in document.entries],
         "excerpt": document.excerpt,
     }
     if include_text:
@@ -72,7 +73,7 @@ async def hfl_api_documents(
     )
     return {
         "documents": [_document_payload(document) for document in documents],
-        "results": [_document_payload(document) for document in results[:200]],
+        "results": [_document_payload(document) for document in results],
         "total_results": len(results),
         "document_count": len(documents),
         "tag_cloud": common_tags(documents),

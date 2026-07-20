@@ -10,7 +10,7 @@ from urllib.parse import quote, unquote
 import httpx
 
 from config import get_settings
-from modules.hfl_corpus.corpus import CorpusDocument
+from modules.hfl_corpus.corpus import CorpusDocument, CorpusEntry
 from services.safe_paths import ReferenceLink
 
 
@@ -24,6 +24,16 @@ def _document(payload: dict[str, Any]) -> CorpusDocument:
         (str(item[0]), int(item[1]))
         for item in payload.get("tag_counts") or ()
     )
+    entries = tuple(
+        CorpusEntry(
+            anchor=str(item["anchor"]),
+            header=str(item.get("header") or ""),
+            moment=str(item.get("moment") or ""),
+            what_happened=str(item.get("what_happened") or ""),
+            tags=tuple(str(tag) for tag in item.get("tags") or ()),
+        )
+        for item in payload.get("entries") or ()
+    )
     return CorpusDocument(
         relative_path=str(payload["relative_path"]),
         path=None,
@@ -36,6 +46,7 @@ def _document(payload: dict[str, Any]) -> CorpusDocument:
         excerpt=str(payload.get("excerpt") or ""),
         tag_counts=tag_counts or tuple((tag, 1) for tag in tags[:10]),
         entry_count=int(payload.get("entry_count") or 0),
+        entries=entries,
     )
 
 

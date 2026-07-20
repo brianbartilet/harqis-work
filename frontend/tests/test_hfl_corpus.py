@@ -5,6 +5,7 @@ import httpx
 from modules.hfl_corpus import corpus as corpus_module
 from modules.hfl_corpus.corpus import (
     CorpusDocument,
+    CorpusEntry,
     CorpusIndex,
     build_tree,
     common_tags,
@@ -27,7 +28,18 @@ def _document(
     entry_count=1,
     references=(),
     text="root cause story",
+    entries=None,
 ):
+    if entries is None and entry_count:
+        entries = (
+            CorpusEntry(
+                anchor="hfl-entry-1-test-entry",
+                header="Test entry",
+                moment="A useful moment",
+                what_happened="Something worth remembering",
+                tags=tags,
+            ),
+        )
     return CorpusDocument(
         relative_path=path,
         path=None,
@@ -40,6 +52,7 @@ def _document(
         excerpt=text,
         tag_counts=tag_counts or tuple((tag, 1) for tag in tags),
         entry_count=entry_count,
+        entries=entries or (),
     )
 
 
@@ -67,6 +80,9 @@ def test_recursive_index_extracts_dates_tags_and_references(tmp_path, monkeypatc
     assert "debugging" in documents[0].tags
     assert documents[0].tag_counts == (("debugging", 1), ("root-cause", 1))
     assert documents[0].entry_count == 1
+    assert documents[0].entries[0].moment == "Fixed a hard bug"
+    assert documents[0].entries[0].what_happened == "Found the root cause"
+    assert documents[0].entries[0].anchor == "hfl-entry-1-2026-07-10-09-30"
     assert documents[0].references == ("https://example.com/source",)
 
 
@@ -126,6 +142,15 @@ def test_search_combines_text_partial_tags_and_dates():
     )
 
     assert results == [matching]
+
+
+def test_search_uses_only_the_last_tag_for_single_topic_focus():
+    first = _document("first.md", tags=("career",))
+    second = _document("second.md", tags=("debugging",))
+
+    results = search_documents((first, second), query="#career #debug")
+
+    assert results == [second]
 
 
 def test_tree_keeps_nested_directories():
@@ -212,7 +237,7 @@ def test_external_and_outside_references_are_classified(tmp_path):
     assert blocked.reason == "outside allowed roots"
 
 
-def test_tag_cloud_links_to_partial_search_without_result_card_tags(
+def test_index_tag_cloud_links_to_partial_search_and_document_uses_navigator(
     authenticated_client, monkeypatch
 ):
     import modules.hfl_corpus.router as hfl_routes
@@ -228,11 +253,12 @@ def test_tag_cloud_links_to_partial_search_without_result_card_tags(
 
     expected = 'href="/hfl-corpus?q=%23debugging"'
     assert expected in index_response.text
-    assert expected in document_response.text
+    assert expected not in document_response.text
+    assert 'data-tag="debugging"' in document_response.text
     assert "Find corpus entries with matching tags" not in index_response.text
-    assert "max-h-24" in index_response.text
+    assert "max-h-16" in index_response.text
     assert "overflow-y-auto" in index_response.text
-    assert 'gap-2 overflow-y-auto p-1' in index_response.text
+    assert 'flex max-h-16 flex-wrap gap-2 overflow-y-auto p-1' in index_response.text
     assert "1 entries" in index_response.text
     assert "root cause story" not in index_response.text
     assert 'title="1 entries in this document"' in index_response.text
@@ -241,7 +267,7 @@ def test_tag_cloud_links_to_partial_search_without_result_card_tags(
     )
 
 
-def test_document_orders_entries_before_tags_and_references(
+def test_document_orders_entries_before_references_and_floating_navigator(
     authenticated_client, monkeypatch
 ):
     import modules.hfl_corpus.router as hfl_routes
@@ -257,9 +283,9 @@ def test_document_orders_entries_before_tags_and_references(
 
     assert response.status_code == 200
     entry_position = response.text.index('class="markdown-body')
-    tags_position = response.text.index(">Tags</h2>")
     references_position = response.text.index(">References</h2>")
-    assert entry_position < tags_position < references_position
+    navigator_position = response.text.index('aria-label="Document tag navigator"')
+    assert entry_position < references_position < navigator_position
     assert "overflow-wrap: anywhere" in response.text
     assert "word-break: break-word" in response.text
 
@@ -293,14 +319,117 @@ def test_corpus_search_uses_compact_date_controls(authenticated_client, monkeypa
     assert 'name="date_to"' in response.text
     assert 'name="created_from"' not in response.text
     assert "if (this.showPicker) this.showPicker()" in response.text
-    tags_heading = '<p class="mb-2 text-xs font-medium text-slate-500">Tags</p>'
+    tags_heading = '<p class="mb-1.5 text-xs font-medium text-slate-500">Tags</p>'
     assert response.text.index('name="date_field"') < response.text.index(tags_heading)
-    assert response.text.index("Search corpus") < response.text.index(tags_heading)
+    assert response.text.index(">Search</button>") < response.text.index(tags_heading)
     assert response.text.index(">Reset</a>") < response.text.index(tags_heading)
     assert "#debugging" in response.text
     assert "bg-blue-950/50" in response.text
     assert ">1</span>" in response.text
     assert "0 matches" in response.text
+
+
+def test_corpus_defaults_to_latest_10_but_search_shows_all_results(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    documents = tuple(_document(f"{index:02d}.md") for index in range(12))
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: documents)
+
+    default_response = authenticated_client.get("/hfl-corpus")
+    search_response = authenticated_client.get("/hfl-corpus?q=root")
+
+    card_marker = '<article class="rounded-xl bg-slate-900'
+    assert default_response.text.count(card_marker) == 10
+    assert "12 matches · latest 10" in default_response.text
+    assert search_response.text.count(card_marker) == 12
+    assert "12 matches · latest 10" not in search_response.text
+
+
+def test_selected_tag_is_highlighted_and_reveals_matching_entry_preview(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document("2026-07-10.md", tags=("debugging", "root-cause"))
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get("/hfl-corpus?q=%23debug")
+
+    assert response.status_code == 200
+    assert 'bg-lime-400 text-slate-950' in response.text
+    assert "1 matching entries" in response.text
+    assert "Moment:</span> <span" in response.text
+    assert "A useful moment" in response.text
+    assert "What happened:</span> <span" in response.text
+    assert "Something worth remembering" in response.text
+    assert "?tag=debugging#hfl-entry-1-test-entry" in response.text
+    assert response.text.index("#debugging") < response.text.index("#root-cause")
+
+
+def test_document_adds_entry_anchors_and_wraparound_tag_navigation(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    entries = (
+        CorpusEntry(
+            anchor="hfl-entry-1-first",
+            header="First",
+            moment="One",
+            what_happened="First event",
+            tags=("debugging",),
+        ),
+        CorpusEntry(
+            anchor="hfl-entry-2-second",
+            header="Second",
+            moment="Two",
+            what_happened="Second event",
+            tags=("debugging",),
+        ),
+    )
+    document = _document(
+        "2026-07-10.md",
+        tags=("debugging",),
+        entry_count=2,
+        entries=entries,
+        text="## First\nMoment: One\nTags: #debugging\n\n## Second\nMoment: Two\nTags: #debugging\n",
+    )
+    monkeypatch.setattr(hfl_routes.corpus_index, "get", lambda path: document)
+
+    response = authenticated_client.get(
+        "/hfl-corpus/document/2026-07-10.md?tag=debug"
+    )
+
+    assert response.status_code == 200
+    assert 'id="hfl-entry-1-first"' in response.text
+    assert 'id="hfl-entry-2-second"' in response.text
+    assert 'data-selected-tag="debug"' in response.text
+    assert 'data-anchors="hfl-entry-1-first,hfl-entry-2-second"' in response.text
+    assert "(currentIndex + 1) % anchors.length" in response.text
+    assert "(currentIndex - 1 + anchors.length) % anchors.length" in response.text
+
+
+def test_document_without_entries_keeps_content_and_hides_navigator(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document(
+        "notes.md",
+        tags=(),
+        entry_count=0,
+        text="# Supporting notes\nThis content should remain visible.",
+    )
+    monkeypatch.setattr(hfl_routes.corpus_index, "get", lambda path: document)
+
+    response = authenticated_client.get("/hfl-corpus/document/notes.md")
+
+    assert response.status_code == 200
+    assert "No entries found" in response.text
+    assert "This content should remain visible." in response.text
+    assert 'id="tag-navigator"' not in response.text
 
 
 def test_corpus_api_requires_bearer_token(authenticated_client):
@@ -325,6 +454,7 @@ def test_corpus_api_returns_canonical_documents(authenticated_client, monkeypatc
     assert response.json()["results"][0]["relative_path"] == "2026-07-10.md"
     assert response.json()["results"][0]["entry_count"] == 1
     assert response.json()["results"][0]["tag_counts"] == [["debugging", 1]]
+    assert response.json()["results"][0]["entries"][0]["moment"] == "A useful moment"
 
 
 def test_hfl_markdown_formats_canonical_provenance_fields():
@@ -351,6 +481,15 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
             "created_at": "2026-07-19T09:30:00",
             "updated_at": "2026-07-19T10:00:00",
             "tags": ["hfl"],
+            "tag_counts": [["hfl", 1]],
+            "entry_count": 1,
+            "entries": [{
+                "anchor": "hfl-entry-1-remote",
+                "header": "Remote",
+                "moment": "A remote moment",
+                "what_happened": "It crossed hosts",
+                "tags": ["hfl"],
+            }],
             "excerpt": "A canonical entry",
         }],
         "results": [],
@@ -373,6 +512,7 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
     assert result["document_count"] == 1
     assert result["documents"][0].path is None
     assert result["documents"][0].relative_path == "2026-07-19.md"
+    assert result["documents"][0].entries[0].moment == "A remote moment"
 
 
 def test_remote_mode_surfaces_failure_without_local_fallback(authenticated_client, monkeypatch):

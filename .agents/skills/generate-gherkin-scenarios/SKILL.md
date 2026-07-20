@@ -184,6 +184,36 @@ user explicitly asks ("save it to <path>", "create the file"). When writing:
   obvious, ask once.
 - Never overwrite an existing `.feature` file without confirmation.
 
+### Jira Test issue output
+
+When the user asks to create or update a Jira **Test** issue with the generated scenarios:
+
+1. Inspect the issue's field names and edit metadata first. Discover the custom-field IDs
+   for `Test Type`, `Cucumber Test Type`, and `Cucumber Scenario` dynamically; Jira field
+   IDs differ between installations, so never hardcode them in the skill or workflow.
+2. Set `Test Type` to `Cucumber` and select the appropriate `Cucumber Test Type` option.
+3. Store the Gherkin in `Cucumber Scenario`, not in the Jira description. Preserve the
+   existing description and requirements. Remove a duplicate description block only when
+   it was added by the current run and the dedicated-field update has succeeded.
+4. Format Gherkin stored in Jira with one literal tab per nesting level instead of two
+   spaces. Send actual newline characters, never visible escape text such as `` `r`n ``
+   or `\r\n`. Build the field as a multiline string and let the JSON serializer escape
+   it only for transport.
+5. Keep repeated preconditions DRY in a `Background:` block. Before writing, identify
+   identical leading `Given` steps shared by every scenario, move them to `Background:`,
+   and remove them from the scenarios. Background contains setup only and remains short.
+6. Honour the Jira field parser and test wrapper support independently. For this Jira,
+   `Cucumber Scenario` accepts scenario-level Gherkin with `Background:` but rejects a
+   `Feature:` wrapper. Omit only the unsupported wrapper; do not flatten a supported
+   Background back into repeated Given steps. Keep the complete `Feature:` form for
+   inline or `.feature` file output.
+7. Re-read the issue after updating it and verify the selected field values, scenario
+   count, tab indentation, Background count, and stored content. Explicitly assert that
+   no literal newline escape tokens remain before reporting success.
+
+If the Test issue has no editable `Cucumber Scenario` field, do not silently fall back to
+the description. Tell the user what is missing and ask where the Gherkin should be stored.
+
 ---
 
 ## Hard rules

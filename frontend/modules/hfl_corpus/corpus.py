@@ -18,6 +18,7 @@ _HEADER = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 _DATE_IN_NAME = re.compile(r"(20\d{2}-\d{2}-\d{2})")
 _TAG_LINE = re.compile(r"^\s*Tags:\s*(.+?)\s*$", re.MULTILINE | re.IGNORECASE)
 _TAG_TOKEN = re.compile(r"(?<!\w)#([\w-]+)", re.UNICODE)
+_NON_SLUG = re.compile(r"[^a-z0-9]+")
 _HFL_FIELD = re.compile(
     r"^\s*(Source|Machine|Entry ID|Moment|What happened|Why it stayed|Possible use|Tags|References):\s*(.*?)\s*$",
     re.IGNORECASE,
@@ -36,6 +37,15 @@ _HFL_FIELD_LABELS = {
 
 
 @dataclass(frozen=True)
+class CorpusEntry:
+    anchor: str
+    header: str
+    moment: str
+    what_happened: str
+    tags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class CorpusDocument:
     relative_path: str
     path: Path | None
@@ -48,6 +58,28 @@ class CorpusDocument:
     excerpt: str
     tag_counts: tuple[tuple[str, int], ...] = ()
     entry_count: int = 0
+    entries: tuple[CorpusEntry, ...] = ()
+
+    def matching_entries(self, selected_tag: str) -> tuple[CorpusEntry, ...]:
+        needle = (selected_tag or "").casefold()
+        if not needle:
+            return ()
+        return tuple(
+            entry
+            for entry in self.entries
+            if any(needle in tag.casefold() for tag in entry.tags)
+        )
+
+    def ordered_tag_counts(self, selected_tag: str) -> tuple[tuple[str, int], ...]:
+        needle = (selected_tag or "").casefold()
+        if not needle:
+            return self.tag_counts
+        return tuple(
+            sorted(
+                self.tag_counts,
+                key=lambda item: (needle not in item[0].casefold()),
+            )
+        )
 
 
 def resolve_corpus_root() -> Path:
@@ -72,6 +104,40 @@ def _entry_blocks(text: str) -> list[tuple[str, str]]:
         (match.group(1).strip(), text[match.end(): matches[index + 1].start() if index + 1 < len(matches) else len(text)].strip())
         for index, match in enumerate(matches)
     ]
+
+
+def _entry_anchor(header: str, index: int) -> str:
+    slug = _NON_SLUG.sub("-", header.casefold()).strip("-")[:48] or "entry"
+    return f"hfl-entry-{index + 1}-{slug}"
+
+
+def parse_entries(text: str) -> tuple[CorpusEntry, ...]:
+    entries: list[CorpusEntry] = []
+    for index, (header, body) in enumerate(_entry_blocks(text)):
+        fields: dict[str, str] = {}
+        for raw in body.splitlines():
+            field = _HFL_FIELD.match(raw)
+            if field:
+                fields[field.group(1).casefold()] = field.group(2).strip()
+        tags = tuple(
+            sorted(
+                {
+                    token.casefold()
+                    for tag_line in _TAG_LINE.findall(body)
+                    for token in _TAG_TOKEN.findall(tag_line)
+                }
+            )
+        )
+        entries.append(
+            CorpusEntry(
+                anchor=_entry_anchor(header, index),
+                header=header,
+                moment=fields.get("moment", ""),
+                what_happened=fields.get("what happened", ""),
+                tags=tags,
+            )
+        )
+    return tuple(entries)
 
 
 def _entry_count(text: str) -> int:
@@ -181,6 +247,7 @@ class CorpusIndex:
                         created, tags, references, tag_counts, entry_count = _metadata(
                             path, text
                         )
+                        entries = parse_entries(text)
                         updated = datetime.fromtimestamp(path.stat().st_mtime)
                     except (OSError, UnicodeDecodeError):
                         continue
@@ -197,6 +264,7 @@ class CorpusIndex:
                             excerpt=_excerpt(text),
                             tag_counts=tag_counts,
                             entry_count=entry_count,
+                            entries=entries,
                         )
                     )
             self._root = root
@@ -270,7 +338,12 @@ def search_documents(
     updated_to: str = "",
 ) -> list[CorpusDocument]:
     tokens = query.split()
-    tag_needles = [token[1:].lower() for token in tokens if token.startswith("#") and len(token) > 1]
+    tag_tokens = [
+        token[1:].lower()
+        for token in tokens
+        if token.startswith("#") and len(token) > 1
+    ]
+    tag_needle = tag_tokens[-1] if tag_tokens else ""
     text_needle = " ".join(token for token in tokens if not token.startswith("#")).strip().lower()
     if date_from or date_to:
         if date_field == "updated":
@@ -284,7 +357,7 @@ def search_documents(
     for document in documents:
         if text_needle and text_needle not in document.text.lower():
             continue
-        if tag_needles and not all(any(needle in tag for tag in document.tags) for needle in tag_needles):
+        if tag_needle and not any(tag_needle in tag for tag in document.tags):
             continue
         if c_from and document.created_at.date() < c_from:
             continue
