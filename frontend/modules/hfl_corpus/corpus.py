@@ -407,11 +407,22 @@ def build_tree(documents: tuple[CorpusDocument, ...]) -> dict:
         node["files"].append(document)
 
     def finalize(node: dict) -> dict:
+        files = sorted(
+            node["files"],
+            key=lambda item: (item.name.casefold(), item.relative_path.casefold()),
+        )
+        files.sort(key=lambda item: item.created_at, reverse=True)
         return {
             "name": node["name"],
             "path": node["path"],
-            "directories": [finalize(child) for _, child in sorted(node["directories"].items())],
-            "files": sorted(node["files"], key=lambda item: item.name.lower()),
+            "directories": [
+                finalize(child)
+                for _, child in sorted(
+                    node["directories"].items(),
+                    key=lambda item: item[0].casefold(),
+                )
+            ],
+            "files": files,
         }
 
     return finalize(root)

@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime
 
 import httpx
@@ -160,6 +161,31 @@ def test_tree_keeps_nested_directories():
 
     assert tree["directories"][0]["name"] == "capsules"
     assert tree["directories"][0]["directories"][0]["name"] == "2026"
+
+
+def test_tree_sorts_directories_alphabetically_and_files_by_created_descending():
+    same_day = datetime(2026, 7, 10, 9, 0)
+    documents = (
+        replace(_document("zeta/nested.md"), created_at=datetime(2026, 7, 12)),
+        replace(_document("Alpha/nested.md"), created_at=datetime(2026, 7, 1)),
+        replace(_document("old.md"), created_at=datetime(2026, 7, 1)),
+        replace(_document("new.md"), created_at=datetime(2026, 7, 12)),
+        replace(_document("b.md"), created_at=same_day),
+        replace(_document("a.md"), created_at=same_day),
+    )
+
+    tree = build_tree(documents)
+
+    assert [directory["name"] for directory in tree["directories"]] == [
+        "Alpha",
+        "zeta",
+    ]
+    assert [document.name for document in tree["files"]] == [
+        "new.md",
+        "a.md",
+        "b.md",
+        "old.md",
+    ]
 
 
 def test_common_tags_are_ranked_by_document_count():
@@ -546,6 +572,13 @@ def test_document_adds_entry_anchors_and_wraparound_tag_navigation(
     assert 'data-anchors="hfl-entry-1-first,hfl-entry-2-second"' in response.text
     assert "(currentIndex + 1) % anchors.length" in response.text
     assert "(currentIndex - 1 + anchors.length) % anchors.length" in response.text
+    assert 'id="navigator-corpus-index" href="/hfl-corpus"' in response.text
+    assert 'id="navigator-back-to-top"' in response.text
+    assert "window.scrollTo({ top: 0, behavior: 'smooth' })" in response.text
+    assert "max-h-28 overflow-y-auto" in response.text
+    assert "max-w-4xl" in response.text
+    assert "pb-56" in response.text
+    assert "sm:order-2 sm:w-auto" in response.text
     assert "button.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })" in response.text
 
 
@@ -568,6 +601,8 @@ def test_document_without_entries_keeps_content_and_hides_navigator(
     assert "No entries found" in response.text
     assert "This content should remain visible." in response.text
     assert 'id="tag-navigator"' not in response.text
+    assert 'id="navigator-corpus-index"' not in response.text
+    assert 'id="navigator-back-to-top"' not in response.text
 
 
 def test_corpus_api_requires_bearer_token(authenticated_client):
