@@ -575,6 +575,106 @@ def register_memory_tools(mcp: FastMCP):
         }
 
     @mcp.tool()
+    def notes_activity(
+        repository: str = "notes",
+        period: str = "",
+        since: str = "",
+        until: str = "",
+        synthesize: bool = False,
+        limit: int = 25,
+        cfg_id__anthropic: str = "ANTHROPIC",
+        model: str = _DEFAULT_HAIKU,
+    ) -> dict:
+        """Inspect note files changed since the repository's ingest cursor.
+
+        This is the read-only companion to the scheduled notes ingest. It
+        returns paths, kinds, statuses, timestamps, and repository references;
+        optionally it produces bounded Haiku previews without writing HFL.
+
+        Args:
+            repository: configured name under notes.repositories.
+            period: same date vocabulary as memory_recall.
+            since: ISO ``YYYY-MM-DD`` or relative ``-Nd``.
+            until: ISO ``YYYY-MM-DD`` (defaults to today).
+            synthesize: distill eligible text/image changes without persisting.
+            limit: maximum changed files returned (1-100).
+        """
+        from workflows.hfl.tasks.ingest_notes import (
+            _blob_url,
+            collect_notes_activity,
+            distill_note_change,
+        )
+        from workflows.notes.config import get_note_repositories
+
+        start, end, label = _resolve_window(period, since, until)
+        end_d = end or _today()
+        start_d = start or (end_d - timedelta(days=6))
+        bounded_limit = min(max(1, int(limit)), 100)
+        definitions = get_note_repositories()
+        definition = definitions.get(repository)
+        if definition is None:
+            return {
+                "found": False,
+                "error": f"unknown notes repository: {repository}",
+                "repositories": sorted(definitions),
+                "period": _period_dict(start_d, end_d, label),
+            }
+        try:
+            activity = collect_notes_activity(
+                repository, since=start_d, until=end_d,
+            )
+        except Exception as exc:  # noqa: BLE001 - surface a safe tool result
+            logger.warning("notes_activity unavailable for %s (%s)", repository, exc)
+            return {
+                "found": False,
+                "error": str(exc)[:300],
+                "period": _period_dict(start_d, end_d, label),
+            }
+        if activity.get("baseline_required"):
+            return {
+                "found": False,
+                "baseline_required": True,
+                "head": activity.get("head", ""),
+                "changes": [],
+                "period": _period_dict(start_d, end_d, label),
+            }
+
+        head = str(activity.get("head", ""))
+        changes = list(activity.get("changes", []))[:bounded_limit]
+        rendered = []
+        for change in changes:
+            item = {
+                "status": change.status,
+                "path": change.path,
+                "old_path": change.old_path or None,
+                "kind": change.kind,
+                "changed_at": change.changed_at.isoformat() if change.changed_at else None,
+                "reference": _blob_url(definition, head, change.path),
+            }
+            if synthesize and change.status != "D" and change.kind in {"text", "image"}:
+                distilled = distill_note_change(
+                    definition, change, synthesize=True, model=model,
+                    cfg_id=cfg_id__anthropic,
+                )
+                item["preview"] = {
+                    key: distilled.get(key)
+                    for key in ("moment", "what_happened", "why_it_stayed", "core_topic")
+                }
+                item["synthesized"] = bool(distilled.get("synthesized"))
+            rendered.append(item)
+        return {
+            "found": bool(rendered),
+            "repository": repository,
+            "changes": rendered,
+            "change_count": int(activity.get("change_count", len(rendered))),
+            "returned": len(rendered),
+            "truncated": int(activity.get("change_count", 0)) > len(rendered),
+            "from_commit": activity.get("from_commit", ""),
+            "head": head,
+            "period": _period_dict(start_d, end_d, label),
+        }
+
+    @mcp.tool()
     def radar_activity(
         period: str = "",
         since: str = "",

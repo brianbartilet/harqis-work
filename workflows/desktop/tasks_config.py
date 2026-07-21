@@ -72,6 +72,7 @@ WORKFLOWS_DESKTOP = {
     # the repos listed under its `[<machine>.git_autopush].paths` block in
     # machines.local.toml. Non-git paths and clean trees are silent no-ops;
     # rebase conflicts auto-abort so the tree stays clean for the next run.
+    # This list is for generic Git backups; workflows/notes owns its own paths.
     'run-job--git_auto_push_paths': {
         'task': 'workflows.desktop.tasks.commands.git_auto_push_paths',
         'schedule': crontab(hour=2, minute=0),

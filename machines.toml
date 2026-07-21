@@ -167,6 +167,34 @@ kanban_profile = "agent:code"
 # Full reference: workflows/dumps/README.md
 
 
+# ── Repository-backed notes (workflows/notes/) ───────────────────────────────
+# Schema only — actual repositories and paths belong in machines.local.toml.
+# The editing worker commits/pushes at 22:30; harqis-server clones or performs
+# a clean fast-forward-only pull at 22:40; HFL ingests changes at 22:50.
+# No force push, automatic rebase, or conflict resolution is performed.
+# These repositories must not also appear in [<machine>.git_autopush].paths;
+# that independent 02:00 list is reserved for generic Git-only backups.
+#
+#     [notes]
+#     state_dir = "<host-state-directory-outside-the-checkout>"
+#
+#     [notes.repositories.<name>]
+#     remote = "git@github.com:<owner>/<repo>.git"
+#     branch = "main"
+#     host_path = "<absolute-host-clone-path>"
+#     tags = ["notes", "dsm"]
+#     include_globs = []
+#     exclude_globs = [".git/**", ".idea/**", "**/.DS_Store"]
+#     max_entries = 25
+#     max_media = 10
+#     max_text_chars = 20000
+#
+#     [<editing-machine>.notes.repositories]
+#     <name> = "<absolute-local-checkout-path>"
+#
+# Full reference: workflows/notes/README.md
+
+
 # ── Git auto-push (workflows/desktop/tasks/commands.py :: git_auto_push_paths) ─
 # Schema only — real paths belong in machines.local.toml.
 #
@@ -177,6 +205,10 @@ kanban_profile = "agent:code"
 # stays clean for the next run. Auth is delegated to the local git config
 # (SSH key / credential helper) — terminal prompts are disabled so missing
 # creds fail fast instead of hanging the daemon.
+#
+# This is a generic Git-only backup list. Keep note collections that use
+# workflows/notes out of it; those use [<machine>.notes.repositories] and a
+# separate guarded push → host pull → Activity Corpus ingest lifecycle.
 #
 #     [<machine>.git_autopush]
 #     paths = [ "<absolute-path-to-git-repo>", "<absolute-path-to-git-repo>" ]

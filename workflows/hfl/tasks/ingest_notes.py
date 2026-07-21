@@ -18,7 +18,7 @@ import fnmatch
 import re
 import subprocess
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import quote
@@ -320,8 +320,8 @@ def distill_change_summary(
 
 def _entry_tags(repository: NoteRepository, distilled: dict[str, Any]) -> list[str]:
     ordered = ["notes", "dsm", f"repo-{_slug(repository.name)}"]
-    ordered.extend(repository.tags)
     ordered.append(_slug(str(distilled.get("core_topic", ""))))
+    ordered.extend(repository.tags)
     ordered.extend(str(tag) for tag in distilled.get("tags") or [])
     out: list[str] = []
     for tag in ordered:
@@ -438,6 +438,12 @@ def ingest_notes_activity(
                         media_count += 1
                 else:
                     summary.append(change)
+
+            # ``max_entries`` is the total per-run entry budget. Reserve its
+            # final slot for the summary whenever anything could not receive a
+            # granular entry, so a configured cap of 25 never emits 26.
+            if summary and len(granular) >= repository.max_entries:
+                summary.insert(0, granular.pop())
 
             written = indexed = skipped = 0
             for change in granular:

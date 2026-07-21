@@ -243,6 +243,10 @@ def git_auto_push_paths() -> str:
     paths are skipped. Push rejections trigger a `pull --rebase --autostash`
     and a single retry; conflicts abort cleanly and surface as 'error'.
 
+    This is the generic Git-only backup path. Repository-backed note
+    collections use `[<machine>.notes.repositories]` and the separate notes
+    push/pull/Activity-Corpus workflow; a checkout should not be in both lists.
+
     Returns a one-line summary per path (`<path>: <status> — <detail>`).
     """
     paths = _resolve_auto_push_paths()

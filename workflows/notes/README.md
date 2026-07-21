@@ -9,6 +9,13 @@ spreadsheets, and other media may coexist. Text notes and common images can be
 distilled individually; unsupported binaries are preserved as references in a
 bounded summary rather than uploaded to a model.
 
+This synchronization path is deliberately separate from the desktop
+workflow's generic 02:00 `git_auto_push_paths` task. Repositories managed here
+belong only in `[<machine>.notes.repositories]`; do not also list them under
+`[<machine>.git_autopush].paths`. The generic list remains available for other
+repositories that only need unattended Git backup and do not feed the notes
+host-pull, ingest cursor, or Activity Corpus pipeline.
+
 ## Daily flow
 
 | Time | Task | Queue | Behavior |
@@ -47,7 +54,8 @@ notes = "C:/Users/name/GIT/notes"
 
 `state_dir` must be outside the clone. Each repository gets separate pull
 status and ingest-cursor JSON files. A machine only pushes repositories bound
-under its own machine key.
+under its own machine key. Notes bindings and generic `git_autopush.paths` are
+independent lists and should not contain the same checkout.
 
 ## Entry shape
 

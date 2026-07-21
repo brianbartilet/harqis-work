@@ -20,6 +20,11 @@ Every task in this tree carries a `'manifesto'` metadata block on its beat entry
 
 `scripts/agents/repo-quality/manifesto_audit.py` validates the metadata across all active workflows. Per-workflow alignment tables live in each `workflows/<name>/README.md` under "Manifesto alignment". Design rationale: [`docs/thesis/MANIFESTO-REPO-UPDATES.md`](../docs/thesis/MANIFESTO-REPO-UPDATES.md).
 
+Repository-backed note collections use [`workflows/notes/`](notes/README.md):
+an editing-machine broadcast push, a canonical host fast-forward pull, and a
+granular notes-to-Activity-Corpus ingest. This replaces treating an entire note
+repository as a generic daily dump.
+
 ### `manifesto` is stripped before Celery sees it
 
 `'manifesto'` is **our** metadata — it is **not** a Celery beat-schedule key and must never reach Celery. Celery's `ScheduleEntry.__init__` accepts only a fixed set of per-entry keys; anything else is a hard error. Hand a raw entry dict (with `manifesto`) to `SPROUT.conf.beat_schedule` and beat dies on **every** startup, before it can log or write a pidfile:

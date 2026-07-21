@@ -15,7 +15,7 @@ Tasks are routed per-entry in `tasks_config.py`. See the `Queue` column below.
 | Task | Schedule | Queue | OS | Description |
 |------|----------|-------|----|-------------|
 | `git_pull_on_paths` | 00:00 and 12:00 daily | `default_broadcast` (fanout) | any | Pull latest commits on the repo root (resolved from `REPO_ROOT`). Fanout queue → every subscribed worker pulls its own working tree. |
-| `git_auto_push_paths` | Daily at 02:00 | `default_broadcast` (fanout) | any | On each worker, stage, commit, and push repositories listed under that machine's `git_autopush.paths`; clean and non-Git paths are no-ops, and rejected pushes retry through rebase/autostash with conflict abort. |
+| `git_auto_push_paths` | Daily at 02:00 | `default_broadcast` (fanout) | any | Generic Git backup for repositories listed under that machine's `git_autopush.paths`; clean and non-Git paths are no-ops, and rejected pushes retry through rebase/autostash with conflict abort. Notes repositories use the separate `workflows/notes` chain and must not be duplicated here. |
 | `run_n8n_sequence` | Daily at midnight | `n8n` | windows / macos / linux | Backup → restore via `.bat` (Windows) or `.sh` (macOS / Linux) in `workflows/n8n/deploy/` |
 | `set_desktop_hud_to_back` | Every 30 min | `hud` | windows | Send desktop HUD windows to background (Rainmeter) |
 | `copy_files_targeted` | Every 30 min | `peon` | any | Sync dev files to run dir; file list sourced from `machines.local.toml` `[sync] items` |
@@ -91,7 +91,7 @@ Log filenames use the format: `YYYY-MM-DD-HH-MM`.
 - `run_n8n_sequence` requires n8n to be running locally (default: `http://localhost:5678`). It auto-picks `.bat` on Windows and `.sh` on macOS / Linux from `workflows/n8n/deploy/`, and is routed to the dedicated `n8n` queue (consumed by `harqis-server` only).
 - `copy_files_targeted` reads its file list from `machines.local.toml` `[sync] items` — same source of truth as `scripts/sync-to-host.ps1`. No hardcoded paths in source.
 - `git_pull_on_paths` uses `REPO_ROOT` (resolved from this module's location) instead of a hard-coded path, so it works on Windows and macOS without per-host edits.
-- `git_auto_push_paths` reads per-machine repository paths from the gitignored `machines.local.toml`; it does not embed local paths or credentials in source.
+- `git_auto_push_paths` reads per-machine repository paths from the gitignored `machines.local.toml`; it does not embed local paths or credentials in source. This list is for generic unattended Git backup. Checkouts managed by `workflows/notes` belong only under `[<machine>.notes.repositories]`, because that workflow has different push safety rules and continues through a canonical host pull and Activity Corpus ingest.
 - The `set_desktop_hud_to_back` task prevents the Rainmeter HUD from overlapping active windows.
 
 ## Manifesto alignment
