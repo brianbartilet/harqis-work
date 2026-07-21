@@ -26,6 +26,7 @@ from workflows.social.tasks_config import WORKFLOW_SOCIAL
 from workflows.knowledge.tasks_config import WORKFLOW_KNOWLEDGE
 from workflows.dumps.tasks_config import WORKFLOW_DUMPS
 from workflows.hfl.tasks_config import WORKFLOW_HFL
+from workflows.notes.tasks_config import WORKFLOW_NOTES
 from workflows.workers.tasks_config import WORKFLOW_WORKERS
 from workflows.testing.tasks_config import WORKFLOW_TESTING
 from workflows.tcg.tasks_config import WORKFLOW_TCG
@@ -46,6 +47,7 @@ CONFIG_DICTIONARY = (
     | WORKFLOW_KNOWLEDGE
     | WORKFLOW_DUMPS
     | WORKFLOW_HFL
+    | WORKFLOW_NOTES
     | WORKFLOW_WORKERS
     | WORKFLOW_TESTING
     | WORKFLOW_TCG

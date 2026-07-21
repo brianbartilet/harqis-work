@@ -259,7 +259,8 @@ Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and 
 | `hud` | Active | 23 | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins, host fallbacks, and manual compatibility tasks |
 | `purchases` | Active | 8 | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
 | `desktop` | Active | 8 | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
-| `hfl` | Active | 16 | Homework-for-Life activity capture/ingest → canonical corpus + Elasticsearch, with durable worker outbox replay |
+| `hfl` | Active | 17 | Homework-for-Life activity capture/ingest → canonical Activity Corpus + Elasticsearch, including granular note changes and durable worker outbox replay |
+| `notes` | Active | 2 | Repository-backed note sync: editing-machine push → canonical host fast-forward pull; HFL performs the downstream ingest |
 | `knowledge` | Guarded active | 9 | Multi-source RAG ingest, cited answers, cross-link reports, and on-demand topic mapping/scanning |
 | `dumps` | Active | 3 | Daily dump collection — fanout per-node ship + harqis-server pull (Android/Termux) → analysis |
 | `social` | Active | 1 | Monthly LinkedIn post — git history → Claude → LinkedIn draft + Gmail notification |
@@ -309,7 +310,8 @@ Declared in `workflows/queues.py` (`WorkflowQueue` enum) and registered with Rab
 # workflows/config.py
 CONFIG_DICTIONARY = (
     WORKFLOW_PURCHASES | WORKFLOWS_HUD | WORKFLOWS_DESKTOP | WORKFLOW_SOCIAL
-    | WORKFLOW_KNOWLEDGE | WORKFLOW_DUMPS | WORKFLOW_HFL | WORKFLOW_WORKERS
+    | WORKFLOW_KNOWLEDGE | WORKFLOW_DUMPS | WORKFLOW_HFL | WORKFLOW_NOTES
+    | WORKFLOW_WORKERS
     | WORKFLOW_TESTING | WORKFLOW_TCG
 )
 SPROUT.conf.beat_schedule = _celery_safe_schedule(CONFIG_DICTIONARY)
@@ -463,6 +465,7 @@ harqis-work/
 │   ├── hfl/                        # Homework-for-Life capture/ingest/express pipeline
 │   ├── hud/                        # Desktop HUD, fallback, and compatibility tasks
 │   ├── knowledge/                  # RAG / knowledge-base ingest and query workflows
+│   ├── notes/                      # Git-backed note push/pull workflow; feeds HFL ingest
 │   ├── mobile/                     # Android screen capture plus emulator/device controls
 │   ├── n8n/                        # n8n utility helpers
 │   ├── purchases/                  # TCG card resale pipeline

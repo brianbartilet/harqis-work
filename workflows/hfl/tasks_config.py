@@ -1,7 +1,7 @@
 """
 Beat schedule for the Homework-for-Life workflow.
 
-Twelve tasks:
+Thirteen tasks:
   - capture_hfl_entry    : adhoc — invoked manually or from an LLM/agent to
                            persist one daily story moment to the corpus.
   - analyze_hfl_media    : daily — vision pass over recent dumps-inbox
@@ -10,6 +10,8 @@ Twelve tasks:
   - ingest_git_activity  : daily — distils the day's GitHub commits across
                            recently-updated repos into one corpus entry
                            (Haiku, raw fallback).
+  - ingest_notes_activity: daily — turns each changed note into a bounded,
+                           tagged corpus entry after the host pull.
   - summarize_hfl_week   : weekly rollup of the past 7 days of entries (Haiku).
   - retrieve_hfl_corpus  : retrieval API + weekly digest. Beat fires Sundays
                            at 20:00 with email_to=$HARQIS_OWNER_EMAIL to
@@ -107,6 +109,33 @@ WORKFLOW_HFL = {
         'options': {
             'queue': WorkflowQueue.HFL,
             'expires': 60 * 60 * 12,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+        },
+    },
+
+    # Repository notes — 22:50 local, ten minutes after the host's clean,
+    # fast-forward-only pull. The first successful run records HEAD as the
+    # baseline; later runs create one entry per text note/common image up to
+    # the configured repository cap, with one overflow/reference summary.
+    'run-job--ingest_notes_activity': {
+        'task': 'workflows.hfl.tasks.ingest_notes.ingest_notes_activity',
+        'schedule': crontab(hour=22, minute=50),
+        'kwargs': {
+            'repository_names': ['notes'],
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'synthesize': True,
+            'pull_max_age_minutes': 90,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 60,
         },
         'manifesto': {
             'code_role': 'capture+distill+express',

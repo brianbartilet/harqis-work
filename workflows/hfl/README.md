@@ -45,6 +45,7 @@ this scaffold closes.
 | `summarize_hfl_week` | Weekly Haiku 4.5 rollup of the past N days; writes `_summary-YYYY-Www.md` alongside the daily files. | `file:hfl_summary+es_log` | Sundays 21:00 local. |
 | `ingest_chatgpt_activity` | **Primary daily research log.** Auto-discovers the operator's ChatGPT conversations created/updated that day via the ChatGPT web app's private backend (no thread ids), distils the questions asked into ONE corpus entry. Haiku-distilled, raw fallback. No token / no prompts → no entry, no call. | `file:hfl_corpus` | Daily 23:00 local (active — no-op until `CHATGPT_WEB_ACCESS_TOKEN` is set). |
 | `ingest_git_activity` | Distils the day's GitHub commits across recently updated repositories into one bounded entry. Haiku-distilled with a raw fallback; no commits means no entry and no model call. | `file:hfl_corpus+es:hfl-entries` | Daily 00:00 local on the `agent` queue. |
+| `ingest_notes_activity` | Diffs each configured note repository from its saved ingest cursor after a verified host pull. Writes one bounded entry per changed text note/common image, plus one summary for deleted, unsupported, or overflow artifacts. Tags always include `#notes #dsm #repo-<name> #<core-topic>` and references include the pinned GitHub blob and host path. First activation records HEAD without backfilling. | `file:hfl_corpus+es:hfl-entries` | Daily 22:50 local on the `hfl` queue. |
 | `ingest_ai_activity` | Alternate source (OpenAI **Platform API** assistant threads, via `OPENAI_HFL_THREAD_IDS`). Superseded by `ingest_chatgpt_activity` — kept in code but its beat entry is **disabled** (commented-out) to avoid a nightly no-op. | `file:hfl_corpus` | Disabled (uncomment in `tasks_config.py` if you also want Platform-API threads). |
 | `ingest_browsing_activity` | Daily web-browsing digest. Reads the Chrome + Edge `History` SQLite DBs directly (copy-to-temp to dodge the browser lock; no app/credential), distils the day's visits into ONE corpus entry with the most-visited pages as `references`. Haiku-distilled, raw fallback. No history DB / no visits → no entry, no call. No domain filtering by default (`exclude_domains` kwarg to redact). | `file:hfl_corpus+es:hfl-entries` | Daily 23:00 local (active — `os: windows`; no config needed). |
 | `ingest_location_activity` | Daily location timeline. Pulls the day's GPS track from the local OwnTracks Recorder (`apps/own_tracks`), clusters fixes into **stay-points** (dwell ≥ N min), reverse-geocodes each via OpenStreetMap Nominatim (free, no key), and distils ONE "where I was today" timeline entry. Haiku-distilled, raw fallback. No device configured / Recorder unreachable / no fixes → no entry, no call. Meaningful movement without stays becomes a named route/round-trip timeline; only low-distance/noisy tracks use the generic movement-only breadcrumb. | `file:hfl_corpus+es:hfl-entries` | Daily 23:05 local (active — clean no-op until OwnTracks reports). |
@@ -286,6 +287,21 @@ workflow up on a fresh fork:
 5. **Optional: pipe the corpus into the existing `knowledge` RAG**
    workflow once it has critical mass — see
    `docs/thesis/MANIFESTO-REPO-UPDATES.md` §7.
+
+### `ingest_notes_activity` (repository-backed notes)
+
+The notes source is a three-stage workflow documented in
+[`workflows/notes/README.md`](../notes/README.md): editing machines push at
+22:30, `harqis-server` clones or fast-forwards at 22:40, and HFL ingests at
+22:50. Add canonical repository metadata under `[notes.repositories.<name>]`
+and an editing path under `[<machine>.notes.repositories]` in the gitignored
+`machines.local.toml`. The initial run records the current commit as its
+baseline, so historical notes are not automatically migrated.
+
+No force push, rebase, merge-conflict resolution, or dirty host pull is
+allowed. Text and common images can be Haiku-distilled; other binaries are
+reference-only. The MCP `notes_activity` tool exposes a read-only pending-change
+view with optional previews.
 
 ### Activating `ingest_chatgpt_activity` (primary daily research log)
 
