@@ -375,8 +375,12 @@ To make it produce entries:
    clusters the day's fixes, distils the timeline, and appends one entry to the
    day's corpus file.
 
-- No device configured / Recorder unreachable / no stay-points → clean no-op
-  (no LLM, no entry).
+- No device configured / Recorder unreachable / no fixes → clean no-op (no
+  LLM, no entry). Fixes with no qualifying stay write a movement-only entry
+  with up to six chronological route anchors. Anchors prefer Nominatim place
+  names and fall back to rounded coordinates.
+- Exact duplicate fixes are removed before analysis, and movement-only entries
+  report the actual first/last fix times rather than the midnight query bounds.
 - Tuning kwargs: `radius_m` (stay cluster radius, default 150 m),
   `min_dwell_min` (default 15), `max_gap_min` (signal-gap split, default 90),
   `max_points` (cap, default 5000).

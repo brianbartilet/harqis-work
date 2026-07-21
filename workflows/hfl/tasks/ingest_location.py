@@ -223,6 +223,19 @@ def _fmt_distance_km(metres: float) -> str:
     return f"{km:.0f} km" if km >= 100 else f"{km:.1f} km"
 
 
+def _dedupe_points(points: list[dict]) -> list[dict]:
+    """Drop exact Recorder duplicates while preserving chronological order."""
+    kept: list[dict] = []
+    seen: set[tuple[int, float, float]] = set()
+    for point in sorted(points, key=lambda p: p["tst"]):
+        key = (point["tst"], point["lat"], point["lon"])
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(point)
+    return kept
+
+
 def _track_health(points: list[dict]) -> dict:
     """Summarize coverage quality from raw GPS fixes.
 
@@ -272,8 +285,7 @@ def _select_route_anchors(
     """Pick a small chronological set of route anchors from raw fixes.
 
     The goal is HFL prose, not a track log: first point, large jump boundaries,
-    meaningfully moved samples, and final point. Coordinates stay internal and
-    are only used for reverse-geocoding labels.
+    meaningfully moved samples, and final point.
     """
     if not points:
         return []
@@ -299,6 +311,27 @@ def _select_route_anchors(
     selected.append(dict(points[-1], kind="last"))
     selected.sort(key=lambda p: p["tst"])
     return _dedupe_route_anchors(selected)[:max_anchors]
+
+
+def _coordinate_label(lat: float, lon: float) -> str:
+    return f"{lat:.5f}, {lon:.5f}"
+
+
+def _enrich_route_anchors(
+    points: list[dict], *, do_geocode: bool = True
+) -> list[dict]:
+    """Select route anchors and give every one a persistable location label."""
+    anchors = _select_route_anchors(points)
+    cache: dict = {}
+    for anchor in anchors:
+        place = (
+            _reverse_geocode(anchor["lat"], anchor["lon"], cache=cache)
+            if do_geocode else None
+        )
+        if place:
+            anchor["place"] = place
+        anchor["label"] = place or _coordinate_label(anchor["lat"], anchor["lon"])
+    return anchors
 
 
 def _analyze_route_activity(
@@ -342,13 +375,7 @@ def _analyze_route_activity(
             "max_jump_m": max_jump_m,
         }
 
-    anchors = _select_route_anchors(points)
-    if do_geocode and anchors:
-        cache: dict = {}
-        for anchor in anchors:
-            place = _reverse_geocode(anchor["lat"], anchor["lon"], cache=cache)
-            if place:
-                anchor["place"] = place
+    anchors = _enrich_route_anchors(points, do_geocode=do_geocode)
 
     return {
         "travel": True,
@@ -363,19 +390,25 @@ def _analyze_route_activity(
 def _route_summary_entry(analysis: dict) -> dict[str, Any]:
     """Return deterministic HFL fields for travel days with no stay-points."""
     anchors = analysis.get("anchors") or []
-    labelled = [a for a in anchors if a.get("place")]
-    start = labelled[0]["place"] if labelled else "the starting area"
-    end = labelled[-1]["place"] if labelled else "the ending area"
+    labelled = [a for a in anchors if a.get("label") or a.get("place")]
+    start = (
+        labelled[0].get("label") or labelled[0].get("place")
+        if labelled else "the starting area"
+    )
+    end = (
+        labelled[-1].get("label") or labelled[-1].get("place")
+        if labelled else "the ending area"
+    )
 
     route_bits: list[str] = []
     seen: set[str] = set()
     for anchor in anchors:
-        label = anchor.get("place")
+        label = anchor.get("label") or anchor.get("place")
         if not label or label in seen:
             continue
         seen.add(label)
         route_bits.append(f"{_fmt_clock(anchor['tst'])} — {label}")
-    route_text = "; ".join(route_bits[:6]) if route_bits else "route anchors were detected but could not be reverse-geocoded"
+    route_text = "; ".join(route_bits[:6]) if route_bits else "no route anchors were available"
 
     distance_text = _fmt_distance_km(max(
         float(analysis.get("direct_distance_m") or 0),
@@ -464,8 +497,7 @@ def collect_location_activity(
             points.append({"lat": float(lat), "lon": float(lon), "tst": int(tst)})
         except (TypeError, ValueError):
             continue
-    points.sort(key=lambda p: p["tst"])
-    points = points[:max_points]
+    points = _dedupe_points(points)[:max_points]
 
     stays = _cluster_stays(
         points, radius_m=radius_m, min_dwell_min=min_dwell_min, max_gap_min=max_gap_min
@@ -485,8 +517,9 @@ def collect_location_activity(
         "stays": stays,
         "stay_count": len(stays),
         "window": {"from": from_ts, "to": to_ts},
-        # Internal-only raw fixes for deterministic route summarization. HFL
-        # prose and normal responses must not expose raw coordinates.
+        # Internal raw fixes used for deterministic route summarization. When
+        # reverse geocoding fails, selected anchors may be persisted as rounded
+        # coordinates; the complete raw track is never exposed.
         "_points": points,
     }
 
@@ -546,6 +579,27 @@ def _fmt_clock(ts: int) -> str:
     return datetime.fromtimestamp(ts).strftime("%H:%M")
 
 
+def _fix_window_text(points: list[dict]) -> str:
+    if not points:
+        return "during the ingest window"
+    first = datetime.fromtimestamp(points[0]["tst"])
+    last = datetime.fromtimestamp(points[-1]["tst"])
+    if first.date() == last.date():
+        return f"from {first:%H:%M} to {last:%H:%M} on {first:%Y-%m-%d}"
+    return f"from {first:%Y-%m-%d %H:%M} to {last:%Y-%m-%d %H:%M}"
+
+
+def _route_anchor_text(anchors: list[dict]) -> str:
+    route_bits: list[str] = []
+    for anchor in anchors[:6]:
+        label = (
+            anchor.get("label") or anchor.get("place")
+            or _coordinate_label(anchor["lat"], anchor["lon"])
+        )
+        route_bits.append(f"{_fmt_clock(anchor['tst'])} — {label}")
+    return "; ".join(route_bits)
+
+
 def _activity_body(activity: dict) -> str:
     lines: list[str] = []
     for s in activity["stays"]:
@@ -562,22 +616,18 @@ def _movement_only_entry(activity: dict, *, min_dwell_min: int) -> dict[str, Any
     """Return deterministic HFL fields for GPS-active days with no stays.
 
     This is intentionally non-LLM: the point track proves the day had location
-    signal, but without a stable stay-point there is no safe place narrative to
-    synthesize. Keep it as an audit/timeline breadcrumb.
+    signal and its selected anchors provide a factual route without inventing a
+    dwell narrative.
 
     When ``_points`` is present in the activity dict, includes path distance
-    and coverage-gap diagnostics in the body — no coordinates are exposed.
+    and coverage-gap diagnostics. Selected anchors prefer reverse-geocoded
+    names and explicitly fall back to rounded coordinates.
     """
     point_count = int(activity.get("point_count") or 0)
-    window = activity.get("window") or {}
-    start = window.get("from")
-    end = window.get("to")
-    if start and end:
-        window_text = f"between {_fmt_clock(int(start))} and {_fmt_clock(int(end))}"
-    else:
-        window_text = "during the ingest window"
-
-    health = _track_health(list(activity.get("_points") or []))
+    points = list(activity.get("_points") or [])
+    window_text = _fix_window_text(points)
+    anchors = list(activity.get("_route_anchors") or [])
+    health = _track_health(points)
     coverage_parts: list[str] = []
     if health["path_km"] >= 0.1:
         coverage_parts.append(
@@ -589,6 +639,7 @@ def _movement_only_entry(activity: dict, *, min_dwell_min: int) -> dict[str, Any
             "(signal lost or device off)"
         )
     coverage_note = ("; " + "; ".join(coverage_parts)) if coverage_parts else ""
+    route_note = f" Route anchors: {_route_anchor_text(anchors)}." if anchors else ""
 
     return {
         "skip": False,
@@ -597,7 +648,7 @@ def _movement_only_entry(activity: dict, *, min_dwell_min: int) -> dict[str, Any
             f"OwnTracks recorded {point_count} GPS fix(es) {window_text}{coverage_note}. "
             f"None formed a stay-point of at least {min_dwell_min} minutes. "
             "The location stream was alive; the day just did not cross the "
-            "configured dwell threshold for a place timeline."
+            f"configured dwell threshold for a place timeline.{route_note}"
         ),
         "why_it_stayed": (
             "This keeps a GPS-active day visible in HFL instead of letting the "
@@ -725,6 +776,7 @@ def ingest_location_activity(
                 "ingest_location: %d fix(es) but no stay-points; writing movement-only entry",
                 activity["point_count"],
             )
+            activity["_route_anchors"] = _enrich_route_anchors(activity.get("_points") or [])
             d = _movement_only_entry(activity, min_dwell_min=min_dwell_min)
             references = []
     else:

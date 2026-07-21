@@ -17,7 +17,9 @@ from workflows.hfl.tasks.ingest_location import (
     _activity_body,
     _analyze_route_activity,
     _cluster_stays,
+    _dedupe_points,
     _dedupe_route_anchors,
+    _enrich_route_anchors,
     _fmt_distance_km,
     _haversine_m,
     _location_window,
@@ -83,9 +85,14 @@ def test__ingest_location_activity_movement_only_fallback(monkeypatch, tmp_path)
     # default 15-min dwell threshold.
     track = _track(now, [(0, 1.3000, 103.8000), (5, 1.3001, 103.8001),
                          (10, 1.3000, 103.8000)])
+    track.insert(1, dict(track[0]))  # exact Recorder duplicate must not inflate the count
     monkeypatch.setattr(
         "workflows.hfl.tasks.ingest_location.ApiServiceOwnTracksLocations",
         lambda *a, **k: type("S", (), {"get_history": lambda self, **kw: {"data": track}})(),
+    )
+    monkeypatch.setattr(
+        "workflows.hfl.tasks.ingest_location._reverse_geocode",
+        lambda lat, lon, **kw: "Test Neighbourhood, Singapore",
     )
     monkeypatch.setattr(
         "workflows.hfl.tasks.ingest_location.resolve_corpus_dir", lambda: tmp_path
@@ -109,6 +116,9 @@ def test__ingest_location_activity_movement_only_fallback(monkeypatch, tmp_path)
     written = submitted[0][0].to_markdown()
     assert "Recorded movement but no qualifying location stay" in written
     assert "movement-only" in written
+    assert "Route anchors:" in written
+    assert "Test Neighbourhood, Singapore" in written
+    assert now.strftime("%Y-%m-%d") in written
     assert "openstreetmap.org" not in written
 
 
@@ -326,6 +336,38 @@ def test__movement_only_entry_is_deterministic_no_api():
     assert "movement-only" in entry["tags"]
 
 
+def test__movement_only_entry_uses_actual_fix_times_and_route_anchors():
+    now = datetime(2026, 7, 20, 8, 55, 0)
+    points = _track(now, [
+        (0, 1.3000, 103.8000),
+        (180, 1.3500, 103.8500),
+        (675, 1.4000, 103.9000),
+    ])
+    activity = {
+        "point_count": 3,
+        "stay_count": 0,
+        "stays": [],
+        # These midnight query bounds previously rendered as 00:00 to 00:00.
+        "window": {
+            "from": int(datetime(2026, 7, 20).timestamp()),
+            "to": int(datetime(2026, 7, 21).timestamp()),
+        },
+        "_points": points,
+        "_route_anchors": [
+            dict(points[0], label="Home District, Singapore"),
+            dict(points[1], label="1.35000, 103.85000"),
+            dict(points[2], label="Town Centre, Singapore"),
+        ],
+    }
+
+    entry = _movement_only_entry(activity, min_dwell_min=15)
+
+    assert "from 08:55 to 20:10 on 2026-07-20" in entry["what_happened"]
+    assert "08:55 — Home District, Singapore" in entry["what_happened"]
+    assert "11:55 — 1.35000, 103.85000" in entry["what_happened"]
+    assert "00:00 and 00:00" not in entry["what_happened"]
+
+
 def test__distill_location_raw_fallback_no_api():
     """synthesize=False must not call any API and must return entry fields."""
     activity = {
@@ -419,6 +461,19 @@ def test__track_health_detects_gaps():
     health = _track_health(points)
     assert health["gap_count"] == 2
     assert health["max_gap_min"] == pytest.approx(40.0, abs=1.0)
+
+
+def test__dedupe_points_removes_only_exact_recorder_duplicates():
+    now = datetime(2026, 7, 20, 9, 0, 0)
+    first, second = _track(now, [
+        (0, 1.3000, 103.8000),
+        (5, 1.3010, 103.8010),
+    ])
+    points = [first, dict(first), second, dict(second), dict(second, lon=103.8020)]
+
+    deduped = _dedupe_points(points)
+
+    assert deduped == [first, second, dict(second, lon=103.8020)]
 
 
 # ── _movement_only_entry enrichment ──────────────────────────────────────────
@@ -564,6 +619,25 @@ def test__dedupe_route_anchors_removes_nearby_moved_samples():
     assert len(deduped) < len(anchors)
     assert deduped[0]["kind"] == "first"
     assert deduped[-1]["kind"] == "last"
+
+
+def test__enrich_route_anchors_prefers_place_and_falls_back_to_coordinates(monkeypatch):
+    now = datetime(2026, 7, 20, 8, 0, 0)
+    points = _track(now, [
+        (0, 1.3000, 103.8000),
+        (60, 1.3600, 103.8600),
+        (120, 1.4200, 103.9200),
+    ])
+    monkeypatch.setattr(
+        "workflows.hfl.tasks.ingest_location._reverse_geocode",
+        lambda lat, lon, **kw: "Named Start, Singapore" if lat == 1.3000 else None,
+    )
+
+    anchors = _enrich_route_anchors(points)
+
+    assert anchors[0]["label"] == "Named Start, Singapore"
+    assert anchors[-1]["label"] == "1.42000, 103.92000"
+    assert len(anchors) <= 6
 
 
 # ── _fmt_distance_km ──────────────────────────────────────────────────────────
