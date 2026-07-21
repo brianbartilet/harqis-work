@@ -401,6 +401,8 @@ def build_tree(documents: tuple[CorpusDocument, ...]) -> dict:
     for document in documents:
         node = root
         parts = Path(document.relative_path).parts
+        if any(part.startswith(".") for part in parts[:-1]):
+            continue
         for index, part in enumerate(parts[:-1]):
             current_path = Path(*parts[: index + 1]).as_posix()
             node = node["directories"].setdefault(
@@ -408,6 +410,10 @@ def build_tree(documents: tuple[CorpusDocument, ...]) -> dict:
                 {"name": part, "path": current_path, "directories": {}, "files": []},
             )
         node["files"].append(document)
+
+    def directory_key(item: tuple[str, dict]) -> tuple[int, int, str]:
+        name = item[0]
+        return (1, -int(name), "") if name.isdigit() else (0, 0, name.casefold())
 
     def finalize(node: dict) -> dict:
         files = sorted(
@@ -421,8 +427,7 @@ def build_tree(documents: tuple[CorpusDocument, ...]) -> dict:
             "directories": [
                 finalize(child)
                 for _, child in sorted(
-                    node["directories"].items(),
-                    key=lambda item: item[0].casefold(),
+                    node["directories"].items(), key=directory_key
                 )
             ],
             "files": files,

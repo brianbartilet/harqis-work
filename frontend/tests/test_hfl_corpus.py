@@ -179,11 +179,27 @@ def test_tree_keeps_nested_directories():
     assert tree["directories"][0]["directories"][0]["name"] == "2026"
 
 
-def test_tree_sorts_directories_alphabetically_and_files_by_created_descending():
+def test_tree_hides_system_directories_even_for_preindexed_documents():
+    tree = build_tree(
+        (
+            _document("visible/entry.md"),
+            _document(".migrations/hidden.md"),
+            _document("visible/.system/nested-hidden.md"),
+        )
+    )
+
+    assert [directory["name"] for directory in tree["directories"]] == ["visible"]
+    assert tree["directories"][0]["directories"] == []
+
+
+def test_tree_sorts_named_directories_first_then_numeric_descending():
     same_day = datetime(2026, 7, 10, 9, 0)
     documents = (
         replace(_document("zeta/nested.md"), created_at=datetime(2026, 7, 12)),
         replace(_document("Alpha/nested.md"), created_at=datetime(2026, 7, 1)),
+        _document("2024/nested.md"),
+        _document("2026/nested.md"),
+        _document("2025/nested.md"),
         replace(_document("old.md"), created_at=datetime(2026, 7, 1)),
         replace(_document("new.md"), created_at=datetime(2026, 7, 12)),
         replace(_document("b.md"), created_at=same_day),
@@ -195,6 +211,9 @@ def test_tree_sorts_directories_alphabetically_and_files_by_created_descending()
     assert [directory["name"] for directory in tree["directories"]] == [
         "Alpha",
         "zeta",
+        "2026",
+        "2025",
+        "2024",
     ]
     assert [document.name for document in tree["files"]] == [
         "new.md",
