@@ -52,9 +52,11 @@ this scaffold closes.
 | `ingest_radar_activity` | Daily **HERMES RADAR digest.** Reads the day's compatibility-named `show_daily_radar` synthesis blocks back out of the shared desktop feed file (`<feed_dir>/hud-logs-YYYYMMDD.txt`) and distils them into ONE "what the day was about" entry. It does not ingest the 15-minute Telegram push rerenders or re-run the radar source sweep. The feed file is Drive-synced, so the Beat host reads briefings a Windows radar wrote; files read remain the entry references. Haiku-distilled, raw fallback. No feed dir / no synthesis blocks → no entry, no LLM call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:20 local (active — clean no-op until `DESKTOP_PATH_FEED` is set and the radar has run). |
 | `analyze_hfl_media` | **Daily media vision pass.** Walks the dumps inbox for recent images/videos (pulled from phones + machines by `workflows/dumps/`), reserves 10 of the 40 analysis slots for Android-origin media, then fills unused capacity by global recency. Each item is sent to Haiku vision for a story moment and **geo-tagged** — EXIF GPS, else the nearest OwnTracks fix by capture time → Nominatim place. One entry per story-worthy item; the source dump file + an OSM pin are the `references`. Already-referenced media is skipped before the model call. Passing `media_path=<inbox file>` targets one artifact directly. | `file:hfl_corpus+es:hfl-entries` | Daily 22:00 local (active). |
 | `collect_time_capsule` | **On-demand, time-ranged archive ingest.** Sweeps a directory (and subdirs) for files dated within a period, extracts text / docs / Haiku vision captions into a bounded manifest + digest. The COLLECT half of the `/time-capsule-synthesizer` skill (Claude synthesizes ONE rollup entry from the digest, then dual-writes it via `capture_hfl_entry`). Not scheduled. | `file:hfl_corpus+es:hfl-entries` (via the skill) | Adhoc — driven by `/time-capsule-synthesizer`. |
+| `build_hfl_knowledge_graph` | Builds a deterministic DTO graph, optionally enriches it with pinned Graphify/Claude extraction, verifies artifacts, and writes a merged graph outside the corpus. Explicit opt-in only. | `file:hfl_graph+es:hfl-graph` | **Not in Beat.** Requires `HARQIS_HFL_GRAPH_ENABLE=1`; see `KNOWLEDGE_GRAPH.md`. |
 
-Each carries the manifesto metadata block on the beat entry — see
-`workflows/hfl/tasks_config.py`.
+Scheduled entries carry the manifesto metadata block in
+`workflows/hfl/tasks_config.py`; the opt-in graph task is intentionally absent
+from Beat until its promotion criteria pass.
 
 ---
 
@@ -130,9 +132,11 @@ without `pillow-heif`. (Termux's sshd must be alive at 00:05 — a `termux-wake-
 plus the Termux:Boot addon keeps it up across sleeps/reboots.)
 
 **Querying it (MCP tools in `workflows/hfl/mcp.py`):** `memory_recall` /
-`memory_recall_es` (what happened in a window), `location_activity` (live
-timeline), `memory_list_media` (photos/videos in a window). The weekly
-`summarize_hfl_week` rollup is emailed each Sunday.
+`memory_recall_es` (what happened in a window), `memory_graph_query`
+(relationship discovery over the latest verified deterministic + semantic
+graph), `location_activity` (live timeline), and `memory_list_media`
+(photos/videos in a window). The weekly `summarize_hfl_week` rollup is emailed
+each Sunday.
 
 ---
 

@@ -44,6 +44,7 @@ from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropi
 from workflows.dumps.config import get_dumps_target
 from workflows.dumps.files import iter_recent_files
 from workflows.hfl.es_store import query_hfl_entries
+from workflows.hfl.knowledge_graph import latest_graph, load_graph, query_graph
 from workflows.hfl.prompts import load_prompt
 from workflows.hfl.tasks.capture import resolve_corpus_dir
 from workflows.hfl.tasks.ingest_browsing import (
@@ -375,9 +376,66 @@ def _period_dict(start: Optional[date], end: Optional[date], label: str) -> dict
     }
 
 
+def _graph_output_root() -> Path:
+    configured = os.environ.get("HFL_GRAPH_OUTPUT_ROOT", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
+    data_root = os.environ.get("HARQIS_DATA_ROOT", "").strip()
+    if data_root:
+        return (Path(data_root).expanduser() / "hfl-graphs").resolve()
+    return (Path(__file__).resolve().parents[2] / ".harqis-data" / "hfl-graphs").resolve()
+
+
+def memory_graph_query_data(question: str, *, depth: int = 2, limit: int = 30) -> dict:
+    """Read the latest verified merged graph and return evidence-bearing traversal."""
+    graph_path = latest_graph(_graph_output_root())
+    if graph_path is None:
+        return {
+            "found": False,
+            "question": question,
+            "graph": None,
+            "nodes": [],
+            "links": [],
+            "explanations": [],
+            "error": "graph unavailable",
+        }
+    try:
+        result = query_graph(load_graph(graph_path), question, depth=depth, limit=limit)
+    except (OSError, ValueError, TypeError) as exc:
+        logger.warning("memory_graph_query: invalid graph %s (%s)", graph_path, exc)
+        return {
+            "found": False,
+            "question": question,
+            "graph": str(graph_path),
+            "nodes": [],
+            "links": [],
+            "explanations": [],
+            "error": "graph unreadable",
+        }
+    result["graph"] = str(graph_path)
+    return result
+
+
 # ── MCP registration ─────────────────────────────────────────────────────────
 
 def register_memory_tools(mcp: FastMCP):
+
+    @mcp.tool()
+    def memory_graph_query(
+        question: str,
+        depth: int = 2,
+        limit: int = 30,
+    ) -> dict:
+        """Discover relationships in the latest verified HFL knowledge graph.
+
+        This is read-only and does not call an LLM. It seeds graph nodes from
+        the question, traverses explicit and semantic edges in both directions,
+        and returns nodes, edges, and human-readable relationship explanations.
+        Use memory_recall_es for direct text/date lookup; use this tool when the
+        value is the path between memories, people, projects, places, artifacts,
+        sources, machines, tags, dates, or inferred lessons.
+        """
+        return memory_graph_query_data(question, depth=depth, limit=limit)
 
     @mcp.tool()
     def memory_recall(
