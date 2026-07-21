@@ -32,6 +32,7 @@ class NoteRepository:
     max_entries: int
     max_media: int
     max_text_chars: int
+    max_topics_per_note: int
     remote_name: str = "origin"
 
 
@@ -76,6 +77,7 @@ def get_note_repositories(cfg: dict | None = None) -> dict[str, NoteRepository]:
             max_entries=max(1, int(raw.get("max_entries", 25))),
             max_media=max(0, int(raw.get("max_media", 10))),
             max_text_chars=max(1000, int(raw.get("max_text_chars", 20_000))),
+            max_topics_per_note=max(1, min(10, int(raw.get("max_topics_per_note", 4)))),
             remote_name=str(raw.get("remote_name", "origin")).strip() or "origin",
         )
     return repositories

@@ -199,8 +199,12 @@ def _compare_url(repository: NoteRepository, old: str, new: str) -> str:
 def _fallback_distillation(change: NoteChange) -> dict[str, Any]:
     action = {"A": "Added", "M": "Updated", "R": "Renamed", "D": "Deleted"}.get(change.status, "Changed")
     excerpt = " ".join(change.content.split())[:800]
+    line_count = len(change.content.splitlines())
     return {
         "skip": False,
+        "section": Path(change.path).stem,
+        "start_line": 1 if line_count else 0,
+        "end_line": line_count,
         "moment": f"{action} {Path(change.path).name}",
         "what_happened": excerpt or f"{action} repository artifact `{change.path}`.",
         "why_it_stayed": "",
@@ -211,60 +215,128 @@ def _fallback_distillation(change: NoteChange) -> dict[str, Any]:
     }
 
 
-def distill_note_change(
+def _normalize_segment(
+    raw: dict[str, Any],
+    fallback: dict[str, Any],
+    *,
+    max_line: int,
+) -> dict[str, Any]:
+    segment = dict(fallback)
+    for key in (
+        "section", "moment", "what_happened", "why_it_stayed",
+        "possible_use", "core_topic",
+    ):
+        if key in raw:
+            segment[key] = str(raw.get(key, "")).strip()
+    segment["skip"] = bool(raw.get("skip", False))
+    segment["tags"] = [
+        str(tag).strip().lstrip("#") for tag in (raw.get("tags") or [])
+        if str(tag).strip()
+    ]
+    try:
+        start = int(raw.get("start_line", 0))
+        end = int(raw.get("end_line", 0))
+    except (TypeError, ValueError):
+        start = end = 0
+    if max_line and start > 0 and end >= start:
+        segment["start_line"] = min(start, max_line)
+        segment["end_line"] = min(max(end, segment["start_line"]), max_line)
+    else:
+        segment["start_line"] = segment["end_line"] = 0
+    segment["synthesized"] = True
+    return segment
+
+
+def _segments_from_parsed(
+    parsed: dict[str, Any] | None,
+    fallback: dict[str, Any],
+    *,
+    max_segments: int,
+    max_line: int,
+) -> list[dict[str, Any]]:
+    if not parsed:
+        return [fallback]
+    raw_segments = parsed.get("segments")
+    if not isinstance(raw_segments, list):
+        raw_segments = [parsed]  # tolerate the pre-segmentation response shape
+    segments = [
+        _normalize_segment(raw, fallback, max_line=max_line)
+        for raw in raw_segments[:max_segments]
+        if isinstance(raw, dict)
+    ]
+    return segments or [fallback]
+
+
+def distill_note_segments(
     repository: NoteRepository,
     change: NoteChange,
     *,
     synthesize: bool = True,
     model: str = _DEFAULT_HAIKU,
     cfg_id: str = "ANTHROPIC",
-    max_tokens: int = 900,
-) -> dict[str, Any]:
-    """Distill one text/image change with a raw metadata fallback."""
+    max_segments: int | None = None,
+    max_tokens: int | None = None,
+) -> list[dict[str, Any]]:
+    """Distill one change into bounded, naturally transitioned topic segments."""
     fallback = _fallback_distillation(change)
     if not synthesize:
-        return fallback
+        return [fallback]
+    segment_cap = 1 if change.kind != "text" else max(
+        1, min(10, max_segments or repository.max_topics_per_note)
+    )
+    token_cap = max_tokens or min(3200, 700 + segment_cap * 450)
     instruction = (
         f"Repository: {repository.name}\nStatus: {change.status}\n"
         f"Path: {change.path}\nOld path: {change.old_path or '(none)'}\n"
+        f"Maximum topic segments: {segment_cap}\n"
     )
     try:
         client = BaseApiServiceAnthropic(get_anthropic_config(cfg_id))
         if not getattr(client, "base_client", None):
-            return fallback
+            return [fallback]
         if change.kind == "image":
             from workflows.hfl.tasks.analyze_media import _encode_image
             local = _safe_checkout_path(repository, change.path)
             image = _encode_image(local) if local and local.is_file() else None
             if image is None:
-                return fallback
+                return [fallback]
             response = client.send_messages(
                 messages=[{"role": "user", "content": [
                     image,
                     {"type": "text", "text": instruction + "Analyze this changed image and return JSON only."},
                 ]}],
-                model=model, max_tokens=max_tokens,
+                model=model, max_tokens=token_cap,
                 system=load_prompt("ingest_notes").strip(),
             )
         else:
+            numbered = "\n".join(
+                f"{line_no}: {line}"
+                for line_no, line in enumerate(change.content.splitlines(), 1)
+            )
             response = client.send_message(
-                prompt=instruction + "\nNote content:\n" + change.content,
+                prompt=instruction + "\nLine-numbered note content:\n" + numbered,
                 system=load_prompt("ingest_notes").strip(),
-                model=model, max_tokens=max_tokens,
+                model=model, max_tokens=token_cap,
             )
         text = response.content[0].text if response and response.content else ""
         parsed = _parse_model_json(text)
-        if not parsed:
-            return fallback
-        for key in ("moment", "what_happened", "why_it_stayed", "possible_use", "core_topic"):
-            parsed[key] = str(parsed.get(key, "")).strip()
-        parsed["tags"] = [str(tag).strip().lstrip("#") for tag in (parsed.get("tags") or [])]
-        parsed.setdefault("skip", False)
-        parsed["synthesized"] = True
-        return parsed
+        return _segments_from_parsed(
+            parsed, fallback, max_segments=segment_cap,
+            max_line=len(change.content.splitlines()),
+        )
     except Exception as exc:  # noqa: BLE001 - one note must not break Beat
         _log.warning("notes distillation failed for %s (%s) — fallback", change.path, exc)
-        return fallback
+        return [fallback]
+
+
+def distill_note_change(
+    repository: NoteRepository,
+    change: NoteChange,
+    **kwargs,
+) -> dict[str, Any]:
+    """Compatibility wrapper returning the first distilled topic segment."""
+    kwargs.pop("max_segments", None)
+    return distill_note_segments(repository, change, max_segments=1, **kwargs)[0]
 
 
 def distill_change_summary(
@@ -299,20 +371,16 @@ def distill_change_summary(
         response = client.send_message(
             prompt=(
                 f"Repository: {repository.name}\nMode: bounded multi-file summary\n"
+                "Maximum topic segments: 1\n"
                 f"Changed artifacts ({len(changes)}):\n" + "\n".join(lines)
             ),
             system=load_prompt("ingest_notes").strip(), model=model,
             max_tokens=max_tokens,
         )
         parsed = _parse_model_json(response.content[0].text if response and response.content else "")
-        if not parsed:
-            return fallback
-        for key in ("moment", "what_happened", "why_it_stayed", "possible_use", "core_topic"):
-            parsed[key] = str(parsed.get(key, "")).strip()
-        parsed["tags"] = [str(tag).strip().lstrip("#") for tag in (parsed.get("tags") or [])]
-        parsed.setdefault("skip", False)
-        parsed["synthesized"] = True
-        return parsed
+        return _segments_from_parsed(
+            parsed, fallback, max_segments=1, max_line=0,
+        )[0]
     except Exception as exc:  # noqa: BLE001
         _log.warning("notes summary distillation failed (%s) — fallback", exc)
         return fallback
@@ -340,10 +408,17 @@ def _write_entry(
 ) -> tuple[bool, bool]:
     if distilled.get("skip"):
         return False, False
+    section = str(distilled.get("section", "")).strip()
+    start_line = int(distilled.get("start_line", 0) or 0)
+    end_line = int(distilled.get("end_line", 0) or 0)
+    section_context = ""
+    if section:
+        line_context = f" (lines {start_line}-{end_line})" if start_line and end_line else ""
+        section_context = f"Section: {section}{line_context}.\n\n"
     entry = _build_entry(
         when=when,
         moment=str(distilled.get("moment", "")),
-        what_happened=str(distilled.get("what_happened", "")),
+        what_happened=section_context + str(distilled.get("what_happened", "")),
         why_it_stayed=str(distilled.get("why_it_stayed", "")),
         possible_use=str(distilled.get("possible_use", "")) or "notes reference",
         tags=_entry_tags(repository, distilled), references=references,
@@ -354,6 +429,24 @@ def _write_entry(
         synthesized=bool(distilled.get("synthesized")),
     )
     return True, doc_id is not None
+
+
+def _segment_references(
+    repository: NoteRepository,
+    head: str,
+    change: NoteChange,
+    segment: dict[str, Any],
+) -> list[str]:
+    blob = _blob_url(repository, head, change.path)
+    start = int(segment.get("start_line", 0) or 0)
+    end = int(segment.get("end_line", 0) or 0)
+    if start and end:
+        blob += f"#L{start}-L{end}"
+    references = [blob]
+    local = _safe_checkout_path(repository, change.path)
+    if local:
+        references.append(str(local))
+    return references
 
 
 def collect_notes_activity(
@@ -425,39 +518,55 @@ def ingest_notes_activity(
                 results[name] = {"skipped": "no qualifying changes", "head": head, "entries_written": 0}
                 continue
 
-            granular: list[NoteChange] = []
+            eligible: list[NoteChange] = []
             summary: list[NoteChange] = []
             media_count = 0
             for change in changes:
-                eligible = change.status != "D" and change.kind in {"text", "image"}
+                can_distill = change.status != "D" and change.kind in {"text", "image"}
                 if change.kind == "image" and media_count >= repository.max_media:
-                    eligible = False
-                if eligible and len(granular) < repository.max_entries:
-                    granular.append(change)
+                    can_distill = False
+                if can_distill:
+                    eligible.append(change)
                     if change.kind == "image":
                         media_count += 1
                 else:
                     summary.append(change)
 
-            # ``max_entries`` is the total per-run entry budget. Reserve its
-            # final slot for the summary whenever anything could not receive a
-            # granular entry, so a configured cap of 25 never emits 26.
-            if summary and len(granular) >= repository.max_entries:
-                summary.insert(0, granular.pop())
-
-            written = indexed = skipped = 0
-            for change in granular:
-                distilled = distill_note_change(
+            granular: list[tuple[NoteChange, dict[str, Any]]] = []
+            skipped = topic_overflow = 0
+            for index, change in enumerate(eligible):
+                if len(granular) >= repository.max_entries:
+                    summary.extend(eligible[index:])
+                    break
+                segments = distill_note_segments(
                     repository, change, synthesize=synthesize,
                     model=model, cfg_id=cfg_id__anthropic,
+                    max_segments=repository.max_topics_per_note,
                 )
-                local = _safe_checkout_path(repository, change.path)
-                references = [_blob_url(repository, head, change.path)]
-                if local:
-                    references.append(str(local))
+                skipped += sum(bool(segment.get("skip")) for segment in segments)
+                segments = [segment for segment in segments if not segment.get("skip")]
+                available = repository.max_entries - len(granular)
+                granular.extend((change, segment) for segment in segments[:available])
+                if len(segments) > available:
+                    summary.append(change)
+                    topic_overflow += len(segments) - available
+
+            # The total cap includes the overflow/reference summary. If topic
+            # entries consumed every slot, move the final one into that summary.
+            if summary and len(granular) >= repository.max_entries:
+                overflow_change, _ = granular.pop()
+                summary.append(overflow_change)
+                topic_overflow += 1
+
+            # Summaries list files, not repeated omitted topic segments.
+            summary = list({(change.status, change.path): change for change in summary}.values())
+
+            written = indexed = 0
+            for change, distilled in granular:
                 did_write, did_index = _write_entry(
                     repository, distilled,
-                    when=change.changed_at or datetime.now(), references=references,
+                    when=change.changed_at or datetime.now(),
+                    references=_segment_references(repository, head, change, distilled),
                 )
                 written += int(did_write)
                 indexed += int(did_index)
@@ -485,6 +594,7 @@ def ingest_notes_activity(
             results[name] = {
                 "entries_written": written, "indexed": indexed,
                 "files_changed": len(changes), "granular": len(granular),
+                "topic_entries": len(granular), "topic_overflow": topic_overflow,
                 "summarized": len(summary), "distilled_skips": skipped,
                 "from_commit": cursor, "head": head,
             }

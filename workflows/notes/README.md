@@ -47,6 +47,7 @@ exclude_globs = [".git/**", ".idea/**", "**/.DS_Store"]
 max_entries = 25
 max_media = 10
 max_text_chars = 20000
+max_topics_per_note = 4
 
 [windows-work-all.notes.repositories]
 notes = "C:/Users/name/GIT/notes"
@@ -59,18 +60,24 @@ independent lists and should not contain the same checkout.
 
 ## Entry shape
 
-Each qualifying changed text note or common image becomes one normal HFL entry
-with:
+Each qualifying changed text note is split by the LLM at genuine heading or
+semantic topic transitions and may become up to `max_topics_per_note` HFL
+entries (default 4). A coherent single-topic note remains one entry; common
+images remain one entry. Each topic entry includes:
 
 - source `notes` and tags `#notes #dsm #repo-<name> #<core-topic>`;
 - a GitHub blob reference pinned to the ingested commit;
 - the host-local file path for downstream retrieval;
+- its section label and inclusive source line range in `What happened`;
+- a GitHub `#Lstart-Lend` anchor when the model returned valid line bounds;
 - a concise moment, change description, retention reason, and possible use.
 
-The total per-run entry cap defaults to 25. When a summary is required, it
-reserves the final slot. Deleted files, unsupported binaries, images beyond the
-media cap, and all overflow changes are grouped into that summary, whose
-reference points to the GitHub commit comparison and host clone.
+The total per-run entry cap defaults to 25 and overrides the per-note cap. When
+a summary is required, it reserves the final slot. Omitted topic segments,
+deleted files, unsupported binaries, images beyond the media cap, and remaining
+files are grouped into that summary, whose reference points to the GitHub commit
+comparison and host clone. Files beyond the daily budget are not sent to the
+model merely to count their latent topics.
 
 ## Safety and failure behavior
 
@@ -84,6 +91,8 @@ reference points to the GitHub commit comparison and host clone.
   HEAD, preventing stale or partially synchronized content from being indexed.
 - Note contents are private repository data. Only bounded text and selected
   common images are sent to Anthropic when synthesis is enabled.
+- Topic segmentation is model-driven only when synthesis is enabled. Raw
+  fallback mode deliberately emits one entry per changed file.
 
 For a read-only view, use the MCP `notes_activity` tool. It lists changed paths
 since the ingest cursor and can optionally synthesize bounded previews without

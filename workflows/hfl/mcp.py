@@ -602,7 +602,7 @@ def register_memory_tools(mcp: FastMCP):
         from workflows.hfl.tasks.ingest_notes import (
             _blob_url,
             collect_notes_activity,
-            distill_note_change,
+            distill_note_segments,
         )
         from workflows.notes.config import get_note_repositories
 
@@ -652,15 +652,25 @@ def register_memory_tools(mcp: FastMCP):
                 "reference": _blob_url(definition, head, change.path),
             }
             if synthesize and change.status != "D" and change.kind in {"text", "image"}:
-                distilled = distill_note_change(
+                segments = distill_note_segments(
                     definition, change, synthesize=True, model=model,
                     cfg_id=cfg_id__anthropic,
+                    max_segments=definition.max_topics_per_note,
                 )
-                item["preview"] = {
-                    key: distilled.get(key)
-                    for key in ("moment", "what_happened", "why_it_stayed", "core_topic")
-                }
-                item["synthesized"] = bool(distilled.get("synthesized"))
+                item["previews"] = [
+                    {
+                        key: segment.get(key)
+                        for key in (
+                            "section", "start_line", "end_line", "moment",
+                            "what_happened", "why_it_stayed", "core_topic",
+                        )
+                    }
+                    for segment in segments if not segment.get("skip")
+                ]
+                item["preview"] = item["previews"][0] if item["previews"] else None
+                item["synthesized"] = any(
+                    bool(segment.get("synthesized")) for segment in segments
+                )
             rendered.append(item)
         return {
             "found": bool(rendered),
