@@ -388,7 +388,10 @@ def _graph_output_root() -> Path:
 
 def memory_graph_query_data(question: str, *, depth: int = 2, limit: int = 30) -> dict:
     """Read the latest verified merged graph and return evidence-bearing traversal."""
-    graph_path = latest_graph(_graph_output_root())
+    try:
+        graph_path = latest_graph(_graph_output_root())
+    except (OSError, RuntimeError, ValueError, TypeError):
+        graph_path = None
     if graph_path is None:
         return {
             "found": False,
@@ -412,6 +415,7 @@ def memory_graph_query_data(question: str, *, depth: int = 2, limit: int = 30) -
             "explanations": [],
             "error": "graph unreadable",
         }
+    result["found"] = bool(result["nodes"])
     result["graph"] = str(graph_path)
     return result
 

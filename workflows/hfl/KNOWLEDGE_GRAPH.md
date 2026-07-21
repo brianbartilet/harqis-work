@@ -108,9 +108,10 @@ Output is outside the scanned corpus, so later runs cannot ingest previous
 graphs:
 
 ```text
-<HFL_GRAPH_OUTPUT_ROOT>/2026-W30/
+<HFL_GRAPH_OUTPUT_ROOT>/2026-W30/<generation-id>/
   deterministic.json
   graph.json                         # merged MCP/query graph
+  SUCCESS.json                       # schema, build time, SHA-256
   semantic/
     graphify-out/
       graph.json                     # Graphify semantic graph
@@ -118,8 +119,17 @@ graphs:
       GRAPH_REPORT.md
 ```
 
+Each successful run uses an immutable generation directory named
+`YYYYMMDDTHHMMSSffffffZ-<32 lowercase hex>`. Graphify runs only in a private
+temporary workspace. Publication creates every destination component through
+no-follow directory descriptors and exclusive file creation; `SUCCESS.json` is
+written last after schema and artifact validation. `latest_graph()` ignores
+partial, malformed, symlinked, invalid-week, invalid-generation-name, and
+checksum-mismatched generations. A failed or concurrent rebuild therefore
+cannot replace the previous queryable graph.
+
 Subprocess exit code zero is not enough. The task requires all three Graphify
-artifacts before it writes the merged graph or reports success.
+artifacts before it publishes the success manifest.
 
 ## Privacy and provider boundary
 
@@ -141,6 +151,16 @@ Controls in this revision:
 - minimal allowlisted subprocess environment, excluding Gemini/OpenAI and other
   competing provider credentials;
 - output outside the source tree;
+- corpus discovery and copying use one stable, no-follow directory descriptor;
+- each date-named source is opened basename-relative with `O_NOFOLLOW` and `fstat`;
+- output publication uses no-follow directory descriptors and exclusive file creation;
+- builds never delete or overwrite a prior generation;
+- duplicate legacy entries without `Entry ID` receive stable ordinal/content-hash IDs;
+- conflicting duplicate explicit `Entry ID` values reject the corpus;
+- semantic ID collisions cannot overwrite deterministic entry fields;
+- model stderr omitted from persisted task results;
+- strict node/link schema and checksum validation before publication;
+- semantic source provenance linked to the source date, never all entries in a daily file;
 - semantic graph treated as non-authoritative enrichment;
 - ES receives build metadata and counts, not corpus text or graph contents.
 
@@ -152,10 +172,11 @@ Controls in this revision:
 | Model differs from reviewed Haiku pin | `reason=unsupported_model` before CLI/config access |
 | Graphify missing | `skipped=cli_missing` |
 | No daily corpus files | `skipped=empty_corpus` |
+| Symlinked corpus/output path | rejected before model or filesystem mutation |
 | Output inside corpus | `reason=output_inside_corpus` |
-| Anthropic key absent | deterministic file retained; semantic build refused |
-| Timeout | `reason=timeout` |
-| Nonzero exit | `reason=non_zero_exit` with bounded stderr tail |
+| Anthropic key absent | semantic build refused; nothing published |
+| Timeout | `reason=timeout`; previous verified generation remains latest |
+| Nonzero exit | `reason=non_zero_exit`; stderr is not persisted |
 | Exit zero, missing artifact | `reason=missing_artifacts` |
 | Invalid graph JSON | `reason=invalid_graph_artifact` |
 | ES metadata failure | verified files remain successful; `es_indexed=false` |
@@ -205,16 +226,20 @@ Until then, this remains an on-demand evaluation capability.
 `workflows/hfl/tests/test_knowledge_graph.py` covers:
 
 - deterministic DTO projection;
-- sanitized multi-memory relationship traversal;
+- sanitized multi-memory relationship traversal and date-level semantic provenance;
+- strict low-limit, stable traversal ordering;
 - disabled, missing-CLI, and empty-corpus behavior;
+- corpus/output symlink rejection and no-follow staging;
 - current CLI argv and explicit backend/model pinning;
 - allowlisted environment behavior;
-- timeout and nonzero exit;
+- timeout and nonzero exit without stderr persistence;
+- failed rebuild preservation through immutable generations;
 - missing artifacts after exit zero;
+- strict graph schema, success-manifest, and checksum validation;
 - actual nested `graphify-out` path resolution;
 - ES failure isolation;
 - exact dependency pin;
-- latest-graph MCP query behavior.
+- latest verified graph MCP query behavior.
 
 ## Future work
 
