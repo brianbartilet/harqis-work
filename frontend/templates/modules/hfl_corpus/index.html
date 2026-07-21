@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}HARQIS — HFL Corpus{% endblock %}
+{% block title %}HARQIS — Activity Corpus{% endblock %}
 
 {% macro render_tree(node) %}
   {% for directory in node.directories %}
@@ -18,8 +18,8 @@
 {% block content %}
 <main class="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:flex lg:h-[calc(100vh-3.5rem)] lg:flex-col lg:overflow-hidden lg:px-8">
   <div class="mb-4 shrink-0">
-    <p class="text-xs uppercase tracking-[0.22em] text-blue-400">Homework for Life</p>
-    <h1 class="mt-1 text-2xl font-semibold text-white">HFL Corpus</h1>
+    <p class="text-xs uppercase tracking-[0.22em] text-blue-400">HARQIS ACTIVITY LOGS</p>
+    <h1 class="mt-1 text-2xl font-semibold text-white">Activity Corpus</h1>
   </div>
 
   {% if remote_error %}

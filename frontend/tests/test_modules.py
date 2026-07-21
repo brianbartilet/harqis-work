@@ -32,7 +32,8 @@ def test_home_renders_module_navigation_without_manifesto(authenticated_client):
     assert 'href="/manifesto"' in response.text
     assert "Workflows" in response.text
     assert "Apps" in response.text
-    assert "HFL Corpus" in response.text
+    assert "Activity Corpus" in response.text
+    assert "based on Homework for Life" in response.text
 
 
 def test_manifesto_module_renders_guiding_principles(authenticated_client):
@@ -99,5 +100,6 @@ def test_hfl_corpus_module_renders_an_empty_index(authenticated_client, monkeypa
     response = authenticated_client.get("/hfl-corpus")
 
     assert response.status_code == 200
-    assert "HFL Corpus" in response.text
+    assert "Activity Corpus" in response.text
+    assert "HARQIS ACTIVITY LOGS" in response.text
     assert "0 files" in response.text

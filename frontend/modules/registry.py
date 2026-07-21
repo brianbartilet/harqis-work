@@ -45,9 +45,9 @@ MODULES: tuple[ModuleDefinition, ...] = (
     ),
     ModuleDefinition(
         key="hfl_corpus",
-        label="HFL Corpus",
+        label="Activity Corpus",
         route="/hfl-corpus",
-        description="The searchable Homework-for-Life knowledge corpus.",
+        description="The searchable HARQIS activity corpus, based on Homework for Life.",
         detail="Browse captured moments, time capsules, logs, tags, and the source artifacts referenced by each entry.",
     ),
 )
