@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Archive completed HFL corpus months into ``YYYY/MM`` directories.
+"""Archive completed HFL corpus months into ``YYYY/Mon`` directories.
 
 Only Markdown files directly under the corpus root are candidates. Hidden files,
 subdirectories, symlinks, current-month documents, undated documents, and
@@ -23,6 +23,10 @@ _FRONTMATTER_FIELD = re.compile(
     re.IGNORECASE,
 )
 _HEADING = re.compile(r"^#{1,2}\s+(.+?)\s*$", re.MULTILINE)
+_MONTH_FOLDERS = (
+    "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+)
 
 
 @dataclass(frozen=True)
@@ -120,7 +124,12 @@ def archive_corpus(
             current_month += 1
             continue
 
-        destination = corpus_root / f"{created.year:04d}" / f"{created.month:02d}" / source.name
+        destination = (
+            corpus_root
+            / f"{created.year:04d}"
+            / _MONTH_FOLDERS[created.month]
+            / source.name
+        )
         if destination.exists() or destination.is_symlink():
             conflicts.append(source.name)
             continue
@@ -145,7 +154,7 @@ def archive_corpus(
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Move prior-month root Markdown files into YYYY/MM directories."
+        description="Move prior-month root Markdown files into YYYY/Mon directories."
     )
     parser.add_argument(
         "--root",

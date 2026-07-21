@@ -212,6 +212,20 @@ def test_tree_keeps_nested_directories():
     assert tree["directories"][0]["directories"][0]["name"] == "2026"
 
 
+def test_tree_sorts_named_month_directories_chronologically():
+    tree = build_tree(
+        (
+            _document("2026/Dec/late.md"),
+            _document("2026/Apr/spring.md"),
+            _document("2026/Jan/early.md"),
+            _document("2026/Feb/next.md"),
+        )
+    )
+
+    months = tree["directories"][0]["directories"]
+    assert [month["name"] for month in months] == ["Jan", "Feb", "Apr", "Dec"]
+
+
 def test_tree_hides_system_directories_even_for_preindexed_documents():
     tree = build_tree(
         (

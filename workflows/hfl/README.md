@@ -147,17 +147,18 @@ timeline), `memory_list_media` (photos/videos in a window). The weekly
   2026-W29-rollup.md
   time-capsule/              # visible, curated time-capsule digests
   2026/
-    05/
+    May/
       2026-05-13.md          # completed months are archived by content date
       2026-W20-rollup.md
-    06/
+    Jun/
       2026-06-14.md
 ```
 
 The silent Hermes job `Monthly HFL corpus archive` runs at 01:00 on the first
 day of each month. It executes
 `scripts/agents/hfl/archive_corpus.py` against the canonical root, moving only
-prior-month Markdown files directly under the root into `YYYY/MM/`. Date
+prior-month Markdown files directly under the root into `YYYY/Mon/` using
+English three-letter month names (`Jan` … `Dec`). Date
 selection uses frontmatter creation/date fields, Markdown/HFL title dates,
 ISO-week summary titles, then filename dates; filesystem update time is never
 used. Hidden files, hidden directories, symlinks, undated files, current-month

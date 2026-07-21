@@ -19,6 +19,16 @@ _DATE_IN_NAME = re.compile(r"(20\d{2}-\d{2}-\d{2})")
 _TAG_LINE = re.compile(r"^\s*Tags:\s*(.+?)\s*$", re.MULTILINE | re.IGNORECASE)
 _TAG_TOKEN = re.compile(r"(?<!\w)#([\w-]+)", re.UNICODE)
 _NON_SLUG = re.compile(r"[^a-z0-9]+")
+_MONTH_DIRECTORY_ORDER = {
+    name.casefold(): index
+    for index, name in enumerate(
+        (
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        ),
+        start=1,
+    )
+}
 _HFL_FIELD = re.compile(
     r"^\s*(Source|Machine|Entry ID|Moment|What happened|Why it stayed|Possible use|Tags|References):\s*(.*?)\s*$",
     re.IGNORECASE,
@@ -453,7 +463,10 @@ def build_tree(documents: tuple[CorpusDocument, ...]) -> dict:
 
     def directory_key(item: tuple[str, dict]) -> tuple[int, int, str]:
         name = item[0]
-        return (1, -int(name), "") if name.isdigit() else (0, 0, name.casefold())
+        folded = name.casefold()
+        if folded in _MONTH_DIRECTORY_ORDER:
+            return (0, _MONTH_DIRECTORY_ORDER[folded], "")
+        return (1, -int(name), "") if name.isdigit() else (0, 0, folded)
 
     def finalize(node: dict) -> dict:
         files = sorted(

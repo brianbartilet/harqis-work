@@ -285,7 +285,7 @@ Local path precedence:
 
 Every `.md` file below the resolved root is indexed recursively except files
 inside dot-directories such as `.migrations` and `.media-ingest-state`. This
-includes daily entries, the visible `time-capsule/` directory, `YYYY/MM/`
+includes daily entries, the visible `time-capsule/` directory, `YYYY/Mon/`
 archives, and miscellaneous Markdown logs. The frontend never edits, moves, or
 deletes corpus content.
 

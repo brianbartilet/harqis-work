@@ -45,7 +45,7 @@ def test_archive_moves_only_prior_month_root_markdown_and_is_idempotent(tmp_path
     assert result.current_month == 1
     assert result.undated == ("undated.md",)
     assert not old.exists()
-    assert (tmp_path / "2026" / "06" / "old.md").is_file()
+    assert (tmp_path / "2026" / "Jun" / "old.md").is_file()
     assert current.is_file()
     assert hidden.is_file()
     assert nested.is_file()
@@ -56,7 +56,7 @@ def test_archive_moves_only_prior_month_root_markdown_and_is_idempotent(tmp_path
 
 def test_archive_does_not_overwrite_conflicting_destination(tmp_path):
     source = _write(tmp_path / "same.md", "## 2026-06-10\nMoment: Source\n")
-    destination = _write(tmp_path / "2026" / "06" / "same.md", "different\n")
+    destination = _write(tmp_path / "2026" / "Jun" / "same.md", "different\n")
 
     result = archive_corpus(tmp_path, today=datetime(2026, 7, 1).date())
 
