@@ -459,6 +459,7 @@ def test_corpus_search_explains_combined_search_and_supports_tag_cloud_toggles(
 
     assert response.status_code == 200
     assert ">Enter search</label>" in response.text
+    assert 'placeholder="Search tags or query string"' in response.text
     assert 'aria-label="How corpus search works"' in response.text
     assert "every space-delimited tag must match" in response.text
     assert response.text.count('aria-pressed="true"') == 2
