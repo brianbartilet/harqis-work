@@ -2,7 +2,7 @@
 workflows/hfl/tasks/summarize.py
 
 Weekly rollup of HFL entries — Haiku 4.5 by default. Emits a Markdown
-summary alongside the per-day corpus files (`hfl/_summary-YYYY-Www.md`).
+summary alongside the per-day corpus files (`hfl/YYYY-Www-rollup.md`).
 
 Cost note: pass `model="claude-haiku-4-5-20251001"` from the beat schedule
 (already the default in tasks_config). Do NOT raise it via the Anthropic
@@ -66,6 +66,44 @@ def _format_for_prompt(entries: list[dict[str, str]]) -> str:
         return "(no entries in this window)"
     return "\n\n".join(
         f"### {e['date']} — {e['header']}\n{e['body']}" for e in entries
+    )
+
+
+def _rollup_tags(
+    entries: list[dict[str, str]], iso_year: int, iso_week: int
+) -> tuple[str, ...]:
+    """Return stable rollup tags plus every tag present in source entries."""
+    source_tags = {
+        tag
+        for entry in entries
+        for tag in HflEntry.from_markdown(entry["header"], entry["body"]).tags
+    }
+    base_tags = ("weekly", "summary", f"{iso_year}-W{iso_week:02d}")
+    return (*base_tags, *(tag for tag in sorted(source_tags) if tag not in base_tags))
+
+
+def _rollup_filename(iso_year: int, iso_week: int) -> str:
+    return f"{iso_year}-W{iso_week:02d}-rollup.md"
+
+
+def _render_rollup(
+    summary_text: str,
+    entries: list[dict[str, str]],
+    files: list[Path],
+    *,
+    window_days: int,
+    iso_year: int,
+    iso_week: int,
+) -> str:
+    tags = " ".join(f"#{tag}" for tag in _rollup_tags(entries, iso_year, iso_week))
+    return (
+        f"# Weekly rollup — {iso_year}-W{iso_week:02d}\n"
+        f"Window: last {window_days} days · "
+        f"{entries[0]['date']} → {entries[-1]['date']} · "
+        f"{len(entries)} entries across {len(files)} files\n\n"
+        f"## Tags\n"
+        f"Tags: {tags}\n\n"
+        f"{summary_text}\n"
     )
 
 
@@ -181,16 +219,21 @@ def summarize_hfl_week(
     )
     summary_text = response.content[0].text.strip() if response.content else ""
 
-    iso_year, iso_week, _ = datetime.now().isocalendar()
+    now = datetime.now()
+    iso_year, iso_week, _ = now.isocalendar()
     corpus_dir = resolve_corpus_dir()
-    out_path = corpus_dir / f"_summary-{iso_year}-W{iso_week:02d}.md"
-    header = (
-        f"# HFL weekly summary — {iso_year}-W{iso_week:02d}\n"
-        f"Window: last {window_days} days · "
-        f"{entries[0]['date']} → {entries[-1]['date']} · "
-        f"{len(entries)} entries across {len(files)} files\n\n"
+    out_path = corpus_dir / _rollup_filename(iso_year, iso_week)
+    out_path.write_text(
+        _render_rollup(
+            summary_text,
+            entries,
+            files,
+            window_days=window_days,
+            iso_year=iso_year,
+            iso_week=iso_week,
+        ),
+        encoding="utf-8",
     )
-    out_path.write_text(header + summary_text + "\n", encoding="utf-8")
 
     # Dual-write the rollup as one synthesized entry so the weekly view is
     # queryable via the memory_recall_es MCP alongside the per-day entries
@@ -198,15 +241,15 @@ def summarize_hfl_week(
     # Best-effort — the file write above is the source of truth.
     index_hfl_entry(
         HflEntry(
-            when=datetime.now(),
-            moment=f"HFL weekly summary — {iso_year}-W{iso_week:02d}",
+            when=now,
+            moment=f"Weekly rollup — {iso_year}-W{iso_week:02d}",
             what_happened=summary_text,
             why_it_stayed=(
                 f"Rollup of {len(entries)} entries across {len(files)} "
                 f"files ({entries[0]['date']} → {entries[-1]['date']})."
             ),
             possible_use="weekly-review",
-            tags=("weekly", "summary", f"{iso_year}-W{iso_week:02d}"),
+            tags=_rollup_tags(entries, iso_year, iso_week),
         ),
         source="summarize",
         synthesized=True,

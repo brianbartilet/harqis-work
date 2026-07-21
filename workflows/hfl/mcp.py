@@ -10,7 +10,7 @@ on harqis-server (${HARQIS_DATA_ROOT}). Answers questions like:
   - "what pictures were stored last week"
 
 Tiered resolution (per the approved spec):
-  T1 (always)        HFL corpus daily entries + _summary-*.md in window
+  T1 (always)        HFL corpus daily entries + *-rollup.md in window
   T2 (detail="full") + dumps media inventory + *.md/*.txt under the dumps
                        tree as supplementary context
   T3 (fallback only) if the corpus dir is missing/empty: best-effort scan
@@ -139,7 +139,7 @@ def _in_window(d: date, start: Optional[date], end: Optional[date]) -> bool:
 
 
 def _summary_overlaps(stem: str, start: Optional[date], end: Optional[date]) -> bool:
-    """`_summary-YYYY-Www` — does its ISO week intersect [start, end]?"""
+    """Does a weekly rollup's ISO week intersect [start, end]?"""
     m = re.search(r"(\d{4})-W(\d{1,2})", stem)
     if not m:
         return False
@@ -155,6 +155,14 @@ def _summary_overlaps(stem: str, start: Optional[date], end: Optional[date]) -> 
     return True
 
 
+def _is_weekly_rollup(stem: str) -> bool:
+    """Recognize current rollup names and legacy `_summary-` files."""
+    return bool(
+        re.fullmatch(r"\d{4}-W\d{1,2}-rollup", stem, re.IGNORECASE)
+        or re.fullmatch(r"_summary-\d{4}-W\d{1,2}", stem, re.IGNORECASE)
+    )
+
+
 # ── Collectors ───────────────────────────────────────────────────────────────
 
 def _collect_corpus(
@@ -164,7 +172,7 @@ def _collect_corpus(
     entries: list[dict] = []
     summaries: list[dict] = []
     for f in sorted(corpus_dir.glob("*.md"), reverse=True):
-        if f.stem.startswith("_summary"):
+        if _is_weekly_rollup(f.stem):
             if _summary_overlaps(f.stem, start, end):
                 try:
                     text = f.read_text(encoding="utf-8")

@@ -42,7 +42,7 @@ this scaffold closes.
 | --- | --- | --- | --- |
 | `capture_hfl_entry` | Appends one structured entry to today's corpus file. Empty `moment` is a no-op. | `file:hfl_corpus` | Adhoc — invoked via `.delay()`, an MCP tool, an agent, or a hotkey. The scheduled slot fires Sunday 03:33 with empty kwargs (i.e. is a no-op). |
 | `retrieve_hfl_corpus` | Substring + tag scan over the corpus, optional date filter. Returns up to `k` entries, most recent first. | `es_log` (callers consume the return value) | Adhoc — same pattern as capture. |
-| `summarize_hfl_week` | Weekly Haiku 4.5 rollup of the past N days; writes `_summary-YYYY-Www.md` alongside the daily files. | `file:hfl_summary+es_log` | Sundays 21:00 local. |
+| `summarize_hfl_week` | Weekly Haiku 4.5 rollup of the past N days; writes `YYYY-Www-rollup.md` with searchable tags aggregated from its source entries. | `file:hfl_summary+es_log` | Sundays 21:00 local. |
 | `ingest_chatgpt_activity` | **Primary daily research log.** Auto-discovers the operator's ChatGPT conversations created/updated that day via the ChatGPT web app's private backend (no thread ids), distils the questions asked into ONE corpus entry. Haiku-distilled, raw fallback. No token / no prompts → no entry, no call. | `file:hfl_corpus` | Daily 23:00 local (active — no-op until `CHATGPT_WEB_ACCESS_TOKEN` is set). |
 | `ingest_git_activity` | Distils the day's GitHub commits across recently updated repositories into one bounded entry. Haiku-distilled with a raw fallback; no commits means no entry and no model call. | `file:hfl_corpus+es:hfl-entries` | Daily 00:00 local on the `agent` queue. |
 | `ingest_notes_activity` | Diffs each configured note repository from its saved ingest cursor after a verified host pull. Text notes are split at natural heading/semantic topic transitions (bounded per file and per run), producing one entry per topic; images remain one entry. A summary covers deleted, unsupported, or overflow material. Tags include `#notes #repo-<name> #<core-topic>`; `#dsm` is added only to explicit Scrum daily-standup segments. References include a pinned GitHub line anchor plus the host path. First activation records HEAD without backfilling. | `file:hfl_corpus+es:hfl-entries` | Daily 22:50 local on the `hfl` queue. |
@@ -144,12 +144,12 @@ timeline), `memory_list_media` (photos/videos in a window). The weekly
 ```
 <corpus_root>/
   2026-07-20.md              # current-month files stay at root
-  _summary-2026-W29.md
+  2026-W29-rollup.md
   time-capsule/              # visible, curated time-capsule digests
   2026/
     05/
       2026-05-13.md          # completed months are archived by content date
-      _summary-2026-W20.md
+      2026-W20-rollup.md
     06/
       2026-06-14.md
 ```
