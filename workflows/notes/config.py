@@ -65,7 +65,7 @@ def get_note_repositories(cfg: dict | None = None) -> dict[str, NoteRepository]:
         host_path = str(raw.get("host_path", "")).strip()
         if not remote or not host_path:
             continue
-        base_tags = _as_tuple(raw.get("tags")) or ("notes", "dsm")
+        base_tags = _as_tuple(raw.get("tags")) or ("notes",)
         repositories[str(name)] = NoteRepository(
             name=str(name),
             remote=remote,

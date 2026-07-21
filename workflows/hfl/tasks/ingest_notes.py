@@ -44,6 +44,12 @@ _log = create_logger("hfl.ingest_notes")
 _DEFAULT_HAIKU = "claude-haiku-4-5-20251001"
 _TEXT_EXTS = {".md", ".markdown", ".txt", ".rst", ".org"}
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+_DAILY_SCRUM_HEADING_RE = re.compile(
+    r"(?im)^\s*(?:#{1,6}\s*)?(?:dsm|daily\s+(?:scrum|stand[- ]?up)(?:\s+meeting)?)\s*:?[ \t]*$"
+)
+_DAILY_SCRUM_PATH_RE = re.compile(
+    r"(?i)(?:^|[/\\ _\-[\(])(?:dsm|daily[- _]?(?:scrum|standup))(?:$|[/\\ _\-\]\)])"
+)
 
 
 @dataclass(frozen=True)
@@ -205,6 +211,10 @@ def _fallback_distillation(change: NoteChange) -> dict[str, Any]:
         "section": Path(change.path).stem,
         "start_line": 1 if line_count else 0,
         "end_line": line_count,
+        "is_daily_scrum": bool(
+            _DAILY_SCRUM_HEADING_RE.search(change.content)
+            or _DAILY_SCRUM_PATH_RE.search(change.path)
+        ),
         "moment": f"{action} {Path(change.path).name}",
         "what_happened": excerpt or f"{action} repository artifact `{change.path}`.",
         "why_it_stayed": "",
@@ -229,6 +239,8 @@ def _normalize_segment(
         if key in raw:
             segment[key] = str(raw.get(key, "")).strip()
     segment["skip"] = bool(raw.get("skip", False))
+    if isinstance(raw.get("is_daily_scrum"), bool):
+        segment["is_daily_scrum"] = raw["is_daily_scrum"]
     segment["tags"] = [
         str(tag).strip().lstrip("#") for tag in (raw.get("tags") or [])
         if str(tag).strip()
@@ -387,13 +399,18 @@ def distill_change_summary(
 
 
 def _entry_tags(repository: NoteRepository, distilled: dict[str, Any]) -> list[str]:
-    ordered = ["notes", "dsm", f"repo-{_slug(repository.name)}"]
+    is_daily_scrum = distilled.get("is_daily_scrum") is True
+    ordered = ["notes", f"repo-{_slug(repository.name)}"]
+    if is_daily_scrum:
+        ordered.append("dsm")
     ordered.append(_slug(str(distilled.get("core_topic", ""))))
     ordered.extend(repository.tags)
     ordered.extend(str(tag) for tag in distilled.get("tags") or [])
     out: list[str] = []
     for tag in ordered:
         normalized = _slug(str(tag))
+        if normalized == "dsm" and not is_daily_scrum:
+            continue
         if normalized and normalized not in out:
             out.append(normalized)
     return out[:6]

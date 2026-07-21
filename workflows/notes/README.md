@@ -41,7 +41,7 @@ state_dir = "/Volumes/harqis-one/GIT/.harqis-notes-state"
 remote = "git@github.com:owner/notes.git"
 branch = "master"
 host_path = "/Volumes/harqis-one/GIT/notes"
-tags = ["notes", "dsm"]
+tags = ["notes"]
 include_globs = []
 exclude_globs = [".git/**", ".idea/**", "**/.DS_Store"]
 max_entries = 25
@@ -65,7 +65,9 @@ semantic topic transitions and may become up to `max_topics_per_note` HFL
 entries (default 4). A coherent single-topic note remains one entry; common
 images remain one entry. Each topic entry includes:
 
-- source `notes` and tags `#notes #dsm #repo-<name> #<core-topic>`;
+- source `notes` and tags `#notes #repo-<name> #<core-topic>`;
+- `#dsm` only when the segment explicitly represents a Scrum daily standup
+  (Daily Scrum Meeting), never merely because it came from the notes repo;
 - a GitHub blob reference pinned to the ingested commit;
 - the host-local file path for downstream retrieval;
 - its section label and inclusive source line range in `What happened`;
@@ -93,6 +95,10 @@ model merely to count their latent topics.
   common images are sent to Anthropic when synthesis is enabled.
 - Topic segmentation is model-driven only when synthesis is enabled. Raw
   fallback mode deliberately emits one entry per changed file.
+- `#dsm` is a semantic classification, not a repository default. Model output
+  must set `is_daily_scrum=true`; raw fallback recognizes only explicit DSM,
+  Daily Scrum, or daily-standup headings/path names. The tag assembler strips
+  stale or model-supplied `dsm` tags when that classification is false.
 
 For a read-only view, use the MCP `notes_activity` tool. It lists changed paths
 since the ingest cursor and can optionally synthesize bounded previews without

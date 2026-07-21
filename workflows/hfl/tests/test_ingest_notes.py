@@ -52,8 +52,36 @@ def test_collects_granular_text_and_reference_changes(tmp_path):
 
 def test_required_tags_include_repo_and_core_topic(tmp_path):
     repository, _ = _repository(tmp_path)
-    tags = subject._entry_tags(repository, {"core_topic": "Deep Work", "tags": ["idea"]})
-    assert tags[:4] == ["notes", "dsm", "repo-notes", "deep-work"]
+    tags = subject._entry_tags(
+        repository,
+        {"core_topic": "Deep Work", "tags": ["idea", "dsm"], "is_daily_scrum": False},
+    )
+    assert tags == ["notes", "repo-notes", "deep-work", "idea"]
+
+
+def test_dsm_tag_requires_explicit_daily_scrum_classification(tmp_path):
+    repository, _ = _repository(tmp_path)
+
+    tags = subject._entry_tags(
+        repository,
+        {"core_topic": "standup", "tags": [], "is_daily_scrum": True},
+    )
+
+    assert tags[:4] == ["notes", "repo-notes", "dsm", "standup"]
+
+
+def test_raw_fallback_recognizes_only_explicit_daily_scrum_marker():
+    standup = subject.NoteChange(
+        status="M", path="Logs/today.md", kind="text",
+        content="# Daily Scrum\nYesterday: fixed routing\nToday: deploy\nBlockers: none\n",
+    )
+    scratchboard = subject.NoteChange(
+        status="M", path="Logs/daily-scratchboard.md", kind="text",
+        content="# Work log\nInvestigated routing\n",
+    )
+
+    assert subject._fallback_distillation(standup)["is_daily_scrum"] is True
+    assert subject._fallback_distillation(scratchboard)["is_daily_scrum"] is False
 
 
 def test_normalizes_natural_topic_segments_with_line_bounds(tmp_path):
