@@ -65,7 +65,7 @@ block; the operator chose append over idempotent replace):
 
 A day with **no** dumps appends nothing — its absence is the signal, and
 `--missing-only` reports gaps explicitly. Run ad-hoc via the
-[`/dumps-summary`](../../.claude/skills/dumps-summary/SKILL.md) skill or
+[`/dumps-summary`](../../.agents/skills/dumps-summary/SKILL.md) skill or
 [`scripts/agents/dumps/run_dumps_summary_retro.py`](../../scripts/README.md#run_dumps_summary_retropy)
 on harqis-server (it prints the Markdown to stdout). Pass `--no-md` /
 `write_md=False` to emit the feed/ES summary only.

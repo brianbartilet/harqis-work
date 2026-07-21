@@ -74,8 +74,8 @@ The system should distinguish:
 
 ```text
            ┌─────────────────────────────┐
-           │        Hermes Brain          │
-           │ memory / tools / HARQIS MCP  │
+           │        Hermes Brain         │
+           │ memory / tools / HARQIS MCP │
            └──────────────┬──────────────┘
                           │
         ┌─────────────────┴─────────────────┐

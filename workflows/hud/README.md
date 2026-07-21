@@ -62,6 +62,19 @@ Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for
 | `prompts/daily_radar.md` | HERMES RADAR synthesis prompt (legacy filename retained; combines ideas #1, #3, #4, #12, #17 from `data/AGENTS_IDEAS.md`) |
 | `prompts/desktop_analysis.md` | DESKTOP LOGS evidence-only activity analysis prompt |
 
+## Manual and compatibility tasks
+
+- `broadcast_reload_config` (`tasks/broadcast_reload.py`) is an ad-hoc
+  `workers_broadcast` fanout entry point that records a lightweight HUD-side
+  configuration reload signal on every subscribed worker. It is not in Beat.
+- `get_events_world_check` (`tasks/hud_gpt.py`) builds the GPT/world-events HUD
+  check for the requested countries and timezone. It remains a callable Celery
+  task but is not currently scheduled.
+- `show_ahk_bindings` (`tasks/hud_utils.py`) parses the configured AutoHotkey
+  macro file and renders the AHK bindings widget. It is Windows/Rainmeter-only
+  and not currently scheduled; supply `ahk_path` instead of relying on the
+  legacy local default when invoking it on another host.
+
 ## App Dependencies
 
 | App | Used For |

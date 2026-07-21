@@ -28,24 +28,24 @@ Hermes is the always-on agent layer that sits on top of the harqis-work platform
 Hermes is the control layer in this picture:
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                  CONTROL LAYER                       │
-│                                                      │
-│   Hermes agent runtime ◄──► Claude (reasoning loop)  │
-│        │                         │                   │
-│        │                  harqis-work MCP tools      │
-│        │            (finance, calendar, GPS,         │
-│        │             messaging, trading, cards)      │
-│        ▼                                              │
-│   Hermes cron ◄──► Celery workers (Beat + RabbitMQ)  │
-│   (agent / no_agent)         │                       │
-│                    ┌─────────┴────────┐              │
-│                    │   APPS LAYER     │              │
-│             OANDA  │  YNAB  │ Google  │              │
-│             Jira   │ Trello │ Telegram│              │
-│             TCG    │ Scry   │ OwnTrks │              │
-│                    └──────────────────┘              │
-└─────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│                  CONTROL LAYER                         │
+│                                                        │
+│   Hermes agent runtime ◄──► LLM model (reasoning loop) │
+│        │                         │                     │
+│        │                  harqis-work MCP tools        │
+│        │            (finance, calendar, GPS,           │
+│        │             messaging, trading, cards)        │
+│        ▼                                               │
+│   Hermes cron ◄──► Celery workers (Beat + RabbitMQ)    │
+│   (agent / no_agent)         │                         │
+│                    ┌─────────┴────────┐                │
+│                    │   APPS LAYER     │                │
+│             OANDA  │  YNAB  │ Google  │                │
+│             Jira   │ Trello │ Telegram│                │
+│             TCG    │ Scry   │ OwnTrks │                │
+│                    └──────────────────┘                │
+└────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -68,7 +68,7 @@ separate cross-machine sync repository (that was the OpenClaw model).
 ```
 
 A **repo-local** `.hermes/plans/` directory also exists inside `harqis-work` for plans
-produced by the [`/max-plan`](../../.claude/skills/max-plan/SKILL.md) skill against this
+produced by the [`/max-plan`](../../.agents/skills/max-plan/SKILL.md) skill against this
 repo. Both `.hermes/` (repo-local) and `~/.hermes/` (home) are git-ignored — they are
 machine-local agent state, never committed.
 
@@ -171,7 +171,7 @@ its memory model*, not the platform underneath it.
 
 - [`HERMES-HOST.md`](HERMES-HOST.md) — host deployment, service inventory, worker nodes, and the Hermes agent configuration on the always-on machine.
 - [`AGENTS-TASKS-KANBAN.md`](AGENTS-TASKS-KANBAN.md) — the Kanban orchestrator, agent profiles, permission model, and MCP bridge.
-- [`AI-TOOLS-WIRING.md`](AI-TOOLS-WIRING.md) — how Claude Code and Hermes are wired and where each one writes.
-- [`SKILLS-GUIDE.md`](SKILLS-GUIDE.md) — Claude Code skills reference and Hermes integration patterns.
+- [`AI-TOOLS-WIRING.md`](AI-TOOLS-WIRING.md) — how reasoning-model harnesses and Hermes are wired and where each one writes.
+- [`SKILLS-GUIDE.md`](SKILLS-GUIDE.md) — model-neutral agent skills and Hermes integration patterns.
 - [`mcp/README.md`](../../mcp/README.md) — the MCP tool catalog Hermes agents call.
 - [`OPENCLAW-SYNC.md`](OPENCLAW-SYNC.md) — **deprecated** legacy reference for the old OpenClaw sync model.

@@ -52,7 +52,7 @@ You are orchestrating a weekly improvement PR for HARQIS-work.
 
 ## Context
 - Repo: /Users/harqis-one/GIT/harqis-work
-- Skills context: /harqis-work/skills (load .claude/skills/ to see manifesto-aligned improvements)
+- Skills context: /harqis-work/skills (load canonical .agents/skills/ to see manifesto-aligned improvements)
 - Agents context: /harqis-work/agents/projects (Kanban orchestrator, task agents)
 
 ## Task

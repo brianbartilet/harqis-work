@@ -5,8 +5,8 @@ Turn a Trello or Jira board into an AI task interface. Humans create cards; Clau
 **Related docs:**
 - [HERMES.md](HERMES.md) — Hermes agent runtime, `~/.hermes/` layout, MCP + cron
 - [HERMES-HOST.md](HERMES-HOST.md) — host deployment, service inventory, worker nodes
-- [SKILLS-GUIDE.md](SKILLS-GUIDE.md) — Claude Code skills and Hermes integration
-- [AI-TOOLS-WIRING.md](AI-TOOLS-WIRING.md) — Claude Code and Hermes setup
+- [SKILLS-GUIDE.md](SKILLS-GUIDE.md) — model-neutral agent skills and Hermes integration
+- [AI-TOOLS-WIRING.md](AI-TOOLS-WIRING.md) — reasoning-model harness and Hermes setup
 - [mcp/README.md](../../mcp/README.md) — full MCP tool catalog (all 16 app modules)
 
 ---

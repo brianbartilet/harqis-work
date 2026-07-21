@@ -21,6 +21,10 @@ workflows/mobile/
 ├── android/
 │   └── tasks/
 │       └── capture.py          # Main Android screen logger loop
+├── emulator/
+│   ├── tasks/manage.py         # On-demand AVD, device, wireless ADB, and scrcpy Celery tasks
+│   ├── tasks_config.py         # Empty Beat export; tasks are manual by default
+│   └── README.md               # Complete emulator task surface and setup
 └── __init__.py
 ```
 

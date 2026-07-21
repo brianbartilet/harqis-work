@@ -7,8 +7,8 @@ memory store.
 
 **Related docs:**
 - [HERMES.md](HERMES.md) — Hermes agent runtime, `~/.hermes/` layout, MCP + cron
-- [AI-TOOLS-WIRING.md](AI-TOOLS-WIRING.md) — Claude Code orientation and Hermes wiring
-- [SKILLS-GUIDE.md](SKILLS-GUIDE.md) — Claude Code skills and Hermes integration
+- [AI-TOOLS-WIRING.md](AI-TOOLS-WIRING.md) — reasoning-model harness and Hermes wiring
+- [SKILLS-GUIDE.md](SKILLS-GUIDE.md) — model-neutral agent skills and Hermes integration
 - [OS-COMPATIBILITY.md](OS-COMPATIBILITY.md) — Cross-platform notes
 - [mcp/README.md](../../mcp/README.md) — Full MCP tool catalog
 - [VPS-CLUSTER-AGENT-DESIGN.md](VPS-CLUSTER-AGENT-DESIGN.md) — Cluster architecture and scaling
@@ -26,7 +26,7 @@ memory store.
 5. [Host Deployment (Mac Mini / Primary Server)](#5-host-deployment-mac-mini--primary-server)
 6. [Hermes Agent Configuration](#6-hermes-agent-configuration)
 7. [MCP Server & Tools](#7-mcp-server--tools)
-8. [Claude Code Skills Integration](#8-claude-code-skills-integration)
+8. [Agent Skills Integration](#8-agent-skills-integration)
 9. [Worker Nodes & Networking](#9-worker-nodes--networking)
 10. [Multi-Agent Topology](#10-multi-agent-topology)
 11. [Monitoring & Observability](#11-monitoring--observability)
@@ -427,7 +427,7 @@ Or, from any Claude Code session opened in the repo (OS-agnostic):
 /deploy-harqis host --down
 ```
 
-The skill walks through every step, validates prerequisites before making changes, and surfaces a per-component log path on any failure. See `.claude/skills/deploy-harqis/SKILL.md` for the full reference.
+The skill walks through every step, validates prerequisites before making changes, and surfaces a per-component log path on any failure. See `.agents/skills/deploy-harqis/SKILL.md` for the full reference.
 
 ### 4.4 Daemon scripts
 
@@ -754,11 +754,14 @@ Then register in `mcp/server.py` and add config to `apps_config.yaml`.
 
 ---
 
-## 8. Claude Code Skills Integration
+## 8. Agent Skills Integration
 
-Claude Code skills (slash commands in `.claude/skills/`) and Hermes share the same host
-filesystem. Skills can read Hermes memory (`~/.hermes/`) as live dynamic context, inject live
-service data via MCP, and write back to the memory store.
+Canonical agent skills in `.agents/skills/` and Hermes share the same host
+filesystem. They can guide Claude, OpenAI models, and other reasoning-model
+agents whose harness can load the instructions and provide the required tools.
+Skills can read Hermes memory (`~/.hermes/`) as live dynamic context, inject
+service data via MCP, and write back to the memory store. Claude Code consumes a
+generated compatibility copy under `.claude/skills/`.
 
 See **[SKILLS-GUIDE.md](SKILLS-GUIDE.md)** for the full skills reference and Hermes
 integration patterns.

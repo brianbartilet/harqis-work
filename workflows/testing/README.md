@@ -68,3 +68,23 @@ seconds (default 5) pause between consecutive API generations.
 
 **AI prompt:** `workflows/testing/prompts/test_farm.md` (per-ticket user message;
 the durable Gherkin conventions live in `_SYSTEM_PROMPT` in `tasks/test_farm.py`).
+
+### `send_test_farm_report` (`tasks/test_farm_email.py`)
+
+**Goal:** Deliver the existing `logs/BDD-TEST-FARM.md` without performing a
+second model-generation pass.
+
+**Data flow:** The task runs
+`scripts/agents/testing/daily_test_farm_email.py --skip-generate
+--no-claude-preflight`, renders the current Markdown, emails it through
+`GOOGLE_GMAIL_SEND`, and posts a Telegram completion notice.
+
+**Schedule:** Mondays at 10:30, thirty minutes after `run_test_farm`.
+
+**Queue/OS:** `WorkflowQueue.PEON`, pinned to Windows so generation and delivery
+share the same file and credentials. The Beat entry expires after eight hours.
+
+**Key kwargs:** `skip_generate` (default `True`), `dry_run`, `timeout` (default
+300 seconds), and `extra_args`. A missing script, timeout, or non-zero process
+exit raises so `@log_result` records the failure. Use `dry_run=True` to render
+without sending.

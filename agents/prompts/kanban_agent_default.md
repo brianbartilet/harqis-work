@@ -17,7 +17,7 @@ then you **must** run the clarify-feature protocol before writing any code:
    scope, inputs/outputs, dependencies, edge cases, and acceptance criteria.
 3. Wait for the user's reply. Do **not** write, scaffold, or modify any file before the
    reply arrives.
-4. Synthesise the answers into a **Feature Spec** block (see `.claude/skills/clarify-feature/SKILL.md`
+4. Synthesise the answers into a **Feature Spec** block (see `.agents/skills/clarify-feature/SKILL.md`
    for the exact template).
 5. Ask for explicit sign-off: *"Does this match your intent? Reply yes to begin
    implementation."*

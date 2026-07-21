@@ -10,14 +10,28 @@ so the MCP tools, the CLI, and these tasks share one implementation.
 |---|---|
 | `start_emulator` | Boot an AVD from a named profile (+ per-call overrides); optionally wait for boot. |
 | `ensure_emulator` | Idempotent — start the profile's AVD only if it isn't already running. Safe to schedule. |
+| `spawn_instance` | Create an AVD when needed and launch a parallel instance on an explicit or free console port. |
+| `clone_instance` | Clone an AVD's persistent state and optionally start the clone. Stop the source first for a consistent copy. |
 | `stop_emulator` | Gracefully stop a running emulator by serial (`adb emu kill`). |
 | `list_emulators` | Running emulators + installed AVDs on this host. |
 | `create_avd` | Create an AVD from a profile and/or explicit image/device. |
+| `list_devices` | List attached physical, wireless, and emulator devices; optionally enrich device metadata. |
+| `mirror_device` | Start a scrcpy mirror/control process for a selected device. |
+| `stop_mirror` | Stop all tracked scrcpy processes or only those for one serial. |
+| `device_up` | Prefer USB, fall back to a wireless target, then optionally start mirroring. |
+| `connect_device` | Run `adb connect` for a wireless-debugging target. |
+| `pair_device` | Perform one-time Android wireless-debugging pairing with a pairing code. |
+| `tcpip_device` | Switch a USB-connected device to TCP/IP ADB and return its connection hint. |
 
 All tasks self-guard: on a worker without the Android SDK they return
 `{"skipped": True, ...}` instead of failing (the "any host with the SDK" model —
 a competing-consumers pickup on a non-SDK box no-ops). Each is `@log_result`-ed
 to Elasticsearch.
+
+Lifecycle, cloning, pairing, and mirroring operations change emulator/device
+state. Confirm the target AVD, serial, port, and pairing destination before
+dispatch. Invalid profiles and command failures return structured failure
+payloads; SDK absence is a clean skip.
 
 ## Schedule
 
@@ -40,6 +54,9 @@ python scripts/agents/emulator/run_emulator.py create --profile pixel7-test
 from workflows.mobile.emulator.tasks.manage import start_emulator
 start_emulator.delay(profile="pixel7-test")
 ```
+
+Celery calls use the default routing unless the caller supplies a queue. There
+is no active Beat entry and therefore no scheduled queue or OS declaration.
 
 ## Setup
 

@@ -576,6 +576,8 @@ Section to add/create:
 
 **Queue:** `WorkflowQueue.<QUEUE>`
 
+**OS:** `<windows / macos / linux / cross-platform>`
+
 **Required config keys:** `<APP_A>`, `<APP_B>`
 
 **Required env vars:** `<ENV_VAR_1>`, `<ENV_VAR_2>`
@@ -586,7 +588,20 @@ Section to add/create:
 ```
 
 **AI prompt:** `workflows/<category>/prompts/<task_name>.md` *(if applicable)*
+
+**Outputs / side effects:** <files, indexes, messages, external mutations, or return payload>
+
+**Failure behavior:** <retry, raise/log, clean no-op, expiry, and partial-output behavior>
 ```
+
+Document every public `@SPROUT.task`, including tasks that are disabled or
+manual-only. Clearly label whether the task is active in Beat, parked/disabled,
+or callable only on demand. Update the category's task/file tables when they
+exist instead of adding a disconnected duplicate list.
+
+Then run the `/update-docs` checklist against the category README and
+`workflows/README.md`. If this is a new category, add it to the root README's
+workflow inventory/directory tree where those sections enumerate categories.
 
 ---
 
@@ -621,6 +636,11 @@ Workflow created. Manual steps to activate:
   Testing:
   [ ] pytest workflows/<category>/tests/test_<task_name>.py -v -m "not integration"
   [ ] pytest workflows/<category>/tests/test_<task_name>.py -v -m integration  (live, needs creds)
+
+  Documentation:
+  [ ] workflows/<category>/README.md covers task status, apps/data flow, schedule, queue/OS, config, outputs, and failure behavior
+  [ ] /update-docs workflows/<category>/README.md completed
+  [ ] workflows/README.md and root workflow inventory checked for category/task drift
 ```
 
 ---

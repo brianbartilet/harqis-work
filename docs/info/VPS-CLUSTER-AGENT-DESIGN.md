@@ -43,13 +43,13 @@ Human → Trello / Jira Card
              │  Celery tasks over encrypted WireGuard tunnel
              │
     ┌────────┴──────────────────────────────────────┐
-    │              Cloud VPS Worker Pool             │
+    │              Cloud VPS Worker Pool            │
     │                                               │
-    │  ┌──────────────┐  ┌──────────────┐          │
-    │  │  VPS Node 1  │  │  VPS Node 2  │  ...     │
-    │  │  agent:code  │  │  agent:write │          │
-    │  │  2 vCPU/4GB  │  │  2 vCPU/4GB  │          │
-    │  └──────────────┘  └──────────────┘          │
+    │  ┌──────────────┐  ┌──────────────┐           │
+    │  │  VPS Node 1  │  │  VPS Node 2  │  ...      │
+    │  │  agent:code  │  │  agent:write │           │
+    │  │  2 vCPU/4GB  │  │  2 vCPU/4GB  │           │
+    │  └──────────────┘  └──────────────┘           │
     │                                               │
     │  Auto-scaled: add/remove nodes on demand      │
     └───────────────────────────────────────────────┘

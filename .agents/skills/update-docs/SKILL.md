@@ -13,6 +13,8 @@ Sweep the root `README.md` (or a targeted doc) against the live state of the cod
 
 - User asks to **update**, **review**, **check**, or **refresh** docs / documentation / a README
 - Right after adding or removing an app, workflow, queue, agent profile, slash command, or major component
+- After adding, renaming, or removing anything under `.agents/skills/`
+- After changing a frontend module's user-facing label while retaining legacy routes or config keys
 - Before cutting a release or onboarding someone new
 
 ## Argument
@@ -41,6 +43,7 @@ For each H2/H3 section, cross-check against the table below. If a section isn't 
 | **Beat schedule** | `workflows/config.py` `CONFIG_DICTIONARY = …` line | Missing `WORKFLOW_*` modules in the union |
 | **Desktop HUD** | `workflows/hud/tasks/`, `apps/rainmeter/` skin layouts | New/removed panels, schedule changes |
 | **Frontend Dashboard** | `frontend/registry.py` `TASK_REGISTRY`, `frontend/main.py` routes | Task count, panel registration |
+| **Agent Skills** | `.agents/skills/*/SKILL.md`, `docs/info/SKILLS-INVENTORY.md`, `docs/info/SKILLS-GUIDE.md` | Missing/stale inventory rows; non-canonical `.claude/skills` paths; model-specific claims presented as portable behavior |
 | **Architecture · Directory Structure** | Top-level dirs (`apps/`, `workflows/`, `agents/`, `mcp/`, `frontend/`, `scripts/`, `core/`, `docs/`) and their immediate children | New top-level dirs, renames, moved files (e.g. `machines.toml` lives at root, not under `scripts/`) |
 | **Platform Runtime** | `scripts/deploy.py` `SERVICES` dict, `scripts/launch.py` subcommands, `core/apps/sprout/` | New services, lifecycle order, runtime startup |
 | **Configuration · Environment Variables** | `.env/apps.env` (or `.example`), `core/config/env_variables.py` `ENV_*` constants | New env vars introduced (especially `WORKFLOW_*`, `FLOWER_*`, `CONFIG_*`) |
@@ -59,6 +62,21 @@ If `<target>` is a path other than the root README, walk that file's sections in
 | `docs/info/HERMES-HOST.md` | `scripts/deploy.py`, `machines.toml`, Docker compose, `apps_config.yaml` |
 | `docs/info/HERMES.md` | `scripts/agents/*` (lessons/cron), `~/.hermes/` usage, `hermes mcp` references |
 | `frontend/README.md` | `frontend/registry.py`, `frontend/main.py` |
+| `docs/info/SKILLS-INVENTORY.md` | Directory names and frontmatter in `.agents/skills/*/SKILL.md` |
+| `docs/info/SKILLS-GUIDE.md` | `.agents/skills/`, `scripts/agents/repo-quality/sync_agent_skills.py`, runtime compatibility settings |
+
+For app/workflow coverage sweeps:
+
+- Every direct app directory containing source must have `apps/<app>/README.md`.
+  Validate its config, env vars, service/MCP surface, side effects, and tests
+  against source. Ignore cache directories.
+- Every workflow category containing tasks or `tasks_config.py` must have
+  `workflows/<category>/README.md`. Every public `@SPROUT.task` must appear in
+  that category README as scheduled, disabled, or manual/ad-hoc, with queue/OS,
+  config, output, and failure behavior where applicable.
+- For user-facing frontend renames, update display terminology while retaining
+  legacy route/package/env identifiers when the code still uses them. Explain
+  that compatibility boundary once in the module section.
 
 ## Cross-reference fan-out
 
@@ -80,7 +98,12 @@ Apply the same drift check to those files. **Skip the cross-reference step** whe
    - `Beat schedule: 3 modules in CONFIG_DICTIONARY, 5 in workflows/. Missing: WORKFLOW_SOCIAL, WORKFLOW_KNOWLEDGE.`
 5. **Apply the smallest-possible edits** with the Edit tool. Preserve table column order, voice, and existing markup style.
 6. **Run cross-reference fan-out** (unless `--related-only`).
-7. **Propose a commit message** in the result:
+7. **Validate repository skills when relevant.** Compare canonical skill
+   directories with the inventory and run
+   `python scripts/agents/repo-quality/sync_agent_skills.py --check`. If it
+   reports generated-copy drift, refresh with the same command without
+   `--check`; never edit `.claude/skills/` directly.
+8. **Propose a commit message** in the result:
    - One section: `docs(repo): refresh <Section Name> in README`
    - Multiple sections: `docs(repo): refresh README sections from code state`
    - Targeted file: `docs(<scope>): refresh <filename> from code state`
@@ -96,3 +119,8 @@ If `--dry-run`, stop after step 4 (don't apply edits).
 - **Skip ambiguous descriptions** — if the code says "REST API" but the doc says "REST (native SDK)", don't auto-flatten unless the SDK is genuinely gone.
 - **Don't touch hand-written prose paragraphs** unless they reference a renamed/removed file or function.
 - **Never delete a section** to "clean up." If a section is fully obsolete, surface it in the report and ask.
+- **Use `.agents/skills` as the canonical path.** Mention `.claude/skills` only
+  when explicitly explaining the generated Claude Code compatibility copy.
+- **Keep model-neutral claims precise.** Skills can guide Claude, OpenAI, and
+  other reasoning models, but discovery, invocation, permissions, and tools
+  depend on the active harness.

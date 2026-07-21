@@ -12,7 +12,7 @@ The frontend currently exposes five modules:
 | Manifesto | `/manifesto` | Renders `docs/MANIFESTO.md` and the HARQIS guiding principles. |
 | Workflows | `/workflows` | Displays Celery workflow categories, task triggers, schedules, status, and run history. |
 | Apps | `/applications` | Inventories `apps/*`, renders documentation, and runs controlled pytest checks using host configuration. |
-| HFL Corpus | `/hfl-corpus` | Browses and searches the recursive Homework-for-Life Markdown corpus and its references. |
+| Activity Corpus | `/hfl-corpus` | Browses and searches HARQIS activity logs, based on the Homework for Life reflection practice, and their references. |
 
 `/dashboard` remains as a compatibility redirect to `/home`.
 
@@ -160,7 +160,7 @@ summarize existing repository responsibilities:
 
 - Workflows are the Celery orchestration and scheduling layer.
 - Applications are reusable integrations with external systems.
-- HFL Corpus is the searchable personal and operational knowledge layer.
+- Activity Corpus is the searchable HARQIS activity-log layer, based on the Homework for Life reflection practice.
 
 The displayed descriptions are maintained in the module registry and grounded
 in the root README and manifesto; no AI call is made at render time.
@@ -260,7 +260,11 @@ These tests may mutate live external services. The safe policy and warning
 dialogs are operational boundaries, not proof that an upstream test is
 non-destructive.
 
-## HFL Corpus Module
+## Activity Corpus Module
+
+The user-facing name is **Activity Corpus**. Internal route, package, API, and
+environment names retain `hfl` / `HFL_*` for compatibility with the underlying
+Homework for Life ingestion and persistence workflow.
 
 ### Corpus resolution
 

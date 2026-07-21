@@ -399,6 +399,10 @@ Follow `apps/.template/README.md` structure exactly. Required sections:
 7. **Tests** — run commands, what credentials are needed
 8. **Notes** — rate limits, OAuth flows, pagination, quirks, known issues
 
+The README is mandatory even for local/no-config MCP-only apps. In that case,
+document that no external credentials are required, enumerate the actual MCP
+tools, and state the filesystem/network or destructive-operation boundaries.
+
 ---
 
 ## Step 14 — Update root `README.md`  ← **MANDATORY — never skip**
@@ -425,6 +429,11 @@ Read `README.md`. Make **three** targeted edits. These edits are **required** re
    - All values **must be blank** — never paste real keys into README.md.
    - Match the env var names you added to `.env/apps.env` in Step 11 exactly.
    - For local/no-config apps (no env vars), skip this edit.
+
+After these edits, invoke the `/update-docs` checklist against
+`apps/APP_NAME/README.md` and the root README. Confirm that every source-backed
+directory in `apps/` still has a README and that current operational skill links
+use canonical `.agents/skills` paths.
 
 ---
 
@@ -474,3 +483,5 @@ If `--workflow <workflow_name>` was passed, after completing all steps above run
 - [ ] **Root `README.md` App Inventory row added** (alphabetical, under `## App Inventory`) ← easy to forget
 - [ ] **Root `README.md` Directory Structure `apps/` line added** (alphabetical) ← easy to forget
 - [ ] **Root `README.md` Configuration block updated** with the new env var(s), values blank ← easy to forget
+- [ ] `/update-docs apps/APP_NAME/README.md` drift sweep completed
+- [ ] Every source-backed `apps/*` directory still has a README (ignore caches/templates as appropriate)

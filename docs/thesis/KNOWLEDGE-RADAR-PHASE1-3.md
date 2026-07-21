@@ -51,10 +51,10 @@ retrieval into a structured, cited onboarding brief whose sections are exactly
 
 ```
             ┌─────────────── deterministic (entities.py) ───────────────┐
-text  ──▶   JIRA keys · PR refs · service names · acronyms · URLs        │  hard links
-            └────────────────────────────────────────────────────────────┘
+text  ──▶   JIRA keys · PR refs · service names · acronyms · URLs       │  hard links
+            └───────────────────────────────────────────────────────────┘
             ┌─────────────── semantic (embed + sqlite_vec KNN) ──────────┐
-query ──▶   cosine similarity over RETRIEVAL_QUERY/DOCUMENT vectors       │  fuzzy links
+query ──▶   cosine similarity over RETRIEVAL_QUERY/DOCUMENT vectors      │  fuzzy links
             └────────────────────────────────────────────────────────────┘
 ```
 

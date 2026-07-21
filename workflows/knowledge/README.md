@@ -138,6 +138,19 @@ workflows/knowledge/
 `knowledge_scan_watchlist`. Confluence has its own `confluence_search` /
 `confluence_get_page` / `confluence_list_spaces`.
 
+## Manual Celery wrappers
+
+- `topic_map_task` wraps `topic_map()` for queued/ad-hoc execution. Pass
+  `topic`, `k`, `model`, and `max_tokens`; it retrieves related material and
+  returns the cited topic brief. It is not exported in the active Beat schedule.
+- `topic_scan_task` wraps `topic_scan()` for queued/ad-hoc watchlist scans. Pass
+  `watchlist_id`, `k`, and `min_similarity`; it returns ranked match cards. It
+  is not exported in the active Beat schedule.
+
+These wrappers use the same persistent vector store and model/provider settings
+as their direct Python counterparts. Empty identifiers or topics should be
+treated as caller errors rather than broad-scan requests.
+
 ## Run it once, locally
 
 Bootstrap env first (see the `harqis-env-context` skill) so `${...}` placeholders

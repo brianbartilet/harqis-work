@@ -74,13 +74,13 @@ At its core the platform has three layers:
 
 ## AI Agents
 
-HARQIS-Work includes a layer of Claude-powered AI agents that go beyond scheduled tasks — they act autonomously on Kanban cards, respond to conversational inputs, and use all connected app integrations as tools.
+HARQIS-Work includes a reasoning-model agent layer that goes beyond scheduled tasks — agents act autonomously on Kanban cards, respond to conversational inputs, and use connected app integrations as tools. The same repository skills can guide Claude, OpenAI models, and other capable reasoning models when their agent harness supports loading repository instructions and tools.
 
-### Claude Code Skills (`.claude/skills/`)
+### Agent Skills (`.agents/skills/`)
 
 > Full reference: [`docs/info/SKILLS-INVENTORY.md`](docs/info/SKILLS-INVENTORY.md)
 
-**Skills are slash commands that build the three core repo features for you: app integrations, workflows, and HUD widgets.** Open any Claude Code session in the repo and type `/<skill-name>` — Claude executes a multi-step recipe end-to-end (no step-by-step prompting), guided by the skill's `SKILL.md` under `.claude/skills/<name>/`. Every artefact in `apps/`, `workflows/`, and the Rainmeter HUD started life as a single slash command; the skill encodes the file layout, decorator stack, registry wiring, and tests so each new piece lands consistent with what's already there.
+**Skills are reusable agent playbooks for building and operating the repository's core features: app integrations, workflows, HUD widgets, deployment, testing, and maintenance.** The canonical, source-controlled definition is `.agents/skills/<name>/SKILL.md`. A compatible agent can invoke a skill by name (often as `/<skill-name>` or `$<skill-name>`) or load its instructions directly; exact discovery and invocation depend on the runtime. Claude compatibility files under `.claude/skills/` are generated from `.agents/skills/` and are not a second source of truth.
 
 #### Building the core features
 
@@ -254,21 +254,21 @@ Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and 
 
 ### Workflow Inventory
 
-| Workflow | Status | Tasks | Description |
+| Workflow | Status | Celery task entry points | Description |
 |----------|--------|-------|-------------|
-| `hud` | Active | 19 | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins |
-| `purchases` | Active | 5 | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
+| `hud` | Active | 23 | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins, host fallbacks, and manual compatibility tasks |
+| `purchases` | Active | 8 | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
 | `desktop` | Active | 8 | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
-| `hfl` | Active | 12 | Homework-for-Life: distributed capture/ingest → canonical Mac corpus + Elasticsearch, with durable worker outbox replay |
-| `knowledge` | Active | 7 | RAG / knowledge base — Notion → vector-store ingest, on-demand `answer` (Haiku-pinned), MCP knowledge tools |
-| `dumps` | Active | 5 | Daily dump collection — fanout per-node ship + harqis-server pull (Android/Termux) → analysis |
+| `hfl` | Active | 16 | Homework-for-Life activity capture/ingest → canonical corpus + Elasticsearch, with durable worker outbox replay |
+| `knowledge` | Guarded active | 9 | Multi-source RAG ingest, cited answers, cross-link reports, and on-demand topic mapping/scanning |
+| `dumps` | Active | 3 | Daily dump collection — fanout per-node ship + harqis-server pull (Android/Termux) → analysis |
 | `social` | Active | 1 | Monthly LinkedIn post — git history → Claude → LinkedIn draft + Gmail notification |
-| `tcg` | Active | 1 (manual) | Pokedex proxy-printing pipeline (MPC) — manual/pytest-triggered, ships empty beat dict |
-| `testing` | Active | 2 | Test farm — headless `/generate-gherkin-scenarios` against Jira boards (Max subscription, weekdays 09:00) |
+| `tcg` | Manual | 6 | Pokedex proxy-printing pipeline (MPC) — manual/pytest-triggered, ships an empty Beat dict |
+| `testing` | Active | 3 | Test farm generation, report delivery, and supporting test task entry points |
 | `workers` | Active | 1 | Worker-pool fanout — each worker reports its own location to the `harqis-worker-locations` ES index |
-| `mobile` | Active | 1 (unscheduled) | Android screen capture and OCR logging |
-| `finance` | Stub | 0 | No tasks defined |
-| `n8n` | Utilities | — | Shell utilities and ngrok helpers for n8n integration |
+| `mobile` | On-demand | 14 | Android SDK/AVD/device/scrcpy Celery controls; also includes a standalone Termux screen logger |
+| `finance` | Manual | 1 | Parse bank-statement PDFs and import categorized transactions into YNAB |
+| `n8n` | Utilities | 0 | Shell utilities and ngrok helpers for n8n integration |
 
 ### Celery Task Queues
 
@@ -459,11 +459,11 @@ harqis-work/
 │   ├── queues.py                   # WorkflowQueue enum + queue topology
 │   ├── desktop/                    # Git pulls, window mgmt, file sync
 │   ├── dumps/                      # Daily dump collection (Android/Termux → harqis-server)
-│   ├── finance/                    # Stub — no tasks yet
+│   ├── finance/                    # Manual PDF-to-YNAB transaction import
 │   ├── hfl/                        # Homework-for-Life capture/ingest/express pipeline
-│   ├── hud/                        # Desktop HUD tasks (19 tasks)
+│   ├── hud/                        # Desktop HUD, fallback, and compatibility tasks
 │   ├── knowledge/                  # RAG / knowledge-base ingest and query workflows
-│   ├── mobile/                     # Android screen capture
+│   ├── mobile/                     # Android screen capture plus emulator/device controls
 │   ├── n8n/                        # n8n utility helpers
 │   ├── purchases/                  # TCG card resale pipeline
 │   ├── social/                     # Monthly LinkedIn posting

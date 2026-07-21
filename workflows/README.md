@@ -116,14 +116,16 @@ Queue names live in `workflows/queues.py`. The wire-level topology (which queues
 | `agent` | Direct | AI ingest / RAG / agent dispatch (e.g. `workflows.knowledge.tasks.*`). |
 | `worker` | Direct | Generic background worker pool — VPS nodes default here. |
 | `n8n` | Direct | n8n container ops (backup / restore / deploy) — pinned to `harqis-server` only. |
+| `hfl` | Direct | Canonical Homework-for-Life capture, ingest, persistence, summarization, and recall on `harqis-server`. |
 | `default_broadcast` | **Fanout** | Cluster-wide jobs every subscribed node must run locally (e.g. local cache invalidation, config reload). |
 | `hud_broadcast` | **Fanout** | HUD-level fanout — `workflows.hud.tasks.broadcast_*` (auto-routed); reload skin config / refresh-all-HUDs cluster-wide. |
-| `workers_broadcast` | **Fanout** | Reserved — declared in enum, no route yet. |
+| `workers_broadcast` | **Fanout** | `workflows.workers.tasks.broadcast_*`; every subscribed worker reports or performs its own local worker action. |
 | `agents_broadcast` | **Fanout** | Reserved — declared in enum, no route yet. |
+| `hfl_broadcast` | **Fanout** | HFL outbox/capture operations that must run independently on every subscribed worker. |
 
 ### Optional `os` annotation in beat options
 
-Beat entries may include an `"os"` key listing the platforms where the task can run, e.g. `"os": ["windows"]`, `"os": ["macos", "linux"]`, or omit it for cross-platform. **Informational only** — Celery does not enforce it. The `/manage-queues` skill reads these labels to surface routing/OS mismatches (e.g. a `windows`-only task on a queue whose only consumer is a Mac box). See `.claude/skills/manage-queues/SKILL.md` for the heuristic fallback when no annotation is present.
+Beat entries may include an `"os"` key listing the platforms where the task can run, e.g. `"os": ["windows"]`, `"os": ["macos", "linux"]`, or omit it for cross-platform. **Informational only** — Celery does not enforce it. The `/manage-queues` skill reads these labels to surface routing/OS mismatches (e.g. a `windows`-only task on a queue whose only consumer is a Mac box). See `.agents/skills/manage-queues/SKILL.md` for the heuristic fallback when no annotation is present.
 
 ### Direct vs fanout — decision rule
 
