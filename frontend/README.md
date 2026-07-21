@@ -283,9 +283,11 @@ Local path precedence:
 2. `HFL_CORPUS_PATH`
 3. `<repo>/logs/hfl`
 
-Every `.md` file below the resolved root is indexed recursively. This includes
-daily entries, time capsules, nested directories, and miscellaneous Markdown
-logs. The frontend never edits, moves, or deletes corpus content.
+Every `.md` file below the resolved root is indexed recursively except files
+inside dot-directories such as `.migrations` and `.media-ingest-state`. This
+includes daily entries, the visible `time-capsule/` directory, `YYYY/MM/`
+archives, and miscellaneous Markdown logs. The frontend never edits, moves, or
+deletes corpus content.
 
 ### Metadata
 

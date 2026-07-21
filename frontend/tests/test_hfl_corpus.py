@@ -89,6 +89,22 @@ def test_recursive_index_extracts_dates_tags_and_references(tmp_path, monkeypatc
     assert documents[0].references == ("https://example.com/source",)
 
 
+def test_recursive_index_excludes_hidden_directories(tmp_path, monkeypatch):
+    _write_visible = tmp_path / "visible" / "2026-07-10.md"
+    _write_visible.parent.mkdir()
+    _write_visible.write_text("## 2026-07-10\nMoment: Visible\n", encoding="utf-8")
+    hidden = tmp_path / ".migrations" / "2026-06-01.md"
+    hidden.parent.mkdir()
+    hidden.write_text("## 2026-06-01\nMoment: Hidden\n", encoding="utf-8")
+    monkeypatch.setattr(corpus_module, "resolve_corpus_root", lambda: tmp_path)
+
+    documents = CorpusIndex(ttl_seconds=0).documents(force=True)
+
+    assert [document.relative_path for document in documents] == [
+        "visible/2026-07-10.md"
+    ]
+
+
 def test_recursive_index_ranks_top_10_tags_by_entry_count(tmp_path, monkeypatch):
     source = tmp_path / "2026-07-10.md"
     entries = []

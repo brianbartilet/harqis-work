@@ -143,10 +143,26 @@ timeline), `memory_list_media` (photos/videos in a window). The weekly
 
 ```
 <corpus_root>/
-  2026-05-13.md              # one file per day, newest entry first
-  2026-05-14.md
-  _summary-2026-W20.md       # weekly summary written by summarize_hfl_week
+  2026-07-20.md              # current-month files stay at root
+  _summary-2026-W29.md
+  time-capsule/              # visible, curated time-capsule digests
+  2026/
+    05/
+      2026-05-13.md          # completed months are archived by content date
+      _summary-2026-W20.md
+    06/
+      2026-06-14.md
 ```
+
+The silent Hermes job `Monthly HFL corpus archive` runs at 01:00 on the first
+day of each month. It executes
+`scripts/agents/hfl/archive_corpus.py` against the canonical root, moving only
+prior-month Markdown files directly under the root into `YYYY/MM/`. Date
+selection uses frontmatter creation/date fields, Markdown/HFL title dates,
+ISO-week summary titles, then filename dates; filesystem update time is never
+used. Hidden files, hidden directories, symlinks, undated files, current-month
+files, and destination conflicts are left untouched. The Activity Corpus UI
+indexes the resulting archive recursively but excludes dot-directories.
 
 The production corpus root is `/Volumes/harqis-data/hfl` on
 `harqis-server`. It is the only writable corpus. Other workers keep failed

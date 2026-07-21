@@ -264,6 +264,9 @@ class CorpusIndex:
             documents: list[CorpusDocument] = []
             if root.exists():
                 for path in sorted(root.rglob("*.md"), key=lambda item: item.as_posix().lower()):
+                    relative = path.relative_to(root)
+                    if any(part.startswith(".") for part in relative.parts[:-1]):
+                        continue
                     try:
                         text = path.read_text(encoding="utf-8")
                         created, tags, references, tag_counts, entry_count = _metadata(
