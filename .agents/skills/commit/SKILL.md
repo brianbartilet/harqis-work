@@ -202,41 +202,29 @@ bridges that gap.
 committed), or the commit itself was aborted/nothing-to-commit. A `--no-push` commit
 still runs this step — config sync is independent of the git push.
 
-1. **Load the sync config.** Read `[sync] items` (and `[sync] default_machine`) from
-   `machines.local.toml` at the repo root. If the file or the `[sync]` section is missing,
-   print one line — `Config sync: not configured on this host; skipping.` — and continue to
-   Step 10. (`/sync-host` is gitignored-config-only; absence just means this machine never syncs.)
-
-2. **Read the last-sync marker.** `.git/sync-host.last` holds the epoch-seconds timestamp of
-   the last successful sync from this skill. Treat a missing marker as `0` (first run — every
-   present item counts as changed; the user confirms or declines once to set the baseline).
-
-3. **Detect changed items.** For each path in `[sync] items` (relative to the repo root),
-   compare modification time against the marker — **do NOT use `git status`; these paths are
-   gitignored and git won't report them.** Use the dedicated tools, not `git`:
-   - A **file** changed when its mtime > marker.
-   - A **directory** (e.g. `.env/`) changed when ANY file under it has mtime > marker.
-   Collect the changed items with their newest mtime. Missing items locally are reported but
-   never block (don't push a partial set — that's `/sync-host`'s own guard).
-
-4. **Nothing changed →** print `Config sync: no changes to [sync] items; skipping.` and
-   continue to Step 10.
-
-5. **Something changed → summarise and confirm.** Print a compact summary:
-   - resolved target: `[sync] default_machine`
-   - each changed item + its newest mtime (and any missing-locally items)
-   Then, unless `--sync` was passed, **ask for explicit confirmation** with AskUserQuestion
-   (this pushes secrets to a remote — always confirm; never auto-sync without `--sync`).
-   On **no**: print `Config sync skipped — run /sync-host manually when ready.` and continue
-   to Step 10 **without** touching the marker (the change stays pending).
-
-6. **On confirmation (or `--sync`), run the sync.** Invoke the `/sync-host` skill (it resolves
-   the OS script flavor, host, and auth — key-based for the default Mac mini target, so no
-   password). If it exits 0, write the current epoch-seconds to `.git/sync-host.last` so the
-   same edits aren't re-flagged next commit, and append to the report:
-   `Config sync: pushed <N> item(s) to <default_machine>`.
-   If it fails, surface the error verbatim, **leave the marker unchanged** (so the next commit
-   re-offers), and append `Config sync: failed — <reason>`.
+1. **Delegate preflight to the owning skill.** Invoke `/sync-host --preflight`
+   (plus the configured/default machine argument when applicable). Do not
+   independently inspect mtimes or secret files here; `sync-host` owns leaf-file
+   detection, safe local/remote comparison, redaction, and marker handling.
+2. **Read the final disposition line:**
+   - `SYNC_PREFLIGHT=clean` — print the sync-host clean result and continue to
+     Step 10.
+   - `SYNC_PREFLIGHT=ephemeral` — print the sync-host automatic token/expiry
+     skip result and continue to Step 10. Do not ask for confirmation.
+   - `SYNC_PREFLIGHT=material` — use the safe added/changed/removed summary
+     already printed by sync-host, then continue below.
+   - `SYNC_PREFLIGHT=unknown` — explain that comparison was incomplete and use
+     the safe metadata summary from sync-host, then continue below. Never infer
+     that unknown changes are safe to skip.
+3. **Confirm material or unknown changes.** Unless `--sync` was passed, ask for
+   explicit confirmation with AskUserQuestion. This transfers config/secrets to
+   a remote, so never auto-sync without `--sync`. On no, print
+   `Config sync skipped — run /sync-host manually when ready.` The marker stays
+   unchanged.
+4. **On confirmation (or `--sync`), invoke `/sync-host` normally.** It repeats
+   preflight to guard against changes since inspection, performs the transfer,
+   and owns marker updates. Report its result verbatim. On failure, leave the
+   marker unchanged so a later run offers the change again.
 
 Stop.
 
