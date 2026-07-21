@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 
 from workflows.hfl.dto import HflEntry
@@ -54,6 +55,28 @@ def test_persist_is_locked_and_idempotent(tmp_path, monkeypatch):
     assert second["bytes_written"] == 0
     assert text.count(envelope.entry.entry_id) == 1
     assert len(indexed) == 2  # the ES projection is safely upserted on replay
+
+
+def test_persist_prepends_new_entry_to_daily_markdown(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "workflows.hfl.es_store.index_hfl_entry",
+        lambda entry, **kwargs: kwargs["doc_id"],
+    )
+    older = persistence.make_envelope(
+        _entry("Older moment"), source="capture", machine="windows-work-all"
+    )
+    newer = persistence.make_envelope(
+        replace(_entry("Newer moment"), when=datetime(2026, 7, 19, 10, 45)),
+        source="capture",
+        machine="windows-work-all",
+    )
+
+    persistence.persist_envelope(older, corpus_dir=tmp_path)
+    persistence.persist_envelope(newer, corpus_dir=tmp_path)
+
+    text = (tmp_path / "2026-07-19.md").read_text(encoding="utf-8")
+    assert text.startswith(newer.entry.to_markdown())
+    assert text.index("Newer moment") < text.index("Older moment")
 
 
 def test_submit_retains_outbox_when_broker_is_unavailable(tmp_path, monkeypatch):

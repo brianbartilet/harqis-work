@@ -214,7 +214,8 @@ WORKFLOW_HFL = {
     # host; this is centralized, not a per-machine broadcast like browsing.
     # Active, clean no-op until OwnTracks reports: no device configured /
     # Recorder unreachable / no fixes → no LLM, no entry. Days with fixes but
-    # no stay-points write a movement-only breadcrumb.
+    # no stay-points become named route summaries when movement is meaningful;
+    # only low-distance/noisy tracks use the movement-only breadcrumb.
     # Device read from OWN_TRACKS_DEFAULT_USER / OWN_TRACKS_DEFAULT_DEVICE.
     'run-job--ingest_location_activity': {
         'task': 'workflows.hfl.tasks.ingest_location.ingest_location_activity',

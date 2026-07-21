@@ -3,7 +3,7 @@ workflows/hfl/tasks/capture.py
 
 Capture one Homework-for-Life entry to the structured corpus.
 
-Entry shape (Markdown, one file per day, multiple entries appended):
+Entry shape (Markdown, one file per day, newest entry prepended):
 
     ## YYYY-MM-DD HH:MM
     Moment:          <one-line headline>
@@ -154,7 +154,7 @@ def capture_hfl_entry(
     references: Optional[list[str]] = None,
     when_iso: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Append a single HFL entry to the day's corpus file.
+    """Prepend a single HFL entry to the day's corpus file.
 
     Args:
         references: optional URLs / host file paths / links pointing at

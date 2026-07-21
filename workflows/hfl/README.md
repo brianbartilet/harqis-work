@@ -46,7 +46,7 @@ this scaffold closes.
 | `ingest_chatgpt_activity` | **Primary daily research log.** Auto-discovers the operator's ChatGPT conversations created/updated that day via the ChatGPT web app's private backend (no thread ids), distils the questions asked into ONE corpus entry. Haiku-distilled, raw fallback. No token / no prompts → no entry, no call. | `file:hfl_corpus` | Daily 23:00 local (active — no-op until `CHATGPT_WEB_ACCESS_TOKEN` is set). |
 | `ingest_ai_activity` | Alternate source (OpenAI **Platform API** assistant threads, via `OPENAI_HFL_THREAD_IDS`). Superseded by `ingest_chatgpt_activity` — kept in code but its beat entry is **disabled** (commented-out) to avoid a nightly no-op. | `file:hfl_corpus` | Disabled (uncomment in `tasks_config.py` if you also want Platform-API threads). |
 | `ingest_browsing_activity` | Daily web-browsing digest. Reads the Chrome + Edge `History` SQLite DBs directly (copy-to-temp to dodge the browser lock; no app/credential), distils the day's visits into ONE corpus entry with the most-visited pages as `references`. Haiku-distilled, raw fallback. No history DB / no visits → no entry, no call. No domain filtering by default (`exclude_domains` kwarg to redact). | `file:hfl_corpus+es:hfl-entries` | Daily 23:00 local (active — `os: windows`; no config needed). |
-| `ingest_location_activity` | Daily location timeline. Pulls the day's GPS track from the local OwnTracks Recorder (`apps/own_tracks`), clusters fixes into **stay-points** (dwell ≥ N min), reverse-geocodes each via OpenStreetMap Nominatim (free, no key), and distils ONE "where I was today" timeline entry. Haiku-distilled, raw fallback. No device configured / Recorder unreachable / no fixes → no entry, no call; fixes with no qualifying stay write a movement-only breadcrumb. | `file:hfl_corpus+es:hfl-entries` | Daily 23:05 local (active — clean no-op until OwnTracks reports). |
+| `ingest_location_activity` | Daily location timeline. Pulls the day's GPS track from the local OwnTracks Recorder (`apps/own_tracks`), clusters fixes into **stay-points** (dwell ≥ N min), reverse-geocodes each via OpenStreetMap Nominatim (free, no key), and distils ONE "where I was today" timeline entry. Haiku-distilled, raw fallback. No device configured / Recorder unreachable / no fixes → no entry, no call. Meaningful movement without stays becomes a named route/round-trip timeline; only low-distance/noisy tracks use the generic movement-only breadcrumb. | `file:hfl_corpus+es:hfl-entries` | Daily 23:05 local (active — clean no-op until OwnTracks reports). |
 | `ingest_spotify_activity` | Daily Spotify listening digest. Pulls the day's plays from the Spotify Web API (`apps/spotify`, OAuth2 refresh-token), with the operator's rolling top tracks/artists as context, and distils ONE "soundtrack of the day" entry — mood **inferred** by Haiku from track/artist/genre names (no audio-features; deprecated for new apps). Haiku-distilled, raw fallback. No credentials / no plays → no entry, no call. `recently-played` caps at 50/day. | `file:hfl_corpus+es:hfl-entries` | Daily 23:10 local (**shipped commented-out** — uncomment in `tasks_config.py` once `SPOTIFY_*` creds are set; `tenant_safe`). |
 | `ingest_plaud_activity` | Daily **voice-recordings** ingest. Pulls the day's Plaud recordings via the `apps/plaud` adapter (cloud API → local export-folder fallback) and writes **ONE entry per recording** (not a daily digest). Transcript precedence: Plaud's own transcript, else OpenAI **Whisper** on the raw audio (bounded by `max_transcribe`). Raw recordings + a consolidated `YYYY-MM-DD-summary.md` are archived to `harqis-ones-mac-mini` over key-based SSH. Haiku-distilled, raw fallback. No `PLAUD_TOKEN`/`PLAUD_EXPORT_DIR` → no entry, no call; no recordings → no entry, no call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:15 local (active — clean no-op until acquisition is configured; `tenant_safe`). |
 | `ingest_radar_activity` | Daily **HERMES RADAR digest.** Reads the day's compatibility-named `show_daily_radar` synthesis blocks back out of the shared desktop feed file (`<feed_dir>/hud-logs-YYYYMMDD.txt`) and distils them into ONE "what the day was about" entry. It does not ingest the 15-minute Telegram push rerenders or re-run the radar source sweep. The feed file is Drive-synced, so the Beat host reads briefings a Windows radar wrote; files read remain the entry references. Haiku-distilled, raw fallback. No feed dir / no synthesis blocks → no entry, no LLM call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:20 local (active — clean no-op until `DESKTOP_PATH_FEED` is set and the radar has run). |
@@ -140,7 +140,7 @@ timeline), `memory_list_media` (photos/videos in a window). The weekly
 
 ```
 <corpus_root>/
-  2026-05-13.md              # one file per day, entries appended
+  2026-05-13.md              # one file per day, newest entry first
   2026-05-14.md
   _summary-2026-W20.md       # weekly summary written by summarize_hfl_week
 ```
@@ -170,14 +170,14 @@ entry envelope to `persist_hfl_entry` on the direct `hfl` queue.
 3. On `harqis-server`, it persists directly. On any other machine, it sends
    `persist_hfl_entry` to the direct `hfl` queue.
 4. The canonical task takes a per-day cross-process file lock, deduplicates by
-   entry ID or legacy content, appends and fsyncs the Markdown, then upserts
+   entry ID or legacy content, atomically prepends the Markdown, then upserts
    Elasticsearch.
 5. Broker acceptance or successful local persistence removes the sender's
    outbox item. Failures retain it. `flush_hfl_outbox` runs every five minutes
    through `hfl_broadcast`, and the canonical task also retains a server-side
    copy before retrying a failed write.
 
-Delivery is therefore at-least-once while corpus append is idempotent. Do not
+Delivery is therefore at-least-once while corpus persistence is idempotent. Do not
 copy whole daily files between machines; entries from the same date can coexist
 and whole-file copies can overwrite them.
 
@@ -185,8 +185,8 @@ and whole-file copies can overwrite them.
 
 ## Entry format
 
-Capture writes plain Markdown, one block per call, appended to the day's
-file. Multiple captures on the same day stack:
+Capture writes plain Markdown, one block per call, prepended to the day's
+file. Multiple captures on the same day stack newest-first:
 
 ```markdown
 ## 2026-05-13 09:14
@@ -503,7 +503,7 @@ To make it produce entries:
 ## Elasticsearch entry index (dual-write)
 
 The canonical Markdown corpus is the source of truth. Every ingest source
-submits through `workflows/hfl/persistence.py`, which appends the entry on
+submits through `workflows/hfl/persistence.py`, which prepends the entry on
 `harqis-server` and indexes the structured `HflEntry` via
 `workflows/hfl/es_store.py`.
 

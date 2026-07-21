@@ -174,7 +174,7 @@ def persist_envelope(
     *,
     corpus_dir: Path | None = None,
 ) -> dict[str, Any]:
-    """Append exactly once under a per-day cross-process file lock."""
+    """Prepend exactly once under a per-day cross-process file lock."""
     entry = envelope.entry
     if not entry.when:
         raise ValueError("canonical HFL entries require a timestamp")
@@ -199,10 +199,20 @@ def persist_envelope(
             for existing in existing_entries
         )
         if not duplicate:
-            with day_file.open("a", encoding="utf-8") as handle:
-                written = handle.write(rendered)
-                handle.flush()
-                os.fsync(handle.fileno())
+            temporary = day_file.with_name(
+                f".{day_file.name}.tmp-{os.getpid()}-{uuid.uuid4().hex}"
+            )
+            try:
+                with temporary.open("w", encoding="utf-8") as handle:
+                    written = handle.write(rendered)
+                    handle.write(existing_text)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                if day_file.exists():
+                    os.chmod(temporary, day_file.stat().st_mode)
+                os.replace(temporary, day_file)
+            finally:
+                temporary.unlink(missing_ok=True)
         else:
             written = 0
 
