@@ -88,6 +88,7 @@ _APP_LOADERS: dict[str, str] = {
     "tcg_mp":      "apps.tcg_mp.mcp.register_tcg_mp_tools",
     "telegram":    "apps.telegram.mcp.register_telegram_tools",
     "trello":      "apps.trello.mcp.register_trello_tools",
+    "youtube":     "apps.youtube.mcp.register_youtube_tools",
     "ynab":        "apps.ynab.mcp.register_ynab_tools",
 }
 

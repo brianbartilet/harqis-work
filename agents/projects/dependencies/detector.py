@@ -93,7 +93,7 @@ class DependencyDetector:
         (r"\bLINKEDIN\b",                         "LINKEDIN_ACCESS_TOKEN"),
         # Google / Gmail / Calendar use file-based OAuth (credentials.json + storage-*.json);
         # GOOGLE_APPS_API_KEY is the shared API key, used as a coarse readiness signal.
-        (r"\bGMAIL\b|\bGOOGLE\s*CALENDAR\b|\bGOOGLE\s*DRIVE\b",
+        (r"\bGMAIL\b|\bGOOGLE\s*CALENDAR\b|\bGOOGLE\s*DRIVE\b|\bYOUTUBE(?:\s*STUDIO)?\b",
                                                   "GOOGLE_APPS_API_KEY"),
         # GitHub / source control
         (r"\bGITHUB\b|gh\s+pr\b|gh\s+repo\b",     "GITHUB_API_TOKEN"),

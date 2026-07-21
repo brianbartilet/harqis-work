@@ -51,6 +51,7 @@ this scaffold closes.
 | `ingest_location_activity` | Daily location timeline. Pulls the day's GPS track from the local OwnTracks Recorder (`apps/own_tracks`), clusters fixes into **stay-points** (dwell ≥ N min), reverse-geocodes each via OpenStreetMap Nominatim (free, no key), and distils ONE "where I was today" timeline entry. Haiku-distilled, raw fallback. No device configured / Recorder unreachable / no fixes → no entry, no call. Meaningful movement without stays becomes a named route/round-trip timeline; only low-distance/noisy tracks use the generic movement-only breadcrumb. | `file:hfl_corpus+es:hfl-entries` | Daily 23:05 local (active — clean no-op until OwnTracks reports). |
 | `ingest_spotify_activity` | Daily Spotify listening digest. Pulls the day's plays from the Spotify Web API (`apps/spotify`, OAuth2 refresh-token), with the operator's rolling top tracks/artists as context, and distils ONE "soundtrack of the day" entry — mood **inferred** by Haiku from track/artist/genre names (no audio-features; deprecated for new apps). Haiku-distilled, raw fallback. No credentials / no plays → no entry, no call. `recently-played` caps at 50/day. | `file:hfl_corpus+es:hfl-entries` | Daily 23:10 local (**shipped commented-out** — uncomment in `tasks_config.py` once `SPOTIFY_*` creds are set; `tenant_safe`). |
 | `ingest_plaud_activity` | Daily **voice-recordings** ingest. Pulls the day's Plaud recordings via the `apps/plaud` adapter (cloud API → local export-folder fallback) and writes **ONE entry per recording** (not a daily digest). Transcript precedence: Plaud's own transcript, else OpenAI **Whisper** on the raw audio (bounded by `max_transcribe`). Raw recordings + a consolidated `YYYY-MM-DD-summary.md` are archived to `harqis-ones-mac-mini` over key-based SSH. Haiku-distilled, raw fallback. No `PLAUD_TOKEN`/`PLAUD_EXPORT_DIR` → no entry, no call; no recordings → no entry, no call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:15 local (active — clean no-op until acquisition is configured; `tenant_safe`). |
+| `ingest_youtube_activity` | Archives authenticated-channel activity as **one retrospective HFL entry per event**: own uploads use their publication time and `#upload`; external videos added to owned playlists use the playlist-added time and `#watch-later`. Both receive `#playlist-<name>` membership tags and reference the curated description plus downloaded video under `YOUTUBE_ARCHIVE_PATH`. | `file:hfl_corpus+es:hfl-entries` | Monthly at 00:30 local on day 1; scans the previous calendar month before the 01:00 corpus archive. Manual calls accept `days=N` or `days='all'`. |
 | `ingest_radar_activity` | Daily **HERMES RADAR digest.** Reads the day's compatibility-named `show_daily_radar` synthesis blocks back out of the shared desktop feed file (`<feed_dir>/hud-logs-YYYYMMDD.txt`) and distils them into ONE "what the day was about" entry. It does not ingest the 15-minute Telegram push rerenders or re-run the radar source sweep. The feed file is Drive-synced, so the Beat host reads briefings a Windows radar wrote; files read remain the entry references. Haiku-distilled, raw fallback. No feed dir / no synthesis blocks → no entry, no LLM call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:20 local (active — clean no-op until `DESKTOP_PATH_FEED` is set and the radar has run). |
 | `ingest_android_media_activity` | Reads Android screen-time/activity export logs, reports only application categories and session counts, and writes one privacy-bounded entry. Raw titles/content are not sent to the model or corpus. A missing log directory is a clean no-op. | `file:hfl_corpus+es:hfl-entries` | Daily 23:15 local on the `hfl` queue; inactive until `HFL_ANDROID_SCREEN_LOG_DIR` is configured. |
 | `analyze_hfl_media` | **Daily media vision pass.** Walks the dumps inbox for recent images/videos (pulled from phones + machines by `workflows/dumps/`), reserves 10 of the 40 analysis slots for Android-origin media, then fills unused capacity by global recency. Each item is sent to Haiku vision for a story moment and **geo-tagged** — EXIF GPS, else the nearest OwnTracks fix by capture time → Nominatim place. One entry per story-worthy item; the source dump file + an OSM pin are the `references`. Already-referenced media is skipped before the model call. Passing `media_path=<inbox file>` targets one artifact directly. | `file:hfl_corpus+es:hfl-entries` | Daily 22:00 local (active). |
@@ -463,6 +464,41 @@ To make it produce entries:
 - Live view (no write): the `spotify_activity` MCP tool in
   `workflows/hfl/mcp.py`.
 
+### `ingest_youtube_activity` (monthly upload archive)
+
+**Shipped active** and scheduled for 00:30 local on the first day of each
+month, before the 01:00 completed-month corpus archive. Its default
+`days="last_month"` window uses the previous calendar month, so every video is
+written retrospectively to the Markdown file matching its published date;
+canonical persistence creates that older daily file when it is missing. Manual
+calls may use a positive integer (`days=30`) or `days="all"`.
+
+Set the archive root and complete the YouTube OAuth setup described in
+[`apps/youtube/README.md`](../../apps/youtube/README.md):
+
+```env
+YOUTUBE_ARCHIVE_PATH=/Volumes/harqis-data/youtube
+# Optional for private/member videos downloaded by yt-dlp:
+YOUTUBE_YT_DLP_COOKIES=/absolute/path/to/youtube-cookies.txt
+```
+
+Each upload or playlist-addition event creates
+`<archive>/YYYY-MM-DD-<video-title>/description.md` for uploads or
+`description-<playlist>.md` for playlist additions (the complete API description
+with provenance frontmatter), plus one shared `video.<ext>` (yt-dlp). The HFL
+entry has `source: youtube`, the exact title as `what_happened`, and three
+references: the curated Markdown artifact, the local video file, and the
+canonical `https://www.youtube.com/watch?v=<id>` web URL. Own videos use their
+YouTube publication time and
+receive `#youtube #upload #playlist-uploads` plus one `#playlist-<slug>` for
+every custom owned playlist containing them. External videos use the
+playlist-item added timestamp as their
+retrospective HFL/archive date and receive `#youtube #watch-later
+#playlist-<slug>`. A video added to two playlists produces two independently
+deduplicated playlist events. The entry is not submitted if the video download
+fails. The read-only `youtube_activity` MCP tool exposes the same event type,
+timestamp, playlist, and tag classification without downloading or writing.
+
 ### `ingest_plaud_activity` (daily voice recordings)
 
 **Shipped active** in `tasks_config.py` — a clean no-op until acquisition is
@@ -648,6 +684,7 @@ New writers must call `submit_hfl_entry` (or the compatibility
 | `ingest_location_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` |
 | `ingest_spotify_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `ingest_plaud_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
+| `ingest_youtube_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `ingest_radar_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` |
 | `flush_hfl_outbox` | express | resource | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `False` |
 

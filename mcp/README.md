@@ -51,7 +51,8 @@ apps/
 ├── tcg_mp/mcp.py                     # TCG Marketplace tools
 ├── echo_mtg/mcp.py                   # Echo MTG inventory tools
 ├── scryfall/mcp.py                   # Scryfall card database tools
-└── telegram/mcp.py                   # Telegram bot tools
+├── telegram/mcp.py                   # Telegram bot tools
+└── youtube/mcp.py                    # YouTube channel and analytics tools
 ```
 
 Tool bindings live alongside the app they wrap — each `apps/<app>/mcp.py` is self-contained and
@@ -508,6 +509,30 @@ Wraps `apps/telegram/references/web/api/` services. Requires valid `TELEGRAM` se
 - *"Send a Telegram message to my default chat saying the build passed."*
 - *"What messages has the bot received recently?"*
 - *"Get info about my Telegram channel."*
+
+---
+
+### YouTube (`apps/youtube/mcp.py`)
+
+Wraps the YouTube Data API v3 and YouTube Analytics API v2. Requires the `YOUTUBE` config section, enabled APIs, and an OAuth token in `.env/storage-youtube.json`.
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `get_youtube_my_channel` | — | Authenticated channel metadata and statistics |
+| `get_youtube_channel` | `channel_id` | Channel metadata and statistics |
+| `list_youtube_playlists` | `channel_id?`, `max_results?` | Channel playlists |
+| `list_youtube_playlist_videos` | `playlist_id`, `max_results?` | Unique playlist videos; omit the limit to auto-paginate all |
+| `list_youtube_channel_videos` | `channel_id?`, `max_results?` | Unique channel uploads; omit the limit to auto-paginate all |
+| `get_youtube_video` | `video_id` | Video metadata and statistics |
+| `search_youtube_videos` | `query`, `channel_id?`, `max_results?` | Public video search results |
+| `analyze_youtube_channel` | dates, metrics, optional dimensions/filters/sort | Targeted Analytics report |
+| `get_youtube_channel_summary` | `start_date`, `end_date` | Headline Studio metrics |
+| `get_youtube_top_videos` | `start_date`, `end_date`, `max_results?` | Top videos by views |
+
+**Example prompts:**
+- *"List all videos uploaded to my YouTube channel."*
+- *"Show my YouTube channel summary for the last 30 days."*
+- *"Which videos had the most views this quarter?"*
 
 ---
 

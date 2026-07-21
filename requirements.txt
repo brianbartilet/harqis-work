@@ -26,6 +26,7 @@ pydantic-settings>=2.5,<3
 PySide6>=6.8,<7
 python-dotenv>=1.1,<2
 tqdm>=4.66,<5
+yt-dlp>=2025.6,<2027
 pytest>=8,<9
 pytest-dotenv>=0.5.2
 redis>=5.0.0

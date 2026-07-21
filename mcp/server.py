@@ -33,6 +33,7 @@ APP_REGISTRARS = [
     ("AppSheet",         "apps.appsheet.mcp",       "register_appsheet_tools"),
     ("OANDA",            "apps.oanda.mcp",          "register_oanda_tools"),
     ("YNAB",             "apps.ynab.mcp",           "register_ynab_tools"),
+    ("YouTube",          "apps.youtube.mcp",        "register_youtube_tools"),
     ("Google Apps",      "apps.google_apps.mcp",    "register_google_apps_tools"),
     ("Google Drive",     "apps.google_drive.mcp",   "register_google_drive_tools"),
     ("TCG Marketplace",  "apps.tcg_mp.mcp",         "register_tcg_mp_tools"),
