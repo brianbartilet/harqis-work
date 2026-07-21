@@ -54,5 +54,7 @@ def test_render_rollup_adds_searchable_tags_section():
     )
 
     assert rendered.startswith("# Weekly rollup — 2026-W30\n")
-    assert "## Tags\nTags: #weekly #summary #2026-W30 #jira #notes\n" in rendered
-    assert rendered.endswith("## Themes\n- A recurring theme\n")
+    assert rendered.index("## Themes") < rendered.index("## Tags")
+    assert rendered.endswith(
+        "## Tags\nTags: #weekly #summary #2026-W30 #jira #notes\n\n"
+    )

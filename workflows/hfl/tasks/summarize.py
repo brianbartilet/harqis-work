@@ -101,9 +101,9 @@ def _render_rollup(
         f"Window: last {window_days} days · "
         f"{entries[0]['date']} → {entries[-1]['date']} · "
         f"{len(entries)} entries across {len(files)} files\n\n"
+        f"{summary_text}\n\n"
         f"## Tags\n"
         f"Tags: {tags}\n\n"
-        f"{summary_text}\n"
     )
 
 
