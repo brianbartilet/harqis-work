@@ -55,6 +55,7 @@ tools:
     - ask_human
   mcp_apps:
     - google_apps
+    - youtube
     - trello
     - discord
     - telegram

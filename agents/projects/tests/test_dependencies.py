@@ -151,6 +151,20 @@ def test_detect_no_blocking_when_service_key_present(detector):
 
 
 @pytest.mark.smoke
+def test_detect_youtube_studio_uses_shared_google_readiness_key(detector):
+    card = _card(description="Review YouTube Studio channel analytics")
+    env = {k: v for k, v in os.environ.items() if k != "GOOGLE_APPS_API_KEY"}
+    with patch.dict(os.environ, env, clear=True):
+        result = detector.detect(card)
+    youtube_blocks = [
+        dependency
+        for dependency in result.blocking
+        if dependency.name == "GOOGLE_APPS_API_KEY"
+    ]
+    assert_that(youtube_blocks, has_length(1))
+
+
+@pytest.mark.smoke
 def test_detect_no_service_refs_in_plain_card(detector):
     card = _card(description="Read and summarize the README file")
     result = detector.detect(card)

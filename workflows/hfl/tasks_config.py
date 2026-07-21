@@ -352,6 +352,40 @@ WORKFLOW_HFL = {
         },
     },
 
+    # Monthly YouTube upload archive — 00:30 local on day 1, before the 01:00
+    # HFL corpus archive. Scans the previous calendar month for own uploads and
+    # external-video playlist additions, downloads each video plus a curated
+    # Markdown artifact beneath YOUTUBE_ARCHIVE_PATH, then writes one
+    # retrospective HFL entry per event. Playlist events use their added-at
+    # timestamp as the entry/archive date.
+    # Active, but a clean no-op until YOUTUBE_ARCHIVE_PATH and YouTube OAuth are
+    # configured. Manual calls may pass days=N or days='all'.
+    'run-job--ingest_youtube_activity': {
+        'task': 'workflows.hfl.tasks.ingest_youtube.ingest_youtube_activity',
+        'schedule': crontab(day_of_month=1, hour=0, minute=30),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'days': 'last_month',
+            'max_videos': 500,
+            'max_playlists': 50,
+            'max_playlist_items': 500,
+            'synthesize': True,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 60 * 24,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+            'tenant_safe': True,
+        },
+    },
+
     # Daily Android screen activity — 23:15 local, one slot after Spotify (23:10).
     # Parses the hourly android_actions-YYYYMMDD_HH.log files written by the
     # Android capture agent (mobile/android/tasks/capture.py), classifies

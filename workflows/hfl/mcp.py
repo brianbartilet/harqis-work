@@ -1195,6 +1195,66 @@ def register_memory_tools(mcp: FastMCP):
         }
 
     @mcp.tool()
+    def youtube_activity(
+        period: str = "",
+        since: str = "",
+        until: str = "",
+        max_videos: int = 500,
+        max_playlists: int = 50,
+        max_playlist_items: int = 500,
+    ) -> dict:
+        """Read-only view of uploads and external-video playlist additions.
+
+        This lists and filters upload metadata only. It does not download
+        videos, create archive artifacts, call an LLM, or write HFL entries.
+        """
+        from apps.youtube.config import CONFIG as YOUTUBE_CONFIG
+        from apps.youtube.references.web.api.data import ApiServiceYouTubeData
+        from workflows.hfl.tasks.ingest_youtube import collect_youtube_activity
+
+        start, end, label = _resolve_window(period, since, until)
+        end_d = end or _today()
+        start_d = start or (end_d - timedelta(days=6))
+        try:
+            collected = collect_youtube_activity(
+                since=start_d,
+                until=end_d,
+                client=ApiServiceYouTubeData(YOUTUBE_CONFIG),
+                max_videos=max(1, min(int(max_videos), 5000)),
+                max_playlists=max(1, min(int(max_playlists), 500)),
+                max_playlist_items=max(1, min(int(max_playlist_items), 5000)),
+            )
+        except Exception as exc:  # noqa: BLE001 - surface, don't crash MCP
+            logger.warning("youtube_activity: YouTube unavailable (%s)", exc)
+            return {"found": False, "videos": [], "count": 0,
+                    "error": "youtube unavailable",
+                    "period": _period_dict(start_d, end_d, label)}
+        items = collected["items"]
+        return {
+            "found": bool(items),
+            "count": len(items),
+            "uploads": collected["uploads"],
+            "playlist_additions": collected["playlist_additions"],
+            "videos": [
+                {
+                    "id": item.video.id,
+                    "title": item.video.title,
+                    "event_type": item.event_type,
+                    "activity_at": item.occurred_at.isoformat(),
+                    "published_at": item.video.published_at,
+                    "playlists": list(item.playlist_names),
+                    "tags": list(item.required_tags),
+                    "url": (
+                        "https://www.youtube.com/watch?v="
+                        f"{item.video.id}"
+                    ),
+                }
+                for item in items
+            ],
+            "period": _period_dict(start_d, end_d, label),
+        }
+
+    @mcp.tool()
     def android_activity(
         period: str = "",
         since: str = "",

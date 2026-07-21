@@ -767,4 +767,23 @@ ANDROID_EMULATOR:
       port: 5560                    # console 5560 / adb 5561 — avoids Docker/WSL squatting adb port 5555
 
 
+YOUTUBE:
+  app_id: 'youtube'
+  client: 'rest'
+  parameters:
+    base_url: 'https://www.googleapis.com/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: False
+  app_data:
+    api_key: ${GOOGLE_APPS_API_KEY}
+    scopes:
+      - "https://www.googleapis.com/auth/youtube.readonly"
+      - "https://www.googleapis.com/auth/yt-analytics.readonly"
+    credentials: "credentials.json"
+    storage: "storage-youtube.json"
+  return_data_only: True
+
+
 

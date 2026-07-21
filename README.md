@@ -69,6 +69,7 @@ At its core the platform has three layers:
 | `telegram` | Telegram Bot messaging | REST API | Yes | [API Docs](https://core.telegram.org/bots/api) · [Site](https://telegram.org/) |
 | `trello` | Kanban board management | REST API | Yes | [API Docs](https://developer.atlassian.com/cloud/trello/rest/) · [Site](https://trello.com/) |
 | `ynab` | Personal budgeting | REST API | Yes | [API Docs](https://api.ynab.com/) · [Site](https://www.ynab.com/) |
+| `youtube` | YouTube channels, videos, playlists, search, and targeted Studio analytics | REST API (OAuth2) | Yes | [Data API](https://developers.google.com/youtube/v3/docs) · [Analytics API](https://developers.google.com/youtube/analytics) |
 
 ---
 
@@ -454,7 +455,8 @@ harqis-work/
 │   ├── tcg_mp/                     # TCG Marketplace
 │   ├── telegram/                   # Telegram Bot
 │   ├── trello/                     # Trello Kanban
-│   └── ynab/                       # Personal budgeting
+│   ├── ynab/                       # Personal budgeting
+│   └── youtube/                    # YouTube data and channel analytics
 │
 ├── workflows/                      # Celery task definitions
 │   ├── config.py                   # Master Celery Beat schedule
@@ -565,7 +567,7 @@ The three driving principles:
                              ▼
    ┌──────────────────────────────────────────────────────────┐
    │                   MCP Server  (mcp/)                     │
-   │   381 tools across 41 modules — OANDA, YNAB, Gmail,      │
+   │   392 tools across 42 modules — OANDA, YNAB, Gmail,      │
    │    Telegram, Discord, Trello, Jira, Scryfall, TCG …      │
    └──────┬──────────────────────────────────┬────────────────┘
           │ reads / writes                   │ triggers
@@ -592,7 +594,7 @@ The three driving principles:
 | Component | Where | What it does |
 |---|---|---|
 | **Hermes agent** | `~/.hermes/` (local per-machine) | Agent runtime: persistent memory, distilled lessons, plans, and cron jobs (agent / `no_agent` modes) — see [`docs/info/HERMES.md`](docs/info/HERMES.md) |
-| **MCP server** | `mcp/server.py` | Exposes all 39 app integrations (plus knowledge & memory-recall tools) as callable tools over the Model Context Protocol |
+| **MCP server** | `mcp/server.py` | Exposes all 40 app integrations (plus knowledge & memory-recall tools) as callable tools over the Model Context Protocol |
 | **Celery Beat** | `workflows/config.py` | Runs all scheduled automation — HUD updates, MTG resale pipeline, desktop sync |
 | **RabbitMQ + Redis** | Docker stack | Celery broker and result backend |
 | **Frontend** | `frontend/main.py` | Web dashboard — manually trigger any task, inspect run history |
@@ -810,7 +812,7 @@ SPOTIFY_REFRESH_TOKEN=           # OAuth2 refresh token (minted once — see app
 
 # ── Cloud / infrastructure ────────────────────────────────────────────────────
 ORGO_API_KEY=
-GOOGLE_APPS_API_KEY=
+GOOGLE_APPS_API_KEY=              # shared Google/YouTube readiness signal
 OWN_TRACKS_HOST=                  # default: localhost
 OWN_TRACKS_PORT=                  # default: 8083
 OWN_TRACKS_USERNAME=
