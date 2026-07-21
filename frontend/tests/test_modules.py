@@ -28,6 +28,11 @@ def test_home_renders_module_navigation_without_manifesto(authenticated_client):
     response = authenticated_client.get("/home")
 
     assert response.status_code == 200
+    assert "Heuristic Automation for a Reliable Quality Integration System" in response.text
+    assert "Hopefully another rather quite intelligent system" in response.text
+    assert "A self-hosted second brain" in response.text
+    assert 'id="platform-modules-heading"' in response.text
+    assert "Platform Modules" in response.text
     assert "HARQIS Work Manifesto" not in response.text
     assert 'href="/manifesto"' in response.text
     assert "Workflows" in response.text

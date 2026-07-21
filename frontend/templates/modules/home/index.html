@@ -4,18 +4,28 @@
 {% block content %}
 <main class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-10">
   <section>
-    <p class="text-xs uppercase tracking-[0.22em] text-blue-400">Platform modules</p>
-    <h1 class="mt-2 text-2xl font-semibold text-white">A self-hosted second brain on steroids.</h1>
+    <p class="text-xs uppercase tracking-[0.22em] text-blue-400">Hopefully another rather quite intelligent system</p>
+    <h1 class="mt-2 max-w-4xl text-2xl font-semibold text-white sm:text-3xl">
+      Heuristic Automation for a Reliable Quality Integration System
+    </h1>
     <p class="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
-      HARQIS captures useful state, organizes it into workflows, distills it into reusable knowledge,
-      and expresses action back into the systems you use.
+      A self-hosted second brain that captures useful state, organizes it into workflows, distills it
+      into reusable knowledge, and expresses action back into the systems you use.
+    </p>
+  </section>
+
+  <section aria-labelledby="platform-modules-heading">
+    <p class="text-xs uppercase tracking-[0.22em] text-blue-400">Explore the platform</p>
+    <h2 id="platform-modules-heading" class="mt-2 text-xl font-semibold text-white">Platform Modules</h2>
+    <p class="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
+      The connected surfaces that help HARQIS capture, distill, orchestrate, and express your work.
     </p>
     <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
       {% for module in module_cards %}
       <a href="{{ module.route }}"
          class="group rounded-xl bg-slate-900 p-5 ring-1 ring-slate-800 hover:ring-blue-500/50 transition">
         <div class="flex items-center justify-between gap-3">
-          <h2 class="font-semibold text-white">{{ module.label }}</h2>
+          <h3 class="font-semibold text-white">{{ module.label }}</h3>
           <span class="text-slate-600 group-hover:text-blue-400 transition">→</span>
         </div>
         <p class="mt-2 text-sm text-slate-300">{{ module.description }}</p>
@@ -24,6 +34,5 @@
       {% endfor %}
     </div>
   </section>
-
 </main>
 {% endblock %}
