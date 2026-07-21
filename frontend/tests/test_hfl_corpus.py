@@ -163,13 +163,46 @@ def test_search_combines_text_partial_tags_and_dates():
     assert results == [matching]
 
 
-def test_search_uses_only_the_last_tag_for_single_topic_focus():
-    first = _document("first.md", tags=("career",))
-    second = _document("second.md", tags=("debugging",))
+def test_search_requires_all_partial_tags():
+    first = _document("first.md", tags=("jira", "notes"))
+    second = _document("second.md", tags=("jira", "testing"))
 
-    results = search_documents((first, second), query="#career #debug")
+    results = search_documents((first, second), query="#jir #note")
 
-    assert results == [second]
+    assert results == [first]
+
+
+def test_search_combines_multiple_tags_with_partial_text():
+    matching = _document(
+        "matching.md",
+        tags=("jira", "testing"),
+        text="A useful testing topic for the release",
+    )
+    wrong_text = _document(
+        "wrong-text.md",
+        tags=("jira", "testing"),
+        text="An unrelated release note",
+    )
+    wrong_tag = _document(
+        "wrong-tag.md",
+        tags=("jira", "notes"),
+        text="A useful testing topic for the release",
+    )
+
+    results = search_documents(
+        (wrong_text, matching, wrong_tag),
+        query="#jira #test testing topic",
+    )
+
+    assert results == [matching]
+
+
+def test_search_can_reverse_created_date_order():
+    older = replace(_document("older.md"), created_at=datetime(2026, 7, 1))
+    newer = replace(_document("newer.md"), created_at=datetime(2026, 7, 20))
+
+    assert search_documents((older, newer)) == [newer, older]
+    assert search_documents((older, newer), sort_order="asc") == [older, newer]
 
 
 def test_tree_keeps_nested_directories():
@@ -390,6 +423,78 @@ def test_corpus_search_uses_compact_date_controls(authenticated_client, monkeypa
     assert "bg-blue-950/50" in response.text
     assert ">1</span>" in response.text
     assert "0 matches" in response.text
+
+
+def test_search_and_reset_actions_are_grouped_with_the_text_input(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    monkeypatch.setattr(
+        hfl_routes.corpus_index,
+        "documents",
+        lambda: (_document("2026-07-10.md"),),
+    )
+
+    response = authenticated_client.get("/hfl-corpus")
+
+    group = response.text.split("data-search-input-actions", 1)[1].split("</div>", 1)[0]
+    assert 'id="q"' in group
+    assert ">Search</button>" in group
+    assert ">Reset</a>" in group
+    assert group.index('id="q"') < group.index(">Search</button>") < group.index(">Reset</a>")
+
+
+def test_corpus_search_explains_combined_search_and_supports_tag_cloud_toggles(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document("2026-07-10.md", tags=("jira", "notes", "testing"))
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get(
+        "/hfl-corpus?q=%23jira+%23notes+testing+topic"
+    )
+
+    assert response.status_code == 200
+    assert ">Enter search</label>" in response.text
+    assert 'aria-label="How corpus search works"' in response.text
+    assert "every space-delimited tag must match" in response.text
+    assert response.text.count('aria-pressed="true"') == 2
+    assert (
+        'href="/hfl-corpus?q=%23notes+testing+topic"' in response.text
+    )
+    assert (
+        'href="/hfl-corpus?q=%23jira+%23notes+%23testing+testing+topic"'
+        in response.text
+    )
+
+
+def test_corpus_results_sort_control_reverses_created_date_order(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    older = replace(
+        _document("older.md"), created_at=datetime(2026, 7, 1)
+    )
+    newer = replace(
+        _document("newer.md"), created_at=datetime(2026, 7, 20)
+    )
+    monkeypatch.setattr(
+        hfl_routes.corpus_index, "documents", lambda: (older, newer)
+    )
+
+    newest_first = authenticated_client.get("/hfl-corpus")
+    oldest_first = authenticated_client.get("/hfl-corpus?sort=asc")
+
+    newer_card = '<h3 class="truncate text-sm font-semibold text-white">newer.md</h3>'
+    older_card = '<h3 class="truncate text-sm font-semibold text-white">older.md</h3>'
+    assert newest_first.text.index(newer_card) < newest_first.text.index(older_card)
+    assert oldest_first.text.index(older_card) < oldest_first.text.index(newer_card)
+    assert 'aria-label="Show oldest results first"' in newest_first.text
+    assert 'aria-label="Show newest results first"' in oldest_first.text
 
 
 def test_corpus_search_is_sticky_above_aligned_directory_and_results(

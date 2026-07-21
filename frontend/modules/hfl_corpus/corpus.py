@@ -61,14 +61,23 @@ class CorpusDocument:
     entry_count: int = 0
     entries: tuple[CorpusEntry, ...] = ()
 
-    def matching_entries(self, selected_tag: str) -> tuple[CorpusEntry, ...]:
-        needle = (selected_tag or "").casefold()
-        if not needle:
+    def matching_entries(
+        self,
+        selected_tags: str | tuple[str, ...],
+        phrase: str = "",
+    ) -> tuple[CorpusEntry, ...]:
+        needles = _tag_needles(selected_tags)
+        text_needle = (phrase or "").strip().casefold()
+        if not needles and not text_needle:
             return ()
         return tuple(
             entry
             for entry in self.entries
-            if any(needle in tag.casefold() for tag in entry.tags)
+            if all(
+                any(needle in tag.casefold() for tag in entry.tags)
+                for needle in needles
+            )
+            and (not text_needle or text_needle in entry.text.casefold())
         )
 
     def matching_text_entries(self, phrase: str) -> tuple[CorpusEntry, ...]:
@@ -77,14 +86,16 @@ class CorpusDocument:
             return ()
         return tuple(entry for entry in self.entries if needle in entry.text.casefold())
 
-    def ordered_tag_counts(self, selected_tag: str) -> tuple[tuple[str, int], ...]:
-        needle = (selected_tag or "").casefold()
-        if not needle:
+    def ordered_tag_counts(
+        self, selected_tags: str | tuple[str, ...]
+    ) -> tuple[tuple[str, int], ...]:
+        needles = _tag_needles(selected_tags)
+        if not needles:
             return self.tag_counts
 
         counts = dict(self.tag_counts)
         for tag in self.tags:
-            if needle not in tag.casefold() or tag in counts:
+            if not self.tag_matches(tag, needles) or tag in counts:
                 continue
             counts[tag] = sum(
                 1
@@ -96,11 +107,23 @@ class CorpusDocument:
             sorted(
                 counts.items(),
                 key=lambda item: (
-                    needle not in item[0].casefold(),
-                    item[0].casefold() != needle,
+                    not self.tag_matches(item[0], needles),
+                    item[0].casefold() not in needles,
                 ),
             )
         )
+
+    @staticmethod
+    def tag_matches(tag: str, selected_tags: str | tuple[str, ...]) -> bool:
+        needles = _tag_needles(selected_tags)
+        folded_tag = tag.casefold()
+        return any(needle in folded_tag for needle in needles)
+
+
+def _tag_needles(selected_tags: str | tuple[str, ...]) -> tuple[str, ...]:
+    if isinstance(selected_tags, str):
+        selected_tags = (selected_tags,)
+    return tuple(tag.casefold() for tag in selected_tags if tag)
 
 
 def resolve_corpus_root() -> Path:
@@ -350,6 +373,22 @@ def common_tags(
     return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]
 
 
+def parse_search_query(query: str) -> tuple[tuple[str, ...], str]:
+    """Split a space-delimited query into partial tags and a text phrase."""
+    tokens = query.split()
+    tags = tuple(
+        dict.fromkeys(
+            token[1:].casefold()
+            for token in tokens
+            if token.startswith("#") and len(token) > 1
+        )
+    )
+    phrase = " ".join(
+        token for token in tokens if not token.startswith("#")
+    ).strip().casefold()
+    return tags, phrase
+
+
 def search_documents(
     documents: tuple[CorpusDocument, ...],
     *,
@@ -361,15 +400,9 @@ def search_documents(
     created_to: str = "",
     updated_from: str = "",
     updated_to: str = "",
+    sort_order: str = "desc",
 ) -> list[CorpusDocument]:
-    tokens = query.split()
-    tag_tokens = [
-        token[1:].lower()
-        for token in tokens
-        if token.startswith("#") and len(token) > 1
-    ]
-    tag_needle = tag_tokens[-1] if tag_tokens else ""
-    text_needle = " ".join(token for token in tokens if not token.startswith("#")).strip().lower()
+    tag_needles, text_needle = parse_search_query(query)
     if date_from or date_to:
         if date_field == "updated":
             updated_from, updated_to = date_from, date_to
@@ -382,7 +415,10 @@ def search_documents(
     for document in documents:
         if text_needle and text_needle not in document.text.lower():
             continue
-        if tag_needle and not any(tag_needle in tag for tag in document.tags):
+        if any(
+            not any(needle in tag.casefold() for tag in document.tags)
+            for needle in tag_needles
+        ):
             continue
         if c_from and document.created_at.date() < c_from:
             continue
@@ -393,7 +429,11 @@ def search_documents(
         if u_to and document.updated_at.date() > u_to:
             continue
         results.append(document)
-    return sorted(results, key=lambda item: (item.created_at, item.relative_path), reverse=True)
+    return sorted(
+        results,
+        key=lambda item: (item.created_at, item.relative_path),
+        reverse=sort_order != "asc",
+    )
 
 
 def build_tree(documents: tuple[CorpusDocument, ...]) -> dict:

@@ -1,7 +1,7 @@
 """Routes for browsing and searching the HFL corpus."""
 
 import re
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
@@ -13,6 +13,7 @@ from modules.hfl_corpus.corpus import (
     common_tags,
     corpus_index,
     format_hfl_markdown,
+    parse_search_query,
     resolve_corpus_root,
     search_documents,
 )
@@ -30,17 +31,6 @@ router = APIRouter(prefix="/hfl-corpus")
 _H2 = re.compile(r"<h2(?:\s+[^>]*)?>")
 
 
-def _selected_tag(query: str) -> str:
-    tags = [token[1:] for token in query.split() if token.startswith("#") and len(token) > 1]
-    return tags[-1].casefold() if tags else ""
-
-
-def _text_query(query: str) -> str:
-    return " ".join(
-        token for token in query.split() if not token.startswith("#")
-    ).strip()
-
-
 def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
     anchors = iter(entry.anchor for entry in document.entries)
 
@@ -55,6 +45,28 @@ def _uses_remote_corpus() -> bool:
     return bool(get_settings().hfl_corpus_api_url.strip())
 
 
+def _index_url(
+    *,
+    query: str,
+    date_field: str,
+    date_from: str,
+    date_to: str,
+    sort: str,
+) -> str:
+    params = {}
+    if query:
+        params["q"] = query
+    if date_field != "created":
+        params["date_field"] = date_field
+    if date_from:
+        params["date_from"] = date_from
+    if date_to:
+        params["date_to"] = date_to
+    if sort != "desc":
+        params["sort"] = sort
+    return "/hfl-corpus" + (f"?{urlencode(params)}" if params else "")
+
+
 @router.get("", response_class=HTMLResponse)
 async def hfl_corpus_page(
     request: Request,
@@ -66,12 +78,15 @@ async def hfl_corpus_page(
     created_to: str = "",
     updated_from: str = "",
     updated_to: str = "",
+    sort: str = "desc",
 ):
     user, redirect = require_user(request)
     if redirect:
         return redirect
     if date_field not in {"created", "updated"}:
         date_field = "created"
+    if sort not in {"asc", "desc"}:
+        sort = "desc"
     # Preserve old bookmarked URLs while presenting only the simplified UI.
     if not date_from and not date_to:
         if updated_from or updated_to:
@@ -86,6 +101,7 @@ async def hfl_corpus_page(
                 "date_field": date_field,
                 "date_from": date_from,
                 "date_to": date_to,
+                "sort": sort,
             })
             documents = remote["documents"]
             results = remote["results"]
@@ -107,10 +123,44 @@ async def hfl_corpus_page(
             date_field=date_field,
             date_from=date_from,
             date_to=date_to,
+            sort_order=sort,
         )
         total_results = len(results)
         document_count = len(documents)
         tag_cloud = common_tags(documents)
+    selected_tags, text_query = parse_search_query(q)
+    reverse_sort = "asc" if sort == "desc" else "desc"
+    sort_toggle_url = _index_url(
+        query=q,
+        date_field=date_field,
+        date_from=date_from,
+        date_to=date_to,
+        sort=reverse_sort,
+    )
+    tag_options = []
+    for tag, count in tag_cloud:
+        matching_selections = tuple(
+            selected for selected in selected_tags if selected in tag.casefold()
+        )
+        active = bool(matching_selections)
+        next_tags = tuple(
+            selected for selected in selected_tags if selected not in matching_selections
+        ) if active else (*selected_tags, tag)
+        next_query = " ".join(
+            [*(f"#{selected}" for selected in next_tags), text_query]
+        ).strip()
+        tag_options.append({
+            "tag": tag,
+            "count": count,
+            "active": active,
+            "url": _index_url(
+                query=next_query,
+                date_field=date_field,
+                date_from=date_from,
+                date_to=date_to,
+                sort=sort,
+            ),
+        })
     return templates.TemplateResponse(
         request,
         "modules/hfl_corpus/index.html",
@@ -123,12 +173,15 @@ async def hfl_corpus_page(
             total_results=total_results,
             document_count=document_count,
             query=q,
-            selected_tag=_selected_tag(q),
-            text_query=_text_query(q),
+            selected_tags=selected_tags,
+            selected_tag=selected_tags[0] if len(selected_tags) == 1 else "",
+            text_query=text_query,
             date_field=date_field,
             date_from=date_from,
             date_to=date_to,
-            tag_cloud=tag_cloud,
+            sort_order=sort,
+            sort_toggle_url=sort_toggle_url,
+            tag_cloud=tag_options,
             remote_error=remote_error,
         ),
     )

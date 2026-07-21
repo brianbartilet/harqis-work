@@ -65,10 +65,13 @@ async def hfl_api_documents(
     date_field: str = "created",
     date_from: str = "",
     date_to: str = "",
+    sort: str = "desc",
 ):
     _authorize(request)
     if date_field not in {"created", "updated"}:
         date_field = "created"
+    if sort not in {"asc", "desc"}:
+        sort = "desc"
     documents = corpus_index.documents()
     results = search_documents(
         documents,
@@ -76,6 +79,7 @@ async def hfl_api_documents(
         date_field=date_field,
         date_from=date_from,
         date_to=date_to,
+        sort_order=sort,
     )
     return {
         "documents": [_document_payload(document) for document in documents],
