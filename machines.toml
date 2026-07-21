@@ -188,6 +188,7 @@ kanban_profile = "agent:code"
 #     max_entries = 25
 #     max_media = 10
 #     max_text_chars = 20000
+#     max_topics_per_note = 4
 #
 #     [<editing-machine>.notes.repositories]
 #     <name> = "<absolute-local-checkout-path>"

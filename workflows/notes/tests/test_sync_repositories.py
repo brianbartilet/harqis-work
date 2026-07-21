@@ -22,7 +22,7 @@ def _definition(remote: Path, host_path: Path) -> NoteRepository:
         name="notes", remote=str(remote), branch="master",
         host_path=host_path, tags=("notes", "dsm"), include_globs=(),
         exclude_globs=(".git/**",), max_entries=25, max_media=10,
-        max_text_chars=20_000,
+        max_text_chars=20_000, max_topics_per_note=4,
     )
 
 
