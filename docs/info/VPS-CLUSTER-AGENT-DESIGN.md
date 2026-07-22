@@ -1,6 +1,6 @@
 # VPS Cluster Agent Design — Mac Mini Orchestrator + Cloud Worker Nodes
 
-**Related:** [AGENTS-TASKS-KANBAN.md](AGENTS-TASKS-KANBAN.md)  
+**Related:** [AGENTS-TASKS-KANBAN.md](AGENTS-TASKS-KANBAN.md) · [EDGE-TAILSCALE-NODE.md](EDGE-TAILSCALE-NODE.md) (Tailscale transport for Raspberry Pi / edge nodes — recommended replacement for the WireGuard plumbing in §4)  
 **Date:** 2026-04-10
 
 ---

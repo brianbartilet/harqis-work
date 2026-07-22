@@ -110,6 +110,20 @@ queues = ["agent", "worker", "default_broadcast"]
 kanban_profile = "agent:code"
 
 
+# ── Raspberry Pi edge node — pure worker over Tailscale ──────────────────────
+# An ARM Linux Pi joins the cluster exactly like a VPS node; the only difference
+# is the transport: it reaches the host broker/Redis/ES by Tailscale MagicDNS
+# name instead of a hand-distributed WireGuard wg0.conf + static 10.0.0.x IP.
+# Bootstrap: edge/rpi_node/bootstrap.sh   Full design: docs/info/EDGE-TAILSCALE-NODE.md
+[rpi-node]
+role = "node"
+# ARM-friendly headless queues. Keep the Pi off heavy `code` queues (bash/pytest
+# builds) where VPS nodes fit better; let it take light agent + broadcast work
+# and any edge-device bridging (sensor gateway / OwnTracks relay) it hosts.
+queues = ["default", "worker", "default_broadcast", "hfl_broadcast"]
+kanban_profile = "agent:write"
+
+
 # Map socket.gethostname() → machine name above.
 #
 # Real hostname mappings should NOT live here — they leak topology. Put them
@@ -122,6 +136,7 @@ kanban_profile = "agent:code"
 # "<bare-hostname>.local"  = "harqis-server"
 # "<windows-hostname>"     = "windows-work"
 # "<vps-hostname>"         = "vps-worker"
+# "<raspberry-pi-hostname>" = "rpi-node"        # Tailscale MagicDNS reaches it as <name>.<tailnet>.ts.net
 
 
 # ── Token expiry watchdog (scripts/agents/diagnostics/check_access_tokens.py) ─
