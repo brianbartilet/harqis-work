@@ -14,6 +14,7 @@ from modules.hfl_corpus.corpus import (
     CorpusDocument,
     CorpusEntry,
     build_tree,
+    paginate_documents,
     shallow_tree,
 )
 from services.safe_paths import ReferenceLink
@@ -59,6 +60,10 @@ def _document(payload: dict[str, Any]) -> CorpusDocument:
             if payload.get("matching_entry_count") is not None
             else None
         ),
+        tag_entry_anchors=tuple(
+            (str(item[0]), str(item[1]))
+            for item in payload.get("tag_entry_anchors") or ()
+        ),
     )
 
 
@@ -101,25 +106,46 @@ class RemoteCorpusClient:
 
     def index(self, *, params: dict[str, str]) -> dict[str, Any]:
         try:
-            payload = self._get("/documents", params=params).json()
+            payload = self._get(
+                "/documents", params={**params, "compact": "true"}
+            ).json()
             documents = tuple(
                 _document(item) for item in payload.get("documents") or ()
             )
+            results = tuple(_document(item) for item in payload["results"])
             tree = (
                 _tree(payload["tree"])
                 if payload.get("tree") is not None
                 else shallow_tree(build_tree(documents))
             )
+            if payload.get("page") is None:
+                result_page = paginate_documents(
+                    results,
+                    page=int(params.get("page") or 1),
+                    page_size=int(params.get("page_size") or 20),
+                )
+                results = result_page.items
+                page = result_page.page
+                page_size = result_page.page_size
+                total_pages = result_page.total_pages
+                has_previous = result_page.has_previous
+                has_next = result_page.has_next
+            else:
+                page = int(payload["page"])
+                page_size = int(payload["page_size"])
+                total_pages = int(payload["total_pages"])
+                has_previous = bool(payload["has_previous"])
+                has_next = bool(payload["has_next"])
             return {
                 "documents": documents,
                 "tree": tree,
-                "results": tuple(_document(item) for item in payload["results"]),
+                "results": results,
                 "total_results": int(payload["total_results"]),
-                "page": int(payload["page"]),
-                "page_size": int(payload["page_size"]),
-                "total_pages": int(payload["total_pages"]),
-                "has_previous": bool(payload["has_previous"]),
-                "has_next": bool(payload["has_next"]),
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "has_previous": has_previous,
+                "has_next": has_next,
                 "document_count": int(payload["document_count"]),
                 "tag_cloud": [tuple(item) for item in payload.get("tag_cloud") or ()],
             }

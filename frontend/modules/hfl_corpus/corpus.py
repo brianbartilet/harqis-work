@@ -72,6 +72,7 @@ class CorpusDocument:
     entry_count: int = 0
     entries: tuple[CorpusEntry, ...] = ()
     matching_entry_count: int | None = None
+    tag_entry_anchors: tuple[tuple[str, str], ...] = ()
 
     def matching_entries(
         self,
@@ -91,6 +92,14 @@ class CorpusDocument:
             )
             and (not text_needle or text_needle in entry.text.casefold())
         )
+
+    def first_matching_entry_anchor(self, tag: str) -> str:
+        normalized = tag.strip().lstrip("#").casefold()
+        for entry_tag, anchor in self.tag_entry_anchors:
+            if entry_tag.casefold() == normalized:
+                return anchor
+        matches = self.matching_entries(normalized)
+        return matches[0].anchor if matches else ""
 
     def matching_text_entries(self, phrase: str) -> tuple[CorpusEntry, ...]:
         needle = (phrase or "").strip().casefold()

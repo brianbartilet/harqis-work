@@ -690,11 +690,17 @@ def test_matching_entry_endpoint_returns_at_most_20_rows(
     monkeypatch.setattr(hfl_routes.corpus_index, "get", lambda path: document)
 
     response = authenticated_client.get("/hfl-corpus/matches/many.md?q=%23work")
+    next_response = authenticated_client.get(
+        "/hfl-corpus/matches/many.md?q=%23work&offset=20"
+    )
 
     assert response.status_code == 200
     assert response.text.count('data-matching-entry=') == 20
     assert "offset=20" in response.text
     assert "Load next 5" in response.text
+    assert next_response.status_code == 200
+    assert next_response.text.count('data-matching-entry=') == 5
+    assert 'class="h-64' not in next_response.text
 
 
 def test_selected_cloud_tag_missing_from_top_counts_is_rendered_first_and_highlighted(
@@ -914,8 +920,8 @@ def test_corpus_api_returns_canonical_documents(authenticated_client, monkeypatc
     assert response.json()["results"][0]["relative_path"] == "2026-07-10.md"
     assert response.json()["results"][0]["entry_count"] == 1
     assert response.json()["results"][0]["tag_counts"] == [["debugging", 1]]
-    assert response.json()["results"][0]["matching_entry_count"] == 1
-    assert "entries" not in response.json()["results"][0]
+    assert response.json()["documents"][0]["relative_path"] == "2026-07-10.md"
+    assert response.json()["results"][0]["entries"][0]["moment"] == "A useful moment"
 
 
 def test_corpus_api_paginates_results_and_returns_page_metadata(
@@ -927,7 +933,7 @@ def test_corpus_api_paginates_results_and_returns_page_metadata(
     monkeypatch.setattr(hfl_api.corpus_index, "documents", lambda: documents)
 
     response = authenticated_client.get(
-        "/api/hfl/documents?q=%23debugging&page=2&page_size=20",
+        "/api/hfl/documents?q=%23debugging&page=2&page_size=20&compact=true",
         headers={"Authorization": "Bearer frontend-test-hfl-api-token"},
     )
 
@@ -938,6 +944,9 @@ def test_corpus_api_paginates_results_and_returns_page_metadata(
     assert "tree" in payload
     assert "entries" not in payload["results"][0]
     assert payload["results"][0]["matching_entry_count"] == 1
+    assert payload["results"][0]["tag_entry_anchors"] == [
+        ["debugging", "hfl-entry-1-test-entry"]
+    ]
     assert payload["page"] == 2
     assert payload["page_size"] == 20
     assert payload["total_results"] == 25
@@ -1010,8 +1019,19 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
                 "excerpt": "A canonical entry",
             }],
         },
-        "results": [],
-        "total_results": 0,
+        "results": [{
+            "relative_path": "2026-07-19.md",
+            "name": "2026-07-19.md",
+            "created_at": "2026-07-19T09:30:00",
+            "updated_at": "2026-07-19T10:00:00",
+            "tags": ["hfl"],
+            "tag_counts": [["hfl", 1]],
+            "entry_count": 1,
+            "matching_entry_count": 1,
+            "tag_entry_anchors": [["hfl", "hfl-entry-1-remote"]],
+            "excerpt": "A canonical entry",
+        }],
+        "total_results": 1,
         "page": 1,
         "page_size": 20,
         "total_pages": 1,
@@ -1040,6 +1060,60 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
     assert result["documents"] == ()
     assert result["tree"]["files"][0].path is None
     assert result["tree"]["files"][0].relative_path == "2026-07-19.md"
+    assert (
+        result["results"][0].first_matching_entry_anchor("hfl")
+        == "hfl-entry-1-remote"
+    )
+
+
+def test_remote_client_paginates_legacy_index_contract(monkeypatch):
+    from modules.hfl_corpus.remote import RemoteCorpusClient
+
+    documents = [
+        {
+            "relative_path": f"{index:02d}.md",
+            "name": f"{index:02d}.md",
+            "created_at": "2026-07-19T09:30:00",
+            "updated_at": "2026-07-19T10:00:00",
+            "tags": ["hfl"],
+            "tag_counts": [["hfl", 1]],
+            "entry_count": 0,
+            "entries": [],
+            "excerpt": "A legacy canonical entry",
+        }
+        for index in range(25)
+    ]
+    payload = {
+        "documents": documents,
+        "results": documents,
+        "total_results": 25,
+        "document_count": 25,
+        "tag_cloud": [["hfl", 25]],
+    }
+    requested = {}
+
+    def legacy_get(url, **kwargs):
+        requested.update(kwargs.get("params") or {})
+        return httpx.Response(
+            200,
+            json=payload,
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx, "get", legacy_get)
+
+    result = RemoteCorpusClient("http://canonical:8081", "secret").index(
+        params={"page": "2", "page_size": "20"}
+    )
+
+    assert requested["compact"] == "true"
+    assert len(result["results"]) == 5
+    assert result["page"] == 2
+    assert result["page_size"] == 20
+    assert result["total_pages"] == 2
+    assert result["has_previous"] is True
+    assert result["has_next"] is False
+    assert len(result["tree"]["files"]) == 25
 
 
 def test_remote_mode_surfaces_failure_without_local_fallback(authenticated_client, monkeypatch):

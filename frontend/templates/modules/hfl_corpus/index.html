@@ -126,8 +126,8 @@
               <div class="mt-2 flex flex-wrap items-center gap-1.5">
                 {% for tag, count in document.ordered_tag_counts(selected_tags) %}
                 {% set active = document.tag_matches(tag, selected_tags) %}
-                {% set tag_entries = document.matching_entries(tag) %}
-                <a href="{{ url_for('hfl_document', relative_path=document.relative_path) }}?tag={{ tag | urlencode }}{% if tag_entries %}#{{ tag_entries[0].anchor }}{% endif %}"
+                {% set tag_entry_anchor = document.first_matching_entry_anchor(tag) %}
+                <a href="{{ url_for('hfl_document', relative_path=document.relative_path) }}?tag={{ tag | urlencode }}{% if tag_entry_anchor %}#{{ tag_entry_anchor }}{% endif %}"
                    data-result-tag="{{ tag }}" title="{{ count }} entries in this document"
                    class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs transition {% if active %}bg-emerald-950/70 text-emerald-200 ring-1 ring-emerald-700/60{% else %}bg-blue-950/50 text-blue-300 hover:bg-blue-900 hover:text-blue-100{% endif %}">
                   <span>#{{ tag }}</span><span class="{% if active %}text-emerald-400{% else %}text-blue-500{% endif %}">{{ count }}</span>

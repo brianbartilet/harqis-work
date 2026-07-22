@@ -46,6 +46,7 @@ def _document_payload(
     include_text: bool = False,
     include_entries: bool = False,
     matching_entry_count: int | None = None,
+    include_tag_entry_anchors: bool = False,
 ) -> dict:
     payload = {
         "relative_path": document.relative_path,
@@ -61,6 +62,12 @@ def _document_payload(
         payload["entries"] = [asdict(entry) for entry in document.entries]
     if matching_entry_count is not None:
         payload["matching_entry_count"] = matching_entry_count
+    if include_tag_entry_anchors:
+        payload["tag_entry_anchors"] = [
+            [tag, matches[0].anchor]
+            for tag in document.tags
+            if (matches := document.matching_entries(tag))
+        ]
     if include_text:
         payload["text"] = document.text
     return payload
@@ -85,6 +92,7 @@ async def hfl_api_documents(
     sort: str = "desc",
     page: int = 1,
     page_size: int = 20,
+    compact: bool = False,
 ):
     _authorize(request)
     if date_field not in {"created", "updated"}:
@@ -102,17 +110,24 @@ async def hfl_api_documents(
     )
     result_page = paginate_documents(results, page=page, page_size=page_size)
     selected_tags, text_query = parse_search_query(q)
-    return {
-        "tree": _tree_payload(shallow_tree(build_tree(documents))),
-        "results": [
-            _document_payload(
-                document,
-                matching_entry_count=len(
-                    document.matching_entries(selected_tags, text_query)
-                ) if q else 0,
-            )
-            for document in result_page.items
-        ],
+    payload = {
+        "results": (
+            [
+                _document_payload(
+                    document,
+                    matching_entry_count=len(
+                        document.matching_entries(selected_tags, text_query)
+                    ) if q else 0,
+                    include_tag_entry_anchors=True,
+                )
+                for document in result_page.items
+            ]
+            if compact
+            else [
+                _document_payload(document, include_entries=bool(q))
+                for document in results
+            ]
+        ),
         "total_results": result_page.total_results,
         "page": result_page.page,
         "page_size": result_page.page_size,
@@ -122,6 +137,13 @@ async def hfl_api_documents(
         "document_count": len(documents),
         "tag_cloud": common_tags(documents),
     }
+    if compact:
+        payload["tree"] = _tree_payload(shallow_tree(build_tree(documents)))
+    else:
+        payload["documents"] = [
+            _document_payload(document) for document in documents
+        ]
+    return payload
 
 
 @router.get("/tree")
