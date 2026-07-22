@@ -2,7 +2,7 @@
 {% block title %}HARQIS — Activity Corpus{% endblock %}
 
 {% block content %}
-<main class="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:flex lg:h-[calc(100vh-3.5rem)] lg:flex-col lg:overflow-hidden lg:px-8">
+<main data-corpus-index class="mx-auto max-w-7xl overflow-x-hidden py-5 pl-4 pr-5 sm:px-6 lg:flex lg:h-[calc(100vh-3.5rem)] lg:flex-col lg:overflow-hidden lg:px-8">
   <div class="mb-4 shrink-0">
     <p class="text-xs uppercase tracking-[0.22em] text-blue-400">HARQIS ACTIVITY LOGS</p>
     <h1 class="mt-1 text-2xl font-semibold text-white">Activity Corpus</h1>
@@ -28,28 +28,37 @@
           </details>
           <label for="q">Enter search</label>
         </div>
-        <div class="mt-1.5 flex items-center gap-2" data-search-input-actions>
+        <div class="mt-1.5 grid grid-cols-2 gap-2 sm:flex sm:items-center" data-search-input-actions>
           <input id="q" name="q" value="{{ query }}" placeholder="Search tags or query string"
-                 class="min-w-0 flex-1 rounded-lg bg-slate-950 px-3 py-2 text-sm text-white ring-1 ring-slate-700 placeholder:text-slate-700 focus:outline-none focus:ring-blue-500">
-          <button class="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500">Search</button>
-          <a href="/hfl-corpus" class="shrink-0 rounded-lg bg-slate-800 px-4 py-2 text-xs text-slate-400 hover:text-white">Reset</a>
+                 class="col-span-2 min-w-0 w-full rounded-lg bg-slate-950 px-3 py-2 text-sm text-white ring-1 ring-slate-700 placeholder:text-slate-700 focus:outline-none focus:ring-blue-500 sm:col-span-1 sm:flex-1">
+          <button class="w-full shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 sm:w-auto">Search</button>
+          <a href="/hfl-corpus" class="inline-flex w-full shrink-0 items-center justify-center rounded-lg bg-slate-800 px-4 py-2 text-xs text-slate-400 hover:text-white sm:w-auto">Reset</a>
         </div>
         <input type="hidden" name="sort" value="{{ sort_order }}">
       </div>
-      <label class="text-xs text-slate-500">Date type
-        <select name="date_field" class="mt-1.5 block w-full rounded-lg bg-slate-950 px-2.5 py-2 text-xs text-slate-300 ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500">
-          <option value="created" {% if date_field == 'created' %}selected{% endif %}>Created</option>
-          <option value="updated" {% if date_field == 'updated' %}selected{% endif %}>Updated</option>
-        </select>
-      </label>
-      <label class="text-xs text-slate-500">From
-        <input type="date" name="date_from" value="{{ date_from }}" onclick="if (this.showPicker) this.showPicker()"
-               class="mt-1.5 block w-full rounded-lg bg-slate-950 px-2.5 py-2 text-xs text-slate-300 ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 [color-scheme:dark]">
-      </label>
-      <label class="text-xs text-slate-500">To
-        <input type="date" name="date_to" value="{{ date_to }}" onclick="if (this.showPicker) this.showPicker()"
-               class="mt-1.5 block w-full rounded-lg bg-slate-950 px-2.5 py-2 text-xs text-slate-300 ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 [color-scheme:dark]">
-      </label>
+      <div data-mobile-date-filters class="rounded-lg border border-slate-800 bg-slate-950/60 lg:contents lg:border-0 lg:bg-transparent">
+        <input id="mobile-date-filters" data-mobile-date-filter-toggle type="checkbox" aria-controls="mobile-date-filter-fields" class="peer sr-only lg:hidden">
+        <label for="mobile-date-filters" class="flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-xs font-medium text-slate-400 peer-checked:[&>span:last-child]:rotate-180 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-slate-900 lg:hidden">
+          <span>Date filters</span>
+          <span aria-hidden="true" class="text-blue-400 transition">⌄</span>
+        </label>
+        <div id="mobile-date-filter-fields" data-date-filter-fields class="hidden gap-3 border-t border-slate-800 px-3 pb-3 pt-2 peer-checked:grid lg:contents lg:border-0 lg:p-0">
+          <label class="block text-xs text-slate-500 lg:block">Date type
+            <select name="date_field" class="mt-1.5 block w-full rounded-lg bg-slate-950 px-2.5 py-2 text-xs text-slate-300 ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500">
+              <option value="created" {% if date_field == 'created' %}selected{% endif %}>Created</option>
+              <option value="updated" {% if date_field == 'updated' %}selected{% endif %}>Updated</option>
+            </select>
+          </label>
+          <label class="block text-xs text-slate-500 lg:block">From
+            <input type="date" name="date_from" value="{{ date_from }}" onclick="if (this.showPicker) this.showPicker()"
+                   class="mt-1.5 block w-full rounded-lg bg-slate-950 px-2.5 py-2 text-xs text-slate-300 ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 [color-scheme:dark]">
+          </label>
+          <label class="block text-xs text-slate-500 lg:block">To
+            <input type="date" name="date_to" value="{{ date_to }}" onclick="if (this.showPicker) this.showPicker()"
+                   class="mt-1.5 block w-full rounded-lg bg-slate-950 px-2.5 py-2 text-xs text-slate-300 ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 [color-scheme:dark]">
+          </label>
+        </div>
+      </div>
     </div>
 
     {% if tag_cloud %}
@@ -70,7 +79,7 @@
   </form>
 
   <div class="grid min-h-0 gap-5 lg:flex-1 lg:grid-cols-[minmax(14rem,1fr)_minmax(0,3fr)]">
-    <aside class="flex min-h-[22rem] flex-col overflow-hidden rounded-xl border border-blue-800/70 bg-slate-900 lg:min-h-0">
+    <aside data-directory-tree class="hidden min-h-[22rem] flex-col overflow-hidden rounded-xl border border-blue-800/70 bg-slate-900 lg:flex lg:min-h-0">
       <div class="shrink-0 border-b border-blue-900/70 bg-slate-900 px-4 py-3">
         <div class="flex items-center justify-between gap-3">
           <h2 class="text-sm font-semibold text-white">Directory tree</h2>
@@ -82,11 +91,11 @@
       </div>
     </aside>
 
-    <section class="flex min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-xl border border-blue-800/70 bg-slate-950/20 lg:min-h-0">
-      <div class="flex shrink-0 items-center justify-between border-b border-blue-900/70 px-4 py-3">
+    <section data-corpus-results class="flex min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-xl border border-blue-800/70 bg-slate-950/20 lg:min-h-0">
+      <div data-corpus-results-toolbar class="flex shrink-0 flex-col gap-2 border-b border-blue-900/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 class="font-semibold text-white">Document results</h2>
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-slate-600">{{ total_results }} matches · showing {{ result_page.start }}–{{ result_page.end }}</span>
+        <div data-corpus-results-controls class="flex flex-wrap items-center gap-2">
+          <span data-corpus-results-count class="w-full text-xs text-slate-600 sm:w-auto">{{ total_results }} matches · showing {{ result_page.start }}–{{ result_page.end }}</span>
           <label class="text-xs text-slate-500">Show
             <select name="page_size" form="corpus-search-form" onchange="this.form.submit()"
                     class="ml-1 rounded-md bg-slate-900 px-1.5 py-1 text-xs text-slate-300 ring-1 ring-slate-700">
