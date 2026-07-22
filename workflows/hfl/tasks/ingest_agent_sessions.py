@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
@@ -35,6 +36,179 @@ _log = create_logger("hfl.ingest_agent_sessions")
 _DEFAULT_HAIKU = "claude-haiku-4-5-20251001"
 
 
+def _brief_request(prompt: str, outcome: str = "", *, limit: int = 120) -> str:
+    """Return a compact task-oriented Moment for no-model migrations."""
+    text = " ".join(prompt.split()).strip(" -*#")
+    text = re.sub(r"^(?:can|could|would) you\s+", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"^please\s+", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bprompt audit\b", "prompt-audit", text, flags=re.IGNORECASE)
+    if re.match(r"^\d+[.)]\s", text) and outcome:
+        outcome_sentences = [
+            part.strip(" -*")
+            for part in re.split(r"(?<=[.!?])\s+|\n+", outcome)
+            if part.strip(" -*")
+        ]
+        acknowledgements = {"got it", "okay", "ok", "sure", "done", "understood"}
+        substantive = next(
+            (
+                sentence
+                for sentence in outcome_sentences
+                if sentence.casefold().rstrip(".!?") not in acknowledgements
+                and not sentence.casefold().startswith(("let me ", "i'll ", "i will "))
+            ),
+            "",
+        )
+        if substantive:
+            text = substantive
+    clauses = [
+        part.strip(" ,.?;")
+        for part in re.split(r",\s*(?:and\s+)?", text)
+        if part.strip()
+    ]
+    if len(text) > limit and len(clauses) > 1:
+        first = re.sub(r"\s+readability$", "", clauses[0], flags=re.IGNORECASE)
+        text = f"{first} and {clauses[-1]}"
+    text = text.rstrip(".?!")
+    if len(text) > limit:
+        text = text[: limit - 1].rsplit(" ", 1)[0].rstrip(" ,;:") + "…"
+    return text[:1].upper() + text[1:] if text else "Agent task completed"
+
+
+def _safe_markdown(text: str) -> str:
+    """Preserve rich Markdown while reserving H2 for HFL entry navigation."""
+    lines: list[str] = []
+    in_fence = False
+    for raw in (text or "").splitlines():
+        stripped = raw.lstrip()
+        if stripped.startswith(("```", "~~~")):
+            in_fence = not in_fence
+            lines.append(raw.rstrip())
+            continue
+        if not in_fence:
+            heading = re.match(r"^(\s*)#{1,6}\s+(.*)$", raw)
+            if heading:
+                raw = f"{heading.group(1)}#### {heading.group(2)}"
+        lines.append(raw.rstrip())
+    return "\n".join(lines).strip()
+
+
+def _readable_markdown(text: str) -> str:
+    """Preserve structured outcomes; bullet dense unstructured prose."""
+    compact = _safe_markdown(text)
+    if not compact:
+        return "No visible outcome was retained."
+    if any(
+        line.lstrip().startswith(("- ", "* ", "+ ", "1. ", "#", "```", "~~~", "|"))
+        for line in compact.splitlines()
+    ):
+        return compact
+    sentences = [
+        part.strip()
+        for part in re.split(r"(?<=[.!?])\s+", compact)
+        if part.strip()
+    ]
+    return "\n".join(f"- {sentence}" for sentence in sentences)
+
+
+def _short_line(text: str, limit: int = 180) -> str:
+    compact = " ".join(text.split()).strip(" -*")
+    if len(compact) <= limit:
+        return compact
+    shortened = compact[: limit - 1].rsplit(" ", 1)[0].rstrip(" ,;:")
+    return f"{shortened}…"
+
+
+def _summarize_outcome(text: str, *, limit: int = 900) -> str:
+    """Keep long fallback outcomes useful without cutting raw text mid-line."""
+    normalized = "\n".join(
+        " ".join(line.split())
+        for line in (text or "").splitlines()
+        if line.strip()
+    )
+    if len(normalized) <= limit:
+        return normalized
+
+    raw_lines = (text or "").splitlines()
+    opening: list[str] = []
+    for raw in raw_lines:
+        line = raw.strip()
+        if not line:
+            if opening:
+                break
+            continue
+        if not line.startswith(("|", "#")):
+            opening.append(line)
+    lead = _short_line(" ".join(opening), 240)
+    lead = re.sub(
+        r"^(?:yes|okay|ok|sure|understood)\.\s+",
+        "",
+        lead,
+        flags=re.IGNORECASE,
+    )
+
+    headings: list[tuple[int, str]] = []
+    for index, raw in enumerate(raw_lines):
+        match = re.match(r"^\s*\d+[.)]\s+\*\*(.+?)\*\*", raw)
+        if match:
+            headings.append((index, match.group(1).strip()))
+
+    highlights: list[str] = []
+    before_ranked = raw_lines[: headings[0][0]] if headings else raw_lines
+    for raw in before_ranked:
+        total = re.match(
+            r"^\s*\|\s*\*\*(.+?)\*\*\s*\|\s*\*\*(.+?)\*\*\s*\|\s*$",
+            raw,
+        )
+        if total:
+            highlights.append(f"- **{total.group(1)}:** {total.group(2)}")
+        elif re.match(r"^\s*So\b", raw, re.IGNORECASE) and re.search(r"\d", raw):
+            highlights.append(f"- {_short_line(raw)}")
+
+    bullets: list[str] = []
+    for position, (index, title) in enumerate(headings[:6]):
+        stop = headings[position + 1][0] if position + 1 < len(headings) else len(raw_lines)
+        details = []
+        for raw in raw_lines[index + 1:stop]:
+            detail = re.sub(r"^\s*[-*]\s+", "", raw).strip()
+            if (
+                detail
+                and not detail.startswith(("|", "#", "`"))
+                and not detail.endswith(":")
+                and "[truncated]" not in detail.casefold()
+            ):
+                details.append(detail)
+        if details:
+            bullets.append(f"- **{title}:** {_short_line(details[-1])}")
+
+    if not bullets:
+        sentences = [
+            _short_line(part)
+            for part in re.split(r"(?<=[.!?])\s+|\n+", normalized)
+            if part.strip() and "[truncated]" not in part.casefold()
+        ]
+        bullets = [f"- {sentence}" for sentence in sentences[1:6]]
+
+    findings = [*highlights[:2], *bullets]
+    lines = [lead, "", "Key findings:", *findings] if lead else ["Key findings:", *findings]
+    selected: list[str] = []
+    for line in lines:
+        candidate = "\n".join([*selected, line]).strip()
+        if len(candidate) > limit:
+            break
+        selected.append(line)
+    return "\n".join(selected).strip()
+
+
+def format_agent_session_happened(distilled: dict[str, Any]) -> str:
+    """Render rich Markdown while avoiding H1/H2 navigation collisions."""
+    request = " ".join(str(
+        distilled.get("request_summary") or distilled.get("corrected_prompt") or ""
+    ).split()).strip()
+    request = re.sub(r"^#{1,6}\s+", "", request)
+    outcome = _readable_markdown(str(distilled.get("work_summary") or ""))
+    return f"### Request\n{request}\n\n### Outcome\n{outcome}"
+
+
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(f".tmp-{os.getpid()}")
@@ -49,11 +223,11 @@ def _artifact_path(event: dict[str, Any]) -> Path:
 
 def _fallback_distillation(event: dict[str, Any]) -> dict[str, Any]:
     corrected = " ".join(event["original_prompt"].split())
-    outcome = " ".join(event["assistant_outcome"].split())
+    outcome = _summarize_outcome(event["assistant_outcome"])
     return {
         "corrected_prompt": corrected,
-        "request_summary": corrected[:240],
-        "work_summary": outcome[:1500],
+        "request_summary": _brief_request(corrected, outcome),
+        "work_summary": outcome,
         "result_status": event.get("result_status") or "unknown",
         "why_it_stayed": "Prompt and outcome retained for audit and future recall.",
         "tags": [],
@@ -90,6 +264,9 @@ def distill_agent_session_event(
             return fallback
         for key in ("corrected_prompt", "request_summary", "work_summary", "result_status", "why_it_stayed"):
             parsed[key] = sanitize_text(parsed.get(key) or fallback[key], limit=10_000)
+        parsed["request_summary"] = _brief_request(
+            parsed["request_summary"], parsed["work_summary"]
+        )
         parsed["tags"] = [
             sanitize_text(tag, limit=100).lstrip("#")
             for tag in parsed.get("tags", [])
@@ -110,9 +287,11 @@ def collect_agent_session_events(
     current = since
     while current <= until and len(events) < max(1, limit):
         for path in sorted((root / current.isoformat()).glob("*.json")) if (root / current.isoformat()).exists() else ():
+            if path.name.startswith("._"):
+                continue
             try:
                 item = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
                 continue
             ingest = item.get("ingest") if isinstance(item.get("ingest"), dict) else {}
             if processed_only and ingest.get("delivery") not in {"persisted", "forwarded", "outbox"}:
@@ -128,7 +307,13 @@ def collect_agent_session_events(
 
 def _event_references(event: dict[str, Any], artifact_path: Path) -> tuple[str, ...]:
     refs = [str(artifact_path)]
-    refs.extend(str(item.get("value")) for item in event.get("artifacts", []) if isinstance(item, dict) and item.get("value"))
+    refs.extend(
+        str(item["value"])
+        for item in event.get("artifacts", [])
+        if isinstance(item, dict)
+        and item.get("kind") in {"url", "file", "path"}
+        and item.get("value")
+    )
     return tuple(dict.fromkeys(refs))
 
 
@@ -157,7 +342,7 @@ def process_agent_session_event(
     entry = HflEntry(
         when=when,
         moment=distilled["request_summary"],
-        what_happened=f"Request: {distilled['corrected_prompt']}\nOutcome: {distilled['work_summary']}",
+        what_happened=format_agent_session_happened(distilled),
         why_it_stayed=distilled["why_it_stayed"],
         possible_use="audit-log",
         tags=tags,

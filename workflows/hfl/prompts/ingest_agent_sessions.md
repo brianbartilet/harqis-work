@@ -6,8 +6,8 @@ Never infer hidden reasoning, credentials, environment values, or tool output.
 Reply with a SINGLE JSON object and nothing else:
 {
   "corrected_prompt": "faithful typo-corrected prompt",
-  "request_summary": "concise one-line request",
-  "work_summary": "concise description of what the assistant actually did",
+  "request_summary": "brief useful task phrase, maximum 120 characters",
+  "work_summary": "concise readable Markdown; use short bullets for multiple actions/results",
   "result_status": "completed|partial|blocked|failed|unknown",
   "why_it_stayed": "short audit value or durable lesson",
   "tags": ["2-6", "lowercase", "tags"]
@@ -18,6 +18,14 @@ Grounding rules:
 - Treat the assistant outcome as a report, not proof of unmentioned work.
 - Redacted text must remain redacted.
 - Do not include chain-of-thought or speculate about internal reasoning.
+- Keep `request_summary` shorter than the corrected prompt. Prefer an imperative
+  task phrase such as "Improve prompt-audit migration" over copied prose.
+- For `work_summary`, separate multiple completed actions, verification results,
+  and blockers with Markdown bullets. Do not return one dense paragraph.
+- Internal compaction handoffs, system verification reminders, delegation
+  completion notices, iteration-limit messages, and active-task-list notices are
+  context—not user moments. Never describe them as the request. Summarize only
+  the useful user task and visible result they support; omit them when orphaned.
 
 Example input: prompt "pls add retry and tell me what changed"; outcome "Added
 three-attempt exponential retry to api.py and updated its tests."

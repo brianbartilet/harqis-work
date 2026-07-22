@@ -76,6 +76,25 @@ def test__round_trip_with_references_incl_paths_with_spaces():
     assert back.references == entry.references
 
 
+def test__multiline_markdown_field_starts_after_label_and_round_trips():
+    entry = HflEntry(
+        when=datetime(2026, 7, 22, 12, 0),
+        moment="Readable audit entry",
+        what_happened="### Request\nInspect the corpus\n\n### Outcome\n- Fixed `rendering`",
+        why_it_stayed="Useful migration evidence.",
+        possible_use="audit-log",
+        tags=("prompt-audit",),
+    )
+
+    markdown = entry.to_markdown()
+    header, body = markdown.split("\n", 1)
+    restored = HflEntry.from_markdown(header, body)
+
+    assert "What happened:   \n### Request" in markdown
+    assert "What happened:   ### Request" not in markdown
+    assert restored.what_happened == entry.what_happened
+
+
 def test__references_rendered_only_when_present():
     base = dict(
         when=datetime(2026, 5, 17, 23, 0), moment="m",

@@ -519,6 +519,51 @@ WORKFLOW_HFL = {
             'hfl_signal': False,
         },
     },
+    # Retry locally retained prompt/outcome audit events that were not accepted
+    # by the broker at capture time. Immediate hook delivery remains primary.
+    'run-job--ingest_agent_session_events': {
+        'task': 'workflows.hfl.tasks.ingest_agent_sessions.ingest_agent_session_events',
+        'schedule': crontab(minute='*/10'),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'window_days': 2,
+            'max_events': 500,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 9,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+        },
+    },
+
+    # Daily cross-surface prompt audit rollup after the last ingest slot.
+    'run-job--rollup_agent_sessions': {
+        'task': 'workflows.hfl.tasks.ingest_agent_sessions.rollup_agent_sessions',
+        'schedule': crontab(hour=23, minute=40),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'max_events': 500,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 60 * 12,
+        },
+        'manifesto': {
+            'code_role': 'distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+        },
+    },
 
 
 }
