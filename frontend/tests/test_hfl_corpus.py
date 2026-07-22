@@ -574,13 +574,83 @@ def test_corpus_search_is_sticky_above_aligned_directory_and_results(
         'lg:grid-cols-[minmax(14rem,1fr)_minmax(0,3fr)]'
     )
     assert search_position < grid_position
-    assert "sticky top-24" in response.text
-    assert "md:top-14" in response.text
+    assert "sticky top-0" in response.text
     assert "fixed inset-x-4 bottom-4" not in response.text
     assert ">Document results</h2>" in response.text
     assert response.text.index(">Directory tree</h2>") < response.text.index(
         ">Document results</h2>"
     )
+
+
+def test_corpus_mobile_pins_panels_and_scrolls_only_result_cards(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document("2026-07-10.md")
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get("/hfl-corpus")
+
+    main = response.text.split('data-corpus-index', 1)[1].split(">", 1)[0]
+    search = response.text.split('data-index-search-panel', 1)[1].split(">", 1)[0]
+    spacing = response.text.split('data-search-panel-spacing', 1)[1].split(
+        ">", 1
+    )[0]
+    layout = response.text.split('data-corpus-layout', 1)[1].split(">", 1)[0]
+    results = response.text.split('data-corpus-results', 1)[1].split(">", 1)[0]
+    toolbar = response.text.split('data-corpus-results-toolbar', 1)[1].split(
+        ">", 1
+    )[0]
+    cards = response.text.split('data-corpus-results-scroll', 1)[1].split(
+        ">", 1
+    )[0]
+    bottom_spacing = response.text.split('data-results-bottom-spacing', 1)[1].split(
+        ">", 1
+    )[0]
+    assert "flex" in main
+    assert "flex-col" in main
+    assert "h-[calc(100dvh-6rem)]" in main
+    assert "md:h-[calc(100dvh-3.5rem)]" in main
+    assert "overflow-y-auto" in main
+    assert "overscroll-contain" in main
+    assert "lg:overflow-hidden" in main
+    assert "[@media(max-height:600px)]:h-[calc(100dvh-96px)]" in main
+    assert "[@media(max-height:600px)]:py-[20px]" in main
+    assert "[@media(max-height:600px)]:max-h-[120px]" in search
+    assert "[@media(max-height:600px)]:overflow-y-auto" in search
+    assert "h-4" in spacing
+    assert "[@media(max-height:600px)]:h-[12px]" in spacing
+    assert "shrink-0" in spacing
+    assert "min-h-56" in layout
+    assert "lg:min-h-0" in layout
+    assert "flex-1" in layout
+    assert "[@media(max-height:600px)]:sticky" in layout
+    assert "[@media(max-height:600px)]:top-[152px]" in layout
+    assert "[@media(max-height:600px)]:min-h-[162px]" in layout
+    assert "min-h-56" in results
+    assert "lg:min-h-0" in results
+    assert "[@media(max-height:600px)]:min-h-[162px]" in results
+    assert "flex-1" in results
+    assert "shrink-0" in toolbar
+    assert "z-10" in toolbar
+    assert "[@media(max-height:600px)]:max-h-[100px]" in toolbar
+    assert "[@media(max-height:600px)]:gap-[4px]" in toolbar
+    assert "[@media(max-height:600px)]:overflow-y-auto" in toolbar
+    assert "[@media(max-height:600px)]:py-[6px]" in toolbar
+    assert "min-h-0" in cards
+    assert "flex-1" in cards
+    assert "overflow-y-auto" in cards
+    assert "overscroll-contain" in cards
+    assert "hidden" in bottom_spacing
+    assert "shrink-0" in bottom_spacing
+    assert "[@media(max-height:600px)]:block" in bottom_spacing
+    assert "[@media(max-height:600px)]:h-[48px]" in bottom_spacing
+    assert response.text.index('data-corpus-results-toolbar') < response.text.index(
+        'data-corpus-results-scroll'
+    )
+    assert 'onchange="this.form.submit()"' in response.text
+    assert 'form="corpus-search-form"' in response.text
 
 
 def test_corpus_mobile_layout_prioritizes_search_results(
@@ -595,7 +665,7 @@ def test_corpus_mobile_layout_prioritizes_search_results(
 
     assert response.status_code == 200
     main = response.text.split('data-corpus-index', 1)[1].split('>', 1)[0]
-    assert "overflow-x-hidden" in main
+    assert "overflow-x-clip" in main
     assert "pr-5" in main
     directory = response.text.split('data-directory-tree', 1)[1].split('>', 1)[0]
     assert "hidden" in directory
@@ -615,6 +685,7 @@ def test_corpus_mobile_layout_prioritizes_search_results(
     assert "flex-wrap" in controls_opening
     assert "w-full" in count_opening
     assert "sm:w-auto" in count_opening
+    assert "[@media(max-height:600px)]:hidden" in count_opening
     search_opening = response.text.split('data-search-input-actions', 1)[0].rsplit(
         "<div", 1
     )[1]
@@ -625,8 +696,7 @@ def test_corpus_mobile_layout_prioritizes_search_results(
     assert "sm:flex" in search_opening
     assert "col-span-2" in search_actions
     assert ">Reset</a>" in search_actions
-    assert "sticky top-24" in response.text
-    assert "md:top-14" in response.text
+    assert "sticky top-0" in response.text
 
 
 def test_corpus_mobile_date_filters_are_collapsed_but_desktop_fields_remain_visible(
@@ -853,7 +923,7 @@ def test_corpus_index_uses_full_width_search_and_left_directory_layout(
     assert "Markdown files" not in response.text
     assert response.text.index(">Directory tree</h2>") < response.text.index(">Document results</h2>")
     assert 'data-index-search-panel' in response.text
-    assert "sticky top-24" in response.text
+    assert "sticky top-0" in response.text
     assert "border-blue-800/70" in response.text
 
 
