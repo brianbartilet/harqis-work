@@ -19,6 +19,7 @@ _DATE_IN_NAME = re.compile(r"(20\d{2}-\d{2}-\d{2})")
 _TAG_LINE = re.compile(r"^\s*Tags:\s*(.+?)\s*$", re.MULTILINE | re.IGNORECASE)
 _TAG_TOKEN = re.compile(r"(?<!\w)#([\w-]+)", re.UNICODE)
 _NON_SLUG = re.compile(r"[^a-z0-9]+")
+_GIT_SHA = re.compile(r"^[0-9a-f]{7,40}$", re.IGNORECASE)
 _MONTH_DIRECTORY_ORDER = {
     name.casefold(): index
     for index, name in enumerate(
@@ -218,14 +219,44 @@ def _entry_anchor(header: str, index: int) -> str:
     return f"hfl-entry-{index + 1}-{slug}"
 
 
+def _field_blocks(body: str) -> dict[str, str]:
+    fields: dict[str, list[str]] = {}
+    current = ""
+    for raw in body.splitlines():
+        field = _HFL_FIELD.match(raw)
+        if field:
+            current = field.group(1).casefold()
+            fields[current] = [field.group(2).strip()]
+        elif current:
+            fields[current].append(raw.rstrip())
+    return {
+        name: "\n".join(lines).strip()
+        for name, lines in fields.items()
+    }
+
+
+def _entry_preview(value: str) -> str:
+    lines = [line.strip() for line in (value or "").splitlines()]
+    outcome = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if line.casefold() in {"### outcome", "outcome:"}
+        ),
+        None,
+    )
+    candidates = lines[outcome + 1:] if outcome is not None else lines
+    for line in candidates:
+        if not line or line.startswith("#"):
+            continue
+        return re.sub(r"^(?:[-*•]|\d+[.)])\s+", "", line).strip()
+    return ""
+
+
 def parse_entries(text: str) -> tuple[CorpusEntry, ...]:
     entries: list[CorpusEntry] = []
     for index, (header, body) in enumerate(_entry_blocks(text)):
-        fields: dict[str, str] = {}
-        for raw in body.splitlines():
-            field = _HFL_FIELD.match(raw)
-            if field:
-                fields[field.group(1).casefold()] = field.group(2).strip()
+        fields = _field_blocks(body)
         tags = tuple(
             sorted(
                 {
@@ -235,12 +266,14 @@ def parse_entries(text: str) -> tuple[CorpusEntry, ...]:
                 }
             )
         )
+        what_happened = _entry_preview(fields.get("what happened", ""))
+        moment = _entry_preview(fields.get("moment", "")) or what_happened or header
         entries.append(
             CorpusEntry(
                 anchor=_entry_anchor(header, index),
                 header=header,
-                moment=fields.get("moment", ""),
-                what_happened=fields.get("what happened", ""),
+                moment=moment,
+                what_happened=what_happened or moment,
                 tags=tags,
                 text=f"{header}\n{body}",
             )
@@ -274,7 +307,7 @@ def _entry_metadata(header: str, body: str) -> tuple[datetime | None, tuple[str,
         if collecting_references:
             if stripped.startswith("- "):
                 reference = stripped[2:].strip()
-                if reference:
+                if reference and not _GIT_SHA.fullmatch(reference):
                     references.append(reference)
                 continue
             if not stripped:

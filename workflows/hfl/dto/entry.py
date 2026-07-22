@@ -97,6 +97,13 @@ class HflEntry:
     def _fmt_tags(tags: tuple[str, ...]) -> str:
         return " ".join(f"#{t}" for t in tags)
 
+    @staticmethod
+    def _fmt_field(label: str, value: str) -> str:
+        prefix = f"{label}:".ljust(_COL)
+        if "\n" in value or value.lstrip().startswith("#"):
+            return f"{prefix}\n{value}"
+        return f"{prefix}{value}"
+
     def to_markdown(self) -> str:
         """Render the entry block (trailing blank line included).
 
@@ -112,10 +119,10 @@ class HflEntry:
         if self.entry_id:
             lines.append(f"{'Entry ID:'.ljust(_COL)}{self.entry_id}")
         lines.extend([
-            f"{'Moment:'.ljust(_COL)}{self.moment}",
-            f"{'What happened:'.ljust(_COL)}{self.what_happened}",
-            f"{'Why it stayed:'.ljust(_COL)}{self.why_it_stayed}",
-            f"{'Possible use:'.ljust(_COL)}{self.possible_use}",
+            self._fmt_field("Moment", self.moment),
+            self._fmt_field("What happened", self.what_happened),
+            self._fmt_field("Why it stayed", self.why_it_stayed),
+            self._fmt_field("Possible use", self.possible_use),
             f"{'Tags:'.ljust(_COL)}{self._fmt_tags(self.tags)}",
         ])
         if self.references:
@@ -150,6 +157,7 @@ class HflEntry:
         vals: dict[str, str] = {}
         refs: list[str] = []
         collecting_refs = False
+        current_field: str | None = None
         for raw in (body or "").splitlines():
             stripped = raw.strip()
             if collecting_refs:
@@ -158,17 +166,17 @@ class HflEntry:
                     continue
                 if not stripped:
                     continue
-                collecting_refs = False  # fall through to key parsing
-            if ":" not in raw:
-                continue
-            key = raw.split(":", 1)[0].strip()
+                collecting_refs = False
+            key = raw.split(":", 1)[0].strip() if ":" in raw else ""
             field_name = _LABELS.get(key)
-            if field_name is None:
-                continue
-            if field_name == "references":
-                collecting_refs = True
-                continue
-            vals[field_name] = raw.split(":", 1)[1].strip()
+            if field_name:
+                current_field = field_name
+                if field_name == "references":
+                    collecting_refs = True
+                    continue
+                vals[field_name] = raw.split(":", 1)[1].strip()
+            elif current_field and current_field != "references":
+                vals[current_field] = f"{vals.get(current_field, '')}\n{raw.rstrip()}"
 
         tags = tuple(
             t.lstrip("#") for t in vals.get("tags", "").split() if t.strip()

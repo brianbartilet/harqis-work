@@ -95,10 +95,11 @@
         history.replaceState(null, '', url);
       }
 
-      function selectTag(button) {
+      function selectTag(button, requestedAnchor = '') {
         currentTag = button.dataset.tag;
         anchors = (button.dataset.anchors || '').split(',').filter(Boolean);
-        currentIndex = 0;
+        const requestedIndex = anchors.indexOf(requestedAnchor);
+        currentIndex = requestedIndex >= 0 ? requestedIndex : 0;
         tagButtons.forEach((item) => {
           const active = item === button;
           item.setAttribute('aria-pressed', active ? 'true' : 'false');
@@ -113,7 +114,7 @@
         const disabled = anchors.length <= 1;
         previous.disabled = disabled;
         next.disabled = disabled;
-        position.textContent = anchors.length ? `1 / ${anchors.length}` : 'No matches';
+        position.textContent = anchors.length ? `${currentIndex + 1} / ${anchors.length}` : 'No matches';
         showCurrentEntry();
       }
 
@@ -133,7 +134,7 @@
       const requested = (navigator.dataset.selectedTag || '').toLowerCase();
       const initial = tagButtons.find((button) => button.dataset.tag.toLowerCase() === requested)
         || tagButtons.find((button) => button.dataset.tag.toLowerCase().includes(requested) && requested);
-      if (initial) selectTag(initial);
+      if (initial) selectTag(initial, window.location.hash.slice(1));
     })();
   </script>
   {% endif %}

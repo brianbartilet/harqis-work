@@ -89,6 +89,57 @@ def test_recursive_index_extracts_dates_tags_and_references(tmp_path, monkeypatc
     assert documents[0].references == ("https://example.com/source",)
 
 
+def test_entry_previews_skip_markdown_sections_and_never_render_blank():
+    entries = corpus_module.parse_entries(
+        "## 2026-07-21 20:09\n"
+        "Moment:\n"
+        "What happened:   ### Request\n"
+        "Pull latest and restart the stack\n\n"
+        "### Outcome\n"
+        "- Pulled the latest changes and restarted successfully.\n"
+        "Tags: #hermes\n\n"
+        "## 2026-07-21 19:00\n"
+        "Tags: #hermes\n"
+    )
+
+    assert entries[0].moment == "Pulled the latest changes and restarted successfully."
+    assert entries[0].what_happened == "Pulled the latest changes and restarted successfully."
+    assert entries[1].moment == "2026-07-21 19:00"
+    assert entries[1].what_happened == "2026-07-21 19:00"
+
+
+def test_entry_previews_read_plain_text_prompt_audit_sections():
+    entries = corpus_module.parse_entries(
+        "## 2026-07-22 01:10\n"
+        "Moment: Git pull latest and restart the stack\n"
+        "What happened: Request: Git pull latest and restart the stack\n"
+        "Outcome:\n"
+        "Pulled and restarted the HARQIS stack.\n"
+        "• Branch: main\n"
+        "Tags: #prompt-audit\n"
+    )
+
+    assert entries[0].what_happened == "Pulled and restarted the HARQIS stack."
+
+
+def test_recursive_index_ignores_bare_git_hash_references(tmp_path, monkeypatch):
+    source = tmp_path / "2026-07-21.md"
+    source.write_text(
+        "## 2026-07-21 20:09\n"
+        "Moment: Restarted frontend\n"
+        "References:\n"
+        "  - /tmp/audit.json\n"
+        "  - b8cf522\n"
+        "  - b09033a\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(corpus_module, "resolve_corpus_root", lambda: tmp_path)
+
+    document = CorpusIndex(ttl_seconds=0).documents(force=True)[0]
+
+    assert document.references == ("/tmp/audit.json",)
+
+
 def test_recursive_index_excludes_hidden_directories(tmp_path, monkeypatch):
     _write_visible = tmp_path / "visible" / "2026-07-10.md"
     _write_visible.parent.mkdir()
@@ -955,6 +1006,8 @@ def test_document_adds_entry_anchors_and_wraparound_tag_navigation(
     assert "pb-56" in response.text
     assert "sm:order-2 sm:w-auto" in response.text
     assert "button.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })" in response.text
+    assert "window.location.hash.slice(1)" in response.text
+    assert "anchors.indexOf(requestedAnchor)" in response.text
 
 
 def test_document_without_entries_keeps_content_and_hides_navigator(
