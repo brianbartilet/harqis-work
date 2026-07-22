@@ -1,0 +1,4 @@
+interface:
+  display_name: "Capture HFL Session"
+  short_description: "Capture a prompt and outcome into HFL"
+  default_prompt: "Use $capture-hfl-session to archive this prompt and its outcome in HFL."

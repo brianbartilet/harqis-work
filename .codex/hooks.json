@@ -1,0 +1,23 @@
+{
+  "description": "Capture user-prompt/assistant-outcome pairs for the HFL audit log.",
+  "hooks": {
+    "UserPromptSubmit": [{
+      "hooks": [{
+        "type": "command",
+        "command": "\"$(git rev-parse --show-toplevel)/.venv/bin/python\" \"$(git rev-parse --show-toplevel)/scripts/agents/hfl/capture_session_event.py\" --surface codex --hook",
+        "commandWindows": "powershell -NoProfile -Command \"$r=(git rev-parse --show-toplevel); & ($r + '\\.venv\\Scripts\\python.exe') ($r + '\\scripts\\agents\\hfl\\capture_session_event.py') --surface codex --hook\"",
+        "timeout": 30,
+        "statusMessage": "Capturing prompt audit"
+      }]
+    }],
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "\"$(git rev-parse --show-toplevel)/.venv/bin/python\" \"$(git rev-parse --show-toplevel)/scripts/agents/hfl/capture_session_event.py\" --surface codex --hook",
+        "commandWindows": "powershell -NoProfile -Command \"$r=(git rev-parse --show-toplevel); & ($r + '\\.venv\\Scripts\\python.exe') ($r + '\\scripts\\agents\\hfl\\capture_session_event.py') --surface codex --hook\"",
+        "timeout": 30,
+        "statusMessage": "Archiving prompt outcome"
+      }]
+    }]
+  }
+}
