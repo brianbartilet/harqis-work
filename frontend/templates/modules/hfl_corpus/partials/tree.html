@@ -1,0 +1,14 @@
+{% for directory in tree.directories %}
+<details class="ml-3">
+  <summary hx-get="{{ url_for('hfl_tree') }}?path={{ directory.path | urlencode }}"
+           hx-trigger="click once" hx-target="next .tree-branch"
+           class="cursor-pointer py-1 text-xs text-slate-400 hover:text-white">{{ directory.name }}</summary>
+  <div class="tree-branch ml-2 text-xs text-slate-600">Loading…</div>
+</details>
+{% endfor %}
+{% for document in tree.files %}
+<a data-tree-file="{{ document.relative_path }}"
+   href="{{ url_for('hfl_document', relative_path=document.relative_path) }}"
+   class="ml-3 block truncate rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-800 hover:text-blue-300"
+   title="{{ document.relative_path }}">{{ document.name }}</a>
+{% endfor %}

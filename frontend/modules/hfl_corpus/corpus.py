@@ -45,6 +45,7 @@ _HFL_FIELD_LABELS = {
     "machine": "Machine",
     "entry id": "Entry ID",
 }
+PAGE_SIZES = (20, 50, 100)
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,8 @@ class CorpusDocument:
     tag_counts: tuple[tuple[str, int], ...] = ()
     entry_count: int = 0
     entries: tuple[CorpusEntry, ...] = ()
+    matching_entry_count: int | None = None
+    tag_entry_anchors: tuple[tuple[str, str], ...] = ()
 
     def matching_entries(
         self,
@@ -90,6 +93,14 @@ class CorpusDocument:
             )
             and (not text_needle or text_needle in entry.text.casefold())
         )
+
+    def first_matching_entry_anchor(self, tag: str) -> str:
+        normalized = tag.strip().lstrip("#").casefold()
+        for entry_tag, anchor in self.tag_entry_anchors:
+            if entry_tag.casefold() == normalized:
+                return anchor
+        matches = self.matching_entries(normalized)
+        return matches[0].anchor if matches else ""
 
     def matching_text_entries(self, phrase: str) -> tuple[CorpusEntry, ...]:
         needle = (phrase or "").strip().casefold()
@@ -129,6 +140,48 @@ class CorpusDocument:
         needles = _tag_needles(selected_tags)
         folded_tag = tag.casefold()
         return any(needle in folded_tag for needle in needles)
+
+
+@dataclass(frozen=True)
+class CorpusPage:
+    items: tuple[CorpusDocument, ...]
+    page: int
+    page_size: int
+    total_results: int
+    total_pages: int
+    start: int
+    end: int
+
+    @property
+    def has_previous(self) -> bool:
+        return self.page > 1
+
+    @property
+    def has_next(self) -> bool:
+        return self.page < self.total_pages
+
+
+def paginate_documents(
+    documents: list[CorpusDocument] | tuple[CorpusDocument, ...],
+    *,
+    page: int = 1,
+    page_size: int = 20,
+) -> CorpusPage:
+    normalized_size = page_size if page_size in PAGE_SIZES else PAGE_SIZES[0]
+    total_results = len(documents)
+    total_pages = max(1, (total_results + normalized_size - 1) // normalized_size)
+    normalized_page = min(max(1, page), total_pages)
+    offset = (normalized_page - 1) * normalized_size
+    items = tuple(documents[offset: offset + normalized_size])
+    return CorpusPage(
+        items=items,
+        page=normalized_page,
+        page_size=normalized_size,
+        total_results=total_results,
+        total_pages=total_pages,
+        start=offset + 1 if items else 0,
+        end=offset + len(items),
+    )
 
 
 def _tag_needles(selected_tags: str | tuple[str, ...]) -> tuple[str, ...]:
@@ -320,6 +373,7 @@ class CorpusIndex:
         self._loaded_at = 0.0
         self._root: Path | None = None
         self._documents: tuple[CorpusDocument, ...] = ()
+        self._file_cache: dict[str, tuple[int, int, CorpusDocument]] = {}
         self._lock = Lock()
 
     def documents(self, force: bool = False) -> tuple[CorpusDocument, ...]:
@@ -328,38 +382,49 @@ class CorpusIndex:
             return self._documents
         with self._lock:
             documents: list[CorpusDocument] = []
+            cached_files = self._file_cache if root == self._root else {}
+            refreshed_cache: dict[str, tuple[int, int, CorpusDocument]] = {}
             if root.exists():
                 for path in sorted(root.rglob("*.md"), key=lambda item: item.as_posix().lower()):
                     relative = path.relative_to(root)
                     if any(part.startswith(".") for part in relative.parts[:-1]):
                         continue
                     try:
+                        relative_path = relative.as_posix()
+                        stat = path.stat()
+                        signature = (stat.st_mtime_ns, stat.st_size)
+                        cached = cached_files.get(relative_path)
+                        if cached and cached[:2] == signature:
+                            documents.append(cached[2])
+                            refreshed_cache[relative_path] = cached
+                            continue
                         text = path.read_text(encoding="utf-8")
                         created, tags, references, tag_counts, entry_count = _metadata(
                             path, text
                         )
                         entries = parse_entries(text)
-                        updated = datetime.fromtimestamp(path.stat().st_mtime)
+                        updated = datetime.fromtimestamp(stat.st_mtime)
                     except (OSError, UnicodeDecodeError):
                         continue
-                    documents.append(
-                        CorpusDocument(
-                            relative_path=path.relative_to(root).as_posix(),
-                            path=path,
-                            name=path.name,
-                            text=text,
-                            created_at=created,
-                            updated_at=updated,
-                            tags=tags,
-                            references=references,
-                            excerpt=_excerpt(text),
-                            tag_counts=tag_counts,
-                            entry_count=entry_count,
-                            entries=entries,
-                        )
+                    document = CorpusDocument(
+                        relative_path=relative_path,
+                        path=path,
+                        name=path.name,
+                        text=text,
+                        created_at=created,
+                        updated_at=updated,
+                        tags=tags,
+                        references=references,
+                        excerpt=_excerpt(text),
+                        tag_counts=tag_counts,
+                        entry_count=entry_count,
+                        entries=entries,
                     )
+                    documents.append(document)
+                    refreshed_cache[relative_path] = (*signature, document)
             self._root = root
             self._documents = tuple(documents)
+            self._file_cache = refreshed_cache
             self._loaded_at = time.monotonic()
             return self._documents
 
@@ -520,6 +585,36 @@ def build_tree(documents: tuple[CorpusDocument, ...]) -> dict:
         }
 
     return finalize(root)
+
+
+def find_tree_node(tree: dict, relative_path: str) -> dict | None:
+    normalized = (relative_path or "").strip("/")
+    if not normalized:
+        return tree
+    for directory in tree["directories"]:
+        if directory["path"] == normalized:
+            return directory
+        found = find_tree_node(directory, normalized)
+        if found:
+            return found
+    return None
+
+
+def shallow_tree(node: dict) -> dict:
+    return {
+        "name": node["name"],
+        "path": node["path"],
+        "directories": [
+            {
+                "name": directory["name"],
+                "path": directory["path"],
+                "directories": [],
+                "files": [],
+            }
+            for directory in node["directories"]
+        ],
+        "files": node["files"],
+    }
 
 
 corpus_index = CorpusIndex()
