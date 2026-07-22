@@ -11,10 +11,15 @@ from fastapi.responses import FileResponse
 from config import get_settings
 from modules.hfl_corpus.corpus import (
     CorpusDocument,
+    build_tree,
     common_tags,
     corpus_index,
+    find_tree_node,
+    paginate_documents,
+    parse_search_query,
     resolve_corpus_root,
     search_documents,
+    shallow_tree,
 )
 from services.safe_paths import (
     allowed_reference_roots,
@@ -40,6 +45,7 @@ def _document_payload(
     *,
     include_text: bool = False,
     include_entries: bool = False,
+    matching_entry_count: int | None = None,
 ) -> dict:
     payload = {
         "relative_path": document.relative_path,
@@ -53,9 +59,20 @@ def _document_payload(
     }
     if include_entries:
         payload["entries"] = [asdict(entry) for entry in document.entries]
+    if matching_entry_count is not None:
+        payload["matching_entry_count"] = matching_entry_count
     if include_text:
         payload["text"] = document.text
     return payload
+
+
+def _tree_payload(node: dict) -> dict:
+    return {
+        "name": node["name"],
+        "path": node["path"],
+        "directories": [_tree_payload(directory) for directory in node["directories"]],
+        "files": [_document_payload(document) for document in node["files"]],
+    }
 
 
 @router.get("/documents")
@@ -66,6 +83,8 @@ async def hfl_api_documents(
     date_from: str = "",
     date_to: str = "",
     sort: str = "desc",
+    page: int = 1,
+    page_size: int = 20,
 ):
     _authorize(request)
     if date_field not in {"created", "updated"}:
@@ -81,15 +100,66 @@ async def hfl_api_documents(
         date_to=date_to,
         sort_order=sort,
     )
+    result_page = paginate_documents(results, page=page, page_size=page_size)
+    selected_tags, text_query = parse_search_query(q)
     return {
-        "documents": [_document_payload(document) for document in documents],
+        "tree": _tree_payload(shallow_tree(build_tree(documents))),
         "results": [
-            _document_payload(document, include_entries=bool(q))
-            for document in results
+            _document_payload(
+                document,
+                matching_entry_count=len(
+                    document.matching_entries(selected_tags, text_query)
+                ) if q else 0,
+            )
+            for document in result_page.items
         ],
-        "total_results": len(results),
+        "total_results": result_page.total_results,
+        "page": result_page.page,
+        "page_size": result_page.page_size,
+        "total_pages": result_page.total_pages,
+        "has_previous": result_page.has_previous,
+        "has_next": result_page.has_next,
         "document_count": len(documents),
         "tag_cloud": common_tags(documents),
+    }
+
+
+@router.get("/tree")
+async def hfl_api_tree(request: Request, path: str = ""):
+    _authorize(request)
+    tree = build_tree(corpus_index.documents())
+    node = find_tree_node(tree, path)
+    if not node:
+        raise HTTPException(status_code=404, detail="Corpus directory not found")
+    return {"tree": _tree_payload(shallow_tree(node))}
+
+
+@router.get("/matches/{relative_path:path}")
+async def hfl_api_matches(
+    request: Request,
+    relative_path: str,
+    q: str = "",
+    offset: int = 0,
+    limit: int = 20,
+):
+    _authorize(request)
+    document = corpus_index.get(relative_path)
+    if not document:
+        raise HTTPException(status_code=404, detail="Corpus document not found")
+    selected_tags, text_query = parse_search_query(q)
+    entries = document.matching_entries(selected_tags, text_query)
+    normalized_offset = max(0, offset)
+    normalized_limit = min(max(1, limit), 20)
+    return {
+        "entries": [
+            asdict(entry)
+            for entry in entries[
+                normalized_offset: normalized_offset + normalized_limit
+            ]
+        ],
+        "total": len(entries),
+        "offset": normalized_offset,
+        "limit": normalized_limit,
     }
 
 
