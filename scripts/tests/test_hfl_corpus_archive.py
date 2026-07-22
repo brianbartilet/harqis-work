@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import errno
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -63,3 +65,22 @@ def test_archive_does_not_overwrite_conflicting_destination(tmp_path):
     assert source.is_file()
     assert destination.read_text(encoding="utf-8") == "different\n"
     assert result.conflicts == ("same.md",)
+
+
+def test_archive_falls_back_to_exclusive_copy_when_hard_links_are_unsupported(
+    monkeypatch, tmp_path
+):
+    source = _write(tmp_path / "old.md", "## 2026-06-10\nMoment: Source\n")
+
+    def unsupported_link(_source, _destination):
+        raise OSError(errno.ENOTSUP, "hard links unsupported")
+
+    monkeypatch.setattr(os, "link", unsupported_link)
+    result = archive_corpus(tmp_path, today=datetime(2026, 7, 1).date())
+
+    destination = tmp_path / "2026" / "Jun" / "old.md"
+    assert result.moved == 1
+    assert not source.exists()
+    assert destination.read_text(encoding="utf-8") == (
+        "## 2026-06-10\nMoment: Source\n"
+    )

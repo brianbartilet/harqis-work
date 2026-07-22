@@ -187,10 +187,13 @@ def persist_envelope(
     corpus_dir = Path(corpus_dir).expanduser().resolve()
     corpus_dir.mkdir(parents=True, exist_ok=True)
     day_file = corpus_dir / f"{entry.when:%Y-%m-%d}.md"
+    lock_dir = corpus_dir / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    lock_file = lock_dir / f"{day_file.name}.lock"
     duplicate = False
     rendered = entry.to_markdown()
 
-    with FileLock(str(day_file) + ".lock", timeout=30):
+    with FileLock(lock_file, timeout=30):
         existing_text = day_file.read_text(encoding="utf-8") if day_file.exists() else ""
         existing_entries = tuple(_entry_blocks(existing_text))
         duplicate = any(

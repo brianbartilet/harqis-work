@@ -10,8 +10,10 @@ mtime/ctime is intentionally never used.
 from __future__ import annotations
 
 import argparse
+import errno
 import os
 import re
+import shutil
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -36,6 +38,42 @@ class ArchiveResult:
     undated: tuple[str, ...]
     conflicts: tuple[str, ...]
     skipped_hidden: int = 0
+
+
+def _move_exclusive(source: Path, destination: Path) -> None:
+    """Move without overwrite, falling back when the volume has no hard links."""
+    try:
+        os.link(source, destination)
+    except FileExistsError:
+        raise
+    except OSError as exc:
+        unsupported = {errno.EXDEV, errno.EPERM, errno.ENOTSUP}
+        if hasattr(errno, "EOPNOTSUPP"):
+            unsupported.add(errno.EOPNOTSUPP)
+        if exc.errno not in unsupported:
+            raise
+
+        fd = os.open(
+            destination,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            source.stat().st_mode & 0o777,
+        )
+        try:
+            with source.open("rb") as reader, os.fdopen(fd, "wb") as writer:
+                shutil.copyfileobj(reader, writer)
+                writer.flush()
+                os.fsync(writer.fileno())
+            shutil.copystat(source, destination, follow_symlinks=False)
+            if destination.stat().st_size != source.stat().st_size:
+                raise OSError("archive fallback copy size mismatch")
+        except BaseException:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            destination.unlink(missing_ok=True)
+            raise
+    source.unlink()
 
 
 def _date_in(value: str) -> date | None:
@@ -136,11 +174,10 @@ def archive_corpus(
         if not dry_run:
             destination.parent.mkdir(parents=True, exist_ok=True)
             try:
-                os.link(source, destination)
+                _move_exclusive(source, destination)
             except FileExistsError:
                 conflicts.append(source.name)
                 continue
-            source.unlink()
         moved += 1
 
     return ArchiveResult(
