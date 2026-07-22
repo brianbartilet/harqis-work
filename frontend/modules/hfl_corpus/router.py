@@ -9,13 +9,17 @@ from markupsafe import Markup
 
 from config import get_settings
 from modules.hfl_corpus.corpus import (
+    CorpusPage,
     build_tree,
     common_tags,
     corpus_index,
+    find_tree_node,
     format_hfl_markdown,
+    paginate_documents,
     parse_search_query,
     resolve_corpus_root,
     search_documents,
+    shallow_tree,
 )
 from services.markdown import render_markdown
 from modules.hfl_corpus.remote import RemoteCorpusClient, RemoteCorpusError
@@ -52,6 +56,8 @@ def _index_url(
     date_from: str,
     date_to: str,
     sort: str,
+    page: int = 1,
+    page_size: int = 20,
 ) -> str:
     params = {}
     if query:
@@ -64,6 +70,10 @@ def _index_url(
         params["date_to"] = date_to
     if sort != "desc":
         params["sort"] = sort
+    if page != 1:
+        params["page"] = page
+    if page_size != 20 or page != 1:
+        params["page_size"] = page_size
     return "/hfl-corpus" + (f"?{urlencode(params)}" if params else "")
 
 
@@ -79,6 +89,8 @@ async def hfl_corpus_page(
     updated_from: str = "",
     updated_to: str = "",
     sort: str = "desc",
+    page: int = 1,
+    page_size: int = 20,
 ):
     user, redirect = require_user(request)
     if redirect:
@@ -102,22 +114,37 @@ async def hfl_corpus_page(
                 "date_from": date_from,
                 "date_to": date_to,
                 "sort": sort,
+                "page": str(page),
+                "page_size": str(page_size),
             })
             documents = remote["documents"]
+            tree = remote["tree"]
             results = remote["results"]
             total_results = remote["total_results"]
             document_count = remote["document_count"]
             tag_cloud = remote["tag_cloud"]
+            result_page = CorpusPage(
+                items=tuple(results),
+                page=remote["page"],
+                page_size=remote["page_size"],
+                total_results=total_results,
+                total_pages=remote["total_pages"],
+                start=(remote["page"] - 1) * remote["page_size"] + 1 if results else 0,
+                end=(remote["page"] - 1) * remote["page_size"] + len(results),
+            )
         except RemoteCorpusError as exc:
             documents = ()
+            tree = shallow_tree(build_tree(()))
             results = ()
             total_results = 0
             document_count = 0
             tag_cloud = []
+            result_page = paginate_documents((), page=page, page_size=page_size)
             remote_error = str(exc)
     else:
         documents = corpus_index.documents()
-        results = search_documents(
+        tree = shallow_tree(build_tree(documents))
+        all_results = search_documents(
             documents,
             query=q,
             date_field=date_field,
@@ -125,7 +152,9 @@ async def hfl_corpus_page(
             date_to=date_to,
             sort_order=sort,
         )
-        total_results = len(results)
+        result_page = paginate_documents(all_results, page=page, page_size=page_size)
+        results = result_page.items
+        total_results = result_page.total_results
         document_count = len(documents)
         tag_cloud = common_tags(documents)
     selected_tags, text_query = parse_search_query(q)
@@ -136,6 +165,7 @@ async def hfl_corpus_page(
         date_from=date_from,
         date_to=date_to,
         sort=reverse_sort,
+        page_size=result_page.page_size,
     )
     tag_options = []
     for tag, count in tag_cloud:
@@ -159,8 +189,23 @@ async def hfl_corpus_page(
                 date_from=date_from,
                 date_to=date_to,
                 sort=sort,
+                page_size=result_page.page_size,
             ),
         })
+    page_url_values = {
+        "query": q,
+        "date_field": date_field,
+        "date_from": date_from,
+        "date_to": date_to,
+        "sort": sort,
+        "page_size": result_page.page_size,
+    }
+    previous_page_url = _index_url(
+        **page_url_values, page=result_page.page - 1
+    )
+    next_page_url = _index_url(
+        **page_url_values, page=result_page.page + 1
+    )
     return templates.TemplateResponse(
         request,
         "modules/hfl_corpus/index.html",
@@ -168,8 +213,8 @@ async def hfl_corpus_page(
             request,
             user,
             "hfl_corpus",
-            tree=build_tree(documents),
-            results=results if (q or date_from or date_to) else results[:10],
+            tree=tree,
+            results=results,
             total_results=total_results,
             document_count=document_count,
             query=q,
@@ -181,9 +226,95 @@ async def hfl_corpus_page(
             date_to=date_to,
             sort_order=sort,
             sort_toggle_url=sort_toggle_url,
+            result_page=result_page,
+            previous_page_url=previous_page_url,
+            next_page_url=next_page_url,
             tag_cloud=tag_options,
             remote_error=remote_error,
         ),
+    )
+
+
+@router.get("/tree", response_class=HTMLResponse, name="hfl_tree")
+async def hfl_tree(request: Request, path: str = ""):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    if _uses_remote_corpus():
+        try:
+            branch = RemoteCorpusClient.from_settings().tree(path)
+        except RemoteCorpusError as exc:
+            return HTMLResponse(str(exc), status_code=502)
+    else:
+        tree = build_tree(corpus_index.documents())
+        node = find_tree_node(tree, path)
+        if not node:
+            return HTMLResponse("Corpus directory not found", status_code=404)
+        branch = shallow_tree(node)
+    return templates.TemplateResponse(
+        request,
+        "modules/hfl_corpus/partials/tree.html",
+        {"tree": branch},
+    )
+
+
+@router.get(
+    "/matches/{relative_path:path}",
+    response_class=HTMLResponse,
+    name="hfl_matches",
+)
+async def hfl_matches(
+    request: Request,
+    relative_path: str,
+    q: str = "",
+    offset: int = 0,
+    limit: int = 20,
+):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    if _uses_remote_corpus():
+        try:
+            match_page = RemoteCorpusClient.from_settings().matches(
+                relative_path,
+                query=q,
+                offset=offset,
+                limit=limit,
+            )
+        except RemoteCorpusError as exc:
+            return HTMLResponse(str(exc), status_code=502)
+        entries = match_page["entries"]
+        total = match_page["total"]
+        normalized_offset = match_page["offset"]
+        normalized_limit = match_page["limit"]
+        document_name = relative_path.rsplit("/", 1)[-1]
+    else:
+        document = corpus_index.get(relative_path)
+        if not document:
+            return HTMLResponse("Corpus document not found", status_code=404)
+        selected_tags, text_query = parse_search_query(q)
+        matching_entries = document.matching_entries(selected_tags, text_query)
+        normalized_offset = max(0, offset)
+        normalized_limit = min(max(1, limit), 20)
+        entries = matching_entries[
+            normalized_offset: normalized_offset + normalized_limit
+        ]
+        total = len(matching_entries)
+        document_name = document.name
+    selected_tags, _ = parse_search_query(q)
+    return templates.TemplateResponse(
+        request,
+        "modules/hfl_corpus/partials/matching_entries.html",
+        {
+            "relative_path": relative_path,
+            "document_name": document_name,
+            "entries": entries,
+            "total": total,
+            "offset": normalized_offset,
+            "limit": normalized_limit,
+            "query": q,
+            "selected_tag": selected_tags[0] if len(selected_tags) == 1 else "",
+        },
     )
 
 
