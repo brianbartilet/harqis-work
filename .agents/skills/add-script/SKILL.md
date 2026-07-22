@@ -34,6 +34,7 @@ script is *for*:
 |---|---|---|
 | `repo-quality/` | Audits, scans, and agent-driven repo maintenance / improvement / PRs | `manifesto_audit{,_agent}.py`, `daily_improvement_scout.py`, `weekly_claude_pr.py`, `run_agent_prompt.py`, `migrate_to_core_{scan,agent}.py` |
 | `learning/` | Agent reasoning capture + the HFL lessons loop | `reasoning_capture.py`, `agent_learning_hook.py`, `lessons_extractor.py`, `weekly_lessons_extraction.py` |
+| `hfl/` | HFL archive utilities and cross-surface session capture adapters | `archive_corpus.py`, `capture_session_event.py`, `capture_session_hook.sh` |
 | `testing/` | Test execution + reporting | `run_test_suite.py`, `daily_test_farm_email.py`, `smoke-tests.sh` |
 | `diagnostics/` | Environment + credential health checks / re-auth | `check_env_health.py`, `check_plaud_token.py`, `reauth_gmail_send.py` |
 | `dumps/` | Device dump ops (pull/back-fill/summarize) | `pull_dumps.py`, `run_dumps_summary_retro.py` |
@@ -113,7 +114,7 @@ Run this checklist every time:
    ```
    python -c "from pathlib import Path; print(Path('scripts/agents/<bucket>/<name>.py').resolve().parents[3].name)"  # → harqis-work
    # expect NO hits at scripts/agents/<name> without a bucket:
-   git grep -nE "scripts/agents/[a-z_]+[-a-z_]*\.(py|sh|ps1)" | grep -vE "scripts/agents/(repo-quality|learning|testing|diagnostics|dumps|fleet)/"
+   git grep -nE "scripts/agents/[a-z_]+[-a-z_]*\.(py|sh|ps1)" | grep -vE "scripts/agents/(repo-quality|learning|hfl|testing|diagnostics|dumps|fleet)/"
    ```
 
 ---

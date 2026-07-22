@@ -15,6 +15,7 @@ of truth.
 |---|---|
 | `/add-script` | Add or reorganize scripts using the repository's `scripts/` taxonomy and documentation conventions. |
 | `/agent-prompt` | Run a named prompt from `agents/prompts/` against the codebase. |
+| `/capture-hfl-session` | Capture a sanitized prompt/outcome pair for HFL when an automatic surface hook is unavailable or needs a manual retry. |
 | `/clarify-feature` | Convert an enhancement request into an approved implementation spec before files change. |
 | `/commit` | Review, stage, and create a Conventional Commit, with optional push and guarded host-sync chaining. |
 | `/create-data-only-from-hud` | Add a host-safe data-only fallback twin for an existing Windows HUD task. |
@@ -42,7 +43,7 @@ of truth.
 | `/workflow-token-audit` | Estimate scheduled workflow API calls, model/token exposure, embedding usage, and cost drivers. |
 | `/zapier-mcp` | Search, enable, and wire Zapier MCP actions into workflows or direct agent use. |
 
-**Current canonical count: 28 skills.** The count is derived from directories
+**Current canonical count: 29 skills.** The count is derived from directories
 containing `.agents/skills/*/SKILL.md`; cache or generated directories do not
 count.
 
@@ -55,6 +56,7 @@ count.
 | Add tools for an existing app | `/create-new-mcp` |
 | Add a desktop widget | `/create-new-hud` |
 | Add an Activity Corpus source | `/create-new-ingest-source-hfl` |
+| Capture a prompt audit event | `/capture-hfl-session` |
 | Validate changes | `/run-tests` |
 | Refresh documentation | `/update-docs` |
 | Commit completed work | `/commit` |

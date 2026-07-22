@@ -1,7 +1,7 @@
 """
 Beat schedule for the Homework-for-Life workflow.
 
-Thirteen tasks:
+Tasks:
   - capture_hfl_entry    : adhoc — invoked manually or from an LLM/agent to
                            persist one daily story moment to the corpus.
   - analyze_hfl_media    : daily — vision pass over recent dumps-inbox
@@ -450,6 +450,52 @@ WORKFLOW_HFL = {
             'express_target': 'file:hfl_corpus+es:hfl-entries',
             'review_artifact': 'es_log+file',
             'hfl_signal': True,
+        },
+    },
+
+    # Cross-surface prompt audit. Hooks normally enqueue each prompt/outcome
+    # immediately; this 23:35 broadcast asks every participating worker to
+    # forward retained local events to the canonical HFL worker. The 23:40
+    # task writes one daily audit rollup there.
+    'run-job--ingest_agent_session_events': {
+        'task': 'workflows.hfl.tasks.ingest_agent_sessions.ingest_agent_session_events',
+        'schedule': crontab(hour=23, minute=35),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'window_days': 2,
+            'max_events': 500,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL_BROADCAST,
+            'expires': 60 * 60 * 12,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+            'tenant_safe': True,
+        },
+    },
+
+    'run-job--rollup_agent_sessions': {
+        'task': 'workflows.hfl.tasks.ingest_agent_sessions.rollup_agent_sessions',
+        'schedule': crontab(hour=23, minute=40),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'max_events': 500,
+        },
+        'options': {'queue': WorkflowQueue.HFL, 'expires': 60 * 60 * 12},
+        'manifesto': {
+            'code_role': 'distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+            'tenant_safe': True,
         },
     },
 

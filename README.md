@@ -679,6 +679,7 @@ HFL_CORPUS_API_URL=             # empty on canonical Mac; Mac frontend URL on re
 HFL_CORPUS_API_TOKEN=           # shared secret; keep in gitignored apps.env
 HFL_CORPUS_PATH=                # canonical host corpus root; /Volumes/harqis-data/hfl in production
 HFL_OUTBOX_PATH=                # optional durable envelope directory; default logs/hfl-outbox
+HFL_SESSION_AUDIT_PATH=         # optional sanitized prompt/outcome artifacts; default logs/hfl-session-audit
 HFL_REFERENCE_ALLOWED_ROOTS=    # optional OS-pathsep list for reference downloads
 
 # ── RabbitMQ / Celery broker ──────────────────────────────────────────────────

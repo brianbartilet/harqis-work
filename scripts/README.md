@@ -5,7 +5,7 @@ Operational scripts for **harqis-work**, organised by purpose:
 - **Deploy / runtime** scripts live at the **root of `scripts/`** — they bring
   the stack up, launch daemons, and sync config between machines.
 - **Agent-support** scripts live under [`scripts/agents/`](#scriptsagents),
-  grouped into **context subfolders** — `repo-quality/`, `learning/`,
+  grouped into **context subfolders** — `repo-quality/`, `learning/`, `hfl/`,
   `testing/`, `diagnostics/`, `dumps/`, and `fleet/`. These are the agent-driven
   automation, the repo-quality / health / test tooling those agents drive, the
   HFL learning loop, and the worktree / window cleanup that keeps the fleet tidy.
@@ -47,6 +47,14 @@ up from `scripts/agents/<bucket>/`).
 | `agent_learning_hook.py` | Load + apply learned agent lessons before a complex task (reads `~/.hermes/memory/agent_lessons.md`). |
 | `lessons_extractor.py` | Weekly autonomous pattern detection over the last 7 days of HFL reasoning → writes insights to `agent_lessons.md`. |
 | `weekly_lessons_extraction.py` | Cron wrapper that runs `lessons_extractor.py` and captures output for logging. |
+
+### `hfl/` — HFL archive and agent-session capture adapters
+
+| Path | Purpose |
+|---|---|
+| `archive_corpus.py` | Archives completed HFL corpus periods. |
+| [`capture_session_event.py`](#scriptsagentshflcapture_session_eventpy) | Normalizes, redacts, spools, and best-effort enqueues Codex/Claude/Hermes/OpenClaw prompt-outcome audit events. |
+| `capture_session_hook.sh` | Selects the repository Python interpreter across macOS/Linux/Windows shells for the Claude Code lifecycle hook. |
 
 ### `testing/` — test execution + reporting
 
@@ -109,6 +117,19 @@ python scripts/agents/repo-quality/sync_agent_skills.py --check
 
 The `--check` mode validates every canonical `SKILL.md` has YAML frontmatter and
 returns non-zero when the generated Claude copy is missing or stale.
+
+---
+
+### `scripts/agents/hfl/capture_session_event.py`
+
+Capture a common JSON envelope manually (automatic hooks call the same entry
+point). `--surface` accepts `codex`, `claude-code`, `hermes`, or `openclaw`.
+Omit `--enqueue` only for an intentional local-spool-only capture.
+
+```bash
+printf '%s' "$HFL_CAPTURE_ENVELOPE" | python scripts/agents/hfl/capture_session_event.py --surface hermes --json -
+python scripts/agents/hfl/capture_session_event.py --surface openclaw --json event.json --no-enqueue
+```
 
 ---
 

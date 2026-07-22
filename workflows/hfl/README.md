@@ -54,6 +54,8 @@ this scaffold closes.
 | `ingest_youtube_activity` | Archives authenticated-channel activity as **one retrospective HFL entry per event**: own uploads use their publication time and `#upload`; external videos added to owned playlists use the playlist-added time and `#watch-later`. Both receive `#playlist-<name>` membership tags and reference the curated description plus downloaded video under `YOUTUBE_ARCHIVE_PATH`. | `file:hfl_corpus+es:hfl-entries` | Monthly at 00:30 local on day 1; scans the previous calendar month before the 01:00 corpus archive. Manual calls accept `days=N` or `days='all'`. |
 | `ingest_radar_activity` | Daily **HERMES RADAR digest.** Reads the day's compatibility-named `show_daily_radar` synthesis blocks back out of the shared desktop feed file (`<feed_dir>/hud-logs-YYYYMMDD.txt`) and distils them into ONE "what the day was about" entry. It does not ingest the 15-minute Telegram push rerenders or re-run the radar source sweep. The feed file is Drive-synced, so the Beat host reads briefings a Windows radar wrote; files read remain the entry references. Haiku-distilled, raw fallback. No feed dir / no synthesis blocks → no entry, no LLM call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:20 local (active — clean no-op until `DESKTOP_PATH_FEED` is set and the radar has run). |
 | `ingest_android_media_activity` | Reads Android screen-time/activity export logs, reports only application categories and session counts, and writes one privacy-bounded entry. Raw titles/content are not sent to the model or corpus. A missing log directory is a clean no-op. | `file:hfl_corpus+es:hfl-entries` | Daily 23:15 local on the `hfl` queue; inactive until `HFL_ANDROID_SCREEN_LOG_DIR` is configured. |
+| `ingest_agent_session_event` / `ingest_agent_session_events` | Captures one sanitized HFL audit entry per user-prompt/assistant-outcome pair from Codex, Claude Code, Hermes, or OpenClaw. The artifact retains the redacted original plus typo-corrected prompt, request/work summaries, status, identifiers, and artifact references. Stable event IDs deduplicate hook retries. | `file:hfl_corpus+es:hfl-entries` | Hooks enqueue immediately; a 23:35 broadcast forwards retained local events from every participating worker. |
+| `rollup_agent_sessions` | Distils the processed prompt audit events in the 24-hour window ending at 23:40 into one cross-surface HFL rollup, so prompts after one cutoff appear in the next rollup instead of being lost. Empty windows are a clean no-op. | `file:hfl_corpus+es:hfl-entries` | Daily 23:40 local. |
 | `analyze_hfl_media` | **Daily media vision pass.** Walks the dumps inbox for recent images/videos (pulled from phones + machines by `workflows/dumps/`), reserves 10 of the 40 analysis slots for Android-origin media, then fills unused capacity by global recency. Each item is sent to Haiku vision for a story moment and **geo-tagged** — EXIF GPS, else the nearest OwnTracks fix by capture time → Nominatim place. One entry per story-worthy item; the source dump file + an OSM pin are the `references`. Already-referenced media is skipped before the model call. Passing `media_path=<inbox file>` targets one artifact directly. | `file:hfl_corpus+es:hfl-entries` | Daily 22:00 local (active). |
 | `collect_time_capsule` | **On-demand, time-ranged archive ingest.** Sweeps a directory (and subdirs) for files dated within a period, extracts text / docs / Haiku vision captions into a bounded manifest + digest. The COLLECT half of the `/time-capsule-synthesizer` skill (Claude synthesizes ONE rollup entry from the digest, then dual-writes it via `capture_hfl_entry`). Not scheduled. | `file:hfl_corpus+es:hfl-entries` (via the skill) | Adhoc — driven by `/time-capsule-synthesizer`. |
 
@@ -123,6 +125,8 @@ screenshot taken downtown comes out tagged with the place.
 | 23:05 | `ingest_location_activity` | day's movement → one timeline entry |
 | 23:10 | `ingest_spotify_activity` | day's plays → one soundtrack entry |
 | 23:15 | `ingest_plaud_activity` | day's voice recordings → one entry each + Mac-mini archive |
+| 23:35 | `ingest_agent_session_events` | retry retained prompt/outcome audit events |
+| 23:40 | `rollup_agent_sessions` | prompt audit events → one daily rollup |
 
 **Setup** (one-time): the OwnTracks app + `OWN_TRACKS_DEFAULT_USER/DEVICE` (the
 location stream — §Activation); a `[dumps.pull_targets.<phone>]` block in
@@ -573,6 +577,27 @@ To make it produce entries:
 
 ---
 
+### Agent session prompt audit
+
+Codex and Claude Code use the checked-in `.codex/hooks.json` and
+`.claude/settings.json` lifecycle hooks. Review/trust the Codex hook with
+`/hooks` after checkout. Hermes and OpenClaw can emit the same versioned JSON
+envelope through the `/capture-hfl-session` skill; this is also the fallback
+when a surface has no compatible lifecycle hook.
+
+The stdlib-only capture path writes beneath `HFL_SESSION_AUDIT_PATH` or, when
+unset, `logs/hfl-session-audit`. It redacts likely secrets before the first
+write, never records hidden reasoning/environment/full tool output, and then
+best-effort enqueues the event. On the HFL worker, Haiku corrects obvious typos
+and derives the concise request/work summaries. The canonical artifact retains
+both the redacted original and corrected prompt. Every prompt entry and the
+23:40 daily rollup use canonical persistence, so each is written to Markdown
+and the `harqis-hfl-entries` Elasticsearch index.
+
+Read-only inspection is available through the `agent_session_activity` MCP
+tool. This feature captures new events only; it does not scan historical
+Codex, Claude, Hermes, or OpenClaw transcripts.
+
 ## Elasticsearch entry index (dual-write)
 
 The canonical Markdown corpus is the source of truth. Every ingest source
@@ -686,6 +711,8 @@ New writers must call `submit_hfl_entry` (or the compatibility
 | `ingest_plaud_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `ingest_youtube_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `ingest_radar_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` |
+| `ingest_agent_session_events` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
+| `rollup_agent_sessions` | distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `flush_hfl_outbox` | express | resource | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `False` |
 
 This block is also persisted on each beat entry's `'manifesto'` key — see

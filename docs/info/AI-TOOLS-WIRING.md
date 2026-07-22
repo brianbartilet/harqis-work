@@ -14,6 +14,7 @@ and how permissions are enforced.
 | `harqis-work/.claude/settings*.json` | Claude Code-specific settings and local permissions | Shared or machine-local as named |
 | `~/.hermes/` | Hermes plans, memory, lessons, scripts, and logs | Local per machine; never committed |
 | `.env/apps.env` | Application secrets | Local; never committed |
+| `HFL_SESSION_AUDIT_PATH` | Sanitized prompt/outcome audit artifacts and retry spool | Local per machine unless explicitly placed on shared storage |
 
 Refresh or validate the Claude compatibility copy with
 `scripts/agents/repo-quality/sync_agent_skills.py`. Never maintain canonical
@@ -56,6 +57,11 @@ python scripts/agents/repo-quality/sync_agent_skills.py --check
 
 Put shared hooks in `.claude/settings.json` and machine-specific permissions in
 `.claude/settings.local.json`. Do not put Hermes memory or secrets there.
+
+The repository's shared Claude `UserPromptSubmit` and `Stop` hooks feed the HFL
+prompt audit adapter. Codex uses the equivalent project `.codex/hooks.json`;
+review it with `/hooks` after the hook definition changes. Hermes and OpenClaw
+use the model-neutral `/capture-hfl-session` fallback and common JSON envelope.
 
 ## Hermes
 

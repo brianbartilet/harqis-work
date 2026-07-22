@@ -1342,3 +1342,52 @@ def register_memory_tools(mcp: FastMCP):
             "model": model if d.get("synthesized") else None,
             "period": _period_dict(start_d, end_d, label),
         }
+
+    @mcp.tool()
+    def agent_session_activity(
+        period: str = "",
+        since: str = "",
+        until: str = "",
+        surface: str = "",
+        limit: int = 100,
+    ) -> dict:
+        """Read sanitized prompt/outcome audit artifacts without writing HFL.
+
+        Defaults to the last seven days. Optionally filters by the exact
+        normalized surface: codex, claude-code, hermes, or openclaw.
+        """
+        from workflows.hfl.tasks.ingest_agent_sessions import (
+            collect_agent_session_events,
+        )
+
+        start, end, label = _resolve_window(period, since, until)
+        end_d = end or _today()
+        start_d = start or (end_d - timedelta(days=6))
+        events = collect_agent_session_events(
+            since=start_d,
+            until=end_d,
+            limit=max(1, min(int(limit), 500)),
+        )
+        if surface.strip():
+            events = [
+                event for event in events
+                if event.get("surface") == surface.strip().lower()
+            ]
+        safe = [
+            {
+                key: event.get(key)
+                for key in (
+                    "event_id", "surface", "session_id", "prompt_id",
+                    "timestamp", "corrected_prompt", "request_summary",
+                    "work_summary", "result_status", "artifacts",
+                    "artifact_path",
+                )
+            }
+            for event in events
+        ]
+        return {
+            "found": bool(safe),
+            "events": safe,
+            "count": len(safe),
+            "period": _period_dict(start_d, end_d, label),
+        }
