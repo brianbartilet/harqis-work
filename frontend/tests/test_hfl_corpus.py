@@ -583,6 +583,88 @@ def test_corpus_search_is_sticky_above_aligned_directory_and_results(
     )
 
 
+def test_corpus_mobile_layout_prioritizes_search_results(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document("2026-07-10.md")
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get("/hfl-corpus")
+
+    assert response.status_code == 200
+    main = response.text.split('data-corpus-index', 1)[1].split('>', 1)[0]
+    assert "overflow-x-hidden" in main
+    assert "pr-5" in main
+    directory = response.text.split('data-directory-tree', 1)[1].split('>', 1)[0]
+    assert "hidden" in directory
+    assert "lg:flex" in directory
+    assert 'data-corpus-results' in response.text
+    toolbar_opening = response.text.split('data-corpus-results-toolbar', 1)[1].split(
+        ">", 1
+    )[0]
+    controls_opening = response.text.split('data-corpus-results-controls', 1)[1].split(
+        ">", 1
+    )[0]
+    count_opening = response.text.split('data-corpus-results-count', 1)[1].split(
+        ">", 1
+    )[0]
+    assert "flex-col" in toolbar_opening
+    assert "sm:flex-row" in toolbar_opening
+    assert "flex-wrap" in controls_opening
+    assert "w-full" in count_opening
+    assert "sm:w-auto" in count_opening
+    search_opening = response.text.split('data-search-input-actions', 1)[0].rsplit(
+        "<div", 1
+    )[1]
+    search_actions = response.text.split('data-search-input-actions', 1)[1].split(
+        "</div>", 1
+    )[0]
+    assert "grid-cols-2" in search_opening
+    assert "sm:flex" in search_opening
+    assert "col-span-2" in search_actions
+    assert ">Reset</a>" in search_actions
+    assert "sticky top-24" in response.text
+    assert "md:top-14" in response.text
+
+
+def test_corpus_mobile_date_filters_are_collapsed_but_desktop_fields_remain_visible(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document("2026-07-10.md")
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get("/hfl-corpus")
+
+    filters = response.text.split('data-mobile-date-filters', 1)[1].split(
+        "</form>", 1
+    )[0]
+    wrapper_opening = filters.split(">", 1)[0]
+    toggle = filters.split('data-mobile-date-filter-toggle', 1)[1].split(">", 1)[0]
+    fields_opening = filters.split('data-date-filter-fields', 1)[1].split(">", 1)[0]
+    assert "lg:contents" in wrapper_opening
+    assert 'type="checkbox"' in toggle
+    assert 'aria-controls="mobile-date-filter-fields"' in toggle
+    assert " checked" not in toggle
+    assert 'for="mobile-date-filters"' in filters
+    assert "peer-focus-visible:ring-2" in filters
+    assert "peer-focus-visible:ring-blue-500" in filters
+    assert 'id="mobile-date-filter-fields"' in filters
+    assert ">Date filters<" in filters
+    assert "lg:hidden" in filters
+    assert "hidden" in fields_opening
+    assert "peer-checked:grid" in fields_opening
+    assert "lg:contents" in fields_opening
+    assert filters.count('class="block') == 3
+    assert filters.count("lg:block") == 3
+    assert 'name="date_field"' in filters
+    assert 'name="date_from"' in filters
+    assert 'name="date_to"' in filters
+
+
 def test_corpus_defaults_to_first_20_results_and_paginates_search(
     authenticated_client, monkeypatch
 ):
