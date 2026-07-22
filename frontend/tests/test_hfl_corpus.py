@@ -633,7 +633,7 @@ def test_corpus_search_is_sticky_above_aligned_directory_and_results(
     )
 
 
-def test_corpus_mobile_pins_panels_and_scrolls_only_result_cards(
+def test_corpus_mobile_results_disclosure_is_open_by_default_and_uses_page_flow(
     authenticated_client, monkeypatch
 ):
     import modules.hfl_corpus.router as hfl_routes
@@ -645,58 +645,38 @@ def test_corpus_mobile_pins_panels_and_scrolls_only_result_cards(
 
     main = response.text.split('data-corpus-index', 1)[1].split(">", 1)[0]
     search = response.text.split('data-index-search-panel', 1)[1].split(">", 1)[0]
-    spacing = response.text.split('data-search-panel-spacing', 1)[1].split(
-        ">", 1
-    )[0]
     layout = response.text.split('data-corpus-layout', 1)[1].split(">", 1)[0]
     results = response.text.split('data-corpus-results', 1)[1].split(">", 1)[0]
+    toggle = response.text.split('data-mobile-results-toggle', 1)[1].split(">", 1)[0]
+    body = response.text.split('data-corpus-results-body', 1)[1].split(">", 1)[0]
     toolbar = response.text.split('data-corpus-results-toolbar', 1)[1].split(
         ">", 1
     )[0]
     cards = response.text.split('data-corpus-results-scroll', 1)[1].split(
         ">", 1
     )[0]
-    bottom_spacing = response.text.split('data-results-bottom-spacing', 1)[1].split(
-        ">", 1
-    )[0]
     assert "flex" in main
     assert "flex-col" in main
-    assert "h-[calc(100dvh-6rem)]" in main
+    assert "h-auto" in main
     assert "md:h-[calc(100dvh-3.5rem)]" in main
-    assert "overflow-y-auto" in main
-    assert "overscroll-contain" in main
     assert "lg:overflow-hidden" in main
-    assert "[@media(max-height:600px)]:h-[calc(100dvh-96px)]" in main
-    assert "[@media(max-height:600px)]:py-[20px]" in main
-    assert "[@media(max-height:600px)]:max-h-[120px]" in search
-    assert "[@media(max-height:600px)]:overflow-y-auto" in search
-    assert "h-4" in spacing
-    assert "[@media(max-height:600px)]:h-[12px]" in spacing
-    assert "shrink-0" in spacing
-    assert "min-h-56" in layout
+    assert "max-h" not in search
+    assert "block" in layout
     assert "lg:min-h-0" in layout
-    assert "flex-1" in layout
-    assert "[@media(max-height:600px)]:sticky" in layout
-    assert "[@media(max-height:600px)]:top-[152px]" in layout
-    assert "[@media(max-height:600px)]:min-h-[162px]" in layout
-    assert "min-h-56" in results
+    assert 'type="checkbox"' in toggle
+    assert 'aria-controls="corpus-results-body"' in toggle
+    assert " checked" in toggle
+    assert 'for="mobile-results-toggle"' in response.text
+    assert ">Document results<" in response.text
+    assert "peer-focus-visible:ring-2" in response.text
+    assert "overflow-visible" in results
     assert "lg:min-h-0" in results
-    assert "[@media(max-height:600px)]:min-h-[162px]" in results
-    assert "flex-1" in results
+    assert "hidden" in body
+    assert "peer-checked:flex" in body
+    assert "lg:flex" in body
     assert "shrink-0" in toolbar
-    assert "z-10" in toolbar
-    assert "[@media(max-height:600px)]:max-h-[100px]" in toolbar
-    assert "[@media(max-height:600px)]:gap-[4px]" in toolbar
-    assert "[@media(max-height:600px)]:overflow-y-auto" in toolbar
-    assert "[@media(max-height:600px)]:py-[6px]" in toolbar
-    assert "min-h-0" in cards
-    assert "flex-1" in cards
-    assert "overflow-y-auto" in cards
-    assert "overscroll-contain" in cards
-    assert "hidden" in bottom_spacing
-    assert "shrink-0" in bottom_spacing
-    assert "[@media(max-height:600px)]:block" in bottom_spacing
-    assert "[@media(max-height:600px)]:h-[48px]" in bottom_spacing
+    assert "overflow-visible" in cards
+    assert "lg:overflow-y-auto" in cards
     assert response.text.index('data-corpus-results-toolbar') < response.text.index(
         'data-corpus-results-scroll'
     )
@@ -750,7 +730,7 @@ def test_corpus_mobile_layout_prioritizes_search_results(
     assert "sticky top-0" in response.text
 
 
-def test_corpus_mobile_date_filters_are_collapsed_but_desktop_fields_remain_visible(
+def test_corpus_mobile_all_filters_include_dates_and_tag_cloud(
     authenticated_client, monkeypatch
 ):
     import modules.hfl_corpus.router as hfl_routes
@@ -774,7 +754,7 @@ def test_corpus_mobile_date_filters_are_collapsed_but_desktop_fields_remain_visi
     assert "peer-focus-visible:ring-2" in filters
     assert "peer-focus-visible:ring-blue-500" in filters
     assert 'id="mobile-date-filter-fields"' in filters
-    assert ">Date filters<" in filters
+    assert ">See all filters<" in filters
     assert "lg:hidden" in filters
     assert "hidden" in fields_opening
     assert "peer-checked:grid" in fields_opening
@@ -784,6 +764,8 @@ def test_corpus_mobile_date_filters_are_collapsed_but_desktop_fields_remain_visi
     assert 'name="date_field"' in filters
     assert 'name="date_from"' in filters
     assert 'name="date_to"' in filters
+    assert 'data-tag-cloud' in filters
+    assert filters.index('name="date_to"') < filters.index('data-tag-cloud')
 
 
 def test_corpus_defaults_to_first_20_results_and_paginates_search(
