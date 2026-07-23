@@ -1,0 +1,3 @@
+# Optional HFL semantic knowledge-graph worker dependency.
+# Keep isolated from the main HARQIS resolver; review Graphify before bumping.
+graphifyy[anthropic]==0.9.22
