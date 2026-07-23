@@ -74,6 +74,33 @@ images remain one entry. Each topic entry includes:
 - a GitHub `#Lstart-Lend` anchor when the model returned valid line bounds;
 - a concise moment, change description, retention reason, and possible use.
 
+Before free-form topic analysis, the ingest checks added and updated Git lines
+for macro-generated blocks matching the HFL object shape:
+
+```markdown
+## 2026-07-23 23:04
+====================================================================
+
+### Moment:
+
+### What happened:
+
+### Possible use:
+
+### Tags: #notes #daily
+
+### References:
+
+====================================================================
+```
+
+Only blocks intersecting the right side of the current Git diff are ingested,
+so editing one block in a long-running note does not re-ingest older blocks.
+The block timestamp and populated fields are preserved as authored. The LLM
+may fill missing retention context and add grounded tags; authored tags remain
+in the entry. When no matching block is available, the file still follows the
+existing heading/semantic analysis path and yields a contextual HFL entry.
+
 The total per-run entry cap defaults to 25 and overrides the per-note cap. When
 a summary is required, it reserves the final slot. Omitted topic segments,
 deleted files, unsupported binaries, images beyond the media cap, and remaining
@@ -94,7 +121,8 @@ model merely to count their latent topics.
 - Note contents are private repository data. Only bounded text and selected
   common images are sent to Anthropic when synthesis is enabled.
 - Topic segmentation is model-driven only when synthesis is enabled. Raw
-  fallback mode deliberately emits one entry per changed file.
+  fallback mode emits recognized macro blocks directly and otherwise emits one
+  contextual entry per changed file.
 - `#dsm` is a semantic classification, not a repository default. Model output
   must set `is_daily_scrum=true`; raw fallback recognizes only explicit DSM,
   Daily Scrum, or daily-standup headings/path names. The tag assembler strips

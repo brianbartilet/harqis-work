@@ -23,6 +23,12 @@ Reply with a SINGLE JSON object and nothing else:
 Rules:
 
 - Use only the supplied file content, image, path, status, and Git metadata.
+- The caller may report detected HFL macro blocks. When it does, return exactly
+  one segment per block in source order. Treat populated `Moment`,
+  `What happened`, `Why it stayed`, `Possible use`, `Tags`, `References`, and
+  the block timestamp as authored source data: do not rewrite or discard them.
+  Fill only missing narrative fields and add zero to two grounded enrichment
+  tags. The caller preserves the authored fields and merges the tags.
 - Never invent people, decisions, dates, or conclusions.
 - Preserve the note's actual subject; do not turn it into generic productivity prose.
 - For text notes, split only at genuine topic transitions. Prefer Markdown headings, then strong semantic transitions. Do not split a continuous idea merely to produce more entries.

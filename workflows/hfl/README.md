@@ -326,8 +326,12 @@ No force push, rebase, merge-conflict resolution, or dirty host pull is
 allowed. Text notes can yield up to four naturally transitioned topic entries
 by default; common images remain single-entry and other binaries are
 reference-only. Topic entries preserve section/line context alongside the
-actual file reference. The MCP `notes_activity` tool exposes a read-only
-pending-change view with optional topic previews.
+actual file reference. Macro-generated HFL-shaped blocks (`## <timestamp>` plus
+`### Moment`, `What happened`, `Possible use`, `Tags`, and `References`) are
+detected only when they intersect added/updated Git lines. Their timestamp and
+authored fields are preserved while the LLM may enrich tags; files without
+those blocks still use contextual topic analysis. The MCP `notes_activity`
+tool exposes a read-only pending-change view with optional topic previews.
 
 ### Activating `ingest_chatgpt_activity` (primary daily research log)
 

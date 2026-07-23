@@ -48,6 +48,87 @@ def test_collects_granular_text_and_reference_changes(tmp_path):
         ("Logs/today.md", "text"), ("sheet.xlsx", "reference")
     ]
     assert activity["changes"][0].content == "A useful note\n"
+    assert activity["changes"][0].changed_lines == (1,)
+
+
+def test_extracts_changed_hfl_macro_block_and_preserves_authored_fields():
+    content = """## 2026-07-22 20:00
+====================================================================
+### Moment:
+Older moment
+### What happened:
+Already ingested
+### Tags: #notes #old
+====================================================================
+
+## 2026-07-23 23:04
+====================================================================
+### Moment:
+Captured an ingest rule
+### What happened:
+The notes workflow should recognize HFL-shaped macro blocks.
+### Possible use:
+Workflow design
+### Tags: #notes #daily
+### References:
+- https://example.invalid/design
+====================================================================
+"""
+    change = subject.NoteChange(
+        status="M", path="daily.md", kind="text", content=content,
+        changed_lines=tuple(range(10, 22)),
+    )
+
+    segments = subject._structured_hfl_segments(change)
+
+    assert len(segments) == 1
+    assert segments[0]["when"] == datetime(2026, 7, 23, 23, 4)
+    assert segments[0]["moment"] == "Captured an ingest rule"
+    assert segments[0]["tags"] == ["notes", "daily"]
+    assert segments[0]["references"] == ["https://example.invalid/design"]
+
+
+def test_structured_macro_blocks_work_without_llm_and_merge_enriched_tags(tmp_path):
+    repository, _ = _repository(tmp_path)
+    change = subject.NoteChange(
+        status="A", path="daily.md", kind="text",
+        content="""## 2026-07-23 23:04
+### Moment:
+Mapped the notes ingest
+### What happened:
+Recorded the HFL block pattern.
+### Tags: #notes #daily
+""",
+    )
+
+    raw = subject.distill_note_segments(repository, change, synthesize=False)
+    normalized = subject._normalize_segment(
+        {"moment": "Rewritten", "tags": ["automation"]},
+        raw[0], max_line=6,
+    )
+
+    assert len(raw) == 1
+    assert raw[0]["structured_hfl"] is True
+    assert raw[0]["moment"] == "Mapped the notes ingest"
+    assert normalized["moment"] == "Mapped the notes ingest"
+    assert normalized["tags"] == ["notes", "daily", "automation"]
+
+
+def test_date_heading_without_hfl_fields_uses_contextual_fallback(tmp_path):
+    repository, _ = _repository(tmp_path)
+    change = subject.NoteChange(
+        status="M", path="daily.md", kind="text",
+        content="## 2026-07-23 23:04\nWorked through the ingest design.\n",
+        changed_lines=(2,),
+    )
+
+    segments = subject.distill_note_segments(repository, change, synthesize=False)
+
+    assert len(segments) == 1
+    assert "structured_hfl" not in segments[0]
+    assert segments[0]["what_happened"] == (
+        "## 2026-07-23 23:04 Worked through the ingest design."
+    )
 
 
 def test_required_tags_include_repo_and_core_topic(tmp_path):

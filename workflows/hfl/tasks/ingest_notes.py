@@ -50,6 +50,21 @@ _DAILY_SCRUM_HEADING_RE = re.compile(
 _DAILY_SCRUM_PATH_RE = re.compile(
     r"(?i)(?:^|[/\\ _\-[\(])(?:dsm|daily[- _]?(?:scrum|standup))(?:$|[/\\ _\-\]\)])"
 )
+_HFL_BLOCK_HEADER_RE = re.compile(
+    r"^##\s+(\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?)\s*$"
+)
+_HFL_BLOCK_FIELD_RE = re.compile(
+    r"^###\s+(Moment|What happened|Why it stayed|Possible use|Tags|References)\s*:\s*(.*)$",
+    re.IGNORECASE,
+)
+_HFL_BLOCK_FIELDS = {
+    "moment": "moment",
+    "what happened": "what_happened",
+    "why it stayed": "why_it_stayed",
+    "possible use": "possible_use",
+    "tags": "tags",
+    "references": "references",
+}
 
 
 @dataclass(frozen=True)
@@ -60,6 +75,10 @@ class NoteChange:
     kind: str = "reference"
     content: str = ""
     changed_at: Optional[datetime] = None
+    # New-file or update lines on the right side of the Git diff. An empty
+    # tuple means the range is unavailable, so structured-block detection
+    # conservatively considers the whole current file.
+    changed_lines: tuple[int, ...] = ()
 
 
 def _git(path: Path, args: list[str], timeout: int = 120) -> subprocess.CompletedProcess:
@@ -132,6 +151,34 @@ def _parse_name_status(text: str) -> list[tuple[str, str, str]]:
     return out
 
 
+def _changed_line_numbers(
+    repository: NoteRepository,
+    from_commit: str,
+    to_commit: str,
+    path: str,
+) -> tuple[int, ...]:
+    """Return right-side line numbers added or updated in one Git diff."""
+    result = _git(repository.host_path, [
+        "diff", "--unified=0", "--no-color", from_commit, to_commit, "--", path,
+    ])
+    if result.returncode != 0:
+        return ()
+    changed: list[int] = []
+    for raw in result.stdout.splitlines():
+        match = re.match(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", raw)
+        if not match:
+            continue
+        start = int(match.group(1))
+        count = int(match.group(2) or "1")
+        if count == 0:
+            # A deletion has no right-side lines. Use its insertion point so
+            # an edited structured block can still be selected.
+            changed.append(max(1, start))
+        else:
+            changed.extend(range(start, start + count))
+    return tuple(changed)
+
+
 def collect_note_changes(
     repository: NoteRepository,
     *,
@@ -167,9 +214,14 @@ def collect_note_changes(
             local = _safe_checkout_path(repository, rel)
             if local and local.is_file():
                 content = local.read_text(encoding="utf-8", errors="replace")[:repository.max_text_chars]
+        changed_lines = (
+            _changed_line_numbers(repository, from_commit, head, rel)
+            if status != "D" and kind == "text"
+            else ()
+        )
         changes.append(NoteChange(
             status=status, path=rel, old_path=old_rel, kind=kind,
-            content=content, changed_at=changed_at,
+            content=content, changed_at=changed_at, changed_lines=changed_lines,
         ))
     return {
         "repository": repository.name,
@@ -225,6 +277,98 @@ def _fallback_distillation(change: NoteChange) -> dict[str, Any]:
     }
 
 
+def _parse_hfl_timestamp(value: str) -> datetime | None:
+    normalized = value.strip().replace("T", " ")
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(normalized, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _structured_hfl_segments(change: NoteChange) -> list[dict[str, Any]]:
+    """Extract changed macro-generated blocks matching the HFL entry shape."""
+    if change.kind != "text" or not change.content:
+        return []
+    lines = change.content.splitlines()
+    headers = [
+        (index, match)
+        for index, line in enumerate(lines)
+        if (match := _HFL_BLOCK_HEADER_RE.match(line.strip()))
+    ]
+    changed = set(change.changed_lines)
+    segments: list[dict[str, Any]] = []
+    for header_index, (start, header) in enumerate(headers):
+        end = headers[header_index + 1][0] if header_index + 1 < len(headers) else len(lines)
+        values: dict[str, list[str]] = {}
+        current = ""
+        block_end = end
+        for offset, raw in enumerate(lines[start + 1:end], start + 1):
+            field = _HFL_BLOCK_FIELD_RE.match(raw.strip())
+            if field:
+                current = _HFL_BLOCK_FIELDS[field.group(1).lower()]
+                values.setdefault(current, [])
+                if field.group(2).strip():
+                    values[current].append(field.group(2).strip())
+                continue
+            stripped = raw.strip()
+            if current and re.fullmatch(r"={8,}", stripped):
+                block_end = offset + 1
+                break
+            if current:
+                values[current].append(raw.rstrip())
+        if not values:
+            # A date-like H2 alone is a common daily-note heading, not an HFL
+            # macro block. Leave it to the contextual analysis fallback.
+            continue
+        one_based = set(range(start + 1, block_end + 1))
+        if changed and changed.isdisjoint(one_based):
+            continue
+
+        def field_text(name: str) -> str:
+            return "\n".join(values.get(name, [])).strip()
+
+        tags_text = field_text("tags")
+        tags = re.findall(r"#([A-Za-z0-9][A-Za-z0-9_-]*)", tags_text)
+        references = [
+            line.strip().removeprefix("- ").strip()
+            for line in values.get("references", [])
+            if line.strip().removeprefix("- ").strip()
+        ]
+        moment = field_text("moment")
+        what_happened = field_text("what_happened")
+        possible_use = field_text("possible_use")
+        meaningful = any((moment, what_happened, possible_use, tags, references))
+        core_candidates = [
+            tag for tag in tags if tag.lower() not in {"notes", "daily"}
+        ]
+        segments.append({
+            "skip": not meaningful,
+            "structured_hfl": True,
+            "section": f"HFL block {header.group(1)}",
+            "start_line": start + 1,
+            "end_line": block_end,
+            "when": _parse_hfl_timestamp(header.group(1)),
+            "is_daily_scrum": bool(
+                _DAILY_SCRUM_HEADING_RE.search(change.content)
+                or _DAILY_SCRUM_PATH_RE.search(change.path)
+            ),
+            "moment": moment,
+            "what_happened": what_happened,
+            "why_it_stayed": field_text("why_it_stayed"),
+            "possible_use": possible_use,
+            "core_topic": _slug(
+                core_candidates[0] if core_candidates else moment,
+                fallback=_slug(Path(change.path).stem),
+            ),
+            "tags": tags,
+            "references": references,
+            "synthesized": False,
+        })
+    return segments
+
+
 def _normalize_segment(
     raw: dict[str, Any],
     fallback: dict[str, Any],
@@ -245,6 +389,21 @@ def _normalize_segment(
         str(tag).strip().lstrip("#") for tag in (raw.get("tags") or [])
         if str(tag).strip()
     ]
+    if fallback.get("structured_hfl"):
+        # Macro fields are authored source data. The model may fill blanks and
+        # enrich tags, but it must not rewrite populated fields.
+        for key in (
+            "section", "moment", "what_happened", "why_it_stayed",
+            "possible_use", "core_topic", "when", "references",
+            "start_line", "end_line",
+        ):
+            if fallback.get(key):
+                segment[key] = fallback[key]
+        segment["structured_hfl"] = True
+        segment["skip"] = bool(fallback.get("skip", False))
+        segment["tags"] = list(dict.fromkeys([
+            *fallback.get("tags", []), *segment["tags"],
+        ]))
     try:
         start = int(raw.get("start_line", 0))
         end = int(raw.get("end_line", 0))
@@ -255,6 +414,9 @@ def _normalize_segment(
         segment["end_line"] = min(max(end, segment["start_line"]), max_line)
     else:
         segment["start_line"] = segment["end_line"] = 0
+    if fallback.get("structured_hfl"):
+        segment["start_line"] = fallback["start_line"]
+        segment["end_line"] = fallback["end_line"]
     segment["synthesized"] = True
     return segment
 
@@ -279,6 +441,25 @@ def _segments_from_parsed(
     return segments or [fallback]
 
 
+def _structured_segments_from_parsed(
+    parsed: dict[str, Any] | None,
+    fallbacks: list[dict[str, Any]],
+    *,
+    max_line: int,
+) -> list[dict[str, Any]]:
+    raw_segments = parsed.get("segments") if parsed else None
+    if not isinstance(raw_segments, list):
+        raw_segments = []
+    return [
+        _normalize_segment(
+            raw_segments[index] if index < len(raw_segments) and isinstance(raw_segments[index], dict) else {},
+            fallback,
+            max_line=max_line,
+        )
+        for index, fallback in enumerate(fallbacks)
+    ]
+
+
 def distill_note_segments(
     repository: NoteRepository,
     change: NoteChange,
@@ -291,8 +472,13 @@ def distill_note_segments(
 ) -> list[dict[str, Any]]:
     """Distill one change into bounded, naturally transitioned topic segments."""
     fallback = _fallback_distillation(change)
+    structured = _structured_hfl_segments(change)
+    if structured:
+        structured = structured[:max(
+            1, min(10, max_segments or repository.max_topics_per_note)
+        )]
     if not synthesize:
-        return [fallback]
+        return structured or [fallback]
     segment_cap = 1 if change.kind != "text" else max(
         1, min(10, max_segments or repository.max_topics_per_note)
     )
@@ -302,6 +488,13 @@ def distill_note_segments(
         f"Path: {change.path}\nOld path: {change.old_path or '(none)'}\n"
         f"Maximum topic segments: {segment_cap}\n"
     )
+    if structured:
+        instruction += (
+            f"Detected structured HFL macro blocks: {len(structured)}\n"
+            "Return exactly one segment per detected block, in source order. "
+            "Preserve populated HFL fields and source tags; infer retention "
+            "context when useful and add relevant tags grounded in the block.\n"
+        )
     try:
         client = BaseApiServiceAnthropic(get_anthropic_config(cfg_id))
         if not getattr(client, "base_client", None):
@@ -321,9 +514,15 @@ def distill_note_segments(
                 system=load_prompt("ingest_notes").strip(),
             )
         else:
+            selected_lines = set()
+            for segment in structured:
+                selected_lines.update(range(
+                    int(segment["start_line"]), int(segment["end_line"]) + 1,
+                ))
             numbered = "\n".join(
                 f"{line_no}: {line}"
                 for line_no, line in enumerate(change.content.splitlines(), 1)
+                if not structured or line_no in selected_lines
             )
             response = client.send_message(
                 prompt=instruction + "\nLine-numbered note content:\n" + numbered,
@@ -332,13 +531,17 @@ def distill_note_segments(
             )
         text = response.content[0].text if response and response.content else ""
         parsed = _parse_model_json(text)
+        if structured:
+            return _structured_segments_from_parsed(
+                parsed, structured, max_line=len(change.content.splitlines()),
+            )
         return _segments_from_parsed(
             parsed, fallback, max_segments=segment_cap,
             max_line=len(change.content.splitlines()),
         )
     except Exception as exc:  # noqa: BLE001 - one note must not break Beat
         _log.warning("notes distillation failed for %s (%s) — fallback", change.path, exc)
-        return [fallback]
+        return structured or [fallback]
 
 
 def distill_note_change(
@@ -404,8 +607,12 @@ def _entry_tags(repository: NoteRepository, distilled: dict[str, Any]) -> list[s
     if is_daily_scrum:
         ordered.append("dsm")
     ordered.append(_slug(str(distilled.get("core_topic", ""))))
-    ordered.extend(repository.tags)
-    ordered.extend(str(tag) for tag in distilled.get("tags") or [])
+    if distilled.get("structured_hfl"):
+        ordered.extend(str(tag) for tag in distilled.get("tags") or [])
+        ordered.extend(repository.tags)
+    else:
+        ordered.extend(repository.tags)
+        ordered.extend(str(tag) for tag in distilled.get("tags") or [])
     out: list[str] = []
     for tag in ordered:
         normalized = _slug(str(tag))
@@ -463,7 +670,8 @@ def _segment_references(
     local = _safe_checkout_path(repository, change.path)
     if local:
         references.append(str(local))
-    return references
+    references.extend(str(item) for item in segment.get("references") or [])
+    return list(dict.fromkeys(item for item in references if item))
 
 
 def collect_notes_activity(
@@ -580,9 +788,12 @@ def ingest_notes_activity(
 
             written = indexed = 0
             for change, distilled in granular:
+                entry_when = distilled.get("when")
+                if not isinstance(entry_when, datetime):
+                    entry_when = change.changed_at or datetime.now()
                 did_write, did_index = _write_entry(
                     repository, distilled,
-                    when=change.changed_at or datetime.now(),
+                    when=entry_when,
                     references=_segment_references(repository, head, change, distilled),
                 )
                 written += int(did_write)
