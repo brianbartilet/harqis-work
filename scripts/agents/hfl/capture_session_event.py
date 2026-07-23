@@ -10,7 +10,9 @@ place for retry.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
+import io
 import json
 import os
 import re
@@ -229,14 +231,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--session-id")
     parser.add_argument("--prompt-id")
     parser.add_argument("--status", default="completed")
-    parser.add_argument("--enqueue", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--enqueue", action=argparse.BooleanOptionalAction, default=None)
     args = parser.parse_args(argv)
+    should_enqueue = args.enqueue if args.enqueue is not None else not args.hook
 
     if args.hook:
         payload = json.load(sys.stdin)
         event, path = capture_hook(payload, args.surface)
         if event is None or path is None:
             return 0
+        if should_enqueue:
+            # Lifecycle-hook stdout is reserved for Codex / Claude control
+            # JSON. App/workflow imports may also log during enqueue, so keep
+            # the entire best-effort submission silent. Automatic hooks defer
+            # to the durable 23:35 retry unless --enqueue is explicit.
+            with contextlib.redirect_stdout(io.StringIO()):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    enqueue_event(event, path)
+        return 0
     else:
         raw = _load_json_arg(args.json) if args.json else {
             "original_prompt": args.prompt,
@@ -250,7 +262,7 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("both prompt and assistant outcome are required")
         path = write_event(event)
 
-    task_id = enqueue_event(event, path) if args.enqueue else None
+    task_id = enqueue_event(event, path) if should_enqueue else None
     print(json.dumps({"captured": True, "event_id": event["event_id"], "path": str(path), "task_id": task_id}))
     return 0
 

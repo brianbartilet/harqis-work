@@ -2,7 +2,9 @@
 
 import json
 import re
+import sys
 from datetime import date
+from io import StringIO
 from pathlib import Path
 
 import pytest
@@ -52,6 +54,67 @@ def test_hook_pairs_prompt_and_stop(monkeypatch, tmp_path):
     assert event["original_prompt"] == "pls fix it"
     assert event["assistant_outcome"].startswith("Fixed parser.py")
     assert path.exists()
+
+
+@pytest.mark.smoke
+def test_hook_cli_is_silent_and_defers_enqueue_by_default(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(capture, "audit_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        capture,
+        "enqueue_event",
+        lambda *_args, **_kwargs: pytest.fail("hook should defer enqueue"),
+    )
+    prompt = {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "session-1",
+        "turn_id": "turn-1",
+        "prompt": "pls fix it",
+    }
+    monkeypatch.setattr(sys, "stdin", StringIO(json.dumps(prompt)))
+    assert capture.main(["--surface", "codex", "--hook"]) == 0
+
+    stop = {
+        "hook_event_name": "Stop",
+        "session_id": "session-1",
+        "last_assistant_message": "Fixed parser.py and verified syntax.",
+    }
+    monkeypatch.setattr(sys, "stdin", StringIO(json.dumps(stop)))
+    assert capture.main(["--surface", "codex", "--hook"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+    assert list((tmp_path / "events").rglob("*.json"))
+
+
+@pytest.mark.smoke
+def test_hook_cli_suppresses_enqueue_output(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(capture, "audit_root", lambda: tmp_path)
+    capture.capture_hook(
+        {
+            "hook_event_name": "UserPromptSubmit",
+            "session_id": "session-1",
+            "turn_id": "turn-1",
+            "prompt": "pls fix it",
+        },
+        "codex",
+    )
+
+    def noisy_enqueue(*_args, **_kwargs):
+        print("workflow import noise")
+        print("broker warning", file=sys.stderr)
+        return "task-id"
+
+    monkeypatch.setattr(capture, "enqueue_event", noisy_enqueue)
+    stop = {
+        "hook_event_name": "Stop",
+        "session_id": "session-1",
+        "last_assistant_message": "Fixed parser.py and verified syntax.",
+    }
+    monkeypatch.setattr(sys, "stdin", StringIO(json.dumps(stop)))
+    assert capture.main(["--surface", "codex", "--hook", "--enqueue"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
 
 
 @pytest.mark.smoke
