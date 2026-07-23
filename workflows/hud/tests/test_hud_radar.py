@@ -92,6 +92,31 @@ def test__radar_sets_both_itemlines_and_maxlines():
     assert 'ini["Variables"]["MaxLines"]' in src
 
 
+def test__radar_pre_wraps_long_dump_lines_before_marquee_paging():
+    """Long Hermes lines must count as visual rows before MaxLines is applied."""
+    from pathlib import Path
+    import inspect
+    from workflows.hud.tasks.hud_radar import (
+        DAILY_RADAR_WRAP_AT,
+        _configure_radar_ini,
+    )
+
+    assert DAILY_RADAR_WRAP_AT == 56
+    src = inspect.getsource(_configure_radar_ini)
+    assert 'ini["Variables"]["WrapAt"] = str(DAILY_RADAR_WRAP_AT)' in src
+
+    text_cycle = (
+        Path(__file__).parents[3]
+        / "apps"
+        / "rainmeter"
+        / "static"
+        / "bin"
+        / "TextCycle.lua"
+    ).read_text(encoding="utf-8")
+    assert 'wrapAt = tonumber(SKIN:GetVariable("WrapAt", "0")) or 0' in text_cycle
+    assert "appendWrappedLine(lines, l)" in text_cycle
+
+
 def test__radar_content_viewport_stays_inside_skin():
     """The content meter starts below the header and must not use SkinHeight."""
     import inspect

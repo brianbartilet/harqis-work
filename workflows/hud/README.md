@@ -170,7 +170,7 @@ Behavior:
 - **Push scope:** delivered Telegram-configured cron outputs from the last 12 hours, newest first. Conversational replies and delivery/job failures are excluded, along with user messages, tool traces, reasoning, system prompts, secrets, IDs, raw local paths, emoji, unsupported Unicode, and looped radar dumps.
 - **Analysis window:** last 8 hours of email / failed jobs / Jira updates (configurable via `window_hours`).
 - **Sound:** the four-hour synthesis uses `play_sound=True`; hourly notification-only refreshes stay silent.
-- **Scroll:** `MeasureLuaScriptScroll` (auto-scrolling marquee, identical to DESKTOP LOGS).
+- **Scroll:** `MeasureLuaScriptScroll` (auto-scrolling marquee, identical to DESKTOP LOGS). HERMES RADAR sets a skin-local `WrapAt` width so long physical dump lines become bounded visual rows before the 19-row marquee window is selected.
 - **Width:** `width_multiplier=2.25` — matches DESKTOP LOGS so the two pinned widgets line up side by side.
 - **Height:** fixed at `DAILY_RADAR_MAX_HUD_LINES` (19), approximately 20% more visible lines than the previous 16-line footprint. The widget sets both `Variables.ItemLines` and `Variables.MaxLines`; the marquee scrolls content beyond that stable footprint.
 - **Viewport clipping:** the content meter subtracts its 70 px header offset and a 14 px footer from the skin height, preventing wrapped text from painting over adjacent HUD content during initial load.

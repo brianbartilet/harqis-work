@@ -30,6 +30,7 @@ from workflows.hud.collectors.hermes_pushes import (
 )
 
 DAILY_RADAR_MAX_HUD_LINES: int = 19
+DAILY_RADAR_WRAP_AT: int = 56
 _DESKTOP_LOGS_HUD_FOLDER = "DESKTOPLOGS"
 # Compatibility path used by forwarding scripts and existing Rainmeter installs.
 _RADAR_HUD_FOLDER = "DAILYRADAR"
@@ -82,6 +83,12 @@ def _configure_radar_ini(
     ini["meterTitle"]["X"] = "({0}*198*#Scale#)/2".format(width_multiplier)
     ini["Variables"]["ItemLines"] = str(max_hud_lines)
     ini["Variables"]["MaxLines"] = str(max_hud_lines)
+    # TextCycle normally counts physical dump lines. Hermes summaries can
+    # contain very long physical lines, which Rainmeter then wraps into several
+    # visual rows after the marquee has already selected its window. Pre-wrap
+    # this skin's input inside TextCycle so MaxLines remains a true display-row
+    # cap and no scroll frame crowds or crosses the panel footer.
+    ini["Variables"]["WrapAt"] = str(DAILY_RADAR_WRAP_AT)
 
 
 @SPROUT.task()
