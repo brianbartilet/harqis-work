@@ -118,6 +118,27 @@ def test_hook_cli_suppresses_enqueue_output(monkeypatch, tmp_path, capsys):
 
 
 @pytest.mark.smoke
+def test_hook_cli_fails_open_and_records_payload_free_diagnostic(
+    monkeypatch, tmp_path, capsys
+):
+    monkeypatch.setattr(capture, "audit_root", lambda: tmp_path)
+    monkeypatch.setattr(sys, "stdin", StringIO(""))
+
+    assert capture.main(["--surface", "codex", "--hook"]) == 0
+
+    captured = capsys.readouterr()
+    diagnostics = list((tmp_path / "hook-errors").rglob("*.json"))
+    assert captured.out == ""
+    assert captured.err == ""
+    assert len(diagnostics) == 1
+    diagnostic = json.loads(diagnostics[0].read_text(encoding="utf-8"))
+    assert diagnostic["surface"] == "codex"
+    assert diagnostic["error_type"] == "JSONDecodeError"
+    assert "original_prompt" not in diagnostic
+    assert "assistant_outcome" not in diagnostic
+
+
+@pytest.mark.smoke
 def test_raw_distillation_never_calls_api():
     event = capture.normalize_event({
         "surface": "hermes",

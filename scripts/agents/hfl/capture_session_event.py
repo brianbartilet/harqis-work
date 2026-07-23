@@ -18,6 +18,7 @@ import os
 import re
 import socket
 import sys
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -156,6 +157,33 @@ def _pending_path(surface: str, session_id: str) -> Path:
     return audit_root() / "pending" / surface / f"{_clean_id(session_id, 'session-unknown')}.json"
 
 
+def record_hook_failure(surface: str, error: Exception) -> Path | None:
+    """Persist a payload-free diagnostic without ever failing the host hook."""
+    try:
+        now = datetime.now().astimezone()
+        error_id = hashlib.sha256(
+            f"{now.isoformat()}:{os.getpid()}:{type(error).__name__}:{error}".encode("utf-8")
+        ).hexdigest()[:12]
+        path = audit_root() / "hook-errors" / now.strftime("%Y-%m-%d") / (
+            f"{now.strftime('%H%M%S-%f')}-{error_id}.json"
+        )
+        diagnostic = {
+            "captured_at": now.isoformat(),
+            "surface": surface,
+            "machine": _clean_id(socket.gethostname(), "unknown"),
+            "error_type": type(error).__name__,
+            "error": sanitize_text(error, limit=2000),
+            "traceback": sanitize_text(
+                "".join(traceback.format_exception(type(error), error, error.__traceback__)),
+                limit=10_000,
+            ),
+        }
+        _atomic_json(path, diagnostic)
+        return path
+    except Exception:
+        return None
+
+
 def capture_hook(payload: dict[str, Any], surface: str) -> tuple[dict[str, Any] | None, Path | None]:
     event_name = str(payload.get("hook_event_name") or "").lower()
     session_id = _clean_id(payload.get("session_id"), "session-unknown")
@@ -236,18 +264,24 @@ def main(argv: list[str] | None = None) -> int:
     should_enqueue = args.enqueue if args.enqueue is not None else not args.hook
 
     if args.hook:
-        payload = json.load(sys.stdin)
-        event, path = capture_hook(payload, args.surface)
-        if event is None or path is None:
-            return 0
-        if should_enqueue:
-            # Lifecycle-hook stdout is reserved for Codex / Claude control
-            # JSON. App/workflow imports may also log during enqueue, so keep
-            # the entire best-effort submission silent. Automatic hooks defer
-            # to the durable 23:35 retry unless --enqueue is explicit.
-            with contextlib.redirect_stdout(io.StringIO()):
-                with contextlib.redirect_stderr(io.StringIO()):
-                    enqueue_event(event, path)
+        try:
+            payload = json.load(sys.stdin)
+            event, path = capture_hook(payload, args.surface)
+            if event is None or path is None:
+                return 0
+            if should_enqueue:
+                # Lifecycle-hook stdout is reserved for Codex / Claude control
+                # JSON. App/workflow imports may also log during enqueue, so keep
+                # the entire best-effort submission silent. Automatic hooks defer
+                # to the durable 23:35 retry unless --enqueue is explicit.
+                with contextlib.redirect_stdout(io.StringIO()):
+                    with contextlib.redirect_stderr(io.StringIO()):
+                        enqueue_event(event, path)
+        except Exception as error:
+            # Auditing must never make the agent surface report a failed
+            # lifecycle hook. Keep a payload-free local diagnostic so the
+            # capture problem can still be investigated.
+            record_hook_failure(args.surface, error)
         return 0
     else:
         raw = _load_json_arg(args.json) if args.json else {
