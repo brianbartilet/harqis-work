@@ -1367,17 +1367,20 @@ def test_corpus_index_renders_create_review_and_discard_dialogs(
 
     assert response.status_code == 200
     assert "Create entry" in response.text
+    assert "Your future self will thank you" in response.text
     assert 'data-create-entry-dialog' in response.text
     assert 'name="date"' in response.text
     assert 'name="time"' in response.text
     assert 'name="moment"' in response.text
-    assert ">description</span>" in response.text
-    assert "enter moment details" in response.text
+    assert 'name="moment" required maxlength="500" placeholder="description"' in response.text
+    assert 'name="what_happened" required rows="3" placeholder="enter details"' in response.text
+    assert "enter moment details" not in response.text
     assert "just writing down notes or thoughts" in response.text
     assert 'placeholder="brainstorming"' in response.text
     assert "#notes #manual-entry #thoughts" in response.text
     assert 'data-entry-review-dialog' in response.text
     assert 'data-entry-discard-dialog' in response.text
+    assert ">Review and save</button>" in response.text
     assert "HFL entry created successfully." in response.text
 
 

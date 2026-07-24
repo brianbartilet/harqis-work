@@ -200,7 +200,7 @@
     <div data-entry-dialog-header
          class="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-slate-800 bg-slate-950 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] sm:static sm:border-0 sm:p-0">
       <div>
-        <p class="text-xs uppercase tracking-[0.2em] text-blue-400">Manual HFL entry</p>
+        <p class="text-xs uppercase tracking-[0.2em] text-blue-400">Your future self will thank you</p>
         <h2 id="create-entry-title" class="mt-1 text-xl font-semibold text-white">Create entry</h2>
       </div>
       <button type="button" data-entry-cancel aria-label="Close create-entry dialog"
@@ -225,14 +225,12 @@
 
       <div class="mt-4 grid gap-4">
         <label class="block text-sm text-slate-300">Moment <span class="text-rose-400">*</span>
-          <input type="text" name="moment" required maxlength="500"
-                 class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 sm:text-sm">
-          <span class="mt-1 block text-xs text-slate-500">description</span>
+          <input type="text" name="moment" required maxlength="500" placeholder="description"
+                 class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-blue-500 sm:text-sm">
         </label>
         <label class="block text-sm text-slate-300">What happened <span class="text-rose-400">*</span>
-          <textarea name="what_happened" required rows="3"
-                    class="mt-1.5 block w-full resize-y rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 sm:text-sm"></textarea>
-          <span class="mt-1 block text-xs text-slate-500">enter moment details</span>
+          <textarea name="what_happened" required rows="3" placeholder="enter details"
+                    class="mt-1.5 block w-full resize-y rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-blue-500 sm:text-sm"></textarea>
         </label>
         <label class="block text-sm text-slate-300">Why it stayed
           <textarea name="why_it_stayed" rows="2"
@@ -259,7 +257,7 @@
       <button type="button" data-entry-cancel
               class="order-2 min-h-11 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm text-slate-300 ring-1 ring-slate-700 hover:text-white sm:order-1 sm:min-h-0 sm:w-auto">Cancel</button>
       <button type="submit" data-entry-review
-              class="order-1 min-h-11 w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-wait disabled:opacity-60 sm:order-2 sm:min-h-0 sm:w-auto">Review entry</button>
+              class="order-1 min-h-11 w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-wait disabled:opacity-60 sm:order-2 sm:min-h-0 sm:w-auto">Review and save</button>
     </div>
   </form>
 </dialog>
