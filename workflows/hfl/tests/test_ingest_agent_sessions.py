@@ -138,6 +138,22 @@ def test_hook_cli_fails_open_and_records_payload_free_diagnostic(
     assert "assistant_outcome" not in diagnostic
 
 
+def test_codex_windows_hooks_use_powershell_fail_open_wrapper():
+    repo_root = Path(__file__).resolve().parents[3]
+    config = json.loads((repo_root / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+
+    for event_name in ("UserPromptSubmit", "Stop"):
+        hook = config["hooks"][event_name][0]["hooks"][0]
+        command = hook["commandWindows"]
+        assert "capture_session_hook.ps1" in command
+        assert "capture_session_event.py" not in command
+        assert command.startswith("powershell.exe ")
+        assert "-ExecutionPolicy Bypass" in command
+        assert "-Command" in command
+        assert "git rev-parse --show-toplevel" in command
+        assert "for /f" not in command
+
+
 @pytest.mark.smoke
 def test_raw_distillation_never_calls_api():
     event = capture.normalize_event({

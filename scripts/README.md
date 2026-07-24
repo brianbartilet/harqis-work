@@ -54,6 +54,7 @@ up from `scripts/agents/<bucket>/`).
 |---|---|
 | `archive_corpus.py` | Archives completed HFL corpus periods. |
 | [`capture_session_event.py`](#scriptsagentshflcapture_session_eventpy) | Normalizes, redacts, spools, and best-effort enqueues Codex/Claude/Hermes/OpenClaw prompt-outcome audit events. |
+| `capture_session_hook.ps1` | Fail-open Windows launcher that forwards Codex lifecycle-hook stdin to the repository capture entry point without inline-shell quoting. |
 | `capture_session_hook.sh` | Selects the repository Python interpreter across macOS/Linux/Windows shells for the Claude Code lifecycle hook. |
 
 ### `testing/` — test execution + reporting

@@ -633,6 +633,22 @@ def test_corpus_search_is_sticky_above_aligned_directory_and_results(
     )
 
 
+def test_corpus_search_cards_show_updated_timestamp(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = replace(
+        _document("2026-07-10.md"),
+        updated_at=datetime(2026, 7, 12, 14, 35),
+    )
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get("/hfl-corpus")
+
+    assert "Updated 2026-07-12 14:35" in response.text
+
+
 def test_corpus_mobile_results_disclosure_is_open_by_default_and_uses_page_flow(
     authenticated_client, monkeypatch
 ):

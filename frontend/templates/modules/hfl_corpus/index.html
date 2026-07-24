@@ -131,7 +131,7 @@
                 <a href="{{ url_for('hfl_document', relative_path=document.relative_path) }}" class="block transition hover:text-blue-300">
                   <h3 class="truncate text-sm font-semibold text-white">{{ document.name }}</h3>
                 </a>
-                <p class="mt-1 text-xs text-slate-500">Updated {{ document.updated_at.strftime('%Y-%m-%d') }}</p>
+                <p class="mt-1 text-xs text-slate-500">Updated {{ document.updated_at.strftime('%Y-%m-%d %H:%M') }}</p>
               </div>
               <p class="shrink-0 text-right text-xs text-slate-600">Created {{ document.created_at.strftime('%Y-%m-%d') }}</p>
             </div>
