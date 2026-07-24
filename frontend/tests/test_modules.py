@@ -106,5 +106,5 @@ def test_hfl_corpus_module_renders_an_empty_index(authenticated_client, monkeypa
 
     assert response.status_code == 200
     assert "Activity Corpus" in response.text
-    assert "HARQIS ACTIVITY LOGS" in response.text
+    assert "EVERYTHING EVERYWHERE, EVENTUALLY INDEXED" in response.text
     assert "0 files" in response.text
