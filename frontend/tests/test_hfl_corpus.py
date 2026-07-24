@@ -1367,7 +1367,7 @@ def test_corpus_index_renders_create_review_and_discard_dialogs(
 
     assert response.status_code == 200
     assert "Create entry" in response.text
-    assert "Your future self will thank you" in response.text
+    assert "Catch it before it wanders" in response.text
     assert 'data-create-entry-dialog' in response.text
     assert 'name="date"' in response.text
     assert 'name="time"' in response.text
@@ -1394,7 +1394,7 @@ def test_create_entry_dialog_uses_mobile_sheets_and_touch_friendly_controls(
     response = authenticated_client.get("/hfl-corpus")
 
     create_dialog = response.text.split(
-        "data-create-entry-dialog", 1
+        "<dialog data-create-entry-dialog", 1
     )[1].split(">", 1)[0]
     create_form = response.text.split(
         "data-create-entry-form", 1
@@ -1414,16 +1414,24 @@ def test_create_entry_dialog_uses_mobile_sheets_and_touch_friendly_controls(
     review_actions = response.text.split(
         "data-entry-review-actions", 1
     )[1].split(">", 1)[0]
+    more_details = response.text.split(
+        "data-entry-more-details", 1
+    )[1].split("</details>", 1)[0]
     date_time_fields = response.text.split(
         'name="date"', 1
     )[0].rsplit("<div", 1)[1]
 
     assert "h-[100dvh]" in create_dialog
     assert "w-screen" in create_dialog
+    assert "overflow-hidden" in create_dialog
     assert "rounded-none" in create_dialog
     assert "sm:m-auto" in create_dialog
     assert "sm:h-auto" in create_dialog
     assert "sm:rounded-2xl" in create_dialog
+    assert "dialog[data-create-entry-dialog]" in response.text
+    assert "dialog[data-create-entry-dialog] > form" in response.text
+    assert "height: fit-content !important" in response.text
+    assert "@media (min-width: 640px)" in response.text
     assert "flex h-full" in create_form
     assert "overflow-hidden" in create_form
     assert "sm:block" in create_form
@@ -1440,11 +1448,21 @@ def test_create_entry_dialog_uses_mobile_sheets_and_touch_friendly_controls(
     assert "sm:text-sm" in response.text
     assert "h-[100dvh]" in review_dialog
     assert "w-screen" in review_dialog
+    assert "overflow-hidden" in review_dialog
     assert "sticky bottom-0" in review_actions
     assert "sm:flex-row" in review_actions
     assert "window.innerWidth >= 640" in response.text
     assert "scrollIntoView({behavior: 'smooth', block: 'center'})" in response.text
     assert "form.checkValidity()" in response.text
+    assert " open" not in more_details.split(">", 1)[0]
+    assert ">Add more details</span>" in more_details
+    assert 'stroke-width="2.5"' in more_details
+    assert 'd="m5 7.5 5 5 5-5"' in more_details
+    assert 'name="why_it_stayed"' in more_details
+    assert 'name="possible_use"' in more_details
+    assert 'name="tags" value="#notes #manual-entry #thoughts"' in more_details
+    assert 'name="references"' in more_details
+    assert "moreDetails.open = false" in response.text
 
 
 def test_create_entry_launcher_and_discard_actions_stack_on_mobile(

@@ -1,6 +1,20 @@
 {% extends "base.html" %}
 {% block title %}HARQIS — Activity Corpus{% endblock %}
 
+{% block head %}
+<style>
+  @media (min-width: 640px) {
+    dialog[data-create-entry-dialog] {
+      height: fit-content !important;
+    }
+
+    dialog[data-create-entry-dialog] > form {
+      height: fit-content !important;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <main data-corpus-index class="mx-auto flex h-auto max-w-7xl flex-col overflow-x-clip py-5 pl-4 pr-5 sm:px-6 md:h-[calc(100dvh-3.5rem)] md:overflow-y-auto md:overscroll-contain lg:h-[calc(100vh-3.5rem)] lg:overflow-hidden lg:px-8">
   <div class="mb-4 flex shrink-0 flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-end sm:gap-4">
@@ -195,12 +209,12 @@
 </main>
 
 <dialog data-create-entry-dialog aria-labelledby="create-entry-title"
-        class="m-0 h-[100dvh] max-h-none w-screen max-w-none rounded-none border-0 bg-slate-950 p-0 text-slate-100 shadow-2xl shadow-black/70 backdrop:bg-black/75 sm:m-auto sm:h-auto sm:max-h-[90dvh] sm:w-[min(44rem,calc(100%-2rem))] sm:rounded-2xl sm:border sm:border-blue-800/70">
+        class="m-0 h-[100dvh] max-h-none w-screen max-w-none overflow-hidden rounded-none border-0 bg-slate-950 p-0 text-slate-100 shadow-2xl shadow-black/70 backdrop:bg-black/75 sm:m-auto sm:h-auto sm:max-h-[90dvh] sm:w-[min(44rem,calc(100%-2rem))] sm:rounded-2xl sm:border sm:border-blue-800/70">
   <form data-create-entry-form class="flex h-full max-h-none flex-col overflow-hidden sm:block sm:h-auto sm:max-h-[90dvh] sm:overflow-y-auto sm:p-6">
     <div data-entry-dialog-header
          class="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-slate-800 bg-slate-950 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] sm:static sm:border-0 sm:p-0">
       <div>
-        <p class="text-xs uppercase tracking-[0.2em] text-blue-400">Your future self will thank you</p>
+        <p class="text-xs uppercase tracking-[0.2em] text-blue-400">Catch it before it wanders</p>
         <h2 id="create-entry-title" class="mt-1 text-xl font-semibold text-white">Create entry</h2>
       </div>
       <button type="button" data-entry-cancel aria-label="Close create-entry dialog"
@@ -232,23 +246,35 @@
           <textarea name="what_happened" required rows="3" placeholder="enter details"
                     class="mt-1.5 block w-full resize-y rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-blue-500 sm:text-sm"></textarea>
         </label>
-        <label class="block text-sm text-slate-300">Why it stayed
-          <textarea name="why_it_stayed" rows="2"
-                    class="mt-1.5 block w-full resize-y rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 sm:text-sm">just writing down notes or thoughts</textarea>
-        </label>
-        <label class="block text-sm text-slate-300">Possible use
-          <input type="text" name="possible_use" placeholder="brainstorming"
-                 class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-blue-500 sm:text-sm">
-        </label>
-        <label class="block text-sm text-slate-300">Tags
-          <input type="text" name="tags" value="#notes #manual-entry #thoughts"
-                 class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 sm:text-sm">
-        </label>
-        <label class="block text-sm text-slate-300">References
-          <textarea name="references" rows="4" placeholder="One reference per line"
-                    class="mt-1.5 block w-full resize-y rounded-lg bg-slate-900 px-3 py-2 font-mono text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-blue-500 sm:text-sm"></textarea>
-          <span class="mt-1 block text-xs text-slate-500">Each nonblank line becomes one Markdown list item.</span>
-        </label>
+        <details data-entry-more-details class="group rounded-xl border border-slate-800 bg-slate-900/40">
+          <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm font-medium text-blue-300 hover:bg-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden">
+            <span>Add more details</span>
+            <svg aria-hidden="true" viewBox="0 0 20 20"
+                 class="h-4 w-4 shrink-0 text-blue-400 transition group-open:rotate-180"
+                 fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m5 7.5 5 5 5-5"></path>
+            </svg>
+          </summary>
+          <div class="grid gap-4 border-t border-slate-800 px-3 pb-3 pt-4">
+            <label class="block text-sm text-slate-300">Why it stayed
+              <textarea name="why_it_stayed" rows="2"
+                        class="mt-1.5 block w-full resize-y rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 sm:text-sm">just writing down notes or thoughts</textarea>
+            </label>
+            <label class="block text-sm text-slate-300">Possible use
+              <input type="text" name="possible_use" placeholder="brainstorming"
+                     class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-blue-500 sm:text-sm">
+            </label>
+            <label class="block text-sm text-slate-300">Tags
+              <input type="text" name="tags" value="#notes #manual-entry #thoughts"
+                     class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 sm:text-sm">
+            </label>
+            <label class="block text-sm text-slate-300">References
+              <textarea name="references" rows="4" placeholder="One reference per line"
+                        class="mt-1.5 block w-full resize-y rounded-lg bg-slate-900 px-3 py-2 font-mono text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-blue-500 sm:text-sm"></textarea>
+              <span class="mt-1 block text-xs text-slate-500">Each nonblank line becomes one Markdown list item.</span>
+            </label>
+          </div>
+        </details>
       </div>
     </div>
 
@@ -263,7 +289,7 @@
 </dialog>
 
 <dialog data-entry-review-dialog aria-labelledby="entry-review-title"
-        class="m-0 h-[100dvh] max-h-none w-screen max-w-none rounded-none border-0 bg-slate-950 p-0 text-slate-100 shadow-2xl shadow-black/70 backdrop:bg-black/75 sm:m-auto sm:h-auto sm:max-h-[90dvh] sm:w-[min(46rem,calc(100%-2rem))] sm:rounded-2xl sm:border sm:border-blue-800/70">
+        class="m-0 h-[100dvh] max-h-none w-screen max-w-none overflow-hidden rounded-none border-0 bg-slate-950 p-0 text-slate-100 shadow-2xl shadow-black/70 backdrop:bg-black/75 sm:m-auto sm:h-auto sm:max-h-[90dvh] sm:w-[min(46rem,calc(100%-2rem))] sm:rounded-2xl sm:border sm:border-blue-800/70">
   <div class="flex h-full max-h-none flex-col overflow-hidden sm:h-auto sm:max-h-[90dvh]">
     <div data-entry-review-header
          class="sticky top-0 z-10 shrink-0 border-b border-slate-800 bg-slate-950 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] sm:static sm:border-0 sm:px-6 sm:pb-0 sm:pt-6">
@@ -306,6 +332,7 @@
 
   const errorBox = form.querySelector('[data-entry-error]');
   const reviewButton = form.querySelector('[data-entry-review]');
+  const moreDetails = form.querySelector('[data-entry-more-details]');
   const confirmButton = reviewDialog.querySelector('[data-entry-confirm]');
   let initialState = '';
   let pendingPayload = null;
@@ -338,6 +365,7 @@
   };
   const openCreate = () => {
     form.reset();
+    moreDetails.open = false;
     localDateAndTime();
     showError('');
     pendingPayload = null;
