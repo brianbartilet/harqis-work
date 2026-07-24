@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from apps.trello.references.web.base_api_service import BaseApiServiceTrello
 from core.web.services.core.decorators.deserializer import deserialized
@@ -12,6 +12,8 @@ class ApiServiceTrelloMembers(BaseApiServiceTrello):
         get_me()                → Authenticated member profile
         get_member()            → Any member by ID or username
         get_member_boards()     → All boards for a member
+        get_member_actions()    → Authored actions for a member
+        get_member_organizations() → Workspaces for a member
         get_board_members()     → All members on a board
     """
 
@@ -55,6 +57,43 @@ class ApiServiceTrelloMembers(BaseApiServiceTrello):
             .add_uri_parameter(member_id) \
             .add_uri_parameter('boards') \
             .add_query_string('filter', filter)
+
+        return self.client.execute_request(self.request.build())
+
+    @deserialized(List[dict])
+    def get_member_actions(
+        self,
+        member_id: str = 'me',
+        filter: str = 'all',
+        limit: int = 200,
+        before: Optional[str] = None,
+        since: Optional[str] = None,
+    ):
+        """Return a newest-first page of actions authored by a member.
+
+        ``before`` and ``since`` accept either an action ID or ISO timestamp,
+        matching Trello's action-pagination convention.
+        """
+        self.request.get() \
+            .add_uri_parameter('members') \
+            .add_uri_parameter(member_id) \
+            .add_uri_parameter('actions') \
+            .add_query_string('filter', filter) \
+            .add_query_string('limit', max(1, min(int(limit), 1000)))
+        if before:
+            self.request.add_query_string('before', before)
+        if since:
+            self.request.add_query_string('since', since)
+
+        return self.client.execute_request(self.request.build())
+
+    @deserialized(List[dict])
+    def get_member_organizations(self, member_id: str = 'me'):
+        """Return all Trello Workspaces for a member."""
+        self.request.get() \
+            .add_uri_parameter('members') \
+            .add_uri_parameter(member_id) \
+            .add_uri_parameter('organizations')
 
         return self.client.execute_request(self.request.build())
 

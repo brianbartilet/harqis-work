@@ -583,6 +583,114 @@ def register_memory_tools(mcp: FastMCP):
         }
 
     @mcp.tool()
+    def trello_activity(
+        period: str = "",
+        since: str = "",
+        until: str = "",
+        workspaces: str = "",
+        synthesize: bool = False,
+        page_size: int = 200,
+        max_actions: int = 1000,
+        cfg_id__anthropic: str = "ANTHROPIC",
+        model: str = _DEFAULT_HAIKU,
+    ) -> dict:
+        """Preview the operator's authored Trello actions without writing HFL.
+
+        Uses the scheduled ingest's Workspace filters, period vocabulary, and
+        readable per-action rendering. Defaults to the last seven days.
+        Routine actions never call an LLM; with ``synthesize`` enabled, Haiku
+        is used only for long comments or unfamiliar action types.
+        """
+        from apps.trello.config import CONFIG as TRELLO_CONFIG
+        from apps.trello.references.web.api.members import ApiServiceTrelloMembers
+        from workflows.hfl.tasks.ingest_trello import (
+            _credentials_present,
+            collect_trello_activity,
+            distill_trello_activity,
+            resolve_trello_window,
+        )
+
+        effective_period = period or (
+            "" if since or until else "last-7-days"
+        )
+        try:
+            start, end, label = resolve_trello_window(
+                period=effective_period,
+                since=since,
+                until=until,
+            )
+        except ValueError as exc:
+            return {"found": False, "actions": [], "count": 0,
+                    "error": str(exc)}
+        if not _credentials_present():
+            return {
+                "found": False, "actions": [], "count": 0,
+                "error": "no credentials",
+                "period": _period_dict(start, end, label),
+            }
+        try:
+            activity = collect_trello_activity(
+                since=start,
+                until=end,
+                service=ApiServiceTrelloMembers(TRELLO_CONFIG),
+                workspaces=workspaces or None,
+                page_size=page_size,
+                max_actions=max_actions,
+            )
+        except Exception as exc:  # noqa: BLE001 - safe MCP error result
+            logger.warning("trello_activity: Trello unavailable (%s)", exc)
+            return {
+                "found": False, "actions": [], "count": 0,
+                "error": "trello unavailable",
+                "period": _period_dict(start, end, label),
+            }
+        if not activity["actions"]:
+            return {
+                "found": False, "actions": [], "count": 0,
+                "period": _period_dict(start, end, label),
+            }
+
+        rendered = []
+        synthesized_count = 0
+        for action in activity["actions"]:
+            distilled = distill_trello_activity(
+                action,
+                synthesize=bool(synthesize and action["needs_synthesis"]),
+                model=model,
+                cfg_id=cfg_id__anthropic,
+            )
+            if distilled.get("skip"):
+                continue
+            synthesized_count += int(bool(distilled.get("synthesized")))
+            rendered.append({
+                "id": action["id"],
+                "type": action["type"],
+                "when": action["when"],
+                "workspace": (
+                    action["workspace"].get("name")
+                    or ("personal" if action["workspace"].get("personal") else "")
+                ),
+                "board": (action["workspace"].get("board") or {}).get("name"),
+                "moment": distilled["moment"],
+                "what_happened": distilled["what_happened"],
+                "tags": distilled.get("tags") or [],
+                "references": list(action["references"]),
+                "synthesized": bool(distilled.get("synthesized")),
+            })
+        return {
+            "found": bool(rendered),
+            "actions": rendered,
+            "count": len(rendered),
+            "scanned": activity["scanned"],
+            "pages": activity["pages"],
+            "truncated": activity["truncated"],
+            "workspace_filter": activity["workspace_filter"],
+            "synthesized": synthesized_count,
+            "model": model if synthesized_count else None,
+            "period": _period_dict(start, end, label),
+        }
+
+    @mcp.tool()
     def notes_activity(
         repository: str = "notes",
         period: str = "",

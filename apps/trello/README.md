@@ -128,6 +128,8 @@ TRELLO:
 | `get_me()` | — | Authenticated member profile |
 | `get_member(member_id)` | `member_id` or username | Any member's profile |
 | `get_member_boards(member_id?, filter?)` | defaults to 'me' | Boards for a member |
+| `get_member_actions(member_id?, filter?, limit?, before?, since?)` | defaults to 'me' | Newest-first page of authored actions |
+| `get_member_organizations(member_id?)` | defaults to 'me' | Workspaces for a member |
 | `get_board_members(board_id)` | `board_id` | All members on a board |
 
 ---

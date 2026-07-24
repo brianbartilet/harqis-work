@@ -12,6 +12,8 @@ Tasks:
                            (Haiku, raw fallback).
   - ingest_notes_activity: daily — turns each changed note into a bounded,
                            tagged corpus entry after the host pull.
+  - ingest_trello_activity: daily — captures one provenance-linked HFL entry
+                            per authored Trello action.
   - summarize_hfl_week   : weekly rollup of the past 7 days of entries (Haiku).
   - retrieve_hfl_corpus  : retrieval API + weekly digest. Beat fires Sundays
                            at 20:00 with email_to=$HARQIS_OWNER_EMAIL to
@@ -450,6 +452,38 @@ WORKFLOW_HFL = {
             'express_target': 'file:hfl_corpus+es:hfl-entries',
             'review_artifact': 'es_log+file',
             'hfl_signal': True,
+        },
+    },
+
+    # Daily Trello activity — 23:25 local, after the 23:20 radar ingest and
+    # before the 23:35 retained-session retry. Reads actions authored by the
+    # authenticated member during the previous completed calendar day and
+    # writes one idempotent HFL entry per meaningful action. Routine actions
+    # are rendered deterministically; only long comments/unfamiliar action
+    # types call Haiku. HFL_TRELLO_WORKSPACES optionally limits Workspace
+    # IDs/slugs; empty means all Workspaces plus personal boards.
+    'run-job--ingest_trello_activity': {
+        'task': 'workflows.hfl.tasks.ingest_trello.ingest_trello_activity',
+        'schedule': crontab(hour=23, minute=25),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'window_days': 1,
+            'page_size': 200,
+            'max_actions': 10_000,
+            'synthesize': True,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 60 * 12,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+            'tenant_safe': True,
         },
     },
 

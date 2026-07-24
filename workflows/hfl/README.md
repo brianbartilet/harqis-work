@@ -55,6 +55,7 @@ this scaffold closes.
 | `ingest_plaud_activity` | Daily **voice-recordings** ingest. Pulls the day's Plaud recordings via the `apps/plaud` adapter (cloud API → local export-folder fallback) and writes **ONE entry per recording** (not a daily digest). Transcript precedence: Plaud's own transcript, else OpenAI **Whisper** on the raw audio (bounded by `max_transcribe`). Raw recordings + a consolidated `YYYY-MM-DD-summary.md` are archived to `harqis-ones-mac-mini` over key-based SSH. Haiku-distilled, raw fallback. No `PLAUD_TOKEN`/`PLAUD_EXPORT_DIR` → no entry, no call; no recordings → no entry, no call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:15 local (active — clean no-op until acquisition is configured; `tenant_safe`). |
 | `ingest_youtube_activity` | Archives authenticated-channel activity as **one retrospective HFL entry per event**: own uploads use their publication time and `#upload`; external videos added to owned playlists use the playlist-added time and `#watch-later`. Both receive `#playlist-<name>` membership tags and reference the curated description plus downloaded video under `YOUTUBE_ARCHIVE_PATH`. | `file:hfl_corpus+es:hfl-entries` | Monthly at 00:30 local on day 1; scans the previous calendar month before the 01:00 corpus archive. Manual calls accept `days=N` or `days='all'`. |
 | `ingest_radar_activity` | Daily **HERMES RADAR digest.** Reads the day's compatibility-named `show_daily_radar` synthesis blocks back out of the shared desktop feed file (`<feed_dir>/hud-logs-YYYYMMDD.txt`) and distils them into ONE "what the day was about" entry. It does not ingest the 15-minute Telegram push rerenders or re-run the radar source sweep. The feed file is Drive-synced, so the Beat host reads briefings a Windows radar wrote; files read remain the entry references. Haiku-distilled, raw fallback. No feed dir / no synthesis blocks → no entry, no LLM call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:20 local (active — clean no-op until `DESKTOP_PATH_FEED` is set and the radar has run). |
+| `ingest_trello_activity` | Reads actions authored by the authenticated Trello member and writes **one entry per meaningful action** using the original event time. Routine activity is rendered deterministically; long comments and unfamiliar actions may use Haiku. Stable action IDs make daily runs and overlapping backfills idempotent. References link to the action/card, board, Workspace, and profile activity page. | `file:hfl_corpus+es:hfl-entries` | Daily 23:25 local on the `hfl` queue (active; previous completed day). Manual runs support `last 30 days`, previous-calendar `last year`, explicit dates, and `all`. |
 | `ingest_android_media_activity` | Reads Android screen-time/activity export logs, reports only application categories and session counts, and writes one privacy-bounded entry. Raw titles/content are not sent to the model or corpus. A missing log directory is a clean no-op. | `file:hfl_corpus+es:hfl-entries` | Daily 23:15 local on the `hfl` queue; inactive until `HFL_ANDROID_SCREEN_LOG_DIR` is configured. |
 | `ingest_agent_session_event` / `ingest_agent_session_events` | Captures one sanitized HFL audit entry per user-prompt/assistant-outcome pair from Codex, Claude Code, Hermes, or OpenClaw. The artifact retains the redacted original plus typo-corrected prompt, request/work summaries, status, identifiers, and artifact references. Stable event IDs deduplicate hook retries. | `file:hfl_corpus+es:hfl-entries` | Hooks enqueue immediately; a 23:35 broadcast forwards retained local events from every participating worker. |
 | `rollup_agent_sessions` | Distils the processed prompt audit events in the 24-hour window ending at 23:40 into one cross-surface HFL rollup, so prompts after one cutoff appear in the next rollup instead of being lost. Empty windows are a clean no-op. | `file:hfl_corpus+es:hfl-entries` | Daily 23:40 local. |
@@ -127,6 +128,7 @@ screenshot taken downtown comes out tagged with the place.
 | 23:05 | `ingest_location_activity` | day's movement → one timeline entry |
 | 23:10 | `ingest_spotify_activity` | day's plays → one soundtrack entry |
 | 23:15 | `ingest_plaud_activity` | day's voice recordings → one entry each + Mac-mini archive |
+| 23:25 | `ingest_trello_activity` | authored Trello actions → one linked entry each |
 | 23:35 | `ingest_agent_session_events` | retry retained prompt/outcome audit events |
 | 23:40 | `rollup_agent_sessions` | prompt audit events → one daily rollup |
 
@@ -689,6 +691,33 @@ It's a **hybrid** (`workflows/hfl/tasks/time_capsule.py` + the skill):
 - Cost is Haiku-only and bounded by `--max-files` / `--max-caption-files` /
   `--no-caption`.
 
+### Trello activity ingest
+
+`ingest_trello_activity` reuses `TRELLO_API_KEY` and `TRELLO_API_TOKEN` from
+`apps/trello`; no additional API credential is needed. The Beat entry is active
+at 23:25 Asia/Singapore and processes the previous completed calendar day.
+Missing credentials and empty windows are clean no-ops.
+
+Optional Workspace filtering is configured in `.env/apps.env`:
+
+```dotenv
+# Empty or "all" includes every Workspace and personal boards.
+# IDs and slugs can be mixed; "personal" explicitly includes personal boards
+# when an allow-list is present.
+HFL_TRELLO_WORKSPACES=harqis,personal
+```
+
+Manual task calls accept `period="last 30 days"`, `period="last year"`
+(previous calendar year), `period="all"`, or explicit inclusive `since` /
+`until` dates. `max_actions` defaults to 10,000. Trello action IDs drive both
+the Markdown dedup key and Elasticsearch document ID, so interrupted or
+overlapping backfills are safe to rerun.
+
+The `trello_activity` MCP tool exposes the same collector and filters as a
+read-only preview. It defaults to seven days, does not write Markdown or
+Elasticsearch, and only invokes Haiku for text-heavy/unfamiliar actions when
+`synthesize=true`.
+
 ## Adding a new ingest source
 
 Run `/create-new-ingest-source-hfl <source_name> [<spec_or_url>]
@@ -717,6 +746,7 @@ New writers must call `submit_hfl_entry` (or the compatibility
 | `ingest_plaud_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `ingest_youtube_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `ingest_radar_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` |
+| `ingest_trello_activity` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `ingest_agent_session_events` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `rollup_agent_sessions` | distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `flush_hfl_outbox` | express | resource | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `False` |
