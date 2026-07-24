@@ -104,6 +104,43 @@ class RemoteCorpusClient:
         except httpx.HTTPError as exc:
             raise RemoteCorpusError(f"Canonical HFL corpus unavailable: {exc}") from exc
 
+    def _post(self, path: str, **kwargs) -> httpx.Response:
+        try:
+            response = httpx.post(
+                self.base_url + path,
+                headers=self.headers,
+                timeout=self.timeout,
+                **kwargs,
+            )
+            response.raise_for_status()
+            return response
+        except httpx.HTTPStatusError as exc:
+            try:
+                detail = str(exc.response.json().get("detail") or "").strip()
+            except (TypeError, ValueError):
+                detail = ""
+            message = detail or str(exc)
+            raise RemoteCorpusError(
+                f"Canonical HFL corpus rejected the entry: {message}"
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise RemoteCorpusError(f"Canonical HFL corpus unavailable: {exc}") from exc
+
+    def create_entry(self, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            result = self._post("/entries", json=payload).json()
+            return {
+                "entry_id": str(result["entry_id"]),
+                "path": str(result["path"]),
+                "duplicate": bool(result["duplicate"]),
+                "indexed": bool(result["indexed"]),
+                "delivery": str(result["delivery"]),
+            }
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RemoteCorpusError(
+                "Canonical HFL corpus returned an invalid create-entry response"
+            ) from exc
+
     def index(self, *, params: dict[str, str]) -> dict[str, Any]:
         try:
             payload = self._get(

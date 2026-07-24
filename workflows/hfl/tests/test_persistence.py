@@ -57,7 +57,7 @@ def test_persist_is_locked_and_idempotent(tmp_path, monkeypatch):
     assert len(indexed) == 2  # the ES projection is safely upserted on replay
 
 
-def test_persist_prepends_new_entry_to_daily_markdown(tmp_path, monkeypatch):
+def test_persist_orders_daily_markdown_by_timestamp_descending(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "workflows.hfl.es_store.index_hfl_entry",
         lambda entry, **kwargs: kwargs["doc_id"],
@@ -71,12 +71,39 @@ def test_persist_prepends_new_entry_to_daily_markdown(tmp_path, monkeypatch):
         machine="windows-work-all",
     )
 
-    persistence.persist_envelope(older, corpus_dir=tmp_path)
     persistence.persist_envelope(newer, corpus_dir=tmp_path)
+    persistence.persist_envelope(older, corpus_dir=tmp_path)
 
     text = (tmp_path / "2026-07-19.md").read_text(encoding="utf-8")
     assert text.startswith(newer.entry.to_markdown())
     assert text.index("Newer moment") < text.index("Older moment")
+
+
+def test_persist_inserts_backdated_entry_and_retains_document_preamble(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        "workflows.hfl.es_store.index_hfl_entry",
+        lambda entry, **kwargs: kwargs["doc_id"],
+    )
+    day_file = tmp_path / "2026-07-19.md"
+    day_file.write_text(
+        "# Daily notes\n\n"
+        + replace(_entry("Latest"), when=datetime(2026, 7, 19, 12, 0)).to_markdown()
+        + replace(_entry("Earliest"), when=datetime(2026, 7, 19, 8, 0)).to_markdown(),
+        encoding="utf-8",
+    )
+    middle = persistence.make_envelope(
+        replace(_entry("Middle"), when=datetime(2026, 7, 19, 10, 0)),
+        source="capture",
+        machine="windows-work-all",
+    )
+
+    persistence.persist_envelope(middle, corpus_dir=tmp_path)
+
+    text = day_file.read_text(encoding="utf-8")
+    assert text.startswith("# Daily notes\n\n")
+    assert text.index("Latest") < text.index("Middle") < text.index("Earliest")
 
 
 def test_submit_retains_outbox_when_broker_is_unavailable(tmp_path, monkeypatch):

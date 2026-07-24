@@ -1,10 +1,10 @@
-"""Routes for browsing and searching the HFL corpus."""
+"""Routes for browsing, searching, and adding entries to the HFL corpus."""
 
 import re
 from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from markupsafe import Markup
 
 from config import get_settings
@@ -23,6 +23,11 @@ from modules.hfl_corpus.corpus import (
 )
 from services.markdown import render_markdown
 from modules.hfl_corpus.remote import RemoteCorpusClient, RemoteCorpusError
+from modules.hfl_corpus.entry_create import (
+    CreateEntryRequest,
+    persist_manual_entry,
+    preview_manual_entry,
+)
 from services.safe_paths import (
     allowed_reference_roots,
     load_download_token,
@@ -91,6 +96,7 @@ async def hfl_corpus_page(
     sort: str = "desc",
     page: int = 1,
     page_size: int = 20,
+    created: bool = False,
 ):
     user, redirect = require_user(request)
     if redirect:
@@ -231,8 +237,48 @@ async def hfl_corpus_page(
             next_page_url=next_page_url,
             tag_cloud=tag_options,
             remote_error=remote_error,
+            success_message="HFL entry created successfully." if created else "",
         ),
     )
+
+
+@router.post("/entries/preview")
+async def hfl_entry_preview(request: Request, payload: CreateEntryRequest):
+    user, redirect = require_user(request)
+    if redirect:
+        return JSONResponse({"detail": "Authentication required"}, status_code=401)
+    try:
+        return preview_manual_entry(payload)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+
+
+@router.post("/entries")
+async def hfl_entry_create(request: Request, payload: CreateEntryRequest):
+    user, redirect = require_user(request)
+    if redirect:
+        return JSONResponse({"detail": "Authentication required"}, status_code=401)
+    try:
+        if _uses_remote_corpus():
+            result = RemoteCorpusClient.from_settings().create_entry(
+                payload.model_dump()
+            )
+        else:
+            result = persist_manual_entry(
+                payload,
+                corpus_dir=resolve_corpus_root(),
+            )
+            corpus_index.documents(force=True)
+        return result
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except RemoteCorpusError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=502)
+    except Exception:
+        return JSONResponse(
+            {"detail": "The entry could not be saved. Please try again."},
+            status_code=500,
+        )
 
 
 @router.get("/tree", response_class=HTMLResponse, name="hfl_tree")

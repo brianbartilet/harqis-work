@@ -271,11 +271,11 @@ Homework for Life ingestion and persistence workflow.
 The frontend has two explicit modes:
 
 - **Canonical-host mode:** when `HFL_CORPUS_API_URL` is empty, read local disk
-  using the same path precedence as HFL persistence.
-- **Remote mode:** when `HFL_CORPUS_API_URL` is set, read only the authenticated
-  canonical API. A missing token, rejected request, or unreachable server is
-  shown as a visible error; the UI does not silently fall back to a stale local
-  corpus.
+  and persist manually created entries through the canonical HFL writer.
+- **Remote mode:** when `HFL_CORPUS_API_URL` is set, read and create entries
+  through the authenticated canonical API. A missing token, rejected request,
+  or unreachable server is shown as a visible error; the UI does not silently
+  fall back to a stale local corpus.
 
 Local path precedence:
 
@@ -286,8 +286,8 @@ Local path precedence:
 Every `.md` file below the resolved root is indexed recursively except files
 inside dot-directories such as `.migrations` and `.media-ingest-state`. This
 includes daily entries, the visible `time-capsule/` directory, `YYYY/Mon/`
-archives, and miscellaneous Markdown logs. The frontend never edits, moves, or
-deletes corpus content.
+archives, and miscellaneous Markdown logs. The frontend only writes corpus
+content through **Create entry**; it never moves or deletes corpus content.
 
 ### Metadata
 
@@ -304,11 +304,20 @@ For each document:
 The canonical host's in-memory index has a 30-second TTL. A page refresh after that interval
 observes filesystem changes without a separate database or Elasticsearch.
 
-The Mac host exposes read-only bearer-authenticated endpoints under
-`/api/hfl`. The Windows frontend performs those calls server-to-server, so the
-API token never appears in browser links or JavaScript. Set the shared secret
-in gitignored `.env/apps.env`; set the Windows-specific non-secret URL in
-`machines.local.toml`.
+The canonical host exposes bearer-authenticated read endpoints and a manual
+entry write endpoint under `/api/hfl`. A remote frontend performs those calls
+server-to-server, so the API token never appears in browser links or
+JavaScript. Set the shared secret in gitignored `.env/apps.env`; set the
+remote frontend's non-secret URL in `machines.local.toml`.
+
+### Create entry
+
+Authenticated users can create a canonical HFL entry from the corpus index.
+The browser supplies local date/time defaults and shows a rendered review
+before saving. The canonical writer updates or creates the selected
+`YYYY-MM-DD.md`, keeps its entries ordered by timestamp descending, applies
+canonical source/machine/entry-ID metadata, and upserts the Elasticsearch
+projection. Remote mode sends the same payload to the canonical host.
 
 ### Search
 
@@ -384,10 +393,13 @@ root. Reference files are not uploaded or mirrored.
 | GET | `/applications/test-runs/{id}` | Poll persisted/current test status. |
 | POST | `/applications/test-runs/{id}/cancel` | Cancel a queued/running test. |
 | GET | `/hfl-corpus` | Corpus tree and filtered search. |
+| POST | `/hfl-corpus/entries/preview` | Validate and render a manual entry preview. |
+| POST | `/hfl-corpus/entries` | Persist a manual entry locally or through the canonical host. |
 | GET | `/hfl-corpus/document/{path}` | Render one corpus Markdown document. |
 | GET | `/hfl-corpus/references/{token}/download` | Download an allowed signed reference. |
 | GET | `/hfl-corpus/remote-references/{token}/download` | Proxy an allowed canonical-host reference. |
 | GET | `/api/hfl/documents` | Bearer-authenticated canonical index and search. |
+| POST | `/api/hfl/entries` | Bearer-authenticated canonical manual-entry write. |
 | GET | `/api/hfl/document/{path}` | Bearer-authenticated canonical Markdown document. |
 | GET | `/api/hfl/reference/{token}` | Bearer-authenticated canonical reference download. |
 | GET | `/health` | Process health response. |
@@ -442,7 +454,8 @@ responsive navigation, corpus filtering, and reference downloads.
   `uvicorn` invocation does not perform machine-context loading.
 - Flower is optional for dispatch but required for useful task-state polling.
 - Application pytest jobs execute on the frontend host, not a Celery worker.
-- The Applications and HFL modules are read-only with respect to source files.
+- The Applications module is read-only. HFL source writes are limited to the
+  authenticated **Create entry** flow and canonical persistence layer.
 - Deploy/restart the Mac frontend before enabling/restarting a remote Windows
   frontend; otherwise Windows correctly reports the canonical corpus as
   unavailable.

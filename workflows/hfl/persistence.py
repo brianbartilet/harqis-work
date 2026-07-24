@@ -169,6 +169,29 @@ def _content_signature(entry: HflEntry) -> tuple[Any, ...]:
     )
 
 
+def _timestamp_sorted_text(existing_text: str, rendered: str) -> str:
+    """Insert a canonical entry while retaining newest-first daily ordering."""
+    matches = list(_HEADER.finditer(existing_text or ""))
+    if not matches:
+        prefix = existing_text
+        if prefix and not prefix.endswith("\n"):
+            prefix += "\n"
+        return prefix + rendered
+
+    prefix = existing_text[:matches[0].start()]
+    blocks: list[tuple[datetime | None, int, str]] = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(existing_text)
+        parsed = HflEntry.from_markdown(match.group(1), existing_text[match.end():end])
+        blocks.append((parsed.when, index, existing_text[match.start():end]))
+
+    created = next(iter(_entry_blocks(rendered)))
+    blocks.append((created.when, len(blocks), rendered))
+    minimum = datetime.min
+    blocks.sort(key=lambda item: (item[0] or minimum, -item[1]), reverse=True)
+    return prefix + "".join(block for _, _, block in blocks)
+
+
 def persist_envelope(
     envelope: EntryEnvelope,
     *,
@@ -202,13 +225,14 @@ def persist_envelope(
             for existing in existing_entries
         )
         if not duplicate:
+            updated_text = _timestamp_sorted_text(existing_text, rendered)
             temporary = day_file.with_name(
                 f".{day_file.name}.tmp-{os.getpid()}-{uuid.uuid4().hex}"
             )
             try:
                 with temporary.open("w", encoding="utf-8") as handle:
-                    written = handle.write(rendered)
-                    handle.write(existing_text)
+                    handle.write(updated_text)
+                    written = len(rendered)
                     handle.flush()
                     os.fsync(handle.fileno())
                 if day_file.exists():

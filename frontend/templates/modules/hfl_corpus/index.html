@@ -3,10 +3,22 @@
 
 {% block content %}
 <main data-corpus-index class="mx-auto flex h-auto max-w-7xl flex-col overflow-x-clip py-5 pl-4 pr-5 sm:px-6 md:h-[calc(100dvh-3.5rem)] md:overflow-y-auto md:overscroll-contain lg:h-[calc(100vh-3.5rem)] lg:overflow-hidden lg:px-8">
-  <div class="mb-4 shrink-0">
-    <p class="text-xs uppercase tracking-[0.22em] text-blue-400">EVERYTHING EVERYWHERE, EVENTUALLY INDEXED</p>
-    <h1 class="mt-1 text-2xl font-semibold text-white">Activity Corpus</h1>
+  <div class="mb-4 flex shrink-0 flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-end sm:gap-4">
+    <div>
+      <p class="text-xs uppercase tracking-[0.22em] text-blue-400">EVERYTHING EVERYWHERE, EVENTUALLY INDEXED</p>
+      <h1 class="mt-1 text-2xl font-semibold text-white">Activity Corpus</h1>
+    </div>
+    <button type="button" data-create-entry-open
+            class="min-h-11 w-full shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 sm:min-h-0 sm:w-auto">
+      Create entry
+    </button>
   </div>
+
+  {% if success_message %}
+  <div data-entry-success role="status" class="mb-4 shrink-0 rounded-xl border border-emerald-800/70 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">
+    {{ success_message }}
+  </div>
+  {% endif %}
 
   {% if remote_error %}
   <div class="mb-4 shrink-0 rounded-xl border border-rose-800/70 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">
@@ -181,4 +193,261 @@
     </section>
   </div>
 </main>
+
+<dialog data-create-entry-dialog aria-labelledby="create-entry-title"
+        class="m-0 h-[100dvh] max-h-none w-screen max-w-none rounded-none border-0 bg-slate-950 p-0 text-slate-100 shadow-2xl shadow-black/70 backdrop:bg-black/75 sm:m-auto sm:h-auto sm:max-h-[90dvh] sm:w-[min(44rem,calc(100%-2rem))] sm:rounded-2xl sm:border sm:border-blue-800/70">
+  <form data-create-entry-form class="flex h-full max-h-none flex-col overflow-hidden sm:block sm:h-auto sm:max-h-[90dvh] sm:overflow-y-auto sm:p-6">
+    <div data-entry-dialog-header
+         class="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-slate-800 bg-slate-950 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] sm:static sm:border-0 sm:p-0">
+      <div>
+        <p class="text-xs uppercase tracking-[0.2em] text-blue-400">Manual HFL entry</p>
+        <h2 id="create-entry-title" class="mt-1 text-xl font-semibold text-white">Create entry</h2>
+      </div>
+      <button type="button" data-entry-cancel aria-label="Close create-entry dialog"
+              class="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-2xl text-slate-500 hover:bg-slate-900 hover:text-white sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1 sm:text-xl">×</button>
+    </div>
+
+    <div data-entry-form-body
+         class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 [scroll-padding-bottom:8rem] sm:overflow-visible sm:p-0">
+      <div data-entry-error role="alert" hidden
+           class="mb-4 rounded-lg border border-rose-800/70 bg-rose-950/50 px-3 py-2 text-sm text-rose-200 sm:mt-4"></div>
+
+      <div class="grid grid-cols-2 gap-3 sm:mt-5 sm:gap-4">
+        <label class="min-w-0 text-sm text-slate-300">Date <span class="text-rose-400">*</span>
+          <input type="date" name="date" required
+                 class="mt-1.5 block min-h-11 w-full min-w-0 rounded-lg bg-slate-900 px-2 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 [color-scheme:dark] sm:px-3 sm:text-sm">
+        </label>
+        <label class="min-w-0 text-sm text-slate-300">Time <span class="text-rose-400">*</span>
+          <input type="time" name="time" required
+                 class="mt-1.5 block min-h-11 w-full min-w-0 rounded-lg bg-slate-900 px-2 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 [color-scheme:dark] sm:px-3 sm:text-sm">
+        </label>
+      </div>
+
+      <div class="mt-4 grid gap-4">
+        <label class="block text-sm text-slate-300">Moment <span class="text-rose-400">*</span>
+          <input type="text" name="moment" required maxlength="500"
+                 class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 sm:text-sm">
+          <span class="mt-1 block text-xs text-slate-500">description</span>
+        </label>
+        <label class="block text-sm text-slate-300">What happened <span class="text-rose-400">*</span>
+          <textarea name="what_happened" required rows="3"
+                    class="mt-1.5 block w-full resize-y rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 sm:text-sm"></textarea>
+          <span class="mt-1 block text-xs text-slate-500">enter moment details</span>
+        </label>
+        <label class="block text-sm text-slate-300">Why it stayed
+          <textarea name="why_it_stayed" rows="2"
+                    class="mt-1.5 block w-full resize-y rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 sm:text-sm">just writing down notes or thoughts</textarea>
+        </label>
+        <label class="block text-sm text-slate-300">Possible use
+          <input type="text" name="possible_use" placeholder="brainstorming"
+                 class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-blue-500 sm:text-sm">
+        </label>
+        <label class="block text-sm text-slate-300">Tags
+          <input type="text" name="tags" value="#notes #manual-entry #thoughts"
+                 class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 sm:text-sm">
+        </label>
+        <label class="block text-sm text-slate-300">References
+          <textarea name="references" rows="4" placeholder="One reference per line"
+                    class="mt-1.5 block w-full resize-y rounded-lg bg-slate-900 px-3 py-2 font-mono text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-blue-500 sm:text-sm"></textarea>
+          <span class="mt-1 block text-xs text-slate-500">Each nonblank line becomes one Markdown list item.</span>
+        </label>
+      </div>
+    </div>
+
+    <div data-entry-dialog-actions
+         class="sticky bottom-0 z-10 flex shrink-0 flex-col gap-2 border-t border-slate-800 bg-slate-950 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:static sm:mt-6 sm:flex-row sm:justify-end sm:gap-3 sm:p-0 sm:pt-4">
+      <button type="button" data-entry-cancel
+              class="order-2 min-h-11 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm text-slate-300 ring-1 ring-slate-700 hover:text-white sm:order-1 sm:min-h-0 sm:w-auto">Cancel</button>
+      <button type="submit" data-entry-review
+              class="order-1 min-h-11 w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-wait disabled:opacity-60 sm:order-2 sm:min-h-0 sm:w-auto">Review entry</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog data-entry-review-dialog aria-labelledby="entry-review-title"
+        class="m-0 h-[100dvh] max-h-none w-screen max-w-none rounded-none border-0 bg-slate-950 p-0 text-slate-100 shadow-2xl shadow-black/70 backdrop:bg-black/75 sm:m-auto sm:h-auto sm:max-h-[90dvh] sm:w-[min(46rem,calc(100%-2rem))] sm:rounded-2xl sm:border sm:border-blue-800/70">
+  <div class="flex h-full max-h-none flex-col overflow-hidden sm:h-auto sm:max-h-[90dvh]">
+    <div data-entry-review-header
+         class="sticky top-0 z-10 shrink-0 border-b border-slate-800 bg-slate-950 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] sm:static sm:border-0 sm:px-6 sm:pb-0 sm:pt-6">
+      <p class="text-xs uppercase tracking-[0.2em] text-blue-400">Confirm save</p>
+      <h2 id="entry-review-title" class="mt-1 text-xl font-semibold text-white">Review entry</h2>
+      <p class="mt-2 text-sm text-slate-400">This entry will be written to <strong data-entry-preview-filename class="break-all text-blue-300"></strong>.</p>
+    </div>
+    <div data-entry-preview class="markdown-body min-h-0 flex-1 overflow-y-auto overscroll-contain bg-slate-900/70 px-4 py-4 text-sm text-slate-300 sm:m-6 sm:mt-4 sm:max-h-[55dvh] sm:rounded-xl sm:border sm:border-slate-800 sm:p-4"></div>
+    <div data-entry-review-actions
+         class="sticky bottom-0 z-10 flex shrink-0 flex-col gap-2 border-t border-slate-800 bg-slate-950 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:static sm:mx-6 sm:mb-6 sm:flex-row sm:justify-end sm:gap-3 sm:p-0 sm:pt-4">
+      <button type="button" data-entry-review-back
+              class="order-2 min-h-11 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm text-slate-300 ring-1 ring-slate-700 hover:text-white sm:order-1 sm:min-h-0 sm:w-auto">Back</button>
+      <button type="button" data-entry-confirm
+              class="order-1 min-h-11 w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-wait disabled:opacity-60 sm:order-2 sm:min-h-0 sm:w-auto">Confirm save</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog data-entry-discard-dialog aria-labelledby="entry-discard-title"
+        class="m-auto w-[min(28rem,calc(100%-2rem))] rounded-2xl border border-amber-800/70 bg-slate-950 p-0 text-slate-100 shadow-2xl shadow-black/70 backdrop:bg-black/75">
+  <div class="p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6">
+    <h2 id="entry-discard-title" class="text-lg font-semibold text-white">Discard this entry?</h2>
+    <p class="mt-2 text-sm text-slate-400">Your changes have not been saved.</p>
+    <div class="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end sm:gap-3">
+      <button type="button" data-entry-keep
+              class="order-2 min-h-11 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm text-slate-300 ring-1 ring-slate-700 hover:text-white sm:order-1 sm:min-h-0 sm:w-auto">Keep editing</button>
+      <button type="button" data-entry-discard
+              class="order-1 min-h-11 w-full rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500 sm:order-2 sm:min-h-0 sm:w-auto">Discard</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  const createDialog = document.querySelector('[data-create-entry-dialog]');
+  const reviewDialog = document.querySelector('[data-entry-review-dialog]');
+  const discardDialog = document.querySelector('[data-entry-discard-dialog]');
+  const form = document.querySelector('[data-create-entry-form]');
+  if (!createDialog || !reviewDialog || !discardDialog || !form) return;
+
+  const errorBox = form.querySelector('[data-entry-error]');
+  const reviewButton = form.querySelector('[data-entry-review]');
+  const confirmButton = reviewDialog.querySelector('[data-entry-confirm]');
+  let initialState = '';
+  let pendingPayload = null;
+
+  const localDateAndTime = () => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000;
+    const local = new Date(now.getTime() - offset).toISOString();
+    form.elements.date.value = local.slice(0, 10);
+    form.elements.time.value = local.slice(11, 16);
+  };
+
+  const serialize = () => JSON.stringify(Object.fromEntries(new FormData(form).entries()));
+  const payload = () => Object.fromEntries(new FormData(form).entries());
+  const isDirty = () => serialize() !== initialState;
+  const showError = (message) => {
+    errorBox.textContent = message;
+    errorBox.hidden = !message;
+  };
+  const responseMessage = (body, fallback) => {
+    if (typeof body?.detail === 'string') return body.detail;
+    if (Array.isArray(body?.detail)) return body.detail.map(item => item.msg).join(' ');
+    return fallback;
+  };
+  const revealField = field => {
+    if (!field || window.innerWidth >= 640) return;
+    window.setTimeout(() => {
+      field.scrollIntoView({behavior: 'smooth', block: 'center'});
+    }, 120);
+  };
+  const openCreate = () => {
+    form.reset();
+    localDateAndTime();
+    showError('');
+    pendingPayload = null;
+    initialState = serialize();
+    createDialog.showModal();
+    form.elements.moment.focus();
+  };
+  const returnToForm = () => {
+    if (reviewDialog.open) reviewDialog.close();
+    if (discardDialog.open) discardDialog.close();
+    createDialog.showModal();
+  };
+  const requestCancel = () => {
+    if (!isDirty()) {
+      createDialog.close();
+      return;
+    }
+    createDialog.close();
+    discardDialog.showModal();
+  };
+
+  document.querySelector('[data-create-entry-open]')?.addEventListener('click', openCreate);
+  form.querySelectorAll('[data-entry-cancel]').forEach(button => button.addEventListener('click', requestCancel));
+
+  createDialog.addEventListener('cancel', event => {
+    event.preventDefault();
+    requestCancel();
+  });
+  createDialog.addEventListener('click', event => {
+    if (event.target === createDialog) requestCancel();
+  });
+  discardDialog.addEventListener('cancel', event => {
+    event.preventDefault();
+    returnToForm();
+  });
+  discardDialog.querySelector('[data-entry-keep]').addEventListener('click', returnToForm);
+  discardDialog.querySelector('[data-entry-discard]').addEventListener('click', () => {
+    discardDialog.close();
+    form.reset();
+    pendingPayload = null;
+  });
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!form.checkValidity()) {
+      const invalid = form.querySelector(':invalid');
+      revealField(invalid);
+      invalid?.focus({preventScroll: true});
+      form.reportValidity();
+      return;
+    }
+    showError('');
+    reviewButton.disabled = true;
+    pendingPayload = payload();
+    try {
+      const response = await fetch('/hfl-corpus/entries/preview', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(pendingPayload),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(responseMessage(body, 'The preview could not be generated.'));
+      reviewDialog.querySelector('[data-entry-preview-filename]').textContent = body.filename;
+      reviewDialog.querySelector('[data-entry-preview]').innerHTML = body.html;
+      createDialog.close();
+      reviewDialog.showModal();
+    } catch (error) {
+      showError(error.message || 'The preview could not be generated.');
+    } finally {
+      reviewButton.disabled = false;
+    }
+  });
+
+  form.addEventListener('focusin', event => {
+    if (!event.target.matches('input, textarea, select')) return;
+    revealField(event.target);
+  });
+
+  const backToEntry = () => returnToForm();
+  reviewDialog.querySelector('[data-entry-review-back]').addEventListener('click', backToEntry);
+  reviewDialog.addEventListener('cancel', event => {
+    event.preventDefault();
+    backToEntry();
+  });
+  reviewDialog.addEventListener('click', event => {
+    if (event.target === reviewDialog) backToEntry();
+  });
+
+  confirmButton.addEventListener('click', async () => {
+    if (!pendingPayload) return;
+    confirmButton.disabled = true;
+    try {
+      const response = await fetch('/hfl-corpus/entries', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(pendingPayload),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(responseMessage(body, 'The entry could not be saved.'));
+      window.location.assign('/hfl-corpus?created=true');
+    } catch (error) {
+      reviewDialog.close();
+      createDialog.showModal();
+      showError(error.message || 'The entry could not be saved.');
+    } finally {
+      confirmButton.disabled = false;
+    }
+  });
+})();
+</script>
 {% endblock %}

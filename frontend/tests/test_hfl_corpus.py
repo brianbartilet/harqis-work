@@ -1341,3 +1341,325 @@ def test_remote_mode_surfaces_failure_without_local_fallback(authenticated_clien
     assert response.status_code == 200
     assert "Canonical corpus unavailable" in response.text
     assert "canonical host is offline" in response.text
+
+
+def _create_entry_payload():
+    return {
+        "date": "2026-07-19",
+        "time": "10:45",
+        "moment": "Captured a useful thought",
+        "what_happened": "Wrote the details down manually.",
+        "why_it_stayed": "It may be useful later.",
+        "possible_use": "brainstorming",
+        "tags": "#notes #manual-entry #thoughts",
+        "references": "https://example.com/one\n- C:\\notes\\source.md\n\n",
+    }
+
+
+def test_corpus_index_renders_create_review_and_discard_dialogs(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: ())
+
+    response = authenticated_client.get("/hfl-corpus?created=true")
+
+    assert response.status_code == 200
+    assert "Create entry" in response.text
+    assert 'data-create-entry-dialog' in response.text
+    assert 'name="date"' in response.text
+    assert 'name="time"' in response.text
+    assert 'name="moment"' in response.text
+    assert ">description</span>" in response.text
+    assert "enter moment details" in response.text
+    assert "just writing down notes or thoughts" in response.text
+    assert 'placeholder="brainstorming"' in response.text
+    assert "#notes #manual-entry #thoughts" in response.text
+    assert 'data-entry-review-dialog' in response.text
+    assert 'data-entry-discard-dialog' in response.text
+    assert "HFL entry created successfully." in response.text
+
+
+def test_create_entry_dialog_uses_mobile_sheets_and_touch_friendly_controls(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: ())
+
+    response = authenticated_client.get("/hfl-corpus")
+
+    create_dialog = response.text.split(
+        "data-create-entry-dialog", 1
+    )[1].split(">", 1)[0]
+    create_form = response.text.split(
+        "data-create-entry-form", 1
+    )[1].split(">", 1)[0]
+    create_header = response.text.split(
+        "data-entry-dialog-header", 1
+    )[1].split(">", 1)[0]
+    form_body = response.text.split(
+        "data-entry-form-body", 1
+    )[1].split(">", 1)[0]
+    create_actions = response.text.split(
+        "data-entry-dialog-actions", 1
+    )[1].split(">", 1)[0]
+    review_dialog = response.text.split(
+        "data-entry-review-dialog", 1
+    )[1].split(">", 1)[0]
+    review_actions = response.text.split(
+        "data-entry-review-actions", 1
+    )[1].split(">", 1)[0]
+    date_time_fields = response.text.split(
+        'name="date"', 1
+    )[0].rsplit("<div", 1)[1]
+
+    assert "h-[100dvh]" in create_dialog
+    assert "w-screen" in create_dialog
+    assert "rounded-none" in create_dialog
+    assert "sm:m-auto" in create_dialog
+    assert "sm:h-auto" in create_dialog
+    assert "sm:rounded-2xl" in create_dialog
+    assert "flex h-full" in create_form
+    assert "overflow-hidden" in create_form
+    assert "sm:block" in create_form
+    assert "safe-area-inset-top" in create_header
+    assert "overflow-y-auto" in form_body
+    assert "scroll-padding-bottom:8rem" in form_body
+    assert "sticky bottom-0" in create_actions
+    assert "flex-col" in create_actions
+    assert "safe-area-inset-bottom" in create_actions
+    assert "sm:flex-row" in create_actions
+    assert "grid-cols-2" in date_time_fields
+    assert "min-h-11" in response.text
+    assert "text-base" in response.text
+    assert "sm:text-sm" in response.text
+    assert "h-[100dvh]" in review_dialog
+    assert "w-screen" in review_dialog
+    assert "sticky bottom-0" in review_actions
+    assert "sm:flex-row" in review_actions
+    assert "window.innerWidth >= 640" in response.text
+    assert "scrollIntoView({behavior: 'smooth', block: 'center'})" in response.text
+    assert "form.checkValidity()" in response.text
+
+
+def test_create_entry_launcher_and_discard_actions_stack_on_mobile(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: ())
+
+    response = authenticated_client.get("/hfl-corpus")
+
+    launcher = response.text.split(
+        "data-create-entry-open", 1
+    )[1].split(">", 1)[0]
+    discard_dialog = response.text.split(
+        "data-entry-discard-dialog", 1
+    )[1].split("</dialog>", 1)[0]
+
+    assert "min-h-11" in launcher
+    assert "w-full" in launcher
+    assert "sm:w-auto" in launcher
+    assert "w-[min(28rem,calc(100%-2rem))]" in discard_dialog
+    assert "flex flex-col" in discard_dialog
+    assert "sm:flex-row" in discard_dialog
+    assert "safe-area-inset-bottom" in discard_dialog
+
+
+def test_manual_entry_preview_uses_canonical_shape_and_reference_list(
+    authenticated_client, monkeypatch
+):
+    monkeypatch.setattr(
+        "workflows.hfl.persistence.local_machine_name",
+        lambda: "harqis-server",
+    )
+
+    response = authenticated_client.post(
+        "/hfl-corpus/entries/preview",
+        json=_create_entry_payload(),
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["filename"] == "2026-07-19.md"
+    assert "## 2026-07-19 10:45" in payload["markdown"]
+    assert "Source:          manual-entry" in payload["markdown"]
+    assert "Machine:         harqis-server" in payload["markdown"]
+    assert "Possible use:    brainstorming" in payload["markdown"]
+    assert "Tags:            #notes #manual-entry #thoughts" in payload["markdown"]
+    assert "                 - https://example.com/one" in payload["markdown"]
+    assert "                 - C:\\notes\\source.md" in payload["markdown"]
+    assert "<strong>References:</strong>" in payload["html"]
+    assert "<li>" in payload["html"]
+
+
+def test_manual_entry_preview_rejects_required_blank_fields(authenticated_client):
+    request = _create_entry_payload()
+    request["moment"] = " "
+
+    response = authenticated_client.post(
+        "/hfl-corpus/entries/preview",
+        json=request,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Moment is required."
+
+
+def test_local_manual_entry_create_persists_and_refreshes_index(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    persisted = []
+    refreshed = []
+    monkeypatch.setattr(hfl_routes, "_uses_remote_corpus", lambda: False)
+    monkeypatch.setattr(hfl_routes, "resolve_corpus_root", lambda: "C:/corpus")
+    monkeypatch.setattr(
+        hfl_routes,
+        "persist_manual_entry",
+        lambda payload, *, corpus_dir: persisted.append(
+            (payload, corpus_dir)
+        ) or {
+            "entry_id": "hfl-manual",
+            "path": "C:/corpus/2026-07-19.md",
+            "duplicate": False,
+            "indexed": True,
+            "delivery": "persisted",
+        },
+    )
+    monkeypatch.setattr(
+        hfl_routes.corpus_index,
+        "documents",
+        lambda force=False: refreshed.append(force) or (),
+    )
+
+    response = authenticated_client.post(
+        "/hfl-corpus/entries",
+        json=_create_entry_payload(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["indexed"] is True
+    assert persisted[0][1] == "C:/corpus"
+    assert refreshed == [True]
+
+
+def test_remote_manual_entry_create_uses_canonical_host(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    submitted = []
+
+    class FakeRemote:
+        def create_entry(self, payload):
+            submitted.append(payload)
+            return {
+                "entry_id": "hfl-remote",
+                "path": "/corpus/2026-07-19.md",
+                "duplicate": False,
+                "indexed": True,
+                "delivery": "persisted",
+            }
+
+    monkeypatch.setattr(hfl_routes, "_uses_remote_corpus", lambda: True)
+    monkeypatch.setattr(
+        hfl_routes.RemoteCorpusClient,
+        "from_settings",
+        classmethod(lambda cls: FakeRemote()),
+    )
+    monkeypatch.setattr(
+        hfl_routes,
+        "persist_manual_entry",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("local writer used")
+        ),
+    )
+
+    response = authenticated_client.post(
+        "/hfl-corpus/entries",
+        json=_create_entry_payload(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["entry_id"] == "hfl-remote"
+    assert submitted[0]["moment"] == "Captured a useful thought"
+
+
+def test_corpus_write_api_requires_bearer_token(authenticated_client):
+    response = authenticated_client.post(
+        "/api/hfl/entries",
+        json=_create_entry_payload(),
+    )
+
+    assert response.status_code == 401
+
+
+def test_corpus_write_api_persists_on_canonical_host(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.api as hfl_api
+
+    persisted = []
+    monkeypatch.setattr(hfl_api, "resolve_corpus_root", lambda: "C:/canonical")
+    monkeypatch.setattr(
+        hfl_api,
+        "persist_manual_entry",
+        lambda payload, *, corpus_dir: persisted.append(corpus_dir) or {
+            "entry_id": "hfl-api",
+            "path": "C:/canonical/2026-07-19.md",
+            "duplicate": False,
+            "indexed": True,
+            "delivery": "persisted",
+        },
+    )
+    monkeypatch.setattr(
+        hfl_api.corpus_index,
+        "documents",
+        lambda force=False: (),
+    )
+
+    response = authenticated_client.post(
+        "/api/hfl/entries",
+        json=_create_entry_payload(),
+        headers={"Authorization": "Bearer frontend-test-hfl-api-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["entry_id"] == "hfl-api"
+    assert persisted == ["C:/canonical"]
+
+
+def test_remote_client_posts_manual_entry_with_bearer_token(monkeypatch):
+    from modules.hfl_corpus.remote import RemoteCorpusClient
+
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured.update({"url": url, **kwargs})
+        return httpx.Response(
+            200,
+            json={
+                "entry_id": "hfl-remote",
+                "path": "/corpus/2026-07-19.md",
+                "duplicate": False,
+                "indexed": True,
+                "delivery": "persisted",
+            },
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+    result = RemoteCorpusClient(
+        "http://canonical:8081", "secret"
+    ).create_entry(_create_entry_payload())
+
+    assert result["entry_id"] == "hfl-remote"
+    assert captured["url"] == "http://canonical:8081/api/hfl/entries"
+    assert captured["headers"]["Authorization"] == "Bearer secret"
+    assert captured["json"]["moment"] == "Captured a useful thought"

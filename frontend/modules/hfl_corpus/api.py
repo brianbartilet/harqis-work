@@ -1,4 +1,4 @@
-"""Authenticated read-only API for the canonical HFL corpus host."""
+"""Authenticated read and manual-entry API for the canonical HFL corpus host."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from modules.hfl_corpus.corpus import (
     search_documents,
     shallow_tree,
 )
+from modules.hfl_corpus.entry_create import CreateEntryRequest, persist_manual_entry
 from services.safe_paths import (
     allowed_reference_roots,
     load_download_token,
@@ -80,6 +81,25 @@ def _tree_payload(node: dict) -> dict:
         "directories": [_tree_payload(directory) for directory in node["directories"]],
         "files": [_document_payload(document) for document in node["files"]],
     }
+
+
+@router.post("/entries")
+async def hfl_api_create_entry(
+    request: Request,
+    payload: CreateEntryRequest,
+):
+    _authorize(request)
+    try:
+        result = persist_manual_entry(payload, corpus_dir=resolve_corpus_root())
+        corpus_index.documents(force=True)
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="The entry could not be saved.",
+        ) from exc
 
 
 @router.get("/documents")
