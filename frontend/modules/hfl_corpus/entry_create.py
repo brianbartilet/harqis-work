@@ -251,9 +251,14 @@ async def persist_manual_entry_with_uploads(
         for name in names:
             source = staging_dir / name
             destination = target_dir / name
-            os.link(source, destination)
-            source.unlink()
+            descriptor = os.open(
+                destination,
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                0o600,
+            )
+            os.close(descriptor)
             committed.append(destination)
+            os.replace(source, destination)
 
         from workflows.hfl.persistence import persist_envelope
 

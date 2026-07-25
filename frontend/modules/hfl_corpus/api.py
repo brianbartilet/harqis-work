@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import logging
 from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -36,6 +37,7 @@ from services.safe_paths import (
 
 
 router = APIRouter(prefix="/api/hfl", tags=["hfl-corpus-api"])
+_log = logging.getLogger(__name__)
 
 
 def _authorize(request: Request) -> None:
@@ -137,6 +139,7 @@ async def hfl_api_upload_entry(
     except (ValueError, ValidationError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
+        _log.exception("Canonical HFL manual entry upload failed")
         raise HTTPException(
             status_code=500,
             detail="The entry and files could not be saved.",

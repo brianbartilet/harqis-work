@@ -1664,6 +1664,13 @@ def test_local_manual_entry_upload_persists_files_and_references(
         "workflows.hfl.es_store.index_hfl_entry",
         lambda entry, **kwargs: entry.entry_id,
     )
+    monkeypatch.setattr(
+        entry_create.os,
+        "link",
+        lambda *args: (_ for _ in ()).throw(
+            AssertionError("uploads must not require hard-link support")
+        ),
+    )
     monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda force=False: ())
     request = _create_entry_payload()
     request["attachment_names"] = ["photo.jpg", "notes.txt"]

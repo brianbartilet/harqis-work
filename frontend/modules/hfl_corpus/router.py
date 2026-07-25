@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import re
 from urllib.parse import quote, urlencode
 
@@ -42,6 +43,7 @@ from web import page_context, require_user, templates
 
 router = APIRouter(prefix="/hfl-corpus")
 _H2 = re.compile(r"<h2(?:\s+[^>]*)?>")
+_log = logging.getLogger(__name__)
 
 
 def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
@@ -326,6 +328,7 @@ async def hfl_entry_upload(
     except RemoteCorpusError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=502)
     except Exception:
+        _log.exception("HFL manual entry upload failed")
         return JSONResponse(
             {"detail": "The entry and files could not be saved. Please try again."},
             status_code=500,
