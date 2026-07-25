@@ -16,11 +16,13 @@ from modules.hfl_corpus.corpus import (
     CorpusPage,
     build_tree,
     common_tags,
+    common_sources,
     corpus_index,
     find_tree_node,
     format_hfl_markdown,
     paginate_documents,
     parse_search_query,
+    normalize_source,
     resolve_corpus_root,
     search_documents,
     shallow_tree,
@@ -66,6 +68,7 @@ def _index_url(
     date_field: str,
     date_from: str,
     date_to: str,
+    source: str,
     sort: str,
     page: int = 1,
     page_size: int = 20,
@@ -79,6 +82,8 @@ def _index_url(
         params["date_from"] = date_from
     if date_to:
         params["date_to"] = date_to
+    if source:
+        params["source"] = source
     if sort != "desc":
         params["sort"] = sort
     if page != 1:
@@ -103,6 +108,7 @@ async def hfl_corpus_page(
     page: int = 1,
     page_size: int = 20,
     created: bool = False,
+    source: str = "",
 ):
     user, redirect = require_user(request)
     if redirect:
@@ -125,6 +131,7 @@ async def hfl_corpus_page(
                 "date_field": date_field,
                 "date_from": date_from,
                 "date_to": date_to,
+                "source": source,
                 "sort": sort,
                 "page": str(page),
                 "page_size": str(page_size),
@@ -135,6 +142,8 @@ async def hfl_corpus_page(
             total_results = remote["total_results"]
             document_count = remote["document_count"]
             tag_cloud = remote["tag_cloud"]
+            source_options = remote.get("sources", [])
+            selected_source = remote.get("selected_source", "")
             result_page = CorpusPage(
                 items=tuple(results),
                 page=remote["page"],
@@ -151,10 +160,14 @@ async def hfl_corpus_page(
             total_results = 0
             document_count = 0
             tag_cloud = []
+            source_options = []
+            selected_source = ""
             result_page = paginate_documents((), page=page, page_size=page_size)
             remote_error = str(exc)
     else:
         documents = corpus_index.documents()
+        source_options = common_sources(documents)
+        selected_source = normalize_source(source, source_options)
         tree = shallow_tree(build_tree(documents))
         all_results = search_documents(
             documents,
@@ -163,6 +176,7 @@ async def hfl_corpus_page(
             date_from=date_from,
             date_to=date_to,
             sort_order=sort,
+            source=selected_source,
         )
         result_page = paginate_documents(all_results, page=page, page_size=page_size)
         results = result_page.items
@@ -176,6 +190,7 @@ async def hfl_corpus_page(
         date_field=date_field,
         date_from=date_from,
         date_to=date_to,
+        source=selected_source,
         sort=reverse_sort,
         page_size=result_page.page_size,
     )
@@ -200,6 +215,7 @@ async def hfl_corpus_page(
                 date_field=date_field,
                 date_from=date_from,
                 date_to=date_to,
+                source=selected_source,
                 sort=sort,
                 page_size=result_page.page_size,
             ),
@@ -209,6 +225,7 @@ async def hfl_corpus_page(
         "date_field": date_field,
         "date_from": date_from,
         "date_to": date_to,
+        "source": selected_source,
         "sort": sort,
         "page_size": result_page.page_size,
     }
@@ -236,6 +253,8 @@ async def hfl_corpus_page(
             date_field=date_field,
             date_from=date_from,
             date_to=date_to,
+            source=selected_source,
+            source_options=source_options,
             sort_order=sort,
             sort_toggle_url=sort_toggle_url,
             result_page=result_page,
@@ -367,6 +386,7 @@ async def hfl_matches(
     request: Request,
     relative_path: str,
     q: str = "",
+    source: str = "",
     offset: int = 0,
     limit: int = 20,
 ):
@@ -378,6 +398,7 @@ async def hfl_matches(
             match_page = RemoteCorpusClient.from_settings().matches(
                 relative_path,
                 query=q,
+                source=source,
                 offset=offset,
                 limit=limit,
             )
@@ -393,7 +414,15 @@ async def hfl_matches(
         if not document:
             return HTMLResponse("Corpus document not found", status_code=404)
         selected_tags, text_query = parse_search_query(q)
-        matching_entries = document.matching_entries(selected_tags, text_query)
+        selected_source = normalize_source(
+            source,
+            common_sources(corpus_index.documents()),
+        )
+        matching_entries = document.matching_entries(
+            selected_tags,
+            text_query,
+            selected_source,
+        )
         normalized_offset = max(0, offset)
         normalized_limit = min(max(1, limit), 20)
         entries = matching_entries[
@@ -413,6 +442,7 @@ async def hfl_matches(
             "offset": normalized_offset,
             "limit": normalized_limit,
             "query": q,
+            "source": source,
             "selected_tag": selected_tags[0] if len(selected_tags) == 1 else "",
         },
     )

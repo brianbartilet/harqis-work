@@ -15,10 +15,12 @@ from modules.hfl_corpus.corpus import (
     CorpusDocument,
     build_tree,
     common_tags,
+    common_sources,
     corpus_index,
     find_tree_node,
     paginate_documents,
     parse_search_query,
+    normalize_source,
     resolve_corpus_root,
     search_documents,
     shallow_tree,
@@ -157,6 +159,7 @@ async def hfl_api_documents(
     page: int = 1,
     page_size: int = 20,
     compact: bool = False,
+    source: str = "",
 ):
     _authorize(request)
     if date_field not in {"created", "updated"}:
@@ -164,6 +167,8 @@ async def hfl_api_documents(
     if sort not in {"asc", "desc"}:
         sort = "desc"
     documents = corpus_index.documents()
+    sources = common_sources(documents)
+    selected_source = normalize_source(source, sources)
     results = search_documents(
         documents,
         query=q,
@@ -171,6 +176,7 @@ async def hfl_api_documents(
         date_from=date_from,
         date_to=date_to,
         sort_order=sort,
+        source=selected_source,
     )
     result_page = paginate_documents(results, page=page, page_size=page_size)
     selected_tags, text_query = parse_search_query(q)
@@ -180,15 +186,22 @@ async def hfl_api_documents(
                 _document_payload(
                     document,
                     matching_entry_count=len(
-                        document.matching_entries(selected_tags, text_query)
-                    ) if q else 0,
+                        document.matching_entries(
+                            selected_tags,
+                            text_query,
+                            selected_source,
+                        )
+                    ) if q or selected_source else 0,
                     include_tag_entry_anchors=True,
                 )
                 for document in result_page.items
             ]
             if compact
             else [
-                _document_payload(document, include_entries=bool(q))
+                _document_payload(
+                    document,
+                    include_entries=bool(q or selected_source),
+                )
                 for document in results
             ]
         ),
@@ -200,6 +213,8 @@ async def hfl_api_documents(
         "has_next": result_page.has_next,
         "document_count": len(documents),
         "tag_cloud": common_tags(documents),
+        "sources": sources,
+        "selected_source": selected_source,
     }
     if compact:
         payload["tree"] = _tree_payload(shallow_tree(build_tree(documents)))
@@ -225,6 +240,7 @@ async def hfl_api_matches(
     request: Request,
     relative_path: str,
     q: str = "",
+    source: str = "",
     offset: int = 0,
     limit: int = 20,
 ):
@@ -233,7 +249,15 @@ async def hfl_api_matches(
     if not document:
         raise HTTPException(status_code=404, detail="Corpus document not found")
     selected_tags, text_query = parse_search_query(q)
-    entries = document.matching_entries(selected_tags, text_query)
+    selected_source = normalize_source(
+        source,
+        common_sources(corpus_index.documents()),
+    )
+    entries = document.matching_entries(
+        selected_tags,
+        text_query,
+        selected_source,
+    )
     normalized_offset = max(0, offset)
     normalized_limit = min(max(1, limit), 20)
     return {

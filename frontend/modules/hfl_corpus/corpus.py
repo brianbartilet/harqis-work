@@ -55,6 +55,7 @@ class CorpusEntry:
     moment: str
     what_happened: str
     tags: tuple[str, ...]
+    source: str = ""
     text: str = ""
 
 
@@ -79,10 +80,12 @@ class CorpusDocument:
         self,
         selected_tags: str | tuple[str, ...],
         phrase: str = "",
+        source: str = "",
     ) -> tuple[CorpusEntry, ...]:
         needles = _tag_needles(selected_tags)
         text_needle = (phrase or "").strip().casefold()
-        if not needles and not text_needle:
+        source_needle = (source or "").strip().casefold()
+        if not needles and not text_needle and not source_needle:
             return ()
         return tuple(
             entry
@@ -92,6 +95,10 @@ class CorpusDocument:
                 for needle in needles
             )
             and (not text_needle or text_needle in entry.text.casefold())
+            and (
+                not source_needle
+                or entry.source.strip().casefold() == source_needle
+            )
         )
 
     def first_matching_entry_anchor(self, tag: str) -> str:
@@ -275,6 +282,7 @@ def parse_entries(text: str) -> tuple[CorpusEntry, ...]:
                 moment=moment,
                 what_happened=what_happened or moment,
                 tags=tags,
+                source=fields.get("source", "").strip(),
                 text=f"{header}\n{body}",
             )
         )
@@ -481,6 +489,26 @@ def common_tags(
     return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]
 
 
+def common_sources(documents: tuple[CorpusDocument, ...]) -> list[str]:
+    """Return distinct nonblank entry sources in case-insensitive name order."""
+    sources: dict[str, str] = {}
+    for document in documents:
+        for entry in document.entries:
+            source = entry.source.strip()
+            if source:
+                sources.setdefault(source.casefold(), source)
+    return sorted(sources.values(), key=str.casefold)
+
+
+def normalize_source(value: str, sources: list[str] | tuple[str, ...]) -> str:
+    """Return the canonical available source name, or All as an empty value."""
+    needle = (value or "").strip().casefold()
+    return next(
+        (source for source in sources if source.casefold() == needle),
+        "",
+    )
+
+
 def parse_search_query(query: str) -> tuple[tuple[str, ...], str]:
     """Split a space-delimited query into partial tags and a text phrase."""
     tokens = query.split()
@@ -509,8 +537,10 @@ def search_documents(
     updated_from: str = "",
     updated_to: str = "",
     sort_order: str = "desc",
+    source: str = "",
 ) -> list[CorpusDocument]:
     tag_needles, text_needle = parse_search_query(query)
+    source_needle = (source or "").strip()
     if date_from or date_to:
         if date_field == "updated":
             updated_from, updated_to = date_from, date_to
@@ -521,6 +551,12 @@ def search_documents(
 
     results: list[CorpusDocument] = []
     for document in documents:
+        if source_needle and not document.matching_entries(
+            tag_needles,
+            text_needle,
+            source_needle,
+        ):
+            continue
         if text_needle and text_needle not in document.text.lower():
             continue
         if any(

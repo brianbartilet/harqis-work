@@ -345,14 +345,17 @@ The main page supports:
 
 - Case-insensitive text substring search
 - Partial tags beginning with `#`
+- An entry-aware Source dropdown populated from distinct corpus `Source:` values
 - A frequency-ranked cloud of the 20 most common tags
 - One compact date mode selector (`Created` or `Updated`)
 - One native date-picker field each for `From` and `To`
 
 Filter classes combine with AND. Multiple tags must all match, and tag matching
-is partial: `#debug` matches both `#debug` and `#debugging`. Results are newest
-first, display excerpts, and link to the complete rendered document. The UI
-shows at most 200 results while reporting the full match count.
+is partial: `#debug` matches both `#debug` and `#debugging`. When Source is
+selected, each result must contain an entry where that source and the current
+text/tag query match together; inline matching-entry counts use the same rule.
+Results are newest first, display excerpts, and link to the complete rendered
+document. The UI shows at most 200 results while reporting the full match count.
 
 Tag chips on both search results and document pages are links. Selecting one
 opens a tag-only corpus search and returns every indexed document with a

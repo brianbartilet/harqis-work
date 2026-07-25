@@ -12,6 +12,7 @@ from modules.hfl_corpus.corpus import (
     CorpusEntry,
     CorpusIndex,
     build_tree,
+    common_sources,
     common_tags,
     format_hfl_markdown,
     search_documents,
@@ -33,6 +34,7 @@ def _document(
     references=(),
     text="root cause story",
     entries=None,
+    source="",
 ):
     if entries is None and entry_count:
         entries = (
@@ -42,6 +44,7 @@ def _document(
                 moment="A useful moment",
                 what_happened="Something worth remembering",
                 tags=tags,
+                source=source,
             ),
         )
     return CorpusDocument(
@@ -66,6 +69,7 @@ def test_recursive_index_extracts_dates_tags_and_references(tmp_path, monkeypatc
     source = nested / "2026-07-10.md"
     source.write_text(
         "## 2026-07-10 09:30\n"
+        "Source:          browsing\n"
         "Moment:          Fixed a hard bug\n"
         "What happened:   Found the root cause\n"
         "Why it stayed:   Useful lesson\n"
@@ -86,6 +90,7 @@ def test_recursive_index_extracts_dates_tags_and_references(tmp_path, monkeypatc
     assert documents[0].entry_count == 1
     assert documents[0].entries[0].moment == "Fixed a hard bug"
     assert documents[0].entries[0].what_happened == "Found the root cause"
+    assert documents[0].entries[0].source == "browsing"
     assert documents[0].entries[0].anchor == "hfl-entry-1-2026-07-10-09-30"
     assert documents[0].matching_text_entries("USEFUL LESSON") == documents[0].entries
     assert documents[0].matching_text_entries("useful retrospective") == ()
@@ -513,10 +518,65 @@ def test_common_tags_defaults_to_top_100():
     assert tags[-1] == ("tag-099", 1)
 
 
+def test_common_sources_are_distinct_trimmed_and_alphabetical():
+    documents = (
+        _document("manual.md", source="manual-entry"),
+        _document("browse.md", source="Browsing"),
+        _document("browse-again.md", source="browsing"),
+        _document("legacy.md", source=""),
+    )
+
+    assert common_sources(documents) == ["Browsing", "manual-entry"]
+
+
+def test_source_filter_requires_query_and_source_on_the_same_entry():
+    browsing = CorpusEntry(
+        anchor="browse",
+        header="Browse",
+        moment="Release research",
+        what_happened="Read release notes",
+        tags=("research",),
+        source="browsing",
+        text="Release research",
+    )
+    manual = CorpusEntry(
+        anchor="manual",
+        header="Manual",
+        moment="Unrelated thought",
+        what_happened="Wrote a note",
+        tags=("notes",),
+        source="manual-entry",
+        text="Unrelated thought",
+    )
+    matching = _document(
+        "matching.md",
+        tags=("research", "notes"),
+        text="Release research and unrelated thought",
+        entries=(browsing, manual),
+    )
+
+    assert search_documents((matching,), source="browsing") == [matching]
+    assert search_documents(
+        (matching,),
+        source="browsing",
+        query="#research release",
+    ) == [matching]
+    assert search_documents(
+        (matching,),
+        source="browsing",
+        query="#notes unrelated",
+    ) == []
+    assert matching.matching_entries((), "", "BROWSING") == (browsing,)
+
+
 def test_corpus_search_uses_compact_date_controls(authenticated_client, monkeypatch):
     import modules.hfl_corpus.router as hfl_routes
 
-    document = _document("2026-07-10.md", tags=("debugging",))
+    document = _document(
+        "2026-07-10.md",
+        tags=("debugging",),
+        source="browsing",
+    )
     monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
 
     response = authenticated_client.get(
@@ -524,12 +584,23 @@ def test_corpus_search_uses_compact_date_controls(authenticated_client, monkeypa
     )
 
     assert response.status_code == 200
+    assert 'name="source"' in response.text
+    assert '<option value="">All</option>' in response.text
+    source_select = response.text.split('name="source"', 1)[1].split(
+        "</select>",
+        1,
+    )[0]
+    assert 'value="browsing"' in source_select
+    assert ">browsing</option>" in source_select
     assert 'name="date_field"' in response.text
     assert 'name="date_from"' in response.text
     assert 'name="date_to"' in response.text
     assert 'name="created_from"' not in response.text
     assert "if (this.showPicker) this.showPicker()" in response.text
     tags_heading = '<p class="mb-1.5 text-xs font-medium text-slate-500">Tags</p>'
+    assert response.text.index('name="source"') < response.text.index(
+        'name="date_field"'
+    )
     assert response.text.index('name="date_field"') < response.text.index(tags_heading)
     assert response.text.index(">Search</button>") < response.text.index(tags_heading)
     assert response.text.index(">Reset</a>") < response.text.index(tags_heading)
@@ -537,6 +608,49 @@ def test_corpus_search_uses_compact_date_controls(authenticated_client, monkeypa
     assert "bg-blue-950/50" in response.text
     assert ">1</span>" in response.text
     assert "0 matches" in response.text
+
+
+def test_corpus_source_filter_preserves_selection_across_index_controls(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    browsing = _document(
+        "browsing.md",
+        tags=("web",),
+        source="browsing",
+    )
+    manual = _document(
+        "manual.md",
+        tags=("notes",),
+        source="manual-entry",
+    )
+    monkeypatch.setattr(
+        hfl_routes.corpus_index,
+        "documents",
+        lambda: (browsing, manual),
+    )
+
+    response = authenticated_client.get(
+        "/hfl-corpus?source=manual-entry&page_size=50&sort=asc"
+    )
+
+    assert response.status_code == 200
+    result_cards = response.text.split("data-corpus-results-scroll", 1)[1]
+    assert "manual.md" in result_cards
+    assert "browsing.md" not in result_cards
+    assert (
+        '<option value="manual-entry" selected>manual-entry</option>'
+        in response.text
+    )
+    assert "source=manual-entry" in response.text
+    assert 'href="/hfl-corpus?source=manual-entry&amp;page_size=50"' in response.text
+    assert "?q=&source=manual-entry" in response.text
+
+    all_sources = authenticated_client.get("/hfl-corpus?source=retired-source")
+    assert "manual.md" in all_sources.text
+    assert "browsing.md" in all_sources.text
+    assert '<option value="">All</option>' in all_sources.text
 
 
 def test_search_and_reset_actions_are_grouped_with_the_text_input(
@@ -750,12 +864,12 @@ def test_corpus_mobile_layout_prioritizes_search_results(
     assert "sticky top-0" in response.text
 
 
-def test_corpus_mobile_all_filters_include_dates_and_tag_cloud(
+def test_corpus_mobile_all_filters_include_source_dates_and_tag_cloud(
     authenticated_client, monkeypatch
 ):
     import modules.hfl_corpus.router as hfl_routes
 
-    document = _document("2026-07-10.md")
+    document = _document("2026-07-10.md", source="manual-entry")
     monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
 
     response = authenticated_client.get("/hfl-corpus")
@@ -779,12 +893,14 @@ def test_corpus_mobile_all_filters_include_dates_and_tag_cloud(
     assert "hidden" in fields_opening
     assert "peer-checked:grid" in fields_opening
     assert "lg:contents" in fields_opening
-    assert filters.count('class="block') == 3
-    assert filters.count("lg:block") == 3
+    assert filters.count('class="block') == 4
+    assert filters.count("lg:block") == 4
+    assert 'name="source"' in filters
     assert 'name="date_field"' in filters
     assert 'name="date_from"' in filters
     assert 'name="date_to"' in filters
     assert 'data-tag-cloud' in filters
+    assert filters.index('name="source"') < filters.index('name="date_field"')
     assert filters.index('name="date_to"') < filters.index('data-tag-cloud')
 
 
@@ -946,7 +1062,11 @@ def test_matching_entry_preview_links_to_anchored_document_entry(
 ):
     import modules.hfl_corpus.router as hfl_routes
 
-    document = _document("2026-07-10.md", tags=("debugging",))
+    document = _document(
+        "2026-07-10.md",
+        tags=("debugging",),
+        source="browsing",
+    )
     monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
 
     response = authenticated_client.get("/hfl-corpus?q=%23debugging")
@@ -1114,7 +1234,11 @@ def test_corpus_api_requires_bearer_token(authenticated_client):
 def test_corpus_api_returns_canonical_documents(authenticated_client, monkeypatch):
     import modules.hfl_corpus.api as hfl_api
 
-    document = _document("2026-07-10.md", tags=("debugging",))
+    document = _document(
+        "2026-07-10.md",
+        tags=("debugging",),
+        source="browsing",
+    )
     monkeypatch.setattr(hfl_api.corpus_index, "documents", lambda: (document,))
 
     response = authenticated_client.get(
@@ -1127,6 +1251,8 @@ def test_corpus_api_returns_canonical_documents(authenticated_client, monkeypatc
     assert response.json()["results"][0]["relative_path"] == "2026-07-10.md"
     assert response.json()["results"][0]["entry_count"] == 1
     assert response.json()["results"][0]["tag_counts"] == [["debugging", 1]]
+    assert response.json()["sources"] == ["browsing"]
+    assert response.json()["selected_source"] == ""
     assert response.json()["documents"][0]["relative_path"] == "2026-07-10.md"
     assert response.json()["results"][0]["entries"][0]["moment"] == "A useful moment"
 
@@ -1193,6 +1319,57 @@ def test_corpus_api_returns_bounded_matching_entries(
     assert len(payload["entries"]) == 5
 
 
+def test_corpus_api_filters_documents_and_entries_by_source(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.api as hfl_api
+
+    browsing = CorpusEntry(
+        anchor="browse",
+        header="Browse",
+        moment="A page",
+        what_happened="Read it",
+        tags=("web",),
+        source="browsing",
+        text="A page",
+    )
+    manual = CorpusEntry(
+        anchor="manual",
+        header="Manual",
+        moment="A note",
+        what_happened="Wrote it",
+        tags=("notes",),
+        source="manual-entry",
+        text="A note",
+    )
+    document = _document(
+        "mixed.md",
+        tags=("web", "notes"),
+        entry_count=2,
+        entries=(browsing, manual),
+    )
+    monkeypatch.setattr(hfl_api.corpus_index, "documents", lambda: (document,))
+    monkeypatch.setattr(hfl_api.corpus_index, "get", lambda path: document)
+    headers = {"Authorization": "Bearer frontend-test-hfl-api-token"}
+
+    index = authenticated_client.get(
+        "/api/hfl/documents?source=BROWSING&compact=true",
+        headers=headers,
+    )
+    matches = authenticated_client.get(
+        "/api/hfl/matches/mixed.md?source=browsing",
+        headers=headers,
+    )
+
+    assert index.status_code == 200
+    assert index.json()["selected_source"] == "browsing"
+    assert index.json()["sources"] == ["browsing", "manual-entry"]
+    assert index.json()["results"][0]["matching_entry_count"] == 1
+    assert matches.status_code == 200
+    assert matches.json()["total"] == 1
+    assert matches.json()["entries"][0]["source"] == "browsing"
+
+
 def test_hfl_markdown_formats_canonical_provenance_fields():
     formatted = format_hfl_markdown(
         "## 2026-07-19 09:30\n"
@@ -1246,6 +1423,8 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
         "has_next": False,
         "document_count": 1,
         "tag_cloud": [["hfl", 1]],
+        "sources": ["browsing", "manual-entry"],
+        "selected_source": "browsing",
     }
     monkeypatch.setattr(
         httpx,
@@ -1264,6 +1443,8 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
     assert result["page_size"] == 20
     assert result["total_pages"] == 1
     assert result["has_next"] is False
+    assert result["sources"] == ["browsing", "manual-entry"]
+    assert result["selected_source"] == "browsing"
     assert result["documents"] == ()
     assert result["tree"]["files"][0].path is None
     assert result["tree"]["files"][0].relative_path == "2026-07-19.md"

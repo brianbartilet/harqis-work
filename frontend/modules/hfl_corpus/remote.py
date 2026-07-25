@@ -33,6 +33,7 @@ def _entry(item: dict[str, Any]) -> CorpusEntry:
         moment=str(item.get("moment") or ""),
         what_happened=str(item.get("what_happened") or ""),
         tags=tuple(str(tag) for tag in item.get("tags") or ()),
+        source=str(item.get("source") or ""),
         text=str(item.get("text") or ""),
     )
 
@@ -237,6 +238,8 @@ class RemoteCorpusClient:
                 "has_next": has_next,
                 "document_count": int(payload["document_count"]),
                 "tag_cloud": [tuple(item) for item in payload.get("tag_cloud") or ()],
+                "sources": [str(source) for source in payload.get("sources") or ()],
+                "selected_source": str(payload.get("selected_source") or ""),
             }
         except (KeyError, TypeError, ValueError) as exc:
             raise RemoteCorpusError("Canonical HFL corpus returned an invalid index") from exc
@@ -255,6 +258,7 @@ class RemoteCorpusClient:
         relative_path: str,
         *,
         query: str,
+        source: str = "",
         offset: int = 0,
         limit: int = 20,
     ) -> dict[str, Any]:
@@ -262,7 +266,12 @@ class RemoteCorpusClient:
         try:
             payload = self._get(
                 f"/matches/{encoded}",
-                params={"q": query, "offset": offset, "limit": limit},
+                params={
+                    "q": query,
+                    "source": source,
+                    "offset": offset,
+                    "limit": limit,
+                },
             ).json()
             return {
                 "entries": tuple(_entry(item) for item in payload["entries"]),
