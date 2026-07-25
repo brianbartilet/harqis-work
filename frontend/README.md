@@ -319,6 +319,26 @@ before saving. The canonical writer updates or creates the selected
 canonical source/machine/entry-ID metadata, and upserts the Elasticsearch
 projection. Remote mode sends the same payload to the canonical host.
 
+The form also accepts up to ten attachments from desktop or mobile browsers.
+Selected files appear in the rendered review as their future canonical
+references, but no bytes are transferred until the user confirms the save.
+Confirmation shows byte-level upload progress, followed by a server-processing
+state. Remote frontends stream the multipart request to the canonical host;
+they never retain a local copy.
+
+The canonical host stores attachments under the configured dumps inbox:
+
+```text
+<harqis_server_inbox>/uploads/YYYY-MM-DD/<entry-id>/<sanitized-original-filename>
+```
+
+The resulting absolute paths are appended to manually entered references.
+Uploads accept any file type, with limits of 50 MB per file, 200 MB combined,
+and ten files per entry. Files are staged before commit, existing files are
+never overwritten, and a failed save removes newly committed attachments.
+Re-uploading files for a duplicate manual entry merges the new paths into the
+existing entry rather than adding another entry block.
+
 ### Search
 
 The main page supports:
@@ -354,6 +374,7 @@ Always-allowed roots:
 
 - Resolved HFL corpus root
 - Repository root
+- `<harqis_server_inbox>/uploads` when the dumps target is configured
 
 Additional non-secret roots can be supplied using the host OS path separator:
 
@@ -395,11 +416,14 @@ root. Reference files are not uploaded or mirrored.
 | GET | `/hfl-corpus` | Corpus tree and filtered search. |
 | POST | `/hfl-corpus/entries/preview` | Validate and render a manual entry preview. |
 | POST | `/hfl-corpus/entries` | Persist a manual entry locally or through the canonical host. |
+| POST | `/hfl-corpus/entries/upload` | Persist a multipart manual entry and its attachments. |
 | GET | `/hfl-corpus/document/{path}` | Render one corpus Markdown document. |
 | GET | `/hfl-corpus/references/{token}/download` | Download an allowed signed reference. |
 | GET | `/hfl-corpus/remote-references/{token}/download` | Proxy an allowed canonical-host reference. |
 | GET | `/api/hfl/documents` | Bearer-authenticated canonical index and search. |
 | POST | `/api/hfl/entries` | Bearer-authenticated canonical manual-entry write. |
+| POST | `/api/hfl/entries/preview` | Bearer-authenticated attachment-reference preview. |
+| POST | `/api/hfl/entries/upload` | Bearer-authenticated canonical multipart entry write. |
 | GET | `/api/hfl/document/{path}` | Bearer-authenticated canonical Markdown document. |
 | GET | `/api/hfl/reference/{token}` | Bearer-authenticated canonical reference download. |
 | GET | `/health` | Process health response. |

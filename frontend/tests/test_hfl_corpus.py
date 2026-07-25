@@ -1,5 +1,8 @@
+import io
+import json
 from dataclasses import replace
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import httpx
 
@@ -1380,6 +1383,11 @@ def test_corpus_index_renders_create_review_and_discard_dialogs(
     assert "#notes #manual-entry #thoughts" in response.text
     assert 'data-entry-review-dialog' in response.text
     assert 'data-entry-discard-dialog' in response.text
+    assert 'type="file" name="attachments" multiple' in response.text
+    assert "data-entry-file-list" in response.text
+    assert "data-entry-upload-progress" in response.text
+    assert "new XMLHttpRequest()" in response.text
+    assert "request.upload.addEventListener('progress'" in response.text
     assert ">Review and save</button>" in response.text
     assert "HFL entry created successfully." in response.text
 
@@ -1530,6 +1538,32 @@ def test_manual_entry_preview_rejects_required_blank_fields(authenticated_client
     assert response.json()["detail"] == "Moment is required."
 
 
+def test_manual_entry_preview_adds_future_attachment_references(
+    authenticated_client, monkeypatch, tmp_path
+):
+    import modules.hfl_corpus.entry_create as entry_create
+
+    monkeypatch.setattr(entry_create, "resolve_upload_inbox", lambda: tmp_path)
+    monkeypatch.setattr(
+        "workflows.hfl.persistence.local_machine_name",
+        lambda: "harqis-server",
+    )
+    request = _create_entry_payload()
+    request["attachment_names"] = ["photo.jpg", "../unsafe:name.txt"]
+
+    response = authenticated_client.post(
+        "/hfl-corpus/entries/preview",
+        json=request,
+    )
+
+    assert response.status_code == 200
+    markdown = response.json()["markdown"]
+    assert str(tmp_path / "uploads" / "2026-07-19") in markdown
+    assert "photo.jpg" in markdown
+    assert "unsafe_name.txt" in markdown
+    assert "../unsafe:name.txt" not in markdown
+
+
 def test_local_manual_entry_create_persists_and_refreshes_index(
     authenticated_client, monkeypatch
 ):
@@ -1611,6 +1645,119 @@ def test_remote_manual_entry_create_uses_canonical_host(
     assert submitted[0]["moment"] == "Captured a useful thought"
 
 
+def test_local_manual_entry_upload_persists_files_and_references(
+    authenticated_client, monkeypatch, tmp_path
+):
+    import modules.hfl_corpus.entry_create as entry_create
+    import modules.hfl_corpus.router as hfl_routes
+
+    corpus_dir = tmp_path / "corpus"
+    inbox_dir = tmp_path / "dumps"
+    monkeypatch.setattr(hfl_routes, "_uses_remote_corpus", lambda: False)
+    monkeypatch.setattr(hfl_routes, "resolve_corpus_root", lambda: corpus_dir)
+    monkeypatch.setattr(entry_create, "resolve_upload_inbox", lambda: inbox_dir)
+    monkeypatch.setattr(
+        "workflows.hfl.persistence.local_machine_name",
+        lambda: "harqis-server",
+    )
+    monkeypatch.setattr(
+        "workflows.hfl.es_store.index_hfl_entry",
+        lambda entry, **kwargs: entry.entry_id,
+    )
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda force=False: ())
+    request = _create_entry_payload()
+    request["attachment_names"] = ["photo.jpg", "notes.txt"]
+
+    response = authenticated_client.post(
+        "/hfl-corpus/entries/upload",
+        data={"payload": json.dumps(request)},
+        files=[
+            ("files", ("photo.jpg", b"image-bytes", "image/jpeg")),
+            ("files", ("notes.txt", b"notes", "text/plain")),
+        ],
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["duplicate"] is False
+    assert len(result["uploads"]) == 2
+    for uploaded in result["uploads"]:
+        assert Path(uploaded).is_file()
+    markdown = (corpus_dir / "2026-07-19.md").read_text(encoding="utf-8")
+    assert result["entry_id"] in markdown
+    assert result["uploads"][0] in markdown
+    assert result["uploads"][1] in markdown
+
+
+def test_duplicate_manual_upload_merges_new_references(
+    authenticated_client, monkeypatch, tmp_path
+):
+    import modules.hfl_corpus.entry_create as entry_create
+    import modules.hfl_corpus.router as hfl_routes
+
+    corpus_dir = tmp_path / "corpus"
+    inbox_dir = tmp_path / "dumps"
+    monkeypatch.setattr(hfl_routes, "_uses_remote_corpus", lambda: False)
+    monkeypatch.setattr(hfl_routes, "resolve_corpus_root", lambda: corpus_dir)
+    monkeypatch.setattr(entry_create, "resolve_upload_inbox", lambda: inbox_dir)
+    monkeypatch.setattr(
+        "workflows.hfl.persistence.local_machine_name",
+        lambda: "harqis-server",
+    )
+    monkeypatch.setattr(
+        "workflows.hfl.es_store.index_hfl_entry",
+        lambda entry, **kwargs: entry.entry_id,
+    )
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda force=False: ())
+
+    results = []
+    for filename in ("first.txt", "second.txt"):
+        request = _create_entry_payload()
+        request["attachment_names"] = [filename]
+        response = authenticated_client.post(
+            "/hfl-corpus/entries/upload",
+            data={"payload": json.dumps(request)},
+            files=[("files", (filename, filename.encode(), "text/plain"))],
+        )
+        assert response.status_code == 200
+        results.append(response.json())
+
+    assert results[0]["entry_id"] == results[1]["entry_id"]
+    assert results[0]["duplicate"] is False
+    assert results[1]["duplicate"] is True
+    markdown = (corpus_dir / "2026-07-19.md").read_text(encoding="utf-8")
+    assert markdown.count(f"Entry ID:        {results[0]['entry_id']}") == 1
+    assert results[0]["uploads"][0] in markdown
+    assert results[1]["uploads"][0] in markdown
+
+
+def test_manual_upload_limit_failure_leaves_no_files_or_entry(
+    authenticated_client, monkeypatch, tmp_path
+):
+    import modules.hfl_corpus.entry_create as entry_create
+    import modules.hfl_corpus.router as hfl_routes
+
+    corpus_dir = tmp_path / "corpus"
+    inbox_dir = tmp_path / "dumps"
+    monkeypatch.setattr(hfl_routes, "_uses_remote_corpus", lambda: False)
+    monkeypatch.setattr(hfl_routes, "resolve_corpus_root", lambda: corpus_dir)
+    monkeypatch.setattr(entry_create, "resolve_upload_inbox", lambda: inbox_dir)
+    monkeypatch.setattr(entry_create, "MAX_UPLOAD_FILE_BYTES", 3)
+    request = _create_entry_payload()
+    request["attachment_names"] = ["large.bin"]
+
+    response = authenticated_client.post(
+        "/hfl-corpus/entries/upload",
+        data={"payload": json.dumps(request)},
+        files=[("files", ("large.bin", b"four", "application/octet-stream"))],
+    )
+
+    assert response.status_code == 400
+    assert "50 MB per-file upload limit" in response.json()["detail"]
+    assert not (corpus_dir / "2026-07-19.md").exists()
+    assert not any((inbox_dir / "uploads").rglob("large.bin"))
+
+
 def test_corpus_write_api_requires_bearer_token(authenticated_client):
     response = authenticated_client.post(
         "/api/hfl/entries",
@@ -1655,6 +1802,19 @@ def test_corpus_write_api_persists_on_canonical_host(
     assert persisted == ["C:/canonical"]
 
 
+def test_corpus_upload_api_requires_bearer_token(authenticated_client):
+    request = _create_entry_payload()
+    request["attachment_names"] = ["notes.txt"]
+
+    response = authenticated_client.post(
+        "/api/hfl/entries/upload",
+        data={"payload": json.dumps(request)},
+        files=[("files", ("notes.txt", b"notes", "text/plain"))],
+    )
+
+    assert response.status_code == 401
+
+
 def test_remote_client_posts_manual_entry_with_bearer_token(monkeypatch):
     from modules.hfl_corpus.remote import RemoteCorpusClient
 
@@ -1684,3 +1844,42 @@ def test_remote_client_posts_manual_entry_with_bearer_token(monkeypatch):
     assert captured["url"] == "http://canonical:8081/api/hfl/entries"
     assert captured["headers"]["Authorization"] == "Bearer secret"
     assert captured["json"]["moment"] == "Captured a useful thought"
+
+
+def test_remote_client_forwards_manual_entry_files_as_multipart(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    from modules.hfl_corpus.remote import RemoteCorpusClient
+
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured.update({"url": url, **kwargs})
+        return httpx.Response(
+            200,
+            json={
+                "entry_id": "hfl-remote",
+                "path": "/corpus/2026-07-19.md",
+                "duplicate": False,
+                "indexed": True,
+                "delivery": "persisted",
+                "uploads": ["/Users/harqis-one/dumps/uploads/notes.txt"],
+            },
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    upload = UploadFile(filename="notes.txt", file=io.BytesIO(b"notes"))
+    request = _create_entry_payload()
+    request["attachment_names"] = ["notes.txt"]
+
+    result = RemoteCorpusClient(
+        "http://canonical:8081", "secret"
+    ).create_entry_with_uploads(request, [upload])
+
+    assert result["uploads"] == ["/Users/harqis-one/dumps/uploads/notes.txt"]
+    assert captured["url"] == "http://canonical:8081/api/hfl/entries/upload"
+    assert captured["headers"]["Authorization"] == "Bearer secret"
+    assert json.loads(captured["data"]["payload"])["moment"] == "Captured a useful thought"
+    assert captured["files"][0][1][0] == "notes.txt"
+    assert captured["timeout"] == 300.0

@@ -273,6 +273,13 @@
                         class="mt-1.5 block w-full resize-y rounded-lg bg-slate-900 px-3 py-2 font-mono text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-blue-500 sm:text-sm"></textarea>
               <span class="mt-1 block text-xs text-slate-500">Each nonblank line becomes one Markdown list item.</span>
             </label>
+            <label class="block text-sm text-slate-300">Files
+              <input type="file" name="attachments" multiple
+                     class="mt-1.5 block min-h-11 w-full cursor-pointer rounded-lg bg-slate-900 text-base text-slate-300 ring-1 ring-slate-700 file:mr-3 file:min-h-11 file:border-0 file:bg-blue-700 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-blue-600 sm:text-sm">
+              <span class="mt-1 block text-xs text-slate-500">Up to 10 files, 50 MB each and 200 MB combined. Files upload only after confirmation.</span>
+            </label>
+            <ul data-entry-file-list hidden
+                class="space-y-1 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-400"></ul>
           </div>
         </details>
       </div>
@@ -298,6 +305,16 @@
       <p class="mt-2 text-sm text-slate-400">This entry will be written to <strong data-entry-preview-filename class="break-all text-blue-300"></strong>.</p>
     </div>
     <div data-entry-preview class="markdown-body min-h-0 flex-1 overflow-y-auto overscroll-contain bg-slate-900/70 px-4 py-4 text-sm text-slate-300 sm:m-6 sm:mt-4 sm:max-h-[55dvh] sm:rounded-xl sm:border sm:border-slate-800 sm:p-4"></div>
+    <div data-entry-upload-progress hidden
+         class="mx-4 mb-4 rounded-xl border border-blue-800/70 bg-blue-950/40 p-4 sm:mx-6">
+      <div class="flex items-center justify-between gap-3 text-sm">
+        <span data-entry-upload-status class="text-blue-200">Preparing upload…</span>
+        <span data-entry-upload-percent class="font-mono text-blue-300">0%</span>
+      </div>
+      <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
+        <div data-entry-upload-bar class="h-full w-0 rounded-full bg-blue-500 transition-[width]"></div>
+      </div>
+    </div>
     <div data-entry-review-actions
          class="sticky bottom-0 z-10 flex shrink-0 flex-col gap-2 border-t border-slate-800 bg-slate-950 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:static sm:mx-6 sm:mb-6 sm:flex-row sm:justify-end sm:gap-3 sm:p-0 sm:pt-4">
       <button type="button" data-entry-review-back
@@ -333,9 +350,17 @@
   const errorBox = form.querySelector('[data-entry-error]');
   const reviewButton = form.querySelector('[data-entry-review]');
   const moreDetails = form.querySelector('[data-entry-more-details]');
+  const fileInput = form.elements.attachments;
+  const fileList = form.querySelector('[data-entry-file-list]');
   const confirmButton = reviewDialog.querySelector('[data-entry-confirm]');
+  const previewPanel = reviewDialog.querySelector('[data-entry-preview]');
+  const progressPanel = reviewDialog.querySelector('[data-entry-upload-progress]');
+  const progressStatus = progressPanel.querySelector('[data-entry-upload-status]');
+  const progressPercent = progressPanel.querySelector('[data-entry-upload-percent]');
+  const progressBar = progressPanel.querySelector('[data-entry-upload-bar]');
   let initialState = '';
   let pendingPayload = null;
+  let pendingFiles = [];
 
   const localDateAndTime = () => {
     const now = new Date();
@@ -345,8 +370,14 @@
     form.elements.time.value = local.slice(11, 16);
   };
 
-  const serialize = () => JSON.stringify(Object.fromEntries(new FormData(form).entries()));
-  const payload = () => Object.fromEntries(new FormData(form).entries());
+  const selectedFiles = () => Array.from(fileInput.files || []);
+  const payload = () => {
+    const values = Object.fromEntries(new FormData(form).entries());
+    delete values.attachments;
+    values.attachment_names = selectedFiles().map(file => file.name);
+    return values;
+  };
+  const serialize = () => JSON.stringify(payload());
   const isDirty = () => serialize() !== initialState;
   const showError = (message) => {
     errorBox.textContent = message;
@@ -369,6 +400,9 @@
     localDateAndTime();
     showError('');
     pendingPayload = null;
+    pendingFiles = [];
+    fileList.replaceChildren();
+    fileList.hidden = true;
     initialState = serialize();
     createDialog.showModal();
     form.elements.moment.focus();
@@ -406,6 +440,29 @@
     discardDialog.close();
     form.reset();
     pendingPayload = null;
+    pendingFiles = [];
+  });
+
+  const readableBytes = bytes => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+  fileInput.addEventListener('change', () => {
+    const files = selectedFiles();
+    fileList.replaceChildren(...files.map(file => {
+      const item = document.createElement('li');
+      item.className = 'flex justify-between gap-3';
+      const name = document.createElement('span');
+      name.className = 'min-w-0 break-all text-slate-300';
+      name.textContent = file.name;
+      const size = document.createElement('span');
+      size.className = 'shrink-0 font-mono';
+      size.textContent = readableBytes(file.size);
+      item.append(name, size);
+      return item;
+    }));
+    fileList.hidden = files.length === 0;
   });
 
   form.addEventListener('submit', async event => {
@@ -420,6 +477,7 @@
     showError('');
     reviewButton.disabled = true;
     pendingPayload = payload();
+    pendingFiles = selectedFiles();
     try {
       const response = await fetch('/hfl-corpus/entries/preview', {
         method: 'POST',
@@ -429,7 +487,7 @@
       const body = await response.json();
       if (!response.ok) throw new Error(responseMessage(body, 'The preview could not be generated.'));
       reviewDialog.querySelector('[data-entry-preview-filename]').textContent = body.filename;
-      reviewDialog.querySelector('[data-entry-preview]').innerHTML = body.html;
+      previewPanel.innerHTML = body.html;
       createDialog.close();
       reviewDialog.showModal();
     } catch (error) {
@@ -458,16 +516,53 @@
     if (!pendingPayload) return;
     confirmButton.disabled = true;
     try {
-      const response = await fetch('/hfl-corpus/entries', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(pendingPayload),
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(responseMessage(body, 'The entry could not be saved.'));
+      let body;
+      if (pendingFiles.length) {
+        previewPanel.hidden = true;
+        progressPanel.hidden = false;
+        progressStatus.textContent = 'Uploading files…';
+        progressPercent.textContent = '0%';
+        progressBar.style.width = '0%';
+        const upload = new FormData();
+        upload.append('payload', JSON.stringify(pendingPayload));
+        pendingFiles.forEach(file => upload.append('files', file, file.name));
+        body = await new Promise((resolve, reject) => {
+          const request = new XMLHttpRequest();
+          request.open('POST', '/hfl-corpus/entries/upload');
+          request.upload.addEventListener('progress', event => {
+            if (!event.lengthComputable) return;
+            const percent = Math.round((event.loaded / event.total) * 100);
+            progressPercent.textContent = `${percent}%`;
+            progressBar.style.width = `${percent}%`;
+            if (percent === 100) progressStatus.textContent = 'Saving entry on the canonical host…';
+          });
+          request.addEventListener('load', () => {
+            let result = {};
+            try { result = JSON.parse(request.responseText || '{}'); } catch (_) {}
+            if (request.status < 200 || request.status >= 300) {
+              reject(new Error(responseMessage(result, 'The entry and files could not be saved.')));
+              return;
+            }
+            resolve(result);
+          });
+          request.addEventListener('error', () => reject(new Error('The upload connection failed.')));
+          request.addEventListener('abort', () => reject(new Error('The upload was interrupted.')));
+          request.send(upload);
+        });
+      } else {
+        const response = await fetch('/hfl-corpus/entries', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(pendingPayload),
+        });
+        body = await response.json();
+        if (!response.ok) throw new Error(responseMessage(body, 'The entry could not be saved.'));
+      }
       window.location.assign('/hfl-corpus?created=true');
     } catch (error) {
       reviewDialog.close();
+      progressPanel.hidden = true;
+      previewPanel.hidden = false;
       createDialog.showModal();
       showError(error.message || 'The entry could not be saved.');
     } finally {

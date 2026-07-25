@@ -1,11 +1,14 @@
 """Routes for browsing, searching, and adding entries to the HFL corpus."""
 
+import asyncio
+import json
 import re
 from urllib.parse import quote, urlencode
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from markupsafe import Markup
+from pydantic import ValidationError
 
 from config import get_settings
 from modules.hfl_corpus.corpus import (
@@ -26,6 +29,7 @@ from modules.hfl_corpus.remote import RemoteCorpusClient, RemoteCorpusError
 from modules.hfl_corpus.entry_create import (
     CreateEntryRequest,
     persist_manual_entry,
+    persist_manual_entry_with_uploads,
     preview_manual_entry,
 )
 from services.safe_paths import (
@@ -248,9 +252,15 @@ async def hfl_entry_preview(request: Request, payload: CreateEntryRequest):
     if redirect:
         return JSONResponse({"detail": "Authentication required"}, status_code=401)
     try:
+        if _uses_remote_corpus() and payload.attachment_names:
+            return RemoteCorpusClient.from_settings().preview_entry(
+                payload.model_dump()
+            )
         return preview_manual_entry(payload)
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
+    except RemoteCorpusError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=502)
 
 
 @router.post("/entries")
@@ -277,6 +287,47 @@ async def hfl_entry_create(request: Request, payload: CreateEntryRequest):
     except Exception:
         return JSONResponse(
             {"detail": "The entry could not be saved. Please try again."},
+            status_code=500,
+        )
+
+
+@router.post("/entries/upload")
+async def hfl_entry_upload(
+    request: Request,
+    payload: str = Form(...),
+    files: list[UploadFile] = File(default=[]),
+):
+    user, redirect = require_user(request)
+    if redirect:
+        return JSONResponse({"detail": "Authentication required"}, status_code=401)
+    try:
+        entry_payload = CreateEntryRequest.model_validate_json(payload)
+        if _uses_remote_corpus():
+            try:
+                client = RemoteCorpusClient.from_settings()
+                result = await asyncio.to_thread(
+                    client.create_entry_with_uploads,
+                    entry_payload.model_dump(),
+                    files,
+                )
+            finally:
+                for upload in files:
+                    await upload.close()
+        else:
+            result = await persist_manual_entry_with_uploads(
+                entry_payload,
+                files,
+                corpus_dir=resolve_corpus_root(),
+            )
+            corpus_index.documents(force=True)
+        return result
+    except (ValueError, ValidationError, json.JSONDecodeError) as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except RemoteCorpusError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=502)
+    except Exception:
+        return JSONResponse(
+            {"detail": "The entry and files could not be saved. Please try again."},
             status_code=500,
         )
 

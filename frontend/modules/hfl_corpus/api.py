@@ -5,8 +5,9 @@ from __future__ import annotations
 import hmac
 from dataclasses import asdict
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import ValidationError
 
 from config import get_settings
 from modules.hfl_corpus.corpus import (
@@ -21,7 +22,12 @@ from modules.hfl_corpus.corpus import (
     search_documents,
     shallow_tree,
 )
-from modules.hfl_corpus.entry_create import CreateEntryRequest, persist_manual_entry
+from modules.hfl_corpus.entry_create import (
+    CreateEntryRequest,
+    persist_manual_entry,
+    persist_manual_entry_with_uploads,
+    preview_manual_entry,
+)
 from services.safe_paths import (
     allowed_reference_roots,
     load_download_token,
@@ -99,6 +105,41 @@ async def hfl_api_create_entry(
         raise HTTPException(
             status_code=500,
             detail="The entry could not be saved.",
+        ) from exc
+
+
+@router.post("/entries/preview")
+async def hfl_api_preview_entry(
+    request: Request,
+    payload: CreateEntryRequest,
+):
+    _authorize(request)
+    try:
+        return preview_manual_entry(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/entries/upload", dependencies=[Depends(_authorize)])
+async def hfl_api_upload_entry(
+    payload: str = Form(...),
+    files: list[UploadFile] = File(default=[]),
+):
+    try:
+        entry_payload = CreateEntryRequest.model_validate_json(payload)
+        result = await persist_manual_entry_with_uploads(
+            entry_payload,
+            files,
+            corpus_dir=resolve_corpus_root(),
+        )
+        corpus_index.documents(force=True)
+        return result
+    except (ValueError, ValidationError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="The entry and files could not be saved.",
         ) from exc
 
 

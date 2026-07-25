@@ -24,6 +24,17 @@ class ReferenceLink:
 
 def allowed_reference_roots(corpus_root: Path) -> tuple[Path, ...]:
     roots = [corpus_root.resolve(), REPO_ROOT.resolve()]
+    try:
+        from workflows.dumps.config import get_dumps_target
+
+        dumps_target = get_dumps_target()
+        if dumps_target and str(dumps_target.inbox).strip():
+            roots.append(
+                (Path(dumps_target.inbox).expanduser() / "uploads").resolve()
+            )
+    except Exception:
+        # Corpus browsing must stay available when machine config is absent.
+        pass
     configured = get_settings().hfl_reference_allowed_roots
     for raw in configured.split(os.pathsep):
         if raw.strip():

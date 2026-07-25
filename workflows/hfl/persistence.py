@@ -192,10 +192,38 @@ def _timestamp_sorted_text(existing_text: str, rendered: str) -> str:
     return prefix + "".join(block for _, _, block in blocks)
 
 
+def _merge_duplicate_references(
+    existing_text: str,
+    entry: HflEntry,
+) -> tuple[str, HflEntry | None]:
+    """Merge new references into an existing entry with the same stable id."""
+    matches = list(_HEADER.finditer(existing_text or ""))
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(existing_text)
+        existing = HflEntry.from_markdown(
+            match.group(1),
+            existing_text[match.end():end],
+        )
+        if existing.entry_id != entry.entry_id:
+            continue
+        references = tuple(dict.fromkeys((*existing.references, *entry.references)))
+        if references == existing.references:
+            return existing_text, existing
+        merged = replace(existing, references=references)
+        updated = (
+            existing_text[:match.start()]
+            + merged.to_markdown()
+            + existing_text[end:]
+        )
+        return updated, merged
+    return existing_text, None
+
+
 def persist_envelope(
     envelope: EntryEnvelope,
     *,
     corpus_dir: Path | None = None,
+    merge_duplicate_references: bool = False,
 ) -> dict[str, Any]:
     """Prepend exactly once under a per-day cross-process file lock."""
     entry = envelope.entry
@@ -215,6 +243,7 @@ def persist_envelope(
     lock_file = lock_dir / f"{day_file.name}.lock"
     duplicate = False
     rendered = entry.to_markdown()
+    indexed_entry = entry
 
     with FileLock(lock_file, timeout=30):
         existing_text = day_file.read_text(encoding="utf-8") if day_file.exists() else ""
@@ -224,7 +253,28 @@ def persist_envelope(
             or _content_signature(existing) == _content_signature(entry)
             for existing in existing_entries
         )
-        if not duplicate:
+        if duplicate and merge_duplicate_references:
+            updated_text, merged_entry = _merge_duplicate_references(existing_text, entry)
+            if merged_entry is not None:
+                indexed_entry = merged_entry
+            if updated_text != existing_text:
+                temporary = day_file.with_name(
+                    f".{day_file.name}.tmp-{os.getpid()}-{uuid.uuid4().hex}"
+                )
+                try:
+                    with temporary.open("w", encoding="utf-8") as handle:
+                        handle.write(updated_text)
+                        written = len(updated_text) - len(existing_text)
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                    if day_file.exists():
+                        os.chmod(temporary, day_file.stat().st_mode)
+                    os.replace(temporary, day_file)
+                finally:
+                    temporary.unlink(missing_ok=True)
+            else:
+                written = 0
+        elif not duplicate:
             updated_text = _timestamp_sorted_text(existing_text, rendered)
             temporary = day_file.with_name(
                 f".{day_file.name}.tmp-{os.getpid()}-{uuid.uuid4().hex}"
@@ -246,10 +296,10 @@ def persist_envelope(
     from workflows.hfl.es_store import index_hfl_entry
 
     doc_id = index_hfl_entry(
-        entry,
-        source=entry.source,
+        indexed_entry,
+        source=indexed_entry.source,
         synthesized=envelope.synthesized,
-        doc_id=envelope.es_doc_id or entry.entry_id,
+        doc_id=envelope.es_doc_id or indexed_entry.entry_id,
     )
     return {
         "entry_id": entry.entry_id,

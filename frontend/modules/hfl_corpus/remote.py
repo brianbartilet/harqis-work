@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, unquote
 
 import httpx
+from starlette.datastructures import UploadFile
 
 from config import get_settings
 from modules.hfl_corpus.corpus import (
@@ -106,10 +108,11 @@ class RemoteCorpusClient:
 
     def _post(self, path: str, **kwargs) -> httpx.Response:
         try:
+            timeout = kwargs.pop("timeout", self.timeout)
             response = httpx.post(
                 self.base_url + path,
                 headers=self.headers,
-                timeout=self.timeout,
+                timeout=timeout,
                 **kwargs,
             )
             response.raise_for_status()
@@ -126,19 +129,68 @@ class RemoteCorpusClient:
         except httpx.HTTPError as exc:
             raise RemoteCorpusError(f"Canonical HFL corpus unavailable: {exc}") from exc
 
-    def create_entry(self, payload: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def _create_result(result: dict[str, Any]) -> dict[str, Any]:
+        payload = {
+            "entry_id": str(result["entry_id"]),
+            "path": str(result["path"]),
+            "duplicate": bool(result["duplicate"]),
+            "indexed": bool(result["indexed"]),
+            "delivery": str(result["delivery"]),
+        }
+        if "uploads" in result:
+            payload["uploads"] = [str(path) for path in result["uploads"]]
+        return payload
+
+    def preview_entry(self, payload: dict[str, Any]) -> dict[str, str]:
         try:
-            result = self._post("/entries", json=payload).json()
+            result = self._post("/entries/preview", json=payload).json()
             return {
-                "entry_id": str(result["entry_id"]),
-                "path": str(result["path"]),
-                "duplicate": bool(result["duplicate"]),
-                "indexed": bool(result["indexed"]),
-                "delivery": str(result["delivery"]),
+                "filename": str(result["filename"]),
+                "markdown": str(result["markdown"]),
+                "html": str(result["html"]),
             }
         except (KeyError, TypeError, ValueError) as exc:
             raise RemoteCorpusError(
+                "Canonical HFL corpus returned an invalid preview response"
+            ) from exc
+
+    def create_entry(self, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            result = self._post("/entries", json=payload).json()
+            return self._create_result(result)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RemoteCorpusError(
                 "Canonical HFL corpus returned an invalid create-entry response"
+            ) from exc
+
+    def create_entry_with_uploads(
+        self,
+        payload: dict[str, Any],
+        uploads: list[UploadFile],
+    ) -> dict[str, Any]:
+        files = [
+            (
+                "files",
+                (
+                    upload.filename or "upload",
+                    upload.file,
+                    upload.content_type or "application/octet-stream",
+                ),
+            )
+            for upload in uploads
+        ]
+        try:
+            result = self._post(
+                "/entries/upload",
+                data={"payload": json.dumps(payload)},
+                files=files,
+                timeout=max(self.timeout, 300.0),
+            ).json()
+            return self._create_result(result)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RemoteCorpusError(
+                "Canonical HFL corpus returned an invalid upload response"
             ) from exc
 
     def index(self, *, params: dict[str, str]) -> dict[str, Any]:
