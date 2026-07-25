@@ -495,6 +495,7 @@ def test_document_orders_entries_before_references_and_floating_navigator(
     references_position = response.text.index(">References</h2>")
     navigator_position = response.text.index('aria-label="Document tag navigator"')
     assert entry_position < references_position < navigator_position
+    assert ".markdown-body p, .markdown-body li" in response.text
     assert "overflow-wrap: anywhere" in response.text
     assert "word-break: break-word" in response.text
 
