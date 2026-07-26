@@ -43,7 +43,7 @@ from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 from workflows.dumps.config import get_dumps_target
 from workflows.dumps.files import iter_recent_files
-from workflows.hfl.es_store import query_hfl_entries
+from workflows.hfl.es_store import query_hfl_entries_status
 from workflows.hfl.prompts import load_prompt
 from workflows.hfl.tasks.capture import resolve_corpus_dir
 from workflows.hfl.tasks.ingest_browsing import (
@@ -920,7 +920,7 @@ def register_memory_tools(mcp: FastMCP):
         logger.info("memory_recall_es q=%r period=%r tags=%r source=%r",
                     query, period, tags, source)
         start, end, label = _resolve_window(period, since, until)
-        rows = query_hfl_entries(
+        search_result = query_hfl_entries_status(
             query=query,
             since=str(start) if start else (since or None),
             until=str(end) if end else (until or None),
@@ -928,6 +928,21 @@ def register_memory_tools(mcp: FastMCP):
             source=source or None,
             limit=limit,
         )
+        if not search_result.available:
+            logger.warning("memory_recall_es: Elasticsearch projection unavailable")
+            return {
+                "found": False,
+                "text": "",
+                "hits": [],
+                "period": _period_dict(start, end, label),
+                "synthesized": False,
+                "degraded": True,
+                "error": {
+                    "code": search_result.error or "elasticsearch_unavailable",
+                    "message": "The HFL search index is temporarily unavailable.",
+                },
+            }
+        rows = list(search_result.rows)
         if not rows:
             logger.info("memory_recall_es: no ES matches — returning empty")
             return {

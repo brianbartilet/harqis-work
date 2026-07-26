@@ -65,6 +65,16 @@ def test_template_settings_zero_replicas_one_shard():
     assert s["number_of_shards"] == "1"
 
 
+def test_hfl_template_has_explicit_search_mappings():
+    bs = load_bootstrap_module()
+    mappings = bs.HFL_TEMPLATE_MAPPINGS
+    assert mappings["dynamic"] == "strict"
+    assert mappings["properties"]["entry_id"]["type"] == "keyword"
+    assert mappings["properties"]["source"]["type"] == "keyword"
+    assert mappings["properties"]["tags"]["type"] == "keyword"
+    assert mappings["properties"]["when"]["type"] == "date"
+
+
 # ── bootstrap dry-run ─────────────────────────────────────────────────────────
 
 def test_bootstrap_dry_run_makes_no_http_calls(monkeypatch):
@@ -122,8 +132,7 @@ def test_bootstrap_installs_template_with_correct_payload(monkeypatch):
         if path == "/_cat/indices?h=index&format=json":
             return 200, []
         if method == "PUT" and "_index_template" in path:
-            captured["path"] = path
-            captured["body"] = body
+            captured[path] = body
             return 200, {"acknowledged": True}
         return 200, {}
 
@@ -131,9 +140,12 @@ def test_bootstrap_installs_template_with_correct_payload(monkeypatch):
     ok = bs.bootstrap(dry_run=False, wait_seconds=5)
 
     assert ok is True
-    assert captured["path"] == f"/_index_template/{bs.TEMPLATE_NAME}"
-    assert captured["body"]["index_patterns"] == bs.INDEX_PATTERNS
-    assert captured["body"]["template"]["settings"] == bs.TEMPLATE_SETTINGS
+    generic = captured[f"/_index_template/{bs.TEMPLATE_NAME}"]
+    hfl = captured[f"/_index_template/{bs.HFL_TEMPLATE_NAME}"]
+    assert generic["index_patterns"] == bs.INDEX_PATTERNS
+    assert generic["template"]["settings"] == bs.TEMPLATE_SETTINGS
+    assert hfl["index_patterns"] == bs.HFL_INDEX_PATTERNS
+    assert hfl["template"]["mappings"] == bs.HFL_TEMPLATE_MAPPINGS
 
 
 def test_bootstrap_patches_existing_harqis_indices(monkeypatch):

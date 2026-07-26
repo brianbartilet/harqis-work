@@ -14,12 +14,13 @@ Manifesto note (docs/MANIFESTO.md §1): this is the "Distill → structured
 DTO" step plus a second Express path (ES retrieval) for every captured
 entry, so dual-written entries are never write-only dead weight.
 
-Hard contract — never break the beat or an MCP call:
+Hard contract — never break the beat:
   - index_hfl_entry: any ES/auth/network failure is logged at WARNING and
     swallowed. The corpus write already happened; ES is bonus.
-  - query_hfl_entries: any failure returns [] (callers no-op cleanly).
-  - Idempotent: the doc id is deterministic (date+moment+source), so a
-    re-run upserts rather than duplicating.
+  - query_hfl_entries: compatibility wrapper returning [] on failure.
+  - query_hfl_entries_status: distinguishes an unavailable projection from
+    a successful query with no matches.
+  - Idempotent: canonical entry ids are required, so a re-run upserts.
 
 Reuses the ELASTIC_LOGGING app config (URL/auth) that @log_result already
 relies on — no new credentials. Index name: env HFL_ES_INDEX, default
@@ -28,10 +29,11 @@ relies on — no new credentials. Index name: env HFL_ES_INDEX, default
 
 from __future__ import annotations
 
-import hashlib
 import os
-from datetime import date, datetime
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Optional
+from urllib.parse import quote, urljoin
 
 from core.utilities.logging.custom_logger import create_logger
 
@@ -40,30 +42,20 @@ from workflows.hfl.dto import HflEntry
 _log = create_logger("hfl.es_store")
 
 _DEFAULT_INDEX = "harqis-hfl-entries"
+HFL_ES_SCHEMA_VERSION = 1
+_MAX_QUERY_LIMIT = 500
 
 
 def _index_name() -> str:
     return os.environ.get("HFL_ES_INDEX", "").strip() or _DEFAULT_INDEX
 
 
-def _doc_id(entry: HflEntry, source: str) -> str:
-    """Deterministic id so re-ingesting the same moment upserts, not dupes.
-
-    date + a short hash of the moment + source. Stable across runs because
-    every component is derived from the entry content, not wall-clock.
-    """
-    day = entry.when.strftime("%Y%m%d") if entry.when else "00000000"
-    moment_hash = hashlib.sha1(
-        (entry.moment or "").strip().lower().encode("utf-8")
-    ).hexdigest()[:12]
-    src = (source or "unknown").strip().lower().replace(" ", "-") or "unknown"
-    return f"{day}-{src}-{moment_hash}"
-
-
-def _to_doc(entry: HflEntry, source: str) -> dict[str, Any]:
+def hfl_document(entry: HflEntry, source: str) -> dict[str, Any]:
     """HflEntry → ES document. Entry time is `when`/`entry_date`; post()
     injects its own `date` (index time) so the two never collide."""
     return {
+        "schema_version": HFL_ES_SCHEMA_VERSION,
+        "indexed_at": datetime.now(timezone.utc).isoformat(),
         "source": (source or "unknown").strip() or "unknown",
         "when": entry.when.isoformat() if entry.when else None,
         "entry_date": entry.when.strftime("%Y-%m-%d") if entry.when else None,
@@ -92,21 +84,26 @@ def index_hfl_entry(
     An empty `moment` is a no-op — mirrors capture's "smallest useful
     entry is one line" rule so empty entries don't pollute the index.
 
-    `doc_id` overrides the default content-derived id. Sources with a stable
-    per-item key (e.g. a recording id) pass it so re-runs upsert even when the
-    distilled `moment` text changes between runs. Defaults to the
-    date+moment+source hash.
+    `doc_id` may override the entry's canonical id for stable aggregate
+    projections. Entries without either id are rejected: moment-derived ids
+    can overwrite distinct entries and are not safe at scale.
     """
     if not entry.moment.strip():
         return None
-    doc_id = doc_id or _doc_id(entry, source)
+    doc_id = (doc_id or entry.entry_id or "").strip()
+    if not doc_id:
+        _log.warning(
+            "hfl.es_store: skipped entry without canonical id (source=%s)",
+            source,
+        )
+        return None
     try:
         # Imported lazily: the es_logging module resolves ELASTIC_LOGGING
         # config at import time; keep that cost off the hot import path and
         # contained where we already handle its failure.
         from core.apps.es_logging.app.elasticsearch import post
 
-        doc = _to_doc(entry, source)
+        doc = hfl_document(entry, source)
         doc["synthesized"] = bool(synthesized)
         post(
             doc,
@@ -142,7 +139,50 @@ def _parse_day(value: Optional[str]) -> Optional[str]:
         return None
 
 
-def query_hfl_entries(
+@dataclass(frozen=True)
+class HflQueryResult:
+    """Observable search result; unavailable is distinct from zero matches."""
+
+    rows: tuple[dict[str, Any], ...]
+    available: bool
+    error: str | None = None
+
+
+def _exact_filter(field: str, value: str) -> dict[str, Any]:
+    """Match both the explicit mapping and legacy dynamic `.keyword` fields."""
+    return {
+        "bool": {
+            "should": [
+                {"term": {field: value}},
+                {"term": {f"{field}.keyword": value}},
+            ],
+            "minimum_should_match": 1,
+        }
+    }
+
+
+def _search(body: dict[str, Any]) -> list[dict[str, Any]]:
+    """Run a complete ES search body using the shared authenticated session."""
+    from core.apps.es_logging.app.elasticsearch import _es_session
+
+    session, base = _es_session()
+    index = quote(_index_name(), safe="-_.")
+    response = session.post(
+        urljoin(base, f"{index}/_search"),
+        json=body,
+        timeout=20,
+    )
+    if response.status_code not in (200, 201):
+        raise RuntimeError(f"Elasticsearch search returned HTTP {response.status_code}")
+    hits = response.json().get("hits", {}).get("hits", [])
+    return [
+        hit["_source"]
+        for hit in hits
+        if isinstance(hit, dict) and isinstance(hit.get("_source"), dict)
+    ]
+
+
+def query_hfl_entries_status(
     *,
     query: str = "",
     since: Optional[str] = None,
@@ -150,8 +190,8 @@ def query_hfl_entries(
     tags: Optional[list[str]] = None,
     source: Optional[str] = None,
     limit: int = 50,
-) -> list[dict[str, Any]]:
-    """Query the HFL entry index. Returns [] on any failure (never raises).
+) -> HflQueryResult:
+    """Query the HFL index and preserve availability information.
 
     Filters compose with AND:
       - since/until → range on `entry_date` (ISO or relative "-Nd")
@@ -183,29 +223,52 @@ def query_hfl_entries(
     for t in tags or []:
         t = str(t).strip().lstrip("#")
         if t:
-            filt.append({"term": {"tags": t}})
+            filt.append(_exact_filter("tags", t))
 
     if source and source.strip():
-        filt.append({"term": {"source": source.strip()}})
+        filt.append(_exact_filter("source", source.strip()))
 
-    body = {
+    requested = min(_MAX_QUERY_LIMIT, max(1, int(limit)))
+    es_query = {
         "bool": {
             "must": must or [{"match_all": {}}],
             "filter": filt,
         }
     }
+    sort = (
+        [{"_score": "desc"}, {"when": "desc"}, {"entry_id": "asc"}]
+        if must
+        else [{"when": "desc"}, {"entry_id": "asc"}]
+    )
+    body = {
+        "query": es_query,
+        "size": requested,
+        "sort": sort,
+        "track_total_hits": False,
+    }
     try:
-        from core.apps.es_logging.app.elasticsearch import get_index_data
+        return HflQueryResult(tuple(_search(body)), available=True)
+    except Exception as exc:  # noqa: BLE001 - caller chooses fallback behaviour
+        _log.warning("hfl.es_store: query failed (%s)", exc)
+        return HflQueryResult((), available=False, error="elasticsearch_unavailable")
 
-        hits = get_index_data(
-            _index_name(),
-            query=body,
-            fetch_docs=max(1, int(limit)),
-        )
-        # get_index_data returns _source dicts (no type_hook passed).
-        rows = [h for h in (hits or []) if isinstance(h, dict)]
-        rows.sort(key=lambda r: r.get("entry_date") or "", reverse=True)
-        return rows[: max(1, int(limit))]
-    except Exception as exc:  # noqa: BLE001 - read failure → empty, caller no-ops
-        _log.warning("hfl.es_store: query failed (%s) — returning []", exc)
-        return []
+
+def query_hfl_entries(
+    *,
+    query: str = "",
+    since: Optional[str] = None,
+    until: Optional[str] = None,
+    tags: Optional[list[str]] = None,
+    source: Optional[str] = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """Compatibility wrapper returning rows, or [] when ES is unavailable."""
+    result = query_hfl_entries_status(
+        query=query,
+        since=since,
+        until=until,
+        tags=tags,
+        source=source,
+        limit=limit,
+    )
+    return list(result.rows)

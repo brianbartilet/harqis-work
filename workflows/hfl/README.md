@@ -620,14 +620,30 @@ submits through `workflows/hfl/persistence.py`, which prepends the entry on
 `workflows/hfl/es_store.py`.
 
 - **Write:** `index_hfl_entry(entry, *, source, synthesized)` →
-  `core.apps.es_logging.app.elasticsearch.post`. Deterministic doc id
-  (`<YYYYMMDD>-<source>-<moment-hash>`) so re-runs upsert, never
-  duplicate. Best-effort: any ES failure is logged and swallowed — the
+  `core.apps.es_logging.app.elasticsearch.post`. The canonical
+  `hfl-<content-hash>` entry ID is the ES document ID, so re-runs upsert
+  without allowing moment-hash collisions. Entries without a canonical ID
+  are rejected. Best-effort: any ES failure is logged and swallowed — the
   corpus entry and the beat run are unaffected.
 - **Read:** `query_hfl_entries(query, since, until, tags, source, limit)`
-  → `get_index_data` (Query DSL). Returns `[]` on any failure.
+  executes a fully sorted Query DSL request (relevance, then timestamp and
+  entry ID). `query_hfl_entries_status` additionally distinguishes an
+  unavailable index from a successful query with zero matches; the MCP
+  returns `degraded=true` instead of reporting a false empty result.
 - **Index name:** env `HFL_ES_INDEX` (default `harqis-hfl-entries`).
   Reuses the existing `ELASTIC_LOGGING` app config — no new credentials.
+- **Mapping:** `scripts/bootstrap_elasticsearch.py` installs a strict,
+  higher-priority HFL template with keyword IDs/sources/tags, date timestamps,
+  text narrative fields, and non-indexed references. The template applies
+  when an index is created; it does not mutate incompatible mappings on an
+  existing concrete index.
+- **Reconciliation:** run
+  `python scripts/agents/hfl/reconcile_elasticsearch.py` for a read-only
+  Markdown-versus-ES report. Add `--apply` to bulk-upsert missing or stale
+  canonical documents. It never deletes corpus or ES records. To migrate an
+  old dynamic mapping safely, reconcile into a newly named index first, for
+  example `--index harqis-hfl-entries-v2 --apply`, verify it, then configure
+  `HFL_ES_INDEX=harqis-hfl-entries-v2`.
 - **Retrieval (MCP):** `memory_recall_es` in `workflows/hfl/mcp.py` reads
   this index by window/query/tags/source (optional Haiku synthesis;
   `found=false` + no LLM on empty). The corpus-based `memory_recall`

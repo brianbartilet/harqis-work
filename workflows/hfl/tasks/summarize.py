@@ -253,6 +253,7 @@ def summarize_hfl_week(
         ),
         source="summarize",
         synthesized=True,
+        doc_id=f"hfl-weekly-{iso_year}-W{iso_week:02d}",
     )
 
     return {
