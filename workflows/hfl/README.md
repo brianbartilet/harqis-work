@@ -262,6 +262,14 @@ paths remain supported. Existing corpus and Elasticsearch records can be
 cleaned with the dry-run-first
 `python scripts/agents/hfl/migrate_references.py [--apply]` migration.
 
+Historical `agent-session` imports may contain visible nested H2 headings inside
+`What happened`. Because H2 is reserved for canonical entry navigation, those
+headings can be previewed or demoted to H3 in both daily Markdown and the
+Elasticsearch projection with the dry-run-first
+`python scripts/agents/hfl/migrate_noncanonical_h2.py [--apply]` migration.
+The migration is fence-aware and leaves canonical dated H2s, code examples,
+other sources, and non-daily corpus documents unchanged.
+
 **Location-enriched media.** `analyze_hfl_media` resolves *where* each photo/
 video was taken and folds the place into the entry: it reads **EXIF GPS** first
 (the camera's own fix), and otherwise matches the capture time to the nearest

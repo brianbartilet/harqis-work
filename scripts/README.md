@@ -54,6 +54,7 @@ up from `scripts/agents/<bucket>/`).
 |---|---|
 | `archive_corpus.py` | Archives completed HFL corpus periods. |
 | `migrate_references.py` | Dry-run-first removal of insecure HTTP references from HFL Markdown and Elasticsearch, with apply-mode backups and rollback. |
+| `migrate_noncanonical_h2.py` | Dry-run-first demotion of historical agent-session H2 headings to H3 in daily Markdown and Elasticsearch, preserving canonical entry headers and fenced examples. |
 | [`capture_session_event.py`](#scriptsagentshflcapture_session_eventpy) | Normalizes, redacts, spools, and best-effort enqueues Codex/Claude/Hermes/OpenClaw prompt-outcome audit events. |
 | `capture_session_hook.ps1` | Fail-open Windows launcher that forwards Codex lifecycle-hook stdin to the repository capture entry point without inline-shell quoting. |
 | `capture_session_hook.sh` | Selects the repository Python interpreter across macOS/Linux/Windows shells for the Claude Code lifecycle hook. |
@@ -144,6 +145,21 @@ Markdown and Elasticsearch. Apply mode creates a private backup first.
 python scripts/agents/hfl/migrate_references.py
 python scripts/agents/hfl/migrate_references.py --apply
 python scripts/agents/hfl/migrate_references.py --corpus /path/to/hfl
+```
+
+### `scripts/agents/hfl/migrate_noncanonical_h2.py`
+
+Preview or apply fence-aware demotion of historical `agent-session` headings
+from H2 to H3 in canonical daily Markdown and Elasticsearch `what_happened`
+fields. Canonical dated entry H2s, fenced examples, other sources, and non-daily
+files are unchanged. Apply mode takes per-day locks, creates private backups,
+and rolls both stores back if an update fails. A second dry-run should report
+zero changes.
+
+```bash
+python scripts/agents/hfl/migrate_noncanonical_h2.py
+python scripts/agents/hfl/migrate_noncanonical_h2.py --apply
+python scripts/agents/hfl/migrate_noncanonical_h2.py --corpus /path/to/hfl
 ```
 
 ---
