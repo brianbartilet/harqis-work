@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx
+import pytest
 
 from modules.hfl_corpus import corpus as corpus_module
 from modules.hfl_corpus.corpus import (
@@ -21,6 +22,7 @@ from services.markdown import render_markdown
 from services.safe_paths import (
     allowed_reference_roots,
     load_download_token,
+    make_download_token,
     resolve_reference,
 )
 
@@ -451,6 +453,123 @@ def test_external_and_outside_references_are_classified(tmp_path):
     assert blocked.reason == "outside allowed roots"
 
 
+def test_reference_rendering_links_safe_files_and_omits_blocked_items(tmp_path):
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    document = corpus / "entry.md"
+    document.write_text("entry", encoding="utf-8")
+    artifact = corpus / "17-03-2026 [LOGS] Daily Scratchboard.md"
+    artifact.write_text("notes", encoding="utf-8")
+    outside = tmp_path / "private.txt"
+    outside.write_text("private", encoding="utf-8")
+    source = (
+        "## 2026-03-17 09:30\n"
+        "Moment:          Linked notes\n"
+        "References:\n"
+        f"                 - {artifact}\n"
+        f"                 - {outside}\n"
+        "                 - http://harqis-ones-mac-mini:8081/dashboard\n"
+        "                 - https://example.com/source\n"
+    )
+    links = [
+        resolve_reference(
+            reference,
+            source_document=document,
+            corpus_root=corpus,
+        )
+        for reference in (
+            str(artifact),
+            str(outside),
+            "http://harqis-ones-mac-mini:8081/dashboard",
+            "https://example.com/source",
+        )
+    ]
+
+    rendered = str(render_markdown(format_hfl_markdown(source, links)))
+
+    assert str(artifact) in rendered
+    assert links[0].href in rendered
+    assert "17-03-2026 [LOGS] Daily Scratchboard.md" in rendered
+    assert str(outside) not in rendered
+    assert "outside allowed roots" not in rendered
+    assert "Unavailable:" not in rendered
+    assert "http://harqis-ones-mac-mini:8081/dashboard" not in rendered
+    assert 'href="https://example.com/source"' in rendered
+
+
+def test_insecure_http_and_forged_outside_download_are_blocked(tmp_path):
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    document = corpus / "entry.md"
+    document.write_text("entry", encoding="utf-8")
+    outside = tmp_path / "private.txt"
+    outside.write_text("private", encoding="utf-8")
+
+    insecure = resolve_reference(
+        "HTTP://internal.example/file",
+        source_document=document,
+        corpus_root=corpus,
+    )
+    forged = make_download_token(outside)
+
+    assert insecure.kind == "blocked"
+    assert insecure.reason == "insecure http"
+    assert load_download_token(forged, allowed_reference_roots(corpus)) is None
+
+
+def test_symlink_and_relative_traversal_cannot_escape_allowed_root(tmp_path):
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    document = corpus / "entry.md"
+    document.write_text("entry", encoding="utf-8")
+    outside = tmp_path / "private.txt"
+    outside.write_text("private", encoding="utf-8")
+    linked = corpus / "linked-private.txt"
+    try:
+        linked.symlink_to(outside)
+    except OSError:
+        pytest.skip("symlink creation is unavailable on this host")
+
+    symlink_reference = resolve_reference(
+        linked.name,
+        source_document=document,
+        corpus_root=corpus,
+    )
+    traversal_reference = resolve_reference(
+        "../private.txt",
+        source_document=document,
+        corpus_root=corpus,
+    )
+
+    assert symlink_reference.kind == "blocked"
+    assert symlink_reference.reason == "outside allowed roots"
+    assert traversal_reference.kind == "blocked"
+    assert traversal_reference.reason == "outside allowed roots"
+
+
+def test_malformed_and_credential_bearing_references_fail_closed(tmp_path):
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    document = corpus / "entry.md"
+    document.write_text("entry", encoding="utf-8")
+
+    malformed = resolve_reference(
+        "https://[invalid",
+        source_document=document,
+        corpus_root=corpus,
+    )
+    credentialed = resolve_reference(
+        "https://user:password@example.com/private",
+        source_document=document,
+        corpus_root=corpus,
+    )
+
+    assert malformed.kind == "blocked"
+    assert malformed.reason == "invalid"
+    assert credentialed.kind == "blocked"
+    assert credentialed.reason == "embedded credentials"
+
+
 def test_index_tag_cloud_links_to_partial_search_and_document_uses_navigator(
     authenticated_client, monkeypatch
 ):
@@ -503,6 +622,62 @@ def test_document_orders_entries_before_references_and_floating_navigator(
     assert ".markdown-body p, .markdown-body li" in response.text
     assert "overflow-wrap: anywhere" in response.text
     assert "word-break: break-word" in response.text
+
+
+def test_document_renders_downloads_inline_and_in_summary(
+    authenticated_client, monkeypatch, tmp_path
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    artifact = corpus / "17-03-2026 [LOGS] Daily Scratchboard.md"
+    artifact.write_text("notes", encoding="utf-8")
+    source_path = corpus / "2026-03-17.md"
+    text = (
+        "## 2026-03-17 09:30\n"
+        "Moment:          Linked notes\n"
+        "Tags:            #notes\n"
+        "References:\n"
+        f"                 - {artifact}\n"
+    )
+    source_path.write_text(text, encoding="utf-8")
+    document = replace(
+        _document(
+            "2026-03-17.md",
+            tags=("notes",),
+            references=(str(artifact),),
+            text=text,
+        ),
+        path=source_path,
+    )
+    monkeypatch.setattr(hfl_routes.corpus_index, "get", lambda path: document)
+    monkeypatch.setattr(hfl_routes, "resolve_corpus_root", lambda: corpus)
+
+    response = authenticated_client.get("/hfl-corpus/document/2026-03-17.md")
+
+    assert response.status_code == 200
+    assert response.text.count(str(artifact)) == 2
+    assert response.text.count("/hfl-corpus/references/") == 2
+    assert "Unavailable:" not in response.text
+
+
+def test_reference_download_route_requires_authenticated_session(tmp_path):
+    from fastapi.testclient import TestClient
+    from main import app
+
+    artifact = tmp_path / "artifact.txt"
+    artifact.write_text("private", encoding="utf-8")
+    token = make_download_token(artifact)
+
+    with TestClient(app) as client:
+        response = client.get(
+            f"/hfl-corpus/references/{token}/download",
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/login"
 
 
 def test_common_tags_defaults_to_top_100():
@@ -1317,6 +1492,58 @@ def test_corpus_api_returns_bounded_matching_entries(
     assert payload["total"] == 25
     assert payload["offset"] == 20
     assert len(payload["entries"]) == 5
+
+
+def test_corpus_api_exposes_only_safe_resolved_references(
+    authenticated_client, monkeypatch, tmp_path
+):
+    import modules.hfl_corpus.api as hfl_api
+
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    source_path = corpus / "2026-07-26.md"
+    source_path.write_text("entry", encoding="utf-8")
+    artifact = corpus / "Daily Notes [final].md"
+    artifact.write_text("notes", encoding="utf-8")
+    outside = tmp_path / "private.txt"
+    outside.write_text("private", encoding="utf-8")
+    document = replace(
+        _document(
+            "2026-07-26.md",
+            references=(
+                str(artifact),
+                str(outside),
+                "http://internal.example/dashboard",
+                "https://example.com/source",
+            ),
+        ),
+        path=source_path,
+    )
+    monkeypatch.setattr(hfl_api.corpus_index, "get", lambda path: document)
+    monkeypatch.setattr(hfl_api, "resolve_corpus_root", lambda: corpus)
+
+    response = authenticated_client.get(
+        "/api/hfl/document/2026-07-26.md",
+        headers={"Authorization": "Bearer frontend-test-hfl-api-token"},
+    )
+
+    references = response.json()["references"]
+    assert response.status_code == 200
+    assert {reference["kind"] for reference in references} == {
+        "download",
+        "external",
+    }
+    assert {reference["source"] for reference in references} == {
+        str(artifact),
+        "https://example.com/source",
+    }
+    download = next(item for item in references if item["kind"] == "download")
+    assert download["label"] == str(artifact.resolve())
+    assert download["href"] is None
+    assert download["token"]
+    serialized = json.dumps(response.json())
+    assert str(outside) not in serialized
+    assert "http://internal.example/dashboard" not in serialized
 
 
 def test_corpus_api_filters_documents_and_entries_by_source(

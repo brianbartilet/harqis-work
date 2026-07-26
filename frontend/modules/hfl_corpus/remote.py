@@ -301,6 +301,7 @@ class RemoteCorpusClient:
                 kind=str(item.get("kind") or "blocked"),
                 href=str(href) if href else None,
                 reason=str(item.get("reason") or ""),
+                source=str(item.get("source") or ""),
             ))
         return document, references
 

@@ -27,9 +27,7 @@
         {% if reference.kind == 'external' %}
         <a href="{{ reference.href }}" target="_blank" rel="noopener noreferrer" class="block truncate text-xs text-blue-400 hover:underline">↗ {{ reference.label }}</a>
         {% elif reference.kind == 'download' %}
-        <a href="{{ reference.href }}" class="block truncate text-xs text-emerald-400 hover:underline">Download {{ reference.label }}</a>
-        {% else %}
-        <span class="block truncate text-xs text-slate-600" title="{{ reference.reason }}">Unavailable: {{ reference.label }} ({{ reference.reason }})</span>
+        <a href="{{ reference.href }}" class="block break-all text-xs text-emerald-400 hover:underline">Download {{ reference.label }}</a>
         {% endif %}
       {% endfor %}
     </div>

@@ -61,7 +61,12 @@ def _norm_tags(tags: Optional[Iterable[str]]) -> tuple[str, ...]:
 def _norm_refs(refs: Optional[Iterable[str]]) -> tuple[str, ...]:
     if not refs:
         return ()
-    return tuple(str(r).strip() for r in refs if r and str(r).strip())
+    normalized = (str(reference).strip() for reference in refs if reference)
+    return tuple(
+        reference
+        for reference in normalized
+        if reference and not reference.casefold().startswith("http://")
+    )
 
 
 @dataclass(frozen=True)

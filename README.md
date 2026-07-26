@@ -680,7 +680,7 @@ HFL_CORPUS_API_TOKEN=           # shared secret; keep in gitignored apps.env
 HFL_CORPUS_PATH=                # canonical host corpus root; /Volumes/harqis-data/hfl in production
 HFL_OUTBOX_PATH=                # optional durable envelope directory; default logs/hfl-outbox
 HFL_SESSION_AUDIT_PATH=         # optional sanitized prompt/outcome artifacts; default logs/hfl-session-audit
-HFL_REFERENCE_ALLOWED_ROOTS=    # optional OS-pathsep list for reference downloads
+HFL_REFERENCE_ALLOWED_ROOTS=    # optional OS-pathsep list of trusted reference-download roots
 
 # ── RabbitMQ / Celery broker ──────────────────────────────────────────────────
 DOCKER_HOST_PORT_RABBIT_MQ=       # default: 15672

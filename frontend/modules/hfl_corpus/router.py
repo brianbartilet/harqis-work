@@ -468,7 +468,12 @@ async def hfl_document(request: Request, relative_path: str, tag: str = ""):
             resolve_reference(reference, source_document=source_document, corpus_root=root)
             for reference in document.references
         ]
-    rendered = render_markdown(format_hfl_markdown(document.text))
+    references = [
+        reference
+        for reference in references
+        if reference.kind in {"download", "external"} and reference.href
+    ]
+    rendered = render_markdown(format_hfl_markdown(document.text, references))
     return templates.TemplateResponse(
         request,
         "modules/hfl_corpus/document.html",

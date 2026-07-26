@@ -256,6 +256,12 @@ source dump file path (the dumps→media→corpus provenance loop), and — when
 the media can be geo-located — also appends an OpenStreetMap pin for where it
 was captured.
 
+Plain `http://` references are discarded by `HflEntry` normalization before
+new entries reach Markdown, outbox payloads, or Elasticsearch; HTTPS and file
+paths remain supported. Existing corpus and Elasticsearch records can be
+cleaned with the dry-run-first
+`python scripts/agents/hfl/migrate_references.py [--apply]` migration.
+
 **Location-enriched media.** `analyze_hfl_media` resolves *where* each photo/
 video was taken and folds the place into the entry: it reads **EXIF GPS** first
 (the camera's own fix), and otherwise matches the capture time to the nearest

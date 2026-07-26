@@ -291,7 +291,10 @@ async def hfl_api_document(request: Request, relative_path: str):
         if reference.kind == "download" and reference.href:
             item["token"] = reference.href.split("/")[-2]
             item["href"] = None
-        references.append(item)
+        if reference.kind in {"download", "external"} and (
+            reference.href or item.get("token")
+        ):
+            references.append(item)
     return {
         "document": _document_payload(
             document,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import re
 import time
 from collections import Counter
@@ -9,9 +10,13 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from threading import Lock
+from typing import TYPE_CHECKING
 
 from config import get_settings
 from web import REPO_ROOT
+
+if TYPE_CHECKING:
+    from services.safe_paths import ReferenceLink
 
 
 _HEADER = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
@@ -450,20 +455,43 @@ def parse_date(value: str | None) -> date | None:
         return None
 
 
-def format_hfl_markdown(source: str) -> str:
+def _reference_markup(reference: "ReferenceLink") -> str:
+    label = html.escape(reference.label, quote=False)
+    href = html.escape(reference.href or "", quote=True)
+    attributes = ' target="_blank" rel="noopener noreferrer"' if reference.kind == "external" else ""
+    return f'<a href="{href}"{attributes}>{label}</a>'
+
+
+def format_hfl_markdown(
+    source: str,
+    reference_links: tuple["ReferenceLink", ...] | list["ReferenceLink"] | None = None,
+) -> str:
     """Prepare canonical HFL fields for readable Markdown presentation.
 
     Source files remain untouched. Labels become bold paragraphs and indented
     reference bullets are normalized so the Markdown renderer treats them as
     a list instead of a code block.
     """
+    links_by_source = {
+        reference.source: reference
+        for reference in (reference_links or ())
+        if reference.source
+        and reference.href
+        and reference.kind in {"download", "external"}
+    }
+    sanitize_references = reference_links is not None
     output: list[str] = []
     in_references = False
+    references_rendered = False
     for raw in (source or "").splitlines():
         field = _HFL_FIELD.match(raw)
         if field:
             label = _HFL_FIELD_LABELS[field.group(1).lower()]
             value = field.group(2).strip()
+            if label == "References" and sanitize_references:
+                in_references = True
+                references_rendered = False
+                continue
             if output and output[-1] != "":
                 output.append("")
             output.append(f"**{label}:**" + (f" {value}" if value else ""))
@@ -473,7 +501,19 @@ def format_hfl_markdown(source: str) -> str:
 
         stripped = raw.strip()
         if in_references and stripped.startswith("- "):
-            output.append(stripped)
+            raw_reference = stripped[2:].strip()
+            if sanitize_references:
+                reference = links_by_source.get(raw_reference)
+                if not reference:
+                    continue
+                if not references_rendered:
+                    if output and output[-1] != "":
+                        output.append("")
+                    output.extend(["**References:**", ""])
+                    references_rendered = True
+                output.append(f"- {_reference_markup(reference)}")
+            else:
+                output.append(stripped)
             continue
         if stripped and not stripped.startswith("-"):
             in_references = False

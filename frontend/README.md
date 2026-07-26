@@ -369,14 +369,17 @@ Markdown list; source corpus files are never rewritten.
 
 ### References and downloads
 
-HTTP and HTTPS references open directly in the browser and are never proxied.
-Local reference paths are converted to signed, one-day download tokens only
-when the resolved file is inside an allowed root.
+HTTPS references open directly in the browser and are never proxied. Plain
+`http://` references are omitted from rendered documents and rejected by new
+HFL persistence. Local reference paths are converted to signed, one-day
+download tokens only when the resolved file is inside an allowed root. The
+same signed links appear in each entry's `References:` list and in the compact
+document-level References summary.
 
 Always-allowed roots:
 
 - Resolved HFL corpus root
-- Repository root
+- Repository `logs/` directory
 - `<harqis_server_inbox>/uploads` when the dumps target is configured
 
 Additional non-secret roots can be supplied using the host OS path separator:
@@ -391,14 +394,25 @@ export HFL_REFERENCE_ALLOWED_ROOTS="/srv/hfl-media:/srv/archive"
 
 Downloads revalidate existence, file type, containment, symlinks, and token
 signature. Missing, directory, expired, tampered, and out-of-root references
-are unavailable. Raw host paths are not placed in download URLs.
+are silently omitted. Canonical host paths are visible as requested link
+labels, but are not placed directly in download URLs.
 
 In remote mode, reference classification and token validation happen on the
 Mac. Download links point to an authenticated Windows frontend proxy, which
 adds the bearer token server-side and streams the response back to the signed-in
-browser. A Windows-only path recorded by an older entry remains visible in the
-Markdown but is marked unavailable when it does not exist under an allowed Mac
-root. Reference files are not uploaded or mirrored.
+browser. A path that does not exist under an allowed Mac root is omitted.
+Reference files are not uploaded or mirrored.
+
+Historical HTTP cleanup is available through a dry-run-first migration:
+
+```bash
+python scripts/agents/hfl/migrate_references.py
+python scripts/agents/hfl/migrate_references.py --apply
+```
+
+Apply mode backs up affected Markdown files and Elasticsearch documents under
+the gitignored `.harqis-data/hfl-reference-migrations/` directory before
+updating either store. Reports contain only counts and entry IDs.
 
 ## Routes
 

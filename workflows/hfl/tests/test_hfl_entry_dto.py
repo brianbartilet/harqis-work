@@ -141,3 +141,21 @@ def test__normalisation_strips_and_dehashes():
     assert e.moment == "spaced"
     assert e.tags == ("tag1", "tag2")
     assert e.references == ("https://x", "/p/q")
+
+
+def test__normalisation_rejects_all_plain_http_references():
+    entry = HflEntry(
+        when=datetime(2026, 7, 26, 12, 0),
+        moment="Secure references",
+        references=(
+            "http://harqis-ones-mac-mini:8081/dashboard",
+            "HTTP://example.com/source",
+            "https://example.com/source",
+            "/Users/harqis-one/GIT/notes/source.md",
+        ),
+    )
+
+    assert entry.references == (
+        "https://example.com/source",
+        "/Users/harqis-one/GIT/notes/source.md",
+    )

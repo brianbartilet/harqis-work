@@ -53,6 +53,7 @@ up from `scripts/agents/<bucket>/`).
 | Path | Purpose |
 |---|---|
 | `archive_corpus.py` | Archives completed HFL corpus periods. |
+| `migrate_references.py` | Dry-run-first removal of insecure HTTP references from HFL Markdown and Elasticsearch, with apply-mode backups and rollback. |
 | [`capture_session_event.py`](#scriptsagentshflcapture_session_eventpy) | Normalizes, redacts, spools, and best-effort enqueues Codex/Claude/Hermes/OpenClaw prompt-outcome audit events. |
 | `capture_session_hook.ps1` | Fail-open Windows launcher that forwards Codex lifecycle-hook stdin to the repository capture entry point without inline-shell quoting. |
 | `capture_session_hook.sh` | Selects the repository Python interpreter across macOS/Linux/Windows shells for the Claude Code lifecycle hook. |
@@ -130,6 +131,19 @@ Omit `--enqueue` only for an intentional local-spool-only capture.
 ```bash
 printf '%s' "$HFL_CAPTURE_ENVELOPE" | python scripts/agents/hfl/capture_session_event.py --surface hermes --json -
 python scripts/agents/hfl/capture_session_event.py --surface openclaw --json event.json --no-enqueue
+```
+
+---
+
+### `scripts/agents/hfl/migrate_references.py`
+
+Preview or apply removal of plain-HTTP references from both canonical HFL
+Markdown and Elasticsearch. Apply mode creates a private backup first.
+
+```bash
+python scripts/agents/hfl/migrate_references.py
+python scripts/agents/hfl/migrate_references.py --apply
+python scripts/agents/hfl/migrate_references.py --corpus /path/to/hfl
 ```
 
 ---
