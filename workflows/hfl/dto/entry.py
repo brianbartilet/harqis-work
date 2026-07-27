@@ -47,6 +47,7 @@ _LABELS = {
     "Source": "source",
     "Machine": "machine",
     "Entry ID": "entry_id",
+    "Synthesized": "synthesized",
 }
 
 
@@ -83,6 +84,7 @@ class HflEntry:
     source: str = ""
     machine: str = ""
     entry_id: str = ""
+    synthesized: bool | None = None
 
     def __post_init__(self) -> None:
         # Normalise without mutating (frozen): re-set via object.__setattr__.
@@ -115,7 +117,15 @@ class HflEntry:
         With empty `references` this is byte-identical to the legacy
         `_render_entry` output — existing producers are unaffected.
         """
-        ts = self.when.strftime("%Y-%m-%d %H:%M") if self.when else ""
+        if self.when:
+            ts = self.when.strftime("%Y-%m-%d %H:%M")
+            if self.when.second or self.when.microsecond:
+                ts = self.when.strftime("%Y-%m-%d %H:%M:%S")
+                if self.when.microsecond:
+                    fraction = f"{self.when.microsecond:06d}".rstrip("0")
+                    ts += f".{fraction.ljust(3, '0')}"
+        else:
+            ts = ""
         lines = [f"## {ts}"]
         if self.source:
             lines.append(f"{'Source:'.ljust(_COL)}{self.source}")
@@ -123,6 +133,9 @@ class HflEntry:
             lines.append(f"{'Machine:'.ljust(_COL)}{self.machine}")
         if self.entry_id:
             lines.append(f"{'Entry ID:'.ljust(_COL)}{self.entry_id}")
+        if self.synthesized is not None:
+            value = "true" if self.synthesized else "false"
+            lines.append(f"{'Synthesized:'.ljust(_COL)}{value}")
         lines.extend([
             self._fmt_field("Moment", self.moment),
             self._fmt_field("What happened", self.what_happened),
@@ -152,7 +165,12 @@ class HflEntry:
         h = (header or "").strip()
         if h.startswith("## "):
             h = h[3:].strip()
-        for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        for fmt in (
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+            "%Y-%m-%d",
+        ):
             try:
                 when = datetime.strptime(h, fmt)
                 break
@@ -197,4 +215,9 @@ class HflEntry:
             source=vals.get("source", ""),
             machine=vals.get("machine", ""),
             entry_id=vals.get("entry_id", ""),
+            synthesized=(
+                vals.get("synthesized", "").casefold() == "true"
+                if vals.get("synthesized", "").casefold() in {"true", "false"}
+                else None
+            ),
         )

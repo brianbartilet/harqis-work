@@ -107,6 +107,17 @@ _ANDROID_SCREENSHOT_DIRS = frozenset({"screenshots", "screenshot"})
 _ANDROID_CAMERA_DIRS = frozenset({"camera", "dcim"})
 _ANDROID_SCREENREC_DIRS = frozenset({"screen recordings", "screenrecord"})
 _ANDROID_DUMP_SOURCES = frozenset({"nothing-phone"})
+_DESKTOP_DUMP_SOURCES = frozenset({"windows-work", "windows-work-all"})
+_DESKTOP_CAPTURE_NAME = re.compile(
+    r"^(?:\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-)?"
+    r"sc-desktop-check_monitor\d+"
+    r"(?:_\d{8}_\d{6})?\.(?:jpe?g|png|webp)$",
+    re.IGNORECASE,
+)
+_DESKTOP_SCREENSHOT_NAME = re.compile(
+    r"^Screenshot \d{4}-\d{2}-\d{2} \d{6}\.(?:jpe?g|png|webp)$",
+    re.IGNORECASE,
+)
 _ANDROID_CAPTURE_HINT = {
     "screenshot": "Source: Android screenshot\n",
     "photo": "Source: Android camera photo\n",
@@ -140,6 +151,31 @@ def classify_android_media_candidate(relative: Path) -> dict | None:
     if parts & _ANDROID_SCREENREC_DIRS:
         return {"capture_type": "screen_recording", "device_type": "android"}
     return None
+
+
+def classify_media_source(relative: Path) -> str | None:
+    """Return the durable HFL source for a canonical dump-relative media path."""
+    if classify_android_media_candidate(relative):
+        return "android_capture"
+    if len(relative.parts) < 2:
+        return None
+    parsed_source = parse_dump_dir_name(relative.parts[0].casefold())
+    if not parsed_source or parsed_source[0] not in _DESKTOP_DUMP_SOURCES:
+        return None
+    is_harqis_capture = bool(_DESKTOP_CAPTURE_NAME.fullmatch(relative.name))
+    is_windows_screenshot = (
+        len(relative.parts) >= 3
+        and relative.parts[-2].casefold() == "screenshots 1"
+        and bool(_DESKTOP_SCREENSHOT_NAME.fullmatch(relative.name))
+    )
+    return "desktop" if is_harqis_capture or is_windows_screenshot else None
+
+
+def _filter_media_candidates_by_source(
+    candidates: list[CollectedFile], source: str,
+) -> list[CollectedFile]:
+    """Keep only candidates whose canonical dump provenance matches source."""
+    return [item for item in candidates if classify_media_source(item.relative) == source]
 
 
 def _select_media_candidates(
@@ -707,9 +743,7 @@ def _resolve_media_location(
     return None, None, None
 
 
-@SPROUT.task()
-@log_result()
-def analyze_hfl_media(
+def _analyze_hfl_media(
     *,
     cfg_id__anthropic: str = "ANTHROPIC",
     model: str = _DEFAULT_HAIKU,
@@ -719,6 +753,8 @@ def analyze_hfl_media(
     frames_per_video: int = 4,
     max_tokens: int = 1024,
     media_path: str | None = None,
+    required_source: str | None = None,
+    entry_source: str | None = None,
 ) -> dict[str, Any]:
     """Analyze recent or one targeted inbox media file and append HFL entries.
 
@@ -731,6 +767,10 @@ def analyze_hfl_media(
         {"entries_written", "images", "videos", "skipped", "scanned",
          "model", "window_days"}
     """
+    if required_source != entry_source or required_source not in {
+        None, "desktop", "android_capture",
+    }:
+        raise ValueError("source-specific ingest requires one matching durable source")
     target = get_dumps_target()
     if not target:
         _log.error("hfl.media: harqis_server_inbox not set — cannot scan")
@@ -749,13 +789,41 @@ def analyze_hfl_media(
             _log.info("hfl.media: targeted ingest rejected (%s)", exc)
             return {"skipped": "invalid media path", "reason": str(exc),
                     "entries_written": 0, "scanned": 0, "targeted": True}
+        classified_source = classify_media_source(candidates[0].relative)
+        if required_source and classified_source != required_source:
+            return {
+                "skipped": "source mismatch",
+                "classified_source": classified_source,
+                "entries_written": 0,
+                "scanned": 1,
+                "targeted": True,
+            }
+        if not required_source and entry_source is None and classified_source is None:
+            return {
+                "skipped": "source mismatch",
+                "classified_source": None,
+                "entries_written": 0,
+                "scanned": 1,
+                "targeted": True,
+            }
         collected = candidates
     else:
         end = datetime.now()
         start = end - timedelta(days=window_days)
         collected = list(iter_recent_files([inbox], start, end))
+        if required_source:
+            source_pool = _filter_media_candidates_by_source(collected, required_source)
+        elif entry_source is None:
+            source_pool = [
+                item for item in collected
+                if classify_media_source(item.relative) is not None
+            ]
+        else:
+            source_pool = collected
         candidates = _select_media_candidates(
-            collected, max_files=len(collected), android_min_files=0,
+            source_pool,
+            max_files=len(source_pool),
+            android_min_files=0 if required_source else android_min_files,
         )
 
     if not candidates:
@@ -919,7 +987,10 @@ def analyze_hfl_media(
             )
             day_file = corpus_dir / f"{item.mtime.strftime('%Y-%m-%d')}.md"
             # Vision pass = an LLM (Haiku) distillation → synthesized.
-            append_entry(day_file, entry, source="media", synthesized=True)
+            durable_source = entry_source or classify_media_source(item.relative)
+            if durable_source is None:
+                raise ValueError("media source became unclassifiable after selection")
+            append_entry(day_file, entry, source=durable_source, synthesized=True)
             entries += 1
             completed = True
             _log.info("hfl.media: entry from %s → %s", item.path.name, day_file)
@@ -949,3 +1020,29 @@ def analyze_hfl_media(
         "window_days": window_days,
         "targeted": bool(media_path),
     }
+
+
+@SPROUT.task()
+@log_result()
+def analyze_hfl_media(
+    *,
+    cfg_id__anthropic: str = "ANTHROPIC",
+    model: str = _DEFAULT_HAIKU,
+    window_days: int = 1,
+    max_files: int = 40,
+    android_min_files: int = 10,
+    frames_per_video: int = 4,
+    max_tokens: int = 1024,
+    media_path: str | None = None,
+) -> dict[str, Any]:
+    """Compatibility task: analyze only captures with classified provenance."""
+    return _analyze_hfl_media(
+        cfg_id__anthropic=cfg_id__anthropic,
+        model=model,
+        window_days=window_days,
+        max_files=max_files,
+        android_min_files=android_min_files,
+        frames_per_video=frames_per_video,
+        max_tokens=max_tokens,
+        media_path=media_path,
+    )

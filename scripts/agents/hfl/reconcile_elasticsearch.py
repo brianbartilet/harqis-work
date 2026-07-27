@@ -20,6 +20,7 @@ import re
 import sys
 import urllib.parse
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -82,7 +83,7 @@ def scan_corpus(corpus_root: Path) -> CorpusScan:
     files = invalid = duplicates = 0
     for path in sorted(root.rglob("*.md")):
         relative = path.relative_to(root)
-        if any(part.startswith(".") for part in relative.parts[:-1]):
+        if any(part.startswith(".") for part in relative.parts):
             continue
         files += 1
         text = path.read_text(encoding="utf-8")
@@ -100,7 +101,20 @@ def scan_corpus(corpus_root: Path) -> CorpusScan:
                 invalid += 1
                 continue
             doc = hfl_document(entry, entry.source)
-            doc["synthesized"] = "synthesized" in entry.tags
+            synthesized_explicit = (
+                entry.synthesized is not None or "synthesized" in entry.tags
+            )
+            doc["synthesized"] = (
+                entry.synthesized
+                if entry.synthesized is not None
+                else "synthesized" in entry.tags
+            )
+            doc["_canonical_synthesized_explicit"] = synthesized_explicit
+            doc["_canonical_when_precision"] = (
+                "second"
+                if re.search(r"\d{2}:\d{2}:\d{2}", match.group(1))
+                else "minute"
+            )
             if entry.entry_id in documents:
                 duplicates += 1
             documents[entry.entry_id] = doc
@@ -123,6 +137,47 @@ def fetch_existing(client: Any, index: str, ids: list[str]) -> dict[str, dict[st
             if row.get("found") and isinstance(source, dict):
                 existing[str(row.get("_id") or "")] = source
     return existing
+
+
+def preserve_existing_legacy_metadata(
+    expected: dict[str, dict[str, Any]],
+    existing: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Keep richer live metadata when legacy Markdown could not encode it."""
+    merged_documents: dict[str, dict[str, Any]] = {}
+    for doc_id, document in expected.items():
+        merged = dict(document)
+        synthesized_explicit = bool(
+            merged.pop("_canonical_synthesized_explicit", False)
+        )
+        when_precision = str(merged.pop("_canonical_when_precision", "minute"))
+        current = existing.get(doc_id)
+        if current:
+            if not synthesized_explicit and isinstance(current.get("synthesized"), bool):
+                merged["synthesized"] = current["synthesized"]
+            current_when = str(current.get("when") or "")
+            expected_when = str(merged.get("when") or "")
+            try:
+                current_dt = datetime.fromisoformat(current_when.replace("Z", "+00:00"))
+                expected_dt = datetime.fromisoformat(expected_when.replace("Z", "+00:00"))
+            except ValueError:
+                current_dt = expected_dt = None
+            if when_precision == "minute" and current_dt and expected_dt and (
+                current_dt.year,
+                current_dt.month,
+                current_dt.day,
+                current_dt.hour,
+                current_dt.minute,
+            ) == (
+                expected_dt.year,
+                expected_dt.month,
+                expected_dt.day,
+                expected_dt.hour,
+                expected_dt.minute,
+            ):
+                merged["when"] = current_when
+        merged_documents[doc_id] = merged
+    return merged_documents
 
 
 def compare_projection(
@@ -187,12 +242,13 @@ def main() -> int:
         scan = scan_corpus(resolve_corpus_root(args.corpus))
         client = elasticsearch_client_from_env()
         current = fetch_existing(client, args.index, list(scan.documents))
-        reconciliation = compare_projection(scan.documents, current)
+        documents = preserve_existing_legacy_metadata(scan.documents, current)
+        reconciliation = compare_projection(documents, current)
         if args.apply:
             bulk_upsert(
                 client,
                 args.index,
-                scan.documents,
+                documents,
                 reconciliation.changed_ids,
             )
     except (OSError, RuntimeError, ValueError) as exc:

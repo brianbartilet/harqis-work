@@ -245,7 +245,7 @@ Google provides **$200/month free credit** automatically to all accounts with a 
 
 - Auth: OAuth — but `photoslibrary.readonly` no longer implies full-library read.
 - **For an HFL "what did I shoot today" ingest this API is a dead end.** Use a
-  local sync/Takeout folder fed into `workflows/dumps` → `analyze_hfl_media`
+  local sync/Takeout folder fed into `workflows/dumps` → the source-specific HFL capture tasks
   instead (no Photos API).
 - Enable: [Photos Library API](https://console.cloud.google.com/apis/library/photoslibrary.googleapis.com)
 - **Feasibility: Low** — uploads/albums only; no automated personal-library read.

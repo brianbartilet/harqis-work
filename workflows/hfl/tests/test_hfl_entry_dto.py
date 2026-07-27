@@ -131,6 +131,35 @@ def test_canonical_metadata_is_optional_and_round_trips():
     assert restored.entry_id == entry.entry_id
 
 
+def test_exact_timestamp_and_synthesized_metadata_round_trip():
+    entry = HflEntry(
+        when=datetime(2026, 7, 26, 19, 59, 33, 870000),
+        moment="Precise desktop capture",
+        source="desktop",
+        machine="harqis-server",
+        entry_id="hfl-precise",
+        synthesized=True,
+    )
+
+    markdown = entry.to_markdown()
+    header, body = markdown.split("\n", 1)
+    restored = HflEntry.from_markdown(header, body)
+
+    assert header == "## 2026-07-26 19:59:33.870"
+    assert "Synthesized:     true" in markdown
+    assert restored.when == entry.when
+    assert restored.synthesized is True
+
+
+def test_legacy_markdown_has_unknown_synthesized_provenance():
+    restored = HflEntry.from_markdown(
+        "## 2026-07-26 19:59",
+        "Moment:          Legacy\nSource:          media\n",
+    )
+
+    assert restored.synthesized is None
+
+
 def test__normalisation_strips_and_dehashes():
     e = HflEntry(
         when=datetime(2026, 5, 17, 23, 0),

@@ -35,6 +35,18 @@ def test_envelope_is_deterministic_and_round_trips():
     assert restored.entry.machine == "windows-work-all"
 
 
+def test_envelope_embeds_synthesized_provenance_in_canonical_entry():
+    envelope = persistence.make_envelope(
+        _entry(), source="desktop", machine="harqis-server", synthesized=True,
+    )
+
+    restored = persistence.EntryEnvelope.from_payload(envelope.to_payload())
+
+    assert envelope.entry.synthesized is True
+    assert restored.entry.synthesized is True
+    assert "Synthesized:     true" in envelope.entry.to_markdown()
+
+
 def test_persist_is_locked_and_idempotent(tmp_path, monkeypatch):
     indexed = []
     monkeypatch.setattr(

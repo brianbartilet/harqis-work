@@ -62,19 +62,15 @@ WORKFLOW_HFL = {
         },
     },
 
-    # Daily vision pass — 22:00 local. Walks the last `window_days` of
-    # dumps-inbox media and appends one HFL entry per story-worthy item.
-    # AGENT queue (vision = LLM call); harqis-server consumes `agent` and
-    # holds the inbox. Haiku only — cost-bounded by frame count + max_files.
-    'run-job--analyze_hfl_media': {
-        'task': 'workflows.hfl.tasks.analyze_media.analyze_hfl_media',
+    # Daily desktop capture vision pass — workstation screenshots/videos only.
+    'run-job--analyze_desktop_capture': {
+        'task': 'workflows.hfl.tasks.analyze_desktop_capture.analyze_desktop_capture',
         'schedule': crontab(hour=22, minute=0),
         'kwargs': {
             'cfg_id__anthropic': 'ANTHROPIC',
             'model': 'claude-haiku-4-5-20251001',
             'window_days': 1,
             'max_files': 40,
-            'android_min_files': 10,
             'frames_per_video': 4,
         },
         'options': {
@@ -84,7 +80,32 @@ WORKFLOW_HFL = {
         'manifesto': {
             'code_role': 'capture+distill+express',
             'para_bucket': 'area',
-            'express_target': 'file:hfl_corpus',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+        },
+    },
+
+    # Daily Android durable-media vision pass. This is distinct from the
+    # privacy-reduced android_media attention-log ingest at 23:15.
+    'run-job--analyze_android_capture': {
+        'task': 'workflows.hfl.tasks.analyze_android_capture.analyze_android_capture',
+        'schedule': crontab(hour=22, minute=5),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'window_days': 1,
+            'max_files': 10,
+            'frames_per_video': 4,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 60 * 12,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
             'review_artifact': 'es_log+file',
             'hfl_signal': True,
         },

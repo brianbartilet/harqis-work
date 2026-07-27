@@ -153,7 +153,7 @@ def scan_markdown(corpus_root: Path) -> list[MarkdownChange]:
     changes: list[MarkdownChange] = []
     for path in sorted(root.rglob("*.md")):
         relative = path.relative_to(root)
-        if any(part.startswith(".") for part in relative.parts[:-1]):
+        if any(part.startswith(".") for part in relative.parts):
             continue
         original = path.read_text(encoding="utf-8")
         updated, entry_ids, removed = migrate_markdown_text(original)

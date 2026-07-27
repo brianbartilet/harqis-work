@@ -704,7 +704,7 @@ The integration must be stricter than a simple ES upsert.
 2. Check completed state before the model call.
 3. Check corpus references before append.
 4. Use a caller-supplied deterministic ES document ID.
-5. Persist a claim/done state comparable to `analyze_hfl_media` for overlapping
+5. Persist a claim/done state comparable to the shared capture analyzer for overlapping
    workers and retries.
 6. Never let a refreshed signed URL create a new logical item.
 7. Mark explicit model skip as terminal only when the response schema is valid.

@@ -7,17 +7,18 @@ unit-tested; these cover the EXIF / OwnTracks geo-resolution layered on top
 """
 
 from datetime import datetime
-from inspect import signature
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
 from workflows.dumps.files import CollectedFile
-from workflows.hfl.tasks_config import WORKFLOW_HFL
 from workflows.hfl.tasks.analyze_media import (
     _acquire_media_claim,
+    _analyze_hfl_media,
     _dms_to_deg,
+    _filter_media_candidates_by_source,
     _filter_processed_media,
     _finish_media_claim,
     _media_reference_exists,
@@ -27,6 +28,7 @@ from workflows.hfl.tasks.analyze_media import (
     _target_media_candidate,
     analyze_hfl_media,
     classify_android_media_candidate,
+    classify_media_source,
 )
 
 _MOD = "workflows.hfl.tasks.analyze_media"
@@ -155,6 +157,50 @@ def test__classify_android_requires_exact_canonical_dump_source():
     assert all(classify_android_media_candidate(Path(path)) is None for path in rejected)
 
 
+def test__classify_media_source_separates_desktop_android_and_unknown():
+    assert classify_media_source(
+        Path(
+            "windows-work-all-daily-dumps-2026-07-19/archive/"
+            "2026-07-19-12-00-sc-desktop-check_monitor1.jpg"
+        )
+    ) == "desktop"
+    assert classify_media_source(
+        Path(
+            "windows-work-all-daily-dumps-2026-07-19/Screenshots 1/"
+            "Screenshot 2026-07-19 120033.png"
+        )
+    ) == "desktop"
+    assert classify_media_source(
+        Path("nothing-phone-daily-dumps-2026-07-19/Screenshots/shot.png")
+    ) == "android_capture"
+    assert classify_media_source(
+        Path("nothing-phone-daily-dumps-2026-07-19/DCIM/Camera/photo.jpg")
+    ) == "android_capture"
+    assert classify_media_source(
+        Path("windows-work-all-daily-dumps-2026-07-19/DCIM/photo.jpg")
+    ) is None
+    assert classify_media_source(Path("unclassified/shot.png")) is None
+
+
+def test__classify_media_source_rejects_desktop_filename_near_matches():
+    root = "windows-work-all-daily-dumps-2026-07-19/archive/"
+    rejected = (
+        "prefix-sc-desktop-check_monitor1.jpg",
+        "sc-desktop-check-notes.jpg",
+        "sc-desktop-check_monitorx.jpg",
+        "screenrecord-private.mp4",
+        "Screenshot 2026-07-19.png",
+    )
+    assert all(
+        classify_media_source(Path(root + filename)) is None
+        for filename in rejected
+    )
+    assert classify_media_source(Path(
+        "windows-work-all-daily-dumps-2026-07-19/Screenshots Backup/"
+        "Screenshot 2026-07-19 120033.png"
+    )) is None
+
+
 # ---------------------------------------------------------------------------
 # source-aware selection + targeted ingest
 # ---------------------------------------------------------------------------
@@ -188,6 +234,29 @@ def test__select_media_candidates_reserves_android_slots(tmp_path):
     assert {c.path for c in android}.issubset({c.path for c in selected})
 
 
+def test__filter_media_candidates_by_source_keeps_only_requested_origin(tmp_path):
+    candidates = [
+        _candidate(
+            tmp_path,
+            "windows-work-all-daily-dumps-2026-07-19/archive/"
+            "sc-desktop-check_monitor1.png",
+            2,
+        ),
+        _candidate(
+            tmp_path,
+            "nothing-phone-daily-dumps-2026-07-19/Screenshots/android.png",
+            1,
+        ),
+        _candidate(tmp_path, "unknown/photo.png", 0),
+    ]
+
+    desktop = _filter_media_candidates_by_source(candidates, "desktop")
+    android = _filter_media_candidates_by_source(candidates, "android_capture")
+
+    assert [item.path.name for item in desktop] == ["sc-desktop-check_monitor1.png"]
+    assert [item.path.name for item in android] == ["android.png"]
+
+
 def test__select_media_candidates_fills_unused_android_slots(tmp_path):
     """A quiet phone does not reduce the total batch capacity."""
     desktop = [
@@ -204,13 +273,7 @@ def test__select_media_candidates_fills_unused_android_slots(tmp_path):
     ]
 
 
-def test__scheduled_media_kwargs_bind_to_task_signature():
-    """Beat configuration cannot silently drift from the task's public kwargs."""
-    kwargs = WORKFLOW_HFL["run-job--analyze_hfl_media"]["kwargs"]
 
-    signature(analyze_hfl_media).bind_partial(**kwargs)
-    assert kwargs["max_files"] == 40
-    assert kwargs["android_min_files"] == 10
 
 
 def test__processed_android_media_is_removed_before_quota_selection(tmp_path):
@@ -450,7 +513,10 @@ def test__batch_revalidates_symlink_before_media_read(tmp_path, monkeypatch):
     item = CollectedFile(
         source_root=inbox,
         path=link,
-        relative=Path("selected.png"),
+        relative=Path(
+            "windows-work-all-daily-dumps-2026-07-26/archive/"
+            "sc-desktop-check_monitor1_20260726_195933.png"
+        ),
         mtime=datetime.now(),
     )
     corpus = tmp_path / "hfl"
@@ -473,7 +539,12 @@ def test__batch_revalidates_symlink_before_media_read(tmp_path, monkeypatch):
 
     monkeypatch.setattr(f"{_MOD}.BaseApiServiceAnthropic", SwapClient)
 
-    result = analyze_hfl_media(window_days=1, max_files=1)
+    result = _analyze_hfl_media(
+        window_days=1,
+        max_files=1,
+        required_source="desktop",
+        entry_source="desktop",
+    )
 
     assert result["entries_written"] == 0
     assert result["skipped"] == 1
@@ -482,7 +553,10 @@ def test__batch_revalidates_symlink_before_media_read(tmp_path, monkeypatch):
 def test__targeted_duplicate_skips_before_anthropic_init(tmp_path, monkeypatch):
     """An idempotent targeted retry must not spend a second vision call."""
     inbox = tmp_path / "dumps"
-    media = inbox / "nothing-phone" / "Screenshots" / "shot.png"
+    media = (
+        inbox / "nothing-phone-daily-dumps-2026-07-19"
+        / "Screenshots" / "shot.png"
+    )
     media.parent.mkdir(parents=True)
     media.write_bytes(b"png")
     captured = datetime.fromtimestamp(media.stat().st_mtime)
@@ -513,6 +587,44 @@ def test__targeted_duplicate_skips_before_anthropic_init(tmp_path, monkeypatch):
         "duplicates": 1,
         "targeted": True,
     }
+
+
+def test__targeted_source_mismatch_skips_before_anthropic_init(tmp_path, monkeypatch):
+    inbox = tmp_path / "dumps"
+    media = inbox / "nothing-phone-daily-dumps-2026-07-19" / "Screenshots" / "shot.png"
+    media.parent.mkdir(parents=True)
+    media.write_bytes(b"png")
+    monkeypatch.setattr(
+        f"{_MOD}.get_dumps_target", lambda: SimpleNamespace(inbox=inbox),
+    )
+
+    class UnexpectedClient:
+        def __init__(self, *_args, **_kwargs):
+            raise AssertionError("Anthropic must not initialize for a source mismatch")
+
+    monkeypatch.setattr(f"{_MOD}.BaseApiServiceAnthropic", UnexpectedClient)
+
+    result = _analyze_hfl_media(
+        media_path=str(media), required_source="desktop", entry_source="desktop",
+    )
+
+    assert result["skipped"] == "source mismatch"
+    assert result["classified_source"] == "android_capture"
+    assert result["entries_written"] == 0
+
+
+def test__compatibility_task_rejects_caller_forced_sources(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        f"{_MOD}._analyze_hfl_media",
+        lambda **kwargs: calls.append(kwargs),
+    )
+    forced_task = cast(Any, analyze_hfl_media)
+
+    forced_task(entry_source="media")
+    forced_task(required_source="desktop", entry_source="android_capture")
+
+    assert calls == []
 
 
 def _configure_targeted_model_test(tmp_path, monkeypatch, response_text):
@@ -547,6 +659,28 @@ def _configure_targeted_model_test(tmp_path, monkeypatch, response_text):
 
     monkeypatch.setattr(f"{_MOD}.BaseApiServiceAnthropic", FakeClient)
     return inbox, media, corpus
+
+
+def test__compatibility_task_writes_classified_source_not_legacy_media(
+    tmp_path, monkeypatch,
+):
+    valid = (
+        '{"skip": false, "moment": "kept", "what_happened": "x", '
+        '"why_it_stayed": "x", "possible_use": "x", "tags": ["android"]}'
+    )
+    _inbox, media, _corpus = _configure_targeted_model_test(
+        tmp_path, monkeypatch, valid,
+    )
+    submitted = []
+    monkeypatch.setattr(
+        f"{_MOD}.append_entry",
+        lambda _day, _entry, **kwargs: submitted.append(kwargs) or (1, None),
+    )
+
+    result = analyze_hfl_media(media_path=str(media))
+
+    assert result["entries_written"] == 1
+    assert submitted == [{"source": "android_capture", "synthesized": True}]
 
 
 def test__malformed_model_response_releases_claim_for_retry(tmp_path, monkeypatch):

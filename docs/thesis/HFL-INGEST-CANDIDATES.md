@@ -33,7 +33,7 @@ count — "ship + first month of operating it."
 | Task | Source |
 |---|---|
 | `capture_hfl_entry` | Manual capture |
-| `analyze_hfl_media` | Vision pass over dumps inbox (images/videos) |
+| `analyze_desktop_capture` / `analyze_android_capture` | Source-specific vision passes over the dumps inbox (images/videos) |
 | `ingest_git_activity` | Daily git/GitHub commits |
 | `ingest_chatgpt_activity` | ChatGPT conversation distillation |
 | `ingest_ai_activity` | OpenAI Platform threads (disabled, superseded by chatgpt) |
@@ -112,7 +112,7 @@ count — "ship + first month of operating it."
 | Candidate | What it captures | Reuses | Friction | Filtering principle |
 |---|---|---|---|---|
 | `ingest_ynab_activity` | Daily YNAB transaction digest distilled to story-worthy events | `apps/ynab/` | ~3 h | Skip recurring routine spend (same merchant + similar amount in last 30 days); keep first-of-kind, large outliers, new categories |
-| `ingest_receipts_activity` | Vision pass over receipt photos in dumps inbox → merchant, total, items, link to YNAB tx by date+amount | `analyze_hfl_media` pattern + `apps/ynab/` | ~5 h | Filename or path matches `receipt*`, `*tax*`, `*invoice*`, or Haiku vision identifies "looks like a receipt" |
+| `ingest_receipts_activity` | Vision pass over receipt photos in dumps inbox → merchant, total, items, link to YNAB tx by date+amount | shared capture-analyzer pattern + `apps/ynab/` | ~5 h | Filename or path matches `receipt*`, `*tax*`, `*invoice*`, or Haiku vision identifies "looks like a receipt" |
 | `ingest_sold_items_activity` | TCG MP sales: cards sold today, gross/net, P&L vs cost basis | `apps/tcg_mp/`, `apps/echo_mtg/` (cost basis) | ~3 h | One entry per day; if zero sales, no LLM call, no entry |
 | `ingest_large_purchase` | Purchases above a configurable threshold get their own entry separate from the daily digest | `apps/ynab/` | ~2 h | Threshold default: $100 (configurable per category — $500 for "Travel", $50 for "Books") |
 
@@ -168,7 +168,7 @@ After those, the **highest-leverage cross-source one** is `ingest_purchase_conte
 |---|---|
 | WhatsApp | E2E encryption makes export gymnastics required; breaks every WhatsApp update. |
 | Apple Screen Time | No clean API; would require plist scraping that breaks on macOS updates. |
-| Camera roll OCR for whiteboards | `analyze_hfl_media` already does vision; this would be a text-specialized variant. Marginal gain over what exists. |
+| Camera roll OCR for whiteboards | The source-specific capture tasks already do vision; this would be a text-specialized variant. Marginal gain over what exists. |
 | Tesla / car telematics | Vendor-specific APIs that change without notice; only valuable for owners. |
 | Phone call logs | Needs deeper Android / iOS access; legally fraught in some jurisdictions. |
 

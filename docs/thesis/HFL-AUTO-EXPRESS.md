@@ -31,7 +31,8 @@ The HFL write path is a single, clean funnel:
   tags, references`) → `es_store.index_hfl_entry(entry, source=, doc_id=)`,
   which upserts into `harqis-hfl-entries` with a deterministic id. Best-effort,
   never raises.
-- The existing ingest tasks (`ingest_git`, `ingest_plaud`, `analyze_hfl_media`,
+- The existing ingest tasks (`ingest_git`, `ingest_plaud`, `analyze_desktop_capture`,
+  `analyze_android_capture`,
   …) are all **PULL + self-express**: each runs on its own schedule, pulls from
   a source, Haiku-distills *one entry per day (or per item)*, and calls
   `index_hfl_entry` itself.

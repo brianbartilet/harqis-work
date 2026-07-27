@@ -1,4 +1,7 @@
+from datetime import datetime
+
 from scripts.agents.hfl import reconcile_elasticsearch as reconcile
+from workflows.hfl.dto import HflEntry
 
 
 def _doc(moment: str) -> dict:
@@ -40,6 +43,79 @@ def test_compare_projection_distinguishes_missing_stale_and_unchanged():
     assert result.missing_ids == ("hfl-missing",)
     assert result.stale_ids == ("hfl-stale",)
     assert result.unchanged == 1
+
+
+def test_scan_corpus_preserves_precise_time_and_explicit_synthesis(tmp_path):
+    entry = HflEntry(
+        when=datetime(2026, 7, 26, 19, 59, 33, 870000),
+        moment="Desktop capture",
+        source="desktop",
+        machine="harqis-server",
+        entry_id="hfl-precise",
+        synthesized=True,
+    )
+    (tmp_path / "2026-07-26.md").write_text(entry.to_markdown(), encoding="utf-8")
+
+    scan = reconcile.scan_corpus(tmp_path)
+    document = scan.documents["hfl-precise"]
+
+    assert document["when"] == "2026-07-26T19:59:33.870000"
+    assert document["synthesized"] is True
+
+
+def test_legacy_markdown_reconciliation_keeps_richer_existing_metadata(tmp_path):
+    corpus = tmp_path / "hfl"
+    corpus.mkdir()
+    (corpus / "2026-07-26.md").write_text(
+        HflEntry(
+            when=datetime(2026, 7, 26, 19, 59),
+            moment="Legacy minute entry",
+            source="desktop",
+            machine="windows-work-all",
+            entry_id="hfl-legacy",
+        ).to_markdown(),
+        encoding="utf-8",
+    )
+    expected = reconcile.scan_corpus(corpus).documents
+    existing = {
+        "hfl-legacy": {
+            **expected["hfl-legacy"],
+            "when": "2026-07-26T19:59:33.870000",
+            "synthesized": True,
+        }
+    }
+
+    merged = reconcile.preserve_existing_legacy_metadata(expected, existing)
+
+    assert merged["hfl-legacy"]["when"] == "2026-07-26T19:59:33.870000"
+    assert merged["hfl-legacy"]["synthesized"] is True
+    assert all(not key.startswith("_canonical_") for key in merged["hfl-legacy"])
+
+
+def test_legacy_reconciliation_rejects_malformed_or_conflicting_live_time(tmp_path):
+    entry = HflEntry(
+        when=datetime(2026, 7, 26, 19, 59),
+        moment="Legacy minute entry",
+        source="desktop",
+        machine="windows-work-all",
+        entry_id="hfl-legacy",
+    )
+    (tmp_path / "2026-07-26.md").write_text(entry.to_markdown(), encoding="utf-8")
+    expected = reconcile.scan_corpus(tmp_path).documents
+
+    for value in ("not-a-date", "2026-07-26T20:00:33.870000"):
+        existing = {"hfl-legacy": {**expected["hfl-legacy"], "when": value}}
+        merged = reconcile.preserve_existing_legacy_metadata(expected, existing)
+        assert merged["hfl-legacy"]["when"] == "2026-07-26T19:59:00"
+
+
+def test_scan_corpus_skips_hidden_macos_sidecar_files(tmp_path):
+    (tmp_path / "._2026-07-26.md").write_bytes(b"\x00\xffnot markdown")
+
+    scan = reconcile.scan_corpus(tmp_path)
+
+    assert scan.files == 0
+    assert scan.documents == {}
 
 
 def test_bulk_upsert_uses_deterministic_ids():

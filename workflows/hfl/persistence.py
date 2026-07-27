@@ -114,6 +114,7 @@ class EntryEnvelope:
             source=str(raw.get("source") or ""),
             machine=str(raw.get("machine") or ""),
             entry_id=str(raw.get("entry_id") or ""),
+            synthesized=bool(payload.get("synthesized")),
         )
         if not entry.moment or not entry.source or not entry.machine or not entry.entry_id:
             raise ValueError("entry payload is missing required canonical metadata")
@@ -146,6 +147,7 @@ def make_envelope(
         source=source_name,
         machine=origin,
         entry_id=entry_id,
+        synthesized=bool(synthesized),
     )
     return EntryEnvelope(enriched, bool(synthesized), es_doc_id)
 

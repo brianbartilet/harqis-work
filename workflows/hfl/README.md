@@ -59,7 +59,8 @@ this scaffold closes.
 | `ingest_android_media_activity` | Reads Android screen-time/activity export logs, reports only application categories and session counts, and writes one privacy-bounded entry. Raw titles/content are not sent to the model or corpus. A missing log directory is a clean no-op. | `file:hfl_corpus+es:hfl-entries` | Daily 23:15 local on the `hfl` queue; inactive until `HFL_ANDROID_SCREEN_LOG_DIR` is configured. |
 | `ingest_agent_session_event` / `ingest_agent_session_events` | Captures one sanitized HFL audit entry per user-prompt/assistant-outcome pair from Codex, Claude Code, Hermes, or OpenClaw. The artifact retains the redacted original plus typo-corrected prompt, request/work summaries, status, identifiers, and artifact references. Stable event IDs deduplicate hook retries. | `file:hfl_corpus+es:hfl-entries` | Hooks enqueue immediately; a 23:35 broadcast forwards retained local events from every participating worker. |
 | `rollup_agent_sessions` | Distils the processed prompt audit events in the 24-hour window ending at 23:40 into one cross-surface HFL rollup, so prompts after one cutoff appear in the next rollup instead of being lost. Empty windows are a clean no-op. | `file:hfl_corpus+es:hfl-entries` | Daily 23:40 local. |
-| `analyze_hfl_media` | **Daily media vision pass.** Walks the dumps inbox for recent images/videos (pulled from phones + machines by `workflows/dumps/`), reserves 10 of the 40 analysis slots for Android-origin media, then fills unused capacity by global recency. Each item is sent to Haiku vision for a story moment and **geo-tagged** — EXIF GPS, else the nearest OwnTracks fix by capture time → Nominatim place. One entry per story-worthy item; the source dump file + an OSM pin are the `references`. Already-referenced media is skipped before the model call. Passing `media_path=<inbox file>` targets one artifact directly. | `file:hfl_corpus+es:hfl-entries` | Daily 22:00 local (active). |
+| `analyze_desktop_capture` | **Desktop capture vision pass.** Selects only exact HARQIS `sc-desktop-check_monitorN` filenames or timestamped native Windows screenshots in the canonical `Screenshots 1` dump folder under the approved workstation daily-dump sources, writes `Source: desktop`, and uses the shared secure media/vision/geolocation pipeline. Already-referenced media is skipped before the model call; `media_path=<inbox file>` targets one artifact. Near matches and unknown provenance remain unprocessed. | `file:hfl_corpus+es:hfl-entries` | Daily 22:00 local (active). |
+| `analyze_android_capture` | **Android durable-media vision pass.** Selects only the exact configured Android dump source plus canonical Camera/DCIM/Screenshots/Screenrecord folders, writes `Source: android_capture`, and cannot be starved by desktop volume. This is separate from privacy-reduced `android_media` attention logs. | `file:hfl_corpus+es:hfl-entries` | Daily 22:05 local (active). |
 | `collect_time_capsule` | **On-demand, time-ranged archive ingest.** Sweeps a directory (and subdirs) for files dated within a period, extracts text / docs / Haiku vision captions into a bounded manifest + digest. The COLLECT half of the `/time-capsule-synthesizer` skill (Claude synthesizes ONE rollup entry from the digest, then dual-writes it via `capture_hfl_entry`). Not scheduled. | `file:hfl_corpus+es:hfl-entries` (via the skill) | Adhoc — driven by `/time-capsule-synthesizer`. |
 
 Each carries the manifesto metadata block on the beat entry — see
@@ -92,12 +93,12 @@ one dated folder per day, never auto-deleted:
   Camera/…   Screenshots/…
 ```
 
-`analyze_hfl_media` (22:00) then *reads* (never moves/deletes) each selected
+`analyze_android_capture` (22:05) then *reads* (never moves/deletes) each selected
 new file, captioning it with Haiku vision and **geo-tagging** it — EXIF GPS first, else the
 nearest OwnTracks fix to its capture time → Nominatim place — writing one entry
-per story-worthy item with the file path + an OSM pin as `references`. Android
-media receives a reserved quota so desktop screenshot volume cannot starve the
-phone stream; unused phone slots flow back to the globally newest media. Android
+per story-worthy item with the file path + an OSM pin as `references` and
+`Source: android_capture`. Android has its own task and quota, so desktop
+screenshot volume cannot starve the phone stream. Android
 classification requires the exact configured `nothing-phone-daily-dumps-YYYY-MM-DD`
 source identity plus a canonical Camera/DCIM/Screenshots/Screenrecord folder;
 generic desktop folders and prefix-like source names are not treated as Android.
@@ -123,7 +124,8 @@ screenshot taken downtown comes out tagged with the place.
 | Time | Task | Result |
 | --- | --- | --- |
 | 00:05 | `pull_daily_dumps_from_remotes` | phone photos/screenshots → dumps inbox (retained) |
-| 22:00 | `analyze_hfl_media` | each story-worthy photo → geo-tagged entry |
+| 22:00 | `analyze_desktop_capture` | workstation captures → `Source: desktop` entries |
+| 22:05 | `analyze_android_capture` | phone photos/screenshots → `Source: android_capture` entries |
 | 23:00 | `ingest_browsing_activity` / `ingest_chatgpt_activity` | browsing + research → entries |
 | 23:05 | `ingest_location_activity` | day's movement → one timeline entry |
 | 23:10 | `ingest_spotify_activity` | day's plays → one soundtrack entry |
@@ -136,7 +138,7 @@ screenshot taken downtown comes out tagged with the place.
 location stream — §Activation); a `[dumps.pull_targets.<phone>]` block in
 `machines.local.toml` pointing at the phone's Termux SSHD over Tailscale (the
 media stream — see [`workflows/dumps/README.md`](../dumps/README.md)). Set the
-camera to **JPEG, not HEIC** — `analyze_hfl_media` only reads
+camera to **JPEG, not HEIC** — the shared capture analyzer only reads
 `jpg/jpeg/png/webp/gif` (+ `mp4/mov/mkv/webm`), and Pillow can't read HEIC EXIF
 without `pillow-heif`. (Termux's sshd must be alive at 00:05 — a `termux-wake-lock`
 plus the Termux:Boot addon keeps it up across sleeps/reboots.)
@@ -222,6 +224,7 @@ file. Multiple captures on the same day stack newest-first:
 Source:          browsing
 Machine:         windows-work-all
 Entry ID:        hfl-8a9f53e231a96a7c135d883b
+Synthesized:     true
 Moment:          Almost ignored a small bug in the feed decorator.
 What happened:   The ${VAR} folder appearing at repo root turned out to be
                  an unresolved env var leaking into Path().resolve().
@@ -239,7 +242,8 @@ round-trippable block. Retrieval splits files on `## ` headers, so the
 format must be preserved if entries are hand-edited.
 
 **Canonical metadata (optional).** New persisted entries include `Source`,
-`Machine`, and `Entry ID`. The parser remains backward compatible with legacy
+`Machine`, `Entry ID`, and `Synthesized`; timestamps retain seconds and
+fractional seconds when available. The parser remains backward compatible with legacy
 blocks and rendering an entry without these fields remains byte-identical to
 the previous format. `Entry ID` drives idempotent queue redelivery; `Machine`
 records where the signal was collected, not where it was persisted.
@@ -251,7 +255,7 @@ pre-DTO format. References are searchable via `retrieve` and, on the
 weekly run, `summarize_hfl_week` resolves them (bounded HTTP/file fetch,
 text-only, size/timeout caps) and injects the excerpts into the rollup
 prompt so the summary is grounded in the source — see
-`workflows/hfl/references.py`. `analyze_hfl_media` auto-sets this to the
+`workflows/hfl/references.py`. The desktop/Android capture tasks auto-set this to the
 source dump file path (the dumps→media→corpus provenance loop), and — when
 the media can be geo-located — also appends an OpenStreetMap pin for where it
 was captured.
@@ -262,7 +266,20 @@ paths remain supported. Existing corpus and Elasticsearch records can be
 cleaned with the dry-run-first
 `python scripts/agents/hfl/migrate_references.py [--apply]` migration.
 
-**Location-enriched media.** `analyze_hfl_media` resolves *where* each photo/
+Legacy generic media provenance can be previewed and migrated with
+`python scripts/agents/hfl/migrate_media_sources.py [--apply]`. It preserves
+entry IDs, backs up affected Markdown and full ES documents, updates ES-only
+history in place, restores timestamp/synthesis metadata for shared entries,
+and leaves unresolved provenance as `media`. On ExFAT, which lacks the normal
+hard-link and atomic-name-exchange guards, apply requires the explicit
+`--offline-exfat` flag after every HFL scheduler/worker has been stopped and
+quiescence verified; the fallback is never selected automatically.
+
+The legacy `analyze_hfl_media` Celery task remains registered but unscheduled for
+one compatibility release. It accepts no source override: it derives the durable
+source from exact path provenance and leaves unknown captures unprocessed.
+
+**Location-enriched media.** The shared capture analyzer resolves *where* each photo/
 video was taken and folds the place into the entry: it reads **EXIF GPS** first
 (the camera's own fix), and otherwise matches the capture time to the nearest
 **OwnTracks** fix (`ingest_location.nearest_fix`) — so screenshots and

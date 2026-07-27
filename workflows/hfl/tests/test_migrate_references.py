@@ -9,6 +9,7 @@ from scripts.agents.hfl.migrate_references import (
     migrate_markdown_text,
     run_migration,
     safe_report_id,
+    scan_markdown,
 )
 
 
@@ -56,6 +57,17 @@ def test_migrate_markdown_removes_http_and_preserves_other_bytes():
     assert "https://example.com/secure" in updated
     assert "/Users/harqis-one/GIT/notes/file.md" in updated
     assert "Moment:          HTTP only" in updated
+
+
+def test_scan_markdown_skips_hidden_appledouble_files(tmp_path):
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    (corpus / "2026-07-26.md").write_text(_markdown(), encoding="utf-8")
+    (corpus / "._2026-07-26.md").write_bytes(b"\x00\x05\x16\x07\xb0")
+
+    changes = scan_markdown(corpus)
+
+    assert [change.path.name for change in changes] == ["2026-07-26.md"]
 
 
 def test_migration_report_ids_cannot_inject_paths_or_terminal_controls():

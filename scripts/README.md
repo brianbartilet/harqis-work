@@ -53,6 +53,7 @@ up from `scripts/agents/<bucket>/`).
 | Path | Purpose |
 |---|---|
 | `archive_corpus.py` | Archives completed HFL corpus periods. |
+| `migrate_media_sources.py` | Dry-run-first `media` → `desktop` / `android_capture` migration across Markdown and Elasticsearch, preserving IDs and creating recovery artifacts. |
 | `migrate_references.py` | Dry-run-first removal of insecure HTTP references from HFL Markdown and Elasticsearch, with apply-mode backups and rollback. |
 | [`capture_session_event.py`](#scriptsagentshflcapture_session_eventpy) | Normalizes, redacts, spools, and best-effort enqueues Codex/Claude/Hermes/OpenClaw prompt-outcome audit events. |
 | `capture_session_hook.ps1` | Fail-open Windows launcher that forwards Codex lifecycle-hook stdin to the repository capture entry point without inline-shell quoting. |
@@ -144,6 +145,41 @@ Markdown and Elasticsearch. Apply mode creates a private backup first.
 python scripts/agents/hfl/migrate_references.py
 python scripts/agents/hfl/migrate_references.py --apply
 python scripts/agents/hfl/migrate_references.py --corpus /path/to/hfl
+```
+
+---
+
+### `scripts/agents/hfl/migrate_media_sources.py`
+
+Preview or apply provenance-based reclassification of legacy `Source: media`
+records. Classification accepts only canonical local references rooted at
+`/Volumes/harqis-data/dumps`; URLs, unrelated paths, and non-normal lexical paths
+with traversal components remain neutral. Apply mode
+requires one positional canonical `Source` field and one canonical metadata
+`Entry ID` field, preserves IDs, rejects symlinked files, duplicate IDs, and
+cross-store changed/unresolved conflicts, and requires Elasticsearch
+sequence/primary-term tokens for optimistic
+concurrency. It rejects nested legacy
+`media` entries, retains a no-follow corpus-directory descriptor, holds corpus locks,
+and revalidates every file immediately before descriptor-relative atomic exchange.
+A hard-link inode guard spans publication; rollback proceeds only while the migration
+still owns the published inode and exact bytes. Atomic replacement preserves file
+ownership, permissions, timestamps, ACLs, and extended attributes.
+Recovery directories are
+crash-durable from first-use parent creation and private (`0700` directories,
+`0600` files); they contain
+byte-exact Markdown and complete Elasticsearch documents with SHA-256 hashes.
+ES-only history is updated in place and ambiguous records remain untouched.
+Confirmed partial Elasticsearch writes and Markdown writes are rolled back
+automatically. If a bulk response becomes malformed, only successes parsed before
+the malformed item are confirmed; the unparsed remainder is unknown and requires
+recovery-manifest reconciliation. If transport failure makes ES state unknowable,
+recover from the timestamped backup rather than guessing.
+
+```bash
+python scripts/agents/hfl/migrate_media_sources.py
+python scripts/agents/hfl/migrate_media_sources.py --apply
+python scripts/agents/hfl/migrate_media_sources.py --corpus /path/to/hfl
 ```
 
 ---
@@ -529,7 +565,8 @@ Manual companion to the nightly `pull_daily_dumps_from_remotes` task (the dumps
 pull from `[dumps.pull_targets.*]` devices — typically Android over Termux SSHD).
 Use it to **back-fill** a date range or do a **full sweep** of every file. Same
 list→`ssh+tar`→extract path as the nightly job, so what lands in the inbox is
-indistinguishable from a nightly pull and flows straight into `analyze_hfl_media`
+indistinguishable from a nightly pull and flows into the source-specific
+`analyze_desktop_capture` / `analyze_android_capture` tasks
 and the memory MCP.
 
 > ⚠️ Run this **on harqis-server** (the dumps host). The inbox is a *local* path
