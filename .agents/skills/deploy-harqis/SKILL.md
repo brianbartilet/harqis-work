@@ -88,6 +88,11 @@ If `--down` was passed, jump to Step 8 (teardown).
 - `CELERY_BROKER_URL` must be set in `.env/apps.env` (CONFIG_SOURCE merged into launch.py — set in apps.env) and point to the host's broker (e.g. `amqp://guest:guest@<host-tailscale-ip>:5672/`).
 - Tailscale connectivity to the host (`tailscale ping <host>`) is recommended.
 
+**Python runtime (both roles):**
+- Normal deploys, targeted restarts, and `--register` synchronize the existing `.venv` with `requirements.txt`, then run `pip check`, before any service is stopped or started.
+- A dependency failure aborts the deploy and points to `logs/requirements-sync.log`; do not continue with stale packages.
+- `--status`, `--stop`, `--down`, `--unregister`, and `--docker-only` intentionally skip dependency synchronization. Use `--rebuild-venv` when the venv itself is missing or corrupt.
+
 If any check fails, print the missing item and the exact command to fix it (e.g. "Run `open -a Docker` then re-run `/deploy-harqis host`"). Stop without making changes.
 
 ---
@@ -359,6 +364,7 @@ python scripts/deploy.py --role host --down --unregister
 - [ ] Role validated (`host` or `node` only)
 - [ ] Queue list parsed cleanly (no spaces, comma-separated)
 - [ ] Prereqs checked before any service starts
+- [ ] Runtime requirements synchronized and `pip check` passed before Python services restart
 - [ ] Docker stack healthy before workers attach (host)
 - [ ] **Beat scheduler started on host *only*** (never on node — would duplicate every periodic task)
 - [ ] Worker `WORKFLOW_QUEUE` exported with the resolved queue list

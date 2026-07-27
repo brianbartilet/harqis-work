@@ -32,6 +32,72 @@ def test_rebuild_venv_is_a_lifecycle_flag():
         deploy.build_parser().parse_args(["--rebuild-venv", "--status"])
 
 
+def test_sync_runtime_requirements_installs_declared_packages_and_checks_venv(
+    tmp_path, monkeypatch
+):
+    deploy = load_deploy_module()
+    venv = tmp_path / ".venv"
+    python = venv / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.write_text("", encoding="utf-8")
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("segno>=1.6,<2\n", encoding="utf-8")
+    log_file = tmp_path / "logs" / "requirements-sync.log"
+    calls = []
+
+    monkeypatch.setattr(deploy, "IS_WIN", False)
+    monkeypatch.setattr(deploy, "VENV_DIR", venv)
+    monkeypatch.setattr(deploy, "REQUIREMENTS_FILE", requirements)
+    monkeypatch.setattr(deploy, "LOG_DIR", log_file.parent)
+    monkeypatch.setattr(
+        deploy,
+        "_run_venv_command",
+        lambda command, log, stage: calls.append((command, log, stage)),
+    )
+
+    deploy.sync_runtime_requirements()
+
+    assert calls == [
+        (
+            [str(python), "-m", "pip", "install", "-r", str(requirements)],
+            log_file,
+            "sync requirements",
+        ),
+        (
+            [str(python), "-m", "pip", "check"],
+            log_file,
+            "pip check",
+        ),
+    ]
+
+
+def test_targeted_restart_syncs_requirements_before_restarting(
+    tmp_path, monkeypatch
+):
+    deploy = load_deploy_module()
+    events = []
+
+    monkeypatch.setattr(deploy, "RUN_DIR", tmp_path / ".run")
+    monkeypatch.setattr(deploy, "LOG_DIR", tmp_path / "logs")
+    monkeypatch.setattr(deploy, "load_env_into_os", lambda: None)
+    monkeypatch.setattr(deploy, "sync_runtime_requirements", lambda: events.append("sync"))
+    monkeypatch.setattr(
+        deploy,
+        "load_machine_config",
+        lambda name: {"role": "host", "queues": ["default"]},
+    )
+    monkeypatch.setattr(
+        deploy,
+        "restart_service",
+        lambda service, machine, args: events.append(f"restart:{service}"),
+    )
+    monkeypatch.setattr(deploy.sys, "argv", ["deploy.py", "--restart", "frontend"])
+
+    deploy.main()
+
+    assert events == ["sync", "restart:frontend"]
+
+
 def test_running_from_target_venv_uses_resolved_prefix(tmp_path, monkeypatch):
     deploy = load_deploy_module()
     venv = tmp_path / ".venv"

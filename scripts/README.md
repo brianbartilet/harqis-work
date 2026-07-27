@@ -299,6 +299,14 @@ stray celery / launcher processes (matched by command-line needles
 runs — the kind that pile up extra console windows on Windows — are
 killed before fresh daemons start.
 
+Before any Python-service deploy, targeted restart, or auto-start registration,
+`deploy.py` synchronizes the existing `.venv` with `requirements.txt` and runs
+`pip check`. Installation output goes to `logs/requirements-sync.log`; a failed
+install aborts before services are stopped or restarted. Read-only and teardown
+operations (`--status`, `--stop`, `--down`, `--unregister`) plus `--docker-only`
+skip this preflight. Use `--rebuild-venv` when `.venv` itself is missing or needs
+transactional replacement.
+
 **All commands**
 
 ```bash

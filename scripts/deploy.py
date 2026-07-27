@@ -49,6 +49,9 @@ Android emulator (config-gated, per machine):
 
 Notes:
 - Docker compose is invoked only when --role host (workers don't run brokers).
+- Startup, restart, and registration actions synchronize `requirements.txt`
+  into the existing runtime venv and run `pip check` before touching services.
+  Read-only/teardown actions and `--docker-only` skip this dependency preflight.
 - Each launched daemon is tracked in <repo>/.run/<service>.pid and logs to
   <repo>/logs/<service>.log. Stale PID files (process gone) are auto-cleaned.
 - The actual per-service launch logic lives in scripts/launch.py.
@@ -1379,6 +1382,30 @@ def _install_venv_requirements(log_file: Path) -> None:
     )
 
 
+def sync_runtime_requirements() -> None:
+    """Synchronize the existing runtime venv with declared requirements."""
+    python = _venv_console_python()
+    if not python.exists():
+        raise RuntimeError(
+            f"runtime virtualenv Python does not exist: {python}; "
+            "run deploy.py --rebuild-venv"
+        )
+    if not REQUIREMENTS_FILE.exists():
+        raise RuntimeError(f"requirements file does not exist: {REQUIREMENTS_FILE}")
+
+    log_file = LOG_DIR / "requirements-sync.log"
+    print(f"[deps] Synchronizing {REQUIREMENTS_FILE.name}...")
+    _run_venv_command(
+        [str(python), "-m", "pip", "install", "-r", str(REQUIREMENTS_FILE)],
+        log_file,
+        "sync requirements",
+    )
+    _run_venv_command(
+        [str(python), "-m", "pip", "check"], log_file, "pip check"
+    )
+    print("[deps] Runtime requirements are synchronized.")
+
+
 def _verify_clean_venv(log_file: Path) -> None:
     config = VENV_DIR / "pyvenv.cfg"
     config_text = config.read_text(encoding="utf-8").lower()
@@ -1565,6 +1592,16 @@ def main() -> None:
         os.environ.update(machine_env_vars(machine))
         rebuild_virtualenv(machine, args)
         return
+
+    manages_python_runtime = not (
+        args.status
+        or args.stop
+        or args.down
+        or args.unregister
+        or args.docker_only
+    )
+    if manages_python_runtime:
+        sync_runtime_requirements()
 
     if args.status:
         _m = load_machine_config(args.machine)
