@@ -1,0 +1,28 @@
+{% extends "share_base.html" %}
+{% block title %}Share generated · HARQIS{% endblock %}
+{% block content %}
+<section class="card">
+  <p class="eyebrow">One-time handoff</p>
+  <h1>Share generated</h1>
+  <p class="muted">{{ grant.name }} · {{ grant.snapshot.entries|length }} entries · expires {{ grant.expires_at }}</p>
+  <div style="display:grid;grid-template-columns:minmax(160px,220px) 1fr;gap:24px;align-items:start;margin-top:22px">
+    <img src="{{ qr }}" alt="QR code for the generated share" style="width:100%;background:white;border-radius:12px;padding:8px">
+    <div>
+      {% if pin %}
+      <p class="muted" style="margin-bottom:4px">PIN — displayed only on this response</p>
+      <p id="generated-pin" style="font:700 1.8rem ui-monospace,monospace;letter-spacing:.14em;color:#fef08a;margin:0 0 20px">{{ pin }}</p>
+      {% endif %}
+      <label for="share-link">Pasteable capability link</label>
+      <input id="share-link" type="text" readonly value="{{ link }}">
+      <p class="notice" style="margin-top:16px">Send the QR/link and PIN through separate channels. If either is lost, revoke this share and generate another.</p>
+    </div>
+  </div>
+</section>
+<a class="button button-secondary" href="/sharing">Return to Sharing</a>
+<style>
+  @media (max-width: 620px) {
+    .card > div { grid-template-columns: 1fr !important; }
+    .card img { max-width: 220px; margin: 0 auto; }
+  }
+</style>
+{% endblock %}

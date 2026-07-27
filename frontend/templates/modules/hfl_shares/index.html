@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Sharing · HARQIS{% endblock %}
+{% block head %}
+<style>
+  .share-grid { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(270px,.8fr); gap:1.25rem; }
+  .panel { border:1px solid #1e293b; background:#0f172a; border-radius:1rem; padding:1.25rem; }
+  .field { margin-bottom:1rem; }
+  .field label { display:block; color:#cbd5e1; font-size:.78rem; font-weight:650; margin-bottom:.4rem; }
+  .control { width:100%; border:1px solid #334155; border-radius:.55rem; background:#020617; color:#f8fafc; padding:.65rem .75rem; }
+  textarea.control { min-height:5.5rem; resize:vertical; }
+  .source-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:.45rem; }
+  .check { display:flex; align-items:flex-start; gap:.5rem; color:#cbd5e1; font-size:.82rem; padding:.55rem; background:#020617; border:1px solid #1e293b; border-radius:.5rem; }
+  .check input { margin-top:.18rem; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:.8rem; }
+  .actions { display:flex; flex-wrap:wrap; gap:.55rem; }
+  .btn { border-radius:.55rem; padding:.58rem .85rem; font-size:.78rem; font-weight:700; }
+  .btn-main { background:#2563eb; color:white; }
+  .btn-soft { background:#1e293b; color:#cbd5e1; }
+  .btn-danger { background:#450a0a; color:#fca5a5; }
+  .stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:.55rem; }
+  .stat { background:#020617; border:1px solid #1e293b; border-radius:.6rem; padding:.7rem; }
+  .stat strong { display:block; color:#f8fafc; font-size:1.05rem; }
+  .stat span { color:#64748b; font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; }
+  .item { border-top:1px solid #1e293b; padding:.8rem 0; }
+  .item:first-child { border-top:0; }
+  .pill { display:inline-block; border-radius:999px; background:#172554; color:#bfdbfe; font-size:.68rem; padding:.18rem .5rem; }
+  .message { border-radius:.65rem; padding:.75rem .9rem; margin-bottom:1rem; background:#082f49; color:#bae6fd; }
+  .message.error { background:#4c0519; color:#fecdd3; }
+  .wrap { overflow-wrap:anywhere; word-break:break-word; }
+  details summary { cursor:pointer; color:#93c5fd; font-size:.8rem; }
+  @media(max-width:900px) { .share-grid { grid-template-columns:1fr; } }
+  @media(max-width:600px) { .two,.stat-grid { grid-template-columns:1fr 1fr; } .panel { padding:.9rem; } }
+</style>
+{% endblock %}
+{% block content %}
+{% set cfg = configuration %}
+<main class="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+  <div class="mb-6">
+    <p class="text-xs font-bold uppercase tracking-widest text-sky-400">Activity Corpus</p>
+    <h1 class="mt-2 text-3xl font-semibold text-white">Sharing</h1>
+    <p class="mt-2 max-w-3xl text-sm text-slate-400">Create a temporary, read-only portal from a reviewed snapshot. Guests never enter the HARQIS network or see owner navigation.</p>
+  </div>
+
+  {% if error %}<div class="message error">{{ error }}</div>{% endif %}
+  <div class="share-grid">
+    <section class="panel">
+      <div class="mb-5 flex items-start justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-semibold text-white">{{ "Edit recipe" if cfg and cfg.id else "New sharing recipe" }}</h2>
+          <p class="mt-1 text-xs text-slate-500">Recipes remain live filters. Generation always refreshes the corpus and freezes a new snapshot.</p>
+        </div>
+        {% if cfg and cfg.id %}<a class="text-xs text-sky-400" href="/sharing">Clear</a>{% endif %}
+      </div>
+      <form method="post">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="configuration_id" value="{{ cfg.id if cfg else '' }}">
+        <div class="two">
+          <div class="field"><label for="name">Configuration name</label><input class="control" id="name" name="name" required value="{{ cfg.name if cfg else '' }}" placeholder="Work context"></div>
+          <div class="field"><label for="auth-mode">Guest verification</label>
+            <select class="control" id="auth-mode" name="auth_mode">
+              {% set mode = cfg.auth_mode if cfg else 'pin' %}
+              <option value="pin" {% if mode == 'pin' %}selected{% endif %}>QR + generated PIN</option>
+              <option value="email_otp" {% if mode == 'email_otp' %}selected{% endif %}>Cloudflare email OTP</option>
+              <option value="manual" {% if mode == 'manual' %}selected{% endif %}>Owner approval</option>
+              <option value="qr" {% if mode == 'qr' %}selected{% endif %}>QR possession only</option>
+            </select>
+          </div>
+        </div>
+        <div class="field"><label for="description">Description</label><input class="control" id="description" name="description" value="{{ cfg.description if cfg else '' }}" placeholder="What this recipe is intended to share"></div>
+
+        <div class="field">
+          <label>Sources — primary authorization boundary</label>
+          <div class="source-grid">
+            {% for source in available_sources %}
+            <label class="check"><input type="checkbox" name="sources" value="{{ source }}" {% if cfg and source in cfg.sources %}checked{% endif %}><span>{{ source }}</span></label>
+            {% else %}<p class="text-xs text-slate-500">No corpus sources are available.</p>{% endfor %}
+          </div>
+        </div>
+        <div class="two">
+          <div class="field"><label for="tags">Tags (comma-separated; all must match)</label><input class="control" id="tags" name="tags" value="{{ cfg.tags|join(', ') if cfg else '' }}" list="known-tags" placeholder="work, project-x"><datalist id="known-tags">{% for tag in available_tags %}<option value="{{ tag }}">{% endfor %}</datalist></div>
+          <div class="field"><label for="topic">Topic phrase (optional)</label><input class="control" id="topic" name="topic" value="{{ cfg.topic if cfg else '' }}" placeholder="Japan trip"></div>
+        </div>
+        <div class="two">
+          <div class="field"><label for="date-from">From date</label><input class="control" id="date-from" type="date" name="date_from" value="{{ cfg.date_from if cfg else '' }}"></div>
+          <div class="field"><label for="date-to">To date</label><input class="control" id="date-to" type="date" name="date_to" value="{{ cfg.date_to if cfg else '' }}"></div>
+        </div>
+        <div class="field"><label for="entry-ids">Specific entry IDs (optional, comma-separated)</label><textarea class="control" id="entry-ids" name="selected_entry_ids" placeholder="hfl-...">{{ cfg.selected_entry_ids|join(', ') if cfg else '' }}</textarea></div>
+        <div class="field"><label for="prompts">Saved test prompts (one per line)</label><textarea class="control" id="prompts" name="test_prompts" placeholder="Summarize the current project status">{{ cfg.test_prompts|join('\n') if cfg else '' }}</textarea></div>
+
+        <details class="mb-4" open>
+          <summary>Access, expiry, and reference controls</summary>
+          <div class="two mt-3">
+            <div class="field"><label for="email">Allowed email (email OTP mode)</label><input class="control" id="email" type="email" name="allowed_email" value="{{ cfg.allowed_email if cfg else '' }}"></div>
+            <div class="field"><label for="ttl">Duration in minutes (5–10080)</label><input class="control" id="ttl" type="number" min="5" max="10080" name="ttl_minutes" value="{{ (cfg.ttl_seconds // 60) if cfg else (defaults.hfl_share_default_ttl_seconds // 60) }}"></div>
+            <div class="field"><label for="devices">Device/session limit (1–10)</label><input class="control" id="devices" type="number" min="1" max="10" name="device_limit" value="{{ cfg.device_limit if cfg else defaults.hfl_share_default_device_limit }}"></div>
+          </div>
+          <label class="check mb-2"><input type="checkbox" name="single_use" {% if not cfg or cfg.single_use %}checked{% endif %}><span>Single-use redemption (recommended)</span></label>
+          <label class="check"><input type="checkbox" name="references_enabled" {% if cfg and cfg.references_enabled %}checked{% endif %}><span>Allow individually selected references. Canonical paths are never shown to guests.</span></label>
+        </details>
+
+        {% if preview %}
+        <section class="mb-5 rounded-xl border border-slate-700 bg-slate-950 p-4">
+          <div class="stat-grid">
+            <div class="stat"><strong>{{ preview.entries|length }}</strong><span>Entries</span></div>
+            <div class="stat"><strong>{{ preview.source_counts|length }}</strong><span>Sources</span></div>
+            <div class="stat"><strong>{{ preview.estimated_chars }}</strong><span>Context chars</span></div>
+            <div class="stat"><strong>{{ preview.available_references }}</strong><span>References</span></div>
+          </div>
+          <p class="mt-3 text-xs text-slate-500">Date range: {{ preview.earliest or "unknown" }} → {{ preview.latest or "unknown" }} · generated {{ preview.created_at }}</p>
+          {% for warning in preview.warnings %}<p class="message mt-3 mb-0">{{ warning }}</p>{% endfor %}
+          <div class="mt-4 max-h-96 overflow-y-auto pr-2">
+            {% for entry in preview.entries[:250] %}
+            <div class="item">
+              <div class="flex items-start justify-between gap-3"><strong class="wrap text-sm text-white">[{{ entry.citation }}] {{ entry.moment or entry.header }}</strong><span class="pill">{{ entry.source }}</span></div>
+              <p class="mt-1 text-xs text-slate-400">{{ entry.what_happened }}</p>
+              {% if entry.references %}
+              <div class="mt-2">
+                {% for reference in entry.references %}
+                <label class="check mb-1"><input type="checkbox" name="enabled_reference_ids" value="{{ reference.id }}" {% if reference.id in preview.enabled_reference_ids %}checked{% endif %}><span>Enable {{ reference.label }} ({{ reference.kind }})</span></label>
+                {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+            {% endfor %}
+            {% if preview.entries|length > 250 %}<p class="mt-3 text-xs text-amber-300">Preview list truncated to 250 entries. Narrow the scope or review the total counts before generation.</p>{% endif %}
+          </div>
+          <div class="field mt-4"><label for="question">Test this exact preview with the owner-only agent</label><input class="control" id="question" name="question" value="{{ preview_question }}" placeholder="What are the main open items?"></div>
+          {% if suggested_prompts %}<p class="text-xs text-slate-500">Suggestions: {{ suggested_prompts|join(' · ') }}</p>{% endif %}
+          {% if preview_answer %}<div class="mt-3 whitespace-pre-wrap rounded-lg bg-slate-900 p-3 text-sm text-slate-200">{{ preview_answer }}</div>{% endif %}
+        </section>
+        {% endif %}
+
+        <div class="actions">
+          <button class="btn btn-soft" formaction="/sharing/configurations">Save recipe</button>
+          <button class="btn btn-soft" formaction="/sharing/preview">Refresh preview</button>
+          {% if preview %}<button class="btn btn-soft" formaction="/sharing/preview/chat">Test agent</button>{% endif %}
+          <button class="btn btn-main" formaction="/sharing/generate">Generate snapshot + QR</button>
+        </div>
+      </form>
+    </section>
+
+    <aside class="space-y-5">
+      <section class="panel">
+        <h2 class="text-base font-semibold text-white">Saved recipes</h2>
+        {% for item in configurations %}
+        <div class="item">
+          <a class="wrap text-sm font-semibold text-sky-300" href="/sharing?configuration_id={{ item.id }}">{{ item.name }}</a>
+          <p class="mt-1 text-xs text-slate-500">{{ item.sources|join(', ') }} · {{ item.ttl_seconds // 60 }} min</p>
+          <div class="actions mt-2">
+            <a class="text-xs text-slate-400" href="/sharing?configuration_id={{ item.id }}&duplicate=true">Duplicate</a>
+            {% if not cfg or cfg.id != item.id %}
+            <form method="post" action="/sharing/configurations/{{ item.id }}/delete"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="text-xs text-red-400" type="submit">Delete</button></form>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}<p class="mt-2 text-xs text-slate-500">No saved recipes yet.</p>{% endfor %}
+      </section>
+
+      {% if pending_requests %}
+      <section class="panel">
+        <h2 class="text-base font-semibold text-white">Approval requests</h2>
+        {% for item in pending_requests %}
+        <div class="item"><p class="text-xs text-slate-300">Share {{ item.share_id[:8] }} requested access.</p>
+          <form class="mt-2" method="post" action="/sharing/requests/{{ item.id }}/approve"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-main">Approve once</button></form>
+        </div>
+        {% endfor %}
+      </section>
+      {% endif %}
+
+      <section class="panel">
+        <h2 class="text-base font-semibold text-white">Generated shares</h2>
+        {% for share in shares %}
+        <div class="item">
+          <div class="flex items-start justify-between gap-2"><strong class="wrap text-sm text-slate-200">{{ share.name }}</strong><span class="pill">{{ "expired" if share.expired else share.status }}</span></div>
+          <p class="mt-1 text-xs text-slate-500">{{ share.snapshot.entries|length }} entries · expires {{ share.expires_at }}</p>
+          {% if share.available %}
+          <form class="mt-2" method="post" action="/sharing/shares/{{ share.id }}/revoke"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-danger">Revoke now</button></form>
+          {% endif %}
+        </div>
+        {% else %}<p class="mt-2 text-xs text-slate-500">No shares generated yet.</p>{% endfor %}
+      </section>
+    </aside>
+  </div>
+</main>
+{% endblock %}

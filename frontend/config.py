@@ -45,6 +45,23 @@ class Settings(BaseSettings):
     # disk. The token is shared with that API and must remain in apps.env.
     hfl_corpus_api_url: str = ""
     hfl_corpus_api_token: str = ""
+    # Owner-created, expiring Activity Corpus share portal.
+    hfl_share_public_url: str = ""
+    hfl_share_secret_key: str = ""
+    hfl_share_store_path: str = str(
+        _REPO_ROOT / ".harqis-data" / "hfl-shares.sqlite3"
+    )
+    hfl_share_default_ttl_seconds: int = 3600
+    hfl_share_default_device_limit: int = 1
+    hfl_share_pin_max_attempts: int = 5
+    hfl_share_model: str = "claude-haiku-4-5-20251001"
+    hfl_share_max_context_chars: int = 60_000
+    hfl_share_max_snapshot_entries: int = 1_000
+    hfl_share_max_snapshot_chars: int = 5_000_000
+    hfl_share_chat_limit_per_hour: int = 30
+    # Trust Cloudflare Access identity headers only when the origin is locked
+    # down so clients cannot reach it without the authenticated proxy.
+    hfl_share_trust_proxy_identity: bool = False
 
     model_config = SettingsConfigDict(
         env_file=[str(_APPS_ENV), str(_LOCAL_ENV)],

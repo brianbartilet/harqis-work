@@ -50,6 +50,13 @@ MODULES: tuple[ModuleDefinition, ...] = (
         description="The searchable HARQIS activity corpus, based on Homework for Life.",
         detail="Browse captured moments, time capsules, logs, tags, and the source artifacts referenced by each entry.",
     ),
+    ModuleDefinition(
+        key="sharing",
+        label="Sharing",
+        route="/sharing",
+        description="Create temporary, topic-scoped Activity Corpus portals.",
+        detail="Save source-first scope recipes, test their context, and issue expiring QR and PIN access.",
+    ),
 )
 
 

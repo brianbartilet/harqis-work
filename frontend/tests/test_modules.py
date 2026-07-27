@@ -3,7 +3,12 @@ from modules.registry import MODULES, module_by_key
 
 def test_module_registry_has_fixed_primary_navigation():
     assert [module.key for module in MODULES] == [
-        "home", "manifesto", "workflows", "applications", "hfl_corpus"
+        "home",
+        "manifesto",
+        "workflows",
+        "applications",
+        "hfl_corpus",
+        "sharing",
     ]
     manifesto = module_by_key("manifesto")
     assert manifesto is not None
