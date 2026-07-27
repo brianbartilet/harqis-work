@@ -4,7 +4,7 @@
 <section class="card">
   <p class="eyebrow">One-time handoff</p>
   <h1>Share generated</h1>
-  <p class="muted">{{ grant.name }} · {{ grant.snapshot.entries|length }} entries · expires {{ grant.expires_at }}</p>
+  <p class="muted">{{ grant.name }} · {{ grant.snapshot.entries|length }} entries · expires {{ expires_at_display }}</p>
   <div style="display:grid;grid-template-columns:minmax(160px,220px) 1fr;gap:24px;align-items:start;margin-top:22px">
     <img src="{{ qr }}" alt="QR code for the generated share" style="width:100%;background:white;border-radius:12px;padding:8px">
     <div>
@@ -18,7 +18,7 @@
     </div>
   </div>
 </section>
-<a class="button button-secondary" href="/sharing">Return to Sharing</a>
+<a class="button button-secondary" href="/sharing">Return to Share Corpus</a>
 <style>
   @media (max-width: 620px) {
     .card > div { grid-template-columns: 1fr !important; }

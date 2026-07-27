@@ -23,6 +23,20 @@ MODULES: tuple[ModuleDefinition, ...] = (
         detail="Browse the platform's automation, integration, knowledge, and operating-principle modules.",
     ),
     ModuleDefinition(
+        key="hfl_corpus",
+        label="Activity Corpus",
+        route="/hfl-corpus",
+        description="The searchable HARQIS activity corpus, based on Homework for Life.",
+        detail="Browse captured moments, time capsules, logs, tags, and the source artifacts referenced by each entry.",
+    ),
+    ModuleDefinition(
+        key="sharing",
+        label="Share Corpus",
+        route="/sharing",
+        description="Recipes stay live while every generated snapshot freezes a fresh view.",
+        detail="Shape Activity Corpus sources, tags, and filters into temporary portals with expiring guest access.",
+    ),
+    ModuleDefinition(
         key="manifesto",
         label="Manifesto",
         route="/manifesto",
@@ -42,20 +56,6 @@ MODULES: tuple[ModuleDefinition, ...] = (
         route="/applications",
         description="App integrations connected to HARQIS Work.",
         detail="Browse integration documentation and run controlled pytest checks using this host's active configuration.",
-    ),
-    ModuleDefinition(
-        key="hfl_corpus",
-        label="Activity Corpus",
-        route="/hfl-corpus",
-        description="The searchable HARQIS activity corpus, based on Homework for Life.",
-        detail="Browse captured moments, time capsules, logs, tags, and the source artifacts referenced by each entry.",
-    ),
-    ModuleDefinition(
-        key="sharing",
-        label="Social",
-        route="/sharing",
-        description="Recipes stay live while every generated snapshot freezes a fresh view.",
-        detail="Shape Activity Corpus sources, tags, and filters into temporary portals with expiring guest access.",
     ),
 )
 

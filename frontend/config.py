@@ -56,7 +56,6 @@ class Settings(BaseSettings):
     hfl_share_pin_max_attempts: int = 5
     hfl_share_model: str = "claude-haiku-4-5-20251001"
     hfl_share_max_context_chars: int = 60_000
-    hfl_share_max_snapshot_entries: int = 1_000
     hfl_share_max_snapshot_chars: int = 5_000_000
     hfl_share_chat_limit_per_hour: int = 30
     # Trust Cloudflare Access identity headers only when the origin is locked

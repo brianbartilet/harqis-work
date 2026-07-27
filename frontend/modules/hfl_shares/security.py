@@ -106,6 +106,13 @@ def clear_guest_cookie(response: Response) -> None:
 
 
 def current_grant(request: Request, store: ShareStore) -> ShareGrant | None:
+    session = current_session(request, store)
+    return session[0] if session else None
+
+
+def current_session(
+    request: Request, store: ShareStore
+) -> tuple[ShareGrant, str] | None:
     token = request.cookies.get(GUEST_COOKIE, "")
     if not token:
         return None
@@ -117,7 +124,8 @@ def current_grant(request: Request, store: ShareStore) -> ShareGrant | None:
         secret = str(payload.get("secret") or "")
     except (BadSignature, SignatureExpired, TypeError):
         return None
-    return store.validate_session(session_id, opaque_hash(secret))
+    grant = store.validate_session(session_id, opaque_hash(secret))
+    return (grant, session_id) if grant else None
 
 
 def make_request_cookie(request_id: str, secret: str) -> str:

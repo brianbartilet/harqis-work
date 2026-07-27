@@ -138,7 +138,8 @@ def build_snapshot(
     configuration: ShareConfiguration,
     documents: tuple[CorpusDocument, ...],
     *,
-    enabled_reference_ids: tuple[str, ...] = (),
+    enabled_reference_ids: tuple[str, ...] | None = None,
+    disabled_reference_ids: tuple[str, ...] = (),
 ) -> ScopeSnapshot:
     all_sources = ALL_SOURCES in configuration.sources
     sources = {
@@ -152,10 +153,14 @@ def build_snapshot(
         for term in re.findall(r"[\w-]+", configuration.topic)
         if len(term) > 1
     )
-    selected = {item.casefold() for item in configuration.selected_entry_ids}
     start = date.fromisoformat(configuration.date_from) if configuration.date_from else None
     end = date.fromisoformat(configuration.date_to) if configuration.date_to else None
-    enabled = set(enabled_reference_ids)
+    enabled = (
+        None
+        if enabled_reference_ids is None
+        else set(enabled_reference_ids)
+    )
+    disabled = set(disabled_reference_ids)
     entries: list[SnapshotEntry] = []
     dates: list[date] = []
     available_references = 0
@@ -167,8 +172,6 @@ def build_snapshot(
                 continue
             missing_sources.discard(entry.source.casefold())
             entry_id = _entry_key(document, entry.anchor, entry.text)
-            if selected and entry_id.casefold() not in selected:
-                continue
             if tags and not tags.issubset({tag.casefold() for tag in entry.tags}):
                 continue
             when = _entry_date(entry.header)
@@ -186,7 +189,14 @@ def build_snapshot(
                 references = ()
             else:
                 references = tuple(
-                    replace(item, enabled=item.id in enabled)
+                    replace(
+                        item,
+                        enabled=(
+                            item.id not in disabled
+                            if enabled is None
+                            else item.id in enabled
+                        ),
+                    )
                     for item in references
                 )
             if when:
@@ -233,7 +243,6 @@ def build_snapshot(
             "date_from": configuration.date_from,
             "date_to": configuration.date_to,
             "topic": configuration.topic,
-            "selected_entry_ids": list(configuration.selected_entry_ids),
         },
         source_counts=dict(source_counts),
         tag_counts=dict(tag_counts.most_common(20)),
@@ -241,20 +250,36 @@ def build_snapshot(
         latest=max(dates).isoformat() if dates else "",
         estimated_chars=sum(len(entry.text) for entry in entries),
         available_references=available_references,
-        enabled_reference_ids=tuple(sorted(enabled)),
+        enabled_reference_ids=tuple(
+            sorted(
+                reference.id
+                for entry in entries
+                for reference in entry.references
+                if reference.enabled
+            )
+        ),
         warnings=tuple(warnings),
+        context_prompt=configuration.context_prompt,
     )
 
 
 def suggested_prompts(snapshot: ScopeSnapshot) -> tuple[str, ...]:
-    suggestions: list[str] = []
-    if snapshot.entries:
-        suggestions.append("Summarize the main themes in this shared context.")
-    for source in list(snapshot.source_counts)[:2]:
-        suggestions.append(f"What happened in the {source} activity?")
-    for tag in list(snapshot.tag_counts)[:2]:
-        suggestions.append(f"What does the context say about #{tag}?")
-    return tuple(suggestions[:5])
+    if not snapshot.entries:
+        return ()
+    suggestions = [
+        "What is Brian currently working on?",
+        "Can you curate interview questions for me from Brian's work?",
+    ]
+    travel_terms = {
+        "travel", "trip", "japan", "place", "places", "location", "holiday"
+    }
+    if travel_terms.intersection(tag.casefold() for tag in snapshot.tag_counts):
+        suggestions.append("Show me places Brian visited over the past year.")
+    for source in list(snapshot.source_counts)[:1]:
+        suggestions.append(f"What stands out from Brian's {source} activity?")
+    for tag in list(snapshot.tag_counts)[:1]:
+        suggestions.append(f"What does #{tag} reveal about Brian's work?")
+    return tuple(dict.fromkeys(suggestions))[:5]
 
 
 def snapshot_entry(snapshot: ScopeSnapshot, entry_id: str) -> SnapshotEntry | None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import math
+import re
 import secrets
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -24,6 +25,7 @@ from modules.hfl_corpus.corpus import (
     common_sources,
     common_tags,
     corpus_index,
+    format_hfl_markdown,
     resolve_corpus_root,
 )
 from modules.hfl_corpus.remote import RemoteCorpusClient, RemoteCorpusError
@@ -38,6 +40,7 @@ from modules.hfl_shares.security import (
     REQUEST_COOKIE,
     clear_guest_cookie,
     current_grant,
+    current_session,
     hash_pin,
     issue_session,
     make_csrf_token,
@@ -53,6 +56,7 @@ from modules.hfl_shares.security import (
     verify_pin,
 )
 from modules.hfl_shares.store import get_share_store
+from services.markdown import render_markdown
 from services.safe_paths import allowed_reference_roots, is_within_roots
 from web import page_context, require_user, templates
 
@@ -177,6 +181,7 @@ def _configuration_from_form(
     form: Any,
     *,
     existing: ShareConfiguration | None = None,
+    preview: bool = False,
 ) -> ShareConfiguration:
     settings = get_settings()
     device_limit = int(
@@ -184,7 +189,7 @@ def _configuration_from_form(
     )
     return ShareConfiguration(
         id=str(form.get("configuration_id") or ""),
-        name=str(form.get("name") or "").strip(),
+        name=str(form.get("name") or "").strip() or ("Preview" if preview else ""),
         description=str(form.get("description") or "").strip(),
         sources=_normalized_sources(form),
         tags=parse_csv(
@@ -193,14 +198,8 @@ def _configuration_from_form(
         date_from=str(form.get("date_from") or "").strip(),
         date_to=str(form.get("date_to") or "").strip(),
         topic=str(form.get("topic") or "").strip(),
-        selected_entry_ids=parse_csv(
-            str(form.get("selected_entry_ids") or "")
-        ),
-        test_prompts=tuple(
-            line.strip()
-            for line in str(form.get("test_prompts") or "").splitlines()
-            if line.strip()
-        ),
+        selected_entry_ids=(),
+        context_prompt=str(form.get("context_prompt") or "").strip(),
         auth_mode=str(form.get("auth_mode") or "pin"),
         allowed_email=str(form.get("allowed_email") or "").strip(),
         references_enabled=form.get("references_enabled") == "on",
@@ -210,6 +209,10 @@ def _configuration_from_form(
         created_at=existing.created_at if existing else "",
         updated_at=existing.updated_at if existing else "",
     )
+
+
+def _disabled_references(form: Any) -> tuple[str, ...]:
+    return tuple(str(item) for item in form.getlist("disabled_reference_ids"))
 
 
 def _require_csrf(form: Any, user: str) -> None:
@@ -277,7 +280,18 @@ def _owner_context(
         user,
         "sharing",
         configurations=store.list_configurations(),
-        shares=store.list_shares(),
+        shares=tuple(
+            {
+                "grant": share,
+                "status": (
+                    "revoked"
+                    if share.status == "revoked"
+                    else "expired" if share.expired else share.status
+                ),
+                "expires_at_display": _format_utc(share.expires_at),
+            }
+            for share in store.list_shares()
+        ),
         pending_requests=store.list_pending_requests(),
         available_sources=tuple(sorted(sources, key=str.casefold)),
         available_tags=available_tags,
@@ -392,25 +406,42 @@ async def _preview_response(
     user: str,
     *,
     with_agent: bool,
+    fragment: bool = False,
 ) -> HTMLResponse:
     form = await request.form()
     _require_csrf(form, user)
     store = get_share_store()
     existing = store.get_configuration(str(form.get("configuration_id") or ""))
     try:
-        configuration = _configuration_from_form(form, existing=existing)
+        configuration = _configuration_from_form(
+            form,
+            existing=existing,
+            preview=fragment,
+        )
         preview = build_snapshot(
             configuration,
             _sharing_documents(configuration.sources),
-            enabled_reference_ids=tuple(
-                str(item) for item in form.getlist("enabled_reference_ids")
-            ),
+            disabled_reference_ids=_disabled_references(form),
         )
         question = str(form.get("question") or "").strip()
         answer = ""
         if with_agent:
             answer = await answer_question(preview, question)
     except (AgentUnavailable, TypeError, ValueError) as exc:
+        if fragment:
+            return templates.TemplateResponse(
+                request,
+                "modules/hfl_shares/_preview.html",
+                {
+                    "request": request,
+                    "preview": locals().get("preview"),
+                    "preview_question": str(form.get("question") or ""),
+                    "preview_answer": "",
+                    "suggested_prompts": (),
+                    "preview_error": str(exc),
+                },
+                status_code=422,
+            )
         return templates.TemplateResponse(
             request,
             "modules/hfl_shares/index.html",
@@ -423,6 +454,19 @@ async def _preview_response(
                 error=str(exc),
             ),
             status_code=422,
+        )
+    if fragment:
+        return templates.TemplateResponse(
+            request,
+            "modules/hfl_shares/_preview.html",
+            {
+                "request": request,
+                "preview": preview,
+                "preview_question": question,
+                "preview_answer": answer,
+                "suggested_prompts": suggested_prompts(preview),
+                "preview_error": "",
+            },
         )
     return templates.TemplateResponse(
         request,
@@ -439,11 +483,16 @@ async def _preview_response(
 
 
 @owner_router.post("/preview", response_class=HTMLResponse)
-async def preview_scope(request: Request):
+async def preview_scope(request: Request, fragment: bool = False):
     user, redirect = require_user(request)
     if redirect:
         return redirect
-    return await _preview_response(request, user, with_agent=False)
+    return await _preview_response(
+        request,
+        user,
+        with_agent=False,
+        fragment=fragment,
+    )
 
 
 @owner_router.post("/preview/chat", response_class=HTMLResponse)
@@ -465,22 +514,14 @@ async def generate_share(request: Request):
     existing = store.get_configuration(str(form.get("configuration_id") or ""))
     try:
         configuration = _configuration_from_form(form, existing=existing)
-        enabled_references = tuple(
-            str(item) for item in form.getlist("enabled_reference_ids")
-        )
         snapshot = build_snapshot(
             configuration,
             _sharing_documents(configuration.sources, force=True),
-            enabled_reference_ids=enabled_references,
+            disabled_reference_ids=_disabled_references(form),
         )
         if not snapshot.entries:
             raise ValueError("A share cannot be generated from an empty scope.")
         settings = get_settings()
-        if len(snapshot.entries) > settings.hfl_share_max_snapshot_entries:
-            raise ValueError(
-                "The scope is too broad to share. Narrow it below "
-                f"{settings.hfl_share_max_snapshot_entries} entries."
-            )
         if snapshot.estimated_chars > settings.hfl_share_max_snapshot_chars:
             raise ValueError(
                 "The scope is too large to share. Narrow its sources or filters."
@@ -518,6 +559,7 @@ async def generate_share(request: Request):
             "link": link,
             "pin": pin,
             "qr": qr,
+            "expires_at_display": _format_utc(grant.expires_at),
         }
         record_share_audit(event="created", share_id=grant.id)
     except (TypeError, ValueError) as exc:
@@ -589,7 +631,13 @@ async def share_access(request: Request, token: str):
     return templates.TemplateResponse(
         request,
         "modules/hfl_shares/access.html",
-        {"request": request, "grant": grant, "token": token, "error": ""},
+        {
+            "request": request,
+            "grant": grant,
+            "token": token,
+            "error": "",
+            "expires_at_display": _format_utc(grant.expires_at),
+        },
     )
 
 
@@ -617,6 +665,7 @@ async def redeem_share(request: Request, token: str):
                     "grant": grant,
                     "token": token,
                     "error": "The access details were not accepted.",
+                    "expires_at_display": _format_utc(grant.expires_at),
                 },
                 status_code=403,
             )
@@ -710,55 +759,149 @@ def _guest_entries(grant, query: str):
     )
 
 
+_PUBLIC_ENTRY_DROP = re.compile(
+    r"^\s*(?:#{1,6}\s+|Source\s*:|Tags\s*:)",
+    re.IGNORECASE,
+)
+_EVIDENCE = re.compile(r"\[S(\d+)\]")
+_GUEST_PAGE_SIZE = 10
+
+
+def _format_utc(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value).astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return value
+    return (
+        f"{parsed.strftime('%B')} {parsed.day:02d}, {parsed.year} "
+        f"{parsed.strftime('%I:%M %p').lstrip('0')} UTC"
+    )
+
+
+def _entry_html(entry):
+    public_text = "\n".join(
+        line
+        for line in entry.text.splitlines()
+        if not _PUBLIC_ENTRY_DROP.match(line)
+    )
+    return render_markdown(format_hfl_markdown(public_text))
+
+
+def _answer_html(content: str):
+    linked = _EVIDENCE.sub(
+        lambda match: (
+            "[View evidence]"
+            f"(/share/session?page="
+            f"{math.ceil(int(match.group(1)) / _GUEST_PAGE_SIZE)}"
+            f"#evidence-{match.group(1)})"
+        ),
+        content,
+    )
+    return render_markdown(linked)
+
+
 def _guest_context(
     request: Request,
     grant,
+    session_id: str,
     *,
     query: str = "",
-    question: str = "",
-    answer: str = "",
+    page: int = 1,
     error: str = "",
 ) -> dict[str, Any]:
+    matches = _guest_entries(grant, query)
+    total_pages = max(1, math.ceil(len(matches) / _GUEST_PAGE_SIZE))
+    page = min(max(1, page), total_pages)
+    start = (page - 1) * _GUEST_PAGE_SIZE
+    store = get_share_store()
+    messages = [
+        {
+            "role": message.role,
+            "content": message.content,
+            "html": _answer_html(message.content),
+            "created_at": _format_utc(message.created_at),
+        }
+        for message in store.list_chat_messages(session_id, grant.id)
+    ]
     return {
         "request": request,
         "grant": grant,
-        "entries": _guest_entries(grant, query),
+        "entries": tuple(
+            {
+                "entry": entry,
+                "html": _entry_html(entry),
+            }
+            for entry in matches[start : start + _GUEST_PAGE_SIZE]
+        ),
+        "result_count": len(matches),
+        "page": page,
+        "total_pages": total_pages,
+        "page_size": _GUEST_PAGE_SIZE,
         "query": query,
-        "question": question,
-        "answer": answer,
+        "messages": messages,
         "error": error,
         "suggested_prompts": suggested_prompts(grant.snapshot),
+        "expires_at_display": _format_utc(grant.expires_at),
     }
 
 
 @guest_router.get("/session", response_class=HTMLResponse)
-async def guest_portal(request: Request, q: str = ""):
-    grant = current_grant(request, get_share_store())
-    if not grant:
+async def guest_portal(request: Request, q: str = "", page: int = 1):
+    session = current_session(request, get_share_store())
+    if not session:
         return _unavailable(request)
+    grant, session_id = session
     return templates.TemplateResponse(
         request,
         "modules/hfl_shares/guest.html",
-        _guest_context(request, grant, query=q),
+        _guest_context(request, grant, session_id, query=q, page=page),
     )
 
 
 @guest_router.post("/session/chat", response_class=HTMLResponse)
 async def guest_chat(request: Request):
     store = get_share_store()
-    grant = current_grant(request, store)
-    if not grant:
+    session = current_session(request, store)
+    if not session:
         return _unavailable(request)
+    grant, session_id = session
     form = await request.form()
     question = str(form.get("question") or "").strip()
     try:
+        if not question:
+            raise ValueError("A question is required.")
         if not store.allow_chat(
             grant.id, get_settings().hfl_share_chat_limit_per_hour
         ):
             raise ValueError(
                 "This share has reached its hourly question limit."
             )
-        answer = await answer_question(grant.snapshot, question)
+        history_messages = store.list_chat_messages(
+            session_id,
+            grant.id,
+            limit=8,
+        )
+        history = tuple(
+            {"role": item.role, "content": item.content}
+            for item in history_messages
+        )
+        store.add_chat_message(
+            session_id=session_id,
+            share_id=grant.id,
+            role="user",
+            content=question,
+        )
+        answer = await answer_question(
+            grant.snapshot,
+            question,
+            history=history,
+        )
+        store.add_chat_message(
+            session_id=session_id,
+            share_id=grant.id,
+            role="assistant",
+            content=answer,
+        )
         record_share_audit(
             event="question-answered",
             share_id=grant.id,
@@ -767,7 +910,6 @@ async def guest_chat(request: Request):
         )
         error = ""
     except (AgentUnavailable, ValueError) as exc:
-        answer = ""
         error = str(exc)
     return templates.TemplateResponse(
         request,
@@ -775,8 +917,7 @@ async def guest_chat(request: Request):
         _guest_context(
             request,
             grant,
-            question=question,
-            answer=answer,
+            session_id,
             error=error,
         ),
         status_code=422 if error else 200,

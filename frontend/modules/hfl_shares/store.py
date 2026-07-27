@@ -12,6 +12,7 @@ from pathlib import Path
 
 from config import get_settings
 from modules.hfl_shares.models import (
+    ChatMessage,
     ScopeSnapshot,
     ShareConfiguration,
     ShareGrant,
@@ -67,9 +68,19 @@ CREATE TABLE IF NOT EXISTS chat_events (
     share_id TEXT NOT NULL REFERENCES shares(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    share_id TEXT NOT NULL REFERENCES shares(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_sessions_share ON sessions(share_id);
 CREATE INDEX IF NOT EXISTS idx_requests_share ON access_requests(share_id);
 CREATE INDEX IF NOT EXISTS idx_chat_events_share ON chat_events(share_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session
+ON chat_messages(session_id, created_at);
 """
 
 
@@ -89,8 +100,14 @@ class ShareStore:
     @staticmethod
     def _configuration(row: sqlite3.Row) -> ShareConfiguration:
         payload = json.loads(row["payload"])
-        for field in ("sources", "tags", "selected_entry_ids", "test_prompts"):
+        for field in ("sources", "tags", "selected_entry_ids"):
             payload[field] = tuple(payload.get(field) or [])
+        if "context_prompt" not in payload:
+            payload["context_prompt"] = "\n".join(
+                str(item) for item in payload.pop("test_prompts", ()) if item
+            )
+        else:
+            payload.pop("test_prompts", None)
         return ShareConfiguration(**payload)
 
     @staticmethod
@@ -373,6 +390,69 @@ class ShareStore:
                 (str(uuid.uuid4()), share_id, now.isoformat()),
             )
         return True
+
+    def add_chat_message(
+        self,
+        *,
+        session_id: str,
+        share_id: str,
+        role: str,
+        content: str,
+    ) -> ChatMessage:
+        if role not in {"user", "assistant"}:
+            raise ValueError("Unsupported chat role.")
+        message = ChatMessage(
+            id=str(uuid.uuid4()),
+            session_id=session_id,
+            share_id=share_id,
+            role=role,
+            content=content,
+            created_at=utc_now().isoformat(),
+        )
+        with self._lock, self._connect() as connection:
+            belongs = connection.execute(
+                "SELECT 1 FROM sessions WHERE id=? AND share_id=?",
+                (session_id, share_id),
+            ).fetchone()
+            if not belongs:
+                raise ValueError("Chat session is unavailable.")
+            connection.execute(
+                """
+                INSERT INTO chat_messages(
+                    id, session_id, share_id, role, content, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    message.id,
+                    message.session_id,
+                    message.share_id,
+                    message.role,
+                    message.content,
+                    message.created_at,
+                ),
+            )
+        return message
+
+    def list_chat_messages(
+        self,
+        session_id: str,
+        share_id: str,
+        *,
+        limit: int = 40,
+    ) -> tuple[ChatMessage, ...]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM (
+                    SELECT * FROM chat_messages
+                    WHERE session_id=? AND share_id=?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                ) ORDER BY created_at
+                """,
+                (session_id, share_id, max(1, int(limit))),
+            ).fetchall()
+        return tuple(ChatMessage(**dict(row)) for row in rows)
 
     def list_pending_requests(self) -> list[dict[str, str]]:
         now = utc_now().isoformat()

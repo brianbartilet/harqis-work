@@ -36,7 +36,7 @@ class ShareConfiguration:
     date_to: str = ""
     topic: str = ""
     selected_entry_ids: tuple[str, ...] = ()
-    test_prompts: tuple[str, ...] = ()
+    context_prompt: str = ""
     auth_mode: str = "pin"
     allowed_email: str = ""
     references_enabled: bool = False
@@ -65,12 +65,8 @@ class ShareConfiguration:
             raise ValueError("Use no more than 50 tags of 100 characters each.")
         if len(self.topic) > 500:
             raise ValueError("Topic must be 500 characters or fewer.")
-        if len(self.selected_entry_ids) > 500:
-            raise ValueError("Select no more than 500 explicit entries.")
-        if len(self.test_prompts) > 20 or any(
-            len(prompt) > 1000 for prompt in self.test_prompts
-        ):
-            raise ValueError("Save no more than 20 test prompts.")
+        if len(self.context_prompt) > 4_000:
+            raise ValueError("Context prompt must be 4000 characters or fewer.")
         if self.auth_mode not in AUTH_MODES:
             raise ValueError("Unsupported authentication mode.")
         if self.auth_mode == "email_otp" and not self.allowed_email.strip():
@@ -176,6 +172,7 @@ class ScopeSnapshot:
     available_references: int = 0
     enabled_reference_ids: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
+    context_prompt: str = ""
 
     def to_record(self) -> dict[str, Any]:
         return {
@@ -191,6 +188,7 @@ class ScopeSnapshot:
             "available_references": self.available_references,
             "enabled_reference_ids": list(self.enabled_reference_ids),
             "warnings": list(self.warnings),
+            "context_prompt": self.context_prompt,
         }
 
     @classmethod
@@ -219,6 +217,7 @@ class ScopeSnapshot:
                 str(item) for item in value.get("enabled_reference_ids") or []
             ),
             warnings=tuple(str(item) for item in value.get("warnings") or []),
+            context_prompt=str(value.get("context_prompt") or ""),
         )
 
 
@@ -249,3 +248,13 @@ class ShareGrant:
     @property
     def available(self) -> bool:
         return self.status == "active" and not self.expired
+
+
+@dataclass(frozen=True)
+class ChatMessage:
+    id: str
+    session_id: str
+    share_id: str
+    role: str
+    content: str
+    created_at: str

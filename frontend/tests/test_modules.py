@@ -4,16 +4,17 @@ from modules.registry import MODULES, module_by_key
 def test_module_registry_has_fixed_primary_navigation():
     assert [module.key for module in MODULES] == [
         "home",
+        "hfl_corpus",
+        "sharing",
         "manifesto",
         "workflows",
         "applications",
-        "hfl_corpus",
-        "sharing",
     ]
     manifesto = module_by_key("manifesto")
     assert manifesto is not None
     assert manifesto.route == "/manifesto"
     assert module_by_key("hfl_corpus").route == "/hfl-corpus"
+    assert module_by_key("sharing").label == "Share Corpus"
 
 
 def test_module_pages_require_authentication():

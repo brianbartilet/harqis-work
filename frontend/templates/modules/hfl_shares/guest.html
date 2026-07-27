@@ -1,50 +1,140 @@
 {% extends "share_base.html" %}
 {% block title %}{{ grant.name }} · HARQIS{% endblock %}
 {% block content %}
-<section class="card">
+<section class="card hero-card">
   <div class="row">
     <div>
-      <p class="eyebrow">Shared snapshot</p>
+      <p class="eyebrow">A curated window</p>
       <h1>{{ grant.name }}</h1>
-      <p class="muted">{{ grant.snapshot.entries|length }} entries · expires {{ grant.expires_at }}</p>
+      <p class="muted">{{ grant.snapshot.entries|length }} moments · available until {{ expires_at_display }}</p>
     </div>
     <form method="post" action="/share/session/logout"><button class="button-secondary">Close session</button></form>
   </div>
 </section>
 
-<section class="card">
-  <h2>Ask this shared context</h2>
-  <p class="muted">Answers are constrained to this immutable snapshot and include citations. Questions and answers are retained as sharing-audit HFL entries.</p>
-  {% if suggested_prompts %}<p class="muted">Try: {{ suggested_prompts|join(' · ') }}</p>{% endif %}
-  <form method="post" action="/share/session/chat">
-    <label for="question">Question</label>
-    <input id="question" name="question" type="text" maxlength="2000" required value="{{ question }}">
-    <button style="margin-top:14px">Ask</button>
-  </form>
+<section class="card chat-card">
+  <div class="chat-intro">
+    <p class="eyebrow">A conversation grounded in real moments</p>
+    <h2>Hello, curious person 👋</h2>
+    <p class="muted">Ask away—about the work, the detours, the places, or the ideas connecting them. Every answer stays grounded in the moments Brian chose to share, with evidence you can explore.</p>
+    <p class="audit-note">To keep this experience trustworthy, questions and answers are recorded in the sharing audit.</p>
+  </div>
+
+  {% if suggested_prompts %}
+  <div class="suggestions" aria-label="Suggested questions">
+    {% for prompt in suggested_prompts %}<button class="suggestion" type="button" data-suggestion="{{ prompt }}">{{ prompt }}</button>{% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="chat-thread" data-chat-thread aria-live="polite">
+    {% for message in messages %}
+    <article class="chat-message chat-{{ message.role }}">
+      <div class="chat-avatar" aria-hidden="true">{{ "B" if message.role == "user" else "H" }}</div>
+      <div class="chat-bubble">
+        <div class="chat-meta"><strong>{{ "You" if message.role == "user" else "HARQIS" }}</strong><span>{{ message.created_at }}</span></div>
+        <div class="markdown-body">{{ message.html }}</div>
+      </div>
+    </article>
+    {% else %}
+    <div class="chat-empty">
+      <p>Start anywhere. A thoughtful question is usually the best icebreaker.</p>
+    </div>
+    {% endfor %}
+  </div>
+
   {% if error %}<p class="notice error">{{ error }}</p>{% endif %}
-  {% if answer %}<div class="answer" style="margin-top:16px">{{ answer }}</div>{% endif %}
+  <form class="chat-compose" method="post" action="/share/session/chat" data-wait-form data-wait-message="Thinking through the moments Brian shared…">
+    <label for="question">Your question</label>
+    <div class="compose-row">
+      <textarea id="question" name="question" maxlength="2000" rows="2" required placeholder="Ask about Brian’s work, interests, projects, or journeys…"></textarea>
+      <button>Ask HARQIS</button>
+    </div>
+  </form>
 </section>
 
 <section class="card">
-  <div class="row">
-    <h2>Shared entries</h2>
-    <form method="get" action="/share/session">
-      <label for="search">Filter entries</label>
-      <input id="search" name="q" type="search" value="{{ query }}" placeholder="Search this snapshot">
+  <div class="entries-heading">
+    <div>
+      <p class="eyebrow">Browse the source material</p>
+      <h2>Moments worth exploring</h2>
+    </div>
+    <form class="entry-search" method="get" action="/share/session" data-wait-form data-wait-message="Looking through these moments…">
+      <label for="search">Search these moments</label>
+      <div class="search-row">
+        <input id="search" name="q" type="search" value="{{ query }}" placeholder="Type a word or phrase">
+        <button>Search</button>
+      </div>
     </form>
   </div>
-  <p class="muted">{{ entries|length }} result{% if entries|length != 1 %}s{% endif %}</p>
-  {% for entry in entries %}
-  <article class="entry">
-    <div class="row"><h3>[{{ entry.citation }}] {{ entry.moment or entry.header }}</h3><span class="chip">{{ entry.source }}</span></div>
-    <div class="chips">{% for tag in entry.tags %}<span class="chip">#{{ tag }}</span>{% endfor %}</div>
-    <pre>{{ entry.text }}</pre>
+  <p class="muted">{{ result_count }} matching moment{% if result_count != 1 %}s{% endif %}{% if result_count %} · page {{ page }} of {{ total_pages }}{% endif %}</p>
+
+  {% for item in entries %}
+  {% set entry = item.entry %}
+  <article class="entry" id="evidence-{{ entry.citation[1:] }}">
+    <header class="entry-header">
+      <h3>{{ entry.moment or entry.header }}</h3>
+      {% if entry.tags %}<div class="chips entry-tags">{% for tag in entry.tags %}<span class="chip">#{{ tag }}</span>{% endfor %}</div>{% endif %}
+    </header>
+    <div class="entry-source"><strong>Source</strong><span class="chip chip-source">{{ entry.source }}</span></div>
+    <div class="entry-content markdown-body">{{ item.html }}</div>
     {% set enabled_refs = entry.references|selectattr('enabled')|list %}
     {% if enabled_refs %}
-    <p><strong>Shared references</strong></p>
-    <ul>{% for reference in enabled_refs %}<li><a href="/share/session/references/{{ reference.id }}">{{ reference.label }}</a></li>{% endfor %}</ul>
+    <div class="entry-references">
+      <strong>Explore further</strong>
+      <div class="reference-links">{% for reference in enabled_refs %}<a href="/share/session/references/{{ reference.id }}">{{ reference.label }}</a>{% endfor %}</div>
+    </div>
     {% endif %}
   </article>
-  {% else %}<p class="muted">No entries match this filter.</p>{% endfor %}
+  {% else %}<div class="empty-state"><p>No moments match that search yet. Try a shorter word or phrase.</p></div>{% endfor %}
+
+  {% if total_pages > 1 %}
+  <nav class="pagination" aria-label="Entry pages">
+    {% if page > 1 %}<a href="/share/session?q={{ query|urlencode }}&page={{ page - 1 }}" data-wait-link>← Previous</a>{% else %}<span aria-disabled="true">← Previous</span>{% endif %}
+    <strong>Page {{ page }} of {{ total_pages }}</strong>
+    {% if page < total_pages %}<a href="/share/session?q={{ query|urlencode }}&page={{ page + 1 }}" data-wait-link>Next →</a>{% else %}<span aria-disabled="true">Next →</span>{% endif %}
+  </nav>
+  {% endif %}
 </section>
+
+<div class="wait-overlay" data-wait-overlay role="alertdialog" aria-modal="true" aria-labelledby="wait-title" hidden>
+  <div class="wait-card">
+    <div class="wait-spinner" aria-hidden="true"></div>
+    <h2 id="wait-title">Just a moment</h2>
+    <p data-wait-copy aria-live="polite">Loading…</p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const overlay = document.querySelector('[data-wait-overlay]');
+  const copy = overlay?.querySelector('[data-wait-copy]');
+  const question = document.querySelector('#question');
+  const thread = document.querySelector('[data-chat-thread]');
+  const showWait = message => {
+    if (!overlay) return;
+    copy.textContent = message || 'Loading…';
+    overlay.hidden = false;
+    document.documentElement.style.overflow = 'hidden';
+  };
+  document.querySelectorAll('[data-wait-form]').forEach(form => {
+    form.addEventListener('submit', () => showWait(form.dataset.waitMessage));
+  });
+  document.querySelectorAll('[data-wait-link]').forEach(link => {
+    link.addEventListener('click', () => showWait('Bringing the next moments into view…'));
+  });
+  document.querySelectorAll('[data-suggestion]').forEach(button => {
+    button.addEventListener('click', () => {
+      question.value = button.dataset.suggestion || '';
+      question.focus();
+    });
+  });
+  window.addEventListener('pageshow', () => {
+    if (overlay) overlay.hidden = true;
+    document.documentElement.style.overflow = '';
+  });
+  if (thread && thread.querySelector('.chat-message')) {
+    thread.scrollTop = thread.scrollHeight;
+  }
+})();
+</script>
 {% endblock %}

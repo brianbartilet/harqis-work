@@ -78,6 +78,7 @@ def _configuration(**overrides) -> ShareConfiguration:
 def _empty_share_store():
     store = get_share_store()
     with store._connect() as connection:
+        connection.execute("DELETE FROM chat_messages")
         connection.execute("DELETE FROM chat_events")
         connection.execute("DELETE FROM access_requests")
         connection.execute("DELETE FROM sessions")
@@ -108,8 +109,7 @@ def _form(**overrides):
         "date_from": "",
         "date_to": "",
         "topic": "",
-        "selected_entry_ids": "",
-        "test_prompts": "Summarize the trip",
+        "context_prompt": "Keep the answer friendly and useful.",
         "auth_mode": "pin",
         "allowed_email": "",
         "ttl_minutes": "60",
@@ -141,14 +141,14 @@ def test_sharing_module_requires_owner_auth_and_renders(
     assert "notes" in response.text
 
 
-def test_social_recipe_form_uses_new_labels_defaults_and_collapsed_sections(
+def test_share_corpus_form_uses_new_labels_defaults_and_collapsed_sections(
     authenticated_client, sharing_corpus
 ):
     response = authenticated_client.get("/sharing")
 
     assert response.status_code == 200
-    assert "<title>Social · HARQIS</title>" in response.text
-    assert ">Social</h1>" in response.text
+    assert "<title>Share Corpus · HARQIS</title>" in response.text
+    assert ">Share Corpus</h1>" in response.text
     assert ">New recipe</h2>" in response.text
     assert "Verification mode" in response.text
     assert "Sources - configure ingest data sources" in response.text
@@ -165,9 +165,14 @@ def test_social_recipe_form_uses_new_labels_defaults_and_collapsed_sections(
     )
     assert 'id="description" name="description" rows="3"' in response.text
     assert 'id="topic" name="topic" rows="3"' in response.text
+    assert "Topic phrase filter" in response.text
+    assert 'id="context-prompt" name="context_prompt"' in response.text
+    assert "Specific entry IDs" not in response.text
+    assert 'data-clear-tags disabled' in response.text
+    assert 'class="select-caret"' in response.text
 
 
-def test_social_long_actions_use_shared_blocking_progress_screen(
+def test_share_corpus_uses_automatic_preview_and_blocking_long_actions(
     authenticated_client, sharing_corpus
 ):
     response = authenticated_client.get("/sharing")
@@ -175,8 +180,10 @@ def test_social_long_actions_use_shared_blocking_progress_screen(
     assert response.status_code == 200
     assert 'data-progress-overlay role="alertdialog" aria-modal="true"' in response.text
     assert 'aria-labelledby="social-progress-title"' in response.text
-    assert 'data-progress-message="Refreshing your preview…"' in response.text
-    assert 'data-progress-next="Applying sources and filters…"' in response.text
+    assert 'data-preview-status role="status"' in response.text
+    assert "fetch('/sharing/preview?fragment=true'" in response.text
+    assert "window.setTimeout(refreshPreview, 450)" in response.text
+    assert 'formaction="/sharing/preview"' not in response.text
     assert 'data-progress-message="Preparing your snapshot…"' in response.text
     assert 'data-progress-next="Generating secure access and QR code…"' in response.text
     assert "prefers-reduced-motion:reduce" in response.text
@@ -192,6 +199,82 @@ def test_social_long_actions_use_shared_blocking_progress_screen(
     assert preview.status_code == 200
     assert 'data-progress-message="Reviewing the snapshot…"' in preview.text
     assert 'data-progress-next="Asking the agent…"' in preview.text
+
+
+def test_automatic_preview_fragment_defaults_references_and_places_tags_below_title(
+    authenticated_client, sharing_corpus
+):
+    response = authenticated_client.post(
+        "/sharing/preview?fragment=true",
+        data=_form(references_enabled="on"),
+    )
+
+    assert response.status_code == 200
+    assert "data-preview-ready" in response.text
+    assert 'name="reference_selection_initialized" value="1"' in response.text
+    assert re.search(
+        r"Planned the Japan trip</strong>.*?#travel.*?#japan",
+        response.text,
+        re.DOTALL,
+    )
+    assert re.search(
+        r'name="enabled_reference_ids"[^>]+checked',
+        response.text,
+    )
+
+
+def _many_entry_document(tmp_path: Path, count: int) -> CorpusDocument:
+    source_file = tmp_path / "2026-07-many.md"
+    source_file.write_text("corpus", encoding="utf-8")
+    entries = []
+    for index in range(count):
+        text = (
+            f"## 2026-07-{(index % 28) + 1:02d} 09:30\n"
+            "Source:          notes\n"
+            f"Entry ID:        hfl-share-{index}\n"
+            f"Moment:          Project moment {index}\n"
+            f"What happened:   Completed project task {index}\n"
+            "Why it stayed:   Useful work context\n"
+            "Possible use:    Share progress\n"
+            "Tags:            #work #project\n"
+        )
+        entries.append(
+            CorpusEntry(
+                anchor=f"hfl-entry-share-{index}",
+                header=f"2026-07-{(index % 28) + 1:02d} 09:30",
+                moment=f"Project moment {index}",
+                what_happened=f"Completed project task {index}",
+                tags=("work", "project"),
+                source="notes",
+                text=text,
+            )
+        )
+    return CorpusDocument(
+        relative_path="2026-07-many.md",
+        path=source_file,
+        name=source_file.name,
+        text="\n".join(entry.text for entry in entries),
+        created_at=datetime(2026, 7, 1),
+        updated_at=datetime(2026, 7, 28),
+        tags=("work", "project"),
+        references=(),
+        excerpt="Project moments",
+        entry_count=count,
+        entries=tuple(entries),
+    )
+
+
+def test_tag_search_and_clear_controls_support_partial_matches(
+    authenticated_client, sharing_corpus
+):
+    response = authenticated_client.get("/sharing")
+
+    assert response.status_code == 200
+    assert ".includes(needle)" in response.text
+    assert "option.style.display = hidden ? 'none' : ''" in response.text
+    assert "replace(/^#/, '')" in response.text
+    assert "Clear selected tags" in response.text
+    assert "clearTags.disabled = selectedTags().size === 0" in response.text
 
 
 def test_all_sources_scope_includes_each_available_source(tmp_path, monkeypatch):
@@ -367,6 +450,8 @@ def test_reference_sharing_is_opt_in_and_hides_canonical_path(
     preview = build_snapshot(
         _configuration(references_enabled=True), (document,)
     )
+    assert preview.entries[0].references
+    assert all(item.enabled for item in preview.entries[0].references)
     local = next(
         item for item in preview.entries[0].references if item.kind == "download"
     )
@@ -382,6 +467,22 @@ def test_reference_sharing_is_opt_in_and_hides_canonical_path(
     assert shared.label == "trip plan [final].pdf"
     assert str(tmp_path) not in shared.public_dict().values()
     assert all(item.kind != "blocked" for item in preview.entries[0].references)
+
+    deselected = build_snapshot(
+        _configuration(references_enabled=True),
+        (document,),
+        disabled_reference_ids=(local.id,),
+    )
+    assert not next(
+        item
+        for item in deselected.entries[0].references
+        if item.id == local.id
+    ).enabled
+    assert all(
+        item.enabled
+        for item in deselected.entries[0].references
+        if item.id != local.id
+    )
 
 
 def test_generate_displays_pin_once_and_stores_only_hashes(
@@ -435,6 +536,169 @@ def test_pin_redemption_binds_one_signed_session_and_blocks_second_device(
             follow_redirects=False,
         )
     assert denied.status_code == 403
+
+
+def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
+    authenticated_client, monkeypatch, sharing_corpus
+):
+    from fastapi.testclient import TestClient
+    from main import app
+    from modules.hfl_shares import router
+
+    captured = []
+
+    async def answer(snapshot, question, *, history=()):
+        captured.append((snapshot.context_prompt, question, history))
+        return f"**A grounded answer:** {question} [S1]"
+
+    monkeypatch.setattr(router, "answer_question", answer)
+    generated = authenticated_client.post(
+        "/sharing/generate",
+        data=_form(single_use="", device_limit="2"),
+    )
+    token, pin = _generated_credentials(generated.text)
+    first_redeem = authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        data={"pin": pin},
+        follow_redirects=False,
+    )
+    assert first_redeem.status_code == 303
+
+    first = authenticated_client.post(
+        "/share/session/chat",
+        data={"question": "What is Brian working on?"},
+    )
+    second = authenticated_client.post(
+        "/share/session/chat",
+        data={"question": "What happened next?"},
+    )
+
+    assert first.status_code == 200
+    assert "<strong>A grounded answer:</strong>" in first.text
+    assert 'href="/share/session?page=1#evidence-1"' in first.text
+    assert "[S1]" not in first.text
+    assert "Hello, curious person" in second.text
+    assert "What is Brian working on?" in second.text
+    assert captured[0][0] == "Keep the answer friendly and useful."
+    assert captured[0][2] == ()
+    assert [message["role"] for message in captured[1][2]] == [
+        "user",
+        "assistant",
+    ]
+
+    with TestClient(app) as other:
+        redeemed = other.post(
+            f"/share/access/{token}/redeem",
+            data={"pin": pin},
+            follow_redirects=False,
+        )
+        assert redeemed.status_code == 303
+        isolated = other.get("/share/session")
+        assert isolated.status_code == 200
+        assert "What is Brian working on?" not in isolated.text
+
+
+def test_guest_entries_use_literal_search_ten_item_pages_and_readable_dates(
+    authenticated_client, monkeypatch, tmp_path
+):
+    from modules.hfl_shares import router, scope
+
+    document = _many_entry_document(tmp_path, 12)
+    monkeypatch.setattr(
+        router.corpus_index,
+        "documents",
+        lambda force=False: (document,),
+    )
+    monkeypatch.setattr(scope, "resolve_corpus_root", lambda: tmp_path)
+    monkeypatch.setattr(router, "record_share_audit", lambda **kwargs: None)
+
+    generated = authenticated_client.post(
+        "/sharing/generate",
+        data=_form(tags=""),
+    )
+    token, pin = _generated_credentials(generated.text)
+    authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        data={"pin": pin},
+        follow_redirects=False,
+    )
+
+    first_page = authenticated_client.get("/share/session")
+    second_page = authenticated_client.get("/share/session?page=2")
+    searched = authenticated_client.get(
+        "/share/session",
+        params={"q": "task 11"},
+    )
+
+    assert first_page.status_code == 200
+    assert first_page.text.count('<article class="entry"') == 10
+    assert "Page 1 of 2" in first_page.text
+    assert second_page.text.count('<article class="entry"') == 2
+    assert "Page 2 of 2" in second_page.text
+    assert "Project moment 11" in searched.text
+    assert "Project moment 1</h3>" not in searched.text
+    assert re.search(
+        r"[A-Z][a-z]+ \d{2}, 2026 \d{1,2}:\d{2} [AP]M UTC",
+        first_page.text,
+    )
+    assert "[S1]" not in first_page.text
+    assert "Moments worth exploring" in first_page.text
+    assert "data-wait-overlay" in first_page.text
+    assert "<strong>Moment:</strong>" in first_page.text
+    assert '<span class="chip chip-source">notes</span>' in first_page.text
+    assert '<span class="chip">#work</span>' in first_page.text
+
+
+def test_generation_allows_more_than_one_thousand_entries_within_char_limit(
+    authenticated_client, monkeypatch, tmp_path
+):
+    from modules.hfl_shares import router, scope
+
+    document = _many_entry_document(tmp_path, 1_001)
+    monkeypatch.setattr(
+        router.corpus_index,
+        "documents",
+        lambda force=False: (document,),
+    )
+    monkeypatch.setattr(scope, "resolve_corpus_root", lambda: tmp_path)
+    monkeypatch.setattr(router, "record_share_audit", lambda **kwargs: None)
+
+    response = authenticated_client.post(
+        "/sharing/generate",
+        data=_form(tags=""),
+    )
+
+    assert response.status_code == 200
+    assert "1001 entries" in response.text
+
+
+def test_generated_share_statuses_use_active_expired_and_revoked_colors(
+    authenticated_client, sharing_corpus
+):
+    store = get_share_store()
+    for name in ("Active example", "Revoked example", "Expired example"):
+        response = authenticated_client.post(
+            "/sharing/generate",
+            data=_form(name=name),
+        )
+        assert response.status_code == 200
+
+    shares = {share.name: share for share in store.list_shares()}
+    store.revoke_share(shares["Revoked example"].id)
+    with store._connect() as connection:
+        connection.execute(
+            "UPDATE shares SET expires_at=? WHERE id=?",
+            (
+                (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+                shares["Expired example"].id,
+            ),
+        )
+
+    response = authenticated_client.get("/sharing")
+
+    assert 'class="status-pill status-active">active</span>' in response.text
+    assert 'class="status-pill status-revoked">revoked</span>' in response.text
+    assert 'class="status-pill status-expired">expired</span>' in response.text
 
 
 def test_wrong_pin_is_generic_and_rate_limited(
