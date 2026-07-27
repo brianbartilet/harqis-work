@@ -46,6 +46,18 @@
   .expand-panel > summary::-webkit-details-marker { display:none; }
   .expand-panel[open] > summary { border-bottom:1px solid #1e293b; }
   .expand-panel[open] .expand-arrow { transform:rotate(180deg); }
+  .progress-overlay { position:fixed; inset:0; z-index:100; display:grid; place-items:center; background:rgba(2,6,23,.88); padding:1.25rem; backdrop-filter:blur(8px); }
+  .progress-overlay[hidden] { display:none; }
+  .progress-card { width:min(28rem,100%); border:1px solid #1e3a8a; border-radius:1rem; background:#0f172a; padding:1.5rem; box-shadow:0 24px 80px rgba(0,0,0,.55); text-align:center; }
+  .progress-spinner { width:2.75rem; height:2.75rem; margin:0 auto; border:.22rem solid #1e3a8a; border-top-color:#60a5fa; border-radius:999px; animation:social-spin .85s linear infinite; }
+  .progress-track { height:.35rem; overflow:hidden; border-radius:999px; background:#172554; }
+  .progress-bar { width:42%; height:100%; border-radius:999px; background:#3b82f6; animation:social-progress 1.35s ease-in-out infinite; }
+  @keyframes social-spin { to { transform:rotate(360deg); } }
+  @keyframes social-progress { 0% { transform:translateX(-115%); } 100% { transform:translateX(340%); } }
+  @media(prefers-reduced-motion:reduce) {
+    .progress-spinner { animation-duration:2.5s; }
+    .progress-bar { width:100%; animation:none; opacity:.75; }
+  }
   @media(max-width:900px) { .share-grid { grid-template-columns:1fr; } }
   @media(max-width:600px) { .two,.stat-grid { grid-template-columns:1fr 1fr; } .panel { padding:.9rem; } }
 </style>
@@ -189,9 +201,18 @@
 
         <div class="actions">
           <button class="btn btn-soft" formaction="/sharing/configurations">Save recipe</button>
-          <button class="btn btn-soft" formaction="/sharing/preview">Refresh preview</button>
-          {% if preview %}<button class="btn btn-soft" formaction="/sharing/preview/chat">Test agent</button>{% endif %}
-          <button class="btn btn-main" formaction="/sharing/generate">Generate snapshot + QR</button>
+          <button class="btn btn-soft" formaction="/sharing/preview"
+                  data-progress-title="Refreshing preview"
+                  data-progress-message="Refreshing your preview…"
+                  data-progress-next="Applying sources and filters…">Refresh preview</button>
+          {% if preview %}<button class="btn btn-soft" formaction="/sharing/preview/chat"
+                  data-progress-title="Testing agent"
+                  data-progress-message="Reviewing the snapshot…"
+                  data-progress-next="Asking the agent…">Test agent</button>{% endif %}
+          <button class="btn btn-main" formaction="/sharing/generate"
+                  data-progress-title="Generating share"
+                  data-progress-message="Preparing your snapshot…"
+                  data-progress-next="Generating secure access and QR code…">Generate snapshot + QR</button>
         </div>
       </form>
     </section>
@@ -239,6 +260,17 @@
     </aside>
   </div>
 </main>
+<div class="progress-overlay" data-progress-overlay role="alertdialog" aria-modal="true"
+     aria-labelledby="social-progress-title" aria-describedby="social-progress-message"
+     tabindex="-1" hidden>
+  <section class="progress-card">
+    <div class="progress-spinner" aria-hidden="true"></div>
+    <h2 id="social-progress-title" data-progress-heading class="mt-5 text-lg font-semibold text-white">Processing</h2>
+    <p id="social-progress-message" data-progress-message class="mt-2 min-h-10 text-sm text-slate-300" aria-live="polite">Please wait…</p>
+    <div class="progress-track mt-5" aria-hidden="true"><div class="progress-bar"></div></div>
+    <p class="mt-3 text-xs text-slate-500">Keep this page open until the request finishes.</p>
+  </section>
+</div>
 <script>
 (() => {
   const form = document.querySelector('[data-social-form]');
@@ -249,6 +281,9 @@
   const tagSearch = form?.querySelector('[data-tag-search]');
   const tagCloud = form?.querySelector('[data-tag-cloud]');
   const timezoneOffset = form?.querySelector('[data-timezone-offset]');
+  const progressOverlay = document.querySelector('[data-progress-overlay]');
+  const progressHeading = progressOverlay?.querySelector('[data-progress-heading]');
+  const progressMessage = progressOverlay?.querySelector('[data-progress-message]');
   if (!form || !selector || !allSources || !sourceSummary || !tagCloud) return;
 
   const specificSources = () =>
@@ -384,6 +419,37 @@
     setTimezone();
     form.addEventListener('submit', setTimezone);
   }
+  let progressTimer = 0;
+  const hideProgress = () => {
+    window.clearTimeout(progressTimer);
+    progressTimer = 0;
+    if (progressOverlay) progressOverlay.hidden = true;
+    form.removeAttribute('aria-busy');
+    delete form.dataset.processing;
+    document.documentElement.style.overflow = '';
+  };
+  form.addEventListener('submit', event => {
+    const submitter = event.submitter;
+    if (!submitter?.dataset.progressMessage || !progressOverlay) return;
+    if (form.dataset.processing === 'true') {
+      event.preventDefault();
+      return;
+    }
+    form.dataset.processing = 'true';
+    form.setAttribute('aria-busy', 'true');
+    progressHeading.textContent = submitter.dataset.progressTitle || 'Processing';
+    progressMessage.textContent = submitter.dataset.progressMessage;
+    progressOverlay.hidden = false;
+    document.documentElement.style.overflow = 'hidden';
+    progressOverlay.focus({preventScroll:true});
+    const nextMessage = submitter.dataset.progressNext;
+    if (nextMessage) {
+      progressTimer = window.setTimeout(() => {
+        progressMessage.textContent = nextMessage;
+      }, 1400);
+    }
+  });
+  window.addEventListener('pageshow', hideProgress);
   updateSourceSummary();
 })();
 </script>

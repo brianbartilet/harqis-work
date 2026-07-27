@@ -167,6 +167,33 @@ def test_social_recipe_form_uses_new_labels_defaults_and_collapsed_sections(
     assert 'id="topic" name="topic" rows="3"' in response.text
 
 
+def test_social_long_actions_use_shared_blocking_progress_screen(
+    authenticated_client, sharing_corpus
+):
+    response = authenticated_client.get("/sharing")
+
+    assert response.status_code == 200
+    assert 'data-progress-overlay role="alertdialog" aria-modal="true"' in response.text
+    assert 'aria-labelledby="social-progress-title"' in response.text
+    assert 'data-progress-message="Refreshing your preview…"' in response.text
+    assert 'data-progress-next="Applying sources and filters…"' in response.text
+    assert 'data-progress-message="Preparing your snapshot…"' in response.text
+    assert 'data-progress-next="Generating secure access and QR code…"' in response.text
+    assert "prefers-reduced-motion:reduce" in response.text
+    assert "form.dataset.processing === 'true'" in response.text
+    assert re.search(
+        r'<button class="btn btn-soft" formaction="/sharing/configurations">'
+        r"Save recipe</button>",
+        response.text,
+    )
+
+    preview = authenticated_client.post("/sharing/preview", data=_form())
+
+    assert preview.status_code == 200
+    assert 'data-progress-message="Reviewing the snapshot…"' in preview.text
+    assert 'data-progress-next="Asking the agent…"' in preview.text
+
+
 def test_all_sources_scope_includes_each_available_source(tmp_path, monkeypatch):
     from modules.hfl_shares import scope
 
