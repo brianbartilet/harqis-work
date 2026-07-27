@@ -156,11 +156,11 @@ def test_social_recipe_form_uses_new_labels_defaults_and_collapsed_sections(
     assert 'name="references_enabled" checked' in response.text
     assert "Number of devices" in response.text
     assert re.search(
-        r'<details class="expand-panel mb-4">\s*<summary><span>Additional filters',
+        r'<details class="expand-panel mb-4">\s*<summary>\s*<span>Additional filters',
         response.text,
     )
     assert re.search(
-        r'<details class="expand-panel mb-4">\s*<summary><span>Access, expiry',
+        r'<details class="expand-panel mb-4">\s*<summary>\s*<span>Access, expiry',
         response.text,
     )
     assert 'id="description" name="description" rows="3"' in response.text
