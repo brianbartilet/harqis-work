@@ -272,6 +272,68 @@ def test_saved_recipe_is_reusable_and_deleting_it_does_not_delete_share(
     assert get_share_store().get_share(share_id) is not None
 
 
+def test_recipe_save_and_update_show_one_time_named_notifications(
+    authenticated_client, sharing_corpus
+):
+    created = authenticated_client.post(
+        "/sharing/configurations",
+        data=_form(),
+        follow_redirects=True,
+    )
+
+    assert created.status_code == 200
+    assert "Japan context saved." in created.text
+    assert 'data-success-toast role="status" aria-live="polite"' in created.text
+    assert 'data-toast-close aria-label="Dismiss notification"' in created.text
+    assert "searchParams.delete('notice')" in created.text
+    assert "window.setTimeout(dismissToast, 5000)" in created.text
+
+    configuration = get_share_store().list_configurations()[0]
+    updated = authenticated_client.post(
+        "/sharing/configurations",
+        data=_form(
+            configuration_id=configuration.id,
+            name="Updated Japan context",
+        ),
+        follow_redirects=True,
+    )
+
+    assert updated.status_code == 200
+    assert "Updated Japan context updated." in updated.text
+    assert "Japan context saved." not in updated.text
+
+
+def test_failed_recipe_save_does_not_show_success_notification(
+    authenticated_client, sharing_corpus
+):
+    response = authenticated_client.post(
+        "/sharing/configurations",
+        data=_form(name=""),
+    )
+
+    assert response.status_code == 422
+    assert "Configuration name is required." in response.text
+    assert '<div class="success-toast"' not in response.text
+
+
+def test_saved_recipe_actions_share_alignment_and_control_sizing(
+    authenticated_client, sharing_corpus
+):
+    authenticated_client.post(
+        "/sharing/configurations",
+        data=_form(),
+        follow_redirects=True,
+    )
+
+    response = authenticated_client.get("/sharing")
+
+    assert response.status_code == 200
+    assert 'class="actions recipe-actions mt-2"' in response.text
+    assert 'class="recipe-action text-slate-400"' in response.text
+    assert 'class="recipe-action text-red-400"' in response.text
+    assert ".recipe-actions form { display:inline-flex; margin:0; }" in response.text
+
+
 def test_snapshot_is_source_first_and_removes_owner_metadata(
     tmp_path, monkeypatch
 ):

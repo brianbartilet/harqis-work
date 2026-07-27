@@ -226,6 +226,7 @@ def _owner_context(
     preview_answer: str = "",
     preview_question: str = "",
     error: str = "",
+    success: str = "",
 ) -> dict[str, Any]:
     try:
         documents, catalog_sources, catalog_tags = _sharing_catalog()
@@ -288,6 +289,7 @@ def _owner_context(
         preview_question=preview_question,
         suggested_prompts=suggested_prompts(preview) if preview else (),
         error=error or corpus_error,
+        success=success,
         csrf=make_csrf_token(user),
         defaults=get_settings(),
     )
@@ -314,11 +316,13 @@ async def sharing_page(
     request: Request,
     configuration_id: str = "",
     duplicate: bool = False,
+    notice: str = "",
 ):
     user, redirect = require_user(request)
     if redirect:
         return redirect
     configuration = None
+    success = ""
     if configuration_id:
         configuration = get_share_store().get_configuration(configuration_id)
         if configuration and duplicate:
@@ -331,10 +335,18 @@ async def sharing_page(
                     "updated_at": "",
                 }
             )
+        elif configuration and notice in {"saved", "updated"}:
+            action = "saved" if notice == "saved" else "updated"
+            success = f"{configuration.name} {action}."
     return templates.TemplateResponse(
         request,
         "modules/hfl_shares/index.html",
-        _owner_context(request, user, configuration=configuration),
+        _owner_context(
+            request,
+            user,
+            configuration=configuration,
+            success=success,
+        ),
     )
 
 
@@ -347,6 +359,7 @@ async def save_configuration(request: Request):
     _require_csrf(form, user)
     store = get_share_store()
     existing = store.get_configuration(str(form.get("configuration_id") or ""))
+    notice = "updated" if existing else "saved"
     try:
         configuration = _configuration_from_form(form, existing=existing)
         saved = store.save_configuration(configuration)
@@ -358,7 +371,8 @@ async def save_configuration(request: Request):
             status_code=422,
         )
     return RedirectResponse(
-        f"/sharing?configuration_id={saved.id}", status_code=303
+        f"/sharing?configuration_id={saved.id}&notice={notice}",
+        status_code=303,
     )
 
 

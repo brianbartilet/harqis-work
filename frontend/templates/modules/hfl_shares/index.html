@@ -40,6 +40,17 @@
   .pill { display:inline-block; border-radius:999px; background:#172554; color:#bfdbfe; font-size:.68rem; padding:.18rem .5rem; }
   .message { border-radius:.65rem; padding:.75rem .9rem; margin-bottom:1rem; background:#082f49; color:#bae6fd; }
   .message.error { background:#4c0519; color:#fecdd3; }
+  .success-toast { position:fixed; top:1rem; right:1rem; z-index:90; display:flex; width:min(24rem,calc(100% - 2rem)); align-items:flex-start; justify-content:space-between; gap:1rem; border:1px solid #047857; border-radius:.75rem; background:#022c22; color:#d1fae5; padding:.85rem 1rem; box-shadow:0 18px 55px rgba(0,0,0,.45); animation:toast-enter .2s ease-out; }
+  .success-toast.is-closing { animation:toast-exit .16s ease-in forwards; }
+  .toast-close { display:inline-flex; min-height:1.75rem; min-width:1.75rem; align-items:center; justify-content:center; border-radius:.4rem; color:#6ee7b7; line-height:1; }
+  .toast-close:hover { background:#064e3b; color:#ecfdf5; }
+  .toast-close:focus-visible { outline:2px solid #34d399; outline-offset:2px; }
+  .recipe-actions { align-items:center; }
+  .recipe-actions form { display:inline-flex; margin:0; }
+  .recipe-action { display:inline-flex; min-height:1.75rem; align-items:center; border:0; background:transparent; padding:.2rem 0; font-size:.75rem; line-height:1.25; cursor:pointer; }
+  .recipe-action:focus-visible { border-radius:.25rem; outline:2px solid #60a5fa; outline-offset:2px; }
+  @keyframes toast-enter { from { opacity:0; transform:translateY(-.5rem); } }
+  @keyframes toast-exit { to { opacity:0; transform:translateY(-.35rem); } }
   .wrap { overflow-wrap:anywhere; word-break:break-word; }
   .expand-panel { border:1px solid #1e293b; border-radius:.75rem; background:rgba(2,6,23,.45); }
   .expand-panel > summary { display:flex; cursor:pointer; list-style:none; align-items:center; justify-content:space-between; gap:.75rem; color:#93c5fd; font-size:.8rem; padding:.8rem .9rem; }
@@ -57,6 +68,7 @@
   @media(prefers-reduced-motion:reduce) {
     .progress-spinner { animation-duration:2.5s; }
     .progress-bar { width:100%; animation:none; opacity:.75; }
+    .success-toast,.success-toast.is-closing { animation:none; }
   }
   @media(max-width:900px) { .share-grid { grid-template-columns:1fr; } }
   @media(max-width:600px) { .two,.stat-grid { grid-template-columns:1fr 1fr; } .panel { padding:.9rem; } }
@@ -72,6 +84,12 @@
   </div>
 
   {% if error %}<div class="message error">{{ error }}</div>{% endif %}
+  {% if success %}
+  <div class="success-toast" data-success-toast role="status" aria-live="polite">
+    <p class="text-sm font-medium">{{ success }}</p>
+    <button class="toast-close" type="button" data-toast-close aria-label="Dismiss notification">×</button>
+  </div>
+  {% endif %}
   <div class="share-grid">
     <section class="panel">
       <div class="mb-5 flex items-start justify-between gap-4">
@@ -224,10 +242,10 @@
         <div class="item">
           <a class="wrap text-sm font-semibold text-sky-300" href="/sharing?configuration_id={{ item.id }}">{{ item.name }}</a>
           <p class="mt-1 text-xs text-slate-500">{{ "All sources" if all_sources_value in item.sources else item.sources|join(', ') }} · {{ (item.ttl_seconds / 3600)|round(1) }} hours</p>
-          <div class="actions mt-2">
-            <a class="text-xs text-slate-400" href="/sharing?configuration_id={{ item.id }}&duplicate=true">Duplicate</a>
+          <div class="actions recipe-actions mt-2">
+            <a class="recipe-action text-slate-400" href="/sharing?configuration_id={{ item.id }}&duplicate=true">Duplicate</a>
             {% if not cfg or cfg.id != item.id %}
-            <form method="post" action="/sharing/configurations/{{ item.id }}/delete"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="text-xs text-red-400" type="submit">Delete</button></form>
+            <form method="post" action="/sharing/configurations/{{ item.id }}/delete"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="recipe-action text-red-400" type="submit">Delete</button></form>
             {% endif %}
           </div>
         </div>
@@ -284,6 +302,7 @@
   const progressOverlay = document.querySelector('[data-progress-overlay]');
   const progressHeading = progressOverlay?.querySelector('[data-progress-heading]');
   const progressMessage = progressOverlay?.querySelector('[data-progress-message]');
+  const successToast = document.querySelector('[data-success-toast]');
   if (!form || !selector || !allSources || !sourceSummary || !tagCloud) return;
 
   const specificSources = () =>
@@ -450,6 +469,20 @@
     }
   });
   window.addEventListener('pageshow', hideProgress);
+  if (successToast) {
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.delete('notice');
+    window.history.replaceState({}, '', currentUrl);
+    const closeButton = successToast.querySelector('[data-toast-close]');
+    let toastTimer = 0;
+    const dismissToast = () => {
+      window.clearTimeout(toastTimer);
+      successToast.classList.add('is-closing');
+      window.setTimeout(() => successToast.remove(), 180);
+    };
+    closeButton?.addEventListener('click', dismissToast);
+    toastTimer = window.setTimeout(dismissToast, 5000);
+  }
   updateSourceSummary();
 })();
 </script>
