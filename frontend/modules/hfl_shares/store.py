@@ -1,0 +1,433 @@
+"""SQLite-backed configuration, grant, session, and approval storage."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+import threading
+import uuid
+from datetime import datetime, timedelta
+from functools import lru_cache
+from pathlib import Path
+
+from config import get_settings
+from modules.hfl_shares.models import (
+    ScopeSnapshot,
+    ShareConfiguration,
+    ShareGrant,
+    utc_now,
+)
+
+
+_SCHEMA = """
+PRAGMA journal_mode=WAL;
+PRAGMA foreign_keys=ON;
+CREATE TABLE IF NOT EXISTS configurations (
+    id TEXT PRIMARY KEY,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS shares (
+    id TEXT PRIMARY KEY,
+    configuration_id TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    pin_hash TEXT NOT NULL DEFAULT '',
+    auth_mode TEXT NOT NULL,
+    allowed_email TEXT NOT NULL DEFAULT '',
+    snapshot TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    status TEXT NOT NULL,
+    single_use INTEGER NOT NULL,
+    device_limit INTEGER NOT NULL,
+    redeemed_at TEXT NOT NULL DEFAULT '',
+    revoked_at TEXT NOT NULL DEFAULT '',
+    pin_failures INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    share_id TEXT NOT NULL REFERENCES shares(id) ON DELETE CASCADE,
+    secret_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    revoked_at TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS access_requests (
+    id TEXT PRIMARY KEY,
+    share_id TEXT NOT NULL REFERENCES shares(id) ON DELETE CASCADE,
+    secret_hash TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS chat_events (
+    id TEXT PRIMARY KEY,
+    share_id TEXT NOT NULL REFERENCES shares(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_share ON sessions(share_id);
+CREATE INDEX IF NOT EXISTS idx_requests_share ON access_requests(share_id);
+CREATE INDEX IF NOT EXISTS idx_chat_events_share ON chat_events(share_id, created_at);
+"""
+
+
+class ShareStore:
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path).expanduser().resolve()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.RLock()
+        with self._connect() as connection:
+            connection.executescript(_SCHEMA)
+
+    def _connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.path, timeout=15)
+        connection.row_factory = sqlite3.Row
+        return connection
+
+    @staticmethod
+    def _configuration(row: sqlite3.Row) -> ShareConfiguration:
+        payload = json.loads(row["payload"])
+        for field in ("sources", "tags", "selected_entry_ids", "test_prompts"):
+            payload[field] = tuple(payload.get(field) or [])
+        return ShareConfiguration(**payload)
+
+    @staticmethod
+    def _grant(row: sqlite3.Row) -> ShareGrant:
+        return ShareGrant(
+            id=row["id"],
+            configuration_id=row["configuration_id"],
+            name=row["name"],
+            auth_mode=row["auth_mode"],
+            allowed_email=row["allowed_email"],
+            snapshot=ScopeSnapshot.from_record(json.loads(row["snapshot"])),
+            created_at=row["created_at"],
+            expires_at=row["expires_at"],
+            status=row["status"],
+            single_use=bool(row["single_use"]),
+            device_limit=int(row["device_limit"]),
+            redeemed_at=row["redeemed_at"],
+            revoked_at=row["revoked_at"],
+            pin_failures=int(row["pin_failures"]),
+        )
+
+    def save_configuration(
+        self, configuration: ShareConfiguration
+    ) -> ShareConfiguration:
+        now = utc_now().isoformat()
+        saved = configuration.saved(
+            configuration_id=configuration.id or str(uuid.uuid4()),
+            now=now,
+        )
+        payload = json.dumps(saved.to_record(), ensure_ascii=False)
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO configurations(id, payload, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    payload=excluded.payload, updated_at=excluded.updated_at
+                """,
+                (saved.id, payload, saved.created_at, saved.updated_at),
+            )
+        return saved
+
+    def list_configurations(self) -> list[ShareConfiguration]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM configurations ORDER BY updated_at DESC"
+            ).fetchall()
+        return [self._configuration(row) for row in rows]
+
+    def get_configuration(self, configuration_id: str) -> ShareConfiguration | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM configurations WHERE id=?", (configuration_id,)
+            ).fetchone()
+        return self._configuration(row) if row else None
+
+    def delete_configuration(self, configuration_id: str) -> bool:
+        with self._lock, self._connect() as connection:
+            result = connection.execute(
+                "DELETE FROM configurations WHERE id=?", (configuration_id,)
+            )
+        return result.rowcount > 0
+
+    def create_share(
+        self,
+        *,
+        configuration_id: str,
+        name: str,
+        token_hash: str,
+        pin_hash: str,
+        auth_mode: str,
+        allowed_email: str,
+        snapshot: ScopeSnapshot,
+        ttl_seconds: int,
+        single_use: bool,
+        device_limit: int,
+    ) -> ShareGrant:
+        now = utc_now()
+        grant = ShareGrant(
+            id=str(uuid.uuid4()),
+            configuration_id=configuration_id,
+            name=name,
+            auth_mode=auth_mode,
+            allowed_email=allowed_email,
+            snapshot=snapshot,
+            created_at=now.isoformat(),
+            expires_at=(now + timedelta(seconds=ttl_seconds)).isoformat(),
+            status="active",
+            single_use=single_use,
+            device_limit=device_limit,
+        )
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO shares(
+                    id, configuration_id, name, token_hash, pin_hash,
+                    auth_mode, allowed_email, snapshot, created_at, expires_at,
+                    status, single_use, device_limit
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    grant.id, configuration_id, name, token_hash, pin_hash,
+                    auth_mode, allowed_email,
+                    json.dumps(snapshot.to_record(), ensure_ascii=False),
+                    grant.created_at, grant.expires_at, "active",
+                    int(single_use), int(device_limit),
+                ),
+            )
+        return grant
+
+    def list_shares(self) -> list[ShareGrant]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM shares ORDER BY created_at DESC"
+            ).fetchall()
+        return [self._grant(row) for row in rows]
+
+    def get_share(self, share_id: str) -> ShareGrant | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM shares WHERE id=?", (share_id,)
+            ).fetchone()
+        return self._grant(row) if row else None
+
+    def get_share_by_token_hash(self, token_hash: str) -> ShareGrant | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM shares WHERE token_hash=?", (token_hash,)
+            ).fetchone()
+        return self._grant(row) if row else None
+
+    def pin_hash_for_share(self, share_id: str) -> str:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT pin_hash FROM shares WHERE id=?", (share_id,)
+            ).fetchone()
+        return str(row["pin_hash"]) if row else ""
+
+    def record_pin_failure(self, share_id: str) -> int:
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                "UPDATE shares SET pin_failures=pin_failures+1 WHERE id=?",
+                (share_id,),
+            )
+            row = connection.execute(
+                "SELECT pin_failures FROM shares WHERE id=?", (share_id,)
+            ).fetchone()
+        return int(row["pin_failures"]) if row else 0
+
+    def create_session(
+        self, share_id: str, secret_hash: str
+    ) -> tuple[str, str] | None:
+        now = utc_now()
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM shares WHERE id=?", (share_id,)
+            ).fetchone()
+            if not row:
+                return None
+            grant = self._grant(row)
+            if not grant.available:
+                return None
+            active_count = connection.execute(
+                """
+                SELECT COUNT(*) AS count FROM sessions
+                WHERE share_id=? AND revoked_at='' AND expires_at>?
+                """,
+                (share_id, now.isoformat()),
+            ).fetchone()["count"]
+            if active_count >= grant.device_limit:
+                return None
+            if grant.single_use and grant.redeemed_at:
+                return None
+            session_id = str(uuid.uuid4())
+            expires_at = min(
+                datetime.fromisoformat(grant.expires_at),
+                now + timedelta(days=7),
+            ).isoformat()
+            connection.execute(
+                """
+                INSERT INTO sessions(
+                    id, share_id, secret_hash, created_at, expires_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (session_id, share_id, secret_hash, now.isoformat(), expires_at),
+            )
+            connection.execute(
+                """
+                UPDATE shares
+                SET redeemed_at=CASE WHEN redeemed_at='' THEN ? ELSE redeemed_at END
+                WHERE id=?
+                """,
+                (now.isoformat(), share_id),
+            )
+        return session_id, expires_at
+
+    def validate_session(
+        self, session_id: str, secret_hash: str
+    ) -> ShareGrant | None:
+        now = utc_now().isoformat()
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT sh.* FROM sessions s
+                JOIN shares sh ON sh.id=s.share_id
+                WHERE s.id=? AND s.secret_hash=? AND s.revoked_at=''
+                  AND s.expires_at>? AND sh.status='active' AND sh.expires_at>?
+                """,
+                (session_id, secret_hash, now, now),
+            ).fetchone()
+        return self._grant(row) if row else None
+
+    def revoke_share(self, share_id: str) -> bool:
+        now = utc_now().isoformat()
+        with self._lock, self._connect() as connection:
+            result = connection.execute(
+                """
+                UPDATE shares SET status='revoked', revoked_at=?
+                WHERE id=? AND status='active'
+                """,
+                (now, share_id),
+            )
+            connection.execute(
+                "UPDATE sessions SET revoked_at=? WHERE share_id=? AND revoked_at=''",
+                (now, share_id),
+            )
+            connection.execute(
+                "UPDATE access_requests SET status='revoked' WHERE share_id=?",
+                (share_id,),
+            )
+        return result.rowcount > 0
+
+    def create_access_request(
+        self, share_id: str, secret_hash: str
+    ) -> tuple[str, str] | None:
+        now = utc_now()
+        request_id = str(uuid.uuid4())
+        expires_at = now + timedelta(hours=1)
+        with self._lock, self._connect() as connection:
+            pending = connection.execute(
+                """
+                SELECT COUNT(*) AS count FROM access_requests
+                WHERE share_id=? AND status='pending' AND expires_at>?
+                """,
+                (share_id, now.isoformat()),
+            ).fetchone()["count"]
+            if pending >= 5:
+                return None
+            connection.execute(
+                """
+                INSERT INTO access_requests(
+                    id, share_id, secret_hash, status, created_at, expires_at
+                ) VALUES (?, ?, ?, 'pending', ?, ?)
+                """,
+                (
+                    request_id, share_id, secret_hash,
+                    now.isoformat(), expires_at.isoformat(),
+                ),
+            )
+        return request_id, expires_at.isoformat()
+
+    def allow_chat(self, share_id: str, limit: int) -> bool:
+        """Atomically reserve one model query inside a rolling one-hour window."""
+        now = utc_now()
+        cutoff = (now - timedelta(hours=1)).isoformat()
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                "DELETE FROM chat_events WHERE created_at<?", (cutoff,)
+            )
+            count = connection.execute(
+                "SELECT COUNT(*) AS count FROM chat_events WHERE share_id=?",
+                (share_id,),
+            ).fetchone()["count"]
+            if count >= max(1, int(limit)):
+                return False
+            connection.execute(
+                "INSERT INTO chat_events(id, share_id, created_at) VALUES (?, ?, ?)",
+                (str(uuid.uuid4()), share_id, now.isoformat()),
+            )
+        return True
+
+    def list_pending_requests(self) -> list[dict[str, str]]:
+        now = utc_now().isoformat()
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT r.id, r.share_id, r.created_at, sh.name
+                FROM access_requests r JOIN shares sh ON sh.id=r.share_id
+                WHERE r.status='pending' AND r.expires_at>?
+                ORDER BY r.created_at
+                """,
+                (now,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def approve_request(self, request_id: str) -> bool:
+        with self._lock, self._connect() as connection:
+            result = connection.execute(
+                """
+                UPDATE access_requests SET status='approved'
+                WHERE id=? AND status='pending'
+                """,
+                (request_id,),
+            )
+        return result.rowcount > 0
+
+    def get_access_request(
+        self, request_id: str, secret_hash: str
+    ) -> dict[str, str] | None:
+        now = utc_now().isoformat()
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM access_requests
+                WHERE id=? AND secret_hash=? AND expires_at>?
+                """,
+                (request_id, secret_hash, now),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def consume_approved_request(self, request_id: str) -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE access_requests SET status='consumed'
+                WHERE id=? AND status='approved'
+                """,
+                (request_id,),
+            )
+
+
+@lru_cache(maxsize=1)
+def get_share_store() -> ShareStore:
+    return ShareStore(Path(get_settings().hfl_share_store_path))
+
+
+def reset_share_store() -> None:
+    get_share_store.cache_clear()

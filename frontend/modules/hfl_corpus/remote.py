@@ -244,6 +244,43 @@ class RemoteCorpusClient:
         except (KeyError, TypeError, ValueError) as exc:
             raise RemoteCorpusError("Canonical HFL corpus returned an invalid index") from exc
 
+    def sharing_documents(
+        self, sources: tuple[str, ...] | list[str]
+    ) -> tuple[CorpusDocument, ...]:
+        """Load entry-bearing documents for an explicitly selected source scope."""
+        documents: dict[str, CorpusDocument] = {}
+        try:
+            for source in dict.fromkeys(item.strip() for item in sources if item.strip()):
+                payload = self._get(
+                    "/documents",
+                    params={
+                        "source": source,
+                        "compact": "false",
+                        "page": "1",
+                        "page_size": "20",
+                    },
+                ).json()
+                selected_source = str(payload.get("selected_source") or "")
+                if selected_source.casefold() != source.casefold():
+                    raise RemoteCorpusError(
+                        f"Canonical HFL corpus source is unavailable: {source}"
+                    )
+                for item in payload.get("results") or ():
+                    document = _document(item)
+                    documents[document.relative_path] = document
+        except RemoteCorpusError:
+            raise
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RemoteCorpusError(
+                "Canonical HFL corpus returned invalid sharing documents"
+            ) from exc
+        return tuple(
+            sorted(
+                documents.values(),
+                key=lambda item: item.relative_path.casefold(),
+            )
+        )
+
     def tree(self, path: str = "") -> dict:
         try:
             payload = self._get("/tree", params={"path": path}).json()

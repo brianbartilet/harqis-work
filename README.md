@@ -378,13 +378,14 @@ Widgets are wired to categories in each task's `@init_meter(..., schedule_catego
 ## Frontend Dashboard
 
 A lightweight, login-protected module frontend for the manifesto, workflow
-operations, application inventory and tests, and the searchable HFL corpus.
+operations, application inventory and tests, the searchable HFL corpus, and
+temporary scope-limited corpus sharing.
 
 ![HARQIS Dashboard](docs/images/dashboard-sample.png)
 
 > Full setup: [`frontend/README.md`](frontend/README.md)
 
-**Features:** Home manifesto · reorderable workflow and app layouts · one-click task triggering · live HTMX status polling · app documentation and controlled pytest runs · recursive HFL browsing, tag cloud, date search, authenticated canonical-host reads, and signed reference downloads · Flower link
+**Features:** Home manifesto · reorderable workflow and app layouts · one-click task triggering · live HTMX status polling · app documentation and controlled pytest runs · recursive HFL browsing, tag cloud, date search, authenticated canonical-host reads, and signed reference downloads · immutable source-scoped guest portals with QR/PIN access and cited Q&A · Flower link
 
 ```sh
 cd frontend && python main.py
@@ -681,6 +682,10 @@ HFL_CORPUS_PATH=                # canonical host corpus root; /Volumes/harqis-da
 HFL_OUTBOX_PATH=                # optional durable envelope directory; default logs/hfl-outbox
 HFL_SESSION_AUDIT_PATH=         # optional sanitized prompt/outcome artifacts; default logs/hfl-session-audit
 HFL_REFERENCE_ALLOWED_ROOTS=    # optional OS-pathsep list of trusted reference-download roots
+HFL_SHARE_PUBLIC_URL=           # public HTTPS tunnel origin for generated share links
+HFL_SHARE_SECRET_KEY=           # dedicated guest capability/session signing secret
+HFL_SHARE_STORE_PATH=           # optional SQLite path; default .harqis-data/hfl-shares.sqlite3
+HFL_SHARE_TRUST_PROXY_IDENTITY= # true only when Cloudflare Access is the exclusive origin path
 
 # ── RabbitMQ / Celery broker ──────────────────────────────────────────────────
 DOCKER_HOST_PORT_RABBIT_MQ=       # default: 15672

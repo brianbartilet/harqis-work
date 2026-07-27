@@ -1,0 +1,50 @@
+{% extends "share_base.html" %}
+{% block title %}{{ grant.name }} · HARQIS{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="row">
+    <div>
+      <p class="eyebrow">Shared snapshot</p>
+      <h1>{{ grant.name }}</h1>
+      <p class="muted">{{ grant.snapshot.entries|length }} entries · expires {{ grant.expires_at }}</p>
+    </div>
+    <form method="post" action="/share/session/logout"><button class="button-secondary">Close session</button></form>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Ask this shared context</h2>
+  <p class="muted">Answers are constrained to this immutable snapshot and include citations. Questions and answers are retained as sharing-audit HFL entries.</p>
+  {% if suggested_prompts %}<p class="muted">Try: {{ suggested_prompts|join(' · ') }}</p>{% endif %}
+  <form method="post" action="/share/session/chat">
+    <label for="question">Question</label>
+    <input id="question" name="question" type="text" maxlength="2000" required value="{{ question }}">
+    <button style="margin-top:14px">Ask</button>
+  </form>
+  {% if error %}<p class="notice error">{{ error }}</p>{% endif %}
+  {% if answer %}<div class="answer" style="margin-top:16px">{{ answer }}</div>{% endif %}
+</section>
+
+<section class="card">
+  <div class="row">
+    <h2>Shared entries</h2>
+    <form method="get" action="/share/session">
+      <label for="search">Filter entries</label>
+      <input id="search" name="q" type="search" value="{{ query }}" placeholder="Search this snapshot">
+    </form>
+  </div>
+  <p class="muted">{{ entries|length }} result{% if entries|length != 1 %}s{% endif %}</p>
+  {% for entry in entries %}
+  <article class="entry">
+    <div class="row"><h3>[{{ entry.citation }}] {{ entry.moment or entry.header }}</h3><span class="chip">{{ entry.source }}</span></div>
+    <div class="chips">{% for tag in entry.tags %}<span class="chip">#{{ tag }}</span>{% endfor %}</div>
+    <pre>{{ entry.text }}</pre>
+    {% set enabled_refs = entry.references|selectattr('enabled')|list %}
+    {% if enabled_refs %}
+    <p><strong>Shared references</strong></p>
+    <ul>{% for reference in enabled_refs %}<li><a href="/share/session/references/{{ reference.id }}">{{ reference.label }}</a></li>{% endfor %}</ul>
+    {% endif %}
+  </article>
+  {% else %}<p class="muted">No entries match this filter.</p>{% endfor %}
+</section>
+{% endblock %}

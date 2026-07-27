@@ -4,7 +4,7 @@ The HARQIS frontend is an authenticated, module-based interface for operating
 and inspecting the automation platform. It is built with FastAPI, Jinja2,
 HTMX, Alpine.js, Tailwind CSS, and SortableJS, with no JavaScript build step.
 
-The frontend currently exposes five modules:
+The frontend currently exposes six modules:
 
 | Module | Route | Purpose |
 |---|---|---|
@@ -13,6 +13,7 @@ The frontend currently exposes five modules:
 | Workflows | `/workflows` | Displays Celery workflow categories, task triggers, schedules, status, and run history. |
 | Apps | `/applications` | Inventories `apps/*`, renders documentation, and runs controlled pytest checks using host configuration. |
 | Activity Corpus | `/hfl-corpus` | Browses and searches HARQIS activity logs, based on the Homework for Life reflection practice, and their references. |
+| Social | `/sharing` | Builds reviewed, immutable Activity Corpus snapshots and temporary guest portals. |
 
 `/dashboard` remains as a compatibility redirect to `/home`.
 
@@ -90,9 +91,16 @@ frontend/
 │   │   ├── inventory.py
 │   │   ├── test_runner.py
 │   │   └── test_policy.toml
-│   └── hfl_corpus/
-│       ├── router.py
-│       └── corpus.py
+│   ├── hfl_corpus/
+│   │   ├── router.py
+│   │   └── corpus.py
+│   └── hfl_shares/
+│       ├── router.py              # Owner workspace + isolated guest routes
+│       ├── scope.py               # Source-first snapshot construction
+│       ├── store.py               # SQLite recipes, grants, and sessions
+│       ├── security.py            # Capability, PIN, CSRF, and cookie signing
+│       ├── agent.py               # Snapshot-only Q&A
+│       └── audit.py               # sharing-audit HFL persistence
 ├── services/
 │   ├── markdown.py               # Shared Markdown render + sanitization
 │   └── safe_paths.py             # Root containment and signed references
@@ -104,7 +112,9 @@ frontend/
 │   │   ├── manifesto/
 │   │   ├── workflows/
 │   │   ├── applications/
-│   │   └── hfl_corpus/
+│   │   ├── hfl_corpus/
+│   │   └── hfl_shares/
+│   └── share_base.html            # Dependency-free guest portal shell
 │   └── partials/status_panel.html
 └── tests/
 ```
@@ -414,6 +424,51 @@ Apply mode backs up affected Markdown files and Elasticsearch documents under
 the gitignored `.harqis-data/hfl-reference-migrations/` directory before
 updating either store. Reports contain only counts and entry IDs.
 
+## Social Module
+
+Social exposes an authenticated owner workspace at `/sharing` and a separate,
+navigation-free guest portal below `/share`. On a remote frontend it reads the
+source catalogue and source-scoped entry text through the authenticated
+canonical corpus API; local-file references remain unavailable there. A saved configuration is a
+reusable recipe, not a permission grant or a stored result. Its source, tag,
+date, topic, and entry-ID filters are recalculated whenever the owner previews
+or generates. Generation then freezes the current matches into an immutable
+snapshot; later recipe edits, corpus changes, or recipe deletion cannot alter
+an existing share.
+
+When `HFL_CORPUS_API_URL` enables remote-reader mode, Social uses only the
+canonical API and fails closed if that host is unavailable. It never falls
+back to the remote frontend's local filesystem.
+
+The owner workflow supports:
+
+- one or more required corpus sources as the primary scope boundary;
+- optional tag, date, natural-language topic, and explicit entry-ID filters;
+- reusable owner-only test prompts and snapshot-constrained preview chat;
+- PIN, Cloudflare email OTP, manual approval, and QR-possession access modes;
+- configurable expiry, device/session count, and single-use redemption;
+- reference sharing disabled by default, with individual files enabled only
+  after preview;
+- QR, a pasteable capability link, and a PIN displayed only in the generation
+  response; and
+- immediate revocation of the share and every active guest session.
+
+Guests can browse/search only the frozen entries and ask the configured model
+questions against that snapshot. They receive `[S1]`-style citations and
+cannot access owner navigation, corpus creation, workflows, tools, raw corpus
+files, or canonical filesystem paths. Guest lifecycle events and successful
+Q&A are submitted as HFL entries with source `sharing-audit`. Owner preview
+chat is diagnostic and is not audited as guest activity.
+
+Storage defaults to `.harqis-data/hfl-shares.sqlite3`. The database contains
+recipes, immutable snapshots, HMAC hashes of capability tokens, scrypt PIN
+hashes, signed-cookie session hashes, approval requests, and revocation state.
+It never stores a generated PIN or public capability token in plaintext.
+
+Detailed deployment, Cloudflare routing, lifecycle, recovery, and threat-model
+guidance is in
+[`docs/info/HFL-CORPUS-SHARING.md`](../docs/info/HFL-CORPUS-SHARING.md).
+
 ## Routes
 
 | Method | Route | Description |
@@ -443,6 +498,10 @@ updating either store. Reports contain only counts and entry IDs.
 | POST | `/api/hfl/entries/upload` | Bearer-authenticated canonical multipart entry write. |
 | GET | `/api/hfl/document/{path}` | Bearer-authenticated canonical Markdown document. |
 | GET | `/api/hfl/reference/{token}` | Bearer-authenticated canonical reference download. |
+| GET/POST | `/sharing[...]` | Owner-only recipe, preview, generation, approval, and revocation operations. |
+| GET/POST | `/share/access/{token}` | Public capability redemption for PIN, manual, and QR modes. |
+| GET/POST | `/share/email/{token}` | Cloudflare Access-protected email OTP redemption. |
+| GET/POST | `/share/session[...]` | Signed guest-session browsing, Q&A, logout, and enabled references. |
 | GET | `/health` | Process health response. |
 
 ## Configuration
@@ -464,6 +523,18 @@ updating either store. Reports contain only counts and entry IDs.
 | `HFL_REFERENCE_ALLOWED_ROOTS` | empty | Additional local reference-download roots. |
 | `HFL_CORPUS_API_URL` | empty | Canonical frontend origin; enables exclusive remote mode when set. |
 | `HFL_CORPUS_API_TOKEN` | empty | Shared bearer secret for canonical corpus API requests. |
+| `HFL_SHARE_PUBLIC_URL` | empty | Public HTTPS tunnel origin used in generated links. Required for proxied production sharing. |
+| `HFL_SHARE_SECRET_KEY` | `APP_SECRET_KEY` | Separate signing/HMAC key for share capabilities and guest cookies. |
+| `HFL_SHARE_STORE_PATH` | `.harqis-data/hfl-shares.sqlite3` | Durable recipe, snapshot, grant, and session store. |
+| `HFL_SHARE_DEFAULT_TTL_SECONDS` | `3600` | New-recipe expiry default. |
+| `HFL_SHARE_DEFAULT_DEVICE_LIMIT` | `1` | New-recipe device/session default. |
+| `HFL_SHARE_PIN_MAX_ATTEMPTS` | `5` | Failed PIN attempts allowed per grant. |
+| `HFL_SHARE_MODEL` | `claude-haiku-4-5-20251001` | Existing Anthropic-provider model used for scoped Q&A. |
+| `HFL_SHARE_MAX_CONTEXT_CHARS` | `60000` | Maximum sanitized snapshot characters sent to the model per question. |
+| `HFL_SHARE_MAX_SNAPSHOT_ENTRIES` | `1000` | Hard entry limit for a generated snapshot. |
+| `HFL_SHARE_MAX_SNAPSHOT_CHARS` | `5000000` | Hard sanitized-text size limit for a generated snapshot. |
+| `HFL_SHARE_CHAT_LIMIT_PER_HOUR` | `30` | Durable per-share guest model-query limit. |
+| `HFL_SHARE_TRUST_PROXY_IDENTITY` | `false` | Trust Cloudflare Access identity headers for email OTP mode; enable only with a locked-down origin. |
 
 ## Testing
 
@@ -485,7 +556,9 @@ raise SystemExit(pytest.main(["-q", "frontend/tests"]))
 
 Coverage includes module authentication, navigation, inventory discovery,
 Markdown sanitization, test redaction, HFL parsing/search/tree construction,
-API bearer authentication, signed reference containment, and route rendering. Browser-level validation
+API bearer authentication, signed reference containment, immutable share
+snapshots, hashed capabilities and PINs, single-use sessions, revocation, and
+route rendering. Browser-level validation
 should additionally cover drag ordering, HTMX polling, confirmation dialogs,
 responsive navigation, corpus filtering, and reference downloads.
 
@@ -500,5 +573,7 @@ responsive navigation, corpus filtering, and reference downloads.
 - Deploy/restart the Mac frontend before enabling/restarting a remote Windows
   frontend; otherwise Windows correctly reports the canonical corpus as
   unavailable.
-- Do not expose the frontend directly to the public internet. Use a VPN or an
-  authenticated HTTPS reverse proxy and set `BEHIND_PROXY=true`.
+- Never expose the origin directly to the public internet. Social requires an
+  HTTPS tunnel or reverse proxy, `BEHIND_PROXY=true`, owner protection for all
+  non-guest routes, and explicit public policy only for the intended
+  `/share/access/*` and guest-session paths.

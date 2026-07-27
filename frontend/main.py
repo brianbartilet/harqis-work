@@ -40,6 +40,8 @@ from config import get_settings, warn_insecure_defaults
 from modules.applications.router import router as applications_router
 from modules.hfl_corpus.api import router as hfl_corpus_api_router
 from modules.hfl_corpus.router import router as hfl_corpus_router
+from modules.hfl_shares.router import guest_router as hfl_share_guest_router
+from modules.hfl_shares.router import owner_router as hfl_share_owner_router
 from modules.home.router import router as home_router
 from modules.manifesto.router import router as manifesto_router
 from modules.workflows.router import router as workflows_router
@@ -59,6 +61,8 @@ app.include_router(workflows_router)
 app.include_router(applications_router)
 app.include_router(hfl_corpus_api_router)
 app.include_router(hfl_corpus_router)
+app.include_router(hfl_share_owner_router)
+app.include_router(hfl_share_guest_router)
 
 
 # ── Security headers ──────────────────────────────────────────────────────────
@@ -69,6 +73,14 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"]        = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"]     = "geolocation=(), microphone=(), camera=()"
+    if request.url.path.startswith("/share/"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; img-src 'self' data:; "
+            "style-src 'self' 'unsafe-inline'; form-action 'self'; "
+            "frame-ancestors 'none'; base-uri 'none'"
+        )
     return response
 
 _here = Path(__file__).parent

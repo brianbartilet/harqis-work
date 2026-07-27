@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,12 @@ os.environ["APP_PASSWORD"] = "frontend-test-password"
 os.environ["APP_SECRET_KEY"] = "frontend-test-secret-key-32-characters"
 os.environ["HFL_CORPUS_API_TOKEN"] = "frontend-test-hfl-api-token"
 os.environ["HFL_CORPUS_API_URL"] = ""
+os.environ["HFL_SHARE_SECRET_KEY"] = "frontend-test-share-secret-key"
+os.environ["HFL_SHARE_PUBLIC_URL"] = "https://share.example.test"
+os.environ["HFL_SHARE_STORE_PATH"] = str(
+    Path(tempfile.gettempdir())
+    / f"harqis-frontend-shares-{os.getpid()}.sqlite3"
+)
 
 
 @pytest.fixture
