@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import json
 import math
 import re
 import secrets
@@ -138,8 +139,8 @@ def _expiration_seconds(form: Any, existing: ShareConfiguration | None) -> int:
     )
     if seconds < 300:
         raise ValueError("Expires at must be at least five minutes from now.")
-    if seconds > 604_800:
-        raise ValueError("Expires at must be within seven days.")
+    if seconds > 31_536_000:
+        raise ValueError("Expires at must be within 365 days.")
     return seconds
 
 
@@ -184,12 +185,16 @@ def _configuration_from_form(
     preview: bool = False,
 ) -> ShareConfiguration:
     settings = get_settings()
+    recipient = str(form.get("recipient") or "").strip()
+    if not recipient and not preview:
+        raise ValueError("Recipient is required.")
     device_limit = int(
         str(form.get("device_limit") or settings.hfl_share_default_device_limit)
     )
     return ShareConfiguration(
         id=str(form.get("configuration_id") or ""),
         name=str(form.get("name") or "").strip() or ("Preview" if preview else ""),
+        recipient=recipient or "there",
         description=str(form.get("description") or "").strip(),
         sources=_normalized_sources(form),
         tags=parse_csv(
@@ -279,7 +284,13 @@ def _owner_context(
         request,
         user,
         "sharing",
-        configurations=store.list_configurations(),
+        configurations=tuple(
+            {
+                "configuration": item,
+                "expiration_summary": _duration_summary(item.ttl_seconds),
+            }
+            for item in store.list_configurations()
+        ),
         shares=tuple(
             {
                 "grant": share,
@@ -560,6 +571,7 @@ async def generate_share(request: Request):
             "pin": pin,
             "qr": qr,
             "expires_at_display": _format_utc(grant.expires_at),
+            "share_recipient": grant.snapshot.recipient,
         }
         record_share_audit(event="created", share_id=grant.id)
     except (TypeError, ValueError) as exc:
@@ -602,6 +614,102 @@ async def revoke_share(request: Request, share_id: str):
     return RedirectResponse("/sharing", status_code=303)
 
 
+@owner_router.get("/shares/{share_id}/preview", response_class=HTMLResponse)
+async def preview_generated_share(
+    request: Request,
+    share_id: str,
+    q: str = "",
+    page: int = 1,
+    fragment: bool = False,
+):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    grant = get_share_store().get_share(share_id)
+    if not grant or not grant.available:
+        raise HTTPException(status_code=404, detail="Active share not found.")
+    context = _guest_context(
+        request,
+        grant,
+        f"owner-preview:{user}:{grant.id}",
+        query=q,
+        page=page,
+        owner_preview=True,
+    )
+    context["preview_csrf"] = make_csrf_token(user)
+    response = templates.TemplateResponse(
+        request,
+        (
+            "modules/hfl_shares/_guest_entries.html"
+            if fragment
+            else "modules/hfl_shares/guest.html"
+        ),
+        context,
+    )
+    if fragment:
+        response.headers["X-HFL-Result-Count"] = str(context["result_count"])
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@owner_router.post("/shares/{share_id}/preview/chat")
+async def preview_generated_share_chat(request: Request, share_id: str):
+    user, redirect = require_user(request)
+    if redirect:
+        return JSONResponse({"detail": "Authentication required."}, status_code=401)
+    grant = get_share_store().get_share(share_id)
+    if not grant or not grant.available:
+        return JSONResponse({"detail": "Active share not found."}, status_code=404)
+    form = await request.form()
+    try:
+        _require_csrf(form, user)
+    except HTTPException:
+        return JSONResponse({"detail": "Invalid form token."}, status_code=403)
+    question = str(form.get("question") or "").strip()
+    try:
+        if not question:
+            raise ValueError("A question is required.")
+        raw_history = json.loads(str(form.get("history") or "[]"))
+        if not isinstance(raw_history, list):
+            raise ValueError("Preview conversation history is invalid.")
+        history = tuple(
+            {
+                "role": (
+                    "assistant"
+                    if str(item.get("role") or "") == "assistant"
+                    else "user"
+                ),
+                "content": str(item.get("content") or "")[:4_000],
+            }
+            for item in raw_history[-8:]
+            if isinstance(item, dict) and str(item.get("content") or "").strip()
+        )
+        answer = await answer_question(
+            grant.snapshot,
+            question,
+            history=history,
+        )
+    except (AgentUnavailable, TypeError, ValueError, json.JSONDecodeError) as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=422)
+    now = _format_utc(datetime.now(timezone.utc).isoformat())
+    return JSONResponse(
+        {
+            "user": {"content": question, "created_at": now},
+            "assistant": {
+                "content": answer,
+                "html": str(
+                    _answer_html(
+                        answer,
+                        _citation_pages(grant),
+                        f"/sharing/shares/{grant.id}/preview",
+                    )
+                ),
+                "created_at": now,
+            },
+        }
+    )
+
+
 @owner_router.post("/requests/{request_id}/approve")
 async def approve_request(request: Request, request_id: str):
     user, redirect = require_user(request)
@@ -637,6 +745,7 @@ async def share_access(request: Request, token: str):
             "token": token,
             "error": "",
             "expires_at_display": _format_utc(grant.expires_at),
+            "share_recipient": grant.snapshot.recipient,
         },
     )
 
@@ -666,6 +775,7 @@ async def redeem_share(request: Request, token: str):
                     "token": token,
                     "error": "The access details were not accepted.",
                     "expires_at_display": _format_utc(grant.expires_at),
+                    "share_recipient": grant.snapshot.recipient,
                 },
                 status_code=403,
             )
@@ -741,22 +851,45 @@ async def pending_access(request: Request):
 
 def _guest_entries(grant, query: str):
     needle = (query or "").strip().casefold()
-    if not needle:
-        return grant.snapshot.entries
-    return tuple(
-        entry
-        for entry in grant.snapshot.entries
-        if needle
-        in " ".join(
-            (
-                entry.moment,
-                entry.what_happened,
-                entry.source,
-                " ".join(entry.tags),
-                entry.text,
-            )
-        ).casefold()
+    matches = (
+        grant.snapshot.entries
+        if not needle
+        else tuple(
+            entry
+            for entry in grant.snapshot.entries
+            if needle
+            in " ".join(
+                (
+                    entry.moment,
+                    entry.what_happened,
+                    entry.source,
+                    " ".join(entry.tags),
+                    entry.text,
+                )
+            ).casefold()
+        )
     )
+    return tuple(
+        sorted(
+            matches,
+            key=lambda entry: _snapshot_entry_datetime(entry.header)
+            or datetime.min,
+            reverse=True,
+        )
+    )
+
+
+def _snapshot_entry_datetime(header: str) -> datetime | None:
+    raw = (header or "").strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(raw).replace(tzinfo=None)
+    except ValueError:
+        return None
 
 
 _PUBLIC_ENTRY_DROP = re.compile(
@@ -778,6 +911,23 @@ def _format_utc(value: str) -> str:
     )
 
 
+def _duration_summary(seconds: int) -> str:
+    total_seconds = max(0, int(seconds))
+    if total_seconds < 3_600:
+        return "expires in less than 1 hour"
+    total_hours = total_seconds // 3_600
+    if total_seconds < 604_800:
+        days, hours = divmod(total_hours, 24)
+        parts: list[str] = []
+        if days:
+            parts.append(f"{days} day{'s' if days != 1 else ''}")
+        if hours:
+            parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+        return "expires in " + " ".join(parts)
+    days = max(7, total_seconds // 86_400)
+    return f"expires after {days} days"
+
+
 def _entry_html(entry):
     public_text = "\n".join(
         line
@@ -787,16 +937,33 @@ def _entry_html(entry):
     return render_markdown(format_hfl_markdown(public_text))
 
 
-def _answer_html(content: str):
-    linked = _EVIDENCE.sub(
-        lambda match: (
-            "[View evidence]"
-            f"(/share/session?page="
-            f"{math.ceil(int(match.group(1)) / _GUEST_PAGE_SIZE)}"
-            f"#evidence-{match.group(1)})"
-        ),
-        content,
-    )
+def _citation_pages(grant) -> dict[int, int]:
+    return {
+        int(entry.citation[1:]): math.ceil(index / _GUEST_PAGE_SIZE)
+        for index, entry in enumerate(_guest_entries(grant, ""), start=1)
+        if entry.citation.startswith("S") and entry.citation[1:].isdigit()
+    }
+
+
+def _answer_html(
+    content: str,
+    citation_pages: dict[int, int] | None = None,
+    evidence_base: str = "/share/session",
+):
+    pages = citation_pages or {}
+
+    def evidence_link(match: re.Match[str]) -> str:
+        citation = int(match.group(1))
+        page = pages.get(
+            citation,
+            math.ceil(citation / _GUEST_PAGE_SIZE),
+        )
+        return (
+            r" [\[See entry\]]"
+            f"({evidence_base}?page={page}#evidence-{citation})"
+        )
+
+    linked = _EVIDENCE.sub(evidence_link, content)
     return render_markdown(linked)
 
 
@@ -808,6 +975,7 @@ def _guest_context(
     query: str = "",
     page: int = 1,
     error: str = "",
+    owner_preview: bool = False,
 ) -> dict[str, Any]:
     matches = _guest_entries(grant, query)
     total_pages = max(1, math.ceil(len(matches) / _GUEST_PAGE_SIZE))
@@ -818,11 +986,12 @@ def _guest_context(
         {
             "role": message.role,
             "content": message.content,
-            "html": _answer_html(message.content),
+            "html": _answer_html(message.content, _citation_pages(grant)),
             "created_at": _format_utc(message.created_at),
         }
         for message in store.list_chat_messages(session_id, grant.id)
     ]
+    recipient = grant.snapshot.recipient.strip() or "there"
     return {
         "request": request,
         "grant": grant,
@@ -842,20 +1011,43 @@ def _guest_context(
         "error": error,
         "suggested_prompts": suggested_prompts(grant.snapshot),
         "expires_at_display": _format_utc(grant.expires_at),
+        "recipient": recipient,
+        "recipient_initial": recipient[0].upper(),
+        "share_recipient": grant.snapshot.recipient.strip(),
+        "owner_preview": owner_preview,
     }
 
 
 @guest_router.get("/session", response_class=HTMLResponse)
-async def guest_portal(request: Request, q: str = "", page: int = 1):
+async def guest_portal(
+    request: Request,
+    q: str = "",
+    page: int = 1,
+    fragment: bool = False,
+):
     session = current_session(request, get_share_store())
     if not session:
         return _unavailable(request)
     grant, session_id = session
-    return templates.TemplateResponse(
+    context = _guest_context(
         request,
-        "modules/hfl_shares/guest.html",
-        _guest_context(request, grant, session_id, query=q, page=page),
+        grant,
+        session_id,
+        query=q,
+        page=page,
     )
+    response = templates.TemplateResponse(
+        request,
+        (
+            "modules/hfl_shares/_guest_entries.html"
+            if fragment
+            else "modules/hfl_shares/guest.html"
+        ),
+        context,
+    )
+    if fragment:
+        response.headers["X-HFL-Result-Count"] = str(context["result_count"])
+    return response
 
 
 @guest_router.post("/session/chat", response_class=HTMLResponse)
@@ -867,6 +1059,10 @@ async def guest_chat(request: Request):
     grant, session_id = session
     form = await request.form()
     question = str(form.get("question") or "").strip()
+    wants_json = (
+        "application/json" in request.headers.get("accept", "")
+        or str(form.get("_async") or "") == "1"
+    )
     try:
         if not question:
             raise ValueError("A question is required.")
@@ -885,7 +1081,7 @@ async def guest_chat(request: Request):
             {"role": item.role, "content": item.content}
             for item in history_messages
         )
-        store.add_chat_message(
+        user_message = store.add_chat_message(
             session_id=session_id,
             share_id=grant.id,
             role="user",
@@ -896,7 +1092,7 @@ async def guest_chat(request: Request):
             question,
             history=history,
         )
-        store.add_chat_message(
+        assistant_message = store.add_chat_message(
             session_id=session_id,
             share_id=grant.id,
             role="assistant",
@@ -911,6 +1107,27 @@ async def guest_chat(request: Request):
         error = ""
     except (AgentUnavailable, ValueError) as exc:
         error = str(exc)
+    if wants_json:
+        if error:
+            return JSONResponse({"detail": error}, status_code=422)
+        return JSONResponse(
+            {
+                "user": {
+                    "content": user_message.content,
+                    "created_at": _format_utc(user_message.created_at),
+                },
+                "assistant": {
+                    "content": assistant_message.content,
+                    "html": str(
+                        _answer_html(
+                            assistant_message.content,
+                            _citation_pages(grant),
+                        )
+                    ),
+                    "created_at": _format_utc(assistant_message.created_at),
+                },
+            }
+        )
     return templates.TemplateResponse(
         request,
         "modules/hfl_shares/guest.html",

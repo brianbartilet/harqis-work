@@ -46,6 +46,7 @@
   .item { border-top:1px solid #1e293b; padding:.8rem 0; }
   .item:first-child { border-top:0; }
   .pill { display:inline-block; border-radius:999px; background:#172554; color:#bfdbfe; font-size:.68rem; padding:.18rem .5rem; }
+  .source-pill { background:#3b0764; color:#e9d5ff; box-shadow:inset 0 0 0 1px #6b21a8; }
   .status-pill { display:inline-flex; border-radius:999px; font-size:.68rem; font-weight:700; padding:.2rem .55rem; text-transform:capitalize; }
   .status-active { background:#064e3b; color:#a7f3d0; }
   .status-expired { background:#4c0519; color:#fecdd3; }
@@ -62,6 +63,8 @@
   .toast-close:hover { background:#064e3b; color:#ecfdf5; }
   .toast-close:focus-visible { outline:2px solid #34d399; outline-offset:2px; }
   .recipe-actions { align-items:center; }
+  .recipe-item { margin:0 -.65rem; padding:.8rem .65rem; border-radius:.65rem; }
+  .recipe-item-active { border:1px solid rgba(51,65,85,.8); background:rgba(15,23,42,.55); box-shadow:inset 2px 0 0 rgba(56,189,248,.65); }
   .recipe-actions form { display:inline-flex; margin:0; }
   .recipe-action { display:inline-flex; min-height:1.75rem; align-items:center; border:0; background:transparent; padding:.2rem 0; font-size:.75rem; line-height:1.25; cursor:pointer; }
   .recipe-action:focus-visible { border-radius:.25rem; outline:2px solid #60a5fa; outline-offset:2px; }
@@ -112,14 +115,16 @@
         <div>
           <h2 class="text-lg font-semibold text-white">{{ "Edit recipe" if cfg and cfg.id else "New recipe" }}</h2>
         </div>
-        {% if cfg and cfg.id %}<a class="text-xs text-sky-400" href="/sharing">Clear</a>{% endif %}
+        {% if cfg and cfg.id %}<a class="text-xs text-sky-400" href="/sharing" data-recipe-clear>Clear</a>{% endif %}
       </div>
       <form method="post" data-social-form>
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <input type="hidden" name="configuration_id" value="{{ cfg.id if cfg else '' }}">
         <div class="two">
           <div class="field"><label for="name">Configuration name</label><input class="control" id="name" name="name" required value="{{ cfg.name if cfg else '' }}" placeholder="Work context"></div>
-          <div class="field"><label for="auth-mode">Verification mode</label>
+          <div class="field"><label for="recipient">Recipient</label><input class="control" id="recipient" name="recipient" required maxlength="20" value="{{ cfg.recipient if cfg else '' }}" placeholder="Who is this for?"></div>
+        </div>
+        <div class="field"><label for="auth-mode">Verification mode</label>
             <div class="select-wrap">
             <select class="control" id="auth-mode" name="auth_mode">
               {% set mode = cfg.auth_mode if cfg else 'pin' %}
@@ -130,7 +135,6 @@
             </select>
             <svg class="select-caret" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg>
             </div>
-          </div>
         </div>
         <div class="field"><label for="description">Description</label><textarea class="control" id="description" name="description" rows="3" placeholder="What this recipe is intended to share">{{ cfg.description if cfg else '' }}</textarea></div>
 
@@ -222,13 +226,13 @@
         </div>
 
         <div class="actions">
-          <button class="btn btn-soft" formaction="/sharing/configurations">Save recipe</button>
+          <button class="btn btn-soft" formaction="/sharing/configurations" formnovalidate>Save recipe</button>
           <button class="btn btn-soft disabled:cursor-not-allowed disabled:opacity-50" formaction="/sharing/preview/chat"
                   data-test-agent {% if not preview %}disabled{% endif %}
                   data-progress-title="Testing agent"
                   data-progress-message="Reviewing the snapshot…"
                   data-progress-next="Asking the agent…">Test agent</button>
-          <button class="btn btn-main" formaction="/sharing/generate"
+          <button class="btn btn-main" formaction="/sharing/generate" formnovalidate
                   data-progress-title="Generating share"
                   data-progress-message="Preparing your snapshot…"
                   data-progress-next="Generating secure access and QR code…">Generate snapshot + QR</button>
@@ -239,12 +243,15 @@
     <aside class="space-y-5">
       <section class="panel">
         <h2 class="text-base font-semibold text-white">Saved recipes</h2>
-        {% for item in configurations %}
-        <div class="item">
-          <a class="wrap text-sm font-semibold text-sky-300" href="/sharing?configuration_id={{ item.id }}">{{ item.name }}</a>
-          <p class="mt-1 text-xs text-slate-500">{{ "All sources" if all_sources_value in item.sources else item.sources|join(', ') }} · {{ (item.ttl_seconds / 3600)|round(1) }} hours</p>
+        <p class="mt-1 text-xs text-slate-500">Click on recipe to load</p>
+        {% for row in configurations %}
+        {% set item = row.configuration %}
+        <div class="item recipe-item{% if cfg and cfg.id == item.id %} recipe-item-active{% endif %}">
+          <a class="wrap text-sm font-semibold text-sky-300" href="/sharing?configuration_id={{ item.id }}" data-recipe-load{% if cfg and cfg.id == item.id %} aria-current="true"{% endif %}>{{ item.name }}</a>
+          <p class="mt-1 text-xs text-slate-500">{{ "All sources" if all_sources_value in item.sources else item.sources|join(', ') }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ row.expiration_summary }}</p>
           <div class="actions recipe-actions mt-2">
-            <a class="recipe-action text-slate-400" href="/sharing?configuration_id={{ item.id }}&duplicate=true">Duplicate</a>
+            <a class="recipe-action text-slate-400" href="/sharing?configuration_id={{ item.id }}&duplicate=true" data-recipe-load>Duplicate</a>
             {% if not cfg or cfg.id != item.id %}
             <form method="post" action="/sharing/configurations/{{ item.id }}/delete"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="recipe-action text-red-400" type="submit">Delete</button></form>
             {% endif %}
@@ -272,7 +279,10 @@
           <div class="flex items-start justify-between gap-2"><strong class="wrap text-sm text-slate-200">{{ share.name }}</strong><span class="status-pill status-{{ row.status }}">{{ row.status }}</span></div>
           <p class="mt-1 text-xs text-slate-500">{{ share.snapshot.entries|length }} entries · expires {{ row.expires_at_display }}</p>
           {% if share.available %}
-          <form class="mt-2" method="post" action="/sharing/shares/{{ share.id }}/revoke"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-danger">Revoke now</button></form>
+          <div class="actions mt-2">
+            <a class="btn btn-soft" href="/sharing/shares/{{ share.id }}/preview" target="_blank" rel="noopener">Preview</a>
+            <form method="post" action="/sharing/shares/{{ share.id }}/revoke"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-danger">Revoke now</button></form>
+          </div>
           {% endif %}
         </div>
         {% else %}<p class="mt-2 text-xs text-slate-500">No shares generated yet.</p>{% endfor %}
@@ -339,6 +349,13 @@
 
   const updateClearTags = () => {
     if (clearTags) clearTags.disabled = selectedTags().size === 0;
+  };
+
+  const updateTestAgentState = () => {
+    if (!testAgentButton) return;
+    const ready = Boolean(previewContent?.querySelector('[data-preview-ready]'));
+    const question = form.querySelector('[data-test-question]');
+    testAgentButton.disabled = !ready || !question?.value.trim();
   };
 
   const updateSourceSummary = () => {
@@ -419,9 +436,7 @@
       });
       const html = await response.text();
       previewContent.innerHTML = html;
-      if (testAgentButton) {
-        testAgentButton.disabled = !previewContent.querySelector('[data-preview-ready]');
-      }
+      updateTestAgentState();
     } catch (error) {
       if (error.name === 'AbortError') return;
       previewContent.innerHTML = '<div class="message error mb-0">The preview could not be refreshed. Please try again.</div>';
@@ -488,6 +503,9 @@
     updateClearTags();
     schedulePreview();
   });
+  form.addEventListener('input', event => {
+    if (event.target.matches('[data-test-question]')) updateTestAgentState();
+  });
   clearTags?.addEventListener('click', () => {
     tagCloud.querySelectorAll('input[name="tags"]:checked').forEach(input => {
       input.checked = false;
@@ -525,6 +543,20 @@
     form.addEventListener('submit', setTimezone);
   }
   let progressTimer = 0;
+  const showProgress = (title, message, nextMessage = '') => {
+    if (!progressOverlay) return;
+    window.clearTimeout(progressTimer);
+    progressHeading.textContent = title || 'Processing';
+    progressMessage.textContent = message || 'Please wait…';
+    progressOverlay.hidden = false;
+    document.documentElement.style.overflow = 'hidden';
+    progressOverlay.focus({preventScroll:true});
+    if (nextMessage) {
+      progressTimer = window.setTimeout(() => {
+        progressMessage.textContent = nextMessage;
+      }, 1400);
+    }
+  };
   const hideProgress = () => {
     window.clearTimeout(progressTimer);
     progressTimer = 0;
@@ -545,17 +577,35 @@
     }
     form.dataset.processing = 'true';
     form.setAttribute('aria-busy', 'true');
-    progressHeading.textContent = submitter.dataset.progressTitle || 'Processing';
-    progressMessage.textContent = submitter.dataset.progressMessage;
-    progressOverlay.hidden = false;
-    document.documentElement.style.overflow = 'hidden';
-    progressOverlay.focus({preventScroll:true});
-    const nextMessage = submitter.dataset.progressNext;
-    if (nextMessage) {
-      progressTimer = window.setTimeout(() => {
-        progressMessage.textContent = nextMessage;
-      }, 1400);
-    }
+    showProgress(
+      submitter.dataset.progressTitle,
+      submitter.dataset.progressMessage,
+      submitter.dataset.progressNext
+    );
+  });
+  document.querySelectorAll('[data-recipe-load]').forEach(link => {
+    link.addEventListener('click', event => {
+      if (
+        event.defaultPrevented || event.button !== 0 ||
+        event.metaKey || event.ctrlKey || event.shiftKey || event.altKey
+      ) return;
+      showProgress(
+        'Loading recipe',
+        'Preparing the selected recipe and its latest preview…'
+      );
+    });
+  });
+  document.querySelectorAll('[data-recipe-clear]').forEach(link => {
+    link.addEventListener('click', event => {
+      if (
+        event.defaultPrevented || event.button !== 0 ||
+        event.metaKey || event.ctrlKey || event.shiftKey || event.altKey
+      ) return;
+      showProgress(
+        'Clearing recipe',
+        'Returning to a fresh recipe…'
+      );
+    });
   });
   window.addEventListener('pageshow', hideProgress);
   if (successToast) {
@@ -574,6 +624,7 @@
   }
   updateSourceSummary();
   updateClearTags();
+  updateTestAgentState();
   if (!previewContent?.querySelector('[data-preview-ready]')) schedulePreview();
 })();
 </script>

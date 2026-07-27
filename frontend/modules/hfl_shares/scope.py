@@ -8,6 +8,7 @@ from collections import Counter
 from dataclasses import replace
 from datetime import date, datetime
 
+from config import get_settings
 from modules.hfl_corpus.corpus import CorpusDocument, resolve_corpus_root
 from modules.hfl_shares.models import (
     ALL_SOURCES,
@@ -44,14 +45,19 @@ def _entry_key(document: CorpusDocument, anchor: str, text: str) -> str:
     return f"legacy-{digest}"
 
 
-def _entry_date(header: str) -> date | None:
+def _entry_datetime(header: str) -> datetime | None:
     raw = (header or "").strip()
     for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
         try:
-            return datetime.strptime(raw, fmt).date()
+            return datetime.strptime(raw, fmt)
         except ValueError:
             continue
     return None
+
+
+def _entry_date(header: str) -> date | None:
+    parsed = _entry_datetime(header)
+    return parsed.date() if parsed else None
 
 
 def _sanitize_entry_text(text: str) -> str:
@@ -165,9 +171,26 @@ def build_snapshot(
     dates: list[date] = []
     available_references = 0
     missing_sources = set() if all_sources else set(sources)
+    max_chars = max(1, get_settings().hfl_share_max_snapshot_chars)
+    used_chars = 0
+    truncated = False
 
-    for document in documents:
-        for entry in document.entries:
+    ordered_documents = sorted(
+        documents,
+        key=lambda document: (
+            document.created_at.replace(tzinfo=None)
+            if document.created_at
+            else datetime.min
+        ),
+        reverse=True,
+    )
+    for document in ordered_documents:
+        ordered_entries = sorted(
+            document.entries,
+            key=lambda entry: _entry_datetime(entry.header) or datetime.min,
+            reverse=True,
+        )
+        for entry in ordered_entries:
             if not all_sources and entry.source.casefold() not in sources:
                 continue
             missing_sources.discard(entry.source.casefold())
@@ -183,6 +206,14 @@ def build_snapshot(
             searchable = sanitized_text.casefold()
             if topic_terms and not all(term in searchable for term in topic_terms):
                 continue
+            entry_chars = len(sanitized_text)
+            if used_chars + entry_chars > max_chars:
+                if not entries:
+                    raise ValueError(
+                        "The newest matching entry exceeds the snapshot size limit."
+                    )
+                truncated = True
+                break
             references = _references(document, entry_id, entry.text)
             available_references += len(references)
             if not configuration.references_enabled:
@@ -216,6 +247,9 @@ def build_snapshot(
                     references=references,
                 )
             )
+            used_chars += entry_chars
+        if truncated:
+            break
 
     source_counts = Counter(entry.source for entry in entries)
     tag_counts = Counter(tag for entry in entries for tag in set(entry.tags))
@@ -226,6 +260,11 @@ def build_snapshot(
         )
     if len(entries) > 250:
         warnings.append("This is a broad scope with more than 250 entries.")
+    if truncated:
+        warnings.append(
+            "Older matching entries were omitted after the snapshot reached "
+            "its 10-million-character limit."
+        )
     if available_references and not configuration.references_enabled:
         warnings.append("References exist but sharing is disabled.")
     if not entries:
@@ -248,7 +287,7 @@ def build_snapshot(
         tag_counts=dict(tag_counts.most_common(20)),
         earliest=min(dates).isoformat() if dates else "",
         latest=max(dates).isoformat() if dates else "",
-        estimated_chars=sum(len(entry.text) for entry in entries),
+        estimated_chars=used_chars,
         available_references=available_references,
         enabled_reference_ids=tuple(
             sorted(
@@ -260,6 +299,7 @@ def build_snapshot(
         ),
         warnings=tuple(warnings),
         context_prompt=configuration.context_prompt,
+        recipient=configuration.recipient,
     )
 
 

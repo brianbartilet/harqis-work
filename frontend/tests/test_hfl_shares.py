@@ -8,7 +8,11 @@ import pytest
 
 from modules.hfl_corpus.corpus import CorpusDocument, CorpusEntry
 from modules.hfl_shares.agent import _context
-from modules.hfl_shares.models import ALL_SOURCES, ShareConfiguration
+from modules.hfl_shares.models import (
+    ALL_SOURCES,
+    ScopeSnapshot,
+    ShareConfiguration,
+)
 from modules.hfl_shares.scope import build_snapshot
 from modules.hfl_shares.security import GUEST_COOKIE, make_csrf_token
 from modules.hfl_shares.store import get_share_store
@@ -62,6 +66,7 @@ def _configuration(**overrides) -> ShareConfiguration:
     values = {
         "id": "",
         "name": "Japan context",
+        "recipient": "Avery",
         "sources": ("notes",),
         "tags": ("travel",),
         "auth_mode": "pin",
@@ -103,6 +108,7 @@ def _form(**overrides):
         "csrf": make_csrf_token("frontend-test-user"),
         "configuration_id": "",
         "name": "Japan context",
+        "recipient": "Avery",
         "description": "Travel-only context",
         "sources": "notes",
         "tags": "travel",
@@ -151,6 +157,7 @@ def test_share_corpus_form_uses_new_labels_defaults_and_collapsed_sections(
     assert ">Share Corpus</h1>" in response.text
     assert ">New recipe</h2>" in response.text
     assert "Verification mode" in response.text
+    assert 'id="recipient" name="recipient" required maxlength="20"' in response.text
     assert "Sources - configure ingest data sources" in response.text
     assert 'value="__all__" data-all-sources checked' in response.text
     assert 'name="references_enabled" checked' in response.text
@@ -189,8 +196,8 @@ def test_share_corpus_uses_automatic_preview_and_blocking_long_actions(
     assert "prefers-reduced-motion:reduce" in response.text
     assert "form.dataset.processing === 'true'" in response.text
     assert re.search(
-        r'<button class="btn btn-soft" formaction="/sharing/configurations">'
-        r"Save recipe</button>",
+        r'<button class="btn btn-soft" formaction="/sharing/configurations" '
+        r"formnovalidate>Save recipe</button>",
         response.text,
     )
 
@@ -211,6 +218,7 @@ def test_automatic_preview_fragment_defaults_references_and_places_tags_below_ti
 
     assert response.status_code == 200
     assert "data-preview-ready" in response.text
+    assert 'required data-test-question' in response.text
     assert 'name="reference_selection_initialized" value="1"' in response.text
     assert re.search(
         r"Planned the Japan trip</strong>.*?#travel.*?#japan",
@@ -221,6 +229,8 @@ def test_automatic_preview_fragment_defaults_references_and_places_tags_below_ti
         r'name="enabled_reference_ids"[^>]+checked',
         response.text,
     )
+    assert 'class="pill source-pill">notes</span>' in response.text
+    assert " · generated " not in response.text
 
 
 def _many_entry_document(tmp_path: Path, count: int) -> CorpusDocument:
@@ -317,6 +327,7 @@ def test_expiration_picker_is_converted_to_relative_ttl():
     form = FormData(
         [
             ("name", "Expiring recipe"),
+            ("recipient", "Avery"),
             ("sources", "notes"),
             ("expires_at", expires_at.replace(tzinfo=None).isoformat(timespec="minutes")),
             ("timezone_offset", "0"),
@@ -327,6 +338,39 @@ def test_expiration_picker_is_converted_to_relative_ttl():
     configuration = _configuration_from_form(form)
 
     assert 86_300 <= configuration.ttl_seconds <= 86_400
+
+
+def test_recipient_is_required_limited_and_legacy_snapshots_remain_readable():
+    with pytest.raises(ValueError, match="Recipient is required"):
+        _configuration(recipient="")
+    with pytest.raises(ValueError, match="20"):
+        _configuration(recipient="x" * 21)
+
+    legacy = ScopeSnapshot.from_record(
+        {
+            "entries": [],
+            "created_at": "2026-07-27T00:00:00+00:00",
+            "sources": [],
+            "filters": {},
+            "source_counts": {},
+            "tag_counts": {},
+            "earliest": "",
+            "latest": "",
+            "estimated_chars": 0,
+            "available_references": 0,
+            "enabled_reference_ids": [],
+            "warnings": [],
+        }
+    )
+    assert legacy.recipient == ""
+
+
+def test_saved_recipe_expiration_is_human_readable():
+    from modules.hfl_shares.router import _duration_summary
+
+    assert _duration_summary(30 * 60) == "expires in less than 1 hour"
+    assert _duration_summary((24 + 3) * 3600) == "expires in 1 day 3 hours"
+    assert _duration_summary(14 * 86_400) == "expires after 14 days"
 
 
 def test_saved_recipe_is_reusable_and_deleting_it_does_not_delete_share(
@@ -399,6 +443,24 @@ def test_failed_recipe_save_does_not_show_success_notification(
     assert '<div class="success-toast"' not in response.text
 
 
+def test_recipe_save_and_generation_require_a_recipient(
+    authenticated_client, sharing_corpus
+):
+    saved = authenticated_client.post(
+        "/sharing/configurations",
+        data=_form(recipient=""),
+    )
+    generated = authenticated_client.post(
+        "/sharing/generate",
+        data=_form(recipient=""),
+    )
+
+    assert saved.status_code == 422
+    assert generated.status_code == 422
+    assert "Recipient is required." in saved.text
+    assert "Recipient is required." in generated.text
+
+
 def test_saved_recipe_actions_share_alignment_and_control_sizing(
     authenticated_client, sharing_corpus
 ):
@@ -408,13 +470,25 @@ def test_saved_recipe_actions_share_alignment_and_control_sizing(
         follow_redirects=True,
     )
 
+    configuration = get_share_store().list_configurations()[0]
     response = authenticated_client.get("/sharing")
+    selected = authenticated_client.get(
+        f"/sharing?configuration_id={configuration.id}"
+    )
 
     assert response.status_code == 200
     assert 'class="actions recipe-actions mt-2"' in response.text
     assert 'class="recipe-action text-slate-400"' in response.text
     assert 'class="recipe-action text-red-400"' in response.text
     assert ".recipe-actions form { display:inline-flex; margin:0; }" in response.text
+    assert "recipe-item-active" in selected.text
+    assert 'data-recipe-load aria-current="true"' in selected.text
+    assert 'href="/sharing" data-recipe-clear>Clear</a>' in selected.text
+    assert "Click on recipe to load" in selected.text
+    assert "'Clearing recipe'" in selected.text
+    assert "Returning to a fresh recipe…" in selected.text
+    assert "'Loading recipe'" in response.text
+    assert "Preparing the selected recipe and its latest preview" in response.text
 
 
 def test_snapshot_is_source_first_and_removes_owner_metadata(
@@ -435,6 +509,157 @@ def test_snapshot_is_source_first_and_removes_owner_metadata(
     assert "hfl-share-test" not in snapshot.entries[0].text
     assert str(tmp_path) not in snapshot.entries[0].text
     assert "http://insecure" not in snapshot.entries[0].text
+
+
+def test_snapshot_and_agent_context_are_newest_first_by_document_created_date(
+    tmp_path, monkeypatch
+):
+    from modules.hfl_shares import scope
+
+    old_dir = tmp_path / "old"
+    new_dir = tmp_path / "new"
+    old_dir.mkdir()
+    new_dir.mkdir()
+    old = _document(old_dir)
+    new = _document(new_dir)
+    old = CorpusDocument(
+        **{
+            **old.__dict__,
+            "relative_path": "old.md",
+            "created_at": datetime(2025, 1, 1),
+            "updated_at": datetime(2027, 1, 1),
+            "entries": (
+                CorpusEntry(
+                    **{
+                        **old.entries[0].__dict__,
+                        "anchor": "old-entry",
+                        "moment": "Older created document",
+                        "text": old.entries[0].text.replace(
+                            "Planned the Japan trip", "Older created document"
+                        ),
+                    }
+                ),
+            ),
+        }
+    )
+    new = CorpusDocument(
+        **{
+            **new.__dict__,
+            "relative_path": "new.md",
+            "created_at": datetime(2026, 1, 1),
+            "updated_at": datetime(2024, 1, 1),
+            "entries": (
+                CorpusEntry(
+                    **{
+                        **new.entries[0].__dict__,
+                        "anchor": "new-entry",
+                        "moment": "Newer created document",
+                        "text": new.entries[0].text.replace(
+                            "Planned the Japan trip", "Newer created document"
+                        ),
+                    }
+                ),
+            ),
+        }
+    )
+    monkeypatch.setattr(scope, "resolve_corpus_root", lambda: tmp_path)
+
+    snapshot = build_snapshot(_configuration(), (old, new))
+    context = _context(snapshot)
+
+    assert [entry.moment for entry in snapshot.entries] == [
+        "Newer created document",
+        "Older created document",
+    ]
+    assert context.index("Newer created document") < context.index(
+        "Older created document"
+    )
+
+
+def test_guest_drawer_resorts_entries_in_existing_snapshots_newest_first(
+    tmp_path, monkeypatch
+):
+    from modules.hfl_shares import scope
+    from modules.hfl_shares.router import _guest_entries
+
+    document = _document(tmp_path)
+    monkeypatch.setattr(scope, "resolve_corpus_root", lambda: tmp_path)
+    snapshot = build_snapshot(_configuration(), (document,))
+    base = snapshot.entries[0]
+    older = type(base)(
+        **{
+            **base.__dict__,
+            "citation": "S1",
+            "header": "2024-01-01 09:00",
+            "moment": "Older frozen moment",
+        }
+    )
+    newer = type(base)(
+        **{
+            **base.__dict__,
+            "citation": "S2",
+            "header": "2026-07-28 09:00",
+            "moment": "Newest frozen moment",
+        }
+    )
+    legacy_snapshot = ScopeSnapshot(
+        **{
+            **snapshot.__dict__,
+            "entries": (older, newer),
+        }
+    )
+    grant = type("Grant", (), {"snapshot": legacy_snapshot})()
+
+    entries = _guest_entries(grant, "")
+
+    assert [entry.moment for entry in entries] == [
+        "Newest frozen moment",
+        "Older frozen moment",
+    ]
+
+
+def test_snapshot_truncates_oldest_entries_at_character_cap(
+    tmp_path, monkeypatch
+):
+    from config import get_settings
+    from modules.hfl_shares import scope
+
+    old_dir = tmp_path / "old-cap"
+    new_dir = tmp_path / "new-cap"
+    old_dir.mkdir()
+    new_dir.mkdir()
+    old = _document(old_dir)
+    new = _document(new_dir)
+    old = CorpusDocument(
+        **{
+            **old.__dict__,
+            "relative_path": "old-cap.md",
+            "created_at": datetime(2025, 1, 1),
+        }
+    )
+    new = CorpusDocument(
+        **{
+            **new.__dict__,
+            "relative_path": "new-cap.md",
+            "created_at": datetime(2026, 1, 1),
+        }
+    )
+    monkeypatch.setattr(scope, "resolve_corpus_root", lambda: tmp_path)
+    newest_chars = len(scope._sanitize_entry_text(new.entries[0].text))
+    monkeypatch.setattr(
+        get_settings(),
+        "hfl_share_max_snapshot_chars",
+        newest_chars + 5,
+    )
+
+    snapshot = build_snapshot(_configuration(), (old, new))
+
+    assert len(snapshot.entries) == 1
+    assert snapshot.entries[0].relative_path == "new-cap.md"
+    assert any(
+        "Older matching entries were omitted" in item
+        for item in snapshot.warnings
+    )
 
 
 def test_reference_sharing_is_opt_in_and_hides_canonical_path(
@@ -572,13 +797,75 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
         "/share/session/chat",
         data={"question": "What happened next?"},
     )
+    async_reply = authenticated_client.post(
+        "/share/session/chat",
+        data={"question": "And what matters most?", "_async": "1"},
+        headers={"Accept": "application/json"},
+    )
 
     assert first.status_code == 200
     assert "<strong>A grounded answer:</strong>" in first.text
     assert 'href="/share/session?page=1#evidence-1"' in first.text
+    assert ">[See entry]</a>" in first.text
+    assert '.markdown-body a[href*="#evidence-"] { display:inline-block; margin-left:.3em; font-weight:400;' in first.text
+    assert "event.target.closest('a[href*=\"#evidence-\"]')" in first.text
+    assert "Finding cited evidence…" in first.text
+    assert "evidence.scrollIntoView({behavior:'smooth', block:'start'})" in first.text
     assert "[S1]" not in first.text
-    assert "Hello, curious person" in second.text
+    assert "Hello, Avery!" in second.text
     assert "What is Brian working on?" in second.text
+    assert async_reply.status_code == 200
+    assert async_reply.headers["content-type"].startswith("application/json")
+    assert "<strong>A grounded answer:</strong>" in async_reply.json()["assistant"]["html"]
+    assert "fetch(form.action" in second.text
+    assert 'class="typing-dots"' in second.text
+    assert "document.createTreeWalker(" in second.text
+    assert "NodeFilter.SHOW_TEXT" in second.text
+    assert "target.innerHTML = renderedHtml;" in second.text
+    assert "item.node.data = item.content.slice(0, visibleLength)" in second.text
+    assert "data-entry-drawer" in second.text
+    assert "data-drawer-toggle" in second.text
+    assert 'id="shared-moments-drawer" type="checkbox"' in second.text
+    assert 'for="shared-moments-drawer"' in second.text
+    assert "--drawer-width:clamp(300px,25vw,480px)" in second.text
+    assert ".drawer-head { display:flex; height:74px; min-height:74px; flex:0 0 74px;" in second.text
+    assert ".workspace-header { display:flex; width:100%; min-width:0; max-width:100%; height:74px; min-height:74px;" in second.text
+    assert "grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr) auto;" in second.text
+    assert "width:min(1120px,calc(100% - 48px))" in second.text
+    assert ".entry-content img, .entry-content video" in second.text
+    assert "A little context, chosen for you" in second.text
+    assert "moments ingested and analyzed" in second.text
+    assert "HARQIS - Knowledge Corpus Share" in second.text
+    assert 'class="brand-logo" aria-hidden="true"' in second.text
+    assert ".header .shell { width:min(1500px,calc(100% - 24px)); }" in second.text
+    assert "button.textContent.trim()" in second.text
+    assert "height:calc(100dvh - 54px)" in second.text
+    assert ".suggestions { display:grid; grid-template-columns:minmax(0,1fr);" in second.text
+    assert ".suggestion { width:100%; max-width:100%; min-width:0;" in second.text
+    assert "grid-template-columns:minmax(0,1fr); align-items:stretch" in second.text
+    assert ".compose-row button { width:100%; min-height:38px;" in second.text
+    assert ".chat-bubble { width:calc(100% - 42px);" in second.text
+    assert ".drawer-search, .drawer-search input { width:100%;" in second.text
+    assert ".chat-content { width:auto; max-width:none;" in second.text
+    assert ".share-main.shell { width:auto; max-width:none;" in second.text
+    assert ".chat-workspace { position:absolute; inset:0; width:auto;" in second.text
+    assert ".entry-drawer { position:absolute; inset:0; z-index:30; width:auto;" in second.text
+    assert "body { font-size:14px; line-height:1.45; }" in second.text
+    assert 'placeholder="Ask Brian’s shared context…"' in second.text
+    assert 'class="close-icon" aria-hidden="true">×</span>' in second.text
+    assert "submit.textContent = 'Thinking…'" in second.text
+    assert "form.setAttribute('aria-busy', 'true')" in second.text
+    assert "submit.textContent = 'Ask'" in second.text
+    assert "const typeAssistantReply = async" in second.text
+    assert "Math.min(7000, Math.max(3500, renderedLength * 3))" in second.text
+    assert "const progress = Math.min(1, (timestamp - startedAt) / duration)" in second.text
+    assert "window.requestAnimationFrame(typeNextChunk)" in second.text
+    assert "@keyframes typing-cursor" in second.text
+    assert "prefers-reduced-motion: reduce" in second.text
+    assert "await typeAssistantReply(" in second.text
+    assert "event.preventDefault();" in second.text
+    assert "const refreshEntrySearch = async" in second.text
+    assert "entryList.innerHTML = await response.text()" in second.text
     assert captured[0][0] == "Keep the answer friendly and useful."
     assert captured[0][2] == ()
     assert [message["role"] for message in captured[1][2]] == [
@@ -632,10 +919,18 @@ def test_guest_entries_use_literal_search_ten_item_pages_and_readable_dates(
 
     assert first_page.status_code == 200
     assert first_page.text.count('<article class="entry"') == 10
-    assert "Page 1 of 2" in first_page.text
+    assert first_page.text.index("Project moment 11") < first_page.text.index(
+        "Project moment 10"
+    )
+    assert 'data-entry-sentinel data-next-page="2"' in first_page.text
+    assert "new IntersectionObserver" in first_page.text
+    assert "fragment', 'true'" in first_page.text
+    assert "Recent" not in first_page.text
+    assert "Oldest →" not in first_page.text
     assert second_page.text.count('<article class="entry"') == 2
-    assert "Page 2 of 2" in second_page.text
+    assert "You’ve reached the oldest matching moment." in second_page.text
     assert "Project moment 11" in searched.text
+    assert '<div class="entry-load-status" data-entry-sentinel' not in searched.text
     assert "Project moment 1</h3>" not in searched.text
     assert re.search(
         r"[A-Z][a-z]+ \d{2}, 2026 \d{1,2}:\d{2} [AP]M UTC",
@@ -647,6 +942,27 @@ def test_guest_entries_use_literal_search_ten_item_pages_and_readable_dates(
     assert "<strong>Moment:</strong>" in first_page.text
     assert '<span class="chip chip-source">notes</span>' in first_page.text
     assert '<span class="chip">#work</span>' in first_page.text
+
+    fragment = authenticated_client.get(
+        "/share/session",
+        params={"page": "2", "fragment": "true"},
+    )
+    assert fragment.status_code == 200
+    assert fragment.text.count('<article class="entry"') == 2
+    assert "<!DOCTYPE html>" not in fragment.text
+    assert "You’ve reached the oldest matching moment." in fragment.text
+
+    filtered = authenticated_client.get(
+        "/share/session",
+        params={"q": "project", "page": "1", "fragment": "true"},
+    )
+    filtered_more = authenticated_client.get(
+        "/share/session",
+        params={"q": "project", "page": "2", "fragment": "true"},
+    )
+    assert filtered.headers["X-HFL-Result-Count"] == "12"
+    assert 'data-entry-sentinel data-next-page="2"' in filtered.text
+    assert filtered_more.text.count('<article class="entry"') == 2
 
 
 def test_generation_allows_more_than_one_thousand_entries_within_char_limit(
@@ -699,6 +1015,72 @@ def test_generated_share_statuses_use_active_expired_and_revoked_colors(
     assert 'class="status-pill status-active">active</span>' in response.text
     assert 'class="status-pill status-revoked">revoked</span>' in response.text
     assert 'class="status-pill status-expired">expired</span>' in response.text
+    assert response.text.count(">Preview</a>") == 1
+
+
+def test_owner_can_preview_active_share_without_guest_verification(
+    authenticated_client, monkeypatch, sharing_corpus
+):
+    from fastapi.testclient import TestClient
+    from main import app
+    from modules.hfl_shares import router
+
+    async def answer(snapshot, question, *, history=()):
+        assert question == "What is newest?"
+        return "**Latest answer** [S1]"
+
+    monkeypatch.setattr(router, "answer_question", answer)
+
+    generated = authenticated_client.post("/sharing/generate", data=_form())
+    assert generated.status_code == 200
+    grant = get_share_store().list_shares()[0]
+
+    preview = authenticated_client.get(
+        f"/sharing/shares/{grant.id}/preview"
+    )
+
+    assert preview.status_code == 200
+    assert "Owner preview" in preview.text
+    assert "Guests still verify before entering." in preview.text
+    assert "data-preview-toast-close" in preview.text
+    assert "previewToast?.remove()" in preview.text
+    assert "Hello, Avery!" in preview.text
+    assert "HARQIS - Knowledge Corpus Share" in preview.text
+    assert 'data-chat-form data-owner-preview' in preview.text
+    assert f'action="/sharing/shares/{grant.id}/preview/chat"' in preview.text
+    assert ">Ask</button>" in preview.text
+    assert "Ask HARQIS" not in preview.text
+    assert 'data-live-search-input' in preview.text
+    assert "window.setTimeout(() => liveSearchForm.requestSubmit(), 450)" in preview.text
+    assert ">Search</button>" not in preview.text
+    assert "Close preview" in preview.text
+
+    reply = authenticated_client.post(
+        f"/sharing/shares/{grant.id}/preview/chat",
+        data={
+            "csrf": make_csrf_token("frontend-test-user"),
+            "question": "What is newest?",
+            "history": "[]",
+        },
+        headers={"Accept": "application/json"},
+    )
+    assert reply.status_code == 200
+    assert "<strong>Latest answer</strong>" in reply.json()["assistant"]["html"]
+
+    searched = authenticated_client.get(
+        f"/sharing/shares/{grant.id}/preview",
+        params={"q": "Kyoto"},
+    )
+    assert searched.status_code == 200
+    assert "This shared context cannot be opened." not in searched.text
+    assert "Booked Kyoto accommodation" in searched.text
+
+    with TestClient(app) as anonymous:
+        denied = anonymous.get(
+            f"/sharing/shares/{grant.id}/preview",
+            follow_redirects=False,
+        )
+    assert denied.status_code == 302
 
 
 def test_wrong_pin_is_generic_and_rate_limited(
@@ -744,6 +1126,7 @@ def test_static_guest_routes_are_not_interpreted_as_capability_tokens(
     response = authenticated_client.get("/share/unavailable")
     assert response.status_code == 404
     assert "cannot be opened" in response.text
+    assert "HARQIS - Knowledge Corpus Share" in response.text
 
 
 def test_agent_context_escapes_entry_delimiters(tmp_path, monkeypatch):

@@ -1,99 +1,94 @@
 {% extends "share_base.html" %}
 {% block title %}{{ grant.name }} · HARQIS{% endblock %}
+{% block main_class %} share-main{% endblock %}
 {% block content %}
-<section class="card hero-card">
-  <div class="row">
-    <div>
-      <p class="eyebrow">A curated window</p>
-      <h1>{{ grant.name }}</h1>
-      <p class="muted">{{ grant.snapshot.entries|length }} moments · available until {{ expires_at_display }}</p>
-    </div>
-    <form method="post" action="/share/session/logout"><button class="button-secondary">Close session</button></form>
+{% if owner_preview %}
+<div class="preview-toast" role="status" aria-live="polite">
+  <div>
+    <strong>Owner preview</strong>
+    <span>This page bypasses verification for preview only. Guests still verify before entering.</span>
   </div>
-</section>
-
-<section class="card chat-card">
-  <div class="chat-intro">
-    <p class="eyebrow">A conversation grounded in real moments</p>
-    <h2>Hello, curious person 👋</h2>
-    <p class="muted">Ask away—about the work, the detours, the places, or the ideas connecting them. Every answer stays grounded in the moments Brian chose to share, with evidence you can explore.</p>
-    <p class="audit-note">To keep this experience trustworthy, questions and answers are recorded in the sharing audit.</p>
-  </div>
-
-  {% if suggested_prompts %}
-  <div class="suggestions" aria-label="Suggested questions">
-    {% for prompt in suggested_prompts %}<button class="suggestion" type="button" data-suggestion="{{ prompt }}">{{ prompt }}</button>{% endfor %}
-  </div>
-  {% endif %}
-
-  <div class="chat-thread" data-chat-thread aria-live="polite">
-    {% for message in messages %}
-    <article class="chat-message chat-{{ message.role }}">
-      <div class="chat-avatar" aria-hidden="true">{{ "B" if message.role == "user" else "H" }}</div>
-      <div class="chat-bubble">
-        <div class="chat-meta"><strong>{{ "You" if message.role == "user" else "HARQIS" }}</strong><span>{{ message.created_at }}</span></div>
-        <div class="markdown-body">{{ message.html }}</div>
+  <button class="preview-toast-close" type="button" data-preview-toast-close aria-label="Dismiss owner preview message">×</button>
+</div>
+{% endif %}
+<section class="share-workspace" data-workspace>
+  <input class="drawer-state" id="shared-moments-drawer" type="checkbox" data-drawer-state>
+  <aside class="entry-drawer" data-entry-drawer aria-label="Shared moments">
+    <header class="drawer-head">
+      <div>
+        <p class="eyebrow">Browse the source material</p>
+        <h2>Moments worth exploring</h2>
       </div>
-    </article>
-    {% else %}
-    <div class="chat-empty">
-      <p>Start anywhere. A thoughtful question is usually the best icebreaker.</p>
-    </div>
-    {% endfor %}
-  </div>
-
-  {% if error %}<p class="notice error">{{ error }}</p>{% endif %}
-  <form class="chat-compose" method="post" action="/share/session/chat" data-wait-form data-wait-message="Thinking through the moments Brian shared…">
-    <label for="question">Your question</label>
-    <div class="compose-row">
-      <textarea id="question" name="question" maxlength="2000" rows="2" required placeholder="Ask about Brian’s work, interests, projects, or journeys…"></textarea>
-      <button>Ask HARQIS</button>
-    </div>
-  </form>
-</section>
-
-<section class="card">
-  <div class="entries-heading">
-    <div>
-      <p class="eyebrow">Browse the source material</p>
-      <h2>Moments worth exploring</h2>
-    </div>
-    <form class="entry-search" method="get" action="/share/session" data-wait-form data-wait-message="Looking through these moments…">
+      <label class="drawer-close" for="shared-moments-drawer" role="button" tabindex="0" data-drawer-close aria-label="Close moments drawer">×</label>
+    </header>
+    <form class="drawer-search" method="get" action="{% if owner_preview %}/sharing/shares/{{ grant.id }}/preview{% else %}/share/session{% endif %}" data-live-search>
       <label for="search">Search these moments</label>
-      <div class="search-row">
-        <input id="search" name="q" type="search" value="{{ query }}" placeholder="Type a word or phrase">
-        <button>Search</button>
+      <input id="search" name="q" type="search" value="{{ query }}" placeholder="Type at least two characters" autocomplete="off" data-live-search-input>
+      <p class="drawer-count" data-drawer-count>{{ result_count }} matching moment{% if result_count != 1 %}s{% endif %}</p>
+    </form>
+    <div class="entry-list" data-entry-list>
+      {% include "modules/hfl_shares/_guest_entries.html" %}
+    </div>
+  </aside>
+  <label class="drawer-backdrop" for="shared-moments-drawer" data-drawer-backdrop aria-label="Close moments drawer"></label>
+
+  <section class="chat-workspace">
+    <header class="workspace-header">
+      <label class="drawer-toggle" for="shared-moments-drawer" role="button" tabindex="0" data-drawer-toggle aria-label="Toggle shared moments" aria-expanded="true">☰</label>
+      <div class="workspace-heading">
+        <h1>{{ grant.name }}</h1>
+        <p class="muted">{{ grant.snapshot.entries|length }} moments ingested and analyzed · available until {{ expires_at_display }}</p>
+      </div>
+      {% if owner_preview %}
+      <a class="button button-secondary logout-form" href="/sharing" aria-label="Close preview"><span class="close-label">Close preview</span><span class="close-icon" aria-hidden="true">×</span></a>
+      {% else %}
+      <form class="logout-form" method="post" action="/share/session/logout"><button class="button-secondary" aria-label="Close session"><span class="close-label">Close session</span><span class="close-icon" aria-hidden="true">×</span></button></form>
+      {% endif %}
+    </header>
+
+    <div class="chat-scroll" data-chat-scroll>
+      <div class="chat-content">
+        <div class="chat-intro">
+          <p class="eyebrow">A little context, chosen for you</p>
+          <h2>Hello, {{ recipient }}! 👋</h2>
+          <p class="muted">Ask about the work, the detours, the places, or the ideas connecting them. Every answer stays grounded in the moments Brian chose to share, with evidence you can explore.</p>
+          <p class="audit-note">To keep this experience trustworthy, questions and answers are recorded in the sharing audit.</p>
+        </div>
+
+        {% if suggested_prompts %}
+        <div class="suggestions" aria-label="Suggested questions">
+          {% for prompt in suggested_prompts %}<button class="suggestion" type="button" data-suggestion>{{ prompt }}</button>{% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="chat-thread" data-chat-thread aria-live="polite">
+          {% for message in messages %}
+          <article class="chat-message chat-{{ message.role }}">
+            <div class="chat-avatar" aria-hidden="true">{{ recipient_initial if message.role == "user" else "H" }}</div>
+            <div class="chat-bubble">
+              <div class="chat-meta"><strong>{{ "You" if message.role == "user" else "HARQIS" }}</strong><span>{{ message.created_at }}</span></div>
+              <div class="markdown-body">{{ message.html }}</div>
+            </div>
+          </article>
+          {% else %}
+          <div class="chat-empty"><p>Start anywhere. A thoughtful question is usually the best icebreaker.</p></div>
+          {% endfor %}
+        </div>
+        {% if error %}<p class="notice error chat-error">{{ error }}</p>{% endif %}
+      </div>
+    </div>
+
+    <form class="chat-compose" method="post" action="{% if owner_preview %}/sharing/shares/{{ grant.id }}/preview/chat{% else %}/share/session/chat{% endif %}" data-chat-form{% if owner_preview %} data-owner-preview{% endif %}>
+      {% if owner_preview %}<input type="hidden" name="csrf" value="{{ preview_csrf }}">{% endif %}
+      <div class="compose-inner">
+        <label for="question">Your question</label>
+        <div class="compose-row">
+          <textarea id="question" name="question" maxlength="2000" rows="2" required placeholder="Ask Brian’s shared context…"></textarea>
+          <button data-chat-submit>Ask</button>
+        </div>
       </div>
     </form>
-  </div>
-  <p class="muted">{{ result_count }} matching moment{% if result_count != 1 %}s{% endif %}{% if result_count %} · page {{ page }} of {{ total_pages }}{% endif %}</p>
-
-  {% for item in entries %}
-  {% set entry = item.entry %}
-  <article class="entry" id="evidence-{{ entry.citation[1:] }}">
-    <header class="entry-header">
-      <h3>{{ entry.moment or entry.header }}</h3>
-      {% if entry.tags %}<div class="chips entry-tags">{% for tag in entry.tags %}<span class="chip">#{{ tag }}</span>{% endfor %}</div>{% endif %}
-    </header>
-    <div class="entry-source"><strong>Source</strong><span class="chip chip-source">{{ entry.source }}</span></div>
-    <div class="entry-content markdown-body">{{ item.html }}</div>
-    {% set enabled_refs = entry.references|selectattr('enabled')|list %}
-    {% if enabled_refs %}
-    <div class="entry-references">
-      <strong>Explore further</strong>
-      <div class="reference-links">{% for reference in enabled_refs %}<a href="/share/session/references/{{ reference.id }}">{{ reference.label }}</a>{% endfor %}</div>
-    </div>
-    {% endif %}
-  </article>
-  {% else %}<div class="empty-state"><p>No moments match that search yet. Try a shorter word or phrase.</p></div>{% endfor %}
-
-  {% if total_pages > 1 %}
-  <nav class="pagination" aria-label="Entry pages">
-    {% if page > 1 %}<a href="/share/session?q={{ query|urlencode }}&page={{ page - 1 }}" data-wait-link>← Previous</a>{% else %}<span aria-disabled="true">← Previous</span>{% endif %}
-    <strong>Page {{ page }} of {{ total_pages }}</strong>
-    {% if page < total_pages %}<a href="/share/session?q={{ query|urlencode }}&page={{ page + 1 }}" data-wait-link>Next →</a>{% else %}<span aria-disabled="true">Next →</span>{% endif %}
-  </nav>
-  {% endif %}
+  </section>
 </section>
 
 <div class="wait-overlay" data-wait-overlay role="alertdialog" aria-modal="true" aria-labelledby="wait-title" hidden>
@@ -106,35 +101,380 @@
 
 <script>
 (() => {
+  const workspace = document.querySelector('[data-workspace]');
+  const drawerState = document.querySelector('[data-drawer-state]');
+  const drawerToggle = document.querySelector('[data-drawer-toggle]');
+  const drawerClose = document.querySelector('[data-drawer-close]');
   const overlay = document.querySelector('[data-wait-overlay]');
   const copy = overlay?.querySelector('[data-wait-copy]');
-  const question = document.querySelector('#question');
+  const form = document.querySelector('[data-chat-form]');
+  const question = form?.querySelector('#question');
+  const submit = form?.querySelector('[data-chat-submit]');
   const thread = document.querySelector('[data-chat-thread]');
+  const scroller = document.querySelector('[data-chat-scroll]');
+  const recipientInitial = {{ recipient_initial|tojson }};
+  const ownerPreview = Boolean(form?.dataset.ownerPreview !== undefined);
+  const previewHistory = [];
+  let pending = false;
+
+  const isCompact = () => window.matchMedia('(max-width: 900px)').matches;
+  const syncDrawer = () => {
+    if (!workspace || !drawerState) return;
+    const open = isCompact() ? drawerState.checked : !drawerState.checked;
+    workspace.classList.toggle('drawer-open', isCompact() && open);
+    workspace.classList.toggle('drawer-collapsed', !isCompact() && !open);
+    drawerToggle?.setAttribute('aria-expanded', String(open));
+  };
+  drawerState?.addEventListener('change', syncDrawer);
+  [drawerToggle, drawerClose].forEach(control => {
+    control?.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      drawerState.checked = !drawerState.checked;
+      syncDrawer();
+    });
+  });
+  window.addEventListener('resize', syncDrawer);
+
   const showWait = message => {
     if (!overlay) return;
     copy.textContent = message || 'Loading…';
     overlay.hidden = false;
     document.documentElement.style.overflow = 'hidden';
   };
-  document.querySelectorAll('[data-wait-form]').forEach(form => {
-    form.addEventListener('submit', () => showWait(form.dataset.waitMessage));
+  document.querySelectorAll('[data-wait-form]').forEach(item => {
+    item.addEventListener('submit', () => showWait(item.dataset.waitMessage));
   });
   document.querySelectorAll('[data-wait-link]').forEach(link => {
     link.addEventListener('click', () => showWait('Bringing the next moments into view…'));
   });
+  const liveSearchForm = document.querySelector('[data-live-search]');
+  const liveSearchInput = liveSearchForm?.querySelector('[data-live-search-input]');
+  const drawerCount = document.querySelector('[data-drawer-count]');
+  const entryList = document.querySelector('[data-entry-list]');
+  const previewToast = document.querySelector('.preview-toast');
+  let searchTimer = 0;
+  let searchController = null;
+  let entryLoading = false;
+  let entryObserver = null;
+  const refreshEntrySearch = async () => {
+    searchController?.abort();
+    const controller = new AbortController();
+    searchController = controller;
+    entryObserver?.disconnect();
+    entryLoading = true;
+    entryList.innerHTML =
+      '<div class="entry-load-status" role="status"><span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span><span>Searching moments…</span></div>';
+    const url = new URL(liveSearchForm.action, window.location.origin);
+    url.searchParams.set('q', liveSearchInput.value.trim());
+    url.searchParams.set('page', '1');
+    url.searchParams.set('fragment', 'true');
+    try {
+      const response = await fetch(url, {
+        headers:{'Accept':'text/html'},
+        signal:controller.signal,
+      });
+      if (!response.ok) throw new Error('Search results could not be loaded.');
+      entryList.innerHTML = await response.text();
+      const total = Number(response.headers.get('X-HFL-Result-Count') || 0);
+      drawerCount.textContent = `${total} matching moment${total === 1 ? '' : 's'}`;
+      const address = new URL(window.location.href);
+      if (liveSearchInput.value.trim()) {
+        address.searchParams.set('q', liveSearchInput.value.trim());
+      } else {
+        address.searchParams.delete('q');
+      }
+      address.searchParams.delete('page');
+      address.searchParams.delete('fragment');
+      window.history.replaceState({}, '', address);
+      entryLoading = false;
+      observeEntryStream();
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      entryList.innerHTML =
+        `<div class="empty-state"><p>${error.message}</p></div>`;
+    } finally {
+      if (searchController === controller) {
+        entryLoading = false;
+        searchController = null;
+      }
+    }
+  };
+  liveSearchForm?.addEventListener('submit', event => {
+    event.preventDefault();
+    if (liveSearchInput.value.trim().length === 1) {
+      return;
+    }
+    refreshEntrySearch();
+  });
+  liveSearchInput?.addEventListener('input', () => {
+    window.clearTimeout(searchTimer);
+    const length = liveSearchInput.value.trim().length;
+    if (length === 1) return;
+    searchTimer = window.setTimeout(() => liveSearchForm.requestSubmit(), 450);
+  });
+  const observeEntryStream = () => {
+    entryObserver?.disconnect();
+    const sentinel = entryList?.querySelector('[data-entry-sentinel]');
+    if (!sentinel || !entryList) return;
+    entryObserver = new IntersectionObserver(async entries => {
+      if (!entries.some(item => item.isIntersecting) || entryLoading) return;
+      entryLoading = true;
+      sentinel.setAttribute('aria-busy', 'true');
+      const url = new URL(liveSearchForm.action, window.location.origin);
+      url.searchParams.set('q', liveSearchInput.value.trim());
+      url.searchParams.set('page', sentinel.dataset.nextPage);
+      url.searchParams.set('fragment', 'true');
+      try {
+        const response = await fetch(url, {headers:{'Accept':'text/html'}});
+        if (!response.ok) throw new Error('More moments could not be loaded.');
+        const template = document.createElement('template');
+        template.innerHTML = await response.text();
+        sentinel.replaceWith(template.content);
+        observeEntryStream();
+      } catch (error) {
+        sentinel.removeAttribute('aria-busy');
+        sentinel.querySelector('span:last-child').textContent =
+          'Could not load more moments. Scroll away and back to retry.';
+      } finally {
+        entryLoading = false;
+      }
+    }, {root:entryList, rootMargin:'0px 0px 240px 0px'});
+    entryObserver.observe(sentinel);
+  };
+  const openEvidenceDrawer = () => {
+    if (!drawerState) return;
+    drawerState.checked = isCompact();
+    syncDrawer();
+  };
+  const revealEvidence = async link => {
+    const evidenceUrl = new URL(link.href, window.location.origin);
+    const evidenceId = evidenceUrl.hash.slice(1);
+    if (!evidenceId.startsWith('evidence-')) return;
+    openEvidenceDrawer();
+    let evidence = document.getElementById(evidenceId);
+    if (!evidence && entryList && liveSearchForm) {
+      entryObserver?.disconnect();
+      entryLoading = true;
+      if (liveSearchInput) liveSearchInput.value = '';
+      entryList.innerHTML =
+        '<div class="entry-load-status" role="status"><span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span><span>Finding cited evidence…</span></div>';
+      const fragmentUrl = new URL(liveSearchForm.action, window.location.origin);
+      fragmentUrl.searchParams.set(
+        'page',
+        evidenceUrl.searchParams.get('page') || '1'
+      );
+      fragmentUrl.searchParams.set('fragment', 'true');
+      try {
+        const response = await fetch(fragmentUrl, {
+          headers:{'Accept':'text/html'},
+        });
+        if (!response.ok) throw new Error('The cited evidence could not be loaded.');
+        entryList.innerHTML = await response.text();
+        const total = Number(response.headers.get('X-HFL-Result-Count') || 0);
+        drawerCount.textContent =
+          `${total} matching moment${total === 1 ? '' : 's'}`;
+        evidence = document.getElementById(evidenceId);
+        observeEntryStream();
+      } catch (error) {
+        entryList.innerHTML = `<div class="empty-state"><p>${error.message}</p></div>`;
+      } finally {
+        entryLoading = false;
+      }
+    }
+    if (!evidence) return;
+    entryList.querySelectorAll('.is-cited-evidence').forEach(
+      item => item.classList.remove('is-cited-evidence')
+    );
+    evidence.classList.add('is-cited-evidence');
+    evidence.setAttribute('tabindex', '-1');
+    window.requestAnimationFrame(() => {
+      evidence.scrollIntoView({behavior:'smooth', block:'start'});
+      evidence.focus({preventScroll:true});
+    });
+  };
+  thread?.addEventListener('click', event => {
+    const link = event.target.closest('a[href*="#evidence-"]');
+    if (!link) return;
+    event.preventDefault();
+    revealEvidence(link);
+  });
   document.querySelectorAll('[data-suggestion]').forEach(button => {
     button.addEventListener('click', () => {
-      question.value = button.dataset.suggestion || '';
+      question.value = button.textContent.trim();
+      question.dispatchEvent(new Event('input', {bubbles:true}));
       question.focus();
     });
+  });
+  document.querySelector('[data-preview-toast-close]')?.addEventListener(
+    'click',
+    () => previewToast?.remove()
+  );
+
+  const scrollToLatest = () => {
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  };
+  const appendMessage = (role, html, date, isHtml = false) => {
+    thread?.querySelector('.chat-empty')?.remove();
+    const article = document.createElement('article');
+    article.className = `chat-message chat-${role}`;
+    const avatar = document.createElement('div');
+    avatar.className = 'chat-avatar';
+    avatar.setAttribute('aria-hidden', 'true');
+    avatar.textContent = role === 'user' ? recipientInitial : 'H';
+    const bubble = document.createElement('div');
+    bubble.className = 'chat-bubble';
+    const meta = document.createElement('div');
+    meta.className = 'chat-meta';
+    const author = document.createElement('strong');
+    author.textContent = role === 'user' ? 'You' : 'HARQIS';
+    const timestamp = document.createElement('span');
+    timestamp.textContent = date || '';
+    meta.append(author, timestamp);
+    const content = document.createElement('div');
+    content.className = 'markdown-body';
+    if (isHtml) content.innerHTML = html;
+    else content.textContent = html;
+    bubble.append(meta, content);
+    article.append(avatar, bubble);
+    thread?.append(article);
+    scrollToLatest();
+    return article;
+  };
+  const appendTyping = () => {
+    const dots = '<span class="typing-dots" aria-label="HARQIS is thinking"><span></span><span></span><span></span></span>';
+    return appendMessage('assistant', dots, '', true);
+  };
+  const typeAssistantReply = async (article, content, renderedHtml) => {
+    const target = article.querySelector('.markdown-body');
+    const text = String(content || '');
+    if (
+      !target || !text ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      if (target) target.innerHTML = renderedHtml;
+      return;
+    }
+    target.innerHTML = renderedHtml;
+    const walker = document.createTreeWalker(
+      target,
+      NodeFilter.SHOW_TEXT
+    );
+    const textNodes = [];
+    let node = walker.nextNode();
+    while (node) {
+      textNodes.push({node, content:node.data});
+      node = walker.nextNode();
+    }
+    const renderedLength = textNodes.reduce(
+      (total, item) => total + item.content.length,
+      0
+    );
+    if (!renderedLength) return;
+    textNodes.forEach(item => { item.node.data = ''; });
+    target.classList.add('is-typing');
+    const duration = Math.min(7000, Math.max(3500, renderedLength * 3));
+    await new Promise(resolve => {
+      let startedAt = 0;
+      const typeNextChunk = timestamp => {
+        if (!startedAt) startedAt = timestamp;
+        const progress = Math.min(1, (timestamp - startedAt) / duration);
+        const position = Math.min(
+          renderedLength,
+          Math.max(1, Math.floor(renderedLength * progress))
+        );
+        let remaining = position;
+        textNodes.forEach(item => {
+          const visibleLength = Math.min(item.content.length, remaining);
+          item.node.data = item.content.slice(0, visibleLength);
+          remaining = Math.max(0, remaining - item.content.length);
+        });
+        scrollToLatest();
+        if (progress < 1) {
+          window.requestAnimationFrame(typeNextChunk);
+        } else {
+          resolve();
+        }
+      };
+      window.requestAnimationFrame(typeNextChunk);
+    });
+    target.classList.remove('is-typing');
+    scrollToLatest();
+  };
+  const appendError = message => {
+    const error = document.createElement('p');
+    error.className = 'notice error chat-error';
+    error.textContent = `${message} Your question is still here—please try again.`;
+    thread?.append(error);
+    scrollToLatest();
+  };
+
+  form?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const value = question.value.trim();
+    if (!value || pending) return;
+    pending = true;
+    submit.disabled = true;
+    submit.textContent = 'Thinking…';
+    form.setAttribute('aria-busy', 'true');
+    appendMessage('user', value, 'Just now');
+    const typing = appendTyping();
+    const payload = new FormData(form);
+    payload.set('question', value);
+    payload.set('_async', '1');
+    if (ownerPreview) payload.set('history', JSON.stringify(previewHistory));
+    question.value = '';
+    try {
+      const response = await fetch(form.action, {
+        method: 'POST',
+        body: payload,
+        headers: {'Accept': 'application/json'},
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail || 'HARQIS could not answer just now.');
+      typing.remove();
+      const assistant = appendMessage(
+        'assistant',
+        '',
+        result.assistant.created_at
+      );
+      await typeAssistantReply(
+        assistant,
+        result.assistant.content,
+        result.assistant.html
+      );
+      if (ownerPreview) {
+        previewHistory.push(
+          {role:'user', content:value},
+          {role:'assistant', content:result.assistant.content || ''}
+        );
+        if (previewHistory.length > 8) previewHistory.splice(0, previewHistory.length - 8);
+      }
+    } catch (error) {
+      typing.remove();
+      appendError(error.message || 'HARQIS could not answer just now.');
+      question.value = value;
+    } finally {
+      pending = false;
+      submit.disabled = false;
+      submit.textContent = 'Ask';
+      form.removeAttribute('aria-busy');
+      question.focus();
+    }
+  });
+  question?.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
   });
   window.addEventListener('pageshow', () => {
     if (overlay) overlay.hidden = true;
     document.documentElement.style.overflow = '';
   });
-  if (thread && thread.querySelector('.chat-message')) {
-    thread.scrollTop = thread.scrollHeight;
-  }
+  syncDrawer();
+  observeEntryStream();
+  scrollToLatest();
 })();
 </script>
 {% endblock %}

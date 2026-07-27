@@ -29,6 +29,7 @@ def parse_csv(value: str) -> tuple[str, ...]:
 class ShareConfiguration:
     id: str
     name: str
+    recipient: str = ""
     description: str = ""
     sources: tuple[str, ...] = ()
     tags: tuple[str, ...] = ()
@@ -51,6 +52,12 @@ class ShareConfiguration:
             raise ValueError("Configuration name is required.")
         if len(self.name) > 120:
             raise ValueError("Configuration name must be 120 characters or fewer.")
+        # Legacy saved recipes have no recipient. They may still be loaded so
+        # the owner can supply one, but every new form submission validates it.
+        if not self.recipient.strip() and not self.id:
+            raise ValueError("Recipient is required.")
+        if len(self.recipient) > 20:
+            raise ValueError("Recipient must be 20 characters or fewer.")
         if len(self.description) > 1000:
             raise ValueError("Description must be 1000 characters or fewer.")
         if not self.sources:
@@ -90,8 +97,8 @@ class ShareConfiguration:
                 if str(exc) == "The start date must not follow the end date.":
                     raise
                 raise ValueError("Share dates must use YYYY-MM-DD format.") from exc
-        if not 300 <= int(self.ttl_seconds) <= 604_800:
-            raise ValueError("Duration must be between five minutes and seven days.")
+        if not 300 <= int(self.ttl_seconds) <= 31_536_000:
+            raise ValueError("Duration must be between five minutes and 365 days.")
         if not 1 <= int(self.device_limit) <= 10:
             raise ValueError("Device limit must be between one and ten.")
 
@@ -173,6 +180,7 @@ class ScopeSnapshot:
     enabled_reference_ids: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
     context_prompt: str = ""
+    recipient: str = ""
 
     def to_record(self) -> dict[str, Any]:
         return {
@@ -189,6 +197,7 @@ class ScopeSnapshot:
             "enabled_reference_ids": list(self.enabled_reference_ids),
             "warnings": list(self.warnings),
             "context_prompt": self.context_prompt,
+            "recipient": self.recipient,
         }
 
     @classmethod
@@ -218,6 +227,7 @@ class ScopeSnapshot:
             ),
             warnings=tuple(str(item) for item in value.get("warnings") or []),
             context_prompt=str(value.get("context_prompt") or ""),
+            recipient=str(value.get("recipient") or ""),
         )
 
 
