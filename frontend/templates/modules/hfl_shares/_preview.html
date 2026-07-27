@@ -1,0 +1,42 @@
+{% if preview_error %}
+<div class="message error mb-0" data-preview-error>{{ preview_error }}</div>
+{% elif preview %}
+<section class="rounded-xl border border-slate-700 bg-slate-950 p-4" data-preview-ready>
+  <input type="hidden" name="reference_selection_initialized" value="1">
+  <div class="stat-grid">
+    <div class="stat"><strong>{{ preview.entries|length }}</strong><span>Entries</span></div>
+    <div class="stat"><strong>{{ preview.source_counts|length }}</strong><span>Sources</span></div>
+    <div class="stat"><strong>{{ preview.estimated_chars }}</strong><span>Context chars</span></div>
+    <div class="stat"><strong>{{ preview.available_references }}</strong><span>References</span></div>
+  </div>
+  <p class="mt-3 text-xs text-slate-500">Date range: {{ preview.earliest or "unknown" }} → {{ preview.latest or "unknown" }} · generated {{ preview.created_at }}</p>
+  {% for warning in preview.warnings %}<p class="message mt-3 mb-0">{{ warning }}</p>{% endfor %}
+  <div class="mt-4 max-h-96 overflow-y-auto pr-2">
+    {% for entry in preview.entries[:250] %}
+    <div class="item">
+      <div class="flex items-start justify-between gap-3">
+        <strong class="wrap text-sm text-white">{{ entry.moment or entry.header }}</strong>
+        <span class="pill">{{ entry.source }}</span>
+      </div>
+      {% if entry.tags %}
+      <div class="mt-2 flex flex-wrap gap-1">
+        {% for tag in entry.tags %}<span class="pill">#{{ tag }}</span>{% endfor %}
+      </div>
+      {% endif %}
+      <p class="mt-2 text-xs text-slate-400">{{ entry.what_happened }}</p>
+      {% if entry.references %}
+      <div class="mt-2">
+        {% for reference in entry.references %}
+        <label class="check mb-1"><input type="checkbox" name="enabled_reference_ids" value="{{ reference.id }}" {% if reference.enabled %}checked{% endif %}><span>Share {{ reference.label }} ({{ reference.kind }})</span></label>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% if preview.entries|length > 250 %}<p class="mt-3 text-xs text-amber-300">Preview list shows the first 250 entries. The generated share will retain the complete matching snapshot within the size limit.</p>{% endif %}
+  </div>
+  <div class="field mt-4"><label for="question">Test this preview with the owner-only agent</label><input class="control" id="question" name="question" value="{{ preview_question }}" placeholder="What are the main open items?"></div>
+  {% if suggested_prompts %}<p class="text-xs text-slate-500">Suggestions: {{ suggested_prompts|join(' · ') }}</p>{% endif %}
+  {% if preview_answer %}<div class="markdown-body mt-3 rounded-lg bg-slate-900 p-3 text-sm text-slate-200">{{ preview_answer }}</div>{% endif %}
+</section>
+{% endif %}
