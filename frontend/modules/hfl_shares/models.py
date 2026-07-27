@@ -8,6 +8,7 @@ from typing import Any
 
 
 AUTH_MODES = ("pin", "email_otp", "manual", "qr")
+ALL_SOURCES = "__all__"
 
 
 def utc_now() -> datetime:
@@ -54,6 +55,8 @@ class ShareConfiguration:
             raise ValueError("Description must be 1000 characters or fewer.")
         if not self.sources:
             raise ValueError("At least one source is required.")
+        if ALL_SOURCES in self.sources and self.sources != (ALL_SOURCES,):
+            raise ValueError("All sources cannot be combined with individual sources.")
         if len(self.sources) > 50 or any(
             not source.strip() or len(source) > 100 for source in self.sources
         ):

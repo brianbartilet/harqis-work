@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
 from modules.hfl_corpus.corpus import CorpusDocument, CorpusEntry
 from modules.hfl_shares.agent import _context
-from modules.hfl_shares.models import ShareConfiguration
+from modules.hfl_shares.models import ALL_SOURCES, ShareConfiguration
 from modules.hfl_shares.scope import build_snapshot
 from modules.hfl_shares.security import GUEST_COOKIE, make_csrf_token
 from modules.hfl_shares.store import get_share_store
@@ -137,8 +137,86 @@ def test_sharing_module_requires_owner_auth_and_renders(
         assert anonymous.get("/sharing", follow_redirects=False).status_code == 302
     response = authenticated_client.get("/sharing")
     assert response.status_code == 200
-    assert "Sources — primary authorization boundary" in response.text
+    assert "Sources - configure ingest data sources" in response.text
     assert "notes" in response.text
+
+
+def test_social_recipe_form_uses_new_labels_defaults_and_collapsed_sections(
+    authenticated_client, sharing_corpus
+):
+    response = authenticated_client.get("/sharing")
+
+    assert response.status_code == 200
+    assert "<title>Social · HARQIS</title>" in response.text
+    assert ">Social</h1>" in response.text
+    assert ">New recipe</h2>" in response.text
+    assert "Verification mode" in response.text
+    assert "Sources - configure ingest data sources" in response.text
+    assert 'value="__all__" data-all-sources checked' in response.text
+    assert 'name="references_enabled" checked' in response.text
+    assert "Number of devices" in response.text
+    assert re.search(
+        r'<details class="expand-panel mb-4">\s*<summary><span>Additional filters',
+        response.text,
+    )
+    assert re.search(
+        r'<details class="expand-panel mb-4">\s*<summary><span>Access, expiry',
+        response.text,
+    )
+    assert 'id="description" name="description" rows="3"' in response.text
+    assert 'id="topic" name="topic" rows="3"' in response.text
+
+
+def test_all_sources_scope_includes_each_available_source(tmp_path, monkeypatch):
+    from modules.hfl_shares import scope
+
+    notes_dir = tmp_path / "notes"
+    git_dir = tmp_path / "git"
+    notes_dir.mkdir()
+    git_dir.mkdir()
+    notes = _document(notes_dir, source="notes")
+    git = _document(git_dir, source="git")
+    monkeypatch.setattr(scope, "resolve_corpus_root", lambda: tmp_path)
+
+    snapshot = build_snapshot(
+        _configuration(sources=(ALL_SOURCES,), tags=()),
+        (notes, git),
+    )
+
+    assert {entry.source for entry in snapshot.entries} == {"notes", "git"}
+    assert snapshot.sources == ("git", "notes")
+
+
+def test_source_filter_options_return_frequency_sorted_tags(
+    authenticated_client, sharing_corpus
+):
+    response = authenticated_client.get(
+        "/sharing/filter-options",
+        params={"source": "notes"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["tags"] == [["japan", 1], ["travel", 1]]
+
+
+def test_expiration_picker_is_converted_to_relative_ttl():
+    from starlette.datastructures import FormData
+    from modules.hfl_shares.router import _configuration_from_form
+
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    form = FormData(
+        [
+            ("name", "Expiring recipe"),
+            ("sources", "notes"),
+            ("expires_at", expires_at.replace(tzinfo=None).isoformat(timespec="minutes")),
+            ("timezone_offset", "0"),
+            ("device_limit", "1"),
+        ]
+    )
+
+    configuration = _configuration_from_form(form)
+
+    assert 86_300 <= configuration.ttl_seconds <= 86_400
 
 
 def test_saved_recipe_is_reusable_and_deleting_it_does_not_delete_share(
@@ -428,21 +506,40 @@ def test_configuration_rejects_reversed_dates_and_oversized_recipes():
         _configuration(name="x" * 121)
 
 
-def test_remote_reader_mode_fails_closed(
+def test_remote_reader_mode_uses_canonical_api(
     authenticated_client, monkeypatch, sharing_corpus
 ):
     from config import get_settings
+    from modules.hfl_shares import router
 
     monkeypatch.setattr(
         get_settings(), "hfl_corpus_api_url", "https://canonical.example.test"
     )
+    document = sharing_corpus
+
+    class RemoteClient:
+        @classmethod
+        def from_settings(cls):
+            return cls()
+
+        def index(self, *, params):
+            return {
+                "sources": ["notes"],
+                "tag_cloud": [["travel", 1]],
+            }
+
+        def sharing_documents(self, sources):
+            assert sources == ("notes",)
+            return (document,)
+
+    monkeypatch.setattr(router, "RemoteCorpusClient", RemoteClient)
     response = authenticated_client.get("/sharing")
     assert response.status_code == 200
-    assert "only on the canonical Activity Corpus host" in response.text
+    assert "notes" in response.text
 
     generated = authenticated_client.post("/sharing/generate", data=_form())
-    assert generated.status_code == 422
-    assert get_share_store().list_shares() == []
+    assert generated.status_code == 200
+    assert len(get_share_store().list_shares()) == 1
 
 
 def test_invalid_proxied_public_url_does_not_create_an_orphan_share(

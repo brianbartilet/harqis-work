@@ -10,6 +10,7 @@ from datetime import date, datetime
 
 from modules.hfl_corpus.corpus import CorpusDocument, resolve_corpus_root
 from modules.hfl_shares.models import (
+    ALL_SOURCES,
     ScopeSnapshot,
     ShareConfiguration,
     SnapshotEntry,
@@ -139,7 +140,12 @@ def build_snapshot(
     *,
     enabled_reference_ids: tuple[str, ...] = (),
 ) -> ScopeSnapshot:
-    sources = {item.casefold() for item in configuration.sources}
+    all_sources = ALL_SOURCES in configuration.sources
+    sources = {
+        item.casefold()
+        for item in configuration.sources
+        if item != ALL_SOURCES
+    }
     tags = {item.lstrip("#").casefold() for item in configuration.tags}
     topic_terms = tuple(
         term.casefold()
@@ -153,11 +159,11 @@ def build_snapshot(
     entries: list[SnapshotEntry] = []
     dates: list[date] = []
     available_references = 0
-    missing_sources = set(sources)
+    missing_sources = set() if all_sources else set(sources)
 
     for document in documents:
         for entry in document.entries:
-            if entry.source.casefold() not in sources:
+            if not all_sources and entry.source.casefold() not in sources:
                 continue
             missing_sources.discard(entry.source.casefold())
             entry_id = _entry_key(document, entry.anchor, entry.text)
@@ -217,7 +223,11 @@ def build_snapshot(
     return ScopeSnapshot(
         entries=tuple(entries),
         created_at=utc_now().isoformat(),
-        sources=configuration.sources,
+        sources=(
+            tuple(sorted(source_counts, key=str.casefold))
+            if all_sources
+            else configuration.sources
+        ),
         filters={
             "tags": list(configuration.tags),
             "date_from": configuration.date_from,

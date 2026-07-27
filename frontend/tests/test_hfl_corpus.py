@@ -1682,6 +1682,56 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
     )
 
 
+def test_remote_client_loads_entry_documents_for_selected_share_sources(monkeypatch):
+    from modules.hfl_corpus.remote import RemoteCorpusClient
+
+    requests = []
+
+    def remote_get(url, **kwargs):
+        requests.append(kwargs["params"])
+        source = kwargs["params"]["source"]
+        payload = {
+            "selected_source": source,
+            "results": [{
+                "relative_path": f"{source}.md",
+                "name": f"{source}.md",
+                "created_at": "2026-07-19T09:30:00",
+                "updated_at": "2026-07-19T10:00:00",
+                "tags": ["hfl"],
+                "tag_counts": [["hfl", 1]],
+                "entry_count": 1,
+                "excerpt": "A canonical entry",
+                "entries": [{
+                    "anchor": f"hfl-entry-{source}",
+                    "header": "2026-07-19 09:30",
+                    "moment": "Remote moment",
+                    "what_happened": "Remote event",
+                    "tags": ["hfl"],
+                    "source": source,
+                    "text": f"Source: {source}",
+                }],
+            }],
+        }
+        return httpx.Response(
+            200,
+            json=payload,
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx, "get", remote_get)
+
+    documents = RemoteCorpusClient(
+        "http://canonical:8081",
+        "secret",
+    ).sharing_documents(["notes", "git"])
+
+    assert {document.entries[0].source for document in documents} == {
+        "notes",
+        "git",
+    }
+    assert all(request["compact"] == "false" for request in requests)
+
+
 def test_remote_client_paginates_legacy_index_contract(monkeypatch):
     from modules.hfl_corpus.remote import RemoteCorpusClient
 

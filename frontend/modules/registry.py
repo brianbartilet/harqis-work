@@ -52,10 +52,10 @@ MODULES: tuple[ModuleDefinition, ...] = (
     ),
     ModuleDefinition(
         key="sharing",
-        label="Sharing",
+        label="Social",
         route="/sharing",
-        description="Create temporary, topic-scoped Activity Corpus portals.",
-        detail="Save source-first scope recipes, test their context, and issue expiring QR and PIN access.",
+        description="Recipes stay live while every generated snapshot freezes a fresh view.",
+        detail="Shape Activity Corpus sources, tags, and filters into temporary portals with expiring guest access.",
     ),
 )
 

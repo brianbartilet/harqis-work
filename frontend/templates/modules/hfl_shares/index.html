@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Sharing · HARQIS{% endblock %}
+{% block title %}Social · HARQIS{% endblock %}
 {% block head %}
 <style>
   .share-grid { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(270px,.8fr); gap:1.25rem; }
@@ -8,9 +8,22 @@
   .field label { display:block; color:#cbd5e1; font-size:.78rem; font-weight:650; margin-bottom:.4rem; }
   .control { width:100%; border:1px solid #334155; border-radius:.55rem; background:#020617; color:#f8fafc; padding:.65rem .75rem; }
   textarea.control { min-height:5.5rem; resize:vertical; }
-  .source-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:.45rem; }
   .check { display:flex; align-items:flex-start; gap:.5rem; color:#cbd5e1; font-size:.82rem; padding:.55rem; background:#020617; border:1px solid #1e293b; border-radius:.5rem; }
   .check input { margin-top:.18rem; }
+  .selector { position:relative; }
+  .selector > summary { display:flex; min-height:2.65rem; list-style:none; align-items:center; justify-content:space-between; gap:.75rem; border:1px solid #334155; border-radius:.55rem; background:#020617; color:#f8fafc; padding:.65rem .75rem; cursor:pointer; }
+  .selector > summary::-webkit-details-marker { display:none; }
+  .selector[open] > summary { border-color:#3b82f6; border-bottom-left-radius:0; border-bottom-right-radius:0; }
+  .selector-menu { border:1px solid #334155; border-top:0; border-radius:0 0 .55rem .55rem; background:#020617; padding:.7rem; }
+  .selector-options { display:grid; max-height:13rem; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:.55rem; overflow-y:auto; padding:.15rem; }
+  .tag-cloud { display:flex; max-height:8.5rem; flex-wrap:wrap; gap:.5rem; overflow-y:auto; padding:.25rem; }
+  .tag-option { cursor:pointer; margin-bottom:0 !important; }
+  .tag-option input { position:absolute; opacity:0; pointer-events:none; }
+  .tag-option > span { display:inline-flex; align-items:center; gap:.25rem; border-radius:999px; background:rgba(23,37,84,.5); color:#93c5fd; padding:.3rem .6rem; font-size:.75rem; transition:.15s; }
+  .tag-option:hover > span { background:#1e3a8a; color:#dbeafe; }
+  .tag-option input:checked + span { background:rgba(2,44,34,.7); color:#a7f3d0; box-shadow:inset 0 0 0 1px rgba(4,120,87,.6); }
+  .tag-count { color:#3b82f6; }
+  .tag-option input:checked + span .tag-count { color:#34d399; }
   .two { display:grid; grid-template-columns:1fr 1fr; gap:.8rem; }
   .actions { display:flex; flex-wrap:wrap; gap:.55rem; }
   .btn { border-radius:.55rem; padding:.58rem .85rem; font-size:.78rem; font-weight:700; }
@@ -27,7 +40,11 @@
   .message { border-radius:.65rem; padding:.75rem .9rem; margin-bottom:1rem; background:#082f49; color:#bae6fd; }
   .message.error { background:#4c0519; color:#fecdd3; }
   .wrap { overflow-wrap:anywhere; word-break:break-word; }
-  details summary { cursor:pointer; color:#93c5fd; font-size:.8rem; }
+  .expand-panel { border:1px solid #1e293b; border-radius:.75rem; background:rgba(2,6,23,.45); }
+  .expand-panel > summary { display:flex; cursor:pointer; list-style:none; align-items:center; justify-content:space-between; gap:.75rem; color:#93c5fd; font-size:.8rem; padding:.8rem .9rem; }
+  .expand-panel > summary::-webkit-details-marker { display:none; }
+  .expand-panel[open] > summary { border-bottom:1px solid #1e293b; }
+  .expand-panel[open] .expand-arrow { transform:rotate(180deg); }
   @media(max-width:900px) { .share-grid { grid-template-columns:1fr; } }
   @media(max-width:600px) { .two,.stat-grid { grid-template-columns:1fr 1fr; } .panel { padding:.9rem; } }
 </style>
@@ -37,8 +54,8 @@
 <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6">
   <div class="mb-6">
     <p class="text-xs font-bold uppercase tracking-widest text-sky-400">Activity Corpus</p>
-    <h1 class="mt-2 text-3xl font-semibold text-white">Sharing</h1>
-    <p class="mt-2 max-w-3xl text-sm text-slate-400">Create a temporary, read-only portal from a reviewed snapshot. Guests never enter the HARQIS network or see owner navigation.</p>
+    <h1 class="mt-2 text-3xl font-semibold text-white">Social</h1>
+    <p class="mt-2 max-w-3xl text-sm text-slate-400">Recipes remain live filters. Generation always refreshes the corpus and freezes a new snapshot.</p>
   </div>
 
   {% if error %}<div class="message error">{{ error }}</div>{% endif %}
@@ -46,17 +63,16 @@
     <section class="panel">
       <div class="mb-5 flex items-start justify-between gap-4">
         <div>
-          <h2 class="text-lg font-semibold text-white">{{ "Edit recipe" if cfg and cfg.id else "New sharing recipe" }}</h2>
-          <p class="mt-1 text-xs text-slate-500">Recipes remain live filters. Generation always refreshes the corpus and freezes a new snapshot.</p>
+          <h2 class="text-lg font-semibold text-white">{{ "Edit recipe" if cfg and cfg.id else "New recipe" }}</h2>
         </div>
         {% if cfg and cfg.id %}<a class="text-xs text-sky-400" href="/sharing">Clear</a>{% endif %}
       </div>
-      <form method="post">
+      <form method="post" data-social-form>
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <input type="hidden" name="configuration_id" value="{{ cfg.id if cfg else '' }}">
         <div class="two">
           <div class="field"><label for="name">Configuration name</label><input class="control" id="name" name="name" required value="{{ cfg.name if cfg else '' }}" placeholder="Work context"></div>
-          <div class="field"><label for="auth-mode">Guest verification</label>
+          <div class="field"><label for="auth-mode">Verification mode</label>
             <select class="control" id="auth-mode" name="auth_mode">
               {% set mode = cfg.auth_mode if cfg else 'pin' %}
               <option value="pin" {% if mode == 'pin' %}selected{% endif %}>QR + generated PIN</option>
@@ -66,36 +82,67 @@
             </select>
           </div>
         </div>
-        <div class="field"><label for="description">Description</label><input class="control" id="description" name="description" value="{{ cfg.description if cfg else '' }}" placeholder="What this recipe is intended to share"></div>
+        <div class="field"><label for="description">Description</label><textarea class="control" id="description" name="description" rows="3" placeholder="What this recipe is intended to share">{{ cfg.description if cfg else '' }}</textarea></div>
 
         <div class="field">
-          <label>Sources — primary authorization boundary</label>
-          <div class="source-grid">
-            {% for source in available_sources %}
-            <label class="check"><input type="checkbox" name="sources" value="{{ source }}" {% if cfg and source in cfg.sources %}checked{% endif %}><span>{{ source }}</span></label>
-            {% else %}<p class="text-xs text-slate-500">No corpus sources are available.</p>{% endfor %}
+          <label>Sources - configure ingest data sources</label>
+          <details class="selector" data-source-selector>
+            <summary><span data-source-summary>All sources</span><span aria-hidden="true">⌄</span></summary>
+            <div class="selector-menu">
+              <input class="control mb-3" type="search" data-source-search placeholder="Search sources" autocomplete="off">
+              <div class="selector-options" data-source-options>
+                <label class="check" data-source-option data-search-value="all sources">
+                  <input type="checkbox" name="sources" value="{{ all_sources_value }}" data-all-sources {% if not cfg or all_sources_value in cfg.sources %}checked{% endif %}>
+                  <span>All sources</span>
+                </label>
+                {% for source in available_sources %}
+                <label class="check" data-source-option data-search-value="{{ source|lower }}">
+                  <input type="checkbox" name="sources" value="{{ source }}" data-specific-source {% if cfg and source in cfg.sources %}checked{% endif %}>
+                  <span>{{ source }}</span>
+                </label>
+                {% else %}<p class="text-xs text-slate-500">No corpus sources are available.</p>{% endfor %}
+              </div>
+            </div>
+          </details>
+        </div>
+        <div class="field" data-tag-filter>
+          <label for="tag-search">Tags <span class="font-normal text-slate-500">— select any number; entries must match all selected tags</span></label>
+          <input class="control mb-3" id="tag-search" type="search" data-tag-search placeholder="Search tags" autocomplete="off">
+          <div class="tag-cloud" data-tag-cloud>
+            {% for tag, count in available_tags %}
+            <label class="tag-option" data-tag-option data-search-value="{{ tag|lower }}">
+              <input type="checkbox" name="tags" value="{{ tag }}" {% if cfg and tag in cfg.tags %}checked{% endif %}>
+              <span><span>#{{ tag }}</span><span class="tag-count">{{ count }}</span></span>
+            </label>
+            {% else %}<p class="text-xs text-slate-500" data-tag-empty>No tags are available for these sources.</p>{% endfor %}
           </div>
+          <p class="mt-2 text-xs text-slate-500">No selection includes all available tags.</p>
         </div>
-        <div class="two">
-          <div class="field"><label for="tags">Tags (comma-separated; all must match)</label><input class="control" id="tags" name="tags" value="{{ cfg.tags|join(', ') if cfg else '' }}" list="known-tags" placeholder="work, project-x"><datalist id="known-tags">{% for tag in available_tags %}<option value="{{ tag }}">{% endfor %}</datalist></div>
-          <div class="field"><label for="topic">Topic phrase (optional)</label><input class="control" id="topic" name="topic" value="{{ cfg.topic if cfg else '' }}" placeholder="Japan trip"></div>
-        </div>
-        <div class="two">
-          <div class="field"><label for="date-from">From date</label><input class="control" id="date-from" type="date" name="date_from" value="{{ cfg.date_from if cfg else '' }}"></div>
-          <div class="field"><label for="date-to">To date</label><input class="control" id="date-to" type="date" name="date_to" value="{{ cfg.date_to if cfg else '' }}"></div>
-        </div>
-        <div class="field"><label for="entry-ids">Specific entry IDs (optional, comma-separated)</label><textarea class="control" id="entry-ids" name="selected_entry_ids" placeholder="hfl-...">{{ cfg.selected_entry_ids|join(', ') if cfg else '' }}</textarea></div>
-        <div class="field"><label for="prompts">Saved test prompts (one per line)</label><textarea class="control" id="prompts" name="test_prompts" placeholder="Summarize the current project status">{{ cfg.test_prompts|join('\n') if cfg else '' }}</textarea></div>
 
-        <details class="mb-4" open>
-          <summary>Access, expiry, and reference controls</summary>
-          <div class="two mt-3">
+        <details class="expand-panel mb-4">
+          <summary><span>Additional filters</span><span class="expand-arrow transition" aria-hidden="true">⌄</span></summary>
+          <div class="p-4">
+            <div class="field"><label for="topic">Topic phrase (optional)</label><textarea class="control" id="topic" name="topic" rows="3" placeholder="Japan trip">{{ cfg.topic if cfg else '' }}</textarea></div>
+            <div class="two">
+              <div class="field"><label for="date-from">From date</label><input class="control [color-scheme:dark]" id="date-from" type="date" name="date_from" value="{{ cfg.date_from if cfg else '' }}" onclick="if (this.showPicker) this.showPicker()"></div>
+              <div class="field"><label for="date-to">To date</label><input class="control [color-scheme:dark]" id="date-to" type="date" name="date_to" value="{{ cfg.date_to if cfg else '' }}" onclick="if (this.showPicker) this.showPicker()"></div>
+            </div>
+            <div class="field"><label for="entry-ids">Specific entry IDs (optional, comma-separated)</label><textarea class="control" id="entry-ids" name="selected_entry_ids" placeholder="hfl-...">{{ cfg.selected_entry_ids|join(', ') if cfg else '' }}</textarea></div>
+            <div class="field mb-0"><label for="prompts">Saved test prompts (one per line)</label><textarea class="control" id="prompts" name="test_prompts" placeholder="Summarize the current project status">{{ cfg.test_prompts|join('\n') if cfg else '' }}</textarea></div>
+          </div>
+        </details>
+
+        <details class="expand-panel mb-4">
+          <summary><span>Access, expiry, and reference controls</span><span class="expand-arrow transition" aria-hidden="true">⌄</span></summary>
+          <div class="p-4">
+          <div class="two">
             <div class="field"><label for="email">Allowed email (email OTP mode)</label><input class="control" id="email" type="email" name="allowed_email" value="{{ cfg.allowed_email if cfg else '' }}"></div>
-            <div class="field"><label for="ttl">Duration in minutes (5–10080)</label><input class="control" id="ttl" type="number" min="5" max="10080" name="ttl_minutes" value="{{ (cfg.ttl_seconds // 60) if cfg else (defaults.hfl_share_default_ttl_seconds // 60) }}"></div>
-            <div class="field"><label for="devices">Device/session limit (1–10)</label><input class="control" id="devices" type="number" min="1" max="10" name="device_limit" value="{{ cfg.device_limit if cfg else defaults.hfl_share_default_device_limit }}"></div>
+            <div class="field"><label for="expires-at">Expires at</label><input class="control [color-scheme:dark]" id="expires-at" type="datetime-local" name="expires_at" required value="{{ default_expires_at }}" onclick="if (this.showPicker) this.showPicker()"><input type="hidden" name="timezone_offset" data-timezone-offset></div>
+            <div class="field"><label for="devices">Number of devices</label><input class="control" id="devices" type="number" min="1" max="10" name="device_limit" value="{{ cfg.device_limit if cfg else defaults.hfl_share_default_device_limit }}"></div>
           </div>
           <label class="check mb-2"><input type="checkbox" name="single_use" {% if not cfg or cfg.single_use %}checked{% endif %}><span>Single-use redemption (recommended)</span></label>
-          <label class="check"><input type="checkbox" name="references_enabled" {% if cfg and cfg.references_enabled %}checked{% endif %}><span>Allow individually selected references. Canonical paths are never shown to guests.</span></label>
+          <label class="check"><input type="checkbox" name="references_enabled" {% if not cfg or cfg.references_enabled %}checked{% endif %}><span>Allow individually selected references. Canonical paths are never shown to guests.</span></label>
+          </div>
         </details>
 
         {% if preview %}
@@ -145,7 +192,7 @@
         {% for item in configurations %}
         <div class="item">
           <a class="wrap text-sm font-semibold text-sky-300" href="/sharing?configuration_id={{ item.id }}">{{ item.name }}</a>
-          <p class="mt-1 text-xs text-slate-500">{{ item.sources|join(', ') }} · {{ item.ttl_seconds // 60 }} min</p>
+          <p class="mt-1 text-xs text-slate-500">{{ "All sources" if all_sources_value in item.sources else item.sources|join(', ') }} · {{ (item.ttl_seconds / 3600)|round(1) }} hours</p>
           <div class="actions mt-2">
             <a class="text-xs text-slate-400" href="/sharing?configuration_id={{ item.id }}&duplicate=true">Duplicate</a>
             {% if not cfg or cfg.id != item.id %}
@@ -182,4 +229,152 @@
     </aside>
   </div>
 </main>
+<script>
+(() => {
+  const form = document.querySelector('[data-social-form]');
+  const selector = form?.querySelector('[data-source-selector]');
+  const allSources = form?.querySelector('[data-all-sources]');
+  const sourceSearch = form?.querySelector('[data-source-search]');
+  const sourceSummary = form?.querySelector('[data-source-summary]');
+  const tagSearch = form?.querySelector('[data-tag-search]');
+  const tagCloud = form?.querySelector('[data-tag-cloud]');
+  const timezoneOffset = form?.querySelector('[data-timezone-offset]');
+  if (!form || !selector || !allSources || !sourceSummary || !tagCloud) return;
+
+  const specificSources = () =>
+    Array.from(form.querySelectorAll('[data-specific-source]'));
+  const selectedSources = () => {
+    if (allSources.checked) return [allSources.value];
+    return specificSources().filter(input => input.checked).map(input => input.value);
+  };
+  const selectedTags = () =>
+    new Set(
+      Array.from(tagCloud.querySelectorAll('input[name="tags"]:checked'))
+        .map(input => input.value)
+    );
+
+  const filterOptions = (input, selectorName) => {
+    const needle = (input?.value || '').trim().toLocaleLowerCase();
+    form.querySelectorAll(selectorName).forEach(option => {
+      option.hidden = Boolean(
+        needle && !(option.dataset.searchValue || '').includes(needle)
+      );
+    });
+  };
+
+  const updateSourceSummary = () => {
+    const selected = specificSources().filter(input => input.checked);
+    if (allSources.checked || !selected.length) {
+      sourceSummary.textContent = 'All sources';
+    } else if (selected.length <= 2) {
+      sourceSummary.textContent = selected.map(input => input.value).join(', ');
+    } else {
+      sourceSummary.textContent = `${selected.length} sources selected`;
+    }
+  };
+
+  const renderTags = (tags, preserved) => {
+    tagCloud.replaceChildren();
+    if (!tags.length) {
+      const empty = document.createElement('p');
+      empty.className = 'text-xs text-slate-500';
+      empty.dataset.tagEmpty = '';
+      empty.textContent = 'No tags are available for these sources.';
+      tagCloud.append(empty);
+      return;
+    }
+    tags.forEach(([tag, count]) => {
+      const label = document.createElement('label');
+      label.className = 'tag-option';
+      label.dataset.tagOption = '';
+      label.dataset.searchValue = tag.toLocaleLowerCase();
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.name = 'tags';
+      checkbox.value = tag;
+      checkbox.checked = preserved.has(tag);
+
+      const pill = document.createElement('span');
+      const name = document.createElement('span');
+      name.textContent = `#${tag}`;
+      const total = document.createElement('span');
+      total.className = 'tag-count';
+      total.textContent = String(count);
+      pill.append(name, total);
+      label.append(checkbox, pill);
+      tagCloud.append(label);
+    });
+    filterOptions(tagSearch, '[data-tag-option]');
+  };
+
+  let tagRequest = 0;
+  const refreshTags = async () => {
+    const requestId = ++tagRequest;
+    const preserved = selectedTags();
+    const params = new URLSearchParams();
+    selectedSources().forEach(source => params.append('source', source));
+    tagCloud.setAttribute('aria-busy', 'true');
+    try {
+      const response = await fetch(`/sharing/filter-options?${params}`, {
+        headers: {'Accept': 'application/json'},
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || 'Tags are unavailable.');
+      if (requestId === tagRequest) renderTags(payload.tags || [], preserved);
+    } catch (error) {
+      if (requestId !== tagRequest) return;
+      tagCloud.replaceChildren();
+      const message = document.createElement('p');
+      message.className = 'text-xs text-rose-300';
+      message.textContent = error.message;
+      tagCloud.append(message);
+    } finally {
+      if (requestId === tagRequest) tagCloud.removeAttribute('aria-busy');
+    }
+  };
+
+  allSources.addEventListener('change', () => {
+    if (allSources.checked) {
+      specificSources().forEach(input => { input.checked = false; });
+    } else if (!specificSources().some(input => input.checked)) {
+      allSources.checked = true;
+    }
+    updateSourceSummary();
+    refreshTags();
+  });
+  specificSources().forEach(input => {
+    input.addEventListener('change', () => {
+      if (input.checked) allSources.checked = false;
+      if (!specificSources().some(item => item.checked)) allSources.checked = true;
+      updateSourceSummary();
+      refreshTags();
+    });
+  });
+  sourceSearch?.addEventListener(
+    'input',
+    () => filterOptions(sourceSearch, '[data-source-option]')
+  );
+  tagSearch?.addEventListener(
+    'input',
+    () => filterOptions(tagSearch, '[data-tag-option]')
+  );
+  [sourceSearch, tagSearch].forEach(input => {
+    input?.addEventListener('keydown', event => {
+      if (event.key === 'Enter') event.preventDefault();
+    });
+  });
+  document.addEventListener('click', event => {
+    if (selector.open && !selector.contains(event.target)) selector.open = false;
+  });
+  if (timezoneOffset) {
+    const setTimezone = () => {
+      timezoneOffset.value = String(new Date().getTimezoneOffset());
+    };
+    setTimezone();
+    form.addEventListener('submit', setTimezone);
+  }
+  updateSourceSummary();
+})();
+</script>
 {% endblock %}

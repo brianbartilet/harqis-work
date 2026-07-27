@@ -3,13 +3,21 @@
 from __future__ import annotations
 
 import hmac
+import math
 import secrets
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+)
 
 from config import get_settings
 from modules.hfl_corpus.corpus import (
@@ -18,9 +26,10 @@ from modules.hfl_corpus.corpus import (
     corpus_index,
     resolve_corpus_root,
 )
+from modules.hfl_corpus.remote import RemoteCorpusClient, RemoteCorpusError
 from modules.hfl_shares.agent import AgentUnavailable, answer_question
 from modules.hfl_shares.audit import record_share_audit
-from modules.hfl_shares.models import ShareConfiguration, parse_csv
+from modules.hfl_shares.models import ALL_SOURCES, ShareConfiguration, parse_csv
 from modules.hfl_shares.scope import (
     build_snapshot,
     suggested_prompts,
@@ -52,12 +61,116 @@ owner_router = APIRouter(prefix="/sharing")
 guest_router = APIRouter(prefix="/share")
 
 
-def _sharing_documents(*, force: bool = False):
+def _sharing_documents(
+    sources: tuple[str, ...] = (),
+    *,
+    force: bool = False,
+):
     if get_settings().hfl_corpus_api_url.strip():
-        raise ValueError(
-            "Sharing is available only on the canonical Activity Corpus host."
-        )
+        try:
+            client = RemoteCorpusClient.from_settings()
+            requested_sources = sources
+            if not requested_sources or ALL_SOURCES in requested_sources:
+                catalog = client.index(params={"page": "1", "page_size": "20"})
+                requested_sources = tuple(catalog["sources"])
+            return client.sharing_documents(requested_sources)
+        except RemoteCorpusError as exc:
+            raise ValueError(str(exc)) from exc
     return corpus_index.documents(force=force)
+
+
+def _sharing_catalog():
+    if get_settings().hfl_corpus_api_url.strip():
+        try:
+            remote = RemoteCorpusClient.from_settings().index(
+                params={"page": "1", "page_size": "20"}
+            )
+        except RemoteCorpusError as exc:
+            raise ValueError(str(exc)) from exc
+        return (), remote["sources"], remote["tag_cloud"]
+    documents = corpus_index.documents()
+    return documents, common_sources(documents), common_tags(documents, limit=100)
+
+
+def _normalized_sources(form: Any) -> tuple[str, ...]:
+    sources = tuple(
+        dict.fromkeys(
+            str(item).strip()
+            for item in form.getlist("sources")
+            if str(item).strip()
+        )
+    )
+    if not sources or ALL_SOURCES in sources:
+        return (ALL_SOURCES,)
+    return sources
+
+
+def _expiration_seconds(form: Any, existing: ShareConfiguration | None) -> int:
+    settings = get_settings()
+    fallback = (
+        existing.ttl_seconds
+        if existing
+        else settings.hfl_share_default_ttl_seconds
+    )
+    raw = str(form.get("expires_at") or "").strip()
+    if not raw:
+        return fallback
+    try:
+        expires_at = datetime.fromisoformat(raw)
+        offset = int(str(form.get("timezone_offset") or "0"))
+        if not -840 <= offset <= 840:
+            raise ValueError
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(
+                tzinfo=timezone(-timedelta(minutes=offset))
+            )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Expires at must be a valid date and time.") from exc
+    seconds = math.ceil(
+        (
+            expires_at.astimezone(timezone.utc)
+            - datetime.now(timezone.utc)
+        ).total_seconds()
+    )
+    if seconds < 300:
+        raise ValueError("Expires at must be at least five minutes from now.")
+    if seconds > 604_800:
+        raise ValueError("Expires at must be within seven days.")
+    return seconds
+
+
+def _source_filtered_tags(
+    documents,
+    sources: tuple[str, ...],
+    *,
+    limit: int = 100,
+) -> list[tuple[str, int]]:
+    if not sources or ALL_SOURCES in sources:
+        return common_tags(documents, limit=limit)
+    selected = {source.casefold() for source in sources}
+    counts: Counter[str] = Counter()
+    for document in documents:
+        tags = {
+            tag
+            for entry in document.entries
+            if entry.source.casefold() in selected
+            for tag in entry.tags
+        }
+        counts.update(tags)
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]
+
+
+def _sharing_tags(
+    sources: tuple[str, ...],
+    *,
+    catalog_tags=(),
+):
+    if not sources or ALL_SOURCES in sources:
+        if catalog_tags:
+            return catalog_tags
+        _, _, tags = _sharing_catalog()
+        return tags
+    return _source_filtered_tags(_sharing_documents(sources), sources)
 
 
 def _configuration_from_form(
@@ -66,12 +179,6 @@ def _configuration_from_form(
     existing: ShareConfiguration | None = None,
 ) -> ShareConfiguration:
     settings = get_settings()
-    ttl_minutes = int(
-        str(
-            form.get("ttl_minutes")
-            or max(5, settings.hfl_share_default_ttl_seconds // 60)
-        )
-    )
     device_limit = int(
         str(form.get("device_limit") or settings.hfl_share_default_device_limit)
     )
@@ -79,8 +186,10 @@ def _configuration_from_form(
         id=str(form.get("configuration_id") or ""),
         name=str(form.get("name") or "").strip(),
         description=str(form.get("description") or "").strip(),
-        sources=tuple(str(item) for item in form.getlist("sources") if str(item)),
-        tags=parse_csv(str(form.get("tags") or "")),
+        sources=_normalized_sources(form),
+        tags=parse_csv(
+            ",".join(str(item) for item in form.getlist("tags"))
+        ),
         date_from=str(form.get("date_from") or "").strip(),
         date_to=str(form.get("date_to") or "").strip(),
         topic=str(form.get("topic") or "").strip(),
@@ -95,7 +204,7 @@ def _configuration_from_form(
         auth_mode=str(form.get("auth_mode") or "pin"),
         allowed_email=str(form.get("allowed_email") or "").strip(),
         references_enabled=form.get("references_enabled") == "on",
-        ttl_seconds=ttl_minutes * 60,
+        ttl_seconds=_expiration_seconds(form, existing),
         device_limit=device_limit,
         single_use=form.get("single_use") == "on",
         created_at=existing.created_at if existing else "",
@@ -119,15 +228,49 @@ def _owner_context(
     error: str = "",
 ) -> dict[str, Any]:
     try:
-        documents = _sharing_documents()
+        documents, catalog_sources, catalog_tags = _sharing_catalog()
         corpus_error = ""
     except ValueError as exc:
         documents = ()
+        catalog_sources = ()
+        catalog_tags = ()
         corpus_error = str(exc)
     store = get_share_store()
-    sources = set(common_sources(documents))
+    sources = set(catalog_sources)
     if configuration:
-        sources.update(configuration.sources)
+        sources.update(
+            source
+            for source in configuration.sources
+            if source != ALL_SOURCES
+        )
+    selected_sources = (
+        configuration.sources
+        if configuration
+        else (ALL_SOURCES,)
+    )
+    try:
+        filtered_tags = _sharing_tags(
+            selected_sources,
+            catalog_tags=catalog_tags,
+        )
+    except ValueError as exc:
+        filtered_tags = catalog_tags
+        corpus_error = corpus_error or str(exc)
+    tag_counts = dict(filtered_tags)
+    for tag in configuration.tags if configuration else ():
+        tag_counts.setdefault(tag, 0)
+    available_tags = sorted(
+        tag_counts.items(),
+        key=lambda item: (-item[1], item[0]),
+    )
+    ttl_seconds = (
+        configuration.ttl_seconds
+        if configuration
+        else 86_400
+    )
+    default_expires_at = (
+        datetime.now().astimezone() + timedelta(seconds=ttl_seconds)
+    ).strftime("%Y-%m-%dT%H:%M")
     return page_context(
         request,
         user,
@@ -136,7 +279,9 @@ def _owner_context(
         shares=store.list_shares(),
         pending_requests=store.list_pending_requests(),
         available_sources=tuple(sorted(sources, key=str.casefold)),
-        available_tags=common_tags(documents, limit=100),
+        available_tags=available_tags,
+        all_sources_value=ALL_SOURCES,
+        default_expires_at=default_expires_at,
         configuration=configuration,
         preview=preview,
         preview_answer=preview_answer,
@@ -146,6 +291,22 @@ def _owner_context(
         csrf=make_csrf_token(user),
         defaults=get_settings(),
     )
+
+
+@owner_router.get("/filter-options")
+async def sharing_filter_options(request: Request):
+    user, redirect = require_user(request)
+    if redirect:
+        return JSONResponse(
+            {"detail": "Authentication required."},
+            status_code=401,
+        )
+    sources = tuple(request.query_params.getlist("source")) or (ALL_SOURCES,)
+    try:
+        tags = _sharing_tags(sources)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=503)
+    return {"tags": [[tag, count] for tag, count in tags]}
 
 
 @owner_router.get("", response_class=HTMLResponse)
@@ -226,7 +387,7 @@ async def _preview_response(
         configuration = _configuration_from_form(form, existing=existing)
         preview = build_snapshot(
             configuration,
-            _sharing_documents(),
+            _sharing_documents(configuration.sources),
             enabled_reference_ids=tuple(
                 str(item) for item in form.getlist("enabled_reference_ids")
             ),
@@ -295,7 +456,7 @@ async def generate_share(request: Request):
         )
         snapshot = build_snapshot(
             configuration,
-            _sharing_documents(force=True),
+            _sharing_documents(configuration.sources, force=True),
             enabled_reference_ids=enabled_references,
         )
         if not snapshot.entries:

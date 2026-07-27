@@ -13,7 +13,7 @@ The frontend currently exposes six modules:
 | Workflows | `/workflows` | Displays Celery workflow categories, task triggers, schedules, status, and run history. |
 | Apps | `/applications` | Inventories `apps/*`, renders documentation, and runs controlled pytest checks using host configuration. |
 | Activity Corpus | `/hfl-corpus` | Browses and searches HARQIS activity logs, based on the Homework for Life reflection practice, and their references. |
-| Sharing | `/sharing` | Builds reviewed, immutable Activity Corpus snapshots and temporary guest portals. |
+| Social | `/sharing` | Builds reviewed, immutable Activity Corpus snapshots and temporary guest portals. |
 
 `/dashboard` remains as a compatibility redirect to `/home`.
 
@@ -424,19 +424,21 @@ Apply mode backs up affected Markdown files and Elasticsearch documents under
 the gitignored `.harqis-data/hfl-reference-migrations/` directory before
 updating either store. Reports contain only counts and entry IDs.
 
-## Sharing Module
+## Social Module
 
-Sharing exposes an authenticated owner workspace at `/sharing` and a separate,
-navigation-free guest portal below `/share`. A saved configuration is a
+Social exposes an authenticated owner workspace at `/sharing` and a separate,
+navigation-free guest portal below `/share`. On a remote frontend it reads the
+source catalogue and source-scoped entry text through the authenticated
+canonical corpus API; local-file references remain unavailable there. A saved configuration is a
 reusable recipe, not a permission grant or a stored result. Its source, tag,
 date, topic, and entry-ID filters are recalculated whenever the owner previews
 or generates. Generation then freezes the current matches into an immutable
 snapshot; later recipe edits, corpus changes, or recipe deletion cannot alter
 an existing share.
 
-The module must run on the canonical Activity Corpus host. When
-`HFL_CORPUS_API_URL` enables remote-reader mode, Sharing fails closed instead
-of building a snapshot from that machine's local filesystem.
+When `HFL_CORPUS_API_URL` enables remote-reader mode, Social uses only the
+canonical API and fails closed if that host is unavailable. It never falls
+back to the remote frontend's local filesystem.
 
 The owner workflow supports:
 
@@ -571,7 +573,7 @@ responsive navigation, corpus filtering, and reference downloads.
 - Deploy/restart the Mac frontend before enabling/restarting a remote Windows
   frontend; otherwise Windows correctly reports the canonical corpus as
   unavailable.
-- Never expose the origin directly to the public internet. Sharing requires an
+- Never expose the origin directly to the public internet. Social requires an
   HTTPS tunnel or reverse proxy, `BEHIND_PROXY=true`, owner protection for all
   non-guest routes, and explicit public policy only for the intended
   `/share/access/*` and guest-session paths.
