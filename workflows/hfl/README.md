@@ -268,9 +268,9 @@ cleaned with the dry-run-first
 
 Legacy generic media provenance can be previewed and migrated with
 `python scripts/agents/hfl/migrate_media_sources.py [--apply]`. It preserves
-entry IDs, backs up affected Markdown and full ES documents, updates ES-only
-history in place, restores timestamp/synthesis metadata for shared entries,
-and leaves unresolved provenance as `media`. On ExFAT, which lacks the normal
+entry IDs and every non-taxonomy Markdown/Elasticsearch field, backs up affected
+Markdown and full ES documents, updates ES-only history in place, and leaves
+unresolved provenance as `media`. On ExFAT, which lacks the normal
 hard-link and atomic-name-exchange guards, apply requires the explicit
 `--offline-exfat` flag after every HFL scheduler/worker has been stopped and
 quiescence verified; the fallback is never selected automatically.
