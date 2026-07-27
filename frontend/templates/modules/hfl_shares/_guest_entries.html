@@ -1,0 +1,28 @@
+{% for item in entries %}
+{% set entry = item.entry %}
+<article class="entry" id="evidence-{{ entry.citation[1:] }}">
+  <header class="entry-header">
+    <h3>{{ entry.moment or entry.header }}</h3>
+    {% if entry.tags %}<div class="chips entry-tags">{% for tag in entry.tags %}<span class="chip">#{{ tag }}</span>{% endfor %}</div>{% endif %}
+  </header>
+  <div class="entry-source"><strong>Source:</strong><span class="chip chip-source">{{ entry.source }}</span></div>
+  <div class="entry-content markdown-body">{{ item.html }}</div>
+  {% set enabled_refs = entry.references|selectattr('enabled')|list %}
+  {% if enabled_refs %}
+  <div class="entry-references">
+    <strong>Explore further</strong>
+    <div class="reference-links">{% for reference in enabled_refs %}<a href="/share/session/references/{{ reference.id }}">{{ reference.label }}</a>{% endfor %}</div>
+  </div>
+  {% endif %}
+</article>
+{% else %}
+{% if page == 1 %}<div class="empty-state"><p>No moments match that search yet. Try a shorter word or phrase.</p></div>{% endif %}
+{% endfor %}
+{% if page < total_pages %}
+<div class="entry-load-status" data-entry-sentinel data-next-page="{{ page + 1 }}" role="status">
+  <span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+  <span>Loading more moments…</span>
+</div>
+{% elif entries %}
+<p class="entry-stream-end">You’ve reached the oldest matching moment.</p>
+{% endif %}
