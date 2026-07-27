@@ -19,21 +19,6 @@
 
   <article class="markdown-body rounded-xl bg-slate-900/70 p-5 ring-1 ring-slate-800 sm:p-8">{{ rendered }}</article>
 
-  {% if references %}
-  <section class="mt-5 rounded-xl bg-slate-900 p-4 ring-1 ring-slate-800">
-    <h2 class="text-sm font-semibold text-white">References</h2>
-    <div class="mt-3 space-y-2">
-      {% for reference in references %}
-        {% if reference.kind == 'external' %}
-        <a href="{{ reference.href }}" target="_blank" rel="noopener noreferrer" class="block truncate text-xs text-blue-400 hover:underline">↗ {{ reference.label }}</a>
-        {% elif reference.kind == 'download' %}
-        <a href="{{ reference.href }}" class="block break-all text-xs text-emerald-400 hover:underline">Download {{ reference.label }}</a>
-        {% endif %}
-      {% endfor %}
-    </div>
-  </section>
-  {% endif %}
-
   {% if document.entry_count %}
   <nav id="tag-navigator"
        data-selected-tag="{{ selected_tag }}"

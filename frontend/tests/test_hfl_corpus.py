@@ -600,7 +600,7 @@ def test_index_tag_cloud_links_to_partial_search_and_document_uses_navigator(
     )
 
 
-def test_document_orders_entries_before_references_and_floating_navigator(
+def test_document_orders_entries_before_floating_navigator_without_reference_summary(
     authenticated_client, monkeypatch
 ):
     import modules.hfl_corpus.router as hfl_routes
@@ -616,15 +616,15 @@ def test_document_orders_entries_before_references_and_floating_navigator(
 
     assert response.status_code == 200
     entry_position = response.text.index('class="markdown-body')
-    references_position = response.text.index(">References</h2>")
     navigator_position = response.text.index('aria-label="Document tag navigator"')
-    assert entry_position < references_position < navigator_position
+    assert entry_position < navigator_position
+    assert ">References</h2>" not in response.text
     assert ".markdown-body p, .markdown-body li" in response.text
     assert "overflow-wrap: anywhere" in response.text
     assert "word-break: break-word" in response.text
 
 
-def test_document_renders_downloads_inline_and_in_summary(
+def test_document_renders_downloads_inline_without_reference_summary(
     authenticated_client, monkeypatch, tmp_path
 ):
     import modules.hfl_corpus.router as hfl_routes
@@ -657,8 +657,9 @@ def test_document_renders_downloads_inline_and_in_summary(
     response = authenticated_client.get("/hfl-corpus/document/2026-03-17.md")
 
     assert response.status_code == 200
-    assert response.text.count(str(artifact)) == 2
-    assert response.text.count("/hfl-corpus/references/") == 2
+    assert response.text.count(str(artifact)) == 1
+    assert response.text.count("/hfl-corpus/references/") == 1
+    assert ">References</h2>" not in response.text
     assert "Unavailable:" not in response.text
 
 
