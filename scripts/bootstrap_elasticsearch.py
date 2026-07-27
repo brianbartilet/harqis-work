@@ -38,12 +38,34 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 TEMPLATE_NAME = "harqis-single-node"
+HFL_TEMPLATE_NAME = "harqis-hfl-entries"
 INDEX_PATTERNS = ["harqis-*", "tcg-mp-*"]
+HFL_INDEX_PATTERNS = ["harqis-hfl-entries*"]
 TEMPLATE_SETTINGS = {
     "index": {
         "number_of_replicas": "0",
         "number_of_shards": "1",
     }
+}
+HFL_TEMPLATE_MAPPINGS = {
+    "dynamic": "strict",
+    "properties": {
+        "date": {"type": "date"},
+        "indexed_at": {"type": "date"},
+        "schema_version": {"type": "integer"},
+        "entry_id": {"type": "keyword"},
+        "source": {"type": "keyword"},
+        "machine": {"type": "keyword"},
+        "when": {"type": "date"},
+        "entry_date": {"type": "date", "format": "strict_date"},
+        "moment": {"type": "text"},
+        "what_happened": {"type": "text"},
+        "why_it_stayed": {"type": "text"},
+        "possible_use": {"type": "text"},
+        "tags": {"type": "keyword"},
+        "references": {"type": "keyword", "index": False},
+        "synthesized": {"type": "boolean"},
+    },
 }
 
 
@@ -137,6 +159,38 @@ def _install_template(dry_run: bool) -> None:
         print(f"  WARNING: template install returned {status}: {body.get('error', body)}")
 
 
+def _install_hfl_template(dry_run: bool) -> None:
+    """Install the higher-priority, explicit HFL document mapping."""
+    payload = {
+        "index_patterns": HFL_INDEX_PATTERNS,
+        "template": {
+            "settings": TEMPLATE_SETTINGS,
+            "mappings": HFL_TEMPLATE_MAPPINGS,
+        },
+        "priority": 200,
+        "_meta": {
+            "description": "HFL entry projection schema",
+            "managed_by": "scripts/bootstrap_elasticsearch.py",
+        },
+    }
+    if dry_run:
+        print(
+            f"  [dry-run] PUT /_index_template/{HFL_TEMPLATE_NAME}\n"
+            f"    patterns={HFL_INDEX_PATTERNS} explicit HFL mappings"
+        )
+        return
+    status, body = _call(
+        "PUT", f"/_index_template/{HFL_TEMPLATE_NAME}", payload
+    )
+    if status in (200, 201):
+        print(f"  Template '{HFL_TEMPLATE_NAME}': installed/updated")
+    else:
+        print(
+            "  WARNING: HFL template install returned "
+            f"{status}: {body.get('error', body)}"
+        )
+
+
 def _patch_replicas(dry_run: bool) -> None:
     """Set replicas=0 on all existing matching indices."""
     try:
@@ -188,6 +242,7 @@ def bootstrap(*, dry_run: bool = False, wait_seconds: int | None = None) -> bool
         return False
 
     _install_template(dry_run)
+    _install_hfl_template(dry_run)
     _patch_replicas(dry_run)
     print("[es-bootstrap] done.")
     return True

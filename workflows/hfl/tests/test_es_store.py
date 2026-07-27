@@ -1,10 +1,7 @@
 """
 Tests for workflows/hfl/es_store.py.
 
-es_logging.post / get_index_data are mocked — no live Elasticsearch. The
-contract under test: deterministic dedup id, correct doc shape, empty-
-moment no-op, and that every ES failure is swallowed (write returns None,
-read returns []) so the beat / MCP never break.
+Elasticsearch calls are intercepted — no live service is required.
 """
 
 from datetime import datetime
@@ -22,6 +19,7 @@ def _entry(moment="Wired the ES store", when=datetime(2026, 5, 17, 23, 0)):
         possible_use="portfolio",
         tags=("hfl", "elasticsearch"),
         references=("https://example.com/x",),
+        entry_id="hfl-test-entry",
     )
 
 
@@ -45,7 +43,7 @@ def test__index_posts_expected_doc_and_deterministic_id(monkeypatch):
     assert doc_id == captured["id"]
     assert captured["use_interval_map"] is False
     assert captured["index"] == "harqis-hfl-entries"
-    assert captured["id"].startswith("20260517-git-")
+    assert captured["id"] == "hfl-test-entry"
     d = captured["doc"]
     assert d["source"] == "git"
     assert d["moment"] == "Wired the ES store"
@@ -55,7 +53,7 @@ def test__index_posts_expected_doc_and_deterministic_id(monkeypatch):
     assert d["synthesized"] is True
 
 
-def test__index_id_is_stable_across_calls(monkeypatch):
+def test__index_uses_canonical_id_across_calls(monkeypatch):
     monkeypatch.setattr(
         "core.apps.es_logging.app.elasticsearch.post", lambda *a, **k: None
     )
@@ -74,6 +72,18 @@ def test__index_empty_moment_is_noop(monkeypatch):
         "core.apps.es_logging.app.elasticsearch.post", fake_post
     )
     assert es.index_hfl_entry(_entry(moment="   "), source="git") is None
+    assert called["n"] == 0
+
+
+def test__index_without_canonical_id_is_rejected(monkeypatch):
+    called = {"n": 0}
+    monkeypatch.setattr(
+        "core.apps.es_logging.app.elasticsearch.post",
+        lambda *a, **k: called.update(n=called["n"] + 1),
+    )
+    entry = HflEntry(when=datetime(2026, 5, 17), moment="No id")
+
+    assert es.index_hfl_entry(entry, source="git") is None
     assert called["n"] == 0
 
 
@@ -101,40 +111,42 @@ def test__index_honours_HFL_ES_INDEX_env(monkeypatch):
 
 # ── query_hfl_entries ─────────────────────────────────────────────────────────
 
-def test__query_builds_filtered_body_and_sorts(monkeypatch):
+def test__query_builds_filtered_body_and_uses_es_sort(monkeypatch):
     captured = {}
 
-    def fake_get(index_name, query=None, fetch_docs=10000, **k):
-        captured["index"] = index_name
-        captured["query"] = query
-        captured["fetch"] = fetch_docs
+    def fake_search(body):
+        captured["body"] = body
         return [
-            {"entry_date": "2026-05-10", "moment": "older"},
             {"entry_date": "2026-05-17", "moment": "newer"},
+            {"entry_date": "2026-05-10", "moment": "older"},
         ]
 
-    monkeypatch.setattr(
-        "core.apps.es_logging.app.elasticsearch.get_index_data", fake_get
-    )
+    monkeypatch.setattr(es, "_search", fake_search)
     rows = es.query_hfl_entries(
         query="celery", since="2026-05-01", until="2026-05-31",
         tags=["#hfl"], source="git", limit=5,
     )
     assert [r["moment"] for r in rows] == ["newer", "older"]  # newest first
-    assert captured["index"] == "harqis-hfl-entries"
-    assert captured["fetch"] == 5
-    b = captured["query"]["bool"]
+    body = captured["body"]
+    assert body["size"] == 5
+    assert body["sort"] == [
+        {"_score": "desc"}, {"when": "desc"}, {"entry_id": "asc"}
+    ]
+    b = body["query"]["bool"]
     assert any("multi_match" in m for m in b["must"])
-    assert {"term": {"tags": "hfl"}} in b["filter"]
-    assert {"term": {"source": "git"}} in b["filter"]
+    assert any(
+        {"term": {"tags": "hfl"}} in item["bool"]["should"]
+        for item in b["filter"] if "bool" in item
+    )
+    assert any(
+        {"term": {"source": "git"}} in item["bool"]["should"]
+        for item in b["filter"] if "bool" in item
+    )
     assert any("range" in f for f in b["filter"])
 
 
 def test__query_empty_filters_use_match_all(monkeypatch):
-    monkeypatch.setattr(
-        "core.apps.es_logging.app.elasticsearch.get_index_data",
-        lambda *a, **k: [],
-    )
+    monkeypatch.setattr(es, "_search", lambda body: [])
     assert es.query_hfl_entries() == []
 
 
@@ -142,7 +154,8 @@ def test__query_swallows_failure(monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("search failed")
 
-    monkeypatch.setattr(
-        "core.apps.es_logging.app.elasticsearch.get_index_data", boom
-    )
+    monkeypatch.setattr(es, "_search", boom)
     assert es.query_hfl_entries(query="x") == []
+    result = es.query_hfl_entries_status(query="x")
+    assert result.available is False
+    assert result.error == "elasticsearch_unavailable"
