@@ -96,9 +96,10 @@ class RemoteCorpusClient:
 
     def _get(self, path: str, **kwargs) -> httpx.Response:
         try:
+            headers = {**self.headers, **kwargs.pop("headers", {})}
             response = httpx.get(
                 self.base_url + path,
-                headers=self.headers,
+                headers=headers,
                 timeout=self.timeout,
                 **kwargs,
             )
@@ -331,16 +332,56 @@ class RemoteCorpusClient:
         references = []
         for item in payload.get("references") or ():
             href = item.get("href")
+            preview_kind = str(item.get("preview_kind") or "")
+            preview_url = ""
+            media_url = ""
+            thumbnail_url = ""
             if item.get("kind") == "download" and item.get("token"):
-                href = f"/hfl-corpus/remote-references/{item['token']}/download"
+                base_url = f"/hfl-corpus/remote-references/{item['token']}"
+                href = f"{base_url}/download"
+                if preview_kind:
+                    preview_url = f"{base_url}/preview"
+                    media_url = f"{base_url}/media"
+                    if preview_kind in {"image", "video"}:
+                        thumbnail_url = f"{base_url}/thumbnail"
             references.append(ReferenceLink(
                 label=str(item.get("label") or "reference"),
                 kind=str(item.get("kind") or "blocked"),
                 href=str(href) if href else None,
                 reason=str(item.get("reason") or ""),
                 source=str(item.get("source") or ""),
+                preview_kind=preview_kind,
+                preview_url=preview_url,
+                media_url=media_url,
+                thumbnail_url=thumbnail_url,
             ))
         return document, references
+
+    def reference_content(
+        self,
+        token: str,
+        endpoint: str,
+        *,
+        range_header: str = "",
+    ) -> tuple[bytes, int, dict[str, str]]:
+        headers = {"Range": range_header} if range_header else {}
+        response = self._get(
+            f"/reference/{quote(token, safe='')}/{endpoint}",
+            headers=headers,
+        )
+        forwarded = {
+            key: value
+            for key, value in response.headers.items()
+            if key.casefold() in {
+                "accept-ranges",
+                "cache-control",
+                "content-length",
+                "content-range",
+                "content-type",
+                "x-content-type-options",
+            }
+        }
+        return response.content, response.status_code, forwarded
 
     def download(self, token: str) -> tuple[bytes, str, str]:
         response = self._get(f"/reference/{quote(token, safe='')}")

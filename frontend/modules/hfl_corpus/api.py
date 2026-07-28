@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import html
 import hmac
 import logging
 from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import ValidationError
 
 from config import get_settings
@@ -31,6 +32,12 @@ from modules.hfl_corpus.entry_create import (
     persist_manual_entry_with_uploads,
     preview_manual_entry,
 )
+from modules.hfl_shares.viewer import (
+    classify_preview,
+    read_preview_text,
+    thumbnail_path,
+)
+from services.markdown import render_markdown
 from services.safe_paths import (
     allowed_reference_roots,
     load_download_token,
@@ -49,6 +56,20 @@ def _authorize(request: Request) -> None:
     scheme, _, supplied = request.headers.get("Authorization", "").partition(" ")
     if scheme.casefold() != "bearer" or not hmac.compare_digest(supplied, expected):
         raise HTTPException(status_code=401, detail="Invalid HFL corpus API token")
+
+
+def _preview_reference_path(token: str):
+    root = resolve_corpus_root()
+    path = load_download_token(token, allowed_reference_roots(root))
+    if not path:
+        raise HTTPException(status_code=404, detail="Reference unavailable")
+    preview = classify_preview(path)
+    if not preview:
+        raise HTTPException(
+            status_code=415,
+            detail="This file is not available for inline preview.",
+        )
+    return path, preview
 
 
 def _document_payload(
@@ -291,6 +312,13 @@ async def hfl_api_document(request: Request, relative_path: str):
         if reference.kind == "download" and reference.href:
             item["token"] = reference.href.split("/")[-2]
             item["href"] = None
+            path = load_download_token(
+                item["token"],
+                allowed_reference_roots(root),
+            )
+            preview = classify_preview(path) if path else None
+            if preview:
+                item["preview_kind"] = preview.kind
         if reference.kind in {"download", "external"} and (
             reference.href or item.get("token")
         ):
@@ -313,3 +341,69 @@ async def hfl_api_reference(request: Request, token: str):
     if not path:
         raise HTTPException(status_code=404, detail="Reference unavailable")
     return FileResponse(path, filename=path.name, media_type="application/octet-stream")
+
+
+@router.get("/reference/{token}/preview")
+async def hfl_api_reference_preview(request: Request, token: str):
+    _authorize(request)
+    path, preview = _preview_reference_path(token)
+    if preview.kind in {"image", "video"}:
+        return HTMLResponse("", status_code=204, headers={"Cache-Control": "no-store"})
+    try:
+        source = read_preview_text(path)
+    except (OSError, UnicodeDecodeError, ValueError):
+        raise HTTPException(
+            status_code=422,
+            detail="This text file could not be safely displayed.",
+        ) from None
+    content = (
+        f'<div class="viewer-document markdown-body">{render_markdown(source)}</div>'
+        if preview.kind == "markdown"
+        else (
+            '<pre class="viewer-document viewer-plain-text">'
+            f"{html.escape(source)}"
+            "</pre>"
+        )
+    )
+    return HTMLResponse(
+        content,
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.get("/reference/{token}/media")
+async def hfl_api_reference_media(request: Request, token: str):
+    _authorize(request)
+    path, preview = _preview_reference_path(token)
+    if preview.kind not in {"image", "video"}:
+        raise HTTPException(status_code=415, detail="This is not a media reference.")
+    return FileResponse(
+        path,
+        filename=path.name,
+        media_type=preview.media_type,
+        content_disposition_type="inline",
+        headers={
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.get("/reference/{token}/thumbnail")
+async def hfl_api_reference_thumbnail(request: Request, token: str):
+    _authorize(request)
+    path, preview = _preview_reference_path(token)
+    if preview.kind not in {"image", "video"}:
+        raise HTTPException(status_code=415, detail="No thumbnail is available.")
+    thumbnail = thumbnail_path(path, preview)
+    if not thumbnail:
+        raise HTTPException(status_code=404, detail="Thumbnail unavailable.")
+    return FileResponse(
+        thumbnail,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "private, max-age=3600",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )

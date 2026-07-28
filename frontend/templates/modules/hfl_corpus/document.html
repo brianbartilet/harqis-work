@@ -1,5 +1,46 @@
 {% extends "base.html" %}
 {% block title %}HARQIS — {{ document.name }}{% endblock %}
+{% block head %}
+<style>
+  .corpus-reference-preview {
+    display: grid;
+    max-width: 32rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .15rem .75rem;
+    border: 1px solid #164e63;
+    border-radius: .6rem;
+    background: #082f49;
+    padding: .55rem .7rem;
+    text-decoration: none !important;
+  }
+  .corpus-reference-preview:hover { border-color: #0ea5e9; background: #0c4a6e; }
+  .corpus-reference-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .corpus-reference-action { color: #7dd3fc; font-size: .7rem; white-space: nowrap; }
+  .file-viewer-dialog {
+    width: min(1080px, calc(100% - 28px));
+    height: min(88dvh, 900px);
+    max-height: calc(100dvh - 28px);
+    margin: auto;
+    overflow: hidden;
+    border: 1px solid #334155;
+    border-radius: 1rem;
+    background: #050b16;
+    color: #e2e8f0;
+    padding: 0;
+    box-shadow: 0 28px 90px rgba(0, 0, 0, .74);
+  }
+  .file-viewer-dialog::backdrop { background: rgba(2, 6, 23, .88); backdrop-filter: blur(4px); }
+  .file-viewer-card { display: grid; width: 100%; height: 100%; min-height: 0; grid-template-rows: auto minmax(0, 1fr); }
+  .file-viewer-head { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: .75rem; border-bottom: 1px solid #1e293b; padding: .75rem .9rem; }
+  .file-viewer-head h2 { min-width: 0; overflow: hidden; margin: 0; font-size: .95rem; text-overflow: ellipsis; white-space: nowrap; }
+  .file-viewer-actions { display: flex; flex: 0 0 auto; align-items: center; gap: .5rem; }
+  .file-viewer-body { display: grid; min-width: 0; min-height: 0; place-items: center; overflow: auto; padding: 1rem; }
+  .file-viewer-media { display: block; width: auto; max-width: 100%; height: auto; max-height: calc(88dvh - 92px); border-radius: .5rem; background: #020617; object-fit: contain; }
+  video.file-viewer-media { width: 100%; }
+  .viewer-document { width: min(880px, 100%); min-width: 0; align-self: start; justify-self: center; }
+  .viewer-plain-text { box-sizing: border-box; min-height: 100%; margin: 0; overflow: visible; border-radius: .5rem; background: #0b1221; color: #dbeafe; padding: 1rem; font: 500 .8rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 4; white-space: pre-wrap; overflow-wrap: anywhere; }
+</style>
+{% endblock %}
 
 {% block content %}
 <main class="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8 {% if document.entry_count %}pb-56{% endif %}">
@@ -18,6 +59,7 @@
   {% endif %}
 
   <article class="markdown-body rounded-xl bg-slate-900/70 p-5 ring-1 ring-slate-800 sm:p-8">{{ rendered }}</article>
+  <div id="document-end" class="scroll-mt-40" aria-hidden="true"></div>
 
   {% if document.entry_count %}
   <nav id="tag-navigator"
@@ -27,14 +69,14 @@
     <div class="max-h-28 overflow-y-auto">
       <p class="mb-2 text-xs font-medium text-slate-500">Document tags</p>
       <div class="flex flex-wrap gap-2">
-        {% for tag in document.tags %}
+        {% for tag, count in document_tag_counts %}
         {% set entries = document.matching_entries(tag) %}
         <button type="button"
                 data-tag-button
                 data-tag="{{ tag }}"
                 data-anchors="{% for entry in entries %}{{ entry.anchor }}{% if not loop.last %},{% endif %}{% endfor %}"
                 class="rounded-full bg-blue-950/60 px-2 py-0.5 text-xs text-blue-300 transition hover:bg-blue-900 hover:text-blue-200"
-                aria-pressed="false">#{{ tag }}</button>
+                aria-pressed="false">#{{ tag }} <span class="text-blue-500">{{ count }}</span></button>
         {% endfor %}
       </div>
     </div>
@@ -48,8 +90,12 @@
         <button id="tag-next" type="button" disabled
                 class="rounded-lg bg-slate-800 px-4 py-2 text-xs text-slate-300 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
       </div>
-      <button id="navigator-back-to-top" type="button"
-              class="order-2 rounded-lg bg-slate-800 px-4 py-2 text-xs text-slate-300 transition hover:bg-slate-700 hover:text-white sm:order-3">Back to top ↑</button>
+      <div class="order-2 flex items-center gap-2 sm:order-3">
+        <button id="navigator-go-to-end" type="button"
+                class="rounded-lg bg-slate-800 px-4 py-2 text-xs text-slate-300 transition hover:bg-slate-700 hover:text-white">Go to end ↓</button>
+        <button id="navigator-back-to-top" type="button"
+                class="rounded-lg bg-slate-800 px-4 py-2 text-xs text-slate-300 transition hover:bg-slate-700 hover:text-white">Back to top ↑</button>
+      </div>
     </div>
   </nav>
 
@@ -62,6 +108,7 @@
       const previous = document.getElementById('tag-previous');
       const next = document.getElementById('tag-next');
       const position = document.getElementById('tag-position');
+      const goToEnd = document.getElementById('navigator-go-to-end');
       const backToTop = document.getElementById('navigator-back-to-top');
       let anchors = [];
       let currentIndex = 0;
@@ -113,6 +160,12 @@
       backToTop.addEventListener('click', () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       });
+      goToEnd.addEventListener('click', () => {
+        document.getElementById('document-end')?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'end',
+        });
+      });
 
       const requested = (navigator.dataset.selectedTag || '').toLowerCase();
       const initial = tagButtons.find((button) => button.dataset.tag.toLowerCase() === requested)
@@ -121,5 +174,106 @@
     })();
   </script>
   {% endif %}
+
+  <dialog class="file-viewer-dialog" data-file-viewer-dialog aria-labelledby="file-viewer-title">
+    <section class="file-viewer-card">
+      <header class="file-viewer-head">
+        <h2 id="file-viewer-title" data-file-viewer-title>File preview</h2>
+        <div class="file-viewer-actions">
+          <a class="rounded-lg bg-blue-950 px-3 py-2 text-xs text-blue-200 hover:bg-blue-900"
+             href="#" data-file-viewer-download>Download original</a>
+          <button class="grid h-9 w-9 place-items-center rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  type="button" data-file-viewer-close aria-label="Close file viewer">×</button>
+        </div>
+      </header>
+      <div class="file-viewer-body" data-file-viewer-body>
+        <p class="text-sm text-slate-400">Choose a file to preview.</p>
+      </div>
+    </section>
+  </dialog>
+
+  <script>
+    (() => {
+      const dialog = document.querySelector('[data-file-viewer-dialog]');
+      const title = document.querySelector('[data-file-viewer-title]');
+      const body = document.querySelector('[data-file-viewer-body]');
+      const download = document.querySelector('[data-file-viewer-download]');
+      const close = document.querySelector('[data-file-viewer-close]');
+
+      function clearViewer() {
+        const video = body?.querySelector('video');
+        if (video) {
+          video.pause();
+          video.removeAttribute('src');
+          video.load();
+        }
+        body?.replaceChildren();
+      }
+
+      function showError(message) {
+        const error = document.createElement('p');
+        error.className = 'rounded-lg border border-red-900 bg-red-950/40 p-4 text-sm text-red-200';
+        error.textContent = message;
+        body.replaceChildren(error);
+      }
+
+      async function openViewer(trigger) {
+        if (!dialog || !body || dialog.open) return;
+        const kind = trigger.dataset.previewKind;
+        const label = trigger.querySelector('.corpus-reference-label')?.textContent;
+        title.textContent = label || 'File preview';
+        download.href = trigger.dataset.downloadUrl;
+        const loading = document.createElement('p');
+        loading.className = 'text-sm text-slate-400';
+        loading.setAttribute('role', 'status');
+        loading.textContent = 'Loading preview…';
+        body.replaceChildren(loading);
+        dialog.showModal();
+        close?.focus();
+        try {
+          const response = await fetch(trigger.dataset.previewUrl, {
+            headers: { Accept: 'text/html' },
+            cache: 'no-store',
+          });
+          if (!response.ok) throw new Error('This file could not be previewed safely.');
+          if (kind === 'image') {
+            const image = document.createElement('img');
+            image.className = 'file-viewer-media';
+            image.alt = label || 'Referenced image';
+            image.addEventListener('error', () => showError('The image preview could not be displayed. You can still download the original.'), { once: true });
+            image.src = trigger.dataset.mediaUrl;
+            body.replaceChildren(image);
+          } else if (kind === 'video') {
+            const video = document.createElement('video');
+            video.className = 'file-viewer-media';
+            video.controls = true;
+            video.autoplay = true;
+            video.playsInline = true;
+            video.preload = 'metadata';
+            video.addEventListener('error', () => showError('The video preview could not be displayed. You can still download the original.'), { once: true });
+            video.src = trigger.dataset.mediaUrl;
+            body.replaceChildren(video);
+            video.play().catch(() => {});
+          } else {
+            body.innerHTML = await response.text();
+          }
+        } catch (error) {
+          showError(error.message);
+        }
+      }
+
+      close?.addEventListener('click', () => dialog?.close());
+      dialog?.addEventListener('click', event => {
+        if (event.target === dialog) dialog.close();
+      });
+      dialog?.addEventListener('close', clearViewer);
+      document.addEventListener('click', event => {
+        const trigger = event.target.closest('[data-reference-preview]');
+        if (!trigger) return;
+        event.preventDefault();
+        openViewer(trigger);
+      });
+    })();
+  </script>
 </main>
 {% endblock %}

@@ -624,6 +624,49 @@ def test_document_orders_entries_before_floating_navigator_without_reference_sum
     assert "word-break: break-word" in response.text
 
 
+def test_document_tag_navigator_shows_counts_in_descending_order(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document(
+        "2026-07-10.md",
+        tags=("popular", "rare", "steady"),
+        tag_counts=(("popular", 4), ("steady", 2), ("rare", 1)),
+    )
+    monkeypatch.setattr(hfl_routes.corpus_index, "get", lambda path: document)
+
+    response = authenticated_client.get("/hfl-corpus/document/2026-07-10.md")
+
+    assert response.status_code == 200
+    popular = response.text.index('data-tag="popular"')
+    steady = response.text.index('data-tag="steady"')
+    rare = response.text.index('data-tag="rare"')
+    assert popular < steady < rare
+    assert '#popular <span class="text-blue-500">4</span>' in response.text
+    assert '#steady <span class="text-blue-500">2</span>' in response.text
+    assert '#rare <span class="text-blue-500">1</span>' in response.text
+
+
+def test_document_navigator_places_go_to_end_beside_back_to_top(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document("2026-07-10.md")
+    monkeypatch.setattr(hfl_routes.corpus_index, "get", lambda path: document)
+
+    response = authenticated_client.get("/hfl-corpus/document/2026-07-10.md")
+
+    assert response.status_code == 200
+    assert 'id="document-end"' in response.text
+    assert 'id="navigator-go-to-end"' in response.text
+    assert response.text.index('id="navigator-go-to-end"') < response.text.index(
+        'id="navigator-back-to-top"'
+    )
+    assert "document.getElementById('document-end')?.scrollIntoView" in response.text
+
+
 def test_document_renders_downloads_inline_without_reference_summary(
     authenticated_client, monkeypatch, tmp_path
 ):
@@ -658,9 +701,35 @@ def test_document_renders_downloads_inline_without_reference_summary(
 
     assert response.status_code == 200
     assert response.text.count(str(artifact)) == 1
-    assert response.text.count("/hfl-corpus/references/") == 1
+    assert 'data-reference-preview=""' in response.text
+    assert 'data-preview-kind="markdown"' in response.text
+    assert "/preview" in response.text
+    assert "/media" in response.text
     assert ">References</h2>" not in response.text
     assert "Unavailable:" not in response.text
+
+
+def test_corpus_text_reference_preview_is_authenticated_and_sanitized(
+    authenticated_client, monkeypatch, tmp_path
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    artifact = corpus / "notes.md"
+    artifact.write_text("# Notes\n<script>alert('no')</script>\nSafe text", encoding="utf-8")
+    token = make_download_token(artifact)
+    monkeypatch.setattr(hfl_routes, "resolve_corpus_root", lambda: corpus)
+
+    response = authenticated_client.get(
+        f"/hfl-corpus/references/{token}/preview"
+    )
+
+    assert response.status_code == 200
+    assert '<div class="viewer-document markdown-body">' in response.text
+    assert "<h1>Notes</h1>" in response.text
+    assert "<script>" not in response.text
+    assert "Safe text" in response.text
 
 
 def test_reference_download_route_requires_authenticated_session(tmp_path):
@@ -674,6 +743,24 @@ def test_reference_download_route_requires_authenticated_session(tmp_path):
     with TestClient(app) as client:
         response = client.get(
             f"/hfl-corpus/references/{token}/download",
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/login"
+
+
+def test_reference_preview_route_requires_authenticated_session(tmp_path):
+    from fastapi.testclient import TestClient
+    from main import app
+
+    artifact = tmp_path / "artifact.txt"
+    artifact.write_text("private", encoding="utf-8")
+    token = make_download_token(artifact)
+
+    with TestClient(app) as client:
+        response = client.get(
+            f"/hfl-corpus/references/{token}/preview",
             follow_redirects=False,
         )
 
@@ -1542,6 +1629,7 @@ def test_corpus_api_exposes_only_safe_resolved_references(
     assert download["label"] == str(artifact.resolve())
     assert download["href"] is None
     assert download["token"]
+    assert download["preview_kind"] == "markdown"
     serialized = json.dumps(response.json())
     assert str(outside) not in serialized
     assert "http://internal.example/dashboard" not in serialized
@@ -1679,6 +1767,59 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
     assert (
         result["results"][0].first_matching_entry_anchor("hfl")
         == "hfl-entry-1-remote"
+    )
+
+
+def test_remote_client_builds_corpus_previewer_urls(monkeypatch):
+    from modules.hfl_corpus.remote import RemoteCorpusClient
+
+    payload = {
+        "document": {
+            "relative_path": "2026-07-19.md",
+            "name": "2026-07-19.md",
+            "created_at": "2026-07-19T09:30:00",
+            "updated_at": "2026-07-19T10:00:00",
+            "tags": ["notes"],
+            "tag_counts": [["notes", 1]],
+            "entry_count": 1,
+            "excerpt": "A canonical entry",
+            "text": "## Entry",
+            "entries": [],
+        },
+        "references": [{
+            "label": "notes.md",
+            "kind": "download",
+            "href": None,
+            "source": "notes.md",
+            "token": "signed-token",
+            "preview_kind": "markdown",
+        }],
+    }
+    monkeypatch.setattr(
+        httpx,
+        "get",
+        lambda url, **kwargs: httpx.Response(
+            200,
+            json=payload,
+            request=httpx.Request("GET", url),
+        ),
+    )
+
+    _, references = RemoteCorpusClient(
+        "http://canonical:8081",
+        "secret",
+    ).document("2026-07-19.md")
+
+    reference = references[0]
+    assert reference.href == (
+        "/hfl-corpus/remote-references/signed-token/download"
+    )
+    assert reference.preview_kind == "markdown"
+    assert reference.preview_url == (
+        "/hfl-corpus/remote-references/signed-token/preview"
+    )
+    assert reference.media_url == (
+        "/hfl-corpus/remote-references/signed-token/media"
     )
 
 

@@ -458,7 +458,25 @@ def parse_date(value: str | None) -> date | None:
 def _reference_markup(reference: "ReferenceLink") -> str:
     label = html.escape(reference.label, quote=False)
     href = html.escape(reference.href or "", quote=True)
-    attributes = ' target="_blank" rel="noopener noreferrer"' if reference.kind == "external" else ""
+    if reference.preview_kind:
+        kind = html.escape(reference.preview_kind, quote=True)
+        preview_url = html.escape(reference.preview_url, quote=True)
+        media_url = html.escape(reference.media_url, quote=True)
+        return (
+            f'<a href="{href}" class="corpus-reference-preview" '
+            f'data-reference-preview data-preview-kind="{kind}" '
+            f'data-preview-url="{preview_url}" data-media-url="{media_url}" '
+            f'data-download-url="{href}">'
+            f'<span class="corpus-reference-label">{label}</span>'
+            '<span class="corpus-reference-action">'
+            f'{"Play video" if reference.preview_kind == "video" else "Open viewer"}'
+            "</span></a>"
+        )
+    attributes = (
+        ' target="_blank" rel="noopener noreferrer"'
+        if reference.kind == "external"
+        else ""
+    )
     return f'<a href="{href}"{attributes}>{label}</a>'
 
 

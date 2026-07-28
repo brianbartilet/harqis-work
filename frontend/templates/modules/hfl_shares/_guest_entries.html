@@ -33,7 +33,8 @@
         <span class="reference-preview-action">{{ "Play video" if view.kind == "video" else "Open viewer" }}</span>
       </button>
       {% else %}
-      <a href="{{ view.download_url if view else '/share/session/references/' ~ reference.id }}">{{ reference.label }}</a>
+      <a href="{{ view.download_url if view else '/share/session/references/' ~ reference.id }}"
+         target="_blank" rel="noopener noreferrer">{{ reference.label }}</a>
       {% endif %}
       {% endfor %}
     </div>

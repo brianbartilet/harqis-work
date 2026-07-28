@@ -1,13 +1,22 @@
 """Routes for browsing, searching, and adding entries to the HFL corpus."""
 
 import asyncio
+import html
 import json
 import logging
 import re
+from dataclasses import replace
+from pathlib import Path
 from urllib.parse import quote, urlencode
 
-from fastapi import APIRouter, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    Response,
+    StreamingResponse,
+)
 from markupsafe import Markup
 from pydantic import ValidationError
 
@@ -35,6 +44,11 @@ from modules.hfl_corpus.entry_create import (
     persist_manual_entry_with_uploads,
     preview_manual_entry,
 )
+from modules.hfl_shares.viewer import (
+    classify_preview,
+    read_preview_text,
+    thumbnail_path,
+)
 from services.safe_paths import (
     allowed_reference_roots,
     load_download_token,
@@ -60,6 +74,155 @@ def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
 
 def _uses_remote_corpus() -> bool:
     return bool(get_settings().hfl_corpus_api_url.strip())
+
+
+def _reference_token(reference) -> str:
+    href = reference.href or ""
+    return href.rsplit("/", 2)[-2] if href.endswith("/download") else ""
+
+
+def _with_reference_preview(reference):
+    if reference.kind != "download" or not reference.href:
+        return reference
+    token = _reference_token(reference)
+    if not token:
+        return reference
+    path = load_download_token(
+        token,
+        allowed_reference_roots(resolve_corpus_root()),
+    )
+    preview = classify_preview(path) if path else None
+    if not preview:
+        return reference
+    base_url = reference.href.removesuffix("/download")
+    return replace(
+        reference,
+        preview_kind=preview.kind,
+        preview_url=f"{base_url}/preview",
+        media_url=f"{base_url}/media",
+        thumbnail_url=(
+            f"{base_url}/thumbnail"
+            if preview.kind in {"image", "video"}
+            else ""
+        ),
+    )
+
+
+def _document_tag_counts(document) -> tuple[tuple[str, int], ...]:
+    counts = dict(document.tag_counts)
+    for tag in document.tags:
+        counts.setdefault(tag, len(document.matching_entries(tag)))
+    return tuple(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+
+def _preview_path(token: str):
+    path = load_download_token(
+        token,
+        allowed_reference_roots(resolve_corpus_root()),
+    )
+    if not path:
+        raise HTTPException(status_code=404, detail="Reference unavailable.")
+    preview = classify_preview(path)
+    if not preview:
+        raise HTTPException(
+            status_code=415,
+            detail="This file is not available for inline preview.",
+        )
+    return path, preview
+
+
+def _preview_fragment(path: Path, preview) -> HTMLResponse:
+    if preview.kind in {"image", "video"}:
+        return HTMLResponse("", status_code=204, headers={"Cache-Control": "no-store"})
+    try:
+        source = read_preview_text(path)
+    except (OSError, UnicodeDecodeError, ValueError):
+        raise HTTPException(
+            status_code=422,
+            detail="This text file could not be safely displayed.",
+        ) from None
+    content = (
+        f'<div class="viewer-document markdown-body">{render_markdown(source)}</div>'
+        if preview.kind == "markdown"
+        else (
+            '<pre class="viewer-document viewer-plain-text">'
+            f"{html.escape(source)}"
+            "</pre>"
+        )
+    )
+    return HTMLResponse(
+        content,
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+def _byte_range(value: str, size: int) -> tuple[int, int] | None:
+    match = re.fullmatch(r"bytes=(\d*)-(\d*)", (value or "").strip())
+    if not match or size <= 0:
+        return None
+    start_text, end_text = match.groups()
+    if not start_text:
+        length = int(end_text or 0)
+        if length <= 0:
+            return None
+        return max(0, size - length), size - 1
+    start = int(start_text)
+    end = min(int(end_text), size - 1) if end_text else size - 1
+    if start >= size or end < start:
+        return None
+    return start, end
+
+
+def _file_chunks(path: Path, start: int, end: int):
+    remaining = end - start + 1
+    with path.open("rb") as handle:
+        handle.seek(start)
+        while remaining:
+            chunk = handle.read(min(1024 * 1024, remaining))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+            yield chunk
+
+
+def _media_response(request: Request, path: Path, preview):
+    if preview.kind not in {"image", "video"}:
+        raise HTTPException(status_code=415, detail="This is not a media reference.")
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+    }
+    requested_range = request.headers.get("range", "")
+    parsed_range = _byte_range(requested_range, preview.size)
+    if requested_range and not parsed_range:
+        return HTMLResponse(
+            "",
+            status_code=416,
+            headers={**headers, "Content-Range": f"bytes */{preview.size}"},
+        )
+    if parsed_range:
+        start, end = parsed_range
+        headers.update(
+            {
+                "Content-Range": f"bytes {start}-{end}/{preview.size}",
+                "Content-Length": str(end - start + 1),
+            }
+        )
+        return StreamingResponse(
+            _file_chunks(path, start, end),
+            status_code=206,
+            media_type=preview.media_type,
+            headers=headers,
+        )
+    headers["Content-Length"] = str(preview.size)
+    return FileResponse(
+        path,
+        filename=path.name,
+        media_type=preview.media_type,
+        content_disposition_type="inline",
+        headers=headers,
+    )
 
 
 def _index_url(
@@ -473,6 +636,8 @@ async def hfl_document(request: Request, relative_path: str, tag: str = ""):
         for reference in references
         if reference.kind in {"download", "external"} and reference.href
     ]
+    if not _uses_remote_corpus():
+        references = [_with_reference_preview(reference) for reference in references]
     rendered = render_markdown(format_hfl_markdown(document.text, references))
     return templates.TemplateResponse(
         request,
@@ -484,6 +649,7 @@ async def hfl_document(request: Request, relative_path: str, tag: str = ""):
             document=document,
             rendered=_anchor_rendered_entries(rendered, document),
             references=references,
+            document_tag_counts=_document_tag_counts(document),
             selected_tag=tag.casefold(),
         ),
     )
@@ -499,6 +665,45 @@ async def hfl_reference_download(request: Request, token: str):
     if not path:
         return HTMLResponse("Reference unavailable", status_code=404)
     return FileResponse(path, filename=path.name, media_type="application/octet-stream")
+
+
+@router.get("/references/{token}/preview", name="hfl_reference_preview")
+async def hfl_reference_preview(request: Request, token: str):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    path, preview = _preview_path(token)
+    return _preview_fragment(path, preview)
+
+
+@router.get("/references/{token}/media", name="hfl_reference_media")
+async def hfl_reference_media(request: Request, token: str):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    path, preview = _preview_path(token)
+    return _media_response(request, path, preview)
+
+
+@router.get("/references/{token}/thumbnail", name="hfl_reference_thumbnail")
+async def hfl_reference_thumbnail(request: Request, token: str):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    path, preview = _preview_path(token)
+    if preview.kind not in {"image", "video"}:
+        raise HTTPException(status_code=415, detail="No thumbnail is available.")
+    thumbnail = thumbnail_path(path, preview)
+    if not thumbnail:
+        raise HTTPException(status_code=404, detail="Thumbnail unavailable.")
+    return FileResponse(
+        thumbnail,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "private, max-age=3600",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.get("/remote-references/{token}/download", name="hfl_remote_reference_download")
@@ -518,3 +723,41 @@ async def hfl_remote_reference_download(request: Request, token: str):
         media_type=media_type,
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(safe_filename)}"},
     )
+
+
+async def _remote_reference_response(
+    request: Request,
+    token: str,
+    endpoint: str,
+):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    if not _uses_remote_corpus():
+        return HTMLResponse("Remote corpus is not configured", status_code=404)
+    try:
+        content, status_code, headers = (
+            RemoteCorpusClient.from_settings().reference_content(
+                token,
+                endpoint,
+                range_header=request.headers.get("range", ""),
+            )
+        )
+    except RemoteCorpusError as exc:
+        return HTMLResponse(str(exc), status_code=502)
+    return Response(content, status_code=status_code, headers=headers)
+
+
+@router.get("/remote-references/{token}/preview")
+async def hfl_remote_reference_preview(request: Request, token: str):
+    return await _remote_reference_response(request, token, "preview")
+
+
+@router.get("/remote-references/{token}/media")
+async def hfl_remote_reference_media(request: Request, token: str):
+    return await _remote_reference_response(request, token, "media")
+
+
+@router.get("/remote-references/{token}/thumbnail")
+async def hfl_remote_reference_thumbnail(request: Request, token: str):
+    return await _remote_reference_response(request, token, "thumbnail")

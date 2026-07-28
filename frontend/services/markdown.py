@@ -14,9 +14,14 @@ _ALLOWED_TAGS = {
     "th", "thead", "tr", "ul",
 }
 _ALLOWED_ATTRIBUTES = {
-    "a": ["href", "title", "target", "rel"],
+    "a": [
+        "href", "title", "target", "rel", "class",
+        "data-reference-preview", "data-preview-kind", "data-preview-label",
+        "data-preview-url", "data-media-url", "data-download-url",
+    ],
     "code": ["class"],
     "img": ["src", "alt", "title"],
+    "span": ["class"],
     "td": ["align"],
     "th": ["align"],
 }

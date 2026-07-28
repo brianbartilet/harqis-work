@@ -103,9 +103,9 @@
     .drawer-tag-filter { margin-top:10px; border:1px solid #1e293b; border-radius:9px; background:#0b1221; }
     .drawer-tag-filter > summary { display:flex; min-height:34px; align-items:center; justify-content:space-between; gap:10px; list-style:none; color:#cbd5e1; cursor:pointer; font-size:.72rem; font-weight:650; padding:7px 9px; }
     .drawer-tag-filter > summary::-webkit-details-marker { display:none; }
-    .drawer-tag-filter > summary::after { content:"⌄"; color:#60a5fa; font-size:.85rem; transition:transform .15s ease; }
-    .drawer-tag-filter[open] > summary::after { transform:rotate(180deg); }
     .drawer-tag-summary { margin-left:auto; color:#64748b; font-size:.64rem; font-weight:500; }
+    .drawer-tag-caret { width:14px; height:14px; flex:0 0 14px; color:#60a5fa; transition:transform .15s ease; }
+    .drawer-tag-filter[open] .drawer-tag-caret { transform:rotate(180deg); }
     .drawer-tag-panel { border-top:1px solid #1e293b; padding:8px; }
     .drawer-tag-cloud { display:flex; max-height:82px; align-content:flex-start; flex-wrap:wrap; gap:5px; overflow-x:hidden; overflow-y:auto; padding-right:3px; }
     .drawer-tag-option { position:relative; display:inline-flex; margin:0; cursor:pointer; }

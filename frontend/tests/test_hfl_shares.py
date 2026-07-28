@@ -983,6 +983,53 @@ def test_pin_redemption_binds_one_signed_session_and_blocks_second_device(
     assert denied.status_code == 403
 
 
+def test_share_external_links_open_in_a_new_tab(
+    authenticated_client, sharing_corpus
+):
+    from modules.hfl_shares.router import _entry_html
+
+    rendered_entry = str(
+        _entry_html(
+            CorpusEntry(
+                anchor="external-link",
+                header="External link",
+                moment="External link",
+                what_happened="Read a guide",
+                tags=("travel",),
+                text=(
+                    "## External link\n"
+                    "What happened: [Travel guide](https://example.test/travel)\n"
+                ),
+            )
+        )
+    )
+    assert (
+        '<a href="https://example.test/travel" target="_blank" '
+        'rel="noopener noreferrer">Travel guide</a>'
+    ) in rendered_entry
+
+    generated = authenticated_client.post(
+        "/sharing/generate",
+        data=_form(references_enabled="on"),
+    )
+    token, pin = _generated_credentials(generated.text)
+    authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        data={"pin": pin},
+        follow_redirects=False,
+    )
+
+    portal = authenticated_client.get("/share/session")
+
+    assert portal.status_code == 200
+    assert re.search(
+        r'<a href="/share/session/references/[^"]+"\s+'
+        r'target="_blank" rel="noopener noreferrer">'
+        r'https://example\.test/guide</a>',
+        portal.text,
+    )
+
+
 def test_shared_manifesto_modal_uses_scoped_guest_and_owner_access(
     authenticated_client, sharing_corpus
 ):
@@ -1352,6 +1399,9 @@ def test_guest_drawer_combines_text_and_multiselect_tag_filters(
         initial.text,
     )
     assert "Search tags" in initial.text
+    assert 'class="drawer-tag-caret"' in initial.text
+    assert 'content:"⌄"' not in initial.text
+    assert ".drawer-tag-filter[open] .drawer-tag-caret" in initial.text
     assert 'data-filter-reset disabled' in initial.text
     assert 'data-clear-drawer-tags disabled' in initial.text
     assert ".drawer-tag-cloud { display:flex; max-height:82px;" in initial.text
@@ -2127,6 +2177,11 @@ def test_share_viewer_renders_controls_previews_ranges_and_owner_urls(
     assert 'data-preview-kind="text"' in portal.text
     assert 'data-preview-kind="markdown"' in portal.text
     assert "archive.pdf" in portal.text
+    assert re.search(
+        r'<a href="/share/session/references/[^"]+"\s+'
+        r'target="_blank" rel="noopener noreferrer">archive\.pdf</a>',
+        portal.text,
+    )
     assert "file-viewer-dialog" in portal.text
     assert "loading=\"lazy\"" in portal.text
 

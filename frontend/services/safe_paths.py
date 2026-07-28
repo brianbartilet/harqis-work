@@ -21,6 +21,10 @@ class ReferenceLink:
     href: str | None
     reason: str = ""
     source: str = ""
+    preview_kind: str = ""
+    preview_url: str = ""
+    media_url: str = ""
+    thumbnail_url: str = ""
 
 
 def allowed_reference_roots(corpus_root: Path) -> tuple[Path, ...]:
