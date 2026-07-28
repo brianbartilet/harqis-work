@@ -1,5 +1,11 @@
 {% extends "share_base.html" %}
 {% block title %}{{ grant.name }} · HARQIS{% endblock %}
+{% block header_actions %}
+<button class="header-action" type="button" data-manifesto-open
+        data-manifesto-url="{% if owner_preview %}/sharing/shares/{{ grant.id }}/preview/manifesto{% else %}/share/session/manifesto{% endif %}">
+  Manifesto
+</button>
+{% endblock %}
 {% block main_class %} share-main{% endblock %}
 {% block content %}
 {% if owner_preview %}
@@ -23,7 +29,32 @@
     </header>
     <form class="drawer-search" method="get" action="{% if owner_preview %}/sharing/shares/{{ grant.id }}/preview{% else %}/share/session{% endif %}" data-live-search>
       <label for="search">Search these moments</label>
-      <input id="search" name="q" type="search" value="{{ query }}" placeholder="Type at least two characters" autocomplete="off" data-live-search-input>
+      <div class="drawer-search-row">
+        <input id="search" name="q" type="search" value="{{ query }}" placeholder="Type at least two characters" autocomplete="off" data-live-search-input>
+        <button class="drawer-reset" type="button" data-filter-reset {% if not query and not selected_tags %}disabled{% endif %}>Reset</button>
+      </div>
+      <details class="drawer-tag-filter" data-tag-filter>
+        <summary>
+          <span>Search tags</span>
+          <span class="drawer-tag-summary" data-tag-summary>{% if selected_tags %}{{ selected_tags|length }} selected{% else %}None selected{% endif %}</span>
+        </summary>
+        <div class="drawer-tag-panel">
+          <div class="drawer-tag-cloud" data-drawer-tag-cloud>
+            {% for tag, count in available_tags %}
+            <label class="drawer-tag-option">
+              <input type="checkbox" name="tag" value="{{ tag }}" {% if tag in selected_tags %}checked{% endif %}>
+              <span>#{{ tag }} <small>{{ count }}</small></span>
+            </label>
+            {% else %}
+            <p class="drawer-tag-empty">No tags are available in this snapshot.</p>
+            {% endfor %}
+            {% for tag in unavailable_selected_tags %}
+            <input type="checkbox" name="tag" value="{{ tag }}" checked hidden data-unavailable-tag>
+            {% endfor %}
+          </div>
+          <button class="drawer-clear-tags" type="button" data-clear-drawer-tags {% if not selected_tags %}disabled{% endif %}>Clear tags</button>
+        </div>
+      </details>
       <p class="drawer-count" data-drawer-count>{{ result_count }} matching moment{% if result_count != 1 %}s{% endif %}</p>
     </form>
     <div class="entry-list" data-entry-list>
@@ -99,6 +130,21 @@
   </div>
 </div>
 
+<dialog class="manifesto-dialog" data-manifesto-dialog aria-labelledby="shared-manifesto-title">
+  <section class="manifesto-dialog-card">
+    <header class="manifesto-dialog-head">
+      <div>
+        <p class="eyebrow">Framework and guiding principles</p>
+        <h2 id="shared-manifesto-title">HARQIS Work Manifesto</h2>
+      </div>
+      <button class="manifesto-dialog-close" type="button" data-manifesto-close aria-label="Close Manifesto">×</button>
+    </header>
+    <div class="manifesto-dialog-body" data-manifesto-body>
+      <p class="manifesto-loading">Loading the Manifesto…</p>
+    </div>
+  </section>
+</dialog>
+
 <script nonce="{{ request.state.csp_nonce }}">
 (() => {
   const workspace = document.querySelector('[data-workspace]');
@@ -116,6 +162,11 @@
   const recipientInitial = {{ recipient_initial|tojson }};
   const ownerPreview = Boolean(form?.dataset.ownerPreview !== undefined);
   const previewHistory = [];
+  const manifestoOpen = document.querySelector('[data-manifesto-open]');
+  const manifestoDialog = document.querySelector('[data-manifesto-dialog]');
+  const manifestoBody = document.querySelector('[data-manifesto-body]');
+  const manifestoClose = document.querySelector('[data-manifesto-close]');
+  let manifestoLoaded = false;
   let pending = false;
 
   const isCompact = () => window.matchMedia('(max-width: 900px)').matches;
@@ -147,6 +198,36 @@
   });
   window.addEventListener('resize', syncDrawer);
 
+  manifestoOpen?.addEventListener('click', async () => {
+    if (!manifestoDialog || !manifestoBody) return;
+    manifestoDialog.showModal();
+    manifestoClose?.focus();
+    if (manifestoLoaded) return;
+    manifestoBody.innerHTML =
+      '<p class="manifesto-loading" role="status">Loading the Manifesto…</p>';
+    try {
+      const response = await fetch(manifestoOpen.dataset.manifestoUrl, {
+        headers:{'Accept':'text/html'},
+        cache:'no-store',
+      });
+      if (!response.ok) {
+        throw new Error('The Manifesto is no longer available for this share.');
+      }
+      manifestoBody.innerHTML = await response.text();
+      manifestoLoaded = true;
+    } catch (error) {
+      manifestoBody.innerHTML = '';
+      const message = document.createElement('p');
+      message.className = 'notice error';
+      message.textContent = error.message;
+      manifestoBody.append(message);
+    }
+  });
+  manifestoClose?.addEventListener('click', () => manifestoDialog?.close());
+  manifestoDialog?.addEventListener('click', event => {
+    if (event.target === manifestoDialog) manifestoDialog.close();
+  });
+
   const showWait = message => {
     if (!overlay) return;
     copy.textContent = message || 'Loading…';
@@ -161,6 +242,10 @@
   });
   const liveSearchForm = document.querySelector('[data-live-search]');
   const liveSearchInput = liveSearchForm?.querySelector('[data-live-search-input]');
+  const tagFilter = liveSearchForm?.querySelector('[data-tag-filter]');
+  const tagSummary = liveSearchForm?.querySelector('[data-tag-summary]');
+  const clearDrawerTags = liveSearchForm?.querySelector('[data-clear-drawer-tags]');
+  const filterReset = liveSearchForm?.querySelector('[data-filter-reset]');
   const drawerCount = document.querySelector('[data-drawer-count]');
   const entryList = document.querySelector('[data-entry-list]');
   const previewToast = document.querySelector('.preview-toast');
@@ -168,6 +253,34 @@
   let searchController = null;
   let entryLoading = false;
   let entryObserver = null;
+  const drawerTagInputs = () =>
+    Array.from(liveSearchForm?.querySelectorAll('input[name="tag"]') || []);
+  const selectedDrawerTags = () =>
+    drawerTagInputs().filter(input => input.checked).map(input => input.value);
+  const activeSearchQuery = () => {
+    const value = liveSearchInput?.value.trim() || '';
+    return value.length === 1 ? '' : value;
+  };
+  const applyEntryFilters = url => {
+    const query = activeSearchQuery();
+    if (query) url.searchParams.set('q', query);
+    else url.searchParams.delete('q');
+    url.searchParams.delete('tag');
+    selectedDrawerTags().forEach(tag => url.searchParams.append('tag', tag));
+    return url;
+  };
+  const syncFilterControls = () => {
+    const selected = selectedDrawerTags();
+    if (tagSummary) {
+      tagSummary.textContent =
+        selected.length ? `${selected.length} selected` : 'None selected';
+    }
+    if (clearDrawerTags) clearDrawerTags.disabled = selected.length === 0;
+    if (filterReset) {
+      filterReset.disabled =
+        selected.length === 0 && !(liveSearchInput?.value.trim());
+    }
+  };
   const refreshEntrySearch = async () => {
     searchController?.abort();
     const controller = new AbortController();
@@ -176,8 +289,9 @@
     entryLoading = true;
     entryList.innerHTML =
       '<div class="entry-load-status" role="status"><span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span><span>Searching moments…</span></div>';
-    const url = new URL(liveSearchForm.action, window.location.origin);
-    url.searchParams.set('q', liveSearchInput.value.trim());
+    const url = applyEntryFilters(
+      new URL(liveSearchForm.action, window.location.origin)
+    );
     url.searchParams.set('page', '1');
     url.searchParams.set('fragment', 'true');
     try {
@@ -189,12 +303,7 @@
       entryList.innerHTML = await response.text();
       const total = Number(response.headers.get('X-HFL-Result-Count') || 0);
       drawerCount.textContent = `${total} matching moment${total === 1 ? '' : 's'}`;
-      const address = new URL(window.location.href);
-      if (liveSearchInput.value.trim()) {
-        address.searchParams.set('q', liveSearchInput.value.trim());
-      } else {
-        address.searchParams.delete('q');
-      }
+      const address = applyEntryFilters(new URL(window.location.href));
       address.searchParams.delete('page');
       address.searchParams.delete('fragment');
       window.history.replaceState({}, '', address);
@@ -220,10 +329,28 @@
   });
   liveSearchInput?.addEventListener('input', () => {
     window.clearTimeout(searchTimer);
+    syncFilterControls();
     const length = liveSearchInput.value.trim().length;
     if (length === 1) return;
     searchTimer = window.setTimeout(() => liveSearchForm.requestSubmit(), 450);
   });
+  tagFilter?.addEventListener('change', event => {
+    if (!event.target.matches('input[name="tag"]')) return;
+    syncFilterControls();
+    refreshEntrySearch();
+  });
+  clearDrawerTags?.addEventListener('click', () => {
+    drawerTagInputs().forEach(input => { input.checked = false; });
+    syncFilterControls();
+    refreshEntrySearch();
+  });
+  filterReset?.addEventListener('click', () => {
+    if (liveSearchInput) liveSearchInput.value = '';
+    drawerTagInputs().forEach(input => { input.checked = false; });
+    syncFilterControls();
+    refreshEntrySearch();
+  });
+  syncFilterControls();
   const observeEntryStream = () => {
     entryObserver?.disconnect();
     const sentinel = entryList?.querySelector('[data-entry-sentinel]');
@@ -232,8 +359,9 @@
       if (!entries.some(item => item.isIntersecting) || entryLoading) return;
       entryLoading = true;
       sentinel.setAttribute('aria-busy', 'true');
-      const url = new URL(liveSearchForm.action, window.location.origin);
-      url.searchParams.set('q', liveSearchInput.value.trim());
+      const url = applyEntryFilters(
+        new URL(liveSearchForm.action, window.location.origin)
+      );
       url.searchParams.set('page', sentinel.dataset.nextPage);
       url.searchParams.set('fragment', 'true');
       try {
@@ -267,7 +395,6 @@
     if (!evidence && entryList && liveSearchForm) {
       entryObserver?.disconnect();
       entryLoading = true;
-      if (liveSearchInput) liveSearchInput.value = '';
       entryList.innerHTML =
         '<div class="entry-load-status" role="status"><span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span><span>Finding cited evidence…</span></div>';
       const fragmentUrl = new URL(liveSearchForm.action, window.location.origin);
@@ -283,10 +410,8 @@
         if (!response.ok) throw new Error('The cited evidence could not be loaded.');
         entryList.innerHTML = await response.text();
         const total = Number(response.headers.get('X-HFL-Result-Count') || 0);
-        drawerCount.textContent =
-          `${total} matching moment${total === 1 ? '' : 's'}`;
+        drawerCount.textContent = 'Showing cited evidence';
         evidence = document.getElementById(evidenceId);
-        observeEntryStream();
       } catch (error) {
         entryList.innerHTML = `<div class="empty-state"><p>${error.message}</p></div>`;
       } finally {

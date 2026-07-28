@@ -59,6 +59,10 @@ MODULES: tuple[ModuleDefinition, ...] = (
     ),
 )
 
+PRIMARY_MODULES: tuple[ModuleDefinition, ...] = tuple(
+    module for module in MODULES if module.key != "manifesto"
+)
+
 
 def module_by_key(key: str) -> ModuleDefinition | None:
     return next((module for module in MODULES if module.key == key), None)

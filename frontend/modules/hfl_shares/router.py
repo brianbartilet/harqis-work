@@ -30,6 +30,7 @@ from modules.hfl_corpus.corpus import (
     resolve_corpus_root,
 )
 from modules.hfl_corpus.remote import RemoteCorpusClient, RemoteCorpusError
+from modules.manifesto.service import load_manifesto
 from modules.hfl_shares.agent import AgentUnavailable, answer_question
 from modules.hfl_shares.audit import record_share_audit
 from modules.hfl_shares.models import ALL_SOURCES, ShareConfiguration, parse_csv
@@ -668,11 +669,13 @@ async def preview_generated_share(
     grant = get_share_store().get_share(share_id)
     if not grant or not grant.available:
         raise HTTPException(status_code=404, detail="Active share not found.")
+    selected_tags = tuple(request.query_params.getlist("tag"))
     context = _guest_context(
         request,
         grant,
         f"owner-preview:{user}:{grant.id}",
         query=q,
+        selected_tags=selected_tags,
         page=page,
         owner_preview=True,
     )
@@ -690,6 +693,41 @@ async def preview_generated_share(
         response.headers["X-HFL-Result-Count"] = str(context["result_count"])
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+def _manifesto_fragment(request: Request) -> HTMLResponse:
+    response = templates.TemplateResponse(
+        request,
+        "modules/hfl_shares/_manifesto.html",
+        {"manifesto": load_manifesto()},
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@owner_router.get(
+    "/shares/{share_id}/preview/manifesto",
+    response_class=HTMLResponse,
+)
+async def preview_generated_share_manifesto(
+    request: Request,
+    share_id: str,
+):
+    user, redirect = require_user(request)
+    if redirect:
+        return HTMLResponse(
+            '<p class="notice error">Manifesto access requires owner authentication.</p>',
+            status_code=401,
+            headers={"Cache-Control": "no-store"},
+        )
+    grant = get_share_store().get_share(share_id)
+    if not grant or not grant.available:
+        return HTMLResponse(
+            '<p class="notice error">This shared Manifesto is no longer available.</p>',
+            status_code=404,
+            headers={"Cache-Control": "no-store"},
+        )
+    return _manifesto_fragment(request)
 
 
 @owner_router.post("/shares/{share_id}/preview/chat")
@@ -889,15 +927,28 @@ async def pending_access(request: Request):
     )
 
 
-def _guest_entries(grant, query: str):
+def _normalized_guest_tags(tags) -> tuple[str, ...]:
+    normalized: dict[str, str] = {}
+    for raw_tag in tags:
+        tag = str(raw_tag).strip()
+        if tag:
+            normalized.setdefault(tag.casefold(), tag)
+    return tuple(normalized.values())
+
+
+def _guest_entries(
+    grant,
+    query: str,
+    tags: tuple[str, ...] = (),
+):
     needle = (query or "").strip().casefold()
-    matches = (
-        grant.snapshot.entries
-        if not needle
-        else tuple(
-            entry
-            for entry in grant.snapshot.entries
-            if needle
+    selected_tags = {tag.casefold() for tag in _normalized_guest_tags(tags)}
+    matches = tuple(
+        entry
+        for entry in grant.snapshot.entries
+        if (
+            not needle
+            or needle
             in " ".join(
                 (
                     entry.moment,
@@ -907,6 +958,9 @@ def _guest_entries(grant, query: str):
                     entry.text,
                 )
             ).casefold()
+        )
+        and selected_tags.issubset(
+            {tag.casefold() for tag in entry.tags}
         )
     )
     return tuple(
@@ -1061,11 +1115,43 @@ def _guest_context(
     session_id: str,
     *,
     query: str = "",
+    selected_tags: tuple[str, ...] = (),
     page: int = 1,
     error: str = "",
     owner_preview: bool = False,
 ) -> dict[str, Any]:
-    matches = _guest_entries(grant, query)
+    tag_counts: Counter[str] = Counter()
+    tag_labels: dict[str, str] = {}
+    for entry in grant.snapshot.entries:
+        entry_tags: set[str] = set()
+        for tag in entry.tags:
+            key = tag.casefold()
+            tag_labels.setdefault(key, tag)
+            entry_tags.add(key)
+        tag_counts.update(entry_tags)
+    available_tags = tuple(
+        sorted(
+            (
+                (tag_labels[key], count)
+                for key, count in tag_counts.items()
+            ),
+            key=lambda item: (-item[1], item[0].casefold()),
+        )
+    )
+    canonical_tags = {
+        tag.casefold(): tag
+        for tag, _ in available_tags
+    }
+    selected_tags = tuple(
+        canonical_tags.get(tag.casefold(), tag)
+        for tag in _normalized_guest_tags(selected_tags)
+    )
+    unavailable_selected_tags = tuple(
+        tag
+        for tag in selected_tags
+        if tag.casefold() not in canonical_tags
+    )
+    matches = _guest_entries(grant, query, selected_tags)
     total_pages = max(1, math.ceil(len(matches) / _GUEST_PAGE_SIZE))
     page = min(max(1, page), total_pages)
     start = (page - 1) * _GUEST_PAGE_SIZE
@@ -1095,6 +1181,9 @@ def _guest_context(
         "total_pages": total_pages,
         "page_size": _GUEST_PAGE_SIZE,
         "query": query,
+        "selected_tags": selected_tags,
+        "available_tags": available_tags,
+        "unavailable_selected_tags": unavailable_selected_tags,
         "messages": messages,
         "error": error,
         "suggested_prompts": suggested_prompts(grant.snapshot),
@@ -1117,11 +1206,13 @@ async def guest_portal(
     if not session:
         return _unavailable(request)
     grant, session_id = session
+    selected_tags = tuple(request.query_params.getlist("tag"))
     context = _guest_context(
         request,
         grant,
         session_id,
         query=q,
+        selected_tags=selected_tags,
         page=page,
     )
     response = templates.TemplateResponse(
@@ -1135,7 +1226,20 @@ async def guest_portal(
     )
     if fragment:
         response.headers["X-HFL-Result-Count"] = str(context["result_count"])
+    response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@guest_router.get("/session/manifesto", response_class=HTMLResponse)
+async def guest_manifesto(request: Request):
+    session = current_session(request, get_share_store())
+    if not session:
+        return HTMLResponse(
+            '<p class="notice error">This shared Manifesto is no longer available.</p>',
+            status_code=404,
+            headers={"Cache-Control": "no-store"},
+        )
+    return _manifesto_fragment(request)
 
 
 @guest_router.post("/session/chat", response_class=HTMLResponse)

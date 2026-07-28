@@ -1,4 +1,4 @@
-from modules.registry import MODULES, module_by_key
+from modules.registry import MODULES, PRIMARY_MODULES, module_by_key
 
 
 def test_module_registry_has_fixed_primary_navigation():
@@ -15,6 +15,7 @@ def test_module_registry_has_fixed_primary_navigation():
     assert manifesto.route == "/manifesto"
     assert module_by_key("hfl_corpus").route == "/hfl-corpus"
     assert module_by_key("sharing").label == "Share Corpus"
+    assert "manifesto" not in {module.key for module in PRIMARY_MODULES}
 
 
 def test_module_pages_require_authentication():
@@ -30,7 +31,9 @@ def test_module_pages_require_authentication():
             assert response.headers["location"] == "/login"
 
 
-def test_home_renders_module_navigation_without_manifesto(authenticated_client):
+def test_home_renders_dedicated_manifesto_section_outside_platform_modules(
+    authenticated_client,
+):
     response = authenticated_client.get("/home")
 
     assert response.status_code == 200
@@ -39,8 +42,19 @@ def test_home_renders_module_navigation_without_manifesto(authenticated_client):
     assert "A self-hosted second brain" in response.text
     assert 'id="platform-modules-heading"' in response.text
     assert "Platform Modules" in response.text
-    assert "HARQIS Work Manifesto" not in response.text
+    assert 'id="manifesto-heading"' in response.text
+    assert "HARQIS Work Manifesto" in response.text
+    assert "The framework behind the platform" in response.text
+    assert "Read the Manifesto" in response.text
     assert 'href="/manifesto"' in response.text
+    desktop_nav = response.text.split(
+        '<nav class="hidden md:flex', 1
+    )[1].split("</nav>", 1)[0]
+    mobile_nav = response.text.split(
+        '<nav class="md:hidden', 1
+    )[1].split("</nav>", 1)[0]
+    assert "Manifesto" not in desktop_nav
+    assert "Manifesto" not in mobile_nav
     assert "Workflows" in response.text
     assert "Apps" in response.text
     assert "Activity Corpus" in response.text
@@ -54,7 +68,7 @@ def test_manifesto_module_renders_guiding_principles(authenticated_client):
     assert "Guiding principles" in response.text
     assert "HARQIS Work Manifesto" in response.text
     assert 'class="rounded-md px-3 py-1.5 text-xs font-medium transition' in response.text
-    assert 'href="/manifesto"' in response.text
+    assert 'href="/manifesto"' not in response.text
 
 
 def test_legacy_dashboard_redirects_to_home(authenticated_client):

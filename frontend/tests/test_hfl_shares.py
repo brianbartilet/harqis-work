@@ -862,6 +862,55 @@ def test_pin_redemption_binds_one_signed_session_and_blocks_second_device(
     assert denied.status_code == 403
 
 
+def test_shared_manifesto_modal_uses_scoped_guest_and_owner_access(
+    authenticated_client, sharing_corpus
+):
+    generated = authenticated_client.post("/sharing/generate", data=_form())
+    token, pin = _generated_credentials(generated.text)
+    grant = get_share_store().list_shares()[0]
+    redeemed = authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        data={"pin": pin},
+        follow_redirects=False,
+    )
+    assert redeemed.status_code == 303
+
+    portal = authenticated_client.get("/share/session")
+    guest_manifesto = authenticated_client.get("/share/session/manifesto")
+    owner_manifesto = authenticated_client.get(
+        f"/sharing/shares/{grant.id}/preview/manifesto"
+    )
+
+    assert portal.status_code == 200
+    assert '<span class="brand-name">HARQIS</span>' in portal.text
+    assert '<span class="brand-context">Knowledge Corpus Share</span>' in portal.text
+    assert ">HARQIS - Knowledge Corpus Share<" not in portal.text
+    assert 'data-manifesto-open' in portal.text
+    assert re.search(r">\s*Manifesto\s*</button>", portal.text)
+    assert 'data-manifesto-dialog aria-labelledby="shared-manifesto-title"' in portal.text
+    assert "manifestoDialog.showModal()" in portal.text
+    assert "if (event.target === manifestoDialog) manifestoDialog.close()" in portal.text
+    assert guest_manifesto.status_code == 200
+    assert owner_manifesto.status_code == 200
+    assert guest_manifesto.headers["cache-control"] == "no-store"
+    assert "HARQIS-Work Manifesto" in guest_manifesto.text
+    assert "Core operating principles" in owner_manifesto.text
+
+    revoked = authenticated_client.post(
+        f"/sharing/shares/{grant.id}/revoke",
+        data={"csrf": make_csrf_token("frontend-test-user")},
+        follow_redirects=False,
+    )
+    assert revoked.status_code == 303
+    assert authenticated_client.get("/share/session/manifesto").status_code == 404
+    assert (
+        authenticated_client.get(
+            f"/sharing/shares/{grant.id}/preview/manifesto"
+        ).status_code
+        == 404
+    )
+
+
 def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
     authenticated_client, monkeypatch, sharing_corpus
 ):
@@ -941,9 +990,10 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
     assert ".entry-content img, .entry-content video" in second.text
     assert "A little context, chosen for you" in second.text
     assert "moments ingested and analyzed" in second.text
-    assert "HARQIS - Knowledge Corpus Share" in second.text
+    assert '<span class="brand-name">HARQIS</span>' in second.text
+    assert '<span class="brand-context">Knowledge Corpus Share</span>' in second.text
     assert 'class="brand-logo" aria-hidden="true"' in second.text
-    assert ".header .shell { width:min(1500px,calc(100% - 24px)); }" in second.text
+    assert "width:min(1500px,calc(100% - 24px));" in second.text
     assert "button.textContent.trim()" in second.text
     assert "height:calc(100dvh - 54px)" in second.text
     assert ".suggestions { display:grid; grid-template-columns:minmax(0,1fr);" in second.text
@@ -1108,6 +1158,110 @@ def test_guest_entries_use_literal_search_ten_item_pages_and_readable_dates(
     assert filtered_more.text.count('<article class="entry"') == 2
 
 
+def test_guest_drawer_combines_text_and_multiselect_tag_filters(
+    authenticated_client, monkeypatch, tmp_path
+):
+    from modules.hfl_shares import router, scope
+
+    document = _many_entry_document(tmp_path, 12)
+    tagged_entries = tuple(
+        CorpusEntry(
+            **{
+                **entry.__dict__,
+                "tags": (
+                    *entry.tags,
+                    "even" if index % 2 == 0 else "odd",
+                ),
+            }
+        )
+        for index, entry in enumerate(document.entries)
+    )
+    document = CorpusDocument(
+        **{
+            **document.__dict__,
+            "tags": ("work", "project", "even", "odd"),
+            "entries": tagged_entries,
+        }
+    )
+    monkeypatch.setattr(
+        router.corpus_index,
+        "documents",
+        lambda force=False: (document,),
+    )
+    monkeypatch.setattr(scope, "resolve_corpus_root", lambda: tmp_path)
+    monkeypatch.setattr(router, "record_share_audit", lambda **kwargs: None)
+
+    generated = authenticated_client.post(
+        "/sharing/generate",
+        data=_form(tags=""),
+    )
+    token, pin = _generated_credentials(generated.text)
+    authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        data={"pin": pin},
+        follow_redirects=False,
+    )
+
+    initial = authenticated_client.get("/share/session")
+    tagged = authenticated_client.get(
+        "/share/session",
+        params=[("tag", "project"), ("tag", "even")],
+    )
+    text_and_tags = authenticated_client.get(
+        "/share/session",
+        params=[("q", "task 10"), ("tag", "PROJECT"), ("tag", "even")],
+    )
+    unknown = authenticated_client.get(
+        "/share/session",
+        params=[("tag", "missing-tag")],
+    )
+    endless = authenticated_client.get(
+        "/share/session",
+        params=[("tag", "work"), ("fragment", "true")],
+    )
+
+    assert initial.status_code == 200
+    assert re.search(
+        r'<details class="drawer-tag-filter" data-tag-filter>\s*<summary>',
+        initial.text,
+    )
+    assert "Search tags" in initial.text
+    assert 'data-filter-reset disabled' in initial.text
+    assert 'data-clear-drawer-tags disabled' in initial.text
+    assert ".drawer-tag-cloud { display:flex; max-height:82px;" in initial.text
+    assert ".drawer-tag-cloud { max-height:76px; }" in initial.text
+    assert initial.text.index("#project") < initial.text.index("#even")
+    assert initial.text.index("#even") < initial.text.index("#odd")
+
+    assert tagged.status_code == 200
+    assert tagged.text.count('<article class="entry"') == 6
+    assert 'value="project" checked' in tagged.text
+    assert 'value="even" checked' in tagged.text
+    assert "2 selected" in tagged.text
+    assert 'data-filter-reset disabled' not in tagged.text
+    assert 'data-clear-drawer-tags disabled' not in tagged.text
+
+    assert text_and_tags.text.count('<article class="entry"') == 1
+    assert "Project moment 10" in text_and_tags.text
+    assert 'value="project" checked' in text_and_tags.text
+    assert unknown.text.count('<article class="entry"') == 0
+    assert "No moments match that search yet." in unknown.text
+    assert 'value="missing-tag" checked hidden data-unavailable-tag' in unknown.text
+    assert 'data-filter-reset disabled' not in unknown.text
+    assert 'data-clear-drawer-tags disabled' not in unknown.text
+
+    assert endless.headers["X-HFL-Result-Count"] == "12"
+    assert 'data-entry-sentinel data-next-page="2"' in endless.text
+    assert "url.searchParams.delete('tag')" in initial.text
+    assert "url.searchParams.append('tag', tag)" in initial.text
+    assert "selectedDrawerTags().forEach" in initial.text
+    assert "filterReset?.addEventListener('click'" in initial.text
+    assert "drawerTagInputs().forEach(input => { input.checked = false; })" in initial.text
+    assert "drawerState.checked" not in initial.text.split(
+        "tagFilter?.addEventListener('change'", 1
+    )[1].split("});", 1)[0]
+
+
 def test_generation_allows_more_than_one_thousand_entries_within_char_limit(
     authenticated_client, monkeypatch, tmp_path
 ):
@@ -1188,7 +1342,8 @@ def test_owner_can_preview_active_share_without_guest_verification(
     assert "data-preview-toast-close" in preview.text
     assert "previewToast?.remove()" in preview.text
     assert "Hello, Avery!" in preview.text
-    assert "HARQIS - Knowledge Corpus Share" in preview.text
+    assert '<span class="brand-name">HARQIS</span>' in preview.text
+    assert '<span class="brand-context">Knowledge Corpus Share</span>' in preview.text
     assert 'data-chat-form data-owner-preview' in preview.text
     assert f'action="/sharing/shares/{grant.id}/preview/chat"' in preview.text
     assert ">Ask</button>" in preview.text
@@ -1269,7 +1424,8 @@ def test_static_guest_routes_are_not_interpreted_as_capability_tokens(
     response = authenticated_client.get("/share/unavailable")
     assert response.status_code == 404
     assert "cannot be opened" in response.text
-    assert "HARQIS - Knowledge Corpus Share" in response.text
+    assert '<span class="brand-name">HARQIS</span>' in response.text
+    assert '<span class="brand-context">Knowledge Corpus Share</span>' in response.text
 
 
 def test_agent_context_escapes_entry_delimiters(tmp_path, monkeypatch):

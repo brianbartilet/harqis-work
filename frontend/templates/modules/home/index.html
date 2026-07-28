@@ -34,5 +34,26 @@
       {% endfor %}
     </div>
   </section>
+
+  {% if manifesto_module %}
+  <section aria-labelledby="manifesto-heading"
+           class="rounded-2xl border border-blue-900/70 bg-gradient-to-br from-slate-900 to-blue-950/30 p-6 sm:p-8">
+    <p class="text-xs uppercase tracking-[0.22em] text-blue-400">The framework behind the platform</p>
+    <div class="mt-2 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h2 id="manifesto-heading" class="text-xl font-semibold text-white">HARQIS Work Manifesto</h2>
+        <p class="mt-2 max-w-3xl text-sm leading-relaxed text-slate-300">
+          Explore the principles and practical frameworks that shape how HARQIS captures,
+          organizes, distills, and expresses useful knowledge.
+        </p>
+        <p class="mt-2 max-w-3xl text-xs leading-relaxed text-slate-500">{{ manifesto_module.detail }}</p>
+      </div>
+      <a href="{{ manifesto_module.route }}"
+         class="inline-flex shrink-0 items-center justify-center rounded-lg bg-blue-600/20 px-4 py-2 text-sm font-medium text-blue-200 ring-1 ring-blue-500/40 transition hover:bg-blue-600/30 hover:text-white">
+        Read the Manifesto →
+      </a>
+    </div>
+  </section>
+  {% endif %}
 </main>
 {% endblock %}

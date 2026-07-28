@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 
 from auth import get_current_user
 from config import get_settings
-from modules.registry import MODULES
+from modules.registry import PRIMARY_MODULES
 
 
 FRONTEND_ROOT = Path(__file__).resolve().parent
@@ -36,7 +36,7 @@ def page_context(
         "request": request,
         "user": user,
         "active_module": active_module,
-        "modules": MODULES,
+        "modules": PRIMARY_MODULES,
         "flower_url": get_settings().flower_url,
         **values,
     }

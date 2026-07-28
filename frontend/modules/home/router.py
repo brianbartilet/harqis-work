@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from modules.registry import MODULES
+from modules.registry import MODULES, module_by_key
 from web import page_context, require_user, templates
 
 
@@ -22,6 +22,11 @@ async def home(request: Request):
             request,
             user,
             "home",
-            module_cards=[module for module in MODULES if module.key != "home"],
+            module_cards=[
+                module
+                for module in MODULES
+                if module.key not in {"home", "manifesto"}
+            ],
+            manifesto_module=module_by_key("manifesto"),
         ),
     )
