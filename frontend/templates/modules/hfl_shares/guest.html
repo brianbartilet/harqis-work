@@ -40,9 +40,9 @@
         <p class="muted">{{ grant.snapshot.entries|length }} moments ingested and analyzed · available until {{ expires_at_display }}</p>
       </div>
       {% if owner_preview %}
-      <a class="button button-secondary logout-form" href="/sharing" aria-label="Close preview"><span class="close-label">Close preview</span><span class="close-icon" aria-hidden="true">×</span></a>
+      <a class="button button-secondary logout-form" href="/sharing">Close preview</a>
       {% else %}
-      <form class="logout-form" method="post" action="/share/session/logout"><button class="button-secondary" aria-label="Close session"><span class="close-label">Close session</span><span class="close-icon" aria-hidden="true">×</span></button></form>
+      <form class="logout-form" method="post" action="/share/session/logout" data-close-session><button class="button-secondary">Close session</button></form>
       {% endif %}
     </header>
 
@@ -105,6 +105,7 @@
   const drawerState = document.querySelector('[data-drawer-state]');
   const drawerToggle = document.querySelector('[data-drawer-toggle]');
   const drawerClose = document.querySelector('[data-drawer-close]');
+  const closeSessionForm = document.querySelector('[data-close-session]');
   const overlay = document.querySelector('[data-wait-overlay]');
   const copy = overlay?.querySelector('[data-wait-copy]');
   const form = document.querySelector('[data-chat-form]');
@@ -137,6 +138,12 @@
     event.stopPropagation();
     drawerState.checked = !isCompact();
     syncDrawer();
+  });
+  closeSessionForm?.addEventListener('submit', event => {
+    const confirmed = window.confirm(
+      'Close this shared session? You may need to verify again to return.'
+    );
+    if (!confirmed) event.preventDefault();
   });
   window.addEventListener('resize', syncDrawer);
 

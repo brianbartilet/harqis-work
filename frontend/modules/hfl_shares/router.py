@@ -64,6 +64,8 @@ from web import page_context, require_user, templates
 
 owner_router = APIRouter(prefix="/sharing")
 guest_router = APIRouter(prefix="/share")
+_OWNER_RECIPE_PAGE_SIZE = 5
+_OWNER_SHARE_PAGE_SIZE = 10
 
 
 def _sharing_documents(
@@ -225,6 +227,17 @@ def _require_csrf(form: Any, user: str) -> None:
         raise HTTPException(status_code=403, detail="Invalid form token.")
 
 
+def _owner_page(items: list[Any], raw_page: str, page_size: int):
+    try:
+        requested = max(1, int(raw_page or "1"))
+    except ValueError:
+        requested = 1
+    total_pages = max(1, math.ceil(len(items) / page_size))
+    page = min(requested, total_pages)
+    start = (page - 1) * page_size
+    return items[start : start + page_size], page, total_pages
+
+
 def _owner_context(
     request: Request,
     user: str,
@@ -280,6 +293,18 @@ def _owner_context(
     default_expires_at = (
         datetime.now().astimezone() + timedelta(seconds=ttl_seconds)
     ).strftime("%Y-%m-%dT%H:%M")
+    all_configurations = store.list_configurations()
+    all_shares = store.list_shares()
+    configuration_page_items, recipe_page, recipe_total_pages = _owner_page(
+        all_configurations,
+        request.query_params.get("recipe_page", "1"),
+        _OWNER_RECIPE_PAGE_SIZE,
+    )
+    share_page_items, share_page, share_total_pages = _owner_page(
+        all_shares,
+        request.query_params.get("share_page", "1"),
+        _OWNER_SHARE_PAGE_SIZE,
+    )
     return page_context(
         request,
         user,
@@ -289,7 +314,7 @@ def _owner_context(
                 "configuration": item,
                 "expiration_summary": _duration_summary(item.ttl_seconds),
             }
-            for item in store.list_configurations()
+            for item in configuration_page_items
         ),
         shares=tuple(
             {
@@ -301,8 +326,14 @@ def _owner_context(
                 ),
                 "expires_at_display": _format_utc(share.expires_at),
             }
-            for share in store.list_shares()
+            for share in share_page_items
         ),
+        recipe_page=recipe_page,
+        recipe_total_pages=recipe_total_pages,
+        recipe_count=len(all_configurations),
+        share_page=share_page,
+        share_total_pages=share_total_pages,
+        share_count=len(all_shares),
         pending_requests=store.list_pending_requests(),
         available_sources=tuple(sorted(sources, key=str.casefold)),
         available_tags=available_tags,
@@ -946,6 +977,36 @@ def _citation_pages(grant) -> dict[int, int]:
     }
 
 
+def _normalize_answer_markdown(content: str) -> str:
+    expanded: list[str] = []
+    for line in (content or "").splitlines():
+        if ": - " in line:
+            lead, inline_items = line.split(": - ", 1)
+            items = [
+                item.strip()
+                for item in inline_items.split(" - ")
+                if item.strip()
+            ]
+            if len(items) > 1:
+                expanded.extend(
+                    (f"{lead.rstrip()}:", "", *(f"- {item}" for item in items))
+                )
+                continue
+        expanded.append(line)
+
+    normalized: list[str] = []
+    in_list = False
+    for line in expanded:
+        is_list_item = bool(re.match(r"^\s*(?:[-*+]|\d+\.)\s+\S", line))
+        if is_list_item and not in_list and normalized and normalized[-1].strip():
+            normalized.append("")
+        elif in_list and line.strip() and not is_list_item:
+            normalized.append("")
+        normalized.append(line)
+        in_list = is_list_item
+    return "\n".join(normalized)
+
+
 def _answer_html(
     content: str,
     citation_pages: dict[int, int] | None = None,
@@ -973,7 +1034,10 @@ def _answer_html(
             f"({evidence_target(citation)})"
         )
 
-    linked = _NATURAL_EVIDENCE.sub(natural_evidence_link, content)
+    linked = _NATURAL_EVIDENCE.sub(
+        natural_evidence_link,
+        _normalize_answer_markdown(content),
+    )
     linked = _EVIDENCE.sub(fallback_evidence_link, linked)
     return render_markdown(linked)
 

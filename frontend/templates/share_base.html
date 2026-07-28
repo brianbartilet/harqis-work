@@ -104,7 +104,6 @@
     .workspace-heading p { margin:2px 0 0; font-size:.7rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .logout-form { flex:0 0 auto; }
     .logout-form button { padding:8px 11px; font-size:.72rem; }
-    .close-icon { display:none; }
     .chat-scroll { min-height:0; overflow-x:hidden; overflow-y:auto; scroll-behavior:smooth; }
     .chat-content { width:min(820px,calc(100% - 32px)); margin:0 auto; padding:30px 0 20px; }
     .chat-intro { margin-bottom:18px; }
@@ -181,9 +180,8 @@
       .workspace-header { gap:9px; padding:9px 10px; }
       .workspace-heading h1 { font-size:.94rem; }
       .workspace-heading p { font-size:.62rem; }
-      .logout-form, .logout-form button { width:36px; height:36px; flex:0 0 36px; padding:0; }
-      .close-label { display:none; }
-      .close-icon { display:inline; font-size:1rem; line-height:1; }
+      a.logout-form, .logout-form button { width:auto; min-width:0; height:36px; flex:0 0 auto; padding:8px 10px; white-space:nowrap; }
+      form.logout-form { width:auto; height:auto; flex:0 0 auto; padding:0; }
       .share-main, .share-workspace, .chat-workspace, .chat-scroll { min-width:0; }
       .chat-scroll { width:auto; max-width:none; }
       .chat-workspace > * { min-width:0; max-width:100%; }

@@ -3,6 +3,7 @@
 {% block head %}
 <style>
   .share-grid { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(270px,.8fr); gap:1.25rem; }
+  .share-grid > *, .two > *, .field, .control { min-width:0; }
   .panel { border:1px solid #1e293b; background:#0f172a; border-radius:1rem; padding:1.25rem; }
   .field { margin-bottom:1rem; }
   .field label { display:block; color:#cbd5e1; font-size:.78rem; font-weight:650; margin-bottom:.4rem; }
@@ -68,6 +69,14 @@
   .recipe-actions form { display:inline-flex; margin:0; }
   .recipe-action { display:inline-flex; min-height:1.75rem; align-items:center; border:0; background:transparent; padding:.2rem 0; font-size:.75rem; line-height:1.25; cursor:pointer; }
   .recipe-action:focus-visible { border-radius:.25rem; outline:2px solid #60a5fa; outline-offset:2px; }
+  .recipe-header-actions { display:flex; flex:0 0 auto; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:.55rem; }
+  .saved-recipes-panel > summary { display:flex; list-style:none; align-items:center; justify-content:space-between; gap:.75rem; cursor:pointer; }
+  .saved-recipes-panel > summary::-webkit-details-marker { display:none; }
+  .saved-recipes-panel[open] .saved-recipes-arrow { transform:rotate(180deg); }
+  .owner-pagination { display:flex; align-items:center; justify-content:space-between; gap:.65rem; border-top:1px solid #1e293b; padding-top:.75rem; }
+  .owner-pagination a { border-radius:.4rem; background:#1e293b; color:#cbd5e1; font-size:.72rem; padding:.35rem .55rem; }
+  .owner-pagination a:hover { background:#334155; color:#f8fafc; }
+  .owner-pagination span { color:#64748b; font-size:.7rem; text-align:center; }
   @keyframes toast-enter { from { opacity:0; transform:translateY(-.5rem); } }
   @keyframes toast-exit { to { opacity:0; transform:translateY(-.35rem); } }
   .wrap { overflow-wrap:anywhere; word-break:break-word; }
@@ -89,13 +98,36 @@
     .progress-bar { width:100%; animation:none; opacity:.75; }
     .success-toast,.success-toast.is-closing { animation:none; }
   }
-  @media(max-width:900px) { .share-grid { grid-template-columns:1fr; } }
-  @media(max-width:600px) { .two,.stat-grid { grid-template-columns:1fr 1fr; } .panel { padding:.9rem; } }
+  @media(min-width:901px) {
+    .saved-recipes-panel > summary { cursor:default; }
+    .saved-recipes-panel > summary .saved-recipes-arrow { display:none; }
+    .saved-recipes-panel:not([open]) > .saved-recipes-content { display:block; }
+  }
+  @media(max-width:900px) {
+    .share-page { max-width:100%; overflow-x:hidden; }
+    .share-grid { display:flex; width:100%; min-width:0; flex-direction:column; }
+    .owner-sidebar { display:contents; }
+    .owner-sidebar > * { margin-top:0 !important; }
+    .saved-recipes-panel { order:1; }
+    .recipe-editor { order:2; }
+    .approval-panel { order:3; }
+    .generated-shares-panel { order:4; }
+  }
+  @media(max-width:600px) {
+    .two,.stat-grid { grid-template-columns:minmax(0,1fr); }
+    .panel { max-width:100%; padding:.9rem; overflow:hidden; }
+    .recipe-heading { flex-wrap:wrap; }
+    .recipe-header-actions { width:100%; justify-content:space-between; }
+    .recipe-header-actions .btn-main { margin-left:auto; }
+    .actions .btn { flex:1 1 auto; }
+    .selector-options { grid-template-columns:minmax(0,1fr); }
+    .tag-cloud { max-width:100%; }
+  }
 </style>
 {% endblock %}
 {% block content %}
 {% set cfg = configuration %}
-<main class="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+<main class="share-page mx-auto max-w-7xl px-4 py-8 sm:px-6">
   <div class="mb-6">
     <p class="text-xs font-bold uppercase tracking-widest text-sky-400">Activity Corpus</p>
     <h1 class="mt-2 text-3xl font-semibold text-white">Share Corpus</h1>
@@ -110,14 +142,21 @@
   </div>
   {% endif %}
   <div class="share-grid">
-    <section class="panel">
-      <div class="mb-5 flex items-start justify-between gap-4">
+    <section class="panel recipe-editor">
+      <div class="recipe-heading mb-5 flex items-start justify-between gap-4">
         <div>
           <h2 class="text-lg font-semibold text-white">{{ "Edit recipe" if cfg and cfg.id else "New recipe" }}</h2>
         </div>
-        {% if cfg and cfg.id %}<a class="text-xs text-sky-400" href="/sharing" data-recipe-clear>Clear</a>{% endif %}
+        <div class="recipe-header-actions">
+          {% if cfg and cfg.id %}<a class="text-xs text-sky-400" href="/sharing" data-recipe-clear>Clear</a>{% endif %}
+          <button class="btn btn-main" type="submit" form="social-recipe-form"
+                  formaction="/sharing/generate" formnovalidate
+                  data-progress-title="Generating share"
+                  data-progress-message="Preparing your snapshot…"
+                  data-progress-next="Generating secure access and QR code…">Generate snapshot + QR</button>
+        </div>
       </div>
-      <form method="post" data-social-form>
+      <form id="social-recipe-form" method="post" data-social-form>
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <input type="hidden" name="configuration_id" value="{{ cfg.id if cfg else '' }}">
         <div class="two">
@@ -232,18 +271,20 @@
                   data-progress-title="Testing agent"
                   data-progress-message="Reviewing the snapshot…"
                   data-progress-next="Asking the agent…">Test agent</button>
-          <button class="btn btn-main" formaction="/sharing/generate" formnovalidate
-                  data-progress-title="Generating share"
-                  data-progress-message="Preparing your snapshot…"
-                  data-progress-next="Generating secure access and QR code…">Generate snapshot + QR</button>
         </div>
       </form>
     </section>
 
-    <aside class="space-y-5">
-      <section class="panel">
-        <h2 class="text-base font-semibold text-white">Saved recipes</h2>
-        <p class="mt-1 text-xs text-slate-500">Click on recipe to load</p>
+    <aside class="owner-sidebar space-y-5">
+      <details class="panel saved-recipes-panel">
+        <summary>
+          <span>
+            <span class="block text-base font-semibold text-white">Saved recipes</span>
+            <span class="mt-1 block text-xs font-normal text-slate-500">Click on recipe to load · {{ recipe_count }} total</span>
+          </span>
+          <svg class="saved-recipes-arrow h-4 w-4 shrink-0 text-blue-400 transition" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg>
+        </summary>
+        <div class="saved-recipes-content mt-2">
         {% for row in configurations %}
         {% set item = row.configuration %}
         <div class="item recipe-item{% if cfg and cfg.id == item.id %} recipe-item-active{% endif %}">
@@ -258,10 +299,18 @@
           </div>
         </div>
         {% else %}<p class="mt-2 text-xs text-slate-500">No saved recipes yet.</p>{% endfor %}
-      </section>
+        {% if recipe_total_pages > 1 %}
+        <nav class="owner-pagination" aria-label="Saved recipe pages">
+          {% if recipe_page > 1 %}<a href="/sharing?recipe_page={{ recipe_page - 1 }}&share_page={{ share_page }}{% if cfg and cfg.id %}&configuration_id={{ cfg.id }}{% endif %}">Previous</a>{% else %}<span></span>{% endif %}
+          <span>Page {{ recipe_page }} of {{ recipe_total_pages }}</span>
+          {% if recipe_page < recipe_total_pages %}<a href="/sharing?recipe_page={{ recipe_page + 1 }}&share_page={{ share_page }}{% if cfg and cfg.id %}&configuration_id={{ cfg.id }}{% endif %}">Next</a>{% else %}<span></span>{% endif %}
+        </nav>
+        {% endif %}
+        </div>
+      </details>
 
       {% if pending_requests %}
-      <section class="panel">
+      <section class="panel approval-panel">
         <h2 class="text-base font-semibold text-white">Approval requests</h2>
         {% for item in pending_requests %}
         <div class="item"><p class="text-xs text-slate-300">Share {{ item.share_id[:8] }} requested access.</p>
@@ -271,11 +320,14 @@
       </section>
       {% endif %}
 
-      <section class="panel">
-        <h2 class="text-base font-semibold text-white">Generated shares</h2>
+      <section class="panel generated-shares-panel">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="text-base font-semibold text-white">Generated shares</h2>
+          <span class="text-xs text-slate-500">{{ share_count }} total</span>
+        </div>
         {% for row in shares %}
         {% set share = row.grant %}
-        <div class="item">
+        <div class="item generated-share-item">
           <div class="flex items-start justify-between gap-2"><strong class="wrap text-sm text-slate-200">{{ share.name }}</strong><span class="status-pill status-{{ row.status }}">{{ row.status }}</span></div>
           <p class="mt-1 text-xs text-slate-500">{{ share.snapshot.entries|length }} entries · expires {{ row.expires_at_display }}</p>
           {% if share.available %}
@@ -286,6 +338,13 @@
           {% endif %}
         </div>
         {% else %}<p class="mt-2 text-xs text-slate-500">No shares generated yet.</p>{% endfor %}
+        {% if share_total_pages > 1 %}
+        <nav class="owner-pagination" aria-label="Generated share pages">
+          {% if share_page > 1 %}<a href="/sharing?recipe_page={{ recipe_page }}&share_page={{ share_page - 1 }}{% if cfg and cfg.id %}&configuration_id={{ cfg.id }}{% endif %}">Previous</a>{% else %}<span></span>{% endif %}
+          <span>Page {{ share_page }} of {{ share_total_pages }}</span>
+          {% if share_page < share_total_pages %}<a href="/sharing?recipe_page={{ recipe_page }}&share_page={{ share_page + 1 }}{% if cfg and cfg.id %}&configuration_id={{ cfg.id }}{% endif %}">Next</a>{% else %}<span></span>{% endif %}
+        </nav>
+        {% endif %}
       </section>
     </aside>
   </div>
