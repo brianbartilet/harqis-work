@@ -162,6 +162,11 @@ def test_share_corpus_form_uses_new_labels_defaults_and_collapsed_sections(
     assert 'value="__all__" data-all-sources checked' in response.text
     assert 'name="references_enabled" checked' in response.text
     assert "Number of devices" in response.text
+    assert 'name="no_expiry" data-no-expiry' in response.text
+    assert 'name="no_expiry" data-no-expiry checked' not in response.text
+    assert 'name="expires_at" required' in response.text
+    assert "expiresAt.disabled = noExpiry.checked" in response.text
+    assert "expiresAt.required = !noExpiry.checked" in response.text
     assert re.search(
         r'<details class="expand-panel mb-4">\s*<summary>\s*<span>Additional filters',
         response.text,
@@ -338,6 +343,56 @@ def test_expiration_picker_is_converted_to_relative_ttl():
     configuration = _configuration_from_form(form)
 
     assert 86_300 <= configuration.ttl_seconds <= 86_400
+
+
+def test_no_expiry_ignores_picker_and_survives_recipe_save(
+    authenticated_client, sharing_corpus
+):
+    response = authenticated_client.post(
+        "/sharing/configurations",
+        data=_form(no_expiry="on", expires_at=""),
+        follow_redirects=True,
+    )
+
+    configuration = get_share_store().list_configurations()[0]
+    assert response.status_code == 200
+    assert configuration.no_expiry is True
+    assert 'name="no_expiry" data-no-expiry checked' in response.text
+    assert re.search(r'name="expires_at"[^>]+disabled', response.text)
+    assert "No expiry" in response.text
+
+
+def test_non_expiring_share_stays_active_until_revoked_with_bounded_session(
+    authenticated_client, sharing_corpus
+):
+    generated = authenticated_client.post(
+        "/sharing/generate",
+        data=_form(no_expiry="on", expires_at=""),
+    )
+    store = get_share_store()
+    grant = store.list_shares()[0]
+
+    assert generated.status_code == 200
+    assert "no expiry" in generated.text
+    assert grant.no_expiry is True
+    assert grant.expires_at == ""
+    assert grant.available is True
+
+    created = store.create_session(grant.id, "non-expiring-session")
+    assert created is not None
+    session_id, session_expires_at = created
+    remaining = (
+        datetime.fromisoformat(session_expires_at)
+        - datetime.now(timezone.utc)
+    ).total_seconds()
+    assert 6 * 86_400 < remaining <= 7 * 86_400
+    assert (
+        store.validate_session(session_id, "non-expiring-session") is not None
+    )
+
+    assert store.revoke_share(grant.id)
+    assert store.get_share(grant.id).available is False
+    assert store.validate_session(session_id, "non-expiring-session") is None
 
 
 def test_recipient_is_required_limited_and_legacy_snapshots_remain_readable():

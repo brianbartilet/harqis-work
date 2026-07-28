@@ -42,6 +42,7 @@ class ShareConfiguration:
     allowed_email: str = ""
     references_enabled: bool = False
     ttl_seconds: int = 3600
+    no_expiry: bool = False
     device_limit: int = 1
     single_use: bool = True
     created_at: str = ""
@@ -97,7 +98,7 @@ class ShareConfiguration:
                 if str(exc) == "The start date must not follow the end date.":
                     raise
                 raise ValueError("Share dates must use YYYY-MM-DD format.") from exc
-        if not 300 <= int(self.ttl_seconds) <= 31_536_000:
+        if not self.no_expiry and not 300 <= int(self.ttl_seconds) <= 31_536_000:
             raise ValueError("Duration must be between five minutes and 365 days.")
         if not 1 <= int(self.device_limit) <= 10:
             raise ValueError("Device limit must be between one and ten.")
@@ -244,12 +245,15 @@ class ShareGrant:
     status: str
     single_use: bool
     device_limit: int
+    no_expiry: bool = False
     redeemed_at: str = ""
     revoked_at: str = ""
     pin_failures: int = 0
 
     @property
     def expired(self) -> bool:
+        if self.no_expiry:
+            return False
         try:
             return datetime.fromisoformat(self.expires_at) <= utc_now()
         except ValueError:

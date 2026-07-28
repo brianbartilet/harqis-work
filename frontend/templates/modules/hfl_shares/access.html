@@ -4,7 +4,7 @@
 <section class="card">
   <p class="eyebrow">Temporary read-only share</p>
   <h1>{{ grant.name }}</h1>
-  <p class="muted">This share contains {{ grant.snapshot.entries|length }} curated moments and is available until {{ expires_at_display }}.</p>
+  <p class="muted">This share contains {{ grant.snapshot.entries|length }} curated moments and {% if grant.no_expiry %}remains available until its owner revokes it{% else %}is available until {{ expires_at_display }}{% endif %}.</p>
   {% if error %}<p class="notice error">{{ error }}</p>{% endif %}
   <form method="post" action="/share/{{ 'email' if grant.auth_mode == 'email_otp' else 'access' }}/{{ token }}/redeem">
     {% if grant.auth_mode == "pin" %}

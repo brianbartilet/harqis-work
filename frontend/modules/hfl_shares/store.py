@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS shares (
     status TEXT NOT NULL,
     single_use INTEGER NOT NULL,
     device_limit INTEGER NOT NULL,
+    no_expiry INTEGER NOT NULL DEFAULT 0,
     redeemed_at TEXT NOT NULL DEFAULT '',
     revoked_at TEXT NOT NULL DEFAULT '',
     pin_failures INTEGER NOT NULL DEFAULT 0
@@ -91,6 +92,15 @@ class ShareStore:
         self._lock = threading.RLock()
         with self._connect() as connection:
             connection.executescript(_SCHEMA)
+            share_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(shares)")
+            }
+            if "no_expiry" not in share_columns:
+                connection.execute(
+                    "ALTER TABLE shares "
+                    "ADD COLUMN no_expiry INTEGER NOT NULL DEFAULT 0"
+                )
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=15)
@@ -124,6 +134,7 @@ class ShareStore:
             status=row["status"],
             single_use=bool(row["single_use"]),
             device_limit=int(row["device_limit"]),
+            no_expiry=bool(row["no_expiry"]),
             redeemed_at=row["redeemed_at"],
             revoked_at=row["revoked_at"],
             pin_failures=int(row["pin_failures"]),
@@ -182,6 +193,7 @@ class ShareStore:
         allowed_email: str,
         snapshot: ScopeSnapshot,
         ttl_seconds: int,
+        no_expiry: bool = False,
         single_use: bool,
         device_limit: int,
     ) -> ShareGrant:
@@ -194,10 +206,15 @@ class ShareStore:
             allowed_email=allowed_email,
             snapshot=snapshot,
             created_at=now.isoformat(),
-            expires_at=(now + timedelta(seconds=ttl_seconds)).isoformat(),
+            expires_at=(
+                ""
+                if no_expiry
+                else (now + timedelta(seconds=ttl_seconds)).isoformat()
+            ),
             status="active",
             single_use=single_use,
             device_limit=device_limit,
+            no_expiry=no_expiry,
         )
         with self._lock, self._connect() as connection:
             connection.execute(
@@ -205,15 +222,15 @@ class ShareStore:
                 INSERT INTO shares(
                     id, configuration_id, name, token_hash, pin_hash,
                     auth_mode, allowed_email, snapshot, created_at, expires_at,
-                    status, single_use, device_limit
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    status, single_use, device_limit, no_expiry
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     grant.id, configuration_id, name, token_hash, pin_hash,
                     auth_mode, allowed_email,
                     json.dumps(snapshot.to_record(), ensure_ascii=False),
                     grant.created_at, grant.expires_at, "active",
-                    int(single_use), int(device_limit),
+                    int(single_use), int(device_limit), int(no_expiry),
                 ),
             )
         return grant
@@ -283,9 +300,11 @@ class ShareStore:
             if grant.single_use and grant.redeemed_at:
                 return None
             session_id = str(uuid.uuid4())
-            expires_at = min(
-                datetime.fromisoformat(grant.expires_at),
-                now + timedelta(days=7),
+            session_limit = now + timedelta(days=7)
+            expires_at = (
+                session_limit
+                if grant.no_expiry
+                else min(datetime.fromisoformat(grant.expires_at), session_limit)
             ).isoformat()
             connection.execute(
                 """
@@ -315,7 +334,8 @@ class ShareStore:
                 SELECT sh.* FROM sessions s
                 JOIN shares sh ON sh.id=s.share_id
                 WHERE s.id=? AND s.secret_hash=? AND s.revoked_at=''
-                  AND s.expires_at>? AND sh.status='active' AND sh.expires_at>?
+                  AND s.expires_at>? AND sh.status='active'
+                  AND (sh.no_expiry=1 OR sh.expires_at>?)
                 """,
                 (session_id, secret_hash, now, now),
             ).fetchone()

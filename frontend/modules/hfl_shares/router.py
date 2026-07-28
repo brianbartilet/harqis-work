@@ -119,6 +119,8 @@ def _expiration_seconds(form: Any, existing: ShareConfiguration | None) -> int:
         if existing
         else settings.hfl_share_default_ttl_seconds
     )
+    if form.get("no_expiry") == "on":
+        return fallback
     raw = str(form.get("expires_at") or "").strip()
     if not raw:
         return fallback
@@ -193,6 +195,7 @@ def _configuration_from_form(
     device_limit = int(
         str(form.get("device_limit") or settings.hfl_share_default_device_limit)
     )
+    no_expiry = form.get("no_expiry") == "on"
     return ShareConfiguration(
         id=str(form.get("configuration_id") or ""),
         name=str(form.get("name") or "").strip() or ("Preview" if preview else ""),
@@ -211,6 +214,7 @@ def _configuration_from_form(
         allowed_email=str(form.get("allowed_email") or "").strip(),
         references_enabled=form.get("references_enabled") == "on",
         ttl_seconds=_expiration_seconds(form, existing),
+        no_expiry=no_expiry,
         device_limit=device_limit,
         single_use=form.get("single_use") == "on",
         created_at=existing.created_at if existing else "",
@@ -312,7 +316,11 @@ def _owner_context(
         configurations=tuple(
             {
                 "configuration": item,
-                "expiration_summary": _duration_summary(item.ttl_seconds),
+                "expiration_summary": (
+                    "No expiry"
+                    if item.no_expiry
+                    else _duration_summary(item.ttl_seconds)
+                ),
             }
             for item in configuration_page_items
         ),
@@ -324,7 +332,7 @@ def _owner_context(
                     if share.status == "revoked"
                     else "expired" if share.expired else share.status
                 ),
-                "expires_at_display": _format_utc(share.expires_at),
+                "expires_at_display": _expiry_display(share),
             }
             for share in share_page_items
         ),
@@ -593,6 +601,7 @@ async def generate_share(request: Request):
             allowed_email=configuration.allowed_email,
             snapshot=snapshot,
             ttl_seconds=configuration.ttl_seconds,
+            no_expiry=configuration.no_expiry,
             single_use=configuration.single_use,
             device_limit=configuration.device_limit,
         )
@@ -601,7 +610,7 @@ async def generate_share(request: Request):
             "link": link,
             "pin": pin,
             "qr": qr,
-            "expires_at_display": _format_utc(grant.expires_at),
+            "expires_at_display": _expiry_display(grant),
             "share_recipient": grant.snapshot.recipient,
         }
         record_share_audit(event="created", share_id=grant.id)
@@ -775,7 +784,7 @@ async def share_access(request: Request, token: str):
             "grant": grant,
             "token": token,
             "error": "",
-            "expires_at_display": _format_utc(grant.expires_at),
+            "expires_at_display": _expiry_display(grant),
             "share_recipient": grant.snapshot.recipient,
         },
     )
@@ -805,7 +814,7 @@ async def redeem_share(request: Request, token: str):
                     "grant": grant,
                     "token": token,
                     "error": "The access details were not accepted.",
-                    "expires_at_display": _format_utc(grant.expires_at),
+                    "expires_at_display": _expiry_display(grant),
                     "share_recipient": grant.snapshot.recipient,
                 },
                 status_code=403,
@@ -941,6 +950,10 @@ def _format_utc(value: str) -> str:
         f"{parsed.strftime('%B')} {parsed.day:02d}, {parsed.year} "
         f"{parsed.strftime('%I:%M %p').lstrip('0')} UTC"
     )
+
+
+def _expiry_display(grant) -> str:
+    return "No expiry" if grant.no_expiry else _format_utc(grant.expires_at)
 
 
 def _duration_summary(seconds: int) -> str:
@@ -1085,7 +1098,7 @@ def _guest_context(
         "messages": messages,
         "error": error,
         "suggested_prompts": suggested_prompts(grant.snapshot),
-        "expires_at_display": _format_utc(grant.expires_at),
+        "expires_at_display": _expiry_display(grant),
         "recipient": recipient,
         "recipient_initial": recipient[0].upper(),
         "share_recipient": grant.snapshot.recipient.strip(),
