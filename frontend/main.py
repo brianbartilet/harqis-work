@@ -22,6 +22,7 @@ from typing import Optional
 import hmac
 import logging
 import os
+import secrets
 import subprocess
 import sys
 
@@ -68,6 +69,7 @@ app.include_router(hfl_share_guest_router)
 # ── Security headers ──────────────────────────────────────────────────────────
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
+    request.state.csp_nonce = secrets.token_urlsafe(24)
     response = await call_next(request)
     response.headers["X-Frame-Options"]        = "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -78,6 +80,7 @@ async def add_security_headers(request: Request, call_next):
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; img-src 'self' data:; "
+            f"script-src 'self' 'nonce-{request.state.csp_nonce}'; "
             "style-src 'self' 'unsafe-inline'; form-action 'self'; "
             "frame-ancestors 'none'; base-uri 'none'"
         )

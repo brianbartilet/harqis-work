@@ -827,6 +827,13 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
     assert "data-drawer-toggle" in second.text
     assert 'id="shared-moments-drawer" type="checkbox"' in second.text
     assert 'for="shared-moments-drawer"' in second.text
+    assert 'class="drawer-close" type="button"' in second.text
+    assert "event.stopPropagation();" in second.text
+    assert "drawerState.checked = !isCompact();" in second.text
+    csp = second.headers["content-security-policy"]
+    nonce = re.search(r"script-src 'self' 'nonce-([^']+)'", csp)
+    assert nonce
+    assert f'<script nonce="{nonce.group(1)}">' in second.text
     assert "--drawer-width:clamp(300px,25vw,480px)" in second.text
     assert ".drawer-head { display:flex; height:74px; min-height:74px; flex:0 0 74px;" in second.text
     assert ".workspace-header { display:flex; width:100%; min-width:0; max-width:100%; height:74px; min-height:74px;" in second.text
@@ -883,6 +890,22 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
         isolated = other.get("/share/session")
         assert isolated.status_code == 200
         assert "What is Brian working on?" not in isolated.text
+
+
+def test_answer_html_links_natural_phrases_to_cited_entries():
+    from modules.hfl_shares.router import _answer_html
+
+    rendered = _answer_html(
+        "Brian shipped [[the corpus sharing portal|S1]] in July.",
+        {1: 3},
+    )
+
+    assert (
+        '<a href="/share/session?page=3#evidence-1">'
+        "the corpus sharing portal</a>"
+    ) in rendered
+    assert "[See entry]" not in rendered
+    assert "[S1]" not in rendered
 
 
 def test_guest_entries_use_literal_search_ten_item_pages_and_readable_dates(

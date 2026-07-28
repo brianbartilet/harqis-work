@@ -19,7 +19,7 @@
         <p class="eyebrow">Browse the source material</p>
         <h2>Moments worth exploring</h2>
       </div>
-      <label class="drawer-close" for="shared-moments-drawer" role="button" tabindex="0" data-drawer-close aria-label="Close moments drawer">×</label>
+      <button class="drawer-close" type="button" data-drawer-close aria-label="Close moments drawer">×</button>
     </header>
     <form class="drawer-search" method="get" action="{% if owner_preview %}/sharing/shares/{{ grant.id }}/preview{% else %}/share/session{% endif %}" data-live-search>
       <label for="search">Search these moments</label>
@@ -99,7 +99,7 @@
   </div>
 </div>
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 (() => {
   const workspace = document.querySelector('[data-workspace]');
   const drawerState = document.querySelector('[data-drawer-state]');
@@ -126,13 +126,17 @@
     drawerToggle?.setAttribute('aria-expanded', String(open));
   };
   drawerState?.addEventListener('change', syncDrawer);
-  [drawerToggle, drawerClose].forEach(control => {
-    control?.addEventListener('keydown', event => {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
-      event.preventDefault();
-      drawerState.checked = !drawerState.checked;
-      syncDrawer();
-    });
+  drawerToggle?.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    drawerState.checked = !drawerState.checked;
+    syncDrawer();
+  });
+  drawerClose?.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    drawerState.checked = !isCompact();
+    syncDrawer();
   });
   window.addEventListener('resize', syncDrawer);
 

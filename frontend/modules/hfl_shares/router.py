@@ -896,6 +896,7 @@ _PUBLIC_ENTRY_DROP = re.compile(
     r"^\s*(?:#{1,6}\s+|Source\s*:|Tags\s*:)",
     re.IGNORECASE,
 )
+_NATURAL_EVIDENCE = re.compile(r"\[\[([^\]\n|]{1,160})\|S(\d+)\]\]")
 _EVIDENCE = re.compile(r"\[S(\d+)\]")
 _GUEST_PAGE_SIZE = 10
 
@@ -952,18 +953,28 @@ def _answer_html(
 ):
     pages = citation_pages or {}
 
-    def evidence_link(match: re.Match[str]) -> str:
-        citation = int(match.group(1))
+    def evidence_target(citation: int) -> str:
         page = pages.get(
             citation,
             math.ceil(citation / _GUEST_PAGE_SIZE),
         )
+        return f"{evidence_base}?page={page}#evidence-{citation}"
+
+    def natural_evidence_link(match: re.Match[str]) -> str:
+        phrase = match.group(1).strip()
+        citation = int(match.group(2))
+        escaped_phrase = phrase.replace("\\", "\\\\").replace("[", r"\[")
+        return f"[{escaped_phrase}]({evidence_target(citation)})"
+
+    def fallback_evidence_link(match: re.Match[str]) -> str:
+        citation = int(match.group(1))
         return (
             r" [\[See entry\]]"
-            f"({evidence_base}?page={page}#evidence-{citation})"
+            f"({evidence_target(citation)})"
         )
 
-    linked = _EVIDENCE.sub(evidence_link, content)
+    linked = _NATURAL_EVIDENCE.sub(natural_evidence_link, content)
+    linked = _EVIDENCE.sub(fallback_evidence_link, linked)
     return render_markdown(linked)
 
 
