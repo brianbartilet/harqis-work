@@ -145,6 +145,21 @@
   </section>
 </dialog>
 
+<dialog class="file-viewer-dialog" data-file-viewer-dialog aria-labelledby="file-viewer-title">
+  <section class="file-viewer-card">
+    <header class="file-viewer-head">
+      <h2 id="file-viewer-title" data-file-viewer-title>File preview</h2>
+      <div class="file-viewer-actions">
+        <a class="button button-secondary file-viewer-download" href="#" data-file-viewer-download>Download original</a>
+        <button class="file-viewer-close" type="button" data-file-viewer-close aria-label="Close file viewer">×</button>
+      </div>
+    </header>
+    <div class="file-viewer-body" data-file-viewer-body>
+      <p class="file-viewer-loading">Choose a file to preview.</p>
+    </div>
+  </section>
+</dialog>
+
 <script nonce="{{ request.state.csp_nonce }}">
 (() => {
   const workspace = document.querySelector('[data-workspace]');
@@ -166,6 +181,11 @@
   const manifestoDialog = document.querySelector('[data-manifesto-dialog]');
   const manifestoBody = document.querySelector('[data-manifesto-body]');
   const manifestoClose = document.querySelector('[data-manifesto-close]');
+  const fileViewerDialog = document.querySelector('[data-file-viewer-dialog]');
+  const fileViewerTitle = document.querySelector('[data-file-viewer-title]');
+  const fileViewerBody = document.querySelector('[data-file-viewer-body]');
+  const fileViewerDownload = document.querySelector('[data-file-viewer-download]');
+  const fileViewerClose = document.querySelector('[data-file-viewer-close]');
   let manifestoLoaded = false;
   let pending = false;
 
@@ -227,6 +247,90 @@
   manifestoDialog?.addEventListener('click', event => {
     if (event.target === manifestoDialog) manifestoDialog.close();
   });
+
+  const clearFileViewer = () => {
+    const video = fileViewerBody?.querySelector('video');
+    if (video) {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+    }
+    if (fileViewerBody) fileViewerBody.replaceChildren();
+  };
+  const closeFileViewer = () => fileViewerDialog?.close();
+  fileViewerClose?.addEventListener('click', closeFileViewer);
+  fileViewerDialog?.addEventListener('click', event => {
+    if (event.target === fileViewerDialog) closeFileViewer();
+  });
+  fileViewerDialog?.addEventListener('close', clearFileViewer);
+  const showFileViewerError = () => {
+    if (!fileViewerDialog?.open) return;
+    const message = document.createElement('p');
+    message.className = 'notice error';
+    message.textContent =
+      'The preview could not be displayed. You can still download the original.';
+    fileViewerBody.replaceChildren(message);
+  };
+  const openFileViewer = async trigger => {
+    if (
+      !fileViewerDialog ||
+      !fileViewerBody ||
+      fileViewerDialog.open
+    ) return;
+    const kind = trigger.dataset.previewKind;
+    fileViewerTitle.textContent = trigger.dataset.previewLabel || 'File preview';
+    fileViewerDownload.href = trigger.dataset.downloadUrl;
+    const loading = document.createElement('p');
+    loading.className = 'file-viewer-loading';
+    loading.setAttribute('role', 'status');
+    loading.textContent = 'Loading preview…';
+    fileViewerBody.replaceChildren(loading);
+    fileViewerDialog.showModal();
+    fileViewerClose?.focus();
+    try {
+      const response = await fetch(trigger.dataset.previewUrl, {
+        headers:{'Accept':'text/html'},
+        cache:'no-store',
+      });
+      if (!response.ok) throw new Error('This file could not be previewed safely.');
+      if (kind === 'image') {
+        const image = document.createElement('img');
+        image.className = 'file-viewer-media';
+        image.alt = trigger.dataset.previewLabel || 'Shared image';
+        image.addEventListener('error', showFileViewerError, {once:true});
+        image.src = trigger.dataset.mediaUrl;
+        fileViewerBody.replaceChildren(image);
+      } else if (kind === 'video') {
+        const video = document.createElement('video');
+        video.className = 'file-viewer-media';
+        video.controls = true;
+        video.autoplay = true;
+        video.playsInline = true;
+        video.preload = 'metadata';
+        video.addEventListener('error', showFileViewerError, {once:true});
+        video.src = trigger.dataset.mediaUrl;
+        fileViewerBody.replaceChildren(video);
+        video.play().catch(() => {});
+      } else {
+        fileViewerBody.innerHTML = await response.text();
+      }
+    } catch (error) {
+      const message = document.createElement('p');
+      message.className = 'notice error';
+      message.textContent = error.message;
+      fileViewerBody.replaceChildren(message);
+    }
+  };
+  document.addEventListener('click', event => {
+    const trigger = event.target.closest('[data-reference-preview]');
+    if (!trigger) return;
+    event.preventDefault();
+    openFileViewer(trigger);
+  });
+  document.addEventListener('error', event => {
+    const thumbnail = event.target.closest?.('.reference-thumbnail img');
+    if (thumbnail) thumbnail.hidden = true;
+  }, true);
 
   const showWait = message => {
     if (!overlay) return;

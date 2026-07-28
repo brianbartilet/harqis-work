@@ -84,6 +84,7 @@ async def add_security_headers(request: Request, call_next):
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; img-src 'self' data:; "
+            "media-src 'self'; "
             f"script-src 'self' 'nonce-{request.state.csp_nonce}'; "
             "style-src 'self' 'unsafe-inline'; form-action 'self'; "
             "frame-ancestors 'none'; base-uri 'none'"

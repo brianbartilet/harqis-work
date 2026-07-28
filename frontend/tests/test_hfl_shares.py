@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -54,6 +55,59 @@ def _document(tmp_path: Path, *, source: str = "notes") -> CorpusDocument:
         text=text,
         created_at=datetime(2026, 7, 10),
         updated_at=datetime(2026, 7, 10),
+        tags=entry.tags,
+        references=(),
+        excerpt=text,
+        entry_count=1,
+        entries=(entry,),
+    )
+
+
+def _viewer_document(tmp_path: Path) -> CorpusDocument:
+    source_file = tmp_path / "2026-07-28.md"
+    source_file.write_text("corpus", encoding="utf-8")
+    attachments = {
+        "photo.png": base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0l"
+            "EQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        ),
+        "clip.mp4": b"\x00\x00\x00\x18ftypisom\x00\x00\x00\x00isompreview-video",
+        "notes.txt": b"<script>alert('no')</script>\nplain notes",
+        "readme.md": b"# Shared notes\n\n<script>alert('no')</script>\n**Safe**",
+        "archive.pdf": b"%PDF-1.4 download only",
+    }
+    paths: list[Path] = []
+    for name, content in attachments.items():
+        path = tmp_path / name
+        path.write_bytes(content)
+        paths.append(path)
+    references = "\n".join(f"                 - {path}" for path in paths)
+    text = (
+        "## 2026-07-28 09:30\n"
+        "Source:          notes\n"
+        "Entry ID:        hfl-viewer-test\n"
+        "Moment:          Collected viewer examples\n"
+        "What happened:   Added several attachment types\n"
+        "Tags:            #viewer\n"
+        "References:\n"
+        f"{references}\n"
+    )
+    entry = CorpusEntry(
+        anchor="hfl-entry-viewer-test",
+        header="2026-07-28 09:30",
+        moment="Collected viewer examples",
+        what_happened="Added several attachment types",
+        tags=("viewer",),
+        source="notes",
+        text=text,
+    )
+    return CorpusDocument(
+        relative_path=source_file.name,
+        path=source_file,
+        name=source_file.name,
+        text=text,
+        created_at=datetime(2026, 7, 28),
+        updated_at=datetime(2026, 7, 28),
         tags=entry.tags,
         references=(),
         excerpt=text,
@@ -1737,3 +1791,189 @@ def test_invalid_proxied_public_url_does_not_create_an_orphan_share(
     assert response.status_code == 422
     assert "must be an HTTPS URL" in response.text
     assert get_share_store().list_shares() == []
+
+
+def test_share_viewer_classifies_allowlisted_content_and_rejects_spoofing(
+    tmp_path,
+):
+    from modules.hfl_shares.viewer import classify_preview
+
+    fixtures = {
+        "photo.png": (b"\x89PNG\r\n\x1a\nimage", "image"),
+        "photo.jpg": (b"\xff\xd8\xff\xe0image", "image"),
+        "clip.mp4": (b"\x00\x00\x00\x18ftypisom\x00\x00\x00\x00isom", "video"),
+        "clip.webm": (b"\x1aE\xdf\xa3video", "video"),
+        "notes.txt": (b"plain text", "text"),
+        "data.json": (b'{"safe": true}', "text"),
+        "readme.md": (b"# Safe markdown", "markdown"),
+    }
+    for name, (content, expected_kind) in fixtures.items():
+        path = tmp_path / name
+        path.write_bytes(content)
+        preview = classify_preview(path)
+        assert preview
+        assert preview.kind == expected_kind
+
+    spoofed = tmp_path / "spoofed.jpg"
+    spoofed.write_text("<script>alert(1)</script>", encoding="utf-8")
+    svg = tmp_path / "active.svg"
+    svg.write_text("<svg><script>alert(1)</script></svg>", encoding="utf-8")
+    assert classify_preview(spoofed) is None
+    assert classify_preview(svg) is None
+
+
+def test_share_viewer_renders_controls_previews_ranges_and_owner_urls(
+    authenticated_client,
+    monkeypatch,
+    tmp_path,
+):
+    from modules.hfl_shares import router, scope
+
+    document = _viewer_document(tmp_path)
+    monkeypatch.setattr(
+        router.corpus_index,
+        "documents",
+        lambda force=False: (document,),
+    )
+    monkeypatch.setattr(scope, "resolve_corpus_root", lambda: tmp_path)
+    monkeypatch.setattr(router, "resolve_corpus_root", lambda: tmp_path)
+    audit_events: list[str] = []
+    monkeypatch.setattr(
+        router,
+        "record_share_audit",
+        lambda **kwargs: audit_events.append(kwargs["event"]),
+    )
+
+    generated = authenticated_client.post(
+        "/sharing/generate",
+        data=_form(tags="", references_enabled="on"),
+    )
+    token, pin = _generated_credentials(generated.text)
+    redeemed = authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        data={"pin": pin},
+        follow_redirects=False,
+    )
+    assert redeemed.status_code == 303
+
+    grant = get_share_store().list_shares()[0]
+    references = {
+        reference.label: reference
+        for entry in grant.snapshot.entries
+        for reference in entry.references
+    }
+    portal = authenticated_client.get("/share/session")
+    assert portal.status_code == 200
+    assert 'data-preview-kind="image"' in portal.text
+    assert 'data-preview-kind="video"' in portal.text
+    assert 'data-preview-kind="text"' in portal.text
+    assert 'data-preview-kind="markdown"' in portal.text
+    assert "archive.pdf" in portal.text
+    assert "file-viewer-dialog" in portal.text
+    assert "loading=\"lazy\"" in portal.text
+
+    text_reference = references["notes.txt"]
+    text_preview = authenticated_client.get(
+        f"/share/session/references/{text_reference.id}/preview"
+    )
+    assert text_preview.status_code == 200
+    assert "&lt;script&gt;" in text_preview.text
+    assert "<script>" not in text_preview.text
+
+    markdown_reference = references["readme.md"]
+    markdown_preview = authenticated_client.get(
+        f"/share/session/references/{markdown_reference.id}/preview"
+    )
+    assert markdown_preview.status_code == 200
+    assert "<h1" in markdown_preview.text
+    assert "<strong>Safe</strong>" in markdown_preview.text
+    assert "<script>" not in markdown_preview.text
+
+    video_reference = references["clip.mp4"]
+    video_open = authenticated_client.get(
+        f"/share/session/references/{video_reference.id}/preview"
+    )
+    ranged = authenticated_client.get(
+        f"/share/session/references/{video_reference.id}/media",
+        headers={"Range": "bytes=4-11"},
+    )
+    assert video_open.status_code == 204
+    assert ranged.status_code == 206
+    assert ranged.content == (tmp_path / "clip.mp4").read_bytes()[4:12]
+    assert ranged.headers["content-range"].startswith("bytes 4-11/")
+    assert ranged.headers["accept-ranges"] == "bytes"
+
+    image_reference = references["photo.png"]
+    thumbnail = authenticated_client.get(
+        f"/share/session/references/{image_reference.id}/thumbnail"
+    )
+    assert thumbnail.status_code == 200
+    assert thumbnail.headers["content-type"] == "image/jpeg"
+    owner = authenticated_client.get(f"/sharing/shares/{grant.id}/preview")
+    assert owner.status_code == 200
+    assert (
+        f"/sharing/shares/{grant.id}/preview/references/"
+        f"{image_reference.id}/media"
+        in owner.text
+    )
+    owner_media = authenticated_client.get(
+        f"/sharing/shares/{grant.id}/preview/references/"
+        f"{image_reference.id}/media"
+    )
+    assert owner_media.status_code == 200
+    assert owner_media.headers["content-type"] == "image/png"
+
+    pdf_reference = references["archive.pdf"]
+    downloaded = authenticated_client.get(
+        f"/share/session/references/{pdf_reference.id}"
+    )
+    assert downloaded.status_code == 200
+    assert "reference-previewed" in audit_events
+    assert "reference-downloaded" in audit_events
+
+
+def test_share_viewer_rejects_invalid_ranges_and_disabled_references(
+    authenticated_client,
+    monkeypatch,
+    tmp_path,
+):
+    from modules.hfl_shares import router, scope
+
+    document = _viewer_document(tmp_path)
+    monkeypatch.setattr(
+        router.corpus_index,
+        "documents",
+        lambda force=False: (document,),
+    )
+    monkeypatch.setattr(scope, "resolve_corpus_root", lambda: tmp_path)
+    monkeypatch.setattr(router, "resolve_corpus_root", lambda: tmp_path)
+    monkeypatch.setattr(router, "record_share_audit", lambda **kwargs: None)
+    generated = authenticated_client.post(
+        "/sharing/generate",
+        data=_form(tags="", references_enabled="on"),
+    )
+    token, pin = _generated_credentials(generated.text)
+    authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        data={"pin": pin},
+        follow_redirects=False,
+    )
+    grant = get_share_store().list_shares()[0]
+    video = next(
+        reference
+        for entry in grant.snapshot.entries
+        for reference in entry.references
+        if reference.label == "clip.mp4"
+    )
+
+    invalid = authenticated_client.get(
+        f"/share/session/references/{video.id}/media",
+        headers={"Range": "bytes=99999-100000"},
+    )
+    assert invalid.status_code == 416
+    assert invalid.headers["content-range"].startswith("bytes */")
+
+    unavailable = authenticated_client.get(
+        "/share/session/references/not-enabled/preview"
+    )
+    assert unavailable.status_code == 404

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import hmac
 import json
 import math
@@ -20,6 +21,7 @@ from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
     RedirectResponse,
+    StreamingResponse,
 )
 
 from config import get_settings
@@ -59,6 +61,11 @@ from modules.hfl_shares.security import (
     verify_pin,
 )
 from modules.hfl_shares.store import get_share_store
+from modules.hfl_shares.viewer import (
+    classify_preview,
+    read_preview_text,
+    thumbnail_path,
+)
 from services.markdown import render_markdown
 from services.safe_paths import allowed_reference_roots, is_within_roots
 from web import page_context, require_user, templates
@@ -1119,6 +1126,38 @@ def _entry_html(entry):
     return render_markdown(format_hfl_markdown(public_text))
 
 
+def _reference_views(entry, *, base_url: str) -> dict[str, dict[str, str]]:
+    views: dict[str, dict[str, str]] = {}
+    for reference in entry.references:
+        if not reference.enabled:
+            continue
+        download_url = f"{base_url}/{reference.id}"
+        view = {
+            "kind": "",
+            "download_url": download_url,
+            "preview_url": "",
+            "media_url": "",
+            "thumbnail_url": "",
+        }
+        if reference.kind != "external":
+            preview = classify_preview(Path(reference.target))
+            if preview:
+                view.update(
+                    {
+                        "kind": preview.kind,
+                        "preview_url": f"{download_url}/preview",
+                        "media_url": f"{download_url}/media",
+                        "thumbnail_url": (
+                            f"{download_url}/thumbnail"
+                            if preview.kind in {"image", "video"}
+                            else ""
+                        ),
+                    }
+                )
+        views[reference.id] = view
+    return views
+
+
 def _citation_pages(grant) -> dict[int, int]:
     return {
         int(entry.citation[1:]): math.ceil(index / _GUEST_PAGE_SIZE)
@@ -1249,6 +1288,11 @@ def _guest_context(
         for message in store.list_chat_messages(session_id, grant.id)
     ]
     recipient = grant.snapshot.recipient.strip() or "there"
+    reference_base = (
+        f"/sharing/shares/{grant.id}/preview/references"
+        if owner_preview
+        else "/share/session/references"
+    )
     return {
         "request": request,
         "grant": grant,
@@ -1256,6 +1300,10 @@ def _guest_context(
             {
                 "entry": entry,
                 "html": _entry_html(entry),
+                "reference_views": _reference_views(
+                    entry,
+                    base_url=reference_base,
+                ),
             }
             for entry in matches[start : start + _GUEST_PAGE_SIZE]
         ),
@@ -1416,12 +1464,8 @@ async def guest_chat(request: Request):
     )
 
 
-@guest_router.get("/session/references/{reference_id}")
-async def guest_reference(request: Request, reference_id: str):
-    grant = current_grant(request, get_share_store())
-    if not grant:
-        return _unavailable(request)
-    reference = next(
+def _enabled_reference(grant, reference_id: str):
+    return next(
         (
             reference
             for entry in grant.snapshot.entries
@@ -1430,8 +1474,29 @@ async def guest_reference(request: Request, reference_id: str):
         ),
         None,
     )
+
+
+def _preview_file(grant, reference_id: str):
+    reference = _enabled_reference(grant, reference_id)
+    if not reference or reference.kind == "external":
+        raise HTTPException(status_code=404, detail="Reference unavailable.")
+    path = Path(reference.target)
+    roots = allowed_reference_roots(resolve_corpus_root())
+    if not path.is_file() or not is_within_roots(path, roots):
+        raise HTTPException(status_code=404, detail="Reference unavailable.")
+    preview = classify_preview(path)
+    if not preview:
+        raise HTTPException(
+            status_code=415,
+            detail="This file is not available for inline preview.",
+        )
+    return reference, path, preview
+
+
+def _download_response(grant, reference_id: str):
+    reference = _enabled_reference(grant, reference_id)
     if not reference:
-        return _unavailable(request)
+        raise HTTPException(status_code=404, detail="Reference unavailable.")
     if reference.kind == "external":
         parsed = urlparse(reference.target)
         if (
@@ -1440,15 +1505,221 @@ async def guest_reference(request: Request, reference_id: str):
             or parsed.username
             or parsed.password
         ):
-            return _unavailable(request)
+            raise HTTPException(status_code=404, detail="Reference unavailable.")
         record_share_audit(event="reference-opened", share_id=grant.id)
         return RedirectResponse(reference.target, status_code=302)
     path = Path(reference.target)
     roots = allowed_reference_roots(resolve_corpus_root())
     if not path.is_file() or not is_within_roots(path, roots):
-        return _unavailable(request)
+        raise HTTPException(status_code=404, detail="Reference unavailable.")
     record_share_audit(event="reference-downloaded", share_id=grant.id)
     return FileResponse(path, filename=reference.label)
+
+
+def _preview_fragment(grant, reference_id: str) -> HTMLResponse:
+    _, path, preview = _preview_file(grant, reference_id)
+    if preview.kind in {"image", "video"}:
+        record_share_audit(event="reference-previewed", share_id=grant.id)
+        return HTMLResponse("", status_code=204, headers={"Cache-Control": "no-store"})
+    try:
+        source = read_preview_text(path)
+    except (OSError, UnicodeDecodeError, ValueError):
+        raise HTTPException(
+            status_code=422,
+            detail="This text file could not be safely displayed.",
+        ) from None
+    record_share_audit(event="reference-previewed", share_id=grant.id)
+    if preview.kind == "markdown":
+        content = f'<div class="viewer-document markdown-body">{render_markdown(source)}</div>'
+    else:
+        content = (
+            '<pre class="viewer-document viewer-plain-text">'
+            f"{html.escape(source)}"
+            "</pre>"
+        )
+    return HTMLResponse(
+        content,
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+def _byte_range(value: str, size: int) -> tuple[int, int] | None:
+    match = re.fullmatch(r"bytes=(\d*)-(\d*)", (value or "").strip())
+    if not match or size <= 0:
+        return None
+    start_text, end_text = match.groups()
+    if not start_text:
+        length = int(end_text or 0)
+        if length <= 0:
+            return None
+        return max(0, size - length), size - 1
+    start = int(start_text)
+    end = min(int(end_text), size - 1) if end_text else size - 1
+    if start >= size or end < start:
+        return None
+    return start, end
+
+
+def _file_chunks(path: Path, start: int, end: int):
+    remaining = end - start + 1
+    with path.open("rb") as handle:
+        handle.seek(start)
+        while remaining:
+            chunk = handle.read(min(1024 * 1024, remaining))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+            yield chunk
+
+
+def _media_response(
+    request: Request,
+    grant,
+    reference_id: str,
+):
+    reference, path, preview = _preview_file(grant, reference_id)
+    if preview.kind not in {"image", "video"}:
+        raise HTTPException(status_code=415, detail="This is not a media reference.")
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+    }
+    requested_range = request.headers.get("range", "")
+    parsed_range = _byte_range(requested_range, preview.size)
+    if requested_range and not parsed_range:
+        return HTMLResponse(
+            "",
+            status_code=416,
+            headers={
+                **headers,
+                "Content-Range": f"bytes */{preview.size}",
+            },
+        )
+    if parsed_range:
+        start, end = parsed_range
+        headers.update(
+            {
+                "Content-Range": f"bytes {start}-{end}/{preview.size}",
+                "Content-Length": str(end - start + 1),
+            }
+        )
+        return StreamingResponse(
+            _file_chunks(path, start, end),
+            status_code=206,
+            media_type=preview.media_type,
+            headers=headers,
+        )
+    headers["Content-Length"] = str(preview.size)
+    return FileResponse(
+        path,
+        filename=reference.label,
+        media_type=preview.media_type,
+        content_disposition_type="inline",
+        headers=headers,
+    )
+
+
+def _thumbnail_response(grant, reference_id: str):
+    _, path, preview = _preview_file(grant, reference_id)
+    if preview.kind not in {"image", "video"}:
+        raise HTTPException(status_code=415, detail="No thumbnail is available.")
+    thumbnail = thumbnail_path(path, preview)
+    if not thumbnail:
+        raise HTTPException(status_code=404, detail="Thumbnail unavailable.")
+    return FileResponse(
+        thumbnail,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "private, max-age=3600",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+def _owner_preview_grant(request: Request, share_id: str):
+    _, redirect = require_user(request)
+    if redirect:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    grant = get_share_store().get_share(share_id)
+    if not grant or not grant.available:
+        raise HTTPException(status_code=404, detail="Active share not found.")
+    return grant
+
+
+@owner_router.get("/shares/{share_id}/preview/references/{reference_id}")
+def owner_preview_reference(
+    request: Request,
+    share_id: str,
+    reference_id: str,
+):
+    return _download_response(_owner_preview_grant(request, share_id), reference_id)
+
+
+@owner_router.get("/shares/{share_id}/preview/references/{reference_id}/preview")
+def owner_preview_reference_text(
+    request: Request,
+    share_id: str,
+    reference_id: str,
+):
+    return _preview_fragment(_owner_preview_grant(request, share_id), reference_id)
+
+
+@owner_router.get("/shares/{share_id}/preview/references/{reference_id}/media")
+def owner_preview_reference_media(
+    request: Request,
+    share_id: str,
+    reference_id: str,
+):
+    return _media_response(
+        request,
+        _owner_preview_grant(request, share_id),
+        reference_id,
+    )
+
+
+@owner_router.get("/shares/{share_id}/preview/references/{reference_id}/thumbnail")
+def owner_preview_reference_thumbnail(
+    request: Request,
+    share_id: str,
+    reference_id: str,
+):
+    return _thumbnail_response(
+        _owner_preview_grant(request, share_id),
+        reference_id,
+    )
+
+
+@guest_router.get("/session/references/{reference_id}")
+def guest_reference(request: Request, reference_id: str):
+    grant = current_grant(request, get_share_store())
+    if not grant:
+        return _unavailable(request)
+    return _download_response(grant, reference_id)
+
+
+@guest_router.get("/session/references/{reference_id}/preview")
+def guest_reference_text(request: Request, reference_id: str):
+    grant = current_grant(request, get_share_store())
+    if not grant:
+        raise HTTPException(status_code=404, detail="Reference unavailable.")
+    return _preview_fragment(grant, reference_id)
+
+
+@guest_router.get("/session/references/{reference_id}/media")
+def guest_reference_media(request: Request, reference_id: str):
+    grant = current_grant(request, get_share_store())
+    if not grant:
+        raise HTTPException(status_code=404, detail="Reference unavailable.")
+    return _media_response(request, grant, reference_id)
+
+
+@guest_router.get("/session/references/{reference_id}/thumbnail")
+def guest_reference_thumbnail(request: Request, reference_id: str):
+    grant = current_grant(request, get_share_store())
+    if not grant:
+        raise HTTPException(status_code=404, detail="Reference unavailable.")
+    return _thumbnail_response(grant, reference_id)
 
 
 @guest_router.post("/session/logout")

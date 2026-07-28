@@ -132,6 +132,29 @@
     .entry-references strong { font-size:.7rem; }
     .reference-links { display:flex; flex-direction:column; align-items:flex-start; gap:6px; margin-top:6px; }
     .reference-links a { display:block; width:100%; border-radius:7px; background:#082f49; padding:6px 8px; text-decoration:none; }
+    .reference-preview { display:grid; width:100%; min-width:0; grid-template-columns:72px minmax(0,1fr); grid-template-rows:auto auto; gap:2px 9px; border:1px solid #164e63; border-radius:9px; background:#082f49; color:#e0f2fe; padding:6px; text-align:left; }
+    .reference-preview:hover { border-color:#0ea5e9; background:#0c4a6e; }
+    .reference-preview:not(:has(.reference-thumbnail)) { grid-template-columns:minmax(0,1fr); padding:8px 9px; }
+    .reference-thumbnail { position:relative; display:grid; width:72px; height:48px; grid-row:1 / 3; place-items:center; overflow:hidden; border-radius:6px; background:#020617; color:#64748b; }
+    .reference-thumbnail img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+    .reference-thumbnail-fallback { font-size:1rem; }
+    .reference-play { position:absolute; display:grid; width:25px; height:25px; place-items:center; border-radius:999px; background:rgba(2,6,23,.78); color:#f8fafc; font-size:.68rem; padding-left:2px; }
+    .reference-preview-label { min-width:0; overflow:hidden; align-self:end; font-size:.72rem; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+    .reference-preview-action { align-self:start; color:#7dd3fc; font-size:.62rem; }
+    .file-viewer-dialog { width:min(1080px,calc(100% - 28px)); height:min(88dvh,900px); max-height:calc(100dvh - 28px); margin:auto; overflow:hidden; border:1px solid #334155; border-radius:16px; background:#050b16; color:#e2e8f0; padding:0; box-shadow:0 28px 90px rgba(0,0,0,.74); }
+    .file-viewer-dialog::backdrop { background:rgba(2,6,23,.88); backdrop-filter:blur(4px); }
+    .file-viewer-card { display:grid; width:100%; height:100%; min-height:0; grid-template-rows:auto minmax(0,1fr); overflow:hidden; }
+    .file-viewer-head { display:flex; min-width:0; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid #1e293b; padding:12px 15px; }
+    .file-viewer-head h2 { min-width:0; overflow:hidden; margin:0; font-size:.95rem; text-overflow:ellipsis; white-space:nowrap; }
+    .file-viewer-actions { display:flex; flex:0 0 auto; align-items:center; gap:8px; }
+    .file-viewer-download { min-height:34px; padding:7px 10px; font-size:.72rem; }
+    .file-viewer-close { display:grid; width:36px; height:36px; flex:0 0 36px; place-items:center; border-radius:8px; background:#172033; color:#cbd5e1; padding:0; }
+    .file-viewer-body { display:grid; min-width:0; min-height:0; place-items:center; overflow:auto; overscroll-behavior:contain; padding:16px; }
+    .file-viewer-loading { color:#94a3b8; }
+    .file-viewer-media { display:block; width:auto; max-width:100%; height:auto; max-height:calc(88dvh - 92px); border-radius:8px; background:#020617; object-fit:contain; }
+    video.file-viewer-media { width:100%; }
+    .viewer-document { width:min(880px,100%); min-width:0; align-self:start; justify-self:center; }
+    .viewer-plain-text { box-sizing:border-box; min-height:100%; margin:0; overflow:visible; border-radius:8px; background:#0b1221; color:#dbeafe; padding:16px; font:500 .8rem/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; tab-size:4; white-space:pre-wrap; overflow-wrap:anywhere; }
     .entry-load-status { display:flex; align-items:center; justify-content:center; gap:8px; min-height:64px; color:#64748b; font-size:.7rem; text-align:center; }
     .entry-stream-end { margin:0; border-top:1px solid #1e293b; color:#475569; font-size:.68rem; padding:14px 4px; text-align:center; }
 
@@ -254,6 +277,17 @@
       .manifesto-dialog-head h2 { font-size:.86rem; }
       .manifesto-dialog-close { width:32px; height:32px; flex-basis:32px; }
       .manifesto-dialog-body { font-size:.78rem; line-height:1.5; padding:6px 12px 18px; }
+      .file-viewer-dialog { width:calc(100% - 10px); height:calc(100dvh - 10px); max-height:calc(100dvh - 10px); border-radius:11px; }
+      .file-viewer-head { align-items:flex-start; gap:7px; padding:9px 10px; }
+      .file-viewer-head h2 { align-self:center; font-size:.78rem; }
+      .file-viewer-actions { gap:5px; }
+      .file-viewer-download { min-height:34px; padding:7px 8px; font-size:.62rem; }
+      .file-viewer-close { width:34px; height:34px; flex-basis:34px; }
+      .file-viewer-body { padding:8px; }
+      .file-viewer-media { max-height:calc(100dvh - 76px); }
+      .viewer-plain-text { border-radius:6px; padding:11px; font-size:.7rem; }
+      .reference-preview { grid-template-columns:64px minmax(0,1fr); min-height:52px; }
+      .reference-thumbnail { width:64px; height:44px; }
       .manifesto-content h1 { margin:.65rem 0 .45rem; font-size:1.12rem; }
       .manifesto-content h2 { margin:.8rem 0 .35rem; font-size:.96rem; }
       .manifesto-content h3 { margin:.7rem 0 .3rem; font-size:.86rem; }
