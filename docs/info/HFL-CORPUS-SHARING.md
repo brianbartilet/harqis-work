@@ -56,10 +56,15 @@ HFL_SHARE_STORE_PATH=/Users/harqis-one/.harqis-data/hfl-shares.sqlite3
 HFL_SHARE_DEFAULT_TTL_SECONDS=3600
 HFL_SHARE_DEFAULT_DEVICE_LIMIT=1
 HFL_SHARE_PIN_MAX_ATTEMPTS=5
+HFL_SHARE_PROVIDER=anthropic
 HFL_SHARE_MODEL=claude-haiku-4-5-20251001
-HFL_SHARE_MAX_CONTEXT_CHARS=60000
-HFL_SHARE_MAX_SNAPSHOT_ENTRIES=1000
-HFL_SHARE_MAX_SNAPSHOT_CHARS=5000000
+HFL_SHARE_HERMES_BASE_URL=http://127.0.0.1:8643/v1
+HFL_SHARE_HERMES_API_KEY=<dedicated-server-side-bearer>
+HFL_SHARE_HERMES_MODEL=share-corpus
+HFL_SHARE_AGENT_TIMEOUT_SECONDS=90
+HFL_SHARE_MAX_OUTPUT_TOKENS=1200
+HFL_SHARE_MAX_CONTEXT_CHARS=120000
+HFL_SHARE_MAX_SNAPSHOT_CHARS=10000000
 HFL_SHARE_CHAT_LIMIT_PER_HOUR=30
 HFL_SHARE_TRUST_PROXY_IDENTITY=false
 ```
@@ -70,8 +75,84 @@ login session key. Back up the SQLite database with the same care as the HFL
 corpus: snapshots contain the guest-visible corpus text and enabled reference
 targets.
 
-The model uses the existing configured Anthropic provider. If it is
-unavailable, browsing continues and Q&A shows a generic temporary error.
+`HFL_SHARE_PROVIDER=anthropic` uses the existing configured Anthropic provider.
+`HFL_SHARE_PROVIDER=hermes` uses the dedicated loopback OpenAI-compatible
+Hermes endpoint. Provider failure never blocks snapshot browsing; Q&A returns a
+generic temporary error without exposing endpoint, credential, or upstream
+response details.
+
+`HFL_SHARE_MAX_CONTEXT_CHARS` bounds the ranked entry excerpt sent for each
+question, not the frozen snapshot itself. The 120,000-character default is
+roughly 30,000 tokens before system instructions and conversation history.
+Increasing it raises latency/quota use and can dilute relevance; whole-corpus
+questions still need iterative retrieval rather than one unbounded prompt.
+
+## Dedicated Hermes profile
+
+Never point public Share Corpus Q&A at the normal Hermes profile. The standard
+Hermes API server layers client instructions over its core agent and can expose
+memory, skills, files, and terminal tools. HARQIS calls Hermes server-side over
+loopback, but prompt injection still makes profile isolation mandatory.
+
+Preview the setup first:
+
+```bash
+python scripts/setup_hfl_share_hermes.py
+```
+
+Apply the locked-down profile and HARQIS environment:
+
+```bash
+python scripts/setup_hfl_share_hermes.py --apply
+python scripts/setup_hfl_share_hermes.py --login  # one-time, if requested
+python scripts/setup_hfl_share_hermes.py --start
+python scripts/setup_hfl_share_hermes.py --check
+```
+
+The script:
+
+- creates a fresh `sharecorpus` profile with `--no-skills`; `--apply` refuses
+  every existing profile rather than trusting or reusing unknown state;
+- configures OpenAI Codex `gpt-5.6-sol`, with no fallback provider;
+- disables long-term memory and user-profile injection;
+- sets `platform_toolsets.api_server: []` and no messaging platforms;
+- binds the API to literal `127.0.0.1:8643`, disables HTTP proxy inheritance,
+  rejects redirects on authenticated checks, and leaves browser CORS unset;
+- passes Hermes subprocesses only an allowlisted environment, excluding inherited
+  messaging, webhook, proxy, CORS, and platform credentials;
+- generates a dedicated API bearer and writes it only to private, gitignored
+  Hermes/HARQIS environment files with mode `0600`;
+- validates the full managed API environment, sensitive profile directories,
+  owner-only credential/profile permissions, OAuth's explicit `logged in`
+  status, and the exact `share-corpus` model alias;
+- uses a profile-scoped `--login` action that also honors custom `--hermes-home`;
+  and
+- installs/restarts the isolated profile gateway only after OAuth is ready,
+  then verifies `/v1/health`, the exact model alias, disabled live CORS, and an
+  empty effective toolset through authenticated API discovery without proxies.
+
+Follow-up commands printed after `--apply` preserve every custom profile, model,
+port, context, Hermes-home, and HARQIS-environment argument.
+
+Restart the HARQIS frontend after a successful `--start` so Pydantic reloads
+`.env/apps.env`. Guest questions consume the connected Codex account's quota.
+The backend assigns every inference a dedicated Hermes session ID and requests
+session deletion immediately after the completion so supplied snapshot text is
+not retained as normal profile history. Failed/interrupted runs remain isolated
+inside this dedicated profile and should be handled as local operational data.
+The integration is not an unlimited inference service; keep the durable per-share
+rate limit and confirm that delegated guest use complies with the provider's
+terms.
+
+Rollback without deleting the isolated profile:
+
+```env
+HFL_SHARE_PROVIDER=anthropic
+```
+
+Then restart the HARQIS frontend. Stop the isolated gateway with
+`hermes -p sharecorpus gateway stop` when it is no longer needed. Do not delete
+or copy profile credentials as part of routine rollback.
 
 ## Cloudflare tunnel policy
 
