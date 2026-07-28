@@ -1616,6 +1616,264 @@ def test_agent_context_ranks_question_relevant_entries_before_newer_noise(
     )
 
 
+def test_hermes_adapter_uses_loopback_openai_endpoint_and_server_side_key(
+    monkeypatch
+):
+    import asyncio
+    from types import SimpleNamespace
+
+    import modules.hfl_shares.agent as share_agent
+
+    captured = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": "Brian shipped [[the corpus portal|S1]]."
+                        }
+                    }
+                ]
+            }
+
+    class AsyncClient:
+        def __init__(self, *, timeout, trust_env, follow_redirects):
+            captured["timeout"] = timeout
+            captured["trust_env"] = trust_env
+            captured["follow_redirects"] = follow_redirects
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+        async def post(self, url, *, headers, json):
+            captured.update(url=url, headers=headers, json=json)
+            return Response()
+
+        async def delete(self, url, *, headers):
+            captured.update(delete_url=url, delete_headers=headers)
+            return Response()
+
+    monkeypatch.setattr(
+        share_agent,
+        "httpx",
+        SimpleNamespace(AsyncClient=AsyncClient),
+        raising=False,
+    )
+    settings = SimpleNamespace(
+        hfl_share_hermes_base_url="http://127.0.0.1:8643/v1/",
+        hfl_share_hermes_api_key="private-server-key",
+        hfl_share_hermes_model="share-corpus",
+        hfl_share_agent_timeout_seconds=75.0,
+        hfl_share_max_output_tokens=1600,
+    )
+
+    answer = asyncio.run(
+        getattr(share_agent, "_answer_with_hermes")(
+            system="System boundary",
+            user="Shared snapshot prompt",
+            settings=settings,
+        )
+    )
+
+    assert answer == "Brian shipped [[the corpus portal|S1]]."
+    assert captured["timeout"] == 75.0
+    assert captured["trust_env"] is False
+    assert captured["follow_redirects"] is False
+    assert captured["url"] == "http://127.0.0.1:8643/v1/chat/completions"
+    session_id = captured["headers"]["X-Hermes-Session-Id"]
+    assert session_id.startswith("sharecorpus-")
+    assert captured["headers"] == {
+        "Authorization": "Bearer private-server-key",
+        "Content-Type": "application/json",
+        "X-Hermes-Session-Id": session_id,
+    }
+    assert captured["json"] == {
+        "model": "share-corpus",
+        "messages": [
+            {"role": "system", "content": "System boundary"},
+            {"role": "user", "content": "Shared snapshot prompt"},
+        ],
+        "max_tokens": 1600,
+        "stream": False,
+    }
+    assert captured["delete_url"] == (
+        f"http://127.0.0.1:8643/api/sessions/{session_id}"
+    )
+    assert captured["delete_headers"] == {
+        "Authorization": "Bearer private-server-key"
+    }
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        {},
+        {"choices": []},
+        {"choices": [{"message": {"content": ""}}]},
+    ),
+)
+def test_hermes_response_parser_rejects_malformed_or_empty_content(payload):
+    import modules.hfl_shares.agent as share_agent
+
+    with pytest.raises(share_agent.AgentUnavailable):
+        share_agent._hermes_response_text(payload)
+
+
+def test_answer_question_routes_only_sanitized_prompt_to_hermes(tmp_path, monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    import modules.hfl_shares.agent as share_agent
+    from modules.hfl_shares import scope
+
+    document = _document(tmp_path)
+    monkeypatch.setattr(scope, "resolve_corpus_root", lambda: tmp_path)
+    snapshot = build_snapshot(_configuration(), (document,))
+    captured = {}
+
+    async def answer_with_hermes(*, system, user, settings):
+        captured.update(system=system, user=user, settings=settings)
+        return "Brian shipped [[the corpus portal|S1]]."
+
+    settings = SimpleNamespace(
+        hfl_share_provider="hermes",
+        hfl_share_max_context_chars=120_000,
+    )
+    monkeypatch.setattr(share_agent, "get_settings", lambda: settings)
+    monkeypatch.setattr(share_agent, "_answer_with_hermes", answer_with_hermes)
+
+    result = asyncio.run(
+        share_agent.answer_question(snapshot, "What did Brian ship?")
+    )
+
+    assert result == "Brian shipped [[the corpus portal|S1]]."
+    assert captured["settings"] is settings
+    assert "read-only HARQIS Activity Corpus" in captured["system"]
+    assert "<shared_context>" in captured["user"]
+    assert "What did Brian ship?" in captured["user"]
+
+
+def test_answer_question_redacts_provider_failure_details(
+    tmp_path, monkeypatch, caplog
+):
+    import asyncio
+    import logging
+    from types import SimpleNamespace
+
+    import modules.hfl_shares.agent as share_agent
+    from modules.hfl_shares import scope
+
+    document = _document(tmp_path)
+    monkeypatch.setattr(scope, "resolve_corpus_root", lambda: tmp_path)
+    snapshot = build_snapshot(_configuration(), (document,))
+
+    async def failed_provider(**kwargs):
+        raise RuntimeError("upstream leaked private-server-key")
+
+    monkeypatch.setattr(
+        share_agent,
+        "get_settings",
+        lambda: SimpleNamespace(
+            hfl_share_provider="hermes",
+            hfl_share_max_context_chars=120_000,
+        ),
+    )
+    monkeypatch.setattr(share_agent, "_answer_with_hermes", failed_provider)
+
+    with caplog.at_level(logging.WARNING), pytest.raises(
+        share_agent.AgentUnavailable,
+        match="The sharing agent is temporarily unavailable",
+    ):
+        asyncio.run(share_agent.answer_question(snapshot, "What did Brian ship?"))
+
+    assert "private-server-key" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    (
+        "https://public.example/v1",
+        "http://localhost:8643/v1",
+        "http://127.0.0.1:8643/not-v1",
+    ),
+)
+def test_hermes_adapter_rejects_non_literal_loopback_before_network(
+    monkeypatch, endpoint
+):
+    import asyncio
+    from types import SimpleNamespace
+
+    import modules.hfl_shares.agent as share_agent
+
+    class UnexpectedClient:
+        def __init__(self, **kwargs):
+            raise AssertionError("network client must not be created")
+
+    monkeypatch.setattr(
+        share_agent,
+        "httpx",
+        SimpleNamespace(AsyncClient=UnexpectedClient),
+    )
+    settings = SimpleNamespace(
+        hfl_share_hermes_base_url=endpoint,
+        hfl_share_hermes_api_key="private-server-key",
+        hfl_share_hermes_model="share-corpus",
+        hfl_share_agent_timeout_seconds=75.0,
+        hfl_share_max_output_tokens=1600,
+    )
+
+    with pytest.raises(share_agent.AgentUnavailable):
+        asyncio.run(
+            share_agent._answer_with_hermes(
+                system="System boundary",
+                user="Shared snapshot prompt",
+                settings=settings,
+            )
+        )
+
+
+def test_hermes_adapter_rejects_missing_key_before_network(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    import modules.hfl_shares.agent as share_agent
+
+    class UnexpectedClient:
+        def __init__(self, **kwargs):
+            raise AssertionError("network client must not be created")
+
+    monkeypatch.setattr(
+        share_agent,
+        "httpx",
+        SimpleNamespace(AsyncClient=UnexpectedClient),
+    )
+    settings = SimpleNamespace(
+        hfl_share_hermes_base_url="http://127.0.0.1:8643/v1",
+        hfl_share_hermes_api_key="",
+        hfl_share_hermes_model="share-corpus",
+        hfl_share_agent_timeout_seconds=75.0,
+        hfl_share_max_output_tokens=1600,
+    )
+
+    with pytest.raises(share_agent.AgentUnavailable):
+        asyncio.run(
+            share_agent._answer_with_hermes(
+                system="System boundary",
+                user="Shared snapshot prompt",
+                settings=settings,
+            )
+        )
+
+
 def test_agent_answer_validation_rejects_uncited_and_unknown_claims(
     tmp_path, monkeypatch
 ):

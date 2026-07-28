@@ -5,6 +5,10 @@ from __future__ import annotations
 import html
 import logging
 import re
+import uuid
+from urllib.parse import quote, urlparse
+
+import httpx
 
 from config import get_settings
 from modules.hfl_shares.models import ScopeSnapshot
@@ -131,6 +135,77 @@ def _conversation(history: tuple[dict[str, str], ...]) -> str:
     return "\n".join(reversed(chunks))
 
 
+def _hermes_response_text(payload: object) -> str:
+    try:
+        content = payload["choices"][0]["message"]["content"]  # type: ignore[index]
+    except (KeyError, IndexError, TypeError):
+        raise AgentUnavailable(
+            "The sharing agent is temporarily unavailable."
+        ) from None
+    if not isinstance(content, str) or not content.strip():
+        raise AgentUnavailable("The sharing agent is temporarily unavailable.")
+    return content.strip()
+
+
+async def _answer_with_hermes(*, system: str, user: str, settings) -> str:
+    """Request raw inference from the dedicated loopback Hermes profile."""
+    base_url = settings.hfl_share_hermes_base_url.rstrip("/")
+    parsed = urlparse(base_url)
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname not in {"127.0.0.1", "::1"}
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+        or parsed.path.rstrip("/") != "/v1"
+        or not settings.hfl_share_hermes_api_key.strip()
+        or not settings.hfl_share_hermes_model.strip()
+    ):
+        raise AgentUnavailable("The sharing agent is temporarily unavailable.")
+    url = base_url + "/chat/completions"
+    session_id = f"sharecorpus-{uuid.uuid4().hex}"
+    headers = {
+        "Authorization": f"Bearer {settings.hfl_share_hermes_api_key}",
+        "Content-Type": "application/json",
+        "X-Hermes-Session-Id": session_id,
+    }
+    payload = {
+        "model": settings.hfl_share_hermes_model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "max_tokens": settings.hfl_share_max_output_tokens,
+        "stream": False,
+    }
+    cleanup_url = (
+        f"{parsed.scheme}://{parsed.netloc}/api/sessions/"
+        f"{quote(session_id, safe='')}"
+    )
+    async with httpx.AsyncClient(
+        timeout=settings.hfl_share_agent_timeout_seconds,
+        trust_env=False,
+        follow_redirects=False,
+    ) as client:
+        try:
+            response = await client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+        finally:
+            try:
+                cleanup_response = await client.delete(
+                    cleanup_url,
+                    headers={"Authorization": headers["Authorization"]},
+                )
+                cleanup_response.raise_for_status()
+            except Exception as exc:
+                logging.getLogger(__name__).warning(
+                    "Hermes Share session cleanup failed: %s",
+                    type(exc).__name__,
+                )
+    return _hermes_response_text(response.json())
+
+
 async def answer_question(
     snapshot: ScopeSnapshot,
     question: str,
@@ -183,23 +258,34 @@ source; factual claims must still be grounded in <shared_context>.
         f"<question>{html.escape(prompt[:2000])}</question>"
     )
     try:
-        from apps.antropic.config import get_config as get_anthropic_config
-        from apps.antropic.references.web.base_api_service import (
-            BaseApiServiceAnthropic,
-        )
+        settings = get_settings()
+        provider = settings.hfl_share_provider.strip().casefold()
+        if provider == "hermes":
+            text = await _answer_with_hermes(
+                system=system,
+                user=user,
+                settings=settings,
+            )
+        elif provider == "anthropic":
+            from apps.antropic.config import get_config as get_anthropic_config
+            from apps.antropic.references.web.base_api_service import (
+                BaseApiServiceAnthropic,
+            )
 
-        client = BaseApiServiceAnthropic(get_anthropic_config("ANTHROPIC"))
-        response = await client.send_message_async(
-            prompt=user,
-            system=system,
-            model=get_settings().hfl_share_model,
-            max_tokens=1200,
-        )
-        text = (
-            response.content[0].text.strip()
-            if response and getattr(response, "content", None)
-            else ""
-        )
+            client = BaseApiServiceAnthropic(get_anthropic_config("ANTHROPIC"))
+            response = await client.send_message_async(
+                prompt=user,
+                system=system,
+                model=settings.hfl_share_model,
+                max_tokens=settings.hfl_share_max_output_tokens,
+            )
+            text = (
+                response.content[0].text.strip()
+                if response and getattr(response, "content", None)
+                else ""
+            )
+        else:
+            raise AgentUnavailable("The sharing agent is temporarily unavailable.")
         if not text:
             raise AgentUnavailable("The sharing agent returned no answer.")
         return _validated_answer(text, snapshot)

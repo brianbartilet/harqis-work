@@ -16,6 +16,7 @@ Operational scripts for **harqis-work**, organised by purpose:
 |---|---|
 | [`launch.py`](#launchpy) | Single-process launcher — runs one daemon in the foreground (`worker`, `scheduler`, `flower`, `frontend`, `mcp`, `kanban`, `trigger-hud-tasks`, `push-config`, `serve-config`). |
 | [`deploy.py`](#deploypy) | Multi-daemon orchestrator — reads `machines.toml` from the repo root, brings the whole stack up/down, optionally registers OS auto-start units. |
+| [`setup_hfl_share_hermes.py`](#setup_hfl_share_hermespy) | Dry-run-first setup/check for a locked-down Hermes profile that serves Share Corpus Q&A through a connected Codex model. |
 | [`sync-to-host.ps1`](#sync-to-hostps1) | Push gitignored config (`.env/`, `frontend/.env`, `machines.local.toml`) to a remote checkout via `tar \| ssh`. Driven by the `[sync]` / `[ssh.*]` blocks in `machines.local.toml`. |
 | [`../machines.toml`](#machinestoml) | Per-machine topology (role, queue list, disabled services). Lives at the repo root so per-machine `machines.local.toml` overrides sit next to it. Auto-detected from hostname. |
 | [`tailscale/`](#tailscale) | Tailscale ACL policy. Unchanged. |
@@ -248,6 +249,37 @@ It reads the credential's `scopes` / `credentials` / `storage` from
 server, and writes a fresh token to the credential's storage file under `.env/`.
 The durable fix for recurrence is to set the OAuth consent screen to **In
 production** in the Google Cloud Console so refresh tokens stop expiring weekly.
+
+---
+
+## `setup_hfl_share_hermes.py`
+
+Configure Share Corpus Q&A to call an isolated Hermes API profile over loopback.
+The default invocation is a read-only preview. Apply mode creates only the
+`sharecorpus` profile (no clone, no skills), disables its tools and memory,
+generates a private API bearer, and synchronizes the matching gitignored HARQIS
+environment values without printing the bearer.
+
+```bash
+python scripts/setup_hfl_share_hermes.py          # dry-run plan
+python scripts/setup_hfl_share_hermes.py --apply  # create fresh profile + configure files
+python scripts/setup_hfl_share_hermes.py --login  # profile-scoped OAuth, if needed
+python scripts/setup_hfl_share_hermes.py --start  # install/start + health/model check
+python scripts/setup_hfl_share_hermes.py --check  # config, OAuth, /health, /models
+```
+
+`--profile`, `--model`, `--port`, `--context-chars`, `--hermes-home`, and
+`--harqis-env` support explicit non-default installations. `--login` carries the
+selected Hermes home into the OAuth command. The API remains bound to literal
+`127.0.0.1`, HTTP proxy inheritance and authenticated redirects are disabled,
+browser CORS is disabled, and Hermes
+subprocesses receive an allowlisted environment with no messaging/platform
+credentials. Apply is intentionally create-once and refuses every existing
+profile; use `--start` or `--check` after creation. Those checks fail closed on
+permission/ownership drift, extra advertised models, malformed toolset discovery,
+or enabled tools. Printed follow-up commands preserve custom paths and settings.
+Restart the HARQIS frontend after setup. See
+`docs/info/HFL-CORPUS-SHARING.md` for the security boundary and rollback procedure.
 
 ---
 
