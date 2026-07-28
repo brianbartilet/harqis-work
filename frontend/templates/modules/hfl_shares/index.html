@@ -100,7 +100,8 @@
   @keyframes social-progress { 0% { transform:translateX(-115%); } 100% { transform:translateX(340%); } }
   .instant-dialog { position:fixed; inset:0; z-index:110; display:grid; place-items:center; background:rgba(2,6,23,.9); padding:1rem; backdrop-filter:blur(8px); }
   .instant-dialog[hidden] { display:none; }
-  .instant-dialog-card { position:relative; width:min(28rem,100%); max-height:calc(100vh - 2rem); max-height:calc(100dvh - 2rem); overflow-y:auto; border:1px solid #1d4ed8; border-radius:1rem; background:#0f172a; padding:1.25rem; box-shadow:0 24px 80px rgba(0,0,0,.6); text-align:center; }
+  .instant-dialog-card { position:relative; width:min(28rem,100%); max-height:calc(100vh - 2rem); max-height:calc(100dvh - 2rem); overflow-y:auto; scrollbar-width:none; border:1px solid #1d4ed8; border-radius:1rem; background:#0f172a; padding:1.25rem; box-shadow:0 24px 80px rgba(0,0,0,.6); text-align:center; }
+  .instant-dialog-card::-webkit-scrollbar { display:none; }
   .instant-dialog-close { position:absolute; top:.75rem; right:.75rem; display:grid; width:2.25rem; height:2.25rem; place-items:center; border-radius:.5rem; color:#94a3b8; font-size:1.4rem; }
   .instant-dialog-close:hover { background:#1e293b; color:#f8fafc; }
   .instant-qr { width:min(19rem,100%); margin:1rem auto 0; border-radius:.8rem; background:white; padding:.65rem; }
@@ -130,19 +131,25 @@
     .actions .btn { flex:1 1 auto; }
     .selector-options { grid-template-columns:minmax(0,1fr); }
     .tag-cloud { max-width:100%; }
-    .instant-dialog-card { padding:1rem; }
-    .instant-qr { width:min(17rem,82vw); }
-    .instant-overrides { grid-template-columns:minmax(0,1fr); }
+    .instant-dialog { padding:.5rem; }
+    .instant-dialog-card { max-height:calc(100vh - 1rem); max-height:calc(100dvh - 1rem); padding:.85rem; }
+    .instant-dialog-card > p:first-of-type { font-size:.65rem; }
+    .instant-dialog-card > h2 { margin-top:.25rem; font-size:1.05rem; line-height:1.4; }
+    .instant-dialog-card > h2 + p { margin-top:.25rem; font-size:.75rem; line-height:1.25rem; }
+    .instant-qr { width:min(13.5rem,68vw); margin-top:.65rem; padding:.45rem; }
+    .instant-overrides { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.35rem; margin-top:.65rem; }
+    .instant-override { padding:.4rem .5rem; font-size:.65rem; }
+    .instant-override:last-child { grid-column:1 / -1; }
   }
 </style>
 {% endblock %}
 {% block content %}
 {% set cfg = configuration %}
 <main class="share-page mx-auto max-w-7xl px-4 py-8 sm:px-6">
-  <div class="mb-6">
-    <p class="text-xs font-bold uppercase tracking-widest text-sky-400">Activity Corpus</p>
-    <h1 class="mt-2 text-3xl font-semibold text-white">Share Corpus</h1>
-    <p class="mt-2 max-w-3xl text-sm text-slate-400">Recipes remain live filters. Generation always refreshes the corpus and freezes a new snapshot.</p>
+  <div class="page-header mb-6">
+    <p class="page-header-eyebrow">Activity Corpus</p>
+    <h1 class="page-header-title">Share Corpus</h1>
+    <p class="page-header-description">Recipes remain live filters. Generation always refreshes the corpus and freezes a new snapshot.</p>
   </div>
 
   {% if error %}<div class="message error">{{ error }}</div>{% endif %}

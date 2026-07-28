@@ -75,6 +75,37 @@
     .markdown-body table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
     .markdown-body th, .markdown-body td { border: 1px solid #334155; padding: .5rem .65rem; text-align: left; }
     .markdown-body th { background: #0f172a; color: #f8fafc; }
+
+    /* Shared primary-page header typography. */
+    .page-header-eyebrow {
+      color: #60a5fa;
+      font-size: .75rem;
+      font-weight: 500;
+      line-height: 1rem;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+    }
+    .page-header-title {
+      margin-top: .5rem;
+      color: #fff;
+      font-size: 1.5rem;
+      font-weight: 600;
+      line-height: 2rem;
+      letter-spacing: -.015em;
+    }
+    .page-header-description {
+      max-width: 48rem;
+      margin-top: .375rem;
+      color: #94a3b8;
+      font-size: .875rem;
+      line-height: 1.5rem;
+    }
+    @media (min-width: 640px) {
+      .page-header-title {
+        font-size: 1.875rem;
+        line-height: 2.25rem;
+      }
+    }
   </style>
 
   {% block head %}{% endblock %}

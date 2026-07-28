@@ -596,6 +596,9 @@ def test_instant_share_uses_throwaway_overrides_and_stays_out_of_generated_list(
     assert "QR possession only" in owner_page.text
     assert "This throwaway share is not added to Generated shares." in owner_page.text
     assert ">0 total</span>" in owner_page.text
+    assert ".instant-dialog-card::-webkit-scrollbar { display:none; }" in owner_page.text
+    assert "width:min(13.5rem,68vw)" in owner_page.text
+    assert "grid-template-columns:repeat(2,minmax(0,1fr))" in owner_page.text
 
     access = authenticated_client.get("/share/access/instant-test-token")
     redeemed = authenticated_client.post(

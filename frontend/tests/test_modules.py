@@ -59,6 +59,9 @@ def test_home_renders_dedicated_manifesto_section_outside_platform_modules(
     assert "Apps" in response.text
     assert "Activity Corpus" in response.text
     assert "based on Homework for Life" in response.text
+    assert '<main class="mx-auto max-w-6xl' in response.text
+    assert "grid grid-cols-1 md:grid-cols-2" in response.text
+    assert 'class="mx-auto max-w-5xl rounded-2xl' in response.text
 
 
 def test_manifesto_module_renders_guiding_principles(authenticated_client):
@@ -126,5 +129,26 @@ def test_hfl_corpus_module_renders_an_empty_index(authenticated_client, monkeypa
 
     assert response.status_code == 200
     assert "Activity Corpus" in response.text
-    assert "EVERYTHING EVERYWHERE, EVENTUALLY INDEXED" in response.text
+    assert "Everything everywhere, eventually indexed" in response.text
     assert "0 files" in response.text
+
+
+def test_primary_navigation_pages_share_header_typography(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: ())
+    for route in ("/home", "/hfl-corpus", "/sharing", "/workflows", "/applications"):
+        response = authenticated_client.get(route)
+
+        assert response.status_code == 200
+        assert 'class="page-header-eyebrow"' in response.text
+        assert "page-header-title" in response.text
+        assert 'class="page-header-description"' in response.text
+
+    base_styles = authenticated_client.get("/home").text
+    assert ".page-header-eyebrow {" in base_styles
+    assert "color: #60a5fa;" in base_styles
+    assert ".page-header-title {" in base_styles
+    assert "font-size: 1.875rem;" in base_styles
