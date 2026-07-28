@@ -1,4 +1,59 @@
+import re
+
 from modules.registry import MODULES, PRIMARY_MODULES, module_by_key
+
+
+def test_module_shell_uses_versioned_self_hosted_assets(authenticated_client):
+    response = authenticated_client.get("/home")
+
+    assert response.status_code == 200
+    for external_origin in (
+        "cdn.tailwindcss.com",
+        "unpkg.com",
+        "cdn.jsdelivr.net",
+    ):
+        assert external_origin not in response.text
+
+    asset_urls = re.findall(
+        r'(?:href|src)="(/static/(?:css|vendor)/[^"?]+\?v=[0-9a-f]{12})"',
+        response.text,
+    )
+    assert len(asset_urls) == 4
+
+    for asset_url in asset_urls:
+        asset_response = authenticated_client.get(asset_url)
+        assert asset_response.status_code == 200
+        assert asset_response.headers["cache-control"] == (
+            "public, max-age=31536000, immutable"
+        )
+
+
+def test_authenticated_module_pages_are_not_edge_cacheable(authenticated_client):
+    response = authenticated_client.get("/home")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_dynamic_routes_cannot_override_no_store(authenticated_client):
+    from fastapi.responses import Response
+    from main import app
+
+    @app.get("/_test/cacheable-dynamic")
+    async def cacheable_dynamic_response():
+        return Response(headers={"Cache-Control": "public, max-age=60"})
+
+    response = authenticated_client.get("/_test/cacheable-dynamic")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_missing_static_assets_are_not_immutable(authenticated_client):
+    response = authenticated_client.get("/static/missing-asset.js")
+
+    assert response.status_code == 404
+    assert response.headers["cache-control"] == "no-store"
 
 
 def test_module_registry_has_fixed_primary_navigation():

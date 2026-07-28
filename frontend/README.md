@@ -2,7 +2,9 @@
 
 The HARQIS frontend is an authenticated, module-based interface for operating
 and inspecting the automation platform. It is built with FastAPI, Jinja2,
-HTMX, Alpine.js, Tailwind CSS, and SortableJS, with no JavaScript build step.
+HTMX, Alpine.js, Tailwind CSS, and SortableJS. Production serves compiled,
+content-versioned assets from `/static/`; the generated files are committed so
+runtime deployment does not require Node.js.
 
 The frontend currently exposes six modules:
 
@@ -65,6 +67,22 @@ $env:FRONTEND_RELOAD = "true"
 .venv\Scripts\python.exe scripts\launch.py frontend
 ```
 
+## Frontend assets
+
+The owner UI does not load Tailwind, HTMX, Alpine.js, or SortableJS from public
+CDNs. Pinned npm packages build the committed files under `frontend/static/`:
+
+```bash
+npm ci
+npm run build:frontend-assets
+```
+
+Run the build whenever template utility classes or pinned dependency versions
+change. The runtime does not need Node.js because generated assets are tracked.
+Rendered URLs include a content digest query, static responses are cacheable for
+one year with `immutable`, and authenticated/dynamic responses use
+`Cache-Control: no-store`.
+
 ## Architecture
 
 ```text
@@ -116,6 +134,9 @@ frontend/
 │   │   └── hfl_shares/
 │   └── share_base.html            # Dependency-free guest portal shell
 │   └── partials/status_panel.html
+├── assets/tailwind.css             # Tailwind build input
+├── static/                         # Committed compiled CSS and pinned vendor JS
+├── scripts/vendor-assets.mjs       # Copies pinned npm browser assets
 └── tests/
 ```
 

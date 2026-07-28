@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +18,23 @@ from modules.registry import PRIMARY_MODULES
 
 FRONTEND_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = FRONTEND_ROOT.parent
+STATIC_ROOT = FRONTEND_ROOT / "static"
 templates = Jinja2Templates(directory=str(FRONTEND_ROOT / "templates"))
+
+
+@lru_cache(maxsize=None)
+def static_asset(relative_path: str) -> str:
+    """Return a same-origin static URL versioned by its content digest."""
+    asset_path = (STATIC_ROOT / relative_path).resolve()
+    try:
+        asset_path.relative_to(STATIC_ROOT.resolve())
+    except ValueError as exc:
+        raise ValueError("static asset must remain under frontend/static") from exc
+    digest = hashlib.sha256(asset_path.read_bytes()).hexdigest()[:12]
+    return f"/static/{relative_path}?v={digest}"
+
+
+templates.env.globals["static_asset"] = static_asset
 
 
 def require_user(request: Request) -> tuple[str | None, RedirectResponse | None]:
