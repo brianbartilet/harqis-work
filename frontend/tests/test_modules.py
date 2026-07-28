@@ -61,7 +61,8 @@ def test_home_renders_dedicated_manifesto_section_outside_platform_modules(
     assert "based on Homework for Life" in response.text
     assert '<main class="mx-auto max-w-6xl' in response.text
     assert "grid grid-cols-1 md:grid-cols-2" in response.text
-    assert 'class="mx-auto max-w-5xl rounded-2xl' in response.text
+    assert 'class="rounded-2xl border border-blue-900/70' in response.text
+    assert 'class="mx-auto max-w-5xl rounded-2xl' not in response.text
 
 
 def test_manifesto_module_renders_guiding_principles(authenticated_client):
