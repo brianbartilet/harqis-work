@@ -90,6 +90,19 @@ Recommended path policies, evaluated most-specific first:
    approval-request cookie.
 5. `/*`: owner-only Cloudflare Access policy or deny-by-default policy.
 
+### Cloudflare cache policy
+
+In the zone dashboard, create a Cache Rule that marks only
+`/static/*` as eligible for caching. The application emits content-versioned
+URLs and `Cache-Control: public, max-age=31536000, immutable` for successful
+static responses. Keep a higher-priority bypass rule for `/share/*`, login,
+owner module pages, APIs, and all other dynamic paths. Dynamic application
+responses emit `Cache-Control: no-store`; never enable Cache Everything for the
+hostname.
+
+Verify a static response reports `CF-Cache-Status: HIT` after a warm request,
+while `/share/*` and authenticated module pages remain `DYNAMIC` or `BYPASS`.
+
 Enable `HFL_SHARE_TRUST_PROXY_IDENTITY=true` only after the origin is locked
 down and the `/share/email/*` policy supplies both
 `Cf-Access-Authenticated-User-Email` and `Cf-Access-Jwt-Assertion`. Mixed PIN

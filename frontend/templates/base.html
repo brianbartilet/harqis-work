@@ -5,27 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}HARQIS{% endblock %}</title>
 
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: { mono: ['JetBrains Mono', 'Fira Code', 'monospace'] },
-          animation: { 'spin-slow': 'spin 2s linear infinite' }
-        }
-      }
-    }
-  </script>
-
-  <!-- HTMX -->
-  <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
-
-  <!-- Alpine.js -->
-  <script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"></script>
-
-  <!-- SortableJS -->
-  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <!-- Compiled Tailwind CSS and pinned local JavaScript dependencies -->
+  <link rel="stylesheet" href="{{ static_asset('css/app.min.css') }}">
+  <script src="{{ static_asset('vendor/htmx-1.9.12.min.js') }}"></script>
+  <script defer src="{{ static_asset('vendor/alpinejs-3.14.1.min.js') }}"></script>
+  <script src="{{ static_asset('vendor/sortablejs-1.15.2.min.js') }}"></script>
 
   <style>
     [x-cloak] { display: none !important; }
