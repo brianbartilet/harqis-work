@@ -69,10 +69,15 @@
   .recipe-actions form { display:inline-flex; margin:0; }
   .recipe-action { display:inline-flex; min-height:1.75rem; align-items:center; border:0; background:transparent; padding:.2rem 0; font-size:.75rem; line-height:1.25; cursor:pointer; }
   .recipe-action:focus-visible { border-radius:.25rem; outline:2px solid #60a5fa; outline-offset:2px; }
+  .recipe-title-row { display:flex; align-items:flex-start; justify-content:space-between; gap:.65rem; }
+  .recipe-title-row .wrap { min-width:0; }
+  .instant-share-button { flex:0 0 auto; border:1px solid #1d4ed8; border-radius:.45rem; background:#172554; color:#bfdbfe; padding:.35rem .55rem; font-size:.7rem; font-weight:700; line-height:1.2; }
+  .instant-share-button:hover { background:#1e3a8a; color:#eff6ff; }
+  .instant-share-button:focus-visible { outline:2px solid #60a5fa; outline-offset:2px; }
   .recipe-header-actions { display:flex; flex:0 0 auto; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:.55rem; }
-  .saved-recipes-panel > summary { display:flex; list-style:none; align-items:center; justify-content:space-between; gap:.75rem; cursor:pointer; }
-  .saved-recipes-panel > summary::-webkit-details-marker { display:none; }
-  .saved-recipes-panel[open] .saved-recipes-arrow { transform:rotate(180deg); }
+  .owner-list-panel > summary { display:flex; list-style:none; align-items:center; justify-content:space-between; gap:.75rem; cursor:pointer; }
+  .owner-list-panel > summary::-webkit-details-marker { display:none; }
+  .owner-list-panel[open] .owner-list-arrow { transform:rotate(180deg); }
   .owner-pagination { display:flex; align-items:center; justify-content:space-between; gap:.65rem; border-top:1px solid #1e293b; padding-top:.75rem; }
   .owner-pagination a { border-radius:.4rem; background:#1e293b; color:#cbd5e1; font-size:.72rem; padding:.35rem .55rem; }
   .owner-pagination a:hover { background:#334155; color:#f8fafc; }
@@ -93,15 +98,18 @@
   .progress-bar { width:42%; height:100%; border-radius:999px; background:#3b82f6; animation:social-progress 1.35s ease-in-out infinite; }
   @keyframes social-spin { to { transform:rotate(360deg); } }
   @keyframes social-progress { 0% { transform:translateX(-115%); } 100% { transform:translateX(340%); } }
+  .instant-dialog { position:fixed; inset:0; z-index:110; display:grid; place-items:center; background:rgba(2,6,23,.9); padding:1rem; backdrop-filter:blur(8px); }
+  .instant-dialog[hidden] { display:none; }
+  .instant-dialog-card { position:relative; width:min(28rem,100%); max-height:calc(100vh - 2rem); max-height:calc(100dvh - 2rem); overflow-y:auto; border:1px solid #1d4ed8; border-radius:1rem; background:#0f172a; padding:1.25rem; box-shadow:0 24px 80px rgba(0,0,0,.6); text-align:center; }
+  .instant-dialog-close { position:absolute; top:.75rem; right:.75rem; display:grid; width:2.25rem; height:2.25rem; place-items:center; border-radius:.5rem; color:#94a3b8; font-size:1.4rem; }
+  .instant-dialog-close:hover { background:#1e293b; color:#f8fafc; }
+  .instant-qr { width:min(19rem,100%); margin:1rem auto 0; border-radius:.8rem; background:white; padding:.65rem; }
+  .instant-overrides { display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-top:1rem; text-align:left; }
+  .instant-override { border:1px solid #1e293b; border-radius:.55rem; background:#020617; padding:.55rem .65rem; color:#cbd5e1; font-size:.72rem; }
   @media(prefers-reduced-motion:reduce) {
     .progress-spinner { animation-duration:2.5s; }
     .progress-bar { width:100%; animation:none; opacity:.75; }
     .success-toast,.success-toast.is-closing { animation:none; }
-  }
-  @media(min-width:901px) {
-    .saved-recipes-panel > summary { cursor:default; }
-    .saved-recipes-panel > summary .saved-recipes-arrow { display:none; }
-    .saved-recipes-panel:not([open]) > .saved-recipes-content { display:block; }
   }
   @media(max-width:900px) {
     .share-page { max-width:100%; overflow-x:hidden; }
@@ -122,6 +130,9 @@
     .actions .btn { flex:1 1 auto; }
     .selector-options { grid-template-columns:minmax(0,1fr); }
     .tag-cloud { max-width:100%; }
+    .instant-dialog-card { padding:1rem; }
+    .instant-qr { width:min(17rem,82vw); }
+    .instant-overrides { grid-template-columns:minmax(0,1fr); }
   }
 </style>
 {% endblock %}
@@ -280,19 +291,25 @@
     </section>
 
     <aside class="owner-sidebar space-y-5">
-      <details class="panel saved-recipes-panel">
+      <details class="panel saved-recipes-panel owner-list-panel" open>
         <summary>
           <span>
             <span class="block text-base font-semibold text-white">Saved recipes</span>
             <span class="mt-1 block text-xs font-normal text-slate-500">Click on recipe to load · {{ recipe_count }} total</span>
           </span>
-          <svg class="saved-recipes-arrow h-4 w-4 shrink-0 text-blue-400 transition" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg>
+          <svg class="owner-list-arrow h-4 w-4 shrink-0 text-blue-400 transition" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg>
         </summary>
         <div class="saved-recipes-content mt-2">
         {% for row in configurations %}
         {% set item = row.configuration %}
         <div class="item recipe-item{% if cfg and cfg.id == item.id %} recipe-item-active{% endif %}">
-          <a class="wrap text-sm font-semibold text-sky-300" href="/sharing?configuration_id={{ item.id }}" data-recipe-load{% if cfg and cfg.id == item.id %} aria-current="true"{% endif %}>{{ item.name }}</a>
+          <div class="recipe-title-row">
+            <a class="wrap text-sm font-semibold text-sky-300" href="/sharing?configuration_id={{ item.id }}" data-recipe-load{% if cfg and cfg.id == item.id %} aria-current="true"{% endif %}>{{ item.name }}</a>
+            <button class="instant-share-button" type="button"
+                    data-instant-share
+                    data-instant-url="/sharing/configurations/{{ item.id }}/instant"
+                    aria-label="Instant share {{ item.name }}">Instant share</button>
+          </div>
           <p class="mt-1 text-xs text-slate-500">{{ "All sources" if all_sources_value in item.sources else item.sources|join(', ') }}</p>
           <p class="mt-1 text-xs text-slate-500">{{ row.expiration_summary }}</p>
           <div class="actions recipe-actions mt-2">
@@ -324,11 +341,15 @@
       </section>
       {% endif %}
 
-      <section class="panel generated-shares-panel">
-        <div class="flex items-center justify-between gap-3">
-          <h2 class="text-base font-semibold text-white">Generated shares</h2>
-          <span class="text-xs text-slate-500">{{ share_count }} total</span>
-        </div>
+      <details class="panel generated-shares-panel owner-list-panel">
+        <summary>
+          <span class="text-base font-semibold text-white">Generated shares</span>
+          <span class="flex items-center gap-3">
+            <span class="text-xs text-slate-500">{{ share_count }} total</span>
+            <svg class="owner-list-arrow h-4 w-4 shrink-0 text-blue-400 transition" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg>
+          </span>
+        </summary>
+        <div class="generated-shares-content mt-2">
         {% for row in shares %}
         {% set share = row.grant %}
         <div class="item generated-share-item">
@@ -349,7 +370,8 @@
           {% if share_page < share_total_pages %}<a href="/sharing?recipe_page={{ recipe_page }}&share_page={{ share_page + 1 }}{% if cfg and cfg.id %}&configuration_id={{ cfg.id }}{% endif %}">Next</a>{% else %}<span></span>{% endif %}
         </nav>
         {% endif %}
-      </section>
+        </div>
+      </details>
     </aside>
   </div>
 </main>
@@ -362,6 +384,24 @@
     <p id="social-progress-message" data-progress-message class="mt-2 min-h-10 text-sm text-slate-300" aria-live="polite">Please wait…</p>
     <div class="progress-track mt-5" aria-hidden="true"><div class="progress-bar"></div></div>
     <p class="mt-3 text-xs text-slate-500">Keep this page open until the request finishes.</p>
+  </section>
+</div>
+<div class="instant-dialog" data-instant-dialog role="dialog" aria-modal="true"
+     aria-labelledby="instant-dialog-title" aria-describedby="instant-dialog-description"
+     hidden>
+  <section class="instant-dialog-card" tabindex="-1" data-instant-dialog-card>
+    <button class="instant-dialog-close" type="button" data-instant-close aria-label="Close instant share">×</button>
+    <p class="text-xs font-bold uppercase tracking-widest text-sky-400">Ready to scan</p>
+    <h2 id="instant-dialog-title" class="mt-2 pr-8 text-xl font-semibold text-white" data-instant-title>Instant share</h2>
+    <p id="instant-dialog-description" class="mt-2 text-sm text-slate-400">Scan this QR code to open the corpus. This throwaway share is not added to Generated shares.</p>
+    <img class="instant-qr" data-instant-qr alt="QR code for instant corpus access">
+    <div class="instant-overrides" aria-label="Instant share settings">
+      <div class="instant-override"><strong class="block text-slate-200">Access</strong>QR possession only</div>
+      <div class="instant-override"><strong class="block text-slate-200">Expires at</strong>1 day</div>
+      <div class="instant-override"><strong class="block text-slate-200">Number of devices</strong>1</div>
+      <div class="instant-override"><strong class="block text-slate-200">Single-use redemption</strong>Yes</div>
+      <div class="instant-override"><strong class="block text-slate-200">Selected references</strong>Allowed</div>
+    </div>
   </section>
 </div>
 <script>
@@ -384,6 +424,11 @@
   const progressHeading = progressOverlay?.querySelector('[data-progress-heading]');
   const progressMessage = progressOverlay?.querySelector('[data-progress-message]');
   const successToast = document.querySelector('[data-success-toast]');
+  const instantDialog = document.querySelector('[data-instant-dialog]');
+  const instantDialogCard = instantDialog?.querySelector('[data-instant-dialog-card]');
+  const instantTitle = instantDialog?.querySelector('[data-instant-title]');
+  const instantQr = instantDialog?.querySelector('[data-instant-qr]');
+  let instantTrigger = null;
   if (!form || !selector || !allSources || !sourceSummary || !tagCloud) return;
 
   const specificSources = () =>
@@ -639,6 +684,21 @@
     delete form.dataset.processing;
     document.documentElement.style.overflow = '';
   };
+  const closeInstantDialog = () => {
+    if (!instantDialog) return;
+    instantDialog.hidden = true;
+    document.documentElement.style.overflow = '';
+    instantTrigger?.focus();
+  };
+  const openInstantDialog = (payload, trigger) => {
+    if (!instantDialog || !instantQr || !instantTitle) return;
+    instantTrigger = trigger;
+    instantTitle.textContent = payload.name || 'Instant share';
+    instantQr.src = payload.qr;
+    instantDialog.hidden = false;
+    document.documentElement.style.overflow = 'hidden';
+    instantDialogCard?.focus({preventScroll:true});
+  };
   form.addEventListener('submit', event => {
     const submitter = event.submitter;
     syncDisabledReferences();
@@ -680,6 +740,40 @@
         'Returning to a fresh recipe…'
       );
     });
+  });
+  document.querySelectorAll('[data-instant-share]').forEach(button => {
+    button.addEventListener('click', async () => {
+      showProgress(
+        'Rendering instant share',
+        'Refreshing the recipe snapshot…',
+        'Generating secure access and QR code…'
+      );
+      try {
+        const body = new FormData();
+        body.set('csrf', form.querySelector('input[name="csrf"]').value);
+        const response = await fetch(button.dataset.instantUrl, {
+          method: 'POST',
+          body,
+          headers: {'Accept': 'application/json'}
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || 'Instant share could not be rendered.');
+        hideProgress();
+        openInstantDialog(payload, button);
+      } catch (error) {
+        hideProgress();
+        window.alert(error.message || 'Instant share could not be rendered.');
+      }
+    });
+  });
+  instantDialog?.querySelector('[data-instant-close]')?.addEventListener('click', closeInstantDialog);
+  instantDialog?.addEventListener('click', event => {
+    if (event.target === instantDialog) closeInstantDialog();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && instantDialog && !instantDialog.hidden) {
+      closeInstantDialog();
+    }
   });
   window.addEventListener('pageshow', hideProgress);
   if (successToast) {

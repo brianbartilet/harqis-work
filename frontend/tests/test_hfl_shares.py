@@ -546,6 +546,67 @@ def test_saved_recipe_actions_share_alignment_and_control_sizing(
     assert "Preparing the selected recipe and its latest preview" in response.text
 
 
+def test_instant_share_uses_throwaway_overrides_and_stays_out_of_generated_list(
+    authenticated_client, sharing_corpus, monkeypatch
+):
+    from modules.hfl_shares import router
+
+    monkeypatch.setattr(router, "new_public_token", lambda: "instant-test-token")
+    authenticated_client.post(
+        "/sharing/configurations",
+        data=_form(
+            auth_mode="pin",
+            device_limit="4",
+            no_expiry="on",
+        ),
+        follow_redirects=True,
+    )
+    store = get_share_store()
+    saved = store.list_configurations()[0]
+
+    response = authenticated_client.post(
+        f"/sharing/configurations/{saved.id}/instant",
+        data={"csrf": make_csrf_token("frontend-test-user")},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json()["qr"].startswith("data:image/")
+    assert response.json()["expires"] == "1 day"
+    assert store.list_shares() == []
+    grant = store.list_shares(include_instant=True)[0]
+    assert grant.instant is True
+    assert grant.auth_mode == "qr"
+    assert grant.no_expiry is False
+    assert grant.single_use is True
+    assert grant.device_limit == 1
+    assert grant.snapshot.enabled_reference_ids
+
+    unchanged = store.get_configuration(saved.id)
+    assert unchanged.auth_mode == "pin"
+    assert unchanged.no_expiry is True
+    assert unchanged.device_limit == 4
+    assert unchanged.references_enabled is False
+
+    owner_page = authenticated_client.get("/sharing")
+    assert "Instant share" in owner_page.text
+    assert f'data-instant-url="/sharing/configurations/{saved.id}/instant"' in owner_page.text
+    assert 'data-instant-dialog role="dialog" aria-modal="true"' in owner_page.text
+    assert "Rendering instant share" in owner_page.text
+    assert "QR possession only" in owner_page.text
+    assert "This throwaway share is not added to Generated shares." in owner_page.text
+    assert ">0 total</span>" in owner_page.text
+
+    access = authenticated_client.get("/share/access/instant-test-token")
+    redeemed = authenticated_client.post(
+        "/share/access/instant-test-token/redeem",
+        follow_redirects=False,
+    )
+    assert access.status_code == 200
+    assert redeemed.status_code == 303
+    assert GUEST_COOKIE in redeemed.cookies
+
+
 def test_owner_page_paginates_recipes_and_shares_with_mobile_first_saved_list(
     authenticated_client, sharing_corpus
 ):
@@ -571,15 +632,18 @@ def test_owner_page_paginates_recipes_and_shares_with_mobile_first_saved_list(
     second = authenticated_client.get(
         "/sharing?recipe_page=2&share_page=2"
     )
+    third = authenticated_client.get("/sharing?share_page=3")
 
     assert first.status_code == 200
     assert first.text.count('class="item recipe-item') == 5
-    assert first.text.count('class="item generated-share-item"') == 10
+    assert first.text.count('class="item generated-share-item"') == 5
     assert second.text.count('class="item recipe-item') == 1
-    assert second.text.count('class="item generated-share-item"') == 1
+    assert second.text.count('class="item generated-share-item"') == 5
+    assert third.text.count('class="item generated-share-item"') == 1
     assert 'aria-label="Saved recipe pages"' in first.text
     assert 'aria-label="Generated share pages"' in first.text
-    assert 'class="panel saved-recipes-panel"' in first.text
+    assert 'class="panel saved-recipes-panel owner-list-panel" open' in first.text
+    assert 'class="panel generated-shares-panel owner-list-panel">' in first.text
     assert ".saved-recipes-panel { order:1; }" in first.text
     assert ".recipe-editor { order:2; }" in first.text
     assert ".owner-sidebar { display:contents; }" in first.text

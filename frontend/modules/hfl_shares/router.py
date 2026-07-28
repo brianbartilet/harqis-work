@@ -8,6 +8,7 @@ import math
 import re
 import secrets
 from collections import Counter
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -66,7 +67,7 @@ from web import page_context, require_user, templates
 owner_router = APIRouter(prefix="/sharing")
 guest_router = APIRouter(prefix="/share")
 _OWNER_RECIPE_PAGE_SIZE = 5
-_OWNER_SHARE_PAGE_SIZE = 10
+_OWNER_SHARE_PAGE_SIZE = 5
 
 
 def _sharing_documents(
@@ -692,6 +693,88 @@ async def preview_generated_share(
     if fragment:
         response.headers["X-HFL-Result-Count"] = str(context["result_count"])
     response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@owner_router.post("/configurations/{configuration_id}/instant")
+async def generate_instant_share(request: Request, configuration_id: str):
+    user, redirect = require_user(request)
+    if redirect:
+        return JSONResponse(
+            {"detail": "Authentication required."},
+            status_code=401,
+        )
+    form = await request.form()
+    _require_csrf(form, user)
+    store = get_share_store()
+    saved = store.get_configuration(configuration_id)
+    if not saved:
+        return JSONResponse(
+            {"detail": "The saved recipe no longer exists."},
+            status_code=404,
+        )
+    configuration = replace(
+        saved,
+        auth_mode="qr",
+        allowed_email="",
+        references_enabled=True,
+        ttl_seconds=86_400,
+        no_expiry=False,
+        device_limit=1,
+        single_use=True,
+    )
+    try:
+        snapshot = build_snapshot(
+            configuration,
+            _sharing_documents(configuration.sources, force=True),
+        )
+        if not snapshot.entries:
+            raise ValueError("A share cannot be generated from an empty scope.")
+        settings = get_settings()
+        if snapshot.estimated_chars > settings.hfl_share_max_snapshot_chars:
+            raise ValueError(
+                "The scope is too large to share. Narrow its sources or filters."
+            )
+        public_token = new_public_token()
+        base = settings.hfl_share_public_url.strip().rstrip("/")
+        if not base:
+            base = str(request.base_url).rstrip("/")
+        parsed_base = urlparse(base)
+        if settings.behind_proxy and parsed_base.scheme != "https":
+            raise ValueError(
+                "HFL_SHARE_PUBLIC_URL must be an HTTPS URL when the frontend "
+                "is behind a proxy."
+            )
+        link = f"{base}/share/access/{public_token}"
+        grant = store.create_share(
+            configuration_id=configuration.id,
+            name=configuration.name,
+            token_hash=opaque_hash(public_token),
+            pin_hash="",
+            auth_mode="qr",
+            allowed_email="",
+            snapshot=snapshot,
+            ttl_seconds=86_400,
+            no_expiry=False,
+            single_use=True,
+            device_limit=1,
+            instant=True,
+        )
+        record_share_audit(event="created", share_id=grant.id)
+    except (TypeError, ValueError) as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=422)
+    response = JSONResponse(
+        {
+            "name": grant.name,
+            "qr": qr_data_uri(link),
+            "expires": "1 day",
+            "devices": 1,
+            "single_use": True,
+            "references_enabled": True,
+        }
+    )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
     return response
 
 

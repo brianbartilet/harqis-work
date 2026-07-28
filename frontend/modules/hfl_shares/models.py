@@ -246,6 +246,7 @@ class ShareGrant:
     single_use: bool
     device_limit: int
     no_expiry: bool = False
+    instant: bool = False
     redeemed_at: str = ""
     revoked_at: str = ""
     pin_failures: int = 0

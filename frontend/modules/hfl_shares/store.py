@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS shares (
     single_use INTEGER NOT NULL,
     device_limit INTEGER NOT NULL,
     no_expiry INTEGER NOT NULL DEFAULT 0,
+    instant INTEGER NOT NULL DEFAULT 0,
     redeemed_at TEXT NOT NULL DEFAULT '',
     revoked_at TEXT NOT NULL DEFAULT '',
     pin_failures INTEGER NOT NULL DEFAULT 0
@@ -101,6 +102,11 @@ class ShareStore:
                     "ALTER TABLE shares "
                     "ADD COLUMN no_expiry INTEGER NOT NULL DEFAULT 0"
                 )
+            if "instant" not in share_columns:
+                connection.execute(
+                    "ALTER TABLE shares "
+                    "ADD COLUMN instant INTEGER NOT NULL DEFAULT 0"
+                )
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=15)
@@ -135,6 +141,7 @@ class ShareStore:
             single_use=bool(row["single_use"]),
             device_limit=int(row["device_limit"]),
             no_expiry=bool(row["no_expiry"]),
+            instant=bool(row["instant"]),
             redeemed_at=row["redeemed_at"],
             revoked_at=row["revoked_at"],
             pin_failures=int(row["pin_failures"]),
@@ -194,6 +201,7 @@ class ShareStore:
         snapshot: ScopeSnapshot,
         ttl_seconds: int,
         no_expiry: bool = False,
+        instant: bool = False,
         single_use: bool,
         device_limit: int,
     ) -> ShareGrant:
@@ -215,6 +223,7 @@ class ShareStore:
             single_use=single_use,
             device_limit=device_limit,
             no_expiry=no_expiry,
+            instant=instant,
         )
         with self._lock, self._connect() as connection:
             connection.execute(
@@ -222,8 +231,8 @@ class ShareStore:
                 INSERT INTO shares(
                     id, configuration_id, name, token_hash, pin_hash,
                     auth_mode, allowed_email, snapshot, created_at, expires_at,
-                    status, single_use, device_limit, no_expiry
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    status, single_use, device_limit, no_expiry, instant
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     grant.id, configuration_id, name, token_hash, pin_hash,
@@ -231,14 +240,17 @@ class ShareStore:
                     json.dumps(snapshot.to_record(), ensure_ascii=False),
                     grant.created_at, grant.expires_at, "active",
                     int(single_use), int(device_limit), int(no_expiry),
+                    int(instant),
                 ),
             )
         return grant
 
-    def list_shares(self) -> list[ShareGrant]:
+    def list_shares(self, *, include_instant: bool = False) -> list[ShareGrant]:
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM shares ORDER BY created_at DESC"
+                "SELECT * FROM shares "
+                + ("" if include_instant else "WHERE instant=0 ")
+                + "ORDER BY created_at DESC"
             ).fetchall()
         return [self._grant(row) for row in rows]
 
