@@ -890,6 +890,11 @@ def test_shared_manifesto_modal_uses_scoped_guest_and_owner_access(
     assert 'data-manifesto-dialog aria-labelledby="shared-manifesto-title"' in portal.text
     assert "manifestoDialog.showModal()" in portal.text
     assert "if (event.target === manifestoDialog) manifestoDialog.close()" in portal.text
+    assert "height:calc(100dvh - 12px)" in portal.text
+    assert "overscroll-behavior:contain" in portal.text
+    assert "-webkit-overflow-scrolling:touch" in portal.text
+    assert ".manifesto-content table { display:block;" in portal.text
+    assert ".manifesto-dialog-body { font-size:.78rem;" in portal.text
     assert guest_manifesto.status_code == 200
     assert owner_manifesto.status_code == 200
     assert guest_manifesto.headers["cache-control"] == "no-store"
