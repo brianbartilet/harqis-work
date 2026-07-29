@@ -28,6 +28,7 @@ entry (no `References:` line) yields `references == ()`.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Iterable, Optional
@@ -35,6 +36,8 @@ from typing import Iterable, Optional
 # Value column the original format aligned on ("Moment:" + 10 spaces = 17).
 # ljust(_COL) reproduces every legacy label string exactly.
 _COL = 17
+_VISIBLE_H1_H2 = re.compile(r"^( {0,3})#{1,2}(?=\s)")
+_FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 
 # label text (before ':') → DTO field name, for from_markdown().
 _LABELS = {
@@ -70,6 +73,33 @@ def _norm_refs(refs: Optional[Iterable[str]]) -> tuple[str, ...]:
     )
 
 
+def _demote_visible_entry_headings(value: str) -> str:
+    """Keep narrative Markdown below the canonical H2 entry boundary."""
+    lines: list[str] = []
+    fence_char = ""
+    fence_length = 0
+    for line in (value or "").splitlines():
+        if fence_char:
+            stripped = line.lstrip(" ") if len(line) - len(line.lstrip(" ")) <= 3 else line
+            if re.fullmatch(
+                rf"{re.escape(fence_char)}{{{fence_length},}}[ \t]*", stripped
+            ):
+                fence_char, fence_length = "", 0
+            lines.append(line)
+            continue
+        opener = _FENCE_OPEN.match(line)
+        if opener and opener.group(1).startswith("`") and "`" in opener.group(2):
+            opener = None
+        if opener:
+            marker = opener.group(1)
+            fence_char, fence_length = marker[0], len(marker)
+            lines.append(line)
+            continue
+        line = _VISIBLE_H1_H2.sub(r"\1###", line)
+        lines.append(line)
+    return "\n".join(lines)
+
+
 @dataclass(frozen=True)
 class HflEntry:
     """One HFL corpus entry. Immutable; render/parse via the two methods."""
@@ -88,10 +118,13 @@ class HflEntry:
 
     def __post_init__(self) -> None:
         # Normalise without mutating (frozen): re-set via object.__setattr__.
-        object.__setattr__(self, "moment", (self.moment or "").strip())
-        object.__setattr__(self, "what_happened", (self.what_happened or "").strip())
-        object.__setattr__(self, "why_it_stayed", (self.why_it_stayed or "").strip())
-        object.__setattr__(self, "possible_use", (self.possible_use or "").strip())
+        for field_name in (
+            "moment", "what_happened", "why_it_stayed", "possible_use"
+        ):
+            normalized = _demote_visible_entry_headings(
+                (getattr(self, field_name) or "").strip()
+            )
+            object.__setattr__(self, field_name, normalized)
         object.__setattr__(self, "tags", _norm_tags(self.tags))
         object.__setattr__(self, "references", _norm_refs(self.references))
         object.__setattr__(self, "source", (self.source or "").strip())

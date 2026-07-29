@@ -95,6 +95,39 @@ def test__multiline_markdown_field_starts_after_label_and_round_trips():
     assert restored.what_happened == entry.what_happened
 
 
+def test_visible_h1_h2_in_narrative_are_demoted_without_changing_fenced_examples():
+    entry = HflEntry(
+        when=datetime(2026, 7, 29, 1, 56),
+        moment="Sharing audit answer",
+        what_happened=(
+            "Answer: # Latest work\n\n"
+            "## Work & Career\nUseful narrative\n\n"
+            "### Existing detail\n\n"
+            "````markdown\n## Canonical example\n````python\n"
+            "## Still fenced\n````\n\n"
+            "~~~markdown`valid\n# Tilde example\n~~~\n\n"
+            "```markdown`invalid\n## Not fenced\n```"
+        ),
+    )
+
+    assert entry.what_happened == (
+        "Answer: # Latest work\n\n"
+        "### Work & Career\nUseful narrative\n\n"
+        "### Existing detail\n\n"
+        "````markdown\n## Canonical example\n````python\n"
+        "## Still fenced\n````\n\n"
+        "~~~markdown`valid\n# Tilde example\n~~~\n\n"
+        "```markdown`invalid\n### Not fenced\n```"
+    )
+    markdown = entry.to_markdown()
+    assert "\n## Work & Career\n" not in markdown
+    assert "\n### Work & Career\n" in markdown
+    assert "\n## Canonical example\n" in markdown
+    assert "\n## Still fenced\n" in markdown
+    assert "\n# Tilde example\n" in markdown
+    assert "\n### Not fenced\n" in markdown
+
+
 def test__references_rendered_only_when_present():
     base = dict(
         when=datetime(2026, 5, 17, 23, 0), moment="m",

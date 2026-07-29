@@ -91,6 +91,39 @@ def test_persist_orders_daily_markdown_by_timestamp_descending(tmp_path, monkeyp
     assert text.index("Newer moment") < text.index("Older moment")
 
 
+def test_persist_keeps_model_section_headings_inside_one_canonical_entry(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        "workflows.hfl.es_store.index_hfl_entry",
+        lambda entry, **kwargs: kwargs["doc_id"],
+    )
+    answer = replace(
+        _entry("Sharing answer"),
+        what_happened="Answer:\n\n## Work & Career\nDetails\n\n## Travel\nMore details",
+    )
+    envelope = persistence.make_envelope(
+        answer, source="sharing-audit", machine="harqis-server"
+    )
+
+    persistence.persist_envelope(envelope, corpus_dir=tmp_path)
+    persistence.persist_envelope(
+        persistence.make_envelope(
+            replace(_entry("Later entry"), when=datetime(2026, 7, 19, 10, 45)),
+            source="capture",
+            machine="harqis-server",
+        ),
+        corpus_dir=tmp_path,
+    )
+
+    text = (tmp_path / "2026-07-19.md").read_text(encoding="utf-8")
+    parsed = tuple(persistence._entry_blocks(text))
+    assert len(parsed) == 2
+    assert "\n## Work & Career\n" not in text
+    assert "\n### Work & Career\n" in text
+    assert next(item for item in parsed if item.entry_id == envelope.entry.entry_id) == envelope.entry
+
+
 def test_persist_inserts_backdated_entry_and_retains_document_preamble(
     tmp_path, monkeypatch
 ):

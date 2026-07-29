@@ -239,7 +239,9 @@ References:
 The format is the formal `HflEntry` DTO (`workflows/hfl/dto/entry.py`) —
 `_render_entry` delegates to it, so every producer emits an identical,
 round-trippable block. Retrieval splits files on `## ` headers, so the
-format must be preserved if entries are hand-edited.
+format must be preserved if entries are hand-edited. To keep model-generated
+narrative from becoming fake entries, the DTO demotes visible H1/H2 headings in
+narrative fields to H3 while preserving headings inside fenced code examples.
 
 **Canonical metadata (optional).** New persisted entries include `Source`,
 `Machine`, `Entry ID`, and `Synthesized`; timestamps retain seconds and
