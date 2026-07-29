@@ -20,6 +20,7 @@ from modules.hfl_corpus.corpus import (
 )
 from services.markdown import render_markdown
 from services.safe_paths import (
+    ReferenceLink,
     allowed_reference_roots,
     load_download_token,
     make_download_token,
@@ -410,6 +411,31 @@ def test_hfl_markdown_formatting_bolds_fields_and_normalizes_references():
     assert "<strong>Moment:</strong> Fixed a difficult issue" in rendered
     assert "<strong>References:</strong>" in rendered
     assert "<li><a href=" in rendered
+
+
+def test_hfl_markdown_reference_preview_includes_thumbnail_card_markup():
+    source = (
+        "## 2026-07-10 09:30\n"
+        "References:\n"
+        "                 - photo.jpg\n"
+    )
+    reference = ReferenceLink(
+        label="photo.jpg",
+        kind="download",
+        href="/hfl-corpus/references/token/download",
+        source="photo.jpg",
+        preview_kind="image",
+        preview_url="/hfl-corpus/references/token/preview",
+        media_url="/hfl-corpus/references/token/media",
+        thumbnail_url="/hfl-corpus/references/token/thumbnail",
+    )
+
+    rendered = str(render_markdown(format_hfl_markdown(source, [reference])))
+
+    assert 'class="corpus-reference-preview"' in rendered
+    assert 'class="corpus-reference-thumbnail"' in rendered
+    assert '<img src="/hfl-corpus/references/token/thumbnail" alt="">' in rendered
+    assert '<span class="corpus-reference-action">Open viewer</span>' in rendered
 
 
 def test_reference_downloads_are_signed_and_root_limited(tmp_path):
