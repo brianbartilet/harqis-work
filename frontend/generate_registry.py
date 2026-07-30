@@ -3,7 +3,8 @@
 Generate frontend/registry.json from workflows/*/tasks_config.py.
 
 For each workflow, the generator:
-  - Pulls task_path, queue, and kwargs from tasks_config.py   (always authoritative)
+  - Pulls task_path, queue, kwargs, and manual_kwargs from tasks_config.py
+    (always authoritative)
   - Preserves label, description, schedule, manual_only from  the existing registry.json
   - Keeps manual-only tasks that have no beat schedule entry
   - Auto-generates a label and schedule string for brand-new tasks
@@ -236,12 +237,13 @@ def build_registry() -> dict:
             task_path = beat_val["task"]
             queue     = str(beat_val.get("options", {}).get("queue", "default"))
             kwargs    = beat_val.get("kwargs", {})
+            manual_kwargs = beat_val.get("manual_kwargs", {})
             schedule  = beat_val.get("schedule")
 
             prev = existing_tasks.get(task_key, {})
             scheduled_keys.add(task_key)
 
-            tasks.append({
+            task = {
                 "key":         task_key,
                 "label":       prev.get("label",       _label_from_key(task_key)),
                 "task_path":   task_path,                                           # always overwrite
@@ -250,7 +252,10 @@ def build_registry() -> dict:
                 "kwargs":      kwargs,                                               # always overwrite
                 "description": prev.get("description", ""),
                 "manual_only": prev.get("manual_only", False),
-            })
+            }
+            if manual_kwargs:
+                task["manual_kwargs"] = manual_kwargs
+            tasks.append(task)
 
         # Preserve manual-only tasks not in the beat schedule
         for task_key, task in existing_tasks.items():

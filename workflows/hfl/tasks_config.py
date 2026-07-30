@@ -395,6 +395,11 @@ WORKFLOW_HFL = {
             'max_playlist_items': 500,
             'synthesize': True,
         },
+        # Dashboard-triggered runs capture recent additions; Beat retains the
+        # previous-calendar-month window above.
+        'manual_kwargs': {
+            'days': 7,
+        },
         'options': {
             'queue': WorkflowQueue.HFL,
             'expires': 60 * 60 * 24,

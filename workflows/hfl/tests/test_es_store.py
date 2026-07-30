@@ -146,8 +146,39 @@ def test__query_builds_filtered_body_and_uses_es_sort(monkeypatch):
 
 
 def test__query_empty_filters_use_match_all(monkeypatch):
-    monkeypatch.setattr(es, "_search", lambda body: [])
+    captured = {}
+
+    def fake_search(body):
+        captured["body"] = body
+        return []
+
+    monkeypatch.setattr(es, "_search", fake_search)
+
     assert es.query_hfl_entries() == []
+    assert captured["body"]["sort"] == [
+        {"when": "desc"}, {"entry_id": "asc"}
+    ]
+
+
+def test__query_retries_legacy_entry_id_keyword_mapping(monkeypatch):
+    sorts = []
+
+    def fake_search(body):
+        sorts.append(body["sort"])
+        if len(sorts) == 1:
+            raise RuntimeError("Fielddata is disabled on [entry_id]")
+        return [{"moment": "legacy mapping result"}]
+
+    monkeypatch.setattr(es, "_search", fake_search)
+
+    result = es.query_hfl_entries_status(source="youtube")
+
+    assert result.available is True
+    assert result.rows == ({"moment": "legacy mapping result"},)
+    assert sorts == [
+        [{"when": "desc"}, {"entry_id": "asc"}],
+        [{"when": "desc"}, {"entry_id.keyword": "asc"}],
+    ]
 
 
 def test__query_swallows_failure(monkeypatch):

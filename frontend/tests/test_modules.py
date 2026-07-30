@@ -154,6 +154,7 @@ def test_workflow_trigger_preserves_existing_dispatch_endpoint(
 ):
     import modules.workflows.router as workflow_routes
 
+    dispatched = {}
     monkeypatch.setattr(
         workflow_routes,
         "find_task",
@@ -166,7 +167,7 @@ def test_workflow_trigger_preserves_existing_dispatch_endpoint(
     monkeypatch.setattr(
         workflow_routes.celery_client,
         "dispatch",
-        lambda **kwargs: "local-test-task-id",
+        lambda **kwargs: dispatched.update(kwargs) or "local-test-task-id",
     )
 
     response = authenticated_client.post("/tasks/example/example/trigger")
@@ -174,6 +175,78 @@ def test_workflow_trigger_preserves_existing_dispatch_endpoint(
     assert response.status_code == 200
     assert "local-test-task-id" in response.text
     assert "Pending" in response.text
+    assert dispatched["kwargs"] == {"sample": True}
+
+
+def test_workflow_trigger_merges_manual_kwargs_over_scheduled_kwargs(
+    authenticated_client, monkeypatch
+):
+    import modules.workflows.router as workflow_routes
+
+    scheduled_kwargs = {"days": "last_month", "synthesize": True}
+    manual_kwargs = {"days": 7}
+    dispatched = {}
+    monkeypatch.setattr(
+        workflow_routes,
+        "find_task",
+        lambda workflow, task_key: {
+            "task_path": "example.task",
+            "queue": "hfl",
+            "kwargs": scheduled_kwargs,
+            "manual_kwargs": manual_kwargs,
+        },
+    )
+    monkeypatch.setattr(
+        workflow_routes.celery_client,
+        "dispatch",
+        lambda **kwargs: dispatched.update(kwargs) or "manual-test-task-id",
+    )
+
+    response = authenticated_client.post("/tasks/hfl/youtube/trigger")
+
+    assert response.status_code == 200
+    assert dispatched["kwargs"] == {"days": 7, "synthesize": True}
+    assert scheduled_kwargs == {"days": "last_month", "synthesize": True}
+    assert manual_kwargs == {"days": 7}
+
+
+def test_registry_preserves_manual_kwargs_overrides(monkeypatch):
+    import generate_registry
+
+    monkeypatch.setattr(generate_registry, "_load_existing_registry", lambda: {})
+    monkeypatch.setattr(
+        generate_registry,
+        "discover_workflows",
+        lambda: [(
+            "hfl",
+            "workflows.hfl.tasks_config",
+            {
+                "run-job--ingest_youtube_activity": {
+                    "task": "workflows.hfl.tasks.ingest_youtube.ingest_youtube_activity",
+                    "schedule": None,
+                    "kwargs": {"days": "last_month", "synthesize": True},
+                    "manual_kwargs": {"days": 7},
+                    "options": {"queue": "hfl"},
+                }
+            },
+            "blue",
+        )],
+    )
+
+    task = generate_registry.build_registry()["hfl"]["tasks"][0]
+
+    assert task["kwargs"] == {"days": "last_month", "synthesize": True}
+    assert task["manual_kwargs"] == {"days": 7}
+
+
+def test_checked_in_youtube_registry_separates_manual_and_scheduled_windows():
+    from modules.workflows.service import find_task
+
+    task = find_task("hfl", "ingest_youtube_activity")
+
+    assert task is not None
+    assert task["kwargs"]["days"] == "last_month"
+    assert task["manual_kwargs"] == {"days": 7}
 
 
 def test_hfl_corpus_module_renders_an_empty_index(authenticated_client, monkeypatch):
