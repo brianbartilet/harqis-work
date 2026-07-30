@@ -53,6 +53,7 @@ this scaffold closes.
 | `ingest_location_activity` | Daily location timeline. Pulls the day's GPS track from the local OwnTracks Recorder (`apps/own_tracks`), clusters fixes into **stay-points** (dwell ≥ N min), reverse-geocodes each via OpenStreetMap Nominatim (free, no key), and distils ONE "where I was today" timeline entry. Haiku-distilled, raw fallback. No device configured / Recorder unreachable / no fixes → no entry, no call. Meaningful movement without stays becomes a named route/round-trip timeline; only low-distance/noisy tracks use the generic movement-only breadcrumb. | `file:hfl_corpus+es:hfl-entries` | Daily 23:05 local (active — clean no-op until OwnTracks reports). |
 | `ingest_spotify_activity` | Daily Spotify listening digest. Pulls the day's plays from the Spotify Web API (`apps/spotify`, OAuth2 refresh-token), with the operator's rolling top tracks/artists as context, and distils ONE "soundtrack of the day" entry — mood **inferred** by Haiku from track/artist/genre names (no audio-features; deprecated for new apps). Haiku-distilled, raw fallback. No credentials / no plays → no entry, no call. `recently-played` caps at 50/day. | `file:hfl_corpus+es:hfl-entries` | Daily 23:10 local (**shipped commented-out** — uncomment in `tasks_config.py` once `SPOTIFY_*` creds are set; `tenant_safe`). |
 | `ingest_plaud_activity` | Daily **voice-recordings** ingest. Pulls the day's Plaud recordings via the `apps/plaud` adapter (cloud API → local export-folder fallback) and writes **ONE entry per recording** (not a daily digest). Transcript precedence: Plaud's own transcript, else OpenAI **Whisper** on the raw audio (bounded by `max_transcribe`). Raw recordings + a consolidated `YYYY-MM-DD-summary.md` are archived to `harqis-ones-mac-mini` over key-based SSH. Haiku-distilled, raw fallback. No `PLAUD_TOKEN`/`PLAUD_EXPORT_DIR` → no entry, no call; no recordings → no entry, no call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:15 local (active — clean no-op until acquisition is configured; `tenant_safe`). |
+| `reconcile_plaud_companion` | Reconciles explicitly tagged Google Calendar events with the authenticated Android BLE companion. Overlaps become one recording claim; calendar and location claims are OR-combined on-device. Fail-closed and dry-run by default. | `device:plaud` | Every 2 minutes (no-op until explicitly enabled; not `tenant_safe`). |
 | `ingest_youtube_activity` | Archives authenticated-channel activity as **one retrospective HFL entry per event**: own uploads use their publication time and `#upload`; external videos added to owned playlists use the playlist-added time and `#watch-later`. Both receive `#playlist-<name>` membership tags and reference the curated description plus downloaded video under `YOUTUBE_ARCHIVE_PATH`. | `file:hfl_corpus+es:hfl-entries` | Monthly at 00:30 local on day 1; scans the previous calendar month before the 01:00 corpus archive. Manual calls accept `days=N` or `days='all'`. |
 | `ingest_radar_activity` | Daily **HERMES RADAR digest.** Reads the day's compatibility-named `show_daily_radar` synthesis blocks back out of the shared desktop feed file (`<feed_dir>/hud-logs-YYYYMMDD.txt`) and distils them into ONE "what the day was about" entry. It does not ingest the 15-minute Telegram push rerenders or re-run the radar source sweep. The feed file is Drive-synced, so the Beat host reads briefings a Windows radar wrote; files read remain the entry references. Haiku-distilled, raw fallback. No feed dir / no synthesis blocks → no entry, no LLM call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:20 local (active — clean no-op until `DESKTOP_PATH_FEED` is set and the radar has run). |
 | `ingest_trello_activity` | Reads actions authored by the authenticated Trello member and writes **one entry per meaningful action** using the original event time. Routine activity is rendered deterministically; long comments and unfamiliar actions may use Haiku. Stable action IDs make daily runs and overlapping backfills idempotent. References link to the action/card, board, Workspace, and profile activity page. | `file:hfl_corpus+es:hfl-entries` | Daily 23:25 local on the `hfl` queue (active; previous completed day). Manual runs support `last 30 days`, previous-calendar `last year`, explicit dates, and `all`. |
@@ -571,6 +572,30 @@ To make it produce entries:
 - Tuning kwargs: `window_days` (1), `max_recordings` (50), `max_transcribe` (20),
   `whisper_model` (`whisper-1`), `allow_whisper`, `archive`.
 - Live view (no write): the `plaud_activity` MCP tool in `workflows/hfl/mcp.py`.
+
+---
+
+### `reconcile_plaud_companion` (Calendar-triggered recording)
+
+**Shipped fail-closed and dry-run by default.** It reads timed Google Calendar
+events containing an explicit tag (default `#record`), compares them with the
+Android companion's actual state over authenticated ADB, and acquires/releases
+the companion's `calendar` recording claim. All-day, cancelled, declined, and
+untagged events are ignored.
+
+```env
+PLAUD_COMPANION_ENABLED=true
+PLAUD_COMPANION_DRY_RUN=true
+PLAUD_COMPANION_ADB_SERIAL=
+PLAUD_COMPANION_TOKEN=
+PLAUD_COMPANION_CALENDAR_ID=primary
+PLAUD_COMPANION_EVENT_TAG=#record
+```
+
+Keep dry-run true until task results show the expected decision, then set it to
+false and restart Beat plus the HFL worker. Build, installation, device binding,
+location setup, security limitations, and troubleshooting are in
+[PLAUD Embedded companion](../../docs/info/PLAUD-EMBEDDED-COMPANION.md).
 
 ---
 

@@ -56,7 +56,7 @@ At its core the platform has three layers:
 | `orgo` | Cloud VM desktop control for AI agents | REST API | Yes | [API Docs](https://docs.orgo.ai/api-reference/introduction) · [Site](https://orgo.ai/) |
 | `own_tracks` | GPS location tracking | REST API + Docker/MQTT | Yes | [API Docs](https://owntracks.org/booklet/tech/http/) · [Site](https://owntracks.org/) |
 | `perplexity` | Perplexity Sonar — chat with live web search, search API, embeddings | REST API | No | [API Docs](https://docs.perplexity.ai/) · [Site](https://www.perplexity.ai/) |
-| `plaud` | Plaud AI voice recorder — recordings + transcripts (cloud API, export-folder fallback) | Adapter | Smoke | [Dev API](https://docs.plaud.ai/) · [Site](https://www.plaud.ai/) |
+| `plaud` | Plaud AI voice recorder — acquisition plus experimental Android BLE/calendar/geofence control | Adapter + companion | Smoke + Android build | [Guide](docs/info/PLAUD-EMBEDDED-COMPANION.md) · [Dev API](https://docs.plaud.ai/) |
 | `playwright` | Headless browser automation — screenshot, click, fill, evaluate | Local | No | [Docs](https://playwright.dev/python/) |
 | `pokemon_tcg` | Pokemon TCG card database — cards by National Dex number, sets, rarities (+ offline JSON-dump fallback) | REST API | Yes | [API Docs](https://docs.pokemontcg.io) · [Site](https://pokemontcg.io/) |
 | `rainmeter` | Windows desktop HUD skinning | Local | No | [Docs](https://docs.rainmeter.net/) · [Site](https://www.rainmeter.net/) |
@@ -445,7 +445,7 @@ harqis-work/
 │   ├── orgo/                       # Cloud VM desktop control
 │   ├── own_tracks/                 # GPS location tracking
 │   ├── perplexity/                 # Perplexity Sonar (chat + search + embeddings)
-│   ├── plaud/                      # Plaud AI voice recorder (cloud + export folder)
+│   ├── plaud/                      # Plaud acquisition + Android BLE companion
 │   ├── playwright/                 # Headless browser automation
 │   ├── pokemon_tcg/                # Pokemon TCG card database (cards, sets, rarities)
 │   ├── rainmeter/                  # Windows desktop HUD
@@ -831,6 +831,12 @@ PLAUD_TOKEN=                      # cloud API bearer token (preferred)
 PLAUD_EXPORT_DIR=                 # local export folder (fallback)
 PLAUD_ARCHIVE_HOST=               # archive host (default: harqis-ones-mac-mini)
 PLAUD_ARCHIVE_PATH=               # remote archive dir (unset → archive skipped)
+PLAUD_COMPANION_ENABLED=false     # fail-closed Calendar control switch
+PLAUD_COMPANION_DRY_RUN=true      # inspect decisions before device mutation
+PLAUD_COMPANION_ADB_SERIAL=       # exact serial/IP:port from `adb devices`
+PLAUD_COMPANION_TOKEN=            # high-entropy shared Android control token
+PLAUD_COMPANION_CALENDAR_ID=primary
+PLAUD_COMPANION_EVENT_TAG=#record
 
 # ── Desktop capture / Rainmeter (Windows) ─────────────────────────────────────
 ACTIONS_LOG_PATH=                 # absolute path

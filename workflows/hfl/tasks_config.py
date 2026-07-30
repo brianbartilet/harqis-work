@@ -375,6 +375,27 @@ WORKFLOW_HFL = {
         },
     },
 
+    # Calendar → Android companion → BLE recorder reconciliation. Fail-closed:
+    # with PLAUD_COMPANION_ENABLED unset/false this returns before any Calendar
+    # or ADB call. Initial rollout should keep PLAUD_COMPANION_DRY_RUN=true.
+    'run-job--reconcile_plaud_companion': {
+        'task': 'workflows.hfl.tasks.plaud_companion.reconcile_plaud_companion',
+        'schedule': crontab(minute='*/2'),
+        'kwargs': {},
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 3,
+        },
+        'manifesto': {
+            'code_role': 'capture',
+            'para_bucket': 'area',
+            'express_target': 'device:plaud',
+            'review_artifact': 'es_log',
+            'hfl_signal': False,
+            'tenant_safe': False,
+        },
+    },
+
     # Monthly YouTube upload archive — 00:30 local on day 1, before the 01:00
     # HFL corpus archive. Scans the previous calendar month for own uploads and
     # external-video playlist additions, downloads each video plus a curated

@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/paper"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="22dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.18"
+            android:text="HARQIS / FIELD RECORDER"
+            android:textColor="@color/signal"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="PLAUD control deck"
+            android:textColor="@color/ink"
+            android:textSize="31sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/panel_background"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:text="DEVICE SIGNAL"
+                android:textColor="@color/muted"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/stateValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="UNCONFIGURED"
+                android:textColor="@color/ink"
+                android:textSize="28sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/connectionValue"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="monospace"
+                    android:text="NO LINK"
+                    android:textColor="@color/signal" />
+
+                <TextView
+                    android:id="@+id/batteryValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:text="—"
+                    android:textColor="@color/muted" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/operationDetail"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Save the connection settings below."
+                android:textColor="@color/muted" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/startButton"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:layout_weight="1"
+                android:background="@drawable/button_record"
+                android:text="Start recording"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/stopButton"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:text="Stop"
+                android:textAllCaps="false" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:fontFamily="monospace"
+            android:text="CONNECTION"
+            android:textColor="@color/muted"
+            android:textStyle="bold" />
+
+        <EditText android:id="@+id/controlToken" style="@style/SetupField" android:hint="ADB control token" />
+        <EditText android:id="@+id/userAccessToken" style="@style/SetupField" android:hint="PLAUD SDK partner / user token" />
+        <EditText android:id="@+id/appKey" style="@style/SetupField" android:hint="PLAUD app key / client ID" />
+        <EditText android:id="@+id/appSecret" style="@style/SetupField" android:hint="PLAUD app secret" />
+        <EditText android:id="@+id/customDomain" style="@style/SetupField" android:hint="platform-us.plaud.ai" />
+        <EditText android:id="@+id/deviceSerial" style="@style/SetupField" android:hint="PLAUD device serial" />
+        <EditText android:id="@+id/deviceToken" style="@style/SetupField" android:hint="Device token / stable user ID" />
+        <EditText android:id="@+id/scanMatch" style="@style/SetupField" android:hint="BLE name or MAC to match (optional)" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="26dp"
+            android:fontFamily="monospace"
+            android:text="LOCATION TRIGGER"
+            android:textColor="@color/muted"
+            android:textStyle="bold" />
+
+        <Switch
+            android:id="@+id/geofenceEnabled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Start on entry · stop on exit"
+            android:textColor="@color/ink" />
+
+        <EditText android:id="@+id/geofenceLatitude" style="@style/SetupField" android:hint="Latitude" android:inputType="numberDecimal|numberSigned" />
+        <EditText android:id="@+id/geofenceLongitude" style="@style/SetupField" android:hint="Longitude" android:inputType="numberDecimal|numberSigned" />
+        <EditText android:id="@+id/geofenceRadius" style="@style/SetupField" android:hint="Radius in metres (minimum 100)" android:inputType="number" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:layout_marginBottom="30dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/saveButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:text="Save &amp; arm"
+                android:textAllCaps="false" />
+
+            <Button
+                android:id="@+id/connectButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:text="Reconnect"
+                android:textAllCaps="false" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

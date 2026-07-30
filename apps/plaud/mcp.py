@@ -4,6 +4,7 @@ from typing import Optional
 from mcp.server.fastmcp import FastMCP
 
 from apps.plaud.config import CONFIG
+from apps.plaud.references.companion import PlaudCompanionController
 from apps.plaud.references.adapter import build_adapter
 
 logger = logging.getLogger("harqis-mcp.plaud")
@@ -80,3 +81,23 @@ def register_plaud_tools(mcp: FastMCP):
         adapter = build_adapter(CONFIG)
         status = adapter.status
         return status if isinstance(status, dict) else {}
+
+    @mcp.tool()
+    def plaud_companion_status() -> dict:
+        """Read the Android companion's BLE and recording state over ADB."""
+        logger.info("Tool called: plaud_companion_status")
+        return PlaudCompanionController().status()
+
+    @mcp.tool()
+    def control_plaud_recording(action: str) -> dict:
+        """Control a BLE-connected PLAUD through the Android companion.
+
+        Args:
+            action: One of start, stop, pause, resume, connect, or status.
+
+        The companion verifies a shared control token and this tool polls its
+        reported state after recording commands; an ADB success alone is not
+        treated as confirmation.
+        """
+        logger.info("Tool called: control_plaud_recording action=%s", action)
+        return PlaudCompanionController().command(action)
