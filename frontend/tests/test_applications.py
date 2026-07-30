@@ -37,6 +37,8 @@ def test_applications_page_and_document_render(authenticated_client):
     assert 'data-sortable-apps' in response.text
     assert "harqis_app_order" in response.text
     assert "Edit Layout" in response.text
+    assert "data-app-reorder" in response.text
+    assert "initAppsKeyboardLayout" in response.text
     assert document.status_code == 200
     assert "Application documentation" in document.text
 

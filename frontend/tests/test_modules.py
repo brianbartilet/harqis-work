@@ -71,6 +71,7 @@ def test_module_registry_has_fixed_primary_navigation():
     assert module_by_key("hfl_corpus").route == "/hfl-corpus"
     assert module_by_key("sharing").label == "Share Corpus"
     assert "manifesto" not in {module.key for module in PRIMARY_MODULES}
+    assert "home" not in {module.key for module in PRIMARY_MODULES}
 
 
 def test_module_pages_require_authentication():
@@ -93,27 +94,35 @@ def test_home_renders_dedicated_manifesto_section_outside_platform_modules(
 
     assert response.status_code == 200
     assert "Heuristic Automation for Resilient, Queryable Integration Systems" in response.text
-    assert "Hopefully another rather quite intelligent system" in response.text
-    assert "A self-hosted second brain" in response.text
+    assert "The HARQIS operating loop" in response.text
+    assert "Turn lived activity into reliable action." in response.text
     assert 'id="platform-modules-heading"' in response.text
-    assert "Platform Modules" in response.text
+    assert "Platform modules" in response.text
+    assert 'id="signal-path-heading"' in response.text
+    assert "From evidence to expression" in response.text
+    for stage in ("Capture", "Organize", "Distill", "Orchestrate", "Express"):
+        assert stage in response.text
     assert 'id="manifesto-heading"' in response.text
     assert "HARQIS Work Manifesto" in response.text
     assert "The framework behind the platform" in response.text
     assert "Read the Manifesto" in response.text
     assert 'href="/manifesto"' in response.text
-    desktop_nav = response.text.split(
-        '<nav class="hidden md:flex', 1
-    )[1].split("</nav>", 1)[0]
-    mobile_nav = response.text.split(
-        '<nav class="md:hidden', 1
-    )[1].split("</nav>", 1)[0]
+    primary_navs = re.findall(
+        r'<nav aria-label="Primary navigation"[^>]*>(.*?)</nav>',
+        response.text,
+        re.DOTALL,
+    )
+    assert len(primary_navs) == 2
+    desktop_nav, mobile_nav = primary_navs
     assert "Manifesto" not in desktop_nav
     assert "Manifesto" not in mobile_nav
     assert "Workflows" in response.text
     assert "Apps" in response.text
     assert "Activity Corpus" in response.text
     assert "based on Homework for Life" in response.text
+    assert 'aria-label="HARQIS home"' in response.text
+    assert 'aria-label="Primary navigation"' in response.text
+    assert 'aria-current="page"' not in response.text
     assert '<main class="mx-auto max-w-6xl' in response.text
     assert "grid grid-cols-1 md:grid-cols-2" in response.text
     assert 'class="rounded-2xl border border-blue-900/70' in response.text
@@ -147,6 +156,11 @@ def test_workflows_module_preserves_reorderable_subtabs(authenticated_client):
     assert "Automation inventory" in response.text
     assert "automations across" in response.text
     assert "border-blue-500 text-blue-400" in response.text
+    assert 'role="tablist"' in response.text
+    assert 'role="tab"' in response.text
+    assert 'role="tabpanel"' in response.text
+    assert "initKeyboardLayout" in response.text
+    assert "This browser" in response.text
 
 
 def test_workflow_trigger_preserves_existing_dispatch_endpoint(
@@ -275,6 +289,8 @@ def test_primary_navigation_pages_share_header_typography(
         assert 'class="page-header-eyebrow"' in response.text
         assert "page-header-title" in response.text
         assert 'class="page-header-description"' in response.text
+        if route != "/home":
+            assert response.text.count('aria-current="page"') == 2
 
     base_styles = authenticated_client.get("/home").text
     assert ".page-header-eyebrow {" in base_styles

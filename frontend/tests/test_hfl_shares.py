@@ -197,7 +197,7 @@ def test_sharing_module_requires_owner_auth_and_renders(
         assert anonymous.get("/sharing", follow_redirects=False).status_code == 302
     response = authenticated_client.get("/sharing")
     assert response.status_code == 200
-    assert "Sources - configure ingest data sources" in response.text
+    assert "Included activity sources" in response.text
     assert "notes" in response.text
 
 
@@ -212,7 +212,7 @@ def test_share_corpus_form_uses_new_labels_defaults_and_collapsed_sections(
     assert ">New recipe</h2>" in response.text
     assert "Verification mode" in response.text
     assert 'id="recipient" name="recipient" required maxlength="20"' in response.text
-    assert "Sources - configure ingest data sources" in response.text
+    assert "Included activity sources" in response.text
     assert 'value="__all__" data-all-sources checked' in response.text
     assert 'name="references_enabled" checked' in response.text
     assert "Number of devices" in response.text
@@ -233,6 +233,7 @@ def test_share_corpus_form_uses_new_labels_defaults_and_collapsed_sections(
     assert 'id="topic" name="topic" rows="3"' in response.text
     assert "Topic phrase filter" in response.text
     assert 'id="context-prompt" name="context_prompt"' in response.text
+    assert "Background for HARQIS" in response.text
     assert "Specific entry IDs" not in response.text
     assert 'data-clear-tags disabled' in response.text
     assert 'class="select-caret"' in response.text
@@ -259,6 +260,10 @@ def test_share_corpus_uses_automatic_preview_and_blocking_long_actions(
         r"formnovalidate>Save recipe</button>",
         response.text,
     )
+    generate = response.text.index('formaction="/sharing/generate"')
+    preview = response.text.index('data-preview-shell')
+    assert generate > preview
+    assert "Generate snapshot and QR" in response.text
 
     preview = authenticated_client.post("/sharing/preview", data=_form())
 
@@ -706,8 +711,11 @@ def test_owner_page_paginates_recipes_and_shares_with_mobile_first_saved_list(
     assert ".owner-sidebar { display:contents; }" in first.text
     assert ".two,.stat-grid { grid-template-columns:minmax(0,1fr); }" in first.text
     assert first.text.count('formaction="/sharing/generate"') == 1
-    assert first.text.index('form="social-recipe-form"') < first.text.index(
-        '<form id="social-recipe-form"'
+    assert first.text.index('<form id="social-recipe-form"') < first.text.index(
+        'formaction="/sharing/generate"'
+    )
+    assert first.text.index("data-preview-shell") < first.text.index(
+        'formaction="/sharing/generate"'
     )
 
 

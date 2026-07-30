@@ -12,7 +12,20 @@
   <script src="{{ static_asset('vendor/sortablejs-1.15.2.min.js') }}"></script>
 
   <style>
+    :root {
+      --harqis-ink: #07101f;
+      --harqis-surface: #0f172a;
+      --harqis-signal: #38bdf8;
+      --harqis-evidence: #14b8a6;
+      --harqis-warning: #f59e0b;
+      --harqis-text: #e2e8f0;
+    }
     [x-cloak] { display: none !important; }
+
+    :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+      outline: 2px solid var(--harqis-signal);
+      outline-offset: 3px;
+    }
 
     /* Scrollbar styling */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -84,10 +97,59 @@
       font-size: .875rem;
       line-height: 1.5rem;
     }
+    .operator-meta { color: #94a3b8; }
+    .signal-path {
+      position: relative;
+      display: grid;
+      gap: .75rem;
+    }
+    .signal-path::before {
+      position: absolute;
+      top: 1.25rem;
+      right: 10%;
+      left: 10%;
+      height: 1px;
+      background: linear-gradient(90deg, #0e7490, var(--harqis-signal), var(--harqis-evidence));
+      content: "";
+      opacity: .6;
+    }
+    .signal-stage {
+      position: relative;
+      min-width: 0;
+      border: 1px solid #1e3a5f;
+      border-radius: .75rem;
+      background: rgba(7, 16, 31, .94);
+      padding: 1rem;
+    }
+    .signal-stage-marker {
+      display: grid;
+      width: 1.5rem;
+      height: 1.5rem;
+      place-items: center;
+      border: 1px solid #0ea5e9;
+      border-radius: 999px;
+      background: var(--harqis-ink);
+      color: #bae6fd;
+      font: 700 .65rem/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+    @media (min-width: 768px) {
+      .signal-path { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    }
+    @media (max-width: 767px) {
+      .signal-path::before { display: none; }
+    }
     @media (min-width: 640px) {
       .page-header-title {
         font-size: 1.875rem;
         line-height: 2.25rem;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
       }
     }
   </style>
@@ -99,7 +161,8 @@
   {% if user %}
   <header class="sticky top-0 z-20 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex items-center justify-between h-14">
-      <a href="/home" class="flex items-center gap-3">
+      <a href="/home" aria-label="HARQIS home"
+         class="flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400">
         <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-600/20 ring-1 ring-blue-500/30">
           <svg class="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round"
@@ -109,9 +172,11 @@
         <span class="font-semibold text-white tracking-tight">HARQIS</span>
       </a>
 
-      <nav class="hidden md:flex items-center gap-1 rounded-lg bg-slate-900/70 p-1 ring-1 ring-slate-800">
+      <nav aria-label="Primary navigation"
+           class="hidden md:flex items-center gap-1 rounded-lg bg-slate-900/70 p-1 ring-1 ring-slate-800">
         {% for module in modules | default([]) %}
         <a href="{{ module.route }}"
+           {% if active_module == module.key %}aria-current="page"{% endif %}
            class="rounded-md px-3 py-1.5 text-xs font-medium transition
                   {% if active_module == module.key %}bg-blue-950/70 text-blue-300 ring-1 ring-blue-800/60{% else %}text-slate-400 hover:bg-slate-800 hover:text-blue-200{% endif %}">
           {{ module.label }}
@@ -127,14 +192,16 @@
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Flower
         </a>
         {% endif %}
-        <span class="hidden sm:inline text-xs text-slate-600">{{ user }}</span>
-        <a href="/logout" class="text-xs text-slate-500 hover:text-red-400 transition">Sign out</a>
+        <span class="operator-meta hidden sm:inline text-xs">{{ user }}</span>
+        <a href="/logout" class="rounded text-xs text-slate-400 transition hover:text-red-300">Sign out</a>
       </div>
     </div>
 
-    <nav class="md:hidden mx-auto max-w-7xl px-4 pb-2 flex gap-2 overflow-x-auto">
+    <nav aria-label="Primary navigation"
+         class="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 pb-2 md:hidden">
       {% for module in modules | default([]) %}
       <a href="{{ module.route }}"
+         {% if active_module == module.key %}aria-current="page"{% endif %}
          class="whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium
                 {% if active_module == module.key %}bg-blue-950/70 text-blue-300 ring-1 ring-blue-800/60{% else %}text-slate-400 bg-slate-900 hover:text-blue-200{% endif %}">
         {{ module.label }}

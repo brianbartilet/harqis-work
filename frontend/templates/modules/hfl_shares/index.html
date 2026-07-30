@@ -8,6 +8,11 @@
   .field { margin-bottom:1rem; }
   .field label { display:block; color:#cbd5e1; font-size:.78rem; font-weight:650; margin-bottom:.4rem; }
   .control { width:100%; border:1px solid #334155; border-radius:.55rem; background:#020617; color:#f8fafc; padding:.65rem .75rem; }
+  .control:focus-visible, .selector > summary:focus-visible, .expand-panel > summary:focus-visible,
+  .owner-list-panel > summary:focus-visible, .btn:focus-visible {
+    outline:2px solid #38bdf8;
+    outline-offset:2px;
+  }
   .select-wrap { position:relative; }
   .select-wrap select { appearance:none; padding-right:3rem; }
   .select-caret { position:absolute; top:50%; right:1rem; width:1.15rem; height:1.15rem; transform:translateY(-50%); pointer-events:none; color:#60a5fa; }
@@ -149,7 +154,7 @@
   <div class="page-header mb-6">
     <p class="page-header-eyebrow">Activity Corpus</p>
     <h1 class="page-header-title">Share Corpus</h1>
-    <p class="page-header-description">Recipes remain live filters. Generation always refreshes the corpus and freezes a new snapshot.</p>
+    <p class="page-header-description">Recipes keep your selection rules. Each generated share captures a fresh, immutable snapshot.</p>
   </div>
 
   {% if error %}<div class="message error">{{ error }}</div>{% endif %}
@@ -167,11 +172,6 @@
         </div>
         <div class="recipe-header-actions">
           {% if cfg and cfg.id %}<a class="text-xs text-sky-400" href="/sharing" data-recipe-clear>Clear</a>{% endif %}
-          <button class="btn btn-main" type="submit" form="social-recipe-form"
-                  formaction="/sharing/generate" formnovalidate
-                  data-progress-title="Generating share"
-                  data-progress-message="Preparing your snapshot…"
-                  data-progress-next="Generating secure access and QR code…">Generate snapshot + QR</button>
         </div>
       </div>
       <form id="social-recipe-form" method="post" data-social-form>
@@ -196,7 +196,7 @@
         <div class="field"><label for="description">Description</label><textarea class="control" id="description" name="description" rows="3" placeholder="What this recipe is intended to share">{{ cfg.description if cfg else '' }}</textarea></div>
 
         <div class="field">
-          <label>Sources - configure ingest data sources</label>
+          <label>Included activity sources</label>
           <details class="selector" data-source-selector>
             <summary>
               <span data-source-summary>All sources</span>
@@ -253,7 +253,7 @@
               <div class="field"><label for="date-to">To date</label><input class="control [color-scheme:dark]" id="date-to" type="date" name="date_to" value="{{ cfg.date_to if cfg else '' }}" data-preview-filter onclick="if (this.showPicker) this.showPicker()"></div>
             </div>
             <div class="field mb-0">
-              <label for="context-prompt">Context prompt
+              <label for="context-prompt">Background for HARQIS
                 <span class="help-icon" tabindex="0" role="img" aria-label="Optional background guidance for the agent. It cannot override snapshot-only privacy and safety rules." title="Optional background guidance for the agent. It cannot override snapshot-only privacy and safety rules.">?</span>
               </label>
               <textarea class="control" id="context-prompt" name="context_prompt" rows="4" maxlength="4000" data-preview-filter>{{ cfg.context_prompt if cfg else '' }}</textarea>
@@ -290,9 +290,13 @@
           <button class="btn btn-soft" formaction="/sharing/configurations" formnovalidate>Save recipe</button>
           <button class="btn btn-soft disabled:cursor-not-allowed disabled:opacity-50" formaction="/sharing/preview/chat"
                   data-test-agent {% if not preview %}disabled{% endif %}
-                  data-progress-title="Testing agent"
-                  data-progress-message="Reviewing the snapshot…"
-                  data-progress-next="Asking the agent…">Test agent</button>
+                   data-progress-title="Testing agent"
+                   data-progress-message="Reviewing the snapshot…"
+                   data-progress-next="Asking the agent…">Test agent</button>
+          <button class="btn btn-main" type="submit" formaction="/sharing/generate"
+                  data-progress-title="Generating share"
+                  data-progress-message="Preparing your snapshot…"
+                  data-progress-next="Generating secure access and QR code…">Generate snapshot and QR</button>
         </div>
       </form>
     </section>

@@ -30,20 +30,21 @@
     <article data-app-key="{{ application.key }}"
              class="group relative rounded-xl bg-slate-900 ring-1 ring-slate-800 hover:ring-blue-500/40 transition"
              :class="customize ? 'ring-amber-900/60' : ''">
-      <span x-show="customize" x-cloak
-            class="drag-handle absolute left-3 top-3 z-10 cursor-grab text-slate-600 hover:text-slate-300 touch-none">
+      <button x-show="customize" x-cloak type="button" data-app-reorder
+              aria-label="Reorder {{ application.label }}. Use arrow keys to move it."
+              class="drag-handle absolute left-3 top-3 z-10 cursor-grab touch-none rounded text-slate-400 hover:text-white">
         <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
           <circle cx="5" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/>
           <circle cx="10" cy="4" r="1.2"/><circle cx="10" cy="8" r="1.2"/><circle cx="10" cy="12" r="1.2"/>
         </svg>
-      </span>
+      </button>
       <a href="/applications/{{ application.key }}"
          @click="if (customize) $event.preventDefault()"
          class="block p-5" :class="customize ? 'pl-10 cursor-default' : ''">
         <div class="flex items-start justify-between gap-3">
           <div>
             <h2 class="font-semibold text-white group-hover:text-blue-300 transition">{{ application.label }}</h2>
-            <p class="mt-1 font-mono text-xs text-slate-600">apps/{{ application.key }}</p>
+            <p class="operator-meta mt-1 font-mono text-xs">apps/{{ application.key }}</p>
           </div>
           {% if latest[application.key] %}
             {% set run = latest[application.key][0] %}
@@ -95,6 +96,32 @@ function initAppsLayout() {
   });
 }
 
+function saveAppsLayout(grid) {
+  const order = Array.from(grid.querySelectorAll('[data-app-key]')).map(function(card) {
+    return card.dataset.appKey;
+  });
+  localStorage.setItem(APPS_LAYOUT_KEY, JSON.stringify(order));
+}
+
+function initAppsKeyboardLayout() {
+  const grid = document.querySelector('[data-sortable-apps]');
+  if (!grid) return;
+  grid.querySelectorAll('[data-app-reorder]').forEach(function(handle) {
+    handle.addEventListener('keydown', function(event) {
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+      event.preventDefault();
+      const card = handle.closest('[data-app-key]');
+      const backwards = ['ArrowUp', 'ArrowLeft'].includes(event.key);
+      const sibling = backwards ? card?.previousElementSibling : card?.nextElementSibling;
+      if (!card || !sibling) return;
+      if (backwards) grid.insertBefore(card, sibling);
+      else grid.insertBefore(sibling, card);
+      saveAppsLayout(grid);
+      handle.focus();
+    });
+  });
+}
+
 function resetAppsLayout() {
   localStorage.removeItem(APPS_LAYOUT_KEY);
   location.reload();
@@ -103,6 +130,7 @@ function resetAppsLayout() {
 document.addEventListener('DOMContentLoaded', function() {
   restoreAppsLayout();
   initAppsLayout();
+  initAppsKeyboardLayout();
 });
 </script>
 {% endblock %}

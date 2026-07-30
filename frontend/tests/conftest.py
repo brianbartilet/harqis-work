@@ -22,6 +22,7 @@ os.environ["HFL_CORPUS_API_TOKEN"] = "frontend-test-hfl-api-token"
 os.environ["HFL_CORPUS_API_URL"] = ""
 os.environ["HFL_SHARE_SECRET_KEY"] = "frontend-test-share-secret-key"
 os.environ["HFL_SHARE_PUBLIC_URL"] = "https://share.example.test"
+os.environ["BEHIND_PROXY"] = "false"
 os.environ["HFL_SHARE_STORE_PATH"] = str(
     Path(tempfile.gettempdir())
     / f"harqis-frontend-shares-{os.getpid()}.sqlite3"
