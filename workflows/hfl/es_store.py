@@ -173,7 +173,10 @@ def _search(body: dict[str, Any]) -> list[dict[str, Any]]:
         timeout=20,
     )
     if response.status_code not in (200, 201):
-        raise RuntimeError(f"Elasticsearch search returned HTTP {response.status_code}")
+        detail = response.text.strip()[:1000]
+        raise RuntimeError(
+            f"Elasticsearch search returned HTTP {response.status_code}: {detail}"
+        )
     hits = response.json().get("hits", {}).get("hits", [])
     return [
         hit["_source"]
@@ -235,21 +238,28 @@ def query_hfl_entries_status(
             "filter": filt,
         }
     }
-    sort = (
-        [{"_score": "desc"}, {"when": "desc"}, {"entry_id": "asc"}]
-        if must
-        else [{"when": "desc"}, {"entry_id": "asc"}]
-    )
+    def _sort(entry_id_field: str) -> list[dict[str, str]]:
+        prefix = [{"_score": "desc"}] if must else []
+        return [*prefix, {"when": "desc"}, {entry_id_field: "asc"}]
+
     body = {
         "query": es_query,
         "size": requested,
-        "sort": sort,
+        "sort": _sort("entry_id"),
         "track_total_hits": False,
     }
     try:
         return HflQueryResult(tuple(_search(body)), available=True)
     except Exception as exc:  # noqa: BLE001 - caller chooses fallback behaviour
-        _log.warning("hfl.es_store: query failed (%s)", exc)
+        if "Fielddata is disabled on [entry_id]" not in str(exc):
+            _log.warning("hfl.es_store: query failed (%s)", exc)
+            return HflQueryResult((), available=False, error="elasticsearch_unavailable")
+
+    legacy_body = {**body, "sort": _sort("entry_id.keyword")}
+    try:
+        return HflQueryResult(tuple(_search(legacy_body)), available=True)
+    except Exception as exc:  # noqa: BLE001 - caller chooses fallback behaviour
+        _log.warning("hfl.es_store: legacy-mapping query failed (%s)", exc)
         return HflQueryResult((), available=False, error="elasticsearch_unavailable")
 
 

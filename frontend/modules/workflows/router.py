@@ -49,9 +49,13 @@ async def trigger_task(request: Request, workflow: str, task_key: str):
         )
 
     try:
+        kwargs = {
+            **task.get("kwargs", {}),
+            **task.get("manual_kwargs", {}),
+        }
         task_id = celery_client.dispatch(
             task_path=task["task_path"],
-            kwargs=task.get("kwargs", {}),
+            kwargs=kwargs,
             queue=task["queue"],
         )
     except Exception as exc:
