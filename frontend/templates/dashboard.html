@@ -11,14 +11,19 @@
 
 {% block subnav %}
 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-  <nav class="-mb-px flex gap-6 overflow-x-auto" data-sortable-tabs>
+  <nav class="-mb-px flex gap-6 overflow-x-auto" data-sortable-tabs
+       role="tablist" aria-label="Workflow categories">
     {% for wf_key, wf in workflows.items() %}
-    <button data-wf-key="{{ wf_key }}"
+    <button id="workflow-tab-{{ wf_key }}" data-wf-key="{{ wf_key }}" data-workflow-tab
+            type="button" role="tab" aria-controls="workflow-panel-{{ wf_key }}"
+            :aria-selected="workflowTab === '{{ wf_key }}'"
+            :tabindex="workflowTab === '{{ wf_key }}' ? 0 : -1"
             @click="customize || (workflowTab = '{{ wf_key }}')"
             :class="workflowTab === '{{ wf_key }}'
               ? 'border-blue-500 text-blue-400'
               : 'border-transparent text-slate-500 hover:text-slate-300 hover:border-slate-600'"
-            class="flex items-center gap-1.5 whitespace-nowrap border-b-2 py-3 text-sm font-medium transition-colors">
+            class="flex items-center gap-1.5 whitespace-nowrap border-b-2 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+            aria-description="Use the left and right arrow keys to change category. In Edit Layout, use Alt plus an arrow key to reorder.">
       <span x-show="customize" x-cloak
             class="drag-handle cursor-grab text-slate-600 hover:text-slate-400 touch-none"
             @click.stop>
@@ -138,7 +143,8 @@
     </div>
 
     {% for wf_key, wf in workflows.items() %}
-    <div x-show="workflowTab === '{{ wf_key }}'" x-cloak>
+    <div id="workflow-panel-{{ wf_key }}" x-show="workflowTab === '{{ wf_key }}'" x-cloak
+         role="tabpanel" aria-labelledby="workflow-tab-{{ wf_key }}">
 
       {# Workflow header #}
       <div class="mb-6">
@@ -177,13 +183,15 @@
             <div class="flex items-start justify-between gap-2 mb-3">
               <div class="flex items-center gap-2 min-w-0">
                 {# Drag handle — visible only in customize mode #}
-                <span x-show="customize" x-cloak
-                      class="drag-handle cursor-grab shrink-0 text-slate-600 hover:text-slate-400 touch-none">
+                <button x-show="customize" x-cloak type="button"
+                        data-keyboard-reorder
+                        aria-label="Reorder {{ task.label }}. Use arrow keys to move it."
+                        class="drag-handle shrink-0 cursor-grab touch-none rounded text-slate-400 hover:text-white">
                   <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 16 16">
                     <circle cx="5" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/>
                     <circle cx="10" cy="4" r="1.2"/><circle cx="10" cy="8" r="1.2"/><circle cx="10" cy="12" r="1.2"/>
                   </svg>
-                </span>
+                </button>
                 <h3 class="text-sm font-semibold text-white leading-snug">{{ task.label }}</h3>
               </div>
               <div class="flex items-center gap-1.5 shrink-0">
@@ -208,6 +216,7 @@
               hx-target="#log-{{ wf_key }}-{{ task.key }}"
               hx-swap="innerHTML"
               hx-indicator="#spinner-{{ wf_key }}-{{ task.key }}"
+              {% if task.manual_only %}hx-confirm="Run {{ task.label }} now? This manual automation may change connected systems."{% endif %}
               @click="open = true"
               class="relative w-full flex items-center justify-center gap-2 rounded-lg
                      bg-slate-800 hover:bg-slate-700 active:bg-slate-750
@@ -216,7 +225,7 @@
                      focus:ring-offset-slate-900">
 
               {# Spinner (htmx indicator) #}
-              <svg id="spinner-{{ wf_key }}-{{ task.key }}"
+              <svg id="spinner-{{ wf_key }}-{{ task.key }}" aria-hidden="true"
                    class="htmx-indicator w-3 h-3 animate-spin text-blue-400"
                    fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
@@ -229,6 +238,11 @@
               </svg>
               Run now
             </button>
+            {% if task.manual_only %}
+            <p class="mt-2 text-xs leading-relaxed text-amber-300/80">
+              Runs immediately and may change a connected system.
+            </p>
+            {% endif %}
 
             {# Drag placeholder shown while customizing #}
             <div x-show="customize" x-cloak
@@ -274,7 +288,7 @@
                          fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/>
                     </svg>
-                    History (<span x-text="history.length"></span>)
+                    This browser (<span x-text="history.length"></span>)
                   </button>
                   <button @click="clearHistory()"
                           class="text-xs text-slate-700 hover:text-red-400 transition-colors">clear</button>
@@ -337,7 +351,7 @@
   </main>
 
   {# ── Footer ───────────────────────────────────────────────────────────── #}
-  <footer class="border-t border-slate-900 py-4 text-center text-xs text-slate-700">
+  <footer class="border-t border-slate-900 py-4 text-center text-xs text-slate-500">
     HARQIS Automation Platform
   </footer>
 
@@ -349,6 +363,20 @@ const _LAYOUT = {
   tabs:  'harqis_tab_order',
   cards: function(wf) { return 'harqis_card_order_' + wf; },
 };
+
+function saveTabOrder(nav) {
+  var order = Array.from(nav.querySelectorAll('[data-wf-key]')).map(function(el) {
+    return el.dataset.wfKey;
+  });
+  localStorage.setItem(_LAYOUT.tabs, JSON.stringify(order));
+}
+
+function saveCardOrder(grid) {
+  var order = Array.from(grid.querySelectorAll('[data-task-key]')).map(function(el) {
+    return el.dataset.taskKey;
+  });
+  localStorage.setItem(_LAYOUT.cards(grid.dataset.sortableGrid), JSON.stringify(order));
+}
 
 function restoreLayout() {
   // Restore tab order
@@ -389,12 +417,7 @@ function initSortable() {
       handle: '.drag-handle',
       ghostClass: 'opacity-30',
       direction: 'horizontal',
-      onEnd: function() {
-        var order = Array.from(nav.querySelectorAll('[data-wf-key]')).map(function(el) {
-          return el.dataset.wfKey;
-        });
-        localStorage.setItem(_LAYOUT.tabs, JSON.stringify(order));
-      }
+      onEnd: function() { saveTabOrder(nav); }
     });
   }
 
@@ -405,12 +428,52 @@ function initSortable() {
       animation: 150,
       handle: '.drag-handle',
       ghostClass: 'opacity-30',
-      onEnd: function() {
-        var order = Array.from(grid.querySelectorAll('[data-task-key]')).map(function(el) {
-          return el.dataset.taskKey;
-        });
-        localStorage.setItem(_LAYOUT.cards(wfKey), JSON.stringify(order));
-      }
+      onEnd: function() { saveCardOrder(grid); }
+    });
+  });
+}
+
+function initKeyboardLayout() {
+  var nav = document.querySelector('[data-sortable-tabs]');
+  nav?.addEventListener('keydown', function(event) {
+    var tab = event.target.closest('[data-workflow-tab]');
+    if (!tab || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    var tabs = Array.from(nav.querySelectorAll('[data-workflow-tab]'));
+    var index = tabs.indexOf(tab);
+    if (event.altKey && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+      event.preventDefault();
+      var sibling = event.key === 'ArrowLeft' ? tab.previousElementSibling : tab.nextElementSibling;
+      if (!sibling) return;
+      if (event.key === 'ArrowLeft') nav.insertBefore(tab, sibling);
+      else nav.insertBefore(sibling, tab);
+      saveTabOrder(nav);
+      tab.focus();
+      return;
+    }
+    event.preventDefault();
+    var nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? tabs.length - 1
+        : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    tabs[nextIndex].click();
+    tabs[nextIndex].focus();
+  });
+
+  document.querySelectorAll('[data-keyboard-reorder]').forEach(function(handle) {
+    handle.addEventListener('keydown', function(event) {
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+      event.preventDefault();
+      var card = handle.closest('[data-task-key]');
+      var grid = card?.closest('[data-sortable-grid]');
+      if (!card || !grid) return;
+      var backwards = ['ArrowUp', 'ArrowLeft'].includes(event.key);
+      var sibling = backwards ? card.previousElementSibling : card.nextElementSibling;
+      if (!sibling) return;
+      if (backwards) grid.insertBefore(card, sibling);
+      else grid.insertBefore(sibling, card);
+      saveCardOrder(grid);
+      handle.focus();
     });
   });
 }
@@ -426,6 +489,7 @@ function resetLayout() {
 document.addEventListener('DOMContentLoaded', function() {
   restoreLayout();
   initSortable();
+  initKeyboardLayout();
 });
 
 // ── Task run history ────────────────────────────────────────────────────────

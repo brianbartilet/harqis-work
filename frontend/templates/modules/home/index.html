@@ -4,32 +4,77 @@
 {% block content %}
 <main class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8 space-y-10">
   <section class="page-header">
-    <p class="page-header-eyebrow">Hopefully another rather quite intelligent system</p>
+    <p class="page-header-eyebrow">The HARQIS operating loop</p>
     <h1 class="page-header-title max-w-4xl">
-      Heuristic Automation for Resilient, Queryable Integration Systems
+      Turn lived activity into reliable action.
     </h1>
     <p class="page-header-description">
-      A self-hosted second brain that captures useful state, organizes it into workflows, distills it
-      into reusable knowledge, and expresses action back into the systems you use.
+      HARQIS captures useful state, organizes and distills it into reusable knowledge,
+      orchestrates repeatable work, and expresses action back into the systems you use.
+    </p>
+    <p class="operator-meta mt-3 font-mono text-xs">
+      Heuristic Automation for Resilient, Queryable Integration Systems
     </p>
   </section>
 
+  <section aria-labelledby="signal-path-heading">
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <p class="page-header-eyebrow">Signal path</p>
+        <h2 id="signal-path-heading" class="mt-2 text-xl font-semibold text-white">
+          From evidence to expression
+        </h2>
+      </div>
+      <p class="max-w-xl text-sm leading-relaxed text-slate-400">
+        Each stage has one job. Together they make captured context searchable,
+        trustworthy, and useful.
+      </p>
+    </div>
+    <ol class="signal-path mt-6">
+      <li class="signal-stage">
+        <span class="signal-stage-marker" aria-hidden="true">01</span>
+        <h3 class="mt-3 font-semibold text-white">Capture</h3>
+        <p class="mt-1 text-xs leading-relaxed text-slate-400">Preserve moments and source evidence.</p>
+      </li>
+      <li class="signal-stage">
+        <span class="signal-stage-marker" aria-hidden="true">02</span>
+        <h3 class="mt-3 font-semibold text-white">Organize</h3>
+        <p class="mt-1 text-xs leading-relaxed text-slate-400">Give activity a durable structure.</p>
+      </li>
+      <li class="signal-stage">
+        <span class="signal-stage-marker" aria-hidden="true">03</span>
+        <h3 class="mt-3 font-semibold text-white">Distill</h3>
+        <p class="mt-1 text-xs leading-relaxed text-slate-400">Turn detail into reusable knowledge.</p>
+      </li>
+      <li class="signal-stage">
+        <span class="signal-stage-marker" aria-hidden="true">04</span>
+        <h3 class="mt-3 font-semibold text-white">Orchestrate</h3>
+        <p class="mt-1 text-xs leading-relaxed text-slate-400">Coordinate repeatable work safely.</p>
+      </li>
+      <li class="signal-stage">
+        <span class="signal-stage-marker" aria-hidden="true">05</span>
+        <h3 class="mt-3 font-semibold text-white">Express</h3>
+        <p class="mt-1 text-xs leading-relaxed text-slate-400">Return useful action to the world.</p>
+      </li>
+    </ol>
+  </section>
+
   <section aria-labelledby="platform-modules-heading">
-    <p class="text-xs uppercase tracking-[0.22em] text-blue-400">Explore the platform</p>
-    <h2 id="platform-modules-heading" class="mt-2 text-xl font-semibold text-white">Platform Modules</h2>
+    <p class="page-header-eyebrow">Choose a workspace</p>
+    <h2 id="platform-modules-heading" class="mt-2 text-xl font-semibold text-white">Platform modules</h2>
     <p class="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
       The connected surfaces that help HARQIS capture, distill, orchestrate, and express your work.
     </p>
     <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
       {% for module in module_cards %}
       <a href="{{ module.route }}"
-         class="group rounded-xl bg-slate-900 p-5 ring-1 ring-slate-800 hover:ring-blue-500/50 transition">
+         class="group rounded-xl bg-slate-900 p-5 ring-1 ring-slate-800 transition hover:ring-blue-500/50">
         <div class="flex items-center justify-between gap-3">
           <h3 class="font-semibold text-white">{{ module.label }}</h3>
-          <span class="text-slate-600 group-hover:text-blue-400 transition">→</span>
+          <span class="text-slate-400 transition group-hover:text-blue-300" aria-hidden="true">→</span>
         </div>
         <p class="mt-2 text-sm text-slate-300">{{ module.description }}</p>
-        <p class="mt-2 text-xs leading-relaxed text-slate-500">{{ module.detail }}</p>
+        <p class="operator-meta mt-2 text-xs leading-relaxed">{{ module.detail }}</p>
       </a>
       {% endfor %}
     </div>
@@ -46,7 +91,7 @@
           Explore the principles and practical frameworks that shape how HARQIS captures,
           organizes, distills, and expresses useful knowledge.
         </p>
-        <p class="mt-2 max-w-3xl text-xs leading-relaxed text-slate-500">{{ manifesto_module.detail }}</p>
+        <p class="operator-meta mt-2 max-w-3xl text-xs leading-relaxed">{{ manifesto_module.detail }}</p>
       </div>
       <a href="{{ manifesto_module.route }}"
          class="inline-flex shrink-0 items-center justify-center rounded-lg bg-blue-600/20 px-4 py-2 text-sm font-medium text-blue-200 ring-1 ring-blue-500/40 transition hover:bg-blue-600/30 hover:text-white">

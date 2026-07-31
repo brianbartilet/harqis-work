@@ -60,7 +60,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
 )
 
 PRIMARY_MODULES: tuple[ModuleDefinition, ...] = tuple(
-    module for module in MODULES if module.key != "manifesto"
+    module for module in MODULES if module.key not in {"home", "manifesto"}
 )
 
 

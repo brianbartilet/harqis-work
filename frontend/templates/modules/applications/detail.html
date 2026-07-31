@@ -9,7 +9,7 @@
       <div>
         <p class="text-xs uppercase tracking-[0.22em] text-blue-400">Application integration</p>
         <h1 class="mt-2 text-2xl font-semibold text-white">{{ application.label }}</h1>
-        <p class="mt-1 font-mono text-xs text-slate-600">apps/{{ application.key }}</p>
+        <p class="operator-meta mt-1 font-mono text-xs">apps/{{ application.key }}</p>
       </div>
       <div class="flex flex-wrap gap-2">
         <form hx-post="/applications/{{ application.key }}/tests" hx-target="#current-test-run" hx-swap="innerHTML">
@@ -32,13 +32,13 @@
     </div>
   </section>
 
-  <section id="current-test-run"></section>
+  <section id="current-test-run" aria-live="polite" aria-label="Current test run"></section>
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <section class="rounded-xl bg-slate-900 ring-1 ring-slate-800 overflow-hidden">
       <div class="border-b border-slate-800 px-5 py-4">
         <h2 class="font-semibold text-white">Documentation</h2>
-        <p class="mt-1 text-xs text-slate-500">Markdown files discovered recursively.</p>
+        <p class="operator-meta mt-1 text-xs">Guides and references included with this integration.</p>
       </div>
       {% if application.documents %}
       <div class="divide-y divide-slate-800/70">
@@ -50,14 +50,14 @@
         {% endfor %}
       </div>
       {% else %}
-      <p class="px-5 py-6 text-sm text-slate-600">No documentation available.</p>
+      <p class="px-5 py-6 text-sm text-slate-400">No documentation is included with this integration yet.</p>
       {% endif %}
     </section>
 
     <section class="rounded-xl bg-slate-900 ring-1 ring-slate-800 overflow-hidden">
       <div class="border-b border-slate-800 px-5 py-4">
         <h2 class="font-semibold text-white">Tests</h2>
-        <p class="mt-1 text-xs text-slate-500">Individual non-safe tests require confirmation.</p>
+        <p class="operator-meta mt-1 text-xs">Checks that may contact live services ask before they run.</p>
       </div>
       {% if application.tests %}
       <div class="divide-y divide-slate-800/70 max-h-[32rem] overflow-y-auto">
@@ -65,7 +65,7 @@
         <div class="flex items-center justify-between gap-3 px-5 py-3">
           <div class="min-w-0">
             <p class="truncate font-mono text-xs text-slate-300">{{ test.label }}</p>
-            {% if test.safe %}<span class="text-xs text-emerald-500">allowlisted safe</span>{% endif %}
+            {% if test.safe %}<span class="text-xs text-emerald-400">approved safe</span>{% endif %}
           </div>
           <form hx-post="/applications/{{ application.key }}/tests" hx-target="#current-test-run" hx-swap="innerHTML"
                 {% if not test.safe %}hx-confirm="This test may use live host credentials. Run {{ test.label }}?"{% endif %}>
@@ -77,7 +77,7 @@
         {% endfor %}
       </div>
       {% else %}
-      <p class="px-5 py-6 text-sm text-slate-600">No pytest files discovered.</p>
+      <p class="px-5 py-6 text-sm text-slate-400">No automated checks are included with this integration yet.</p>
       {% endif %}
     </section>
   </div>
