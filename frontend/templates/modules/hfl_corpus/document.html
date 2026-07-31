@@ -116,21 +116,67 @@
   {% if document.entry_count %}
   <nav id="tag-navigator"
        data-selected-tag="{{ selected_tag }}"
+       data-selected-source="{{ selected_source }}"
        class="fixed inset-x-2 bottom-2 z-30 mx-auto max-h-[45dvh] max-w-4xl overflow-y-auto rounded-2xl border border-blue-800/70 bg-slate-900/95 p-3 shadow-2xl shadow-black/60 backdrop-blur sm:inset-x-4 sm:bottom-4 sm:max-h-none sm:p-4"
-       aria-label="Document tag navigator">
-    <div class="max-h-28 overflow-y-auto">
-      <p class="mb-2 text-xs font-medium text-slate-500">Document tags</p>
-      <div class="flex flex-wrap gap-2">
+       aria-label="Document entry navigator">
+    <div class="max-h-28 overflow-y-auto space-y-2">
+      {% if document_source_options %}
+      <details data-filter-section="source" class="group rounded-lg bg-slate-950/35">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-950/60 hover:text-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden">
+          <span>Document source</span>
+          <span class="flex items-center gap-2">
+            <span class="text-slate-600">{{ document_source_options | length }}</span>
+            <svg aria-hidden="true" viewBox="0 0 20 20"
+                 class="h-4 w-4 shrink-0 text-blue-400 transition group-open:rotate-180"
+                 fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m5 7.5 5 5 5-5"></path>
+            </svg>
+          </span>
+        </summary>
+        <div class="flex flex-wrap gap-2 px-2 pb-2 pt-1">
+          {% for option in document_source_options %}
+          <button type="button"
+                  data-filter-button
+                  data-source-button
+                  data-filter-kind="source"
+                  data-filter-value="{{ option.source }}"
+                  data-source="{{ option.source }}"
+                  data-anchors="{{ option.anchors | join(',') }}"
+                  class="rounded-full bg-blue-950/60 px-2 py-0.5 text-xs text-blue-300 transition hover:bg-blue-900 hover:text-blue-200"
+                  aria-pressed="false">{{ option.source }} <span class="text-blue-500">{{ option.count }}</span></button>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+      {% if document_tag_counts %}
+      <details data-filter-section="tag" class="group rounded-lg bg-slate-950/35">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-950/60 hover:text-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden">
+          <span>Document tags</span>
+          <span class="flex items-center gap-2">
+            <span class="text-slate-600">{{ document_tag_counts | length }}</span>
+            <svg aria-hidden="true" viewBox="0 0 20 20"
+                 class="h-4 w-4 shrink-0 text-blue-400 transition group-open:rotate-180"
+                 fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m5 7.5 5 5 5-5"></path>
+            </svg>
+          </span>
+        </summary>
+        <div class="flex flex-wrap gap-2 px-2 pb-2 pt-1">
         {% for tag, count in document_tag_counts %}
         {% set entries = document.matching_entries(tag) %}
         <button type="button"
+                data-filter-button
                 data-tag-button
+                data-filter-kind="tag"
+                data-filter-value="{{ tag }}"
                 data-tag="{{ tag }}"
                 data-anchors="{% for entry in entries %}{{ entry.anchor }}{% if not loop.last %},{% endif %}{% endfor %}"
                 class="rounded-full bg-blue-950/60 px-2 py-0.5 text-xs text-blue-300 transition hover:bg-blue-900 hover:text-blue-200"
                 aria-pressed="false">#{{ tag }} <span class="text-blue-500">{{ count }}</span></button>
         {% endfor %}
-      </div>
+        </div>
+      </details>
+      {% endif %}
     </div>
     <div class="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
       <a id="navigator-corpus-index" href="/hfl-corpus"
@@ -138,7 +184,7 @@
       <div class="order-3 flex w-full items-center justify-center gap-3 sm:order-2 sm:w-auto">
         <button id="tag-previous" type="button" disabled
                 class="rounded-lg bg-slate-800 px-4 py-2 text-xs text-slate-300 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
-        <span id="tag-position" class="min-w-16 text-center text-xs text-slate-400" aria-live="polite">Select a tag</span>
+        <span id="tag-position" class="min-w-24 text-center text-xs text-slate-400" aria-live="polite">Select a source or tag</span>
         <button id="tag-next" type="button" disabled
                 class="rounded-lg bg-slate-800 px-4 py-2 text-xs text-slate-300 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
       </div>
@@ -156,7 +202,7 @@
       const navigator = document.getElementById('tag-navigator');
       if (!navigator) return;
 
-      const tagButtons = Array.from(navigator.querySelectorAll('[data-tag-button]'));
+      const filterButtons = Array.from(navigator.querySelectorAll('[data-filter-button]'));
       const previous = document.getElementById('tag-previous');
       const next = document.getElementById('tag-next');
       const position = document.getElementById('tag-position');
@@ -164,26 +210,13 @@
       const backToTop = document.getElementById('navigator-back-to-top');
       let anchors = [];
       let currentIndex = 0;
-      let currentTag = '';
+      let currentButton = null;
+      let currentKind = '';
+      let currentValue = '';
 
-      function showCurrentEntry() {
-        if (!anchors.length) return;
-        const target = document.getElementById(anchors[currentIndex]);
-        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        position.textContent = `${currentIndex + 1} / ${anchors.length}`;
-        const url = new URL(window.location.href);
-        url.searchParams.set('tag', currentTag);
-        url.hash = anchors[currentIndex];
-        history.replaceState(null, '', url);
-      }
-
-      function selectTag(button, requestedAnchor = '') {
-        currentTag = button.dataset.tag;
-        anchors = (button.dataset.anchors || '').split(',').filter(Boolean);
-        const requestedIndex = anchors.indexOf(requestedAnchor);
-        currentIndex = requestedIndex >= 0 ? requestedIndex : 0;
-        tagButtons.forEach((item) => {
-          const active = item === button;
+      function styleButtons(activeButton = null) {
+        filterButtons.forEach((item) => {
+          const active = item === activeButton;
           item.setAttribute('aria-pressed', active ? 'true' : 'false');
           item.classList.toggle('bg-emerald-950/70', active);
           item.classList.toggle('text-emerald-200', active);
@@ -192,6 +225,50 @@
           item.classList.toggle('bg-blue-950/60', !active);
           item.classList.toggle('text-blue-300', !active);
         });
+      }
+
+      function clearSelection() {
+        anchors = [];
+        currentIndex = 0;
+        currentButton = null;
+        currentKind = '';
+        currentValue = '';
+        styleButtons();
+        previous.disabled = true;
+        next.disabled = true;
+        position.textContent = 'Select a source or tag';
+        const url = new URL(window.location.href);
+        url.searchParams.delete('tag');
+        url.searchParams.delete('source');
+        url.hash = '';
+        history.replaceState(null, '', url);
+      }
+
+      function showCurrentEntry() {
+        if (!anchors.length) return;
+        const target = document.getElementById(anchors[currentIndex]);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        position.textContent = `${currentIndex + 1} / ${anchors.length}`;
+        const url = new URL(window.location.href);
+        url.searchParams.delete('tag');
+        url.searchParams.delete('source');
+        url.searchParams.set(currentKind, currentValue);
+        url.hash = anchors[currentIndex];
+        history.replaceState(null, '', url);
+      }
+
+      function selectFilter(button, requestedAnchor = '') {
+        if (currentButton === button) {
+          clearSelection();
+          return;
+        }
+        currentButton = button;
+        currentKind = button.dataset.filterKind;
+        currentValue = button.dataset.filterValue;
+        anchors = (button.dataset.anchors || '').split(',').filter(Boolean);
+        const requestedIndex = anchors.indexOf(requestedAnchor);
+        currentIndex = requestedIndex >= 0 ? requestedIndex : 0;
+        styleButtons(button);
         button.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
         const disabled = anchors.length <= 1;
         previous.disabled = disabled;
@@ -200,7 +277,7 @@
         showCurrentEntry();
       }
 
-      tagButtons.forEach((button) => button.addEventListener('click', () => selectTag(button)));
+      filterButtons.forEach((button) => button.addEventListener('click', () => selectFilter(button)));
       previous.addEventListener('click', () => {
         currentIndex = (currentIndex - 1 + anchors.length) % anchors.length;
         showCurrentEntry();
@@ -219,10 +296,23 @@
         });
       });
 
-      const requested = (navigator.dataset.selectedTag || '').toLowerCase();
-      const initial = tagButtons.find((button) => button.dataset.tag.toLowerCase() === requested)
-        || tagButtons.find((button) => button.dataset.tag.toLowerCase().includes(requested) && requested);
-      if (initial) selectTag(initial, window.location.hash.slice(1));
+      const requestedSource = (navigator.dataset.selectedSource || '').toLowerCase();
+      const requestedTag = (navigator.dataset.selectedTag || '').toLowerCase();
+      const sourceButtons = filterButtons.filter((button) => button.dataset.filterKind === 'source');
+      const tagButtons = filterButtons.filter((button) => button.dataset.filterKind === 'tag');
+      const initial = sourceButtons.find(
+        (button) => button.dataset.filterValue.toLowerCase() === requestedSource && requestedSource
+      ) || tagButtons.find(
+        (button) => button.dataset.filterValue.toLowerCase() === requestedTag && requestedTag
+      ) || tagButtons.find(
+        (button) => button.dataset.filterValue.toLowerCase().includes(requestedTag) && requestedTag
+      );
+      if (initial) {
+        initial.closest('details')?.setAttribute('open', '');
+        selectFilter(initial, window.location.hash.slice(1));
+      } else if (requestedSource || requestedTag) {
+        clearSelection();
+      }
     })();
   </script>
   {% endif %}

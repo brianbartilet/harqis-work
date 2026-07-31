@@ -7,6 +7,7 @@ import logging
 import re
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
@@ -114,6 +115,35 @@ def _document_tag_counts(document) -> tuple[tuple[str, int], ...]:
     for tag in document.tags:
         counts.setdefault(tag, len(document.matching_entries(tag)))
     return tuple(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+
+def _document_source_options(document) -> tuple[dict[str, Any], ...]:
+    sources: dict[str, dict[str, Any]] = {}
+    for entry in document.entries:
+        source = entry.source.strip()
+        if not source:
+            continue
+        option = sources.setdefault(
+            source.casefold(),
+            {"source": source, "anchors": []},
+        )
+        option["anchors"].append(entry.anchor)
+    return tuple(
+        sorted(
+            (
+                {
+                    "source": option["source"],
+                    "count": len(option["anchors"]),
+                    "anchors": tuple(option["anchors"]),
+                }
+                for option in sources.values()
+            ),
+            key=lambda option: (
+                -option["count"],
+                str(option["source"]).casefold(),
+            ),
+        )
+    )
 
 
 def _preview_path(token: str):
@@ -615,7 +645,12 @@ async def hfl_matches(
 
 
 @router.get("/document/{relative_path:path}", response_class=HTMLResponse, name="hfl_document")
-async def hfl_document(request: Request, relative_path: str, tag: str = ""):
+async def hfl_document(
+    request: Request,
+    relative_path: str,
+    tag: str = "",
+    source: str = "",
+):
     user, redirect = require_user(request)
     if redirect:
         return redirect
@@ -653,7 +688,9 @@ async def hfl_document(request: Request, relative_path: str, tag: str = ""):
             rendered=_anchor_rendered_entries(rendered, document),
             references=references,
             document_tag_counts=_document_tag_counts(document),
-            selected_tag=tag.casefold(),
+            document_source_options=_document_source_options(document),
+            selected_source=source.casefold(),
+            selected_tag="" if source else tag.casefold(),
         ),
     )
 

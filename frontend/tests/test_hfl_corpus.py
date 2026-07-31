@@ -646,7 +646,7 @@ def test_document_orders_entries_before_floating_navigator_without_reference_sum
 
     assert response.status_code == 200
     entry_position = response.text.index('class="markdown-body')
-    navigator_position = response.text.index('aria-label="Document tag navigator"')
+    navigator_position = response.text.index('aria-label="Document entry navigator"')
     assert entry_position < navigator_position
     assert ">References</h2>" not in response.text
     assert ".markdown-body p, .markdown-body li" in response.text
@@ -676,6 +676,114 @@ def test_document_tag_navigator_shows_counts_in_descending_order(
     assert '#popular <span class="text-blue-500">4</span>' in response.text
     assert '#steady <span class="text-blue-500">2</span>' in response.text
     assert '#rare <span class="text-blue-500">1</span>' in response.text
+
+
+def test_document_navigator_collapses_sources_before_tags_with_counts(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    entries = (
+        CorpusEntry(
+            anchor="hfl-entry-1-browser",
+            header="Browser one",
+            moment="One",
+            what_happened="First browsing entry",
+            tags=("research",),
+            source="browsing",
+        ),
+        CorpusEntry(
+            anchor="hfl-entry-2-browser",
+            header="Browser two",
+            moment="Two",
+            what_happened="Second browsing entry",
+            tags=("research",),
+            source="Browsing",
+        ),
+        CorpusEntry(
+            anchor="hfl-entry-3-manual",
+            header="Manual",
+            moment="Three",
+            what_happened="Manual entry",
+            tags=("notes",),
+            source="manual-entry",
+        ),
+        CorpusEntry(
+            anchor="hfl-entry-4-legacy",
+            header="Legacy",
+            moment="Four",
+            what_happened="No source entry",
+            tags=("notes",),
+            source="",
+        ),
+    )
+    document = _document(
+        "2026-07-10.md",
+        tags=("research", "notes"),
+        entry_count=4,
+        entries=entries,
+    )
+    monkeypatch.setattr(hfl_routes.corpus_index, "get", lambda path: document)
+
+    response = authenticated_client.get("/hfl-corpus/document/2026-07-10.md")
+
+    assert response.status_code == 200
+    source_section = response.text.split(
+        '<details data-filter-section="source"', 1
+    )[1].split("</details>", 1)[0]
+    tag_section = response.text.split(
+        '<details data-filter-section="tag"', 1
+    )[1].split("</details>", 1)[0]
+    assert " open" not in source_section.split(">", 1)[0]
+    assert " open" not in tag_section.split(">", 1)[0]
+    assert response.text.index(">Document source</span>") < response.text.index(
+        ">Document tags</span>"
+    )
+    assert 'data-source="browsing"' in source_section
+    assert '>browsing <span class="text-blue-500">2</span>' in source_section
+    assert '>manual-entry <span class="text-blue-500">1</span>' in source_section
+    assert 'data-anchors="hfl-entry-1-browser,hfl-entry-2-browser"' in source_section
+    assert "Legacy" not in source_section
+
+
+def test_document_navigator_uses_one_deselectable_source_or_tag_selection(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    entries = (
+        CorpusEntry(
+            anchor="hfl-entry-1-browser",
+            header="Browser",
+            moment="One",
+            what_happened="Browser entry",
+            tags=("research",),
+            source="browsing",
+        ),
+    )
+    document = _document(
+        "2026-07-10.md",
+        tags=("research",),
+        entry_count=1,
+        entries=entries,
+    )
+    monkeypatch.setattr(hfl_routes.corpus_index, "get", lambda path: document)
+
+    response = authenticated_client.get(
+        "/hfl-corpus/document/2026-07-10.md?source=BROWSING"
+    )
+
+    assert response.status_code == 200
+    assert 'data-selected-source="browsing"' in response.text
+    assert 'data-selected-tag=""' in response.text
+    assert ">Select a source or tag</span>" in response.text
+    assert "if (currentButton === button)" in response.text
+    assert "clearSelection();" in response.text
+    assert "styleButtons(button);" in response.text
+    assert "url.searchParams.delete('tag')" in response.text
+    assert "url.searchParams.delete('source')" in response.text
+    assert "url.searchParams.set(currentKind, currentValue)" in response.text
+    assert "initial.closest('details')?.setAttribute('open', '')" in response.text
 
 
 def test_document_navigator_places_go_to_end_beside_back_to_top(
