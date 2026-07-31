@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -12,6 +13,9 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from config import get_settings
 from web import REPO_ROOT
+
+
+_MARKDOWN_LINK = re.compile(r"^\[([^\]]+)\]\(([^)]+)\)$")
 
 
 @dataclass(frozen=True)
@@ -101,7 +105,10 @@ def resolve_reference(
     source_document: Path,
     corpus_root: Path,
 ) -> ReferenceLink:
-    raw = (reference or "").strip()
+    source = (reference or "").strip()
+    markdown_link = _MARKDOWN_LINK.fullmatch(source)
+    label_override = markdown_link.group(1).strip() if markdown_link else ""
+    raw = markdown_link.group(2).strip() if markdown_link else source
     try:
         parsed = urlparse(raw)
     except ValueError:
@@ -110,7 +117,7 @@ def resolve_reference(
             kind="blocked",
             href=None,
             reason="invalid",
-            source=raw,
+            source=source,
         )
     if parsed.scheme.lower() == "http":
         return ReferenceLink(
@@ -118,7 +125,7 @@ def resolve_reference(
             kind="blocked",
             href=None,
             reason="insecure http",
-            source=raw,
+            source=source,
         )
     if parsed.scheme.lower() == "https":
         if parsed.username or parsed.password:
@@ -127,13 +134,13 @@ def resolve_reference(
                 kind="blocked",
                 href=None,
                 reason="embedded credentials",
-                source=raw,
+                source=source,
             )
         return ReferenceLink(
-            label=raw,
+            label=label_override or raw,
             kind="external",
             href=raw,
-            source=raw,
+            source=source,
         )
 
     if parsed.scheme.lower() == "file":

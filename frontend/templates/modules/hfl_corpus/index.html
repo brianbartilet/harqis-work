@@ -290,6 +290,17 @@
               <input type="text" name="possible_use" placeholder="brainstorming"
                      class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-blue-500 sm:text-sm">
             </label>
+            <label class="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-blue-900/70 bg-blue-950/25 px-3 py-3 transition hover:border-blue-700/70">
+              <span class="min-w-0">
+                <span class="block text-sm font-medium text-blue-100">Include location</span>
+                <span class="mt-0.5 block text-xs leading-relaxed text-slate-500">Use your activity timeline first, then this device if needed.</span>
+              </span>
+              <span class="relative inline-flex shrink-0 items-center">
+                <input type="checkbox" name="include_location" checked data-entry-location-toggle class="peer sr-only">
+                <span aria-hidden="true" class="h-6 w-11 rounded-full bg-slate-700 ring-1 ring-slate-600 transition peer-checked:bg-blue-600 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-400 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-slate-900"></span>
+                <span aria-hidden="true" class="absolute left-1 h-4 w-4 rounded-full bg-white shadow-sm transition peer-checked:translate-x-5"></span>
+              </span>
+            </label>
             <label class="block text-sm text-slate-300">Tags
               <input type="text" name="tags" value="#notes #manual-entry #thoughts"
                      class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 sm:text-sm">
@@ -329,6 +340,11 @@
       <p class="text-xs uppercase tracking-[0.2em] text-blue-400">Confirm save</p>
       <h2 id="entry-review-title" class="mt-1 text-xl font-semibold text-white">Review entry</h2>
       <p class="mt-2 text-sm text-slate-400">This entry will be written to <strong data-entry-preview-filename class="break-all text-blue-300"></strong>.</p>
+    </div>
+    <div data-entry-enrichment-summary hidden role="status" aria-live="polite"
+         class="mx-4 mt-4 shrink-0 rounded-xl border border-blue-900/70 bg-blue-950/25 px-3 py-2.5 text-xs text-slate-300 sm:mx-6">
+      <p class="font-semibold uppercase tracking-[0.14em] text-blue-300">Context added</p>
+      <ul data-entry-enrichment-items class="mt-1.5 space-y-1"></ul>
     </div>
     <div data-entry-preview class="markdown-body min-h-0 flex-1 overflow-y-auto overscroll-contain bg-slate-900/70 px-4 py-4 text-sm text-slate-300 sm:m-6 sm:mt-4 sm:max-h-[55dvh] sm:rounded-xl sm:border sm:border-slate-800 sm:p-4"></div>
     <div data-entry-upload-progress hidden
@@ -380,6 +396,8 @@
   const fileList = form.querySelector('[data-entry-file-list]');
   const confirmButton = reviewDialog.querySelector('[data-entry-confirm]');
   const previewPanel = reviewDialog.querySelector('[data-entry-preview]');
+  const enrichmentPanel = reviewDialog.querySelector('[data-entry-enrichment-summary]');
+  const enrichmentItems = enrichmentPanel.querySelector('[data-entry-enrichment-items]');
   const progressPanel = reviewDialog.querySelector('[data-entry-upload-progress]');
   const progressStatus = progressPanel.querySelector('[data-entry-upload-status]');
   const progressPercent = progressPanel.querySelector('[data-entry-upload-percent]');
@@ -387,6 +405,7 @@
   let initialState = '';
   let pendingPayload = null;
   let pendingFiles = [];
+  let enrichmentCache = null;
 
   const localDateAndTime = () => {
     const now = new Date();
@@ -400,6 +419,7 @@
   const payload = () => {
     const values = Object.fromEntries(new FormData(form).entries());
     delete values.attachments;
+    values.include_location = form.elements.include_location.checked;
     values.attachment_names = selectedFiles().map(file => file.name);
     return values;
   };
@@ -414,6 +434,58 @@
     if (Array.isArray(body?.detail)) return body.detail.map(item => item.msg).join(' ');
     return fallback;
   };
+  const captureBrowserLocation = () => new Promise(resolve => {
+    if (!form.elements.include_location.checked) {
+      resolve({browser_location_status: 'disabled'});
+      return;
+    }
+    if (!navigator.geolocation) {
+      resolve({browser_location_status: 'unsupported'});
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      position => resolve({
+        browser_latitude: position.coords.latitude,
+        browser_longitude: position.coords.longitude,
+        browser_location_status: 'available',
+      }),
+      error => resolve({
+        browser_location_status: error.code === error.PERMISSION_DENIED ? 'denied' : 'unavailable',
+      }),
+      {enableHighAccuracy: false, timeout: 8000, maximumAge: 300000},
+    );
+  });
+  const renderEnrichment = enrichment => {
+    const items = [];
+    if (enrichment?.location_label) {
+      const source = enrichment.location_source === 'owntracks' ? 'activity timeline' : 'this device';
+      items.push(`Location · ${enrichment.location_label} via ${source}`);
+    }
+    if (enrichment?.added_tags?.length) {
+      items.push(`Tags · ${enrichment.added_tags.map(tag => `#${tag}`).join(' ')}`);
+    }
+    (enrichment?.notices || []).forEach(notice => items.push(notice));
+    enrichmentItems.replaceChildren(...items.map(message => {
+      const item = document.createElement('li');
+      item.className = 'flex gap-2 leading-relaxed';
+      const marker = document.createElement('span');
+      marker.className = 'text-blue-400';
+      marker.textContent = '•';
+      const text = document.createElement('span');
+      text.textContent = message;
+      item.append(marker, text);
+      return item;
+    }));
+    enrichmentPanel.hidden = items.length === 0;
+  };
+  const showReview = body => {
+    pendingPayload = body.payload;
+    reviewDialog.querySelector('[data-entry-preview-filename]').textContent = body.filename;
+    previewPanel.innerHTML = body.html;
+    renderEnrichment(body.enrichment);
+    createDialog.close();
+    reviewDialog.showModal();
+  };
   const revealField = field => {
     if (!field || window.innerWidth >= 640) return;
     window.setTimeout(() => {
@@ -427,6 +499,7 @@
     showError('');
     pendingPayload = null;
     pendingFiles = [];
+    enrichmentCache = null;
     fileList.replaceChildren();
     fileList.hidden = true;
     initialState = serialize();
@@ -467,6 +540,7 @@
     form.reset();
     pendingPayload = null;
     pendingFiles = [];
+    enrichmentCache = null;
   });
 
   const readableBytes = bytes => {
@@ -502,24 +576,30 @@
     }
     showError('');
     reviewButton.disabled = true;
-    pendingPayload = payload();
+    const basePayload = payload();
+    const cacheKey = JSON.stringify(basePayload);
     pendingFiles = selectedFiles();
+    const originalLabel = reviewButton.textContent;
+    reviewButton.textContent = 'Adding context…';
     try {
-      const response = await fetch('/hfl-corpus/entries/preview', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(pendingPayload),
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(responseMessage(body, 'The preview could not be generated.'));
-      reviewDialog.querySelector('[data-entry-preview-filename]').textContent = body.filename;
-      previewPanel.innerHTML = body.html;
-      createDialog.close();
-      reviewDialog.showModal();
+      let body = enrichmentCache?.key === cacheKey ? enrichmentCache.body : null;
+      if (!body) {
+        const browserLocation = await captureBrowserLocation();
+        const response = await fetch('/hfl-corpus/entries/preview', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({...basePayload, ...browserLocation}),
+        });
+        body = await response.json();
+        if (!response.ok) throw new Error(responseMessage(body, 'The preview could not be generated.'));
+        enrichmentCache = {key: cacheKey, body};
+      }
+      showReview(body);
     } catch (error) {
       showError(error.message || 'The preview could not be generated.');
     } finally {
       reviewButton.disabled = false;
+      reviewButton.textContent = originalLabel;
     }
   });
 

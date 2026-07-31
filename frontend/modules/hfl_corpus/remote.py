@@ -144,13 +144,15 @@ class RemoteCorpusClient:
             payload["uploads"] = [str(path) for path in result["uploads"]]
         return payload
 
-    def preview_entry(self, payload: dict[str, Any]) -> dict[str, str]:
+    def preview_entry(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
             result = self._post("/entries/preview", json=payload).json()
             return {
                 "filename": str(result["filename"]),
                 "markdown": str(result["markdown"]),
                 "html": str(result["html"]),
+                "payload": dict(result["payload"]),
+                "enrichment": dict(result["enrichment"]),
             }
         except (KeyError, TypeError, ValueError) as exc:
             raise RemoteCorpusError(

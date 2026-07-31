@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import hmac
 import logging
@@ -32,6 +33,7 @@ from modules.hfl_corpus.entry_create import (
     persist_manual_entry_with_uploads,
     preview_manual_entry,
 )
+from modules.hfl_corpus.entry_enrichment import enrich_manual_entry
 from modules.hfl_shares.viewer import (
     classify_preview,
     read_preview_text,
@@ -140,7 +142,8 @@ async def hfl_api_preview_entry(
 ):
     _authorize(request)
     try:
-        return preview_manual_entry(payload)
+        enriched, enrichment = await asyncio.to_thread(enrich_manual_entry, payload)
+        return preview_manual_entry(enriched, enrichment=enrichment)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

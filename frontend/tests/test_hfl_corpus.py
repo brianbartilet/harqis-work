@@ -2099,9 +2099,16 @@ def test_create_entry_dialog_uses_mobile_sheets_and_touch_friendly_controls(
     assert 'd="m5 7.5 5 5 5-5"' in more_details
     assert 'name="why_it_stayed"' in more_details
     assert 'name="possible_use"' in more_details
+    assert 'name="include_location" checked' in more_details
+    assert 'data-entry-location-toggle' in more_details
+    assert ">Include location</span>" in more_details
+    assert "Use your activity timeline first" in more_details
     assert 'name="tags" value="#notes #manual-entry #thoughts"' in more_details
     assert 'name="references"' in more_details
     assert "moreDetails.open = false" in response.text
+    assert "navigator.geolocation.getCurrentPosition" in response.text
+    assert "data-entry-enrichment-summary" in response.text
+    assert "Adding context…" in response.text
 
 
 def test_create_entry_launcher_and_discard_actions_stack_on_mobile(
@@ -2132,6 +2139,18 @@ def test_create_entry_launcher_and_discard_actions_stack_on_mobile(
 def test_manual_entry_preview_uses_canonical_shape_and_reference_list(
     authenticated_client, monkeypatch
 ):
+    import modules.hfl_corpus.router as hfl_routes
+
+    monkeypatch.setattr(
+        hfl_routes,
+        "enrich_manual_entry",
+        lambda payload: (payload, {
+            "location_source": "disabled",
+            "location_label": "",
+            "added_tags": [],
+            "notices": [],
+        }),
+    )
     monkeypatch.setattr(
         "workflows.hfl.persistence.local_machine_name",
         lambda: "harqis-server",
@@ -2173,8 +2192,19 @@ def test_manual_entry_preview_adds_future_attachment_references(
     authenticated_client, monkeypatch, tmp_path
 ):
     import modules.hfl_corpus.entry_create as entry_create
+    import modules.hfl_corpus.router as hfl_routes
 
     monkeypatch.setattr(entry_create, "resolve_upload_inbox", lambda: tmp_path)
+    monkeypatch.setattr(
+        hfl_routes,
+        "enrich_manual_entry",
+        lambda payload: (payload, {
+            "location_source": "disabled",
+            "location_label": "",
+            "added_tags": [],
+            "notices": [],
+        }),
+    )
     monkeypatch.setattr(
         "workflows.hfl.persistence.local_machine_name",
         lambda: "harqis-server",
@@ -2273,6 +2303,54 @@ def test_remote_manual_entry_create_uses_canonical_host(
 
     assert response.status_code == 200
     assert response.json()["entry_id"] == "hfl-remote"
+    assert submitted[0]["moment"] == "Captured a useful thought"
+
+
+def test_remote_manual_entry_preview_enriches_on_canonical_host(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    submitted = []
+
+    class FakeRemote:
+        def preview_entry(self, payload):
+            submitted.append(payload)
+            enriched = {**payload, "tags": payload["tags"] + " #contextual"}
+            return {
+                "filename": "2026-07-19.md",
+                "markdown": "preview",
+                "html": "<p>preview</p>",
+                "payload": enriched,
+                "enrichment": {
+                    "location_source": "owntracks",
+                    "location_label": "Singapore",
+                    "added_tags": ["contextual"],
+                    "notices": [],
+                },
+            }
+
+    monkeypatch.setattr(hfl_routes, "_uses_remote_corpus", lambda: True)
+    monkeypatch.setattr(
+        hfl_routes.RemoteCorpusClient,
+        "from_settings",
+        classmethod(lambda cls: FakeRemote()),
+    )
+    monkeypatch.setattr(
+        hfl_routes,
+        "enrich_manual_entry",
+        lambda payload: (_ for _ in ()).throw(
+            AssertionError("local enrichment used")
+        ),
+    )
+
+    response = authenticated_client.post(
+        "/hfl-corpus/entries/preview",
+        json=_create_entry_payload(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["payload"]["tags"].endswith("#contextual")
     assert submitted[0]["moment"] == "Captured a useful thought"
 
 
@@ -2484,6 +2562,40 @@ def test_remote_client_posts_manual_entry_with_bearer_token(monkeypatch):
     assert captured["json"]["moment"] == "Captured a useful thought"
 
 
+def test_remote_client_returns_enriched_manual_entry_preview(monkeypatch):
+    from modules.hfl_corpus.remote import RemoteCorpusClient
+
+    request_payload = _create_entry_payload()
+
+    def fake_post(url, **kwargs):
+        enriched = {**request_payload, "tags": request_payload["tags"] + " #contextual"}
+        return httpx.Response(
+            200,
+            json={
+                "filename": "2026-07-19.md",
+                "markdown": "preview",
+                "html": "<p>preview</p>",
+                "payload": enriched,
+                "enrichment": {
+                    "location_source": "browser",
+                    "location_label": "Singapore",
+                    "added_tags": ["contextual"],
+                    "notices": [],
+                },
+            },
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+    result = RemoteCorpusClient(
+        "http://canonical:8081", "secret"
+    ).preview_entry(request_payload)
+
+    assert result["payload"]["tags"].endswith("#contextual")
+    assert result["enrichment"]["location_source"] == "browser"
+
+
 def test_remote_client_forwards_manual_entry_files_as_multipart(monkeypatch):
     from starlette.datastructures import UploadFile
 
@@ -2521,3 +2633,144 @@ def test_remote_client_forwards_manual_entry_files_as_multipart(monkeypatch):
     assert json.loads(captured["data"]["payload"])["moment"] == "Captured a useful thought"
     assert captured["files"][0][1][0] == "notes.txt"
     assert captured["timeout"] == 300.0
+
+
+def test_manual_entry_enrichment_prefers_owntracks_and_appends_context(monkeypatch):
+    from modules.hfl_corpus.entry_create import CreateEntryRequest
+    import modules.hfl_corpus.entry_enrichment as enrichment
+
+    request = _create_entry_payload()
+    request.update({
+        "browser_latitude": 1.20,
+        "browser_longitude": 103.70,
+        "browser_location_status": "available",
+    })
+    seen = {}
+    monkeypatch.setattr(
+        enrichment,
+        "_owntracks_fix",
+        lambda when: (1.2644, 103.8222),
+    )
+    monkeypatch.setattr(
+        enrichment,
+        "_reverse_geocode",
+        lambda latitude, longitude: seen.update(
+            {"coordinates": (latitude, longitude)}
+        ) or "VivoCity, HarbourFront",
+    )
+    monkeypatch.setattr(
+        enrichment,
+        "_suggest_tags",
+        lambda payload, *, place="": ("thoughts", "shopping", "reflection"),
+    )
+
+    enriched, result = enrichment.enrich_manual_entry(
+        CreateEntryRequest.model_validate(request)
+    )
+
+    assert seen["coordinates"] == (1.2644, 103.8222)
+    assert result["location_source"] == "owntracks"
+    assert result["location_label"] == "VivoCity, HarbourFront"
+    assert result["added_tags"] == ["shopping", "reflection"]
+    assert "#notes #manual-entry #thoughts #shopping #reflection" == enriched.tags
+    assert "[VivoCity, HarbourFront](https://www.openstreetmap.org/search?" in enriched.references
+    assert enriched.browser_latitude is None
+    assert enriched.browser_longitude is None
+
+
+def test_manual_entry_enrichment_falls_back_to_browser_location(monkeypatch):
+    from modules.hfl_corpus.entry_create import CreateEntryRequest
+    import modules.hfl_corpus.entry_enrichment as enrichment
+
+    request = _create_entry_payload()
+    request.update({
+        "browser_latitude": 1.3521,
+        "browser_longitude": 103.8198,
+    })
+    monkeypatch.setattr(enrichment, "_owntracks_fix", lambda when: None)
+    monkeypatch.setattr(
+        enrichment,
+        "_reverse_geocode",
+        lambda latitude, longitude: "Singapore",
+    )
+    monkeypatch.setattr(enrichment, "_suggest_tags", lambda payload, *, place="": ())
+
+    enriched, result = enrichment.enrich_manual_entry(
+        CreateEntryRequest.model_validate(request)
+    )
+
+    assert result["location_source"] == "browser"
+    assert result["location_label"] == "Singapore"
+    assert "[Singapore](https://www.openstreetmap.org/search?query=Singapore)" in enriched.references
+
+
+def test_manual_entry_enrichment_failures_keep_manual_content(monkeypatch):
+    from modules.hfl_corpus.entry_create import CreateEntryRequest
+    import modules.hfl_corpus.entry_enrichment as enrichment
+
+    monkeypatch.setattr(enrichment, "_owntracks_fix", lambda when: None)
+    monkeypatch.setattr(
+        enrichment,
+        "_suggest_tags",
+        lambda payload, *, place="": (_ for _ in ()).throw(RuntimeError("offline")),
+    )
+
+    enriched, result = enrichment.enrich_manual_entry(
+        CreateEntryRequest.model_validate(_create_entry_payload())
+    )
+
+    assert enriched.tags == "#notes #manual-entry #thoughts"
+    assert enriched.references == _create_entry_payload()["references"]
+    assert result["location_source"] == "unavailable"
+    assert len(result["notices"]) == 2
+
+
+def test_manual_entry_preview_returns_the_exact_enriched_save_payload(
+    authenticated_client, monkeypatch
+):
+    from modules.hfl_corpus.entry_create import CreateEntryRequest
+    import modules.hfl_corpus.router as hfl_routes
+
+    def fake_enrich(payload: CreateEntryRequest):
+        enriched = payload.model_copy(
+            update={
+                "tags": payload.tags + " #contextual",
+                "references": payload.references + "\n[Singapore](https://example.com/map)",
+            }
+        )
+        return enriched, {
+            "location_source": "owntracks",
+            "location_label": "Singapore",
+            "added_tags": ["contextual"],
+            "notices": [],
+        }
+
+    monkeypatch.setattr(hfl_routes, "enrich_manual_entry", fake_enrich)
+
+    response = authenticated_client.post(
+        "/hfl-corpus/entries/preview",
+        json=_create_entry_payload(),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["payload"]["tags"].endswith("#contextual")
+    assert "[Singapore](https://example.com/map)" in body["payload"]["references"]
+    assert body["enrichment"]["location_source"] == "owntracks"
+
+
+def test_markdown_external_reference_uses_short_label(tmp_path):
+    from services.safe_paths import resolve_reference
+
+    source = tmp_path / "entry.md"
+    source.write_text("entry", encoding="utf-8")
+
+    reference = resolve_reference(
+        "[VivoCity](https://www.openstreetmap.org/search?query=VivoCity)",
+        source_document=source,
+        corpus_root=tmp_path,
+    )
+
+    assert reference.kind == "external"
+    assert reference.label == "VivoCity"
+    assert reference.href == "https://www.openstreetmap.org/search?query=VivoCity"

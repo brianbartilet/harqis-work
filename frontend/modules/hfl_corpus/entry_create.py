@@ -38,6 +38,13 @@ class CreateEntryRequest(BaseModel):
     tags: str = Field(default="", max_length=2_000)
     references: str = Field(default="", max_length=20_000)
     attachment_names: list[str] = Field(default_factory=list, max_length=MAX_UPLOAD_FILES)
+    include_location: bool = True
+    browser_latitude: float | None = Field(default=None, ge=-90, le=90)
+    browser_longitude: float | None = Field(default=None, ge=-180, le=180)
+    browser_location_status: str = Field(default="", max_length=40)
+
+    def reference_items(self) -> tuple[str, ...]:
+        return _references(self.references)
 
 
 def _timestamp(payload: CreateEntryRequest) -> datetime:
@@ -168,7 +175,11 @@ def attachment_reference_paths(
     return tuple(str(target_dir / name) for name in names)
 
 
-def preview_manual_entry(payload: CreateEntryRequest) -> dict[str, str]:
+def preview_manual_entry(
+    payload: CreateEntryRequest,
+    *,
+    enrichment: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     generated = attachment_reference_paths(payload)
     envelope = make_manual_envelope(payload, generated_references=generated)
     markdown = envelope.entry.to_markdown()
@@ -176,6 +187,13 @@ def preview_manual_entry(payload: CreateEntryRequest) -> dict[str, str]:
         "filename": f"{envelope.entry.when:%Y-%m-%d}.md",
         "markdown": markdown,
         "html": str(render_markdown(format_hfl_markdown(markdown))),
+        "payload": payload.model_dump(mode="json"),
+        "enrichment": enrichment or {
+            "location_source": "disabled",
+            "location_label": "",
+            "added_tags": [],
+            "notices": [],
+        },
     }
 
 

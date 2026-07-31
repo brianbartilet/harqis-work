@@ -44,6 +44,7 @@ from modules.hfl_corpus.entry_create import (
     persist_manual_entry_with_uploads,
     preview_manual_entry,
 )
+from modules.hfl_corpus.entry_enrichment import enrich_manual_entry
 from modules.hfl_shares.viewer import (
     classify_preview,
     read_preview_text,
@@ -436,11 +437,13 @@ async def hfl_entry_preview(request: Request, payload: CreateEntryRequest):
     if redirect:
         return JSONResponse({"detail": "Authentication required"}, status_code=401)
     try:
-        if _uses_remote_corpus() and payload.attachment_names:
-            return RemoteCorpusClient.from_settings().preview_entry(
-                payload.model_dump()
+        if _uses_remote_corpus():
+            return await asyncio.to_thread(
+                RemoteCorpusClient.from_settings().preview_entry,
+                payload.model_dump(mode="json"),
             )
-        return preview_manual_entry(payload)
+        enriched, enrichment = await asyncio.to_thread(enrich_manual_entry, payload)
+        return preview_manual_entry(enriched, enrichment=enrichment)
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except RemoteCorpusError as exc:
