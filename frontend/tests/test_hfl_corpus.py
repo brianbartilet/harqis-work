@@ -734,7 +734,7 @@ def test_document_navigator_collapses_sources_before_tags_with_counts(
     tag_section = response.text.split(
         '<details data-filter-section="tag"', 1
     )[1].split("</details>", 1)[0]
-    assert " open" not in source_section.split(">", 1)[0]
+    assert " open" in source_section.split(">", 1)[0]
     assert " open" not in tag_section.split(">", 1)[0]
     assert response.text.index(">Document source</span>") < response.text.index(
         ">Document tags</span>"
