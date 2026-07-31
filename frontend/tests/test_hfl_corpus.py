@@ -615,9 +615,13 @@ def test_index_tag_cloud_links_to_partial_search_and_document_uses_navigator(
     assert expected not in document_response.text
     assert 'data-tag="debugging"' in document_response.text
     assert "Find corpus entries with matching tags" not in index_response.text
-    assert "max-h-16" in index_response.text
+    tag_cloud = index_response.text.split("<details data-tag-cloud", 1)[1].split(
+        "</details>", 1
+    )[0]
+    assert " open" not in tag_cloud.split(">", 1)[0]
+    assert "max-h-56" in tag_cloud
     assert "overflow-y-auto" in index_response.text
-    assert 'flex max-h-16 flex-wrap gap-2 overflow-y-auto p-1' in index_response.text
+    assert 'flex max-h-56 flex-wrap gap-2 overflow-y-auto p-1' in index_response.text
     assert "1 entries" in index_response.text
     assert "root cause story" not in index_response.text
     assert 'title="1 entries in this document"' in index_response.text
@@ -886,13 +890,13 @@ def test_corpus_search_uses_compact_date_controls(authenticated_client, monkeypa
     assert 'name="date_to"' in response.text
     assert 'name="created_from"' not in response.text
     assert "if (this.showPicker) this.showPicker()" in response.text
-    tags_heading = '<p class="mb-1.5 text-xs font-medium text-slate-500">Tags</p>'
+    tags_section = "<details data-tag-cloud"
     assert response.text.index('name="source"') < response.text.index(
         'name="date_field"'
     )
-    assert response.text.index('name="date_field"') < response.text.index(tags_heading)
-    assert response.text.index(">Search</button>") < response.text.index(tags_heading)
-    assert response.text.index(">Reset</a>") < response.text.index(tags_heading)
+    assert response.text.index('name="date_field"') < response.text.index(tags_section)
+    assert response.text.index(">Search</button>") < response.text.index(tags_section)
+    assert response.text.index(">Reset</a>") < response.text.index(tags_section)
     assert "#debugging" in response.text
     assert "bg-blue-950/50" in response.text
     assert ">1</span>" in response.text
