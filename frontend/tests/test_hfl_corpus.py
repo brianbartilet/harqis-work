@@ -2021,6 +2021,230 @@ def test_corpus_index_renders_create_review_and_discard_dialogs(
     assert "request.upload.addEventListener('progress'" in response.text
     assert ">Review and save</button>" in response.text
     assert "HFL entry created successfully." in response.text
+    assert 'name="location_query"' in response.text
+    assert 'data-entry-location-search' in response.text
+    assert 'data-entry-use-location' in response.text
+    assert 'name="location_latitude"' in response.text
+    assert 'name="location_longitude"' in response.text
+    assert "navigator.geolocation.getCurrentPosition" in response.text
+    assert "Geolocation runs only after you press Use current location." in response.text
+    assert "Search data ©" in response.text
+    assert "OpenStreetMap contributors</a>, ODbL." in response.text
+    assert "locationGeneration" in response.text
+
+
+def test_location_search_requires_authentication():
+    from fastapi.testclient import TestClient
+    from main import app
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/hfl-corpus/locations/search",
+            json={"q": "Singapore"},
+        )
+
+    assert response.status_code == 401
+
+
+def test_location_search_returns_bounded_nominatim_results(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    captured = []
+    monkeypatch.setattr(
+        hfl_routes,
+        "search_nominatim",
+        lambda query, *, limit=5: captured.append((query, limit)) or [
+            {
+                "label": "Singapore",
+                "latitude": "1.35210",
+                "longitude": "103.81980",
+            }
+        ],
+    )
+
+    response = authenticated_client.post(
+        "/hfl-corpus/locations/search",
+        json={"q": "Singapore"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "results": [
+            {
+                "label": "Singapore",
+                "latitude": "1.35210",
+                "longitude": "103.81980",
+            }
+        ]
+    }
+    assert captured == [("Singapore", 5)]
+
+
+def test_location_search_rejects_get_query_strings(authenticated_client):
+    response = authenticated_client.get(
+        "/hfl-corpus/locations/search?q=private-address"
+    )
+
+    assert response.status_code == 405
+
+
+def test_location_search_rejects_cross_site_post(authenticated_client):
+    response = authenticated_client.post(
+        "/hfl-corpus/locations/search",
+        json={"q": "private-address"},
+        headers={"Origin": "https://evil.example", "Sec-Fetch-Site": "cross-site"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_location_search_rejects_when_admission_is_full(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    class FullAdmission:
+        def acquire(self, **kwargs):
+            return False
+
+    monkeypatch.setattr(hfl_routes, "_LOCATION_SEARCH_SLOTS", FullAdmission())
+    response = authenticated_client.post(
+        "/hfl-corpus/locations/search",
+        json={"q": "Singapore"},
+    )
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "2"
+
+
+def test_location_search_normalizes_cache_key_and_provider_contract(monkeypatch):
+    import modules.hfl_corpus.location as location
+
+    calls = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return [{
+                "display_name": "Marina Bay, Singapore",
+                "lat": "1.2834",
+                "lon": "103.8607",
+            }]
+
+    monkeypatch.setattr(location, "nominatim_rate_limit", lambda: None)
+    monkeypatch.setattr(
+        location.httpx,
+        "get",
+        lambda url, **kwargs: calls.append((url, kwargs)) or FakeResponse(),
+    )
+    location._clear_search_cache()
+
+    first = location.search_nominatim("  Marina   Bay  ", limit=9)
+    second = location.search_nominatim("Marina Bay", limit=5)
+
+    assert first == second
+    assert len(calls) == 1
+    url, kwargs = calls[0]
+    assert url == "https://nominatim.openstreetmap.org/search"
+    assert kwargs["params"]["q"] == "Marina Bay"
+    assert kwargs["params"]["limit"] == 5
+    assert kwargs["follow_redirects"] is False
+    assert kwargs["timeout"] == 10.0
+    assert "harqis-work-hfl" in kwargs["headers"]["User-Agent"]
+
+
+def test_shared_nominatim_limiter_paces_calls_across_rate_file(monkeypatch, tmp_path):
+    from apps import openstreetmap as harqis_osm
+
+    ticks = iter((100.0, 100.0, 100.2, 101.1))
+    sleeps = []
+    monkeypatch.setenv("HARQIS_NOMINATIM_RATE_FILE", str(tmp_path / "rate"))
+    monkeypatch.setattr(harqis_osm.time, "time", lambda: next(ticks))
+    monkeypatch.setattr(harqis_osm.time, "sleep", sleeps.append)
+
+    harqis_osm.nominatim_rate_limit(min_interval=1.1)
+    harqis_osm.nominatim_rate_limit(min_interval=1.1)
+
+    assert sleeps == [pytest.approx(0.9)]
+
+
+def test_location_search_cache_has_per_entry_hard_expiry(monkeypatch):
+    from modules.hfl_corpus import location
+
+    class FakeTimer:
+        def __init__(self, delay, callback, args=()):
+            self.delay = delay
+            self.callback = callback
+            self.args = args
+            self.daemon = False
+
+        def start(self):
+            return None
+
+        def cancel(self):
+            return None
+
+    now = [100.0]
+    monkeypatch.setattr(location.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(location.threading, "Timer", FakeTimer)
+    location._clear_search_cache()
+    location._cache_put(("first address", 5), (("First", "1.00000", "2.00000"),))
+    now[0] = 200.0
+    location._cache_put(("second address", 5), (("Second", "3.00000", "4.00000"),))
+
+    now[0] = 701.0
+    location._expire_search_cache(location._CACHE_GENERATION)
+
+    assert ("first address", 5) not in location._CACHE
+    assert ("second address", 5) in location._CACHE
+    location._clear_search_cache()
+
+
+def test_location_search_rejects_invalid_upstream_payload(monkeypatch):
+    import modules.hfl_corpus.location as location
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"unexpected": "shape"}
+
+    monkeypatch.setattr(location, "nominatim_rate_limit", lambda: None)
+    monkeypatch.setattr(location.httpx, "get", lambda *args, **kwargs: FakeResponse())
+    location._clear_search_cache()
+
+    with pytest.raises(location.LocationSearchError):
+        location.search_nominatim("Singapore")
+
+
+def test_hfl_page_allows_same_origin_geolocation(authenticated_client, monkeypatch):
+    import modules.hfl_corpus.router as hfl_routes
+
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: ())
+
+    response = authenticated_client.get("/hfl-corpus")
+
+    assert response.headers["Permissions-Policy"] == (
+        "geolocation=(self), microphone=(), camera=()"
+    )
+
+
+def test_non_hfl_pages_keep_geolocation_disabled(authenticated_client):
+    response = authenticated_client.get("/home")
+
+    assert response.headers["Permissions-Policy"] == (
+        "geolocation=(), microphone=(), camera=()"
+    )
+
+    nested_response = authenticated_client.get("/hfl-corpus/tree")
+    assert nested_response.headers["Permissions-Policy"] == (
+        "geolocation=(), microphone=(), camera=()"
+    )
 
 
 def test_create_entry_dialog_uses_mobile_sheets_and_touch_friendly_controls(
@@ -2156,6 +2380,129 @@ def test_manual_entry_preview_uses_canonical_shape_and_reference_list(
     assert "<li>" in payload["html"]
 
 
+def test_manual_entry_preview_generates_one_canonical_osm_reference(
+    authenticated_client, monkeypatch
+):
+    monkeypatch.setattr(
+        "workflows.hfl.persistence.local_machine_name",
+        lambda: "harqis-server",
+    )
+    request = _create_entry_payload()
+    request.update({
+        "location_latitude": "1.3521",
+        "location_longitude": "103.8198",
+        "location_label": "Singapore",
+        "references": (
+            request["references"]
+            + "https://www.openstreetmap.org/?mlat=1.35210&mlon=103.81980"
+              "#map=16/1.35210/103.81980\n"
+        ),
+    })
+
+    response = authenticated_client.post(
+        "/hfl-corpus/entries/preview",
+        json=request,
+    )
+
+    assert response.status_code == 200
+    markdown = response.json()["markdown"]
+    osm_reference = (
+        "https://www.openstreetmap.org/?mlat=1.35210&mlon=103.81980"
+        "#map=16/1.35210/103.81980"
+    )
+    assert markdown.count(osm_reference) == 1
+    assert "location_latitude" not in markdown
+    assert "Singapore" not in markdown
+    assert 'class="corpus-location-reference"' in response.json()["html"]
+    assert "Open in OpenStreetMap" in response.json()["html"]
+
+
+@pytest.mark.parametrize(
+    ("latitude", "longitude", "message"),
+    [
+        ("1.2", "", "Enter both latitude and longitude."),
+        ("91", "103", "Latitude must be between -90 and 90."),
+        ("1", "181", "Longitude must be between -180 and 180."),
+        ("nan", "103", "Enter valid numeric coordinates."),
+    ],
+)
+def test_manual_entry_preview_rejects_invalid_location_coordinates(
+    authenticated_client, latitude, longitude, message
+):
+    request = _create_entry_payload()
+    request.update({
+        "location_latitude": latitude,
+        "location_longitude": longitude,
+    })
+
+    response = authenticated_client.post(
+        "/hfl-corpus/entries/preview",
+        json=request,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == message
+
+
+def test_osm_pin_reference_renders_static_privacy_safe_card():
+    osm_reference = (
+        "https://www.openstreetmap.org/?mlat=1.35210&mlon=103.81980"
+        "#map=16/1.35210/103.81980"
+    )
+    source = "References:\n                 - " + osm_reference
+
+    rendered = str(render_markdown(format_hfl_markdown(source)))
+
+    assert 'class="corpus-location-reference"' in rendered
+    assert "Location · 1.35210, 103.81980" in rendered
+    assert "Open in OpenStreetMap" in rendered
+    assert "<iframe" not in rendered
+    assert "<img" not in rendered
+    assert "nominatim" not in rendered
+
+
+@pytest.mark.parametrize("reference", [
+    (
+        "https://www.openstreetmap.org.evil.example/"
+        "?mlat=1.35210&mlon=103.81980#map=16/1.35210/103.81980"
+    ),
+    (
+        "https://www.openstreetmap.org/?mlat=1.35210&mlon=103.81980"
+        "#map=99/1.35210/103.81980"
+    ),
+    (
+        "https://user@www.openstreetmap.org/?mlat=1.35210&mlon=103.81980"
+        "#map=16/1.35210/103.81980"
+    ),
+    (
+        "https://www.openstreetmap.org/path?mlat=1.35210&mlon=103.81980"
+        "#map=16/1.35210/103.81980"
+    ),
+    (
+        "https://www.openstreetmap.org/?mlat=1.35210&mlon=103.81980"
+        "#map=16/1.30000/103.81980"
+    ),
+    (
+        "https://www.openstreetmap.org/?mlat=1.35210&mlat=1.35210&mlon=103.81980"
+        "#map=16/1.35210/103.81980"
+    ),
+    (
+        "https://www.openstreetmap.org:443/?mlat=1.35210&mlon=103.81980"
+        "#map=16/1.35210/103.81980"
+    ),
+    (
+        "https://www.openstreetmap.org/?mlat=NaN&mlon=103.81980"
+        "#map=16/NaN/103.81980"
+    ),
+])
+def test_osm_lookalike_reference_is_not_rendered_as_location_card(reference):
+    source = "References:\n                 - " + reference
+
+    rendered = str(render_markdown(format_hfl_markdown(source)))
+
+    assert "corpus-location-reference" not in rendered
+
+
 def test_manual_entry_preview_rejects_required_blank_fields(authenticated_client):
     request = _create_entry_payload()
     request["moment"] = " "
@@ -2266,14 +2613,27 @@ def test_remote_manual_entry_create_uses_canonical_host(
         ),
     )
 
+    request = _create_entry_payload()
+    request.update({
+        "location_latitude": "1.3521",
+        "location_longitude": "103.8198",
+    })
     response = authenticated_client.post(
         "/hfl-corpus/entries",
-        json=_create_entry_payload(),
+        json=request,
     )
 
     assert response.status_code == 200
     assert response.json()["entry_id"] == "hfl-remote"
     assert submitted[0]["moment"] == "Captured a useful thought"
+    assert (
+        "https://www.openstreetmap.org/?mlat=1.35210&mlon=103.81980"
+        "#map=16/1.35210/103.81980"
+    ) in submitted[0]["references"]
+    assert "location_latitude" not in submitted[0]
+    assert "location_longitude" not in submitted[0]
+    assert "location_label" not in submitted[0]
+    assert set(submitted[0]) == set(_create_entry_payload()) | {"attachment_names"}
 
 
 def test_local_manual_entry_upload_persists_files_and_references(

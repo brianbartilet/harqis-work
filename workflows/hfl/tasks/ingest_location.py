@@ -35,7 +35,7 @@ from __future__ import annotations
 import math
 import os
 import re
-import time
+
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
@@ -47,6 +47,7 @@ from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 from apps.own_tracks.config import CONFIG as OWN_TRACKS_CONFIG
 from apps.own_tracks.references.web.api.locations import ApiServiceOwnTracksLocations
+from apps.openstreetmap import nominatim_rate_limit, osm_link
 
 from workflows.hfl.prompts import load_prompt
 from workflows.hfl.tasks.capture import (
@@ -65,9 +66,7 @@ _NOMINATIM_UA = (
     "harqis-work-hfl/1.0 (personal location journal; "
     "+https://github.com/brianbartilet/harqis-work)"
 )
-# Module-level throttle so back-to-back stay lookups respect Nominatim's
-# <=1 req/s policy across the whole run.
-_LAST_GEOCODE_TS = 0.0
+
 
 
 # ── geo helpers ───────────────────────────────────────────────────────────────
@@ -82,12 +81,8 @@ def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * r * math.asin(min(1.0, math.sqrt(a)))
 
 
-def _osm_link(lat: float, lon: float) -> str:
-    """A shareable OpenStreetMap pin for a coordinate (the entry's provenance)."""
-    return (
-        f"https://www.openstreetmap.org/?mlat={lat:.5f}&mlon={lon:.5f}"
-        f"#map=16/{lat:.5f}/{lon:.5f}"
-    )
+# Backward-compatible private alias for existing producers and tests.
+_osm_link = osm_link
 
 
 def _short_place(data: dict) -> Optional[str]:
@@ -119,16 +114,13 @@ def _reverse_geocode(
     failure (offline, rate-limited, parse) returns None and the caller keeps
     the coordinates. Cached per ~100 m cell within the run; throttled to honour
     the Nominatim usage policy (<=1 req/s)."""
-    global _LAST_GEOCODE_TS
     key = (round(lat, 3), round(lon, 3))  # ~100 m grid
     if key in cache:
         return cache[key]
     try:
         import httpx
 
-        wait = _LAST_GEOCODE_TS + min_interval - time.monotonic()
-        if wait > 0:
-            time.sleep(wait)
+        nominatim_rate_limit(min_interval=min_interval)
         resp = httpx.get(
             _NOMINATIM_URL,
             params={
@@ -138,7 +130,7 @@ def _reverse_geocode(
             headers={"User-Agent": _NOMINATIM_UA},
             timeout=10.0,
         )
-        _LAST_GEOCODE_TS = time.monotonic()
+
         resp.raise_for_status()
         label = _short_place(resp.json())
         cache[key] = label

@@ -31,7 +31,6 @@ from workflows.hfl.tasks.ingest_location import (
     _select_route_anchors,
     _short_place,
     _track_health,
-    collect_location_activity,
     distill_location_activity,
     ingest_location_activity,
     nearest_fix,
@@ -550,7 +549,7 @@ def test__reverse_geocode_uses_cache(monkeypatch):
     import httpx as _httpx
     import workflows.hfl.tasks.ingest_location as _m
 
-    monkeypatch.setattr(_m, "_LAST_GEOCODE_TS", 0.0)
+    monkeypatch.setattr(_m, "nominatim_rate_limit", lambda **kwargs: None)
 
     call_count = []
 

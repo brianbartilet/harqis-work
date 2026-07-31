@@ -57,6 +57,25 @@
   .markdown-body ul:has(> li > .corpus-reference-preview) > li > a:not(.corpus-reference-preview):hover {
     background: #0c4a6e;
   }
+  .corpus-location-reference {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .3rem .8rem;
+    border: 1px solid #166534;
+    border-radius: .6rem;
+    background: #052e16;
+    padding: .6rem .75rem;
+    text-decoration: none !important;
+  }
+  .corpus-location-reference:hover { border-color: #22c55e; background: #14532d; }
+  .corpus-location-label { min-width: 0; color: #dcfce7; font-size: .8rem; font-weight: 650; overflow-wrap: anywhere; }
+  .corpus-location-action { color: #86efac; font-size: .72rem; white-space: nowrap; }
+  .markdown-body ul:has(> li > .corpus-location-reference) { padding-left: 0; list-style: none; }
+  .markdown-body ul:has(> li > .corpus-location-reference) > li { list-style: none; }
   .file-viewer-dialog {
     width: min(1080px, calc(100% - 28px));
     height: min(88dvh, 900px);

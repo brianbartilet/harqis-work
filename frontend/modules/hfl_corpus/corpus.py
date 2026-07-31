@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import math
 import re
 import time
 from collections import Counter
@@ -11,8 +12,10 @@ from datetime import date, datetime
 from pathlib import Path
 from threading import Lock
 from typing import TYPE_CHECKING
+from urllib.parse import parse_qs, urlparse
 
 from config import get_settings
+from apps.openstreetmap import osm_link
 from web import REPO_ROOT
 
 if TYPE_CHECKING:
@@ -455,7 +458,67 @@ def parse_date(value: str | None) -> date | None:
         return None
 
 
+def _osm_pin_coordinates(reference: str) -> tuple[float, float] | None:
+    """Parse only canonical HTTPS OpenStreetMap pin URLs."""
+    try:
+        parsed = urlparse(reference)
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname not in {"openstreetmap.org", "www.openstreetmap.org"}
+            or parsed.username
+            or parsed.password
+            or parsed.port is not None
+            or parsed.path not in {"", "/"}
+        ):
+            return None
+        query = parse_qs(parsed.query, strict_parsing=True)
+        if set(query) != {"mlat", "mlon"}:
+            return None
+        if len(query["mlat"]) != 1 or len(query["mlon"]) != 1:
+            return None
+        latitude = float(query["mlat"][0])
+        longitude = float(query["mlon"][0])
+        fragment = re.fullmatch(
+            r"map=16/(-?\d+(?:\.\d+)?)/(-?\d+(?:\.\d+)?)",
+            parsed.fragment,
+        )
+        if not fragment:
+            return None
+        fragment_latitude, fragment_longitude = map(float, fragment.groups())
+        if (
+            not math.isfinite(latitude)
+            or not math.isfinite(longitude)
+            or not -90 <= latitude <= 90
+            or not -180 <= longitude <= 180
+            or abs(fragment_latitude - latitude) > 0.00001
+            or abs(fragment_longitude - longitude) > 0.00001
+        ):
+            return None
+        if reference != osm_link(latitude, longitude):
+            return None
+        return latitude, longitude
+    except (TypeError, ValueError):
+        return None
+
+
+def _location_reference_markup(reference: str) -> str | None:
+    coordinates = _osm_pin_coordinates(reference)
+    if not coordinates:
+        return None
+    latitude, longitude = coordinates
+    href = html.escape(reference, quote=True)
+    return (
+        f'<a href="{href}" class="corpus-location-reference" '
+        'target="_blank" rel="noopener noreferrer">'
+        f'<span class="corpus-location-label">Location · {latitude:.5f}, {longitude:.5f}</span>'
+        '<span class="corpus-location-action">Open in OpenStreetMap ↗</span>'
+        "</a>"
+    )
+
+
 def _reference_markup(reference: "ReferenceLink") -> str:
+    if location_markup := _location_reference_markup(reference.href or ""):
+        return location_markup
     label = html.escape(reference.label, quote=False)
     href = html.escape(reference.href or "", quote=True)
     if reference.preview_kind:
@@ -542,7 +605,8 @@ def format_hfl_markdown(
                     references_rendered = True
                 output.append(f"- {_reference_markup(reference)}")
             else:
-                output.append(stripped)
+                location_markup = _location_reference_markup(raw_reference)
+                output.append(f"- {location_markup}" if location_markup else stripped)
             continue
         if stripped and not stripped.startswith("-"):
             in_references = False

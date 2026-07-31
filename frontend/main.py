@@ -74,7 +74,8 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"]        = "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"]        = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"]     = "geolocation=(), microphone=(), camera=()"
+    geolocation_policy = "(self)" if request.url.path == "/hfl-corpus" else "()"
+    response.headers["Permissions-Policy"]     = f"geolocation={geolocation_policy}, microphone=(), camera=()"
     if request.url.path.startswith("/static/") and response.status_code == 200:
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     else:

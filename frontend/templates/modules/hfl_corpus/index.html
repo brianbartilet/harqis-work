@@ -3,6 +3,25 @@
 
 {% block head %}
 <style>
+  .corpus-location-reference {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .3rem .8rem;
+    border: 1px solid #166534;
+    border-radius: .6rem;
+    background: #052e16;
+    padding: .6rem .75rem;
+    text-decoration: none !important;
+  }
+  .corpus-location-reference:hover { border-color: #22c55e; background: #14532d; }
+  .corpus-location-label { min-width: 0; color: #dcfce7; font-size: .8rem; font-weight: 650; overflow-wrap: anywhere; }
+  .corpus-location-action { color: #86efac; font-size: .72rem; white-space: nowrap; }
+  .markdown-body ul:has(> li > .corpus-location-reference) { padding-left: 0; list-style: none; }
+  .markdown-body ul:has(> li > .corpus-location-reference) > li { list-style: none; }
   @media (min-width: 640px) {
     dialog[data-create-entry-dialog] {
       height: fit-content !important;
@@ -294,6 +313,45 @@
               <input type="text" name="tags" value="#notes #manual-entry #thoughts"
                      class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 sm:text-sm">
             </label>
+            <section data-entry-location class="rounded-lg border border-emerald-900/70 bg-emerald-950/20 p-3">
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <label class="min-w-0 flex-1 text-sm text-slate-300">Location
+                  <input type="search" name="location_query" maxlength="200" autocomplete="off"
+                         placeholder="Search a place or address"
+                         class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-emerald-500 sm:text-sm">
+                </label>
+                <div class="grid grid-cols-2 gap-2 sm:flex">
+                  <button type="button" data-entry-location-search
+                          class="min-h-11 rounded-lg bg-emerald-800 px-3 py-2 text-sm font-medium text-emerald-50 hover:bg-emerald-700">Search</button>
+                  <button type="button" data-entry-use-location
+                          class="min-h-11 rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 ring-1 ring-slate-700 hover:bg-slate-700">Use current location</button>
+                </div>
+              </div>
+              <p class="mt-2 text-xs text-slate-500">Geolocation runs only after you press Use current location.</p>
+              <p class="mt-1 text-xs text-slate-500">
+                Search data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" class="text-emerald-400 hover:text-emerald-300">OpenStreetMap contributors</a>, ODbL.
+              </p>
+              <div data-entry-location-status role="status" aria-live="polite"
+                   class="mt-2 text-xs text-emerald-300"></div>
+              <div data-entry-location-results hidden
+                   class="mt-2 grid max-h-40 gap-1 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/70 p-1"></div>
+              <div class="mt-2">
+                <p class="text-xs text-slate-400">Or enter coordinates manually</p>
+                <div class="mt-2 grid grid-cols-2 gap-2">
+                  <label class="text-xs text-slate-400">Latitude
+                    <input type="text" inputmode="decimal" name="location_latitude" maxlength="32" placeholder="1.35210"
+                           class="mt-1 block min-h-11 w-full min-w-0 rounded-lg bg-slate-900 px-2 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-emerald-500 sm:text-sm">
+                  </label>
+                  <label class="text-xs text-slate-400">Longitude
+                    <input type="text" inputmode="decimal" name="location_longitude" maxlength="32" placeholder="103.81980"
+                           class="mt-1 block min-h-11 w-full min-w-0 rounded-lg bg-slate-900 px-2 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-emerald-500 sm:text-sm">
+                  </label>
+                </div>
+              </div>
+              <input type="hidden" name="location_label" value="">
+              <button type="button" data-entry-location-clear hidden
+                      class="mt-2 min-h-11 rounded-lg px-3 py-2 text-xs text-slate-400 ring-1 ring-slate-700 hover:text-white sm:min-h-0">Clear location</button>
+            </section>
             <label class="block text-sm text-slate-300">References
               <textarea name="references" rows="4" placeholder="One reference per line"
                         class="mt-1.5 block w-full resize-y rounded-lg bg-slate-900 px-3 py-2 font-mono text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-blue-500 sm:text-sm"></textarea>
@@ -378,6 +436,15 @@
   const moreDetails = form.querySelector('[data-entry-more-details]');
   const fileInput = form.elements.attachments;
   const fileList = form.querySelector('[data-entry-file-list]');
+  const locationQuery = form.elements.location_query;
+  const locationLatitude = form.elements.location_latitude;
+  const locationLongitude = form.elements.location_longitude;
+  const locationLabel = form.elements.location_label;
+  const locationStatus = form.querySelector('[data-entry-location-status]');
+  const locationResults = form.querySelector('[data-entry-location-results]');
+  const locationSearchButton = form.querySelector('[data-entry-location-search]');
+  const useLocationButton = form.querySelector('[data-entry-use-location]');
+  const clearLocationButton = form.querySelector('[data-entry-location-clear]');
   const confirmButton = reviewDialog.querySelector('[data-entry-confirm]');
   const previewPanel = reviewDialog.querySelector('[data-entry-preview]');
   const progressPanel = reviewDialog.querySelector('[data-entry-upload-progress]');
@@ -387,6 +454,8 @@
   let initialState = '';
   let pendingPayload = null;
   let pendingFiles = [];
+  let locationGeneration = 0;
+  let locationSearchController = null;
 
   const localDateAndTime = () => {
     const now = new Date();
@@ -400,6 +469,7 @@
   const payload = () => {
     const values = Object.fromEntries(new FormData(form).entries());
     delete values.attachments;
+    delete values.location_query;
     values.attachment_names = selectedFiles().map(file => file.name);
     return values;
   };
@@ -408,6 +478,35 @@
   const showError = (message) => {
     errorBox.textContent = message;
     errorBox.hidden = !message;
+  };
+  const clearLocationResults = () => {
+    locationResults.replaceChildren();
+    locationResults.hidden = true;
+  };
+  const invalidateLocationRequests = () => {
+    locationGeneration += 1;
+    locationSearchController?.abort();
+    locationSearchController = null;
+    locationSearchButton.disabled = false;
+    useLocationButton.disabled = false;
+  };
+  const setLocation = (latitude, longitude, label) => {
+    invalidateLocationRequests();
+    locationLatitude.value = Number(latitude).toFixed(5);
+    locationLongitude.value = Number(longitude).toFixed(5);
+    locationLabel.value = label || '';
+    locationStatus.textContent = `${label || 'Selected location'} · ${locationLatitude.value}, ${locationLongitude.value}`;
+    clearLocationButton.hidden = false;
+    clearLocationResults();
+  };
+  const clearLocation = () => {
+    invalidateLocationRequests();
+    locationLatitude.value = '';
+    locationLongitude.value = '';
+    locationLabel.value = '';
+    locationStatus.textContent = '';
+    clearLocationButton.hidden = true;
+    clearLocationResults();
   };
   const responseMessage = (body, fallback) => {
     if (typeof body?.detail === 'string') return body.detail;
@@ -427,6 +526,7 @@
     showError('');
     pendingPayload = null;
     pendingFiles = [];
+    clearLocation();
     fileList.replaceChildren();
     fileList.hidden = true;
     initialState = serialize();
@@ -439,6 +539,7 @@
     createDialog.showModal();
   };
   const requestCancel = () => {
+    invalidateLocationRequests();
     if (!isDirty()) {
       createDialog.close();
       return;
@@ -467,6 +568,7 @@
     form.reset();
     pendingPayload = null;
     pendingFiles = [];
+    clearLocation();
   });
 
   const readableBytes = bytes => {
@@ -491,6 +593,103 @@
     fileList.hidden = files.length === 0;
   });
 
+  locationSearchButton.addEventListener('click', async () => {
+    const query = locationQuery.value.trim();
+    if (query.length < 3) {
+      locationStatus.textContent = 'Enter at least 3 characters to search.';
+      locationQuery.focus();
+      return;
+    }
+    invalidateLocationRequests();
+    const generation = locationGeneration;
+    const controller = new AbortController();
+    locationSearchController = controller;
+    locationSearchButton.disabled = true;
+    locationStatus.textContent = 'Searching OpenStreetMap…';
+    clearLocationResults();
+    try {
+      const response = await fetch(
+        '/hfl-corpus/locations/search',
+        {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({q: query}),
+          signal: controller.signal,
+        },
+      );
+      const body = await response.json();
+      if (generation !== locationGeneration) return;
+      if (!response.ok) throw new Error(responseMessage(body, 'Location search failed.'));
+      const results = Array.isArray(body.results) ? body.results : [];
+      if (!results.length) {
+        locationStatus.textContent = 'No places found. Try another search or enter coordinates.';
+        return;
+      }
+      locationResults.replaceChildren(...results.map(result => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'min-h-11 rounded-md px-3 py-2 text-left text-sm text-slate-200 hover:bg-emerald-950 focus:outline-none focus:ring-2 focus:ring-emerald-500';
+        button.textContent = result.label;
+        button.addEventListener('click', () => setLocation(result.latitude, result.longitude, result.label));
+        return button;
+      }));
+      locationResults.hidden = false;
+      locationStatus.textContent = `${results.length} location result${results.length === 1 ? '' : 's'}. Select one.`;
+    } catch (error) {
+      if (error.name === 'AbortError' || generation !== locationGeneration) return;
+      locationStatus.textContent = error.message || 'Location search failed. Enter coordinates manually.';
+    } finally {
+      if (generation === locationGeneration) {
+        locationSearchController = null;
+        locationSearchButton.disabled = false;
+      }
+    }
+  });
+
+  locationQuery.addEventListener('input', () => {
+    invalidateLocationRequests();
+    clearLocationResults();
+    locationStatus.textContent = '';
+  });
+  locationQuery.addEventListener('keydown', event => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    locationSearchButton.click();
+  });
+  useLocationButton.addEventListener('click', () => {
+    if (!navigator.geolocation) {
+      locationStatus.textContent = 'This browser does not support geolocation. Enter coordinates manually.';
+      return;
+    }
+    invalidateLocationRequests();
+    const generation = locationGeneration;
+    useLocationButton.disabled = true;
+    locationStatus.textContent = 'Waiting for location permission…';
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        if (generation !== locationGeneration) return;
+        setLocation(position.coords.latitude, position.coords.longitude, 'Current device location');
+        useLocationButton.disabled = false;
+      },
+      () => {
+        if (generation !== locationGeneration) return;
+        locationStatus.textContent = 'Location permission was denied or unavailable. Enter coordinates manually.';
+        useLocationButton.disabled = false;
+      },
+      {enableHighAccuracy: false, timeout: 10000, maximumAge: 60000},
+    );
+  });
+  [locationLatitude, locationLongitude].forEach(input => input.addEventListener('input', () => {
+    invalidateLocationRequests();
+    clearLocationResults();
+    locationLabel.value = '';
+    const latitude = locationLatitude.value.trim();
+    const longitude = locationLongitude.value.trim();
+    locationStatus.textContent = latitude || longitude ? `Manual coordinates · ${latitude || '—'}, ${longitude || '—'}` : '';
+    clearLocationButton.hidden = !(latitude || longitude);
+  }));
+  clearLocationButton.addEventListener('click', clearLocation);
+
   form.addEventListener('submit', async event => {
     event.preventDefault();
     if (!form.checkValidity()) {
@@ -501,6 +700,7 @@
       return;
     }
     showError('');
+    invalidateLocationRequests();
     reviewButton.disabled = true;
     pendingPayload = payload();
     pendingFiles = selectedFiles();

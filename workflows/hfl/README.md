@@ -262,6 +262,19 @@ source dump file path (the dumps→media→corpus provenance loop), and — when
 the media can be geo-located — also appends an OpenStreetMap pin for where it
 was captured.
 
+The Activity Corpus **Create entry** dialog can add the same canonical pin to a
+manual entry. A user may submit a place/address search, explicitly request the
+browser's current location, or enter latitude/longitude directly. The persisted
+HFL shape remains unchanged: only the generated HTTPS OpenStreetMap pin is
+stored under `References:`. Valid pins render as static coordinate cards that
+link to OpenStreetMap; the corpus view does not embed tiles, images, iframes, or
+make a third-party request merely to display an entry. Place search uses an
+authenticated same-origin JSON POST only after an explicit Search action, keeping
+address text out of request URLs; excess concurrent searches fail fast. Browser
+geolocation is requested only after **Use current location** is pressed. Forward
+and reverse Nominatim calls share a user-scoped, cross-process ≥1-second rate
+limiter; the search UI includes OpenStreetMap contributor/ODbL attribution.
+
 Plain `http://` references are discarded by `HflEntry` normalization before
 new entries reach Markdown, outbox payloads, or Elasticsearch; HTTPS and file
 paths remain supported. Existing corpus and Elasticsearch records can be

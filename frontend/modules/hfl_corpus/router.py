@@ -5,6 +5,7 @@ import html
 import json
 import logging
 import re
+import threading
 from dataclasses import replace
 from pathlib import Path
 from urllib.parse import quote, urlencode
@@ -18,7 +19,7 @@ from fastapi.responses import (
     StreamingResponse,
 )
 from markupsafe import Markup
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from config import get_settings
 from modules.hfl_corpus.corpus import (
@@ -43,7 +44,9 @@ from modules.hfl_corpus.entry_create import (
     persist_manual_entry,
     persist_manual_entry_with_uploads,
     preview_manual_entry,
+    remote_entry_payload,
 )
+from modules.hfl_corpus.location import LocationSearchError, search_nominatim
 from modules.hfl_shares.viewer import (
     classify_preview,
     read_preview_text,
@@ -60,6 +63,20 @@ from web import page_context, require_user, templates
 router = APIRouter(prefix="/hfl-corpus")
 _H2 = re.compile(r"<h2(?:\s+[^>]*)?>")
 _log = logging.getLogger(__name__)
+_LOCATION_SEARCH_SLOTS = threading.BoundedSemaphore(value=2)
+
+
+class LocationSearchRequest(BaseModel):
+    q: str = Field(min_length=3, max_length=200)
+
+
+def _require_same_origin(request: Request) -> None:
+    if request.headers.get("sec-fetch-site", "").lower() == "cross-site":
+        raise HTTPException(status_code=403, detail="Cross-site location search denied.")
+    origin = request.headers.get("origin", "").rstrip("/")
+    expected = f"{request.url.scheme}://{request.url.netloc}"
+    if origin and origin != expected:
+        raise HTTPException(status_code=403, detail="Cross-site location search denied.")
 
 
 def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
@@ -438,13 +455,49 @@ async def hfl_entry_preview(request: Request, payload: CreateEntryRequest):
     try:
         if _uses_remote_corpus() and payload.attachment_names:
             return RemoteCorpusClient.from_settings().preview_entry(
-                payload.model_dump()
+                remote_entry_payload(payload)
             )
         return preview_manual_entry(payload)
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except RemoteCorpusError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=502)
+
+
+@router.post("/locations/search")
+async def hfl_location_search(
+    request: Request,
+    payload: LocationSearchRequest,
+):
+    user, redirect = require_user(request)
+    if redirect:
+        return JSONResponse({"detail": "Authentication required"}, status_code=401)
+    _require_same_origin(request)
+    admitted = _LOCATION_SEARCH_SLOTS.acquire(blocking=False)
+    if not admitted:
+        return JSONResponse(
+            {"detail": "Location search is busy. Try again shortly."},
+            status_code=429,
+            headers={"Retry-After": "2"},
+        )
+    search_task = asyncio.create_task(
+        asyncio.to_thread(search_nominatim, payload.q, limit=5)
+    )
+    try:
+        results = await asyncio.shield(search_task)
+        return {"results": results}
+    except asyncio.CancelledError:
+        try:
+            await search_task
+        except Exception:  # noqa: BLE001 - preserve cancellation after worker cleanup
+            pass
+        raise
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except LocationSearchError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=502)
+    finally:
+        _LOCATION_SEARCH_SLOTS.release()
 
 
 @router.post("/entries")
@@ -455,7 +508,7 @@ async def hfl_entry_create(request: Request, payload: CreateEntryRequest):
     try:
         if _uses_remote_corpus():
             result = RemoteCorpusClient.from_settings().create_entry(
-                payload.model_dump()
+                remote_entry_payload(payload)
             )
         else:
             result = persist_manual_entry(
@@ -491,7 +544,7 @@ async def hfl_entry_upload(
                 client = RemoteCorpusClient.from_settings()
                 result = await asyncio.to_thread(
                     client.create_entry_with_uploads,
-                    entry_payload.model_dump(),
+                    remote_entry_payload(entry_payload),
                     files,
                 )
             finally:

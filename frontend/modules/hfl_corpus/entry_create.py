@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import uuid
+import math
 from dataclasses import replace
 from datetime import date, datetime, time
 from pathlib import Path
@@ -37,6 +38,9 @@ class CreateEntryRequest(BaseModel):
     possible_use: str = Field(default="", max_length=5_000)
     tags: str = Field(default="", max_length=2_000)
     references: str = Field(default="", max_length=20_000)
+    location_latitude: str = Field(default="", max_length=32)
+    location_longitude: str = Field(default="", max_length=32)
+    location_label: str = Field(default="", max_length=300)
     attachment_names: list[str] = Field(default_factory=list, max_length=MAX_UPLOAD_FILES)
 
 
@@ -65,6 +69,44 @@ def _references(value: str) -> tuple[str, ...]:
     return tuple(line for line in normalized if line)
 
 
+def _location_reference(payload: CreateEntryRequest) -> str:
+    latitude_raw = payload.location_latitude.strip()
+    longitude_raw = payload.location_longitude.strip()
+    if not latitude_raw and not longitude_raw:
+        return ""
+    if not latitude_raw or not longitude_raw:
+        raise ValueError("Enter both latitude and longitude.")
+    try:
+        latitude = float(latitude_raw)
+        longitude = float(longitude_raw)
+    except ValueError as exc:
+        raise ValueError("Enter valid numeric coordinates.") from exc
+    if not math.isfinite(latitude) or not math.isfinite(longitude):
+        raise ValueError("Enter valid numeric coordinates.")
+    if not -90 <= latitude <= 90:
+        raise ValueError("Latitude must be between -90 and 90.")
+    if not -180 <= longitude <= 180:
+        raise ValueError("Longitude must be between -180 and 180.")
+
+    from apps.openstreetmap import osm_link
+
+    return osm_link(latitude, longitude)
+
+
+def remote_entry_payload(payload: CreateEntryRequest) -> dict:
+    """Include the canonical pin in references for rolling remote compatibility."""
+    data = payload.model_dump()
+    references = _references(payload.references)
+    location_reference = _location_reference(payload)
+    if location_reference:
+        references = tuple(dict.fromkeys((*references, location_reference)))
+    data["references"] = "\n".join(references)
+    data.pop("location_latitude", None)
+    data.pop("location_longitude", None)
+    data.pop("location_label", None)
+    return data
+
+
 def make_manual_envelope(
     payload: CreateEntryRequest,
     *,
@@ -82,6 +124,10 @@ def make_manual_envelope(
     from workflows.hfl.dto import HflEntry
     from workflows.hfl.persistence import make_envelope
 
+    references = _references(payload.references)
+    location_reference = _location_reference(payload)
+    if location_reference:
+        references = tuple(dict.fromkeys((*references, location_reference)))
     entry = HflEntry(
         when=_timestamp(payload),
         moment=moment,
@@ -89,7 +135,7 @@ def make_manual_envelope(
         why_it_stayed=payload.why_it_stayed,
         possible_use=payload.possible_use,
         tags=_tags(payload.tags),
-        references=_references(payload.references),
+        references=references,
     )
     envelope = make_envelope(entry, source="manual-entry")
     if not generated_references:
