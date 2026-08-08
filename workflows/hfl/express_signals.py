@@ -66,6 +66,13 @@ def _manifesto_map() -> dict[str, dict]:
                 # Same task may appear under several beat entries (e.g. data-only
                 # twins); their manifesto role is the same, so last-wins is fine.
                 out[task] = man
+                # A scheduled orchestration task may invoke an otherwise adhoc
+                # Celery child directly. Listing the child in manifesto metadata
+                # lets an explicit standalone .delay() use the same capture policy
+                # without adding a fake Beat schedule entry.
+                for child in man.get("hfl_child_tasks") or []:
+                    if isinstance(child, str) and child.strip():
+                        out[child.strip()] = man
     except Exception as exc:  # noqa: BLE001 - no map → handler simply no-ops
         _log.warning("hfl.express_signals: could not build manifesto map (%s)", exc)
     _map_cache = out
@@ -85,7 +92,11 @@ def _summarize(result: Any) -> str:
     if result is None:
         return ""
     try:
-        if isinstance(result, str):
+        if isinstance(result, dict) and result.get("hfl_relevant") is False:
+            return ""
+        if isinstance(result, dict) and result.get("hfl_summary") is not None:
+            text = str(result.get("hfl_summary") or "")
+        elif isinstance(result, str):
             text = result
         elif isinstance(result, dict):
             text = json.dumps(result, default=str, ensure_ascii=False)
@@ -114,13 +125,20 @@ def express_task_signal(task_name: Optional[str], result: Any) -> Optional[str]:
     if not summary:
         return None
     ref = man.get("express_target")
+    references = [ref] if ref else []
+    if isinstance(result, dict):
+        references.extend(
+            str(value) for value in (result.get("hfl_references") or []) if value
+        )
     return index_hfl_signal(
         task=task_name,
-        source=f"signal:{_short_name(task_name)}",
+        source=str(man.get("hfl_source") or f"signal:{_short_name(task_name)}"),
         summary=summary,
-        status="success",
-        references=[ref] if ref else None,
-        dedup_key=summary,
+        status=(str(result.get("hfl_status") or "success")
+                if isinstance(result, dict) else "success"),
+        references=references or None,
+        dedup_key=(str(result.get("hfl_dedup_key") or summary)
+                   if isinstance(result, dict) else summary),
     )
 
 

@@ -142,6 +142,33 @@ WORKFLOW_HFL = {
         },
     },
 
+    # Purchase transaction review — purchase tasks buffer compact structured
+    # outcomes immediately after success. This 23:00 rollup omits no-change
+    # runs, distils meaningful mutations/anomalies plus Scryfall provenance,
+    # and dual-writes one daily entry. Historical ES/radar-CSV backfill is an
+    # explicit ad-hoc task, not part of Beat.
+    'run-job--ingest_purchase_transactions_activity': {
+        'task': 'workflows.hfl.tasks.ingest_purchase_transactions.ingest_purchase_transactions_activity',
+        'schedule': crontab(hour=23, minute=0),
+        'kwargs': {
+            'cfg_id__anthropic': 'ANTHROPIC',
+            'model': 'claude-haiku-4-5-20251001',
+            'window_days': 1,
+            'max_events': 500,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 60 * 12,
+        },
+        'manifesto': {
+            'code_role': 'capture+distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries',
+            'review_artifact': 'es_log+file',
+            'hfl_signal': True,
+        },
+    },
+
     # Repository notes — 22:50 local, ten minutes after the host's clean,
     # fast-forward-only pull. The first successful run records HEAD as the
     # baseline; later runs create one entry per text note/common image up to

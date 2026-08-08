@@ -884,6 +884,71 @@ def register_memory_tools(mcp: FastMCP):
         }
 
     @mcp.tool()
+    def purchase_transactions_activity(
+        period: str = "",
+        since: str = "",
+        until: str = "",
+        synthesize: bool = True,
+        include_backfill: bool = True,
+        max_events: int = 500,
+        cfg_id__anthropic: str = "ANTHROPIC",
+        model: str = _DEFAULT_HAIKU,
+    ) -> dict:
+        """Read-only review of meaningful purchase workflow outcomes.
+
+        Reads buffered structured results and, by default, available historical
+        sold-radar ES/CSV plus aggregate workflow-log evidence. It never writes
+        HFL, marks signals, or mutates marketplace/inventory state. Defaults to
+        the last seven days and makes no LLM call when no events are found.
+        """
+        from workflows.hfl.tasks.ingest_purchase_transactions import (
+            collect_purchase_transactions_activity,
+            distill_purchase_transactions_activity,
+        )
+
+        start, end, label = _resolve_window(period, since, until)
+        end_d = end or _today()
+        start_d = start or (end_d - timedelta(days=6))
+        try:
+            activity = collect_purchase_transactions_activity(
+                since=start_d,
+                until=end_d,
+                include_rolled_up=True,
+                include_backfill=include_backfill,
+                max_events=max_events,
+            )
+        except Exception as exc:  # noqa: BLE001 - safe MCP result
+            logger.warning("purchase_transactions_activity unavailable (%s)", exc)
+            return {
+                "found": False, "text": "", "events": [], "count": 0,
+                "error": "purchase transaction sources unavailable",
+                "period": _period_dict(start_d, end_d, label),
+            }
+        if not activity["event_count"]:
+            return {
+                "found": False, "text": "", "events": [], "count": 0,
+                "period": _period_dict(start_d, end_d, label),
+            }
+        distilled = distill_purchase_transactions_activity(
+            activity, synthesize=synthesize, model=model,
+            cfg_id=cfg_id__anthropic,
+        )
+        text = (
+            f"**{distilled['moment']}**\n\n{distilled['what_happened']}\n\n"
+            f"_{distilled.get('why_it_stayed', '')}_"
+        ).strip()
+        return {
+            "found": True,
+            "text": text,
+            "events": activity["events"],
+            "count": activity["event_count"],
+            "references": activity["references"],
+            "synthesized": bool(distilled.get("synthesized")),
+            "model": model if distilled.get("synthesized") else None,
+            "period": _period_dict(start_d, end_d, label),
+        }
+
+    @mcp.tool()
     def memory_recall_es(
         query: str = "",
         period: str = "",

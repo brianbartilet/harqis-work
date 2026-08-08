@@ -93,6 +93,7 @@ def index_hfl_signal(
         from core.apps.es_logging.app.elasticsearch import post
 
         doc = {
+            "signal_id": doc_id,
             "task": task,
             "source": (source or "unknown").strip() or "unknown",
             "summary": summary.strip()[:_MAX_SUMMARY],
@@ -116,6 +117,35 @@ def index_hfl_signal(
             "result is unaffected", task, exc,
         )
         return None
+
+
+def mark_hfl_signals_rolled_up(signals: list[dict[str, Any]]) -> int:
+    """Best-effort acknowledgement for signals successfully persisted to HFL.
+
+    New signal documents carry their deterministic ``signal_id`` so the full
+    document can be upserted with ``rolled_up=True``. Older documents without
+    that field remain readable but cannot be safely acknowledged.
+    """
+    marked = 0
+    try:
+        from core.apps.es_logging.app.elasticsearch import post
+
+        for signal in signals:
+            signal_id = str(signal.get("signal_id") or "").strip()
+            if not signal_id:
+                continue
+            doc = dict(signal)
+            doc["rolled_up"] = True
+            post(
+                doc,
+                _index_name(),
+                location_key=signal_id,
+                use_interval_map=False,
+            )
+            marked += 1
+    except Exception as exc:  # noqa: BLE001 - acknowledgement is best-effort
+        _log.warning("hfl.signal_store: acknowledgement failed (%s)", exc)
+    return marked
 
 
 def _parse_day(value: Optional[str]) -> Optional[str]:

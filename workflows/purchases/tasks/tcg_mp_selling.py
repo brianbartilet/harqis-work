@@ -553,6 +553,27 @@ def task_smoke():
     return number
 
 
+def _purchase_workflow_result(
+    workflow: str,
+    summary: str,
+    *,
+    relevant: bool,
+    status: str = "success",
+    references: Optional[list[str]] = None,
+    **counts,
+) -> dict:
+    """Stable task result consumed by the HFL post-success signal hook."""
+    return {
+        "status": status,
+        "workflow": workflow,
+        **counts,
+        "hfl_relevant": bool(relevant),
+        "hfl_summary": summary,
+        "hfl_status": status,
+        "hfl_references": list(references or []),
+    }
+
+
 @feed()
 @SPROUT.task()
 def download_scryfall_bulk_data(**kwargs):
@@ -561,7 +582,12 @@ def download_scryfall_bulk_data(**kwargs):
     api_service__scryfall_cards_bulk = ApiServiceScryfallBulkData(cfg__scryfall)
     api_service__scryfall_cards_bulk.download_bulk_file()
 
-    return "SUCCESS"
+    return _purchase_workflow_result(
+        "download_scryfall_bulk_data",
+        "Scryfall bulk card data refreshed successfully.",
+        relevant=True,
+        refreshes=1,
+    )
 
 
 # region task: generate_tcg_mappings, do not multiprocess because of bulk file
@@ -1134,7 +1160,10 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
     if not cards_echo:
         tcg_mp_log.info("No tradable cards found.")
         api_merchant.set_listing_status(1)
-        return "SUCCESS"
+        return _purchase_workflow_result(
+            "generate_tcg_listings", "No tradable cards required listing review.",
+            relevant=False, variants=0,
+        )
     cards_echo = cards_echo if limit is None else cards_echo[:limit]
     cards_echo.reverse()
 
@@ -1142,7 +1171,11 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
     if not cards_to_list:
         tcg_mp_log.info(f"0 of {len(cards_echo)} cards need a new listing.")
         api_merchant.set_listing_status(1)
-        return "SUCCESS"
+        return _purchase_workflow_result(
+            "generate_tcg_listings",
+            f"No listing changes were needed across {len(cards_echo)} tradable cards.",
+            relevant=False, variants=0, cards_scanned=len(cards_echo),
+        )
 
     # Group the copies needing a listing by variant and dispatch ONE task per
     # variant — never per copy. This guarantees two unlisted copies of the same card
@@ -1187,7 +1220,28 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
     )
     api_merchant.set_listing_status(1)
 
-    return "SUCCESS"
+    created = sum(1 for r in results if isinstance(r, dict) and r.get("created"))
+    changed = sum(1 for r in results if isinstance(r, dict) and r.get("status") == "ok")
+    errors = sum(1 for r in results if isinstance(r, dict) and r.get("status") == "error")
+    skipped = sum(1 for r in results if isinstance(r, dict) and r.get("status") == "skipped")
+    duplicates_removed = sum(
+        len(r.get("duplicate_listing_ids") or [])
+        for r in results if isinstance(r, dict)
+    )
+    adopted = max(0, changed - created)
+    summary = (
+        f"TCG listing generation reviewed {len(results)} variant(s): "
+        f"{created} created, {adopted} adopted or reconciled, "
+        f"{duplicates_removed} duplicate listing(s) removed, "
+        f"{skipped} skipped, {errors} error(s)."
+    )
+    return _purchase_workflow_result(
+        "generate_tcg_listings", summary,
+        relevant=bool(changed or errors or skipped),
+        status="anomaly" if errors else "success",
+        variants=len(results), created=created, adopted=adopted,
+        duplicates_removed=duplicates_removed, skipped=skipped, errors=errors,
+    )
 
 # endregion
 
@@ -1524,7 +1578,10 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
     if not cards_echo:
         tcg_mp_log.info("No tradable cards found.")
         api_service__tcg_mp_merchant.set_listing_status(1)
-        return "SUCCESS"
+        return _purchase_workflow_result(
+            "update_tcg_listings_prices", "No tradable cards required listing updates.",
+            relevant=False, variants=0,
+        )
 
     cards_echo = cards_echo if limit is None else cards_echo[:limit]
 
@@ -1541,7 +1598,11 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
     if not variant_groups:
         tcg_mp_log.info("No tradable cards with listing metadata notes found.")
         api_service__tcg_mp_merchant.set_listing_status(1)
-        return "SUCCESS"
+        return _purchase_workflow_result(
+            "update_tcg_listings_prices",
+            "No tradable cards with listing metadata required updates.",
+            relevant=False, variants=0,
+        )
 
     # Prefer a copy with a note as the representative.
     representatives = [
@@ -1578,7 +1639,31 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
         log=tcg_mp_log,
     )
 
-    return "SUCCESS"
+    updated = sum(1 for r in results if isinstance(r, dict) and r.get("updated"))
+    errors = sum(1 for r in results if isinstance(r, dict) and r.get("status") == "error")
+    skipped = sum(1 for r in results if isinstance(r, dict) and r.get("status") == "skipped")
+    reset = sum(
+        1 for r in results
+        if isinstance(r, dict) and r.get("status") == "ok"
+        and not r.get("updated") and not r.get("listing_id")
+    )
+    duplicates_removed = sum(
+        len(r.get("duplicate_listing_ids") or [])
+        for r in results if isinstance(r, dict)
+    )
+    summary = (
+        f"TCG listing reconciliation reviewed {len(results)} variant(s): "
+        f"{updated} price/quantity update(s), {reset} missing listing(s) reset, "
+        f"{duplicates_removed} duplicate listing(s) removed, "
+        f"{skipped} skipped, {errors} error(s)."
+    )
+    return _purchase_workflow_result(
+        "update_tcg_listings_prices", summary,
+        relevant=bool(updated or reset or duplicates_removed or skipped or errors),
+        status="anomaly" if errors or reset else "success",
+        variants=len(results), updated=updated, reset=reset,
+        duplicates_removed=duplicates_removed, skipped=skipped, errors=errors,
+    )
 
 # endregion
 
@@ -1613,16 +1698,46 @@ def reconcile_then_update_tcg_listings(**kwargs):
 
     tcg_mp_log.info("reconcile_then_update: running sold-inventory radar first.")
     try:
-        radar_sold_inventory(**radar_kwargs)
+        radar_result = radar_sold_inventory(**radar_kwargs)
     except Exception:
         tcg_mp_log.exception(
             "reconcile_then_update: radar FAILED; skipping price update to avoid over-listing."
         )
-        return "RADAR_FAILED_UPDATE_SKIPPED"
+        return _purchase_workflow_result(
+            "reconcile_then_update_tcg_listings",
+            "Sold-inventory radar failed; the price/quantity update was skipped to prevent over-listing.",
+            relevant=True, status="failure", radar_failed=1, update_skipped=1,
+        )
 
     tcg_mp_log.info("reconcile_then_update: radar complete; running price/quantity update.")
-    update_tcg_listings_prices(**update_kwargs)
-    return "SUCCESS"
+    update_result = update_tcg_listings_prices(**update_kwargs)
+    radar_summary = (
+        radar_result.get("hfl_summary", "")
+        if isinstance(radar_result, dict) else str(radar_result)
+    )
+    update_summary = (
+        update_result.get("hfl_summary", "")
+        if isinstance(update_result, dict) else str(update_result)
+    )
+    relevant = any(
+        isinstance(result, dict) and result.get("hfl_relevant")
+        for result in (radar_result, update_result)
+    )
+    references = []
+    for result in (radar_result, update_result):
+        if isinstance(result, dict):
+            references.extend(result.get("hfl_references") or [])
+    return _purchase_workflow_result(
+        "reconcile_then_update_tcg_listings",
+        " ".join(part for part in (radar_summary, update_summary) if part).strip(),
+        relevant=relevant,
+        status=("anomaly" if any(
+            isinstance(result, dict) and result.get("hfl_status") in {"anomaly", "failure"}
+            for result in (radar_result, update_result)
+        ) else "success"),
+        references=references,
+        radar=radar_result, update=update_result,
+    )
 
 # endregion
 

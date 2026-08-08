@@ -79,7 +79,9 @@ WORKFLOW_PURCHASES = {
             'para_bucket': 'area',
             'express_target': 'api:tcg_mp',
             'review_artifact': 'es_log+file',
-            'hfl_signal': False,
+            'hfl_signal': True,
+            'hfl_express': 'buffer',
+            'hfl_source': 'purchase_transactions',
         },
     },
 
@@ -120,7 +122,12 @@ WORKFLOW_PURCHASES = {
             'para_bucket': 'area',
             'express_target': 'api:tcg_mp',
             'review_artifact': 'es_log+file',
-            'hfl_signal': False,
+            'hfl_signal': True,
+            'hfl_express': 'buffer',
+            'hfl_source': 'purchase_transactions',
+            'hfl_child_tasks': [
+                'workflows.purchases.tasks.sold_inventory_radar.radar_sold_inventory',
+            ],
         },
     },
 
@@ -147,7 +154,9 @@ WORKFLOW_PURCHASES = {
             'para_bucket': 'area',
             'express_target': 'file:scryfall_bulk',
             'review_artifact': 'es_log+file',
-            'hfl_signal': False,
+            'hfl_signal': True,
+            'hfl_express': 'buffer',
+            'hfl_source': 'purchase_transactions',
         },
     },
 

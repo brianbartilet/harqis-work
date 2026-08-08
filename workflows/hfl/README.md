@@ -45,6 +45,7 @@ this scaffold closes.
 | `summarize_hfl_week` | Weekly Haiku 4.5 rollup of the past N days; writes `YYYY-Www-rollup.md` with searchable tags aggregated from its source entries. | `file:hfl_summary+es_log` | Sundays 21:00 local. |
 | `ingest_chatgpt_activity` | **Primary daily research log.** Auto-discovers the operator's ChatGPT conversations created/updated that day via the ChatGPT web app's private backend (no thread ids), distils the questions asked into ONE corpus entry. Haiku-distilled, raw fallback. No token / no prompts → no entry, no call. | `file:hfl_corpus` | Daily 23:00 local (active — no-op until `CHATGPT_WEB_ACCESS_TOKEN` is set). |
 | `ingest_git_activity` | Distils the day's GitHub commits across recently updated repositories into one bounded entry. Haiku-distilled with a raw fallback; no commits means no entry and no model call. | `file:hfl_corpus+es:hfl-entries` | Daily 00:00 local on the `agent` queue. |
+| `ingest_purchase_transactions_activity` | Drains structured outcomes buffered by TCG listing generation, sold-inventory reconciliation, listing price/quantity reconciliation, and Scryfall bulk refresh. Writes one concise daily review; routine no-change runs make no entry or model call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:00 local on the `hfl` queue. |
 | `ingest_notes_activity` | Diffs each configured note repository from its saved ingest cursor after a verified host pull. Text notes are split at natural heading/semantic topic transitions (bounded per file and per run), producing one entry per topic; images remain one entry. A summary covers deleted, unsupported, or overflow material. Tags include `#notes #repo-<name> #<core-topic>`; `#dsm` is added only to explicit Scrum daily-standup segments. References include a pinned GitHub line anchor plus the host path. First activation records HEAD without backfilling. | `file:hfl_corpus+es:hfl-entries` | Daily 22:50 local on the `hfl` queue. |
 | `ingest_agent_session_event` / `ingest_agent_session_events` | Sanitizes one completed agent prompt plus its visible outcome into a deterministic prompt-audit entry; the batch task retries locally retained events. Hidden reasoning and tool output are excluded. | `file:hfl_corpus+es:hfl-entries` | Immediate from supported hooks/manual skill; retained-event retry every 10 minutes. |
 | `rollup_agent_sessions` | Synthesizes the prior 24-hour cross-surface prompt audit into one daily HFL rollup. | `file:hfl_corpus+es:hfl-entries` | Daily 23:40 local on the `hfl` queue. |
@@ -300,6 +301,30 @@ for EXIF (optional); see `apps/own_tracks` for the location source.
 ---
 
 ## Activation
+
+### Purchase transaction review
+
+`ingest_purchase_transactions_activity` is active at 23:00 with no new
+credentials. The purchase beat entries opt into `hfl_express: buffer` under the
+combined `purchase_transactions` source. Successful tasks buffer only their
+structured summary; results explicitly marked `hfl_relevant: false` are omitted.
+The daily ingest distils pending events with
+`claude-haiku-4-5-20251001`, then writes both the Markdown corpus and the
+`harqis-hfl-entries` projection (default `HFL_ES_INDEX`).
+
+`radar_sold_inventory` is captured inside the scheduled
+`reconcile_then_update_tcg_listings` chain. Its review CSV remains a provenance
+reference. `download_scryfall_bulk_data` contributes only a short refresh event.
+For a read-only live or historical preview, use the
+`purchase_transactions_activity` MCP tool. Historical retained ES records and
+`results/sold_inventory_radar-*.csv` files can be imported idempotently with:
+
+```powershell
+python -c "import sys;sys.path.insert(0,'scripts');import launch;launch.setup_env();from workflows.hfl.tasks.ingest_purchase_transactions import backfill_purchase_transactions_activity;print(backfill_purchase_transactions_activity(window_days=3650))"
+```
+
+No events, unavailable Elasticsearch, or failed Haiku synthesis never breaks
+the purchase beat; synthesis falls back to the bounded factual summaries.
 
 The beat wiring (step 2 below) is **already in place** on `main`; this section
 is the reference for what each source still needs — and for bringing the

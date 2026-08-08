@@ -673,7 +673,7 @@ def _reconcile_listing(publish_service, inventory_service, *, emid, foil,
 @SPROUT.task()
 def radar_sold_inventory(dry_run: bool = False, last_x_days: int = 60,
                          source: str = "hybrid", limit: Optional[int] = None,
-                         **kwargs) -> str:
+                         **kwargs) -> dict:
     """Find EchoMTG items already sold on TCG MP but still listed, and clean them up.
 
     Args:
@@ -694,7 +694,7 @@ def radar_sold_inventory(dry_run: bool = False, last_x_days: int = 60,
         sold_statuses: optional iterable of EnumTcgOrderStatus to override defaults.
 
     Returns:
-        A one-line summary string (also pushed to the HUD feed).
+        A structured summary for the HUD feed and HFL transaction buffer.
     """
     cfg_id__tcg_mp = kwargs.get("cfg_id__tcg_mp", "TCG_MP")
     cfg_id__echo_mtg = kwargs.get("cfg_id__echo_mtg", "ECHO_MTG")
@@ -749,7 +749,13 @@ def radar_sold_inventory(dry_run: bool = False, last_x_days: int = 60,
     inventory = inventory_service.get_collection(tradable_only=1) or []
     if not isinstance(inventory, list):
         _log.warning("radar: echo inventory did not return a list; aborting")
-        return "Sold-radar: echo inventory unavailable"
+        return {
+            "status": "anomaly", "workflow": "radar_sold_inventory",
+            "candidates": 0, "acted": 0,
+            "hfl_relevant": True, "hfl_status": "anomaly",
+            "hfl_summary": "Sold-inventory radar could not read EchoMTG inventory.",
+            "hfl_references": [],
+        }
     # owned counts per (emid, foil) from the FULL inventory (before any --limit slice),
     # so a listing mapped to multiple copies reconciles to the right quantity.
     owned = _owned_counts(inventory)
@@ -887,7 +893,24 @@ def radar_sold_inventory(dry_run: bool = False, last_x_days: int = 60,
         f"{'0 acted (dry run)' if dry_run else f'{acted} acted'} — review {out_file}"
     )
     _log.info(summary)
-    return summary
+    action_errors = sum(
+        1 for candidate in candidates
+        for value in (candidate.get("actions") or {}).values()
+        if str(value).startswith("error:")
+    )
+    return {
+        "status": "anomaly" if action_errors else "success",
+        "workflow": "radar_sold_inventory",
+        "candidates": len(candidates),
+        "acted": 0 if dry_run else acted,
+        "dry_run": bool(dry_run),
+        "action_errors": action_errors,
+        "review_path": str(out_file),
+        "hfl_relevant": bool(candidates or action_errors),
+        "hfl_status": "anomaly" if action_errors else "success",
+        "hfl_summary": summary,
+        "hfl_references": [str(out_file)],
+    }
 
 
 @log_result()

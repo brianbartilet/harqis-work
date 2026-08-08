@@ -46,6 +46,39 @@ def test_summarize_none_is_empty():
     assert_that(express_signals._summarize(None), equal_to(""))
 
 
+def test_structured_no_change_is_omitted():
+    assert_that(
+        express_signals._summarize({"hfl_relevant": False, "hfl_summary": "no change"}),
+        equal_to(""),
+    )
+
+
+def test_structured_summary_uses_manifesto_source(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        express_signals, "manifesto_for",
+        lambda _: {
+            "hfl_express": "buffer", "hfl_source": "purchase_transactions",
+            "express_target": "api:tcg_mp",
+        },
+    )
+    monkeypatch.setattr(
+        express_signals, "index_hfl_signal",
+        lambda **kwargs: captured.update(kwargs) or "signal-id",
+    )
+
+    doc_id = express_signals.express_task_signal(
+        "workflows.purchases.task",
+        {"hfl_relevant": True, "hfl_summary": "2 listings created",
+         "hfl_references": ["results/review.csv"]},
+    )
+
+    assert doc_id == "signal-id"
+    assert captured["source"] == "purchase_transactions"
+    assert captured["summary"] == "2 listings created"
+    assert captured["references"] == ["api:tcg_mp", "results/review.csv"]
+
+
 @pytest.mark.smoke
 def test_summarize_truncates_to_cap():
     big = "x" * 5000
