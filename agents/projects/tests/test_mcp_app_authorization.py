@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 def _profile() -> AgentProfile:
     profile = AgentProfile(id="agent:test", name="MCP app test")
-    profile.tools = ToolsConfig(allowed=["read_file"], mcp_apps=["scryfall"])
+    profile.tools = ToolsConfig(allowed=["read_file"], mcp_apps=["filesystem"])
     return profile
 
 
@@ -17,8 +17,8 @@ def test_selected_mcp_app_authorizes_its_tools_despite_native_allowlist():
     bridge = build_bridge(profile.tools.mcp_apps, enforcer=enforcer)
     assert bridge is not None
     definitions = bridge.definitions_with_apps()
-    assert any(app == "scryfall" and d["name"] == "get_scryfall_card" for app, d in definitions)
-    enforcer.check_tool("get_scryfall_card", app_key="scryfall")
+    assert any(app == "filesystem" and d["name"] == "fs_read_file" for app, d in definitions)
+    enforcer.check_tool("fs_read_file", app_key="filesystem")
 
 
 def test_registry_advertises_selected_app_tools_with_native_allowlist(sample_card):
@@ -31,7 +31,7 @@ def test_registry_advertises_selected_app_tools_with_native_allowlist(sample_car
     )
     names = {definition["name"] for definition in registry.definitions()}
     assert "read_file" in names
-    assert "get_scryfall_card" in names
+    assert "fs_read_file" in names
 
 
 def test_unselected_app_does_not_bypass_native_allowlist():
