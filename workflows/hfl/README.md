@@ -45,6 +45,7 @@ this scaffold closes.
 | `summarize_hfl_week` | Weekly Haiku 4.5 rollup of the past N days; writes `YYYY-Www-rollup.md` with searchable tags aggregated from its source entries. | `file:hfl_summary+es_log` | Sundays 21:00 local. |
 | `ingest_chatgpt_activity` | **Primary daily research log.** Auto-discovers the operator's ChatGPT conversations created/updated that day via the ChatGPT web app's private backend (no thread ids), distils the questions asked into ONE corpus entry. Haiku-distilled, raw fallback. No token / no prompts → no entry, no call. | `file:hfl_corpus` | Daily 23:00 local (active — no-op until `CHATGPT_WEB_ACCESS_TOKEN` is set). |
 | `ingest_git_activity` | Distils the day's GitHub commits across recently updated repositories into one bounded entry. Haiku-distilled with a raw fallback; no commits means no entry and no model call. | `file:hfl_corpus+es:hfl-entries` | Daily 00:00 local on the `agent` queue. |
+| `ingest_echomtg_inventory_activity` | Compares the complete current EchoMTG collection with the previous successful snapshot and writes one exact per-variant rollup of cards added or removed. The first run establishes a baseline; failed/incomplete reads and unchanged days make no entry or model call. Tags always include `#echomtg #inventory`. | `file:hfl_corpus+es:hfl-entries` | Daily 22:55 local on the `hfl` queue. |
 | `ingest_purchase_transactions_activity` | Drains structured outcomes buffered by TCG listing generation, sold-inventory reconciliation, listing price/quantity reconciliation, and Scryfall bulk refresh. Writes one concise daily review; routine no-change runs make no entry or model call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:00 local on the `hfl` queue. |
 | `ingest_notes_activity` | Diffs each configured note repository from its saved ingest cursor after a verified host pull. Text notes are split at natural heading/semantic topic transitions (bounded per file and per run), producing one entry per topic; images remain one entry. A summary covers deleted, unsupported, or overflow material. Tags include `#notes #repo-<name> #<core-topic>`; `#dsm` is added only to explicit Scrum daily-standup segments. References include a pinned GitHub line anchor plus the host path. First activation records HEAD without backfilling. | `file:hfl_corpus+es:hfl-entries` | Daily 22:50 local on the `hfl` queue. |
 | `ingest_agent_session_event` / `ingest_agent_session_events` | Sanitizes one completed agent prompt plus its visible outcome into a deterministic prompt-audit entry; the batch task retries locally retained events. Hidden reasoning and tool output are excluded. | `file:hfl_corpus+es:hfl-entries` | Immediate from supported hooks/manual skill; retained-event retry every 10 minutes. |
@@ -127,6 +128,7 @@ screenshot taken downtown comes out tagged with the place.
 | 00:05 | `pull_daily_dumps_from_remotes` | phone photos/screenshots → dumps inbox (retained) |
 | 22:00 | `analyze_desktop_capture` | workstation captures → `Source: desktop` entries |
 | 22:05 | `analyze_android_capture` | phone photos/screenshots → `Source: android_capture` entries |
+| 22:55 | `ingest_echomtg_inventory_activity` | EchoMTG collection snapshot delta → added/removed card rollup |
 | 23:00 | `ingest_browsing_activity` / `ingest_chatgpt_activity` | browsing + research → entries |
 | 23:05 | `ingest_location_activity` | day's movement → one timeline entry |
 | 23:10 | `ingest_spotify_activity` | day's plays → one soundtrack entry |
@@ -301,6 +303,28 @@ for EXIF (optional); see `apps/own_tracks` for the location source.
 ---
 
 ## Activation
+
+### EchoMTG inventory delta review
+
+`ingest_echomtg_inventory_activity` is active daily at 22:55 on the `hfl`
+queue, five minutes before the general purchase-transaction rollup. It uses the
+existing `ECHO_MTG` config (`ECHO_MTG_USER` and `ECHO_MTG_PASSWORD`) and the
+existing `ANTHROPIC` config; no new credentials or Python packages are needed.
+
+The first successful run atomically stores a baseline at
+`<HFL_CORPUS_PATH>/.ingest-state/echomtg-inventory.json` and writes no entry.
+Later runs fully paginate the current collection, validate inventory IDs and
+the EchoMTG quick-stat card count, then compare stable `inventory_id` values.
+One daily entry lists every changed variant with quantity, set, foil/non-foil,
+and condition, always tagged `#echomtg #inventory`. It dual-writes through the
+canonical Markdown + `harqis-hfl-entries` persistence boundary with source
+`echomtg_inventory` and a stable daily identity.
+
+The snapshot advances only after a baseline, a verified no-change result, or a
+durably submitted HFL entry. Missing credentials, API failures, malformed or
+truncated responses, and invalid prior state write nothing and retain the old
+snapshot for retry. The `echomtg_inventory_activity` MCP tool previews the live
+delta against that snapshot without writing HFL or advancing it.
 
 ### Purchase transaction review
 

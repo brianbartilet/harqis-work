@@ -1,5 +1,7 @@
 from datetime import date, datetime
 
+import pytest
+
 import workflows.hfl.tasks.ingest_purchase_transactions as module
 
 
@@ -140,3 +142,194 @@ def test_radar_csv_backfill_is_idempotently_identified(tmp_path, monkeypatch):
     assert result["event_count"] == 1
     assert result["events"][0]["event_id"] == "radar-csv:20260808020304"
     assert result["events"][0]["references"] == [str(path)]
+
+
+class _EchoInventoryPages:
+    def __init__(self, pages):
+        self.pages = list(pages)
+        self.calls = []
+
+    def get_collection(self, **kwargs):
+        self.calls.append(kwargs)
+        return self.pages.pop(0) if self.pages else []
+
+
+def _echo_item(inventory_id, name="Sol Ring", set_name="CMM", foil=0, condition="NM"):
+    return {
+        "inventory_id": inventory_id, "emid": "100", "name": name,
+        "set": set_name, "foil": foil, "condition": condition,
+    }
+
+
+def test_echomtg_collector_first_run_is_baseline_only(tmp_path):
+    service = _EchoInventoryPages([[_echo_item("one")]])
+
+    result = module.collect_echomtg_inventory_activity(
+        service=service, snapshot_path=tmp_path / "snapshot.json",
+    )
+
+    assert result["baseline"] is True
+    assert result["current_count"] == 1
+    assert result["change_count"] == 0
+
+
+def test_echomtg_collector_rolls_up_additions_removals_and_duplicates(tmp_path):
+    snapshot = tmp_path / "snapshot.json"
+    module._store_echomtg_snapshot(snapshot, {
+        "removed": module._normalize_echomtg_item(
+            _echo_item("removed", "Counterspell", "DMR", 1, "LP")
+        )[1],
+        "kept": module._normalize_echomtg_item(_echo_item("kept"))[1],
+    })
+    service = _EchoInventoryPages([[
+        _echo_item("kept"), _echo_item("added-1"), _echo_item("added-2"),
+    ]])
+
+    result = module.collect_echomtg_inventory_activity(
+        service=service, snapshot_path=snapshot,
+    )
+
+    assert result["baseline"] is False
+    assert result["added_count"] == 2
+    assert result["removed_count"] == 1
+    assert result["added"] == [{
+        "name": "Sol Ring", "set": "CMM", "foil": False,
+        "condition": "NM", "quantity": 2,
+    }]
+    assert "Removed 1x Counterspell — DMR, foil, LP" in module._echomtg_delta_body(result)
+
+
+def test_echomtg_collection_paginates_and_rejects_duplicate_ids():
+    service = _EchoInventoryPages([
+        [_echo_item("one")],
+        [_echo_item("one")],
+    ])
+
+    with pytest.raises(ValueError, match="repeated inventory_id"):
+        module._fetch_complete_echomtg_collection(service, page_size=1, max_cards=10)
+
+    assert [call["start"] for call in service.calls] == [0, 1]
+
+
+def test_echomtg_distill_without_synthesis_keeps_exact_variant_details():
+    activity = {
+        "added_count": 2, "removed_count": 1,
+        "added": [{"name": "Sol Ring", "set": "CMM", "foil": False,
+                   "condition": "NM", "quantity": 2}],
+        "removed": [{"name": "Counterspell", "set": "DMR", "foil": True,
+                     "condition": "LP", "quantity": 1}],
+    }
+
+    result = module.distill_echomtg_inventory_activity(activity, synthesize=False)
+
+    assert result["synthesized"] is False
+    assert result["tags"] == ["echomtg", "inventory"]
+    assert "Added 2x Sol Ring — CMM, non-foil, NM" in result["what_happened"]
+
+
+def test_echomtg_task_baseline_writes_snapshot_without_entry_or_llm(monkeypatch, tmp_path):
+    snapshot = tmp_path / "snapshot.json"
+    current = {"one": module._normalize_echomtg_item(_echo_item("one"))[1]}
+    monkeypatch.setattr(module.CONFIG_MANAGER, "get", lambda key: {
+        "app_data": {"email": "configured", "password": "configured"}
+    })
+    monkeypatch.setattr(module, "ApiServiceEchoMTGInventory", lambda cfg: object())
+    monkeypatch.setattr(module, "_echomtg_snapshot_path", lambda: snapshot)
+    monkeypatch.setattr(module, "collect_echomtg_inventory_activity", lambda **kwargs: {
+        "baseline": True, "current": current, "current_count": 1,
+        "change_count": 0,
+    })
+    monkeypatch.setattr(
+        module, "distill_echomtg_inventory_activity",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("LLM called")),
+    )
+    monkeypatch.setattr(
+        module, "_persist_echomtg_inventory_activity",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("entry written")),
+    )
+
+    result = module.ingest_echomtg_inventory_activity.run()
+
+    assert result["skipped"] == "baseline created"
+    assert result["entries_written"] == 0
+    assert module._load_echomtg_snapshot(snapshot)["items"] == current
+
+
+def test_echomtg_task_missing_credentials_makes_no_network_call(monkeypatch):
+    monkeypatch.setattr(module.CONFIG_MANAGER, "get", lambda key: {
+        "app_data": {"email": "${ECHO_MTG_USER}", "password": ""}
+    })
+    monkeypatch.setattr(
+        module, "ApiServiceEchoMTGInventory",
+        lambda cfg: (_ for _ in ()).throw(AssertionError("network client created")),
+    )
+
+    result = module.ingest_echomtg_inventory_activity.run()
+
+    assert result["skipped"] == "no EchoMTG credentials"
+    assert result["entries_written"] == 0
+    assert result["snapshot_advanced"] is False
+
+
+def test_echomtg_task_dual_writes_then_advances_snapshot(monkeypatch, tmp_path):
+    snapshot = tmp_path / "snapshot.json"
+    current = {"new": module._normalize_echomtg_item(_echo_item("new"))[1]}
+    activity = {
+        "baseline": False, "current": current, "current_count": 1,
+        "added": [{"name": "Sol Ring", "set": "CMM", "foil": False,
+                   "condition": "NM", "quantity": 1}],
+        "removed": [], "added_count": 1, "removed_count": 0,
+        "change_count": 1, "references": [module._ECHOMTG_REFERENCE],
+    }
+    monkeypatch.setattr(module.CONFIG_MANAGER, "get", lambda key: {
+        "app_data": {"email": "configured", "password": "configured"}
+    })
+    monkeypatch.setattr(module, "ApiServiceEchoMTGInventory", lambda cfg: object())
+    monkeypatch.setattr(module, "_echomtg_snapshot_path", lambda: snapshot)
+    monkeypatch.setattr(module, "collect_echomtg_inventory_activity", lambda **kwargs: activity)
+    monkeypatch.setattr(module, "distill_echomtg_inventory_activity", lambda *args, **kwargs: {
+        "skip": False, "moment": "One card added", "what_happened": "Added one.",
+        "why_it_stayed": "Collection changed.", "possible_use": "inventory-review",
+        "tags": ["echomtg", "inventory"], "synthesized": False,
+    })
+    monkeypatch.setattr(module, "_persist_echomtg_inventory_activity", lambda *args, **kwargs: {
+        "doc_id": "echomtg-inventory-2026-08-08", "path": "day.md", "entry_id": "entry",
+    })
+
+    result = module.ingest_echomtg_inventory_activity.run()
+
+    assert result["entries_written"] == 1
+    assert result["added"] == 1 and result["removed"] == 0
+    assert result["snapshot_advanced"] is True
+    assert module._load_echomtg_snapshot(snapshot)["items"] == current
+
+
+def test_echomtg_persist_uses_stable_daily_identity_and_required_tags(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        module, "submit_hfl_entry",
+        lambda entry, **kwargs: captured.update(entry=entry, **kwargs) or {
+            "doc_id": kwargs["es_doc_id"], "path": "day.md"
+        },
+    )
+    activity = {"references": [module._ECHOMTG_REFERENCE]}
+    distilled = {
+        "moment": "One card added", "what_happened": "Added one.",
+        "why_it_stayed": "Collection changed.", "possible_use": "inventory-review",
+        "tags": ["cards-added"], "synthesized": False,
+    }
+
+    result = module._persist_echomtg_inventory_activity(
+        activity, when=datetime(2026, 8, 8, 22, 55), distilled=distilled,
+    )
+
+    assert result["doc_id"] == "echomtg-inventory-2026-08-08"
+    assert captured["dedup_key"] == "echomtg-inventory-2026-08-08"
+    assert captured["es_doc_id"] == "echomtg-inventory-2026-08-08"
+    assert captured["entry"].tags[:2] == ("echomtg", "inventory")
+    assert captured["entry"].references == (module._ECHOMTG_REFERENCE,)
+
+
+@pytest.mark.skip(reason="Manual only — queries the live EchoMTG collection and writes HFL state")
+def test_echomtg_full_pipeline_manual():
+    module.ingest_echomtg_inventory_activity.run()

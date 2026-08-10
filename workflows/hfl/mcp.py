@@ -949,6 +949,87 @@ def register_memory_tools(mcp: FastMCP):
         }
 
     @mcp.tool()
+    def echomtg_inventory_activity(
+        period: str = "",
+        since: str = "",
+        until: str = "",
+        synthesize: bool = False,
+        page_size: int = 1000,
+        max_cards: int = 20_000,
+        cfg_id__echo_mtg: str = "ECHO_MTG",
+        cfg_id__anthropic: str = "ANTHROPIC",
+        model: str = _DEFAULT_HAIKU,
+    ) -> dict:
+        """Preview the current EchoMTG collection delta without changing state.
+
+        Compares the live, fully paginated EchoMTG collection with the last
+        successful scheduled snapshot. It never updates that snapshot or
+        writes HFL. No baseline or no changes returns found=false without an
+        LLM call. ``period``/``since``/``until`` label the requested view; the
+        underlying EchoMTG API exposes current inventory rather than history.
+        """
+        from apps.apps_config import CONFIG_MANAGER
+        from apps.echo_mtg.references.web.api.inventory import ApiServiceEchoMTGInventory
+        from workflows.hfl.tasks.ingest_purchase_transactions import (
+            _echo_credentials_present,
+            collect_echomtg_inventory_activity,
+            distill_echomtg_inventory_activity,
+        )
+
+        start, end, label = _resolve_window(period, since, until)
+        try:
+            config = CONFIG_MANAGER.get(cfg_id__echo_mtg)
+            if not _echo_credentials_present(config):
+                return {
+                    "found": False, "text": "", "added": [], "removed": [],
+                    "error": "no EchoMTG credentials",
+                    "period": _period_dict(start, end, label),
+                }
+            activity = collect_echomtg_inventory_activity(
+                service=ApiServiceEchoMTGInventory(config),
+                page_size=page_size,
+                max_cards=max_cards,
+            )
+        except Exception as exc:  # noqa: BLE001 - safe MCP result
+            logger.warning("echomtg_inventory_activity unavailable (%s)", exc)
+            return {
+                "found": False, "text": "", "added": [], "removed": [],
+                "error": "EchoMTG inventory unavailable",
+                "period": _period_dict(start, end, label),
+            }
+        if activity["baseline"]:
+            return {
+                "found": False, "text": "", "added": [], "removed": [],
+                "baseline_required": True, "current_count": activity["current_count"],
+                "period": _period_dict(start, end, label),
+            }
+        if not activity["change_count"]:
+            return {
+                "found": False, "text": "", "added": [], "removed": [],
+                "current_count": activity["current_count"],
+                "period": _period_dict(start, end, label),
+            }
+        distilled = distill_echomtg_inventory_activity(
+            activity, synthesize=synthesize, model=model,
+            cfg_id=cfg_id__anthropic,
+        )
+        return {
+            "found": True,
+            "text": (
+                f"**{distilled['moment']}**\n\n{distilled['what_happened']}\n\n"
+                f"_{distilled.get('why_it_stayed', '')}_"
+            ).strip(),
+            "added": activity["added"],
+            "removed": activity["removed"],
+            "added_count": activity["added_count"],
+            "removed_count": activity["removed_count"],
+            "current_count": activity["current_count"],
+            "synthesized": bool(distilled.get("synthesized")),
+            "model": model if distilled.get("synthesized") else None,
+            "period": _period_dict(start, end, label),
+        }
+
+    @mcp.tool()
     def memory_recall_es(
         query: str = "",
         period: str = "",
