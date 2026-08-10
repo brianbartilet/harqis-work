@@ -35,6 +35,7 @@ from urllib.parse import urlparse
 from mcp.server.fastmcp import FastMCP
 
 from agents.projects.permissions.enforcer import PermissionDenied, PermissionEnforcer
+from harqis_tools.catalog import APP_CATALOG, get_app_spec, register_app_tools
 
 logger = logging.getLogger(__name__)
 
@@ -50,47 +51,8 @@ _URL_INPUT_FIELDS: frozenset[str] = frozenset({
     "endpoint",
 })
 
-# Maps profile mcp_apps key → register function import path
-_APP_LOADERS: dict[str, str] = {
-    "google_apps": "apps.google_apps.mcp.register_google_apps_tools",
-    "trello":      "apps.trello.mcp.register_trello_tools",
-    "airtable":    "apps.airtable.mcp.register_airtable_tools",
-    "alpha_vantage":"apps.alpha_vantage.mcp.register_alpha_vantage_tools",
-    "apify":       "apps.apify.mcp.register_apify_tools",
-    "appsheet":    "apps.appsheet.mcp.register_appsheet_tools",
-    "browser":     "apps.browser.mcp.register_browser_tools",
-    "discord":     "apps.discord.mcp.register_discord_tools",
-    "echo_mtg":    "apps.echo_mtg.mcp.register_echo_mtg_tools",
-    "filesystem":  "apps.filesystem.mcp.register_filesystem_tools",
-    "gemini":      "apps.gemini.mcp.register_gemini_tools",
-    "git":         "apps.git.mcp.register_git_tools",
-    "github":      "apps.github.mcp.register_github_tools",
-    "google_apps": "apps.google_apps.mcp.register_google_apps_tools",
-    "google_drive":"apps.google_drive.mcp.register_google_drive_tools",
-    "grok":        "apps.grok.mcp.register_grok_tools",
-    "jira":        "apps.jira.mcp.register_jira_tools",
-    "justtcg":     "apps.justtcg.mcp.register_justtcg_tools",
-    "linkedin":    "apps.linkedin.mcp.register_linkedin_tools",
-    "mpc":         "apps.mpc.mcp.register_mpc_tools",
-    "notion":      "apps.notion.mcp.register_notion_tools",
-    "oanda":       "apps.oanda.mcp.register_oanda_tools",
-    "open_ai":     "apps.open_ai.mcp.register_open_ai_tools",
-    "orgo":        "apps.orgo.mcp.register_orgo_tools",
-    "own_tracks":  "apps.own_tracks.mcp.register_own_tracks_tools",
-    "perplexity":  "apps.perplexity.mcp.register_perplexity_tools",
-    "plaud":       "apps.plaud.mcp.register_plaud_tools",
-    "playwright":  "apps.playwright.mcp.register_playwright_tools",
-    "pokemon_tcg": "apps.pokemon_tcg.mcp.register_pokemon_tcg_tools",
-    "reddit":      "apps.reddit.mcp.register_reddit_tools",
-    "scryfall":    "apps.scryfall.mcp.register_scryfall_tools",
-    "spotify":     "apps.spotify.mcp.register_spotify_tools",
-    "stripe":      "apps.stripe.mcp.register_stripe_tools",
-    "tcg_mp":      "apps.tcg_mp.mcp.register_tcg_mp_tools",
-    "telegram":    "apps.telegram.mcp.register_telegram_tools",
-    "trello":      "apps.trello.mcp.register_trello_tools",
-    "youtube":     "apps.youtube.mcp.register_youtube_tools",
-    "ynab":        "apps.ynab.mcp.register_ynab_tools",
-}
+# Backward-compatible lookup generated from the canonical shared catalog.
+_APP_LOADERS: dict[str, str] = {spec.key: spec.registrar for spec in APP_CATALOG}
 
 
 @contextlib.contextmanager
@@ -127,24 +89,23 @@ class McpBridge:
     ):
         self._mcp = FastMCP("kanban-agent-bridge")
         self._loaded_apps: list[str] = []
+        self._tool_apps: dict[str, str] = {}
         self._scoped_secrets: dict[str, str] = scoped_secrets or {}
         self._enforcer = enforcer
         for key in app_keys:
             self._load_app(key)
 
     def _load_app(self, key: str) -> None:
-        loader_path = _APP_LOADERS.get(key)
-        if not loader_path:
+        try:
+            spec = get_app_spec(key)
+        except KeyError:
             logger.warning("Unknown MCP app key: '%s' — skipping", key)
             return
         try:
-            module_path, fn_name = loader_path.rsplit(".", 1)
-            import importlib
-            module = importlib.import_module(module_path)
-            register_fn = getattr(module, fn_name)
-            register_fn(self._mcp)
-            self._loaded_apps.append(key)
-            logger.debug("Loaded MCP tools from: %s", key)
+            names = register_app_tools(self._mcp, spec)
+            self._tool_apps.update({name: spec.key for name in names})
+            self._loaded_apps.append(spec.key)
+            logger.debug("Loaded MCP tools from: %s", spec.key)
         except Exception as e:
             logger.warning("Could not load MCP app '%s': %s", key, e)
 
@@ -160,6 +121,13 @@ class McpBridge:
                 "input_schema": schema,
             })
         return defs
+
+    def definitions_with_apps(self) -> list[tuple[str, dict]]:
+        """Return each definition paired with its authorizing app key."""
+        return [
+            (self._tool_apps[definition["name"]], definition)
+            for definition in self.definitions()
+        ]
 
     def _enforce_network(self, name: str, inputs: dict[str, Any]) -> None:
         """If the tool inputs include a URL-like field, run it through the
@@ -193,6 +161,8 @@ class McpBridge:
         # Network ACL is enforced *before* secrets are injected, so a denied
         # destination can't capture credentials via a side-effect log.
         self._enforce_network(name, inputs)
+        if self._enforcer is not None:
+            self._enforcer.check_tool(name, app_key=self._tool_apps.get(name))
         try:
             with _injected_env(self._scoped_secrets):
                 result = tool.fn(**inputs)
@@ -207,6 +177,9 @@ class McpBridge:
 
     def tool_names(self) -> list[str]:
         return list(self._mcp._tool_manager._tools.keys())
+
+    def app_for_tool(self, name: str) -> str | None:
+        return self._tool_apps.get(name)
 
     @property
     def loaded_apps(self) -> list[str]:

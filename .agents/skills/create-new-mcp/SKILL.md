@@ -1,18 +1,23 @@
 ---
 name: create-new-mcp
 description: >
-  Build or extend the MCP tool surface for an **existing** app under `apps/*`, wrapping
-  its
+  Build or extend the compatible MCP adapter and CLI-first catalog entry for an
+  **existing** app under `apps/*`.
 user-invocable: true
 allowed-tools: Bash Read Glob Grep Edit Write
 ---
 
-Build or extend the MCP tool surface for an **existing** app under `apps/*`, wrapping its
-service-layer endpoints (`references/web/api/*.py`) as `@mcp.tool()` functions.
+Build or extend the tool adapter for an **existing** app under `apps/*`, wrapping its
+service-layer endpoints (`references/web/api/*.py`) as backward-compatible `@mcp.tool()`
+functions. The same registration is exposed lazily through `python -m harqis_tools`.
 
-This skill **owns the MCP layer** for the whole repo. `/create-new-service-app` delegates its
+This skill **owns the shared app tool adapter** for the whole repo. `/create-new-service-app` delegates its
 MCP step to this skill, and this skill loops back to `/create-new-service-app` when the app or a
 needed endpoint doesn't exist yet. See **The feedback loop** at the end.
+
+**Design rule:** CLI is the preferred surface for coding agents with shell access. MCP remains a
+compatible adapter for existing clients and typed tool consumers. Never create separate CLI and
+MCP implementations of the same service method.
 
 ## Arguments
 
@@ -136,31 +141,25 @@ namespace). Mark destructive ops clearly in the docstring.
 
 ---
 
-## Step 4 — Register in `mcp/server.py`
+## Step 4 — Register in the shared catalog
 
-Read `mcp/server.py`. Registration is the `APP_REGISTRARS` list of
-`(label, module_path, func_name)` tuples — **not** an inline import. If the app is **not**
-already in the list, add a tuple (match the column alignment of neighbours):
+Read `harqis_tools/catalog.py`. If the app is **not** already in `APP_CATALOG`, add one
+`AppToolSpec` entry. Import strings preserve lazy loading:
 
 ```python
-    ("<Label>",          "apps.<app_name>.mcp",     "register_<app_name>_tools"),
+    AppToolSpec("<app_name>", "<Label>", "apps.<app_name>.mcp.register_<app_name>_tools"),
 ```
 
-If the app already has a tuple (you only added tools to an existing `mcp.py`), **make no change** —
-the existing registration picks up the new tools automatically.
+If the app already has an entry, **make no change**. The CLI, standalone server, and bridge all
+consume this catalog.
 
 ---
 
-## Step 5 — Register in the Kanban bridge
+## Step 5 — Verify all three consumers
 
-Read `agents/projects/agent/tools/mcp_bridge.py`. If `<app_name>` is not already a key in the
-`_APP_LOADERS` dict, add it (alphabetical by key, preserve column alignment):
-
-```python
-    "<app_name>":  "apps.<app_name>.mcp.register_<app_name>_tools",
-```
-
-If the key already exists, make no change.
+Do not edit a second registry. Confirm `mcp/server.py` and
+`agents/projects/agent/tools/mcp_bridge.py` consume `APP_CATALOG`, then verify CLI discovery with
+`python -m harqis_tools commands <app_name>`.
 
 ---
 
@@ -196,7 +195,9 @@ example prompts in italics, mirroring the existing app sections.
    ```
 
    Confirm the new tool names appear and there are no import errors.
-3. **Optional live smoke:** call one or two **read-only** new tools' underlying service methods
+3. **CLI-check:** `python -m harqis_tools commands <app_name>` and
+   `python -m harqis_tools schema <app_name> <tool_name>`. Confirm names and schemas match MCP.
+4. **Optional live smoke:** call one or two **read-only** new tools' underlying service methods
    against real config to confirm the endpoint/auth path works. Skip destructive calls. If you hit
    a 401/placeholder token, report it as a config gap (env var not set) — not a code bug.
 
@@ -216,11 +217,12 @@ files — e.g. `apps/ynab/tests/test_transactions.py`). Verify they at least col
 Print verbatim:
 
 ```
-MCP tools updated for <app_name>.
+CLI/MCP tools updated for <app_name>.
 Next steps:
-  [ ] (if a tuple was added to mcp/server.py) restart / reconnect the MCP server
+  [ ] (if a catalog entry was added) restart / reconnect the MCP server
   [ ] Reconnect in the active agent client: /mcp → harqis-work → Reconnect  (tool list is cached at connect)
   [ ] (if any new env var is needed) fill it in .env/apps.env
+  [ ] verify lazy CLI discovery: python -m harqis_tools commands <app_name>
 ```
 
 ---
@@ -234,14 +236,14 @@ Next steps:
 ```
 
 - **/create-new-service-app → /create-new-mcp:** after the service layer + DTOs + config exist,
-  that skill calls `/create-new-mcp <app_name> --all` to generate the MCP layer and registration,
+  that skill calls `/create-new-mcp <app_name> --all` to generate the shared adapter and registration,
   instead of hand-rolling tools. /create-new-mcp is the single source of truth for `mcp.py`
-  conventions, `APP_REGISTRARS`, `_APP_LOADERS`, and the MCP docs.
+  conventions, the shared app catalog, and CLI/MCP docs.
 - **/create-new-mcp → /create-new-service-app:** when the target app (or a required endpoint) is
   missing, this skill hands off to `/create-new-service-app` to build it, then resumes wrapping.
 
-Net effect: endpoints are always owned by the service layer; the MCP surface is always generated
-the same way; neither side duplicates the other's logic.
+Net effect: endpoints are always owned by the service layer; CLI and MCP reuse the same adapter;
+neither side duplicates the other's logic.
 
 ---
 
@@ -253,8 +255,9 @@ the same way; neither side duplicates the other's logic.
 - [ ] Every tool: docstring + `Args:` + entry/result logs + defensive return serialization
 - [ ] Destructive tools (create/update/delete/remove) flagged in their docstrings
 - [ ] Tool names unique across the server and follow `<verb>_<app>_<resource>`
-- [ ] `mcp/server.py` `APP_REGISTRARS` tuple present (added only if the app was new to it)
-- [ ] `mcp_bridge.py` `_APP_LOADERS` key present (added only if missing)
+- [ ] `harqis_tools/catalog.py` entry present (added only if the app was new)
+- [ ] No duplicate registry added to `mcp/server.py` or `mcp_bridge.py`
+- [ ] CLI command and schema discovery match existing MCP names
 - [ ] `apps/<app_name>/README.md` MCP Tools table matches `mcp.py`
 - [ ] `mcp/README.md` app section updated
 - [ ] Register-check passes with `APP_CONFIG_FILE=apps_config.yaml`
