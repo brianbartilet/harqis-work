@@ -35,7 +35,7 @@ from urllib.parse import urlparse
 from mcp.server.fastmcp import FastMCP
 
 from agents.projects.permissions.enforcer import PermissionDenied, PermissionEnforcer
-from harqis_tools.catalog import APP_CATALOG, get_app_spec, register_app_tools
+from tools.catalog import APP_CATALOG, get_app_spec, register_app_tools
 
 logger = logging.getLogger(__name__)
 

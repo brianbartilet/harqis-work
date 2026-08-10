@@ -14,7 +14,7 @@ For real implementations, use an isolated git worktree or feature branch so the 
 > **Feedback loop with `/create-new-mcp`.** This skill builds the service layer (config, base
 > service, DTOs, API service classes, tests, app config). The **MCP layer is delegated** to
 > `/create-new-mcp`, which is the single source of truth for `apps/<app>/mcp.py`, the
-> shared `harqis_tools/catalog.py` entry, and CLI/MCP docs. CLI is preferred for shell-capable
+> shared `tools/catalog.py` entry, and CLI/MCP docs. CLI is preferred for shell-capable
 > coding agents; MCP remains backward compatible. Steps 7, 8, 9, and 15 below are therefore
 > hand-offs to `/create-new-mcp`. Conversely, if
 > `/create-new-mcp` is run against an app that doesn't exist yet, it loops back here first.
@@ -239,7 +239,7 @@ hand off the entire MCP layer to the single-source-of-truth skill:
 That skill audits the service methods you just created, generates `apps/APP_NAME/mcp.py`
 (`register_APP_NAME_tools` with logging, `Args:` docstrings, and defensive return serialization),
 and handles registration + MCP docs. It covers:
-- **Step 8** below (`harqis_tools/catalog.py` entry) — done by `/create-new-mcp`.
+- **Step 8** below (`tools/catalog.py` entry) — done by `/create-new-mcp`.
 - **Step 9** below (shared-catalog bridge verification) — done by `/create-new-mcp`.
 - **Step 15** below (`mcp/README.md` section) — done by `/create-new-mcp`.
 
@@ -253,7 +253,7 @@ remaining service-layer steps below.
 
 ## Step 8 — Register in the shared CLI/MCP catalog → handled by `/create-new-mcp` (Step 7)
 
-`/create-new-mcp` adds the app's lazy `AppToolSpec` to `harqis_tools/catalog.py`, consumed by
+`/create-new-mcp` adds the app's lazy `AppToolSpec` to `tools/catalog.py`, consumed by
 the CLI and standalone MCP server. It does not create a second server registry.
 
 ---

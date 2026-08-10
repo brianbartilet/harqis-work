@@ -15,7 +15,7 @@ if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
 
 from mcp.server.fastmcp import FastMCP
-from harqis_tools.catalog import APP_CATALOG, register_app_tools
+from tools.catalog import APP_CATALOG, register_app_tools
 
 logging.basicConfig(
     level=logging.INFO,

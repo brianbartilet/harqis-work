@@ -621,7 +621,7 @@ ELEVEN LABS, YNAB, OWN_TRACKS, JIRA, DISCORD, ORGO, REDDIT, LINKEDIN,
 NOTION, MOO
 ```
 
-### 7b-3 — `harqis_tools/catalog.py`
+### 7b-3 — `tools/catalog.py`
 
 The file contains `APP_CATALOG` with one `AppToolSpec` per app. For every entry whose registrar
 starts with `apps.<stripped_app>.mcp.`, delete the entry. The CLI, standalone MCP server, and
@@ -634,7 +634,7 @@ registrar.startswith("apps." + stripped_app + ".mcp.")
 
 After editing, the file must still parse:
 ```bash
-.venv/bin/python -c "import ast; ast.parse(open('harqis_tools/catalog.py').read())" && echo "ok"
+.venv/bin/python -c "import ast; ast.parse(open('tools/catalog.py').read())" && echo "ok"
 ```
 
 ### 7b-4 — Agent profiles (`agents/projects/profiles/examples/agent_*.yaml`)
@@ -832,7 +832,7 @@ What's in it:
   ✓ workflows/queues.py            (minimal — DEFAULT + ADHOC only)
   ✓ workflows/README.md            (rewritten for <BUSINESS_NAME>)
   ✓ README.md                      (rewritten for <BUSINESS_NAME>; App Inventory pruned)
-  ✓ harqis_tools/catalog.py        (APP_CATALOG filtered to kept apps)
+  ✓ tools/catalog.py               (APP_CATALOG filtered to kept apps)
   ✓ Dockerfile, docker-compose.yml, scripts/, .github/
   ✓ apps_config.yaml.example       (sections for stripped apps removed; no creds)
   ✓ .env/apps.env.example          (env vars for stripped apps removed; redacted)

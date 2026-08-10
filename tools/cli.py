@@ -16,7 +16,7 @@ from mcp.server.fastmcp import FastMCP
 from agents.projects.permissions.enforcer import PermissionDenied, PermissionEnforcer
 from agents.projects.profiles.schema import AgentProfile
 from agents.projects.security.audit import AuditLogger
-from harqis_tools.catalog import APP_CATALOG, get_app_spec, is_write_tool, register_app_tools
+from tools.catalog import APP_CATALOG, get_app_spec, is_write_tool, register_app_tools
 
 
 class CliError(RuntimeError):

@@ -9,7 +9,7 @@ allowed-tools: Bash Read Glob Grep Edit Write
 
 Build or extend the tool adapter for an **existing** app under `apps/*`, wrapping its
 service-layer endpoints (`references/web/api/*.py`) as backward-compatible `@mcp.tool()`
-functions. The same registration is exposed lazily through `python -m harqis_tools`.
+functions. The same registration is exposed lazily through `python -m tools`.
 
 This skill **owns the shared app tool adapter** for the whole repo. `/create-new-service-app` delegates its
 MCP step to this skill, and this skill loops back to `/create-new-service-app` when the app or a
@@ -143,7 +143,7 @@ namespace). Mark destructive ops clearly in the docstring.
 
 ## Step 4 — Register in the shared catalog
 
-Read `harqis_tools/catalog.py`. If the app is **not** already in `APP_CATALOG`, add one
+Read `tools/catalog.py`. If the app is **not** already in `APP_CATALOG`, add one
 `AppToolSpec` entry. Import strings preserve lazy loading:
 
 ```python
@@ -159,7 +159,7 @@ consume this catalog.
 
 Do not edit a second registry. Confirm `mcp/server.py` and
 `agents/projects/agent/tools/mcp_bridge.py` consume `APP_CATALOG`, then verify CLI discovery with
-`python -m harqis_tools commands <app_name>`.
+`python -m tools commands <app_name>`.
 
 ---
 
@@ -195,8 +195,8 @@ example prompts in italics, mirroring the existing app sections.
    ```
 
    Confirm the new tool names appear and there are no import errors.
-3. **CLI-check:** `python -m harqis_tools commands <app_name>` and
-   `python -m harqis_tools schema <app_name> <tool_name>`. Confirm names and schemas match MCP.
+3. **CLI-check:** `python -m tools commands <app_name>` and
+   `python -m tools schema <app_name> <tool_name>`. Confirm names and schemas match MCP.
 4. **Optional live smoke:** call one or two **read-only** new tools' underlying service methods
    against real config to confirm the endpoint/auth path works. Skip destructive calls. If you hit
    a 401/placeholder token, report it as a config gap (env var not set) — not a code bug.
@@ -222,7 +222,7 @@ Next steps:
   [ ] (if a catalog entry was added) restart / reconnect the MCP server
   [ ] Reconnect in the active agent client: /mcp → harqis-work → Reconnect  (tool list is cached at connect)
   [ ] (if any new env var is needed) fill it in .env/apps.env
-  [ ] verify lazy CLI discovery: python -m harqis_tools commands <app_name>
+  [ ] verify lazy CLI discovery: python -m tools commands <app_name>
 ```
 
 ---
@@ -255,7 +255,7 @@ neither side duplicates the other's logic.
 - [ ] Every tool: docstring + `Args:` + entry/result logs + defensive return serialization
 - [ ] Destructive tools (create/update/delete/remove) flagged in their docstrings
 - [ ] Tool names unique across the server and follow `<verb>_<app>_<resource>`
-- [ ] `harqis_tools/catalog.py` entry present (added only if the app was new)
+- [ ] `tools/catalog.py` entry present (added only if the app was new)
 - [ ] No duplicate registry added to `mcp/server.py` or `mcp_bridge.py`
 - [ ] CLI command and schema discovery match existing MCP names
 - [ ] `apps/<app_name>/README.md` MCP Tools table matches `mcp.py`

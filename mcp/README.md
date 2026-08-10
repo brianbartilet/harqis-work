@@ -38,9 +38,9 @@ Claude (AI) ←──── MCP protocol ────→ MCP Server ←───
 registers tool modules from each app. Each app exposes a `register_<app>_tools(mcp)` function in
 `apps/<app>/mcp.py` that decorates service calls as `@mcp.tool()`.
 
-The canonical app registry now lives in `harqis_tools/catalog.py`. The standalone server,
+The canonical app registry now lives in `tools/catalog.py`. The standalone server,
 Kanban bridge, and low-context CLI consume that one registry, preventing registration drift.
-Coding agents with shell access should prefer `python -m harqis_tools`; MCP remains available
+Coding agents with shell access should prefer `python -m tools`; MCP remains available
 for typed tool clients and existing integrations.
 
 ```
@@ -557,13 +557,13 @@ The CLI loads no app schemas during discovery and imports only the selected app 
 schemas, or calls are requested:
 
 ```sh
-python -m harqis_tools apps
-python -m harqis_tools commands ynab
-python -m harqis_tools schema trello create_trello_card
-python -m harqis_tools call scryfall get_scryfall_card_prices --input '{"identifier":"Black Lotus"}'
+python -m tools apps
+python -m tools commands ynab
+python -m tools schema trello create_trello_card
+python -m tools call scryfall get_scryfall_card_prices --input '{"identifier":"Black Lotus"}'
 ```
 
-Write operations require `--confirm-write`. See `harqis_tools/README.md` for JSON envelopes,
+Write operations require `--confirm-write`. See `tools/README.md` for JSON envelopes,
 profile authorization, and audit behavior.
 
 ### Restricting the app surface per node (`MCP_ENABLED_APPS`)
@@ -668,7 +668,7 @@ def register_<app_name>_tools(mcp: FastMCP):
         return result if isinstance(result, dict) else (result.__dict__ if hasattr(result, "__dict__") else {})
 ```
 
-2. Register once in `harqis_tools/catalog.py` by adding an `AppToolSpec`. This exposes the app
+2. Register once in `tools/catalog.py` by adding an `AppToolSpec`. This exposes the app
    to the CLI, standalone MCP server, and Kanban bridge:
 
 ```python

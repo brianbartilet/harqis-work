@@ -1,23 +1,23 @@
 # harqis-tools CLI
 
-`harqis_tools` is the low-context, JSON-first command surface for every app in
+`tools` is the low-context, JSON-first command surface for every app in
 `harqis-work`. It reuses the existing MCP registrations, but imports only the app
 selected by a command. Existing MCP clients remain fully compatible.
 
 ```powershell
 # Discover apps without importing any app modules
-python -m harqis_tools apps
+python -m tools apps
 
 # Import one app and discover its operations
-python -m harqis_tools commands scryfall
-python -m harqis_tools schema trello create_trello_card
+python -m tools commands scryfall
+python -m tools schema trello create_trello_card
 
 # Invoke a read operation
-python -m harqis_tools call scryfall get_scryfall_card_prices `
+python -m tools call scryfall get_scryfall_card_prices `
   --input '{"identifier":"Black Lotus"}'
 
 # Writes require explicit confirmation
-python -m harqis_tools call trello create_trello_card `
+python -m tools call trello create_trello_card `
   --input '{"list_id":"...","name":"Review CLI migration"}' `
   --confirm-write
 ```

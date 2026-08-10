@@ -228,12 +228,12 @@ For coding agents with shell access, prefer the lazy JSON CLI so app schemas are
 when needed:
 
 ```sh
-python -m harqis_tools apps
-python -m harqis_tools commands trello
-python -m harqis_tools schema trello create_trello_card
+python -m tools apps
+python -m tools commands trello
+python -m tools schema trello create_trello_card
 ```
 
-The CLI and both MCP surfaces share `harqis_tools/catalog.py`; existing MCP names remain compatible.
+The CLI and both MCP surfaces share `tools/catalog.py`; existing MCP names remain compatible.
 
 ---
 

@@ -4,8 +4,8 @@ import sys
 
 import pytest
 
-from harqis_tools.catalog import APP_CATALOG, get_app_spec, is_write_tool
-from harqis_tools.cli import run
+from tools.catalog import APP_CATALOG, get_app_spec, is_write_tool
+from tools.cli import run
 from agents.projects.permissions.enforcer import PermissionDenied
 
 
@@ -29,7 +29,7 @@ def test_apps_discovery_stays_under_context_budget():
 
 def test_apps_discovery_does_not_import_application_modules():
     code = (
-        "import sys; from harqis_tools.cli import run; run(['apps']); "
+        "import sys; from tools.cli import run; run(['apps']); "
         "print(any(n.startswith('apps.trello') or n.startswith('apps.ynab') "
         "for n in sys.modules))"
     )
@@ -44,7 +44,7 @@ def test_apps_discovery_does_not_import_application_modules():
 
 def test_command_stdout_is_one_json_envelope():
     completed = subprocess.run(
-        [sys.executable, "-m", "harqis_tools", "commands", "scryfall"],
+        [sys.executable, "-m", "tools", "commands", "scryfall"],
         check=True,
         capture_output=True,
         text=True,
