@@ -40,7 +40,7 @@ class PermissionEnforcer:
 
     # ── Tool access ───────────────────────────────────────────────────────────
 
-    def check_tool(self, tool_name: str) -> None:
+    def check_tool(self, tool_name: str, app_key: str | None = None) -> None:
         t = self.profile.tools
         if tool_name in t.denied:
             raise PermissionDenied(
@@ -55,7 +55,10 @@ class PermissionEnforcer:
                 f"explicitly allowed by profile '{self.profile.id}'. "
                 f"Add it to tools.allowed if you really need it."
             )
-        if t.allowed and tool_name not in t.allowed:
+        # MCP tools are selected and authorized as an app surface. This keeps
+        # native `allowed` lists compact while explicit tool denies still win.
+        app_allowed = app_key is not None and app_key in t.mcp_apps
+        if t.allowed and tool_name not in t.allowed and not app_allowed:
             raise PermissionDenied(
                 f"Tool '{tool_name}' is not in the allowed list for profile '{self.profile.id}'"
             )

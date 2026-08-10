@@ -20,5 +20,5 @@ jobs:
 
     - name: Run Tests
       run: |
-        docker run --rm harqis-work \
-          python -m pytest agents/projects/tests/ -m "not integration" -v
+        docker run --rm -e APP_CONFIG_FILE=apps_config.yaml harqis-work \
+          python -m pytest agents/projects/tests/ tools/tests/ -m "not integration" -v

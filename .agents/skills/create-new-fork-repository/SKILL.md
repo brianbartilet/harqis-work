@@ -621,18 +621,20 @@ ELEVEN LABS, YNAB, OWN_TRACKS, JIRA, DISCORD, ORGO, REDDIT, LINKEDIN,
 NOTION, MOO
 ```
 
-### 7b-3 — `mcp/server.py`
+### 7b-3 — `tools/catalog.py`
 
-The file contains an `APP_REGISTRARS = [...]` list with one entry per app. For every entry whose `module_path` is `apps.<stripped_app>.mcp`, delete the line. The lazy-import pattern would tolerate missing modules, but each missing app emits a warning at every startup; filtering the list keeps the boot log clean.
+The file contains `APP_CATALOG` with one `AppToolSpec` per app. For every entry whose registrar
+starts with `apps.<stripped_app>.mcp.`, delete the entry. The CLI, standalone MCP server, and
+Kanban bridge all consume this catalog, so this one edit keeps every surface consistent.
 
 Match the module path against stripped folder names:
 ```
-( "apps." + stripped_app + ".mcp" ) == entry[1]
+registrar.startswith("apps." + stripped_app + ".mcp.")
 ```
 
 After editing, the file must still parse:
 ```bash
-.venv/bin/python -c "import ast; ast.parse(open('mcp/server.py').read())" && echo "ok"
+.venv/bin/python -c "import ast; ast.parse(open('tools/catalog.py').read())" && echo "ok"
 ```
 
 ### 7b-4 — Agent profiles (`agents/projects/profiles/examples/agent_*.yaml`)
@@ -830,7 +832,7 @@ What's in it:
   ✓ workflows/queues.py            (minimal — DEFAULT + ADHOC only)
   ✓ workflows/README.md            (rewritten for <BUSINESS_NAME>)
   ✓ README.md                      (rewritten for <BUSINESS_NAME>; App Inventory pruned)
-  ✓ mcp/server.py                  (APP_REGISTRARS filtered to kept apps)
+  ✓ tools/catalog.py               (APP_CATALOG filtered to kept apps)
   ✓ Dockerfile, docker-compose.yml, scripts/, .github/
   ✓ apps_config.yaml.example       (sections for stripped apps removed; no creds)
   ✓ .env/apps.env.example          (env vars for stripped apps removed; redacted)

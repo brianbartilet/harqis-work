@@ -14,8 +14,9 @@ For real implementations, use an isolated git worktree or feature branch so the 
 > **Feedback loop with `/create-new-mcp`.** This skill builds the service layer (config, base
 > service, DTOs, API service classes, tests, app config). The **MCP layer is delegated** to
 > `/create-new-mcp`, which is the single source of truth for `apps/<app>/mcp.py`, the
-> `mcp/server.py` `APP_REGISTRARS` entry, the Kanban bridge `_APP_LOADERS` entry, and the MCP
-> docs. Steps 7, 8, 9, and 15 below are therefore hand-offs to `/create-new-mcp`. Conversely, if
+> shared `tools/catalog.py` entry, and CLI/MCP docs. CLI is preferred for shell-capable
+> coding agents; MCP remains backward compatible. Steps 7, 8, 9, and 15 below are therefore
+> hand-offs to `/create-new-mcp`. Conversely, if
 > `/create-new-mcp` is run against an app that doesn't exist yet, it loops back here first.
 
 ## Arguments
@@ -238,8 +239,8 @@ hand off the entire MCP layer to the single-source-of-truth skill:
 That skill audits the service methods you just created, generates `apps/APP_NAME/mcp.py`
 (`register_APP_NAME_tools` with logging, `Args:` docstrings, and defensive return serialization),
 and handles registration + MCP docs. It covers:
-- **Step 8** below (`mcp/server.py` `APP_REGISTRARS` tuple) — done by `/create-new-mcp`.
-- **Step 9** below (`mcp_bridge.py` `_APP_LOADERS` entry) — done by `/create-new-mcp`.
+- **Step 8** below (`tools/catalog.py` entry) — done by `/create-new-mcp`.
+- **Step 9** below (shared-catalog bridge verification) — done by `/create-new-mcp`.
 - **Step 15** below (`mcp/README.md` section) — done by `/create-new-mcp`.
 
 For **Mode A** (skeleton), still invoke `/create-new-mcp APP_NAME` — it will generate stub tools
@@ -250,17 +251,18 @@ remaining service-layer steps below.
 
 ---
 
-## Step 8 — Register in `mcp/server.py`  → handled by `/create-new-mcp` (Step 7)
+## Step 8 — Register in the shared CLI/MCP catalog → handled by `/create-new-mcp` (Step 7)
 
-`/create-new-mcp` adds the `(label, module_path, func_name)` tuple to the `APP_REGISTRARS` list in
-`mcp/server.py`. Nothing to do here — do not also add an inline import.
+`/create-new-mcp` adds the app's lazy `AppToolSpec` to `tools/catalog.py`, consumed by
+the CLI and standalone MCP server. It does not create a second server registry.
 
 ---
 
-## Step 9 — Register in the Kanban bridge  → handled by `/create-new-mcp` (Step 7)
+## Step 9 — Verify Kanban bridge consumption → handled by `/create-new-mcp` (Step 7)
 
-`/create-new-mcp` adds the `_APP_LOADERS` entry in
-`agents/projects/agent/tools/mcp_bridge.py`. Nothing to do here.
+`/create-new-mcp` verifies that
+`agents/projects/agent/tools/mcp_bridge.py` consumes the shared catalog; it does not add a
+separate `_APP_LOADERS` entry.
 
 ---
 
@@ -474,7 +476,7 @@ If `--workflow <workflow_name>` was passed, after completing all steps above run
 - [ ] Base service class name is `BaseApiService{PascalCase}`
 - [ ] All service classes inherit from the base service
 - [ ] All DTO fields are `Optional` with `None` defaults
-- [ ] **MCP layer delegated to `/create-new-mcp`** — it owns `mcp.py`, `APP_REGISTRARS`, `_APP_LOADERS`, and `mcp/README.md` (Steps 7/8/9/15)
+- [ ] **Tool adapter delegated to `/create-new-mcp`** — it owns `mcp.py`, the shared catalog, and CLI/MCP docs (Steps 7/8/9/15)
 - [ ] **Kanban dependency detector** entry added in `agents/projects/dependencies/detector.py:_SERVICE_SECRETS` (skip only if the app has zero env vars) — env var name matches `.env/apps.env` exactly
 - [ ] `apps_config.yaml` updated with APP_NAME_UPPER section
 - [ ] `.env/apps.env` updated with env var placeholder(s)

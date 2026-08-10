@@ -1,4 +1,3 @@
-import importlib
 import logging
 import os
 import sys
@@ -16,6 +15,7 @@ if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
 
 from mcp.server.fastmcp import FastMCP
+from tools.catalog import APP_CATALOG, register_app_tools
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,51 +25,8 @@ logger = logging.getLogger("harqis-mcp")
 
 mcp = FastMCP("harqis-work")
 
-# (label, module path, registrar function name)
-APP_REGISTRARS = [
-    ("Airtable",         "apps.airtable.mcp",       "register_airtable_tools"),
-    ("Alpha Vantage",    "apps.alpha_vantage.mcp",  "register_alpha_vantage_tools"),
-    ("Apify",            "apps.apify.mcp",          "register_apify_tools"),
-    ("AppSheet",         "apps.appsheet.mcp",       "register_appsheet_tools"),
-    ("OANDA",            "apps.oanda.mcp",          "register_oanda_tools"),
-    ("YNAB",             "apps.ynab.mcp",           "register_ynab_tools"),
-    ("YouTube",          "apps.youtube.mcp",        "register_youtube_tools"),
-    ("Google Apps",      "apps.google_apps.mcp",    "register_google_apps_tools"),
-    ("Google Drive",     "apps.google_drive.mcp",   "register_google_drive_tools"),
-    ("TCG Marketplace",  "apps.tcg_mp.mcp",         "register_tcg_mp_tools"),
-    ("Echo MTG",         "apps.echo_mtg.mcp",       "register_echo_mtg_tools"),
-    ("Scryfall",         "apps.scryfall.mcp",       "register_scryfall_tools"),
-    ("JustTCG",          "apps.justtcg.mcp",        "register_justtcg_tools"),
-    ("Pokemon TCG",      "apps.pokemon_tcg.mcp",    "register_pokemon_tcg_tools"),
-    ("MPC",              "apps.mpc.mcp",            "register_mpc_tools"),
-    ("Telegram",         "apps.telegram.mcp",       "register_telegram_tools"),
-    ("Trello",           "apps.trello.mcp",         "register_trello_tools"),
-    ("Jira",             "apps.jira.mcp",           "register_jira_tools"),
-    ("Confluence",       "apps.confluence.mcp",     "register_confluence_tools"),
-    ("OwnTracks",        "apps.own_tracks.mcp",     "register_own_tracks_tools"),
-    ("Plaud",            "apps.plaud.mcp",          "register_plaud_tools"),
-    ("Orgo",             "apps.orgo.mcp",           "register_orgo_tools"),
-    ("Discord",          "apps.discord.mcp",        "register_discord_tools"),
-    ("Reddit",           "apps.reddit.mcp",         "register_reddit_tools"),
-    ("LinkedIn",         "apps.linkedin.mcp",       "register_linkedin_tools"),
-    ("Notion",           "apps.notion.mcp",         "register_notion_tools"),
-    ("Anthropic",        "apps.antropic.mcp",       "register_anthropic_tools"),
-    ("Gemini",           "apps.gemini.mcp",         "register_gemini_tools"),
-    ("Grok",             "apps.grok.mcp",           "register_grok_tools"),
-    ("OpenAI",           "apps.open_ai.mcp",        "register_open_ai_tools"),
-    ("Perplexity",       "apps.perplexity.mcp",     "register_perplexity_tools"),
-    ("Spotify",          "apps.spotify.mcp",        "register_spotify_tools"),
-    ("Stripe",           "apps.stripe.mcp",         "register_stripe_tools"),
-    ("GitHub",           "apps.github.mcp",         "register_github_tools"),
-    ("Git",              "apps.git.mcp",            "register_git_tools"),
-    ("Filesystem",       "apps.filesystem.mcp",     "register_filesystem_tools"),
-    ("Android Emulator", "apps.android_emulator.mcp", "register_android_emulator_tools"),
-    ("Browser",          "apps.browser.mcp",        "register_browser_tools"),
-    ("Playwright",       "apps.playwright.mcp",     "register_playwright_tools"),
-    ("SQLite-Vec",       "apps.sqlite_vec.mcp",     "register_sqlite_vec_tools"),
-    ("Knowledge / RAG",  "workflows.knowledge.mcp", "register_knowledge_tools"),
-    ("Memory Recall",    "workflows.hfl.mcp",       "register_memory_tools"),
-]
+# Backward-compatible tuple view for code that inspects the legacy symbol.
+APP_REGISTRARS = [(spec.label, *spec.registrar.rsplit(".", 1)) for spec in APP_CATALOG]
 
 # Per-node app surface filter.
 #
@@ -85,27 +42,30 @@ _enabled_filter: set[str] | None = None
 if _enabled_raw:
     _enabled_filter = {name.strip().lower() for name in _enabled_raw.split(",") if name.strip()}
 
-_total_apps = len(APP_REGISTRARS)
+_total_apps = len(APP_CATALOG)
 if _enabled_filter is not None:
-    _filtered_registrars = [t for t in APP_REGISTRARS if t[0].lower() in _enabled_filter]
+    _filtered_specs = [
+        spec for spec in APP_CATALOG
+        if spec.label.lower() in _enabled_filter or spec.key.lower() in _enabled_filter
+    ]
     logger.info(
         "MCP_ENABLED_APPS filter active: %d of %d apps will be registered (%s)",
-        len(_filtered_registrars), _total_apps,
-        ", ".join(t[0] for t in _filtered_registrars) or "<none>",
+        len(_filtered_specs), _total_apps,
+        ", ".join(spec.label for spec in _filtered_specs) or "<none>",
     )
 else:
-    _filtered_registrars = APP_REGISTRARS
+    _filtered_specs = list(APP_CATALOG)
+
+_filtered_registrars = [(spec.label, *spec.registrar.rsplit(".", 1)) for spec in _filtered_specs]
 
 # Lazy-import each app's mcp module so a missing config section in one app
 # does not prevent the rest from loading. Skipped apps log a warning.
-for label, module_path, fn_name in _filtered_registrars:
+for spec in _filtered_specs:
     try:
-        mod = importlib.import_module(module_path)
-        registrar = getattr(mod, fn_name)
-        logger.info("Registering %s tools", label)
-        registrar(mcp)
+        logger.info("Registering %s tools", spec.label)
+        register_app_tools(mcp, spec)
     except Exception as e:
-        logger.warning("Skipping %s tools — %s: %s", label, type(e).__name__, e)
+        logger.warning("Skipping %s tools — %s: %s", spec.label, type(e).__name__, e)
 
 logger.info(
     "MCP server: registered %d tool(s) from %d app(s) (filtered from %d total)",

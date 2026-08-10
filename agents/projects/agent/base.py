@@ -372,7 +372,10 @@ class BaseKanbanAgent:
             self._audit.tool_call(tool_name, tool_input)
 
             try:
-                self.enforcer.check_tool(tool_name)
+                self.enforcer.check_tool(
+                    tool_name,
+                    app_key=self.registry.app_for_tool(tool_name),
+                )
                 self._audit.permission_check("tool", tool_name, allowed=True)
                 output = self.registry.call(tool_name, tool_input)
                 safe_output = self._sanitizer.scrub(str(output))

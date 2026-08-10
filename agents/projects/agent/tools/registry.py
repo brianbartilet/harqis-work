@@ -158,6 +158,11 @@ class ToolRegistry:
             return self._mcp_bridge.call(name, inputs)
         return f"Unknown tool: {name}"
 
+    def app_for_tool(self, name: str) -> str | None:
+        if self._mcp_bridge:
+            return self._mcp_bridge.app_for_tool(name)
+        return None
+
     # ── Definitions for Claude API ────────────────────────────────────────────
 
     def definitions(self) -> list[dict]:
@@ -175,18 +180,16 @@ class ToolRegistry:
                 continue
             result.append(tool["definition"])
 
-        # MCP tools — same allowed/denied semantics as native tools.
-        # When a profile sets `tools.allowed`, MCP tools that aren't on the
-        # whitelist are hidden from the definitions list shown to Claude.
-        # This matches the runtime behavior of PermissionEnforcer.check_tool
-        # (which already denies non-whitelisted tools regardless of source),
-        # so advertising them would just invite tool calls that fail.
+        # MCP apps are authorized at app granularity through `mcp_apps`; an
+        # explicit tool deny still wins. Native `tools.allowed` remains a
+        # separate whitelist so profiles do not need to enumerate every tool
+        # exposed by each selected app.
         if self._mcp_bridge:
-            for defn in self._mcp_bridge.definitions():
+            for app_key, defn in self._mcp_bridge.definitions_with_apps():
                 name = defn["name"]
                 if name in denied:
                     continue
-                if allowed and name not in allowed:
+                if allowed and name not in allowed and app_key not in self._profile.tools.mcp_apps:
                     continue
                 result.append(defn)
 

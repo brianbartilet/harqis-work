@@ -87,7 +87,7 @@ HARQIS-Work includes a reasoning-model agent layer that goes beyond scheduled ta
 
 | What you're adding | Skill |
 |---|---|
-| **App integration** — REST API wrapper (service + DTO + MCP tool) under `apps/<name>/` | `/create-new-service-app <name> [<openapi_url>]` |
+| **App integration** — REST API wrapper with CLI-first and compatible MCP adapters | `/create-new-service-app <name> [<openapi_url>]` |
 | **Workflow / scheduled task** — Celery RPA chaining apps with cron + queue routing | `/create-new-workflow [<category>] <description_or_diagram>` |
 | **Visual workflow outside Celery** — n8n flows for branching automations or vendor connectors not in `apps/` | `/create-new-n8n-workflow <description_or_diagram>` |
 | **HUD widget** — Rainmeter desktop display fed by an app or workflow | `/create-new-hud <title> <description_or_screenshot>` |
@@ -223,6 +223,17 @@ A FastMCP server that exposes all harqis-work app tools over the Model Context P
 # Start the MCP server
 python mcp/server.py
 ```
+
+For coding agents with shell access, prefer the lazy JSON CLI so app schemas are discovered only
+when needed:
+
+```sh
+python -m tools apps
+python -m tools commands trello
+python -m tools schema trello create_trello_card
+```
+
+The CLI and both MCP surfaces share `tools/catalog.py`; existing MCP names remain compatible.
 
 ---
 

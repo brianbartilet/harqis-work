@@ -38,6 +38,11 @@ Claude (AI) ←──── MCP protocol ────→ MCP Server ←───
 registers tool modules from each app. Each app exposes a `register_<app>_tools(mcp)` function in
 `apps/<app>/mcp.py` that decorates service calls as `@mcp.tool()`.
 
+The canonical app registry now lives in `tools/catalog.py`. The standalone server,
+Kanban bridge, and low-context CLI consume that one registry, preventing registration drift.
+Coding agents with shell access should prefer `python -m tools`; MCP remains available
+for typed tool clients and existing integrations.
+
 ```
 mcp/
 ├── server.py                              # Entry point — creates FastMCP, registers tools, runs server
@@ -546,9 +551,24 @@ python mcp/server.py
 The server starts in `stdio` mode (the default for local Claude Desktop connections). You will see
 startup logs confirming which tools were registered.
 
+### Low-context CLI alternative
+
+The CLI loads no app schemas during discovery and imports only the selected app when commands,
+schemas, or calls are requested:
+
+```sh
+python -m tools apps
+python -m tools commands ynab
+python -m tools schema trello create_trello_card
+python -m tools call scryfall get_scryfall_card_prices --input '{"identifier":"Black Lotus"}'
+```
+
+Write operations require `--confirm-write`. See `tools/README.md` for JSON envelopes,
+profile authorization, and audit behavior.
+
 ### Restricting the app surface per node (`MCP_ENABLED_APPS`)
 
-By default every app in `APP_REGISTRARS` is registered. For node-specific deployments
+By default every app in the shared `APP_CATALOG` is registered. For node-specific deployments
 (e.g. a worker that should only expose Trello + Discord) set the comma-separated env var
 `MCP_ENABLED_APPS` to the case-insensitive labels you want to keep:
 
@@ -558,9 +578,9 @@ export MCP_ENABLED_APPS="trello,discord"
 python mcp/server.py
 ```
 
-Labels match the first column of `APP_REGISTRARS` in `mcp/server.py` ("Trello", "Discord",
-"Knowledge / RAG", etc.). Whitespace is trimmed; matching is case-insensitive. Unset or empty
-preserves the legacy "register everything" behavior.
+Values may use the catalog key or label (`trello`, `Discord`, `Knowledge / RAG`, etc.).
+Whitespace is trimmed; matching is case-insensitive. Unset or empty preserves the legacy
+"register everything" behavior.
 
 ---
 
@@ -648,22 +668,15 @@ def register_<app_name>_tools(mcp: FastMCP):
         return result if isinstance(result, dict) else (result.__dict__ if hasattr(result, "__dict__") else {})
 ```
 
-2. Register in `mcp/server.py` by adding a tuple to the `APP_REGISTRARS` list (the server
-   lazy-imports each module from this registry — there is no inline import/call):
+2. Register once in `tools/catalog.py` by adding an `AppToolSpec`. This exposes the app
+   to the CLI, standalone MCP server, and Kanban bridge:
 
 ```python
-    ("<Label>",          "apps.<app_name>.mcp",     "register_<app_name>_tools"),
+    AppToolSpec("<app_name>", "<Label>", "apps.<app_name>.mcp.register_<app_name>_tools"),
 ```
 
-3. Add the app to `_APP_LOADERS` in `agents/projects/agent/tools/mcp_bridge.py` so Kanban agents
-   can load it:
-
-```python
-    "<app_name>":  "apps.<app_name>.mcp.register_<app_name>_tools",
-```
-
-If you only added tools to an app that's already registered, steps 2–3 need no change — the
-existing registration picks up the new tools.
+If you only added tools to an app that's already registered, the catalog needs no change — all
+three surfaces pick up the new tools automatically.
 
 ---
 
