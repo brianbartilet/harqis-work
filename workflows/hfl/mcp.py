@@ -601,9 +601,8 @@ def register_memory_tools(mcp: FastMCP):
         Routine actions never call an LLM; with ``synthesize`` enabled, Haiku
         is used only for long comments or unfamiliar action types.
         """
-        from apps.trello.config import CONFIG as TRELLO_CONFIG
-        from apps.trello.references.web.api.members import ApiServiceTrelloMembers
         from workflows.hfl.tasks.ingest_trello import (
+            FreshTrelloMemberService,
             _credentials_present,
             collect_trello_activity,
             distill_trello_activity,
@@ -632,7 +631,7 @@ def register_memory_tools(mcp: FastMCP):
             activity = collect_trello_activity(
                 since=start,
                 until=end,
-                service=ApiServiceTrelloMembers(TRELLO_CONFIG),
+                service=FreshTrelloMemberService(),
                 workspaces=workspaces or None,
                 page_size=page_size,
                 max_actions=max_actions,

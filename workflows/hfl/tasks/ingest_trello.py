@@ -187,6 +187,31 @@ def _with_rate_limit_retry(call, /, *args, **kwargs):
     return []
 
 
+class FreshTrelloMemberService:
+    """Call each Trello endpoint through a fresh stateful service instance."""
+
+    def __init__(self, config: Any = TRELLO_CONFIG, service_factory=None):
+        self._config = config
+        self._service_factory = service_factory
+
+    def _call(self, method: str, /, *args, **kwargs):
+        factory = self._service_factory or ApiServiceTrelloMembers
+        service = factory(self._config)
+        return getattr(service, method)(*args, **kwargs)
+
+    def get_me(self):
+        return self._call("get_me")
+
+    def get_member_boards(self, **kwargs):
+        return self._call("get_member_boards", **kwargs)
+
+    def get_member_organizations(self, **kwargs):
+        return self._call("get_member_organizations", **kwargs)
+
+    def get_member_actions(self, **kwargs):
+        return self._call("get_member_actions", **kwargs)
+
+
 def _workspace_context(
     action: dict,
     *,
@@ -500,7 +525,7 @@ def collect_trello_activity(
     *,
     since: Optional[date],
     until: date,
-    service: ApiServiceTrelloMembers,
+    service: ApiServiceTrelloMembers | FreshTrelloMemberService,
     workspaces: Optional[str | Iterable[str]] = None,
     page_size: int = 200,
     max_actions: int = 10_000,
@@ -661,7 +686,7 @@ def ingest_trello_activity(
         collected = collect_trello_activity(
             since=start,
             until=end,
-            service=ApiServiceTrelloMembers(TRELLO_CONFIG),
+            service=FreshTrelloMemberService(),
             workspaces=workspaces,
             page_size=page_size,
             max_actions=max_actions,

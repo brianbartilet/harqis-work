@@ -63,6 +63,42 @@ class _FakeTrello:
         return list(self.pages.get(before, []))
 
 
+class _SingleCallTrello:
+    """Model the app service whose request builder cannot be reused safely."""
+
+    def __init__(self, pages, instances):
+        self.pages = pages
+        self.calls = []
+        instances.append(self)
+
+    def _once(self, method, value):
+        if self.calls:
+            raise TypeError("'Response' object is not iterable")
+        self.calls.append(method)
+        return value
+
+    def get_me(self):
+        return self._once(
+            "get_me", {"id": "member-1", "username": "brianbartilet"},
+        )
+
+    def get_member_boards(self, **_kwargs):
+        return self._once("get_member_boards", [{
+            "id": "board-1", "name": "HARQIS Work",
+            "shortLink": "board123", "idOrganization": "org-1",
+        }])
+
+    def get_member_organizations(self, **_kwargs):
+        return self._once("get_member_organizations", [{
+            "id": "org-1", "name": "harqis", "displayName": "HARQIS",
+        }])
+
+    def get_member_actions(self, *, before=None, **_kwargs):
+        return self._once(
+            "get_member_actions", list(self.pages.get(before, [])),
+        )
+
+
 @pytest.mark.smoke
 def test_periods_cover_previous_calendar_year_and_all():
     today = date(2026, 7, 24)
@@ -112,6 +148,26 @@ def test_collector_paginates_filters_author_and_workspace():
     assert result["scanned"] == 3
     assert result["workspace_filter"] == ["harqis"]
     assert result["actions"][0]["references"][0].endswith("#action-a3")
+
+
+@pytest.mark.smoke
+def test_fresh_service_facade_uses_one_instance_per_endpoint_call():
+    instances = []
+    pages = {None: [_action("a1", "2026-07-24T10:00:00Z")]}
+    facade = it.FreshTrelloMemberService(
+        config=object(),
+        service_factory=lambda _config: _SingleCallTrello(pages, instances),
+    )
+
+    result = it.collect_trello_activity(
+        since=date(2026, 7, 24),
+        until=date(2026, 7, 24),
+        service=facade,
+    )
+
+    assert result["action_count"] == 1
+    assert len(instances) == 4
+    assert all(len(instance.calls) == 1 for instance in instances)
 
 
 @pytest.mark.smoke

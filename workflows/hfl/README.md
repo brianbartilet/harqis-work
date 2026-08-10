@@ -788,6 +788,9 @@ It's a **hybrid** (`workflows/hfl/tasks/time_capsule.py` + the skill):
 `apps/trello`; no additional API credential is needed. The Beat entry is active
 at 23:25 Asia/Singapore and processes the previous completed calendar day.
 Missing credentials and empty windows are clean no-ops.
+Each Trello endpoint call uses a fresh service instance because the underlying
+request builder is stateful; this also applies to every actions page and the
+read-only MCP preview.
 
 Optional Workspace filtering is configured in `.env/apps.env`:
 
