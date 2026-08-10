@@ -313,8 +313,9 @@ existing `ANTHROPIC` config; no new credentials or Python packages are needed.
 
 The first successful run atomically stores a baseline at
 `<HFL_CORPUS_PATH>/.ingest-state/echomtg-inventory.json` and writes no entry.
-Later runs fully paginate the current collection, validate inventory IDs and
-the EchoMTG quick-stat card count, then compare stable `inventory_id` values.
+Later runs fully paginate both EchoMTG tradable partitions, validate inventory
+IDs, use the quick-stat card count as a lower-bound completeness check, then
+compare stable `inventory_id` values.
 One daily entry lists every changed variant with quantity, set, foil/non-foil,
 and condition, always tagged `#echomtg #inventory`. It dual-writes through the
 canonical Markdown + `harqis-hfl-entries` persistence boundary with source

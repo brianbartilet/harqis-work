@@ -31,6 +31,7 @@ import os
 import re
 import uuid
 from collections import Counter, defaultdict
+from collections.abc import Mapping
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
@@ -114,12 +115,22 @@ def _store_echomtg_snapshot(path: Path, items: dict[str, dict[str, Any]]) -> Non
 
 
 def _echo_credentials_present(config: Any) -> bool:
-    if not isinstance(config, dict):
+    data = (
+        config.get("app_data")
+        if isinstance(config, Mapping)
+        else getattr(config, "app_data", None)
+    )
+    if not isinstance(data, Mapping):
         return False
-    data = config.get("app_data") or {}
-    email = str(data.get("email") or "").strip()
+
+    def _resolved(value: Any) -> bool:
+        text = str(value or "").strip()
+        return bool(text and "${" not in text)
+
+    token = data.get("token")
+    username = data.get("username") or data.get("email")
     password = str(data.get("password") or "").strip()
-    return bool(email and password and "${" not in email and "${" not in password)
+    return _resolved(token) or (_resolved(username) and _resolved(password))
 
 
 def _normalize_echomtg_item(item: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -165,28 +176,54 @@ def _fetch_complete_echomtg_collection(
                     f"EchoMTG quick stats count {expected_count} is outside the safe bound"
                 )
     items: dict[str, dict[str, Any]] = {}
-    start = 0
-    while True:
-        page = service.get_collection(
-            start=start, limit=page_size, sort="i.id", direction="ASC", tradable_only=0,
-        )
-        if not isinstance(page, list):
-            raise ValueError(f"EchoMTG collection returned {type(page).__name__}, expected list")
-        for raw in page:
-            if not isinstance(raw, dict):
-                raise ValueError("EchoMTG collection contained a non-object item")
-            inventory_id, normalized = _normalize_echomtg_item(raw)
-            if inventory_id in items:
-                raise ValueError(f"EchoMTG collection repeated inventory_id {inventory_id}")
-            items[inventory_id] = normalized
-            if len(items) > max_cards:
-                raise ValueError(f"EchoMTG collection exceeded max_cards={max_cards}")
-        if len(page) < page_size:
-            break
-        start += len(page)
-    if expected_count is not None and len(items) != expected_count:
+    # EchoMTG exposes non-tradable and tradable inventory as separate views.
+    # Read and paginate both so the snapshot represents the complete collection.
+    for tradable_only in (0, 1):
+        start = 0
+        partition_ids: set[str] = set()
+        while True:
+            page = service.get_collection(
+                start=start,
+                limit=page_size,
+                sort="i.id",
+                direction="ASC",
+                tradable_only=tradable_only,
+            )
+            if not isinstance(page, list):
+                raise ValueError(
+                    f"EchoMTG collection returned {type(page).__name__}, expected list"
+                )
+            for raw in page:
+                if not isinstance(raw, dict):
+                    raise ValueError("EchoMTG collection contained a non-object item")
+                inventory_id, normalized = _normalize_echomtg_item(raw)
+                if inventory_id in partition_ids:
+                    raise ValueError(
+                        f"EchoMTG collection repeated inventory_id {inventory_id} "
+                        f"in tradable={tradable_only}"
+                    )
+                partition_ids.add(inventory_id)
+                existing = items.get(inventory_id)
+                if existing is not None:
+                    if existing != normalized:
+                        raise ValueError(
+                            f"EchoMTG collection returned conflicting inventory_id "
+                            f"{inventory_id} across tradable partitions"
+                        )
+                    continue
+                items[inventory_id] = normalized
+                if len(items) > max_cards:
+                    raise ValueError(f"EchoMTG collection exceeded max_cards={max_cards}")
+            if len(page) < page_size:
+                break
+            start += len(page)
+    # Quick stats can lag or exclude a partition (the live API currently reports
+    # fewer cards than the two fully paginated inventory views). It remains a
+    # useful lower-bound guard against truncated reads, but not an exact total.
+    if expected_count is not None and len(items) < expected_count:
         raise ValueError(
-            f"EchoMTG collection incomplete: expected {expected_count}, received {len(items)}"
+            f"EchoMTG collection incomplete: expected at least {expected_count}, "
+            f"received {len(items)}"
         )
     return items
 

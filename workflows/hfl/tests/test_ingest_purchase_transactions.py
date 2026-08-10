@@ -1,6 +1,7 @@
 from datetime import date, datetime
 
 import pytest
+from core.web.services.core.config.webservice import AppConfigWSClient
 
 import workflows.hfl.tasks.ingest_purchase_transactions as module
 
@@ -154,6 +155,32 @@ class _EchoInventoryPages:
         return self.pages.pop(0) if self.pages else []
 
 
+class _EchoInventoryPartitions:
+    def __init__(self, partitions, expected_count=None):
+        self.partitions = {
+            key: list(pages) for key, pages in partitions.items()
+        }
+        self.expected_count = expected_count
+        self.calls = []
+
+    def get_quick_stats(self):
+        count = (
+            self.expected_count
+            if self.expected_count is not None
+            else sum(
+                len(page)
+                for pages in self.partitions.values()
+                for page in pages
+            )
+        )
+        return type("Stats", (), {"total_cards": count})()
+
+    def get_collection(self, **kwargs):
+        self.calls.append(kwargs)
+        pages = self.partitions[kwargs["tradable_only"]]
+        return pages.pop(0) if pages else []
+
+
 def _echo_item(inventory_id, name="Sol Ring", set_name="CMM", foil=0, condition="NM"):
     return {
         "inventory_id": inventory_id, "emid": "100", "name": name,
@@ -171,6 +198,57 @@ def test_echomtg_collector_first_run_is_baseline_only(tmp_path):
     assert result["baseline"] is True
     assert result["current_count"] == 1
     assert result["change_count"] == 0
+
+
+def test_echo_credentials_support_live_config_shape_and_token():
+    config = AppConfigWSClient(app_data={
+        "username": "configured", "password": "configured",
+    })
+
+    assert module._echo_credentials_present(config) is True
+    assert module._echo_credentials_present({
+        "app_data": {"token": "configured"},
+    }) is True
+    assert module._echo_credentials_present(AppConfigWSClient(app_data={
+        "username": "${ECHO_MTG_USER}", "password": "configured",
+    })) is False
+
+
+def test_echomtg_collection_fetches_both_tradable_partitions(tmp_path):
+    service = _EchoInventoryPartitions({
+        0: [[_echo_item("collection-copy")]],
+        1: [[_echo_item("tradable-copy")]],
+    })
+
+    result = module.collect_echomtg_inventory_activity(
+        service=service, snapshot_path=tmp_path / "snapshot.json",
+    )
+
+    assert result["current_count"] == 2
+    assert set(result["current"]) == {"collection-copy", "tradable-copy"}
+    assert [call["tradable_only"] for call in service.calls] == [0, 1]
+    assert [call["start"] for call in service.calls] == [0, 0]
+
+
+def test_echomtg_quick_stats_is_a_lower_bound_not_an_exact_total():
+    service = _EchoInventoryPartitions({
+        0: [[_echo_item("collection-copy")]],
+        1: [[_echo_item("tradable-copy")]],
+    }, expected_count=1)
+
+    items = module._fetch_complete_echomtg_collection(service)
+
+    assert set(items) == {"collection-copy", "tradable-copy"}
+
+
+def test_echomtg_collection_rejects_fewer_items_than_quick_stats():
+    service = _EchoInventoryPartitions({
+        0: [[_echo_item("collection-copy")]],
+        1: [[]],
+    }, expected_count=2)
+
+    with pytest.raises(ValueError, match="expected at least 2, received 1"):
+        module._fetch_complete_echomtg_collection(service)
 
 
 def test_echomtg_collector_rolls_up_additions_removals_and_duplicates(tmp_path):
