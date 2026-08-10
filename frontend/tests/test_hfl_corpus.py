@@ -2219,6 +2219,19 @@ def test_create_entry_dialog_uses_mobile_sheets_and_touch_friendly_controls(
     assert "Adding context…" in response.text
 
 
+def test_compiled_css_contains_manual_entry_location_toggle_utilities():
+    css = (
+        Path(__file__).resolve().parents[1] / "static" / "css" / "app.min.css"
+    ).read_text(encoding="utf-8")
+
+    assert ".h-6{height:1.5rem}" in css
+    assert ".w-11{width:2.75rem}" in css
+    assert ".left-1{left:.25rem}" in css
+    assert ".bg-white{" in css
+    assert "peer-checked\\:bg-blue-600" in css
+    assert "peer-checked\\:translate-x-5" in css
+
+
 def test_create_entry_launcher_and_discard_actions_stack_on_mobile(
     authenticated_client, monkeypatch
 ):
