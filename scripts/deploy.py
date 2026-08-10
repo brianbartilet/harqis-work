@@ -62,6 +62,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import plistlib
 import shlex
 import shutil
 import socket
@@ -1075,12 +1076,31 @@ def _plist_path(service: str) -> Path:
     return Path.home() / "Library" / "LaunchAgents" / f"work.harqis.{service}.plist"
 
 
+def _remove_obsolete_launchd_jobs() -> None:
+    """Remove retired launchd bootstrap jobs that target deleted repo scripts."""
+    legacy = Path.home() / "Library" / "LaunchAgents" / "work.harqis.deploy.plist"
+    if not legacy.exists():
+        return
+    try:
+        with legacy.open("rb") as stream:
+            arguments = plistlib.load(stream).get("ProgramArguments") or []
+    except (OSError, plistlib.InvalidFileException) as exc:
+        print(f"  WARNING: preserving unreadable legacy launchd plist {legacy}: {exc}")
+        return
+    if not any(str(arg).endswith("/scripts/sh/deploy.sh") for arg in arguments):
+        return
+    subprocess.run(["launchctl", "unload", str(legacy)], capture_output=True)
+    legacy.unlink()
+    print("  Removed obsolete launchd bootstrap: work.harqis.deploy")
+
+
 def _register_launchd(machine, args, services, *, load: bool = True):
     """Write launchd plists. If `load`, also `launchctl load` (which starts the
     daemon via RunAtLoad=true). Pass `load=False` when the caller plans to
     start the same services in visible console tabs — loading the plist would
     spawn a background duplicate alongside the console process.
     """
+    _remove_obsolete_launchd_jobs()
     for s in services:
         cmd = build_service_cmd(s, machine, args)
         label = f"work.harqis.{s}"
