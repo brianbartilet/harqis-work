@@ -1083,13 +1083,29 @@ def _remove_obsolete_launchd_jobs() -> None:
         return
     try:
         with legacy.open("rb") as stream:
-            arguments = plistlib.load(stream).get("ProgramArguments") or []
+            plist = plistlib.load(stream)
     except (OSError, plistlib.InvalidFileException) as exc:
         print(f"  WARNING: preserving unreadable legacy launchd plist {legacy}: {exc}")
         return
-    if not any(str(arg).endswith("/scripts/sh/deploy.sh") for arg in arguments):
+    if not isinstance(plist, dict):
+        print(f"  WARNING: preserving legacy launchd plist with unexpected schema: {legacy}")
         return
-    subprocess.run(["launchctl", "unload", str(legacy)], capture_output=True)
+    arguments = plist.get("ProgramArguments")
+    if not isinstance(arguments, (list, tuple)) or not all(isinstance(arg, str) for arg in arguments):
+        print(f"  WARNING: preserving legacy launchd plist with unexpected ProgramArguments: {legacy}")
+        return
+    if not any(arg.endswith("/scripts/sh/deploy.sh") for arg in arguments):
+        return
+    try:
+        result = subprocess.run(["launchctl", "unload", str(legacy)], capture_output=True)
+    except OSError as exc:
+        print(f"  WARNING: preserving obsolete launchd plist because unload failed: {exc}")
+        return
+    if result.returncode != 0:
+        stderr = result.stderr.decode(errors="replace").strip() if isinstance(result.stderr, bytes) else str(result.stderr or "").strip()
+        detail = f": {stderr}" if stderr else ""
+        print(f"  WARNING: preserving obsolete launchd plist because unload failed{detail}")
+        return
     legacy.unlink()
     print("  Removed obsolete launchd bootstrap: work.harqis.deploy")
 
