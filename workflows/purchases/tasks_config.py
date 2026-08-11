@@ -45,7 +45,7 @@ WORKFLOW_PURCHASES = {
             "cfg_id__echo_mtg_fe": "ECHO_MTG_FE",
             "cfg_id__scryfall": "SCRYFALL",
             "create_missing_notes": True,
-            "limit": 250
+            "limit": 100
         },
         "options": {
             "queue": WorkflowQueue.TCG,
@@ -68,7 +68,7 @@ WORKFLOW_PURCHASES = {
             "cfg_id__echo_mtg": "ECHO_MTG",
             "cfg_id__echo_mtg_fe": "ECHO_MTG_FE",
             "language": "EN",   # default; per-card EchoMTG language wins when present
-            "limit": 250
+            "limit": 100
         },
         "options": {
             "queue": WorkflowQueue.TCG,
