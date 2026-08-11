@@ -652,7 +652,9 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
             card_name = card_meta['name_clean']
             card_tcg_id = card_meta['tcgplayer_id']
             tcg_mp_log.info("Searching for card: {0}".format(card_name))
-            search_results = api_service__tcg_mp_products.search_card(card_name)
+
+            search_results = api_service__tcg_mp_products.search_card("[{0}] {1}"
+                                                                      .format(card_meta['set_code'], card_name))
             match_found = False
             guid = None
             scryfall_card = None

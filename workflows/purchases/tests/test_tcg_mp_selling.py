@@ -456,6 +456,7 @@ def test__find_scryfall_card_by_set_collector_prefers_english_exact_match():
 def test__generate_tcg_mappings_creates_note_for_note_less_card_by_default(monkeypatch):
     guid = "123e4567-e89b-42d3-a456-426614174000"
     created_notes = []
+    search_queries = []
 
     class _ConfigManager:
         def get(self, _cfg_id):
@@ -489,13 +490,14 @@ def test__generate_tcg_mappings_creates_note_for_note_less_card_by_default(monke
             pass
 
         def get_card_meta(self, _emid):
-            return {"name_clean": "Test Card", "tcgplayer_id": 111}
+            return {"name_clean": "Test Card", "set_code": "BLB", "tcgplayer_id": 111}
 
     class _TcgProducts:
         def __init__(self, _config):
             pass
 
         def search_card(self, _card_name):
+            search_queries.append(_card_name)
             return [SimpleNamespace(id=222, image=f"https://img.example/{guid}.jpg")]
 
         def get_single_card(self, _card_id):
@@ -537,6 +539,7 @@ def test__generate_tcg_mappings_creates_note_for_note_less_card_by_default(monke
     result = tcg_mp_selling_module.generate_tcg_mappings()
 
     assert result == "SUCCESS"
+    assert search_queries == ["[BLB] Test Card"]
     assert len(created_notes) == 1
     assert created_notes[0][0] == "inv-1"
     note_payload = json.loads(created_notes[0][1])
