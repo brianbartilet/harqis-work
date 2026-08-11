@@ -1,9 +1,12 @@
-import os, re, time, ijson
+import os
+import re
+import time
 from datetime import datetime
 from typing import Optional, Dict, Any
 from pathlib import Path
 from core.utilities.logging.custom_logger import logger as log
 from apps.scryfall.references.web.api.cards import ApiServiceScryfallCards
+from apps.scryfall.references.web.api.bulk import iter_bulk_cards
 
 
 def get_scryfall_card_metadata(api_service__scryfall_cards: ApiServiceScryfallCards, guid: str, card_name: str,
@@ -27,17 +30,17 @@ def get_scryfall_card_metadata(api_service__scryfall_cards: ApiServiceScryfallCa
 def load_scryfall_bulk_data(folder_path: str) -> Optional[Dict[str, Any]]:
     """
     Scans `folder_path` for files matching:
-        all-cards-YYYYMMDDHHMMSS.json
+        all-cards-YYYYMMDDHHMMSS.jsonl.gz (current) or .json (legacy)
 
     Loads the newest file and returns an index: { card_id: card_object }.
 
-    Uses streaming JSON parsing (ijson) to avoid MemoryError on huge files.
+    Uses streaming parsing to avoid MemoryError on huge files.
     """
     folder = Path(folder_path)
     if not folder.exists():
         raise Exception(f"Path for bulk data does not resolve please check {folder_path}.")
 
-    timestamp_pattern = re.compile(r"all-cards-(\d{14})\.json$")
+    timestamp_pattern = re.compile(r"all-cards-(\d{14})(?:\.jsonl\.gz|\.json)$")
 
     candidates: list[tuple[datetime, Path]] = []
     for p in folder.iterdir():
@@ -61,12 +64,10 @@ def load_scryfall_bulk_data(folder_path: str) -> Optional[Dict[str, Any]]:
     candidates.sort(key=lambda x: x[0], reverse=True)
     latest_file = candidates[0][1]
 
-    # Stream parse JSON array: [ {...}, {...}, ... ]
     cards: Dict[str, Any] = {}
-    with latest_file.open("rb") as f:
-        for card in ijson.items(f, "item"):
-            card_id = card.get("id")
-            if card_id:
-                cards[card_id] = card
+    for card in iter_bulk_cards(latest_file):
+        card_id = card.get("id")
+        if card_id:
+            cards[card_id] = card
 
     return cards

@@ -1,5 +1,8 @@
+import gzip
+import json
 import os
 import time
+from pathlib import Path
 
 import ijson
 
@@ -8,6 +11,44 @@ from apps.scryfall.references.web.base_api_service import BaseApiServiceAppScryf
 from core.utilities.logging.custom_logger import logger as log
 from core.web.services.core.decorators.deserializer import deserialized
 from core.utilities.resources.download_file import ServiceDownloadFile
+
+
+def _bulk_download_uri(info: dict | list[dict]) -> str:
+    """Return the current Scryfall bulk URI, with legacy API compatibility."""
+    if not isinstance(info, dict):
+        raise RuntimeError(
+            "Scryfall bulk metadata did not include a download URI "
+            f"(response type: {type(info).__name__})"
+        )
+    url = info.get('jsonl_download_uri') or info.get('download_uri')
+    if not isinstance(url, str) or not url:
+        raise RuntimeError(
+            "Scryfall bulk metadata did not include a download URI "
+            f"(response keys: {sorted(info)})"
+        )
+    return url
+
+
+def iter_bulk_cards(file_path):
+    """Stream cards from current JSONL gzip files or legacy JSON arrays."""
+    path = Path(file_path)
+    if path.name.endswith('.jsonl.gz'):
+        with gzip.open(path, 'rt', encoding='utf-8') as fh:
+            for line in fh:
+                if line.strip():
+                    yield json.loads(line)
+        return
+
+    if path.name.endswith('.jsonl'):
+        with path.open('r', encoding='utf-8') as fh:
+            for line in fh:
+                if line.strip():
+                    yield json.loads(line)
+        return
+
+    with path.open('rb') as fh:
+        yield from ijson.items(fh, 'item')
+
 
 class ApiServiceScryfallBulkData(BaseApiServiceAppScryfallMtg):
 
@@ -35,7 +76,7 @@ class ApiServiceScryfallBulkData(BaseApiServiceAppScryfallMtg):
         for attempt in range(1, max_retries + 1):
             try:
                 response = self.get_card_data_bulk(bulk_data_type)
-                url = response['download_uri']
+                url = _bulk_download_uri(response)
                 filename = url.split('/')[-1]
                 downloader = ServiceDownloadFile(url=url)
                 downloader.download_file(filename, self.config.app_data['path_folder_static_file'])
@@ -55,8 +96,8 @@ class ApiServiceScryfallBulkData(BaseApiServiceAppScryfallMtg):
                    field: str = "name", limit: int = 50, force_download: bool = False):
         """Download (or reuse) the latest bulk file and return only matching cards.
 
-        Streams the bulk JSON array with ijson so the multi-GB file is never fully
-        loaded into memory. Matching is a case-insensitive substring on ``field``.
+        Streams the compressed JSONL (or a legacy JSON array) so the bulk file is
+        never fully loaded into memory. Matching is a case-insensitive substring.
 
         Args:
             query: Substring to match against ``field``.
@@ -69,7 +110,7 @@ class ApiServiceScryfallBulkData(BaseApiServiceAppScryfallMtg):
             A list of matching card dicts (at most ``limit``).
         """
         info = self.get_card_data_bulk(bulk_data_type)
-        url = info['download_uri']
+        url = _bulk_download_uri(info)
         filename = url.split('/')[-1]
         folder = self.config.app_data['path_folder_static_file']
         file_path = os.path.join(folder, filename)
@@ -81,13 +122,12 @@ class ApiServiceScryfallBulkData(BaseApiServiceAppScryfallMtg):
 
         needle = query.lower()
         results = []
-        with open(file_path, 'rb') as fh:
-            for card in ijson.items(fh, 'item'):
-                value = card.get(field)
-                if value is not None and needle in str(value).lower():
-                    results.append(card)
-                    if len(results) >= limit:
-                        break
+        for card in iter_bulk_cards(file_path):
+            value = card.get(field)
+            if value is not None and needle in str(value).lower():
+                results.append(card)
+                if len(results) >= limit:
+                    break
 
         log.warning(f"query_bulk matched {len(results)} card(s) for '{query}' in '{field}'")
         return results
