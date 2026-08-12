@@ -2,10 +2,12 @@ import time
 import re
 import json
 import os
+import csv
 import psutil
 import requests
 import random
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 from random import randint
 from datetime import datetime, timezone, timedelta
@@ -41,10 +43,92 @@ tcg_mp_log = create_logger("tcg_mp_selling")
 
 DEFAULT_CREATE_MISSING_MAPPING_NOTES = True
 
+TCG_AUDIT_COLUMNS = (
+    "inventory_id",
+    "emid",
+    "card_name",
+    "stage",
+    "reason",
+    "set_code",
+    "timestamp",
+)
+TCG_AUDIT_OUTPUT_DIR = Path(__file__).resolve().parents[3] / "logs" / "tcg-mp-audit"
+
 _TCG_MP_TRANSIENT_EXCEPTIONS = (
     requests.exceptions.Timeout,
     requests.exceptions.ConnectionError,
 )
+
+
+def _tcg_audit_row(card=None, *, card_name="", stage, reason, set_code="", timestamp=None):
+    """Build one normalized skipped/failed-card audit row."""
+    card = card if isinstance(card, dict) else {}
+    return {
+        "inventory_id": card.get("inventory_id", ""),
+        "emid": card.get("emid", ""),
+        "card_name": card_name or card.get("card_name", "") or card.get("name", ""),
+        "stage": stage,
+        "reason": str(reason),
+        "set_code": set_code or card.get("set_code", ""),
+        "timestamp": (timestamp or datetime.now()).isoformat(),
+    }
+
+
+def _write_tcg_audit_csv(function_name, rows, *, output_csv=True, output_dir=None, run_at=None):
+    """Write a per-run CSV of skipped/failed EchoMTG cards.
+
+    A numeric suffix is added only if two invocations of the same task finish in
+    the same minute, so one run never overwrites another.
+    """
+    if not output_csv:
+        return None
+
+    output_dir = Path(output_dir) if output_dir else TCG_AUDIT_OUTPUT_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
+    run_at = run_at or datetime.now()
+    stem = f"{function_name}-{run_at.strftime('%d-%m-%Y-%H-%M')}"
+    output_path = output_dir / f"{stem}.csv"
+    suffix = 2
+    while output_path.exists():
+        output_path = output_dir / f"{stem}-{suffix}.csv"
+        suffix += 1
+
+    with output_path.open("x", newline="", encoding="utf-8-sig") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=TCG_AUDIT_COLUMNS, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+    tcg_mp_log.info("Wrote %d skipped/failed card(s) to %s", len(rows), output_path)
+    return output_path
+
+
+def _audit_worker_results(results, tasks, *, stage):
+    """Convert listing worker skipped/error results to standard audit rows."""
+    rows = []
+    for index, result in enumerate(results):
+        if not isinstance(result, dict):
+            continue
+        task = tasks[index] if index < len(tasks) else {}
+        card = task.get("card_echo") or ((task.get("cards") or [{}])[0])
+        if result.get("status") in {"skipped", "error"}:
+            rows.append(_tcg_audit_row(
+                card,
+                card_name=result.get("card", ""),
+                stage=result.get("stage") or stage,
+                reason=result.get("reason") or result.get("error") or result.get("status"),
+                set_code=result.get("set_code", ""),
+            ))
+        for failure in result.get("audit_failures") or []:
+            failure_card = failure.get("card") if isinstance(failure, dict) else card
+            failure = failure if isinstance(failure, dict) else {"reason": failure}
+            rows.append(_tcg_audit_row(
+                failure_card or card,
+                card_name=failure.get("card_name") or result.get("card", ""),
+                stage=failure.get("stage") or stage,
+                reason=failure.get("reason") or "Unknown worker failure",
+                set_code=failure.get("set_code") or result.get("set_code", ""),
+            ))
+    return rows
 
 
 def _resolve_config_placeholder(value: str) -> str:
@@ -596,7 +680,8 @@ def download_scryfall_bulk_data(**kwargs):
 @log_result()
 @feed()
 @SPROUT.task()
-def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **kwargs):
+def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None,
+                          output_csv=True, audit_output_dir=None, **kwargs):
     """ ../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
     cfg_id__tcg_mp = kwargs.get("cfg_id__tcg_mp", "TCG_MP")
     cfg_id__echo_mtg = kwargs.get("cfg_id__echo_mtg", "ECHO_MTG")
@@ -608,6 +693,7 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
     # card. Pass create_missing_notes=False only for an audit/skip pass.
     create_missing_notes = bool(kwargs.get(
         "create_missing_notes", DEFAULT_CREATE_MISSING_MAPPING_NOTES))
+    audit_rows = []
 
     cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
     cfg__echo_mtg = CONFIG_MANAGER.get(cfg_id__echo_mtg)
@@ -660,6 +746,11 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
             scryfall_card = None
         except Exception as e:
             tcg_mp_log.warning("Error getting metadata: {0}".format(e))
+            audit_rows.append(_tcg_audit_row(
+                card_echo,
+                stage="echo_metadata",
+                reason=f"{type(e).__name__}: {e}",
+            ))
             continue
 
         note_id_for_update = card_echo.get("note_id") if force_generate else None
@@ -680,6 +771,12 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
                     tcg_mp_log.info(
                         "No listing metadata note for %s %s — skipping.",
                         card_name, card_echo['inventory_id'])
+                    audit_rows.append(_tcg_audit_row(
+                        card_echo, card_name=card_name,
+                        stage="mapping_note",
+                        reason="Missing listing metadata note and create_missing_notes is disabled",
+                        set_code=card_meta.get("set_code", ""),
+                    ))
                     continue
                 notes_fetch = {"status": "error", "note": "not found"}
             else:
@@ -691,6 +788,12 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
                     tcg_mp_log.info(
                         "No listing metadata note for %s %s — skipping.",
                         card_name, card_echo['inventory_id'])
+                    audit_rows.append(_tcg_audit_row(
+                        card_echo, card_name=card_name,
+                        stage="mapping_note",
+                        reason="Listing metadata note was not found and create_missing_notes is disabled",
+                        set_code=card_meta.get("set_code", ""),
+                    ))
                     continue
             else:
                 # A note exists. Keep it only when it is valid TCG listing metadata.
@@ -698,11 +801,23 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
                 # by the mapping job; otherwise cards with empty notes never recover.
                 existing_note = _parse_listing_note_payload(notes_fetch)
                 if existing_note:
+                    audit_rows.append(_tcg_audit_row(
+                        card_echo, card_name=card_name,
+                        stage="existing_mapping",
+                        reason="Valid TCG listing metadata note already exists",
+                        set_code=card_meta.get("set_code", ""),
+                    ))
                     continue
                 if not create_missing_notes:
                     tcg_mp_log.info(
                         "Note for %s %s is not valid TCG listing metadata — skipping.",
                         card_name, card_echo['inventory_id'])
+                    audit_rows.append(_tcg_audit_row(
+                        card_echo, card_name=card_name,
+                        stage="mapping_note",
+                        reason="Existing note is not valid TCG listing metadata and create_missing_notes is disabled",
+                        set_code=card_meta.get("set_code", ""),
+                    ))
                     continue
                 note_id_for_update = note_id
                 tcg_mp_log.info(
@@ -710,6 +825,8 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
                     card_name, card_echo['inventory_id'])
 
         tcg_mp_card_id = 0
+        match_failure_stage = "tcg_mp_search"
+        match_failure_reason = "TCG Marketplace search returned no candidates"
         for item in search_results:
             tcg_mp_log.info("Attempting to resolve TCG MP print id for card: {0}".format(card_name))
             try:
@@ -720,6 +837,10 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
                 tcg_mp_print_id = getattr(card, "card_id", None)
                 card_set, card_collector_number = _split_tcg_mp_card_id(tcg_mp_print_id)
                 if not card_set or not card_collector_number:
+                    match_failure_stage = "tcg_mp_product"
+                    match_failure_reason = (
+                        f"TCG Marketplace card_id has no set/collector number: {tcg_mp_print_id}"
+                    )
                     tcg_mp_log.warning(
                         "TCG MP card_id does not contain set/collector number. card=%s card_id=%s",
                         card_name, tcg_mp_print_id)
@@ -736,7 +857,9 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
                 tcg_mp_log.info("Found GUID: {0} for card: {1}".format(guid, card_name))
                 """
 
-            except Exception:
+            except Exception as exc:
+                match_failure_stage = "tcg_mp_product"
+                match_failure_reason = f"{type(exc).__name__}: {exc}"
                 tcg_mp_log.exception(
                     "Could not resolve TCG MP print id for card=%s product_id=%s",
                     card_name, tcg_mp_card_id)
@@ -749,6 +872,8 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
                 card_collector_number,
             )
             if not scryfall_card:
+                match_failure_stage = "scryfall_match"
+                match_failure_reason = f"No exact set/collector match for {card_set}/{card_collector_number}"
                 tcg_mp_log.warning(
                     "Scryfall unable to get exact set/collector match for %s: %s/%s",
                     card_name, card_set, card_collector_number)
@@ -758,6 +883,11 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
             scryfall_card_tcg_id = _int_value(scryfall_card.get('tcgplayer_id'), None)
             echo_tcg_id = _int_value(card_meta.get('tcgplayer_id'), None)
             if scryfall_card_tcg_id and echo_tcg_id and scryfall_card_tcg_id != echo_tcg_id:
+                match_failure_stage = "scryfall_match"
+                match_failure_reason = (
+                    "Scryfall tcgplayer_id does not match EchoMTG "
+                    f"(scryfall={scryfall_card_tcg_id}, echo={echo_tcg_id})"
+                )
                 tcg_mp_log.warning(
                     "Scryfall set/collector match has different tcgplayer_id for %s: "
                     "scryfall=%s echo=%s set=%s collector=%s",
@@ -769,12 +899,24 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
 
         if not match_found:
             tcg_mp_log.warning("No match found for card: {0}".format(card_name))
+            audit_rows.append(_tcg_audit_row(
+                card_echo, card_name=card_name,
+                stage=match_failure_stage,
+                reason=match_failure_reason,
+                set_code=card_meta.get("set_code", ""),
+            ))
             continue
 
         if not guid:
             # Defensive: a matched card should always carry a Scryfall GUID, but
             # never persist a note with scryfall_guid=None — it breaks later lookups.
             tcg_mp_log.warning("No scryfall guid resolved for %s — skipping note.", card_name)
+            audit_rows.append(_tcg_audit_row(
+                card_echo, card_name=card_name,
+                stage="scryfall_guid",
+                reason="Matched Scryfall card has no GUID",
+                set_code=card_meta.get("set_code", ""),
+            ))
             continue
 
         tcg_mp_log.info("Creating json information as note for {0}".format(card_name))
@@ -848,6 +990,12 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
             tcg_mp_log.warning("Error creating note: {0}".format(error))
+            audit_rows.append(_tcg_audit_row(
+                card_echo, card_name=card_name,
+                stage="mapping_note_write",
+                reason=error,
+                set_code=card_meta.get("set_code", ""),
+            ))
             continue
 
     # endregion
@@ -857,6 +1005,11 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None, **k
     # update_tcg_listings_prices run flips it back on.
     if force_generate:
         api_service__tcg_mp_merchant.set_listing_status(1)
+
+    _write_tcg_audit_csv(
+        generate_tcg_mappings.__name__, audit_rows,
+        output_csv=output_csv, output_dir=audit_output_dir,
+    )
 
     return "SUCCESS"
 
@@ -918,14 +1071,22 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         try:
             card_name = card_meta["name_clean"]
             rep_note = json.loads(api_notes.get_note(rep["note_id"])["note"]["note"])
-        except Exception:
+        except Exception as exc:
             _log_worker_generate_tcg_listings.warning(f"Skipping {card_name}: invalid note")
-            return {"status": "skipped", "card": card_name}
+            return {
+                "status": "skipped", "card": card_name,
+                "stage": "listing_note", "reason": f"Invalid listing metadata note: {exc}",
+                "set_code": card_meta.get("set_code", ""),
+            }
 
         product_id = rep_note.get("tcg_mp_card_id", 0)
         if not product_id:
             _log_worker_generate_tcg_listings.warning(f"Skipping {card_name}: no tcg_mp_card_id mapping")
-            return {"status": "skipped", "card": card_name}
+            return {
+                "status": "skipped", "card": card_name,
+                "stage": "listing_mapping", "reason": "No tcg_mp_card_id mapping",
+                "set_code": card_meta.get("set_code", ""),
+            }
 
         language = _language_value(rep, default_language) or "EN"
         condition = _condition_value(rep, "NM") or "NM"
@@ -1047,6 +1208,7 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         # Stamp the resolved listing id + price into every copy's note (self-heal).
         time.sleep(1)
         notes_updated = 0
+        audit_failures = []
         for c in variant_copies:
             try:
                 n = note_cache.get(c.get("note_id")) or _parse_listing_note_payload(
@@ -1064,9 +1226,16 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
             try:
                 api_notes.update_note(c["note_id"], json.dumps(n))
                 notes_updated += 1
-            except Exception:
+            except Exception as exc:
                 _log_worker_generate_tcg_listings.exception(
                     f"Failed to stamp note for {card_name} copy {c.get('inventory_id')}")
+                audit_failures.append({
+                    "card": c,
+                    "card_name": card_name,
+                    "stage": "listing_note_write",
+                    "reason": f"{type(exc).__name__}: {exc}",
+                    "set_code": card_meta.get("set_code", ""),
+                })
 
         return {
             "status": "ok",
@@ -1078,11 +1247,15 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
             "reserved_quantity": max(0, locals().get("total_quantity", quantity) - quantity),
             "notes_updated": notes_updated,
             "duplicate_listing_ids": duplicate_listing_ids,
+            "audit_failures": audit_failures,
         }
 
     except Exception as e:
         _log_worker_generate_tcg_listings.exception("Unhandled worker error")
-        return {"card": card_name, "status": "error", "error": str(e)}
+        return {
+            "card": card_name, "status": "error", "error": str(e),
+            "stage": "listing_generation",
+        }
 
 
 def _worker_fetch_note_for_listing(task: dict):
@@ -1131,7 +1304,8 @@ def _filter_cards_needing_listing(cards: list, cfg_id__echo_mtg: str, worker_cou
 @log_result()
 @feed()
 @SPROUT.task()
-def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs):
+def generate_tcg_listings(worker_count=4, limit: Optional[int] = None,
+                          output_csv=True, audit_output_dir=None, **kwargs):
     """../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
     cfg_id__tcg_mp = kwargs.pop("cfg_id__tcg_mp", "TCG_MP")
     cfg_id__echo_mtg = kwargs.pop("cfg_id__echo_mtg", "ECHO_MTG")
@@ -1162,6 +1336,10 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
     if not cards_echo:
         tcg_mp_log.info("No tradable cards found.")
         api_merchant.set_listing_status(1)
+        _write_tcg_audit_csv(
+            generate_tcg_listings.__name__, [],
+            output_csv=output_csv, output_dir=audit_output_dir,
+        )
         return _purchase_workflow_result(
             "generate_tcg_listings", "No tradable cards required listing review.",
             relevant=False, variants=0,
@@ -1170,9 +1348,22 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
     cards_echo.reverse()
 
     cards_to_list = _filter_cards_needing_listing(cards_echo, cfg_id__echo_mtg, worker_count or min(4, psutil.cpu_count()))
+    cards_to_list_ids = {card.get("inventory_id") for card in cards_to_list}
+    audit_rows = [
+        _tcg_audit_row(
+            card,
+            stage="listing_prefilter",
+            reason="Card does not need a new listing or its mapping note could not be read",
+        )
+        for card in cards_echo if card.get("inventory_id") not in cards_to_list_ids
+    ]
     if not cards_to_list:
         tcg_mp_log.info(f"0 of {len(cards_echo)} cards need a new listing.")
         api_merchant.set_listing_status(1)
+        _write_tcg_audit_csv(
+            generate_tcg_listings.__name__, audit_rows,
+            output_csv=output_csv, output_dir=audit_output_dir,
+        )
         return _purchase_workflow_result(
             "generate_tcg_listings",
             f"No listing changes were needed across {len(cards_echo)} tradable cards.",
@@ -1215,6 +1406,11 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None, **kwargs)
 
         mp_client.execute_tasks(_worker_generate_tcg_listings, timeout_secs=60 * 120)
         results = mp_client.get_tasks_output()
+    audit_rows.extend(_audit_worker_results(results, tasks_generate, stage="listing_generation"))
+    _write_tcg_audit_csv(
+        generate_tcg_listings.__name__, audit_rows,
+        output_csv=output_csv, output_dir=audit_output_dir,
+    )
     log_mp_summary(
         results,
         title="TCG listing generation",
@@ -1389,9 +1585,13 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.3 
             time.sleep(1)
             json_note = json.loads(note["note"]["note"])
             json_note["function"] = update_tcg_listings_prices.__name__
-        except Exception:
+        except Exception as exc:
             _log_worker_generate_tcg_listings.warning(f"Skipping {card_name}: invalid note")
-            return {"status": "skipped", "card": card_name}
+            return {
+                "status": "skipped", "card": card_name,
+                "stage": "pricing_note", "reason": f"Invalid listing metadata note: {exc}",
+                "set_code": card_meta.get("set_code", "") if "card_meta" in locals() else "",
+            }
 
         if card_echo['foil']:
             base_price = card_meta['foil_price']
@@ -1437,6 +1637,7 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.3 
         quantity = 0
         duplicate_listing_ids = []
         note_cache = {}
+        audit_failures = []
         try:
             time.sleep(2)
             existing = api_service__search.search_card(card_echo["emid"], tradable_only=1) or []
@@ -1499,10 +1700,17 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.3 
                             api_publish, live_listings, listing_id
                         )
                     updated = True
-        except Exception:
+        except Exception as exc:
             _log_worker_generate_tcg_listings.exception(f"Failed to update listing for {card_name}")
             updated = False
             matching = [card_echo]
+            audit_failures.append({
+                "card": card_echo,
+                "card_name": card_name,
+                "stage": "listing_price_update",
+                "reason": f"{type(exc).__name__}: {exc}",
+                "set_code": card_meta.get("set_code", ""),
+            })
 
         # Stamp the (possibly reset) listing id + new price into EVERY copy's note of
         # this variant — so all copies stay consistent and a vanished listing is reset
@@ -1528,9 +1736,16 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.3 
                     payload["function"] = update_tcg_listings_prices.__name__
                 api_notes.update_note(note_id, json.dumps(payload))
                 notes_updated += 1
-            except Exception:
+            except Exception as exc:
                 _log_worker_generate_tcg_listings.exception(
                     f"Failed to stamp note for {card_name} copy {c.get('inventory_id')}")
+                audit_failures.append({
+                    "card": c,
+                    "card_name": card_name,
+                    "stage": "pricing_note_write",
+                    "reason": f"{type(exc).__name__}: {exc}",
+                    "set_code": card_meta.get("set_code", ""),
+                })
 
         return {
             "status": "ok",
@@ -1542,17 +1757,22 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.3 
             "reserved_quantity": max(0, locals().get("total_quantity", quantity) - quantity),
             "notes_updated": notes_updated,
             "duplicate_listing_ids": duplicate_listing_ids,
+            "audit_failures": audit_failures,
         }
 
     except Exception as e:
         _log_worker_generate_tcg_listings.exception("Unhandled worker error")
-        return {"card": card_name, "status": "error", "error": str(e)}
+        return {
+            "card": card_name, "status": "error", "error": str(e),
+            "stage": "listing_price_update",
+        }
 
 
 @log_result()
 @feed()
 @SPROUT.task()
-def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kwargs):
+def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None,
+                               output_csv=True, audit_output_dir=None, **kwargs):
     """../diagrams/tcg_mp.drawio/TCGGenerate Mappings Job"""
     cfg_id__tcg_mp = kwargs.get("cfg_id__tcg_mp", "TCG_MP")
     cfg_id__echo_mtg = kwargs.get("cfg_id__echo_mtg", "ECHO_MTG")
@@ -1580,6 +1800,10 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
     if not cards_echo:
         tcg_mp_log.info("No tradable cards found.")
         api_service__tcg_mp_merchant.set_listing_status(1)
+        _write_tcg_audit_csv(
+            update_tcg_listings_prices.__name__, [],
+            output_csv=output_csv, output_dir=audit_output_dir,
+        )
         return _purchase_workflow_result(
             "update_tcg_listings_prices", "No tradable cards required listing updates.",
             relevant=False, variants=0,
@@ -1595,11 +1819,23 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
     # Only noted cards enter the update pipeline. The worker validates the JSON TCG
     # metadata before mutating anything, and listable quantity is counted from valid
     # metadata notes only.
+    audit_rows = [
+        _tcg_audit_row(
+            card,
+            stage="pricing_note",
+            reason="EchoMTG card has no listing metadata note",
+        )
+        for card in cards_echo if not card.get("note_id")
+    ]
     cards_echo = [card for card in cards_echo if card.get("note_id")]
     variant_groups = _group_by_variant(cards_echo)
     if not variant_groups:
         tcg_mp_log.info("No tradable cards with listing metadata notes found.")
         api_service__tcg_mp_merchant.set_listing_status(1)
+        _write_tcg_audit_csv(
+            update_tcg_listings_prices.__name__, audit_rows,
+            output_csv=output_csv, output_dir=audit_output_dir,
+        )
         return _purchase_workflow_result(
             "update_tcg_listings_prices",
             "No tradable cards with listing metadata required updates.",
@@ -1634,6 +1870,11 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None, **kw
 
     mp_client.execute_tasks(_worker_update_tcg_listings_prices, timeout_secs=60 * 120)
     results = mp_client.get_tasks_output()
+    audit_rows.extend(_audit_worker_results(results, tasks_update, stage="listing_price_update"))
+    _write_tcg_audit_csv(
+        update_tcg_listings_prices.__name__, audit_rows,
+        output_csv=output_csv, output_dir=audit_output_dir,
+    )
     api_service__tcg_mp_merchant.set_listing_status(1)
     log_mp_summary(
         results,

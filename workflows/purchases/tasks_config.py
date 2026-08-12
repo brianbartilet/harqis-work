@@ -45,6 +45,7 @@ WORKFLOW_PURCHASES = {
             "cfg_id__echo_mtg_fe": "ECHO_MTG_FE",
             "cfg_id__scryfall": "SCRYFALL",
             "create_missing_notes": True,
+            "output_csv": True,
             "limit": 100
         },
         "options": {
@@ -68,6 +69,7 @@ WORKFLOW_PURCHASES = {
             "cfg_id__echo_mtg": "ECHO_MTG",
             "cfg_id__echo_mtg_fe": "ECHO_MTG_FE",
             "language": "EN",   # default; per-card EchoMTG language wins when present
+            "output_csv": True,
             # "limit": 100
         },
         "options": {
@@ -111,7 +113,7 @@ WORKFLOW_PURCHASES = {
                 "last_x_days": 60,
                 "source": "hybrid",
             },
-            "update_kwargs": {},
+            "update_kwargs": {"output_csv": True},
         },
         "options": {
             "queue": WorkflowQueue.TCG,

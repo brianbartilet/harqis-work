@@ -1,3 +1,5 @@
+import csv
+import inspect
 import json
 from datetime import datetime
 from types import SimpleNamespace
@@ -424,6 +426,79 @@ def test__generate_tcg_mappings_creates_missing_metadata_notes_by_default():
     assert DEFAULT_CREATE_MISSING_MAPPING_NOTES is True
 
 
+def test__tcg_tasks_enable_csv_audits_by_default():
+    for task in (generate_tcg_mappings, generate_tcg_listings, update_tcg_listings_prices):
+        assert inspect.signature(task).parameters["output_csv"].default is True
+
+
+def test__write_tcg_audit_csv_uses_shared_schema_and_preserves_same_minute_runs(tmp_path):
+    run_at = datetime(2026, 8, 12, 14, 5)
+    rows = [tcg_mp_selling_module._tcg_audit_row(
+        {"inventory_id": "inv-1", "emid": "em-1"},
+        card_name="Test Card",
+        stage="scryfall_match",
+        reason="No exact set/collector match",
+        set_code="BLB",
+        timestamp=run_at,
+    )]
+
+    first = tcg_mp_selling_module._write_tcg_audit_csv(
+        "generate_tcg_mappings", rows, output_dir=tmp_path, run_at=run_at,
+    )
+    second = tcg_mp_selling_module._write_tcg_audit_csv(
+        "generate_tcg_mappings", [], output_dir=tmp_path, run_at=run_at,
+    )
+
+    assert first.name == "generate_tcg_mappings-12-08-2026-14-05.csv"
+    assert second.name == "generate_tcg_mappings-12-08-2026-14-05-2.csv"
+    with first.open(encoding="utf-8-sig", newline="") as csv_file:
+        reader = csv.DictReader(csv_file)
+        assert reader.fieldnames == list(tcg_mp_selling_module.TCG_AUDIT_COLUMNS)
+        assert list(reader) == [{
+            "inventory_id": "inv-1",
+            "emid": "em-1",
+            "card_name": "Test Card",
+            "stage": "scryfall_match",
+            "reason": "No exact set/collector match",
+            "set_code": "BLB",
+            "timestamp": "2026-08-12T14:05:00",
+        }]
+
+
+def test__write_tcg_audit_csv_can_be_disabled(tmp_path):
+    result = tcg_mp_selling_module._write_tcg_audit_csv(
+        "generate_tcg_mappings", [], output_csv=False, output_dir=tmp_path,
+    )
+
+    assert result is None
+    assert list(tmp_path.iterdir()) == []
+
+
+def test__audit_worker_results_collects_skips_errors_and_note_failures():
+    tasks = [{"card_echo": {"inventory_id": "inv-1", "emid": "em-1"}}]
+    results = [{
+        "status": "skipped",
+        "card": "Test Card",
+        "stage": "pricing_note",
+        "reason": "Invalid note",
+        "audit_failures": [{
+            "card": {"inventory_id": "inv-2", "emid": "em-1"},
+            "card_name": "Test Card",
+            "stage": "pricing_note_write",
+            "reason": "API rejected note",
+        }],
+    }]
+
+    rows = tcg_mp_selling_module._audit_worker_results(
+        results, tasks, stage="listing_price_update",
+    )
+
+    assert [(row["inventory_id"], row["stage"], row["reason"]) for row in rows] == [
+        ("inv-1", "pricing_note", "Invalid note"),
+        ("inv-2", "pricing_note_write", "API rejected note"),
+    ]
+
+
 def test__find_scryfall_card_by_set_collector_prefers_english_exact_match():
     cards = {
         "ja-card": {
@@ -548,6 +623,55 @@ def test__generate_tcg_mappings_creates_note_for_note_less_card_by_default(monke
     assert note_payload["tcg_mp_card_id"] == 222
     assert note_payload["tcg_mp_listing_id"] == 0
     assert note_payload["function"] == "generate_tcg_mappings"
+
+
+def test__generate_tcg_mappings_collects_metadata_failures(monkeypatch):
+    written_rows = []
+
+    class _ConfigManager:
+        def get(self, _cfg_id):
+            return SimpleNamespace(app_data={"path_folder_static_file": "unused"})
+
+    class _EchoInventory:
+        def __init__(self, _config):
+            pass
+
+        def get_collection(self, tradable_only=0):
+            return [{"inventory_id": "inv-1", "emid": "em-1"}]
+
+    class _EchoCardItem:
+        def __init__(self, _config):
+            pass
+
+        def get_card_meta(self, _emid):
+            raise RuntimeError("metadata unavailable")
+
+    class _NoOpService:
+        def __init__(self, _config):
+            self.config = _config
+
+    monkeypatch.setattr(tcg_mp_selling_module, "CONFIG_MANAGER", _ConfigManager())
+    monkeypatch.setattr(tcg_mp_selling_module, "ApiServiceEchoMTGInventory", _EchoInventory)
+    monkeypatch.setattr(tcg_mp_selling_module, "ApiServiceEchoMTGNotes", _NoOpService)
+    monkeypatch.setattr(tcg_mp_selling_module, "ApiServiceEchoMTGCardItem", _EchoCardItem)
+    monkeypatch.setattr(tcg_mp_selling_module, "ApiServiceTcgMpProducts", _NoOpService)
+    monkeypatch.setattr(tcg_mp_selling_module, "ApiServiceTcgMpMerchant", _NoOpService)
+    monkeypatch.setattr(tcg_mp_selling_module, "ApiServiceScryfallCards", _NoOpService)
+    monkeypatch.setattr(tcg_mp_selling_module, "load_scryfall_bulk_data", lambda _path: {})
+    monkeypatch.setattr(
+        tcg_mp_selling_module,
+        "_write_tcg_audit_csv",
+        lambda _function_name, rows, **_kwargs: written_rows.extend(rows),
+    )
+
+    result = tcg_mp_selling_module.generate_tcg_mappings()
+
+    assert result == "SUCCESS"
+    assert len(written_rows) == 1
+    assert written_rows[0]["inventory_id"] == "inv-1"
+    assert written_rows[0]["emid"] == "em-1"
+    assert written_rows[0]["stage"] == "echo_metadata"
+    assert written_rows[0]["reason"] == "RuntimeError: metadata unavailable"
 
 
 def test__resolve_config_placeholder_uses_environment(monkeypatch):

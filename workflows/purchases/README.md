@@ -295,6 +295,21 @@ The note contains the workflow metadata used by later steps:
 A positive `tcg_mp_listing_id` means "this EchoMTG copy is tied to an existing
 marketplace listing".
 
+#### Per-run skipped/failed card audits
+
+`generate_tcg_mappings`, `generate_tcg_listings`, and
+`update_tcg_listings_prices` accept `output_csv=True` by default. Each run writes
+a CSV under `logs/tcg-mp-audit/` named
+`<task>-DD-MM-YYYY-HH-MM.csv`. Header-only files are retained for clean runs;
+same-minute collisions receive a numeric suffix instead of overwriting an earlier
+run. Pass `output_csv=False` to disable the artifact for an ad-hoc invocation.
+
+The shared columns are `inventory_id`, `emid`, `card_name`, `stage`, `reason`,
+`set_code`, and `timestamp`. Mapping records include cards skipped because a valid
+mapping already exists as well as metadata, marketplace, Scryfall, and note-write
+failures. Listing tasks include pre-filtered cards, explicit worker skips/errors,
+and per-copy note-write failures.
+
 ### 3. Create Missing TCG Marketplace Listings
 
 `generate_tcg_listings` runs daily at `01:00`.
