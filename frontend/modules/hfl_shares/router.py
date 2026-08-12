@@ -34,6 +34,7 @@ from modules.hfl_corpus.corpus import (
 )
 from modules.hfl_corpus.remote import RemoteCorpusClient, RemoteCorpusError
 from modules.manifesto.service import load_manifesto
+from modules.profile.store import get_profile_store
 from modules.hfl_shares.agent import AgentUnavailable, answer_question
 from modules.hfl_shares.audit import record_share_audit
 from modules.hfl_shares.models import (
@@ -82,6 +83,14 @@ guest_router = APIRouter(prefix="/share")
 _OWNER_RECIPE_PAGE_SIZE = 5
 _OWNER_SHARE_PAGE_SIZE = 5
 _OWNER_SHARE_FORM_MAX_FIELDS = 10_000
+
+
+def _profile():
+    return get_profile_store().get()
+
+
+def _suggested_prompts(snapshot: ScopeSnapshot) -> tuple[str, ...]:
+    return suggested_prompts(snapshot, _profile().display_name)
 
 
 def _sharing_documents(
@@ -409,7 +418,7 @@ def _owner_context(
         preview=preview,
         preview_answer=preview_answer,
         preview_question=preview_question,
-        suggested_prompts=suggested_prompts(preview) if preview else (),
+        suggested_prompts=_suggested_prompts(preview) if preview else (),
         error=error or corpus_error,
         success=success,
         csrf=make_csrf_token(user),
@@ -572,7 +581,7 @@ async def _preview_response(
                 "preview": preview,
                 "preview_question": question,
                 "preview_answer": answer,
-                "suggested_prompts": suggested_prompts(preview),
+                "suggested_prompts": _suggested_prompts(preview),
                 "preview_error": "",
             },
         )
@@ -1346,6 +1355,7 @@ def _guest_context(
         for message in store.list_chat_messages(session_id, grant.id)
     ]
     recipient = grant.snapshot.recipient.strip() or "there"
+    owner_profile = _profile()
     reference_base = (
         f"/sharing/shares/{grant.id}/preview/references"
         if owner_preview
@@ -1375,13 +1385,18 @@ def _guest_context(
         "unavailable_selected_tags": unavailable_selected_tags,
         "messages": messages,
         "error": error,
-        "suggested_prompts": suggested_prompts(grant.snapshot),
+        "suggested_prompts": suggested_prompts(
+            grant.snapshot,
+            owner_profile.display_name,
+        ),
         "expires_at_display": _expiry_display(grant),
         "content_refreshed_at": _format_utc(grant.snapshot.created_at),
         "recipient": recipient,
         "recipient_initial": recipient[0].upper(),
         "share_recipient": grant.snapshot.recipient.strip(),
         "owner_preview": owner_preview,
+        "owner_profile": owner_profile,
+        "owner_name": owner_profile.display_name,
     }
 
 

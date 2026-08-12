@@ -303,22 +303,26 @@ def build_snapshot(
     )
 
 
-def suggested_prompts(snapshot: ScopeSnapshot) -> tuple[str, ...]:
+def suggested_prompts(
+    snapshot: ScopeSnapshot,
+    owner_name: str = "P",
+) -> tuple[str, ...]:
     if not snapshot.entries:
         return ()
+    owner = owner_name.strip() or "P"
     suggestions = [
-        "What is Brian currently working on?",
-        "Can you curate interview questions for me from Brian's work?",
+        f"What is {owner} currently working on?",
+        f"Can you curate interview questions for me from {owner}'s work?",
     ]
     travel_terms = {
         "travel", "trip", "japan", "place", "places", "location", "holiday"
     }
     if travel_terms.intersection(tag.casefold() for tag in snapshot.tag_counts):
-        suggestions.append("Show me places Brian visited over the past year.")
+        suggestions.append(f"Show me places {owner} visited over the past year.")
     for source in list(snapshot.source_counts)[:1]:
-        suggestions.append(f"What stands out from Brian's {source} activity?")
+        suggestions.append(f"What stands out from {owner}'s {source} activity?")
     for tag in list(snapshot.tag_counts)[:1]:
-        suggestions.append(f"What does #{tag} reveal about Brian's work?")
+        suggestions.append(f"What does #{tag} reveal about {owner}'s work?")
     return tuple(dict.fromkeys(suggestions))[:5]
 
 

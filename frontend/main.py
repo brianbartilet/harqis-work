@@ -7,6 +7,7 @@ GET  /                              → redirect to /home
 GET  /login                         → login page
 POST /login                         → authenticate and set session cookie
 GET  /logout                        → clear session, redirect to /login
+GET  /profile                       → edit the global owner profile
 GET  /home                          → module overview
 GET  /manifesto                     → manifesto and guiding principles
 GET  /workflows                     → workflow task dashboard
@@ -45,6 +46,7 @@ from modules.hfl_shares.router import guest_router as hfl_share_guest_router
 from modules.hfl_shares.router import owner_router as hfl_share_owner_router
 from modules.home.router import router as home_router
 from modules.manifesto.router import router as manifesto_router
+from modules.profile.router import router as profile_router
 from modules.workflows.router import router as workflows_router
 from web import require_user as _require_auth, templates
 
@@ -64,6 +66,7 @@ app.include_router(hfl_corpus_api_router)
 app.include_router(hfl_corpus_router)
 app.include_router(hfl_share_owner_router)
 app.include_router(hfl_share_guest_router)
+app.include_router(profile_router)
 
 
 # ── Security headers ──────────────────────────────────────────────────────────

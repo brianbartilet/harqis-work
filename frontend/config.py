@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     # Trust Cloudflare Access identity headers only when the origin is locked
     # down so clients cannot reach it without the authenticated proxy.
     hfl_share_trust_proxy_identity: bool = False
+    profile_store_path: str = str(
+        _REPO_ROOT / ".harqis-data" / "profile.sqlite3"
+    )
 
     model_config = SettingsConfigDict(
         env_file=[str(_APPS_ENV), str(_LOCAL_ENV)],

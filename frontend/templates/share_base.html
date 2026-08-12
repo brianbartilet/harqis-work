@@ -81,6 +81,25 @@
     .manifesto-content th, .manifesto-content td { min-width:7rem; padding:.35rem .5rem; text-align:left; vertical-align:top; word-break:normal; }
     .manifesto-content pre { white-space:pre-wrap; word-break:break-word; }
     .manifesto-loading { color:#64748b; padding:28px 0; text-align:center; }
+    .contact-dialog { width:min(620px,calc(100% - 28px)); max-height:calc(100dvh - 28px); margin:auto; overflow:hidden; border:1px solid #334155; border-radius:18px; background:#0b1221; color:#e2e8f0; padding:0; box-shadow:0 28px 90px rgba(0,0,0,.68); }
+    .contact-dialog::backdrop { background:rgba(2,6,23,.82); backdrop-filter:blur(4px); }
+    .contact-dialog-card { display:grid; max-height:calc(100dvh - 28px); grid-template-rows:auto minmax(0,1fr); overflow:hidden; }
+    .contact-dialog-head { display:flex; align-items:center; justify-content:space-between; gap:14px; border-bottom:1px solid #1e293b; padding:14px 16px; }
+    .contact-dialog-head h2 { margin:0; font-size:1rem; }
+    .contact-dialog-close { display:grid; width:34px; height:34px; flex:0 0 34px; place-items:center; border-radius:8px; background:#172033; color:#cbd5e1; padding:0; }
+    .contact-dialog-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:22px; -webkit-overflow-scrolling:touch; }
+    .contact-identity { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:15px; }
+    .contact-avatar { display:grid; width:66px; height:66px; place-items:center; overflow:hidden; border:1px solid #38bdf8; border-radius:999px; background:#172554; color:#dbeafe; font-size:1.3rem; font-weight:800; }
+    .contact-avatar img { width:100%; height:100%; object-fit:cover; }
+    .contact-identity h3 { margin:0; font-size:1.2rem; }
+    .contact-bio { margin:8px 0 0; color:#94a3b8; font-size:.86rem; }
+    .contact-list { display:grid; gap:1px; margin:20px 0 0; border:1px solid #1e293b; border-radius:12px; overflow:hidden; background:#1e293b; }
+    .contact-row { display:grid; grid-template-columns:92px minmax(0,1fr); gap:12px; background:#0f172a; padding:11px 13px; }
+    .contact-row dt { color:#64748b; font-size:.72rem; font-weight:650; text-transform:uppercase; letter-spacing:.06em; }
+    .contact-row dd { min-width:0; margin:0; color:#cbd5e1; font-size:.82rem; overflow-wrap:anywhere; }
+    .contact-links { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
+    .contact-link { display:inline-flex; border:1px solid #164e63; border-radius:999px; background:#082f49; color:#a5f3fc; font-size:.76rem; font-weight:650; padding:7px 10px; text-decoration:none; }
+    .contact-empty { margin:18px 0 0; border:1px dashed #334155; border-radius:10px; color:#94a3b8; font-size:.82rem; padding:14px; }
 
     .share-main { width: min(1500px, calc(100% - 24px)); height: calc(100dvh - 56px); padding: 12px 0; }
     .share-workspace { --drawer-width:clamp(300px,25vw,480px); position:relative; display:grid; height:100%; min-height:0; grid-template-columns:var(--drawer-width) minmax(0,1fr); overflow:hidden; border:1px solid #1e293b; border-radius:16px; background:#0b1221; box-shadow:0 20px 70px rgba(0,0,0,.3); }

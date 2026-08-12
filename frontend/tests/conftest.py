@@ -27,6 +27,22 @@ os.environ["HFL_SHARE_STORE_PATH"] = str(
     Path(tempfile.gettempdir())
     / f"harqis-frontend-shares-{os.getpid()}.sqlite3"
 )
+os.environ["PROFILE_STORE_PATH"] = str(
+    Path(tempfile.gettempdir())
+    / f"harqis-frontend-profile-{os.getpid()}.sqlite3"
+)
+
+
+@pytest.fixture(autouse=True)
+def _empty_owner_profile():
+    from modules.profile.store import get_profile_store
+
+    store = get_profile_store()
+    with store._connect() as connection:
+        connection.execute("DELETE FROM owner_profile")
+    yield
+    with store._connect() as connection:
+        connection.execute("DELETE FROM owner_profile")
 
 
 @pytest.fixture

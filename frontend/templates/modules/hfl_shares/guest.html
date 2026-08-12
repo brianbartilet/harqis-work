@@ -1,6 +1,7 @@
 {% extends "share_base.html" %}
 {% block title %}{{ grant.name }} · HARQIS{% endblock %}
 {% block header_actions %}
+<button class="header-action" type="button" data-contact-open>Contact</button>
 <button class="header-action" type="button" data-manifesto-open
         data-manifesto-url="{% if owner_preview %}/sharing/shares/{{ grant.id }}/preview/manifesto{% else %}/share/session/manifesto{% endif %}">
   Manifesto
@@ -87,7 +88,8 @@
         <div class="chat-intro">
           <p class="eyebrow">A little context, chosen for you</p>
           <h2>Hello, {{ recipient }}! 👋</h2>
-          <p class="muted">Ask about the work, the detours, the places, or the ideas connecting them. Every answer stays grounded in the moments Brian chose to share, with evidence you can explore.</p>
+          <p class="muted">You’re exploring {{ owner_name }}’s shared context.{% if owner_profile.bio %} {{ owner_profile.bio }}{% endif %}</p>
+          <p class="muted">Ask about the work, the detours, the places, or the ideas connecting them. Every answer stays grounded in the moments {{ owner_name }} chose to share, with evidence you can explore.</p>
           <p class="audit-note">To keep this experience trustworthy, questions and answers are recorded in the sharing audit.</p>
         </div>
 
@@ -119,7 +121,7 @@
       <div class="compose-inner">
         <label for="question">Your question</label>
         <div class="compose-row">
-          <textarea id="question" name="question" maxlength="2000" rows="2" required placeholder="Ask Brian’s shared context…"></textarea>
+          <textarea id="question" name="question" maxlength="2000" rows="2" required placeholder="Ask {{ owner_name }}’s shared context…"></textarea>
           <button data-chat-submit>Ask</button>
         </div>
       </div>
@@ -146,6 +148,51 @@
     </header>
     <div class="manifesto-dialog-body" data-manifesto-body>
       <p class="manifesto-loading">Loading the Manifesto…</p>
+    </div>
+  </section>
+</dialog>
+
+<dialog class="contact-dialog" data-contact-dialog aria-labelledby="shared-contact-title">
+  <section class="contact-dialog-card">
+    <header class="contact-dialog-head">
+      <div>
+        <p class="eyebrow">Profile</p>
+        <h2 id="shared-contact-title">Contact {{ owner_name }}</h2>
+      </div>
+      <button class="contact-dialog-close" type="button" data-contact-close aria-label="Close Contact">×</button>
+    </header>
+    <div class="contact-dialog-body">
+      <div class="contact-identity">
+        <div class="contact-avatar" aria-hidden="true">
+          {% if owner_profile.avatar_data_uri %}<img src="{{ owner_profile.avatar_data_uri }}" alt="">{% else %}{{ owner_profile.initial }}{% endif %}
+        </div>
+        <div>
+          <h3>{{ owner_name }}</h3>
+          {% if owner_profile.bio %}<p class="contact-bio">{{ owner_profile.bio }}</p>{% endif %}
+        </div>
+      </div>
+
+      {% if owner_profile.location or owner_profile.email or owner_profile.phone %}
+      <dl class="contact-list">
+        {% if owner_profile.location %}<div class="contact-row"><dt>Location</dt><dd>{{ owner_profile.location }}</dd></div>{% endif %}
+        {% if owner_profile.email %}<div class="contact-row"><dt>Email</dt><dd><a href="mailto:{{ owner_profile.email }}">{{ owner_profile.email }}</a></dd></div>{% endif %}
+        {% if owner_profile.phone %}<div class="contact-row"><dt>Telephone</dt><dd><a href="tel:{{ owner_profile.phone|replace(' ', '')|replace('(', '')|replace(')', '')|replace('-', '') }}">{{ owner_profile.phone }}</a></dd></div>{% endif %}
+      </dl>
+      {% endif %}
+
+      {% if owner_profile.linkedin_url or owner_profile.github_url or owner_profile.website_url or owner_profile.instagram_url %}
+      <nav class="contact-links" aria-label="Social accounts">
+        {% for url, label in [
+          (owner_profile.linkedin_url, 'LinkedIn'),
+          (owner_profile.github_url, 'GitHub'),
+          (owner_profile.website_url, 'Website'),
+          (owner_profile.instagram_url, 'Instagram')
+        ] %}
+        {% if url %}<a class="contact-link" href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ label }} ↗</a>{% endif %}
+        {% endfor %}
+      </nav>
+      {% endif %}
+      {% if not owner_profile.has_contact_details %}<p class="contact-empty">No contact details have been published yet.</p>{% endif %}
     </div>
   </section>
 </dialog>
@@ -186,6 +233,9 @@
   const manifestoDialog = document.querySelector('[data-manifesto-dialog]');
   const manifestoBody = document.querySelector('[data-manifesto-body]');
   const manifestoClose = document.querySelector('[data-manifesto-close]');
+  const contactOpen = document.querySelector('[data-contact-open]');
+  const contactDialog = document.querySelector('[data-contact-dialog]');
+  const contactClose = document.querySelector('[data-contact-close]');
   const fileViewerDialog = document.querySelector('[data-file-viewer-dialog]');
   const fileViewerTitle = document.querySelector('[data-file-viewer-title]');
   const fileViewerBody = document.querySelector('[data-file-viewer-body]');
@@ -251,6 +301,14 @@
   manifestoClose?.addEventListener('click', () => manifestoDialog?.close());
   manifestoDialog?.addEventListener('click', event => {
     if (event.target === manifestoDialog) manifestoDialog.close();
+  });
+  contactOpen?.addEventListener('click', () => {
+    contactDialog?.showModal();
+    contactClose?.focus();
+  });
+  contactClose?.addEventListener('click', () => contactDialog?.close());
+  contactDialog?.addEventListener('click', event => {
+    if (event.target === contactDialog) contactDialog.close();
   });
 
   const clearFileViewer = () => {

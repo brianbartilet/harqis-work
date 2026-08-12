@@ -1242,6 +1242,72 @@ def test_shared_manifesto_modal_uses_scoped_guest_and_owner_access(
     )
 
 
+def test_active_share_uses_live_profile_and_renders_contact_dialog(
+    authenticated_client, sharing_corpus
+):
+    from modules.profile.models import OwnerProfile
+    from modules.profile.store import get_profile_store
+
+    profile_store = get_profile_store()
+    profile_store.save(
+        OwnerProfile(
+            first_name="Sam",
+            last_name="Rivera",
+            nickname="Sami",
+            location="Singapore",
+            phone="+65 8123 4567",
+            bio="I turn lived activity into useful systems.",
+            email="sami@example.test",
+            linkedin_url="https://linkedin.com/in/sami",
+            github_url="https://github.com/sami",
+            website_url="https://sami.example.test",
+            instagram_url="https://instagram.com/sami",
+        )
+    )
+    generated = authenticated_client.post("/sharing/generate", data=_form())
+    token, pin = _generated_credentials(generated.text)
+    grant = get_share_store().list_shares()[0]
+    authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        data={"pin": pin},
+        follow_redirects=False,
+    )
+
+    first = authenticated_client.get("/share/session")
+    owner_preview = authenticated_client.get(
+        f"/sharing/shares/{grant.id}/preview"
+    )
+
+    assert first.status_code == 200
+    assert "You’re exploring Sami’s shared context." in first.text
+    assert "I turn lived activity into useful systems." in first.text
+    assert "What is Sami currently working on?" in first.text
+    assert 'placeholder="Ask Sami’s shared context…"' in first.text
+    assert 'data-contact-open>Contact</button>' in first.text
+    assert 'href="mailto:sami@example.test"' in first.text
+    assert 'href="tel:+6581234567"' in first.text
+    assert (
+        'href="https://github.com/sami" target="_blank" '
+        'rel="noopener noreferrer"' in first.text
+    )
+    assert "Contact Sami" in owner_preview.text
+
+    profile_store.save(
+        OwnerProfile(
+            nickname="Samuel",
+            bio="Now building durable knowledge tools.",
+            email="samuel@example.test",
+        )
+    )
+    updated = authenticated_client.get("/share/session")
+
+    assert "You’re exploring Samuel’s shared context." in updated.text
+    assert "Now building durable knowledge tools." in updated.text
+    assert "What is Samuel currently working on?" in updated.text
+    assert "sami@example.test" not in updated.text
+    assert 'href="mailto:samuel@example.test"' in updated.text
+
+
 def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
     authenticated_client, monkeypatch, sharing_corpus
 ):
@@ -1338,7 +1404,7 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
     assert ".chat-workspace { position:absolute; inset:0; width:auto;" in second.text
     assert ".entry-drawer { position:absolute; inset:0; z-index:30; width:auto;" in second.text
     assert "body { font-size:14px; line-height:1.45; }" in second.text
-    assert 'placeholder="Ask Brian’s shared context…"' in second.text
+    assert 'placeholder="Ask P’s shared context…"' in second.text
     assert 'action="/share/session/logout" data-close-session' in second.text
     assert ">Close session</button>" in second.text
     assert "Close this shared session? You may need to verify again to return." in second.text
