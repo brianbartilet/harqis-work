@@ -73,7 +73,7 @@
       <label class="drawer-toggle" for="shared-moments-drawer" role="button" tabindex="0" data-drawer-toggle aria-label="Toggle shared moments" aria-expanded="true">☰</label>
       <div class="workspace-heading">
         <h1>{{ grant.name }}</h1>
-        <p class="muted">{{ grant.snapshot.entries|length }} moments ingested and analyzed · {% if grant.no_expiry %}no expiry{% else %}available until {{ expires_at_display }}{% endif %}</p>
+        <p class="muted">{{ grant.snapshot.entries|length }} moments ingested and analyzed · {% if grant.live_updates %}content refreshed {{ content_refreshed_at }} · {% endif %}{% if grant.no_expiry %}no expiry{% else %}available until {{ expires_at_display }}{% endif %}</p>
       </div>
       {% if owner_preview %}
       <a class="button button-secondary logout-form" href="/sharing">Close preview</a>

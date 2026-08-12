@@ -41,6 +41,7 @@ class ShareConfiguration:
     auth_mode: str = "pin"
     allowed_email: str = ""
     references_enabled: bool = False
+    live_updates: bool = False
     ttl_seconds: int = 3600
     no_expiry: bool = False
     device_limit: int = 1
@@ -247,6 +248,8 @@ class ShareGrant:
     device_limit: int
     no_expiry: bool = False
     instant: bool = False
+    live_updates: bool = False
+    live_configuration: ShareConfiguration | None = None
     redeemed_at: str = ""
     revoked_at: str = ""
     pin_failures: int = 0

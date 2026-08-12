@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS shares (
     device_limit INTEGER NOT NULL,
     no_expiry INTEGER NOT NULL DEFAULT 0,
     instant INTEGER NOT NULL DEFAULT 0,
+    live_updates INTEGER NOT NULL DEFAULT 0,
+    live_configuration TEXT NOT NULL DEFAULT '',
     redeemed_at TEXT NOT NULL DEFAULT '',
     revoked_at TEXT NOT NULL DEFAULT '',
     pin_failures INTEGER NOT NULL DEFAULT 0
@@ -119,6 +121,16 @@ class ShareStore:
                 connection.execute(
                     "ALTER TABLE shares "
                     "ADD COLUMN instant INTEGER NOT NULL DEFAULT 0"
+                )
+            if "live_updates" not in share_columns:
+                connection.execute(
+                    "ALTER TABLE shares "
+                    "ADD COLUMN live_updates INTEGER NOT NULL DEFAULT 0"
+                )
+            if "live_configuration" not in share_columns:
+                connection.execute(
+                    "ALTER TABLE shares "
+                    "ADD COLUMN live_configuration TEXT NOT NULL DEFAULT ''"
                 )
 
     def _connect(self) -> sqlite3.Connection:
@@ -202,8 +214,7 @@ class ShareStore:
                 )
 
     @staticmethod
-    def _configuration(row: sqlite3.Row) -> ShareConfiguration:
-        payload = json.loads(row["payload"])
+    def _configuration_payload(payload: dict) -> ShareConfiguration:
         for field in ("sources", "tags", "selected_entry_ids"):
             payload[field] = tuple(payload.get(field) or [])
         if "context_prompt" not in payload:
@@ -215,7 +226,12 @@ class ShareStore:
         return ShareConfiguration(**payload)
 
     @staticmethod
+    def _configuration(row: sqlite3.Row) -> ShareConfiguration:
+        return ShareStore._configuration_payload(json.loads(row["payload"]))
+
+    @staticmethod
     def _grant(row: sqlite3.Row) -> ShareGrant:
+        live_configuration = str(row["live_configuration"] or "")
         return ShareGrant(
             id=row["id"],
             configuration_id=row["configuration_id"],
@@ -230,6 +246,12 @@ class ShareStore:
             device_limit=int(row["device_limit"]),
             no_expiry=bool(row["no_expiry"]),
             instant=bool(row["instant"]),
+            live_updates=bool(row["live_updates"]),
+            live_configuration=(
+                ShareStore._configuration_payload(json.loads(live_configuration))
+                if live_configuration
+                else None
+            ),
             redeemed_at=row["redeemed_at"],
             revoked_at=row["revoked_at"],
             pin_failures=int(row["pin_failures"]),
@@ -290,6 +312,7 @@ class ShareStore:
         ttl_seconds: int,
         no_expiry: bool = False,
         instant: bool = False,
+        live_configuration: ShareConfiguration | None = None,
         single_use: bool,
         device_limit: int,
     ) -> ShareGrant:
@@ -312,6 +335,8 @@ class ShareStore:
             device_limit=device_limit,
             no_expiry=no_expiry,
             instant=instant,
+            live_updates=live_configuration is not None,
+            live_configuration=live_configuration,
         )
         with self._lock, self._connect() as connection:
             connection.execute(
@@ -319,8 +344,9 @@ class ShareStore:
                 INSERT INTO shares(
                     id, configuration_id, name, token_hash, pin_hash,
                     auth_mode, allowed_email, snapshot, created_at, expires_at,
-                    status, single_use, device_limit, no_expiry, instant
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    status, single_use, device_limit, no_expiry, instant,
+                    live_updates, live_configuration
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     grant.id, configuration_id, name, token_hash, pin_hash,
@@ -329,9 +355,23 @@ class ShareStore:
                     grant.created_at, grant.expires_at, "active",
                     int(single_use), int(device_limit), int(no_expiry),
                     int(instant),
+                    int(live_configuration is not None),
+                    (
+                        json.dumps(live_configuration.to_record(), ensure_ascii=False)
+                        if live_configuration
+                        else ""
+                    ),
                 ),
             )
         return grant
+
+    def update_share_snapshot(self, share_id: str, snapshot: ScopeSnapshot) -> bool:
+        with self._lock, self._connect() as connection:
+            result = connection.execute(
+                "UPDATE shares SET snapshot=? WHERE id=? AND live_updates=1",
+                (json.dumps(snapshot.to_record(), ensure_ascii=False), share_id),
+            )
+        return result.rowcount > 0
 
     def list_shares(self, *, include_instant: bool = False) -> list[ShareGrant]:
         with self._connect() as connection:

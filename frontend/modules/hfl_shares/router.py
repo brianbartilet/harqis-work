@@ -36,7 +36,13 @@ from modules.hfl_corpus.remote import RemoteCorpusClient, RemoteCorpusError
 from modules.manifesto.service import load_manifesto
 from modules.hfl_shares.agent import AgentUnavailable, answer_question
 from modules.hfl_shares.audit import record_share_audit
-from modules.hfl_shares.models import ALL_SOURCES, ShareConfiguration, parse_csv
+from modules.hfl_shares.models import (
+    ALL_SOURCES,
+    ScopeSnapshot,
+    ShareConfiguration,
+    ShareGrant,
+    parse_csv,
+)
 from modules.hfl_shares.scope import (
     build_snapshot,
     suggested_prompts,
@@ -75,6 +81,7 @@ owner_router = APIRouter(prefix="/sharing")
 guest_router = APIRouter(prefix="/share")
 _OWNER_RECIPE_PAGE_SIZE = 5
 _OWNER_SHARE_PAGE_SIZE = 5
+_OWNER_SHARE_FORM_MAX_FIELDS = 10_000
 
 
 def _sharing_documents(
@@ -93,6 +100,47 @@ def _sharing_documents(
         except RemoteCorpusError as exc:
             raise ValueError(str(exc)) from exc
     return corpus_index.documents(force=force)
+
+
+def _stable_live_citations(
+    snapshot: ScopeSnapshot,
+    previous: ScopeSnapshot,
+) -> ScopeSnapshot:
+    existing = {entry.id: entry.citation for entry in previous.entries}
+    used_numbers = {
+        int(citation[1:])
+        for citation in existing.values()
+        if citation.startswith("S") and citation[1:].isdigit()
+    }
+    next_number = max(used_numbers, default=0) + 1
+    entries = []
+    for entry in snapshot.entries:
+        citation = existing.get(entry.id)
+        if not citation:
+            citation = f"S{next_number}"
+            next_number += 1
+        entries.append(replace(entry, citation=citation))
+    return replace(snapshot, entries=tuple(entries))
+
+
+def _refresh_live_grant(grant: ShareGrant) -> ShareGrant:
+    configuration = grant.live_configuration
+    if not grant.live_updates or not configuration:
+        return grant
+    try:
+        snapshot = build_snapshot(
+            configuration,
+            _sharing_documents(configuration.sources, force=True),
+            enabled_reference_ids=grant.snapshot.enabled_reference_ids,
+        )
+        if not snapshot.entries:
+            raise ValueError("A live share cannot refresh to an empty scope.")
+        snapshot = _stable_live_citations(snapshot, grant.snapshot)
+    except (TypeError, ValueError):
+        return grant
+    if not get_share_store().update_share_snapshot(grant.id, snapshot):
+        return grant
+    return replace(grant, snapshot=snapshot)
 
 
 def _sharing_catalog():
@@ -222,6 +270,7 @@ def _configuration_from_form(
         auth_mode=str(form.get("auth_mode") or "pin"),
         allowed_email=str(form.get("allowed_email") or "").strip(),
         references_enabled=form.get("references_enabled") == "on",
+        live_updates=str(form.get("freeze_snapshot") or "on") != "on",
         ttl_seconds=_expiration_seconds(form, existing),
         no_expiry=no_expiry,
         device_limit=device_limit,
@@ -428,7 +477,7 @@ async def save_configuration(request: Request):
     user, redirect = require_user(request)
     if redirect:
         return redirect
-    form = await request.form()
+    form = await request.form(max_fields=_OWNER_SHARE_FORM_MAX_FIELDS)
     _require_csrf(form, user)
     store = get_share_store()
     existing = store.get_configuration(str(form.get("configuration_id") or ""))
@@ -467,7 +516,7 @@ async def _preview_response(
     with_agent: bool,
     fragment: bool = False,
 ) -> HTMLResponse:
-    form = await request.form()
+    form = await request.form(max_fields=_OWNER_SHARE_FORM_MAX_FIELDS)
     _require_csrf(form, user)
     store = get_share_store()
     existing = store.get_configuration(str(form.get("configuration_id") or ""))
@@ -567,7 +616,7 @@ async def generate_share(request: Request):
     user, redirect = require_user(request)
     if redirect:
         return redirect
-    form = await request.form()
+    form = await request.form(max_fields=_OWNER_SHARE_FORM_MAX_FIELDS)
     _require_csrf(form, user)
     store = get_share_store()
     existing = store.get_configuration(str(form.get("configuration_id") or ""))
@@ -609,6 +658,9 @@ async def generate_share(request: Request):
             auth_mode=configuration.auth_mode,
             allowed_email=configuration.allowed_email,
             snapshot=snapshot,
+            live_configuration=(
+                configuration if configuration.live_updates else None
+            ),
             ttl_seconds=configuration.ttl_seconds,
             no_expiry=configuration.no_expiry,
             single_use=configuration.single_use,
@@ -677,6 +729,7 @@ async def preview_generated_share(
     grant = get_share_store().get_share(share_id)
     if not grant or not grant.available:
         raise HTTPException(status_code=404, detail="Active share not found.")
+    grant = _refresh_live_grant(grant)
     selected_tags = tuple(request.query_params.getlist("tag"))
     context = _guest_context(
         request,
@@ -761,6 +814,9 @@ async def generate_instant_share(request: Request, configuration_id: str):
             auth_mode="qr",
             allowed_email="",
             snapshot=snapshot,
+            live_configuration=(
+                configuration if configuration.live_updates else None
+            ),
             ttl_seconds=86_400,
             no_expiry=False,
             single_use=True,
@@ -828,6 +884,7 @@ async def preview_generated_share_chat(request: Request, share_id: str):
     grant = get_share_store().get_share(share_id)
     if not grant or not grant.available:
         return JSONResponse({"detail": "Active share not found."}, status_code=404)
+    grant = _refresh_live_grant(grant)
     form = await request.form()
     try:
         _require_csrf(form, user)
@@ -1320,6 +1377,7 @@ def _guest_context(
         "error": error,
         "suggested_prompts": suggested_prompts(grant.snapshot),
         "expires_at_display": _expiry_display(grant),
+        "content_refreshed_at": _format_utc(grant.snapshot.created_at),
         "recipient": recipient,
         "recipient_initial": recipient[0].upper(),
         "share_recipient": grant.snapshot.recipient.strip(),
@@ -1338,6 +1396,7 @@ async def guest_portal(
     if not session:
         return _unavailable(request)
     grant, session_id = session
+    grant = _refresh_live_grant(grant)
     selected_tags = tuple(request.query_params.getlist("tag"))
     context = _guest_context(
         request,
@@ -1381,6 +1440,7 @@ async def guest_chat(request: Request):
     if not session:
         return _unavailable(request)
     grant, session_id = session
+    grant = _refresh_live_grant(grant)
     form = await request.form()
     question = str(form.get("question") or "").strip()
     wants_json = (

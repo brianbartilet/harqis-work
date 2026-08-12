@@ -154,7 +154,7 @@
   <div class="page-header mb-6">
     <p class="page-header-eyebrow">Activity Corpus</p>
     <h1 class="page-header-title">Share Corpus</h1>
-    <p class="page-header-description">Recipes keep your selection rules. Each generated share captures a fresh, immutable snapshot.</p>
+    <p class="page-header-description">Recipes keep your selection rules. Generated shares can use a fixed snapshot or stay updated with the latest matching entries.</p>
   </div>
 
   {% if error %}<div class="message error">{{ error }}</div>{% endif %}
@@ -219,6 +219,14 @@
             </div>
           </details>
         </div>
+        <div class="field">
+          <input type="hidden" name="freeze_snapshot" value="off">
+          <label class="check">
+            <input type="checkbox" name="freeze_snapshot" {% if not cfg or not cfg.live_updates %}checked{% endif %}>
+            <span>Freeze generated shares at creation (recommended)</span>
+          </label>
+          <p class="mt-2 text-xs text-slate-500">Uncheck to let active links refresh from the latest entries matching these saved rules. New references remain disabled.</p>
+        </div>
         <div class="field" data-tag-filter>
           <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
             <label class="mb-0" for="tag-search">Tags <span class="font-normal text-slate-500">— entries must match all selected tags</span></label>
@@ -254,7 +262,7 @@
             </div>
             <div class="field mb-0">
               <label for="context-prompt">Background for HARQIS
-                <span class="help-icon" tabindex="0" role="img" aria-label="Optional background guidance for the agent. It cannot override snapshot-only privacy and safety rules." title="Optional background guidance for the agent. It cannot override snapshot-only privacy and safety rules.">?</span>
+                <span class="help-icon" tabindex="0" role="img" aria-label="Optional background guidance for the agent. It cannot override share-scoped privacy and safety rules." title="Optional background guidance for the agent. It cannot override share-scoped privacy and safety rules.">?</span>
               </label>
               <textarea class="control" id="context-prompt" name="context_prompt" rows="4" maxlength="4000" data-preview-filter>{{ cfg.context_prompt if cfg else '' }}</textarea>
             </div>
@@ -365,7 +373,7 @@
         {% set share = row.grant %}
         <div class="item generated-share-item">
           <div class="flex items-start justify-between gap-2"><strong class="wrap text-sm text-slate-200">{{ share.name }}</strong><span class="status-pill status-{{ row.status }}">{{ row.status }}</span></div>
-          <p class="mt-1 text-xs text-slate-500">{{ share.snapshot.entries|length }} entries · {% if share.no_expiry %}no expiry{% else %}expires {{ row.expires_at_display }}{% endif %}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ share.snapshot.entries|length }} entries · {{ "live recipe" if share.live_updates else "fixed snapshot" }} · {% if share.no_expiry %}no expiry{% else %}expires {{ row.expires_at_display }}{% endif %}</p>
           {% if share.available %}
           <div class="actions mt-2">
             <a class="btn btn-soft" href="/sharing/shares/{{ share.id }}/preview" target="_blank" rel="noopener">Preview</a>

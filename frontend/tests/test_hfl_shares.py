@@ -116,6 +116,41 @@ def _viewer_document(tmp_path: Path) -> CorpusDocument:
     )
 
 
+def _newer_document(tmp_path: Path) -> CorpusDocument:
+    source_file = tmp_path / "2026-08-12.md"
+    source_file.write_text("new corpus entry", encoding="utf-8")
+    text = (
+        "## 2026-08-12 14:00\n"
+        "Source:          notes\n"
+        "Entry ID:        hfl-share-newer\n"
+        "Moment:          Added a live recipe update\n"
+        "What happened:   Published another matching corpus entry\n"
+        "Tags:            #travel #japan\n"
+    )
+    entry = CorpusEntry(
+        anchor="hfl-entry-share-newer",
+        header="2026-08-12 14:00",
+        moment="Added a live recipe update",
+        what_happened="Published another matching corpus entry",
+        tags=("travel", "japan"),
+        source="notes",
+        text=text,
+    )
+    return CorpusDocument(
+        relative_path=source_file.name,
+        path=source_file,
+        name=source_file.name,
+        text=text,
+        created_at=datetime(2026, 8, 12),
+        updated_at=datetime(2026, 8, 12),
+        tags=entry.tags,
+        references=(),
+        excerpt=text,
+        entry_count=1,
+        entries=(entry,),
+    )
+
+
 def _configuration(**overrides) -> ShareConfiguration:
     values = {
         "id": "",
@@ -511,6 +546,121 @@ def test_saved_recipe_is_reusable_and_deleting_it_does_not_delete_share(
     assert deleted.status_code == 303
     assert get_share_store().get_configuration(configuration.id) is None
     assert get_share_store().get_share(share_id) is not None
+
+
+def test_recipe_save_accepts_more_than_one_thousand_reference_fields(
+    authenticated_client, sharing_corpus
+):
+    form = _form()
+    form["disabled_reference_ids"] = [
+        f"reference-{index}" for index in range(1_001)
+    ]
+
+    response = authenticated_client.post(
+        "/sharing/configurations",
+        data=form,
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert len(get_share_store().list_configurations()) == 1
+
+
+def test_recipe_snapshot_checkbox_precedes_tags_and_defaults_to_fixed(
+    authenticated_client, sharing_corpus
+):
+    page = authenticated_client.get("/sharing")
+
+    assert page.status_code == 200
+    assert page.text.index('name="freeze_snapshot"') < page.text.index(
+        'data-tag-filter'
+    )
+    assert re.search(r'name="freeze_snapshot"[^>]+checked', page.text)
+
+    authenticated_client.post("/sharing/configurations", data=_form())
+    saved = get_share_store().list_configurations()[0]
+
+    assert saved.live_updates is False
+
+
+def test_live_recipe_refreshes_latest_entries_using_frozen_rules(
+    authenticated_client, sharing_corpus, monkeypatch, tmp_path
+):
+    generated = authenticated_client.post(
+        "/sharing/generate",
+        data=_form(freeze_snapshot="off"),
+    )
+    grant = get_share_store().list_shares()[0]
+
+    assert generated.status_code == 200
+    assert grant.live_updates is True
+    assert grant.live_configuration is not None
+    assert grant.live_configuration.tags == ("travel",)
+    assert len(grant.snapshot.entries) == 1
+
+    newer = _newer_document(tmp_path)
+    monkeypatch.setattr(
+        "modules.hfl_shares.router.corpus_index.documents",
+        lambda force=False: (newer, sharing_corpus),
+    )
+
+    preview = authenticated_client.get(f"/sharing/shares/{grant.id}/preview")
+    refreshed = get_share_store().get_share(grant.id)
+
+    assert preview.status_code == 200
+    assert "Added a live recipe update" in preview.text
+    assert "content refreshed" in preview.text
+    assert refreshed is not None
+    assert len(refreshed.snapshot.entries) == 2
+    assert refreshed.snapshot.entries[1].citation == "S1"
+    assert refreshed.snapshot.entries[0].citation == "S2"
+
+
+def test_fixed_snapshot_does_not_refresh_latest_entries(
+    authenticated_client, sharing_corpus, monkeypatch, tmp_path
+):
+    authenticated_client.post("/sharing/generate", data=_form())
+    grant = get_share_store().list_shares()[0]
+    newer = _newer_document(tmp_path)
+    monkeypatch.setattr(
+        "modules.hfl_shares.router.corpus_index.documents",
+        lambda force=False: (newer, sharing_corpus),
+    )
+
+    preview = authenticated_client.get(f"/sharing/shares/{grant.id}/preview")
+    unchanged = get_share_store().get_share(grant.id)
+
+    assert preview.status_code == 200
+    assert "Added a live recipe update" not in preview.text
+    assert unchanged is not None
+    assert unchanged.live_updates is False
+    assert len(unchanged.snapshot.entries) == 1
+
+
+def test_live_recipe_keeps_last_snapshot_when_refresh_fails(
+    authenticated_client, sharing_corpus, monkeypatch
+):
+    authenticated_client.post(
+        "/sharing/generate",
+        data=_form(freeze_snapshot="off"),
+    )
+    grant = get_share_store().list_shares()[0]
+
+    def unavailable(*, force=False):
+        raise ValueError("Corpus temporarily unavailable")
+
+    monkeypatch.setattr(
+        "modules.hfl_shares.router.corpus_index.documents",
+        unavailable,
+    )
+
+    preview = authenticated_client.get(f"/sharing/shares/{grant.id}/preview")
+    fallback = get_share_store().get_share(grant.id)
+
+    assert preview.status_code == 200
+    assert "Planned the Japan trip" in preview.text
+    assert fallback is not None
+    assert fallback.snapshot.created_at == grant.snapshot.created_at
 
 
 def test_recipe_save_and_update_show_one_time_named_notifications(

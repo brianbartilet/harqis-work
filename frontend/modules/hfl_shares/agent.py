@@ -169,7 +169,7 @@ async def answer_question(
     history: tuple[dict[str, str], ...] = (),
     share_id: str = "",
 ) -> str:
-    """Answer strictly from the immutable snapshot, with entry citations."""
+    """Answer strictly from the resolved share context, with entry citations."""
     prompt = (question or "").strip()
     if not prompt:
         raise ValueError("A question is required.")
