@@ -4,6 +4,111 @@ A practical, locally-runnable Retrieval-Augmented-Generation stack built on top 
 
 > **Operational status (2026-06-24):** the Knowledge beat schedule is guarded rather than fully disabled. `knowledge_cross_link_report` is available for weekday reports, Confluence ingest is scheduled only when `HARQIS_KNOWLEDGE_CONFLUENCE_SPACES` is set, and scheduled LLM summaries require `HARQIS_KNOWLEDGE_REPORT_SUMMARIZE=1`. Live ingest still requires funded/configured embeddings and persistent `HARQIS_VECTOR_DB`. See [`workflows/knowledge/README.md`](../../workflows/knowledge/README.md#status--guarded-beat-schedule-enabled) for the deployment checklist.
 
+## Review note: HFL corpus applicability and follow-ups (2026-08-12)
+
+RAG is applicable to the Homework-for-Life (HFL) Markdown corpus. Its immediate
+value is **semantic recall and cited synthesis**, not search performance. The
+corpus is already served well by literal Markdown retrieval and structured
+Elasticsearch queries for exact words, dates, tags, sources, and machines. RAG
+adds value when a question uses different language from the original entry or
+needs evidence synthesized across several entries.
+
+The recommended design is **hybrid retrieval**, with Markdown remaining the
+source of truth:
+
+```text
+Question
+   |
+   +--> extract date, tag, source, and machine constraints
+   |
+   +--> Elasticsearch exact/structured search
+   |
+   +--> vector similarity search over HFL entries
+              |
+              v
+       fuse and optionally rerank results
+              |
+              v
+       5-8 best Markdown entries
+              |
+              v
+       answer with citations to the source files
+```
+
+This would support questions such as:
+
+- "When have I encountered a problem similar to this?"
+- "What recurring configuration issues have I seen?"
+- "What earlier decisions explain this implementation?"
+- "What did I learn from previous authentication failures?"
+
+### Current HFL gap
+
+HFL entries are not currently stored as first-class vectors. They have:
+
+- literal substring retrieval in `workflows/hfl/tasks/retrieve.py`;
+- structured Elasticsearch retrieval in `workflows/hfl/es_store.py`; and
+- read-only use as a live signal by the Knowledge cross-link workflow.
+
+The missing integration is an HFL ingestion adapter for the existing
+`workflows/knowledge` vector pipeline. See
+[`docs/info/HFL-CORPUS-RAG-AND-KNOWLEDGE-GRAPH.md`](../info/HFL-CORPUS-RAG-AND-KNOWLEDGE-GRAPH.md)
+for the fuller RAG-versus-knowledge-graph analysis.
+
+### Findings to resolve when this workflow is revisited
+
+1. **Operational status is inconsistent within this document.** Historical
+   sections describe the Notion, Jira, GitHub, and Google Drive jobs as active
+   nightly schedules. The current source of truth is
+   `workflows/knowledge/README.md` and `tasks_config.py`: scheduled work is
+   guarded, and broad ingestors remain parked until they have explicit scope
+   and cost controls.
+2. **The documented embedding model is stale.** References to
+   `text-embedding-004` should be replaced with the shared, environment-driven
+   embedder. Its current default is `models/gemini-embedding-001` in
+   `workflows/knowledge/embed.py`.
+3. **Model prices are inconsistent and time-sensitive.** This document quotes
+   different Haiku input prices in different sections. Pricing and the
+   per-question estimate must be revalidated against the provider before an
+   operational or budget decision; static prices should carry an explicit
+   as-of date.
+4. **Chunk IDs are stable, but not content-addressable.** An ID such as
+   `{page_id}:{chunk_idx}` is position-addressed. It overwrites a chunk at the
+   same position, but if a document shrinks, trailing chunks can remain unless
+   the ingestor deletes the document's previous rows or performs a rebuild.
+5. **Incremental ingestion is uneven.** Confluence compares stored page
+   versions. Other ingestors generally rewrite every fetched item; Jira JQL and
+   Google Drive modification filters are incremental only when configured by
+   the caller.
+6. **Privacy is provider-dependent.** The vector database is local, but corpus
+   text is sent to the configured embedding provider and retrieved excerpts are
+   sent to the answer model. "Private" therefore means locally stored and
+   narrowly disclosed, not necessarily processed entirely on-device.
+7. **Retrieval quality is not yet measured.** Before promoting HFL RAG, create
+   a fixed set of questions with expected source entries and measure recall@k.
+   Use it to choose chunking, `k`, rank fusion, and any reranker.
+
+### Recommended HFL implementation sequence
+
+1. Recursively discover active and archived Markdown files.
+2. Parse entries through the existing `HflEntry` DTO.
+3. Treat one HFL entry as the default semantic chunk and split only unusually
+   long entries.
+4. Store entry ID, date, tags, source, machine, references, content hash, and
+   Markdown path as vector metadata.
+5. Skip unchanged entries by content hash and remove vector rows for deleted or
+   shortened entries.
+6. Fuse Elasticsearch and vector results while retaining structured filters.
+7. Add a small recall@k evaluation suite before tuning or adding a reranker.
+8. Consider deterministic graph expansion only after hybrid RAG is reliable;
+   externally generated semantic graph edges require evidence, provenance,
+   confidence, and separate privacy/cost validation.
+
+Until those follow-ups are completed, the existing RAG stack remains a sound
+foundation, but this document should be read as a mixture of implemented
+architecture, historical operating assumptions, and roadmap—not as the sole
+live deployment specification.
+
 ---
 
 ## 1. Introduction
