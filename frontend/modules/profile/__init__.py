@@ -1,0 +1,1 @@
+"""Global owner profile module."""

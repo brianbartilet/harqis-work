@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Profile · HARQIS{% endblock %}
+{% block head %}
+<style>
+  .profile-shell { max-width:72rem; margin:0 auto; padding:2rem 1rem 4rem; }
+  .profile-grid { display:grid; min-width:0; gap:1.25rem; margin-top:1.75rem; }
+  .profile-grid > *, .profile-fields > * { min-width:0; }
+  .profile-specimen { position:relative; overflow:hidden; border:1px solid #1e3a5f; border-radius:1rem; background:linear-gradient(155deg,#0b1930 0%,#0f172a 52%,#07101f 100%); padding:1.4rem; }
+  .profile-specimen::after { position:absolute; width:11rem; height:11rem; right:-5rem; bottom:-5rem; border:1px solid rgba(56,189,248,.18); border-radius:999px; box-shadow:0 0 0 28px rgba(20,184,166,.04),0 0 0 56px rgba(56,189,248,.025); content:""; pointer-events:none; }
+  .profile-avatar-large,.profile-avatar-preview { display:grid; place-items:center; overflow:hidden; border-radius:999px; background:#172554; color:#dbeafe; font-weight:750; }
+  .profile-avatar-large { width:5.5rem; height:5.5rem; border:3px solid #0f172a; box-shadow:0 0 0 1px #38bdf8,0 12px 34px rgba(2,6,23,.55); font-size:1.7rem; }
+  .profile-avatar-large img,.profile-avatar-preview img { width:100%; height:100%; object-fit:cover; }
+  .profile-fieldset { min-width:0; border:1px solid #1e293b; border-radius:1rem; background:#0f172a; padding:1.25rem; }
+  .profile-fieldset legend { padding:0 .45rem; color:#f8fafc; font-size:.9rem; font-weight:650; }
+  .profile-fields { display:grid; gap:1rem; }
+  .profile-label { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.4rem; color:#cbd5e1; font-size:.78rem; font-weight:650; }
+  .profile-hint { color:#64748b; font-size:.68rem; font-weight:450; }
+  .profile-input { width:100%; border:1px solid #334155; border-radius:.65rem; background:#07101f; color:#f8fafc; padding:.7rem .8rem; }
+  .profile-input:focus { border-color:#38bdf8; outline:2px solid rgba(56,189,248,.18); }
+  textarea.profile-input { min-height:7rem; resize:vertical; }
+  .profile-error { margin:.38rem 0 0; color:#fda4af; font-size:.72rem; }
+  .profile-upload { display:flex; align-items:center; gap:1rem; border:1px dashed #334155; border-radius:.8rem; padding:1rem; }
+  .profile-upload > * { min-width:0; }
+  .profile-upload input[type="file"] { width:100%; max-width:100%; }
+  .profile-location-row { display:grid; min-width:0; grid-template-columns:minmax(0,1fr) auto; gap:.5rem; }
+  .profile-avatar-preview { width:3.75rem; height:3.75rem; flex:0 0 3.75rem; font-size:1.1rem; }
+  .profile-action { display:inline-flex; align-items:center; justify-content:center; border-radius:.6rem; background:#0284c7; color:white; font-size:.82rem; font-weight:700; padding:.65rem 1rem; }
+  .profile-action:hover { background:#0369a1; }
+  .profile-action-secondary { border:1px solid #334155; background:#172033; color:#cbd5e1; }
+  .profile-action-secondary:hover { background:#1e293b; }
+  .profile-success { margin-top:1.25rem; border-left:3px solid #14b8a6; border-radius:.55rem; background:#042f2e; color:#99f6e4; padding:.75rem 1rem; font-size:.82rem; }
+  .profile-form-actions { position:sticky; bottom:0; z-index:5; display:flex; align-items:center; justify-content:flex-end; gap:.7rem; margin-top:1.25rem; border:1px solid #1e293b; border-radius:.85rem; background:rgba(7,16,31,.94); padding:.8rem; backdrop-filter:blur(12px); }
+  @media (min-width:768px) { .profile-shell{padding-right:1.5rem;padding-left:1.5rem}.profile-fields.two{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media (min-width:1024px) { .profile-grid{grid-template-columns:minmax(250px,.72fr) minmax(0,1.65fr);align-items:start}.profile-specimen{position:sticky;top:5.75rem} }
+</style>
+{% endblock %}
+{% block content %}
+<main class="profile-shell">
+  <section class="page-header">
+    <p class="page-header-eyebrow">Public identity</p>
+    <h1 class="page-header-title">Profile settings</h1>
+    <p class="page-header-description">Shape the identity and contact details that accompany your shared corpus.</p>
+  </section>
+
+  {% if saved %}<p class="profile-success" role="status">Profile changes saved. Active shares now use this identity.</p>{% endif %}
+
+  <div class="profile-grid">
+    <aside class="profile-specimen" aria-labelledby="profile-preview-title">
+      <p class="page-header-eyebrow">Guest preview</p>
+      <div class="profile-avatar-large" data-profile-preview-avatar>
+        {% if profile.avatar_data_uri %}<img src="{{ profile.avatar_data_uri }}" alt="">{% else %}<span data-profile-preview-initial>{{ profile.initial }}</span>{% endif %}
+      </div>
+      <h2 id="profile-preview-title" class="mt-5 text-xl font-semibold text-white" data-profile-preview-name>{{ profile.display_name }}</h2>
+      <p class="mt-2 text-sm leading-relaxed text-slate-300" data-profile-preview-bio>{% if profile.bio %}{{ profile.bio }}{% else %}Your short bio will introduce you here.{% endif %}</p>
+      <p class="mt-4 font-mono text-xs text-slate-500" data-profile-preview-location>{% if profile.location %}{{ profile.location }}{% else %}Location not set{% endif %}</p>
+    </aside>
+
+    <form method="post" action="/profile" enctype="multipart/form-data" novalidate data-profile-form>
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="space-y-5">
+        <fieldset class="profile-fieldset">
+          <legend>Identity</legend>
+          <div class="profile-fields two">
+            <div>
+              <label class="profile-label" for="first_name">First name</label>
+              <input class="profile-input" id="first_name" name="first_name" maxlength="80" value="{{ profile.first_name }}" autocomplete="given-name">
+              {% if errors.first_name %}<p class="profile-error">{{ errors.first_name }}</p>{% endif %}
+            </div>
+            <div>
+              <label class="profile-label" for="last_name">Last name</label>
+              <input class="profile-input" id="last_name" name="last_name" maxlength="80" value="{{ profile.last_name }}" autocomplete="family-name">
+              {% if errors.last_name %}<p class="profile-error">{{ errors.last_name }}</p>{% endif %}
+            </div>
+            <div>
+              <label class="profile-label" for="nickname">Nickname <span class="profile-hint">Used on shared pages</span></label>
+              <input class="profile-input" id="nickname" name="nickname" maxlength="50" value="{{ profile.nickname }}" autocomplete="nickname" data-profile-nickname>
+              {% if errors.nickname %}<p class="profile-error">{{ errors.nickname }}</p>{% endif %}
+            </div>
+            <div>
+              <label class="profile-label" for="location">Location <span class="profile-hint">Country-level inference</span></label>
+              <div class="profile-location-row">
+                <input class="profile-input" id="location" name="location" maxlength="120" value="{{ profile.location }}" autocomplete="country-name" data-profile-location>
+                <button class="profile-action profile-action-secondary" type="button" data-detect-location>Detect</button>
+              </div>
+              <p class="profile-error" data-location-error hidden></p>
+              {% if errors.location %}<p class="profile-error">{{ errors.location }}</p>{% endif %}
+            </div>
+          </div>
+          <div class="mt-4">
+            <label class="profile-label" for="bio">Short bio <span class="profile-hint"><span data-bio-count>{{ profile.bio|length }}</span>/500</span></label>
+            <textarea class="profile-input" id="bio" name="bio" maxlength="500" data-profile-bio>{{ profile.bio }}</textarea>
+            {% if errors.bio %}<p class="profile-error">{{ errors.bio }}</p>{% endif %}
+          </div>
+        </fieldset>
+
+        <fieldset class="profile-fieldset">
+          <legend>Avatar</legend>
+          <div class="profile-upload">
+            <div class="profile-avatar-preview" data-upload-preview>
+              {% if profile.avatar_data_uri %}<img src="{{ profile.avatar_data_uri }}" alt="Current avatar">{% else %}<span>{{ profile.initial }}</span>{% endif %}
+            </div>
+            <div class="min-w-0 flex-1">
+              <label class="profile-label" for="avatar">Upload a new image</label>
+              <input id="avatar" name="avatar" type="file" accept="image/jpeg,image/png,image/webp" data-avatar-input>
+              <p class="profile-hint mt-2">JPEG, PNG, or WebP. Maximum 2 MB. Cropped to a square.</p>
+              {% if profile.avatar_data_uri or remove_avatar %}<label class="mt-3 flex items-center gap-2 text-xs text-slate-400"><input type="checkbox" name="remove_avatar" {% if remove_avatar %}checked{% endif %}> Remove current avatar</label>{% endif %}
+              {% if errors.avatar %}<p class="profile-error">{{ errors.avatar }}</p>{% endif %}
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="profile-fieldset">
+          <legend>Contact</legend>
+          <div class="profile-fields two">
+            <div>
+              <label class="profile-label" for="email">Email address</label>
+              <input class="profile-input" id="email" name="email" type="email" maxlength="254" value="{{ profile.email }}" autocomplete="email">
+              {% if errors.email %}<p class="profile-error">{{ errors.email }}</p>{% endif %}
+            </div>
+            <div>
+              <label class="profile-label" for="phone">Telephone <span class="profile-hint">Include country code</span></label>
+              <input class="profile-input" id="phone" name="phone" type="tel" maxlength="32" value="{{ profile.phone }}" placeholder="+65 8123 4567" autocomplete="tel">
+              {% if errors.phone %}<p class="profile-error">{{ errors.phone }}</p>{% endif %}
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="profile-fieldset">
+          <legend>Social links</legend>
+          <div class="profile-fields two">
+            {% for field, label, placeholder in [
+              ('linkedin_url', 'LinkedIn', 'https://linkedin.com/in/...'),
+              ('github_url', 'GitHub', 'https://github.com/...'),
+              ('website_url', 'Website', 'https://example.com'),
+              ('instagram_url', 'Instagram', 'https://instagram.com/...')
+            ] %}
+            <div>
+              <label class="profile-label" for="{{ field }}">{{ label }}</label>
+              <input class="profile-input" id="{{ field }}" name="{{ field }}" type="url" maxlength="500" value="{{ profile|attr(field) }}" placeholder="{{ placeholder }}" inputmode="url">
+              {% if errors.get(field) %}<p class="profile-error">{{ errors.get(field) }}</p>{% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </fieldset>
+      </div>
+
+      <div class="profile-form-actions">
+        <a class="profile-action profile-action-secondary" href="/home">Cancel</a>
+        <button class="profile-action" type="submit">Save changes</button>
+      </div>
+    </form>
+  </div>
+</main>
+<script>
+(() => {
+  const nickname = document.querySelector('[data-profile-nickname]');
+  const bio = document.querySelector('[data-profile-bio]');
+  const location = document.querySelector('[data-profile-location]');
+  const namePreview = document.querySelector('[data-profile-preview-name]');
+  const bioPreview = document.querySelector('[data-profile-preview-bio]');
+  const locationPreview = document.querySelector('[data-profile-preview-location]');
+  const initial = document.querySelector('[data-profile-preview-initial]');
+  const bioCount = document.querySelector('[data-bio-count]');
+  nickname?.addEventListener('input', () => {
+    const value = nickname.value.trim();
+    if (namePreview) namePreview.textContent = value || 'P';
+    if (initial) initial.textContent = value ? value[0].toUpperCase() : 'P';
+  });
+  bio?.addEventListener('input', () => {
+    if (bioPreview) bioPreview.textContent = bio.value.trim() || 'Your short bio will introduce you here.';
+    if (bioCount) bioCount.textContent = String(bio.value.length);
+  });
+  location?.addEventListener('input', () => {
+    if (locationPreview) locationPreview.textContent = location.value.trim() || 'Location not set';
+  });
+
+  const avatarInput = document.querySelector('[data-avatar-input]');
+  const uploadPreview = document.querySelector('[data-upload-preview]');
+  const largePreview = document.querySelector('[data-profile-preview-avatar]');
+  avatarInput?.addEventListener('change', () => {
+    const file = avatarInput.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    const url = URL.createObjectURL(file);
+    [uploadPreview, largePreview].forEach((target) => {
+      if (!target) return;
+      target.replaceChildren(Object.assign(document.createElement('img'), { src: url, alt: '' }));
+    });
+  });
+
+  const detect = document.querySelector('[data-detect-location]');
+  const locationError = document.querySelector('[data-location-error]');
+  detect?.addEventListener('click', () => {
+    try {
+      const locale = new Intl.Locale(navigator.language || 'en').maximize();
+      if (!locale.region) throw new Error('No region');
+      const names = new Intl.DisplayNames([navigator.language || 'en'], { type: 'region' });
+      location.value = names.of(locale.region) || locale.region;
+      location.dispatchEvent(new Event('input'));
+      locationError.hidden = true;
+    } catch (_) {
+      locationError.textContent = 'Your browser did not provide a country. Enter your location manually.';
+      locationError.hidden = false;
+    }
+  });
+})();
+</script>
+{% endblock %}
