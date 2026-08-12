@@ -550,8 +550,7 @@ guidance is in
 | `HFL_SHARE_DEFAULT_TTL_SECONDS` | `3600` | New-recipe expiry default. |
 | `HFL_SHARE_DEFAULT_DEVICE_LIMIT` | `1` | New-recipe device/session default. |
 | `HFL_SHARE_PIN_MAX_ATTEMPTS` | `5` | Failed PIN attempts allowed per grant. |
-| `HFL_SHARE_PROVIDER` | `anthropic` | Scoped-Q&A backend: `anthropic` or locked-down loopback `hermes`. |
-| `HFL_SHARE_MODEL` | `claude-haiku-4-5-20251001` | Anthropic model used when `HFL_SHARE_PROVIDER=anthropic`. |
+| `HFL_SHARE_PROVIDER` | `hermes` | Share Q&A backend. Only locked-down loopback `hermes` is accepted. |
 | `HFL_SHARE_HERMES_BASE_URL` | `http://127.0.0.1:8643/v1` | Dedicated Hermes OpenAI-compatible API; non-loopback URLs are rejected. |
 | `HFL_SHARE_HERMES_API_KEY` | empty | Server-side bearer for the isolated Hermes profile; never expose it to browsers. |
 | `HFL_SHARE_HERMES_MODEL` | `share-corpus` | Model alias advertised by the dedicated Hermes API profile. |
@@ -560,6 +559,10 @@ guidance is in
 | `HFL_SHARE_MAX_CONTEXT_CHARS` | `120000` | Maximum ranked, sanitized snapshot characters sent per question. |
 | `HFL_SHARE_MAX_SNAPSHOT_CHARS` | `10000000` | Hard sanitized-text size limit for a generated snapshot. |
 | `HFL_SHARE_CHAT_LIMIT_PER_HOUR` | `30` | Durable per-share guest model-query limit. |
+| `HFL_SHARE_EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | FastEmbed model used locally for immutable-snapshot retrieval. |
+| `HFL_SHARE_EMBEDDING_CACHE_DIR` | `.harqis-data/models/fastembed` | Local model cache. The first use may download model files; corpus text is never sent to an embedding API. |
+| `HFL_SHARE_RETRIEVAL_K` | `8` | Maximum snapshot entries supplied to Hermes per question (clamped to 1–20). |
+| `HFL_SHARE_SEMANTIC_WEIGHT` | `0.75` | Semantic share of hybrid semantic/lexical ranking, clamped to 0–1. |
 | `HFL_SHARE_TRUST_PROXY_IDENTITY` | `false` | Trust Cloudflare Access identity headers for email OTP mode; enable only with a locked-down origin. |
 
 ## Testing

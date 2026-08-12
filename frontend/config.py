@@ -54,8 +54,7 @@ class Settings(BaseSettings):
     hfl_share_default_ttl_seconds: int = 3600
     hfl_share_default_device_limit: int = 1
     hfl_share_pin_max_attempts: int = 5
-    hfl_share_provider: str = "anthropic"
-    hfl_share_model: str = "claude-haiku-4-5-20251001"
+    hfl_share_provider: str = "hermes"
     hfl_share_hermes_base_url: str = "http://127.0.0.1:8643/v1"
     hfl_share_hermes_api_key: str = ""
     hfl_share_hermes_model: str = "share-corpus"
@@ -64,6 +63,12 @@ class Settings(BaseSettings):
     hfl_share_max_context_chars: int = 120_000
     hfl_share_max_snapshot_chars: int = 10_000_000
     hfl_share_chat_limit_per_hour: int = 30
+    hfl_share_embedding_model: str = "BAAI/bge-small-en-v1.5"
+    hfl_share_embedding_cache_dir: str = str(
+        _REPO_ROOT / ".harqis-data" / "models" / "fastembed"
+    )
+    hfl_share_retrieval_k: int = 8
+    hfl_share_semantic_weight: float = 0.75
     # Trust Cloudflare Access identity headers only when the origin is locked
     # down so clients cannot reach it without the authenticated proxy.
     hfl_share_trust_proxy_identity: bool = False

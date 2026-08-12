@@ -56,8 +56,7 @@ HFL_SHARE_STORE_PATH=/Users/harqis-one/.harqis-data/hfl-shares.sqlite3
 HFL_SHARE_DEFAULT_TTL_SECONDS=3600
 HFL_SHARE_DEFAULT_DEVICE_LIMIT=1
 HFL_SHARE_PIN_MAX_ATTEMPTS=5
-HFL_SHARE_PROVIDER=anthropic
-HFL_SHARE_MODEL=claude-haiku-4-5-20251001
+HFL_SHARE_PROVIDER=hermes
 HFL_SHARE_HERMES_BASE_URL=http://127.0.0.1:8643/v1
 HFL_SHARE_HERMES_API_KEY=<dedicated-server-side-bearer>
 HFL_SHARE_HERMES_MODEL=share-corpus
@@ -66,6 +65,10 @@ HFL_SHARE_MAX_OUTPUT_TOKENS=1200
 HFL_SHARE_MAX_CONTEXT_CHARS=120000
 HFL_SHARE_MAX_SNAPSHOT_CHARS=10000000
 HFL_SHARE_CHAT_LIMIT_PER_HOUR=30
+HFL_SHARE_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+HFL_SHARE_EMBEDDING_CACHE_DIR=/Users/harqis-one/.harqis-data/models/fastembed
+HFL_SHARE_RETRIEVAL_K=8
+HFL_SHARE_SEMANTIC_WEIGHT=0.75
 HFL_SHARE_TRUST_PROXY_IDENTITY=false
 ```
 
@@ -75,11 +78,21 @@ login session key. Back up the SQLite database with the same care as the HFL
 corpus: snapshots contain the guest-visible corpus text and enabled reference
 targets.
 
-`HFL_SHARE_PROVIDER=anthropic` uses the existing configured Anthropic provider.
-`HFL_SHARE_PROVIDER=hermes` uses the dedicated loopback OpenAI-compatible
-Hermes endpoint. Provider failure never blocks snapshot browsing; Q&A returns a
-generic temporary error without exposing endpoint, credential, or upstream
-response details.
+Only `HFL_SHARE_PROVIDER=hermes` is accepted. It uses the dedicated loopback
+OpenAI-compatible Hermes endpoint; the frontend never calls a generation
+provider directly. Hermes can still use the model provider configured inside
+its isolated profile, which is a separate disclosure boundary. Provider
+failure never blocks snapshot browsing; Q&A returns a generic temporary error
+without exposing endpoint, credential, or upstream response details.
+
+Share retrieval is local and isolated from the global Knowledge index. On the
+first question, FastEmbed creates vectors only for entries in the immutable
+share snapshot and stores them in the share SQLite database. Existing shares
+index lazily. Later questions reuse those vectors, hybrid-ranked with lexical
+signals; the default sends the best eight entries to Hermes. If FastEmbed or
+its model cache is unavailable, Q&A falls back to bounded lexical retrieval.
+The model files may be downloaded on first use, but snapshot text and visitor
+questions are never sent to an embedding API.
 
 `HFL_SHARE_MAX_CONTEXT_CHARS` bounds the ranked entry excerpt sent for each
 question, not the frozen snapshot itself. The 120,000-character default is

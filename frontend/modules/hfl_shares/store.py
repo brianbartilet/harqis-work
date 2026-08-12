@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import struct
 import threading
 import uuid
 from datetime import datetime, timedelta
@@ -78,11 +79,23 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     content TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS share_embeddings (
+    share_id TEXT NOT NULL REFERENCES shares(id) ON DELETE CASCADE,
+    entry_id TEXT NOT NULL,
+    model_name TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    dimensions INTEGER NOT NULL,
+    embedding BLOB NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(share_id, entry_id, model_name)
+);
 CREATE INDEX IF NOT EXISTS idx_sessions_share ON sessions(share_id);
 CREATE INDEX IF NOT EXISTS idx_requests_share ON access_requests(share_id);
 CREATE INDEX IF NOT EXISTS idx_chat_events_share ON chat_events(share_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_session
 ON chat_messages(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_share_embeddings_share
+ON share_embeddings(share_id, model_name);
 """
 
 
@@ -111,7 +124,82 @@ class ShareStore:
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=15)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys=ON")
         return connection
+
+    def get_share_embeddings(
+        self,
+        share_id: str,
+        *,
+        model_name: str,
+    ) -> dict[str, dict[str, object]]:
+        """Return vectors stored for one immutable share and model."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT e.* FROM share_embeddings e
+                JOIN shares sh ON sh.id=e.share_id
+                WHERE e.share_id=? AND e.model_name=?
+                """,
+                (share_id, model_name),
+            ).fetchall()
+        result: dict[str, dict[str, object]] = {}
+        for row in rows:
+            dimensions = int(row["dimensions"])
+            blob = bytes(row["embedding"])
+            if dimensions <= 0 or len(blob) != dimensions * 4:
+                continue
+            result[str(row["entry_id"])] = {
+                "content_hash": str(row["content_hash"]),
+                "embedding": struct.unpack(f"<{dimensions}f", blob),
+            }
+        return result
+
+    def upsert_share_embeddings(
+        self,
+        share_id: str,
+        *,
+        model_name: str,
+        rows: list[dict[str, object]],
+    ) -> None:
+        """Persist locally generated vectors for one immutable share."""
+        if not rows:
+            return
+        now = utc_now().isoformat()
+        with self._lock, self._connect() as connection:
+            exists = connection.execute(
+                "SELECT 1 FROM shares WHERE id=?", (share_id,)
+            ).fetchone()
+            if not exists:
+                raise ValueError("Active share not found for local indexing.")
+            connection.execute(
+                "DELETE FROM share_embeddings WHERE share_id=? AND model_name<>?",
+                (share_id, model_name),
+            )
+            for row in rows:
+                vector = tuple(float(value) for value in row["embedding"])
+                connection.execute(
+                    """
+                    INSERT INTO share_embeddings(
+                        share_id, entry_id, model_name, content_hash,
+                        dimensions, embedding, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(share_id, entry_id, model_name) DO UPDATE SET
+                        content_hash=excluded.content_hash,
+                        dimensions=excluded.dimensions,
+                        embedding=excluded.embedding,
+                        created_at=excluded.created_at
+                    """,
+                    (
+                        share_id,
+                        str(row["entry_id"]),
+                        model_name,
+                        str(row["content_hash"]),
+                        len(vector),
+                        struct.pack(f"<{len(vector)}f", *vector),
+                        now,
+                    ),
+                )
 
     @staticmethod
     def _configuration(row: sqlite3.Row) -> ShareConfiguration:
