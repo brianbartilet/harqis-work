@@ -528,6 +528,56 @@ def test__find_scryfall_card_by_set_collector_prefers_english_exact_match():
     assert _find_scryfall_card_by_set_collector(index, "blb", "281") is None
 
 
+def test__search_tcg_mp_products_with_fallback_keeps_qualified_results():
+    queries = []
+    expected = [SimpleNamespace(id=222)]
+
+    class _Products:
+        def search_card(self, query):
+            queries.append(query)
+            return expected
+
+    result = tcg_mp_selling_module._search_tcg_mp_products_with_fallback(
+        _Products(), "BLB", "Test Card",
+    )
+
+    assert result is expected
+    assert queries == ["[BLB] Test Card"]
+
+
+def test__search_tcg_mp_products_with_fallback_retries_card_name_only():
+    queries = []
+    expected = [SimpleNamespace(id=222)]
+
+    class _Products:
+        def search_card(self, query):
+            queries.append(query)
+            return [] if query.startswith("[") else expected
+
+    result = tcg_mp_selling_module._search_tcg_mp_products_with_fallback(
+        _Products(), "BLB", "Test Card",
+    )
+
+    assert result is expected
+    assert queries == ["[BLB] Test Card", "Test Card"]
+
+
+def test__search_tcg_mp_products_with_fallback_returns_empty_after_both_searches():
+    queries = []
+
+    class _Products:
+        def search_card(self, query):
+            queries.append(query)
+            return []
+
+    result = tcg_mp_selling_module._search_tcg_mp_products_with_fallback(
+        _Products(), "BLB", "Test Card",
+    )
+
+    assert result == []
+    assert queries == ["[BLB] Test Card", "Test Card"]
+
+
 def test__generate_tcg_mappings_creates_note_for_note_less_card_by_default(monkeypatch):
     guid = "123e4567-e89b-42d3-a456-426614174000"
     created_notes = []

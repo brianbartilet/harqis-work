@@ -131,6 +131,20 @@ def _audit_worker_results(results, tasks, *, stage):
     return rows
 
 
+def _search_tcg_mp_products_with_fallback(api_products, set_code, card_name):
+    """Search by set-qualified name, then retry by card name when empty."""
+    qualified_query = f"[{set_code}] {card_name}"
+    search_results = api_products.search_card(qualified_query)
+    if search_results:
+        return search_results
+
+    tcg_mp_log.info(
+        "No TCG Marketplace results for %s; retrying with card name only: %s",
+        qualified_query, card_name,
+    )
+    return api_products.search_card(card_name)
+
+
 def _resolve_config_placeholder(value: str) -> str:
     """Resolve a literal ${VAR} left in apps_config.yaml.
 
@@ -739,8 +753,11 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None,
             card_tcg_id = card_meta['tcgplayer_id']
             tcg_mp_log.info("Searching for card: {0}".format(card_name))
 
-            search_results = api_service__tcg_mp_products.search_card("[{0}] {1}"
-                                                                      .format(card_meta['set_code'], card_name))
+            search_results = _search_tcg_mp_products_with_fallback(
+                api_service__tcg_mp_products,
+                card_meta['set_code'],
+                card_name,
+            )
             match_found = False
             guid = None
             scryfall_card = None
@@ -826,7 +843,10 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None,
 
         tcg_mp_card_id = 0
         match_failure_stage = "tcg_mp_search"
-        match_failure_reason = "TCG Marketplace search returned no candidates"
+        match_failure_reason = (
+            "TCG Marketplace searches returned no candidates for either "
+            f"[{card_meta.get('set_code', '')}] {card_name} or {card_name}"
+        )
         for item in search_results:
             tcg_mp_log.info("Attempting to resolve TCG MP print id for card: {0}".format(card_name))
             try:

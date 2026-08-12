@@ -263,7 +263,10 @@ Procedure:
 2. Pull EchoMTG collection rows with `tradable_only=1`.
 3. Load the Scryfall bulk data file.
 4. For each tradable EchoMTG card, fetch card metadata, search TCG Marketplace by
-   clean card name, and validate the candidate through Scryfall `tcgplayer_id`.
+   `[set_code] clean card name`, retry with the clean card name alone when that
+   returns no results, and validate the candidate through Scryfall `tcgplayer_id`.
+   If both marketplace searches are empty, record the card as a failed
+   `tcg_mp_search` audit row.
 5. If `force_generate=True`, delete the existing EchoMTG note first and disable
    marketplace listings while remapping.
 6. If a valid existing TCG JSON note exists, keep it. Missing notes are created by
