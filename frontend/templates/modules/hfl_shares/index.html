@@ -635,6 +635,23 @@
   form.addEventListener('input', event => {
     if (event.target.matches('[data-test-question]')) updateTestAgentState();
   });
+  previewContent?.addEventListener('change', event => {
+    if (event.target.matches('[data-toggle-all-references]')) {
+      previewContent.querySelectorAll('input[name="enabled_reference_ids"]').forEach(input => {
+        input.checked = event.target.checked;
+      });
+      syncDisabledReferences();
+      return;
+    }
+    if (!event.target.matches('input[name="enabled_reference_ids"]')) return;
+    const toggle = previewContent.querySelector('[data-toggle-all-references]');
+    if (!toggle) return;
+    const references = Array.from(previewContent.querySelectorAll('input[name="enabled_reference_ids"]'));
+    const selected = references.filter(input => input.checked).length;
+    toggle.checked = selected === references.length;
+    toggle.indeterminate = selected > 0 && selected < references.length;
+    syncDisabledReferences();
+  });
   clearTags?.addEventListener('click', () => {
     tagCloud.querySelectorAll('input[name="tags"]:checked').forEach(input => {
       input.checked = false;

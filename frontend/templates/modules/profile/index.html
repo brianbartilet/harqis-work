@@ -8,10 +8,12 @@
   .profile-specimen { position:relative; overflow:hidden; border:1px solid #1e3a5f; border-radius:1rem; background:linear-gradient(155deg,#0b1930 0%,#0f172a 52%,#07101f 100%); padding:1.4rem; }
   .profile-specimen::after { position:absolute; width:11rem; height:11rem; right:-5rem; bottom:-5rem; border:1px solid rgba(56,189,248,.18); border-radius:999px; box-shadow:0 0 0 28px rgba(20,184,166,.04),0 0 0 56px rgba(56,189,248,.025); content:""; pointer-events:none; }
   .profile-avatar-large,.profile-avatar-preview { display:grid; place-items:center; overflow:hidden; border-radius:999px; background:#172554; color:#dbeafe; font-weight:750; }
-  .profile-avatar-large { width:5.5rem; height:5.5rem; border:3px solid #0f172a; box-shadow:0 0 0 1px #38bdf8,0 12px 34px rgba(2,6,23,.55); font-size:1.7rem; }
+  .profile-avatar-large { width:5.5rem; height:5.5rem; margin-top:1.35rem; border:3px solid #0f172a; box-shadow:0 0 0 1px #38bdf8,0 12px 34px rgba(2,6,23,.55); font-size:1.7rem; }
   .profile-avatar-large img,.profile-avatar-preview img { width:100%; height:100%; object-fit:cover; }
   .profile-fieldset { min-width:0; border:1px solid #1e293b; border-radius:1rem; background:#0f172a; padding:1.25rem; }
-  .profile-fieldset legend { padding:0 .45rem; color:#f8fafc; font-size:.9rem; font-weight:650; }
+  .profile-section-header { margin:-.1rem 0 1.15rem; padding-bottom:.75rem; border-bottom:1px solid #1e3a5f; }
+  .profile-section-kicker { color:#38bdf8; font:600 .7rem/1.2 ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing:.18em; text-transform:uppercase; }
+  .profile-section-title { margin:.28rem 0 0; color:#f8fafc; font-size:1.05rem; font-weight:680; }
   .profile-fields { display:grid; gap:1rem; }
   .profile-label { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.4rem; color:#cbd5e1; font-size:.78rem; font-weight:650; }
   .profile-hint { color:#64748b; font-size:.68rem; font-weight:450; }
@@ -58,8 +60,11 @@
     <form method="post" action="/profile" enctype="multipart/form-data" novalidate data-profile-form>
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <div class="space-y-5">
-        <fieldset class="profile-fieldset">
-          <legend>Identity</legend>
+        <section class="profile-fieldset" role="group" aria-labelledby="profile-identity-title">
+          <header class="profile-section-header">
+            <p class="profile-section-kicker">Profile section</p>
+            <h2 class="profile-section-title" id="profile-identity-title">Identity</h2>
+          </header>
           <div class="profile-fields two">
             <div>
               <label class="profile-label" for="first_name">First name</label>
@@ -91,10 +96,13 @@
             <textarea class="profile-input" id="bio" name="bio" maxlength="500" data-profile-bio>{{ profile.bio }}</textarea>
             {% if errors.bio %}<p class="profile-error">{{ errors.bio }}</p>{% endif %}
           </div>
-        </fieldset>
+        </section>
 
-        <fieldset class="profile-fieldset">
-          <legend>Avatar</legend>
+        <section class="profile-fieldset" role="group" aria-labelledby="profile-avatar-title">
+          <header class="profile-section-header">
+            <p class="profile-section-kicker">Profile section</p>
+            <h2 class="profile-section-title" id="profile-avatar-title">Avatar</h2>
+          </header>
           <div class="profile-upload">
             <div class="profile-avatar-preview" data-upload-preview>
               {% if profile.avatar_data_uri %}<img src="{{ profile.avatar_data_uri }}" alt="Current avatar">{% else %}<span>{{ profile.initial }}</span>{% endif %}
@@ -107,10 +115,13 @@
               {% if errors.avatar %}<p class="profile-error">{{ errors.avatar }}</p>{% endif %}
             </div>
           </div>
-        </fieldset>
+        </section>
 
-        <fieldset class="profile-fieldset">
-          <legend>Contact</legend>
+        <section class="profile-fieldset" role="group" aria-labelledby="profile-contact-title">
+          <header class="profile-section-header">
+            <p class="profile-section-kicker">Profile section</p>
+            <h2 class="profile-section-title" id="profile-contact-title">Contact</h2>
+          </header>
           <div class="profile-fields two">
             <div>
               <label class="profile-label" for="email">Email address</label>
@@ -123,10 +134,13 @@
               {% if errors.phone %}<p class="profile-error">{{ errors.phone }}</p>{% endif %}
             </div>
           </div>
-        </fieldset>
+        </section>
 
-        <fieldset class="profile-fieldset">
-          <legend>Social links</legend>
+        <section class="profile-fieldset" role="group" aria-labelledby="profile-social-title">
+          <header class="profile-section-header">
+            <p class="profile-section-kicker">Profile section</p>
+            <h2 class="profile-section-title" id="profile-social-title">Social links</h2>
+          </header>
           <div class="profile-fields two">
             {% for field, label, placeholder in [
               ('linkedin_url', 'LinkedIn', 'https://linkedin.com/in/...'),
@@ -141,7 +155,7 @@
             </div>
             {% endfor %}
           </div>
-        </fieldset>
+        </section>
       </div>
 
       <div class="profile-form-actions">

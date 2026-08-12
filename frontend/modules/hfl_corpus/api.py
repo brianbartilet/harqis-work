@@ -33,6 +33,7 @@ from modules.hfl_corpus.entry_create import (
     persist_manual_entry_with_uploads,
     preview_manual_entry,
 )
+from modules.hfl_corpus.document_edit import UpdateDocumentRequest, update_document_text
 from modules.hfl_corpus.entry_enrichment import enrich_manual_entry
 from modules.hfl_shares.viewer import (
     classify_preview,
@@ -334,6 +335,38 @@ async def hfl_api_document(request: Request, relative_path: str):
         ),
         "references": references,
     }
+
+
+@router.post("/document/{relative_path:path}")
+async def hfl_api_update_document(
+    request: Request,
+    relative_path: str,
+    payload: UpdateDocumentRequest,
+):
+    _authorize(request)
+    document = corpus_index.get(relative_path)
+    if not document:
+        raise HTTPException(status_code=404, detail="Corpus document not found")
+    try:
+        path = update_document_text(
+            document,
+            payload.text,
+            corpus_dir=resolve_corpus_root(),
+        )
+        corpus_index.documents(force=True)
+        return {
+            "updated": True,
+            "relative_path": document.relative_path,
+            "size": path.stat().st_size,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        _log.exception("Canonical HFL document update failed")
+        raise HTTPException(
+            status_code=500,
+            detail="The corpus document could not be saved.",
+        ) from exc
 
 
 @router.get("/reference/{token}")

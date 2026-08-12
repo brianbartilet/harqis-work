@@ -1,6 +1,7 @@
 """Routes for browsing, searching, and adding entries to the HFL corpus."""
 
 import asyncio
+import base64
 import html
 import json
 import logging
@@ -45,6 +46,7 @@ from modules.hfl_corpus.entry_create import (
     persist_manual_entry_with_uploads,
     preview_manual_entry,
 )
+from modules.hfl_corpus.document_edit import UpdateDocumentRequest, update_document_text
 from modules.hfl_corpus.entry_enrichment import enrich_manual_entry
 from modules.hfl_shares.viewer import (
     classify_preview,
@@ -378,6 +380,10 @@ async def hfl_corpus_page(
         document_count = len(documents)
         tag_cloud = common_tags(documents)
     selected_tags, text_query = parse_search_query(q)
+    entry_source_options = [
+        "manual-entry",
+        *(option for option in source_options if option.casefold() != "manual-entry"),
+    ]
     reverse_sort = "asc" if sort == "desc" else "desc"
     sort_toggle_url = _index_url(
         query=q,
@@ -449,6 +455,7 @@ async def hfl_corpus_page(
             date_to=date_to,
             source=selected_source,
             source_options=source_options,
+            entry_source_options=entry_source_options,
             sort_order=sort,
             sort_toggle_url=sort_toggle_url,
             result_page=result_page,
@@ -685,6 +692,9 @@ async def hfl_document(
             user,
             "hfl_corpus",
             document=document,
+            document_text_encoded=base64.b64encode(
+                document.text.encode("utf-8")
+            ).decode("ascii"),
             rendered=_anchor_rendered_entries(rendered, document),
             references=references,
             document_tag_counts=_document_tag_counts(document),
@@ -693,6 +703,51 @@ async def hfl_document(
             selected_tag="" if source else tag.casefold(),
         ),
     )
+
+
+@router.post("/document/{relative_path:path}")
+async def hfl_document_update(
+    request: Request,
+    relative_path: str,
+    payload: UpdateDocumentRequest,
+):
+    user, redirect = require_user(request)
+    if redirect:
+        return JSONResponse({"detail": "Authentication required"}, status_code=401)
+    try:
+        if _uses_remote_corpus():
+            return await asyncio.to_thread(
+                RemoteCorpusClient.from_settings().update_document,
+                relative_path,
+                payload.text,
+            )
+        document = corpus_index.get(relative_path)
+        if not document:
+            return JSONResponse(
+                {"detail": "Corpus document not found"},
+                status_code=404,
+            )
+        path = update_document_text(
+            document,
+            payload.text,
+            corpus_dir=resolve_corpus_root(),
+        )
+        corpus_index.documents(force=True)
+        return {
+            "updated": True,
+            "relative_path": document.relative_path,
+            "size": path.stat().st_size,
+        }
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except RemoteCorpusError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=502)
+    except OSError:
+        _log.exception("HFL document update failed")
+        return JSONResponse(
+            {"detail": "The corpus document could not be saved."},
+            status_code=500,
+        )
 
 
 @router.get("/references/{token}/download", name="hfl_reference_download")

@@ -328,6 +328,8 @@ def test_automatic_preview_fragment_defaults_references_and_places_tags_below_ti
         r'name="enabled_reference_ids"[^>]+checked',
         response.text,
     )
+    assert 'data-toggle-all-references checked' in response.text
+    assert "input[name=\"enabled_reference_ids\"]" in authenticated_client.get("/sharing").text
     assert 'class="pill source-pill">notes</span>' in response.text
     assert " · generated " not in response.text
 

@@ -847,6 +847,39 @@ def test_document_renders_downloads_inline_without_reference_summary(
     assert "Unavailable:" not in response.text
 
 
+def test_document_page_offers_plaintext_edit_save_and_discard(
+    authenticated_client, monkeypatch, tmp_path
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    source = corpus / "2026-07-10.md"
+    source.write_text("# Before\n", encoding="utf-8")
+    document = replace(
+        _document("2026-07-10.md", text="# Before\n"),
+        path=source,
+    )
+    monkeypatch.setattr(hfl_routes.corpus_index, "get", lambda path: document)
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda force=False: (document,))
+    monkeypatch.setattr(hfl_routes, "resolve_corpus_root", lambda: corpus)
+
+    page = authenticated_client.get("/hfl-corpus/document/2026-07-10.md")
+    saved = authenticated_client.post(
+        "/hfl-corpus/document/2026-07-10.md",
+        json={"text": "# After\n\nEdited safely.\n"},
+    )
+
+    assert page.status_code == 200
+    assert 'data-document-edit-open' in page.text
+    assert 'data-document-edit-text' in page.text
+    assert '>Save changes</button>' in page.text
+    assert '>Discard</button>' in page.text
+    assert saved.status_code == 200
+    assert saved.json()["updated"] is True
+    assert source.read_text(encoding="utf-8") == "# After\n\nEdited safely.\n"
+
+
 def test_corpus_text_reference_preview_is_authenticated_and_sanitized(
     authenticated_client, monkeypatch, tmp_path
 ):
@@ -2208,6 +2241,8 @@ def test_create_entry_dialog_uses_mobile_sheets_and_touch_friendly_controls(
     assert 'name="why_it_stayed"' in more_details
     assert 'name="possible_use"' in more_details
     assert 'name="include_location" checked' in more_details
+    assert 'name="source"' in more_details
+    assert '<option value="manual-entry" selected>manual-entry</option>' in more_details
     assert 'data-entry-location-toggle' in more_details
     assert ">Include location</span>" in more_details
     assert "Use your activity timeline first" in more_details
@@ -2294,6 +2329,28 @@ def test_manual_entry_preview_uses_canonical_shape_and_reference_list(
     assert "                 - C:\\notes\\source.md" in payload["markdown"]
     assert "<strong>References:</strong>" in payload["html"]
     assert "<li>" in payload["html"]
+
+
+def test_manual_entry_preview_allows_source_override(authenticated_client, monkeypatch):
+    import modules.hfl_corpus.router as hfl_routes
+
+    monkeypatch.setattr(
+        hfl_routes,
+        "enrich_manual_entry",
+        lambda payload: (payload, {
+            "location_source": "disabled",
+            "location_label": "",
+            "added_tags": [],
+            "notices": [],
+        }),
+    )
+    request = _create_entry_payload()
+    request["source"] = "browsing"
+
+    response = authenticated_client.post("/hfl-corpus/entries/preview", json=request)
+
+    assert response.status_code == 200
+    assert "Source:          browsing" in response.json()["markdown"]
 
 
 def test_manual_entry_preview_rejects_required_blank_fields(authenticated_client):

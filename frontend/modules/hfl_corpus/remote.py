@@ -359,6 +359,20 @@ class RemoteCorpusClient:
             ))
         return document, references
 
+    def update_document(self, relative_path: str, text: str) -> dict[str, Any]:
+        encoded = quote(relative_path.replace("\\", "/"), safe="/")
+        try:
+            payload = self._post(f"/document/{encoded}", json={"text": text}).json()
+            return {
+                "updated": bool(payload["updated"]),
+                "relative_path": str(payload["relative_path"]),
+                "size": int(payload["size"]),
+            }
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RemoteCorpusError(
+                "Canonical HFL corpus returned an invalid document update response"
+            ) from exc
+
     def reference_content(
         self,
         token: str,

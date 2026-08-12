@@ -51,6 +51,10 @@ def test_profile_requires_authentication_and_header_uses_fallback(
     assert '<span aria-hidden="true">P</span>' in page.text
     assert "Country-level inference" in page.text
     assert "new Intl.Locale" in page.text
+    assert "margin-top:1.35rem" in page.text
+    assert '<section class="profile-fieldset" role="group"' in page.text
+    assert 'class="profile-section-title" id="profile-contact-title">Contact</h2>' in page.text
+    assert "<legend>Contact</legend>" not in page.text
 
 
 def test_profile_saves_and_updates_authenticated_header(authenticated_client):

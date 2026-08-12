@@ -35,6 +35,7 @@ class CreateEntryRequest(BaseModel):
     what_happened: str = Field(max_length=20_000)
     why_it_stayed: str = Field(default="", max_length=10_000)
     possible_use: str = Field(default="", max_length=5_000)
+    source: str = Field(default="manual-entry", min_length=1, max_length=120)
     tags: str = Field(default="", max_length=2_000)
     references: str = Field(default="", max_length=20_000)
     attachment_names: list[str] = Field(default_factory=list, max_length=MAX_UPLOAD_FILES)
@@ -98,7 +99,10 @@ def make_manual_envelope(
         tags=_tags(payload.tags),
         references=_references(payload.references),
     )
-    envelope = make_envelope(entry, source="manual-entry")
+    source = payload.source.strip()
+    if not source:
+        raise ValueError("Source is required.")
+    envelope = make_envelope(entry, source=source)
     if not generated_references:
         return envelope
     references = tuple(
