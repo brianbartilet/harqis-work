@@ -856,6 +856,7 @@ async def preview_generated_share_chat(request: Request, share_id: str):
             grant.snapshot,
             question,
             history=history,
+            share_id=grant.id,
         )
     except (AgentUnavailable, TypeError, ValueError, json.JSONDecodeError) as exc:
         return JSONResponse({"detail": str(exc)}, status_code=422)
@@ -1414,6 +1415,7 @@ async def guest_chat(request: Request):
             grant.snapshot,
             question,
             history=history,
+            share_id=grant.id,
         )
         assistant_message = store.add_chat_message(
             session_id=session_id,

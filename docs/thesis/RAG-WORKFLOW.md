@@ -109,6 +109,32 @@ foundation, but this document should be read as a mixture of implemented
 architecture, historical operating assumptions, and roadmap—not as the sole
 live deployment specification.
 
+### Corpus-share RAG implementation
+
+The public corpus-share chat has a stricter boundary than the general Knowledge
+workflow. Retrieval is limited to the immutable `ScopeSnapshot` attached to the
+active share; it never searches the owner's broader HFL corpus or the global
+Knowledge vector store.
+
+On the first question for a share, `frontend/modules/hfl_shares/retrieval.py`
+uses FastEmbed with `BAAI/bge-small-en-v1.5` to create local vectors for the
+snapshot entries. Vectors are stored in the existing share SQLite database,
+keyed by share, entry, model, and content hash. Later questions reuse them.
+Existing shares therefore migrate lazily without a bulk rebuild.
+
+Each question is embedded locally and hybrid-ranked with the existing lexical
+signals. The best eight entries by default are supplied to the answer prompt;
+the current lexical ranker remains the safe fallback if the local model or its
+cache is unavailable. Citation validation and the evidence drawer continue to
+resolve only snapshot citation IDs.
+
+Answer generation is restricted to the dedicated loopback Hermes profile; the
+frontend no longer calls Anthropic or another generation provider directly.
+Hermes may still use the model provider configured in its isolated profile, so
+that provider remains a separate disclosure boundary. The embedding model files
+may be downloaded on first use, but corpus entries and visitor questions are
+processed locally for retrieval and are never sent to an embedding API.
+
 ---
 
 ## 1. Introduction

@@ -1101,8 +1101,8 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
 
     captured = []
 
-    async def answer(snapshot, question, *, history=()):
-        captured.append((snapshot.context_prompt, question, history))
+    async def answer(snapshot, question, *, history=(), share_id=""):
+        captured.append((snapshot.context_prompt, question, history, share_id))
         return f"**A grounded answer:** {question} [S1]"
 
     monkeypatch.setattr(router, "answer_question", answer)
@@ -1210,6 +1210,7 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
     assert "entryList.innerHTML = await response.text()" in second.text
     assert captured[0][0] == "Keep the answer friendly and useful."
     assert captured[0][2] == ()
+    assert captured[0][3] == get_share_store().list_shares()[0].id
     assert [message["role"] for message in captured[1][2]] == [
         "user",
         "assistant",
@@ -1506,8 +1507,9 @@ def test_owner_can_preview_active_share_without_guest_verification(
     from main import app
     from modules.hfl_shares import router
 
-    async def answer(snapshot, question, *, history=()):
+    async def answer(snapshot, question, *, history=(), share_id=""):
         assert question == "What is newest?"
+        assert share_id
         return "**Latest answer** [S1]"
 
     monkeypatch.setattr(router, "answer_question", answer)
@@ -1674,6 +1676,213 @@ def test_agent_context_ranks_question_relevant_entries_before_newer_noise(
     )
 
 
+def test_local_hybrid_retrieval_is_share_isolated_and_reuses_vectors(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from modules.hfl_shares import retrieval, scope
+
+    document = _document(tmp_path)
+    monkeypatch.setattr(scope, "resolve_corpus_root", lambda: tmp_path)
+    base_snapshot = build_snapshot(_configuration(), (document,))
+    base = base_snapshot.entries[0]
+    meal = type(base)(
+        **{
+            **base.__dict__,
+            "id": "meal-entry",
+            "citation": "S1",
+            "moment": "Prepared dinner",
+            "text": "Cooked dinner and wrote down a pasta recipe.",
+            "tags": ("food",),
+        }
+    )
+    deployment = type(base)(
+        **{
+            **base.__dict__,
+            "id": "deployment-entry",
+            "citation": "S2",
+            "moment": "Deployment retrospective",
+            "text": "Shipped the deployment project and fixed service failures.",
+            "tags": ("work", "project"),
+        }
+    )
+    snapshot = type(base_snapshot)(
+        **{**base_snapshot.__dict__, "entries": (meal, deployment)}
+    )
+    settings = SimpleNamespace(
+        hfl_share_retrieval_k=8,
+        hfl_share_embedding_model="local-test-model",
+        hfl_share_embedding_cache_dir=str(tmp_path / "models"),
+        hfl_share_semantic_weight=0.75,
+    )
+    document_calls = []
+
+    def embed_documents(texts, **kwargs):
+        batch = list(texts)
+        document_calls.append(batch)
+        return [
+            [1.0, 0.0] if "deployment" in text.casefold() else [0.0, 1.0]
+            for text in batch
+        ]
+
+    monkeypatch.setattr(retrieval, "get_settings", lambda: settings)
+    monkeypatch.setattr(retrieval, "_embed_documents", embed_documents)
+    monkeypatch.setattr(
+        retrieval,
+        "_embed_query",
+        lambda query, **kwargs: [1.0, 0.0],
+    )
+    store = get_share_store()
+    first = store.create_share(
+        configuration_id="",
+        name="First",
+        token_hash="first-token",
+        pin_hash="",
+        auth_mode="qr",
+        allowed_email="",
+        snapshot=snapshot,
+        ttl_seconds=3600,
+        single_use=False,
+        device_limit=1,
+    )
+
+    ranked = retrieval.retrieve_entries(
+        snapshot,
+        "Which deployment project shipped?",
+        share_id=first.id,
+        store=store,
+    )
+    repeated = retrieval.retrieve_entries(
+        snapshot,
+        "What service failed?",
+        share_id=first.id,
+        store=store,
+    )
+
+    assert ranked[0].id == "deployment-entry"
+    assert repeated[0].id == "deployment-entry"
+    assert len(document_calls) == 1
+    assert set(store.get_share_embeddings(
+        first.id, model_name="local-test-model"
+    )) == {"meal-entry", "deployment-entry"}
+
+    second_snapshot = type(base_snapshot)(
+        **{**base_snapshot.__dict__, "entries": (meal,)}
+    )
+    second = store.create_share(
+        configuration_id="",
+        name="Second",
+        token_hash="second-token",
+        pin_hash="",
+        auth_mode="qr",
+        allowed_email="",
+        snapshot=second_snapshot,
+        ttl_seconds=3600,
+        single_use=False,
+        device_limit=1,
+    )
+    isolated = retrieval.retrieve_entries(
+        second_snapshot,
+        "Which deployment project shipped?",
+        share_id=second.id,
+        store=store,
+    )
+
+    assert [entry.id for entry in isolated] == ["meal-entry"]
+    assert set(store.get_share_embeddings(
+        second.id, model_name="local-test-model"
+    )) == {"meal-entry"}
+
+
+def test_local_retrieval_falls_back_to_bounded_lexical_ranking(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from modules.hfl_shares import retrieval, scope
+
+    document = _document(tmp_path)
+    monkeypatch.setattr(scope, "resolve_corpus_root", lambda: tmp_path)
+    snapshot = build_snapshot(_configuration(), (document,))
+    base = snapshot.entries[0]
+    unrelated = type(base)(
+        **{
+            **base.__dict__,
+            "id": "unrelated",
+            "citation": "S1",
+            "text": "Prepared dinner at home.",
+            "tags": ("food",),
+        }
+    )
+    relevant = type(base)(
+        **{
+            **base.__dict__,
+            "id": "relevant",
+            "citation": "S2",
+            "text": "Resolved a deployment failure.",
+            "tags": ("deployment",),
+        }
+    )
+    snapshot = type(snapshot)(
+        **{**snapshot.__dict__, "entries": (unrelated, relevant)}
+    )
+    monkeypatch.setattr(
+        retrieval,
+        "get_settings",
+        lambda: SimpleNamespace(
+            hfl_share_retrieval_k=1,
+            hfl_share_embedding_model="missing-local-model",
+            hfl_share_embedding_cache_dir=str(tmp_path / "models"),
+            hfl_share_semantic_weight=0.75,
+        ),
+    )
+    monkeypatch.setattr(
+        retrieval,
+        "_embed_documents",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("offline")),
+    )
+
+    ranked = retrieval.retrieve_entries(snapshot, "deployment failure")
+
+    assert [entry.id for entry in ranked] == ["relevant"]
+
+
+def test_share_answer_rejects_non_hermes_provider_before_retrieval(
+    tmp_path, monkeypatch
+):
+    import asyncio
+    from types import SimpleNamespace
+
+    import modules.hfl_shares.agent as share_agent
+    from modules.hfl_shares import scope
+
+    document = _document(tmp_path)
+    monkeypatch.setattr(scope, "resolve_corpus_root", lambda: tmp_path)
+    snapshot = build_snapshot(_configuration(), (document,))
+    monkeypatch.setattr(
+        share_agent,
+        "get_settings",
+        lambda: SimpleNamespace(
+            hfl_share_provider="anthropic",
+            hfl_share_max_context_chars=120_000,
+        ),
+    )
+    monkeypatch.setattr(
+        share_agent,
+        "retrieve_entries",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("retrieval must not run")
+        ),
+    )
+
+    with pytest.raises(
+        share_agent.AgentUnavailable,
+        match="requires the local Hermes provider",
+    ):
+        asyncio.run(share_agent.answer_question(snapshot, "What happened?"))
+
+
 def test_hermes_adapter_uses_loopback_openai_endpoint_and_server_side_key(
     monkeypatch
 ):
@@ -1807,6 +2016,11 @@ def test_answer_question_routes_only_sanitized_prompt_to_hermes(tmp_path, monkey
     )
     monkeypatch.setattr(share_agent, "get_settings", lambda: settings)
     monkeypatch.setattr(share_agent, "_answer_with_hermes", answer_with_hermes)
+    monkeypatch.setattr(
+        share_agent,
+        "retrieve_entries",
+        lambda snapshot, query, *, share_id="": snapshot.entries,
+    )
 
     result = asyncio.run(
         share_agent.answer_question(snapshot, "What did Brian ship?")
@@ -1845,6 +2059,11 @@ def test_answer_question_redacts_provider_failure_details(
         ),
     )
     monkeypatch.setattr(share_agent, "_answer_with_hermes", failed_provider)
+    monkeypatch.setattr(
+        share_agent,
+        "retrieve_entries",
+        lambda snapshot, query, *, share_id="": snapshot.entries,
+    )
 
     with caplog.at_level(logging.WARNING), pytest.raises(
         share_agent.AgentUnavailable,

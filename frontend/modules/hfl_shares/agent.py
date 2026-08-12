@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 import re
@@ -11,85 +12,40 @@ from urllib.parse import quote, urlparse
 import httpx
 
 from config import get_settings
-from modules.hfl_shares.models import ScopeSnapshot
+from modules.hfl_shares.models import ScopeSnapshot, SnapshotEntry
+from modules.hfl_shares.retrieval import lexical_entries, retrieve_entries
 
 
 _log = logging.getLogger(__name__)
 _INSUFFICIENT = (
     "This shared context does not contain enough information to answer that."
 )
-_TOKEN = re.compile(r"[a-z0-9][a-z0-9_-]{2,}")
 _NATURAL_CITATION = re.compile(r"\[\[[^\]\n|]{1,160}\|S(\d+)\]\]")
 _LEGACY_CITATION = re.compile(r"\[S(\d+)\]")
-_STOP_WORDS = {
-    "about", "after", "again", "also", "and", "are", "brian", "can", "could",
-    "does", "for", "from", "have", "into", "latest", "most", "over", "show",
-    "that", "the", "their", "there", "these", "this", "through", "what", "when",
-    "where", "which", "with", "would", "your",
-}
-_TERM_EXPANSIONS = {
-    "interview": {"career", "experience", "project", "skills", "work"},
-    "places": {"location", "singapore", "travel", "trip", "visit"},
-    "visited": {"location", "places", "travel", "trip"},
-    "working": {"commit", "git", "project", "shipped", "work"},
-    "work": {"commit", "git", "project", "shipped", "working"},
-}
 
 
 class AgentUnavailable(RuntimeError):
     """The configured model provider could not answer safely."""
 
 
-def _retrieval_terms(query: str) -> set[str]:
-    terms = {
-        token
-        for token in _TOKEN.findall((query or "").casefold())
-        if token not in _STOP_WORDS
-    }
-    expanded = set(terms)
-    for term in terms:
-        expanded.update(_TERM_EXPANSIONS.get(term, ()))
-        if term.endswith("s") and len(term) > 4:
-            expanded.add(term[:-1])
-    return expanded
-
-
 def _retrieval_entries(snapshot: ScopeSnapshot, query: str):
-    terms = _retrieval_terms(query)
-    if not terms:
-        return snapshot.entries
-
-    def score(entry) -> int:
-        moment = entry.moment.casefold()
-        source = entry.source.casefold()
-        tags = {tag.casefold() for tag in entry.tags}
-        text = entry.text.casefold()
-        total = 0
-        for term in terms:
-            if term in tags:
-                total += 10
-            if term == source or term in source:
-                total += 7
-            if term in moment:
-                total += 6
-            total += min(4, text.count(term))
-        return total
-
-    ranked = [
-        (score(entry), index, entry)
-        for index, entry in enumerate(snapshot.entries)
-    ]
-    if not any(item[0] for item in ranked):
-        return snapshot.entries
-    ranked.sort(key=lambda item: (-item[0], item[1]))
-    return tuple(item[2] for item in ranked)
+    """Compatibility wrapper for deterministic lexical-only callers/tests."""
+    return lexical_entries(snapshot, query, k=len(snapshot.entries))
 
 
-def _context(snapshot: ScopeSnapshot, query: str = "") -> str:
+def _context(
+    snapshot: ScopeSnapshot,
+    query: str = "",
+    *,
+    entries: tuple[SnapshotEntry, ...] | None = None,
+) -> str:
     limit = max(5_000, get_settings().hfl_share_max_context_chars)
     chunks: list[str] = []
     used = 0
-    for entry in _retrieval_entries(snapshot, query):
+    ranked_entries = (
+        entries if entries is not None else _retrieval_entries(snapshot, query)
+    )
+    for entry in ranked_entries:
         chunk = (
             f'<entry citation="[{html.escape(entry.citation, quote=True)}]" '
             f'source="{html.escape(entry.source, quote=True)}">\n'
@@ -211,6 +167,7 @@ async def answer_question(
     question: str,
     *,
     history: tuple[dict[str, str], ...] = (),
+    share_id: str = "",
 ) -> str:
     """Answer strictly from the immutable snapshot, with entry citations."""
     prompt = (question or "").strip()
@@ -250,42 +207,31 @@ source; factual claims must still be grounded in <shared_context>.
             ),
         ]
     )
+    settings = get_settings()
+    if settings.hfl_share_provider.strip().casefold() != "hermes":
+        raise AgentUnavailable(
+            "The sharing agent requires the local Hermes provider."
+        )
+    selected_entries = await asyncio.to_thread(
+        retrieve_entries,
+        snapshot,
+        retrieval_query,
+        share_id=share_id,
+    )
     user = (
-        f"<shared_context>\n{_context(snapshot, retrieval_query)}\n"
+        f"<shared_context>\n"
+        f"{_context(snapshot, retrieval_query, entries=selected_entries)}\n"
         "</shared_context>\n\n"
         f"<owner_context>{owner_context}</owner_context>\n\n"
         f"<conversation>\n{conversation}\n</conversation>\n\n"
         f"<question>{html.escape(prompt[:2000])}</question>"
     )
     try:
-        settings = get_settings()
-        provider = settings.hfl_share_provider.strip().casefold()
-        if provider == "hermes":
-            text = await _answer_with_hermes(
-                system=system,
-                user=user,
-                settings=settings,
-            )
-        elif provider == "anthropic":
-            from apps.antropic.config import get_config as get_anthropic_config
-            from apps.antropic.references.web.base_api_service import (
-                BaseApiServiceAnthropic,
-            )
-
-            client = BaseApiServiceAnthropic(get_anthropic_config("ANTHROPIC"))
-            response = await client.send_message_async(
-                prompt=user,
-                system=system,
-                model=settings.hfl_share_model,
-                max_tokens=settings.hfl_share_max_output_tokens,
-            )
-            text = (
-                response.content[0].text.strip()
-                if response and getattr(response, "content", None)
-                else ""
-            )
-        else:
-            raise AgentUnavailable("The sharing agent is temporarily unavailable.")
+        text = await _answer_with_hermes(
+            system=system,
+            user=user,
+            settings=settings,
+        )
         if not text:
             raise AgentUnavailable("The sharing agent returned no answer.")
         return _validated_answer(text, snapshot)
