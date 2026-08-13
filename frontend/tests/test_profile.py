@@ -54,6 +54,8 @@ def test_profile_requires_authentication_and_header_uses_fallback(
     assert "margin-top:1.35rem" in page.text
     assert '<section class="profile-fieldset" role="group"' in page.text
     assert 'class="profile-section-title" id="profile-contact-title">Contact</h2>' in page.text
+    assert "Profile section" not in page.text
+    assert "profile-section-kicker" not in page.text
     assert "<legend>Contact</legend>" not in page.text
 
 
