@@ -215,7 +215,12 @@ class ShareStore:
 
     @staticmethod
     def _configuration_payload(payload: dict) -> ShareConfiguration:
-        for field in ("sources", "tags", "selected_entry_ids"):
+        for field in (
+            "sources",
+            "tags",
+            "selected_entry_ids",
+            "disabled_reference_ids",
+        ):
             payload[field] = tuple(payload.get(field) or [])
         if "context_prompt" not in payload:
             payload["context_prompt"] = "\n".join(

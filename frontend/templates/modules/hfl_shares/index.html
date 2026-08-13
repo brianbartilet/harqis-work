@@ -177,6 +177,7 @@
       <form id="social-recipe-form" method="post" data-social-form>
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <input type="hidden" name="configuration_id" value="{{ cfg.id if cfg else '' }}">
+        {% if cfg %}{% for reference_id in cfg.disabled_reference_ids %}<input type="hidden" name="disabled_reference_ids" value="{{ reference_id }}" data-disabled-reference>{% endfor %}{% endif %}
         <div class="two">
           <div class="field"><label for="name">Configuration name</label><input class="control" id="name" name="name" required value="{{ cfg.name if cfg else '' }}" placeholder="Work context"></div>
           <div class="field"><label for="recipient">Recipient</label><input class="control" id="recipient" name="recipient" required maxlength="20" value="{{ cfg.recipient if cfg else '' }}" placeholder="Who is this for?"></div>
@@ -538,8 +539,13 @@
   let previewTimer = 0;
   let previewController = null;
   const syncDisabledReferences = () => {
+    const references = form.querySelectorAll('input[name="enabled_reference_ids"]');
+    // Preserve a saved recipe's exclusions until its first automatic preview
+    // has rendered the corresponding reference controls.
+    if (!references.length) return;
     form.querySelectorAll('[data-disabled-reference]').forEach(input => input.remove());
-    form.querySelectorAll('input[name="enabled_reference_ids"]:not(:checked)').forEach(reference => {
+    references.forEach(reference => {
+      if (reference.checked) return;
       const hidden = document.createElement('input');
       hidden.type = 'hidden';
       hidden.name = 'disabled_reference_ids';

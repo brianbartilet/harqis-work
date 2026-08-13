@@ -565,7 +565,55 @@ def test_recipe_save_accepts_more_than_one_thousand_reference_fields(
     )
 
     assert response.status_code == 303
-    assert len(get_share_store().list_configurations()) == 1
+    saved = get_share_store().list_configurations()[0]
+    assert len(saved.disabled_reference_ids) == 1_001
+
+
+def test_saved_recipe_restores_deselected_references(
+    authenticated_client, sharing_corpus
+):
+    preview = build_snapshot(
+        _configuration(references_enabled=True),
+        (sharing_corpus,),
+    )
+    reference_id = preview.entries[0].references[0].id
+
+    response = authenticated_client.post(
+        "/sharing/configurations",
+        data=_form(
+            references_enabled="on",
+            disabled_reference_ids=[reference_id],
+        ),
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    saved = get_share_store().list_configurations()[0]
+    assert saved.disabled_reference_ids == (reference_id,)
+
+    loaded = authenticated_client.get(
+        f"/sharing?configuration_id={saved.id}"
+    )
+    assert loaded.status_code == 200
+    assert (
+        f'name="disabled_reference_ids" value="{reference_id}" '
+        "data-disabled-reference"
+    ) in loaded.text
+
+    reloaded_preview = authenticated_client.post(
+        "/sharing/preview?fragment=true",
+        data=_form(
+            configuration_id=saved.id,
+            references_enabled="on",
+            disabled_reference_ids=[reference_id],
+        ),
+    )
+    assert reloaded_preview.status_code == 200
+    assert re.search(
+        rf'name="enabled_reference_ids" value="{re.escape(reference_id)}"(?![^>]*checked)',
+        reloaded_preview.text,
+    )
+    assert "data-toggle-all-references checked" not in reloaded_preview.text
 
 
 def test_recipe_snapshot_checkbox_precedes_tags_and_defaults_to_fixed(

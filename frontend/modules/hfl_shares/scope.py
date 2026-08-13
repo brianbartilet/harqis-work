@@ -145,7 +145,7 @@ def build_snapshot(
     documents: tuple[CorpusDocument, ...],
     *,
     enabled_reference_ids: tuple[str, ...] | None = None,
-    disabled_reference_ids: tuple[str, ...] = (),
+    disabled_reference_ids: tuple[str, ...] | None = None,
 ) -> ScopeSnapshot:
     all_sources = ALL_SOURCES in configuration.sources
     sources = {
@@ -166,7 +166,11 @@ def build_snapshot(
         if enabled_reference_ids is None
         else set(enabled_reference_ids)
     )
-    disabled = set(disabled_reference_ids)
+    disabled = set(
+        configuration.disabled_reference_ids
+        if disabled_reference_ids is None
+        else disabled_reference_ids
+    )
     entries: list[SnapshotEntry] = []
     dates: list[date] = []
     available_references = 0

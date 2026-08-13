@@ -279,6 +279,7 @@ def _configuration_from_form(
         auth_mode=str(form.get("auth_mode") or "pin"),
         allowed_email=str(form.get("allowed_email") or "").strip(),
         references_enabled=form.get("references_enabled") == "on",
+        disabled_reference_ids=_disabled_references(form),
         live_updates=str(form.get("freeze_snapshot") or "on") != "on",
         ttl_seconds=_expiration_seconds(form, existing),
         no_expiry=no_expiry,
