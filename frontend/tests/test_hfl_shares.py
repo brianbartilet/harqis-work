@@ -1942,6 +1942,90 @@ def test_agent_context_ranks_question_relevant_entries_before_newer_noise(
     )
 
 
+def test_local_retrieval_treats_latest_as_a_temporal_boundary(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from modules.hfl_shares import retrieval, scope
+
+    document = _document(tmp_path)
+    monkeypatch.setattr(scope, "resolve_corpus_root", lambda: tmp_path)
+    base_snapshot = build_snapshot(_configuration(), (document,))
+    base = base_snapshot.entries[0]
+
+    def entry(entry_id, citation, header, source, moment):
+        return type(base)(
+            **{
+                **base.__dict__,
+                "id": entry_id,
+                "citation": citation,
+                "header": header,
+                "source": source,
+                "moment": moment,
+                "text": f"{header} Source: {source} Moment: {moment}",
+            }
+        )
+
+    newest_other = entry(
+        "newest-other", "S1", "2026-08-10 09:00", "trello", "Updated targets"
+    )
+    newer_mention = entry(
+        "newer-mention",
+        "S4",
+        "2026-08-09 09:00",
+        "browsing",
+        "Watched YouTube while browsing",
+    )
+    newest_youtube = entry(
+        "newest-youtube", "S2", "2023-06-09 18:47", "youtube", "Uploaded Fresh"
+    )
+    older_youtube = entry(
+        "older-youtube", "S3", "2023-06-02 10:00", "youtube-hfl", "Older vlog"
+    )
+    snapshot = type(base_snapshot)(
+        **{
+            **base_snapshot.__dict__,
+            "entries": (
+                newest_other,
+                newer_mention,
+                older_youtube,
+                newest_youtube,
+            ),
+            "latest": "2026-08-10",
+        }
+    )
+    monkeypatch.setattr(
+        retrieval,
+        "get_settings",
+        lambda: SimpleNamespace(
+            hfl_share_retrieval_k=2,
+            hfl_share_embedding_model="unused",
+            hfl_share_embedding_cache_dir=str(tmp_path / "models"),
+            hfl_share_semantic_weight=0.75,
+        ),
+    )
+    monkeypatch.setattr(
+        retrieval,
+        "_embed_query",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("temporal retrieval must establish candidates before embeddings")
+        ),
+    )
+
+    latest_youtube = retrieval.retrieve_entries(snapshot, "latest youtube")
+    latest_activity = retrieval.retrieve_entries(snapshot, "latest activity")
+
+    assert [item.id for item in latest_youtube] == [
+        "newest-youtube",
+        "older-youtube",
+    ]
+    assert [item.id for item in latest_activity] == [
+        "newest-other",
+        "newer-mention",
+    ]
+
+
 def test_local_hybrid_retrieval_is_share_isolated_and_reuses_vectors(
     tmp_path, monkeypatch
 ):
@@ -2295,6 +2379,8 @@ def test_answer_question_routes_only_sanitized_prompt_to_hermes(tmp_path, monkey
     assert result == "Brian shipped [[the corpus portal|S1]]."
     assert captured["settings"] is settings
     assert "read-only HARQIS Activity Corpus" in captured["system"]
+    assert "first-person activity in an entry belongs to Brian" in captured["system"]
+    assert "latest known snapshot activity" in captured["system"]
     assert "<shared_context>" in captured["user"]
     assert "What did Brian ship?" in captured["user"]
 

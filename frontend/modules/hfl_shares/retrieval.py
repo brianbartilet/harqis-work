@@ -7,6 +7,7 @@ import logging
 import math
 import re
 import threading
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
@@ -69,6 +70,69 @@ def _lexical_score(entry: SnapshotEntry, terms: set[str]) -> float:
             score += 6
         score += min(4, text.count(term))
     return score
+
+
+def _entry_datetime(entry: SnapshotEntry) -> datetime | None:
+    raw = (entry.header or "").strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(raw).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
+def has_recency_intent(query: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(?:latest|newest|current|currently|recent|recently)\b",
+            query.casefold(),
+        )
+    )
+
+
+def _latest_entries(
+    snapshot: ScopeSnapshot,
+    query: str,
+    *,
+    k: int,
+) -> tuple[SnapshotEntry, ...] | None:
+    """Return newest relevant snapshot entries for explicit recency questions."""
+    if not has_recency_intent(query):
+        return None
+    terms = _terms(query)
+    source_terms = {
+        term
+        for term in terms
+        if any(
+            term == entry.source.casefold()
+            or entry.source.casefold().startswith(f"{term}-")
+            for entry in snapshot.entries
+        )
+    }
+    scored = [
+        (_lexical_score(entry, terms), _entry_datetime(entry), index, entry)
+        for index, entry in enumerate(snapshot.entries)
+    ]
+    source_matches = [
+        item
+        for item in scored
+        if item[1] is not None
+        and any(
+            term == item[3].source.casefold()
+            or item[3].source.casefold().startswith(f"{term}-")
+            for term in source_terms
+        )
+    ]
+    relevant = [item for item in scored if item[0] > 0 and item[1] is not None]
+    candidates = source_matches or relevant or [
+        item for item in scored if item[1] is not None
+    ]
+    candidates.sort(key=lambda item: (item[1], -item[2]), reverse=True)
+    return tuple(item[3] for item in candidates[:k])
 
 
 def lexical_entries(
@@ -202,6 +266,9 @@ def retrieve_entries(
     """
     settings = get_settings()
     k = max(1, min(20, int(settings.hfl_share_retrieval_k)))
+    temporal = _latest_entries(snapshot, query, k=k)
+    if temporal is not None:
+        return temporal
     lexical = lexical_entries(snapshot, query, k=k)
     if not snapshot.entries:
         return ()
