@@ -81,6 +81,33 @@ def test_profile_pin_unlocks_for_authenticated_browser_session(authenticated_cli
     assert authenticated_client.cookies.get("hfl_secrets_unlocked")
 
 
+def test_secret_pages_render_custom_pin_dialog_without_native_prompt(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as corpus_router
+
+    get_profile_store().save(
+        OwnerProfile(secret_pin_hash=hash_pin("002795"), secret_tags="#secrets")
+    )
+    document = _document()
+    monkeypatch.setattr(corpus_router.corpus_index, "documents", lambda: (document,))
+    monkeypatch.setattr(corpus_router.corpus_index, "get", lambda path: document)
+
+    corpus_page = authenticated_client.get("/hfl-corpus")
+    document_page = authenticated_client.get("/hfl-corpus/document/2026-08-13.md")
+    sharing_page = authenticated_client.get("/sharing")
+
+    for page in (corpus_page, document_page, sharing_page):
+        assert page.status_code == 200
+        assert "data-secrets-pin-dialog" in page.text
+        assert 'inputmode="numeric"' in page.text
+        assert 'pattern="[0-9]{6}"' in page.text
+        assert "window.prompt" not in page.text
+    assert "requestHflSecretsUnlock" in corpus_page.text
+    assert "requestHflSecretsUnlock" in document_page.text
+    assert "requestHflSecretsUnlock" in sharing_page.text
+
+
 def test_mixed_document_blurs_secret_entry_and_protects_editor(
     authenticated_client, monkeypatch
 ):

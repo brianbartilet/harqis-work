@@ -141,6 +141,7 @@
   <article data-document-rendered class="markdown-body rounded-xl bg-slate-900/70 p-5 ring-1 ring-slate-800 sm:p-8">{{ rendered }}</article>
   <div id="document-end" class="scroll-mt-40" aria-hidden="true"></div>
 
+  {% include "modules/hfl_corpus/partials/secrets_pin_dialog.html" %}
   <script>
     (() => {
       const open = document.querySelector('[data-document-edit-open]');
@@ -170,17 +171,7 @@
         error.textContent = message;
         error.hidden = !message;
       };
-      const unlock = async () => {
-        const pin = window.prompt('Enter your six-digit Activity Corpus PIN');
-        if (pin === null) return false;
-        const response = await fetch('/hfl-corpus/secrets/unlock', {
-          method: 'POST', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({pin}),
-        });
-        const body = await response.json();
-        if (!response.ok) { window.alert(body.detail || 'Secrets could not be unlocked.'); return false; }
-        return true;
-      };
+      const unlock = () => window.requestHflSecretsUnlock();
       open.addEventListener('click', async () => {
         if ({{ 'true' if document_has_secrets and not secrets_authorized else 'false' }}) {
           if (!await unlock()) return;

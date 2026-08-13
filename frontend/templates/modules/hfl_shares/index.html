@@ -435,6 +435,7 @@
     </div>
   </section>
 </div>
+{% include "modules/hfl_corpus/partials/secrets_pin_dialog.html" %}
 <script>
 (() => {
   const form = document.querySelector('[data-social-form]');
@@ -454,16 +455,8 @@
   const expiresAt = form?.querySelector('[data-expires-at]');
   includeSecrets?.addEventListener('change', async () => {
     if (!includeSecrets.checked || includeSecrets.dataset.secretsAuthorized === 'true') return;
-    const pin = window.prompt('Enter your six-digit Activity Corpus PIN');
-    if (pin === null) { includeSecrets.checked = false; return; }
-    const response = await fetch('/hfl-corpus/secrets/unlock', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({pin}),
-    });
-    const body = await response.json();
-    if (!response.ok) {
+    if (!await window.requestHflSecretsUnlock()) {
       includeSecrets.checked = false;
-      window.alert(body.detail || 'Secrets could not be unlocked.');
       return;
     }
     includeSecrets.dataset.secretsAuthorized = 'true';

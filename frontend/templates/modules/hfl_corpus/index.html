@@ -697,6 +697,7 @@
   });
 })();
 </script>
+{% include "modules/hfl_corpus/partials/secrets_pin_dialog.html" %}
 <script>
 (() => {
   const button = document.querySelector('[data-secrets-toggle]');
@@ -709,18 +710,7 @@
       return;
     }
     if (button.dataset.secretsAuthorized !== 'true') {
-      const pin = window.prompt('Enter your six-digit Activity Corpus PIN');
-      if (pin === null) return;
-      const response = await fetch('/hfl-corpus/secrets/unlock', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({pin}),
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        window.alert(body.detail || 'Secrets could not be unlocked.');
-        return;
-      }
+      if (!await window.requestHflSecretsUnlock()) return;
     }
     url.searchParams.set('show_secrets', 'true');
     window.location.assign(url);
