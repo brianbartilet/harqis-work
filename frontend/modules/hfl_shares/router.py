@@ -33,6 +33,7 @@ from modules.hfl_corpus.corpus import (
     resolve_corpus_root,
 )
 from modules.hfl_corpus.remote import RemoteCorpusClient, RemoteCorpusError
+from modules.hfl_corpus.secrets import normalize_secret_tags, secrets_unlocked
 from modules.manifesto.service import load_manifesto
 from modules.profile.store import get_profile_store
 from modules.hfl_shares.agent import AgentUnavailable, answer_question
@@ -93,10 +94,21 @@ def _suggested_prompts(snapshot: ScopeSnapshot) -> tuple[str, ...]:
     return suggested_prompts(snapshot, _profile().display_name)
 
 
+def _secret_snapshot_options(request: Request, configuration: ShareConfiguration) -> dict:
+    profile = _profile()
+    if configuration.include_secrets and not secrets_unlocked(request, profile):
+        raise ValueError("Unlock Activity Corpus secrets before including them.")
+    return {
+        "allow_secrets": configuration.include_secrets,
+        "secret_tags": normalize_secret_tags(profile.secret_tags),
+    }
+
+
 def _sharing_documents(
     sources: tuple[str, ...] = (),
     *,
     force: bool = False,
+    include_secrets: bool = False,
 ):
     if get_settings().hfl_corpus_api_url.strip():
         try:
@@ -105,6 +117,12 @@ def _sharing_documents(
             if not requested_sources or ALL_SOURCES in requested_sources:
                 catalog = client.index(params={"page": "1", "page_size": "20"})
                 requested_sources = tuple(catalog["sources"])
+            if include_secrets:
+                return client.sharing_documents(
+                    requested_sources,
+                    include_secrets=True,
+                    secret_tags=normalize_secret_tags(_profile().secret_tags),
+                )
             return client.sharing_documents(requested_sources)
         except RemoteCorpusError as exc:
             raise ValueError(str(exc)) from exc
@@ -139,8 +157,14 @@ def _refresh_live_grant(grant: ShareGrant) -> ShareGrant:
     try:
         snapshot = build_snapshot(
             configuration,
-            _sharing_documents(configuration.sources, force=True),
+            _sharing_documents(
+                configuration.sources,
+                force=True,
+                include_secrets=configuration.include_secrets,
+            ),
             enabled_reference_ids=grant.snapshot.enabled_reference_ids,
+            allow_secrets=configuration.include_secrets,
+            secret_tags=normalize_secret_tags(_profile().secret_tags),
         )
         if not snapshot.entries:
             raise ValueError("A live share cannot refresh to an empty scope.")
@@ -279,6 +303,7 @@ def _configuration_from_form(
         auth_mode=str(form.get("auth_mode") or "pin"),
         allowed_email=str(form.get("allowed_email") or "").strip(),
         references_enabled=form.get("references_enabled") == "on",
+        include_secrets=form.get("include_secrets") == "on",
         disabled_reference_ids=_disabled_references(form),
         live_updates=str(form.get("freeze_snapshot") or "on") != "on",
         ttl_seconds=_expiration_seconds(form, existing),
@@ -424,6 +449,8 @@ def _owner_context(
         success=success,
         csrf=make_csrf_token(user),
         defaults=get_settings(),
+        secrets_configured=bool(_profile().secret_pin_hash),
+        secrets_authorized=secrets_unlocked(request, _profile()),
     )
 
 
@@ -538,8 +565,11 @@ async def _preview_response(
         )
         preview = build_snapshot(
             configuration,
-            _sharing_documents(configuration.sources),
+            _sharing_documents(
+                configuration.sources, include_secrets=configuration.include_secrets
+            ),
             disabled_reference_ids=_disabled_references(form),
+            **_secret_snapshot_options(request, configuration),
         )
         question = str(form.get("question") or "").strip()
         answer = ""
@@ -634,8 +664,13 @@ async def generate_share(request: Request):
         configuration = _configuration_from_form(form, existing=existing)
         snapshot = build_snapshot(
             configuration,
-            _sharing_documents(configuration.sources, force=True),
+            _sharing_documents(
+                configuration.sources,
+                force=True,
+                include_secrets=configuration.include_secrets,
+            ),
             disabled_reference_ids=_disabled_references(form),
+            **_secret_snapshot_options(request, configuration),
         )
         if not snapshot.entries:
             raise ValueError("A share cannot be generated from an empty scope.")
@@ -796,7 +831,12 @@ async def generate_instant_share(request: Request, configuration_id: str):
     try:
         snapshot = build_snapshot(
             configuration,
-            _sharing_documents(configuration.sources, force=True),
+            _sharing_documents(
+                configuration.sources,
+                force=True,
+                include_secrets=configuration.include_secrets,
+            ),
+            **_secret_snapshot_options(request, configuration),
         )
         if not snapshot.entries:
             raise ValueError("A share cannot be generated from an empty scope.")

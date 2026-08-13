@@ -21,6 +21,8 @@ class OwnerProfile:
     instagram_url: str = ""
     avatar: bytes = b""
     avatar_content_type: str = ""
+    secret_pin_hash: str = ""
+    secret_tags: str = ""
     updated_at: str = ""
 
     @property

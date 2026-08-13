@@ -94,6 +94,9 @@
   .corpus-editor { border: 1px solid #1e3a5f; border-radius: .8rem; background: #08111f; padding: 1rem; }
   .corpus-editor textarea { box-sizing: border-box; width: 100%; min-height: min(62dvh, 44rem); resize: vertical; border: 1px solid #334155; border-radius: .65rem; background: #020617; color: #dbeafe; padding: 1rem; font: 500 .82rem/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 2; }
   .corpus-editor textarea:focus { border-color: #38bdf8; outline: 2px solid rgba(56, 189, 248, .18); }
+  .secret-entry-placeholder { display:flex; min-height:9rem; align-items:center; justify-content:space-between; gap:1rem; margin:1rem 0; border:1px solid #6d28d9; border-radius:.8rem; background:rgba(46,16,101,.35); padding:1.25rem; filter:none; }
+  .secret-entry-placeholder p { margin:.3rem 0 0; color:#94a3b8; font-size:.8rem; }
+  .secret-entry-placeholder button { border-radius:.55rem; background:#6d28d9; color:white; padding:.55rem .9rem; font-size:.8rem; font-weight:700; }
 </style>
 {% endblock %}
 
@@ -107,6 +110,9 @@
       <p class="mt-1 text-xs text-slate-500">Updated {{ document.updated_at.strftime('%Y-%m-%d %H:%M') }}</p>
     </div>
     <div class="shrink-0 pt-1 text-right text-xs">
+      {% if document_has_secrets and secrets_configured %}
+      <button type="button" data-secrets-toggle data-secrets-on="{{ 'true' if show_secrets else 'false' }}" data-secrets-authorized="{{ 'true' if secrets_authorized else 'false' }}" class="mb-3 block w-full text-right font-semibold text-violet-300 hover:text-violet-200">{{ 'Hide secrets' if show_secrets else 'Show secrets' }}</button>
+      {% endif %}
       <button type="button" data-document-edit-open class="mb-3 block w-full text-right font-semibold text-blue-300 hover:text-blue-200">Edit</button>
       <p class="operator-meta">Created {{ document.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
     </div>
@@ -164,7 +170,49 @@
         error.textContent = message;
         error.hidden = !message;
       };
-      open.addEventListener('click', () => setEditing(true));
+      const unlock = async () => {
+        const pin = window.prompt('Enter your six-digit Activity Corpus PIN');
+        if (pin === null) return false;
+        const response = await fetch('/hfl-corpus/secrets/unlock', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({pin}),
+        });
+        const body = await response.json();
+        if (!response.ok) { window.alert(body.detail || 'Secrets could not be unlocked.'); return false; }
+        return true;
+      };
+      open.addEventListener('click', async () => {
+        if ({{ 'true' if document_has_secrets and not secrets_authorized else 'false' }}) {
+          if (!await unlock()) return;
+          const url = new URL(window.location.href);
+          url.searchParams.set('show_secrets', 'true');
+          window.location.assign(url);
+          return;
+        }
+        setEditing(true);
+      });
+      document.querySelectorAll('[data-secret-reveal]').forEach(button => {
+        button.addEventListener('click', async () => {
+          if ({{ 'true' if not secrets_authorized else 'false' }} && !await unlock()) return;
+          const url = new URL(window.location.href);
+          url.searchParams.delete('show_secrets');
+          url.searchParams.set('reveal', button.dataset.secretReveal);
+          url.hash = button.dataset.secretReveal;
+          window.location.assign(url);
+        });
+      });
+      document.querySelector('[data-secrets-toggle]')?.addEventListener('click', async event => {
+        const button = event.currentTarget;
+        const url = new URL(window.location.href);
+        url.searchParams.delete('reveal');
+        if (button.dataset.secretsOn === 'true') {
+          url.searchParams.delete('show_secrets');
+        } else {
+          if (button.dataset.secretsAuthorized !== 'true' && !await unlock()) return;
+          url.searchParams.set('show_secrets', 'true');
+        }
+        window.location.assign(url);
+      });
       discard.addEventListener('click', () => {
         textarea.value = original;
         showError('');

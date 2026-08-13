@@ -20,7 +20,7 @@ from fastapi.responses import (
     StreamingResponse,
 )
 from markupsafe import Markup
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from config import get_settings
 from modules.hfl_corpus.corpus import (
@@ -48,6 +48,17 @@ from modules.hfl_corpus.entry_create import (
 )
 from modules.hfl_corpus.document_edit import UpdateDocumentRequest, update_document_text
 from modules.hfl_corpus.entry_enrichment import enrich_manual_entry
+from modules.hfl_corpus.secrets import (
+    document_has_secrets,
+    filter_documents,
+    is_secret_entry,
+    normalize_secret_tags,
+    pin_rate_limited,
+    secrets_unlocked,
+    set_unlocked_cookie,
+    verify_owner_pin,
+)
+from modules.profile.store import get_profile_store
 from modules.hfl_shares.viewer import (
     classify_preview,
     read_preview_text,
@@ -64,6 +75,32 @@ from web import page_context, require_user, templates
 router = APIRouter(prefix="/hfl-corpus")
 _H2 = re.compile(r"<h2(?:\s+[^>]*)?>")
 _log = logging.getLogger(__name__)
+
+
+class SecretPinRequest(BaseModel):
+    pin: str
+
+
+@router.post("/secrets/unlock")
+async def hfl_secrets_unlock(request: Request, payload: SecretPinRequest):
+    user, redirect = require_user(request)
+    if redirect:
+        return JSONResponse({"detail": "Authentication required"}, status_code=401)
+    profile = get_profile_store().get()
+    if not profile.secret_pin_hash:
+        return JSONResponse(
+            {"detail": "Set a secrets PIN in Profile Settings first."}, status_code=409
+        )
+    if pin_rate_limited(request, user):
+        return JSONResponse(
+            {"detail": "Too many incorrect attempts. Try again in 15 minutes."},
+            status_code=429,
+        )
+    if not verify_owner_pin(request, user, payload.pin, profile):
+        return JSONResponse({"detail": "Incorrect PIN."}, status_code=403)
+    response = JSONResponse({"unlocked": True})
+    set_unlocked_cookie(response, profile)
+    return response
 
 
 def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
@@ -268,6 +305,7 @@ def _index_url(
     sort: str,
     page: int = 1,
     page_size: int = 20,
+    show_secrets: bool = False,
 ) -> str:
     params = {}
     if query:
@@ -286,6 +324,8 @@ def _index_url(
         params["page"] = page
     if page_size != 20 or page != 1:
         params["page_size"] = page_size
+    if show_secrets:
+        params["show_secrets"] = "true"
     return "/hfl-corpus" + (f"?{urlencode(params)}" if params else "")
 
 
@@ -305,6 +345,7 @@ async def hfl_corpus_page(
     page_size: int = 20,
     created: bool = False,
     source: str = "",
+    show_secrets: bool = False,
 ):
     user, redirect = require_user(request)
     if redirect:
@@ -319,6 +360,10 @@ async def hfl_corpus_page(
             date_field, date_from, date_to = "updated", updated_from, updated_to
         elif created_from or created_to:
             date_field, date_from, date_to = "created", created_from, created_to
+    profile = get_profile_store().get()
+    protected_tags = normalize_secret_tags(profile.secret_tags)
+    authorized = secrets_unlocked(request, profile)
+    include_secrets = bool(show_secrets and authorized)
     remote_error = ""
     if _uses_remote_corpus():
         try:
@@ -331,6 +376,8 @@ async def hfl_corpus_page(
                 "sort": sort,
                 "page": str(page),
                 "page_size": str(page_size),
+                "include_secrets": str(include_secrets).lower(),
+                "secret_tags": ",".join(protected_tags),
             })
             documents = remote["documents"]
             tree = remote["tree"]
@@ -361,7 +408,11 @@ async def hfl_corpus_page(
             result_page = paginate_documents((), page=page, page_size=page_size)
             remote_error = str(exc)
     else:
-        documents = corpus_index.documents()
+        raw_documents = corpus_index.documents()
+        tag_cloud = common_tags(raw_documents)
+        documents = raw_documents if include_secrets else filter_documents(
+            raw_documents, protected_tags
+        )
         source_options = common_sources(documents)
         selected_source = normalize_source(source, source_options)
         tree = shallow_tree(build_tree(documents))
@@ -378,7 +429,6 @@ async def hfl_corpus_page(
         results = result_page.items
         total_results = result_page.total_results
         document_count = len(documents)
-        tag_cloud = common_tags(documents)
     selected_tags, text_query = parse_search_query(q)
     entry_source_options = [
         "manual-entry",
@@ -393,6 +443,7 @@ async def hfl_corpus_page(
         source=selected_source,
         sort=reverse_sort,
         page_size=result_page.page_size,
+        show_secrets=include_secrets,
     )
     tag_options = []
     for tag, count in tag_cloud:
@@ -418,6 +469,7 @@ async def hfl_corpus_page(
                 source=selected_source,
                 sort=sort,
                 page_size=result_page.page_size,
+                show_secrets=include_secrets,
             ),
         })
     page_url_values = {
@@ -428,6 +480,7 @@ async def hfl_corpus_page(
         "source": selected_source,
         "sort": sort,
         "page_size": result_page.page_size,
+        "show_secrets": include_secrets,
     }
     previous_page_url = _index_url(
         **page_url_values, page=result_page.page - 1
@@ -464,6 +517,9 @@ async def hfl_corpus_page(
             tag_cloud=tag_options,
             remote_error=remote_error,
             success_message="HFL entry created successfully." if created else "",
+            secrets_configured=bool(profile.secret_pin_hash),
+            secrets_authorized=authorized,
+            show_secrets=include_secrets,
         ),
     )
 
@@ -558,17 +614,25 @@ async def hfl_entry_upload(
 
 
 @router.get("/tree", response_class=HTMLResponse, name="hfl_tree")
-async def hfl_tree(request: Request, path: str = ""):
+async def hfl_tree(request: Request, path: str = "", show_secrets: bool = False):
     user, redirect = require_user(request)
     if redirect:
         return redirect
+    profile = get_profile_store().get()
+    protected_tags = normalize_secret_tags(profile.secret_tags)
+    include_secrets = bool(show_secrets and secrets_unlocked(request, profile))
     if _uses_remote_corpus():
         try:
-            branch = RemoteCorpusClient.from_settings().tree(path)
+            branch = RemoteCorpusClient.from_settings().tree(
+                path, include_secrets=include_secrets, secret_tags=protected_tags
+            )
         except RemoteCorpusError as exc:
             return HTMLResponse(str(exc), status_code=502)
     else:
-        tree = build_tree(corpus_index.documents())
+        documents = corpus_index.documents()
+        if not include_secrets:
+            documents = filter_documents(documents, protected_tags)
+        tree = build_tree(documents)
         node = find_tree_node(tree, path)
         if not node:
             return HTMLResponse("Corpus directory not found", status_code=404)
@@ -576,7 +640,7 @@ async def hfl_tree(request: Request, path: str = ""):
     return templates.TemplateResponse(
         request,
         "modules/hfl_corpus/partials/tree.html",
-        {"tree": branch},
+        {"tree": branch, "show_secrets": include_secrets},
     )
 
 
@@ -592,10 +656,14 @@ async def hfl_matches(
     source: str = "",
     offset: int = 0,
     limit: int = 20,
+    show_secrets: bool = False,
 ):
     user, redirect = require_user(request)
     if redirect:
         return redirect
+    profile = get_profile_store().get()
+    protected_tags = normalize_secret_tags(profile.secret_tags)
+    include_secrets = bool(show_secrets and secrets_unlocked(request, profile))
     if _uses_remote_corpus():
         try:
             match_page = RemoteCorpusClient.from_settings().matches(
@@ -604,6 +672,8 @@ async def hfl_matches(
                 source=source,
                 offset=offset,
                 limit=limit,
+                include_secrets=include_secrets,
+                secret_tags=protected_tags,
             )
         except RemoteCorpusError as exc:
             return HTMLResponse(str(exc), status_code=502)
@@ -621,10 +691,14 @@ async def hfl_matches(
             source,
             common_sources(corpus_index.documents()),
         )
-        matching_entries = document.matching_entries(
-            selected_tags,
-            text_query,
-            selected_source,
+        visible_documents = (document,) if include_secrets else filter_documents(
+            (document,), protected_tags
+        )
+        matching_entries = (
+            visible_documents[0].matching_entries(
+                selected_tags, text_query, selected_source
+            )
+            if visible_documents else ()
         )
         normalized_offset = max(0, offset)
         normalized_limit = min(max(1, limit), 20)
@@ -647,6 +721,7 @@ async def hfl_matches(
             "query": q,
             "source": source,
             "selected_tag": selected_tags[0] if len(selected_tags) == 1 else "",
+            "show_secrets": include_secrets,
         },
     )
 
@@ -657,13 +732,23 @@ async def hfl_document(
     relative_path: str,
     tag: str = "",
     source: str = "",
+    show_secrets: bool = False,
+    reveal: str = "",
 ):
     user, redirect = require_user(request)
     if redirect:
         return redirect
+    profile = get_profile_store().get()
+    protected_tags = normalize_secret_tags(profile.secret_tags)
+    authorized = secrets_unlocked(request, profile)
+    include_secrets = bool(authorized and (show_secrets or reveal))
     if _uses_remote_corpus():
         try:
-            document, references = RemoteCorpusClient.from_settings().document(relative_path)
+            document, references = RemoteCorpusClient.from_settings().document(
+                relative_path,
+                include_secrets=include_secrets,
+                secret_tags=protected_tags,
+            )
         except RemoteCorpusError as exc:
             return HTMLResponse(str(exc), status_code=502)
     else:
@@ -683,7 +768,37 @@ async def hfl_document(
     ]
     if not _uses_remote_corpus():
         references = [_with_reference_preview(reference) for reference in references]
-    rendered = render_markdown(format_hfl_markdown(document.text, references))
+    has_secrets = document_has_secrets(document, protected_tags)
+    rendered_parts: list[str] = []
+    for entry in document.entries if has_secrets else ():
+        secret = is_secret_entry(entry, protected_tags)
+        visible = not secret or (authorized and (show_secrets or reveal == entry.anchor))
+        if visible:
+            entry_rendered = render_markdown(
+                format_hfl_markdown(f"## {entry.text}", references)
+            )
+            rendered_parts.append(
+                str(_anchor_rendered_entries(entry_rendered, replace(document, entries=(entry,))))
+            )
+        else:
+            anchor = html.escape(entry.anchor, quote=True)
+            rendered_parts.append(
+                f'<section id="{anchor}" class="secret-entry-placeholder scroll-mt-40" '
+                f'data-secret-entry="{anchor}"><div><strong>Secret entry</strong>'
+                '<p>Protected content is hidden.</p></div>'
+                f'<button type="button" data-secret-reveal="{anchor}">Show</button></section>'
+            )
+    rendered = (
+        Markup("\n".join(rendered_parts))
+        if has_secrets
+        else _anchor_rendered_entries(
+            render_markdown(format_hfl_markdown(document.text, references)), document
+        )
+    )
+    filtered = filter_documents((document,), protected_tags)
+    display_document = document if show_secrets and authorized else (
+        filtered[0] if filtered else replace(document, entries=(), tags=(), tag_counts=())
+    )
     return templates.TemplateResponse(
         request,
         "modules/hfl_corpus/document.html",
@@ -692,15 +807,20 @@ async def hfl_document(
             user,
             "hfl_corpus",
             document=document,
-            document_text_encoded=base64.b64encode(
-                document.text.encode("utf-8")
-            ).decode("ascii"),
-            rendered=_anchor_rendered_entries(rendered, document),
+            document_text_encoded=(
+                base64.b64encode(document.text.encode("utf-8")).decode("ascii")
+                if not has_secrets or authorized else ""
+            ),
+            rendered=rendered,
             references=references,
-            document_tag_counts=_document_tag_counts(document),
-            document_source_options=_document_source_options(document),
+            document_tag_counts=_document_tag_counts(display_document),
+            document_source_options=_document_source_options(display_document),
             selected_source=source.casefold(),
             selected_tag="" if source else tag.casefold(),
+            document_has_secrets=has_secrets,
+            secrets_configured=bool(profile.secret_pin_hash),
+            secrets_authorized=authorized,
+            show_secrets=bool(show_secrets and authorized),
         ),
     )
 
@@ -714,7 +834,25 @@ async def hfl_document_update(
     user, redirect = require_user(request)
     if redirect:
         return JSONResponse({"detail": "Authentication required"}, status_code=401)
+    profile = get_profile_store().get()
+    protected_tags = normalize_secret_tags(profile.secret_tags)
     try:
+        existing_document = (
+            RemoteCorpusClient.from_settings().document(
+                relative_path, include_secrets=True, secret_tags=protected_tags
+            )[0]
+            if _uses_remote_corpus()
+            else corpus_index.get(relative_path)
+        )
+        if (
+            existing_document
+            and document_has_secrets(existing_document, protected_tags)
+            and not secrets_unlocked(request, profile)
+        ):
+            return JSONResponse(
+                {"detail": "Unlock secrets before editing this document."},
+                status_code=403,
+            )
         if _uses_remote_corpus():
             return await asyncio.to_thread(
                 RemoteCorpusClient.from_settings().update_document,

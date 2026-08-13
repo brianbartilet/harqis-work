@@ -9,7 +9,7 @@
   </a>
   {% endfor %}
   {% if offset + (entries | length) < total %}
-  <button hx-get="{{ url_for('hfl_matches', relative_path=relative_path) }}?q={{ query | urlencode }}&source={{ source | urlencode }}&offset={{ offset + limit }}&limit={{ limit }}"
+  <button hx-get="{{ url_for('hfl_matches', relative_path=relative_path) }}?q={{ query | urlencode }}&source={{ source | urlencode }}&offset={{ offset + limit }}&limit={{ limit }}{% if show_secrets %}&show_secrets=true{% endif %}"
           hx-target="this" hx-swap="outerHTML"
           class="w-full rounded-md bg-blue-950/60 px-3 py-2 text-xs text-blue-300 ring-1 ring-blue-800/60 hover:bg-blue-900">
     Load next {{ [limit, total - offset - (entries | length)] | min }}

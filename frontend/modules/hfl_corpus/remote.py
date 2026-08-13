@@ -35,6 +35,7 @@ def _entry(item: dict[str, Any]) -> CorpusEntry:
         tags=tuple(str(tag) for tag in item.get("tags") or ()),
         source=str(item.get("source") or ""),
         text=str(item.get("text") or ""),
+        secret=bool(item.get("secret", False)),
     )
 
 
@@ -248,7 +249,11 @@ class RemoteCorpusClient:
             raise RemoteCorpusError("Canonical HFL corpus returned an invalid index") from exc
 
     def sharing_documents(
-        self, sources: tuple[str, ...] | list[str]
+        self,
+        sources: tuple[str, ...] | list[str],
+        *,
+        include_secrets: bool = False,
+        secret_tags: tuple[str, ...] = (),
     ) -> tuple[CorpusDocument, ...]:
         """Load entry-bearing documents for an explicitly selected source scope."""
         documents: dict[str, CorpusDocument] = {}
@@ -261,6 +266,8 @@ class RemoteCorpusClient:
                         "compact": "false",
                         "page": "1",
                         "page_size": "20",
+                        "include_secrets": str(include_secrets).lower(),
+                        "secret_tags": ",".join(secret_tags),
                     },
                 ).json()
                 selected_source = str(payload.get("selected_source") or "")
@@ -284,9 +291,19 @@ class RemoteCorpusClient:
             )
         )
 
-    def tree(self, path: str = "") -> dict:
+    def tree(
+        self,
+        path: str = "",
+        *,
+        include_secrets: bool = False,
+        secret_tags: tuple[str, ...] = (),
+    ) -> dict:
         try:
-            payload = self._get("/tree", params={"path": path}).json()
+            payload = self._get("/tree", params={
+                "path": path,
+                "include_secrets": str(include_secrets).lower(),
+                "secret_tags": ",".join(secret_tags),
+            }).json()
             return _tree(payload["tree"])
         except (KeyError, TypeError, ValueError) as exc:
             raise RemoteCorpusError(
@@ -301,6 +318,8 @@ class RemoteCorpusClient:
         source: str = "",
         offset: int = 0,
         limit: int = 20,
+        include_secrets: bool = False,
+        secret_tags: tuple[str, ...] = (),
     ) -> dict[str, Any]:
         encoded = quote(relative_path.replace("\\", "/"), safe="/")
         try:
@@ -311,6 +330,8 @@ class RemoteCorpusClient:
                     "source": source,
                     "offset": offset,
                     "limit": limit,
+                    "include_secrets": str(include_secrets).lower(),
+                    "secret_tags": ",".join(secret_tags),
                 },
             ).json()
             return {
@@ -324,10 +345,22 @@ class RemoteCorpusClient:
                 "Canonical HFL corpus returned invalid matching entries"
             ) from exc
 
-    def document(self, relative_path: str) -> tuple[CorpusDocument, list[ReferenceLink]]:
+    def document(
+        self,
+        relative_path: str,
+        *,
+        include_secrets: bool = False,
+        secret_tags: tuple[str, ...] = (),
+    ) -> tuple[CorpusDocument, list[ReferenceLink]]:
         encoded = quote(relative_path.replace("\\", "/"), safe="/")
         try:
-            payload = self._get(f"/document/{encoded}").json()
+            payload = self._get(
+                f"/document/{encoded}",
+                params={
+                    "include_secrets": str(include_secrets).lower(),
+                    "secret_tags": ",".join(secret_tags),
+                },
+            ).json()
             document = _document(payload["document"])
         except (KeyError, TypeError, ValueError) as exc:
             raise RemoteCorpusError("Canonical HFL corpus returned an invalid document") from exc

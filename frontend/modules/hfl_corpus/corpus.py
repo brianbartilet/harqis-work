@@ -62,6 +62,7 @@ class CorpusEntry:
     tags: tuple[str, ...]
     source: str = ""
     text: str = ""
+    secret: bool = False
 
 
 @dataclass(frozen=True)
