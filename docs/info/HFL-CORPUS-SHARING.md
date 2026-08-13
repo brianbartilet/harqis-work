@@ -19,8 +19,10 @@ disk.
    eligible references.
 4. Owner preview chat uses only that transient preview and does not create a
    guest audit event.
-5. Generate forces a fresh corpus read and freezes the matches into an
-   immutable SQLite snapshot.
+5. Generate forces a fresh corpus read and stores the matches in a SQLite
+   snapshot. Frozen shares retain that exact snapshot; live shares also retain
+   a copy of the recipe and refresh their stored snapshot from current corpus
+   matches when opened.
 6. The owner receives a QR and pasteable capability link. PIN mode additionally
    displays a random eight-digit PIN once.
 7. Successful redemption binds one server session to an HTTP-only signed
@@ -29,7 +31,81 @@ disk.
    invalid immediately.
 
 Editing or deleting a recipe never changes or revokes previously generated
-shares. To change an active scope, revoke it and generate a new snapshot.
+shares. A live share refreshes from the recipe copy saved with the grant, not
+from later edits to the reusable recipe. To change an active scope, revoke it
+and generate a new share.
+
+## Recipe, snapshot, and vector storage
+
+The vector rows are not the authoritative store for linked entry information.
+Sharing uses several layers in the SQLite database configured by
+`HFL_SHARE_STORE_PATH`:
+
+| Layer | SQLite storage | Contents | Role |
+|---|---|---|---|
+| Canonical corpus | Outside the share database | Original Markdown entries | Source of truth from which scopes are resolved. |
+| Saved recipe | `configurations.payload` | JSON filters and settings: sources, tags, dates, topic, recipient, secret/reference choices, access mode, expiry, and device limits | Reusable instructions for selecting entries; it does not contain the matching entry text. |
+| Generated grant | `shares` | Hashed capability/PIN data, lifecycle settings, and the stored snapshot | Controls guest access to one resolved share. |
+| Share snapshot | `shares.snapshot` | JSON copies of each selected entry's sanitized text, citation, source, tags, document path/anchor, and allowed reference metadata | The actual guest-visible information. |
+| Live recipe copy | `shares.live_configuration` | JSON copy of the generation-time recipe, only for live shares | Rebuilds the stored snapshot without depending on later saved-recipe edits. |
+| Retrieval cache | `share_embeddings` | Share ID, entry ID, embedding model, content hash, dimensions, and a binary numeric vector | Accelerates semantic ranking; contains no readable entry text and can be regenerated. |
+| Guest state | `sessions`, `chat_messages`, and related access tables | Hashed session secrets, access lifecycle, and bounded conversation history | Authenticates guests and preserves the conversation, independently of retrieval vectors. |
+
+The snapshot is therefore the durable content boundary for a generated share.
+Deleting a recipe does not delete an existing snapshot. Deleting embedding rows
+also does not lose share content: the next question regenerates missing vectors
+from the snapshot text.
+
+The FastEmbed cache directory is different again. It contains downloaded local
+embedding model files, not recipes, snapshots, corpus entries, or guest
+questions. Share embeddings are also separate from the global Knowledge
+workflow and its `apps/sqlite_vec` database.
+
+### Resolution and question-answering flow
+
+1. **Save recipe:** the owner form is validated and serialized into
+   `configurations.payload`. No corpus entry text is copied at this stage.
+2. **Preview:** the current corpus is read and the recipe's source, tag, date,
+   topic, and secret rules are applied. Matching entries are sanitized and
+   assembled into a transient `ScopeSnapshot`; preview does not create a guest
+   grant.
+3. **Generate:** the corpus is read again so generation cannot rely on a stale
+   preview. The resolved `ScopeSnapshot` is serialized into `shares.snapshot`,
+   and the capability token and optional PIN are stored only as hashes.
+4. **Browse:** guest pages read directly from the authorized stored snapshot.
+   Browsing does not require vector retrieval and never opens arbitrary corpus
+   documents.
+5. **Ask a question:** the question is embedded locally. Snapshot entry vectors
+   are loaded from `share_embeddings`; missing vectors or rows whose
+   `content_hash` no longer matches the snapshot text are regenerated locally.
+6. **Rank:** semantic similarity is combined with deterministic lexical scores.
+   The configured top `HFL_SHARE_RETRIEVAL_K` entries are selected only from
+   that share's snapshot.
+7. **Answer:** Hermes receives the selected sanitized entries, their citations,
+   bounded conversation history, and the question. It does not receive the
+   whole corpus or use the global Knowledge index.
+
+```text
+Canonical Markdown corpus
+          │ apply saved recipe
+          ▼
+Transient preview snapshot
+          │ fresh read on Generate
+          ▼
+shares.snapshot (durable shared text)
+          │ local embedding, on first question
+          ▼
+share_embeddings (regenerable numeric cache)
+          │ hybrid semantic + lexical ranking
+          ▼
+Selected snapshot entries → Hermes answer with [S#] citations
+```
+
+For frozen shares, later corpus changes do not alter `shares.snapshot`. For live
+shares, opening the grant rebuilds the snapshot from its stored
+`live_configuration`. Stable entry citations are retained where possible, and
+the content hashes ensure changed entry text receives a new vector before it is
+used for semantic retrieval.
 
 ## Access modes
 
