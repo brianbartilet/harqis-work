@@ -76,16 +76,23 @@ def _build_entry(
     possible_use: str,
     tags: Optional[Iterable[str]] = None,
     references: Optional[Iterable[str]] = None,
+    secret: bool = False,
 ) -> HflEntry:
     """Construct the formal HflEntry DTO — the single source of truth for
     both the on-disk Markdown shape and the ES projection."""
+    normalized_tags = list(tags or ())
+    if secret and not any(
+        tag.strip().lstrip("#").casefold() == "secrets"
+        for tag in normalized_tags
+    ):
+        normalized_tags.append("secrets")
     return HflEntry(
         when=when,
         moment=moment,
         what_happened=what_happened,
         why_it_stayed=why_it_stayed,
         possible_use=possible_use,
-        tags=tuple(tags) if tags else (),
+        tags=tuple(normalized_tags),
         references=tuple(references) if references else (),
     )
 
@@ -153,6 +160,7 @@ def capture_hfl_entry(
     tags: Optional[list[str]] = None,
     references: Optional[list[str]] = None,
     when_iso: Optional[str] = None,
+    secret: bool = False,
 ) -> dict[str, Any]:
     """Prepend a single HFL entry to the day's corpus file.
 
@@ -182,6 +190,7 @@ def capture_hfl_entry(
         possible_use=possible_use,
         tags=tags,
         references=references,
+        secret=secret,
     )
 
     result = submit_hfl_entry(entry, source="capture")

@@ -10,6 +10,7 @@ from datetime import date, datetime
 
 from config import get_settings
 from modules.hfl_corpus.corpus import CorpusDocument, resolve_corpus_root
+from modules.hfl_corpus.secrets import is_secret_entry, normalize_secret_tags
 from modules.hfl_shares.models import (
     ALL_SOURCES,
     ScopeSnapshot,
@@ -146,8 +147,11 @@ def build_snapshot(
     *,
     enabled_reference_ids: tuple[str, ...] | None = None,
     disabled_reference_ids: tuple[str, ...] | None = None,
+    allow_secrets: bool = False,
+    secret_tags: tuple[str, ...] = (),
 ) -> ScopeSnapshot:
     all_sources = ALL_SOURCES in configuration.sources
+    protected_tags = secret_tags or normalize_secret_tags("")
     sources = {
         item.casefold()
         for item in configuration.sources
@@ -195,6 +199,10 @@ def build_snapshot(
             reverse=True,
         )
         for entry in ordered_entries:
+            if is_secret_entry(entry, protected_tags) and not (
+                configuration.include_secrets and allow_secrets
+            ):
+                continue
             if not all_sources and entry.source.casefold() not in sources:
                 continue
             missing_sources.discard(entry.source.casefold())

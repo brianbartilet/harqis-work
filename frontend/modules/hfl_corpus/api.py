@@ -6,6 +6,7 @@ import asyncio
 import html
 import hmac
 import logging
+from dataclasses import replace
 from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -35,6 +36,13 @@ from modules.hfl_corpus.entry_create import (
 )
 from modules.hfl_corpus.document_edit import UpdateDocumentRequest, update_document_text
 from modules.hfl_corpus.entry_enrichment import enrich_manual_entry
+from modules.hfl_corpus.secrets import (
+    document_has_secrets,
+    filter_document,
+    filter_documents,
+    is_secret_entry,
+    normalize_secret_tags,
+)
 from modules.hfl_shares.viewer import (
     classify_preview,
     read_preview_text,
@@ -185,13 +193,19 @@ async def hfl_api_documents(
     page_size: int = 20,
     compact: bool = False,
     source: str = "",
+    include_secrets: bool = False,
+    secret_tags: str = "",
 ):
     _authorize(request)
     if date_field not in {"created", "updated"}:
         date_field = "created"
     if sort not in {"asc", "desc"}:
         sort = "desc"
-    documents = corpus_index.documents()
+    raw_documents = corpus_index.documents()
+    protected_tags = normalize_secret_tags(secret_tags)
+    documents = raw_documents if include_secrets else filter_documents(
+        raw_documents, protected_tags
+    )
     sources = common_sources(documents)
     selected_source = normalize_source(source, sources)
     results = search_documents(
@@ -237,7 +251,7 @@ async def hfl_api_documents(
         "has_previous": result_page.has_previous,
         "has_next": result_page.has_next,
         "document_count": len(documents),
-        "tag_cloud": common_tags(documents),
+        "tag_cloud": common_tags(raw_documents),
         "sources": sources,
         "selected_source": selected_source,
     }
@@ -251,9 +265,17 @@ async def hfl_api_documents(
 
 
 @router.get("/tree")
-async def hfl_api_tree(request: Request, path: str = ""):
+async def hfl_api_tree(
+    request: Request,
+    path: str = "",
+    include_secrets: bool = False,
+    secret_tags: str = "",
+):
     _authorize(request)
-    tree = build_tree(corpus_index.documents())
+    documents = corpus_index.documents()
+    if not include_secrets:
+        documents = filter_documents(documents, normalize_secret_tags(secret_tags))
+    tree = build_tree(documents)
     node = find_tree_node(tree, path)
     if not node:
         raise HTTPException(status_code=404, detail="Corpus directory not found")
@@ -268,6 +290,8 @@ async def hfl_api_matches(
     source: str = "",
     offset: int = 0,
     limit: int = 20,
+    include_secrets: bool = False,
+    secret_tags: str = "",
 ):
     _authorize(request)
     document = corpus_index.get(relative_path)
@@ -278,7 +302,11 @@ async def hfl_api_matches(
         source,
         common_sources(corpus_index.documents()),
     )
-    entries = document.matching_entries(
+    protected_tags = normalize_secret_tags(secret_tags)
+    visible_document = document if include_secrets else filter_document(
+        document, protected_tags
+    )
+    entries = visible_document.matching_entries(
         selected_tags,
         text_query,
         selected_source,
@@ -299,14 +327,45 @@ async def hfl_api_matches(
 
 
 @router.get("/document/{relative_path:path}")
-async def hfl_api_document(request: Request, relative_path: str):
+async def hfl_api_document(
+    request: Request,
+    relative_path: str,
+    include_secrets: bool = False,
+    secret_tags: str = "",
+):
     _authorize(request)
     document = corpus_index.get(relative_path)
     if not document or document.path is None:
         raise HTTPException(status_code=404, detail="Corpus document not found")
+    protected_tags = normalize_secret_tags(secret_tags)
+    response_document = document
+    if not include_secrets and document_has_secrets(document, protected_tags):
+        visible = filter_document(document, protected_tags)
+        redacted_entries = tuple(
+            (
+                replace(
+                    entry,
+                    header="",
+                    moment="",
+                    what_happened="",
+                    tags=(),
+                    source="",
+                    text="",
+                    secret=True,
+                )
+                if is_secret_entry(entry, protected_tags)
+                else entry
+            )
+            for entry in document.entries
+        )
+        response_document = replace(
+            visible,
+            entries=redacted_entries,
+            entry_count=len(redacted_entries),
+        )
     root = resolve_corpus_root()
     references = []
-    for raw_reference in document.references:
+    for raw_reference in response_document.references:
         reference = resolve_reference(
             raw_reference,
             source_document=document.path,
@@ -329,7 +388,7 @@ async def hfl_api_document(request: Request, relative_path: str):
             references.append(item)
     return {
         "document": _document_payload(
-            document,
+            response_document,
             include_text=True,
             include_entries=True,
         ),

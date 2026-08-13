@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS owner_profile (
     instagram_url TEXT NOT NULL DEFAULT '',
     avatar BLOB NOT NULL DEFAULT X'',
     avatar_content_type TEXT NOT NULL DEFAULT '',
+    secret_pin_hash TEXT NOT NULL DEFAULT '',
+    secret_tags TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT ''
 );
 """
@@ -37,6 +39,14 @@ class ProfileStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
             connection.executescript(_SCHEMA)
+            columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(owner_profile)")
+            }
+            for name in ("secret_pin_hash", "secret_tags"):
+                if name not in columns:
+                    connection.execute(
+                        f"ALTER TABLE owner_profile ADD COLUMN {name} TEXT NOT NULL DEFAULT ''"
+                    )
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path)

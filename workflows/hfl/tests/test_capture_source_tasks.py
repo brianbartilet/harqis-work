@@ -1,4 +1,5 @@
 from inspect import signature
+from datetime import datetime
 from typing import Any, cast
 
 import workflows.hfl  # noqa: F401 - registers Celery tasks
@@ -80,3 +81,20 @@ def test_source_tasks_and_unscheduled_compatibility_task_are_registered():
             WORKFLOW_HFL["run-job--analyze_android_capture"],
         )
     )
+
+
+def test_build_entry_adds_secret_tag_without_changing_default():
+    from workflows.hfl.tasks.capture import _build_entry
+
+    values = {
+        "when": datetime(2026, 8, 13, 10, 0),
+        "moment": "Private moment",
+        "what_happened": "Private detail",
+        "why_it_stayed": "",
+        "possible_use": "",
+    }
+    normal = _build_entry(**values, tags=["notes"])
+    secret = _build_entry(**values, tags=["notes"], secret=True)
+
+    assert "secrets" not in {tag.casefold() for tag in normal.tags}
+    assert "secrets" in {tag.casefold() for tag in secret.tags}

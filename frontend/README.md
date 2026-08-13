@@ -392,6 +392,28 @@ Tag chips on both search results and document pages are links. Selecting one
 opens a tag-only corpus search and returns every indexed document with a
 matching tag, using the same case-insensitive partial-match behavior.
 
+### Secret entries
+
+Profile Settings stores a salted hash of a six-digit owner PIN and a
+comma-separated protected-tag list. `#secrets` is always protected; configured
+tags are normalized without their leading `#` and matched exactly and
+case-insensitively. This is an authenticated-frontend privacy screen only:
+Markdown, Elasticsearch, MCP, RAG, and direct filesystem consumers are not
+encrypted or filtered.
+
+Activity Corpus search and document views hide protected entries by default.
+Protected tags remain in the tag cloud, but locked searches return no protected
+entry content. An owner can unlock for the current browser session, then enable
+**Show secrets** on a page or reveal one blurred document entry. Mixed documents
+retain their ordinary entries; opening or saving the raw editor requires the
+same active unlock. Remote-reader mode passes the configured classification to
+the canonical API so filtering occurs before entry text crosses the network.
+
+Social recipes persist an **Include secrets** intent, but preview, agent tests,
+instant share, and generation require an active owner unlock. Generated guest
+snapshots use their existing share access controls and never expose the owner
+PIN.
+
 Opened entries are still rendered from their source Markdown. For presentation
 only, canonical HFL fields (`Source`, `Machine`, `Entry ID`, `Moment`, `What
 happened`, `Why it stayed`, `Possible use`, `Tags`, and `References`) are separated into readable

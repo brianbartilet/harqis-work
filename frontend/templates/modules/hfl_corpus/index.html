@@ -23,10 +23,20 @@
       <h1 class="page-header-title">Activity Corpus</h1>
       <p class="page-header-description">Search and browse captured moments, source documents, tags, and references.</p>
     </div>
+    <div class="flex gap-2">
+    {% if secrets_configured %}
+    <button type="button" data-secrets-toggle data-secrets-on="{{ 'true' if show_secrets else 'false' }}" data-secrets-authorized="{{ 'true' if secrets_authorized else 'false' }}"
+            class="min-h-11 shrink-0 rounded-lg px-4 py-2 text-sm font-semibold ring-1 {% if show_secrets %}bg-violet-900/70 text-violet-100 ring-violet-600{% else %}bg-slate-900 text-slate-300 ring-slate-700{% endif %}">
+      {{ 'Hide secrets' if show_secrets else 'Show secrets' }}
+    </button>
+    {% else %}
+    <a href="/profile#profile-secrets-title" class="inline-flex min-h-11 items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-300 ring-1 ring-slate-700">Show secrets</a>
+    {% endif %}
     <button type="button" data-create-entry-open
             class="min-h-11 w-full shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 sm:min-h-0 sm:w-auto">
       Create entry
     </button>
+    </div>
   </div>
 
   {% if success_message %}
@@ -44,6 +54,7 @@
 
   <form id="corpus-search-form" method="get" action="/hfl-corpus" data-index-search-panel
         class="sticky top-0 z-20 shrink-0 rounded-2xl border border-blue-800/70 bg-slate-900/95 p-4 shadow-xl shadow-black/30 backdrop-blur">
+    {% if show_secrets %}<input type="hidden" name="show_secrets" value="true">{% endif %}
     <div class="grid gap-3 lg:grid-cols-[minmax(24rem,2fr)_minmax(9rem,1fr)_minmax(9rem,1fr)_minmax(9rem,1fr)_minmax(9rem,1fr)] lg:items-end">
       <div>
         <div class="flex items-center gap-1.5 text-xs font-medium text-slate-400">
@@ -200,7 +211,7 @@
 
             {% if (selected_tags or text_query or source) and matching_count %}
             <details class="mt-3 rounded-lg bg-slate-950/70 ring-1 ring-blue-900/70">
-              <summary hx-get="{{ url_for('hfl_matches', relative_path=document.relative_path) }}?q={{ query | urlencode }}&source={{ source | urlencode }}"
+              <summary hx-get="{{ url_for('hfl_matches', relative_path=document.relative_path) }}?q={{ query | urlencode }}&source={{ source | urlencode }}{% if show_secrets %}&show_secrets=true{% endif %}"
                        hx-trigger="click once" hx-target="next .matching-entry-results"
                        class="cursor-pointer px-3 py-2 text-xs font-medium text-emerald-300">{{ matching_count }} matching entries</summary>
               <div class="matching-entry-results border-t border-blue-900/70 p-3 text-xs text-slate-500">Loading matching entries…</div>
@@ -683,6 +694,36 @@
     } finally {
       confirmButton.disabled = false;
     }
+  });
+})();
+</script>
+<script>
+(() => {
+  const button = document.querySelector('[data-secrets-toggle]');
+  if (!button) return;
+  button.addEventListener('click', async () => {
+    const url = new URL(window.location.href);
+    if (button.dataset.secretsOn === 'true') {
+      url.searchParams.delete('show_secrets');
+      window.location.assign(url);
+      return;
+    }
+    if (button.dataset.secretsAuthorized !== 'true') {
+      const pin = window.prompt('Enter your six-digit Activity Corpus PIN');
+      if (pin === null) return;
+      const response = await fetch('/hfl-corpus/secrets/unlock', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({pin}),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        window.alert(body.detail || 'Secrets could not be unlocked.');
+        return;
+      }
+    }
+    url.searchParams.set('show_secrets', 'true');
+    window.location.assign(url);
   });
 })();
 </script>

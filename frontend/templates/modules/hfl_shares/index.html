@@ -244,6 +244,17 @@
           </div>
           <p class="mt-2 text-xs text-slate-500">No selection includes all available tags.</p>
         </div>
+        <div class="field">
+          {% if secrets_configured %}
+          <label class="check">
+            <input type="checkbox" name="include_secrets" data-include-secrets data-secrets-authorized="{{ 'true' if secrets_authorized else 'false' }}" {% if cfg and cfg.include_secrets %}checked{% endif %}>
+            <span>Include secrets</span>
+          </label>
+          <p class="mt-2 text-xs text-slate-500">Requires your Activity Corpus PIN before previewing, testing, instant sharing, or generation.</p>
+          {% else %}
+          <a href="/profile#profile-secrets-title" class="text-sm font-semibold text-violet-300">Set an Activity Corpus secrets PIN</a>
+          {% endif %}
+        </div>
 
         <details class="expand-panel mb-4">
           <summary>
@@ -434,12 +445,30 @@
   const tagSearch = form?.querySelector('[data-tag-search]');
   const tagCloud = form?.querySelector('[data-tag-cloud]');
   const clearTags = form?.querySelector('[data-clear-tags]');
+  const includeSecrets = form?.querySelector('[data-include-secrets]');
   const previewContent = form?.querySelector('[data-preview-content]');
   const previewStatus = form?.querySelector('[data-preview-status]');
   const testAgentButton = form?.querySelector('[data-test-agent]');
   const timezoneOffset = form?.querySelector('[data-timezone-offset]');
   const noExpiry = form?.querySelector('[data-no-expiry]');
   const expiresAt = form?.querySelector('[data-expires-at]');
+  includeSecrets?.addEventListener('change', async () => {
+    if (!includeSecrets.checked || includeSecrets.dataset.secretsAuthorized === 'true') return;
+    const pin = window.prompt('Enter your six-digit Activity Corpus PIN');
+    if (pin === null) { includeSecrets.checked = false; return; }
+    const response = await fetch('/hfl-corpus/secrets/unlock', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pin}),
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      includeSecrets.checked = false;
+      window.alert(body.detail || 'Secrets could not be unlocked.');
+      return;
+    }
+    includeSecrets.dataset.secretsAuthorized = 'true';
+    form.dispatchEvent(new Event('change', {bubbles: true}));
+  });
   const progressOverlay = document.querySelector('[data-progress-overlay]');
   const progressHeading = progressOverlay?.querySelector('[data-progress-heading]');
   const progressMessage = progressOverlay?.querySelector('[data-progress-message]');

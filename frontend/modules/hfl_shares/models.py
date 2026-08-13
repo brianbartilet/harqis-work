@@ -41,6 +41,7 @@ class ShareConfiguration:
     auth_mode: str = "pin"
     allowed_email: str = ""
     references_enabled: bool = False
+    include_secrets: bool = False
     disabled_reference_ids: tuple[str, ...] = ()
     live_updates: bool = False
     ttl_seconds: int = 3600
