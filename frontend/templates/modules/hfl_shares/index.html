@@ -228,22 +228,6 @@
           </label>
           <p class="mt-2 text-xs text-slate-500">Uncheck to let active links refresh from the latest entries matching these saved rules. New references remain disabled.</p>
         </div>
-        <div class="field" data-tag-filter>
-          <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <label class="mb-0" for="tag-search">Tags <span class="font-normal text-slate-500">— entries must match all selected tags</span></label>
-            <button class="clear-tags" type="button" data-clear-tags disabled>Clear selected tags</button>
-          </div>
-          <input class="control mb-3" id="tag-search" type="search" data-tag-search placeholder="Search tags" autocomplete="off">
-          <div class="tag-cloud" data-tag-cloud>
-            {% for tag, count in available_tags %}
-            <label class="tag-option" data-tag-option data-search-value="{{ tag|lower }}">
-              <input type="checkbox" name="tags" value="{{ tag }}" {% if cfg and tag in cfg.tags %}checked{% endif %}>
-              <span><span>#{{ tag }}</span><span class="tag-count">{{ count }}</span></span>
-            </label>
-            {% else %}<p class="text-xs text-slate-500" data-tag-empty>No tags are available for these sources.</p>{% endfor %}
-          </div>
-          <p class="mt-2 text-xs text-slate-500">No selection includes all available tags.</p>
-        </div>
         <div class="field">
           {% if secrets_configured %}
           <label class="check">
@@ -262,6 +246,22 @@
             <svg class="expand-arrow h-4 w-4 shrink-0 text-blue-400 transition" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg>
           </summary>
           <div class="p-4">
+            <div class="field" data-tag-filter>
+              <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <label class="mb-0" for="tag-search">Tags <span class="font-normal text-slate-500">— entries must match all selected tags</span></label>
+                <button class="clear-tags" type="button" data-clear-tags disabled>Clear selected tags</button>
+              </div>
+              <input class="control mb-3" id="tag-search" type="search" data-tag-search placeholder="Search tags" autocomplete="off">
+              <div class="tag-cloud" data-tag-cloud>
+                {% for tag, count in available_tags %}
+                <label class="tag-option" data-tag-option data-search-value="{{ tag|lower }}">
+                  <input type="checkbox" name="tags" value="{{ tag }}" {% if cfg and tag in cfg.tags %}checked{% endif %}>
+                  <span><span>#{{ tag }}</span><span class="tag-count">{{ count }}</span></span>
+                </label>
+                {% else %}<p class="text-xs text-slate-500" data-tag-empty>No tags are available for these sources.</p>{% endfor %}
+              </div>
+              <p class="mt-2 text-xs text-slate-500">No selection includes all available tags.</p>
+            </div>
             <div class="field">
               <label for="topic">Topic phrase filter
                 <span class="help-icon" tabindex="0" role="img" aria-label="Entries must contain every word in this phrase." title="Entries must contain every word in this phrase.">?</span>

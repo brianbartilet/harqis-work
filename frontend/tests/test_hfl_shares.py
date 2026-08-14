@@ -260,6 +260,12 @@ def test_share_corpus_form_uses_new_labels_defaults_and_collapsed_sections(
         r'<details class="expand-panel mb-4">\s*<summary>\s*<span>Additional filters',
         response.text,
     )
+    additional_filters = response.text.split(">Additional filters</span>", 1)[1].split(
+        "</details>", 1
+    )[0]
+    assert additional_filters.index('data-tag-filter') < additional_filters.index(
+        'id="topic"'
+    )
     assert re.search(
         r'<details class="expand-panel mb-4">\s*<summary>\s*<span>Access, expiry',
         response.text,
