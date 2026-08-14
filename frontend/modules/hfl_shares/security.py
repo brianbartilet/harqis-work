@@ -4,19 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import secrets
 from dataclasses import dataclass
 
 from fastapi import Request, Response
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from config import get_settings
+from config import get_settings, hfl_share_session_ttl
 from modules.hfl_shares.models import ShareGrant
 from modules.hfl_shares.store import ShareStore
 
 
 GUEST_COOKIE = "hfl_share_session"
 REQUEST_COOKIE = "hfl_share_request"
+_PUBLIC_TOKEN = re.compile(r"[A-Za-z0-9_-]{43}")
 
 
 def _secret() -> str:
@@ -38,6 +40,10 @@ def opaque_hash(value: str) -> str:
 
 def new_public_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+def valid_public_token(value: str) -> bool:
+    return bool(_PUBLIC_TOKEN.fullmatch(value or ""))
 
 
 def new_pin() -> str:
@@ -118,7 +124,8 @@ def current_session(
         return None
     try:
         payload = _serializer("hfl-share-guest-session").loads(
-            token, max_age=604_800
+            token,
+            max_age=hfl_share_session_ttl(),
         )
         session_id = str(payload.get("session_id") or "")
         secret = str(payload.get("secret") or "")

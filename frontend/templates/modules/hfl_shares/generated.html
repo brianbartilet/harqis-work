@@ -2,9 +2,9 @@
 {% block title %}Share generated · HARQIS{% endblock %}
 {% block content %}
 <section class="card">
-  <p class="eyebrow">One-time handoff</p>
+  <p class="eyebrow">Capability handoff</p>
   <h1>Share generated</h1>
-  <p class="muted">{{ grant.name }} · {{ grant.snapshot.entries|length }} entries · {{ "live recipe" if grant.live_updates else "fixed snapshot" }} · {% if grant.no_expiry %}no expiry{% else %}expires {{ expires_at_display }}{% endif %}</p>
+  <p class="muted">{{ grant.name }} · {{ grant.snapshot.entries|length }} entries · {{ "live recipe" if grant.live_updates else "fixed snapshot" }} · {% if grant.no_expiry %}no expiry{% else %}expires {{ expires_at_display }}{% endif %} · up to {{ grant.device_limit }} concurrent session{{ '' if grant.device_limit == 1 else 's' }} · {{ session_duration }} each</p>
   <div style="display:grid;grid-template-columns:minmax(160px,220px) 1fr;gap:24px;align-items:start;margin-top:22px">
     <img src="{{ qr }}" alt="QR code for the generated share" style="width:100%;background:white;border-radius:12px;padding:8px">
     <div>
@@ -14,7 +14,11 @@
       {% endif %}
       <label for="share-link">Pasteable capability link</label>
       <input id="share-link" type="text" readonly value="{{ link }}">
+      {% if pin %}
       <p class="notice" style="margin-top:16px">Send the QR/link and PIN through separate channels. If either is lost, revoke this share and generate another.</p>
+      {% else %}
+      <p class="notice" style="margin-top:16px">Anyone with this QR or link can open a {{ session_duration }} session while capacity is available. Revoke the share if the capability is copied or abused.</p>
+      {% endif %}
     </div>
   </div>
 </section>

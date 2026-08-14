@@ -1,5 +1,7 @@
 import re
 
+import pytest
+
 from modules.registry import MODULES, PRIMARY_MODULES, module_by_key
 
 
@@ -54,6 +56,449 @@ def test_missing_static_assets_are_not_immutable(authenticated_client):
 
     assert response.status_code == 404
     assert response.headers["cache-control"] == "no-store"
+
+
+def test_framework_schema_and_interactive_docs_are_not_public(authenticated_client):
+    for route in ("/openapi.json", "/docs", "/redoc"):
+        response = authenticated_client.get(route)
+        assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "headers",
+    (
+        [],
+        [(b"content-length", b"1")],
+    ),
+)
+def test_public_share_body_limit_counts_actual_streamed_bytes(headers):
+    import asyncio
+
+    from main import PUBLIC_SHARE_MAX_BODY_BYTES, PublicShareBodyLimitMiddleware
+
+    messages = [
+        {
+            "type": "http.request",
+            "body": b"x" * PUBLIC_SHARE_MAX_BODY_BYTES,
+            "more_body": True,
+        },
+        {"type": "http.request", "body": b"x", "more_body": False},
+    ]
+    sent = []
+
+    async def receive():
+        return messages.pop(0)
+
+    async def send(message):
+        sent.append(message)
+
+    async def consume_body(scope, receive, send):
+        while True:
+            message = await receive()
+            if not message.get("more_body", False):
+                break
+
+    middleware = PublicShareBodyLimitMiddleware(consume_body)
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/share/session/chat",
+        "headers": headers,
+    }
+    asyncio.run(middleware(scope, receive, send))
+
+    assert sent[0]["type"] == "http.response.start"
+    assert sent[0]["status"] == 413
+
+
+def test_public_share_body_limit_rejects_stream_before_unread_route_runs():
+    import asyncio
+
+    from main import PUBLIC_SHARE_MAX_BODY_BYTES, PublicShareBodyLimitMiddleware
+
+    messages = [
+        {
+            "type": "http.request",
+            "body": b"x" * PUBLIC_SHARE_MAX_BODY_BYTES,
+            "more_body": True,
+        },
+        {"type": "http.request", "body": b"x", "more_body": False},
+    ]
+    sent = []
+
+    async def receive():
+        return messages.pop(0)
+
+    async def send(message):
+        sent.append(message)
+
+    async def unread_route(scope, receive, send):
+        raise AssertionError("Oversized bodies must fail before route work.")
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/share/session/logout",
+        "headers": [],
+    }
+    middleware = PublicShareBodyLimitMiddleware(unread_route)
+
+    asyncio.run(middleware(scope, receive, send))
+
+    assert sent[0]["type"] == "http.response.start"
+    assert sent[0]["status"] == 413
+
+
+@pytest.mark.parametrize(
+    "headers",
+    (
+        [(b"content-length", b"10"), (b"content-length", b"10")],
+        [(b"content-length", b"10"), (b"content-length", b"11")],
+        [(b"content-length", b"+10")],
+        [(b"content-length", b"1_0")],
+        [(b"content-length", b" 10")],
+        [(b"content-length", b"10 ")],
+        [(b"content-length", b"0x10")],
+        [(b"content-length", b"-1")],
+        [(b"content-length", b"")],
+    ),
+)
+def test_public_share_body_limit_rejects_ambiguous_content_length(headers):
+    import asyncio
+
+    from main import PublicShareBodyLimitMiddleware
+
+    sent = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    async def route_must_not_run(scope, receive, send):
+        raise AssertionError("Ambiguous Content-Length must fail before routing.")
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/share/session/chat",
+        "headers": headers,
+    }
+    middleware = PublicShareBodyLimitMiddleware(route_must_not_run)
+
+    asyncio.run(middleware(scope, receive, send))
+
+    assert sent[0]["type"] == "http.response.start"
+    assert sent[0]["status"] == 400
+
+
+@pytest.mark.parametrize(
+    ("headers", "messages", "expected_status"),
+    (
+        (
+            [(b"content-length", b"0")],
+            [{"type": "http.request", "body": b"x", "more_body": False}],
+            400,
+        ),
+        (
+            [(b"content-length", b"2")],
+            [{"type": "http.request", "body": b"x", "more_body": False}],
+            400,
+        ),
+        (
+            [
+                (b"content-length", b"1"),
+                (b"transfer-encoding", b"chunked"),
+            ],
+            [{"type": "http.request", "body": b"x", "more_body": False}],
+            400,
+        ),
+    ),
+)
+def test_public_share_body_limit_rejects_ambiguous_framing(
+    headers, messages, expected_status
+):
+    import asyncio
+
+    from main import PublicShareBodyLimitMiddleware
+
+    sent = []
+
+    async def receive():
+        return messages.pop(0)
+
+    async def send(message):
+        sent.append(message)
+
+    async def route_must_not_run(scope, receive, send):
+        raise AssertionError("Ambiguous framing must fail before routing.")
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/share/session/chat",
+        "headers": headers,
+    }
+    middleware = PublicShareBodyLimitMiddleware(route_must_not_run)
+
+    asyncio.run(middleware(scope, receive, send))
+
+    assert sent[0]["status"] == expected_status
+
+
+def test_public_share_body_limit_bounds_empty_stream_messages():
+    import asyncio
+
+    from main import PublicShareBodyLimitMiddleware
+
+    messages = [
+        {"type": "http.request", "body": b"", "more_body": True},
+        {"type": "http.request", "body": b"", "more_body": True},
+        {"type": "http.request", "body": b"", "more_body": False},
+    ]
+    sent = []
+
+    async def receive():
+        return messages.pop(0)
+
+    async def send(message):
+        sent.append(message)
+
+    async def route_must_not_run(scope, receive, send):
+        raise AssertionError("Excessive body messages must fail before routing.")
+
+    middleware = PublicShareBodyLimitMiddleware(
+        route_must_not_run,
+        max_body_messages=2,
+    )
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/share/session/chat",
+        "headers": [],
+    }
+
+    asyncio.run(middleware(scope, receive, send))
+
+    assert sent[0]["status"] == 400
+
+
+def test_public_share_body_limit_enforces_receive_deadline():
+    import asyncio
+
+    from main import PublicShareBodyLimitMiddleware
+
+    sent = []
+
+    async def receive():
+        await asyncio.Event().wait()
+
+    async def send(message):
+        sent.append(message)
+
+    async def route_must_not_run(scope, receive, send):
+        raise AssertionError("Timed-out bodies must fail before routing.")
+
+    middleware = PublicShareBodyLimitMiddleware(
+        route_must_not_run,
+        body_timeout_seconds=0.01,
+    )
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/share/session/chat",
+        "headers": [],
+    }
+
+    asyncio.run(middleware(scope, receive, send))
+
+    assert sent[0]["status"] == 408
+
+
+def test_public_share_body_limit_never_times_out_during_rejection_send():
+    import asyncio
+
+    from main import PublicShareBodyLimitMiddleware
+
+    sent = []
+    messages = [
+        {"type": "http.request", "body": b"xx", "more_body": False},
+    ]
+
+    async def receive():
+        return messages.pop(0)
+
+    async def send(message):
+        sent.append(message)
+        if len(sent) == 1:
+            await asyncio.sleep(0.02)
+
+    async def route_must_not_run(scope, receive, send):
+        raise AssertionError("Oversized bodies must fail before routing.")
+
+    middleware = PublicShareBodyLimitMiddleware(
+        route_must_not_run,
+        max_body_bytes=1,
+        body_timeout_seconds=0.01,
+    )
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/share/session/chat",
+        "headers": [],
+    }
+
+    asyncio.run(middleware(scope, receive, send))
+
+    response_starts = [
+        message for message in sent if message["type"] == "http.response.start"
+    ]
+    assert [message["status"] for message in response_starts] == [413]
+
+
+@pytest.mark.parametrize(
+    "invalid_message",
+    (
+        None,
+        {"type": "http.request", "body": None, "more_body": False},
+        {"type": "http.request", "body": "x", "more_body": False},
+        {"type": "http.request", "body": [], "more_body": False},
+        {"type": "http.request", "body": b"", "more_body": 1},
+        {"type": "unexpected", "body": b"", "more_body": False},
+    ),
+)
+def test_public_share_body_limit_rejects_malformed_asgi_events(invalid_message):
+    import asyncio
+
+    from main import PublicShareBodyLimitMiddleware
+
+    sent = []
+
+    async def receive():
+        return invalid_message
+
+    async def send(message):
+        sent.append(message)
+
+    async def route_must_not_run(scope, receive, send):
+        raise AssertionError("Malformed ASGI events must fail before routing.")
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/share/session/chat",
+        "headers": [],
+    }
+    asyncio.run(PublicShareBodyLimitMiddleware(route_must_not_run)(scope, receive, send))
+
+    assert sent[0]["status"] == 400
+
+
+@pytest.mark.parametrize(
+    "transfer_headers",
+    (
+        [(b"transfer-encoding", b"")],
+        [(b"transfer-encoding", b"gzip")],
+        [(b"transfer-encoding", b"chunked"), (b"transfer-encoding", b"chunked")],
+    ),
+)
+def test_public_share_body_limit_rejects_ambiguous_transfer_encoding(
+    transfer_headers,
+):
+    import asyncio
+
+    from main import PublicShareBodyLimitMiddleware
+
+    sent = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"x", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    async def route_must_not_run(scope, receive, send):
+        raise AssertionError("Ambiguous transfer framing must fail before routing.")
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/share/session/chat",
+        "headers": transfer_headers,
+    }
+    asyncio.run(PublicShareBodyLimitMiddleware(route_must_not_run)(scope, receive, send))
+
+    assert sent[0]["status"] == 400
+
+
+def test_public_share_body_limit_accepts_single_chunked_transfer_encoding():
+    import asyncio
+
+    from main import PublicShareBodyLimitMiddleware
+
+    sent = []
+    received = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"x", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    async def consuming_route(scope, receive, send):
+        received.append(await receive())
+        await send({"type": "http.response.start", "status": 204, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/share/session/chat",
+        "headers": [(b"transfer-encoding", b"chunked")],
+    }
+    asyncio.run(PublicShareBodyLimitMiddleware(consuming_route)(scope, receive, send))
+
+    assert sent[0]["status"] == 204
+    assert received[0]["body"] == b"x"
+
+
+@pytest.mark.parametrize(
+    "invalid_headers",
+    (
+        None,
+        1,
+        [(b"content-length",)],
+        [(b"content-length", b"1", b"extra")],
+        [("content-length", b"1")],
+        [(b"content-length", "1")],
+    ),
+)
+def test_public_share_body_limit_rejects_malformed_scope_headers(invalid_headers):
+    import asyncio
+
+    from main import PublicShareBodyLimitMiddleware
+
+    sent = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    async def route_must_not_run(scope, receive, send):
+        raise AssertionError("Malformed scope headers must fail before routing.")
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/share/session/chat",
+        "headers": invalid_headers,
+    }
+    asyncio.run(PublicShareBodyLimitMiddleware(route_must_not_run)(scope, receive, send))
+
+    assert sent[0]["status"] == 400
 
 
 def test_module_registry_has_fixed_primary_navigation():

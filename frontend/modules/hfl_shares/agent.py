@@ -11,7 +11,7 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
-from config import get_settings
+from config import get_settings, hfl_share_question_limit
 from modules.hfl_shares.models import ScopeSnapshot, SnapshotEntry
 from modules.hfl_shares.retrieval import (
     has_recency_intent,
@@ -175,7 +175,11 @@ async def answer_question(
     share_id: str = "",
 ) -> str:
     """Answer strictly from the resolved share context, with entry citations."""
-    prompt = (question or "").strip()
+    raw_question = question or ""
+    limit = hfl_share_question_limit()
+    if len(raw_question) > limit:
+        raise ValueError(f"Questions must be {limit} characters or fewer.")
+    prompt = raw_question.strip()
     if not prompt:
         raise ValueError("A question is required.")
     if not snapshot.entries:
@@ -245,7 +249,7 @@ source; factual claims must still be grounded in <shared_context>.
         "</shared_context>\n\n"
         f"<owner_context>{owner_context}</owner_context>\n\n"
         f"<conversation>\n{conversation}\n</conversation>\n\n"
-        f"<question>{html.escape(prompt[:2000])}</question>"
+        f"<question>{html.escape(prompt)}</question>"
     )
     try:
         text = await _answer_with_hermes(

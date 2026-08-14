@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 
-from config import get_settings
+from config import get_settings, hfl_share_session_ttl
 from modules.hfl_shares.models import (
     ChatMessage,
     ScopeSnapshot,
@@ -73,6 +73,11 @@ CREATE TABLE IF NOT EXISTS chat_events (
     share_id TEXT NOT NULL REFERENCES shares(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS pin_failure_events (
+    id TEXT PRIMARY KEY,
+    share_id TEXT NOT NULL REFERENCES shares(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS chat_messages (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -94,6 +99,8 @@ CREATE TABLE IF NOT EXISTS share_embeddings (
 CREATE INDEX IF NOT EXISTS idx_sessions_share ON sessions(share_id);
 CREATE INDEX IF NOT EXISTS idx_requests_share ON access_requests(share_id);
 CREATE INDEX IF NOT EXISTS idx_chat_events_share ON chat_events(share_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_pin_failure_events_share
+ON pin_failure_events(share_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_session
 ON chat_messages(session_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_share_embeddings_share
@@ -409,7 +416,13 @@ class ShareStore:
         return str(row["pin_hash"]) if row else ""
 
     def record_pin_failure(self, share_id: str) -> int:
+        now = utc_now().isoformat()
         with self._lock, self._connect() as connection:
+            connection.execute(
+                "INSERT INTO pin_failure_events(id, share_id, created_at) "
+                "VALUES (?, ?, ?)",
+                (str(uuid.uuid4()), share_id, now),
+            )
             connection.execute(
                 "UPDATE shares SET pin_failures=pin_failures+1 WHERE id=?",
                 (share_id,),
@@ -418,6 +431,33 @@ class ShareStore:
                 "SELECT pin_failures FROM shares WHERE id=?", (share_id,)
             ).fetchone()
         return int(row["pin_failures"]) if row else 0
+
+    def pin_rate_limited(
+        self,
+        share_id: str,
+        limit: int,
+        window_seconds: int,
+    ) -> bool:
+        """Temporarily limit failures without permanently locking a share."""
+        cutoff = (
+            utc_now() - timedelta(seconds=max(1, int(window_seconds)))
+        ).isoformat()
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                "DELETE FROM pin_failure_events WHERE created_at<?", (cutoff,)
+            )
+            count = connection.execute(
+                "SELECT COUNT(*) AS count FROM pin_failure_events "
+                "WHERE share_id=? AND created_at>=?",
+                (share_id, cutoff),
+            ).fetchone()["count"]
+        return int(count) >= max(1, int(limit))
+
+    def clear_recent_pin_failures(self, share_id: str) -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                "DELETE FROM pin_failure_events WHERE share_id=?", (share_id,)
+            )
 
     def create_session(
         self, share_id: str, secret_hash: str
@@ -433,6 +473,10 @@ class ShareStore:
             grant = self._grant(row)
             if not grant.available:
                 return None
+            connection.execute(
+                "DELETE FROM sessions WHERE share_id=? AND expires_at<=?",
+                (share_id, now.isoformat()),
+            )
             active_count = connection.execute(
                 """
                 SELECT COUNT(*) AS count FROM sessions
@@ -445,7 +489,8 @@ class ShareStore:
             if grant.single_use and grant.redeemed_at:
                 return None
             session_id = str(uuid.uuid4())
-            session_limit = now + timedelta(days=7)
+            session_ttl = hfl_share_session_ttl()
+            session_limit = now + timedelta(seconds=session_ttl)
             expires_at = (
                 session_limit
                 if grant.no_expiry
@@ -469,6 +514,30 @@ class ShareStore:
             )
         return session_id, expires_at
 
+    def active_session_count(self, share_id: str) -> int:
+        now = utc_now().isoformat()
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT COUNT(*) AS count FROM sessions
+                WHERE share_id=? AND revoked_at='' AND expires_at>?
+                """,
+                (share_id, now),
+            ).fetchone()
+        return int(row["count"]) if row else 0
+
+    def revoke_session(self, session_id: str) -> bool:
+        now = utc_now().isoformat()
+        with self._lock, self._connect() as connection:
+            result = connection.execute(
+                """
+                UPDATE sessions SET revoked_at=?
+                WHERE id=? AND revoked_at='' AND expires_at>?
+                """,
+                (now, session_id, now),
+            )
+        return result.rowcount > 0
+
     def validate_session(
         self, session_id: str, secret_hash: str
     ) -> ShareGrant | None:
@@ -485,6 +554,18 @@ class ShareStore:
                 (session_id, secret_hash, now, now),
             ).fetchone()
         return self._grant(row) if row else None
+
+    def revoke_session(self, session_id: str) -> bool:
+        now = utc_now().isoformat()
+        with self._lock, self._connect() as connection:
+            result = connection.execute(
+                """
+                UPDATE sessions SET revoked_at=?
+                WHERE id=? AND revoked_at=''
+                """,
+                (now, session_id),
+            )
+        return result.rowcount > 0
 
     def revoke_share(self, share_id: str) -> bool:
         now = utc_now().isoformat()

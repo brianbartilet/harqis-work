@@ -189,7 +189,7 @@
               <option value="pin" {% if mode == 'pin' %}selected{% endif %}>QR + generated PIN</option>
               <option value="email_otp" {% if mode == 'email_otp' %}selected{% endif %}>Cloudflare email OTP</option>
               <option value="manual" {% if mode == 'manual' %}selected{% endif %}>Owner approval</option>
-              <option value="qr" {% if mode == 'qr' %}selected{% endif %}>QR possession only</option>
+              <option value="qr" {% if mode == 'qr' %}selected{% endif %}>Public QR bearer access</option>
             </select>
             <svg class="select-caret" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg>
             </div>
@@ -294,9 +294,10 @@
           <div class="two">
             <div class="field"><label for="email">Allowed email (email OTP mode)</label><input class="control" id="email" type="email" name="allowed_email" value="{{ cfg.allowed_email if cfg else '' }}"></div>
             <div class="field"><label for="expires-at">Expires at</label><input class="control [color-scheme:dark]" id="expires-at" type="datetime-local" name="expires_at" required value="{{ default_expires_at }}" data-expires-at {% if cfg and cfg.no_expiry %}disabled{% endif %} onclick="if (this.showPicker) this.showPicker()"><input type="hidden" name="timezone_offset" data-timezone-offset></div>
-            <div class="field"><label for="devices">Number of devices</label><input class="control" id="devices" type="number" min="1" max="10" name="device_limit" value="{{ cfg.device_limit if cfg else defaults.hfl_share_default_device_limit }}"></div>
+            <div class="field"><label for="devices">Concurrent sessions</label><input class="control" id="devices" type="number" min="1" max="{{ max_concurrent_sessions }}" name="device_limit" value="{{ [cfg.device_limit if cfg else defaults.hfl_share_default_device_limit, max_concurrent_sessions]|min }}"></div>
           </div>
-          <label class="check mb-2"><input type="checkbox" name="single_use" {% if not cfg or cfg.single_use %}checked{% endif %}><span>Single-use redemption (recommended)</span></label>
+          <p class="mb-3 text-xs leading-5 text-slate-500">Each browser receives a fixed session lasting {{ session_duration }}. Closing or expiry releases its slot; rescanning in the same browser resumes it.</p>
+          <label class="check mb-2"><input type="checkbox" name="single_use" {% if not cfg or cfg.single_use %}checked{% endif %}><span>Allow only the first successful session</span></label>
           <label class="check"><input type="checkbox" name="references_enabled" {% if not cfg or cfg.references_enabled %}checked{% endif %}><span>Allow individually selected references. Canonical paths are never shown to guests.</span></label>
           </div>
         </details>
@@ -430,6 +431,7 @@
       <div class="instant-override"><strong class="block text-slate-200">Access</strong>QR possession only</div>
       <div class="instant-override"><strong class="block text-slate-200">Expires at</strong>1 day</div>
       <div class="instant-override"><strong class="block text-slate-200">Number of devices</strong>1</div>
+      <div class="instant-override"><strong class="block text-slate-200">Session length</strong>{{ session_duration }}</div>
       <div class="instant-override"><strong class="block text-slate-200">Single-use redemption</strong>Yes</div>
       <div class="instant-override"><strong class="block text-slate-200">Selected references</strong>Allowed</div>
     </div>
