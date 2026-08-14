@@ -26,8 +26,11 @@ disk.
 6. The owner receives a QR and pasteable capability link. PIN mode additionally
    displays a random eight-digit PIN once.
 7. Successful redemption binds one server session to an HTTP-only signed
-   cookie. No browser fingerprint is collected.
-8. Expiry or owner revocation makes the grant and every associated session
+   cookie. Rescanning in that browser resumes the same session; closing it or
+   reaching its fixed lifetime releases the slot. No browser fingerprint is
+   collected.
+8. A share may have no grant expiry while its individual sessions still
+   expire. Grant expiry or owner revocation makes every associated session
    invalid immediately.
 
 Editing or deleting a recipe never changes or revokes previously generated
@@ -111,10 +114,10 @@ used for semantic retrieval.
 
 | Mode | Verification | Notes |
 |---|---|---|
-| QR + PIN | Capability token plus separately communicated eight-digit PIN | Default. Five failed attempts lock the grant. |
+| QR + PIN | Capability token plus separately communicated eight-digit PIN | Default. Repeated failures are temporarily throttled in a rolling window. |
 | Email OTP | Cloudflare Access identity header plus exact configured email | Requires the dedicated `/share/email/*` Access policy described below. |
 | Manual approval | Capability token plus one owner-approved browser request | Guest waiting cookie is HTTP-only and expires after one hour. |
-| QR possession | Capability token only | Suitable only for low-risk context; link possession is authorization. |
+| QR possession | Capability token only | Suitable only for low-risk context; link possession is authorization. A no-expiry QR can issue bounded sessions as slots become free. |
 
 The default grant lasts one hour, permits one session, is single-use, disables
 references, and terminates active sessions when revoked.
@@ -131,7 +134,14 @@ HFL_SHARE_SECRET_KEY=<independent-random-secret>
 HFL_SHARE_STORE_PATH=/Users/harqis-one/.harqis-data/hfl-shares.sqlite3
 HFL_SHARE_DEFAULT_TTL_SECONDS=3600
 HFL_SHARE_DEFAULT_DEVICE_LIMIT=1
+HFL_SHARE_SESSION_TTL_SECONDS=21600
+HFL_SHARE_MAX_CONCURRENT_SESSIONS=20
+HFL_SHARE_CAPACITY_RETRY_SECONDS=300
 HFL_SHARE_PIN_MAX_ATTEMPTS=5
+HFL_SHARE_PIN_ATTEMPT_WINDOW_SECONDS=900
+HFL_SHARE_MAX_GUEST_REQUEST_BYTES=16384
+HFL_SHARE_MAX_QUESTION_CHARS=2000
+HFL_SHARE_LIVE_REFRESH_SECONDS=300
 HFL_SHARE_PROVIDER=hermes
 HFL_SHARE_HERMES_BASE_URL=http://127.0.0.1:8643/v1
 HFL_SHARE_HERMES_API_KEY=<dedicated-server-side-bearer>
@@ -147,6 +157,28 @@ HFL_SHARE_RETRIEVAL_K=8
 HFL_SHARE_SEMANTIC_WEIGHT=0.75
 HFL_SHARE_TRUST_PROXY_IDENTITY=false
 ```
+
+The six-hour session and 20-session ceiling are operational defaults, not
+hard-coded requirements. `HFL_SHARE_SESSION_TTL_SECONDS` accepts 300–86,400
+seconds. `HFL_SHARE_MAX_CONCURRENT_SESSIONS` sets the highest value an owner
+may select for a recipe and is safety-bounded to 1–20; each recipe may choose a
+lower value. `HFL_SHARE_CAPACITY_RETRY_SECONDS` controls the public `Retry-After`
+response when every slot is occupied and is bounded to 30–3,600 seconds.
+
+For a reusable public QR, enable QR possession mode, disable grant expiry, and
+set the recipe's concurrent-session count. The capability URL remains valid
+until owner revocation, while each browser receives only the configured fixed
+session lifetime. A rescan in the same browser resumes its existing session;
+logout or expiry frees that durable slot for another browser. Increasing the
+session ceiling increases concurrent request and model-cost exposure, so edge
+rate limiting and monitoring remain necessary.
+
+The remaining public-input controls are also configurable:
+`HFL_SHARE_PIN_ATTEMPT_WINDOW_SECONDS` is the rolling failed-PIN window,
+`HFL_SHARE_MAX_GUEST_REQUEST_BYTES` bounds public form bodies,
+`HFL_SHARE_MAX_QUESTION_CHARS` bounds questions, and
+`HFL_SHARE_LIVE_REFRESH_SECONDS` limits how often live grants rebuild their
+snapshot.
 
 `HFL_SHARE_PUBLIC_URL` must be HTTPS when `BEHIND_PROXY=true`. Use a dedicated
 share signing key so rotating guest grants does not require rotating the owner
@@ -318,10 +350,10 @@ for `sharing audit persistence failed`.
 
 | Risk | Mitigation | Residual concern |
 |---|---|---|
-| QR/link forwarding | 256-bit capability token, separate PIN default, one device, single use, short expiry | A recipient with both factors can use the share first. |
-| Online PIN guessing | Capability token is also required; scrypt PIN hash; five failures per grant | A link holder can deliberately lock a grant. Revoke/regenerate. |
+| QR/link forwarding | 256-bit capability token, separate PIN default, configurable concurrent-session ceiling, fixed session lifetime, optional grant expiry | Anyone holding a QR-possession link can claim a free session slot until the owner revokes it. |
+| Online PIN guessing | Capability token is also required; scrypt PIN hash; rolling failed-attempt throttle | Distributed attempts still require edge rate limiting and monitoring. |
 | Model-cost abuse | Durable per-share hourly chat limit and bounded model context | An authorized guest can consume the configured allowance. |
-| Oversized public input | 32 KiB public POST body cap plus exact capability/PIN formats, 2,000-character questions, and 500-character searches enforced server-side before expensive hashing, persistence, retrieval, or snapshot scans | The edge should still cap request-line size and connection rates. |
+| Oversized public input | 16 KiB public POST body cap plus exact capability/PIN formats, 2,000-character questions, and 500-character searches enforced server-side before expensive hashing, persistence, retrieval, or snapshot scans | The edge should still cap request-line size and connection rates. |
 | Approval-request flooding | At most five live manual requests per share | A link holder can occupy the queue until requests expire or the share is revoked. |
 | Snapshot oversharing | Source-first filters, explicit preview, warnings, fresh generation | Owners must review broad or sensitive sources before generation. |
 | Corpus prompt injection | Escaped delimiters, untrusted-context instruction, no tools, snapshot-only prompt | Model behavior is probabilistic; do not share secrets in the snapshot. |

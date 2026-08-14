@@ -222,6 +222,12 @@ def _generated_credentials(html: str) -> tuple[str, str]:
     return token.group(1), pin.group(1)
 
 
+def _generated_token(html: str) -> str:
+    token = re.search(r"/share/access/([A-Za-z0-9_-]+)", html)
+    assert token
+    return token.group(1)
+
+
 def test_sharing_module_requires_owner_auth_and_renders(
     authenticated_client, sharing_corpus
 ):
@@ -250,7 +256,9 @@ def test_share_corpus_form_uses_new_labels_defaults_and_collapsed_sections(
     assert "Included activity sources" in response.text
     assert 'value="__all__" data-all-sources checked' in response.text
     assert 'name="references_enabled" checked' in response.text
-    assert "Number of devices" in response.text
+    assert "Concurrent sessions" in response.text
+    assert 'max="20" name="device_limit"' in response.text
+    assert "fixed session lasting 6 hours" in response.text
     assert 'name="no_expiry" data-no-expiry' in response.text
     assert 'name="no_expiry" data-no-expiry checked' not in response.text
     assert 'name="expires_at" required' in response.text
@@ -278,6 +286,24 @@ def test_share_corpus_form_uses_new_labels_defaults_and_collapsed_sections(
     assert "Specific entry IDs" not in response.text
     assert 'data-clear-tags disabled' in response.text
     assert 'class="select-caret"' in response.text
+
+
+def test_concurrent_session_ceiling_is_configurable(
+    authenticated_client, sharing_corpus, monkeypatch
+):
+    from config import get_settings
+
+    monkeypatch.setattr(get_settings(), "hfl_share_max_concurrent_sessions", 4)
+
+    page = authenticated_client.get("/sharing")
+    rejected = authenticated_client.post(
+        "/sharing/generate",
+        data=_form(device_limit="5"),
+    )
+
+    assert 'max="4" name="device_limit"' in page.text
+    assert rejected.status_code == 422
+    assert "between one and 4" in rejected.text
 
 
 def test_share_corpus_uses_automatic_preview_and_blocking_long_actions(
@@ -509,7 +535,7 @@ def test_non_expiring_share_stays_active_until_revoked_with_bounded_session(
         datetime.fromisoformat(session_expires_at)
         - datetime.now(timezone.utc)
     ).total_seconds()
-    assert 6 * 86_400 < remaining <= 7 * 86_400
+    assert 21_590 < remaining <= 21_600
     assert (
         store.validate_session(session_id, "non-expiring-session") is not None
     )
@@ -692,6 +718,33 @@ def test_live_recipe_refreshes_latest_entries_using_frozen_rules(
     assert len(refreshed.snapshot.entries) == 2
     assert refreshed.snapshot.entries[1].citation == "S1"
     assert refreshed.snapshot.entries[0].citation == "S2"
+
+
+def test_live_recipe_does_not_rebuild_inside_refresh_interval(
+    authenticated_client, sharing_corpus, monkeypatch
+):
+    from config import get_settings
+
+    authenticated_client.post(
+        "/sharing/generate",
+        data=_form(freeze_snapshot="off"),
+    )
+    grant = get_share_store().list_shares()[0]
+    monkeypatch.setattr(
+        get_settings(), "hfl_share_live_refresh_seconds", 300
+    )
+
+    def unexpected_refresh(*, force=False):
+        raise AssertionError("a recent live snapshot must not be rebuilt")
+
+    monkeypatch.setattr(
+        "modules.hfl_shares.router.corpus_index.documents",
+        unexpected_refresh,
+    )
+
+    preview = authenticated_client.get(f"/sharing/shares/{grant.id}/preview")
+
+    assert preview.status_code == 200
 
 
 def test_fixed_snapshot_does_not_refresh_latest_entries(
@@ -1192,6 +1245,23 @@ def test_generate_displays_pin_once_and_stores_only_hashes(
     assert token not in refreshed.text
 
 
+def test_public_share_pages_send_anti_indexing_and_transport_headers(
+    authenticated_client, sharing_corpus, monkeypatch
+):
+    from main import settings
+
+    monkeypatch.setattr(settings, "behind_proxy", True)
+    generated = authenticated_client.post("/sharing/generate", data=_form())
+    token = _generated_token(generated.text)
+
+    access = authenticated_client.get(f"/share/access/{token}")
+
+    assert access.status_code == 200
+    assert access.headers["x-robots-tag"] == "noindex, nofollow, noarchive"
+    assert access.headers["cross-origin-opener-policy"] == "same-origin"
+    assert access.headers["strict-transport-security"] == "max-age=31536000"
+
+
 def test_pin_redemption_binds_one_signed_session_and_blocks_second_device(
     authenticated_client, sharing_corpus
 ):
@@ -1218,6 +1288,105 @@ def test_pin_redemption_binds_one_signed_session_and_blocks_second_device(
             follow_redirects=False,
         )
     assert denied.status_code == 403
+
+
+def test_qr_share_reuses_browser_session_and_logout_releases_slot(
+    authenticated_client, sharing_corpus
+):
+    from fastapi.testclient import TestClient
+    from main import app
+
+    generated = authenticated_client.post(
+        "/sharing/generate",
+        data=_form(
+            auth_mode="qr",
+            single_use="",
+            device_limit="20",
+            no_expiry="on",
+            expires_at="",
+        ),
+    )
+    token = _generated_token(generated.text)
+    store = get_share_store()
+    grant = store.list_shares()[0]
+
+    first = authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        follow_redirects=False,
+    )
+    resumed = authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        follow_redirects=False,
+    )
+
+    assert first.status_code == 303
+    assert resumed.status_code == 303
+    assert store.active_session_count(grant.id) == 1
+    assert "up to 20 concurrent sessions" in generated.text
+    assert "6 hours each" in generated.text
+
+    closed = authenticated_client.post(
+        "/share/session/logout",
+        follow_redirects=False,
+    )
+    assert closed.status_code == 303
+    assert store.active_session_count(grant.id) == 0
+
+    with TestClient(app) as next_browser:
+        reopened = next_browser.post(
+            f"/share/access/{token}/redeem",
+            follow_redirects=False,
+        )
+    assert reopened.status_code == 303
+    assert store.active_session_count(grant.id) == 1
+
+
+def test_qr_share_caps_twenty_sessions_and_recovers_expired_slot(
+    authenticated_client, sharing_corpus
+):
+    generated = authenticated_client.post(
+        "/sharing/generate",
+        data=_form(
+            auth_mode="qr",
+            single_use="",
+            device_limit="20",
+            no_expiry="on",
+            expires_at="",
+        ),
+    )
+    token = _generated_token(generated.text)
+    store = get_share_store()
+    grant = store.list_shares()[0]
+
+    sessions = [
+        store.create_session(grant.id, f"session-{index}")
+        for index in range(20)
+    ]
+    assert all(sessions)
+    assert store.active_session_count(grant.id) == 20
+
+    full = authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        follow_redirects=False,
+    )
+    assert full.status_code == 429
+    assert full.headers["retry-after"] == "300"
+    assert "All 20 sessions are currently in use" in full.text
+
+    expired_at = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+    with store._connect() as connection:
+        connection.execute(
+            "UPDATE sessions SET expires_at=? WHERE id=?",
+            (expired_at, sessions[0][0]),
+        )
+    replacement = store.create_session(grant.id, "replacement-session")
+
+    assert replacement is not None
+    assert store.active_session_count(grant.id) == 20
+    remaining = (
+        datetime.fromisoformat(replacement[1]) - datetime.now(timezone.utc)
+    ).total_seconds()
+    assert 21_590 < remaining <= 21_600
 
 
 def test_share_external_links_open_in_a_new_tab(
@@ -1921,7 +2090,7 @@ def test_wrong_pin_is_generic_and_rate_limited(
     authenticated_client, sharing_corpus
 ):
     generated = authenticated_client.post("/sharing/generate", data=_form())
-    token, _ = _generated_credentials(generated.text)
+    token, pin = _generated_credentials(generated.text)
     for attempt in range(5):
         response = authenticated_client.post(
             f"/share/access/{token}/redeem", data={"pin": "00000000"}
@@ -1932,6 +2101,46 @@ def test_wrong_pin_is_generic_and_rate_limited(
         f"/share/access/{token}/redeem", data={"pin": "00000000"}
     )
     assert limited.status_code == 429
+    assert limited.headers["retry-after"] == "900"
+
+    expired_failure = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    with get_share_store()._connect() as connection:
+        connection.execute(
+            "UPDATE pin_failure_events SET created_at=?", (expired_failure,)
+        )
+    recovered = authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        data={"pin": pin},
+        follow_redirects=False,
+    )
+    assert recovered.status_code == 303
+
+
+def test_guest_chat_rejects_large_questions_and_request_bodies(
+    authenticated_client, sharing_corpus
+):
+    generated = authenticated_client.post("/sharing/generate", data=_form())
+    token, pin = _generated_credentials(generated.text)
+    redeemed = authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        data={"pin": pin},
+        follow_redirects=False,
+    )
+    assert redeemed.status_code == 303
+
+    too_long = authenticated_client.post(
+        "/share/session/chat",
+        data={"question": "x" * 2_001},
+    )
+    oversized = authenticated_client.post(
+        "/share/session/chat",
+        content=b"question=" + (b"x" * 17_000),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+
+    assert too_long.status_code == 422
+    assert "question is too long" in too_long.text
+    assert oversized.status_code == 413
 
 
 def test_malformed_pin_is_rejected_before_expensive_scrypt(
@@ -1951,7 +2160,7 @@ def test_malformed_pin_is_rejected_before_expensive_scrypt(
 
     response = authenticated_client.post(
         f"/share/access/{token}/redeem",
-        data={"pin": "9" * 20_000},
+        data={"pin": "9" * 20},
     )
 
     assert response.status_code == 403

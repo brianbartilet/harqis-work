@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from fastapi import Request, Response
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from config import get_settings
+from config import get_settings, hfl_share_session_ttl
 from modules.hfl_shares.models import ShareGrant
 from modules.hfl_shares.store import ShareStore
 
@@ -124,7 +124,8 @@ def current_session(
         return None
     try:
         payload = _serializer("hfl-share-guest-session").loads(
-            token, max_age=604_800
+            token,
+            max_age=hfl_share_session_ttl(),
         )
         session_id = str(payload.get("session_id") or "")
         secret = str(payload.get("secret") or "")

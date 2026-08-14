@@ -103,8 +103,8 @@ class ShareConfiguration:
                 raise ValueError("Share dates must use YYYY-MM-DD format.") from exc
         if not self.no_expiry and not 300 <= int(self.ttl_seconds) <= 31_536_000:
             raise ValueError("Duration must be between five minutes and 365 days.")
-        if not 1 <= int(self.device_limit) <= 10:
-            raise ValueError("Device limit must be between one and ten.")
+        if not 1 <= int(self.device_limit) <= 20:
+            raise ValueError("Session limit must be between one and twenty.")
 
     def saved(self, *, configuration_id: str, now: str) -> "ShareConfiguration":
         return replace(

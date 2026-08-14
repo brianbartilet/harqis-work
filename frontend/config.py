@@ -53,7 +53,14 @@ class Settings(BaseSettings):
     )
     hfl_share_default_ttl_seconds: int = 3600
     hfl_share_default_device_limit: int = 1
+    hfl_share_session_ttl_seconds: int = 21_600
+    hfl_share_max_concurrent_sessions: int = 20
+    hfl_share_capacity_retry_seconds: int = 300
     hfl_share_pin_max_attempts: int = 5
+    hfl_share_pin_attempt_window_seconds: int = 900
+    hfl_share_max_guest_request_bytes: int = 16_384
+    hfl_share_max_question_chars: int = 2_000
+    hfl_share_live_refresh_seconds: int = 300
     hfl_share_provider: str = "hermes"
     hfl_share_hermes_base_url: str = "http://127.0.0.1:8643/v1"
     hfl_share_hermes_api_key: str = ""
@@ -87,6 +94,30 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def hfl_share_session_ttl(settings: Settings | None = None) -> int:
+    """Return the configured guest-session lifetime within its safety bounds."""
+    configured = (settings or get_settings()).hfl_share_session_ttl_seconds
+    return max(300, min(86_400, int(configured)))
+
+
+def hfl_share_concurrent_session_cap(settings: Settings | None = None) -> int:
+    """Return the owner-selectable session cap within the hard limit."""
+    configured = (settings or get_settings()).hfl_share_max_concurrent_sessions
+    return max(1, min(20, int(configured)))
+
+
+def hfl_share_capacity_retry(settings: Settings | None = None) -> int:
+    """Return the public capacity response retry delay in seconds."""
+    configured = (settings or get_settings()).hfl_share_capacity_retry_seconds
+    return max(30, min(3_600, int(configured)))
+
+
+def hfl_share_question_limit(settings: Settings | None = None) -> int:
+    """Return the public question limit within a bounded parsing budget."""
+    configured = (settings or get_settings()).hfl_share_max_question_chars
+    return max(100, min(10_000, int(configured)))
 
 
 def warn_insecure_defaults(settings: Settings) -> None:

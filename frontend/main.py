@@ -260,6 +260,8 @@ async def add_security_headers(request: Request, call_next):
     if request.url.path.startswith("/share/"):
         response.headers["Cache-Control"] = "no-store"
         response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; img-src 'self' data:; "
             "media-src 'self'; "
@@ -267,6 +269,8 @@ async def add_security_headers(request: Request, call_next):
             "style-src 'self' 'unsafe-inline'; form-action 'self'; "
             "frame-ancestors 'none'; base-uri 'none'"
         )
+    if settings.behind_proxy:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000"
     return response
 
 _here = Path(__file__).parent
@@ -470,4 +474,5 @@ if __name__ == "__main__":
         port=settings.port,
         reload=reload_enabled,
         reload_dirs=[str(_here)] if reload_enabled else None,
+        server_header=False,
     )

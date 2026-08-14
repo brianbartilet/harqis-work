@@ -11,7 +11,7 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
-from config import get_settings
+from config import get_settings, hfl_share_question_limit
 from modules.hfl_shares.models import ScopeSnapshot, SnapshotEntry
 from modules.hfl_shares.retrieval import (
     has_recency_intent,
@@ -25,7 +25,6 @@ _log = logging.getLogger(__name__)
 _INSUFFICIENT = (
     "This shared context does not contain enough information to answer that."
 )
-MAX_QUESTION_CHARS = 2_000
 _NATURAL_CITATION = re.compile(r"\[\[[^\]\n|]{1,160}\|S(\d+)\]\]")
 _LEGACY_CITATION = re.compile(r"\[S(\d+)\]")
 
@@ -177,8 +176,9 @@ async def answer_question(
 ) -> str:
     """Answer strictly from the resolved share context, with entry citations."""
     raw_question = question or ""
-    if len(raw_question) > MAX_QUESTION_CHARS:
-        raise ValueError("Questions must be 2000 characters or fewer.")
+    limit = hfl_share_question_limit()
+    if len(raw_question) > limit:
+        raise ValueError(f"Questions must be {limit} characters or fewer.")
     prompt = raw_question.strip()
     if not prompt:
         raise ValueError("A question is required.")
