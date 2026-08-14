@@ -782,11 +782,15 @@ async def hfl_document(
             )
         else:
             anchor = html.escape(entry.anchor, quote=True)
+            header = html.escape(entry.header)
             rendered_parts.append(
-                f'<section id="{anchor}" class="secret-entry-placeholder scroll-mt-40" '
-                f'data-secret-entry="{anchor}"><div><strong>Secret entry</strong>'
-                '<p>Protected content is hidden.</p></div>'
-                f'<button type="button" data-secret-reveal="{anchor}">Show</button></section>'
+                f'<h2 id="{anchor}" class="scroll-mt-40">{header}</h2>'
+                f'<section class="secret-entry-placeholder" data-secret-entry="{anchor}" '
+                f'aria-label="Protected content for {header}">'
+                '<div><strong><span aria-hidden="true">&#128274;</span> Hidden entry</strong>'
+                '<p>PIN protected</p></div>'
+                f'<button type="button" data-secret-reveal="{anchor}" '
+                f'aria-label="Show protected content for {header}">Show</button></section>'
             )
     rendered = (
         Markup("\n".join(rendered_parts))

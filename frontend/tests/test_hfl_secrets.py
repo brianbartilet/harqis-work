@@ -106,6 +106,13 @@ def test_secret_pages_render_custom_pin_dialog_without_native_prompt(
     assert "requestHflSecretsUnlock" in corpus_page.text
     assert "requestHflSecretsUnlock" in document_page.text
     assert "requestHflSecretsUnlock" in sharing_page.text
+    for page in (corpus_page, document_page):
+        assert 'data-secrets-toggle' in page.text
+        assert 'role="switch"' in page.text
+        assert 'aria-checked="false"' in page.text
+        assert ">Secrets<" in page.text
+        assert "Show secrets" not in page.text
+        assert "Hide secrets" not in page.text
 
 
 def test_mixed_document_blurs_secret_entry_and_protects_editor(
@@ -127,7 +134,11 @@ def test_mixed_document_blurs_secret_entry_and_protects_editor(
     assert page.status_code == 200
     assert "Visible note" in page.text
     assert "Private detail" not in page.text
-    assert "Secret entry" in page.text
+    assert '<h2 id="private" class="scroll-mt-40">2026-08-13 10:00</h2>' in page.text
+    assert "Hidden entry" in page.text
+    assert "PIN protected" in page.text
+    assert "Protected content is hidden." not in page.text
+    assert "Secret entry" not in page.text
     assert 'data-secret-reveal="private"' in page.text
     assert edit.status_code == 403
 

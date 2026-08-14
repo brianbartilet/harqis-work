@@ -26,11 +26,15 @@
     <div class="flex gap-2">
     {% if secrets_configured %}
     <button type="button" data-secrets-toggle data-secrets-on="{{ 'true' if show_secrets else 'false' }}" data-secrets-authorized="{{ 'true' if secrets_authorized else 'false' }}"
-            class="min-h-11 shrink-0 rounded-lg px-4 py-2 text-sm font-semibold ring-1 {% if show_secrets %}bg-violet-900/70 text-violet-100 ring-violet-600{% else %}bg-slate-900 text-slate-300 ring-slate-700{% endif %}">
-      {{ 'Hide secrets' if show_secrets else 'Show secrets' }}
+            role="switch" aria-checked="{{ 'true' if show_secrets else 'false' }}"
+            class="inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-semibold ring-1 transition focus:outline-none focus:ring-2 focus:ring-violet-400 {% if show_secrets %}bg-violet-900/70 text-violet-100 ring-violet-600{% else %}bg-slate-900 text-slate-300 ring-slate-700{% endif %}">
+      <span>Secrets</span>
+      <span aria-hidden="true" class="relative h-5 w-9 rounded-full transition-colors {% if show_secrets %}bg-violet-500{% else %}bg-slate-700{% endif %}">
+        <span class="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform {% if show_secrets %}translate-x-4{% endif %}"></span>
+      </span>
     </button>
     {% else %}
-    <a href="/profile#profile-secrets-title" class="inline-flex min-h-11 items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-300 ring-1 ring-slate-700">Show secrets</a>
+    <a href="/profile#profile-secrets-title" class="inline-flex min-h-11 items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-300 ring-1 ring-slate-700">Secrets</a>
     {% endif %}
     <button type="button" data-create-entry-open
             class="min-h-11 w-full shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 sm:min-h-0 sm:w-auto">

@@ -652,6 +652,28 @@ def test_document_orders_entries_before_floating_navigator_without_reference_sum
     assert ".markdown-body p, .markdown-body li" in response.text
     assert "overflow-wrap: anywhere" in response.text
     assert "word-break: break-word" in response.text
+    assert 'data-document-header class="corpus-document-header"' in response.text
+    assert "position: sticky" in response.text
+    assert "top: 3.5rem" in response.text
+
+
+def test_document_floating_navigator_can_be_minimized(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document("2026-07-10.md", tags=("debugging",))
+    monkeypatch.setattr(hfl_routes.corpus_index, "get", lambda path: document)
+
+    response = authenticated_client.get("/hfl-corpus/document/2026-07-10.md")
+
+    assert response.status_code == 200
+    assert 'data-navigator-toggle aria-expanded="true"' in response.text
+    assert 'id="navigator-content" data-navigator-content' in response.text
+    assert "Search &amp; navigate" in response.text
+    assert "setNavigatorCollapsed" in response.text
+    assert "hfl-corpus-document-navigator-collapsed" in response.text
+    assert "navigator-collapsed" in response.text
 
 
 def test_document_tag_navigator_shows_counts_in_descending_order(

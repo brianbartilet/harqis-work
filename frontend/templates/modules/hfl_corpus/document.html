@@ -94,16 +94,40 @@
   .corpus-editor { border: 1px solid #1e3a5f; border-radius: .8rem; background: #08111f; padding: 1rem; }
   .corpus-editor textarea { box-sizing: border-box; width: 100%; min-height: min(62dvh, 44rem); resize: vertical; border: 1px solid #334155; border-radius: .65rem; background: #020617; color: #dbeafe; padding: 1rem; font: 500 .82rem/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 2; }
   .corpus-editor textarea:focus { border-color: #38bdf8; outline: 2px solid rgba(56, 189, 248, .18); }
-  .secret-entry-placeholder { display:flex; min-height:9rem; align-items:center; justify-content:space-between; gap:1rem; margin:1rem 0; border:1px solid #6d28d9; border-radius:.8rem; background:rgba(46,16,101,.35); padding:1.25rem; filter:none; }
-  .secret-entry-placeholder p { margin:.3rem 0 0; color:#94a3b8; font-size:.8rem; }
-  .secret-entry-placeholder button { border-radius:.55rem; background:#6d28d9; color:white; padding:.55rem .9rem; font-size:.8rem; font-weight:700; }
+  .secret-entry-placeholder { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin:.65rem 0 1.6rem; border:1px solid rgba(109,40,217,.55); border-radius:.65rem; background:rgba(46,16,101,.2); padding:.65rem .75rem .65rem .9rem; }
+  .secret-entry-placeholder strong { color:#e2e8f0; font-size:.8rem; }
+  .secret-entry-placeholder strong span { margin-right:.35rem; color:#a78bfa; font-size:.72rem; }
+  .secret-entry-placeholder p { margin:.1rem 0 0; color:#94a3b8; font-size:.72rem; }
+  .secret-entry-placeholder button { flex:0 0 auto; border-radius:.5rem; background:#6d28d9; color:white; padding:.45rem .8rem; font-size:.75rem; font-weight:700; transition:background-color .15s ease, transform .15s ease; }
+  .secret-entry-placeholder button:hover { background:#7c3aed; }
+  .secret-entry-placeholder button:focus-visible { outline:2px solid #c4b5fd; outline-offset:2px; }
+  .secret-entry-placeholder button:active { transform:translateY(1px); }
+  .corpus-document-header {
+    position: sticky;
+    top: 3.5rem;
+    z-index: 19;
+    margin: -1rem -1rem 1.25rem;
+    border-bottom: 1px solid rgba(30, 41, 59, .85);
+    border-radius: 0 0 .85rem .85rem;
+    background: rgba(2, 6, 23, .94);
+    padding: 1rem;
+    box-shadow: 0 12px 28px rgba(2, 6, 23, .32);
+    backdrop-filter: blur(12px);
+  }
+  #tag-navigator[data-collapsed="true"] { right:.5rem; left:auto; width:max-content; max-width:calc(100vw - 1rem); max-height:none; margin:0; overflow:hidden; padding:.55rem .7rem; }
+  #tag-navigator[data-collapsed="true"] [data-navigator-chevron] { transform:rotate(180deg); }
+  .corpus-document-main.navigator-collapsed { padding-bottom:6rem !important; }
+  @media (min-width:640px) { #tag-navigator[data-collapsed="true"] { right:1rem; } }
+  @media (max-width:767px) { .corpus-document-header { top:6rem; } }
+  @media (prefers-reduced-motion: reduce) { .secret-entry-placeholder button, [data-navigator-chevron] { transition:none; } }
 </style>
 {% endblock %}
 
 {% block content %}
-<main class="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8 {% if document.entry_count %}pb-56{% endif %}">
-  <a href="/hfl-corpus" class="text-xs text-slate-500 hover:text-white">← Activity Corpus</a>
-  <div class="mb-5 mt-4 flex items-start justify-between gap-4">
+<main class="corpus-document-main mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8 {% if document.entry_count %}pb-56{% endif %}">
+  <header data-document-header class="corpus-document-header">
+    <a href="/hfl-corpus" class="text-xs text-slate-500 hover:text-white">← Activity Corpus</a>
+    <div class="mt-3 flex items-start justify-between gap-4">
     <div class="min-w-0">
       <p class="text-xs uppercase tracking-[0.22em] text-blue-400">Corpus document</p>
       <h1 class="mt-2 truncate text-xl font-semibold text-white">{{ document.name }}</h1>
@@ -111,12 +135,20 @@
     </div>
     <div class="shrink-0 pt-1 text-right text-xs">
       {% if document_has_secrets and secrets_configured %}
-      <button type="button" data-secrets-toggle data-secrets-on="{{ 'true' if show_secrets else 'false' }}" data-secrets-authorized="{{ 'true' if secrets_authorized else 'false' }}" class="mb-3 block w-full text-right font-semibold text-violet-300 hover:text-violet-200">{{ 'Hide secrets' if show_secrets else 'Show secrets' }}</button>
+      <button type="button" data-secrets-toggle data-secrets-on="{{ 'true' if show_secrets else 'false' }}" data-secrets-authorized="{{ 'true' if secrets_authorized else 'false' }}"
+              role="switch" aria-checked="{{ 'true' if show_secrets else 'false' }}"
+              class="mb-3 inline-flex w-full items-center justify-end gap-2 font-semibold text-violet-300 hover:text-violet-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400">
+        <span>Secrets</span>
+        <span aria-hidden="true" class="relative h-5 w-9 rounded-full transition-colors {% if show_secrets %}bg-violet-500{% else %}bg-slate-700{% endif %}">
+          <span class="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform {% if show_secrets %}translate-x-4{% endif %}"></span>
+        </span>
+      </button>
       {% endif %}
       <button type="button" data-document-edit-open class="mb-3 block w-full text-right font-semibold text-blue-300 hover:text-blue-200">Edit</button>
       <p class="operator-meta">Created {{ document.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
     </div>
-  </div>
+    </div>
+  </header>
 
   {% if not document.entry_count %}
   <div class="mb-4 rounded-xl border border-amber-800/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">No entries found</div>
@@ -244,6 +276,17 @@
        data-selected-source="{{ selected_source }}"
        class="fixed inset-x-2 bottom-2 z-30 mx-auto max-h-[45dvh] max-w-4xl overflow-y-auto rounded-2xl border border-blue-800/70 bg-slate-900/95 p-3 shadow-2xl shadow-black/60 backdrop-blur sm:inset-x-4 sm:bottom-4 sm:max-h-none sm:p-4"
        aria-label="Document entry navigator">
+    <div class="flex items-center justify-between gap-4">
+      <p id="navigator-title" class="text-xs font-semibold text-slate-300">Search &amp; navigate</p>
+      <button type="button" data-navigator-toggle aria-expanded="true" aria-controls="navigator-content"
+              class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-blue-300 transition hover:bg-slate-800 hover:text-blue-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+        <span data-navigator-toggle-label>Minimize</span>
+        <svg data-navigator-chevron aria-hidden="true" viewBox="0 0 20 20" class="h-4 w-4 transition-transform" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m5 7.5 5 5 5-5"></path>
+        </svg>
+      </button>
+    </div>
+    <div id="navigator-content" data-navigator-content>
     <div class="max-h-28 overflow-y-auto space-y-2">
       {% if document_source_options %}
       <details data-filter-section="source" open class="group rounded-lg bg-slate-950/35">
@@ -320,6 +363,7 @@
                 class="rounded-lg bg-slate-800 px-4 py-2 text-xs text-slate-300 transition hover:bg-slate-700 hover:text-white">Back to top ↑</button>
       </div>
     </div>
+    </div>
   </nav>
 
   <script>
@@ -333,11 +377,41 @@
       const position = document.getElementById('tag-position');
       const goToEnd = document.getElementById('navigator-go-to-end');
       const backToTop = document.getElementById('navigator-back-to-top');
+      const toggle = navigator.querySelector('[data-navigator-toggle]');
+      const toggleLabel = navigator.querySelector('[data-navigator-toggle-label]');
+      const navigatorContent = navigator.querySelector('[data-navigator-content]');
+      const page = document.querySelector('.corpus-document-main');
+      const collapsedStorageKey = 'hfl-corpus-document-navigator-collapsed';
       let anchors = [];
       let currentIndex = 0;
       let currentButton = null;
       let currentKind = '';
       let currentValue = '';
+
+      function setNavigatorCollapsed(collapsed, persist = true) {
+        navigator.dataset.collapsed = collapsed ? 'true' : 'false';
+        navigatorContent.hidden = collapsed;
+        toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        toggleLabel.textContent = collapsed ? 'Expand' : 'Minimize';
+        page?.classList.toggle('navigator-collapsed', collapsed);
+        if (!persist) return;
+        try {
+          sessionStorage.setItem(collapsedStorageKey, collapsed ? 'true' : 'false');
+        } catch (error) {
+          // Storage may be unavailable in privacy-restricted browser sessions.
+        }
+      }
+
+      let initiallyCollapsed = false;
+      try {
+        initiallyCollapsed = sessionStorage.getItem(collapsedStorageKey) === 'true';
+      } catch (error) {
+        // Keep the navigator expanded when storage is unavailable.
+      }
+      setNavigatorCollapsed(initiallyCollapsed, false);
+      toggle.addEventListener('click', () => {
+        setNavigatorCollapsed(navigator.dataset.collapsed !== 'true');
+      });
 
       function styleButtons(activeButton = null) {
         filterButtons.forEach((item) => {
