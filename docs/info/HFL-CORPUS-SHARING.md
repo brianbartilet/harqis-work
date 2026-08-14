@@ -233,15 +233,12 @@ The integration is not an unlimited inference service; keep the durable per-shar
 rate limit and confirm that delegated guest use complies with the provider's
 terms.
 
-Rollback without deleting the isolated profile:
-
-```env
-HFL_SHARE_PROVIDER=anthropic
-```
-
-Then restart the HARQIS frontend. Stop the isolated gateway with
-`hermes -p sharecorpus gateway stop` when it is no longer needed. Do not delete
-or copy profile credentials as part of routine rollback.
+To disable Q&A without deleting the isolated profile, stop the isolated gateway
+with `hermes -p sharecorpus gateway stop`. Snapshot browsing remains available
+and questions fail with the generic temporary-unavailable response. Do not set
+an alternate provider: the sharing boundary intentionally accepts only
+`HFL_SHARE_PROVIDER=hermes`. Do not delete or copy profile credentials as part
+of routine rollback.
 
 ## Cloudflare tunnel policy
 
@@ -324,6 +321,7 @@ for `sharing audit persistence failed`.
 | QR/link forwarding | 256-bit capability token, separate PIN default, one device, single use, short expiry | A recipient with both factors can use the share first. |
 | Online PIN guessing | Capability token is also required; scrypt PIN hash; five failures per grant | A link holder can deliberately lock a grant. Revoke/regenerate. |
 | Model-cost abuse | Durable per-share hourly chat limit and bounded model context | An authorized guest can consume the configured allowance. |
+| Oversized public input | 32 KiB public POST body cap plus exact capability/PIN formats, 2,000-character questions, and 500-character searches enforced server-side before expensive hashing, persistence, retrieval, or snapshot scans | The edge should still cap request-line size and connection rates. |
 | Approval-request flooding | At most five live manual requests per share | A link holder can occupy the queue until requests expire or the share is revoked. |
 | Snapshot oversharing | Source-first filters, explicit preview, warnings, fresh generation | Owners must review broad or sensitive sources before generation. |
 | Corpus prompt injection | Escaped delimiters, untrusted-context instruction, no tools, snapshot-only prompt | Model behavior is probabilistic; do not share secrets in the snapshot. |
@@ -332,7 +330,13 @@ for `sharing audit persistence failed`.
 | Cookie theft | HTTP-only, same-site, secure behind HTTPS, server-side session hash | A compromised guest browser can act until expiry or revocation. |
 | Proxy-header spoofing | Trust disabled by default; dedicated Access path; locked-down origin required | Misconfigured origin exposure invalidates this boundary. |
 | Revocation race | Session validation checks grant status on every request; revocation updates all sessions transactionally | A response already in flight may complete. |
+| Guest-cookie replay after logout | Closing a guest session revokes that exact durable session before clearing the browser cookie | A response already in flight may complete. |
+| Capability-origin poisoning | Proxied deployments require an explicit HTTPS `HFL_SHARE_PUBLIC_URL`; credentials, paths, queries, and fragments are rejected | Non-proxied local development may derive the request origin. |
 | Availability | Local durable store; portal fails closed when host/tunnel is down | This is intentionally not a high-availability cloud service. |
+
+FastAPI interactive documentation and the OpenAPI schema are disabled on this
+operator-facing deployment (`/docs`, `/redoc`, and `/openapi.json` return 404)
+to avoid publishing a reconnaissance map of owner and guest routes.
 
 ## Recovery and operations
 

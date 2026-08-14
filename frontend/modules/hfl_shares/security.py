@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import secrets
 from dataclasses import dataclass
 
@@ -17,6 +18,7 @@ from modules.hfl_shares.store import ShareStore
 
 GUEST_COOKIE = "hfl_share_session"
 REQUEST_COOKIE = "hfl_share_request"
+_PUBLIC_TOKEN = re.compile(r"[A-Za-z0-9_-]{43}")
 
 
 def _secret() -> str:
@@ -38,6 +40,10 @@ def opaque_hash(value: str) -> str:
 
 def new_public_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+def valid_public_token(value: str) -> bool:
+    return bool(_PUBLIC_TOKEN.fullmatch(value or ""))
 
 
 def new_pin() -> str:

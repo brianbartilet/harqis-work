@@ -25,6 +25,7 @@ _log = logging.getLogger(__name__)
 _INSUFFICIENT = (
     "This shared context does not contain enough information to answer that."
 )
+MAX_QUESTION_CHARS = 2_000
 _NATURAL_CITATION = re.compile(r"\[\[[^\]\n|]{1,160}\|S(\d+)\]\]")
 _LEGACY_CITATION = re.compile(r"\[S(\d+)\]")
 
@@ -175,7 +176,10 @@ async def answer_question(
     share_id: str = "",
 ) -> str:
     """Answer strictly from the resolved share context, with entry citations."""
-    prompt = (question or "").strip()
+    raw_question = question or ""
+    if len(raw_question) > MAX_QUESTION_CHARS:
+        raise ValueError("Questions must be 2000 characters or fewer.")
+    prompt = raw_question.strip()
     if not prompt:
         raise ValueError("A question is required.")
     if not snapshot.entries:
@@ -245,7 +249,7 @@ source; factual claims must still be grounded in <shared_context>.
         "</shared_context>\n\n"
         f"<owner_context>{owner_context}</owner_context>\n\n"
         f"<conversation>\n{conversation}\n</conversation>\n\n"
-        f"<question>{html.escape(prompt[:2000])}</question>"
+        f"<question>{html.escape(prompt)}</question>"
     )
     try:
         text = await _answer_with_hermes(

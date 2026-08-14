@@ -486,6 +486,18 @@ class ShareStore:
             ).fetchone()
         return self._grant(row) if row else None
 
+    def revoke_session(self, session_id: str) -> bool:
+        now = utc_now().isoformat()
+        with self._lock, self._connect() as connection:
+            result = connection.execute(
+                """
+                UPDATE sessions SET revoked_at=?
+                WHERE id=? AND revoked_at=''
+                """,
+                (now, session_id),
+            )
+        return result.rowcount > 0
+
     def revoke_share(self, share_id: str) -> bool:
         now = utc_now().isoformat()
         with self._lock, self._connect() as connection:

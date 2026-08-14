@@ -313,6 +313,28 @@ def test_share_corpus_uses_automatic_preview_and_blocking_long_actions(
     assert 'data-progress-next="Asking the agent…"' in preview.text
 
 
+def test_oversized_draft_preview_question_is_rejected_before_snapshot_work(
+    authenticated_client, monkeypatch, sharing_corpus
+):
+    from modules.hfl_shares import router
+
+    monkeypatch.setattr(
+        router,
+        "_sharing_documents",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("Oversized preview questions must not load the corpus.")
+        ),
+    )
+
+    response = authenticated_client.post(
+        "/sharing/preview/chat",
+        data=_form(question=("q" * 2_000) + " "),
+    )
+
+    assert response.status_code == 422
+    assert "2000 characters or fewer" in response.text
+
+
 def test_automatic_preview_fragment_defaults_references_and_places_tags_below_title(
     authenticated_client, sharing_corpus
 ):
@@ -816,7 +838,8 @@ def test_instant_share_uses_throwaway_overrides_and_stays_out_of_generated_list(
 ):
     from modules.hfl_shares import router
 
-    monkeypatch.setattr(router, "new_public_token", lambda: "instant-test-token")
+    instant_token = "i" * 43
+    monkeypatch.setattr(router, "new_public_token", lambda: instant_token)
     authenticated_client.post(
         "/sharing/configurations",
         data=_form(
@@ -865,9 +888,9 @@ def test_instant_share_uses_throwaway_overrides_and_stays_out_of_generated_list(
     assert "width:min(13.5rem,68vw)" in owner_page.text
     assert "grid-template-columns:repeat(2,minmax(0,1fr))" in owner_page.text
 
-    access = authenticated_client.get("/share/access/instant-test-token")
+    access = authenticated_client.get(f"/share/access/{instant_token}")
     redeemed = authenticated_client.post(
-        "/share/access/instant-test-token/redeem",
+        f"/share/access/{instant_token}/redeem",
         follow_redirects=False,
     )
     assert access.status_code == 200
@@ -1500,6 +1523,31 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
         assert "What is Brian working on?" not in isolated.text
 
 
+def test_guest_logout_revokes_server_session_and_blocks_cookie_replay(
+    authenticated_client, sharing_corpus
+):
+    generated = authenticated_client.post("/sharing/generate", data=_form())
+    token, pin = _generated_credentials(generated.text)
+    redeemed = authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        data={"pin": pin},
+        follow_redirects=False,
+    )
+    assert redeemed.status_code == 303
+    stolen_cookie = authenticated_client.cookies.get(GUEST_COOKIE)
+    assert stolen_cookie
+
+    logged_out = authenticated_client.post(
+        "/share/session/logout", follow_redirects=False
+    )
+    assert logged_out.status_code == 303
+
+    authenticated_client.cookies.set(GUEST_COOKIE, stolen_cookie, path="/share")
+    replay = authenticated_client.get("/share/session")
+    assert replay.status_code == 404
+    assert "cannot be opened" in replay.text
+
+
 def test_answer_html_links_natural_phrases_to_cited_entries():
     from modules.hfl_shares.router import _answer_html
 
@@ -1839,6 +1887,36 @@ def test_owner_can_preview_active_share_without_guest_verification(
     assert denied.status_code == 302
 
 
+def test_oversized_owner_preview_question_is_rejected_before_live_refresh(
+    authenticated_client, monkeypatch, sharing_corpus
+):
+    from modules.hfl_shares import router
+
+    generated = authenticated_client.post("/sharing/generate", data=_form())
+    assert generated.status_code == 200
+    grant = get_share_store().list_shares()[0]
+    monkeypatch.setattr(
+        router,
+        "_refresh_live_grant",
+        lambda grant: (_ for _ in ()).throw(
+            AssertionError("Oversized questions must not refresh live shares.")
+        ),
+    )
+
+    response = authenticated_client.post(
+        f"/sharing/shares/{grant.id}/preview/chat",
+        data={
+            "csrf": make_csrf_token("frontend-test-user"),
+            "question": ("q" * 2_000) + " ",
+            "history": "[]",
+        },
+        headers={"Accept": "application/json"},
+    )
+
+    assert response.status_code == 422
+    assert "2000 characters or fewer" in response.text
+
+
 def test_wrong_pin_is_generic_and_rate_limited(
     authenticated_client, sharing_corpus
 ):
@@ -1854,6 +1932,117 @@ def test_wrong_pin_is_generic_and_rate_limited(
         f"/share/access/{token}/redeem", data={"pin": "00000000"}
     )
     assert limited.status_code == 429
+
+
+def test_malformed_pin_is_rejected_before_expensive_scrypt(
+    authenticated_client, sharing_corpus, monkeypatch
+):
+    from modules.hfl_shares import router
+
+    generated = authenticated_client.post("/sharing/generate", data=_form())
+    token, _ = _generated_credentials(generated.text)
+    monkeypatch.setattr(
+        router,
+        "verify_pin",
+        lambda pin, encoded: (_ for _ in ()).throw(
+            AssertionError("Malformed PINs must not reach scrypt.")
+        ),
+    )
+
+    response = authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        data={"pin": "9" * 20_000},
+    )
+
+    assert response.status_code == 403
+    assert "not accepted" in response.text
+
+
+def test_oversized_guest_question_is_rejected_before_storage_or_retrieval(
+    authenticated_client, sharing_corpus, monkeypatch
+):
+    from modules.hfl_shares import router
+
+    generated = authenticated_client.post("/sharing/generate", data=_form())
+    token, pin = _generated_credentials(generated.text)
+    redeemed = authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        data={"pin": pin},
+        follow_redirects=False,
+    )
+    assert redeemed.status_code == 303
+    monkeypatch.setattr(
+        router,
+        "answer_question",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("Oversized questions must not reach retrieval.")
+        ),
+    )
+    monkeypatch.setattr(
+        router,
+        "_refresh_live_grant",
+        lambda grant: (_ for _ in ()).throw(
+            AssertionError("Oversized questions must not refresh live shares.")
+        ),
+    )
+
+    response = authenticated_client.post(
+        "/share/session/chat",
+        data={"question": ("q" * 2_000) + " "},
+    )
+
+    assert response.status_code == 422
+    assert "2000 characters or fewer" in response.text
+
+
+def test_agent_rejects_raw_question_overflow_before_whitespace_normalization(
+    authenticated_client, sharing_corpus
+):
+    import asyncio
+
+    from modules.hfl_shares.agent import answer_question
+
+    generated = authenticated_client.post("/sharing/generate", data=_form())
+    assert generated.status_code == 200
+    snapshot = get_share_store().list_shares()[0].snapshot
+
+    with pytest.raises(ValueError, match="2000 characters or fewer"):
+        asyncio.run(answer_question(snapshot, ("q" * 2_000) + " "))
+
+
+def test_oversized_guest_search_is_rejected_before_snapshot_scan(
+    authenticated_client, sharing_corpus
+):
+    generated = authenticated_client.post("/sharing/generate", data=_form())
+    token, pin = _generated_credentials(generated.text)
+    redeemed = authenticated_client.post(
+        f"/share/access/{token}/redeem",
+        data={"pin": pin},
+        follow_redirects=False,
+    )
+    assert redeemed.status_code == 303
+
+    response = authenticated_client.get(
+        "/share/session",
+        params={"q": "q" * 501},
+    )
+
+    assert response.status_code == 422
+    assert "Search queries must be 500 characters or fewer" in response.text
+
+
+def test_public_share_post_body_is_rejected_before_route_processing(
+    authenticated_client,
+):
+    response = authenticated_client.post(
+        "/share/session/chat",
+        content=b"question=" + (b"x" * 65_536),
+        headers={"content-type": "application/x-www-form-urlencoded"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 413
+    assert response.text == "Payload too large"
 
 
 def test_revocation_immediately_invalidates_active_guest_session(
@@ -1884,6 +2073,23 @@ def test_static_guest_routes_are_not_interpreted_as_capability_tokens(
     assert "cannot be opened" in response.text
     assert '<span class="brand-name">HARQIS</span>' in response.text
     assert '<span class="brand-context">Knowledge Corpus Share</span>' in response.text
+
+
+def test_malformed_capability_token_is_rejected_before_store_lookup(
+    authenticated_client, monkeypatch
+):
+    from modules.hfl_shares import router
+
+    class NoLookupStore:
+        def get_share_by_token_hash(self, token_hash):
+            raise AssertionError("Malformed capabilities must not reach SQLite.")
+
+    monkeypatch.setattr(router, "get_share_store", lambda: NoLookupStore())
+
+    response = authenticated_client.get(f"/share/access/{'x' * 20_000}")
+
+    assert response.status_code == 404
+    assert "cannot be opened" in response.text
 
 
 def test_agent_context_escapes_entry_delimiters(tmp_path, monkeypatch):
@@ -2683,6 +2889,57 @@ def test_invalid_proxied_public_url_does_not_create_an_orphan_share(
     response = authenticated_client.post("/sharing/generate", data=_form())
     assert response.status_code == 422
     assert "must be an HTTPS URL" in response.text
+    assert get_share_store().list_shares() == []
+
+
+def test_proxied_share_requires_explicit_public_origin(
+    authenticated_client, monkeypatch, sharing_corpus
+):
+    from config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "behind_proxy", True)
+    monkeypatch.setattr(settings, "hfl_share_public_url", "")
+
+    response = authenticated_client.post("/sharing/generate", data=_form())
+
+    assert response.status_code == 422
+    assert "must be configured" in response.text
+    assert get_share_store().list_shares() == []
+
+
+@pytest.mark.parametrize(
+    "public_url",
+    (
+        "https://user@share.example.test",
+        "https://share.example.test/guest",
+        "https://share.example.test?campaign=linkedin",
+        "https://share.example.test#fragment",
+        "https://share.example.test\\evil.test",
+        "https://share.example.test%2Fevil.test",
+        "https://share.example.test:invalid",
+        "https://share.example.test:",
+        "https://share.example.test:0",
+        "https://bad_host.example.test",
+        "https://.example.test",
+        "https://example..test",
+        "https://-bad.example.test",
+        "https://bad-.example.test",
+    ),
+)
+def test_public_share_origin_rejects_credentials_paths_queries_and_fragments(
+    authenticated_client, monkeypatch, sharing_corpus, public_url
+):
+    from config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "behind_proxy", True)
+    monkeypatch.setattr(settings, "hfl_share_public_url", public_url)
+
+    response = authenticated_client.post("/sharing/generate", data=_form())
+
+    assert response.status_code == 422
+    assert "must be an origin only" in response.text
     assert get_share_store().list_shares() == []
 
 

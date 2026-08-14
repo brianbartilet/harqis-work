@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import hmac
+from ipaddress import ip_address
 import json
 import math
 import re
@@ -36,7 +37,11 @@ from modules.hfl_corpus.remote import RemoteCorpusClient, RemoteCorpusError
 from modules.hfl_corpus.secrets import normalize_secret_tags, secrets_unlocked
 from modules.manifesto.service import load_manifesto
 from modules.profile.store import get_profile_store
-from modules.hfl_shares.agent import AgentUnavailable, answer_question
+from modules.hfl_shares.agent import (
+    MAX_QUESTION_CHARS,
+    AgentUnavailable,
+    answer_question,
+)
 from modules.hfl_shares.audit import record_share_audit
 from modules.hfl_shares.models import (
     ALL_SOURCES,
@@ -65,6 +70,7 @@ from modules.hfl_shares.security import (
     qr_data_uri,
     set_guest_cookie,
     set_request_cookie,
+    valid_public_token,
     verify_csrf_token,
     verify_pin,
 )
@@ -84,6 +90,17 @@ guest_router = APIRouter(prefix="/share")
 _OWNER_RECIPE_PAGE_SIZE = 5
 _OWNER_SHARE_PAGE_SIZE = 5
 _OWNER_SHARE_FORM_MAX_FIELDS = 10_000
+_MAX_GUEST_SEARCH_CHARS = 500
+
+
+def _validated_question(value: object) -> str:
+    raw = str(value or "")
+    if len(raw) > MAX_QUESTION_CHARS:
+        raise ValueError("Questions must be 2000 characters or fewer.")
+    question = raw.strip()
+    if not question:
+        raise ValueError("A question is required.")
+    return question
 
 
 def _profile():
@@ -558,6 +575,11 @@ async def _preview_response(
     store = get_share_store()
     existing = store.get_configuration(str(form.get("configuration_id") or ""))
     try:
+        question = (
+            _validated_question(form.get("question"))
+            if with_agent
+            else str(form.get("question") or "").strip()
+        )
         configuration = _configuration_from_form(
             form,
             existing=existing,
@@ -571,7 +593,6 @@ async def _preview_response(
             disabled_reference_ids=_disabled_references(form),
             **_secret_snapshot_options(request, configuration),
         )
-        question = str(form.get("question") or "").strip()
         answer = ""
         if with_agent:
             answer = await answer_question(preview, question)
@@ -651,6 +672,79 @@ async def preview_chat(request: Request):
     return await _preview_response(request, user, with_agent=True)
 
 
+def _valid_public_hostname(hostname: str) -> bool:
+    try:
+        ip_address(hostname)
+    except ValueError:
+        if len(hostname) > 253:
+            return False
+        return all(
+            re.fullmatch(
+                r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?",
+                label,
+            )
+            for label in hostname.split(".")
+        )
+    return True
+
+
+def _public_share_origin(request: Request) -> str:
+    settings = get_settings()
+    configured = settings.hfl_share_public_url.strip()
+    if settings.behind_proxy and not configured:
+        raise ValueError(
+            "HFL_SHARE_PUBLIC_URL must be configured when the frontend is "
+            "behind a proxy."
+        )
+    base = configured or str(request.base_url)
+    if any(
+        ord(character) <= 32 or character in {"\\", "%"}
+        for character in base
+    ):
+        raise ValueError(
+            "HFL_SHARE_PUBLIC_URL must be an origin only, without ambiguous "
+            "authority characters."
+        )
+    parsed = urlparse(base)
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError("HFL_SHARE_PUBLIC_URL must be an absolute URL.")
+    try:
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError(
+            "HFL_SHARE_PUBLIC_URL must be an origin only with a valid port."
+        ) from exc
+    if not hostname:
+        raise ValueError("HFL_SHARE_PUBLIC_URL must be an absolute URL.")
+    authority = parsed.netloc.rsplit("@", 1)[-1]
+    if authority.endswith(":") or port == 0 or not _valid_public_hostname(hostname):
+        raise ValueError(
+            "HFL_SHARE_PUBLIC_URL must be an origin only with a valid "
+            "hostname and port."
+        )
+    if settings.behind_proxy and parsed.scheme != "https":
+        raise ValueError(
+            "HFL_SHARE_PUBLIC_URL must be an HTTPS URL when the frontend "
+            "is behind a proxy."
+        )
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("HFL_SHARE_PUBLIC_URL must use HTTP or HTTPS.")
+    if (
+        parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError(
+            "HFL_SHARE_PUBLIC_URL must be an origin only, without credentials, "
+            "a path, query, or fragment."
+        )
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
 @owner_router.post("/generate", response_class=HTMLResponse)
 async def generate_share(request: Request):
     user, redirect = require_user(request)
@@ -681,15 +775,7 @@ async def generate_share(request: Request):
             )
         public_token = new_public_token()
         pin = new_pin() if configuration.auth_mode == "pin" else ""
-        base = get_settings().hfl_share_public_url.strip().rstrip("/")
-        if not base:
-            base = str(request.base_url).rstrip("/")
-        parsed_base = urlparse(base)
-        if get_settings().behind_proxy and parsed_base.scheme != "https":
-            raise ValueError(
-                "HFL_SHARE_PUBLIC_URL must be an HTTPS URL when the frontend "
-                "is behind a proxy."
-            )
+        base = _public_share_origin(request)
         access_path = (
             "email" if configuration.auth_mode == "email_otp" else "access"
         )
@@ -846,15 +932,7 @@ async def generate_instant_share(request: Request, configuration_id: str):
                 "The scope is too large to share. Narrow its sources or filters."
             )
         public_token = new_public_token()
-        base = settings.hfl_share_public_url.strip().rstrip("/")
-        if not base:
-            base = str(request.base_url).rstrip("/")
-        parsed_base = urlparse(base)
-        if settings.behind_proxy and parsed_base.scheme != "https":
-            raise ValueError(
-                "HFL_SHARE_PUBLIC_URL must be an HTTPS URL when the frontend "
-                "is behind a proxy."
-            )
+        base = _public_share_origin(request)
         link = f"{base}/share/access/{public_token}"
         grant = store.create_share(
             configuration_id=configuration.id,
@@ -934,16 +1012,13 @@ async def preview_generated_share_chat(request: Request, share_id: str):
     grant = get_share_store().get_share(share_id)
     if not grant or not grant.available:
         return JSONResponse({"detail": "Active share not found."}, status_code=404)
-    grant = _refresh_live_grant(grant)
     form = await request.form()
     try:
         _require_csrf(form, user)
     except HTTPException:
         return JSONResponse({"detail": "Invalid form token."}, status_code=403)
-    question = str(form.get("question") or "").strip()
     try:
-        if not question:
-            raise ValueError("A question is required.")
+        question = _validated_question(form.get("question"))
         raw_history = json.loads(str(form.get("history") or "[]"))
         if not isinstance(raw_history, list):
             raise ValueError("Preview conversation history is invalid.")
@@ -959,6 +1034,7 @@ async def preview_generated_share_chat(request: Request, share_id: str):
             for item in raw_history[-8:]
             if isinstance(item, dict) and str(item.get("content") or "").strip()
         )
+        grant = _refresh_live_grant(grant)
         answer = await answer_question(
             grant.snapshot,
             question,
@@ -1009,6 +1085,8 @@ def _unavailable(request: Request, status_code: int = 404) -> HTMLResponse:
 @guest_router.get("/access/{token}", response_class=HTMLResponse)
 @guest_router.get("/email/{token}", response_class=HTMLResponse)
 async def share_access(request: Request, token: str):
+    if not valid_public_token(token):
+        return _unavailable(request)
     grant = get_share_store().get_share_by_token_hash(opaque_hash(token))
     if not grant or not grant.available:
         return _unavailable(request)
@@ -1029,6 +1107,8 @@ async def share_access(request: Request, token: str):
 @guest_router.post("/access/{token}/redeem")
 @guest_router.post("/email/{token}/redeem")
 async def redeem_share(request: Request, token: str):
+    if not valid_public_token(token):
+        return _unavailable(request)
     store = get_share_store()
     grant = store.get_share_by_token_hash(opaque_hash(token))
     if not grant or not grant.available:
@@ -1037,8 +1117,9 @@ async def redeem_share(request: Request, token: str):
     if grant.auth_mode == "pin":
         if grant.pin_failures >= get_settings().hfl_share_pin_max_attempts:
             return _unavailable(request, status_code=429)
-        if not verify_pin(
-            str(form.get("pin") or ""), store.pin_hash_for_share(grant.id)
+        pin = str(form.get("pin") or "")
+        if not re.fullmatch(r"[0-9]{8}", pin) or not verify_pin(
+            pin, store.pin_hash_for_share(grant.id)
         ):
             store.record_pin_failure(grant.id)
             record_share_audit(event="failed-redemption", share_id=grant.id)
@@ -1452,6 +1533,11 @@ async def guest_portal(
     if not session:
         return _unavailable(request)
     grant, session_id = session
+    if len(q) > _MAX_GUEST_SEARCH_CHARS:
+        raise HTTPException(
+            status_code=422,
+            detail="Search queries must be 500 characters or fewer.",
+        )
     grant = _refresh_live_grant(grant)
     selected_tags = tuple(request.query_params.getlist("tag"))
     context = _guest_context(
@@ -1496,16 +1582,14 @@ async def guest_chat(request: Request):
     if not session:
         return _unavailable(request)
     grant, session_id = session
-    grant = _refresh_live_grant(grant)
     form = await request.form()
-    question = str(form.get("question") or "").strip()
     wants_json = (
         "application/json" in request.headers.get("accept", "")
         or str(form.get("_async") or "") == "1"
     )
     try:
-        if not question:
-            raise ValueError("A question is required.")
+        question = _validated_question(form.get("question"))
+        grant = _refresh_live_grant(grant)
         if not store.allow_chat(
             grant.id, get_settings().hfl_share_chat_limit_per_hour
         ):
@@ -1842,6 +1926,11 @@ def guest_reference_thumbnail(request: Request, reference_id: str):
 
 @guest_router.post("/session/logout")
 async def guest_logout(request: Request):
+    store = get_share_store()
+    session = current_session(request, store)
+    if session:
+        _, session_id = session
+        store.revoke_session(session_id)
     response = RedirectResponse("/share/unavailable", status_code=303)
     clear_guest_cookie(response)
     return response

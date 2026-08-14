@@ -17,9 +17,11 @@ GET  /applications                  → app inventory, docs, and pytest controls
 GET  /hfl-corpus                    → recursive corpus browser and search
 GET  /health                        → simple health check
 """
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Optional
 
+import asyncio
 import hmac
 import logging
 import os
@@ -29,7 +31,12 @@ import sys
 
 import uvicorn
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from auth import (
     create_session_token,
@@ -53,11 +60,179 @@ from web import require_user as _require_auth, templates
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+PUBLIC_SHARE_MAX_BODY_BYTES = 32 * 1024
+PUBLIC_SHARE_MAX_BODY_MESSAGES = 64
+PUBLIC_SHARE_BODY_TIMEOUT_SECONDS = 10.0
+
+
+class PublicShareBodyLimitMiddleware:
+    """Bound public share POST bodies before form parsing or route work."""
+
+    def __init__(
+        self,
+        app,
+        max_body_bytes: int = PUBLIC_SHARE_MAX_BODY_BYTES,
+        max_body_messages: int = PUBLIC_SHARE_MAX_BODY_MESSAGES,
+        body_timeout_seconds: float = PUBLIC_SHARE_BODY_TIMEOUT_SECONDS,
+    ):
+        self.app = app
+        self.max_body_bytes = max_body_bytes
+        self.max_body_messages = max_body_messages
+        self.body_timeout_seconds = body_timeout_seconds
+
+    async def __call__(self, scope, receive, send):
+        if (
+            scope.get("type") != "http"
+            or scope.get("method") != "POST"
+            or not str(scope.get("path", "")).startswith("/share/")
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        raw_headers = scope.get("headers", ())
+        if not isinstance(raw_headers, (list, tuple)) or any(
+            not isinstance(header, (list, tuple))
+            or len(header) != 2
+            or not isinstance(header[0], bytes)
+            or not isinstance(header[1], bytes)
+            for header in raw_headers
+        ):
+            await PlainTextResponse("Invalid request headers", status_code=400)(
+                scope, receive, send
+            )
+            return
+        headers = [(header[0], header[1]) for header in raw_headers]
+        content_lengths = [
+            value
+            for name, value in headers
+            if name.lower() == b"content-length"
+        ]
+        transfer_encodings = [
+            value
+            for name, value in headers
+            if name.lower() == b"transfer-encoding"
+        ]
+        if transfer_encodings and (
+            len(transfer_encodings) != 1
+            or transfer_encodings[0].lower() != b"chunked"
+        ):
+            await PlainTextResponse("Invalid Transfer-Encoding", status_code=400)(
+                scope, receive, send
+            )
+            return
+        if content_lengths and transfer_encodings:
+            await PlainTextResponse("Invalid request framing", status_code=400)(
+                scope, receive, send
+            )
+            return
+        declared_body_bytes = None
+        if len(content_lengths) > 1:
+            await PlainTextResponse("Invalid Content-Length", status_code=400)(
+                scope, receive, send
+            )
+            return
+        if content_lengths:
+            declared_length = content_lengths[0]
+            if not declared_length or any(
+                byte < ord("0") or byte > ord("9") for byte in declared_length
+            ):
+                await PlainTextResponse(
+                    "Invalid Content-Length", status_code=400
+                )(scope, receive, send)
+                return
+            normalized_length = declared_length.lstrip(b"0") or b"0"
+            maximum_length = str(self.max_body_bytes).encode("ascii")
+            if len(normalized_length) > len(maximum_length) or (
+                len(normalized_length) == len(maximum_length)
+                and normalized_length > maximum_length
+            ):
+                await self._reject(scope, receive, send)
+                return
+            declared_body_bytes = int(normalized_length)
+
+        body = bytearray()
+        disconnected = False
+        message_count = 0
+        rejection = None
+        try:
+            async with asyncio.timeout(self.body_timeout_seconds):
+                while True:
+                    message = await receive()
+                    message_count += 1
+                    if message_count > self.max_body_messages:
+                        rejection = (400, "Invalid request body")
+                        break
+                    if not isinstance(message, Mapping):
+                        rejection = (400, "Invalid request body")
+                        break
+                    message_type = message.get("type")
+                    if message_type == "http.disconnect":
+                        disconnected = True
+                        break
+                    if message_type != "http.request":
+                        rejection = (400, "Invalid request body")
+                        break
+                    chunk = message.get("body", b"")
+                    more_body = message.get("more_body", False)
+                    if not isinstance(chunk, bytes) or type(more_body) is not bool:
+                        rejection = (400, "Invalid request body")
+                        break
+                    if len(chunk) > self.max_body_bytes - len(body):
+                        rejection = (413, "Payload too large")
+                        break
+                    body.extend(chunk)
+                    if not more_body:
+                        break
+        except TimeoutError:
+            rejection = (408, "Request body timeout")
+
+        if rejection is not None:
+            status_code, detail = rejection
+            await PlainTextResponse(detail, status_code=status_code)(
+                scope, receive, send
+            )
+            return
+
+        if disconnected:
+            return
+        if declared_body_bytes is not None and len(body) != declared_body_bytes:
+            await PlainTextResponse("Invalid request framing", status_code=400)(
+                scope, receive, send
+            )
+            return
+
+        replayed = False
+
+        async def replay_receive():
+            nonlocal replayed
+            if replayed:
+                return {"type": "http.disconnect"}
+            replayed = True
+            return {
+                "type": "http.request",
+                "body": bytes(body),
+                "more_body": False,
+            }
+
+        await self.app(scope, replay_receive, send)
+
+    @staticmethod
+    async def _reject(scope, receive, send):
+        await PlainTextResponse("Payload too large", status_code=413)(
+            scope, receive, send
+        )
+
 # ── App setup ─────────────────────────────────────────────────────────────────
 settings = get_settings()
 warn_insecure_defaults(settings)
 
-app = FastAPI(title="HARQIS Frontend", docs_url=None, redoc_url=None)
+app = FastAPI(
+    title="HARQIS Frontend",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
+app.add_middleware(PublicShareBodyLimitMiddleware)
 app.include_router(home_router)
 app.include_router(manifesto_router)
 app.include_router(workflows_router)
