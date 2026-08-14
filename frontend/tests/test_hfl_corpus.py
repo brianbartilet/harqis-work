@@ -654,7 +654,13 @@ def test_document_orders_entries_before_floating_navigator_without_reference_sum
     assert "word-break: break-word" in response.text
     assert 'data-document-header class="corpus-document-header"' in response.text
     assert "position: sticky" in response.text
-    assert "top: 3.5rem" in response.text
+    assert "top: var(--corpus-document-header-offset)" in response.text
+    assert ".corpus-document-header::before" in response.text
+    assert "height: var(--corpus-document-header-offset)" in response.text
+    assert ".corpus-document-header.is-editing" in response.text
+    assert "scroll-margin-top:6rem" in response.text
+    assert "textarea.focus({ preventScroll: true })" in response.text
+    assert "editor.scrollIntoView({ block: 'start' })" in response.text
 
 
 def test_document_floating_navigator_can_be_minimized(
@@ -669,7 +675,7 @@ def test_document_floating_navigator_can_be_minimized(
 
     assert response.status_code == 200
     assert 'data-navigator-toggle aria-expanded="true"' in response.text
-    assert 'id="navigator-content" data-navigator-content' in response.text
+    assert 'id="navigator-content" data-navigator-content class="mt-3"' in response.text
     assert "Search &amp; navigate" in response.text
     assert "setNavigatorCollapsed" in response.text
     assert "hfl-corpus-document-navigator-collapsed" in response.text

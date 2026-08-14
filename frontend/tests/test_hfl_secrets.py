@@ -111,8 +111,19 @@ def test_secret_pages_render_custom_pin_dialog_without_native_prompt(
         assert 'role="switch"' in page.text
         assert 'aria-checked="false"' in page.text
         assert ">Secrets<" in page.text
+        assert 'class="secrets-toggle-track"' in page.text
+        assert 'class="secrets-toggle-thumb"' in page.text
+        assert '[data-secrets-toggle][aria-checked="true"]' in page.text
         assert "Show secrets" not in page.text
         assert "Hide secrets" not in page.text
+    corpus_toggle = corpus_page.text.split(
+        '<button type="button" data-secrets-toggle', 1
+    )[1].split(">", 1)[0]
+    assert 'data-corpus-header-actions class="flex flex-col gap-2 sm:flex-row"' in corpus_page.text
+    assert "order-2" in corpus_toggle
+    assert "sm:order-1" in corpus_toggle
+    assert "bg-slate-900" not in corpus_toggle
+    assert "bg-violet-900" not in corpus_toggle
 
 
 def test_mixed_document_blurs_secret_entry_and_protects_editor(
