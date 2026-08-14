@@ -772,7 +772,7 @@ async def hfl_document(
     rendered_parts: list[str] = []
     for entry in document.entries if has_secrets else ():
         secret = is_secret_entry(entry, protected_tags)
-        visible = not secret or (authorized and (show_secrets or reveal == entry.anchor))
+        visible = not secret or (authorized and bool(show_secrets or reveal))
         if visible:
             entry_rendered = render_markdown(
                 format_hfl_markdown(f"## {entry.text}", references)
@@ -800,7 +800,7 @@ async def hfl_document(
         )
     )
     filtered = filter_documents((document,), protected_tags)
-    display_document = document if show_secrets and authorized else (
+    display_document = document if authorized and (show_secrets or reveal) else (
         filtered[0] if filtered else replace(document, entries=(), tags=(), tag_counts=())
     )
     return templates.TemplateResponse(

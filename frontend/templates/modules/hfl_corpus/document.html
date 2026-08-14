@@ -146,16 +146,6 @@
       <p class="mt-1 text-xs text-slate-500">Updated {{ document.updated_at.strftime('%Y-%m-%d %H:%M') }}</p>
     </div>
     <div class="shrink-0 pt-1 text-right text-xs">
-      {% if document_has_secrets and secrets_configured %}
-      <button type="button" data-secrets-toggle data-secrets-on="{{ 'true' if show_secrets else 'false' }}" data-secrets-authorized="{{ 'true' if secrets_authorized else 'false' }}"
-              role="switch" aria-checked="{{ 'true' if show_secrets else 'false' }}"
-              class="mb-3 inline-flex w-full items-center justify-end gap-2 font-semibold text-violet-300 hover:text-violet-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400">
-        <span>Secrets</span>
-        <span aria-hidden="true" class="secrets-toggle-track">
-          <span class="secrets-toggle-thumb"></span>
-        </span>
-      </button>
-      {% endif %}
       <button type="button" data-document-edit-open class="mb-3 block w-full text-right font-semibold text-blue-300 hover:text-blue-200">Edit</button>
       <p class="operator-meta">Created {{ document.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
     </div>
@@ -240,18 +230,6 @@
           url.hash = button.dataset.secretReveal;
           window.location.assign(url);
         });
-      });
-      document.querySelector('[data-secrets-toggle]')?.addEventListener('click', async event => {
-        const button = event.currentTarget;
-        const url = new URL(window.location.href);
-        url.searchParams.delete('reveal');
-        if (button.dataset.secretsOn === 'true') {
-          url.searchParams.delete('show_secrets');
-        } else {
-          if (button.dataset.secretsAuthorized !== 'true' && !await unlock()) return;
-          url.searchParams.set('show_secrets', 'true');
-        }
-        window.location.assign(url);
       });
       discard.addEventListener('click', () => {
         textarea.value = original;

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 
 from modules.hfl_corpus.corpus import CorpusDocument, CorpusEntry
@@ -106,14 +107,15 @@ def test_secret_pages_render_custom_pin_dialog_without_native_prompt(
     assert "requestHflSecretsUnlock" in corpus_page.text
     assert "requestHflSecretsUnlock" in document_page.text
     assert "requestHflSecretsUnlock" in sharing_page.text
+    assert 'data-secrets-toggle' in corpus_page.text
+    assert 'role="switch"' in corpus_page.text
+    assert 'aria-checked="false"' in corpus_page.text
+    assert ">Secrets<" in corpus_page.text
+    assert 'class="secrets-toggle-track"' in corpus_page.text
+    assert 'class="secrets-toggle-thumb"' in corpus_page.text
+    assert '[data-secrets-toggle][aria-checked="true"]' in corpus_page.text
+    assert '<button type="button" data-secrets-toggle' not in document_page.text
     for page in (corpus_page, document_page):
-        assert 'data-secrets-toggle' in page.text
-        assert 'role="switch"' in page.text
-        assert 'aria-checked="false"' in page.text
-        assert ">Secrets<" in page.text
-        assert 'class="secrets-toggle-track"' in page.text
-        assert 'class="secrets-toggle-thumb"' in page.text
-        assert '[data-secrets-toggle][aria-checked="true"]' in page.text
         assert "Show secrets" not in page.text
         assert "Hide secrets" not in page.text
     corpus_toggle = corpus_page.text.split(
@@ -152,6 +154,42 @@ def test_mixed_document_blurs_secret_entry_and_protects_editor(
     assert "Secret entry" not in page.text
     assert 'data-secret-reveal="private"' in page.text
     assert edit.status_code == 403
+
+
+def test_revealing_one_secret_entry_reveals_all_secrets_in_document(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as corpus_router
+
+    get_profile_store().save(
+        OwnerProfile(secret_pin_hash=hash_pin("123456"), secret_tags="#secrets")
+    )
+    original = _document()
+    second_secret = _entry("private-two", "Secrets", "Another private detail")
+    entries = (*original.entries, second_secret)
+    document = replace(
+        original,
+        text="\n\n".join(f"## {entry.text}" for entry in entries),
+        excerpt="Visible note Private detail Another private detail",
+        tag_counts=(("notes", 1), ("secrets", 2)),
+        entry_count=3,
+        entries=entries,
+    )
+    monkeypatch.setattr(corpus_router.corpus_index, "get", lambda path: document)
+
+    unlocked = authenticated_client.post(
+        "/hfl-corpus/secrets/unlock", json={"pin": "123456"}
+    )
+    revealed = authenticated_client.get(
+        "/hfl-corpus/document/2026-08-13.md?reveal=private"
+    )
+
+    assert unlocked.status_code == 200
+    assert revealed.status_code == 200
+    assert "Private detail" in revealed.text
+    assert "Another private detail" in revealed.text
+    assert "Hidden entry" not in revealed.text
+    assert "data-secret-entry=" not in revealed.text
 
 
 def test_share_snapshot_requires_explicit_secret_authorization():
