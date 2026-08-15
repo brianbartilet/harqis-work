@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ink">#17211F</color>
+    <color name="paper">#F2F5F1</color>
+    <color name="panel">#FFFFFF</color>
+    <color name="rail">#CBD8D1</color>
+    <color name="signal">#1B7F63</color>
+    <color name="record">#D8473F</color>
+    <color name="muted">#61706B</color>
+</resources>

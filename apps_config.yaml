@@ -738,6 +738,8 @@ PLAUD:
     password: ${PLAUD_PASSWORD}
     token: ${PLAUD_TOKEN}
     export_dir: ${PLAUD_EXPORT_DIR}
+    companion_adb_serial: ${PLAUD_COMPANION_ADB_SERIAL}
+    companion_token: ${PLAUD_COMPANION_TOKEN}
   return_data_only: True
 
 
