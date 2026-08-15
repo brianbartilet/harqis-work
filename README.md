@@ -92,6 +92,7 @@ HARQIS-Work includes a reasoning-model agent layer that goes beyond scheduled ta
 | **Visual workflow outside Celery** — n8n flows for branching automations or vendor connectors not in `apps/` | `/create-new-n8n-workflow <description_or_diagram>` |
 | **HUD widget** — Rainmeter desktop display fed by an app or workflow | `/create-new-hud <title> <description_or_screenshot>` |
 | **HUD fallback twin** — keep a HUD task's `@feed`/ES logs flowing on the always-on host when the Windows box is offline | `/create-data-only-from-hud <task_fn>` |
+| **Fork fleet governance** — inspect drift, cherry-pick changes, test, deploy, and publish reviewed PRs across harqis-work forks | `/manage-fork-fleet` |
 
 Re-run `/generate-registry` after a workflow or HUD task lands so the dashboard picks it up. See [`docs/info/SKILLS-INVENTORY.md`](docs/info/SKILLS-INVENTORY.md) for every skill (operations, deploy, agent profiles, Zapier wiring, commits, tests).
 
@@ -272,6 +273,7 @@ Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and 
 | `purchases` | Active | 8 | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
 | `desktop` | Active | 8 | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
 | `hfl` | Active | 17 | Homework-for-Life activity capture/ingest → canonical Activity Corpus + Elasticsearch, including granular note changes and durable worker outbox replay |
+| `git_forks` | Active | 1 | Weekly hybrid discovery and drift analysis for harqis-work forks, with one HFL entry per fork instance plus a fleet summary |
 | `notes` | Active | 2 | Repository-backed note sync: editing-machine push → canonical host fast-forward pull; HFL performs the downstream ingest |
 | `knowledge` | Guarded active | 9 | Multi-source RAG ingest, cited answers, cross-link reports, and on-demand topic mapping/scanning |
 | `dumps` | Active | 3 | Daily dump collection — fanout per-node ship + harqis-server pull (Android/Termux) → analysis |
@@ -325,6 +327,7 @@ CONFIG_DICTIONARY = (
     | WORKFLOW_KNOWLEDGE | WORKFLOW_DUMPS | WORKFLOW_HFL | WORKFLOW_NOTES
     | WORKFLOW_WORKERS
     | WORKFLOW_TESTING | WORKFLOW_TCG
+    | WORKFLOW_GIT_FORKS
 )
 SPROUT.conf.beat_schedule = _celery_safe_schedule(CONFIG_DICTIONARY)
 ```

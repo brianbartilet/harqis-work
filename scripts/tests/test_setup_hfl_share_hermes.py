@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
 
 
 def load_setup_module():
-    path = Path(__file__).resolve().parents[1] / "setup_hfl_share_hermes.py"
+    path = Path(__file__).resolve().parents[1] / "agents" / "hfl" / "setup_hfl_share_hermes.py"
     spec = importlib.util.spec_from_file_location("setup_hfl_share_hermes_for_test", path)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
@@ -51,7 +52,8 @@ def test_upsert_env_is_idempotent_private_and_preserves_unrelated_values(tmp_pat
     assert "OTHER=value\n" in text
     assert text.count("HFL_SHARE_PROVIDER=hermes") == 1
     assert text.count("HFL_SHARE_HERMES_API_KEY=server-secret") == 1
-    assert env_path.stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":
+        assert env_path.stat().st_mode & 0o777 == 0o600
 
 
 def test_dry_run_reports_plan_without_creating_profile_or_env(tmp_path, capsys):
@@ -125,14 +127,15 @@ def test_apply_creates_isolated_profile_and_never_prints_generated_key(
     assert "HFL_SHARE_PROVIDER=hermes" in harqis_env.read_text()
     assert "HFL_SHARE_MAX_CONTEXT_CHARS=120000" in harqis_env.read_text()
     assert "HFL_SHARE_HERMES_API_KEY=generated-private-key" in harqis_env.read_text()
-    assert (profile / ".env").stat().st_mode & 0o777 == 0o600
-    assert harqis_env.stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":
+        assert (profile / ".env").stat().st_mode & 0o777 == 0o600
+        assert harqis_env.stat().st_mode & 0o777 == 0o600
     assert ["hermes", "profile", "create", "sharecorpus", "--no-skills", "--description", "Snapshot-only HARQIS Share Corpus inference"] in calls
     output = capsys.readouterr().out
     assert "generated-private-key" not in output
-    assert "python scripts/setup_hfl_share_hermes.py --login" in output
-    assert f"--hermes-home {hermes_home}" in output
-    assert f"--harqis-env {harqis_env}" in output
+    assert "python scripts/agents/hfl/setup_hfl_share_hermes.py --login" in output
+    assert "--hermes-home" in output and str(hermes_home) in output
+    assert "--harqis-env" in output and str(harqis_env) in output
 
 
 def test_apply_start_installs_gateway_only_after_oauth_and_checks_api(
@@ -338,7 +341,10 @@ def test_env_update_rejects_symlinked_parent(tmp_path):
     real_parent = tmp_path / "real"
     real_parent.mkdir()
     linked_parent = tmp_path / "linked"
-    linked_parent.symlink_to(real_parent, target_is_directory=True)
+    try:
+        linked_parent.symlink_to(real_parent, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable on this host: {exc}")
 
     with pytest.raises(ValueError, match="symlinked path component"):
         setup.upsert_env_file(linked_parent / "apps.env", {"SAFE": "value"})
@@ -445,6 +451,9 @@ def test_api_check_disables_environment_proxies_and_requires_model(
 
 def test_check_rejects_group_readable_credentials(tmp_path, monkeypatch):
     import pytest
+
+    if os.name == "nt":
+        pytest.skip("Windows does not expose authoritative POSIX mode bits")
 
     setup = load_setup_module()
     hermes_home = tmp_path / "hermes"

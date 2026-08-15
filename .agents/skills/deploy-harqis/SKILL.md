@@ -229,7 +229,7 @@ Print a single block:
 HARQIS-WORK deploy complete (role=<role>)
 
 Started:
-  ✓ Docker stack       (rabbitmq, redis, elasticsearch, kibana, n8n, mosquitto, owntracks)   [host only]
+  ✓ Docker stack       (the services enabled in this fork's docker-compose.yml)               [host only]
   ✓ Scheduler          (Celery Beat — global dispatcher)                                      [host only]
   ✓ Worker             queues: <q1,q2,q3>      broker: <CELERY_BROKER_URL>
   ✓ Frontend           http://localhost:8000                                                  [host, optional]

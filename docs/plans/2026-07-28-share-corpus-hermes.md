@@ -41,7 +41,7 @@ A reviewable GitHub pull request where:
 ## Task 2: Add secure setup automation
 
 **Files:**
-- Create: `scripts/setup_hfl_share_hermes.py`
+- Create: `scripts/agents/hfl/setup_hfl_share_hermes.py`
 - Create: `scripts/tests/test_setup_hfl_share_hermes.py`
 - Modify: `scripts/README.md`
 

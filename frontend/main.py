@@ -51,6 +51,7 @@ from modules.hfl_corpus.api import router as hfl_corpus_api_router
 from modules.hfl_corpus.router import router as hfl_corpus_router
 from modules.hfl_shares.router import guest_router as hfl_share_guest_router
 from modules.hfl_shares.router import owner_router as hfl_share_owner_router
+from modules.git_forks.router import router as git_forks_router
 from modules.home.router import router as home_router
 from modules.manifesto.router import router as manifesto_router
 from modules.profile.router import router as profile_router
@@ -241,6 +242,7 @@ app.include_router(hfl_corpus_api_router)
 app.include_router(hfl_corpus_router)
 app.include_router(hfl_share_owner_router)
 app.include_router(hfl_share_guest_router)
+app.include_router(git_forks_router)
 app.include_router(profile_router)
 
 

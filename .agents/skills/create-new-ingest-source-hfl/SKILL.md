@@ -132,9 +132,12 @@ Do not run tests automatically unless asked; print the command.
 ## Step 8 — Verify
 
 ```bash
-.venv/bin/python -m py_compile workflows/hfl/tasks/ingest_<source_name>.py workflows/hfl/tasks_config.py workflows/hfl/__init__.py
-.venv/bin/python -c "import sys;sys.path.insert(0,'scripts');import launch;launch.setup_env();import workflows.hfl;from core.apps.sprout.app.celery import SPROUT;print('workflows.hfl.tasks.ingest_<source_name>.ingest_<source_name>_activity' in SPROUT.tasks)"
+<venv-python> -m py_compile workflows/hfl/tasks/ingest_<source_name>.py workflows/hfl/tasks_config.py workflows/hfl/__init__.py
+<venv-python> -c "import sys;sys.path.insert(0,'scripts');import launch;launch.setup_env();import workflows.hfl;from core.apps.sprout.app.celery import SPROUT;print('workflows.hfl.tasks.ingest_<source_name>.ingest_<source_name>_activity' in SPROUT.tasks)"
 ```
+
+Resolve `<venv-python>` as `.venv/Scripts/python.exe` on Windows or `.venv/bin/python` on
+macOS/Linux.
 
 Both must succeed (registration prints `True`).
 

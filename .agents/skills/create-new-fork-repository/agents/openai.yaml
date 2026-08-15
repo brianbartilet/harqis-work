@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Fork Repository"
+  short_description: "Build, validate, and publish a safe branded fork."
+  default_prompt: "Create a branded reduced fork, validate it locally, and publish it safely to GitHub."

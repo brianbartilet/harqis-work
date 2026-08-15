@@ -218,16 +218,16 @@ loopback, but prompt injection still makes profile isolation mandatory.
 Preview the setup first:
 
 ```bash
-python scripts/setup_hfl_share_hermes.py
+python scripts/agents/hfl/setup_hfl_share_hermes.py
 ```
 
 Apply the locked-down profile and HARQIS environment:
 
 ```bash
-python scripts/setup_hfl_share_hermes.py --apply
-python scripts/setup_hfl_share_hermes.py --login  # one-time, if requested
-python scripts/setup_hfl_share_hermes.py --start
-python scripts/setup_hfl_share_hermes.py --check
+python scripts/agents/hfl/setup_hfl_share_hermes.py --apply
+python scripts/agents/hfl/setup_hfl_share_hermes.py --login  # one-time, if requested
+python scripts/agents/hfl/setup_hfl_share_hermes.py --start
+python scripts/agents/hfl/setup_hfl_share_hermes.py --check
 ```
 
 The script:

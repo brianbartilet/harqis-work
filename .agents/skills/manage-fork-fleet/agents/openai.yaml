@@ -1,0 +1,4 @@
+interface:
+  display_name: "Manage Fork Fleet"
+  short_description: "Inspect and safely synchronize harqis-work forks"
+  default_prompt: "Scan my harqis-work fork fleet for drift and summarize safe synchronization options."

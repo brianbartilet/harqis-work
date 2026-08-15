@@ -33,9 +33,11 @@ of truth.
 | `/generate-gherkin-scenarios` | Generate repository-standard Gherkin scenarios from requirements or tickets. |
 | `/generate-registry` | Regenerate the frontend workflow catalogue from workflow task configurations. |
 | `/manage-queues` | Maintain Celery task-to-queue assignments and report live machine coverage. |
+| `/manage-fork-fleet` | Discover, compare, test, deploy, and safely synchronize harqis-work forks through isolated worktrees and PRs. |
 | `/max-plan` | Perform a deep reasoning planning pass and persist the resulting plan. |
 | `/migrate-to-core` | Move reusable generic code from `harqis-work` into `harqis-core`. |
 | `/radar-sold-inventory` | Cross-reference sold TCG orders with inventory and radar data. |
+| `/replay-expired-celery-tasks` | Reconstruct, review, and safely replay missed Celery Beat executions that expired before a worker consumed them. |
 | `/run-tests` | Run app-specific, targeted, or full pytest suites using repository conventions. |
 | `/sync-host` | Preflight and synchronize configured local files to a remote HARQIS checkout over SSH. |
 | `/time-capsule-synthesizer` | Synthesize a set of files into one period-based HFL time-capsule entry. |
@@ -43,7 +45,7 @@ of truth.
 | `/workflow-token-audit` | Estimate scheduled workflow API calls, model/token exposure, embedding usage, and cost drivers. |
 | `/zapier-mcp` | Search, enable, and wire Zapier MCP actions into workflows or direct agent use. |
 
-**Current canonical count: 29 skills.** The count is derived from directories
+**Current canonical count: 31 skills.** The count is derived from directories
 containing `.agents/skills/*/SKILL.md`; cache or generated directories do not
 count.
 
@@ -57,6 +59,7 @@ count.
 | Add a desktop widget | `/create-new-hud` |
 | Add an Activity Corpus source | `/create-new-ingest-source-hfl` |
 | Capture a prompt audit event | `/capture-hfl-session` |
+| Govern harqis-work forks | `/manage-fork-fleet` |
 | Validate changes | `/run-tests` |
 | Refresh documentation | `/update-docs` |
 | Commit completed work | `/commit` |

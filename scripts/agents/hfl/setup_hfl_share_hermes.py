@@ -2,11 +2,11 @@
 """Configure a locked-down Hermes profile for Activity Corpus sharing.
 
 Usage:
-    python scripts/setup_hfl_share_hermes.py
-    python scripts/setup_hfl_share_hermes.py --apply
-    python scripts/setup_hfl_share_hermes.py --login
-    python scripts/setup_hfl_share_hermes.py --start
-    python scripts/setup_hfl_share_hermes.py --check
+    python scripts/agents/hfl/setup_hfl_share_hermes.py
+    python scripts/agents/hfl/setup_hfl_share_hermes.py --apply
+    python scripts/agents/hfl/setup_hfl_share_hermes.py --login
+    python scripts/agents/hfl/setup_hfl_share_hermes.py --start
+    python scripts/agents/hfl/setup_hfl_share_hermes.py --check
 """
 
 from __future__ import annotations
@@ -25,6 +25,8 @@ import urllib.request
 from pathlib import Path
 from typing import Collection, Mapping, Sequence
 
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 _ENV_KEY = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _HERMES_ENV_ALLOWLIST = {
@@ -104,9 +106,12 @@ def _assert_private_permissions(
     ):
         raise RuntimeError(f"Private path has an unsafe type: {path.name}")
     metadata = path.stat()
-    if metadata.st_mode & 0o077:
+    # POSIX mode bits are not authoritative on Windows; chmod there does not
+    # produce a meaningful 0600/0700 stat result. Type and symlink checks above
+    # remain enforced on every platform.
+    if os.name != "nt" and metadata.st_mode & 0o077:
         raise RuntimeError(f"{path.name} must have private permissions.")
-    if hasattr(metadata, "st_uid") and metadata.st_uid != os.getuid():
+    if hasattr(os, "getuid") and hasattr(metadata, "st_uid") and metadata.st_uid != os.getuid():
         raise RuntimeError(f"{path.name} must be owned by the current user.")
 
 
@@ -526,7 +531,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--harqis-env",
         type=Path,
-        default=Path(__file__).resolve().parents[1] / ".env" / "apps.env",
+        default=REPO_ROOT / ".env" / "apps.env",
     )
     return parser
 
@@ -535,7 +540,7 @@ def _followup_command(args, action: str) -> str:
     return shlex.join(
         [
             "python",
-            "scripts/setup_hfl_share_hermes.py",
+            "scripts/agents/hfl/setup_hfl_share_hermes.py",
             action,
             "--profile",
             args.profile,

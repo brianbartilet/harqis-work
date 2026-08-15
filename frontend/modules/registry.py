@@ -57,6 +57,13 @@ MODULES: tuple[ModuleDefinition, ...] = (
         description="App integrations connected to HARQIS Work.",
         detail="Browse integration documentation and run controlled pytest checks using this host's active configuration.",
     ),
+    ModuleDefinition(
+        key="git_forks",
+        label="Git Forks",
+        route="/git-forks",
+        description="Trace drift across every managed harqis-work fork.",
+        detail="Compare commits and capabilities, inspect branches and PRs, then run guarded synchronization, regression, and deployment operations.",
+    ),
 )
 
 PRIMARY_MODULES: tuple[ModuleDefinition, ...] = tuple(

@@ -1,0 +1,16 @@
+<section class="rounded-xl border border-slate-700 bg-slate-950/80 p-4" role="status" aria-live="polite">
+  <div class="flex items-center justify-between gap-3">
+    <h2 class="font-mono text-sm text-cyan-200">{{ result.status | default('complete') }}</h2>
+    {% if result.path %}<span class="text-xs text-slate-500">{{ result.path }}</span>{% endif %}
+  </div>
+  {% if result.error %}<p class="mt-3 text-sm text-red-300">{{ result.error }}</p>{% endif %}
+  {% if result.conflict %}<pre class="mt-3 max-h-72 overflow-auto whitespace-pre-wrap text-xs text-amber-200">{{ result.conflict }}</pre>{% endif %}
+  {% if result.output %}<pre class="mt-3 max-h-72 overflow-auto whitespace-pre-wrap text-xs text-slate-300">{{ result.output }}</pre>{% endif %}
+  {% if result.report %}
+  <p class="mt-3 text-sm text-slate-300">
+    {{ result.report.summary.healthy }} accessible · {{ result.report.summary.errors }} errors ·
+    {{ result.report.summary.missing_upstream_commits }} missing upstream commits
+  </p>
+  <p class="mt-2 text-xs text-slate-500">Reload the page to inspect the refreshed topology.</p>
+  {% endif %}
+</section>
