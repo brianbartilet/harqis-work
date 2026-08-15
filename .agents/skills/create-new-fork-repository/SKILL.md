@@ -17,20 +17,22 @@ Before running anything, confirm in one message:
 - GitHub owner and visibility (default `private`);
 - apps to retain;
 - skills to retain;
-- whether the optional HFL capability is required;
+- whether to opt out of the default HFL Activity Corpus audit capability;
 - any extra workflow categories beyond `.template`.
 
 Show the resolved dependency closure and get confirmation. `antropic` is mandatory because
-the retained agent framework imports its provider. HFL is optional; when selected it brings
-its complete workflow/app dependency bundle and `create-new-ingest-source-hfl`. Selected
+the retained agent framework imports its provider. HFL is enabled by default as the durable
+Activity Corpus audit mechanism; `--no-hfl` explicitly removes its complete workflow/app
+dependency bundle and `create-new-ingest-source-hfl`. Selected
 skills automatically bring declared skill dependencies such as `update-docs` and
 `sync-host`.
 
 Defaults are maintained by `scripts/create_fork.py`. The principal defaults are:
 
 - apps: `.template`, `antropic`, `git`, `github`, `google_apps`, `google_drive`, `trello`;
-- workflows: `.template` only;
-- the generic operational skill set described by the generator; HFL ingest is conditional.
+- workflows: `.template` plus the HFL capability by default;
+- the generic operational skill set described by the generator, including HFL ingest unless
+  the user explicitly opts out.
 
 ## Run
 
@@ -51,6 +53,7 @@ the user explicitly wants a local-only result. Test/evaluation runs may also use
 `--skip-build`, `--skip-tests`, `--skip-live-tests`, and `--skip-docker-build`; do not use
 those flags for a production fork presented as validated. The normal gate runs the offline
 suite first and then credential-backed `integration` tests using the copied local secrets.
+Use `--no-hfl` only when the user explicitly declines the default Activity Corpus audit.
 
 The generator:
 

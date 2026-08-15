@@ -59,7 +59,12 @@ def _clean_id(value: Any, fallback: str) -> str:
 
 def audit_root() -> Path:
     configured = os.environ.get("HFL_SESSION_AUDIT_PATH", "").strip()
-    return Path(configured).expanduser().resolve() if configured else DEFAULT_ROOT
+    if configured:
+        return Path(configured).expanduser().resolve()
+    data_root = os.environ.get("HARQIS_DATA_ROOT", "").strip()
+    if data_root:
+        return (Path(data_root).expanduser() / "runtime" / "hfl-session-audit").resolve()
+    return DEFAULT_ROOT
 
 
 def _timestamp(value: Any = None) -> str:

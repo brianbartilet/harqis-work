@@ -195,7 +195,9 @@ def cmd_worker(args: argparse.Namespace) -> None:
     if args.queues:
         os.environ["WORKFLOW_QUEUE"] = args.queues.replace(" ", "")
     os.environ.setdefault("WORKFLOW_QUEUE", "default")
-    queues = os.environ["WORKFLOW_QUEUE"]
+    from workflows.queues import qualify_queues
+
+    queues = qualify_queues(os.environ["WORKFLOW_QUEUE"])
     pool = os.environ.get("WORKFLOW_POOL", "threads")
     concurrency = os.environ.get("WORKFLOW_CONCURRENCY", "8")
     print(
@@ -212,11 +214,15 @@ def cmd_worker(args: argparse.Namespace) -> None:
     )
 
 
-# celery beat's default PersistentScheduler shelve. No --schedule flag is
-# passed below, and setup_env() chdir's to REPO_ROOT, so the shelve lives
-# at <repo>/celerybeat-schedule(.db / .dir / .dat / .bak depending on the
-# platform dbm backend).
-_BEAT_SCHEDULE_BASE = REPO_ROOT / "celerybeat-schedule"
+def _beat_schedule_base() -> Path:
+    """Return an instance-owned Beat state path when isolation is enabled."""
+    if not os.environ.get("HARQIS_INSTANCE"):
+        # Preserve the established upstream path until an instance opts in.
+        return REPO_ROOT / "celerybeat-schedule"
+    data_root = Path(os.environ.get("HARQIS_DATA_ROOT", REPO_ROOT / ".harqis-data"))
+    schedule = data_root / "runtime" / "celerybeat-schedule"
+    schedule.parent.mkdir(parents=True, exist_ok=True)
+    return schedule
 
 
 def _heal_beat_schedule() -> None:
@@ -235,7 +241,7 @@ def _heal_beat_schedule() -> None:
     forensics) and let beat regenerate a fresh one. Healthy db: a few KB,
     probe is microseconds, no-op.
     """
-    base = str(_BEAT_SCHEDULE_BASE)
+    base = str(_beat_schedule_base())
     if not glob.glob(base + "*") and not os.path.exists(base):
         return  # fresh host — nothing to heal
 
@@ -283,6 +289,7 @@ def cmd_scheduler(args: argparse.Namespace) -> None:
         "-A", "core.apps.sprout:SPROUT", "beat",
         "--loglevel=INFO",
         "--pidfile=",
+        f"--schedule={_beat_schedule_base()}",
     )
 
 

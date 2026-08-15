@@ -1,10 +1,12 @@
 import logging
+import os
 from functools import lru_cache
 from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _REPO_ROOT = Path(__file__).parent.parent
+_DATA_ROOT = Path(os.environ.get("HARQIS_DATA_ROOT", _REPO_ROOT / ".harqis-data"))
 # Primary source: shared apps.env; frontend/.env can override locally
 _APPS_ENV  = _REPO_ROOT / ".env" / "apps.env"
 _LOCAL_ENV = Path(__file__).parent / ".env"
@@ -49,7 +51,7 @@ class Settings(BaseSettings):
     hfl_share_public_url: str = ""
     hfl_share_secret_key: str = ""
     hfl_share_store_path: str = str(
-        _REPO_ROOT / ".harqis-data" / "hfl-shares.sqlite3"
+        _DATA_ROOT / "hfl-shares.sqlite3"
     )
     hfl_share_default_ttl_seconds: int = 3600
     hfl_share_default_device_limit: int = 1
@@ -72,7 +74,7 @@ class Settings(BaseSettings):
     hfl_share_chat_limit_per_hour: int = 30
     hfl_share_embedding_model: str = "BAAI/bge-small-en-v1.5"
     hfl_share_embedding_cache_dir: str = str(
-        _REPO_ROOT / ".harqis-data" / "models" / "fastembed"
+        _DATA_ROOT / "models" / "fastembed"
     )
     hfl_share_retrieval_k: int = 8
     hfl_share_semantic_weight: float = 0.75
@@ -80,7 +82,7 @@ class Settings(BaseSettings):
     # down so clients cannot reach it without the authenticated proxy.
     hfl_share_trust_proxy_identity: bool = False
     profile_store_path: str = str(
-        _REPO_ROOT / ".harqis-data" / "profile.sqlite3"
+        _DATA_ROOT / "profile.sqlite3"
     )
 
     model_config = SettingsConfigDict(

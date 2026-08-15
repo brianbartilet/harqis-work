@@ -20,7 +20,7 @@ from workflows.hfl.dto import HflEntry
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTBOX = REPO_ROOT / "logs" / "hfl-outbox"
-CANONICAL_MACHINE = "harqis-server"
+DEFAULT_CANONICAL_MACHINE = "harqis-server"
 _HEADER = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 
 
@@ -35,12 +35,21 @@ def local_machine_name() -> str:
 
 
 def is_canonical_machine(machine: str | None = None) -> bool:
-    return (machine or local_machine_name()).casefold() == CANONICAL_MACHINE.casefold()
+    canonical = (
+        os.environ.get("HFL_CANONICAL_MACHINE", "").strip()
+        or DEFAULT_CANONICAL_MACHINE
+    )
+    return (machine or local_machine_name()).casefold() == canonical.casefold()
 
 
 def outbox_dir() -> Path:
     configured = os.environ.get("HFL_OUTBOX_PATH", "").strip()
-    return Path(configured).expanduser().resolve() if configured else DEFAULT_OUTBOX
+    if configured:
+        return Path(configured).expanduser().resolve()
+    data_root = os.environ.get("HARQIS_DATA_ROOT", "").strip()
+    if data_root:
+        return (Path(data_root).expanduser() / "runtime" / "hfl-outbox").resolve()
+    return DEFAULT_OUTBOX
 
 
 def deterministic_entry_id(

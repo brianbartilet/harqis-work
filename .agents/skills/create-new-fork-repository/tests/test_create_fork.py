@@ -73,7 +73,7 @@ def _source_repo(tmp_path: Path) -> Path:
     return source
 
 
-def test_dependency_resolution_keeps_hfl_conditional():
+def test_dependency_resolution_keeps_hfl_opt_out_available():
     apps, skills, workflows = create_fork.resolve_dependencies(
         create_fork.DEFAULT_APPS,
         create_fork.DEFAULT_SKILLS + ("create-new-ingest-source-hfl",),
@@ -94,6 +94,17 @@ def test_dependency_resolution_keeps_hfl_conditional():
     assert "create-new-ingest-source-hfl" in skills
 
 
+def test_cli_enables_hfl_by_default_and_allows_explicit_opt_out():
+    assert create_fork.parse_args([
+        "--repo-name", "target", "--brand-name", "Target",
+        "--description", "test",
+    ]).hfl is True
+    assert create_fork.parse_args([
+        "--repo-name", "target", "--brand-name", "Target",
+        "--description", "test", "--no-hfl",
+    ]).hfl is False
+
+
 def test_full_local_generation_is_fresh_and_secret_safe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     source = _source_repo(tmp_path)
     _write(source, ".env/apps.env", "SECRET_VALUE=local-only\n")
@@ -111,7 +122,7 @@ def test_full_local_generation_is_fresh_and_secret_safe(tmp_path: Path, monkeypa
         "--brand-name", "Acme Automation",
         "--description", "A generated test fork.",
         "--target-dir", str(target),
-        "--no-publish", "--yes",
+        "--no-publish", "--no-hfl", "--yes",
         "--skip-build", "--skip-tests", "--skip-docker-build",
     ])
 

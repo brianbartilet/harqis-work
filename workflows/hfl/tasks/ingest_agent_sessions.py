@@ -27,9 +27,9 @@ from scripts.agents.hfl.capture_session_event import (
     sanitize_text,
 )
 from workflows.hfl.dto import HflEntry
+from workflows.hfl.distill import parse_model_json
 from workflows.hfl.persistence import is_canonical_machine, submit_hfl_entry
 from workflows.hfl.prompts import load_prompt
-from workflows.hfl.tasks.ingest_git import _parse_model_json
 
 
 _log = create_logger("hfl.ingest_agent_sessions")
@@ -259,7 +259,7 @@ def distill_agent_session_event(
             model=model,
             max_tokens=max_tokens,
         )
-        parsed = _parse_model_json(response.content[0].text if response and response.content else "")
+        parsed = parse_model_json(response.content[0].text if response and response.content else "")
         if not parsed:
             return fallback
         for key in ("corrected_prompt", "request_summary", "work_summary", "result_status", "why_it_stayed"):
@@ -444,7 +444,7 @@ def distill_agent_session_rollup(events: list[dict[str, Any]], day: date, *, mod
             return fallback
         rows = [{key: event.get(key) for key in ("surface", "request_summary", "work_summary", "result_status")} for event in events]
         response = client.send_message(prompt=json.dumps({"date": day.isoformat(), "events": rows}, ensure_ascii=False), system=load_prompt("rollup_agent_sessions").strip(), model=model, max_tokens=1000)
-        parsed = _parse_model_json(response.content[0].text if response and response.content else "")
+        parsed = parse_model_json(response.content[0].text if response and response.content else "")
         if not parsed:
             return fallback
         for key in ("moment", "what_happened", "why_it_stayed", "possible_use"):

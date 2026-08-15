@@ -1,14 +1,15 @@
+name: ${COMPOSE_PROJECT_NAME:-harqis-work}
+
 services:
 
   # ── Message Broker ─────────────────────────────────────────────────────────
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
-    container_name: rabbitmq
     restart: unless-stopped
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
@@ -22,10 +23,9 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - ${HARQIS_DATA_ROOT:-./.harqis-data}/redis:/data
     healthcheck:
@@ -38,10 +38,9 @@ services:
 
   mosquitto:
     image: eclipse-mosquitto:latest
-    container_name: mosquitto
     restart: unless-stopped
     ports:
-      - "1883:1883"
+      - "${MQTT_PORT:-1883}:1883"
     volumes:
       - ./apps/own_tracks/mosquitto/config:/mosquitto/config
       - ./apps/own_tracks/mosquitto/data:/mosquitto/data
@@ -49,10 +48,9 @@ services:
 
   recorder:
     image: owntracks/recorder:latest
-    container_name: owntracks-recorder
     restart: unless-stopped
     ports:
-      - "8083:8083"
+      - "${OWNTRACKS_PORT:-8083}:8083"
     environment:
       OTR_HOST: mosquitto
       OTR_PORT: 1883
@@ -68,7 +66,6 @@ services:
 
   n8n:
     image: docker.n8n.io/n8nio/n8n:latest
-    container_name: n8n
     restart: unless-stopped
     ports:
       - "${HOST_PORT_N8N:-5678}:5678"
@@ -95,10 +92,9 @@ services:
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
-    container_name: elasticsearch
     restart: unless-stopped
     ports:
-      - "9200:9200"
+      - "${ELASTICSEARCH_PORT:-9200}:9200"
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
@@ -120,10 +116,9 @@ services:
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.13.0
-    container_name: kibana
     restart: unless-stopped
     ports:
-      - "5601:5601"
+      - "${KIBANA_PORT:-5601}:5601"
     environment:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
     depends_on:
@@ -134,7 +129,6 @@ services:
 
   flower:
     image: mher/flower:2.0
-    container_name: flower
     restart: unless-stopped
     command:
       - "celery"
@@ -145,7 +139,7 @@ services:
       - "--address=0.0.0.0"
       - "--basic-auth=${FLOWER_USER}:${FLOWER_PASSWORD}"
     ports:
-      - "5555:5555"
+      - "${FLOWER_PORT:-5555}:5555"
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -158,7 +152,6 @@ services:
 
   cloudflared:
     image: cloudflare/cloudflared:latest
-    container_name: cloudflared
     restart: unless-stopped
     command: tunnel run
     environment:
@@ -168,7 +161,6 @@ services:
 
   ngrok:
     image: ngrok/ngrok:latest
-    container_name: ngrok
     restart: unless-stopped
     command:
       - "http"
@@ -180,7 +172,7 @@ services:
     env_file:
       - ./.env/apps.env
     ports:
-      - "4040:4040"
+      - "${NGROK_INSPECT_PORT:-4040}:4040"
     depends_on:
       - n8n
 

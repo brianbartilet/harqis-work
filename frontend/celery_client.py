@@ -17,6 +17,7 @@ from celery import Celery
 from kombu.common import Broadcast
 
 from config import get_settings
+from workflows.queues import qualify_queue
 
 settings = get_settings()
 
@@ -29,10 +30,10 @@ def _get_celery() -> Celery:
     # task_default_exchange_type='direct' and RabbitMQ rejects the redeclare
     # against the existing fanout exchange with 406 PRECONDITION_FAILED.
     app.conf.task_queues = (
-        Broadcast('default_broadcast'),
-        Broadcast('hud_broadcast'),
-        Broadcast('workers_broadcast'),
-        Broadcast('agents_broadcast'),
+        Broadcast(qualify_queue('default_broadcast')),
+        Broadcast(qualify_queue('hud_broadcast')),
+        Broadcast(qualify_queue('workers_broadcast')),
+        Broadcast(qualify_queue('agents_broadcast')),
     )
     app.conf.broker_connection_timeout = 5       # seconds before giving up
     app.conf.broker_connection_retry = False     # fail fast, don't retry
@@ -42,7 +43,9 @@ def _get_celery() -> Celery:
 
 def dispatch(task_path: str, kwargs: dict, queue: str) -> str:
     """Send a task to the broker. Returns the Celery task UUID."""
-    result = _get_celery().send_task(task_path, kwargs=kwargs, queue=queue)
+    result = _get_celery().send_task(
+        task_path, kwargs=kwargs, queue=qualify_queue(queue)
+    )
     return result.id
 
 

@@ -17,7 +17,7 @@ from kombu.common import Broadcast
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.sprout.settings import TIME_ZONE, USE_TZ
-from workflows.queues import WorkflowQueue
+from workflows.queues import WorkflowQueue, qualify_queue
 
 from workflows.purchases.tasks_config import WORKFLOW_PURCHASES
 from workflows.hud.tasks_config import WORKFLOWS_HUD
@@ -71,10 +71,17 @@ _CELERY_ENTRY_KEYS = frozenset(
 
 def _celery_safe_schedule(config: dict) -> dict:
     """Project each beat entry down to keys Celery's ScheduleEntry accepts."""
-    return {
-        name: {k: v for k, v in entry.items() if k in _CELERY_ENTRY_KEYS}
-        for name, entry in config.items()
-    }
+    schedule = {}
+    for name, entry in config.items():
+        projected = {k: v for k, v in entry.items() if k in _CELERY_ENTRY_KEYS}
+        options = projected.get("options")
+        if options and options.get("queue"):
+            projected["options"] = {
+                **options,
+                "queue": qualify_queue(options["queue"]),
+            }
+        schedule[name] = projected
+    return schedule
 
 
 # Configure the Celery beat schedule based on the current environment's task

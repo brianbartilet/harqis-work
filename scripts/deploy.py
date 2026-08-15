@@ -52,8 +52,8 @@ Notes:
 - Startup, restart, and registration actions synchronize `requirements.txt`
   into the existing runtime venv and run `pip check` before touching services.
   Read-only/teardown actions and `--docker-only` skip this dependency preflight.
-- Each launched daemon is tracked in <repo>/.run/<service>.pid and logs to
-  <repo>/logs/<service>.log. Stale PID files (process gone) are auto-cleaned.
+- Each launched daemon is tracked under <repo>/.run[/<instance>] and logs under
+  <repo>/logs[/<instance>]. Stale PID files (process gone) are auto-cleaned.
 - The actual per-service launch logic lives in scripts/launch.py.
 - The emulator is NOT a tracked daemon — it's driven via the emulator CLI
   (scripts/agents/emulator/run_emulator.py) and tracked by adb serial.
@@ -63,6 +63,7 @@ from __future__ import annotations
 import argparse
 import os
 import plistlib
+import re
 import shlex
 import shutil
 import socket
@@ -100,6 +101,29 @@ else:
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 IS_LIN = sys.platform.startswith("linux")
+
+
+def instance_name() -> str:
+    """Return the normalized optional deployment namespace."""
+    raw = os.environ.get("HARQIS_INSTANCE", "")
+    return re.sub(r"[^a-z0-9]+", "-", raw.lower()).strip("-")
+
+
+def _runtime_dir(base: Path) -> Path:
+    namespace = instance_name()
+    return base / namespace if namespace else base
+
+
+def _run_dir() -> Path:
+    return _runtime_dir(RUN_DIR)
+
+
+def _log_dir() -> Path:
+    return _runtime_dir(LOG_DIR)
+
+
+def _terminal_namespace() -> str:
+    return instance_name() or "harqis-work"
 
 
 # ── Service registry ──────────────────────────────────────────────────────────
@@ -239,11 +263,11 @@ def load_env_into_os() -> None:
 # ── Process tracking ──────────────────────────────────────────────────────────
 
 def pid_path(service: str) -> Path:
-    return RUN_DIR / f"{service}.pid"
+    return _run_dir() / f"{service}.pid"
 
 
 def log_path(service: str) -> Path:
-    return LOG_DIR / f"{service}.log"
+    return _log_dir() / f"{service}.log"
 
 
 def is_alive(pid: int) -> bool:
@@ -318,7 +342,7 @@ def _spawn_macos_console(
     escaped = inner.replace("\\", "\\\\").replace('"', '\\"')
     # Tag the tab via custom title so _close_macos_terminal_windows() can find
     # and close it later on redeploy / --down.
-    title = f"harqis-work:{pidfile.stem}"
+    title = f"{_terminal_namespace()}:{pidfile.stem}"
     osa = (
         'tell application "Terminal"\n'
         '    activate\n'
@@ -347,21 +371,22 @@ def _spawn_macos_console(
 
 
 def _close_macos_terminal_windows(services: list[str] | None = None) -> None:
-    """Close Terminal.app tabs tagged 'harqis-work:<service>' from prior deploys.
+    """Close Terminal.app tabs tagged '<instance>:<service>' from prior deploys.
 
     Tabs are tagged at spawn time via `set custom title of newTab to ...`
     in `_spawn_macos_console`. Closing the tab terminates the running celery
     process inside it (Terminal sends the shell SIGHUP).
 
-    `services=None` closes every harqis-work:* tab (broad pre-deploy sweep).
+    `services=None` closes every tab owned by this instance.
     `services=['scheduler']` closes only the scheduler's tab (per-service stop).
     """
     if not IS_MAC:
         return
+    namespace = _terminal_namespace()
     if services is None:
-        cond = '(tabTitle starts with "harqis-work:")'
+        cond = f'(tabTitle starts with "{namespace}:")'
     else:
-        wanted = ' or '.join(f'(tabTitle is "harqis-work:{s}")' for s in services)
+        wanted = ' or '.join(f'(tabTitle is "{namespace}:{s}")' for s in services)
         cond = f'({wanted})'
     osa = (
         'tell application "Terminal"\n'
@@ -591,10 +616,12 @@ def _process_matching(needle: str) -> list[int]:
     """
     if IS_WIN:
         try:
+            repo_marker = str(REPO_ROOT.resolve()).replace("'", "''")
             ps_cmd = (
                 "Get-CimInstance Win32_Process | "
                 "Where-Object { $_.Name -in @('python.exe','pythonw.exe') } | "
-                f"Where-Object {{ $_.CommandLine -like '*{needle}*' }} | "
+                f"Where-Object {{ $_.CommandLine -like '*{needle}*' -and "
+                f"$_.CommandLine -like '*{repo_marker}*' }} | "
                 "Select-Object -ExpandProperty ProcessId"
             )
             out = subprocess.run(
@@ -609,7 +636,8 @@ def _process_matching(needle: str) -> list[int]:
             ["pgrep", "-f", needle],
             capture_output=True, text=True, check=False,
         )
-        return [int(x) for x in out.stdout.split() if x.strip().isdigit()]
+        candidates = [int(x) for x in out.stdout.split() if x.strip().isdigit()]
+        return [pid for pid in candidates if _pid_belongs_to_repo(pid)]
     except FileNotFoundError:
         return []
 
@@ -623,9 +651,11 @@ def _all_processes_matching(needle: str) -> list[int]:
     """
     if IS_WIN:
         try:
+            repo_marker = str(REPO_ROOT.resolve()).replace("'", "''")
             ps_cmd = (
                 "Get-CimInstance Win32_Process | "
-                f"Where-Object {{ $_.CommandLine -like '*{needle}*' }} | "
+                f"Where-Object {{ $_.CommandLine -like '*{needle}*' -and "
+                f"$_.CommandLine -like '*{repo_marker}*' }} | "
                 "Select-Object -ExpandProperty ProcessId"
             )
             out = subprocess.run(
@@ -640,9 +670,26 @@ def _all_processes_matching(needle: str) -> list[int]:
             ["pgrep", "-f", needle],
             capture_output=True, text=True, check=False,
         )
-        return [int(x) for x in out.stdout.split() if x.strip().isdigit()]
+        candidates = [int(x) for x in out.stdout.split() if x.strip().isdigit()]
+        return [pid for pid in candidates if _pid_belongs_to_repo(pid)]
     except FileNotFoundError:
         return []
+
+
+def _pid_belongs_to_repo(pid: int) -> bool:
+    """Return whether a process command line identifies this exact checkout."""
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (FileNotFoundError, OSError):
+        return False
+    marker = str(REPO_ROOT.resolve()).replace("\\", "/").casefold()
+    command = result.stdout.replace("\\", "/").casefold()
+    return marker in command
 
 
 def kill_stray_celery() -> None:
@@ -1072,13 +1119,25 @@ def unregister_services(services: list[str]) -> None:
 
 # macOS launchd
 
+def _service_label(service: str) -> str:
+    namespace = instance_name()
+    middle = f".{namespace}" if namespace else ""
+    return f"work.harqis{middle}.{service}"
+
+
+def _systemd_unit_name(service: str) -> str:
+    namespace = instance_name()
+    middle = f"-{namespace}" if namespace else ""
+    return f"harqis{middle}-{service}.service"
+
+
 def _plist_path(service: str) -> Path:
-    return Path.home() / "Library" / "LaunchAgents" / f"work.harqis.{service}.plist"
+    return Path.home() / "Library" / "LaunchAgents" / f"{_service_label(service)}.plist"
 
 
 def _remove_obsolete_launchd_jobs() -> None:
     """Remove retired launchd bootstrap jobs that target deleted repo scripts."""
-    legacy = Path.home() / "Library" / "LaunchAgents" / "work.harqis.deploy.plist"
+    legacy = Path.home() / "Library" / "LaunchAgents" / f"{_service_label('deploy')}.plist"
     if not legacy.exists():
         return
     try:
@@ -1107,7 +1166,7 @@ def _remove_obsolete_launchd_jobs() -> None:
         print(f"  WARNING: preserving obsolete launchd plist because unload failed{detail}")
         return
     legacy.unlink()
-    print("  Removed obsolete launchd bootstrap: work.harqis.deploy")
+    print(f"  Removed obsolete launchd bootstrap: {_service_label('deploy')}")
 
 
 def _register_launchd(machine, args, services, *, load: bool = True):
@@ -1119,7 +1178,7 @@ def _register_launchd(machine, args, services, *, load: bool = True):
     _remove_obsolete_launchd_jobs()
     for s in services:
         cmd = build_service_cmd(s, machine, args)
-        label = f"work.harqis.{s}"
+        label = _service_label(s)
         plist = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -1153,13 +1212,13 @@ def _unregister_launchd(services):
         if path.exists():
             subprocess.run(["launchctl", "unload", str(path)], capture_output=True)
             path.unlink()
-            print(f"  Unregistered launchd: work.harqis.{s}")
+            print(f"  Unregistered launchd: {_service_label(s)}")
 
 
 # Linux systemd (user)
 
 def _systemd_unit_path(service: str) -> Path:
-    return Path.home() / ".config" / "systemd" / "user" / f"harqis-{service}.service"
+    return Path.home() / ".config" / "systemd" / "user" / _systemd_unit_name(service)
 
 
 def _register_systemd(machine, args, services, *, activate: bool = True):
@@ -1189,20 +1248,20 @@ WantedBy=default.target
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
         if activate:
             subprocess.run(["systemctl", "--user", "enable", "--now", path.name], check=False)
-            print(f"  Registered + started systemd: harqis-{s}")
+            print(f"  Registered + started systemd: {_systemd_unit_name(s)}")
         else:
             subprocess.run(["systemctl", "--user", "enable", path.name], check=False)
-            print(f"  Registered systemd (not started — console mode): harqis-{s}")
+            print(f"  Registered systemd (not started — console mode): {_systemd_unit_name(s)}")
 
 
 def _unregister_systemd(services):
     for s in services:
-        unit = f"harqis-{s}.service"
+        unit = _systemd_unit_name(s)
         subprocess.run(["systemctl", "--user", "disable", "--now", unit], capture_output=True)
         path = _systemd_unit_path(s)
         if path.exists():
             path.unlink()
-            print(f"  Unregistered systemd: harqis-{s}")
+            print(f"  Unregistered systemd: {_systemd_unit_name(s)}")
     subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
 
 
@@ -1222,7 +1281,7 @@ def _register_scheduled_tasks(machine, args, services):
         # Quote the executable + each arg containing spaces.
         parts = [f'"{cmd[0]}"'] + [f'"{a}"' if " " in a else a for a in cmd[1:]]
         value = " ".join(parts).replace("'", "''")
-        name = f"work.harqis.{s}"
+        name = _service_label(s)
         ps = (
             f"Set-ItemProperty -Path '{_RUN_KEY}' "
             f"-Name '{name}' -Value '{value}' -Type String"
@@ -1240,7 +1299,7 @@ def _register_scheduled_tasks(machine, args, services):
 
 def _unregister_scheduled_tasks(services):
     for s in services:
-        name = f"work.harqis.{s}"
+        name = _service_label(s)
         subprocess.run(
             ["powershell", "-NoProfile", "-Command",
              f"Remove-ItemProperty -Path '{_RUN_KEY}' -Name '{name}' "
@@ -1323,7 +1382,7 @@ def _suspend_supervised_services(active: set[str] | None = None) -> set[str]:
             path = _plist_path(service)
             if not path.exists():
                 continue
-            label = f"work.harqis.{service}"
+            label = _service_label(service)
             result = subprocess.run(
                 ["launchctl", "list", label], capture_output=True, check=False
             )
@@ -1331,7 +1390,7 @@ def _suspend_supervised_services(active: set[str] | None = None) -> set[str]:
                 active.add(service)
                 subprocess.run(["launchctl", "unload", str(path)], check=True)
         elif IS_LIN:
-            unit = f"harqis-{service}.service"
+            unit = _systemd_unit_name(service)
             result = subprocess.run(
                 ["systemctl", "--user", "is-active", "--quiet", unit],
                 capture_output=True,
@@ -1359,7 +1418,7 @@ def _resume_supervised_services(services: set[str]) -> None:
             subprocess.run(["launchctl", "load", str(_plist_path(service))], check=True)
         elif IS_LIN:
             subprocess.run(
-                ["systemctl", "--user", "start", f"harqis-{service}.service"],
+                ["systemctl", "--user", "start", _systemd_unit_name(service)],
                 check=True,
             )
 
@@ -1429,7 +1488,7 @@ def sync_runtime_requirements() -> None:
     if not REQUIREMENTS_FILE.exists():
         raise RuntimeError(f"requirements file does not exist: {REQUIREMENTS_FILE}")
 
-    log_file = LOG_DIR / "requirements-sync.log"
+    log_file = _log_dir() / "requirements-sync.log"
     print(f"[deps] Synchronizing {REQUIREMENTS_FILE.name}...")
     _run_venv_command(
         [str(python), "-m", "pip", "install", "-r", str(REQUIREMENTS_FILE)],
@@ -1472,7 +1531,7 @@ def rebuild_virtualenv(machine: dict, args: argparse.Namespace) -> Path | None:
         raise RuntimeError(f"requirements file does not exist: {REQUIREMENTS_FILE}")
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    log_file = LOG_DIR / f"venv-rebuild-{stamp}.log"
+    log_file = _log_dir() / f"venv-rebuild-{stamp}.log"
     running = _record_running_services()
     supervised: set[str] = set()
     backup: Path | None = None
@@ -1612,14 +1671,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
-    RUN_DIR.mkdir(parents=True, exist_ok=True)
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    load_env_into_os()
+    runtime_machine = load_machine_config(args.machine)
+    if args.role:
+        runtime_machine["role"] = args.role
+    os.environ.update(machine_env_vars(runtime_machine))
+    _run_dir().mkdir(parents=True, exist_ok=True)
+    _log_dir().mkdir(parents=True, exist_ok=True)
 
     if args.rebuild_venv:
         _reexec_rebuild_with_base_python()
         os.environ.pop(_REBUILD_REEXEC_MARKER, None)
-
-    load_env_into_os()
 
     if args.rebuild_venv:
         machine = load_machine_config(args.machine)

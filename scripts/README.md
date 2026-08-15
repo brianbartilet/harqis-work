@@ -16,6 +16,8 @@ Operational scripts for **harqis-work**, organised by purpose:
 |---|---|
 | [`launch.py`](#launchpy) | Single-process launcher — runs one daemon in the foreground (`worker`, `scheduler`, `flower`, `frontend`, `mcp`, `kanban`, `trigger-hud-tasks`, `push-config`, `serve-config`). |
 | [`deploy.py`](#deploypy) | Multi-daemon orchestrator — reads `machines.toml` from the repo root, brings the whole stack up/down, optionally registers OS auto-start units. |
+| [`verify_instance_isolation.py`](#verify_instance_isolationpy) | Captures and compares a sibling HARQIS Compose project and checkout-specific processes during a co-deployment soak test. |
+| [`setup_hfl_share_hermes.py`](#setup_hfl_share_hermespy) | Dry-run-first setup/check for a locked-down Hermes profile that serves Share Corpus Q&A through a connected Codex model. |
 | [`sync-to-host.ps1`](#sync-to-hostps1) | Push gitignored config (`.env/`, `frontend/.env`, `machines.local.toml`) to a remote checkout via `tar \| ssh`. Driven by the `[sync]` / `[ssh.*]` blocks in `machines.local.toml`. |
 | [`../machines.toml`](#machinestoml) | Per-machine topology (role, queue list, disabled services). Lives at the repo root so per-machine `machines.local.toml` overrides sit next to it. Auto-detected from hostname. |
 | [`tailscale/`](#tailscale) | Tailscale ACL policy. Unchanged. |
@@ -324,10 +326,12 @@ python scripts/launch.py print-env                                 # eval-able e
 
 Orchestrator. Reads `machines.toml`, decides which services to start
 (based on `role` + `disable`), launches each as a detached background
-process, tracks PIDs in `<repo>/.run/<service>.pid`, and logs to
-`<repo>/logs/<service>.log`. On every deploy or `--down` it also sweeps
+process, tracks PIDs in `<repo>/.run[/<instance>]/<service>.pid`, and logs to
+`<repo>/logs[/<instance>]/<service>.log`. When `HARQIS_INSTANCE` is configured,
+service registrations and process state are namespaced. On every deploy or `--down` it also sweeps
 stray celery / launcher processes (matched by command-line needles
-`run_workflows.py` and `core.apps.sprout.app`) so orphans from prior
+`run_workflows.py` and `core.apps.sprout.app`, then constrained to this exact
+checkout path) so orphans from prior
 runs — the kind that pile up extra console windows on Windows — are
 killed before fresh daemons start.
 
@@ -399,6 +403,22 @@ manual recovery or later cleanup.
 
 Use `--no-frontend / --no-mcp / --no-kanban / --no-flower` to skip
 individual host daemons, or list them under `disable` in `machines.toml`.
+
+## `verify_instance_isolation.py`
+
+Use this around a secondary-instance soak test:
+
+```bash
+python scripts/verify_instance_isolation.py snapshot \
+  --primary-project harqis-work \
+  --primary-repo /path/to/harqis-work
+
+# Deploy the sibling fork, leave it running for the soak period, then:
+python scripts/verify_instance_isolation.py check
+```
+
+The check fails if any primary Compose container ID or checkout-specific process
+PID/command line changed. Its baseline is local-only under `.harqis-data/`.
 
 **Console mode (`--console`)**
 

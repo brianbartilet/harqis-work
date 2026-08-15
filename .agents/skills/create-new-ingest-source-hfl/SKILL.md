@@ -2,12 +2,12 @@
 name: create-new-ingest-source-hfl
 description: >
   Scaffold a new Homework-for-Life ingest source under workflows/hfl that captures,
-  distills, and dual-writes entries to Markdown and Elasticsearch.
+  distills, and durably submits entries to the Activity Corpus and Elasticsearch.
 user-invocable: true
 allowed-tools: Bash Read Glob Grep Edit Write
 ---
 
-Scaffold a new Homework-for-Life ingest source under `workflows/hfl/` — a Celery task that captures information from a source, distils it with Claude Haiku into a structured `HflEntry`, and **dual-writes** it (Markdown corpus + the `harqis-hfl-entries` Elasticsearch index). Follows the proven `ingest_git` / `ingest_ai` / `ingest_chatgpt` template, composes with `/create-new-service-app`, and (by default) adds a paired read-only MCP tool.
+Scaffold a new Homework-for-Life ingest source under `workflows/hfl/` — a Celery task that captures information from a source, distils it with Claude Haiku into a structured `HflEntry`, and submits it through the durable Activity Corpus boundary. `submit_hfl_entry(...)` owns the Markdown source-of-truth write, Elasticsearch projection, deterministic deduplication, machine provenance, canonical-host forwarding, and local outbox fallback. Follow the current `ingest_chatgpt` template, compose with `/create-new-service-app`, and (by default) add a paired read-only MCP tool.
 
 This skill exists because every HFL ingest source has the same shape; encoding it removes the boilerplate and *enforces* the manifesto Capture → Distill → Express loop (docs/MANIFESTO.md §1–§2) for every new source.
 
@@ -35,10 +35,10 @@ This skill exists because every HFL ingest source has the same shape; encoding i
 Habit 5 (manifesto): no generation without exploration. Read, in order:
 
 1. `workflows/hfl/tasks/ingest_chatgpt.py` — the closest full template (self-contained client + collectors + distiller + task).
-2. `workflows/hfl/tasks/ingest_git.py` — the canonical template; note `_parse_model_json` and the raw-fallback pattern.
+2. `workflows/hfl/distill.py` — source-agnostic model JSON parsing. Never import an unrelated ingest source just to reuse a helper.
 3. `workflows/hfl/dto/entry.py` — the `HflEntry` DTO every entry is built from.
-4. `workflows/hfl/es_store.py` — `index_hfl_entry(entry, *, source, synthesized)` (the dual-write call) and `query_hfl_entries`.
-5. `workflows/hfl/tasks/capture.py` — `_render_entry` (delegates to `HflEntry`) and `resolve_corpus_dir`.
+4. `workflows/hfl/persistence.py` — `submit_hfl_entry(...)`, the only supported durable write boundary.
+5. `workflows/hfl/es_store.py` — the queryable projection and read helpers; ingestors do not call its write API directly.
 6. `workflows/hfl/tasks_config.py` — the beat-entry shape incl. the `manifesto` metadata block and `WorkflowQueue.HFL`.
 7. `workflows/hfl/__init__.py` — explicit task-module imports (Celery registration).
 8. `workflows/hfl/mcp.py` — `register_memory_tools(mcp)` and the `git_activity` live-view tool (the MCP pattern to mirror).
@@ -77,17 +77,17 @@ Create `workflows/hfl/prompts/ingest_<source_name>.md` mirroring `prompts/ingest
 
 Create `workflows/hfl/tasks/ingest_<source_name>.py`. Required structure (copy `ingest_chatgpt.py` and adapt):
 
-- Module docstring: what it captures, the source, auth/config env vars, the "no token / no items → clean no-op" contract, and that it dual-writes.
-- Imports: `SPROUT`, `log_result`, `create_logger`; `get_anthropic_config` + `BaseApiServiceAnthropic`; `load_prompt`; `from workflows.hfl.tasks.capture import _render_entry, resolve_corpus_dir`; `from workflows.hfl.tasks.ingest_git import _parse_model_json`; `from workflows.hfl.dto import HflEntry`; `from workflows.hfl.es_store import index_hfl_entry`.
+- Module docstring: what it captures, the source, auth/config env vars, the "no token / no items → clean no-op" contract, and that it submits through the Activity Corpus persistence boundary.
+- Imports: `SPROUT`, `log_result`, `create_logger`; `get_anthropic_config` + `BaseApiServiceAnthropic`; `load_prompt`; `from workflows.hfl.distill import parse_model_json`; `from workflows.hfl.dto import HflEntry`; `from workflows.hfl.persistence import submit_hfl_entry`.
 - `_DEFAULT_HAIKU = "claude-haiku-4-5-20251001"` (never raise the Anthropic default model).
 - `collect_<source>_activity(*, since, until, ...) -> dict` — plain function (MCP-reusable), bounded by explicit caps, windowed by date.
-- `distill_<source>_activity(activity, *, synthesize=True, model=_DEFAULT_HAIKU, cfg_id="ANTHROPIC", max_tokens=900) -> dict` — Haiku via `load_prompt("ingest_<source_name>")`, `_parse_model_json`, raw-fallback dict on any failure.
+- `distill_<source>_activity(activity, *, synthesize=True, model=_DEFAULT_HAIKU, cfg_id="ANTHROPIC", max_tokens=900) -> dict` — Haiku via `load_prompt("ingest_<source_name>")`, `parse_model_json`, raw-fallback dict on any failure.
 - `@SPROUT.task()` / `@log_result()` `ingest_<source_name>_activity(*, cfg_id__anthropic="ANTHROPIC", model=_DEFAULT_HAIKU, window_days=<N>, ...)`:
   1. Missing credential / no source items → return `{"skipped": ..., "entries_written": 0}` (NO LLM, NO network beyond the cheap check).
   2. Collect → if empty, skip. Distil → if `skip`, skip.
   3. Build the entry **once** as an `HflEntry(when=…, moment=…, …, tags=…, references=…)`.
-  4. **Dual-write:** append `entry.to_markdown()` to `<corpus>/YYYY-MM-DD.md` (via `_render_entry` for parity) **and** call `index_hfl_entry(entry, source="<source_name>", synthesized=d.get("synthesized", False))`.
-  5. Return `{"entries_written": 1, "indexed": <doc_id is not None>, "synthesized": ..., "model": ..., "path": ...}`.
+  4. **Durable submit:** call `submit_hfl_entry(entry, source="<source_name>", synthesized=d.get("synthesized", False), dedup_key=<stable source id when available>)` exactly once. Do not append files or call `index_hfl_entry` yourself.
+  5. Return `{"entries_written": 1, "indexed": persistence.get("indexed"), "synthesized": ..., "model": ..., **persistence}`.
 - Every external failure is caught and turned into a logged skip — the beat must never break (match `ingest_chatgpt.py` exactly).
 
 Set `references` to the source artifact when one exists (URL/path) — the manifesto provenance convention (docs/MANIFESTO.md §2).
@@ -106,7 +106,7 @@ import workflows.hfl.tasks.ingest_<source_name>  # noqa: F401
 
 ## Step 5 — Add the beat schedule entry
 
-Add to `workflows/hfl/tasks_config.py` a `run-job--ingest_<source_name>_activity` entry: the resolved `--schedule` (default `crontab(hour=23, minute=0)`), `kwargs` (`cfg_id__anthropic`, `model` Haiku, `window_days`, caps), `options` `{'queue': WorkflowQueue.HFL, 'expires': 60*60*12}`, and the `manifesto` block (`code_role: 'capture+distill+express'`, `para_bucket: 'area'`, `express_target: 'file:hfl_corpus+es:hfl-entries'`, `review_artifact: 'es_log+file'`, `hfl_signal: True`). Ship it **active** only if the credential is set; otherwise ship it commented-out with a one-line activation note (mirror how `ingest_ai` / `ingest_chatgpt` were handled). Comment disabled entries with **`#` lines only** — never a `"""..."""` block, which concatenates with the next key and hides the whole workflow from the frontend registry (see `workflows/README.md`). Once the entry is active, regenerate the frontend registry (`/generate-registry`) so it appears in the dashboard.
+Add to `workflows/hfl/tasks_config.py` a `run-job--ingest_<source_name>_activity` entry: the resolved `--schedule` (default `crontab(hour=23, minute=0)`), `kwargs` (`cfg_id__anthropic`, `model` Haiku, `window_days`, caps), `options` `{'queue': WorkflowQueue.HFL, 'expires': 60*60*12}`, and the `manifesto` block (`code_role: 'capture+distill+express'`, `para_bucket: 'area'`, `express_target: 'file:activity-corpus+es:hfl-entries'`, `review_artifact: 'es_log+file'`, `hfl_signal: True`). Ship it **active** only if the credential is set; otherwise ship it commented-out with a one-line activation note (mirror how `ingest_ai` / `ingest_chatgpt` were handled). Comment disabled entries with **`#` lines only** — never a `"""..."""` block, which concatenates with the next key and hides the whole workflow from the frontend registry (see `workflows/README.md`). Once the entry is active, regenerate the frontend registry (`/generate-registry`) so it appears in the dashboard.
 
 ---
 
@@ -123,7 +123,7 @@ Create `workflows/hfl/tests/test_ingest_<source_name>.py` (mirror `test_ingest_c
 - Integration: the no-credential / no-items path → clean no-op, no network, no write (safe to run live).
 - `@pytest.mark.skip(reason="Manual only — live …")` for the full pipeline.
 - Unit: collector windowing/parse helpers; `distill_*(synthesize=False)` raw fallback (no API).
-- A test asserting the task calls `index_hfl_entry` (monkeypatch it) so the dual-write contract is covered.
+- A test asserting the task calls `submit_hfl_entry` exactly once with the expected source, synthesis flag, and stable dedup key. Stub its result to cover persisted, forwarded, and outbox return contracts without touching a real corpus or broker.
 
 Do not run tests automatically unless asked; print the command.
 
@@ -145,7 +145,7 @@ Both must succeed (registration prints `True`).
 
 ## Step 9 — Docs
 
-Append a row to the `workflows/hfl/README.md` Tasks table and an Activation note (env var, schedule, dual-write, MCP tool) — mirror the existing `ingest_chatgpt` / `ingest_ai` sections.
+Append a row to the `workflows/hfl/README.md` Tasks table and an Activation note (env var, schedule, durable Activity Corpus submission, MCP tool) — mirror the existing `ingest_chatgpt` section.
 
 ---
 
@@ -158,7 +158,7 @@ Print, filled in: the credential/env var to set, whether the beat entry shipped 
 ## Hard rules — never break these
 
 1. **Match the template.** The generated task must be structurally identical to `ingest_chatgpt.py` — same skip/no-op contract, same raw-fallback, same "never break the beat".
-2. **Dual-write is mandatory.** Every generated source writes BOTH the Markdown corpus and `index_hfl_entry(...)`. The corpus is the source of truth; ES is the queryable projection. Never ES-only.
+2. **The persistence boundary is mandatory.** Every generated source calls `submit_hfl_entry(...)` exactly once. It dual-writes the Markdown corpus and Elasticsearch projection, enriches provenance, deduplicates retries, and retains failures in the outbox. Never write either store directly.
 3. **Haiku only.** Distil with `claude-haiku-4-5-20251001`. Never raise `BaseApiServiceAnthropic.DEFAULT_MODEL`.
 4. **No secrets written.** Credentials/tokens are printed as instructions for `.env/apps.env`, never written to a tracked file.
 5. **Compose, don't reinvent.** Delegate a missing source API to `/create-new-service-app`. Never invoke `/create-new-workflow`.

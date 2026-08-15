@@ -15,7 +15,8 @@ Entry shape (Markdown, one file per day, newest entry prepended):
 Corpus path resolution (first hit wins):
     1. apps_config.yaml::HFL.corpus.path
     2. env var HFL_CORPUS_PATH
-    3. <repo>/logs/hfl/
+    3. <HARQIS_DATA_ROOT>/activity-corpus/
+    4. <repo>/logs/hfl/
 
 This task is NOT in the beat schedule by default — see
 workflows/hfl/README.md §Activation.
@@ -55,6 +56,10 @@ def resolve_corpus_dir() -> Path:
     env_path = os.environ.get("HFL_CORPUS_PATH", "").strip()
     if env_path:
         return Path(env_path).resolve()
+
+    data_root = os.environ.get("HARQIS_DATA_ROOT", "").strip()
+    if data_root:
+        return (Path(data_root).expanduser() / "activity-corpus").resolve()
 
     return (REPO_ROOT / "logs" / "hfl").resolve()
 

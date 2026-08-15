@@ -5,6 +5,14 @@ import importlib.util
 import plistlib
 from pathlib import Path
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def upstream_instance_compatibility(monkeypatch):
+    """Keep legacy launchd tests independent of developer-local env files."""
+    monkeypatch.delenv("HARQIS_INSTANCE", raising=False)
+
 
 def load_deploy_module():
     deploy_path = Path(__file__).resolve().parents[1] / "deploy.py"
@@ -18,7 +26,7 @@ def load_deploy_module():
 
 def test_register_launchd_removes_obsolete_bootstrap_job(tmp_path, monkeypatch):
     deploy = load_deploy_module()
-    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(deploy.Path, "home", classmethod(lambda cls: tmp_path))
     launch_agents = tmp_path / "Library" / "LaunchAgents"
     launch_agents.mkdir(parents=True)
     legacy = launch_agents / "work.harqis.deploy.plist"
@@ -50,7 +58,7 @@ def test_register_launchd_removes_obsolete_bootstrap_job(tmp_path, monkeypatch):
 
 def test_register_launchd_preserves_nonlegacy_bootstrap_job(tmp_path, monkeypatch):
     deploy = load_deploy_module()
-    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(deploy.Path, "home", classmethod(lambda cls: tmp_path))
     launch_agents = tmp_path / "Library" / "LaunchAgents"
     launch_agents.mkdir(parents=True)
     custom = launch_agents / "work.harqis.deploy.plist"
@@ -79,7 +87,7 @@ def test_register_launchd_preserves_nonlegacy_bootstrap_job(tmp_path, monkeypatc
 
 def test_register_launchd_preserves_plist_with_unexpected_schema(tmp_path, monkeypatch):
     deploy = load_deploy_module()
-    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(deploy.Path, "home", classmethod(lambda cls: tmp_path))
     launch_agents = tmp_path / "Library" / "LaunchAgents"
     launch_agents.mkdir(parents=True)
     custom = launch_agents / "work.harqis.deploy.plist"
@@ -101,7 +109,7 @@ def test_register_launchd_preserves_plist_with_unexpected_schema(tmp_path, monke
 
 def test_register_launchd_preserves_obsolete_plist_when_unload_fails(tmp_path, monkeypatch):
     deploy = load_deploy_module()
-    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(deploy.Path, "home", classmethod(lambda cls: tmp_path))
     launch_agents = tmp_path / "Library" / "LaunchAgents"
     launch_agents.mkdir(parents=True)
     legacy = launch_agents / "work.harqis.deploy.plist"
@@ -129,7 +137,7 @@ def test_register_launchd_preserves_obsolete_plist_when_unload_fails(tmp_path, m
 
 def test_register_launchd_preserves_obsolete_plist_when_unload_cannot_start(tmp_path, monkeypatch):
     deploy = load_deploy_module()
-    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(deploy.Path, "home", classmethod(lambda cls: tmp_path))
     launch_agents = tmp_path / "Library" / "LaunchAgents"
     launch_agents.mkdir(parents=True)
     legacy = launch_agents / "work.harqis.deploy.plist"
