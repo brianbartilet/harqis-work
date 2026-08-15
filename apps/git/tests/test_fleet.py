@@ -1,16 +1,25 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
 from apps.git.fleet import (
+    FleetError,
     FleetConfig,
     RepositorySpec,
     _capability_summary,
+    _feature_plan_id,
+    _readiness_summary,
     load_config,
     discover_repositories,
+    load_feature_plan,
+    plan_feature_shipping,
+    resolve_feature_commits,
     scan_repository,
+    ship_feature_plan,
 )
+import pytest
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -23,6 +32,25 @@ def _init(path: Path) -> None:
     _git(path, "init", "-b", "main")
     _git(path, "config", "user.name", "Fleet Tests")
     _git(path, "config", "user.email", "fleet@example.test")
+
+
+def _write_empty_plan(plan_dir: Path) -> str:
+    payload = {
+        "schema_version": 1,
+        "generated_at": "2026-08-16T07:00:00+08:00",
+        "source": {"commits": []},
+        "feature_slug": "test-feature",
+        "squash": False,
+        "candidate_changes": [],
+        "candidate_capabilities": {},
+        "filters": {"include": [], "exclude": []},
+        "discovery_errors": [],
+        "targets": [],
+    }
+    plan_id = _feature_plan_id(payload)
+    payload["plan_id"] = plan_id
+    (plan_dir / f"{plan_id}.json").write_text(json.dumps(payload), encoding="utf-8")
+    return plan_id
 
 
 def test_load_config_merges_local_repository_paths(tmp_path: Path):
@@ -119,3 +147,117 @@ def test_scan_repository_finds_missing_and_fork_only_commits(tmp_path: Path):
     assert report["fork_only_commits"] == 1
     assert report["capabilities"]["apps"] == ["fork_app"]
     assert report["capabilities"]["workflows"] == ["upstream_flow"]
+
+
+def test_readiness_flags_fork_only_work_and_failed_ci():
+    readiness = _readiness_summary({
+        "fork_only_commits": 2,
+        "missing_upstream_commits": 1,
+        "conflicts": [],
+        "ci_summary": {"failure": 1},
+    })
+    assert readiness["level"] == "review"
+    assert any("fork-only" in reason for reason in readiness["reasons"])
+
+
+def test_plan_feature_shipping_persists_compatible_local_plan(tmp_path: Path):
+    source = tmp_path / "source-plan"
+    _init(source)
+    (source / "README.md").write_text("base\n", encoding="utf-8")
+    _git(source, "add", "README.md")
+    _git(source, "commit", "-m", "chore: base")
+
+    fork = tmp_path / "fork-plan"
+    _git(tmp_path, "clone", source.as_uri(), str(fork))
+    _git(fork, "config", "user.name", "Fleet Tests")
+    _git(fork, "config", "user.email", "fleet@example.test")
+
+    (source / "feature.txt").write_text("feature\n", encoding="utf-8")
+    _git(source, "add", "feature.txt")
+    _git(source, "commit", "-m", "feat: portable feature")
+    feature_sha = _git(source, "rev-parse", "HEAD")
+
+    config_path = tmp_path / "fork-fleet.toml"
+    config_path.write_text(
+        "[fleet]\n"
+        f'source_repository = "{source.as_uri()}"\n'
+        "github_fallback = false\n"
+        f'cache_dir = "{(tmp_path / "cache-plan").as_posix()}"\n'
+        f'worktree_dir = "{(tmp_path / "worktrees-plan").as_posix()}"\n'
+        f'plan_dir = "{(tmp_path / "plans").as_posix()}"\n'
+        "[[repositories]]\n"
+        f'repository = "{fork.as_uri()}"\n',
+        encoding="utf-8",
+    )
+    report = plan_feature_shipping(commits=[feature_sha], config_path=config_path)
+    assert report["summary"]["compatible"] == 1
+    assert report["targets"][0]["trial"]["status"] == "clean"
+    assert Path(report["plan_path"]).exists()
+    assert load_feature_plan(report["plan_id"], config_path=config_path)["plan_id"] == report["plan_id"]
+    tampered = json.loads(Path(report["plan_path"]).read_text(encoding="utf-8"))
+    tampered["targets"][0]["status"] = "compatible-with-warnings"
+    Path(report["plan_path"]).write_text(json.dumps(tampered), encoding="utf-8")
+    with pytest.raises(FleetError, match="integrity"):
+        load_feature_plan(report["plan_id"], config_path=config_path)
+
+
+def test_ship_feature_plan_rejects_wrong_approval(tmp_path: Path):
+    config_path = tmp_path / "fork-fleet.toml"
+    plan_dir = tmp_path / "plans"
+    plan_dir.mkdir()
+    config_path.write_text(
+        '[fleet]\nsource_repository = "owner/source"\ngithub_fallback = false\n'
+        f'plan_dir = "{plan_dir.as_posix()}"\n', encoding="utf-8",
+    )
+    plan_id = _write_empty_plan(plan_dir)
+    with pytest.raises(FleetError, match="approval"):
+        ship_feature_plan(plan_id, approval="wrong", config_path=config_path)
+
+
+def test_resolve_feature_commits_supports_contiguous_range_and_source_pr(tmp_path: Path, monkeypatch):
+    source = tmp_path / "source-resolve"
+    _init(source)
+    (source / "base.txt").write_text("base\n", encoding="utf-8")
+    _git(source, "add", "base.txt")
+    _git(source, "commit", "-m", "chore: base")
+    base_sha = _git(source, "rev-parse", "HEAD")
+    (source / "feature.txt").write_text("feature\n", encoding="utf-8")
+    _git(source, "add", "feature.txt")
+    _git(source, "commit", "-m", "feat: range and PR")
+    feature_sha = _git(source, "rev-parse", "HEAD")
+    config_path = tmp_path / "fork-fleet.toml"
+    config_path.write_text(
+        "[fleet]\n"
+        f'source_repository = "{source.as_uri()}"\n'
+        "github_fallback = false\n"
+        f'cache_dir = "{(tmp_path / "cache-resolve").as_posix()}"\n',
+        encoding="utf-8",
+    )
+    ranged = resolve_feature_commits(commit_range=f"{base_sha}..{feature_sha}", config_path=config_path)
+    assert ranged["commits"] == [feature_sha]
+    with pytest.raises(FleetError, match="contiguous"):
+        resolve_feature_commits(commit_range=f"{base_sha}...{feature_sha}", config_path=config_path)
+
+    monkeypatch.setattr("apps.git.fleet._gh_json", lambda args, **kwargs: {
+        "number": 7, "title": "PR feature", "url": "https://github.com/owner/source/pull/7",
+        "commits": [{"oid": feature_sha}],
+    })
+    from_pr = resolve_feature_commits(pull_request="7", config_path=config_path)
+    assert from_pr["commits"] == [feature_sha]
+    assert from_pr["title"] == "PR feature"
+
+
+def test_ship_feature_plan_requires_separate_direct_main_confirmation(tmp_path: Path):
+    config_path = tmp_path / "fork-fleet.toml"
+    plan_dir = tmp_path / "plans"
+    plan_dir.mkdir()
+    config_path.write_text(
+        '[fleet]\nsource_repository = "owner/source"\ngithub_fallback = false\n'
+        f'plan_dir = "{plan_dir.as_posix()}"\n', encoding="utf-8",
+    )
+    plan_id = _write_empty_plan(plan_dir)
+    with pytest.raises(FleetError, match="DIRECT-MAIN"):
+        ship_feature_plan(
+            plan_id, approval=plan_id, repositories=["owner/fork"],
+            direct_main=["owner/fork"], config_path=config_path,
+        )

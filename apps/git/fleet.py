@@ -11,6 +11,7 @@ import shlex
 import shutil
 import subprocess
 import tomllib
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -67,6 +68,7 @@ class FleetConfig:
     report_path: str = ".harqis-data/fork-fleet/latest.json"
     cache_dir: str = ".harqis-data/fork-fleet/repos"
     worktree_dir: str = ".harqis-data/fork-fleet/worktrees"
+    plan_dir: str = ".harqis-data/fork-fleet/plans"
     repositories: list[RepositorySpec] = field(default_factory=list)
 
     def resolve(self, value: str) -> Path:
@@ -131,6 +133,7 @@ def load_config(
         report_path=str(fleet.get("report_path", ".harqis-data/fork-fleet/latest.json")),
         cache_dir=str(fleet.get("cache_dir", ".harqis-data/fork-fleet/repos")),
         worktree_dir=str(fleet.get("worktree_dir", ".harqis-data/fork-fleet/worktrees")),
+        plan_dir=str(fleet.get("plan_dir", ".harqis-data/fork-fleet/plans")),
         repositories=repos,
     )
 
@@ -323,6 +326,34 @@ def _repo_links(repo: RepositorySpec, report: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(links))
 
 
+def _readiness_summary(report: dict[str, Any]) -> dict[str, Any]:
+    """Classify general shipping readiness without applying a candidate feature."""
+    reasons: list[str] = []
+    level = "ready"
+    manifest = report.get("intentional_selection")
+    if isinstance(manifest, dict) and report.get("manifest_error"):
+        level = "blocked"
+        reasons.append("fork manifest is invalid")
+    if report.get("conflicts"):
+        level = "review" if level != "blocked" else level
+        reasons.append("existing pull requests are blocked or conflicted")
+    failed_ci = sum(
+        count for state, count in report.get("ci_summary", {}).items()
+        if state in {"failure", "failed", "cancelled", "timed_out", "action_required"}
+    )
+    if failed_ci:
+        level = "review" if level != "blocked" else level
+        reasons.append(f"{failed_ci} recent CI run(s) require review")
+    if report.get("fork_only_commits"):
+        level = "review" if level != "blocked" else level
+        reasons.append("fork-only commits may overlap candidate changes")
+    if report.get("missing_upstream_commits"):
+        reasons.append("outstanding upstream commits are available for planning")
+    if not reasons:
+        reasons.append("no general drift blockers detected")
+    return {"level": level, "reasons": reasons}
+
+
 def scan_repository(repo: RepositorySpec, config: FleetConfig) -> dict[str, Any]:
     cache = _ensure_cache(repo, config)
     source_ref = f"upstream/{config.default_branch}"
@@ -394,6 +425,7 @@ def scan_repository(repo: RepositorySpec, config: FleetConfig) -> dict[str, Any]
         "file_changes": changes,
         "capabilities": _capability_summary(changes),
         "intentional_selection": selection,
+        "manifest_error": manifest.get("error", "") if isinstance(manifest, dict) else "",
         "intentional_exclusions": _intentional_exclusions(cache, source_ref, selection),
         "branches": branches,
         "pull_requests": pull_requests,
@@ -403,6 +435,7 @@ def scan_repository(repo: RepositorySpec, config: FleetConfig) -> dict[str, Any]
         "cache_path": str(cache),
         "status": "ok",
     }
+    result["feature_readiness"] = _readiness_summary(result)
     result["references"] = _repo_links(repo, result)
     return result
 
@@ -437,6 +470,9 @@ def scan_fleet(
             "errors": sum(r.get("status") != "ok" for r in reports),
             "missing_upstream_commits": sum(int(r.get("missing_upstream_commits", 0)) for r in reports),
             "fork_only_commits": sum(int(r.get("fork_only_commits", 0)) for r in reports),
+            "feature_ready": sum(r.get("feature_readiness", {}).get("level") == "ready" for r in reports),
+            "feature_review": sum(r.get("feature_readiness", {}).get("level") == "review" for r in reports),
+            "feature_blocked": sum(r.get("feature_readiness", {}).get("level") == "blocked" for r in reports),
         },
     }
     if write_report:
@@ -579,6 +615,574 @@ def deploy_fork(repository: str, *, branch: str, role: str = "host", config_path
     repo = _registered_repo(repository, config)
     deploy = _run([_python_for(repo, path), "scripts/deploy.py", "--role", role], cwd=path, timeout=3600)
     return {**worktree, "success": deploy.returncode == 0, "output": (deploy.stdout + deploy.stderr)[-10000:]}
+
+
+def _ensure_source_cache(config: FleetConfig) -> Path:
+    cache = config.resolve(config.cache_dir) / "_source"
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    source = RepositorySpec(config.source_repository)
+    if not (cache / ".git").exists():
+        _run(["git", "clone", "--filter=blob:none", "--no-checkout", source.url, str(cache)], timeout=600, check=True)
+    _run(["git", "remote", "set-url", "origin", source.url], cwd=cache, check=True)
+    _run(["git", "fetch", "--prune", "origin"], cwd=cache, timeout=600, check=True)
+    return cache
+
+
+def _commit_sha(cache: Path, value: str) -> str:
+    if not re.fullmatch(r"[0-9a-fA-F]{7,64}", value):
+        raise FleetError(f"invalid commit id: {value}")
+    result = _run(["git", "rev-parse", "--verify", f"{value}^{{commit}}"], cwd=cache)
+    if result.returncode:
+        raise FleetError(f"commit is unavailable from the source repository: {value}")
+    return result.stdout.strip()
+
+
+def resolve_feature_commits(
+    *, commits: Sequence[str] = (), commit_range: str = "", pull_request: str = "",
+    config_path: Path | str = DEFAULT_CONFIG,
+) -> dict[str, Any]:
+    """Resolve explicit SHAs, one range, or one source PR to ordered source commits."""
+    supplied = sum(bool(value) for value in (commits, commit_range, pull_request))
+    if supplied != 1:
+        raise FleetError("provide exactly one of commits, commit_range, or pull_request")
+    config = load_config(config_path)
+    cache = _ensure_source_cache(config)
+    title = ""
+    source_url = ""
+    values: list[str]
+    if commits:
+        values = list(commits)
+    elif commit_range:
+        parts = commit_range.split("..")
+        safe_ref = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*")
+        if len(parts) != 2 or not all(safe_ref.fullmatch(part) for part in parts):
+            raise FleetError("commit range must use safe contiguous A..B syntax")
+        values = _git_lines(cache, ["rev-list", "--reverse", "--topo-order", commit_range])
+    else:
+        pr_ref = str(pull_request).strip()
+        if not (pr_ref.isdigit() or re.fullmatch(r"https://github\.com/[^/]+/[^/]+/pull/\d+/?", pr_ref)):
+            raise FleetError("pull_request must be a PR number or GitHub PR URL")
+        if pr_ref.startswith("https://"):
+            expected = f"https://github.com/{config.source_repository}/pull/"
+            if not pr_ref.casefold().startswith(expected.casefold()):
+                raise FleetError("pull request URL must belong to fleet.source_repository")
+        args = ["pr", "view", pr_ref]
+        if pr_ref.isdigit():
+            args += ["--repo", config.source_repository]
+        payload = _gh_json([*args, "--json", "number,title,url,commits"])
+        title = str(payload.get("title") or "")
+        source_url = str(payload.get("url") or "")
+        values = [str(row.get("oid") or "") for row in payload.get("commits", [])]
+        number = str(payload.get("number") or "")
+        if number:
+            _run(["git", "fetch", "origin", f"pull/{number}/head"], cwd=cache, timeout=300)
+    resolved: list[str] = []
+    for value in values:
+        sha = _commit_sha(cache, value)
+        if sha not in resolved:
+            resolved.append(sha)
+    if not resolved:
+        raise FleetError("feature input resolved to zero commits")
+    subjects = [_git_lines(cache, ["show", "-s", "--format=%s", sha])[0] for sha in resolved]
+    if not title:
+        title = subjects[0]
+    return {
+        "repository": config.source_repository,
+        "commits": resolved,
+        "subjects": subjects,
+        "title": title,
+        "url": source_url,
+        "input": {"commits": list(commits), "range": commit_range, "pull_request": pull_request},
+    }
+
+
+def _parse_name_status(lines: Iterable[str]) -> list[dict[str, str]]:
+    changes: list[dict[str, str]] = []
+    for line in lines:
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        status = parts[0]
+        if status.startswith(("R", "C")) and len(parts) >= 3:
+            changes.append({"status": status, "path": parts[1], "new_path": parts[2]})
+        else:
+            changes.append({"status": status, "path": parts[-1]})
+    return changes
+
+
+def _feature_changes(cache: Path, commits: Sequence[str]) -> list[dict[str, str]]:
+    changes: list[dict[str, str]] = []
+    for commit in commits:
+        changes.extend(_parse_name_status(_git_lines(
+            cache, ["diff-tree", "--root", "--no-commit-id", "--name-status", "-r", "-M", commit],
+        )))
+    unique: dict[tuple[str, str, str], dict[str, str]] = {}
+    for change in changes:
+        key = (change["status"], change["path"], change.get("new_path", ""))
+        unique[key] = change
+    return list(unique.values())
+
+
+def _commit_presence(cache: Path, target_ref: str, commit: str) -> str:
+    ancestor = _run(["git", "merge-base", "--is-ancestor", commit, target_ref], cwd=cache)
+    if ancestor.returncode == 0:
+        return "present"
+    cherry = _run(["git", "cherry", target_ref, commit], cwd=cache)
+    for line in cherry.stdout.splitlines():
+        if line.rstrip().endswith(commit):
+            return "patch-equivalent" if line.startswith("-") else "missing"
+    return "missing"
+
+
+def _target_custom_changes(cache: Path, source_ref: str, target_ref: str, manifest: dict[str, Any]) -> list[dict[str, str]]:
+    base = _run(["git", "merge-base", source_ref, target_ref], cwd=cache)
+    if base.returncode == 0 and base.stdout.strip():
+        start = base.stdout.strip()
+    else:
+        start = str((manifest.get("fork") or {}).get("source_sha") or "")
+        if not start or _run(["git", "cat-file", "-e", f"{start}^{{commit}}"], cwd=cache).returncode:
+            return []
+    return _parse_name_status(_git_lines(cache, ["diff", "--name-status", "-M", start, target_ref]))
+
+
+def _open_pr_path_collisions(repository: str, candidate_paths: set[str]) -> list[dict[str, Any]]:
+    if "://" in repository or repository.startswith("git@"):
+        return []
+    try:
+        rows = _gh_json(["pr", "list", "-R", repository, "--state", "open", "--limit", "30", "--json", "number,title,url"])
+    except FleetError:
+        return []
+    collisions = []
+    for row in rows or []:
+        try:
+            detail = _gh_json(["pr", "view", str(row["number"]), "-R", repository, "--json", "files"])
+        except FleetError:
+            continue
+        paths = {str(item.get("path") or "") for item in detail.get("files", [])}
+        overlap = sorted(candidate_paths & paths)
+        if overlap:
+            collisions.append({"number": row["number"], "title": row.get("title"), "url": row.get("url"), "paths": overlap})
+    return collisions
+
+
+def _trial_cherry_pick(
+    cache: Path, target_ref: str, commits: Sequence[str], *, repo: RepositorySpec, config: FleetConfig,
+) -> dict[str, Any]:
+    if not commits:
+        return {"success": True, "status": "already-applied", "conflicted_paths": []}
+    for commit in commits:
+        fetch = _run(["git", "fetch", "upstream", commit], cwd=cache, timeout=300)
+        if fetch.returncode and _run(["git", "cat-file", "-e", f"{commit}^{{commit}}"], cwd=cache).returncode:
+            return {"success": False, "status": "commit-unavailable", "conflicted_paths": [], "error": fetch.stderr.strip()[:600]}
+    token = uuid.uuid4().hex[:10]
+    target = config.resolve(config.worktree_dir) / "preflight" / repo.slug / token
+    target.parent.mkdir(parents=True, exist_ok=True)
+    _run(["git", "worktree", "add", "--detach", str(target), target_ref], cwd=cache, check=True)
+    for commit in commits:
+        picked = _run(["git", "cherry-pick", "--no-commit", commit], cwd=target, timeout=300)
+        if picked.returncode:
+            conflicted = _run(["git", "diff", "--name-only", "--diff-filter=U"], cwd=target).stdout.splitlines()
+            return {
+                "success": False, "status": "conflict", "conflicted_paths": conflicted,
+                "diagnostic_worktree": str(target), "error": (picked.stderr or picked.stdout).strip()[:1200],
+            }
+    _run(["git", "worktree", "remove", "--force", str(target)], cwd=cache, timeout=120, check=True)
+    return {"success": True, "status": "clean", "conflicted_paths": []}
+
+
+def _slug(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")[:40] or "feature"
+
+
+def _plan_path(config: FleetConfig, plan_id: str) -> Path:
+    return config.resolve(config.plan_dir) / f"{plan_id}.json"
+
+
+def _feature_plan_id(payload: dict[str, Any]) -> str:
+    keys = (
+        "schema_version", "generated_at", "source", "feature_slug", "squash",
+        "candidate_changes", "candidate_capabilities", "filters", "discovery_errors", "targets",
+    )
+    core = {key: payload[key] for key in keys}
+    return hashlib.sha256(
+        json.dumps(core, sort_keys=True, separators=(",", ":")).encode("utf-8"),
+    ).hexdigest()[:16]
+
+
+def plan_feature_shipping(
+    *, commits: Sequence[str] = (), commit_range: str = "", pull_request: str = "",
+    include: Sequence[str] = (), exclude: Sequence[str] = (), squash: bool = False,
+    config_path: Path | str = DEFAULT_CONFIG, write_report: bool = True,
+) -> dict[str, Any]:
+    """Build a compatibility plan without changing any fork remote."""
+    config = load_config(config_path)
+    source = resolve_feature_commits(
+        commits=commits, commit_range=commit_range, pull_request=pull_request,
+        config_path=config_path,
+    )
+    source_cache = _ensure_source_cache(config)
+    changes = _feature_changes(source_cache, source["commits"])
+    candidate_paths = {change["path"] for change in changes} | {
+        change["new_path"] for change in changes if change.get("new_path")
+    }
+    candidate_capabilities = _capability_summary(changes)
+    wanted = {value.casefold() for value in include}
+    omitted = {value.casefold() for value in exclude}
+    repos, discovery_errors = discover_repositories(config)
+    targets: list[dict[str, Any]] = []
+    for repo in repos:
+        if wanted and repo.repository.casefold() not in wanted:
+            continue
+        if repo.repository.casefold() in omitted:
+            continue
+        try:
+            cache = _ensure_cache(repo, config)
+            target_ref = f"origin/{repo.default_branch}"
+            source_ref = f"upstream/{config.default_branch}"
+            for commit in source["commits"]:
+                _run(["git", "fetch", "upstream", commit], cwd=cache, timeout=300)
+            target_sha = _git_lines(cache, ["rev-parse", target_ref])[0]
+            source_sha = _git_lines(cache, ["rev-parse", source_ref])[0]
+            manifest = _manifest(cache, target_ref)
+            presence = {commit: _commit_presence(cache, target_ref, commit) for commit in source["commits"]}
+            remaining = [commit for commit, state in presence.items() if state == "missing"]
+            custom_changes = _target_custom_changes(cache, source_ref, target_ref, manifest)
+            custom_paths = {item["path"] for item in custom_changes} | {
+                item["new_path"] for item in custom_changes if item.get("new_path")
+            }
+            collisions: list[dict[str, Any]] = []
+            overlap = sorted(candidate_paths & custom_paths)
+            if overlap:
+                collisions.append({"type": "fork-path-overlap", "severity": "warning", "paths": overlap})
+            custom_capabilities = _capability_summary(custom_changes)
+            capability_overlap = {
+                key: sorted(set(candidate_capabilities.get(key, ())) & set(custom_capabilities.get(key, ())))
+                for key in CAPABILITY_ROOTS
+            }
+            capability_overlap = {key: values for key, values in capability_overlap.items() if values}
+            if capability_overlap:
+                collisions.append({"type": "capability-overlap", "severity": "warning", "capabilities": capability_overlap})
+            selection = manifest.get("selection", {}) if isinstance(manifest, dict) else {}
+            excluded = {}
+            for key in ("apps", "workflows", "skills"):
+                selected = selection.get(key)
+                if isinstance(selected, list):
+                    missing_selected = sorted(set(candidate_capabilities.get(key, ())) - {str(value) for value in selected})
+                    if missing_selected:
+                        excluded[key] = missing_selected
+            if excluded:
+                collisions.append({"type": "manifest-exclusion", "severity": "blocking", "capabilities": excluded})
+            pr_collisions = _open_pr_path_collisions(repo.repository, candidate_paths)
+            if pr_collisions:
+                collisions.append({"type": "open-pr-overlap", "severity": "warning", "pull_requests": pr_collisions})
+            trial = _trial_cherry_pick(cache, target_ref, remaining, repo=repo, config=config)
+            if not trial["success"]:
+                collisions.append({
+                    "type": "trial-cherry-pick", "severity": "blocking",
+                    "paths": trial.get("conflicted_paths", []), "detail": trial.get("error", ""),
+                    "diagnostic_worktree": trial.get("diagnostic_worktree", ""),
+                })
+            if not remaining:
+                status = "already-applied"
+            elif any(item["severity"] == "blocking" for item in collisions):
+                status = "blocked"
+            elif collisions:
+                status = "compatible-with-warnings"
+            else:
+                status = "compatible"
+            targets.append({
+                "repository": repo.repository, "default_branch": repo.default_branch,
+                "target_sha": target_sha, "source_sha": source_sha, "status": status,
+                "mergeable": status in {"compatible", "compatible-with-warnings"},
+                "commit_presence": presence, "commits_to_apply": remaining,
+                "drift": {
+                    "missing_upstream_commits": _git_count(cache, f"{target_ref}..{source_ref}"),
+                    "fork_only_commits": _git_count(cache, f"{source_ref}..{target_ref}"),
+                    "custom_paths": sorted(custom_paths),
+                },
+                "collisions": collisions, "trial": trial,
+                "references": _repo_links(repo, {}),
+            })
+        except (FleetError, OSError, subprocess.SubprocessError) as exc:
+            targets.append({
+                "repository": repo.repository, "default_branch": repo.default_branch,
+                "status": "unavailable", "mergeable": False, "error": str(exc)[:1000],
+                "references": _repo_links(repo, {}),
+            })
+    generated_at = datetime.now().astimezone().isoformat()
+    core = {
+        "schema_version": 1, "generated_at": generated_at,
+        "source": source, "feature_slug": _slug(source["title"]), "squash": squash,
+        "candidate_changes": changes, "candidate_capabilities": candidate_capabilities,
+        "filters": {"include": list(include), "exclude": list(exclude)},
+        "discovery_errors": discovery_errors, "targets": targets,
+    }
+    plan_id = _feature_plan_id(core)
+    report = {**core, "plan_id": plan_id}
+    report["summary"] = {
+        "total": len(targets),
+        "compatible": sum(row.get("status") == "compatible" for row in targets),
+        "warnings": sum(row.get("status") == "compatible-with-warnings" for row in targets),
+        "blocked": sum(row.get("status") == "blocked" for row in targets),
+        "already_applied": sum(row.get("status") == "already-applied" for row in targets),
+        "unavailable": sum(row.get("status") == "unavailable" for row in targets),
+    }
+    if write_report:
+        path = _plan_path(config, plan_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+        os.replace(temporary, path)
+        report["plan_path"] = str(path)
+    return report
+
+
+def load_feature_plan(plan: str, *, config_path: Path | str = DEFAULT_CONFIG) -> dict[str, Any]:
+    config = load_config(config_path)
+    candidate = Path(plan)
+    path = candidate.resolve() if candidate.exists() else _plan_path(config, plan)
+    if not path.exists():
+        raise FleetError(f"feature plan not found: {plan}")
+    plan_root = config.resolve(config.plan_dir)
+    if path.parent != plan_root:
+        raise FleetError(f"feature plan must be persisted under {plan_root}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise FleetError(f"feature plan is unreadable: {path}") from exc
+    if payload.get("plan_id") != path.stem:
+        raise FleetError("feature plan id does not match its persisted filename")
+    try:
+        expected = _feature_plan_id(payload)
+    except KeyError as exc:
+        raise FleetError(f"feature plan is missing integrity field: {exc.args[0]}") from exc
+    if payload.get("plan_id") != expected:
+        raise FleetError("feature plan integrity check failed; generate a new plan")
+    payload["plan_path"] = str(path.resolve())
+    return payload
+
+
+def _infer_test_paths(worktree: Path, changes: Sequence[dict[str, str]]) -> list[str]:
+    targets: list[str] = []
+    for change in changes:
+        path = str(change.get("new_path") or change.get("path") or "")
+        parts = path.split("/")
+        if len(parts) < 2 or parts[0] not in {"apps", "workflows"}:
+            continue
+        candidate = Path(parts[0]) / parts[1] / "tests"
+        if (worktree / candidate).is_dir() and candidate.as_posix() not in targets:
+            targets.append(candidate.as_posix())
+    return targets
+
+
+def _test_stage(executable: str, path: Path, targets: Sequence[str], *, label: str) -> dict[str, Any]:
+    if label == "targeted" and not targets:
+        return {"stage": label, "success": True, "skipped": True, "reason": "no component test paths inferred"}
+    args = list(targets) if targets else ["-q"]
+    result = _run([executable, "-m", "pytest", *args], cwd=path, timeout=3600)
+    return {
+        "stage": label, "success": result.returncode == 0,
+        "command": ["python", "-m", "pytest", *args],
+        "output": (result.stdout + result.stderr)[-10000:],
+    }
+
+
+def _apply_feature_commits(path: Path, commits: Sequence[str], *, squash: bool, feature_title: str) -> dict[str, Any]:
+    if not commits:
+        return {"success": True, "commits": [], "status": "already-applied"}
+    for commit in commits:
+        args = ["git", "cherry-pick"]
+        if squash:
+            args.append("--no-commit")
+        args.append(commit)
+        result = _run(args, cwd=path, timeout=300)
+        if result.returncode:
+            conflicted = _run(["git", "diff", "--name-only", "--diff-filter=U"], cwd=path).stdout.splitlines()
+            return {
+                "success": False, "status": "conflict", "commit": commit,
+                "conflicted_paths": conflicted, "error": (result.stderr or result.stdout).strip()[:1200],
+            }
+    if squash:
+        committed = _run(["git", "commit", "-m", f"feat: {feature_title}"], cwd=path, timeout=300)
+        if committed.returncode:
+            return {"success": False, "status": "commit-failed", "error": (committed.stderr or committed.stdout).strip()[:1200]}
+    return {"success": True, "status": "applied", "commits": list(commits), "squash": squash}
+
+
+def ship_feature_plan(
+    plan: str, *, approval: str, repositories: Sequence[str] = (),
+    test_paths: Sequence[str] = (), deploy_roles: dict[str, str] | None = None,
+    direct_main: Sequence[str] = (), direct_main_confirmation: str = "",
+    config_path: Path | str = DEFAULT_CONFIG, write_report: bool = True,
+) -> dict[str, Any]:
+    """Execute an approved plan, isolating failures and revalidating every target SHA."""
+    payload = load_feature_plan(plan, config_path=config_path)
+    plan_id = str(payload.get("plan_id") or "")
+    if not plan_id or approval != plan_id:
+        raise FleetError("approval must exactly match the persisted plan_id")
+    selected = {value.casefold() for value in repositories}
+    direct = {value.casefold() for value in direct_main}
+    if direct and direct_main_confirmation != f"DIRECT-MAIN:{plan_id}":
+        raise FleetError(f"direct-main delivery requires confirmation DIRECT-MAIN:{plan_id}")
+    if direct and (not selected or not direct.issubset(selected)):
+        raise FleetError("direct-main repositories must be explicitly included in the rollout repository list")
+    config = load_config(config_path)
+    deploy_roles = {key.casefold(): value for key, value in (deploy_roles or {}).items()}
+    invalid_roles = {role for role in deploy_roles.values() if role not in {"host", "worker"}}
+    if invalid_roles:
+        raise FleetError("deploy roles must be host or worker")
+    results: list[dict[str, Any]] = []
+    for target in payload.get("targets", []):
+        repository = str(target.get("repository") or "")
+        key = repository.casefold()
+        if selected and key not in selected:
+            continue
+        if target.get("status") not in {"compatible", "compatible-with-warnings"}:
+            results.append({"repository": repository, "status": "skipped", "reason": target.get("status")})
+            continue
+        try:
+            repo = _registered_repo(repository, config)
+            cache = _ensure_cache(repo, config)
+            target_ref = f"origin/{repo.default_branch}"
+            current_sha = _git_lines(cache, ["rev-parse", target_ref])[0]
+            if current_sha != target.get("target_sha"):
+                results.append({
+                    "repository": repository, "status": "stale-plan",
+                    "planned_sha": target.get("target_sha"), "current_sha": current_sha,
+                })
+                continue
+            for commit in target.get("commits_to_apply", []):
+                fetched = _run(["git", "fetch", "upstream", commit], cwd=cache, timeout=300)
+                if fetched.returncode and _run(["git", "cat-file", "-e", f"{commit}^{{commit}}"], cwd=cache).returncode:
+                    raise FleetError(f"planned commit is no longer fetchable: {commit}")
+            branch = f"fleet/{payload['feature_slug']}-{payload['source']['commits'][-1][:8]}"
+            worktree = create_worktree(repository, branch, config_path=config_path)
+            path = Path(worktree["path"])
+            outcome: dict[str, Any] = {
+                **worktree, "plan_id": plan_id, "status": "created",
+                "direct_main": key in direct,
+            }
+            applied = _apply_feature_commits(
+                path, target.get("commits_to_apply", []), squash=bool(payload.get("squash")),
+                feature_title=str(payload["source"].get("title") or payload["feature_slug"]),
+            )
+            outcome["apply"] = applied
+            if not applied["success"]:
+                outcome["status"] = applied["status"]
+                results.append(outcome)
+                continue
+            executable = _python_for(repo, path)
+            targeted = list(test_paths) or _infer_test_paths(path, payload.get("candidate_changes", []))
+            targeted_result = _test_stage(executable, path, targeted, label="targeted")
+            outcome["targeted_tests"] = targeted_result
+            if not targeted_result["success"]:
+                outcome["status"] = "targeted-tests-failed"
+                results.append(outcome)
+                continue
+            full_result = _test_stage(executable, path, (), label="full")
+            outcome["full_tests"] = full_result
+            if not full_result["success"]:
+                outcome["status"] = "full-tests-failed"
+                results.append(outcome)
+                continue
+            if key in deploy_roles:
+                deployed = _run([executable, "scripts/deploy.py", "--role", deploy_roles[key]], cwd=path, timeout=3600)
+                outcome["deployment"] = {
+                    "role": deploy_roles[key], "success": deployed.returncode == 0,
+                    "output": (deployed.stdout + deployed.stderr)[-10000:],
+                }
+                if deployed.returncode:
+                    outcome["status"] = "deploy-failed"
+                    results.append(outcome)
+                    continue
+            _run(["git", "fetch", "origin", repo.default_branch], cwd=cache, timeout=300, check=True)
+            latest_sha = _git_lines(cache, ["rev-parse", target_ref])[0]
+            if latest_sha != current_sha:
+                outcome.update(status="stale-before-publish", current_sha=latest_sha)
+                results.append(outcome)
+                continue
+            if key in direct:
+                pushed = _run(["git", "push", "origin", f"HEAD:refs/heads/{repo.default_branch}"], cwd=path, timeout=600)
+                outcome["push"] = {"success": pushed.returncode == 0, "output": (pushed.stderr or pushed.stdout).strip()[-1200:]}
+                outcome["status"] = "direct-main-pushed" if pushed.returncode == 0 else "push-failed"
+            else:
+                pushed = _run(["git", "push", "--set-upstream", "origin", branch], cwd=path, timeout=600)
+                outcome["push"] = {"success": pushed.returncode == 0, "output": (pushed.stderr or pushed.stdout).strip()[-1200:]}
+                if pushed.returncode:
+                    outcome["status"] = "push-failed"
+                    results.append(outcome)
+                    continue
+                body = (
+                    f"Fleet rollout plan `{plan_id}`\n\n"
+                    f"Source: {payload['source'].get('url') or payload['source']['repository']}\n\n"
+                    "Targeted and full regression tests passed before publication. "
+                    "This PR remains draft until GitHub CI is reviewed and explicitly promoted."
+                )
+                pr = _run([
+                    "gh", "pr", "create", "--draft", "--repo", repository,
+                    "--head", branch, "--base", repo.default_branch,
+                    "--title", str(payload["source"]["title"]), "--body", body,
+                ], cwd=path, timeout=180)
+                outcome["pull_request"] = {
+                    "success": pr.returncode == 0, "url": pr.stdout.strip(), "error": pr.stderr.strip(), "draft": True,
+                }
+                outcome["status"] = "draft-pr-created" if pr.returncode == 0 else "pr-failed"
+            results.append(outcome)
+        except (FleetError, OSError, subprocess.SubprocessError) as exc:
+            results.append({"repository": repository, "status": "error", "error": str(exc)[:1200]})
+    report = {
+        "schema_version": 1, "generated_at": datetime.now().astimezone().isoformat(),
+        "plan_id": plan_id, "source": payload.get("source", {}), "results": results,
+        "summary": {
+            "total": len(results),
+            "draft_prs": sum(row.get("status") == "draft-pr-created" for row in results),
+            "direct_main": sum(row.get("status") == "direct-main-pushed" for row in results),
+            "failed": sum(row.get("status") in {
+                "conflict", "targeted-tests-failed", "full-tests-failed", "deploy-failed",
+                "push-failed", "pr-failed", "error", "stale-plan", "stale-before-publish",
+            } for row in results),
+            "skipped": sum(row.get("status") == "skipped" for row in results),
+        },
+    }
+    if write_report:
+        rollout_dir = config.resolve(config.plan_dir).parent / "rollouts"
+        rollout_dir.mkdir(parents=True, exist_ok=True)
+        path = rollout_dir / f"{plan_id}-{datetime.now():%Y%m%d-%H%M%S}.json"
+        path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+        report["report_path"] = str(path)
+    return report
+
+
+def promote_feature_pull_request(
+    repository: str, pull_request: int, *, approval: str,
+) -> dict[str, Any]:
+    """Mark a fleet PR ready only after every reported GitHub check succeeds."""
+    expected = f"READY:{repository}#{pull_request}"
+    if approval != expected:
+        raise FleetError(f"PR promotion requires confirmation {expected}")
+    payload = _gh_json([
+        "pr", "view", str(pull_request), "-R", repository,
+        "--json", "url,isDraft,mergeStateStatus,statusCheckRollup",
+    ])
+    if not payload.get("isDraft"):
+        return {"repository": repository, "pull_request": pull_request, "status": "already-ready", "url": payload.get("url")}
+    if str(payload.get("mergeStateStatus") or "").upper() in {"DIRTY", "BLOCKED"}:
+        raise FleetError("PR is conflicted or blocked")
+    checks = payload.get("statusCheckRollup") or []
+    if not checks:
+        raise FleetError("PR has no GitHub checks to verify")
+    incomplete = []
+    for check in checks:
+        status = str(check.get("status") or "").upper()
+        conclusion = str(check.get("conclusion") or check.get("state") or "").upper()
+        if status not in {"COMPLETED", ""} or conclusion not in {"SUCCESS", "NEUTRAL", "SKIPPED"}:
+            incomplete.append(str(check.get("name") or check.get("context") or "unnamed check"))
+    if incomplete:
+        raise FleetError("PR checks are not successful: " + ", ".join(incomplete))
+    ready = _run(["gh", "pr", "ready", str(pull_request), "-R", repository], timeout=180)
+    if ready.returncode:
+        raise FleetError((ready.stderr or ready.stdout).strip()[:800])
+    return {"repository": repository, "pull_request": pull_request, "status": "ready", "url": payload.get("url")}
 
 
 def shell_preview(command: Sequence[str]) -> str:

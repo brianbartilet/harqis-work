@@ -25,3 +25,7 @@ accepts independent derivatives when their default branch contains
 `fork-manifest.toml`. Legacy fresh-history derivatives can also be recognized
 when their README explicitly references `harqis-work` or the configured source
 repository. Manual repositories without detectable lineage must be registered.
+
+Persisted candidate plans use `fleet.plan_dir` (default
+`.harqis-data/fork-fleet/plans`). Rollout reports are written beside that directory under
+`.harqis-data/fork-fleet/rollouts`. These paths must remain ignored runtime data.

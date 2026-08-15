@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ship Features to Forks"
+  short_description: "Plan and safely ship changes across managed forks"
+  default_prompt: "Use $ship-feature-to-forks to plan compatibility and ship selected commits across my managed forks."

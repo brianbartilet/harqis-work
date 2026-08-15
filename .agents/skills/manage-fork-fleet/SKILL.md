@@ -32,7 +32,14 @@ python .agents/skills/manage-fork-fleet/scripts/fork_fleet.py test `
   --repository owner/fork --branch main --test-path tests/path
 python .agents/skills/manage-fork-fleet/scripts/fork_fleet.py deploy `
   --repository owner/fork --branch feature/topic --role host
+python .agents/skills/manage-fork-fleet/scripts/fork_fleet.py plan --commit <sha>
+python .agents/skills/manage-fork-fleet/scripts/fork_fleet.py ship `
+  --plan <plan-id> --approve <plan-id> --repository owner/fork
 ```
+
+Use `ship-feature-to-forks` for multi-fork candidate compatibility and rollout. Its
+persisted plan ID, stale-target revalidation, test gates, draft PR default, direct-main
+confirmation, and rollout HFL audit are mandatory; do not reproduce those decisions ad hoc.
 
 Add `--publish-pr --pr-title ... --pr-body ...` to `sync` only after the user
 explicitly requests publication. Repeat `sync` per fork so every target receives

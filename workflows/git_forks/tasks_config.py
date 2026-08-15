@@ -1,4 +1,4 @@
-"""Weekly schedule for read-only fork drift analysis and HFL reporting."""
+"""Weekly schedule for read-only fork drift/readiness analysis and HFL reporting."""
 
 from celery.schedules import crontab
 

@@ -39,13 +39,14 @@ of truth.
 | `/radar-sold-inventory` | Cross-reference sold TCG orders with inventory and radar data. |
 | `/replay-expired-celery-tasks` | Reconstruct, review, and safely replay missed Celery Beat executions that expired before a worker consumed them. |
 | `/run-tests` | Run app-specific, targeted, or full pytest suites using repository conventions. |
+| `/ship-feature-to-forks` | Plan compatibility for a SHA, range, or PR across managed forks, then test, deploy, audit, and publish an explicitly approved rollout. |
 | `/sync-host` | Preflight and synchronize configured local files to a remote HARQIS checkout over SSH. |
 | `/time-capsule-synthesizer` | Synthesize a set of files into one period-based HFL time-capsule entry. |
 | `/update-docs` | Audit documentation against current code and apply the smallest accurate corrections. |
 | `/workflow-token-audit` | Estimate scheduled workflow API calls, model/token exposure, embedding usage, and cost drivers. |
 | `/zapier-mcp` | Search, enable, and wire Zapier MCP actions into workflows or direct agent use. |
 
-**Current canonical count: 31 skills.** The count is derived from directories
+**Current canonical count: 32 skills.** The count is derived from directories
 containing `.agents/skills/*/SKILL.md`; cache or generated directories do not
 count.
 
@@ -60,6 +61,7 @@ count.
 | Add an Activity Corpus source | `/create-new-ingest-source-hfl` |
 | Capture a prompt audit event | `/capture-hfl-session` |
 | Govern harqis-work forks | `/manage-fork-fleet` |
+| Ship a feature across forks | `/ship-feature-to-forks` |
 | Validate changes | `/run-tests` |
 | Refresh documentation | `/update-docs` |
 | Commit completed work | `/commit` |

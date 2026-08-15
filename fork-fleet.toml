@@ -6,6 +6,7 @@ github_owners = ["brianbartilet"]
 report_path = ".harqis-data/fork-fleet/latest.json"
 cache_dir = ".harqis-data/fork-fleet/repos"
 worktree_dir = ".harqis-data/fork-fleet/worktrees"
+plan_dir = ".harqis-data/fork-fleet/plans"
 
 # Explicit repositories are authoritative. GitHub discovery supplements this
 # list and detects conventional forks plus repositories carrying

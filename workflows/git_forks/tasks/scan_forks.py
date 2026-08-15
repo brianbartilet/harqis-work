@@ -1,4 +1,4 @@
-"""Weekly Git/GitHub fleet scan followed by per-fork HFL persistence."""
+"""Weekly Git/GitHub fleet drift/readiness scan with per-fork HFL persistence."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ _log = create_logger("git_forks.scan_forks")
 @SPROUT.task()
 @log_result()
 def scan_fork_fleet() -> dict:
-    """Scan every managed fork and write per-instance plus fleet HFL entries."""
+    """Scan managed-fork drift/readiness and write per-instance plus fleet HFL entries."""
     report = scan_fleet()
     report["hfl"] = persist_scan_entries(report)
     _log.info(

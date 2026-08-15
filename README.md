@@ -93,6 +93,7 @@ HARQIS-Work includes a reasoning-model agent layer that goes beyond scheduled ta
 | **HUD widget** — Rainmeter desktop display fed by an app or workflow | `/create-new-hud <title> <description_or_screenshot>` |
 | **HUD fallback twin** — keep a HUD task's `@feed`/ES logs flowing on the always-on host when the Windows box is offline | `/create-data-only-from-hud <task_fn>` |
 | **Fork fleet governance** — inspect drift, cherry-pick changes, test, deploy, and publish reviewed PRs across harqis-work forks | `/manage-fork-fleet` |
+| **Fork feature shipping** — preflight a SHA/range/PR across all managed forks, then test and publish an explicitly approved rollout | `/ship-feature-to-forks` |
 
 Re-run `/generate-registry` after a workflow or HUD task lands so the dashboard picks it up. See [`docs/info/SKILLS-INVENTORY.md`](docs/info/SKILLS-INVENTORY.md) for every skill (operations, deploy, agent profiles, Zapier wiring, commits, tests).
 

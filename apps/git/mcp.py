@@ -113,6 +113,56 @@ def register_git_tools(mcp: FastMCP):
         return deploy_fork(repository, branch=branch, role=role)
 
     @mcp.tool()
+    def fork_feature_plan(
+        commits: Optional[list[str]] = None,
+        commit_range: str = "",
+        pull_request: str = "",
+        include: Optional[list[str]] = None,
+        exclude: Optional[list[str]] = None,
+        squash: bool = False,
+    ) -> dict:
+        """Persist a read-only compatibility plan for commits, a range, or a source PR."""
+        from apps.git.fleet import plan_feature_shipping
+
+        return plan_feature_shipping(
+            commits=commits or (), commit_range=commit_range,
+            pull_request=pull_request, include=include or (), exclude=exclude or (),
+            squash=squash,
+        )
+
+    @mcp.tool()
+    def fork_feature_ship(
+        plan: str,
+        approval: str,
+        repositories: Optional[list[str]] = None,
+        test_paths: Optional[list[str]] = None,
+        deploy_roles: Optional[dict[str, str]] = None,
+        direct_main: Optional[list[str]] = None,
+        direct_main_confirmation: str = "",
+        write_hfl: bool = True,
+    ) -> dict:
+        """Execute an approved plan, then audit every fork outcome; never force-pushes."""
+        from apps.git.fleet import ship_feature_plan
+
+        report = ship_feature_plan(
+            plan, approval=approval, repositories=repositories or (),
+            test_paths=test_paths or (), deploy_roles=deploy_roles or {},
+            direct_main=direct_main or (),
+            direct_main_confirmation=direct_main_confirmation,
+        )
+        if write_hfl:
+            from workflows.git_forks.hfl import persist_rollout_entries
+            report["hfl"] = persist_rollout_entries(report)
+        return report
+
+    @mcp.tool()
+    def fork_feature_promote_pr(repository: str, pull_request: int, approval: str) -> dict:
+        """Promote a draft fleet PR only after GitHub checks succeed and approval matches."""
+        from apps.git.fleet import promote_feature_pull_request
+
+        return promote_feature_pull_request(repository, pull_request, approval=approval)
+
+    @mcp.tool()
     def git_status(path: str = ".") -> dict:
         """Get the working tree status of a git repository.
 
