@@ -50,6 +50,69 @@ def _run(args: list[str], cwd: Optional[str] = None, timeout: int = 60) -> dict:
 def register_git_tools(mcp: FastMCP):
 
     @mcp.tool()
+    def fork_fleet_scan() -> dict:
+        """Discover and compare every managed harqis-work fork without HFL writes."""
+        from apps.git.fleet import scan_fleet
+
+        return scan_fleet()
+
+    @mcp.tool()
+    def fork_fleet_write_hfl_scan() -> dict:
+        """Scan the fleet and write one HFL entry per fork plus a fleet summary."""
+        from apps.git.fleet import scan_fleet
+        from workflows.git_forks.hfl import persist_scan_entries
+
+        report = scan_fleet()
+        report["hfl"] = persist_scan_entries(report)
+        return report
+
+    @mcp.tool()
+    def fork_fleet_latest() -> dict:
+        """Return the latest persisted fork drift report without fetching remotes."""
+        from apps.git.fleet import load_latest_report
+
+        return load_latest_report()
+
+    @mcp.tool()
+    def fork_fleet_sync(
+        repository: str,
+        commits: list[str],
+        branch: str,
+        test_paths: Optional[list[str]] = None,
+        publish_pr: bool = False,
+        pr_title: str = "",
+        pr_body: str = "",
+    ) -> dict:
+        """Cherry-pick commits in an isolated fork worktree, test, push, and optionally create a PR.
+
+        This never force-pushes, directly merges, or auto-resolves conflicts.
+        """
+        from apps.git.fleet import cherry_pick_to_worktree
+
+        return cherry_pick_to_worktree(
+            repository, commits, branch=branch, test_paths=test_paths or (),
+            publish_pr=publish_pr, pr_title=pr_title, pr_body=pr_body,
+        )
+
+    @mcp.tool()
+    def fork_fleet_test(
+        repository: str,
+        branch: str = "main",
+        test_paths: Optional[list[str]] = None,
+    ) -> dict:
+        """Run a fork's regression suite or selected paths in an isolated worktree."""
+        from apps.git.fleet import run_fork_tests
+
+        return run_fork_tests(repository, branch=branch, test_paths=test_paths or ())
+
+    @mcp.tool()
+    def fork_fleet_deploy(repository: str, branch: str, role: str = "host") -> dict:
+        """Deploy a fork branch locally from an isolated worktree using its configuration."""
+        from apps.git.fleet import deploy_fork
+
+        return deploy_fork(repository, branch=branch, role=role)
+
+    @mcp.tool()
     def git_status(path: str = ".") -> dict:
         """Get the working tree status of a git repository.
 

@@ -13,6 +13,10 @@ run through the installed `git` CLI and return structured command results.
 | `git_commit` | Create a commit from explicitly selected repository state. |
 | `git_clone` | Clone a remote repository. |
 | `git_show_file` | Read a file at a Git ref. |
+| `fork_fleet_scan`, `fork_fleet_latest` | Discover forks and inspect commit, patch, capability, branch, PR, and CI drift without HFL writes. |
+| `fork_fleet_write_hfl_scan` | Scan and persist one source `git`, tag `git-forks` HFL entry per fork plus a fleet summary. |
+| `fork_fleet_sync` | Cherry-pick selected commits in an isolated worktree, run tests, push, and optionally publish a PR. |
+| `fork_fleet_test`, `fork_fleet_deploy` | Run fork regression or deploy a fork branch from isolated worktrees using fork-local configuration. |
 
 Arguments are validated before they reach the CLI. Authentication, remotes,
 signing, and author identity come from the host's Git configuration. Mutating
@@ -21,3 +25,8 @@ and the intended branch.
 
 The tools are registered by `register_git_tools()` in `mcp/server.py`. No
 `apps_config.yaml` block is required.
+
+Fleet membership uses `fork-fleet.toml` plus ignored
+`fork-fleet.local.toml`; authenticated GitHub discovery supplements explicit
+entries. Runtime caches, reports, and worktrees stay below
+`.harqis-data/fork-fleet/`.

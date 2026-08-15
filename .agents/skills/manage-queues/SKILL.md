@@ -22,7 +22,7 @@ The argument `$ARGUMENTS` is a free-form action. Recognised forms:
 | `add <queue>` | Scaffold a new beat-schedule entry on the named queue. Asks the user for module path, schedule, kwargs. |
 | `audit` | Like `list`, plus flag any queue that has tasks but no consuming worker, and OS-mismatch routing. |
 
-`<queue>` is one of the values in `workflows/queues.py::WorkflowQueue` (`default`, `host`, `hud`, `tcg`, `adhoc`, `peon`, `agent`, `worker`, plus the `*_broadcast` fanout queues). `<task-pattern>` matches against the dotted module path (substring or exact).
+`<queue>` must be discovered from the current `workflows/queues.py::WorkflowQueue`; reduced forks may expose only `default` and `adhoc`, while optional capabilities add their own queues. `<task-pattern>` matches against the dotted module path (substring or exact).
 
 ## Source of truth
 

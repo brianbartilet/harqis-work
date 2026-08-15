@@ -112,7 +112,7 @@ Run this checklist every time:
 6. **Verify.** Run the moved script (or a path-resolution one-liner) to confirm `REPO_ROOT`
    still points at the repo root, and grep that no un-bucketed path survives:
    ```
-   python -c "from pathlib import Path; print(Path('scripts/agents/<bucket>/<name>.py').resolve().parents[3].name)"  # → harqis-work
+   python -c "from pathlib import Path; print(Path('scripts/agents/<bucket>/<name>.py').resolve().parents[3])"  # must equal `git rev-parse --show-toplevel`
    # expect NO hits at scripts/agents/<name> without a bucket:
    git grep -nE "scripts/agents/[a-z_]+[-a-z_]*\.(py|sh|ps1)" | grep -vE "scripts/agents/(repo-quality|learning|hfl|testing|diagnostics|dumps|fleet)/"
    ```

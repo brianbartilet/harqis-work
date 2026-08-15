@@ -90,8 +90,8 @@ Unless `--all` or a specific method list was given, ask the user to confirm the 
 
 ## Step 3 — Write / extend `apps/<app_name>/mcp.py`
 
-Match the existing app conventions exactly. Reference implementations: `apps/ynab/mcp.py`,
-`apps/tcg_mp/mcp.py`, `apps/scryfall/mcp.py`.
+Match the existing app conventions exactly. Prefer retained reference implementations such as
+`apps/trello/mcp.py`, `apps/github/mcp.py`, and `apps/google_apps/mcp.py`.
 
 If creating the file, use this skeleton:
 
@@ -124,8 +124,8 @@ def register_<app_name>_tools(mcp: FastMCP):
 
 When **extending** an existing `mcp.py`, add the new tools inside the existing
 `register_<app_name>_tools` function (don't create a second register function), add any new
-service imports, and group related tools with a short `# --- <section> ---` comment as in
-`apps/ynab/mcp.py`.
+service imports, and group related tools with a short `# --- <section> ---` comment used by
+existing retained apps.
 
 Every `@mcp.tool()` MUST have:
 - A descriptive docstring with an `Args:` section for every non-trivial parameter.
@@ -133,7 +133,7 @@ Every `@mcp.tool()` MUST have:
 - A defensive serialization of the return value: `list[dict]` (serialize DTOs via `.__dict__`)
   or `dict`. Never return a raw DTO/Response object.
 - For write tools that wrap a pass-through service method (body-in), build the API's body wrapper
-  in the tool (e.g. `{"transaction": {...}}`) — see `apps/ynab/mcp.py`.
+  in the tool according to the target API's documented request shape.
 
 **Naming:** `<verb>_<app_name>_<resource>` — verbs `get` / `list` / `search` / `create` /
 `update` / `delete` / `analyze`. Keep names unique across the whole server (they share one
@@ -167,7 +167,7 @@ Do not edit a second registry. Confirm `mcp/server.py` and
 
 Update (or add) the **## MCP Tools** section — a table of `tool name | description` covering the
 full current tool set (existing + new). Mark destructive tools. If amounts/IDs/date formats matter,
-add a one-line note (see `apps/ynab/README.md`). Keep it in sync with `mcp.py` exactly.
+add a one-line note. Keep it in sync with `mcp.py` exactly.
 
 ---
 
@@ -206,8 +206,8 @@ example prompts in italics, mirroring the existing app sections.
 ## Step 9 — Tests (optional but encouraged)
 
 If the app's `tests/` follow the live-integration pattern, add `@pytest.mark.smoke` tests for
-read-only new methods and `@pytest.mark.skip` tests for destructive ones (mirror the existing test
-files — e.g. `apps/ynab/tests/test_transactions.py`). Verify they at least collect:
+read-only new methods and `@pytest.mark.skip` tests for destructive ones (mirror a retained app's
+existing test files). Verify they at least collect:
 `python -m pytest apps/<app_name>/tests/ --collect-only -q`.
 
 ---
@@ -220,7 +220,7 @@ Print verbatim:
 CLI/MCP tools updated for <app_name>.
 Next steps:
   [ ] (if a catalog entry was added) restart / reconnect the MCP server
-  [ ] Reconnect in the active agent client: /mcp → harqis-work → Reconnect  (tool list is cached at connect)
+  [ ] Reconnect the current repository's MCP server in the active agent client (tool lists are cached)
   [ ] (if any new env var is needed) fill it in .env/apps.env
   [ ] verify lazy CLI discovery: python -m tools commands <app_name>
 ```

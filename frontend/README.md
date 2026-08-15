@@ -6,7 +6,7 @@ HTMX, Alpine.js, Tailwind CSS, and SortableJS. Production serves compiled,
 content-versioned assets from `/static/`; the generated files are committed so
 runtime deployment does not require Node.js.
 
-The frontend currently exposes six modules:
+The frontend currently exposes seven modules:
 
 | Module | Route | Purpose |
 |---|---|---|
@@ -16,6 +16,7 @@ The frontend currently exposes six modules:
 | Apps | `/applications` | Inventories `apps/*`, renders documentation, and runs controlled pytest checks using host configuration. |
 | Activity Corpus | `/hfl-corpus` | Browses and searches HARQIS activity logs, based on the Homework for Life reflection practice, and their references. |
 | Social | `/sharing` | Builds reviewed, immutable Activity Corpus snapshots and temporary guest portals. |
+| Git Forks | `/git-forks` | Maps fork drift and launches guarded synchronization, regression, and isolated deployment operations. |
 
 `/dashboard` remains as a compatibility redirect to `/home`.
 
@@ -109,6 +110,8 @@ frontend/
 │   │   ├── inventory.py
 │   │   ├── test_runner.py
 │   │   └── test_policy.toml
+│   ├── git_forks/
+│   │   └── router.py
 │   ├── hfl_corpus/
 │   │   ├── router.py
 │   │   └── corpus.py
@@ -130,6 +133,7 @@ frontend/
 │   │   ├── manifesto/
 │   │   ├── workflows/
 │   │   ├── applications/
+│   │   ├── git_forks/
 │   │   ├── hfl_corpus/
 │   │   └── hfl_shares/
 │   └── share_base.html            # Dependency-free guest portal shell
@@ -528,6 +532,11 @@ guidance is in
 | POST | `/applications/{app}/tests` | Start a safe, full, or file test run. |
 | GET | `/applications/test-runs/{id}` | Poll persisted/current test status. |
 | POST | `/applications/test-runs/{id}/cancel` | Cancel a queued/running test. |
+| GET | `/git-forks` | Latest fork fleet topology and drift report. |
+| POST | `/git-forks/scan` | Run hybrid fleet discovery and optionally write per-fork HFL entries. |
+| POST | `/git-forks/sync` | Cherry-pick, test, push, and optionally publish a fork PR from an isolated worktree. |
+| POST | `/git-forks/test` | Run a fork regression suite in an isolated worktree. |
+| POST | `/git-forks/deploy` | Deploy a fork branch locally from an isolated worktree. |
 | GET | `/hfl-corpus` | Corpus tree and filtered search. |
 | POST | `/hfl-corpus/entries/preview` | Validate and render a manual entry preview. |
 | POST | `/hfl-corpus/entries` | Persist a manual entry locally or through the canonical host. |

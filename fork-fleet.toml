@@ -1,0 +1,13 @@
+[fleet]
+source_repository = "brianbartilet/harqis-work"
+default_branch = "main"
+github_fallback = true
+github_owners = ["brianbartilet"]
+report_path = ".harqis-data/fork-fleet/latest.json"
+cache_dir = ".harqis-data/fork-fleet/repos"
+worktree_dir = ".harqis-data/fork-fleet/worktrees"
+
+# Explicit repositories are authoritative. GitHub discovery supplements this
+# list and detects conventional forks plus repositories carrying
+# fork-manifest.toml.
+repositories = []

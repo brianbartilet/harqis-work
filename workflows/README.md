@@ -25,6 +25,11 @@ an editing-machine broadcast push, a canonical host fast-forward pull, and a
 granular notes-to-Activity-Corpus ingest. This replaces treating an entire note
 repository as a generic daily dump.
 
+Fork fleet governance uses [`workflows/git_forks/`](git_forks/README.md). Its
+active weekly scan combines the committed registry with GitHub fallback
+discovery, writes the ignored machine-readable drift report, and submits one
+canonical HFL entry per fork instance plus a fleet summary.
+
 ### `manifesto` is stripped before Celery sees it
 
 `'manifesto'` is **our** metadata — it is **not** a Celery beat-schedule key and must never reach Celery. Celery's `ScheduleEntry.__init__` accepts only a fixed set of per-entry keys; anything else is a hard error. Hand a raw entry dict (with `manifesto`) to `SPROUT.conf.beat_schedule` and beat dies on **every** startup, before it can log or write a pidfile:

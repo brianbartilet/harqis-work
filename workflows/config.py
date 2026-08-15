@@ -30,6 +30,7 @@ from workflows.notes.tasks_config import WORKFLOW_NOTES
 from workflows.workers.tasks_config import WORKFLOW_WORKERS
 from workflows.testing.tasks_config import WORKFLOW_TESTING
 from workflows.tcg.tasks_config import WORKFLOW_TCG
+from workflows.git_forks.tasks_config import WORKFLOW_GIT_FORKS
 
 # Set Celery to use the same timezone settings as the Django project
 SPROUT.conf.enable_utc = USE_TZ
@@ -51,6 +52,7 @@ CONFIG_DICTIONARY = (
     | WORKFLOW_WORKERS
     | WORKFLOW_TESTING
     | WORKFLOW_TCG
+    | WORKFLOW_GIT_FORKS
 )
 
 # Celery's ScheduleEntry.__init__ only accepts these per-entry keys. Our

@@ -21,7 +21,7 @@ When this is a non-trivial implementation, do the work in an isolated git worktr
 
 | Token | Required | Description |
 |---|---|---|
-| `category` | Inferred or asked | Workflow category: `desktop`, `finance`, `hud`, `purchases`, `mobile`, or a new one. Infer from the task description; ask if ambiguous. |
+| `category` | Inferred or asked | An existing selected workflow category or a new category. Infer from the task description; ask if ambiguous. |
 | `task_description_or_diagram_path` | Yes | Free-text description of what the workflow should do, OR a path to a `.drawio`/`.xml` diagram file. |
 | `--merge <file>` | No | Append the new task function(s) to an existing task file, e.g. `--merge hud_finance.py`. |
 | `--new-file <name>` | No | Force creation of a new task file with this name. If neither `--merge` nor `--new-file` is given, infer from context or ask the user. |
@@ -32,7 +32,7 @@ When this is a non-trivial implementation, do the work in an isolated git worktr
 
 Before doing any implementation, collect the answers to these questions if they cannot be confidently inferred from `$ARGUMENTS`:
 
-1. **Category** — which workflow category? (`desktop`, `finance`, `hud`, `purchases`, `mobile`, new?)
+1. **Category** — which existing selected workflow category, or what new category?
 2. **Trigger** — how should this run? (schedule / on-demand / both)
 3. **Schedule** — how often? (crontab pattern, timedelta, or "manual only")
 4. **New file or merge** — add to an existing task file or create a new one?
@@ -91,12 +91,12 @@ Before writing code, read these files to understand conventions:
 ```
 workflows/.template/tasks/do_random.py        # minimal task pattern
 workflows/.template/tasks_config.py           # schedule dict pattern
-workflows/finance/tasks/parse_transaction.py  # multi-app RPA pattern with AI
-workflows/hud/tasks/hud_calendar.py           # decorator stack pattern
-workflows/hud/tasks_config.py                 # full schedule examples (crontab + kwargs + options)
 workflows/queues.py                           # WorkflowQueue enum
 workflows/config.py                           # how tasks_config dicts are merged
 ```
+
+Use only reference files that exist in the current repository. The baseline fork intentionally
+does not carry upstream business-specific workflow examples.
 
 Also scan the target category directory for existing tasks and imports to avoid duplication and match style:
 
@@ -141,16 +141,13 @@ For each package **not already listed** in `requirements.txt`, it is a candidate
 
 For each missing package, search PyPI to confirm the canonical package name and latest stable version:
 
-```bash
-.venv/bin/pip index versions <package_name> 2>/dev/null | head -5
-```
+Use the repository virtual-environment interpreter and run
+`<venv-python> -m pip index versions <package_name>`. Resolve `<venv-python>` as
+`.venv/Scripts/python.exe` on Windows or `.venv/bin/python` on macOS/Linux.
 
 If the exact name is uncertain (e.g. you know you need "yaml support" but don't know whether it's `pyyaml`, `ruamel.yaml`, etc.), run a keyword search:
 
-```bash
-.venv/bin/pip search <keyword> 2>/dev/null || \
-  curl -s "https://pypi.org/pypi/<package_name>/json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['info']['name'], d['info']['version'], d['info']['summary'])"
-```
+Use official PyPI project metadata or `pip index`; `pip search` is retired and must not be used.
 
 Pick the package that:
 1. Has the most direct name match to what the task needs
@@ -164,19 +161,19 @@ Tell the user which package you selected and why before installing.
 Install each confirmed package into the project's `.venv`:
 
 ```bash
-.venv/bin/pip install <package_name>
+<venv-python> -m pip install <package_name>
 ```
 
 For a specific version (use when `requirements.txt` style requires pinning):
 
 ```bash
-.venv/bin/pip install "<package_name>==<version>"
+<venv-python> -m pip install "<package_name>==<version>"
 ```
 
 Capture the installed version from pip's output or by running:
 
 ```bash
-.venv/bin/pip show <package_name> | grep -E "^(Name|Version):"
+<venv-python> -m pip show <package_name>
 ```
 
 If installation fails (conflict, missing system library, etc.), report the error to the user and propose an alternative package or ask how to proceed. Do **not** silently skip.
@@ -202,7 +199,7 @@ grep "<package_name>" requirements.txt
 After all packages are installed, run a quick import check inside the venv to confirm nothing is broken:
 
 ```bash
-.venv/bin/python -c "import <package_name>; print('ok')"
+<venv-python> -c "import <package_name>; print('ok')"
 ```
 
 If any import fails, diagnose and fix before continuing to Step 4.
@@ -314,7 +311,7 @@ def <task_name>(**kwargs):
 
 Decorators are applied bottom-up — `@SPROUT.task()` must be innermost (closest to the function).
 
-**For AI/agent steps:** load the prompt from `workflows/<category>/prompts/` (see Step 6). Use `apps.antropic.references.web.base_api_service.BaseApiServiceAnthropic` for the API call. Follow the pattern in `workflows/finance/tasks/parse_transaction.py`.
+**For AI/agent steps:** load the prompt from `workflows/<category>/prompts/` (see Step 6). Use the retained `apps.antropic` provider and its current service conventions; do not reference an upstream workflow that is absent from the fork.
 
 ---
 
@@ -328,7 +325,7 @@ This step is **mandatory** — without it the Celery worker logs `Received unreg
 cat workflows/<category>/__init__.py
 ```
 
-Compare against the established pattern in sibling packages (`workflows/desktop/__init__.py`, `workflows/hud/__init__.py`, `workflows/purchases/__init__.py`) — each one explicitly imports its task submodules.
+Compare against `workflows/.template/__init__.py` and any selected sibling package that exists.
 
 ### 5b-2 — Apply the right edit
 
@@ -336,7 +333,7 @@ Compare against the established pattern in sibling packages (`workflows/desktop/
 |---|---|
 | File missing or empty (new category from Step 4) | Create with the header comment + a single `import workflows.<category>.tasks.<module>` line |
 | File exists and already imports other task modules | **Append** a new `import workflows.<category>.tasks.<module>` line — do not rewrite existing imports |
-| File exists with platform-guarded imports (e.g. `if sys.platform == "win32":` like `workflows/hud/__init__.py`) | Add the new import inside the same guard if the task is platform-specific; otherwise add it above/below the guard at module top level |
+| File exists with platform-guarded imports | Add the new import inside the same guard if the task is platform-specific; otherwise add it at module top level |
 | New module is already imported (`--merge` into a file already registered) | Skip — no edit needed |
 
 Default template for a fresh category:
@@ -353,7 +350,7 @@ For `--merge` into an existing task file: only add the import if the **module pa
 After editing, confirm the module loads cleanly:
 
 ```bash
-.venv/bin/python -c "import workflows.<category>; print('ok')"
+<venv-python> -c "import workflows.<category>; print('ok')"
 ```
 
 If this raises an `ImportError`, fix it before continuing — the worker will fail the same way at startup.
@@ -363,7 +360,7 @@ If this raises an `ImportError`, fix it before continuing — the worker will fa
 Run a quick check that the decorated task is now registered under the dotted path the scheduler will use:
 
 ```bash
-.venv/bin/python -c "from core.apps.sprout.app.celery import SPROUT; import workflows.<category>; print('workflows.<category>.tasks.<module>.<task_name>' in SPROUT.tasks)"
+<venv-python> -c "from core.apps.sprout.app.celery import SPROUT; import workflows.<category>; print('workflows.<category>.tasks.<module>.<task_name>' in SPROUT.tasks)"
 ```
 
 It should print `True`. If it prints `False`, the import in `__init__.py` is wrong or the `@SPROUT.task()` decorator was not applied.
@@ -451,7 +448,7 @@ Disable tasks with **`#` line comments only** (as above) — never a `"""..."""`
 Infer the schedule and queue:
 - **timedelta** for sub-minute or short-interval tasks
 - **crontab** for hourly/daily/weekly tasks
-- Use `WorkflowQueue.HUD` for display tasks, `WorkflowQueue.TCG` for card/purchase tasks, `WorkflowQueue.DEFAULT` for everything else
+- Read `WorkflowQueue` at runtime and choose only a queue present in this fork. Use `DEFAULT` for general work and `ADHOC` for manual-only work unless the selected capability defines a more specific queue.
 
 If you cannot confidently infer the schedule, ask the user before writing the comment.
 
@@ -613,7 +610,7 @@ Print this at the end, filled in with the actual values:
 Workflow created. Manual steps to activate:
 
   Python packages (installed automatically in Step 3b — verify if needed):
-  [ ] Confirm packages are present: .venv/bin/pip show <pkg_1> <pkg_2>
+  [ ] Confirm packages are present: <venv-python> -m pip show <pkg_1> <pkg_2>
   [ ] Confirm requirements.txt updated with new entries
 
   Config & secrets:
@@ -625,7 +622,7 @@ Workflow created. Manual steps to activate:
 
   Task registration (already done by Step 5b — verify):
   [ ] workflows/<category>/__init__.py imports workflows.<category>.tasks.<module>
-  [ ] .venv/bin/python -c "from core.apps.sprout.app.celery import SPROUT; import workflows.<category>; print('workflows.<category>.tasks.<module>.<task_name>' in SPROUT.tasks)" prints True
+  [ ] <venv-python> -c "from core.apps.sprout.app.celery import SPROUT; import workflows.<category>; print('workflows.<category>.tasks.<module>.<task_name>' in SPROUT.tasks)" prints True
 
   Schedule activation:
   [ ] Review and uncomment the schedule in workflows/<category>/tasks_config.py
@@ -708,6 +705,7 @@ service_b.save(structured)
 | Queue | Use when |
 |---|---|
 | `WorkflowQueue.DEFAULT` | General background tasks, desktop operations |
-| `WorkflowQueue.HUD` | Tasks that push data to the Rainmeter desktop display |
-| `WorkflowQueue.TCG` | TCG card / purchase pipeline tasks |
 | `WorkflowQueue.ADHOC` | On-demand / manually triggered tasks |
+
+Discover any additional queue values from the current `workflows/queues.py`; never assume an
+upstream optional capability was copied.

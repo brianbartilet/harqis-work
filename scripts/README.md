@@ -16,7 +16,6 @@ Operational scripts for **harqis-work**, organised by purpose:
 |---|---|
 | [`launch.py`](#launchpy) | Single-process launcher — runs one daemon in the foreground (`worker`, `scheduler`, `flower`, `frontend`, `mcp`, `kanban`, `trigger-hud-tasks`, `push-config`, `serve-config`). |
 | [`deploy.py`](#deploypy) | Multi-daemon orchestrator — reads `machines.toml` from the repo root, brings the whole stack up/down, optionally registers OS auto-start units. |
-| [`setup_hfl_share_hermes.py`](#setup_hfl_share_hermespy) | Dry-run-first setup/check for a locked-down Hermes profile that serves Share Corpus Q&A through a connected Codex model. |
 | [`sync-to-host.ps1`](#sync-to-hostps1) | Push gitignored config (`.env/`, `frontend/.env`, `machines.local.toml`) to a remote checkout via `tar \| ssh`. Driven by the `[sync]` / `[ssh.*]` blocks in `machines.local.toml`. |
 | [`../machines.toml`](#machinestoml) | Per-machine topology (role, queue list, disabled services). Lives at the repo root so per-machine `machines.local.toml` overrides sit next to it. Auto-detected from hostname. |
 | [`tailscale/`](#tailscale) | Tailscale ACL policy. Unchanged. |
@@ -59,6 +58,7 @@ up from `scripts/agents/<bucket>/`).
 | [`capture_session_event.py`](#scriptsagentshflcapture_session_eventpy) | Normalizes, redacts, spools, and best-effort enqueues Codex/Claude/Hermes/OpenClaw prompt-outcome audit events. |
 | `capture_session_hook.ps1` | Fail-open Windows launcher that forwards Codex lifecycle-hook stdin to the repository capture entry point without inline-shell quoting. |
 | `capture_session_hook.sh` | Selects the repository Python interpreter across macOS/Linux/Windows shells for the Claude Code lifecycle hook. |
+| [`setup_hfl_share_hermes.py`](#scriptsagentshflsetup_hfl_share_hermespy) | Dry-run-first setup/check for a locked-down Hermes profile that serves Share Corpus Q&A through a connected Codex model. |
 
 ### `testing/` — test execution + reporting
 
@@ -252,7 +252,7 @@ production** in the Google Cloud Console so refresh tokens stop expiring weekly.
 
 ---
 
-## `setup_hfl_share_hermes.py`
+## `scripts/agents/hfl/setup_hfl_share_hermes.py`
 
 Configure Share Corpus Q&A to call an isolated Hermes API profile over loopback.
 The default invocation is a read-only preview. Apply mode creates only the
@@ -261,11 +261,11 @@ generates a private API bearer, and synchronizes the matching gitignored HARQIS
 environment values without printing the bearer.
 
 ```bash
-python scripts/setup_hfl_share_hermes.py          # dry-run plan
-python scripts/setup_hfl_share_hermes.py --apply  # create fresh profile + configure files
-python scripts/setup_hfl_share_hermes.py --login  # profile-scoped OAuth, if needed
-python scripts/setup_hfl_share_hermes.py --start  # install/start + health/model check
-python scripts/setup_hfl_share_hermes.py --check  # config, OAuth, /health, /models
+python scripts/agents/hfl/setup_hfl_share_hermes.py          # dry-run plan
+python scripts/agents/hfl/setup_hfl_share_hermes.py --apply  # create fresh profile + configure files
+python scripts/agents/hfl/setup_hfl_share_hermes.py --login  # profile-scoped OAuth, if needed
+python scripts/agents/hfl/setup_hfl_share_hermes.py --start  # install/start + health/model check
+python scripts/agents/hfl/setup_hfl_share_hermes.py --check  # config, OAuth, /health, /models
 ```
 
 `--profile`, `--model`, `--port`, `--context-chars`, `--hermes-home`, and
