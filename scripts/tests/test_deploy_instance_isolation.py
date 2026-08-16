@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
+import subprocess
+import sys
+
+import pytest
 
 
 def load_deploy_module():
@@ -43,3 +48,71 @@ def test_process_filter_rejects_other_checkout(monkeypatch):
     monkeypatch.setattr(deploy.subprocess, "run", lambda *args, **kwargs: Result())
 
     assert deploy._pid_belongs_to_repo(42) is False
+
+
+def test_concurrent_deploy_for_same_instance_fails_closed(tmp_path, monkeypatch):
+    deploy = load_deploy_module()
+    monkeypatch.setattr(deploy, "RUN_DIR", tmp_path / ".run")
+
+    with deploy.deploy_operation_lock():
+        with pytest.raises(RuntimeError, match="deploy operation is already running"):
+            with deploy.deploy_operation_lock():
+                pass
+
+
+def test_main_resolves_instance_before_acquiring_deploy_lock(tmp_path, monkeypatch):
+    deploy = load_deploy_module()
+    observed = []
+    monkeypatch.setattr(sys, "argv", ["deploy.py", "--down"])
+    monkeypatch.setenv("HARQIS_INSTANCE", "pre-test")
+    monkeypatch.setattr(deploy, "RUN_DIR", tmp_path / ".run")
+    monkeypatch.setattr(deploy, "LOG_DIR", tmp_path / "logs")
+    monkeypatch.setattr(deploy, "load_env_into_os", lambda: None)
+    monkeypatch.setattr(
+        deploy,
+        "load_machine_config",
+        lambda machine=None: {"role": "host", "env_vars": {}},
+    )
+    monkeypatch.setattr(
+        deploy,
+        "machine_env_vars",
+        lambda machine: {"HARQIS_INSTANCE": "resolved-instance"},
+    )
+    monkeypatch.setattr(deploy, "_main", lambda args, machine: observed.append(deploy._run_dir()))
+
+    deploy.main()
+
+    assert observed == [tmp_path / ".run" / "resolved-instance"]
+
+
+def test_main_preserves_non_lock_runtime_errors(tmp_path, monkeypatch):
+    deploy = load_deploy_module()
+    monkeypatch.setattr(sys, "argv", ["deploy.py", "--down"])
+    monkeypatch.setattr(deploy, "RUN_DIR", tmp_path / ".run")
+    monkeypatch.setattr(deploy, "LOG_DIR", tmp_path / "logs")
+    monkeypatch.setattr(deploy, "load_env_into_os", lambda: None)
+    monkeypatch.setattr(deploy, "load_machine_config", lambda machine=None: {"role": "host"})
+    monkeypatch.setattr(deploy, "machine_env_vars", lambda machine: {})
+    monkeypatch.setattr(
+        deploy,
+        "_main",
+        lambda args, machine: (_ for _ in ()).throw(RuntimeError("lifecycle failed")),
+    )
+
+    with pytest.raises(RuntimeError, match="lifecycle failed"):
+        deploy.main()
+
+
+def test_deploy_bootstraps_without_site_packages():
+    deploy_path = Path(__file__).resolve().parents[1] / "deploy.py"
+
+    result = subprocess.run(
+        [sys.executable, "-S", str(deploy_path), "--help"],
+        cwd=deploy_path.parent.parent,
+        env={**os.environ, "PYTHONPATH": ""},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr

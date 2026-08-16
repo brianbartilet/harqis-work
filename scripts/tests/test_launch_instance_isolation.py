@@ -27,3 +27,15 @@ def test_fork_beat_schedule_lives_under_instance_data_root(tmp_path, monkeypatch
 
     assert launch._beat_schedule_base() == tmp_path / "runtime" / "celerybeat-schedule"
     assert (tmp_path / "runtime").is_dir()
+
+
+def test_setup_env_adds_repo_to_live_python_import_path(monkeypatch):
+    launch = load_launch_module()
+    monkeypatch.setattr(launch, "load_env_file", lambda: {})
+    monkeypatch.setattr(launch, "_machine_env_vars", lambda: {})
+    monkeypatch.setattr(launch.sys, "path", [])
+
+    launch.setup_env()
+
+    assert str(launch.REPO_ROOT) in launch.sys.path
+    assert str(launch.SCRIPTS_DIR) in launch.sys.path

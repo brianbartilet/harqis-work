@@ -129,6 +129,12 @@ def setup_env() -> None:
     sep = ";" if os.name == "nt" else ":"
     os.environ["PYTHONPATH"] = sep.join(pythonpath_parts)
 
+    # PYTHONPATH only affects child interpreters. This launcher imports repo
+    # modules before execing Celery, so update the live interpreter as well.
+    for import_root in (str(SCRIPTS_DIR), str(REPO_ROOT)):
+        if import_root not in sys.path:
+            sys.path.insert(0, import_root)
+
     os.environ.setdefault("ROOT_DIRECTORY", str(REPO_ROOT))
     os.environ.setdefault("PATH_APP_CONFIG", str(REPO_ROOT))
     os.environ.setdefault("PATH_APP_CONFIG_SECRETS", str(REPO_ROOT / ".env"))

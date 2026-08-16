@@ -61,6 +61,7 @@ Notes:
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import os
 import plistlib
 import re
@@ -73,7 +74,6 @@ import time
 import tomllib
 from datetime import datetime
 from pathlib import Path
-
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -124,6 +124,61 @@ def _log_dir() -> Path:
 
 def _terminal_namespace() -> str:
     return instance_name() or "harqis-work"
+
+
+class DeployOperationBusy(RuntimeError):
+    pass
+
+
+def _acquire_deploy_lock(lock_file) -> None:
+    if IS_WIN:
+        import msvcrt
+
+        getattr(msvcrt, "locking")(
+            lock_file.fileno(), getattr(msvcrt, "LK_NBLCK"), 1
+        )
+    else:
+        import fcntl
+
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _release_deploy_lock(lock_file) -> None:
+    if IS_WIN:
+        import msvcrt
+
+        lock_file.seek(0)
+        getattr(msvcrt, "locking")(
+            lock_file.fileno(), getattr(msvcrt, "LK_UNLCK"), 1
+        )
+    else:
+        import fcntl
+
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def deploy_operation_lock():
+    """Fail closed when another mutating deploy owns this instance."""
+    lock_path = _run_dir() / "deploy.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+b") as lock_file:
+        lock_file.seek(0, os.SEEK_END)
+        if lock_file.tell() == 0:
+            lock_file.write(b"\0")
+            lock_file.flush()
+        lock_file.seek(0)
+        try:
+            _acquire_deploy_lock(lock_file)
+        except OSError as exc:
+            raise DeployOperationBusy(
+                f"another deploy operation is already running for "
+                f"instance '{_terminal_namespace()}' ({lock_path})"
+            ) from exc
+        try:
+            yield
+        finally:
+            _release_deploy_lock(lock_file)
 
 
 # ── Service registry ──────────────────────────────────────────────────────────
@@ -1669,26 +1724,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main() -> None:
-    args = build_parser().parse_args()
-    load_env_into_os()
-    runtime_machine = load_machine_config(args.machine)
-    if args.role:
-        runtime_machine["role"] = args.role
-    os.environ.update(machine_env_vars(runtime_machine))
-    _run_dir().mkdir(parents=True, exist_ok=True)
-    _log_dir().mkdir(parents=True, exist_ok=True)
-
+def _main(args: argparse.Namespace, runtime_machine: dict) -> None:
     if args.rebuild_venv:
         _reexec_rebuild_with_base_python()
         os.environ.pop(_REBUILD_REEXEC_MARKER, None)
 
     if args.rebuild_venv:
-        machine = load_machine_config(args.machine)
-        if args.role:
-            machine["role"] = args.role
-        os.environ.update(machine_env_vars(machine))
-        rebuild_virtualenv(machine, args)
+        rebuild_virtualenv(runtime_machine, args)
         return
 
     manages_python_runtime = not (
@@ -1710,17 +1752,15 @@ def main() -> None:
 
     if args.stop:
         if args.stop == "emulator":
-            emulator_down(load_machine_config(args.machine))
+            emulator_down(runtime_machine)
         elif args.stop == "device":
-            device_down(load_machine_config(args.machine))
+            device_down(runtime_machine)
         else:
             stop_service(args.stop)
         return
 
     if args.restart:
-        machine = load_machine_config(args.machine)
-        if args.role:
-            machine["role"] = args.role
+        machine = runtime_machine
         if args.restart == "emulator":
             print("==> Restart: emulator")
             emulator_down(machine)
@@ -1733,9 +1773,7 @@ def main() -> None:
             restart_service(args.restart, machine, args)
         return
 
-    machine = load_machine_config(args.machine)
-    if args.role:
-        machine["role"] = args.role
+    machine = runtime_machine
 
     # Per-machine env_vars must reach `docker compose` too — not just the
     # celery daemons (which get them via spawn_detached extra_env). docker_up()
@@ -1874,6 +1912,28 @@ def main() -> None:
                     print(f"Warning: post-deploy cleanup failed: {e}")
             else:
                 print(f"Warning: cleanup script not found at {cleanup_script}")
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    load_env_into_os()
+    runtime_machine = load_machine_config(args.machine)
+    if args.role:
+        runtime_machine["role"] = args.role
+    os.environ.update(machine_env_vars(runtime_machine))
+    _run_dir().mkdir(parents=True, exist_ok=True)
+    _log_dir().mkdir(parents=True, exist_ok=True)
+
+    # Keep status observable during an in-flight deployment. Every lifecycle
+    # that can mutate runtime state is serialized per resolved HARQIS instance.
+    if args.status:
+        _main(args, runtime_machine)
+        return
+    try:
+        with deploy_operation_lock():
+            _main(args, runtime_machine)
+    except DeployOperationBusy as exc:
+        raise SystemExit(f"ERROR: {exc}") from exc
 
 
 if __name__ == "__main__":
