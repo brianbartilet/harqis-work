@@ -680,5 +680,26 @@ WORKFLOW_HFL = {
         },
     },
 
+    # Meta archive import is deliberately manual-only. First run
+    # prepare_meta_archive_import on harqis-server, review plan.json, then run
+    # dispatch_meta_archive_import. Do not activate either task in Beat.
+    #
+    # 'run-job--prepare_meta_archive_import': {
+    #     'task': 'workflows.hfl.tasks.ingest_meta_archive.prepare_meta_archive_import',
+    #     'schedule': crontab(day_of_week='sun', hour=3, minute=47),
+    #     'kwargs': {
+    #         'platform': 'facebook',
+    #         'archive_roots': [],
+    #         'work_dir': '${HFL_META_WORK_DIR}',
+    #     },
+    #     'options': {'queue': WorkflowQueue.HFL, 'expires': 60 * 60 * 12},
+    #     'manifesto': {
+    #         'code_role': 'capture+distill+express',
+    #         'para_bucket': 'area',
+    #         'express_target': 'file:activity-corpus+es:hfl-entries',
+    #         'review_artifact': 'es_log+file',
+    #         'hfl_signal': True,
+    #     },
+    # },
 
 }

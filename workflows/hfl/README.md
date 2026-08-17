@@ -44,6 +44,8 @@ this scaffold closes.
 | `retrieve_hfl_corpus` | Substring + tag scan over the corpus, optional date filter. Returns up to `k` entries, most recent first. | `es_log` (callers consume the return value) | Adhoc — same pattern as capture. |
 | `summarize_hfl_week` | Weekly Haiku 4.5 rollup of the past N days; writes `YYYY-Www-rollup.md` with searchable tags aggregated from its source entries. | `file:hfl_summary+es_log` | Sundays 21:00 local. |
 | `ingest_chatgpt_activity` | **Primary daily research log.** Auto-discovers the operator's ChatGPT conversations created/updated that day via the ChatGPT web app's private backend (no thread ids), distils the questions asked into ONE corpus entry. Haiku-distilled, raw fallback. No token / no prompts → no entry, no call. | `file:hfl_corpus` | Daily 23:00 local (active — no-op until `CHATGPT_WEB_ACCESS_TOKEN` is set). |
+| `prepare_meta_archive_import` / `dispatch_meta_archive_import` | **Manual Meta archive backfill.** Normalizes multipart Facebook JSON and Instagram HTML exports into deduplicated ISO thread-week work items, then dispatches reviewed items to source-specific leaf tasks. Raw exports remain immutable. | `file:hfl_corpus+es:hfl-entries` | Manual only; never scheduled. |
+| `ingest_facebook_activity` / `ingest_instagram_activity` | Writes one reviewed Meta thread-week work item using source `facebook` or `instagram`. Facebook private-message media supports bounded Haiku captions and Whisper transcription; references remain visible in Markdown and ES. | `file:hfl_corpus+es:hfl-entries` | Manual leaf tasks dispatched from an approved plan. |
 | `ingest_git_activity` | Distils the day's GitHub commits across recently updated repositories into one bounded entry. Haiku-distilled with a raw fallback; no commits means no entry and no model call. | `file:hfl_corpus+es:hfl-entries` | Daily 00:00 local on the `agent` queue. |
 | `ingest_echomtg_inventory_activity` | Compares the complete current EchoMTG collection with the previous successful snapshot and writes one exact per-variant rollup of cards added or removed. The first run establishes a baseline; failed/incomplete reads and unchanged days make no entry or model call. Tags always include `#echomtg #inventory`. | `file:hfl_corpus+es:hfl-entries` | Daily 22:55 local on the `hfl` queue. |
 | `ingest_purchase_transactions_activity` | Drains structured outcomes buffered by TCG listing generation, sold-inventory reconciliation, listing price/quantity reconciliation, and Scryfall bulk refresh. Writes one concise daily review; routine no-change runs make no entry or model call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:00 local on the `hfl` queue. |
@@ -67,6 +69,33 @@ this scaffold closes.
 
 Each carries the manifesto metadata block on the beat entry — see
 `workflows/hfl/tasks_config.py`.
+
+### Manual Meta archive import
+
+The importer is intentionally absent from Beat. Run it only on the canonical
+server after raw export folders have been synced to a server-visible inbox.
+
+1. Call `prepare_meta_archive_import` once for `facebook` and once for
+   `instagram`, passing every export parent in `archive_roots` and an ignored
+   derived-data directory in `work_dir` (`HFL_META_WORK_DIR` is recommended).
+2. Review the returned `plan.json`: export roots, unique event count, work-item
+   count, thread ids, ISO week starts, and per-item event counts.
+3. Preview selected work-item paths with the read-only MCP tool
+   `meta_archive_preview` (`synthesize=False` makes no model call).
+4. Call `dispatch_meta_archive_import(manifest_path=...)` only after review.
+   It sends one leaf task per platform/thread/week to `WorkflowQueue.HFL`.
+
+Facebook message attachments from every participant are eligible for bounded
+Haiku captions and Whisper transcription. Results are cached by content hash
+under the platform work directory. Set `allow_cloud=False` on dispatch for a
+metadata/text-only run. Raw exports are never moved, renamed, deleted, or
+written into the corpus.
+
+Entries use exact `Source: facebook` / `Source: instagram` values. Their
+`References:` lines use portable `meta-archive://` identifiers and are copied
+into the Elasticsearch `references` array. The implementation thesis and
+future server-sync boundary are documented in
+`docs/thesis/meta-archive-hfl-ingestion.md`.
 
 ---
 
