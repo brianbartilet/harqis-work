@@ -1,4 +1,4 @@
-"""Tests for the monthly YouTube -> HFL archive ingest."""
+"""Tests for the weekly YouTube -> HFL archive ingest."""
 
 from datetime import date
 from pathlib import Path
@@ -9,6 +9,19 @@ from apps.youtube.references.dto.channel import DtoYouTubeChannel
 from apps.youtube.references.dto.playlist import DtoYouTubePlaylist
 from apps.youtube.references.dto.video import DtoYouTubeVideo
 import workflows.hfl.tasks.ingest_youtube as iy
+
+
+@pytest.mark.smoke
+def test_youtube_ingest_runs_monday_at_0600_with_weekly_window():
+    from workflows.hfl.tasks_config import WORKFLOW_HFL
+
+    entry = WORKFLOW_HFL["run-job--ingest_youtube_activity"]
+    schedule = entry["schedule"]
+
+    assert schedule.day_of_week == {1}
+    assert schedule.hour == {6}
+    assert schedule.minute == {0}
+    assert entry["kwargs"]["days"] == 7
 
 
 def _video(**overrides):
