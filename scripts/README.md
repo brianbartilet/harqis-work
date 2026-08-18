@@ -40,6 +40,7 @@ up from `scripts/agents/<bucket>/`).
 | `migrate_to_core_scan.py` | Deterministic harvest-candidate scan for the `/migrate-to-core` skill — ranks `apps/` + `scripts/agents/` by genericness vs. coupling and maps what's already upstream in harqis-core. Writes `.harqis-data/migrate_to_core_scan.json`. |
 | `migrate_to_core_agent.py` | Bi-monthly local agent runner for `/migrate-to-core` (first/third Saturdays). Runs `migrate_to_core_scan.py` first, then opens review-gated PR pairs. |
 | [`sync_agent_skills.py`](#sync_agent_skillspy) | Mirrors canonical `.agents/skills` into generated `.claude/skills` for Claude compatibility. |
+| [`harqis_agent_skill_sync.py`](#harqis_agent_skill_syncpy) | Mirrors canonical `.agents/skills` into Hermes `harqis-*` skills and maintains original-name `quick_commands` aliases. |
 
 ### `learning/` — agent reasoning capture + lessons loop
 
@@ -123,6 +124,25 @@ python scripts/agents/repo-quality/sync_agent_skills.py --check
 
 The `--check` mode validates every canonical `SKILL.md` has YAML frontmatter and
 returns non-zero when the generated Claude copy is missing or stale.
+
+---
+
+### `scripts/agents/repo-quality/harqis_agent_skill_sync.py`
+
+Mirror canonical `.agents/skills` into the active Hermes home and maintain an
+original-name alias for every generated `harqis-*` skill. Existing unrelated
+`quick_commands` are preserved; stale mirrors and aliases are reported but not
+deleted automatically. Quiet no-change output is intentional for no-agent cron.
+
+```bash
+python scripts/agents/repo-quality/harqis_agent_skill_sync.py
+python scripts/agents/repo-quality/harqis_agent_skill_sync.py --check
+python scripts/agents/repo-quality/harqis_agent_skill_sync.py \
+  --repo-root /path/to/harqis-work --hermes-home ~/.hermes
+```
+
+`--check` performs no writes and returns non-zero when mirror content, aliases,
+or source validation have drifted.
 
 ---
 
