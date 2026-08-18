@@ -26,4 +26,7 @@ import workflows.hfl.tasks.ingest_notes    # noqa: F401
 import workflows.hfl.tasks.ingest_agent_sessions  # noqa: F401
 import workflows.hfl.tasks.ingest_trello   # noqa: F401
 import workflows.hfl.tasks.ingest_purchase_transactions  # noqa: F401
+import workflows.hfl.tasks.ingest_meta_archive  # noqa: F401
+import workflows.hfl.tasks.ingest_facebook  # noqa: F401
+import workflows.hfl.tasks.ingest_instagram  # noqa: F401
 import workflows.hfl.tasks.persist        # noqa: F401
