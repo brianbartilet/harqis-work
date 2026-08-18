@@ -13,8 +13,8 @@
 # Per-machine fields:
 #   role            "host" (runs scheduler + docker) or "node" (worker-only)
 #   queues          list of Celery queues this machine consumes
-#   disable         list of services NOT to run here (subset of:
-#                   scheduler worker frontend mcp kanban flower)
+#   disable         list of services NOT to run here
+#   capture_worker  launch an isolated solo worker for the `capture` queue
 #   kanban_profile  agent profile filter for the kanban orchestrator
 #                   (e.g. "agent:default", "agent:code")
 #   kanban_num_agents  concurrent in-process kanban agents (default: 1)
@@ -41,6 +41,7 @@ kanban_num_agents = 4
 [windows-work]
 role = "host"
 queues = ["default", "hud", "default_broadcast", "hfl_broadcast"]
+capture_worker = true
 disable = ["kanban", "scheduler"]
 
 [windows-work-all]
@@ -53,6 +54,7 @@ role = "host"
 # that only exist on the Mac mini (e.g. "inbox not yet created"). Keep `host`
 # on harqis-server alone.
 queues = ["default", "hud", "peon", "adhoc", "default_broadcast", "hfl_broadcast", "agent"]
+capture_worker = true
 disable = ["kanban", "scheduler"]
 # Beat must run on exactly one machine cluster-wide (harqis-server is the
 # canonical Beat runner per the "always-on hub" comment), so disable scheduler

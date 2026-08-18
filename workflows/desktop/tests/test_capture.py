@@ -1,4 +1,8 @@
 import pytest
+from datetime import datetime, timedelta
+import workflows.desktop.tasks.capture as capture_module
+from workflows.desktop.tasks_config import WORKFLOWS_DESKTOP
+from workflows.queues import WorkflowQueue
 from workflows.desktop.tasks.capture import (
     _tail_with_marker,
     MAX_DUMP_CHARS,
@@ -13,10 +17,56 @@ from workflows.desktop.tasks.capture import (
 # 4xx / 5xx / SKIPPED return is now a test failure (previously they passed
 # silently regardless).
 
-def test__run_capture_logging():
-    result = run_capture_logging(cfg_id__desktop_utils="DESKTOP")
-    assert isinstance(result, dict)
-    assert result.get("status") == "spawned"
+class _FakeProcess:
+    def __init__(self, pid, parent_pid=0, running=True):
+        self.pid = pid
+        self._parent_pid = parent_pid
+        self._running = running
+
+    def ppid(self):
+        return self._parent_pid
+
+    def is_running(self):
+        return self._running
+
+
+def test__capture_process_family_treats_venv_launcher_and_child_as_singleton():
+    launcher = _FakeProcess(100, parent_pid=50)
+    interpreter = _FakeProcess(101, parent_pid=100)
+
+    assert capture_module._capture_families([launcher, interpreter]) == [launcher]
+
+
+def test__capture_state_file_records_all_processes(tmp_path):
+    state_path = capture_module._write_screen_reader_state(
+        tmp_path,
+        [_FakeProcess(100), _FakeProcess(101, parent_pid=100)],
+    )
+
+    payload = __import__("json").loads(state_path.read_text(encoding="utf-8"))
+    assert payload["pids"] == [100, 101]
+    assert payload["health_path"].endswith("actions_health.json")
+
+
+def test__capture_health_requires_recent_telemetry_from_live_family():
+    process = _FakeProcess(101)
+    fresh = {"pid": 101, "timestamp": datetime.now().isoformat()}
+    stale = {
+        "pid": 101,
+        "timestamp": (datetime.now() - timedelta(minutes=5)).isoformat(),
+    }
+
+    assert capture_module._capture_health_is_fresh(fresh, [process]) is True
+    assert capture_module._capture_health_is_fresh(stale, [process]) is False
+    assert capture_module._capture_health_is_fresh(fresh, [_FakeProcess(999)]) is False
+
+
+def test__capture_schedule_uses_isolated_queue_and_short_supervision_expiry():
+    entry = WORKFLOWS_DESKTOP["run-job--run_capture_logging"]
+
+    assert entry["options"]["queue"] == WorkflowQueue.CAPTURE
+    assert entry["options"]["expires"] == 300
+    assert entry["options"]["os"] == ["windows"]
 
 
 def test__generate_daily_desktop_summary():

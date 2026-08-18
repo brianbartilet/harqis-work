@@ -260,6 +260,9 @@ DESKTOP:
     archive_path: ${ACTIONS_ARCHIVE_PATH}
     screenshots_path: ${ACTIONS_SCREENSHOT_PATH}
     show_console: False
+    idle_pause_seconds: 300
+    focus_interval_seconds: 1.0
+    max_memory_mb: 768
   copy_files:
     path_dev_files: ${DESKTOP_PATH_DEV}
     path_run_files: ${DESKTOP_PATH_RUN}

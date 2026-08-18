@@ -396,10 +396,14 @@ manual recovery or later cleanup.
 
 **Per-role behaviour**
 
-| Role | Docker compose | scheduler | worker | frontend | mcp | kanban | flower |
-|---|---|---|---|---|---|---|---|
-| `host` | ✓ up/down | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `node` | — (broker is on host) | — | ✓ | — | — | ✓ | — |
+| Role | Docker compose | scheduler | worker | capture-worker | frontend | mcp | kanban | flower |
+|---|---|---|---|---|---|---|---|---|
+| `host` | ✓ up/down | ✓ | ✓ | opt-in | ✓ | ✓ | ✓ | ✓ |
+| `node` | — (broker is on host) | — | ✓ | opt-in | — | — | ✓ | — |
+
+`capture-worker` starts only when the machine profile sets
+`capture_worker = true`. It consumes only `capture` with a solo pool and
+concurrency 1, isolating the desktop reader from the general worker.
 
 Use `--no-frontend / --no-mcp / --no-kanban / --no-flower` to skip
 individual host daemons, or list them under `disable` in `machines.toml`.
@@ -422,8 +426,8 @@ PID/command line changed. Its baseline is local-only under `.harqis-data/`.
 
 **Console mode (`--console`)**
 
-`scheduler` and `worker` are flagged `console: True` in `SERVICES`. With
-`--console`, those two daemons launch under `python.exe` (not
+`scheduler`, `worker`, and `capture-worker` are flagged `console: True` in
+`SERVICES`. With `--console`, those daemons launch under `python.exe` (not
 `pythonw.exe`) with `CREATE_NEW_CONSOLE` and **no stdout redirect** —
 each gets its own visible window with live celery output. Other services
 (`frontend`, `mcp`, `kanban`, `flower`) stay windowless even with the

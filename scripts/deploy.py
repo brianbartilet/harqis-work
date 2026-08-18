@@ -191,6 +191,17 @@ SERVICES: dict[str, dict] = {
     # closing the window terminates the daemon.
     "scheduler": {"cmd": ["scheduler"],         "roles": {"host"},         "console": True},
     "worker":    {"cmd": ["worker"],            "roles": {"host", "node"}, "console": True},
+    # The desktop capture supervisor is deliberately isolated from the general
+    # thread worker. A solo worker keeps failures and imports in a separate
+    # process and is enabled only on machines with capture_worker=true.
+    "capture-worker": {
+        "cmd": [
+            "worker", "--queues", "capture", "--pool", "solo",
+            "--concurrency", "1", "--hostname", "capture@%h",
+        ],
+        "roles": {"host", "node"},
+        "console": True,
+    },
     "frontend":  {"cmd": ["frontend"],          "roles": {"host"}},
     # HARQIS MCP is a stdio server: clients (Hermes, Claude Desktop, etc.)
     # spawn it on demand and keep stdin/stdout attached. Running it as a
@@ -632,7 +643,7 @@ def start_service(service: str, machine: dict, args: argparse.Namespace) -> bool
     )
     pid_path(service).write_text(str(pid))
     detail = ""
-    if service == "worker":
+    if service in ("worker", "capture-worker"):
         detail = f"  queues={cmd[cmd.index('--queues') + 1]}"
     elif service == "kanban" and "--profile" in cmd:
         detail = f"  profile={cmd[cmd.index('--profile') + 1]}"
@@ -890,6 +901,7 @@ def restart_service(service: str, machine: dict, args: argparse.Namespace) -> bo
 _STATUS_NEEDLES = {
     "scheduler": "core.apps.sprout:SPROUT beat",
     "worker":    "core.apps.sprout:SPROUT worker",
+    "capture-worker": "--hostname=capture@",
     "flower":    "core.apps.sprout:SPROUT flower",
     # Use os.sep so the substring matches the real command line on each OS —
     # the previous hard-coded "\\" only matched on Windows, so on macOS/Linux
@@ -1665,7 +1677,9 @@ def select_services(machine: dict, args: argparse.Namespace) -> list[str]:
     if args.no_flower:    disabled.add("flower")
     return [
         s for s, info in SERVICES.items()
-        if role in info["roles"] and s not in disabled
+        if role in info["roles"]
+        and s not in disabled
+        and (s != "capture-worker" or machine.get("capture_worker", False))
     ]
 
 

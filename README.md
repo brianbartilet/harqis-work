@@ -304,6 +304,7 @@ Declared in `workflows/queues.py` (`WorkflowQueue` enum) and registered with Rab
 | `worker` | Generic background worker pool (cross-app jobs) |
 | `n8n` | n8n container ops (backup / restore / deploy) — pinned to `harqis-server` |
 | `hfl` | Homework-for-Life capture / ingest / summarize / recall — pinned to `harqis-server` |
+| `capture` | Isolated Windows desktop screen-reader supervisor; consumed only by `capture-worker` |
 
 **Broadcast (fanout)** — every subscribed worker runs each task; tasks **must** be idempotent. A worker only receives broadcasts when its `queues` list includes the broadcast name (otherwise the exchange isn't declared and beat publishes fail with `NOT_FOUND`):
 

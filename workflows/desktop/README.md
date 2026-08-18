@@ -19,7 +19,7 @@ Tasks are routed per-entry in `tasks_config.py`. See the `Queue` column below.
 | `run_n8n_sequence` | Daily at midnight | `n8n` | windows / macos / linux | Backup → restore via `.bat` (Windows) or `.sh` (macOS / Linux) in `workflows/n8n/deploy/` |
 | `set_desktop_hud_to_back` | Every 30 min | `hud` | windows | Send desktop HUD windows to background (Rainmeter) |
 | `copy_files_targeted` | Every 30 min | `peon` | any | Sync dev files to run dir; file list sourced from `machines.local.toml` `[sync] items` |
-| `run_capture_logging` | Every 15 min | `peon` | any | Capture screenshot + log foreground app |
+| `run_capture_logging` | Every 5 min | `capture` | windows | Supervise one lock/idle-aware desktop activity reader |
 | `generate_daily_desktop_summary` | Daily at 23:55 | `peon` | any | AI summary of today's desktop activity |
 | `generate_weekly_desktop_summary` | Sundays at 23:58 | `peon` | any | AI summary of the week's activity |
 
@@ -54,6 +54,9 @@ DESKTOP:
     archive_path: ${ACTIONS_ARCHIVE_PATH}
     screenshots_path: ${ACTIONS_SCREENSHOT_PATH}
     show_console: False
+    idle_pause_seconds: 300
+    focus_interval_seconds: 1.0
+    max_memory_mb: 768
   copy_files:
     path_dev_files: ${DESKTOP_PATH_DEV}
     path_run_files: ${DESKTOP_PATH_RUN}
@@ -77,11 +80,12 @@ DESKTOP_PATH_FEED=/path/to/hud/feed
 
 ## Activity Capture Format
 
-The `run_capture_logging` task:
-1. Takes a screenshot of the active window.
-2. Reads the foreground application name.
-3. Writes a timestamped log entry to `ACTIONS_LOG_PATH`.
-4. Archives logs by month pattern (`YYYY-MM`).
+The `run_capture_logging` task supervises one long-lived activity reader. A healthy
+reader is left in place; duplicate/orphan process trees are replaced. The reader
+pauses UI Automation while Windows is locked or the user has been idle for the
+configured threshold, polls focus no more than once per second, and exits if its
+private memory reaches the configured cap. `actions_health.json` records its PID,
+memory, session state, idle time, last operation, and last focus poll.
 
 Log filenames use the format: `YYYY-MM-DD-HH-MM`.
 

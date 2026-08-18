@@ -116,3 +116,25 @@ def test_deploy_bootstraps_without_site_packages():
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_capture_worker_is_opt_in_and_uses_isolated_solo_queue():
+    deploy = load_deploy_module()
+    args = deploy.build_parser().parse_args([])
+
+    without_capture = deploy.select_services({"role": "host"}, args)
+    with_capture = deploy.select_services(
+        {"role": "host", "capture_worker": True},
+        args,
+    )
+    command = deploy.build_service_cmd(
+        "capture-worker",
+        {"role": "host", "capture_worker": True},
+        args,
+    )
+
+    assert "capture-worker" not in without_capture
+    assert "capture-worker" in with_capture
+    assert command[command.index("--queues") + 1] == "capture"
+    assert command[command.index("--pool") + 1] == "solo"
+    assert command[command.index("--concurrency") + 1] == "1"

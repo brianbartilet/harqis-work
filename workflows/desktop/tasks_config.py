@@ -147,13 +147,16 @@ WORKFLOWS_DESKTOP = {
 
     'run-job--run_capture_logging': {
         'task': 'workflows.desktop.tasks.capture.run_capture_logging',
-        'schedule': crontab(minute='0,15,30,45'),
+        # Lightweight supervisor: a healthy singleton is left running; a dead
+        # or duplicate process is repaired within five minutes.
+        'schedule': crontab(minute='*/5'),
         'kwargs': {
             "cfg_id__desktop_utils": "DESKTOP"
         },
         "options": {
-            "queue": WorkflowQueue.PEON,
-            "expires": 60 * 60
+            "queue": WorkflowQueue.CAPTURE,
+            "expires": 5 * 60,
+            "os": ["windows"],
         },
         'manifesto': {
             'code_role': 'capture',

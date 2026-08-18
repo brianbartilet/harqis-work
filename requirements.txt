@@ -1,4 +1,4 @@
-harqis-core @ git+https://github.com/brianbartilet/harqis-core.git@dfc29aee4e0a2b3477b20491ea64d533214d1fd7
+harqis-core @ git+https://github.com/brianbartilet/harqis-core.git@d2aa596ee89fe62b57edf9352099cf72e97c418c
 
 # Shared application/runtime stack. These are direct harqis-work dependencies;
 # they must not arrive accidentally through harqis-core package metadata.

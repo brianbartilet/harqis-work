@@ -204,8 +204,8 @@ def cmd_worker(args: argparse.Namespace) -> None:
     from workflows.queues import qualify_queues
 
     queues = qualify_queues(os.environ["WORKFLOW_QUEUE"])
-    pool = os.environ.get("WORKFLOW_POOL", "threads")
-    concurrency = os.environ.get("WORKFLOW_CONCURRENCY", "8")
+    pool = args.pool or os.environ.get("WORKFLOW_POOL", "threads")
+    concurrency = args.concurrency or os.environ.get("WORKFLOW_CONCURRENCY", "8")
     print(
         f"[launch] worker queues={queues} pool={pool} concurrency={concurrency}",
         flush=True,
@@ -217,6 +217,7 @@ def cmd_worker(args: argparse.Namespace) -> None:
         f"--queues={queues}",
         f"--pool={pool}",
         f"--concurrency={concurrency}",
+        *([f"--hostname={args.hostname}"] if args.hostname else []),
     )
 
 
@@ -449,6 +450,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     w = sub.add_parser("worker", help="Celery worker")
     w.add_argument("-q", "--queues", help="Comma-separated queue list (default: $WORKFLOW_QUEUE or 'default')")
+    w.add_argument("--pool", help="Celery pool override (default: $WORKFLOW_POOL or threads)")
+    w.add_argument("--concurrency", help="Celery concurrency override")
+    w.add_argument("--hostname", help="Explicit Celery worker hostname")
     w.set_defaults(func=cmd_worker)
 
     s = sub.add_parser("scheduler", help="Celery Beat scheduler")
