@@ -47,6 +47,18 @@ def test_envelope_embeds_synthesized_provenance_in_canonical_entry():
     assert "Synthesized:     true" in envelope.entry.to_markdown()
 
 
+def test_envelope_round_trips_duplicate_replacement_policy():
+    envelope = persistence.make_envelope(
+        _entry(), source="facebook", machine="windows-work-all",
+        dedup_key="facebook:friend:2026-07-13", replace_duplicate=True,
+    )
+
+    restored = persistence.EntryEnvelope.from_payload(envelope.to_payload())
+
+    assert restored == envelope
+    assert restored.replace_duplicate is True
+
+
 def test_persist_is_locked_and_idempotent(tmp_path, monkeypatch):
     indexed = []
     monkeypatch.setattr(

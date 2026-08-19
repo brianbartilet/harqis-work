@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections import defaultdict
 from datetime import date
@@ -12,6 +13,15 @@ from workflows.hfl.meta_archive.models import MetaEvent
 from workflows.hfl.meta_archive.parsers import (
     parse_facebook_posts, parse_facebook_thread, parse_instagram_html,
 )
+
+
+def content_sha256(content: bytes) -> str:
+    """Return the review pin used for manifests and immutable work items."""
+    return hashlib.sha256(content).hexdigest()
+
+
+def _json_bytes(payload: dict) -> bytes:
+    return json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
 
 
 def discover_export_roots(roots: Iterable[str], platform: str) -> list[Path]:
@@ -84,18 +94,35 @@ def build_import_plan(*, platform: str, archive_roots: list[str], work_dir: str,
         path = root / f"{key}.json"
         payload = {"schema_version": 1, "platform": platform, "thread_id": thread_id,
                    "week_start": week.isoformat(), "events": [event.to_dict() for event in values]}
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        content = _json_bytes(payload)
+        path.write_bytes(content)
         items.append({"key": key, "path": str(path), "thread_id": thread_id,
-                      "week_start": week.isoformat(), "event_count": len(values)})
+                      "week_start": week.isoformat(), "event_count": len(values),
+                      "sha256": content_sha256(content)})
     manifest = {"ok": True, "schema_version": 1, "platform": platform,
                 "exports": [str(path) for path in exports], "events_discovered": len(unique),
                 "work_item_count": len(items), "items": items}
     manifest_path = root / "plan.json"
-    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    manifest["manifest_path"] = str(manifest_path)
-    return manifest
+    manifest_content = _json_bytes(manifest)
+    manifest_path.write_bytes(manifest_content)
+    return {
+        **manifest,
+        "manifest_path": str(manifest_path),
+        "manifest_sha256": content_sha256(manifest_content),
+    }
 
 
-def load_work_item(path: str) -> tuple[dict, list[MetaEvent]]:
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+def load_work_item(path: str, *, expected_sha256: str = "",
+                   allowed_root: str = "") -> tuple[dict, list[MetaEvent]]:
+    resolved = Path(path).expanduser().resolve(strict=True)
+    if allowed_root:
+        root = Path(allowed_root).expanduser().resolve(strict=True)
+        if not resolved.is_relative_to(root):
+            raise ValueError("work item is outside the approved manifest directory")
+    content = resolved.read_bytes()
+    if expected_sha256:
+        expected = expected_sha256.strip().casefold()
+        if len(expected) != 64 or content_sha256(content) != expected:
+            raise ValueError("work item integrity check failed")
+    payload = json.loads(content.decode("utf-8"))
     return payload, [MetaEvent.from_dict(item) for item in payload.get("events") or []]

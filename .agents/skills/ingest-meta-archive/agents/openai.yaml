@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ingest Meta Archive"
+  short_description: "Safely review and import private Meta archives"
+  default_prompt: "Use $ingest-meta-archive to prepare, review, preview, and safely dispatch a private Meta archive import."

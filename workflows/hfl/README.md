@@ -78,24 +78,36 @@ server after raw export folders have been synced to a server-visible inbox.
 1. Call `prepare_meta_archive_import` once for `facebook` and once for
    `instagram`, passing every export parent in `archive_roots` and an ignored
    derived-data directory in `work_dir` (`HFL_META_WORK_DIR` is recommended).
-2. Review the returned `plan.json`: export roots, unique event count, work-item
-   count, thread ids, ISO week starts, and per-item event counts.
+2. Record the returned `manifest_sha256`, then review that exact `plan.json`:
+   export roots, unique event count, work-item count, thread ids, ISO week
+   starts, per-item event counts, and each work item's `sha256` pin.
 3. Preview selected work-item paths with the read-only MCP tool
-   `meta_archive_preview` (`synthesize=False` makes no model call).
-4. Call `dispatch_meta_archive_import(manifest_path=...)` only after review.
-   It sends one leaf task per platform/thread/week to `WorkflowQueue.HFL`.
+   `meta_archive_preview`, passing `expected_work_item_sha256` and
+   `work_item_root=<plan.json parent>` (`synthesize=False` makes no model call).
+4. Call `dispatch_meta_archive_import(manifest_path=...,
+   approved_manifest_sha256=...)` only after review. Dispatch verifies the
+   manifest pin, every work-item pin, metadata agreement, and path boundary
+   before sending any leaf task to `WorkflowQueue.HFL`.
 
-Facebook message attachments from every participant are eligible for bounded
-Haiku captions and Whisper transcription. Results are cached by content hash
-under the platform work directory. Set `allow_cloud=False` on dispatch for a
-metadata/text-only run. Raw exports are never moved, renamed, deleted, or
-written into the corpus.
+Cloud media enrichment is disabled by default. With `allow_cloud=True`,
+Facebook message attachments from every participant and authored Instagram
+media are eligible for bounded Haiku captions and Whisper transcription.
+Instagram conversation attachments are always metadata-only and cannot reach
+either cloud service. Results are cached by content hash under the platform
+work directory. Raw exports are never moved, renamed, deleted, or written into
+the corpus.
 
 Entries use exact `Source: facebook` / `Source: instagram` values. Their
 `References:` lines use portable `meta-archive://` identifiers and are copied
 into the Elasticsearch `references` array. The implementation thesis and
 future server-sync boundary are documented in
 `docs/thesis/meta-archive-hfl-ingestion.md`.
+
+Each thread-week uses its ISO Monday as a stable entry timestamp. A reviewed
+overlapping export replaces the exact stable-ID Markdown block atomically, and
+that same winning block is projected to the stable Elasticsearch document ID.
+After a batch, run `scripts/agents/hfl/reconcile_elasticsearch.py` without
+`--apply` on the canonical server and require zero missing or stale documents.
 
 ---
 

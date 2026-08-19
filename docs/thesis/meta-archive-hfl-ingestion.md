@@ -27,7 +27,7 @@ immutable Meta exports
   -> Markdown Activity Corpus + Elasticsearch
 ```
 
-The planner and leaf writer are intentionally separate. Preparing an import is safe to repeat and writes only derived work files. A reviewed plan is then dispatched to source-specific leaf tasks. Each leaf owns one platform/thread/week and calls the durable persistence boundary at most once.
+The planner and leaf writer are intentionally separate. Preparing an import is safe to repeat and writes only derived work files. Preparation returns a SHA-256 pin for `plan.json`, and the manifest pins every work item. Dispatch requires the reviewed manifest pin, checks every work-item pin and path boundary before enqueueing anything, and passes each pin to the leaf for a second check at consumption time. Each leaf owns one platform/thread/week and calls the durable persistence boundary at most once.
 
 ## Canonical event
 
@@ -39,11 +39,11 @@ Event identity is derived from platform, thread, sender, UTC timestamp, normaliz
 
 ## Weekly projection
 
-Weeks are ISO Monday–Sunday in `Asia/Singapore`. Only active thread-weeks generate work. Authored posts/stories use a platform-local `authored-content` pseudo-thread. This preserves conversational grouping while keeping each model request and HFL entry bounded.
+Weeks are ISO Monday–Sunday in `Asia/Singapore`. Only active thread-weeks generate work. Authored posts/stories use a platform-local `authored-content` pseudo-thread. Each projection uses ISO Monday midnight as its stable HFL timestamp. On an overlapping rerun, the stable platform/thread/week entry ID replaces its prior Markdown block atomically; Elasticsearch indexes that same winning entry under its stable document ID. This preserves conversational grouping, bounds each model request, and prevents Markdown/Elasticsearch narrative splits.
 
 ## Media enrichment and privacy
 
-Facebook private-message attachments from any participant are in scope. Images, stickers, GIFs, and sampled video frames may be described by Claude Haiku. Audio and video speech may be transcribed by OpenAI Whisper. Instagram conversation attachments remain out of scope for cloud enrichment in the first version; authored Instagram media is eligible.
+Cloud media enrichment is opt-in and dispatch defaults to `allow_cloud=False`. When enabled, Facebook private-message attachments from any participant are in scope. Images, stickers, GIFs, and sampled video frames may be described by Claude Haiku. Audio and video speech may be transcribed by OpenAI Whisper. Instagram conversation attachments are filtered before either cloud client is initialized and remain metadata-only even when `allow_cloud=True`; authored Instagram media is eligible.
 
 Raw attachments remain immutable and are not embedded in the corpus. Only bounded derived text and stable provenance references enter a weekly narrative. Content hashes prevent repeated model charges for duplicate media. Missing or unsupported artifacts degrade to metadata-only records.
 
@@ -55,11 +55,12 @@ Corpus entries render a `References:` list and Elasticsearch stores the same val
 
 1. Sync the immutable export directories to a harqis-server inbox (future work).
 2. Run `prepare_meta_archive_import` separately for Facebook and Instagram.
-3. Inspect each generated `plan.json` and its counts.
-4. Optionally preview work items through `meta_archive_preview`.
-5. Run `dispatch_meta_archive_import` against the approved manifest.
+3. Record the returned `manifest_sha256`; inspect that exact `plan.json`, its counts, and its per-item SHA-256 pins.
+4. Optionally preview pinned work items through `meta_archive_preview`.
+5. Run `dispatch_meta_archive_import` with `approved_manifest_sha256` from the completed review.
 6. Review task results, HFL Markdown, Elasticsearch documents, and durable outbox status.
-7. Re-run safely when a later Meta export overlaps the earlier period.
+7. Run the read-only Markdown/Elasticsearch reconciliation and require no missing or stale documents.
+8. Re-run safely when a later Meta export overlaps the earlier period, supplying all relevant export roots so the replacement narrative remains complete.
 
 ## Boundaries and future work
 

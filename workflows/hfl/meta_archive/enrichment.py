@@ -23,13 +23,22 @@ def enrich_event_media(events: list[MetaEvent], *, allow_cloud: bool,
     """Caption/transcribe unique attachments; never raises for one bad artifact."""
     if not allow_cloud or max_media <= 0:
         return {}
+    eligible_events = [
+        event for event in events
+        if not (
+            event.platform.casefold() == "instagram"
+            and event.event_type != "authored-content"
+        )
+    ]
+    if not eligible_events:
+        return {}
     cache_root = Path(cache_dir).resolve() if cache_dir else None
     if cache_root:
         cache_root.mkdir(parents=True, exist_ok=True)
     client = BaseApiServiceAnthropic(get_anthropic_config(cfg_id))
     visual_ready = bool(getattr(client, "base_client", None))
     enriched: dict[str, dict[str, Any]] = {}
-    for event in events:
+    for event in eligible_events:
         for attachment in event.attachments:
             key = attachment.media_id or attachment.path or attachment.uri
             if not key or key in enriched or len(enriched) >= max_media:

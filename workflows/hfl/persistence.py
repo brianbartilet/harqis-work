@@ -86,6 +86,7 @@ class EntryEnvelope:
     entry: HflEntry
     synthesized: bool = False
     es_doc_id: str | None = None
+    replace_duplicate: bool = False
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -103,6 +104,7 @@ class EntryEnvelope:
             },
             "synthesized": self.synthesized,
             "es_doc_id": self.es_doc_id,
+            "replace_duplicate": self.replace_duplicate,
         }
 
     @classmethod
@@ -131,6 +133,7 @@ class EntryEnvelope:
             entry=entry,
             synthesized=bool(payload.get("synthesized")),
             es_doc_id=str(payload.get("es_doc_id") or "") or None,
+            replace_duplicate=bool(payload.get("replace_duplicate")),
         )
 
 
@@ -142,6 +145,7 @@ def make_envelope(
     machine: str | None = None,
     dedup_key: str | None = None,
     es_doc_id: str | None = None,
+    replace_duplicate: bool = False,
 ) -> EntryEnvelope:
     origin = (machine or local_machine_name()).strip() or "unknown"
     source_name = (source or "unknown").strip() or "unknown"
@@ -158,7 +162,9 @@ def make_envelope(
         entry_id=entry_id,
         synthesized=bool(synthesized),
     )
-    return EntryEnvelope(enriched, bool(synthesized), es_doc_id)
+    return EntryEnvelope(
+        enriched, bool(synthesized), es_doc_id, bool(replace_duplicate)
+    )
 
 
 def _entry_blocks(text: str) -> Iterable[HflEntry]:
@@ -230,11 +236,32 @@ def _merge_duplicate_references(
     return existing_text, None
 
 
+def _replace_duplicate_entry(
+    existing_text: str,
+    entry: HflEntry,
+) -> tuple[str, HflEntry | None]:
+    """Replace the exact stable-id block so Markdown and ES project one entry."""
+    matches = list(_HEADER.finditer(existing_text or ""))
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(existing_text)
+        existing = HflEntry.from_markdown(match.group(1), existing_text[match.end():end])
+        if existing.entry_id != entry.entry_id:
+            continue
+        if _content_signature(existing) == _content_signature(entry):
+            return existing_text, entry
+        return (
+            existing_text[:match.start()] + entry.to_markdown() + existing_text[end:],
+            entry,
+        )
+    return existing_text, None
+
+
 def persist_envelope(
     envelope: EntryEnvelope,
     *,
     corpus_dir: Path | None = None,
     merge_duplicate_references: bool = False,
+    replace_duplicate: bool | None = None,
 ) -> dict[str, Any]:
     """Prepend exactly once under a per-day cross-process file lock."""
     entry = envelope.entry
@@ -255,6 +282,7 @@ def persist_envelope(
     duplicate = False
     rendered = entry.to_markdown()
     indexed_entry = entry
+    should_replace = envelope.replace_duplicate if replace_duplicate is None else replace_duplicate
 
     with FileLock(lock_file, timeout=30):
         existing_text = day_file.read_text(encoding="utf-8") if day_file.exists() else ""
@@ -264,7 +292,28 @@ def persist_envelope(
             or _content_signature(existing) == _content_signature(entry)
             for existing in existing_entries
         )
-        if duplicate and merge_duplicate_references:
+        if duplicate and should_replace:
+            updated_text, replacement = _replace_duplicate_entry(existing_text, entry)
+            if replacement is not None:
+                indexed_entry = replacement
+            if updated_text != existing_text:
+                temporary = day_file.with_name(
+                    f".{day_file.name}.tmp-{os.getpid()}-{uuid.uuid4().hex}"
+                )
+                try:
+                    with temporary.open("w", encoding="utf-8") as handle:
+                        handle.write(updated_text)
+                        written = len(entry.to_markdown())
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                    if day_file.exists():
+                        os.chmod(temporary, day_file.stat().st_mode)
+                    os.replace(temporary, day_file)
+                finally:
+                    temporary.unlink(missing_ok=True)
+            else:
+                written = 0
+        elif duplicate and merge_duplicate_references:
             updated_text, merged_entry = _merge_duplicate_references(existing_text, entry)
             if merged_entry is not None:
                 indexed_entry = merged_entry
@@ -366,6 +415,7 @@ def submit_hfl_entry(
     synthesized: bool = False,
     dedup_key: str | None = None,
     es_doc_id: str | None = None,
+    replace_duplicate: bool = False,
 ) -> dict[str, Any]:
     """Durably submit an entry locally or to the canonical HFL queue."""
     envelope = make_envelope(
@@ -374,6 +424,7 @@ def submit_hfl_entry(
         synthesized=synthesized,
         dedup_key=dedup_key,
         es_doc_id=es_doc_id,
+        replace_duplicate=replace_duplicate,
     )
     path = save_to_outbox(envelope)
     try:
