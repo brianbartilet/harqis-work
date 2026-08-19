@@ -44,6 +44,8 @@ class MetaEvent:
     attachments: tuple[MetaAttachment, ...] = field(default_factory=tuple)
     references: tuple[str, ...] = field(default_factory=tuple)
     event_id: str = ""
+    raw_timestamp: str = ""
+    source_reference: str = ""
 
     def __post_init__(self) -> None:
         if not self.event_id:

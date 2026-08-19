@@ -53,8 +53,10 @@ def _event(*, platform: str = "facebook", event_type: str = "message",
 
 def _write_work_item(path: Path, events: list[MetaEvent], *,
                      platform: str = "facebook") -> str:
+    item_id = f"meta-{platform}-test-item"
     content = json.dumps({
-        "schema_version": 1, "platform": platform, "thread_id": "friend",
+        "schema_version": 2, "item_id": item_id,
+        "platform": platform, "thread_id": "friend",
         "week_start": "2024-06-03", "events": [event.to_dict() for event in events],
     }, ensure_ascii=False, indent=2).encode("utf-8")
     path.write_bytes(content)
@@ -133,6 +135,42 @@ def test__build_import_plan_deduplicates_overlapping_parts(tmp_path):
     assert len(plan["items"][0]["sha256"]) == 64
 
 
+def test__preparation_fails_closed_at_cap_with_exact_counts(tmp_path):
+    export_root = tmp_path / "exports"
+    _facebook_export(export_root)
+
+    plan = build_import_plan(
+        platform="facebook", archive_roots=[str(export_root)],
+        work_dir=str(tmp_path / "work"), max_events=1,
+    )
+
+    assert plan["ok"] is False
+    assert plan["truncated"] is True
+    assert plan["reason"] == "event-cap-reached"
+    assert plan["counts"]["parsed"] == 1
+    assert plan["counts"]["valid_unique"] == 1
+    assert not (Path(plan["report_path"]).parent / "plan.json").exists()
+
+
+def test__future_events_are_quarantined_with_raw_timestamp(tmp_path):
+    export, source = _facebook_export(tmp_path / "exports")
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    payload["messages"][0]["timestamp_ms"] = 4926355200000  # 2126-02-15 UTC
+    source.write_text(json.dumps(payload), encoding="utf-8")
+
+    plan = build_import_plan(
+        platform="facebook", archive_roots=[str(export)],
+        work_dir=str(tmp_path / "work"), max_events=0,
+    )
+
+    assert plan["ok"] is True
+    assert plan["counts"]["valid_unique"] == 0
+    assert plan["counts"]["quarantined"] == 1
+    quarantine = json.loads(Path(plan["quarantine"]["path"]).read_text(encoding="utf-8"))
+    assert quarantine["events"][0]["raw_timestamp"] == "4926355200000"
+    assert quarantine["events"][0]["reason"] == "materially-future-timestamp"
+
+
 def test__ingest_meta_work_item_submits_exactly_once(tmp_path, monkeypatch):
     event = _event()
     path = tmp_path / "item.json"
@@ -141,6 +179,10 @@ def test__ingest_meta_work_item_submits_exactly_once(tmp_path, monkeypatch):
     monkeypatch.setattr(module, "submit_hfl_entry", lambda *args, **kwargs: calls.append((args, kwargs)) or {
         "delivery": "persisted", "entry_id": "test-id", "indexed": True,
     })
+    monkeypatch.setattr(
+        module, "BaseApiServiceAnthropic",
+        lambda *_: (_ for _ in ()).throw(AssertionError("synthesis client called")),
+    )
     result = module.ingest_meta_work_item(
         work_item_path=str(path), platform="facebook", allow_cloud=False,
         synthesize=False, expected_work_item_sha256=digest,
@@ -152,6 +194,24 @@ def test__ingest_meta_work_item_submits_exactly_once(tmp_path, monkeypatch):
     assert calls[0][1]["dedup_key"] == "facebook:friend:2024-06-03"
     assert calls[0][1]["replace_duplicate"] is True
     assert calls[0][0][0].when.isoformat() == "2024-06-03T00:00:00+08:00"
+
+
+def test__leaf_marks_noncanonical_delivery_failed(tmp_path, monkeypatch):
+    path = tmp_path / "item.json"
+    _write_work_item(path, [_event()])
+    monkeypatch.setattr(module, "submit_hfl_entry", lambda *_a, **_k: {
+        "delivery": "outbox", "indexed": None,
+    })
+
+    try:
+        module.ingest_meta_work_item(
+            work_item_path=str(path), platform="facebook",
+            allow_cloud=False, synthesize=False,
+        )
+    except RuntimeError as exc:
+        assert "Markdown and Elasticsearch" in str(exc)
+    else:
+        raise AssertionError("noncanonical delivery must fail the leaf task")
 
 
 def test__instagram_conversation_media_never_reaches_cloud(tmp_path, monkeypatch):
@@ -230,6 +290,22 @@ def test__dispatch_requires_pinned_manifest_and_work_items(tmp_path, monkeypatch
     assert result["dispatched"] == 1
     assert result["allow_cloud"] is False
     assert sent[0][1]["kwargs"]["expected_work_item_sha256"] == plan["items"][0]["sha256"]
+    assert sent[0][1]["kwargs"]["synthesize"] is False
+
+    resumed = module.dispatch_meta_archive_import(
+        manifest_path=plan["manifest_path"],
+        approved_manifest_sha256=plan["manifest_sha256"],
+    )
+    assert resumed["dispatched"] == 0
+    assert resumed["enqueued"] == 1
+    report = module.report_meta_archive_import(
+        manifest_path=plan["manifest_path"],
+        approved_manifest_sha256=plan["manifest_sha256"],
+    )
+    assert report["ok"] is True
+    assert report["planned"] == 1
+    assert report["enqueued"] == 1
+    assert Path(report["report_path"]).exists()
 
     item_path = Path(plan["items"][0]["path"])
     item_path.write_bytes(item_path.read_bytes() + b" ")
@@ -273,7 +349,10 @@ def test__dispatch_rejects_cross_root_and_malformed_work_items(tmp_path, monkeyp
 
     local_item = manifest_path.parent / "malformed.json"
     digest = _write_work_item(local_item, [_event()], platform="instagram")
-    manifest["items"][0].update(path=str(local_item), sha256=digest, thread_id="friend")
+    manifest["items"][0].update(
+        id="meta-instagram-test-item", key="meta-instagram-test-item",
+        path=str(local_item), sha256=digest, thread_id="friend",
+    )
     content = json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")
     manifest_path.write_bytes(content)
     monkeypatch.setattr(
@@ -325,6 +404,7 @@ def test__overlapping_replay_keeps_markdown_and_es_in_parity(tmp_path, monkeypat
     assert indexed[-1][0].moment == entries[0].moment
     assert indexed[-1][0].what_happened == entries[0].what_happened
     assert indexed[-1][0].references == entries[0].references
+    assert indexed[-1][0].tags == entries[0].tags
     assert indexed[0][1]["doc_id"] == indexed[-1][1]["doc_id"]
 
 
@@ -336,3 +416,30 @@ def test__references_render_in_activity_corpus():
     rendered = entry.to_markdown()
     assert "References:" in rendered
     assert "meta-archive://facebook/test/message_1.json" in rendered
+
+
+def test__meta_tags_are_canonical_and_round_trip(tmp_path, monkeypatch):
+    path = tmp_path / "item.json"
+    _write_work_item(path, [_event()])
+    captured = []
+    monkeypatch.setattr(module, "distill_meta_activity", lambda *_a, **_k: {
+        "skip": False, "moment": "m", "what_happened": "w",
+        "why_it_stayed": "y", "possible_use": "p",
+        "tags": [" Work & Life ", "FACEBOOK", "work-life"],
+        "synthesized": False,
+    })
+    monkeypatch.setattr(module, "submit_hfl_entry", lambda entry, **_k: (
+        captured.append(entry) or {"delivery": "persisted", "indexed": True}
+    ))
+
+    module.ingest_meta_work_item(
+        work_item_path=str(path), platform="facebook", allow_cloud=False,
+        synthesize=False,
+    )
+    entry = captured[0]
+    markdown = entry.to_markdown()
+    header, body = markdown.split("\n", 1)
+    parsed = HflEntry.from_markdown(header, body)
+    assert entry.tags == tuple(sorted(set(entry.tags)))
+    assert entry.tags == parsed.tags
+    assert "work-life" in entry.tags

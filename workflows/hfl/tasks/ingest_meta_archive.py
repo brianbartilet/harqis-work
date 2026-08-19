@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import uuid
 from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
@@ -15,7 +16,10 @@ from core.utilities.logging.custom_logger import create_logger
 from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 from workflows.hfl.distill import parse_model_json
-from workflows.hfl.dto import HflEntry
+from workflows.hfl.dto import HflEntry, canonicalize_tags
+from workflows.hfl.meta_archive.checkpoint import (
+    checkpoint_report, initialize_checkpoint, reserve_items, update_item,
+)
 from workflows.hfl.meta_archive.enrichment import enrich_event_media
 from workflows.hfl.meta_archive.models import MetaEvent, stable_hash
 from workflows.hfl.meta_archive.planner import (
@@ -87,7 +91,7 @@ def distill_meta_activity(events: list[MetaEvent], *, platform: str,
 
 def _validate_work_item(payload: dict[str, Any], events: list[MetaEvent],
                         *, platform: str) -> date:
-    if payload.get("schema_version") != 1:
+    if payload.get("schema_version") != 2:
         raise ValueError("unsupported work item schema")
     if payload.get("platform") != platform:
         raise ValueError("work item platform mismatch")
@@ -106,12 +110,12 @@ def _validate_work_item(payload: dict[str, Any], events: list[MetaEvent],
     return week_start
 
 
-def ingest_meta_work_item(*, work_item_path: str, platform: str,
+def _ingest_meta_work_item(*, work_item_path: str, platform: str,
                           cfg_id__anthropic: str = "ANTHROPIC",
                           model: str = _DEFAULT_HAIKU, allow_cloud: bool = False,
                           max_media: int = 12, frames_per_video: int = 4,
                           whisper_model: str = "whisper-1",
-                          synthesize: bool = True,
+                          synthesize: bool = False,
                           expected_work_item_sha256: str = "",
                           work_item_root: str = "") -> dict[str, Any]:
     payload, events = load_work_item(
@@ -135,9 +139,9 @@ def ingest_meta_work_item(*, work_item_path: str, platform: str,
     references = tuple(dict.fromkeys(
         reference for event in events for reference in event.references
     ))[:25]
-    tags = [platform, "meta-archive", "weekly"] + [
+    tags = canonicalize_tags([platform, "meta-archive", "weekly"] + [
         str(tag) for tag in distilled.get("tags") or [] if str(tag).strip()
-    ][:6]
+    ][:6])
     # A stable date keeps overlapping exports in the same Markdown file. The
     # replacement policy below then atomically updates the exact stable-id block.
     entry_when = datetime.combine(
@@ -156,6 +160,10 @@ def ingest_meta_work_item(*, work_item_path: str, platform: str,
         dedup_key=key, es_doc_id=f"meta-{platform}-{stable_hash(key)[:24]}",
         replace_duplicate=True,
     )
+    if persistence.get("delivery") != "persisted" or persistence.get("indexed") is not True:
+        raise RuntimeError(
+            "Meta entry did not reach both canonical Markdown and Elasticsearch"
+        )
     return {"entries_written": 1, "platform": platform,
             "thread_id": payload["thread_id"], "week_start": payload["week_start"],
             "events": len(events), "media_considered": len(enrichment),
@@ -163,14 +171,37 @@ def ingest_meta_work_item(*, work_item_path: str, platform: str,
             **persistence}
 
 
+def ingest_meta_work_item(*, checkpoint_path: str = "", item_id: str = "",
+                          **kwargs: Any) -> dict[str, Any]:
+    """Persist one item and durably record its terminal dispatch outcome."""
+    if checkpoint_path:
+        item_root = Path(str(kwargs.get("work_item_root") or "")).expanduser().resolve()
+        resolved_checkpoint = Path(checkpoint_path).expanduser().resolve()
+        if not item_root or resolved_checkpoint.parent != item_root:
+            raise ValueError("checkpoint is outside the approved work-item directory")
+        checkpoint_path = str(resolved_checkpoint)
+    try:
+        result = _ingest_meta_work_item(**kwargs)
+        if checkpoint_path and item_id:
+            status = "distilled-skip" if result.get("skipped") == "distilled-skip" else "succeeded"
+            update_item(checkpoint_path, item_id, status, result=result)
+        return result
+    except Exception as exc:
+        if checkpoint_path and item_id:
+            update_item(checkpoint_path, item_id, "failed", error=str(exc))
+        raise
+
+
 @SPROUT.task()
 @log_result()
 def prepare_meta_archive_import(*, platform: str, archive_roots: list[str],
-                                work_dir: str, max_events: int = 500_000) -> dict:
+                                work_dir: str, max_events: int = 500_000,
+                                future_tolerance_hours: int = 24) -> dict:
     """Parse raw archives into resumable thread-week work items; writes no HFL."""
     try:
         return build_import_plan(platform=platform, archive_roots=archive_roots,
-                                 work_dir=work_dir, max_events=max_events)
+                                 work_dir=work_dir, max_events=max_events,
+                                 future_tolerance_hours=future_tolerance_hours)
     except Exception as exc:  # noqa: BLE001
         _log.error("prepare_meta_archive_import failed (%s)", exc)
         return {"ok": False, "reason": "prepare-failed", "error": str(exc)[:300]}
@@ -178,7 +209,8 @@ def prepare_meta_archive_import(*, platform: str, archive_roots: list[str],
 
 def _approved_dispatch_items(*, manifest_path: str,
                              approved_manifest_sha256: str,
-                             max_items: int) -> tuple[str, str, Path, list[dict[str, Any]]]:
+                             item_ids: list[str] | None = None
+                             ) -> tuple[str, str, Path, list[dict[str, Any]]]:
     """Validate every reviewed artifact before any task can be enqueued."""
     manifest_file = Path(manifest_path).expanduser().resolve(strict=True)
     manifest_content = manifest_file.read_bytes()
@@ -188,22 +220,43 @@ def _approved_dispatch_items(*, manifest_path: str,
     ):
         raise ValueError("manifest integrity check failed")
     manifest = json.loads(manifest_content.decode("utf-8"))
-    if manifest.get("schema_version") != 1 or not manifest.get("ok"):
+    if (manifest.get("schema_version") != 2 or not manifest.get("ok")
+            or not manifest.get("complete") or manifest.get("truncated")):
         raise ValueError("unsupported or unsuccessful Meta archive manifest")
     platform = manifest["platform"]
     if platform not in {"facebook", "instagram"}:
         raise ValueError("manifest platform must be facebook or instagram")
     work_root = manifest_file.parent.resolve(strict=True)
+    quarantine = manifest.get("quarantine") or {}
+    if quarantine.get("path") and quarantine.get("sha256"):
+        quarantine_path = Path(str(quarantine["path"])).expanduser().resolve(strict=True)
+        if not quarantine_path.is_relative_to(work_root):
+            raise ValueError("quarantine report is outside the approved manifest directory")
+        if not hmac.compare_digest(
+            content_sha256(quarantine_path.read_bytes()), str(quarantine["sha256"]).casefold()
+        ):
+            raise ValueError("quarantine report integrity check failed")
+        quarantine_payload = json.loads(quarantine_path.read_text(encoding="utf-8"))
+        if (quarantine_payload.get("schema_version") != 2
+                or quarantine_payload.get("platform") != platform
+                or len(quarantine_payload.get("events") or []) != int(quarantine.get("count", -1))):
+            raise ValueError("quarantine report metadata does not match the manifest")
     approved_items: list[dict[str, Any]] = []
-    limit = max(0, min(int(max_items), 10_000))
-    for item in (manifest.get("items") or [])[:limit]:
-        if not isinstance(item, dict) or not item.get("path") or not item.get("sha256"):
+    seen_ids: set[str] = set()
+    for item in manifest.get("items") or []:
+        if (not isinstance(item, dict) or not item.get("id")
+                or not item.get("path") or not item.get("sha256")):
             raise ValueError("manifest contains an unpinned work item")
+        if item["id"] in seen_ids:
+            raise ValueError("manifest contains duplicate item IDs")
+        seen_ids.add(str(item["id"]))
         payload, events = load_work_item(
             str(item["path"]), expected_sha256=str(item["sha256"]),
             allowed_root=str(work_root),
         )
         if (
+            payload.get("item_id") != item.get("id")
+            or
             payload.get("thread_id") != item.get("thread_id")
             or payload.get("week_start") != item.get("week_start")
             or len(events) != int(item.get("event_count", -1))
@@ -211,6 +264,11 @@ def _approved_dispatch_items(*, manifest_path: str,
             raise ValueError("work item metadata does not match the approved manifest")
         _validate_work_item(payload, events, platform=platform)
         approved_items.append(item)
+    if len(approved_items) != int(manifest.get("work_item_count", -1)):
+        raise ValueError("manifest work-item count does not match its items")
+    requested = set(item_ids or [])
+    if requested and not requested.issubset(seen_ids):
+        raise ValueError("requested item ID is not present in the approved manifest")
     return platform, approved, work_root, approved_items
 
 
@@ -219,13 +277,25 @@ def _approved_dispatch_items(*, manifest_path: str,
 def dispatch_meta_archive_import(*, manifest_path: str,
                                  approved_manifest_sha256: str,
                                  allow_cloud: bool = False,
-                                 max_items: int = 10_000) -> dict:
+                                 synthesize: bool = False,
+                                 max_items: int = 100,
+                                 item_ids: list[str] | None = None,
+                                 retry_failed: bool = False) -> dict:
     """Dispatch only the exact manifest and work items approved by review."""
     try:
         platform, approved, work_root, approved_items = _approved_dispatch_items(
             manifest_path=manifest_path,
             approved_manifest_sha256=approved_manifest_sha256,
-            max_items=max_items,
+            item_ids=item_ids,
+        )
+        checkpoint_path = work_root / "dispatch.sqlite3"
+        initialize_checkpoint(
+            checkpoint_path, manifest_sha256=approved, platform=platform,
+            items=approved_items, allow_cloud=allow_cloud, synthesize=synthesize,
+        )
+        selected_ids = reserve_items(
+            checkpoint_path, max_items=min(max(0, int(max_items)), 10_000),
+            item_ids=item_ids, retry_failed=retry_failed,
         )
     except Exception as exc:  # noqa: BLE001 - fail closed before any dispatch
         _log.warning("Meta archive dispatch rejected (%s)", exc)
@@ -237,24 +307,69 @@ def dispatch_meta_archive_import(*, manifest_path: str,
             "task_ids": [],
         }
     task_name = f"workflows.hfl.tasks.ingest_{platform}.ingest_{platform}_activity"
+    by_id = {str(item["id"]): item for item in approved_items}
     task_ids: list[str] = []
-    for item in approved_items:
-        result = SPROUT.send_task(
-            task_name,
-            kwargs={
-                "work_item_path": item["path"],
-                "expected_work_item_sha256": item["sha256"],
-                "work_item_root": str(work_root),
-                "allow_cloud": allow_cloud,
-            },
-            queue=WorkflowQueue.HFL.value,
-        )
-        task_ids.append(str(result.id))
+    for item_id in selected_ids:
+        item = by_id[item_id]
+        task_id = str(uuid.uuid4())
+        try:
+            result = SPROUT.send_task(
+                task_name,
+                kwargs={
+                    "work_item_path": item["path"],
+                    "expected_work_item_sha256": item["sha256"],
+                    "work_item_root": str(work_root),
+                    "allow_cloud": allow_cloud,
+                    "synthesize": synthesize,
+                    "checkpoint_path": str(checkpoint_path),
+                    "item_id": item_id,
+                },
+                queue=WorkflowQueue.HFL.value, task_id=task_id,
+            )
+            actual_task_id = str(result.id or task_id)
+            update_item(checkpoint_path, item_id, "enqueued", task_id=actual_task_id)
+            task_ids.append(actual_task_id)
+        except Exception as exc:
+            update_item(checkpoint_path, item_id, "failed", task_id=task_id, error=str(exc))
+            _log.error("failed to enqueue Meta item %s (%s)", item_id, exc)
+    report = checkpoint_report(checkpoint_path)
     return {
-        "ok": True,
+        "ok": len(task_ids) == len(selected_ids),
+        "reason": "" if len(task_ids) == len(selected_ids) else "enqueue-failed",
         "platform": platform,
         "manifest_sha256": approved,
         "allow_cloud": bool(allow_cloud),
+        "synthesize": bool(synthesize),
         "dispatched": len(task_ids),
         "task_ids": task_ids,
+        "checkpoint_path": str(checkpoint_path),
+        "estimated_synthesis_calls": len(task_ids) if synthesize else 0,
+        **report,
     }
+
+
+@SPROUT.task()
+@log_result()
+def report_meta_archive_import(*, manifest_path: str,
+                               approved_manifest_sha256: str) -> dict:
+    """Write and return an auditable snapshot of dispatch outcomes."""
+    try:
+        _, approved, work_root, _ = _approved_dispatch_items(
+            manifest_path=manifest_path,
+            approved_manifest_sha256=approved_manifest_sha256,
+        )
+        checkpoint_path = work_root / "dispatch.sqlite3"
+        report = {"ok": True, "generated_at": datetime.now().astimezone().isoformat(),
+                  "checkpoint_path": str(checkpoint_path),
+                  **checkpoint_report(checkpoint_path)}
+        if not hmac.compare_digest(report["manifest_sha256"], approved):
+            raise ValueError("checkpoint manifest pin does not match approval")
+        report_path = work_root / "final-report.json"
+        content = json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8")
+        temporary = report_path.with_suffix(".json.tmp")
+        temporary.write_bytes(content)
+        temporary.replace(report_path)
+        return {**report, "report_path": str(report_path),
+                "report_sha256": content_sha256(content)}
+    except Exception as exc:
+        return {"ok": False, "reason": "report-failed", "error": str(exc)[:200]}

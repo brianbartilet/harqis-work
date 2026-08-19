@@ -44,14 +44,14 @@ this scaffold closes.
 | `retrieve_hfl_corpus` | Substring + tag scan over the corpus, optional date filter. Returns up to `k` entries, most recent first. | `es_log` (callers consume the return value) | Adhoc — same pattern as capture. |
 | `summarize_hfl_week` | Weekly Haiku 4.5 rollup of the past N days; writes `YYYY-Www-rollup.md` with searchable tags aggregated from its source entries. | `file:hfl_summary+es_log` | Sundays 21:00 local. |
 | `ingest_chatgpt_activity` | **Primary daily research log.** Auto-discovers the operator's ChatGPT conversations created/updated that day via the ChatGPT web app's private backend (no thread ids), distils the questions asked into ONE corpus entry. Haiku-distilled, raw fallback. No token / no prompts → no entry, no call. | `file:hfl_corpus` | Daily 23:00 local (active — no-op until `CHATGPT_WEB_ACCESS_TOKEN` is set). |
-| `prepare_meta_archive_import` / `dispatch_meta_archive_import` | **Manual Meta archive backfill.** Normalizes multipart Facebook JSON and Instagram HTML exports into deduplicated ISO thread-week work items, then dispatches reviewed items to source-specific leaf tasks. Raw exports remain immutable. | `file:hfl_corpus+es:hfl-entries` | Manual only; never scheduled. |
+| `prepare_meta_archive_import` / `dispatch_meta_archive_import` / `report_meta_archive_import` | **Manual Meta archive backfill.** Streams multipart Facebook JSON and Instagram HTML exports through a disk-backed deduplication plan, quarantines future timestamps, dispatches reviewed ISO thread-week items with a durable checkpoint, and reports terminal outcomes. Raw exports remain immutable. | `file:hfl_corpus+es:hfl-entries` | Manual only; never scheduled. |
 | `ingest_facebook_activity` / `ingest_instagram_activity` | Writes one reviewed Meta thread-week work item using source `facebook` or `instagram`. Facebook private-message media supports bounded Haiku captions and Whisper transcription; references remain visible in Markdown and ES. | `file:hfl_corpus+es:hfl-entries` | Manual leaf tasks dispatched from an approved plan. |
 | `ingest_git_activity` | Distils the day's GitHub commits across recently updated repositories into one bounded entry. Haiku-distilled with a raw fallback; no commits means no entry and no model call. | `file:hfl_corpus+es:hfl-entries` | Daily 00:00 local on the `agent` queue. |
 | `ingest_echomtg_inventory_activity` | Compares the complete current EchoMTG collection with the previous successful snapshot and writes one exact per-variant rollup of cards added or removed. The first run establishes a baseline; failed/incomplete reads and unchanged days make no entry or model call. Tags always include `#echomtg #inventory`. | `file:hfl_corpus+es:hfl-entries` | Daily 22:55 local on the `hfl` queue. |
 | `ingest_purchase_transactions_activity` | Drains structured outcomes buffered by TCG listing generation, sold-inventory reconciliation, listing price/quantity reconciliation, and Scryfall bulk refresh. Writes one concise daily review; routine no-change runs make no entry or model call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:00 local on the `hfl` queue. |
 | `ingest_notes_activity` | Diffs each configured note repository from its saved ingest cursor after a verified host pull. Text notes are split at natural heading/semantic topic transitions (bounded per file and per run), producing one entry per topic; images remain one entry. A summary covers deleted, unsupported, or overflow material. Tags include `#notes #repo-<name> #<core-topic>`; `#dsm` is added only to explicit Scrum daily-standup segments. References include a pinned GitHub line anchor plus the host path. First activation records HEAD without backfilling. | `file:hfl_corpus+es:hfl-entries` | Daily 22:50 local on the `hfl` queue. |
-| `ingest_agent_session_event` / `ingest_agent_session_events` | Sanitizes one completed agent prompt plus its visible outcome into a deterministic prompt-audit entry; the batch task retries locally retained events. Hidden reasoning and tool output are excluded. | `file:hfl_corpus+es:hfl-entries` | Immediate from supported hooks/manual skill; retained-event retry every 10 minutes. |
-| `rollup_agent_sessions` | Synthesizes the prior 24-hour cross-surface prompt audit into one daily HFL rollup. | `file:hfl_corpus+es:hfl-entries` | Daily 23:40 local on the `hfl` queue. |
+| `ingest_agent_session_event` / `ingest_agent_session_events` | Captures one sanitized HFL audit entry per user-prompt/assistant-outcome pair from Codex, Claude Code, Hermes, or OpenClaw. Hidden reasoning and tool output are excluded; stable event IDs deduplicate retries. | `file:hfl_corpus+es:hfl-entries` | Immediate from supported hooks/manual skill; retained-event retry every 10 minutes on the `hfl` queue. |
+| `rollup_agent_sessions` | Distils the processed prompt audit events in the 24-hour window ending at 23:40 into one cross-surface HFL rollup. Prompts after the cutoff appear in the next rollup; empty windows are a clean no-op. | `file:hfl_corpus+es:hfl-entries` | Daily 23:40 local on the `hfl` queue. |
 | `ingest_ai_activity` | Alternate source (OpenAI **Platform API** assistant threads, via `OPENAI_HFL_THREAD_IDS`). Superseded by `ingest_chatgpt_activity` — kept in code but its beat entry is **disabled** (commented-out) to avoid a nightly no-op. | `file:hfl_corpus` | Disabled (uncomment in `tasks_config.py` if you also want Platform-API threads). |
 | `ingest_browsing_activity` | Daily web-browsing digest. Reads the Chrome + Edge `History` SQLite DBs directly (copy-to-temp to dodge the browser lock; no app/credential), distils the day's visits into ONE corpus entry with the most-visited pages as `references`. Haiku-distilled, raw fallback. No history DB / no visits → no entry, no call. No domain filtering by default (`exclude_domains` kwarg to redact). | `file:hfl_corpus+es:hfl-entries` | Daily 23:00 local (active — `os: windows`; no config needed). |
 | `ingest_location_activity` | Daily location timeline. Pulls the day's GPS track from the local OwnTracks Recorder (`apps/own_tracks`), clusters fixes into **stay-points** (dwell ≥ N min), reverse-geocodes each via OpenStreetMap Nominatim (free, no key), and distils ONE "where I was today" timeline entry. Haiku-distilled, raw fallback. No device configured / Recorder unreachable / no fixes → no entry, no call. Meaningful movement without stays becomes a named route/round-trip timeline; only low-distance/noisy tracks use the generic movement-only breadcrumb. | `file:hfl_corpus+es:hfl-entries` | Daily 23:05 local (active — clean no-op until OwnTracks reports). |
@@ -61,8 +61,6 @@ this scaffold closes.
 | `ingest_radar_activity` | Daily **HERMES RADAR digest.** Reads the day's compatibility-named `show_daily_radar` synthesis blocks back out of the shared desktop feed file (`<feed_dir>/hud-logs-YYYYMMDD.txt`) and distils them into ONE "what the day was about" entry. It does not ingest the 15-minute Telegram push rerenders or re-run the radar source sweep. The feed file is Drive-synced, so the Beat host reads briefings a Windows radar wrote; files read remain the entry references. Haiku-distilled, raw fallback. No feed dir / no synthesis blocks → no entry, no LLM call. | `file:hfl_corpus+es:hfl-entries` | Daily 23:20 local (active — clean no-op until `DESKTOP_PATH_FEED` is set and the radar has run). |
 | `ingest_trello_activity` | Reads actions authored by the authenticated Trello member and writes **one entry per meaningful action** using the original event time. Routine activity is rendered deterministically; long comments and unfamiliar actions may use Haiku. Stable action IDs make daily runs and overlapping backfills idempotent. References link to the action/card, board, Workspace, and profile activity page. | `file:hfl_corpus+es:hfl-entries` | Daily 23:25 local on the `hfl` queue (active; previous completed day). Manual runs support `last 30 days`, previous-calendar `last year`, explicit dates, and `all`. |
 | `ingest_android_media_activity` | Reads Android screen-time/activity export logs, reports only application categories and session counts, and writes one privacy-bounded entry. Raw titles/content are not sent to the model or corpus. A missing log directory is a clean no-op. | `file:hfl_corpus+es:hfl-entries` | Daily 23:15 local on the `hfl` queue; inactive until `HFL_ANDROID_SCREEN_LOG_DIR` is configured. |
-| `ingest_agent_session_event` / `ingest_agent_session_events` | Captures one sanitized HFL audit entry per user-prompt/assistant-outcome pair from Codex, Claude Code, Hermes, or OpenClaw. The artifact retains the redacted original plus typo-corrected prompt, request/work summaries, status, identifiers, and artifact references. Stable event IDs deduplicate hook retries. | `file:hfl_corpus+es:hfl-entries` | Hooks enqueue immediately; a 23:35 broadcast forwards retained local events from every participating worker. |
-| `rollup_agent_sessions` | Distils the processed prompt audit events in the 24-hour window ending at 23:40 into one cross-surface HFL rollup, so prompts after one cutoff appear in the next rollup instead of being lost. Empty windows are a clean no-op. | `file:hfl_corpus+es:hfl-entries` | Daily 23:40 local. |
 | `analyze_desktop_capture` | **Desktop capture vision pass.** Selects only exact HARQIS `sc-desktop-check_monitorN` filenames or timestamped native Windows screenshots in the canonical `Screenshots 1` dump folder under the approved workstation daily-dump sources, writes `Source: desktop`, and uses the shared secure media/vision/geolocation pipeline. Already-referenced media is skipped before the model call; `media_path=<inbox file>` targets one artifact. Near matches and unknown provenance remain unprocessed. | `file:hfl_corpus+es:hfl-entries` | Daily 22:00 local (active). |
 | `analyze_android_capture` | **Android durable-media vision pass.** Selects only the exact configured Android dump source plus canonical Camera/DCIM/Screenshots/Screenrecord folders, writes `Source: android_capture`, and cannot be starved by desktop volume. This is separate from privacy-reduced `android_media` attention logs. | `file:hfl_corpus+es:hfl-entries` | Daily 22:05 local (active). |
 | `collect_time_capsule` | **On-demand, time-ranged archive ingest.** Sweeps a directory (and subdirs) for files dated within a period, extracts text / docs / Haiku vision captions into a bounded manifest + digest. The COLLECT half of the `/time-capsule-synthesizer` skill (Claude synthesizes ONE rollup entry from the digest, then dual-writes it via `capture_hfl_entry`). Not scheduled. | `file:hfl_corpus+es:hfl-entries` (via the skill) | Adhoc — driven by `/time-capsule-synthesizer`. |
@@ -78,16 +76,29 @@ server after raw export folders have been synced to a server-visible inbox.
 1. Call `prepare_meta_archive_import` once for `facebook` and once for
    `instagram`, passing every export parent in `archive_roots` and an ignored
    derived-data directory in `work_dir` (`HFL_META_WORK_DIR` is recommended).
-2. Record the returned `manifest_sha256`, then review that exact `plan.json`:
-   export roots, unique event count, work-item count, thread ids, ISO week
-   starts, per-item event counts, and each work item's `sha256` pin.
-3. Preview selected work-item paths with the read-only MCP tool
+2. Require schema 2 with `ok=true`, `complete=true`, and `truncated=false`.
+   A positive `max_events` is an approval ceiling: reaching it produces only
+   `preparation-report.json`, never an approvable `plan.json`. Use `max_events=0`
+   only after the exact count and host capacity have been reviewed.
+3. Review the pinned quarantine report. Future records retain their raw Meta
+   timestamp and provenance; inspect and correct the source problem rather
+   than silently reinterpreting it. Then record `manifest_sha256` and review
+   the exact `plan.json`, counts, thread/week metadata, item paths, and hashes.
+4. Preview selected work-item paths with the read-only MCP tool
    `meta_archive_preview`, passing `expected_work_item_sha256` and
    `work_item_root=<plan.json parent>` (`synthesize=False` makes no model call).
-4. Call `dispatch_meta_archive_import(manifest_path=...,
-   approved_manifest_sha256=...)` only after review. Dispatch verifies the
+5. Call `dispatch_meta_archive_import(manifest_path=...,
+   approved_manifest_sha256=..., max_items=...)` only after review. Dispatch verifies the
    manifest pin, every work-item pin, metadata agreement, and path boundary
-   before sending any leaf task to `WorkflowQueue.HFL`.
+   before sending any leaf task to `WorkflowQueue.HFL`. It skips checkpointed
+   items on restart; use explicit `item_ids` for a reviewed subset and
+   `retry_failed=true` only after investigating failures.
+6. Choose `synthesize=false` (default, deterministic local narrative) or
+   `synthesize=true` (one bounded text-model call per dispatched item).
+   `allow_cloud=false` remains the independent media privacy default.
+7. Run `report_meta_archive_import` after each batch and retain its checkpoint
+   and `final-report.json`. Continue only when all enqueued tasks are terminal
+   and Markdown/Elasticsearch reconciliation is clean.
 
 Cloud media enrichment is disabled by default. With `allow_cloud=True`,
 Facebook message attachments from every participant and authored Instagram
@@ -175,7 +186,7 @@ screenshot taken downtown comes out tagged with the place.
 | 23:10 | `ingest_spotify_activity` | day's plays → one soundtrack entry |
 | 23:15 | `ingest_plaud_activity` | day's voice recordings → one entry each + Mac-mini archive |
 | 23:25 | `ingest_trello_activity` | authored Trello actions → one linked entry each |
-| 23:35 | `ingest_agent_session_events` | retry retained prompt/outcome audit events |
+| Every 10 min | `ingest_agent_session_events` | retry retained prompt/outcome audit events |
 | 23:40 | `rollup_agent_sessions` | prompt audit events → one daily rollup |
 
 **Setup** (one-time): the OwnTracks app + `OWN_TRACKS_DEFAULT_USER/DEVICE` (the

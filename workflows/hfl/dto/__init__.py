@@ -11,6 +11,6 @@ This is the manifesto's CODE/Distill rule applied to lived experience:
 "structured DTOs over raw API blobs" (docs/MANIFESTO.md §1).
 """
 
-from workflows.hfl.dto.entry import HflEntry
+from workflows.hfl.dto.entry import HflEntry, canonicalize_tags
 
-__all__ = ["HflEntry"]
+__all__ = ["HflEntry", "canonicalize_tags"]

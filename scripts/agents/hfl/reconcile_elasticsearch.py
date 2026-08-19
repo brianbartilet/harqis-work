@@ -67,6 +67,23 @@ class Reconciliation:
         return self.missing_ids + self.stale_ids
 
 
+class ExistingDocuments(dict[str, dict[str, Any]]):
+    """Live documents keyed by canonical entry_id, with their actual ES IDs."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.actual_ids: dict[str, str] = {}
+
+    def add(self, actual_id: str, source: dict[str, Any]) -> None:
+        canonical_id = str(source.get("entry_id") or actual_id)
+        if canonical_id in self and self.actual_ids[canonical_id] != actual_id:
+            raise ValueError(
+                f"multiple Elasticsearch documents claim entry_id {canonical_id}"
+            )
+        self[canonical_id] = source
+        self.actual_ids[canonical_id] = actual_id
+
+
 def _same_projection(left: dict[str, Any], right: dict[str, Any]) -> bool:
     return all(left.get(field) == right.get(field) for field in _STABLE_FIELDS)
 
@@ -121,10 +138,10 @@ def scan_corpus(corpus_root: Path) -> CorpusScan:
     return CorpusScan(documents, files, invalid, duplicates)
 
 
-def fetch_existing(client: Any, index: str, ids: list[str]) -> dict[str, dict[str, Any]]:
-    """Fetch current sources in bounded `_mget` batches."""
+def fetch_existing(client: Any, index: str, ids: list[str]) -> ExistingDocuments:
+    """Resolve canonical IDs through either ES ``_id`` or ``entry_id``."""
     encoded = urllib.parse.quote(index, safe="-_.")
-    existing: dict[str, dict[str, Any]] = {}
+    existing = ExistingDocuments()
     for offset in range(0, len(ids), 500):
         batch = ids[offset:offset + 500]
         response = client._request(  # shared stdlib client; no secrets logged
@@ -135,7 +152,19 @@ def fetch_existing(client: Any, index: str, ids: list[str]) -> dict[str, dict[st
         for row in response.get("docs", []):
             source = row.get("_source")
             if row.get("found") and isinstance(source, dict):
-                existing[str(row.get("_id") or "")] = source
+                existing.add(str(row.get("_id") or ""), source)
+    unresolved = [entry_id for entry_id in ids if entry_id not in existing]
+    for offset in range(0, len(unresolved), 500):
+        batch = unresolved[offset:offset + 500]
+        response = client._request(
+            "POST", f"/{encoded}/_search",
+            {"size": len(batch) * 2, "_source": True,
+             "query": {"terms": {"entry_id.keyword": batch}}},
+        )
+        for hit in response.get("hits", {}).get("hits", []):
+            source = hit.get("_source")
+            if isinstance(source, dict) and source.get("entry_id") in batch:
+                existing.add(str(hit.get("_id") or ""), source)
     return existing
 
 
@@ -203,10 +232,12 @@ def bulk_upsert(
     index: str,
     documents: dict[str, dict[str, Any]],
     ids: tuple[str, ...],
+    actual_ids: dict[str, str] | None = None,
 ) -> None:
     lines: list[str] = []
     for doc_id in ids:
-        lines.append(json.dumps({"index": {"_index": index, "_id": doc_id}}))
+        target_id = (actual_ids or {}).get(doc_id, doc_id)
+        lines.append(json.dumps({"index": {"_index": index, "_id": target_id}}))
         lines.append(json.dumps(documents[doc_id], ensure_ascii=False))
     if not lines:
         return
@@ -250,6 +281,7 @@ def main() -> int:
                 args.index,
                 documents,
                 reconciliation.changed_ids,
+                current.actual_ids,
             )
     except (OSError, RuntimeError, ValueError) as exc:
         print(f"Reconciliation failed: {exc}", file=sys.stderr)

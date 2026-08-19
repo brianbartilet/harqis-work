@@ -16,11 +16,14 @@ not print private message or attachment content in logs or summaries.
    resolve on the canonical server without displaying credential values.
 2. Run `prepare_meta_archive_import` separately for `facebook` and `instagram`.
    Include every relevant overlapping export root so a later weekly projection
-   contains the complete event set.
-3. Retain the returned `manifest_path` and `manifest_sha256`. Review the exact
-   `plan.json`: platform, export roots, unique event count, work-item count,
-   thread/week metadata, event counts, and every item `sha256`. Do not edit the
-   manifest or work items after review.
+   contains the complete event set. Require schema 2, `complete=true`, and
+   `truncated=false`. If the event cap is reached, inspect the exact count in
+   `preparation-report.json`, then reprepare with a deliberately approved cap
+   or `max_events=0`; a truncated run has no approvable manifest.
+3. Review the pinned quarantine report before the manifest. Inspect the raw
+   Meta timestamp and provenance of every future event; never silently adjust
+   it. Retain the returned `manifest_path` and `manifest_sha256`, then review
+   every count, path, metadata field, and item hash. Do not edit approved files.
 4. Preview selected items with `meta_archive_preview`, passing the item path,
    its `expected_work_item_sha256`, and `work_item_root` equal to the manifest
    directory. Keep `synthesize=False` unless a bounded Haiku preview is wanted.
@@ -28,14 +31,24 @@ not print private message or attachment content in logs or summaries.
    `approved_manifest_sha256`. Keep `allow_cloud=False` unless media enrichment
    was explicitly approved. Even when true, Instagram conversation attachments
    must remain metadata-only; only authored Instagram media is eligible.
-6. Require `ok=true` from dispatch and retain the task IDs. An integrity error,
+   Choose `synthesize=False` for local deterministic entries or
+   `synthesize=True` for one bounded text-model call per dispatched item.
+6. Start with 25 explicit item IDs per platform, then 50, 250, and batches no
+   larger than 500 while queue health is good. The run-local checkpoint skips
+   completed and enqueued items on restart; set `retry_failed=True` only after
+   investigating each failure.
+7. Require `ok=true` from dispatch and retain the task IDs. An integrity error,
    path-boundary error, malformed item, outbox delivery, or `indexed=false`
    stops the batch investigation; do not regenerate a hash to approve an
    unexplained mutation.
-7. Review the resulting Markdown blocks and leaf results. Confirm one stable
+8. Run `report_meta_archive_import` after each batch and preserve
+   `dispatch.sqlite3` plus `final-report.json`. Require all enqueued tasks to be
+   terminal and every item classified as succeeded, distilled-skip, failed, or
+   still planned.
+9. Review the resulting Markdown blocks and leaf results. Confirm one stable
    entry ID per platform/thread/ISO-week and exact `Source: facebook` or
-   `Source: instagram` values.
-8. Run `scripts/agents/hfl/reconcile_elasticsearch.py` without `--apply` using
+   `Source: instagram` values, canonical tag equality, and no duplicate IDs.
+10. Run `scripts/agents/hfl/reconcile_elasticsearch.py` without `--apply` using
    the machine environment bootstrap. Require zero missing and zero stale
    documents. Investigate first; use `--apply` only with explicit authorization.
 

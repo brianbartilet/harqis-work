@@ -1,27 +1,34 @@
-"""Create resumable, deduplicated thread-week work items from raw exports."""
+"""Create complete, review-pinned Meta thread-week work items."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-from collections import defaultdict
-from datetime import date
+import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Iterator
 
-from workflows.hfl.meta_archive.models import MetaEvent
+from workflows.hfl.meta_archive.models import MetaEvent, stable_hash
 from workflows.hfl.meta_archive.parsers import (
     parse_facebook_posts, parse_facebook_thread, parse_instagram_html,
 )
 
 
 def content_sha256(content: bytes) -> str:
-    """Return the review pin used for manifests and immutable work items."""
     return hashlib.sha256(content).hexdigest()
 
 
 def _json_bytes(payload: dict) -> bytes:
     return json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+
+
+def _write_json(path: Path, payload: dict) -> str:
+    content = _json_bytes(payload)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_bytes(content)
+    temporary.replace(path)
+    return content_sha256(content)
 
 
 def discover_export_roots(roots: Iterable[str], platform: str) -> list[Path]:
@@ -38,78 +45,176 @@ def discover_export_roots(roots: Iterable[str], platform: str) -> list[Path]:
     return sorted(found.values(), key=lambda path: str(path).casefold())
 
 
-def _collect(platform: str, exports: list[Path]) -> list[MetaEvent]:
-    events: list[MetaEvent] = []
+def _iter_event_batches(platform: str, exports: list[Path]) -> Iterator[list[MetaEvent]]:
     if platform == "facebook":
         for root in exports:
             for path in root.glob("your_facebook_activity/messages/**/message_*.json"):
                 try:
-                    events.extend(parse_facebook_thread(path, root))
+                    yield parse_facebook_thread(path, root)
                 except (OSError, ValueError, TypeError, json.JSONDecodeError):
                     continue
             for path in root.glob("your_facebook_activity/**/*post*.json"):
                 try:
-                    events.extend(parse_facebook_posts(path, root))
+                    yield parse_facebook_posts(path, root)
                 except (OSError, ValueError, TypeError, json.JSONDecodeError):
                     continue
     elif platform == "instagram":
         for root in exports:
             for path in root.glob("your_instagram_activity/messages/**/message_*.html"):
                 try:
-                    events.extend(parse_instagram_html(path, root, thread_id=path.parent.name))
+                    yield parse_instagram_html(path, root, thread_id=path.parent.name)
                 except (OSError, ValueError, TypeError):
                     continue
             for path in root.glob("your_instagram_activity/media/*.html"):
                 if "post" in path.name.lower() or "stor" in path.name.lower():
                     try:
-                        events.extend(parse_instagram_html(path, root, thread_id="authored-content", authored=True))
+                        yield parse_instagram_html(
+                            path, root, thread_id="authored-content", authored=True
+                        )
                     except (OSError, ValueError, TypeError):
                         continue
     else:
         raise ValueError("platform must be facebook or instagram")
-    return events
+
+
+def _initialize_staging(connection: sqlite3.Connection) -> None:
+    connection.executescript("""
+        PRAGMA journal_mode=WAL;
+        CREATE TABLE events (
+            event_id TEXT PRIMARY KEY,
+            thread_id TEXT NOT NULL,
+            week_start TEXT NOT NULL,
+            occurred_at TEXT NOT NULL,
+            payload TEXT NOT NULL
+        );
+        CREATE INDEX events_grouping ON events(week_start, thread_id, occurred_at, event_id);
+        CREATE TABLE quarantine (
+            event_id TEXT PRIMARY KEY,
+            payload TEXT NOT NULL
+        );
+    """)
 
 
 def build_import_plan(*, platform: str, archive_roots: list[str], work_dir: str,
-                      max_events: int = 500_000) -> dict:
+                      max_events: int = 500_000,
+                      future_tolerance_hours: int = 24) -> dict:
+    """Build a complete plan without retaining the whole export in memory.
+
+    ``max_events`` is an approval safety limit, not a truncation instruction.
+    Preparation still obtains exact counts, but refuses to emit ``plan.json``
+    when the number of valid unique events exceeds a positive limit.
+    """
     exports = discover_export_roots(archive_roots, platform)
     if not exports:
         return {"ok": False, "reason": "no-export-roots", "platform": platform, "items": []}
-    unique: dict[str, MetaEvent] = {}
-    for event in _collect(platform, exports):
-        unique.setdefault(event.event_id, event)
-        if len(unique) >= max_events:
-            break
-    groups: dict[tuple[str, date], list[MetaEvent]] = defaultdict(list)
-    for event in unique.values():
-        week = event.occurred_at_local.date()
-        week = week.fromordinal(week.toordinal() - week.weekday())
-        groups[(event.thread_id, week)].append(event)
-    root = Path(work_dir).expanduser().resolve() / platform
-    root.mkdir(parents=True, exist_ok=True)
-    items: list[dict] = []
-    for (thread_id, week), values in sorted(groups.items(), key=lambda item: (item[0][1], item[0][0])):
-        values.sort(key=lambda event: (event.occurred_at_utc, event.event_id))
-        key = f"{platform}-{week.isoformat()}-{values[0].event_id[:16]}"
-        path = root / f"{key}.json"
-        payload = {"schema_version": 1, "platform": platform, "thread_id": thread_id,
-                   "week_start": week.isoformat(), "events": [event.to_dict() for event in values]}
-        content = _json_bytes(payload)
-        path.write_bytes(content)
-        items.append({"key": key, "path": str(path), "thread_id": thread_id,
-                      "week_start": week.isoformat(), "event_count": len(values),
-                      "sha256": content_sha256(content)})
-    manifest = {"ok": True, "schema_version": 1, "platform": platform,
-                "exports": [str(path) for path in exports], "events_discovered": len(unique),
-                "work_item_count": len(items), "items": items}
-    manifest_path = root / "plan.json"
-    manifest_content = _json_bytes(manifest)
-    manifest_path.write_bytes(manifest_content)
-    return {
-        **manifest,
-        "manifest_path": str(manifest_path),
-        "manifest_sha256": content_sha256(manifest_content),
-    }
+    prepared_at = datetime.now(timezone.utc)
+    run_id = f"{prepared_at:%Y%m%dT%H%M%S%fZ}-{stable_hash(platform, *(str(p) for p in exports))[:10]}"
+    root = Path(work_dir).expanduser().resolve() / platform / run_id
+    root.mkdir(parents=True, exist_ok=False)
+    database = root / "staging.sqlite3"
+    connection = sqlite3.connect(database)
+    _initialize_staging(connection)
+    parsed = duplicates = quarantined = 0
+    future_boundary = prepared_at + timedelta(hours=max(0, future_tolerance_hours))
+    try:
+        for batch in _iter_event_batches(platform, exports):
+            for event in batch:
+                parsed += 1
+                if event.occurred_at_utc > future_boundary:
+                    quarantine = {
+                        "event_id": event.event_id,
+                        "platform": event.platform,
+                        "thread_id": event.thread_id,
+                        "reason": "materially-future-timestamp",
+                        "raw_timestamp": event.raw_timestamp,
+                        "parsed_utc": event.occurred_at_utc.isoformat(),
+                        "parsed_local": event.occurred_at_local.isoformat(),
+                        "source_reference": event.source_reference or (event.references[0] if event.references else ""),
+                    }
+                    inserted = connection.execute(
+                        "INSERT OR IGNORE INTO quarantine(event_id, payload) VALUES (?, ?)",
+                        (event.event_id, json.dumps(quarantine, ensure_ascii=False)),
+                    ).rowcount
+                    quarantined += inserted
+                    duplicates += int(not inserted)
+                    continue
+                local_date = event.occurred_at_local.date()
+                week = local_date.fromordinal(local_date.toordinal() - local_date.weekday())
+                inserted = connection.execute(
+                    "INSERT OR IGNORE INTO events VALUES (?, ?, ?, ?, ?)",
+                    (event.event_id, event.thread_id, week.isoformat(),
+                     event.occurred_at_utc.isoformat(),
+                     json.dumps(event.to_dict(), ensure_ascii=False)),
+                ).rowcount
+                duplicates += int(not inserted)
+            connection.commit()
+        valid = int(connection.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+        quarantine_rows = [
+            json.loads(row[0]) for row in connection.execute(
+                "SELECT payload FROM quarantine ORDER BY payload"
+            )
+        ]
+        quarantine_path = root / "quarantine.json"
+        quarantine_sha = _write_json(quarantine_path, {
+            "schema_version": 2, "platform": platform,
+            "prepared_at": prepared_at.isoformat(), "events": quarantine_rows,
+        })
+        counts = {
+            "parsed": parsed, "valid_unique": valid, "duplicates": duplicates,
+            "quarantined": quarantined,
+        }
+        if max_events > 0 and valid >= max_events:
+            report = {
+                "ok": False, "schema_version": 2, "complete": False,
+                "truncated": True, "reason": "event-cap-reached",
+                "platform": platform, "run_id": run_id,
+                "max_events": max_events, "counts": counts,
+                "quarantine": {"path": str(quarantine_path), "sha256": quarantine_sha,
+                               "count": quarantined},
+            }
+            report_path = root / "preparation-report.json"
+            report_sha = _write_json(report_path, report)
+            return {**report, "report_path": str(report_path), "report_sha256": report_sha}
+
+        items: list[dict] = []
+        groups = connection.execute(
+            "SELECT thread_id, week_start, COUNT(*) FROM events "
+            "GROUP BY thread_id, week_start ORDER BY week_start, thread_id"
+        ).fetchall()
+        for thread_id, week_start, event_count in groups:
+            item_id = f"meta-{platform}-{stable_hash(platform, thread_id, week_start)[:24]}"
+            events = [
+                json.loads(row[0]) for row in connection.execute(
+                    "SELECT payload FROM events WHERE thread_id=? AND week_start=? "
+                    "ORDER BY occurred_at, event_id", (thread_id, week_start)
+                )
+            ]
+            item_path = root / f"{item_id}.json"
+            item_sha = _write_json(item_path, {
+                "schema_version": 2, "item_id": item_id, "platform": platform,
+                "thread_id": thread_id, "week_start": week_start, "events": events,
+            })
+            items.append({
+                "id": item_id, "key": item_id, "path": str(item_path),
+                "thread_id": thread_id, "week_start": week_start,
+                "event_count": event_count, "sha256": item_sha,
+            })
+        manifest = {
+            "ok": True, "schema_version": 2, "complete": True, "truncated": False,
+            "platform": platform, "run_id": run_id, "prepared_at": prepared_at.isoformat(),
+            "exports": [str(path) for path in exports], "max_events": max_events,
+            "counts": counts, "events_discovered": valid,
+            "work_item_count": len(items), "synthesis_eligible_items": len(items),
+            "quarantine": {"path": str(quarantine_path), "sha256": quarantine_sha,
+                           "count": quarantined},
+            "items": items,
+        }
+        manifest_path = root / "plan.json"
+        manifest_sha = _write_json(manifest_path, manifest)
+        return {**manifest, "manifest_path": str(manifest_path),
+                "manifest_sha256": manifest_sha}
+    finally:
+        connection.close()
 
 
 def load_work_item(path: str, *, expected_sha256: str = "",

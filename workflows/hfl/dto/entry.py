@@ -29,6 +29,7 @@ entry (no `References:` line) yields `references == ()`.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Iterable, Optional
@@ -60,6 +61,19 @@ def _norm_tags(tags: Optional[Iterable[str]]) -> tuple[str, ...]:
     return tuple(
         t.strip().lstrip("#") for t in tags if t and str(t).strip()
     )
+
+
+def canonicalize_tags(tags: Optional[Iterable[str]]) -> tuple[str, ...]:
+    """Return deterministic lowercase Markdown-safe tag slugs."""
+    canonical: set[str] = set()
+    for tag in tags or ():
+        ascii_tag = unicodedata.normalize("NFKD", str(tag)).encode(
+            "ascii", "ignore"
+        ).decode("ascii").casefold().lstrip("#")
+        slug = re.sub(r"[^a-z0-9]+", "-", ascii_tag).strip("-")
+        if slug:
+            canonical.add(slug)
+    return tuple(sorted(canonical))
 
 
 def _norm_refs(refs: Optional[Iterable[str]]) -> tuple[str, ...]:

@@ -136,3 +136,30 @@ def test_bulk_upsert_uses_deterministic_ids():
     payload = calls[0][2]["raw_body"].decode("utf-8")
     assert '"_index": "harqis-hfl-entries-v2"' in payload
     assert '"_id": "hfl-one"' in payload
+
+
+def test_fetch_and_upsert_resolve_meta_document_by_canonical_entry_id():
+    calls = []
+
+    class Client:
+        def _request(self, method, path, body=None, **kwargs):
+            calls.append((method, path, body, kwargs))
+            if path.endswith("/_mget"):
+                return {"docs": [{"_id": "hfl-one", "found": False}]}
+            if path.endswith("/_search"):
+                return {"hits": {"hits": [{
+                    "_id": "meta-facebook-stable", "_source": _doc("Old")
+                }]}}
+            return {"errors": False}
+
+    client = Client()
+    existing = reconcile.fetch_existing(client, "harqis-hfl-entries", ["hfl-one"])
+    assert existing["hfl-one"]["moment"] == "Old"
+    assert existing.actual_ids["hfl-one"] == "meta-facebook-stable"
+
+    reconcile.bulk_upsert(
+        client, "harqis-hfl-entries", {"hfl-one": _doc("New")},
+        ("hfl-one",), existing.actual_ids,
+    )
+    payload = calls[-1][3]["raw_body"].decode("utf-8")
+    assert '"_id": "meta-facebook-stable"' in payload

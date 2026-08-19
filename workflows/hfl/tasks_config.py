@@ -567,52 +567,6 @@ WORKFLOW_HFL = {
         },
     },
 
-    # Cross-surface prompt audit. Hooks normally enqueue each prompt/outcome
-    # immediately; this 23:35 broadcast asks every participating worker to
-    # forward retained local events to the canonical HFL worker. The 23:40
-    # task writes one daily audit rollup there.
-    'run-job--ingest_agent_session_events': {
-        'task': 'workflows.hfl.tasks.ingest_agent_sessions.ingest_agent_session_events',
-        'schedule': crontab(hour=23, minute=35),
-        'kwargs': {
-            'cfg_id__anthropic': 'ANTHROPIC',
-            'model': 'claude-haiku-4-5-20251001',
-            'window_days': 2,
-            'max_events': 500,
-        },
-        'options': {
-            'queue': WorkflowQueue.HFL_BROADCAST,
-            'expires': 60 * 60 * 12,
-        },
-        'manifesto': {
-            'code_role': 'capture+distill+express',
-            'para_bucket': 'area',
-            'express_target': 'file:hfl_corpus+es:hfl-entries',
-            'review_artifact': 'es_log+file',
-            'hfl_signal': True,
-            'tenant_safe': True,
-        },
-    },
-
-    'run-job--rollup_agent_sessions': {
-        'task': 'workflows.hfl.tasks.ingest_agent_sessions.rollup_agent_sessions',
-        'schedule': crontab(hour=23, minute=40),
-        'kwargs': {
-            'cfg_id__anthropic': 'ANTHROPIC',
-            'model': 'claude-haiku-4-5-20251001',
-            'max_events': 500,
-        },
-        'options': {'queue': WorkflowQueue.HFL, 'expires': 60 * 60 * 12},
-        'manifesto': {
-            'code_role': 'distill+express',
-            'para_bucket': 'area',
-            'express_target': 'file:hfl_corpus+es:hfl-entries',
-            'review_artifact': 'es_log+file',
-            'hfl_signal': True,
-            'tenant_safe': True,
-        },
-    },
-
     # Durable delivery retry for distributed HFL producers. Every worker may
     # hold a local outbox, so this runs through the HFL broadcast exchange.
     # The canonical server persists its own retained entries directly; other
@@ -633,8 +587,8 @@ WORKFLOW_HFL = {
             'hfl_signal': False,
         },
     },
-    # Retry locally retained prompt/outcome audit events that were not accepted
-    # by the broker at capture time. Immediate hook delivery remains primary.
+    # Retry retained prompt/outcome audit events on the canonical HFL worker.
+    # Immediate hook delivery remains primary.
     'run-job--ingest_agent_session_events': {
         'task': 'workflows.hfl.tasks.ingest_agent_sessions.ingest_agent_session_events',
         'schedule': crontab(minute='*/10'),
@@ -654,6 +608,7 @@ WORKFLOW_HFL = {
             'express_target': 'file:hfl_corpus+es:hfl-entries',
             'review_artifact': 'es_log+file',
             'hfl_signal': True,
+            'tenant_safe': True,
         },
     },
 
@@ -676,12 +631,14 @@ WORKFLOW_HFL = {
             'express_target': 'file:hfl_corpus+es:hfl-entries',
             'review_artifact': 'es_log+file',
             'hfl_signal': True,
+            'tenant_safe': True,
         },
     },
 
     # Meta archive import is deliberately manual-only. First run
-    # prepare_meta_archive_import on harqis-server, review plan.json, then run
-    # dispatch_meta_archive_import. Do not activate either task in Beat.
+    # prepare_meta_archive_import on harqis-server, require a complete schema-v2
+    # plan and review its quarantine/hash pins, then dispatch controlled batches
+    # and call report_meta_archive_import. Do not activate these tasks in Beat.
     #
     # 'run-job--prepare_meta_archive_import': {
     #     'task': 'workflows.hfl.tasks.ingest_meta_archive.prepare_meta_archive_import',
@@ -690,6 +647,8 @@ WORKFLOW_HFL = {
     #         'platform': 'facebook',
     #         'archive_roots': [],
     #         'work_dir': '${HFL_META_WORK_DIR}',
+    #         'max_events': 500000,
+    #         'future_tolerance_hours': 24,
     #     },
     #     'options': {'queue': WorkflowQueue.HFL, 'expires': 60 * 60 * 12},
     #     'manifesto': {

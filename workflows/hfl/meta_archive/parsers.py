@@ -83,6 +83,8 @@ def parse_facebook_thread(path: Path, export_root: Path,
             occurred_at_utc=utc, occurred_at_local=utc.astimezone(tz),
             event_type=event_type, content=content,
             attachments=tuple(attachments), references=refs,
+            raw_timestamp=str(stamp),
+            source_reference=_reference("facebook", export_root, path),
         ))
     return events
 
@@ -125,6 +127,8 @@ def parse_instagram_html(path: Path, export_root: Path, *, thread_id: str,
             occurred_at_utc=local.astimezone(timezone.utc), occurred_at_local=local,
             event_type="authored-content" if authored else "message", content=content,
             attachments=attachments, references=refs,
+            raw_timestamp=match.group(0),
+            source_reference=_reference("instagram", export_root, path),
         ))
     return events
 
@@ -162,5 +166,7 @@ def parse_facebook_posts(path: Path, export_root: Path,
             event_type="authored-content", content=content,
             attachments=tuple(attachments),
             references=tuple(dict.fromkeys([_reference("facebook", export_root, path), *[a.reference for a in attachments]])),
+            raw_timestamp=str(stamp if stamp is not None else raw.get("timestamp")),
+            source_reference=_reference("facebook", export_root, path),
         ))
     return events
