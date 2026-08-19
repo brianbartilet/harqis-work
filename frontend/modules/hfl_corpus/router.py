@@ -26,8 +26,6 @@ from config import get_settings
 from modules.hfl_corpus.corpus import (
     CorpusPage,
     build_tree,
-    common_tags,
-    common_sources,
     corpus_index,
     find_tree_node,
     format_hfl_markdown,
@@ -58,6 +56,7 @@ from modules.hfl_corpus.secrets import (
     set_unlocked_cookie,
     verify_owner_pin,
 )
+from modules.hfl_corpus.view import corpus_view_cache
 from modules.profile.store import get_profile_store
 from modules.hfl_shares.viewer import (
     classify_preview,
@@ -367,18 +366,21 @@ async def hfl_corpus_page(
     remote_error = ""
     if _uses_remote_corpus():
         try:
-            remote = RemoteCorpusClient.from_settings().index(params={
-                "q": q,
-                "date_field": date_field,
-                "date_from": date_from,
-                "date_to": date_to,
-                "source": source,
-                "sort": sort,
-                "page": str(page),
-                "page_size": str(page_size),
-                "include_secrets": str(include_secrets).lower(),
-                "secret_tags": ",".join(protected_tags),
-            })
+            remote = await asyncio.to_thread(
+                RemoteCorpusClient.from_settings().index,
+                params={
+                    "q": q,
+                    "date_field": date_field,
+                    "date_from": date_from,
+                    "date_to": date_to,
+                    "source": source,
+                    "sort": sort,
+                    "page": str(page),
+                    "page_size": str(page_size),
+                    "include_secrets": str(include_secrets).lower(),
+                    "secret_tags": ",".join(protected_tags),
+                },
+            )
             documents = remote["documents"]
             tree = remote["tree"]
             results = remote["results"]
@@ -409,13 +411,16 @@ async def hfl_corpus_page(
             remote_error = str(exc)
     else:
         raw_documents = corpus_index.documents()
-        tag_cloud = common_tags(raw_documents)
-        documents = raw_documents if include_secrets else filter_documents(
-            raw_documents, protected_tags
+        view = corpus_view_cache.get(
+            raw_documents,
+            include_secrets=include_secrets,
+            secret_tags=protected_tags,
         )
-        source_options = common_sources(documents)
+        tag_cloud = view.tag_cloud
+        documents = view.documents
+        source_options = view.sources
         selected_source = normalize_source(source, source_options)
-        tree = shallow_tree(build_tree(documents))
+        tree = shallow_tree(view.tree)
         all_results = search_documents(
             documents,
             query=q,
@@ -550,8 +555,9 @@ async def hfl_entry_create(request: Request, payload: CreateEntryRequest):
         return JSONResponse({"detail": "Authentication required"}, status_code=401)
     try:
         if _uses_remote_corpus():
-            result = RemoteCorpusClient.from_settings().create_entry(
-                payload.model_dump()
+            result = await asyncio.to_thread(
+                RemoteCorpusClient.from_settings().create_entry,
+                payload.model_dump(),
             )
         else:
             result = persist_manual_entry(
@@ -623,17 +629,21 @@ async def hfl_tree(request: Request, path: str = "", show_secrets: bool = False)
     include_secrets = bool(show_secrets and secrets_unlocked(request, profile))
     if _uses_remote_corpus():
         try:
-            branch = RemoteCorpusClient.from_settings().tree(
-                path, include_secrets=include_secrets, secret_tags=protected_tags
+            branch = await asyncio.to_thread(
+                RemoteCorpusClient.from_settings().tree,
+                path,
+                include_secrets=include_secrets,
+                secret_tags=protected_tags,
             )
         except RemoteCorpusError as exc:
             return HTMLResponse(str(exc), status_code=502)
     else:
-        documents = corpus_index.documents()
-        if not include_secrets:
-            documents = filter_documents(documents, protected_tags)
-        tree = build_tree(documents)
-        node = find_tree_node(tree, path)
+        view = corpus_view_cache.get(
+            corpus_index.documents(),
+            include_secrets=include_secrets,
+            secret_tags=protected_tags,
+        )
+        node = find_tree_node(view.tree, path)
         if not node:
             return HTMLResponse("Corpus directory not found", status_code=404)
         branch = shallow_tree(node)
@@ -666,7 +676,8 @@ async def hfl_matches(
     include_secrets = bool(show_secrets and secrets_unlocked(request, profile))
     if _uses_remote_corpus():
         try:
-            match_page = RemoteCorpusClient.from_settings().matches(
+            match_page = await asyncio.to_thread(
+                RemoteCorpusClient.from_settings().matches,
                 relative_path,
                 query=q,
                 source=source,
@@ -687,10 +698,12 @@ async def hfl_matches(
         if not document:
             return HTMLResponse("Corpus document not found", status_code=404)
         selected_tags, text_query = parse_search_query(q)
-        selected_source = normalize_source(
-            source,
-            common_sources(corpus_index.documents()),
+        view = corpus_view_cache.get(
+            corpus_index.documents(),
+            include_secrets=include_secrets,
+            secret_tags=protected_tags,
         )
+        selected_source = normalize_source(source, view.sources)
         visible_documents = (document,) if include_secrets else filter_documents(
             (document,), protected_tags
         )
@@ -744,7 +757,8 @@ async def hfl_document(
     include_secrets = bool(authorized and (show_secrets or reveal))
     if _uses_remote_corpus():
         try:
-            document, references = RemoteCorpusClient.from_settings().document(
+            document, references = await asyncio.to_thread(
+                RemoteCorpusClient.from_settings().document,
                 relative_path,
                 include_secrets=include_secrets,
                 secret_tags=protected_tags,
@@ -841,13 +855,13 @@ async def hfl_document_update(
     profile = get_profile_store().get()
     protected_tags = normalize_secret_tags(profile.secret_tags)
     try:
-        existing_document = (
-            RemoteCorpusClient.from_settings().document(
+        if _uses_remote_corpus():
+            existing_document = (await asyncio.to_thread(
+                RemoteCorpusClient.from_settings().document,
                 relative_path, include_secrets=True, secret_tags=protected_tags
-            )[0]
-            if _uses_remote_corpus()
-            else corpus_index.get(relative_path)
-        )
+            ))[0]
+        else:
+            existing_document = corpus_index.get(relative_path)
         if (
             existing_document
             and document_has_secrets(existing_document, protected_tags)
@@ -951,7 +965,10 @@ async def hfl_remote_reference_download(request: Request, token: str):
     if not _uses_remote_corpus():
         return HTMLResponse("Remote corpus is not configured", status_code=404)
     try:
-        content, filename, media_type = RemoteCorpusClient.from_settings().download(token)
+        content, filename, media_type = await asyncio.to_thread(
+            RemoteCorpusClient.from_settings().download,
+            token,
+        )
     except RemoteCorpusError as exc:
         return HTMLResponse(str(exc), status_code=502)
     safe_filename = filename.replace('"', "")
@@ -973,12 +990,11 @@ async def _remote_reference_response(
     if not _uses_remote_corpus():
         return HTMLResponse("Remote corpus is not configured", status_code=404)
     try:
-        content, status_code, headers = (
-            RemoteCorpusClient.from_settings().reference_content(
-                token,
-                endpoint,
-                range_header=request.headers.get("range", ""),
-            )
+        content, status_code, headers = await asyncio.to_thread(
+            RemoteCorpusClient.from_settings().reference_content,
+            token,
+            endpoint,
+            range_header=request.headers.get("range", ""),
         )
     except RemoteCorpusError as exc:
         return HTMLResponse(str(exc), status_code=502)

@@ -3,11 +3,13 @@ import json
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
 
 from modules.hfl_corpus import corpus as corpus_module
+from modules.hfl_corpus import remote as remote_module
 from modules.hfl_corpus.corpus import (
     CorpusDocument,
     CorpusEntry,
@@ -187,6 +189,64 @@ def test_recursive_index_reuses_unchanged_documents_on_refresh(tmp_path, monkeyp
     assert refreshed[0] is not initial[0]
     assert refreshed[1] is initial[1]
     assert "changed and longer" in refreshed[0].text
+
+
+def test_recursive_index_serves_stale_documents_while_refresh_starts(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "a.md"
+    source.write_text(
+        "## 2026-07-10\nMoment: Fast cached response\nTags: #performance\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(corpus_module, "resolve_corpus_root", lambda: tmp_path)
+    index = CorpusIndex(ttl_seconds=0, stale_while_revalidate=True)
+    initial = index.documents(force=True)
+    refreshes = []
+    monkeypatch.setattr(index, "_refresh_in_background", lambda: refreshes.append(True))
+
+    cached = index.documents()
+
+    assert cached is initial
+    assert refreshes == [True]
+    assert initial[0].tag_entry_anchors == (("performance", initial[0].entries[0].anchor),)
+
+
+def test_corpus_view_cache_reuses_query_independent_aggregates(monkeypatch):
+    from modules.hfl_corpus import view as view_module
+
+    document = _document("cached.md", tags=("performance",))
+    documents = (document,)
+    cache = view_module.CorpusViewCache()
+    builds = []
+    original_build_tree = view_module.build_tree
+    monkeypatch.setattr(
+        view_module,
+        "build_tree",
+        lambda items: builds.append(items) or original_build_tree(items),
+    )
+
+    first = cache.get(
+        documents,
+        include_secrets=True,
+        secret_tags=("secrets",),
+    )
+    second = cache.get(
+        documents,
+        include_secrets=True,
+        secret_tags=("secrets",),
+    )
+
+    assert second is first
+    assert len(builds) == 1
+
+    refreshed = cache.get(
+        tuple([document]),
+        include_secrets=True,
+        secret_tags=("secrets",),
+    )
+    assert refreshed is not first
+    assert len(builds) == 2
 
 
 def test_recursive_index_ranks_top_10_tags_by_entry_count(tmp_path, monkeypatch):
@@ -1942,12 +2002,14 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
         "selected_source": "browsing",
     }
     monkeypatch.setattr(
-        httpx,
-        "get",
-        lambda url, **kwargs: httpx.Response(
-            200,
-            json=payload,
-            request=httpx.Request("GET", url),
+        remote_module,
+        "_http_client",
+        lambda: SimpleNamespace(
+            get=lambda url, **kwargs: httpx.Response(
+                200,
+                json=payload,
+                request=httpx.Request("GET", url),
+            )
         ),
     )
 
@@ -1967,6 +2029,22 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
         result["results"][0].first_matching_entry_anchor("hfl")
         == "hfl-entry-1-remote"
     )
+
+
+def test_remote_client_reuses_and_closes_process_connection_pool():
+    remote_module.close_remote_http_client()
+
+    first = remote_module._http_client()
+    second = remote_module._http_client()
+
+    assert second is first
+
+    remote_module.close_remote_http_client()
+    replacement = remote_module._http_client()
+    try:
+        assert replacement is not first
+    finally:
+        remote_module.close_remote_http_client()
 
 
 def test_remote_client_builds_corpus_previewer_urls(monkeypatch):
@@ -1995,12 +2073,14 @@ def test_remote_client_builds_corpus_previewer_urls(monkeypatch):
         }],
     }
     monkeypatch.setattr(
-        httpx,
-        "get",
-        lambda url, **kwargs: httpx.Response(
-            200,
-            json=payload,
-            request=httpx.Request("GET", url),
+        remote_module,
+        "_http_client",
+        lambda: SimpleNamespace(
+            get=lambda url, **kwargs: httpx.Response(
+                200,
+                json=payload,
+                request=httpx.Request("GET", url),
+            )
         ),
     )
 
@@ -2058,7 +2138,11 @@ def test_remote_client_loads_entry_documents_for_selected_share_sources(monkeypa
             request=httpx.Request("GET", url),
         )
 
-    monkeypatch.setattr(httpx, "get", remote_get)
+    monkeypatch.setattr(
+        remote_module,
+        "_http_client",
+        lambda: SimpleNamespace(get=remote_get),
+    )
 
     documents = RemoteCorpusClient(
         "http://canonical:8081",
@@ -2106,7 +2190,11 @@ def test_remote_client_paginates_legacy_index_contract(monkeypatch):
             request=httpx.Request("GET", url),
         )
 
-    monkeypatch.setattr(httpx, "get", legacy_get)
+    monkeypatch.setattr(
+        remote_module,
+        "_http_client",
+        lambda: SimpleNamespace(get=legacy_get),
+    )
 
     result = RemoteCorpusClient("http://canonical:8081", "secret").index(
         params={"page": "2", "page_size": "20"}
@@ -2756,7 +2844,11 @@ def test_remote_client_posts_manual_entry_with_bearer_token(monkeypatch):
             request=httpx.Request("POST", url),
         )
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    monkeypatch.setattr(
+        remote_module,
+        "_http_client",
+        lambda: SimpleNamespace(post=fake_post),
+    )
 
     result = RemoteCorpusClient(
         "http://canonical:8081", "secret"
@@ -2792,7 +2884,11 @@ def test_remote_client_returns_enriched_manual_entry_preview(monkeypatch):
             request=httpx.Request("POST", url),
         )
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    monkeypatch.setattr(
+        remote_module,
+        "_http_client",
+        lambda: SimpleNamespace(post=fake_post),
+    )
 
     result = RemoteCorpusClient(
         "http://canonical:8081", "secret"
@@ -2824,7 +2920,11 @@ def test_remote_client_forwards_manual_entry_files_as_multipart(monkeypatch):
             request=httpx.Request("POST", url),
         )
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    monkeypatch.setattr(
+        remote_module,
+        "_http_client",
+        lambda: SimpleNamespace(post=fake_post),
+    )
     upload = UploadFile(filename="notes.txt", file=io.BytesIO(b"notes"))
     request = _create_entry_payload()
     request["attachment_names"] = ["notes.txt"]

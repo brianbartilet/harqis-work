@@ -336,8 +336,17 @@ For each document:
 - Tags and references are parsed from the canonical `HflEntry` Markdown shape
   without importing the Celery workflow package into the web process.
 
-The canonical host's in-memory index has a 30-second TTL. A page refresh after that interval
-observes filesystem changes without a separate database or Elasticsearch.
+The canonical host prewarms its in-memory index during frontend startup. The
+index has a 30-second TTL; after expiry, requests keep using the last complete
+snapshot while one daemon refresh scans for filesystem changes. Writes made
+through the frontend force a synchronous refresh, so newly created or edited
+entries remain immediately visible. Query-independent tag, source, and tree
+projections are reused until the index publishes a new document snapshot.
+
+Remote-reader requests run outside the FastAPI event loop and share a bounded
+HTTP keep-alive pool. The pool is closed during application shutdown. This
+keeps a slow or restarting canonical host from blocking unrelated frontend
+requests and avoids reconnecting for every Activity Corpus page load.
 
 The canonical host exposes bearer-authenticated read endpoints and a manual
 entry write endpoint under `/api/hfl`. A remote frontend performs those calls

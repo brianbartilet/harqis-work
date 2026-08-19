@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
 from typing import Any
 from urllib.parse import quote, unquote
 
@@ -20,6 +21,41 @@ from modules.hfl_corpus.corpus import (
     shallow_tree,
 )
 from services.safe_paths import ReferenceLink
+
+
+_client_lock = Lock()
+_client: httpx.Client | None = None
+
+
+def _http_client() -> httpx.Client:
+    global _client
+    with _client_lock:
+        if _client is None:
+            _client = httpx.Client(
+                limits=httpx.Limits(
+                    max_connections=20,
+                    max_keepalive_connections=10,
+                    keepalive_expiry=30.0,
+                )
+            )
+        return _client
+
+
+def close_remote_http_client() -> None:
+    """Close the process-wide canonical corpus connection pool."""
+    global _client
+    with _client_lock:
+        client, _client = _client, None
+    if client is not None:
+        client.close()
+
+
+def _discard_http_client(client: httpx.Client) -> None:
+    global _client
+    with _client_lock:
+        if _client is client:
+            _client = None
+    client.close()
 
 
 class RemoteCorpusError(RuntimeError):
@@ -96,9 +132,10 @@ class RemoteCorpusClient:
         return cls(settings.hfl_corpus_api_url, settings.hfl_corpus_api_token)
 
     def _get(self, path: str, **kwargs) -> httpx.Response:
+        headers = {**self.headers, **kwargs.pop("headers", {})}
+        client = _http_client()
         try:
-            headers = {**self.headers, **kwargs.pop("headers", {})}
-            response = httpx.get(
+            response = client.get(
                 self.base_url + path,
                 headers=headers,
                 timeout=self.timeout,
@@ -106,13 +143,28 @@ class RemoteCorpusClient:
             )
             response.raise_for_status()
             return response
+        except httpx.RemoteProtocolError:
+            _discard_http_client(client)
+            try:
+                response = _http_client().get(
+                    self.base_url + path,
+                    headers=headers,
+                    timeout=self.timeout,
+                    **kwargs,
+                )
+                response.raise_for_status()
+                return response
+            except httpx.HTTPError as exc:
+                raise RemoteCorpusError(
+                    f"Canonical HFL corpus unavailable: {exc}"
+                ) from exc
         except httpx.HTTPError as exc:
             raise RemoteCorpusError(f"Canonical HFL corpus unavailable: {exc}") from exc
 
     def _post(self, path: str, **kwargs) -> httpx.Response:
         try:
             timeout = kwargs.pop("timeout", self.timeout)
-            response = httpx.post(
+            response = _http_client().post(
                 self.base_url + path,
                 headers=self.headers,
                 timeout=timeout,

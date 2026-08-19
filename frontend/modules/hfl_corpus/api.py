@@ -16,9 +16,6 @@ from pydantic import ValidationError
 from config import get_settings
 from modules.hfl_corpus.corpus import (
     CorpusDocument,
-    build_tree,
-    common_tags,
-    common_sources,
     corpus_index,
     find_tree_node,
     paginate_documents,
@@ -39,10 +36,10 @@ from modules.hfl_corpus.entry_enrichment import enrich_manual_entry
 from modules.hfl_corpus.secrets import (
     document_has_secrets,
     filter_document,
-    filter_documents,
     is_secret_entry,
     normalize_secret_tags,
 )
+from modules.hfl_corpus.view import corpus_view_cache
 from modules.hfl_shares.viewer import (
     classify_preview,
     read_preview_text,
@@ -106,11 +103,18 @@ def _document_payload(
     if matching_entry_count is not None:
         payload["matching_entry_count"] = matching_entry_count
     if include_tag_entry_anchors:
-        payload["tag_entry_anchors"] = [
-            [tag, matches[0].anchor]
-            for tag in document.tags
-            if (matches := document.matching_entries(tag))
-        ]
+        anchors = {
+            tag.casefold(): anchor
+            for tag, anchor in document.tag_entry_anchors
+        }
+        tag_entry_anchors = []
+        for tag in document.tags:
+            anchor = anchors.get(tag.casefold())
+            if anchor is None:
+                anchor = document.first_matching_entry_anchor(tag)
+            if anchor:
+                tag_entry_anchors.append([tag, anchor])
+        payload["tag_entry_anchors"] = tag_entry_anchors
     if include_text:
         payload["text"] = document.text
     return payload
@@ -203,10 +207,13 @@ async def hfl_api_documents(
         sort = "desc"
     raw_documents = corpus_index.documents()
     protected_tags = normalize_secret_tags(secret_tags)
-    documents = raw_documents if include_secrets else filter_documents(
-        raw_documents, protected_tags
+    view = corpus_view_cache.get(
+        raw_documents,
+        include_secrets=include_secrets,
+        secret_tags=protected_tags,
     )
-    sources = common_sources(documents)
+    documents = view.documents
+    sources = view.sources
     selected_source = normalize_source(source, sources)
     results = search_documents(
         documents,
@@ -251,12 +258,12 @@ async def hfl_api_documents(
         "has_previous": result_page.has_previous,
         "has_next": result_page.has_next,
         "document_count": len(documents),
-        "tag_cloud": common_tags(raw_documents),
+        "tag_cloud": view.tag_cloud,
         "sources": sources,
         "selected_source": selected_source,
     }
     if compact:
-        payload["tree"] = _tree_payload(shallow_tree(build_tree(documents)))
+        payload["tree"] = _tree_payload(shallow_tree(view.tree))
     else:
         payload["documents"] = [
             _document_payload(document) for document in documents
@@ -272,11 +279,12 @@ async def hfl_api_tree(
     secret_tags: str = "",
 ):
     _authorize(request)
-    documents = corpus_index.documents()
-    if not include_secrets:
-        documents = filter_documents(documents, normalize_secret_tags(secret_tags))
-    tree = build_tree(documents)
-    node = find_tree_node(tree, path)
+    view = corpus_view_cache.get(
+        corpus_index.documents(),
+        include_secrets=include_secrets,
+        secret_tags=normalize_secret_tags(secret_tags),
+    )
+    node = find_tree_node(view.tree, path)
     if not node:
         raise HTTPException(status_code=404, detail="Corpus directory not found")
     return {"tree": _tree_payload(shallow_tree(node))}
@@ -298,11 +306,13 @@ async def hfl_api_matches(
     if not document:
         raise HTTPException(status_code=404, detail="Corpus document not found")
     selected_tags, text_query = parse_search_query(q)
-    selected_source = normalize_source(
-        source,
-        common_sources(corpus_index.documents()),
-    )
     protected_tags = normalize_secret_tags(secret_tags)
+    view = corpus_view_cache.get(
+        corpus_index.documents(),
+        include_secrets=include_secrets,
+        secret_tags=protected_tags,
+    )
+    selected_source = normalize_source(source, view.sources)
     visible_document = document if include_secrets else filter_document(
         document, protected_tags
     )

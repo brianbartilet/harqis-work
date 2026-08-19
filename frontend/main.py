@@ -18,6 +18,7 @@ GET  /hfl-corpus                    → recursive corpus browser and search
 GET  /health                        → simple health check
 """
 from collections.abc import Mapping
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -48,6 +49,8 @@ from auth import (
 from config import get_settings, warn_insecure_defaults
 from modules.applications.router import router as applications_router
 from modules.hfl_corpus.api import router as hfl_corpus_api_router
+from modules.hfl_corpus.corpus import corpus_index
+from modules.hfl_corpus.remote import close_remote_http_client
 from modules.hfl_corpus.router import router as hfl_corpus_router
 from modules.hfl_shares.router import guest_router as hfl_share_guest_router
 from modules.hfl_shares.router import owner_router as hfl_share_owner_router
@@ -227,11 +230,24 @@ class PublicShareBodyLimitMiddleware:
 settings = get_settings()
 warn_insecure_defaults(settings)
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Warm local corpus state and release pooled remote connections cleanly."""
+    if not get_settings().hfl_corpus_api_url.strip():
+        await asyncio.to_thread(corpus_index.documents, True)
+    try:
+        yield
+    finally:
+        close_remote_http_client()
+
+
 app = FastAPI(
     title="HARQIS Frontend",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
+    lifespan=lifespan,
 )
 app.add_middleware(PublicShareBodyLimitMiddleware)
 app.include_router(home_router)

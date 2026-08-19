@@ -9,7 +9,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from threading import Lock
+from threading import Lock, Thread
 from typing import TYPE_CHECKING
 
 from config import get_settings
@@ -295,6 +295,16 @@ def parse_entries(text: str) -> tuple[CorpusEntry, ...]:
     return tuple(entries)
 
 
+def _first_tag_entry_anchors(
+    entries: tuple[CorpusEntry, ...],
+) -> tuple[tuple[str, str], ...]:
+    anchors: dict[str, str] = {}
+    for entry in entries:
+        for tag in entry.tags:
+            anchors.setdefault(tag.casefold(), entry.anchor)
+    return tuple(anchors.items())
+
+
 def _entry_count(text: str) -> int:
     """Count HFL entries from level-two Markdown headers."""
     return sum(1 for _ in _HEADER.finditer(text))
@@ -382,19 +392,67 @@ def _excerpt(text: str, limit: int = 240) -> str:
 
 
 class CorpusIndex:
-    def __init__(self, ttl_seconds: int = 30) -> None:
+    def __init__(
+        self,
+        ttl_seconds: int = 30,
+        *,
+        stale_while_revalidate: bool = False,
+    ) -> None:
         self.ttl_seconds = ttl_seconds
+        self.stale_while_revalidate = stale_while_revalidate
         self._loaded_at = 0.0
         self._root: Path | None = None
         self._documents: tuple[CorpusDocument, ...] = ()
         self._file_cache: dict[str, tuple[int, int, CorpusDocument]] = {}
         self._lock = Lock()
+        self._refresh_lock = Lock()
+        self._refreshing = False
 
     def documents(self, force: bool = False) -> tuple[CorpusDocument, ...]:
         root = resolve_corpus_root()
         if not force and root == self._root and time.monotonic() - self._loaded_at < self.ttl_seconds:
             return self._documents
+        if (
+            not force
+            and self.stale_while_revalidate
+            and root == self._root
+            and self._loaded_at
+        ):
+            self._refresh_in_background()
+            return self._documents
+        return self._refresh(root, force=force)
+
+    def _refresh_in_background(self) -> None:
+        with self._refresh_lock:
+            if self._refreshing:
+                return
+            self._refreshing = True
+        Thread(
+            target=self._background_refresh,
+            name="hfl-corpus-refresh",
+            daemon=True,
+        ).start()
+
+    def _background_refresh(self) -> None:
+        try:
+            self._refresh(resolve_corpus_root(), force=True)
+        finally:
+            with self._refresh_lock:
+                self._refreshing = False
+
+    def _refresh(
+        self,
+        root: Path,
+        *,
+        force: bool,
+    ) -> tuple[CorpusDocument, ...]:
         with self._lock:
+            if (
+                not force
+                and root == self._root
+                and time.monotonic() - self._loaded_at < self.ttl_seconds
+            ):
+                return self._documents
             documents: list[CorpusDocument] = []
             cached_files = self._file_cache if root == self._root else {}
             refreshed_cache: dict[str, tuple[int, int, CorpusDocument]] = {}
@@ -433,6 +491,7 @@ class CorpusIndex:
                         tag_counts=tag_counts,
                         entry_count=entry_count,
                         entries=entries,
+                        tag_entry_anchors=_first_tag_entry_anchors(entries),
                     )
                     documents.append(document)
                     refreshed_cache[relative_path] = (*signature, document)
@@ -723,4 +782,4 @@ def shallow_tree(node: dict) -> dict:
     }
 
 
-corpus_index = CorpusIndex()
+corpus_index = CorpusIndex(stale_while_revalidate=True)
