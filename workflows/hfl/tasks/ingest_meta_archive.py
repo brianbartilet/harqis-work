@@ -18,7 +18,8 @@ from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropi
 from workflows.hfl.distill import parse_model_json
 from workflows.hfl.dto import HflEntry, canonicalize_tags
 from workflows.hfl.meta_archive.checkpoint import (
-    checkpoint_report, initialize_checkpoint, reserve_items, update_item,
+    TaskSnapshot, checkpoint_report, initialize_checkpoint, reconcile_items,
+    reserve_items, update_item,
 )
 from workflows.hfl.meta_archive.enrichment import enrich_event_media
 from workflows.hfl.meta_archive.models import MetaEvent, stable_hash
@@ -33,6 +34,21 @@ from workflows.queues import WorkflowQueue
 
 _log = create_logger("hfl.ingest_meta_archive")
 _DEFAULT_HAIKU = "claude-haiku-4-5-20251001"
+
+
+def _celery_task_snapshot(task_id: str) -> TaskSnapshot:
+    """Read one task's durable Celery result without exposing its payload."""
+    try:
+        result = SPROUT.AsyncResult(task_id)
+        state = str(result.state or "PENDING").upper()
+        value = result.result
+        return TaskSnapshot(
+            state=state,
+            result=value if isinstance(value, dict) else None,
+            error=(type(value).__name__ if state in {"FAILURE", "REVOKED"} else ""),
+        )
+    except Exception as exc:  # noqa: BLE001 - recovery must remain inspectable
+        return TaskSnapshot(state="UNKNOWN", error=type(exc).__name__)
 
 
 def render_activity(events: list[MetaEvent], enrichment: dict[str, dict[str, Any]]) -> str:
@@ -241,6 +257,47 @@ def _approved_dispatch_items(*, manifest_path: str,
                 or quarantine_payload.get("platform") != platform
                 or len(quarantine_payload.get("events") or []) != int(quarantine.get("count", -1))):
             raise ValueError("quarantine report metadata does not match the manifest")
+    parser_failures = manifest.get("parser_failures") or {}
+    if not parser_failures.get("path") or not parser_failures.get("sha256"):
+        raise ValueError("manifest does not pin its parser-failure report")
+    parser_failures_path = Path(
+        str(parser_failures["path"])
+    ).expanduser().resolve(strict=True)
+    if not parser_failures_path.is_relative_to(work_root):
+        raise ValueError("parser-failure report is outside the approved manifest directory")
+    if not hmac.compare_digest(
+        content_sha256(parser_failures_path.read_bytes()),
+        str(parser_failures["sha256"]).casefold(),
+    ):
+        raise ValueError("parser-failure report integrity check failed")
+    failures_payload = json.loads(parser_failures_path.read_text(encoding="utf-8"))
+    failures = failures_payload.get("failures") or []
+    if (failures_payload.get("schema_version") != 2
+            or failures_payload.get("platform") != platform
+            or len(failures) != int(parser_failures.get("count", -1))):
+        raise ValueError("parser-failure report metadata does not match the manifest")
+    if failures:
+        raise ValueError("manifest contains unexplained parser failures")
+    preparation_report = manifest.get("preparation_report") or {}
+    if not preparation_report.get("path") or not preparation_report.get("sha256"):
+        raise ValueError("manifest does not pin its preparation report")
+    preparation_report_path = Path(
+        str(preparation_report["path"])
+    ).expanduser().resolve(strict=True)
+    if not preparation_report_path.is_relative_to(work_root):
+        raise ValueError("preparation report is outside the approved manifest directory")
+    if not hmac.compare_digest(
+        content_sha256(preparation_report_path.read_bytes()),
+        str(preparation_report["sha256"]).casefold(),
+    ):
+        raise ValueError("preparation report integrity check failed")
+    report_payload = json.loads(preparation_report_path.read_text(encoding="utf-8"))
+    if (report_payload.get("schema_version") != 2
+            or not report_payload.get("complete")
+            or report_payload.get("truncated")
+            or report_payload.get("platform") != platform
+            or report_payload.get("counts") != manifest.get("counts")):
+        raise ValueError("preparation report metadata does not match the manifest")
     approved_items: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     for item in manifest.get("items") or []:
@@ -280,7 +337,9 @@ def dispatch_meta_archive_import(*, manifest_path: str,
                                  synthesize: bool = False,
                                  max_items: int = 100,
                                  item_ids: list[str] | None = None,
-                                 retry_failed: bool = False) -> dict:
+                                 retry_failed: bool = False,
+                                 reservation_lease_seconds: int = 300,
+                                 enqueued_lease_seconds: int = 21_600) -> dict:
     """Dispatch only the exact manifest and work items approved by review."""
     try:
         platform, approved, work_root, approved_items = _approved_dispatch_items(
@@ -293,9 +352,14 @@ def dispatch_meta_archive_import(*, manifest_path: str,
             checkpoint_path, manifest_sha256=approved, platform=platform,
             items=approved_items, allow_cloud=allow_cloud, synthesize=synthesize,
         )
+        recovery = reconcile_items(
+            checkpoint_path, _celery_task_snapshot,
+            active_lease_seconds=enqueued_lease_seconds,
+        )
         selected_ids = reserve_items(
             checkpoint_path, max_items=min(max(0, int(max_items)), 10_000),
             item_ids=item_ids, retry_failed=retry_failed,
+            lease_seconds=reservation_lease_seconds,
         )
     except Exception as exc:  # noqa: BLE001 - fail closed before any dispatch
         _log.warning("Meta archive dispatch rejected (%s)", exc)
@@ -313,6 +377,10 @@ def dispatch_meta_archive_import(*, manifest_path: str,
         item = by_id[item_id]
         task_id = str(uuid.uuid4())
         try:
+            update_item(
+                checkpoint_path, item_id, "dispatching", task_id=task_id,
+                lease_seconds=reservation_lease_seconds,
+            )
             result = SPROUT.send_task(
                 task_name,
                 kwargs={
@@ -327,7 +395,10 @@ def dispatch_meta_archive_import(*, manifest_path: str,
                 queue=WorkflowQueue.HFL.value, task_id=task_id,
             )
             actual_task_id = str(result.id or task_id)
-            update_item(checkpoint_path, item_id, "enqueued", task_id=actual_task_id)
+            update_item(
+                checkpoint_path, item_id, "enqueued", task_id=actual_task_id,
+                lease_seconds=enqueued_lease_seconds,
+            )
             task_ids.append(actual_task_id)
         except Exception as exc:
             update_item(checkpoint_path, item_id, "failed", task_id=task_id, error=str(exc))
@@ -344,8 +415,36 @@ def dispatch_meta_archive_import(*, manifest_path: str,
         "task_ids": task_ids,
         "checkpoint_path": str(checkpoint_path),
         "estimated_synthesis_calls": len(task_ids) if synthesize else 0,
+        "recovery": recovery,
         **report,
     }
+
+
+@SPROUT.task()
+@log_result()
+def recover_meta_archive_import(*, manifest_path: str,
+                                approved_manifest_sha256: str,
+                                reclaim_pending: bool = False,
+                                active_lease_seconds: int = 21_600) -> dict:
+    """Reconcile leases; optionally fail expired ambiguous tasks for retry."""
+    try:
+        _, approved, work_root, _ = _approved_dispatch_items(
+            manifest_path=manifest_path,
+            approved_manifest_sha256=approved_manifest_sha256,
+        )
+        checkpoint_path = work_root / "dispatch.sqlite3"
+        transitions = reconcile_items(
+            checkpoint_path, _celery_task_snapshot,
+            active_lease_seconds=active_lease_seconds,
+            reclaim_pending=reclaim_pending,
+        )
+        report = checkpoint_report(checkpoint_path)
+        if not hmac.compare_digest(report["manifest_sha256"], approved):
+            raise ValueError("checkpoint manifest pin does not match approval")
+        return {"ok": True, "checkpoint_path": str(checkpoint_path),
+                "transitions": transitions, **report}
+    except Exception as exc:
+        return {"ok": False, "reason": "recovery-failed", "error": str(exc)[:200]}
 
 
 @SPROUT.task()
@@ -359,8 +458,12 @@ def report_meta_archive_import(*, manifest_path: str,
             approved_manifest_sha256=approved_manifest_sha256,
         )
         checkpoint_path = work_root / "dispatch.sqlite3"
+        transitions = reconcile_items(
+            checkpoint_path, _celery_task_snapshot,
+        )
         report = {"ok": True, "generated_at": datetime.now().astimezone().isoformat(),
                   "checkpoint_path": str(checkpoint_path),
+                  "recovery": transitions,
                   **checkpoint_report(checkpoint_path)}
         if not hmac.compare_digest(report["manifest_sha256"], approved):
             raise ValueError("checkpoint manifest pin does not match approval")

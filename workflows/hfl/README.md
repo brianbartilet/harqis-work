@@ -76,7 +76,9 @@ server after raw export folders have been synced to a server-visible inbox.
 1. Call `prepare_meta_archive_import` once for `facebook` and once for
    `instagram`, passing every export parent in `archive_roots` and an ignored
    derived-data directory in `work_dir` (`HFL_META_WORK_DIR` is recommended).
-2. Require schema 2 with `ok=true`, `complete=true`, and `truncated=false`.
+2. Require schema 2 with `ok=true`, `complete=true`, `truncated=false`, and
+   `counts.parser_failures=0`. Every failed artifact appears in a pinned,
+   content-free parser-failure report; any failure prevents `plan.json`.
    A positive `max_events` is an approval ceiling: reaching it produces only
    `preparation-report.json`, never an approvable `plan.json`. Use `max_events=0`
    only after the exact count and host capacity have been reviewed.
@@ -87,18 +89,24 @@ server after raw export folders have been synced to a server-visible inbox.
 4. Preview selected work-item paths with the read-only MCP tool
    `meta_archive_preview`, passing `expected_work_item_sha256` and
    `work_item_root=<plan.json parent>` (`synthesize=False` makes no model call).
-5. Call `dispatch_meta_archive_import(manifest_path=...,
+5. Run read-only Elasticsearch reconciliation and verify the installed strict
+   mapping exposes `entry_id` as a direct keyword. The reconciler uses
+   `entry_id.keyword` only when a legacy mapping explicitly declares it.
+6. Call `dispatch_meta_archive_import(manifest_path=...,
    approved_manifest_sha256=..., max_items=...)` only after review. Dispatch verifies the
    manifest pin, every work-item pin, metadata agreement, and path boundary
    before sending any leaf task to `WorkflowQueue.HFL`. It skips checkpointed
    items on restart; use explicit `item_ids` for a reviewed subset and
    `retry_failed=true` only after investigating failures.
-6. Choose `synthesize=false` (default, deterministic local narrative) or
+7. Choose `synthesize=false` (default, deterministic local narrative) or
    `synthesize=true` (one bounded text-model call per dispatched item).
    `allow_cloud=false` remains the independent media privacy default.
-7. Run `report_meta_archive_import` after each batch and retain its checkpoint
+8. Run `report_meta_archive_import` after each batch and retain its checkpoint
    and `final-report.json`. Continue only when all enqueued tasks are terminal
-   and Markdown/Elasticsearch reconciliation is clean.
+   and Markdown/Elasticsearch reconciliation is clean. Leases reclaim a crash
+   before enqueue and reconcile terminal Celery results. Use
+   `recover_meta_archive_import(reclaim_pending=true)` only after Flower/worker
+   inspection confirms that a stale `PENDING` task is absent.
 
 Cloud media enrichment is disabled by default. With `allow_cloud=True`,
 Facebook message attachments from every participant and authored Instagram

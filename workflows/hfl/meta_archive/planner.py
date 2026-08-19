@@ -45,34 +45,59 @@ def discover_export_roots(roots: Iterable[str], platform: str) -> list[Path]:
     return sorted(found.values(), key=lambda path: str(path).casefold())
 
 
-def _iter_event_batches(platform: str, exports: list[Path]) -> Iterator[list[MetaEvent]]:
+def _record_parser_failure(failures: list[dict], *, platform: str,
+                           export_root: Path, artifact: Path,
+                           error: Exception) -> None:
+    failures.append({
+        "platform": platform,
+        "artifact": f"meta-archive://{platform}/{export_root.name}/"
+                    f"{artifact.relative_to(export_root).as_posix()}",
+        "exception_category": type(error).__name__,
+        "affected_artifacts": 1,
+    })
+
+
+def _iter_event_batches(platform: str, exports: list[Path],
+                        failures: list[dict]) -> Iterator[list[MetaEvent]]:
     if platform == "facebook":
         for root in exports:
             for path in root.glob("your_facebook_activity/messages/**/message_*.json"):
                 try:
                     yield parse_facebook_thread(path, root)
-                except (OSError, ValueError, TypeError, json.JSONDecodeError):
-                    continue
+                except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                    _record_parser_failure(
+                        failures, platform=platform, export_root=root,
+                        artifact=path, error=exc,
+                    )
             for path in root.glob("your_facebook_activity/**/*post*.json"):
                 try:
                     yield parse_facebook_posts(path, root)
-                except (OSError, ValueError, TypeError, json.JSONDecodeError):
-                    continue
+                except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                    _record_parser_failure(
+                        failures, platform=platform, export_root=root,
+                        artifact=path, error=exc,
+                    )
     elif platform == "instagram":
         for root in exports:
             for path in root.glob("your_instagram_activity/messages/**/message_*.html"):
                 try:
                     yield parse_instagram_html(path, root, thread_id=path.parent.name)
-                except (OSError, ValueError, TypeError):
-                    continue
+                except (OSError, ValueError, TypeError) as exc:
+                    _record_parser_failure(
+                        failures, platform=platform, export_root=root,
+                        artifact=path, error=exc,
+                    )
             for path in root.glob("your_instagram_activity/media/*.html"):
                 if "post" in path.name.lower() or "stor" in path.name.lower():
                     try:
                         yield parse_instagram_html(
                             path, root, thread_id="authored-content", authored=True
                         )
-                    except (OSError, ValueError, TypeError):
-                        continue
+                    except (OSError, ValueError, TypeError) as exc:
+                        _record_parser_failure(
+                            failures, platform=platform, export_root=root,
+                            artifact=path, error=exc,
+                        )
     else:
         raise ValueError("platform must be facebook or instagram")
 
@@ -115,9 +140,10 @@ def build_import_plan(*, platform: str, archive_roots: list[str], work_dir: str,
     connection = sqlite3.connect(database)
     _initialize_staging(connection)
     parsed = duplicates = quarantined = 0
+    parser_failures: list[dict] = []
     future_boundary = prepared_at + timedelta(hours=max(0, future_tolerance_hours))
     try:
-        for batch in _iter_event_batches(platform, exports):
+        for batch in _iter_event_batches(platform, exports, parser_failures):
             for event in batch:
                 parsed += 1
                 if event.occurred_at_utc > future_boundary:
@@ -159,18 +185,31 @@ def build_import_plan(*, platform: str, archive_roots: list[str], work_dir: str,
             "schema_version": 2, "platform": platform,
             "prepared_at": prepared_at.isoformat(), "events": quarantine_rows,
         })
+        parser_failures_path = root / "parser-failures.json"
+        parser_failures_sha = _write_json(parser_failures_path, {
+            "schema_version": 2, "platform": platform,
+            "prepared_at": prepared_at.isoformat(), "failures": parser_failures,
+        })
         counts = {
             "parsed": parsed, "valid_unique": valid, "duplicates": duplicates,
-            "quarantined": quarantined,
+            "quarantined": quarantined, "parser_failures": len(parser_failures),
         }
-        if max_events > 0 and valid >= max_events:
+        cap_reached = max_events > 0 and valid >= max_events
+        if parser_failures or cap_reached:
             report = {
                 "ok": False, "schema_version": 2, "complete": False,
-                "truncated": True, "reason": "event-cap-reached",
+                "truncated": cap_reached,
+                "reason": ("parser-failures" if parser_failures
+                           else "event-cap-reached"),
                 "platform": platform, "run_id": run_id,
                 "max_events": max_events, "counts": counts,
                 "quarantine": {"path": str(quarantine_path), "sha256": quarantine_sha,
                                "count": quarantined},
+                "parser_failures": {
+                    "path": str(parser_failures_path),
+                    "sha256": parser_failures_sha,
+                    "count": len(parser_failures),
+                },
             }
             report_path = root / "preparation-report.json"
             report_sha = _write_json(report_path, report)
@@ -199,6 +238,22 @@ def build_import_plan(*, platform: str, archive_roots: list[str], work_dir: str,
                 "thread_id": thread_id, "week_start": week_start,
                 "event_count": event_count, "sha256": item_sha,
             })
+        preparation_report = {
+            "ok": True, "schema_version": 2, "complete": True,
+            "truncated": False, "platform": platform, "run_id": run_id,
+            "prepared_at": prepared_at.isoformat(), "max_events": max_events,
+            "counts": counts, "work_item_count": len(items),
+            "quarantine": {"path": str(quarantine_path), "sha256": quarantine_sha,
+                           "count": quarantined},
+            "parser_failures": {
+                "path": str(parser_failures_path), "sha256": parser_failures_sha,
+                "count": 0,
+            },
+        }
+        preparation_report_path = root / "preparation-report.json"
+        preparation_report_sha = _write_json(
+            preparation_report_path, preparation_report
+        )
         manifest = {
             "ok": True, "schema_version": 2, "complete": True, "truncated": False,
             "platform": platform, "run_id": run_id, "prepared_at": prepared_at.isoformat(),
@@ -207,6 +262,14 @@ def build_import_plan(*, platform: str, archive_roots: list[str], work_dir: str,
             "work_item_count": len(items), "synthesis_eligible_items": len(items),
             "quarantine": {"path": str(quarantine_path), "sha256": quarantine_sha,
                            "count": quarantined},
+            "parser_failures": {
+                "path": str(parser_failures_path), "sha256": parser_failures_sha,
+                "count": 0,
+            },
+            "preparation_report": {
+                "path": str(preparation_report_path),
+                "sha256": preparation_report_sha,
+            },
             "items": items,
         }
         manifest_path = root / "plan.json"

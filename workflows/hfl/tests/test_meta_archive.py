@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from workflows.hfl import persistence
 from workflows.hfl.dto import HflEntry
 from workflows.hfl.meta_archive import enrichment
+from workflows.hfl.meta_archive import checkpoint
 from workflows.hfl.meta_archive.models import MetaAttachment, MetaEvent
 from workflows.hfl.meta_archive.parsers import (
     parse_facebook_posts,
@@ -171,6 +173,115 @@ def test__future_events_are_quarantined_with_raw_timestamp(tmp_path):
     assert quarantine["events"][0]["reason"] == "materially-future-timestamp"
 
 
+def test__parser_failure_prevents_complete_manifest(tmp_path):
+    export, source = _facebook_export(tmp_path / "exports")
+    source.write_text("{ malformed", encoding="utf-8")
+
+    plan = build_import_plan(
+        platform="facebook", archive_roots=[str(export)],
+        work_dir=str(tmp_path / "work"), max_events=0,
+    )
+
+    assert plan["ok"] is False
+    assert plan["complete"] is False
+    assert plan["reason"] == "parser-failures"
+    assert plan["counts"]["parser_failures"] == 1
+    assert not (Path(plan["report_path"]).parent / "plan.json").exists()
+    failures = json.loads(
+        Path(plan["parser_failures"]["path"]).read_text(encoding="utf-8")
+    )["failures"]
+    assert failures == [{
+        "platform": "facebook",
+        "artifact": (
+            "meta-archive://facebook/facebook-owner-2026-test/"
+            "your_facebook_activity/messages/inbox/friend_1/message_1.json"
+        ),
+        "exception_category": "JSONDecodeError",
+        "affected_artifacts": 1,
+    }]
+
+
+def _checkpoint(tmp_path):
+    path = tmp_path / "dispatch.sqlite3"
+    checkpoint.initialize_checkpoint(
+        path, manifest_sha256="a" * 64, platform="facebook",
+        items=[{"id": "item-1", "sha256": "b" * 64}],
+        allow_cloud=False, synthesize=False,
+    )
+    return path
+
+
+def test__stale_crash_before_enqueue_is_reclaimed(tmp_path):
+    path = _checkpoint(tmp_path)
+    started = datetime(2026, 8, 19, tzinfo=timezone.utc)
+    assert checkpoint.reserve_items(
+        path, max_items=1, lease_seconds=30, now=started
+    ) == ["item-1"]
+
+    transitions = checkpoint.reconcile_items(
+        path,
+        lambda _task_id: (_ for _ in ()).throw(AssertionError("no task exists")),
+        now=started + timedelta(seconds=31),
+    )
+
+    assert transitions["reclaimed"] == 1
+    assert checkpoint.checkpoint_report(path)["remaining"] == 1
+    assert checkpoint.reserve_items(
+        path, max_items=1, now=started + timedelta(seconds=32)
+    ) == ["item-1"]
+
+
+def test__confirmed_broker_loss_becomes_retryable_failure(tmp_path):
+    path = _checkpoint(tmp_path)
+    started = datetime(2026, 8, 19, tzinfo=timezone.utc)
+    checkpoint.reserve_items(path, max_items=1, lease_seconds=30, now=started)
+    checkpoint.update_item(
+        path, "item-1", "dispatching", task_id="task-lost",
+        lease_seconds=30, now=started,
+    )
+    checkpoint.update_item(
+        path, "item-1", "enqueued", task_id="task-lost",
+        lease_seconds=30, now=started,
+    )
+
+    transitions = checkpoint.reconcile_items(
+        path, lambda _task_id: checkpoint.TaskSnapshot("LOST"),
+        now=started + timedelta(seconds=31),
+    )
+
+    assert transitions["failed"] == 1
+    assert checkpoint.checkpoint_report(path)["failed"] == 1
+    assert checkpoint.reserve_items(
+        path, max_items=1, retry_failed=True,
+        now=started + timedelta(seconds=32),
+    ) == ["item-1"]
+
+
+def test__ambiguous_pending_requires_explicit_reclaim(tmp_path):
+    path = _checkpoint(tmp_path)
+    started = datetime(2026, 8, 19, tzinfo=timezone.utc)
+    checkpoint.reserve_items(path, max_items=1, lease_seconds=10, now=started)
+    checkpoint.update_item(
+        path, "item-1", "dispatching", task_id="task-pending",
+        lease_seconds=10, now=started,
+    )
+    checkpoint.update_item(
+        path, "item-1", "enqueued", task_id="task-pending",
+        lease_seconds=10, now=started,
+    )
+    lookup = lambda _task_id: checkpoint.TaskSnapshot("PENDING")
+
+    retained = checkpoint.reconcile_items(
+        path, lookup, now=started + timedelta(seconds=11)
+    )
+    reclaimed = checkpoint.reconcile_items(
+        path, lookup, now=started + timedelta(seconds=12), reclaim_pending=True
+    )
+
+    assert retained["pending"] == 1
+    assert reclaimed["failed"] == 1
+
+
 def test__ingest_meta_work_item_submits_exactly_once(tmp_path, monkeypatch):
     event = _event()
     path = tmp_path / "item.json"
@@ -279,10 +390,19 @@ def test__dispatch_requires_pinned_manifest_and_work_items(tmp_path, monkeypatch
     class Result:
         id = "task-1"
 
-    monkeypatch.setattr(
-        module.SPROUT, "send_task",
-        lambda *args, **kwargs: sent.append((args, kwargs)) or Result(),
-    )
+    def send_task(*args, **kwargs):
+        checkpoint_path = kwargs["kwargs"]["checkpoint_path"]
+        with sqlite3.connect(checkpoint_path) as connection:
+            status, persisted_task_id = connection.execute(
+                "SELECT status, task_id FROM items WHERE item_id=?",
+                (kwargs["kwargs"]["item_id"],),
+            ).fetchone()
+        assert status == "dispatching"
+        assert persisted_task_id == kwargs["task_id"]
+        sent.append((args, kwargs))
+        return Result()
+
+    monkeypatch.setattr(module.SPROUT, "send_task", send_task)
     result = module.dispatch_meta_archive_import(
         manifest_path=plan["manifest_path"],
         approved_manifest_sha256=plan["manifest_sha256"],

@@ -17,9 +17,10 @@ not print private message or attachment content in logs or summaries.
 2. Run `prepare_meta_archive_import` separately for `facebook` and `instagram`.
    Include every relevant overlapping export root so a later weekly projection
    contains the complete event set. Require schema 2, `complete=true`, and
-   `truncated=false`. If the event cap is reached, inspect the exact count in
-   `preparation-report.json`, then reprepare with a deliberately approved cap
-   or `max_events=0`; a truncated run has no approvable manifest.
+   `truncated=false`, with `counts.parser_failures=0`. If the event cap is
+   reached, inspect the exact count in `preparation-report.json`, then reprepare
+   with a deliberately approved cap or `max_events=0`; a truncated run has no
+   approvable manifest.
 3. Review the pinned quarantine report before the manifest. Inspect the raw
    Meta timestamp and provenance of every future event; never silently adjust
    it. Retain the returned `manifest_path` and `manifest_sha256`, then review
@@ -33,22 +34,31 @@ not print private message or attachment content in logs or summaries.
    must remain metadata-only; only authored Instagram media is eligible.
    Choose `synthesize=False` for local deterministic entries or
    `synthesize=True` for one bounded text-model call per dispatched item.
-6. Start with 25 explicit item IDs per platform, then 50, 250, and batches no
+6. Before dispatch, run the read-only Elasticsearch reconciler and verify that
+   the installed mapping resolves `entry_id` directly as `keyword`. A legacy
+   `entry_id.keyword` fallback is valid only when `_mapping` declares that
+   multifield.
+7. Start with 25 explicit item IDs per platform, then 50, 250, and batches no
    larger than 500 while queue health is good. The run-local checkpoint skips
    completed and enqueued items on restart; set `retry_failed=True` only after
    investigating each failure.
-7. Require `ok=true` from dispatch and retain the task IDs. An integrity error,
+8. Require `ok=true` from dispatch and retain the task IDs. An integrity error,
    path-boundary error, malformed item, outbox delivery, or `indexed=false`
    stops the batch investigation; do not regenerate a hash to approve an
    unexplained mutation.
-8. Run `report_meta_archive_import` after each batch and preserve
+9. Run `report_meta_archive_import` after each batch and preserve
    `dispatch.sqlite3` plus `final-report.json`. Require all enqueued tasks to be
    terminal and every item classified as succeeded, distilled-skip, failed, or
    still planned.
-9. Review the resulting Markdown blocks and leaf results. Confirm one stable
+   Reservations and enqueued tasks have leases. Run
+   `recover_meta_archive_import(reclaim_pending=False)` to reconcile Celery
+   results and reclaim a crash before enqueue. A stale Celery `PENDING` result
+   is ambiguous; confirm through Flower/worker state before deliberately using
+   `reclaim_pending=True`, which marks it failed and makes it retryable.
+10. Review the resulting Markdown blocks and leaf results. Confirm one stable
    entry ID per platform/thread/ISO-week and exact `Source: facebook` or
    `Source: instagram` values, canonical tag equality, and no duplicate IDs.
-10. Run `scripts/agents/hfl/reconcile_elasticsearch.py` without `--apply` using
+11. Run `scripts/agents/hfl/reconcile_elasticsearch.py` without `--apply` using
    the machine environment bootstrap. Require zero missing and zero stale
    documents. Investigate first; use `--apply` only with explicit authorization.
 

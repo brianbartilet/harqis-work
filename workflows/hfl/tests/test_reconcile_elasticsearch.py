@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from scripts.agents.hfl import reconcile_elasticsearch as reconcile
+from scripts import bootstrap_elasticsearch
 from workflows.hfl.dto import HflEntry
 
 
@@ -156,6 +157,8 @@ def test_fetch_and_upsert_resolve_meta_document_by_canonical_entry_id():
     existing = reconcile.fetch_existing(client, "harqis-hfl-entries", ["hfl-one"])
     assert existing["hfl-one"]["moment"] == "Old"
     assert existing.actual_ids["hfl-one"] == "meta-facebook-stable"
+    search_body = next(body for _, path, body, _ in calls if path.endswith("/_search"))
+    assert search_body["query"] == {"terms": {"entry_id": ["hfl-one"]}}
 
     reconcile.bulk_upsert(
         client, "harqis-hfl-entries", {"hfl-one": _doc("New")},
@@ -163,3 +166,61 @@ def test_fetch_and_upsert_resolve_meta_document_by_canonical_entry_id():
     )
     payload = calls[-1][3]["raw_body"].decode("utf-8")
     assert '"_id": "meta-facebook-stable"' in payload
+
+
+def test_bootstrap_mapping_uses_direct_entry_id_query_only():
+    assert reconcile.entry_id_query_fields(
+        bootstrap_elasticsearch.HFL_TEMPLATE_MAPPINGS
+    ) == ("entry_id",)
+
+
+def test_strict_mapping_never_queries_missing_keyword_multifield():
+    calls = []
+
+    class Client:
+        def _request(self, method, path, body=None, **kwargs):
+            calls.append((method, path, body))
+            if path.endswith("/_mget"):
+                return {"docs": [{"_id": "hfl-one", "found": False}]}
+            if path.endswith("/_mapping"):
+                return {"index": {"mappings": bootstrap_elasticsearch.HFL_TEMPLATE_MAPPINGS}}
+            return {"hits": {"hits": []}}
+
+    assert reconcile.fetch_existing(
+        Client(), "harqis-hfl-entries", ["hfl-one"]
+    ) == {}
+    queried_fields = [
+        next(iter(body["query"]["terms"]))
+        for _, path, body in calls if path.endswith("/_search")
+    ]
+    assert queried_fields == ["entry_id"]
+
+
+def test_legacy_text_mapping_falls_back_to_keyword_multifield():
+    calls = []
+
+    class Client:
+        def _request(self, method, path, body=None, **kwargs):
+            calls.append((method, path, body))
+            if path.endswith("/_mget"):
+                return {"docs": [{"_id": "hfl-one", "found": False}]}
+            if path.endswith("/_mapping"):
+                return {"legacy": {"mappings": {"properties": {
+                    "entry_id": {"type": "text", "fields": {
+                        "keyword": {"type": "keyword"}
+                    }}
+                }}}}
+            field = next(iter(body["query"]["terms"]))
+            return {"hits": {"hits": ([{
+                "_id": "meta-facebook-stable", "_source": _doc("Old")
+            }] if field == "entry_id.keyword" else [])}}
+
+    existing = reconcile.fetch_existing(
+        Client(), "harqis-hfl-entries", ["hfl-one"]
+    )
+
+    assert existing.actual_ids["hfl-one"] == "meta-facebook-stable"
+    assert [
+        next(iter(body["query"]["terms"]))
+        for _, path, body in calls if path.endswith("/_search")
+    ] == ["entry_id", "entry_id.keyword"]

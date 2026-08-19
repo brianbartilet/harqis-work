@@ -637,8 +637,8 @@ WORKFLOW_HFL = {
 
     # Meta archive import is deliberately manual-only. First run
     # prepare_meta_archive_import on harqis-server, require a complete schema-v2
-    # plan and review its quarantine/hash pins, then dispatch controlled batches
-    # and call report_meta_archive_import. Do not activate these tasks in Beat.
+    # plan with zero parser failures and review all pins, then dispatch controlled
+    # batches and call report/recover_meta_archive_import. Do not schedule them.
     #
     # 'run-job--prepare_meta_archive_import': {
     #     'task': 'workflows.hfl.tasks.ingest_meta_archive.prepare_meta_archive_import',

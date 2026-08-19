@@ -84,6 +84,42 @@ class ExistingDocuments(dict[str, dict[str, Any]]):
         self.actual_ids[canonical_id] = actual_id
 
 
+def entry_id_query_fields(mapping: dict[str, Any]) -> tuple[str, ...]:
+    """Return safe query fields for the installed ``entry_id`` mapping."""
+    candidates: list[dict[str, Any]] = []
+    if isinstance(mapping.get("properties"), dict):
+        candidates.append(mapping)
+    for value in mapping.values():
+        if isinstance(value, dict):
+            mappings = value.get("mappings")
+            if isinstance(mappings, dict):
+                candidates.append(mappings)
+    direct = legacy = False
+    for mappings in candidates:
+        field = (mappings.get("properties") or {}).get("entry_id") or {}
+        if field.get("type") == "keyword":
+            direct = True
+            continue
+        keyword = (field.get("fields") or {}).get("keyword") or {}
+        if field.get("type") == "text" and keyword.get("type") == "keyword":
+            legacy = True
+            continue
+        raise ValueError("Elasticsearch entry_id mapping is absent or unsupported")
+    if not direct and not legacy:
+        raise ValueError("Elasticsearch entry_id mapping is absent or unsupported")
+    return ("entry_id", "entry_id.keyword") if legacy else ("entry_id",)
+
+
+def _search_entry_ids(client: Any, encoded_index: str, ids: list[str],
+                      field: str) -> list[dict[str, Any]]:
+    response = client._request(
+        "POST", f"/{encoded_index}/_search",
+        {"size": len(ids) * 2, "_source": True,
+         "query": {"terms": {field: ids}}},
+    )
+    return list(response.get("hits", {}).get("hits", []))
+
+
 def _same_projection(left: dict[str, Any], right: dict[str, Any]) -> bool:
     return all(left.get(field) == right.get(field) for field in _STABLE_FIELDS)
 
@@ -156,15 +192,23 @@ def fetch_existing(client: Any, index: str, ids: list[str]) -> ExistingDocuments
     unresolved = [entry_id for entry_id in ids if entry_id not in existing]
     for offset in range(0, len(unresolved), 500):
         batch = unresolved[offset:offset + 500]
-        response = client._request(
-            "POST", f"/{encoded}/_search",
-            {"size": len(batch) * 2, "_source": True,
-             "query": {"terms": {"entry_id.keyword": batch}}},
-        )
-        for hit in response.get("hits", {}).get("hits", []):
+        for hit in _search_entry_ids(client, encoded, batch, "entry_id"):
             source = hit.get("_source")
             if isinstance(source, dict) and source.get("entry_id") in batch:
                 existing.add(str(hit.get("_id") or ""), source)
+    unresolved = [entry_id for entry_id in ids if entry_id not in existing]
+    if unresolved:
+        mapping = client._request("GET", f"/{encoded}/_mapping")
+        fields = entry_id_query_fields(mapping)
+        if "entry_id.keyword" in fields:
+            for offset in range(0, len(unresolved), 500):
+                batch = unresolved[offset:offset + 500]
+                for hit in _search_entry_ids(
+                    client, encoded, batch, "entry_id.keyword"
+                ):
+                    source = hit.get("_source")
+                    if isinstance(source, dict) and source.get("entry_id") in batch:
+                        existing.add(str(hit.get("_id") or ""), source)
     return existing
 
 

@@ -27,7 +27,7 @@ immutable Meta exports
   -> Markdown Activity Corpus + Elasticsearch
 ```
 
-The planner and leaf writer are intentionally separate. Schema-v2 preparation streams parser batches into a per-run SQLite staging database, so exact counts and overlap deduplication do not require the whole archive in memory. A positive `max_events` is fail-closed: reaching the ceiling finishes the exact count and writes a non-approvable preparation report, but no `plan.json`. A complete preparation returns a SHA-256 pin for `plan.json`, its quarantine report, and every work item. Dispatch validates all artifacts before enqueueing anything and each leaf validates its pin again at consumption time.
+The planner and leaf writer are intentionally separate. Schema-v2 preparation streams parser batches into a per-run SQLite staging database, so exact counts and overlap deduplication do not require the whole archive in memory. A positive `max_events` is fail-closed: reaching the ceiling finishes the exact count and writes a non-approvable preparation report, but no `plan.json`. Every parser exception is recorded by portable artifact URI and exception category in a pinned parser-failure report. Any nonzero failure count makes preparation incomplete and prevents `plan.json`. A complete preparation returns a SHA-256 pin for `plan.json`, its zero-failure report, quarantine report, and every work item. Dispatch validates all artifacts before enqueueing anything and each leaf validates its pin again at consumption time.
 
 ## Canonical event
 
@@ -49,7 +49,9 @@ Text synthesis is a separate opt-in. `synthesize=False` produces deterministic l
 
 ## Resumption and audit
 
-Each approved run owns `dispatch.sqlite3`, pinned to the manifest hash and the `allow_cloud`/`synthesize` policy. Items move through planned, dispatching, enqueued, succeeded, distilled-skip, or failed states. Restarts select only undispatched items; explicit item IDs and deliberate failed-item retries are supported. `report_meta_archive_import` writes `final-report.json` with planned, enqueued, succeeded, distilled-skip, failed, remaining, and already-completed totals. The generic reconciler resolves live projections by canonical `entry_id`, while preserving stable `meta-facebook-*` and `meta-instagram-*` Elasticsearch IDs.
+Each approved run owns `dispatch.sqlite3`, pinned to the manifest hash and the `allow_cloud`/`synthesize` policy. Items move through planned, dispatching, enqueued, succeeded, distilled-skip, or failed states. A task ID, reservation timestamp, and lease are persisted before broker submission. Reconciliation reads the Celery result state: successful/failed tasks become terminal, active tasks renew their lease, and an expired pre-enqueue reservation with no task ID returns to planned. Ambiguous stale `PENDING` tasks are retained until an operator checks Flower/worker state and invokes the explicit reclaim switch; confirmed `LOST` tasks fail automatically and are retryable. `report_meta_archive_import` writes `final-report.json` with planned, enqueued, succeeded, distilled-skip, failed, remaining, and already-completed totals.
+
+The generic reconciler always queries canonical `entry_id` first. It reads the installed mapping before considering a legacy fallback: strict bootstrap indices use the direct `entry_id` keyword field, while `entry_id.keyword` is queried only when a legacy text mapping explicitly declares that multifield. This preserves stable `meta-facebook-*` and `meta-instagram-*` document IDs and prevents an apply run from creating parallel `hfl-*` documents.
 
 Raw attachments remain immutable and are not embedded in the corpus. Only bounded derived text and stable provenance references enter a weekly narrative. Content hashes prevent repeated model charges for duplicate media. Missing or unsupported artifacts degrade to metadata-only records.
 
@@ -61,13 +63,14 @@ Corpus entries render a `References:` list and Elasticsearch stores the same val
 
 1. Sync the immutable export directories to a harqis-server inbox (future work).
 2. Run `prepare_meta_archive_import` separately for Facebook and Instagram.
-3. Require a complete, untruncated schema-v2 result; review the quarantine report and inspect raw timestamp values for every quarantined record.
+3. Require a complete, untruncated schema-v2 result with zero parser failures; review the parser-failure and quarantine reports and inspect raw timestamp values for every quarantined record.
 4. Record the new `manifest_sha256`; inspect that exact `plan.json`, counts, paths, metadata, and per-item SHA-256 pins. Calculate synthesis calls as the number of items that will be dispatched with `synthesize=true`.
 5. Optionally preview pinned work items through `meta_archive_preview`.
-6. Dispatch a 25-item canary per platform with `allow_cloud=false` and an explicit synthesis policy. Continue with 50, 250, then at most 500 items per controlled batch when queue health and parity remain clean.
-7. Run `report_meta_archive_import` after each batch. Retry only investigated failures and retain `dispatch.sqlite3`, the manifest, hashes, and reports.
-8. Require terminal tasks, zero unexplained failures, canonical tag parity, no duplicate IDs, and matching Markdown/Elasticsearch projections before continuing.
-9. Re-run safely when a later Meta export overlaps the earlier period, supplying all relevant export roots and approving the newly generated manifest hash.
+6. Verify the live Elasticsearch mapping and run read-only reconciliation. Require direct `entry_id` keyword lookup on the strict mapping before dispatch.
+7. Dispatch a 25-item canary per platform with `allow_cloud=false` and an explicit synthesis policy. Continue with 50, 250, then at most 500 items per controlled batch when queue health and parity remain clean.
+8. Run `report_meta_archive_import` after each batch. Reconcile leases, inspect stale `PENDING` tasks in Flower, and explicitly reclaim only tasks confirmed absent. Retry only investigated failures and retain `dispatch.sqlite3`, the manifest, hashes, and reports.
+9. Require terminal tasks, zero unexplained failures, canonical tag parity, no duplicate IDs, and matching Markdown/Elasticsearch projections before continuing.
+10. Re-run safely when a later Meta export overlaps the earlier period, supplying all relevant export roots and approving the newly generated manifest hash.
 
 ## Boundaries and future work
 
