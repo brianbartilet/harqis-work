@@ -1,0 +1,4 @@
+interface:
+  display_name: "Write Notes"
+  short_description: "Save enriched notes to Homework for Life"
+  default_prompt: "Use $write-notes to save this note to Homework for Life."
