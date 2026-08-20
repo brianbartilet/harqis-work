@@ -7,7 +7,10 @@ user-invocable: true
 allowed-tools: Bash Read Glob Grep Edit Write
 ---
 
-Design and implement an RPA-style Celery workflow that chains harqis-work app integrations to automate a task. The workflow passes data between services — output of one app becomes the input of the next.
+Design and implement an RPA-style Celery workflow, or the deterministic Celery
+side of a hybrid automation, that chains harqis-work app integrations. The
+workflow passes data between services — output of one app becomes the input of
+the next.
 
 When this is a non-trivial implementation, do the work in an isolated git worktree or feature branch so the main working tree stays clean until review/commit time.
 
@@ -28,7 +31,18 @@ When this is a non-trivial implementation, do the work in an isolated git worktr
 
 ---
 
-## Step 0 — Clarify inputs before writing any code
+## Step 0 — Classify the runtime and clarify inputs
+
+Read and apply `/choose-automation-runtime` before writing code.
+
+- If the result is **`celery`**, continue with the full workflow scaffold.
+- If the result is **`hybrid`**, list the deterministic Celery operations and
+  the separate agent responsibilities, then scaffold only the Celery side.
+- If the result is **`agent`**, stop. Do not create a Celery task or Beat entry;
+  hand off to the relevant agent or skill implementation with the decision record.
+
+An LLM call alone is not evidence that a workflow is agent-owned. Fixed prompts,
+bounded transformations, and schema-validated outputs can remain in Celery.
 
 Before doing any implementation, collect the answers to these questions if they cannot be confidently inferred from `$ARGUMENTS`:
 
@@ -38,6 +52,9 @@ Before doing any implementation, collect the answers to these questions if they 
 4. **New file or merge** — add to an existing task file or create a new one?
 5. **Apps needed** — confirm the app list you derived from the description. Are there apps the user wants to include that you missed?
 6. **Credentials/secrets needed** — list any API keys or config you expect and confirm with user before writing env placeholders.
+7. **Runtime boundary** — which steps are deterministic Celery operations and
+   which, if any, require adaptive agent judgment?
+8. **Schedule owner** — choose exactly one of Celery Beat, Hermes, Kanban, or manual.
 
 If a diagram file path is provided, parse it first (Step 1b) and use the extracted steps to answer most of these automatically — then only ask about gaps.
 
@@ -58,6 +75,8 @@ From the user's description, extract:
   ```
 - **Output** — what is the final side-effect or returned value?
 - **Apps required** — list of `apps/<name>` modules needed
+- **Runtime decision** — classification, execution owners, schedule owner,
+  controls, and review artifact from `/choose-automation-runtime`
 
 Check each required app:
 ```bash
@@ -311,7 +330,11 @@ def <task_name>(**kwargs):
 
 Decorators are applied bottom-up — `@SPROUT.task()` must be innermost (closest to the function).
 
-**For AI/agent steps:** load the prompt from `workflows/<category>/prompts/` (see Step 6). Use the retained `apps.antropic` provider and its current service conventions; do not reference an upstream workflow that is absent from the fork.
+**For bounded LLM transformations:** load the prompt from
+`workflows/<category>/prompts/` (see Step 6). Use the retained `apps.antropic`
+provider and its current service conventions; do not reference an upstream
+workflow that is absent from the fork. Adaptive agent loops belong outside the
+Celery task and must use an explicit hybrid boundary.
 
 ---
 
@@ -367,14 +390,14 @@ It should print `True`. If it prints `False`, the import in `__init__.py` is wro
 
 ---
 
-## Step 6 - Generate AI prompts (if an agent / Anthropic is used)
+## Step 6 - Generate AI prompts (if a bounded LLM transform is used)
 
 **Hard rule — no inline prompts.** If a task sends *any* system or instruction
 prompt to an LLM, that prompt text MUST live in a `.md` file under the
 workflow's `prompts/` layer and be pulled in via `load_prompt(...)`. Never
 assign a multi-line prompt string to a module constant or pass a string
 literal to `system=`/`messages=`. This applies to every task that calls
-Agent/Anthropic - there is no "if applicable" escape hatch. (A short,
+an LLM provider - there is no "if applicable" escape hatch. (A short,
 fully dynamic user message built from runtime values is the only exception;
 its fixed instruction scaffolding still belongs in the `.md` file.)
 
@@ -407,7 +430,12 @@ def load_prompt(name: str) -> str:
 
 ---
 
-## Step 7 — Add placeholder schedule to `tasks_config.py`
+## Step 7 — Add Beat configuration only when Beat owns the schedule
+
+If **Celery Beat** is the schedule owner, follow this step. If Hermes, Kanban, or
+manual invocation owns the schedule, do not add a second recurring Beat schedule.
+Document how that owner dispatches the Celery task and proceed to task registration;
+use the `ADHOC` queue unless a more specific queue is required.
 
 Read `workflows/<category>/tasks_config.py`. If it does not exist, create it from the template pattern.
 
@@ -454,7 +482,11 @@ If you cannot confidently infer the schedule, ask the user before writing the co
 
 ---
 
-## Step 8 — Register in `workflows/config.py` (commented out)
+## Step 8 — Register the Beat schedule when applicable
+
+Perform this step only when Celery Beat owns the schedule. Agent-scheduled or
+manual Celery tasks still require the Step 5b task-module import, but they must
+not gain a duplicate Beat initiator.
 
 Read `workflows/config.py`. Add a commented import and merge line so the user can activate with one edit:
 
@@ -565,6 +597,10 @@ Section to add/create:
 
 **Goal:** <one sentence>
 
+**Runtime:** `celery` or `hybrid` — <execution boundary>
+
+**Schedule owner:** `Celery Beat` / `Hermes` / `Kanban` / `manual`
+
 **Apps chained:**
 1. `apps/<app_a>` → <what it fetches/does>
 2. `apps/<app_b>` → <what it receives/does>
@@ -625,8 +661,9 @@ Workflow created. Manual steps to activate:
   [ ] <venv-python> -c "from core.apps.sprout.app.celery import SPROUT; import workflows.<category>; print('workflows.<category>.tasks.<module>.<task_name>' in SPROUT.tasks)" prints True
 
   Schedule activation:
-  [ ] Review and uncomment the schedule in workflows/<category>/tasks_config.py
-  [ ] Uncomment the import + merge line in workflows/config.py
+  [ ] Confirm this automation has exactly one schedule owner: <owner>
+  [ ] If Celery Beat owns it, review/uncomment tasks_config.py and workflows/config.py
+  [ ] If another runtime owns it, verify no duplicate Beat schedule exists
   [ ] Regenerate the frontend registry so the task appears in the dashboard: /generate-registry (or python frontend/generate_registry.py)
   [ ] Restart Celery Beat AND the worker to pick up the new task (worker reload is required for the new __init__.py import)
 

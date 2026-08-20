@@ -63,8 +63,11 @@ an adapter example, not presented as a portable requirement.
 
 Some skills intentionally chain into others. For example,
 `create-new-service-app` may hand off MCP work to `create-new-mcp`, while
-`create-new-workflow` owns Celery task, schedule, queue, test, and documentation
-wiring.
+`choose-automation-runtime` decides whether automation belongs to Celery, an
+agent orchestrator, or both. `create-new-workflow` then owns Celery task,
+schedule, queue, test, and documentation wiring only for a Celery decision or
+the deterministic side of a hybrid decision. See
+[`AUTOMATION-RUNTIME-GUIDE.md`](AUTOMATION-RUNTIME-GUIDE.md).
 
 ## Creating or updating a skill
 
@@ -106,6 +109,7 @@ for planning artifacts. It is not a skill source.
 ## Related documentation
 
 - [`SKILLS-INVENTORY.md`](SKILLS-INVENTORY.md) — current repository skill list
+- [`AUTOMATION-RUNTIME-GUIDE.md`](AUTOMATION-RUNTIME-GUIDE.md) — Celery, agent, and hybrid ownership decisions
 - [`AI-TOOLS-WIRING.md`](AI-TOOLS-WIRING.md) — model/runtime wiring and write boundaries
 - [`HERMES.md`](HERMES.md) — Hermes runtime and memory
 - [`AGENTS-TASKS-KANBAN.md`](AGENTS-TASKS-KANBAN.md) — Kanban-driven agents

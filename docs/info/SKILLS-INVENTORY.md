@@ -18,6 +18,7 @@ of truth.
 | `/agent-prompt` | Run a named prompt from `agents/prompts/` against the codebase. |
 | `/capture-hfl-session` | Capture a sanitized prompt/outcome pair for HFL when an automatic surface hook is unavailable or needs a manual retry. |
 | `/clarify-feature` | Convert an enhancement request into an approved implementation spec before files change. |
+| `/choose-automation-runtime` | Classify automation as Celery, agent-orchestrated, or hybrid and record its ownership and controls. |
 | `/commit` | Review, stage, and create a Conventional Commit, with optional push and guarded host-sync chaining. |
 | `/create-data-only-from-hud` | Add a host-safe data-only fallback twin for an existing Windows HUD task. |
 | `/create-new-fork-repository` | Produce a clean client/business fork baseline while preserving the platform skeleton. |
@@ -49,7 +50,7 @@ of truth.
 | `/write-notes` | Save notes, reminders, URLs, and provided media as structured HFL entries with image OCR and visual analysis. |
 | `/zapier-mcp` | Search, enable, and wire Zapier MCP actions into workflows or direct agent use. |
 
-**Current canonical count: 35 skills.** The count is derived from directories
+**Current canonical count: 36 skills.** The count is derived from directories
 containing `.agents/skills/*/SKILL.md`; cache or generated directories do not
 count.
 
@@ -57,6 +58,7 @@ count.
 
 | Goal | Start with |
 |---|---|
+| Choose Celery, agent, or hybrid ownership | `/choose-automation-runtime` |
 | Add an external service | `/create-new-service-app` |
 | Add scheduled automation | `/create-new-workflow` |
 | Add tools for an existing app | `/create-new-mcp` |

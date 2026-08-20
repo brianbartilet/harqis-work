@@ -47,4 +47,4 @@ Do not infer dismissed or resolved status without an explicit user instruction. 
 
 ## Scheduled behavior
 
-Celery Beat invokes the same analyzer every two hours at 08:00–22:00 Asia/Singapore. It reads from the last successful marker, capped at 48 hours; the first run uses 48 hours. It sends Telegram only for material findings. The marker advances only after complete analysis and successful notification, or after a successful silent no-findings pass.
+Hermes owns the waking-hours schedule at 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, and 22:00 Asia/Singapore. It dispatches the canonical `workflows.hfl.tasks.activity_radar.activity_radar` Celery task to the `hfl` queue; the corresponding Beat entry remains disabled to prevent duplicate runs. The task reads from the last successful marker, capped at 48 hours; the first run uses 48 hours. It sends Telegram only for material findings. The marker advances only after complete analysis and successful notification, or after a successful silent no-findings pass.

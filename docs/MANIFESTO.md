@@ -203,6 +203,7 @@ This manifesto is not:
 ## Related reading
 
 - [`README.md`](../README.md) — what the platform is and what it integrates with.
+- [`docs/info/AUTOMATION-RUNTIME-GUIDE.md`](info/AUTOMATION-RUNTIME-GUIDE.md) — how to assign durable execution and adaptive judgment to Celery, agents, or a hybrid.
 - [`docs/info/SKILLS-INVENTORY.md`](info/SKILLS-INVENTORY.md) — the slash commands that operationalize this manifesto into builds.
 - [`docs/info/AGENTS-TASKS-KANBAN.md`](info/AGENTS-TASKS-KANBAN.md) — how Projects in PARA flow through the Kanban agent.
 - [`docs/info/COMMIT-MESSAGE-GUIDE.md`](info/COMMIT-MESSAGE-GUIDE.md) — how Express-level changes get recorded.

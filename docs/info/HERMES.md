@@ -111,6 +111,13 @@ Hermes schedules recurring work. Two modes:
 | **agent** | A full Claude reasoning loop with MCP tools | Tasks that need judgement (triage, research, multi-step automation) |
 | **`no_agent`** | A plain script; Hermes only schedules + delivers the output | Deterministic jobs — extract a file, post a summary, run a canonical skill — where reasoning would add cost without value |
 
+This table chooses the mode of a Hermes-owned cron job; it does not make Hermes
+the default scheduler for platform workflows. Apply the
+[`Automation Runtime Decision Guide`](AUTOMATION-RUNTIME-GUIDE.md), name exactly
+one schedule owner, and keep reliability-critical schedule definitions or
+reconciliation artifacts in the repository rather than only in machine-local
+Hermes state.
+
 `no_agent` jobs stay **silent when there is nothing to deliver**, so an off-cycle run
 doesn't spam the delivery channel. Examples already in the repo:
 

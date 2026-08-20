@@ -4,9 +4,10 @@ workflows/testing/tasks/test_farm_email.py
 Celery beat task — the *delivery* half of the BDD "test case farm".
 
 ``workflows/testing/tasks/test_farm.run_test_farm`` regenerates
-``logs/BDD-TEST-FARM.md`` at 09:00 on weekdays but notifies no one. This task
-runs a few minutes later, renders that already-current markdown to HTML, emails
-it via ``GOOGLE_GMAIL_SEND`` and posts a Telegram completion notice — by
+``logs/BDD-TEST-FARM.md`` but notifies no one. Its Beat entry is disabled while
+schedule ownership moves to Hermes. This independently scheduled delivery task
+runs Mondays at 10:30, renders the latest markdown to HTML, emails it via
+``GOOGLE_GMAIL_SEND``, and posts a Telegram completion notice — by
 shelling out to ``scripts/agents/testing/daily_test_farm_email.py`` in ``--skip-generate``
 mode so there is **no** second (duplicate, costly) Claude generation pass.
 
@@ -20,12 +21,13 @@ Why shell out instead of importing the script:
   * It keeps a single source of truth for the render → Gmail → Telegram path and
     mirrors the pattern ``run_test_farm`` already uses to shell out to ``claude``.
 
-Pinned (via the beat entry) to the same ``peon`` / windows host as
-``run_test_farm`` so it shares the ``GOOGLE_GMAIL_SEND`` + ``TELEGRAM`` configs
-and reads the markdown that host just produced.
+Pinned to the ``peon`` / Windows host where the generation task is dispatched,
+so it shares the ``GOOGLE_GMAIL_SEND`` + ``TELEGRAM`` configs and reads the
+same host-local markdown. The Hermes job should finish generation before the
+10:30 delivery schedule.
 
 References:
-- workflows/testing/tasks/test_farm.py — the generation half (run at 09:00).
+- workflows/testing/tasks/test_farm.py — the Hermes/manual-dispatched generation half.
 - scripts/agents/testing/daily_test_farm_email.py — the render/email/telegram sequence.
 """
 import sys
@@ -58,8 +60,9 @@ def send_test_farm_report(**kwargs):
     Kwargs:
         skip_generate: Reuse the existing markdown that ``run_test_farm`` already
                        produced (default True). Set False only to let the script
-                       refresh the farm itself first — this duplicates the 09:00
-                       ``run_test_farm`` generation and is rarely wanted.
+                       refresh the farm itself first — this duplicates the
+                       separately dispatched ``run_test_farm`` generation and
+                       is rarely wanted.
         dry_run:       Render artifacts but do not send (default False).
         timeout:       Seconds allowed for the script (default 300).
         extra_args:    Optional list of extra CLI flags forwarded verbatim

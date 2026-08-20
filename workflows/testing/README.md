@@ -27,7 +27,17 @@ Jira board (sprint, statuses, Bug/Story)
    → logs/BDD-TEST-FARM.md   (summary nav table + one section per ticket)
 ```
 
-**Schedule:** Mondays at 10:00 — `crontab(hour=10, minute=0, day_of_week='mon')`.
+**Runtime decision:** Hybrid migration. Hermes is the designated schedule and
+agent-reasoning owner; the canonical Celery task remains the durable execution
+boundary for Jira collection, bounded generation, incremental persistence, and
+logging. The agent-reasoning split itself is not implemented by this change.
+
+**Schedule:** The former Monday 10:00 Celery Beat entry is disabled and retained
+as a line-commented migration reference in `tasks_config.py`. Until the Hermes
+job is configured, generation is manual/on-demand. Hermes must be the only
+recurring initiator and dispatch
+`workflows.testing.tasks.test_farm.run_test_farm` to `WorkflowQueue.PEON`; do not
+re-enable the Beat entry at the same time.
 
 **Queue:** `WorkflowQueue.PEON`, pinned to `os: ['windows']` (the
 `windows-work-all` host, alongside the email/report half). `expires`: 8h.
@@ -69,6 +79,11 @@ seconds (default 5) pause between consecutive API generations.
 **AI prompt:** `workflows/testing/prompts/test_farm.md` (per-ticket user message;
 the durable Gherkin conventions live in `_SYSTEM_PROMPT` in `tasks/test_farm.py`).
 
+**Hermes activation controls:** record the invoked skill/version hash, use a
+stable weekly idempotency/correlation key, retain the dispatched Celery task ID,
+keep Jira and execution permissions scoped, and preserve `es_log` plus
+`logs/BDD-TEST-FARM.md` as the PAER review evidence.
+
 ### `send_test_farm_report` (`tasks/test_farm_email.py`)
 
 **Goal:** Deliver the existing `logs/BDD-TEST-FARM.md` without performing a
@@ -79,7 +94,9 @@ second model-generation pass.
 --no-claude-preflight`, renders the current Markdown, emails it through
 `GOOGLE_GMAIL_SEND`, and posts a Telegram completion notice.
 
-**Schedule:** Mondays at 10:30, thirty minutes after `run_test_farm`.
+**Schedule:** Celery Beat remains active Mondays at 10:30 as a separate Express
+operation. During migration it delivers the latest available Markdown, so the
+Hermes generation job should complete before 10:30 to avoid sending stale output.
 
 **Queue/OS:** `WorkflowQueue.PEON`, pinned to Windows so generation and delivery
 share the same file and credentials. The Beat entry expires after eight hours.

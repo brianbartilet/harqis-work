@@ -30,6 +30,15 @@ active weekly scan combines the committed registry with GitHub fallback
 discovery, writes the ignored machine-readable drift report, and submits one
 canonical HFL entry per fork instance plus a fleet summary.
 
+## Choosing Celery, an agent, or both
+
+Before adding a non-trivial automation, apply
+[`docs/info/AUTOMATION-RUNTIME-GUIDE.md`](../docs/info/AUTOMATION-RUNTIME-GUIDE.md)
+or `/choose-automation-runtime`. Agents own adaptive judgment; Celery owns
+durable execution. A bounded LLM transformation is not automatically an agent.
+Hybrid workflows must document the agent/Celery boundary and have exactly one
+schedule owner.
+
 ### `manifesto` is stripped before Celery sees it
 
 `'manifesto'` is **our** metadata — it is **not** a Celery beat-schedule key and must never reach Celery. Celery's `ScheduleEntry.__init__` accepts only a fixed set of per-entry keys; anything else is a hard error. Hand a raw entry dict (with `manifesto`) to `SPROUT.conf.beat_schedule` and beat dies on **every** startup, before it can log or write a pidfile:

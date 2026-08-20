@@ -88,6 +88,7 @@ HARQIS-Work includes a reasoning-model agent layer that goes beyond scheduled ta
 
 | What you're adding | Skill |
 |---|---|
+| **Automation runtime decision** — classify Celery, agent, or hybrid ownership before implementation | `/choose-automation-runtime <automation description>` |
 | **App integration** — REST API wrapper with CLI-first and compatible MCP adapters | `/create-new-service-app <name> [<openapi_url>]` |
 | **Workflow / scheduled task** — Celery RPA chaining apps with cron + queue routing | `/create-new-workflow [<category>] <description_or_diagram>` |
 | **Visual workflow outside Celery** — n8n flows for branching automations or vendor connectors not in `apps/` | `/create-new-n8n-workflow <description_or_diagram>` |
@@ -281,7 +282,7 @@ Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and 
 | `dumps` | Active | 3 | Daily dump collection — fanout per-node ship + harqis-server pull (Android/Termux) → analysis |
 | `social` | Active | 1 | Monthly LinkedIn post — git history → Claude → LinkedIn draft + Gmail notification |
 | `tcg` | Manual | 6 | Pokedex proxy-printing pipeline (MPC) — manual/pytest-triggered, ships an empty Beat dict |
-| `testing` | Active | 3 | Test farm generation, report delivery, and supporting test task entry points |
+| `testing` | Hybrid | 2 | Hermes/manual-dispatched test farm generation plus Celery Beat report delivery |
 | `workers` | Active | 1 | Worker-pool fanout — each worker reports its own location to the `harqis-worker-locations` ES index |
 | `mobile` | On-demand | 14 | Android SDK/AVD/device/scrcpy Celery controls; also includes a standalone Termux screen logger |
 | `finance` | Manual | 1 | Parse bank-statement PDFs and import categorized transactions into YNAB |

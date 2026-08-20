@@ -97,6 +97,9 @@ confidently infer.
   an MCP tool call from the active agent, a direct API call from another service?
 - **A3.** Is this a one-off request or something that should run automatically on a
   schedule? If scheduled, how often?
+- **A4.** For automation, is the intended runtime Celery, an external agent
+  orchestrator, or a hybrid? Use `/choose-automation-runtime` when the answer is
+  not already explicit.
 
 ---
 
@@ -147,6 +150,17 @@ confidently infer.
 - **F2.** Are there existing tests the feature must not break?
 - **F3.** Is there a specific test case you want added as part of this work?
 
+### Category G — Runtime ownership (automation only)
+
+- **G1.** Which steps require adaptive judgment, clarification, or dynamic tool
+  selection, and which are deterministic operations?
+- **G2.** Does the work require durable queueing, retries, expiry, host affinity,
+  fanout, or idempotent persistence?
+- **G3.** Who is the single schedule owner: Celery Beat, Hermes, Kanban, or a
+  manual trigger?
+- **G4.** Which actions are irreversible or high impact, and what durable approval
+  evidence is required before they run?
+
 ---
 
 ## Step 2 — Wait for the user's answers
@@ -172,6 +186,12 @@ this exact template:
 
 **Trigger:**
 <How/when it runs — user action / schedule / MCP call / API event.>
+
+**Automation runtime:**
+  - Classification: <celery / agent / hybrid / not applicable>
+  - Execution owner: <owner for each operation>
+  - Schedule owner: <Celery Beat / Hermes / Kanban / manual / not applicable>
+  - Decision record: <reasoning, required controls, or link>
 
 **Primary files changed:**
   - <file or directory 1> — <what changes>
@@ -228,6 +248,8 @@ When the user approves, determine the right next action:
 | The feature is…                                  | Hand off to…                     |
 |--------------------------------------------------|----------------------------------|
 | A new Celery workflow or task                    | `/create-new-workflow`           |
+| A new agent-owned automation                     | `/choose-automation-runtime`, then the relevant agent/skill implementation |
+| A hybrid agent/Celery automation                 | `/create-new-workflow` for deterministic operations; implement the agent boundary separately |
 | A new app/service integration                    | `/create-new-service-app`        |
 | A new Rainmeter HUD widget                       | `/create-new-hud`                |
 | A new n8n workflow                               | `/create-new-n8n-workflow`       |
@@ -259,3 +281,5 @@ the conventions in the existing code and run tests when done.
 7. **Respect the `skip:clarify` escape hatch.** If a card carries the `skip:clarify`
    label, skip this skill entirely and proceed directly to implementation. This is for
    well-specified cards where the user has pre-answered all questions in the description.
+8. **Record runtime ownership.** Every scheduled or non-trivial automation must
+   classify its runtime and name exactly one schedule owner before implementation.
