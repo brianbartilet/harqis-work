@@ -438,6 +438,7 @@ Each daemon is launched via the cross-platform `python scripts/launch.py <servic
 | `work.harqis.scheduler` | `python scripts/launch.py scheduler` | `python run_workflows.py scheduler` |
 | `work.harqis.worker` | `python scripts/launch.py worker` | `WORKFLOW_QUEUE=${WORKFLOW_QUEUE:-default} python run_workflows.py worker` (Celery's `-Q` accepts a comma-separated list) |
 | `work.harqis.frontend` | `python scripts/launch.py frontend` | `python frontend/main.py` |
+| `work.harqis.hfl-api` | `python scripts/launch.py hfl-api` | `python frontend/hfl_api.py` (canonical host only; Swagger `/docs`, default port 8082) |
 | `work.harqis.mcp` | `python scripts/launch.py mcp` | `python mcp/server.py` |
 | `work.harqis.kanban` | `python scripts/launch.py kanban` | `python -m agents.projects.orchestrator.local --num-agents $KANBAN_NUM_AGENTS` |
 | `work.harqis.flower` | `python scripts/launch.py flower` | `python -m celery -A core.apps.sprout.app.celery:SPROUT flower --port=$FLOWER_PORT --address=$FLOWER_ADDRESS --basic-auth=$FLOWER_USER:$FLOWER_PASSWORD` |

@@ -11,6 +11,7 @@ Usage:
     python scripts/launch.py scheduler
     python scripts/launch.py flower
     python scripts/launch.py frontend
+    python scripts/launch.py hfl-api
     python scripts/launch.py mcp
     python scripts/launch.py kanban [--profile agent:default] [--num-agents 1]
 
@@ -327,6 +328,20 @@ def cmd_frontend(args: argparse.Namespace) -> None:
     _exec(_python(), str(REPO_ROOT / "frontend" / "main.py"))
 
 
+def cmd_hfl_api(args: argparse.Namespace) -> None:
+    setup_env()
+    if not os.environ.get("HFL_CORPUS_API_TOKEN", "").strip():
+        sys.exit("HFL_CORPUS_API_TOKEN must be set before starting hfl-api")
+    sep = ";" if os.name == "nt" else ":"
+    os.environ["PYTHONPATH"] = sep.join(
+        [os.environ.get("PYTHONPATH", ""), str(REPO_ROOT / "frontend")]
+    ).strip(sep)
+    host = os.environ.get("HFL_API_HOST", "0.0.0.0")
+    port = os.environ.get("HFL_API_PORT", "8082")
+    print(f"[launch] hfl-api {host}:{port} (Swagger: /docs)", flush=True)
+    _exec(_python(), str(REPO_ROOT / "frontend" / "hfl_api.py"))
+
+
 def cmd_mcp(args: argparse.Namespace) -> None:
     setup_env()
     print("[launch] mcp server", flush=True)
@@ -463,6 +478,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     fe = sub.add_parser("frontend", help="FastAPI frontend dashboard")
     fe.set_defaults(func=cmd_frontend)
+
+    ha = sub.add_parser("hfl-api", help="Standalone HFL Activity Corpus API")
+    ha.set_defaults(func=cmd_hfl_api)
 
     m = sub.add_parser("mcp", help="MCP server (stdio)")
     m.set_defaults(func=cmd_mcp)

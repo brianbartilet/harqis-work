@@ -320,6 +320,7 @@ python scripts/launch.py worker [-q default,hud,tcg]
 python scripts/launch.py scheduler
 python scripts/launch.py flower
 python scripts/launch.py frontend
+python scripts/launch.py hfl-api
 python scripts/launch.py mcp
 python scripts/launch.py kanban [-p agent:default] [--num-agents 1]
 
@@ -337,6 +338,9 @@ python scripts/launch.py print-env                                 # eval-able e
 - `flower`, `trigger-hud-tasks` require `FLOWER_USER` and `FLOWER_PASSWORD`
   in `.env/apps.env`. The legacy hardcoded creds in `run_hud_tasks.bat`
   are gone — `launch.py trigger-hud-tasks` reads them from the env.
+- `hfl-api` requires `HFL_CORPUS_API_TOKEN`, binds to
+  `HFL_API_HOST:HFL_API_PORT` (`0.0.0.0:8082` by default), and exposes Swagger
+  at `/docs`.
 - `push-config` / `serve-config` run on the **host** machine. Remote workers
   set `CONFIG_SOURCE=redis|http` to consume the resolved config.
 
@@ -386,6 +390,7 @@ python scripts/deploy.py --num-agents N             # override Kanban concurrent
 
 # Service filters (skip individual host daemons; can also live under `disable=` in machines.toml)
 python scripts/deploy.py --no-frontend
+python scripts/deploy.py --no-hfl-api
 python scripts/deploy.py --no-mcp
 python scripts/deploy.py --no-kanban
 python scripts/deploy.py --no-flower
@@ -416,16 +421,20 @@ manual recovery or later cleanup.
 
 **Per-role behaviour**
 
-| Role | Docker compose | scheduler | worker | capture-worker | frontend | mcp | kanban | flower |
-|---|---|---|---|---|---|---|---|---|
-| `host` | ✓ up/down | ✓ | ✓ | opt-in | ✓ | ✓ | ✓ | ✓ |
-| `node` | — (broker is on host) | — | ✓ | opt-in | — | — | ✓ | — |
+| Role | Docker compose | scheduler | worker | capture-worker | frontend | hfl-api | mcp | kanban | flower |
+|---|---|---|---|---|---|---|---|---|---|
+| `host` | ✓ up/down | ✓ | ✓ | opt-in | ✓ | opt-in | ✓ | ✓ | ✓ |
+| `node` | — (broker is on host) | — | ✓ | opt-in | — | — | — | ✓ | — |
 
 `capture-worker` starts only when the machine profile sets
 `capture_worker = true`. It consumes only `capture` with a solo pool and
 concurrency 1, isolating the desktop reader from the general worker.
 
-Use `--no-frontend / --no-mcp / --no-kanban / --no-flower` to skip
+`hfl-api` starts only when the machine profile sets `hfl_api = true`. The
+canonical `harqis-server` profile enables it on port 8082 with Swagger at
+`/docs`; other hosts remain clients of that single writable corpus authority.
+
+Use `--no-frontend / --no-hfl-api / --no-mcp / --no-kanban / --no-flower` to skip
 individual host daemons, or list them under `disable` in `machines.toml`.
 
 ## `verify_instance_isolation.py`

@@ -1,0 +1,349 @@
+openapi: 3.1.0
+info:
+  title: HARQIS HFL Activity Corpus API
+  version: 1.0.0
+  description: >-
+    Authenticated API for writing the canonical Homework-for-Life Markdown corpus
+    and its best-effort Elasticsearch projection, then searching and retrieving it.
+servers:
+  - url: http://localhost:8082
+    description: Standalone hfl-api daemon
+security:
+  - HTTPBearer: []
+tags:
+  - name: hfl-corpus-api
+    description: Canonical Activity Corpus operations
+  - name: operations
+    description: Service operations
+paths:
+  /health:
+    get:
+      tags: [operations]
+      summary: Service health
+      security: []
+      responses:
+        '200':
+          description: Service is running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string, const: ok}
+                  service: {type: string, const: hfl-api}
+  /api/hfl/entries:
+    post:
+      tags: [hfl-corpus-api]
+      summary: Create a canonical HFL entry
+      description: >-
+        Writes the canonical Markdown entry and attempts an idempotent Elasticsearch
+        projection. A successful Markdown write can return indexed=false when ES is unavailable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEntryRequest'
+      responses:
+        '200':
+          description: Entry persisted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryResult'
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/hfl/entries/preview:
+    post:
+      tags: [hfl-corpus-api]
+      summary: Preview and enrich an entry without saving it
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEntryRequest'
+      responses:
+        '200':
+          description: Rendered preview
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [filename, markdown, html, payload, enrichment]
+                properties:
+                  filename: {type: string}
+                  markdown: {type: string}
+                  html: {type: string}
+                  payload: {$ref: '#/components/schemas/CreateEntryRequest'}
+                  enrichment: {type: object, additionalProperties: true}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/hfl/entries/upload:
+    post:
+      tags: [hfl-corpus-api]
+      summary: Create an entry with attachments
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [payload]
+              properties:
+                payload:
+                  type: string
+                  description: JSON-encoded CreateEntryRequest
+                files:
+                  type: array
+                  maxItems: 10
+                  items: {type: string, format: binary}
+      responses:
+        '200':
+          description: Entry and attachments persisted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryResult'
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/hfl/documents:
+    get:
+      tags: [hfl-corpus-api]
+      summary: Search and paginate corpus documents
+      parameters:
+        - {$ref: '#/components/parameters/Query'}
+        - {name: date_field, in: query, schema: {type: string, enum: [created, updated], default: created}}
+        - {name: date_from, in: query, schema: {type: string}}
+        - {name: date_to, in: query, schema: {type: string}}
+        - {name: sort, in: query, schema: {type: string, enum: [asc, desc], default: desc}}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: page_size, in: query, schema: {type: integer, minimum: 1, default: 20}}
+        - {name: compact, in: query, schema: {type: boolean, default: false}}
+        - {name: source, in: query, schema: {type: string}}
+        - {$ref: '#/components/parameters/IncludeSecrets'}
+        - {$ref: '#/components/parameters/SecretTags'}
+      responses:
+        '200':
+          description: Corpus search result
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/hfl/tree:
+    get:
+      tags: [hfl-corpus-api]
+      summary: Return a shallow corpus directory tree
+      parameters:
+        - {name: path, in: query, schema: {type: string, default: ''}}
+        - {$ref: '#/components/parameters/IncludeSecrets'}
+        - {$ref: '#/components/parameters/SecretTags'}
+      responses:
+        '200':
+          description: Directory tree
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/hfl/matches/{relative_path}:
+    get:
+      tags: [hfl-corpus-api]
+      summary: Find matching entries within one document
+      parameters:
+        - {$ref: '#/components/parameters/RelativePath'}
+        - {$ref: '#/components/parameters/Query'}
+        - {name: source, in: query, schema: {type: string}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 20, default: 20}}
+        - {$ref: '#/components/parameters/IncludeSecrets'}
+        - {$ref: '#/components/parameters/SecretTags'}
+      responses:
+        '200':
+          description: Matching entries
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/hfl/document/{relative_path}:
+    get:
+      tags: [hfl-corpus-api]
+      summary: Retrieve one corpus document
+      parameters:
+        - {$ref: '#/components/parameters/RelativePath'}
+        - {$ref: '#/components/parameters/IncludeSecrets'}
+        - {$ref: '#/components/parameters/SecretTags'}
+      responses:
+        '200':
+          description: Document, entries, and safe references
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      tags: [hfl-corpus-api]
+      summary: Replace a corpus Markdown document
+      description: Destructive. Validates and replaces the complete document text.
+      parameters:
+        - {$ref: '#/components/parameters/RelativePath'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: {type: string}
+      responses:
+        '200':
+          description: Document updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated: {type: boolean}
+                  relative_path: {type: string}
+                  size: {type: integer}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/hfl/reference/{token}:
+    get:
+      tags: [hfl-corpus-api]
+      summary: Download a referenced file
+      parameters:
+        - {$ref: '#/components/parameters/ReferenceToken'}
+      responses:
+        '200': {$ref: '#/components/responses/BinaryFile'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/hfl/reference/{token}/preview:
+    get:
+      tags: [hfl-corpus-api]
+      summary: Preview a safe text or Markdown reference
+      parameters:
+        - {$ref: '#/components/parameters/ReferenceToken'}
+      responses:
+        '200':
+          description: HTML preview
+          content:
+            text/html:
+              schema: {type: string}
+        '204': {description: Media reference; use the media endpoint}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '415': {description: Reference type cannot be previewed}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/hfl/reference/{token}/media:
+    get:
+      tags: [hfl-corpus-api]
+      summary: Stream image or video reference content
+      parameters:
+        - {$ref: '#/components/parameters/ReferenceToken'}
+      responses:
+        '200': {$ref: '#/components/responses/BinaryFile'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '415': {description: Reference is not media}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/hfl/reference/{token}/thumbnail:
+    get:
+      tags: [hfl-corpus-api]
+      summary: Download a generated media thumbnail
+      parameters:
+        - {$ref: '#/components/parameters/ReferenceToken'}
+      responses:
+        '200': {$ref: '#/components/responses/BinaryFile'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '415': {description: Thumbnail is unavailable}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+components:
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer
+  schemas:
+    CreateEntryRequest:
+      type: object
+      required: [date, time, moment, what_happened]
+      properties:
+        date: {type: string, format: date, maxLength: 10}
+        time: {type: string, maxLength: 8, examples: ['14:30']}
+        moment: {type: string, minLength: 1, maxLength: 500}
+        what_happened: {type: string, minLength: 1, maxLength: 20000}
+        why_it_stayed: {type: string, maxLength: 10000, default: ''}
+        possible_use: {type: string, maxLength: 5000, default: ''}
+        source: {type: string, minLength: 1, maxLength: 120, default: manual-entry}
+        tags: {type: string, maxLength: 2000, default: '', examples: ['#notes #manual-entry']}
+        references: {type: string, maxLength: 20000, default: ''}
+        attachment_names:
+          type: array
+          maxItems: 10
+          items: {type: string}
+          default: []
+        include_location: {type: boolean, default: true}
+        browser_latitude: {type: [number, 'null'], minimum: -90, maximum: 90}
+        browser_longitude: {type: [number, 'null'], minimum: -180, maximum: 180}
+        browser_location_status: {type: string, maxLength: 40, default: ''}
+    EntryResult:
+      type: object
+      required: [entry_id, path, duplicate, indexed, delivery]
+      properties:
+        entry_id: {type: string}
+        path: {type: string}
+        bytes_written: {type: integer}
+        duplicate: {type: boolean}
+        indexed:
+          type: boolean
+          description: Whether the best-effort Elasticsearch upsert succeeded.
+        doc_id: {type: [string, 'null']}
+        delivery: {type: string, enum: [persisted, forwarded, outbox]}
+        uploads:
+          type: array
+          items: {type: string}
+  parameters:
+    Query:
+      name: q
+      in: query
+      schema: {type: string, default: ''}
+    IncludeSecrets:
+      name: include_secrets
+      in: query
+      schema: {type: boolean, default: false}
+    SecretTags:
+      name: secret_tags
+      in: query
+      schema: {type: string, default: ''}
+    RelativePath:
+      name: relative_path
+      in: path
+      required: true
+      schema: {type: string}
+    ReferenceToken:
+      name: token
+      in: path
+      required: true
+      schema: {type: string}
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: {type: object, additionalProperties: true}
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema: {type: object, additionalProperties: true}
+    NotFound:
+      description: Corpus resource not found
+      content:
+        application/json:
+          schema: {type: object, additionalProperties: true}
+    BinaryFile:
+      description: Binary file content
+      content:
+        application/octet-stream:
+          schema: {type: string, format: binary}

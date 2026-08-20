@@ -44,6 +44,7 @@ At its core the platform has three layers:
 | `google_apps` | Calendar, Gmail, Keep, Sheets, Tasks, Drive, Translation | REST API (OAuth + API key) | Yes | [API Docs](https://developers.google.com/workspace) · [Console](https://console.cloud.google.com/) |
 | `google_drive` | Google Drive — upload, download, export, manage files/folders | REST API (OAuth) | No | [API Docs](https://developers.google.com/drive/api/reference/rest/v3) · [Console](https://console.cloud.google.com/) |
 | `grok` | xAI Grok — chat completions, live web search, X post search, embeddings | REST (native SDK) | Yes | [API Docs](https://docs.x.ai/api-reference) · [Console](https://console.x.ai/) |
+| `hfl_corpus` | Canonical Homework-for-Life Activity Corpus — entry writes, ES projection status, search, documents, and references | REST API | Yes | [OpenAPI](apps/hfl_corpus/openapi.yaml) |
 | `investagrams` | Philippine stock analytics | Web scraping | No | [Site](https://www.investagrams.com/) |
 | `jira` | Jira project management | REST API (DC/Bearer) | Yes | [API Docs](https://developer.atlassian.com/server/jira/platform/rest-apis/) · [Site](https://www.atlassian.com/software/jira) |
 | `justtcg` | Multi-game TCG pricing analytics (MTG, Pokémon, Yu-Gi-Oh!, Lorcana…) — prices + 24h/7d/30d/90d/1y change & trend stats | REST API | Yes | [API Docs](https://justtcg.com/docs) · [Site](https://justtcg.com/) |
@@ -451,6 +452,7 @@ harqis-work/
 │   ├── google_apps/                # Google Workspace (Calendar, Gmail, Drive…)
 │   ├── google_drive/               # Google Drive upload/download/export
 │   ├── grok/                       # xAI Grok LLM (chat, web search, X search, embeddings)
+│   ├── hfl_corpus/                 # HFL Activity Corpus REST client + OpenAPI contract
 │   ├── jira/                       # Jira project management
 │   ├── justtcg/                    # Multi-game TCG pricing analytics API
 │   ├── linkedin/                   # LinkedIn API
@@ -626,7 +628,7 @@ The three driving principles:
 # 1. Ensure the Docker stack is up (RabbitMQ, Redis, n8n, Mosquitto, Elasticsearch, Kibana, OwnTracks)
 docker compose -f docker-compose.yml up -d
 
-# 2. On macOS — verify LaunchAgents (scheduler, worker, frontend)
+# 2. On macOS — verify LaunchAgents (scheduler, worker, frontend, canonical HFL API)
 launchctl list | grep work.harqis
 
 # 3. If anything is down, run the deploy script (cross-platform)
@@ -694,6 +696,8 @@ APP_PASSWORD=
 APP_SECRET_KEY=
 HFL_CORPUS_API_URL=             # empty on canonical Mac; Mac frontend URL on remote readers
 HFL_CORPUS_API_TOKEN=           # shared secret; keep in gitignored apps.env
+HFL_API_HOST=                   # standalone HFL API bind address; default 0.0.0.0
+HFL_API_PORT=                   # standalone HFL API port; default 8082
 HFL_CORPUS_PATH=                # canonical host corpus root; /Volumes/harqis-data/hfl in production
 HFL_OUTBOX_PATH=                # optional durable envelope directory; default logs/hfl-outbox
 HFL_SESSION_AUDIT_PATH=         # optional sanitized prompt/outcome artifacts; default logs/hfl-session-audit
@@ -927,6 +931,17 @@ celery -A workflows.config beat --loglevel=info
 cd frontend && python main.py
 # → http://localhost:8080
 ```
+
+### HFL Activity Corpus API
+
+```sh
+python scripts/launch.py hfl-api
+# → health: http://localhost:8082/health
+# → Swagger: http://localhost:8082/docs
+```
+
+The daemon is enabled only for machine profiles with `hfl_api = true`; the
+canonical `harqis-server` profile is the sole writable API authority.
 
 ### MCP Server
 

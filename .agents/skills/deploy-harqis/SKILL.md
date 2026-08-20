@@ -25,6 +25,7 @@ Deploy the harqis-work platform on this machine — full stack ("host") or worke
 | `--os <LABELS>` | No | Comma-separated `os:*` labels this orchestrator satisfies, e.g. `os:linux,os:gpu`. Unset = auto-detect from `platform.system()` (darwin → `os:darwin,os:macos,os:mac`; linux → `os:linux`; windows → `os:windows,os:win`; all hosts also satisfy `os:any`). Cards with no `os:*` label run on any node; cards with `os:windows` only run on Windows nodes. |
 | `--down` | No | Tear down services for this role instead of starting them. |
 | `--no-frontend` | No | Skip the FastAPI dashboard (host only). |
+| `--no-hfl-api` | No | Skip the standalone canonical HFL Activity Corpus API (host only and opt-in through `hfl_api = true`). |
 | `--no-mcp` | No | Skip the MCP server daemon (host only). |
 | `--no-kanban` | No | Skip the Kanban orchestrator. On node this also relaxes the `--profile` requirement. |
 | `--no-flower` | No | Skip the Flower Celery monitor (host only). |
@@ -190,13 +191,15 @@ For each component below, the launch is cross-platform via `python scripts/launc
 
 7a. **Frontend (FastAPI dashboard)** — runs `python scripts/launch.py frontend`. Probe `http://localhost:8000/health` until it returns 200, max 15s. Skip if `--no-frontend`.
 
-7b. **MCP server daemon** — runs `python scripts/launch.py mcp`. Note: typically the MCP server is spawned as a stdio subprocess by the active agent client, so this daemon is only needed for SSH-stdio remote access or HTTP-transport setups. Skip if `--no-mcp`.
+7b. **HFL Activity Corpus API** — when the machine profile sets `hfl_api = true`, run `python scripts/launch.py hfl-api`. It listens on `HFL_API_HOST:HFL_API_PORT` (`0.0.0.0:8082` by default), exposes health at `/health`, OpenAPI at `/openapi.json`, and Swagger UI at `/docs`. Probe `http://localhost:${HFL_API_PORT:-8082}/health` until it returns 200, max 15s. Skip if `--no-hfl-api`; never enable it on a non-canonical corpus host.
 
-7c. **Projects orchestrator (acts as 1 agent worker on the host)** — runs `python scripts/launch.py kanban` (module is `agents.projects.orchestrator.local`). Default `KANBAN_NUM_AGENTS=1`. If `--num-agents N` was passed, export it before launching. If `--dry-run`, set `KANBAN_DRY_RUN=1`. Skip if `--no-kanban`.
+7c. **MCP server daemon** — runs `python scripts/launch.py mcp`. Note: typically the MCP server is spawned as a stdio subprocess by the active agent client, so this daemon is only needed for SSH-stdio remote access or HTTP-transport setups. Skip if `--no-mcp`.
+
+7d. **Projects orchestrator (acts as 1 agent worker on the host)** — runs `python scripts/launch.py kanban` (module is `agents.projects.orchestrator.local`). Default `KANBAN_NUM_AGENTS=1`. If `--num-agents N` was passed, export it before launching. If `--dry-run`, set `KANBAN_DRY_RUN=1`. Skip if `--no-kanban`.
 
 After loading, tail the last 5 lines of `logs/projects_audit.jsonl` to confirm the orchestrator is polling. If the file doesn't exist yet, that's fine — it's created on the first poll.
 
-7d. **Flower (Celery task monitor)** — runs `python scripts/launch.py flower`. Listens on `127.0.0.1:5555` by default with HTTP Basic auth (`FLOWER_USER` + `FLOWER_PASSWORD` from `.env/apps.env`). To expose over Tailscale set `FLOWER_ADDRESS=0.0.0.0` before deploy. Probe `http://localhost:5555/api/workers` (with the configured basic auth) until it returns 200, max 15s. Skip if `--no-flower`. **Required env vars:** if `FLOWER_USER` or `FLOWER_PASSWORD` are unset, the daemon will exit immediately — surface the error and either set them or pass `--no-flower`.
+7e. **Flower (Celery task monitor)** — runs `python scripts/launch.py flower`. Listens on `127.0.0.1:5555` by default with HTTP Basic auth (`FLOWER_USER` + `FLOWER_PASSWORD` from `.env/apps.env`). To expose over Tailscale set `FLOWER_ADDRESS=0.0.0.0` before deploy. Probe `http://localhost:5555/api/workers` (with the configured basic auth) until it returns 200, max 15s. Skip if `--no-flower`. **Required env vars:** if `FLOWER_USER` or `FLOWER_PASSWORD` are unset, the daemon will exit immediately — surface the error and either set them or pass `--no-flower`.
 
 ---
 
@@ -233,6 +236,7 @@ Started:
   ✓ Scheduler          (Celery Beat — global dispatcher)                                      [host only]
   ✓ Worker             queues: <q1,q2,q3>      broker: <CELERY_BROKER_URL>
   ✓ Frontend           http://localhost:8000                                                  [host, optional]
+  ✓ HFL API            http://localhost:8082/docs                                             [canonical host, optional]
   ✓ MCP server         daemon (stdio)                                                          [host, optional]
   ✓ Kanban orchestrator agents=<n>, profiles=<count>                                          [host, optional]
   ✓ Flower              http://localhost:5555  (basic-auth: $FLOWER_USER:$FLOWER_PASSWORD)    [host, optional]
@@ -241,6 +245,7 @@ Logs:
   ~/Library/Logs/harqis-scheduler.log
   ~/Library/Logs/harqis-worker.log
   ~/Library/Logs/harqis-frontend.log
+  ~/Library/Logs/harqis-hfl-api.log
   ~/Library/Logs/harqis-kanban.log
   ~/Library/Logs/harqis-flower.log
   logs/projects_audit.jsonl
@@ -279,6 +284,7 @@ Standard label-to-service mapping:
 | `work.harqis.scheduler` | `scheduler` |
 | `work.harqis.worker` | `worker` |
 | `work.harqis.frontend` | `frontend` |
+| `work.harqis.hfl-api` | `hfl-api` |
 | `work.harqis.mcp` | `mcp` |
 | `work.harqis.kanban` | `kanban` |
 | `work.harqis.flower` | `flower` |
@@ -321,6 +327,7 @@ On Windows, `python scripts/deploy.py --register` (must run elevated) installs e
 | `work.harqis.scheduler` | `python scripts/launch.py scheduler` |
 | `work.harqis.worker` | `python scripts/launch.py worker` |
 | `work.harqis.frontend` | `python scripts/launch.py frontend` |
+| `work.harqis.hfl-api` | `python scripts/launch.py hfl-api` |
 | `work.harqis.mcp` | `python scripts/launch.py mcp` |
 | `work.harqis.kanban` | `python scripts/launch.py kanban` |
 | `work.harqis.flower` | `python scripts/launch.py flower` |
@@ -371,6 +378,7 @@ python scripts/deploy.py --role host --down --unregister
 - [ ] Worker registered with broker (`celery inspect ping` succeeds)
 - [ ] Worker subscribed to every requested queue (`celery inspect active_queues` lists all of them)
 - [ ] Frontend `/health` returns 200 (host, unless `--no-frontend`)
+- [ ] HFL API `/health` returns 200 and `/openapi.json` is valid when `hfl_api = true` (canonical host, unless `--no-hfl-api`)
 - [ ] Kanban orchestrator polling (host, unless `--no-kanban`)
 - [ ] Flower `/api/workers` returns 200 with `FLOWER_USER:FLOWER_PASSWORD` basic auth (host, unless `--no-flower`)
 - [ ] If `FLOWER_USER`/`FLOWER_PASSWORD` are unset, the Flower daemon errored cleanly — surface the missing env var rather than silently skipping
