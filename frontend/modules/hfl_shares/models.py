@@ -271,6 +271,42 @@ class ShareGrant:
 
 
 @dataclass(frozen=True)
+class ShareGrantSummary:
+    """Snapshot-free projection used by the owner share listing."""
+
+    id: str
+    configuration_id: str
+    name: str
+    auth_mode: str
+    allowed_email: str
+    created_at: str
+    expires_at: str
+    status: str
+    single_use: bool
+    device_limit: int
+    entry_count: int
+    no_expiry: bool = False
+    instant: bool = False
+    live_updates: bool = False
+    redeemed_at: str = ""
+    revoked_at: str = ""
+    pin_failures: int = 0
+
+    @property
+    def expired(self) -> bool:
+        if self.no_expiry:
+            return False
+        try:
+            return datetime.fromisoformat(self.expires_at) <= utc_now()
+        except ValueError:
+            return True
+
+    @property
+    def available(self) -> bool:
+        return self.status == "active" and not self.expired
+
+
+@dataclass(frozen=True)
 class ChatMessage:
     id: str
     session_id: str

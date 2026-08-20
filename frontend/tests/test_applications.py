@@ -1,4 +1,5 @@
 from modules.applications.inventory import (
+    clear_application_cache,
     discover_applications,
     get_application,
     resolve_document,
@@ -54,7 +55,27 @@ def test_safe_policy_ignores_paths_outside_discovered_tests(monkeypatch):
         "load_safe_policy",
         lambda: {"aaa": (valid, "scripts/deploy.py")},
     )
+    clear_application_cache()
 
     application = get_application("aaa")
 
     assert application.safe_paths == (valid,)
+    clear_application_cache()
+
+
+def test_application_inventory_uses_short_lived_cache(monkeypatch):
+    clear_application_cache()
+    calls = 0
+    original = inventory_module._discover_applications
+
+    def counted_discovery():
+        nonlocal calls
+        calls += 1
+        return original()
+
+    monkeypatch.setattr(inventory_module, "_discover_applications", counted_discovery)
+
+    assert discover_applications()
+    assert discover_applications()
+    assert calls == 1
+    clear_application_cache()

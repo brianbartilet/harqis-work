@@ -28,6 +28,19 @@ def test_upstream_service_names_and_runtime_paths_remain_compatible(monkeypatch)
     assert deploy.log_path("worker").parent == deploy.REPO_ROOT / "logs"
 
 
+def test_service_logs_rotate_before_daemon_restart(tmp_path, monkeypatch):
+    deploy = load_deploy_module()
+    log_file = tmp_path / "frontend.log"
+    log_file.write_bytes(b"x" * 1_048_576)
+    monkeypatch.setenv("HARQIS_LOG_MAX_BYTES", "1048576")
+    monkeypatch.setenv("HARQIS_LOG_BACKUP_COUNT", "2")
+
+    deploy._rotate_service_log(log_file)
+
+    assert not log_file.exists()
+    assert (tmp_path / "frontend.log.1").stat().st_size == 1_048_576
+
+
 def test_service_names_and_runtime_paths_are_instance_scoped(monkeypatch):
     monkeypatch.setenv("HARQIS_INSTANCE", "ALAM Tech Labs")
     deploy = load_deploy_module()

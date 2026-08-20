@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     host:          str = "0.0.0.0"
     port:          int = 8080
     session_max_age: int = 3600 * 8
+    frontend_gzip_minimum_size: int = 1_000
+    frontend_slow_request_ms: float = 100.0
     # Set to True when the app is behind a reverse proxy / Cloudflare Tunnel.
     # Enables the Secure flag on session cookies (requires HTTPS end-to-end).
     behind_proxy:  bool = False

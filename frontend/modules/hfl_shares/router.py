@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import hmac
 from ipaddress import ip_address
@@ -392,7 +393,16 @@ def _owner_page(items: list[Any], raw_page: str, page_size: int):
     return items[start : start + page_size], page, total_pages
 
 
-def _owner_context(
+def _owner_page_number(total: int, raw_page: str, page_size: int) -> tuple[int, int]:
+    try:
+        requested = max(1, int(raw_page or "1"))
+    except ValueError:
+        requested = 1
+    total_pages = max(1, math.ceil(total / page_size))
+    return min(requested, total_pages), total_pages
+
+
+def _owner_context_sync(
     request: Request,
     user: str,
     *,
@@ -448,16 +458,20 @@ def _owner_context(
         datetime.now().astimezone() + timedelta(seconds=ttl_seconds)
     ).strftime("%Y-%m-%dT%H:%M")
     all_configurations = store.list_configurations()
-    all_shares = store.list_shares()
     configuration_page_items, recipe_page, recipe_total_pages = _owner_page(
         all_configurations,
         request.query_params.get("recipe_page", "1"),
         _OWNER_RECIPE_PAGE_SIZE,
     )
-    share_page_items, share_page, share_total_pages = _owner_page(
-        all_shares,
+    share_count = store.count_shares()
+    share_page, share_total_pages = _owner_page_number(
+        share_count,
         request.query_params.get("share_page", "1"),
         _OWNER_SHARE_PAGE_SIZE,
+    )
+    share_page_items = store.list_share_summaries(
+        limit=_OWNER_SHARE_PAGE_SIZE,
+        offset=(share_page - 1) * _OWNER_SHARE_PAGE_SIZE,
     )
     return page_context(
         request,
@@ -491,7 +505,7 @@ def _owner_context(
         recipe_count=len(all_configurations),
         share_page=share_page,
         share_total_pages=share_total_pages,
-        share_count=len(all_shares),
+        share_count=share_count,
         pending_requests=store.list_pending_requests(),
         available_sources=tuple(sorted(sources, key=str.casefold)),
         available_tags=available_tags,
@@ -511,6 +525,11 @@ def _owner_context(
         secrets_configured=bool(_profile().secret_pin_hash),
         secrets_authorized=secrets_unlocked(request, _profile()),
     )
+
+
+async def _owner_context(*args, **kwargs) -> dict[str, Any]:
+    """Build the owner page without blocking the frontend event loop."""
+    return await asyncio.to_thread(_owner_context_sync, *args, **kwargs)
 
 
 @owner_router.get("/filter-options")
@@ -542,7 +561,9 @@ async def sharing_page(
     configuration = None
     success = ""
     if configuration_id:
-        configuration = get_share_store().get_configuration(configuration_id)
+        configuration = await asyncio.to_thread(
+            lambda: get_share_store().get_configuration(configuration_id)
+        )
         if configuration and duplicate:
             configuration = ShareConfiguration(
                 **{
@@ -559,7 +580,7 @@ async def sharing_page(
     return templates.TemplateResponse(
         request,
         "modules/hfl_shares/index.html",
-        _owner_context(
+        await _owner_context(
             request,
             user,
             configuration=configuration,
@@ -585,7 +606,7 @@ async def save_configuration(request: Request):
         return templates.TemplateResponse(
             request,
             "modules/hfl_shares/index.html",
-            _owner_context(request, user, error=str(exc)),
+            await _owner_context(request, user, error=str(exc)),
             status_code=422,
         )
     return RedirectResponse(
@@ -656,7 +677,7 @@ async def _preview_response(
         return templates.TemplateResponse(
             request,
             "modules/hfl_shares/index.html",
-            _owner_context(
+            await _owner_context(
                 request,
                 user,
                 configuration=locals().get("configuration"),
@@ -682,7 +703,7 @@ async def _preview_response(
     return templates.TemplateResponse(
         request,
         "modules/hfl_shares/index.html",
-        _owner_context(
+        await _owner_context(
             request,
             user,
             configuration=configuration,
@@ -853,7 +874,7 @@ async def generate_share(request: Request):
         return templates.TemplateResponse(
             request,
             "modules/hfl_shares/index.html",
-            _owner_context(
+            await _owner_context(
                 request,
                 user,
                 configuration=locals().get("configuration"),

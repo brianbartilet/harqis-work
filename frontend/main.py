@@ -29,6 +29,7 @@ import os
 import secrets
 import subprocess
 import sys
+import time
 
 import uvicorn
 from fastapi import FastAPI, Form, Request
@@ -39,6 +40,7 @@ from fastapi.responses import (
     RedirectResponse,
 )
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 from auth import (
     create_session_token,
     get_current_user,
@@ -250,6 +252,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.add_middleware(PublicShareBodyLimitMiddleware)
+app.add_middleware(
+    GZipMiddleware,
+    minimum_size=max(500, settings.frontend_gzip_minimum_size),
+    compresslevel=5,
+)
 app.include_router(home_router)
 app.include_router(manifesto_router)
 app.include_router(workflows_router)
@@ -265,8 +272,19 @@ app.include_router(profile_router)
 # ── Security headers ──────────────────────────────────────────────────────────
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
+    started_at = time.perf_counter()
     request.state.csp_nonce = secrets.token_urlsafe(24)
     response = await call_next(request)
+    duration_ms = (time.perf_counter() - started_at) * 1_000
+    response.headers["Server-Timing"] = f"app;dur={duration_ms:.1f}"
+    if duration_ms >= max(1.0, settings.frontend_slow_request_ms):
+        logger.warning(
+            "Slow request method=%s path=%s status=%s duration_ms=%.1f",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+        )
     response.headers["X-Frame-Options"]        = "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"]        = "strict-origin-when-cross-origin"

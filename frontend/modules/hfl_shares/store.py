@@ -17,6 +17,7 @@ from modules.hfl_shares.models import (
     ScopeSnapshot,
     ShareConfiguration,
     ShareGrant,
+    ShareGrantSummary,
     utc_now,
 )
 
@@ -48,6 +49,7 @@ CREATE TABLE IF NOT EXISTS shares (
     instant INTEGER NOT NULL DEFAULT 0,
     live_updates INTEGER NOT NULL DEFAULT 0,
     live_configuration TEXT NOT NULL DEFAULT '',
+    snapshot_entry_count INTEGER NOT NULL DEFAULT 0,
     redeemed_at TEXT NOT NULL DEFAULT '',
     revoked_at TEXT NOT NULL DEFAULT '',
     pin_failures INTEGER NOT NULL DEFAULT 0
@@ -105,6 +107,8 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_session
 ON chat_messages(session_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_share_embeddings_share
 ON share_embeddings(share_id, model_name);
+CREATE INDEX IF NOT EXISTS idx_shares_owner_list
+ON shares(instant, created_at DESC);
 """
 
 
@@ -138,6 +142,15 @@ class ShareStore:
                 connection.execute(
                     "ALTER TABLE shares "
                     "ADD COLUMN live_configuration TEXT NOT NULL DEFAULT ''"
+                )
+            if "snapshot_entry_count" not in share_columns:
+                connection.execute(
+                    "ALTER TABLE shares "
+                    "ADD COLUMN snapshot_entry_count INTEGER NOT NULL DEFAULT 0"
+                )
+                connection.execute(
+                    "UPDATE shares SET snapshot_entry_count="
+                    "COALESCE(json_array_length(snapshot, '$.entries'), 0)"
                 )
 
     def _connect(self) -> sqlite3.Connection:
@@ -269,6 +282,28 @@ class ShareStore:
             pin_failures=int(row["pin_failures"]),
         )
 
+    @staticmethod
+    def _grant_summary(row: sqlite3.Row) -> ShareGrantSummary:
+        return ShareGrantSummary(
+            id=row["id"],
+            configuration_id=row["configuration_id"],
+            name=row["name"],
+            auth_mode=row["auth_mode"],
+            allowed_email=row["allowed_email"],
+            created_at=row["created_at"],
+            expires_at=row["expires_at"],
+            status=row["status"],
+            single_use=bool(row["single_use"]),
+            device_limit=int(row["device_limit"]),
+            entry_count=int(row["snapshot_entry_count"]),
+            no_expiry=bool(row["no_expiry"]),
+            instant=bool(row["instant"]),
+            live_updates=bool(row["live_updates"]),
+            redeemed_at=row["redeemed_at"],
+            revoked_at=row["revoked_at"],
+            pin_failures=int(row["pin_failures"]),
+        )
+
     def save_configuration(
         self, configuration: ShareConfiguration
     ) -> ShareConfiguration:
@@ -357,8 +392,8 @@ class ShareStore:
                     id, configuration_id, name, token_hash, pin_hash,
                     auth_mode, allowed_email, snapshot, created_at, expires_at,
                     status, single_use, device_limit, no_expiry, instant,
-                    live_updates, live_configuration
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    live_updates, live_configuration, snapshot_entry_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     grant.id, configuration_id, name, token_hash, pin_hash,
@@ -373,6 +408,7 @@ class ShareStore:
                         if live_configuration
                         else ""
                     ),
+                    len(snapshot.entries),
                 ),
             )
         return grant
@@ -380,10 +416,48 @@ class ShareStore:
     def update_share_snapshot(self, share_id: str, snapshot: ScopeSnapshot) -> bool:
         with self._lock, self._connect() as connection:
             result = connection.execute(
-                "UPDATE shares SET snapshot=? WHERE id=? AND live_updates=1",
-                (json.dumps(snapshot.to_record(), ensure_ascii=False), share_id),
+                "UPDATE shares SET snapshot=?, snapshot_entry_count=? "
+                "WHERE id=? AND live_updates=1",
+                (
+                    json.dumps(snapshot.to_record(), ensure_ascii=False),
+                    len(snapshot.entries),
+                    share_id,
+                ),
             )
         return result.rowcount > 0
+
+    def count_shares(self, *, include_instant: bool = False) -> int:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT COUNT(*) AS count FROM shares "
+                + ("" if include_instant else "WHERE instant=0")
+            ).fetchone()
+        return int(row["count"])
+
+    def list_share_summaries(
+        self,
+        *,
+        limit: int,
+        offset: int = 0,
+        include_instant: bool = False,
+    ) -> list[ShareGrantSummary]:
+        """Return one metadata-only page without reading snapshot JSON."""
+        page_size = max(1, int(limit))
+        page_offset = max(0, int(offset))
+        columns = (
+            "id, configuration_id, name, auth_mode, allowed_email, "
+            "created_at, expires_at, status, single_use, device_limit, "
+            "snapshot_entry_count, no_expiry, instant, live_updates, "
+            "redeemed_at, revoked_at, pin_failures"
+        )
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"SELECT {columns} FROM shares "
+                + ("" if include_instant else "WHERE instant=0 ")
+                + "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (page_size, page_offset),
+            ).fetchall()
+        return [self._grant_summary(row) for row in rows]
 
     def list_shares(self, *, include_instant: bool = False) -> list[ShareGrant]:
         with self._connect() as connection:

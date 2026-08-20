@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import threading
+import time
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +16,10 @@ APPS_ROOT = REPO_ROOT / "apps"
 POLICY_PATH = Path(__file__).with_name("test_policy.toml")
 _APP_KEY = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
 _EXCLUDED = {".template", "__pycache__"}
+_CACHE_TTL_SECONDS = 30.0
+_cache_lock = threading.Lock()
+_cached_inventory: tuple[Application, ...] | None = None
+_cached_at = 0.0
 
 
 @dataclass(frozen=True)
@@ -62,7 +68,7 @@ def load_safe_policy() -> dict[str, tuple[str, ...]]:
     }
 
 
-def discover_applications() -> tuple[Application, ...]:
+def _discover_applications() -> tuple[Application, ...]:
     policy = load_safe_policy()
     applications: list[Application] = []
     if not APPS_ROOT.exists():
@@ -117,6 +123,30 @@ def discover_applications() -> tuple[Application, ...]:
             )
         )
     return tuple(applications)
+
+
+def clear_application_cache() -> None:
+    """Invalidate cached filesystem discovery after deploy or local changes."""
+    global _cached_inventory, _cached_at
+    with _cache_lock:
+        _cached_inventory = None
+        _cached_at = 0.0
+
+
+def discover_applications(*, force: bool = False) -> tuple[Application, ...]:
+    global _cached_inventory, _cached_at
+    now = time.monotonic()
+    with _cache_lock:
+        if (
+            not force
+            and _cached_inventory is not None
+            and now - _cached_at < _CACHE_TTL_SECONDS
+        ):
+            return _cached_inventory
+        inventory = _discover_applications()
+        _cached_inventory = inventory
+        _cached_at = time.monotonic()
+        return inventory
 
 
 def get_application(key: str) -> Application | None:

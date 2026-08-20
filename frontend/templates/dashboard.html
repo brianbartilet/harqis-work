@@ -13,12 +13,17 @@
 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
   <nav class="-mb-px flex gap-6 overflow-x-auto" data-sortable-tabs
        role="tablist" aria-label="Workflow categories">
-    {% for wf_key, wf in workflows.items() %}
+    {% for wf_key, wf in workflow_tabs.items() %}
     <button id="workflow-tab-{{ wf_key }}" data-wf-key="{{ wf_key }}" data-workflow-tab
             type="button" role="tab" aria-controls="workflow-panel-{{ wf_key }}"
             :aria-selected="workflowTab === '{{ wf_key }}'"
             :tabindex="workflowTab === '{{ wf_key }}' ? 0 : -1"
-            @click="customize || (workflowTab = '{{ wf_key }}')"
+            @click="if (customize) { $event.preventDefault(); $event.stopImmediatePropagation() } else { workflowTab = '{{ wf_key }}' }"
+            hx-get="/workflows?workflow={{ wf_key }}"
+            hx-target="#workflow-panel-host"
+            hx-select="#workflow-panel-host"
+            hx-swap="outerHTML"
+            hx-push-url="true"
             :class="workflowTab === '{{ wf_key }}'
               ? 'border-blue-500 text-blue-400'
               : 'border-transparent text-slate-500 hover:text-slate-300 hover:border-slate-600'"
@@ -142,6 +147,7 @@
       </p>
     </div>
 
+    <div id="workflow-panel-host" aria-live="polite">
     {% for wf_key, wf in workflows.items() %}
     <div id="workflow-panel-{{ wf_key }}" x-show="workflowTab === '{{ wf_key }}'" x-cloak
          role="tabpanel" aria-labelledby="workflow-tab-{{ wf_key }}">
@@ -348,6 +354,7 @@
 
     </div>
     {% endfor %}
+    </div>
   </main>
 
   {# ── Footer ───────────────────────────────────────────────────────────── #}
@@ -411,7 +418,8 @@ function initSortable() {
 
   // Tabs
   var nav = document.querySelector('[data-sortable-tabs]');
-  if (nav) {
+  if (nav && !nav.dataset.sortableReady) {
+    nav.dataset.sortableReady = 'true';
     Sortable.create(nav, {
       animation: 150,
       handle: '.drag-handle',
@@ -423,6 +431,8 @@ function initSortable() {
 
   // Card grids
   document.querySelectorAll('[data-sortable-grid]').forEach(function(grid) {
+    if (grid.dataset.sortableReady) return;
+    grid.dataset.sortableReady = 'true';
     var wfKey = grid.dataset.sortableGrid;
     Sortable.create(grid, {
       animation: 150,
@@ -435,7 +445,7 @@ function initSortable() {
 
 function initKeyboardLayout() {
   var nav = document.querySelector('[data-sortable-tabs]');
-  nav?.addEventListener('keydown', function(event) {
+  if (nav && !nav.dataset.keyboardReady) nav.addEventListener('keydown', function(event) {
     var tab = event.target.closest('[data-workflow-tab]');
     if (!tab || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     var tabs = Array.from(nav.querySelectorAll('[data-workflow-tab]'));
@@ -459,8 +469,11 @@ function initKeyboardLayout() {
     tabs[nextIndex].click();
     tabs[nextIndex].focus();
   });
+  if (nav) nav.dataset.keyboardReady = 'true';
 
   document.querySelectorAll('[data-keyboard-reorder]').forEach(function(handle) {
+    if (handle.dataset.keyboardReady) return;
+    handle.dataset.keyboardReady = 'true';
     handle.addEventListener('keydown', function(event) {
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
       event.preventDefault();
@@ -487,6 +500,13 @@ function resetLayout() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+  restoreLayout();
+  initSortable();
+  initKeyboardLayout();
+});
+
+document.addEventListener('htmx:afterSwap', function(event) {
+  if (event.detail.target?.id !== 'workflow-panel-host') return;
   restoreLayout();
   initSortable();
   initKeyboardLayout();
