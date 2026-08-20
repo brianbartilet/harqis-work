@@ -274,7 +274,7 @@ Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and 
 | `hud` | Active | 23 | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins, host fallbacks, and manual compatibility tasks |
 | `purchases` | Active | 8 | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
 | `desktop` | Active | 8 | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
-| `hfl` | Active | 17 | Homework-for-Life activity capture/ingest → canonical Activity Corpus + Elasticsearch, including granular note changes and durable worker outbox replay |
+| `hfl` | Active | 21 | Homework-for-Life capture/ingest → canonical Activity Corpus + Elasticsearch, including granular note changes, durable outbox replay, and an evidence-grounded activity watchdog |
 | `git_forks` | Active | 1 | Weekly hybrid discovery and drift analysis for harqis-work forks, with one HFL entry per fork instance plus a fleet summary |
 | `notes` | Active | 2 | Repository-backed note sync: editing-machine push → canonical host fast-forward pull; HFL performs the downstream ingest |
 | `knowledge` | Guarded active | 9 | Multi-source RAG ingest, cited answers, cross-link reports, and on-demand topic mapping/scanning |

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Activity Radar"
+  short_description: "Analyze recent HFL activity against relevant history"
+  default_prompt: "Use $activity-radar to review recent HFL entries for missed commitments, risks, contradictions, and recommendations."

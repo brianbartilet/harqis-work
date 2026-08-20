@@ -1,0 +1,424 @@
+"""Analyze recent HFL entries against related history and optionally notify."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Callable, Iterable
+
+from core.apps.es_logging.app.elasticsearch import log_result
+from core.apps.sprout.app.celery import SPROUT
+from core.utilities.logging.custom_logger import create_logger
+
+from workflows.hfl.dto import HflEntry
+from workflows.hfl.es_store import query_hfl_entries_status
+from workflows.hfl.persistence import submit_hfl_entry
+from workflows.hfl.prompts import load_prompt
+from workflows.hfl.tasks.capture import resolve_corpus_dir
+
+_log = create_logger("hfl.activity_radar")
+_DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+_SECTIONS = {
+    "critical_risks": "Critical risks",
+    "missed_commitments": "Possibly missed commitments",
+    "current_focus": "Current focus",
+    "related_history": "Related historical evidence",
+    "recommendations": "Recommendations and improvements",
+    "contradictions": "Contradictions or changed assumptions",
+}
+_ENTRY_RE = re.compile(r"^## (.+?)\s*$", re.MULTILINE)
+_SECRET_PATTERNS = (
+    re.compile(r"(?i)(authorization\s*:\s*bearer\s+)[^\s]+"),
+    re.compile(r"(?i)((?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret)\s*[:=]\s*)[^\s&]+"),
+    re.compile(r"(?i)([?&](?:token|key|api_key|signature|sig)=)[^&#\s]+"),
+)
+
+
+def redact_secrets(value: Any) -> str:
+    text = str(value or "")
+    for pattern in _SECRET_PATTERNS:
+        text = pattern.sub(r"\1[REDACTED]", text)
+    return text
+
+
+def state_path() -> Path:
+    root = os.environ.get("HARQIS_DATA_ROOT", "").strip()
+    base = Path(root).expanduser() / "runtime" if root else Path(__file__).resolve().parents[3] / "logs"
+    return (base / "activity-radar" / "state.json").resolve()
+
+
+def load_state(path: Path | None = None) -> dict[str, Any]:
+    target = path or state_path()
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            data.setdefault("version", 1)
+            data.setdefault("findings", {})
+            return data
+    except (OSError, ValueError):
+        pass
+    return {"version": 1, "last_success_at": None, "findings": {}}
+
+
+def save_state(state: dict[str, Any], path: Path | None = None) -> None:
+    target = path or state_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(".tmp")
+    temporary.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+    os.replace(temporary, target)
+
+
+def _parse_when(row: dict[str, Any]) -> datetime | None:
+    raw = row.get("when") or row.get("entry_date")
+    if not raw:
+        return None
+    try:
+        value = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        return value if value.tzinfo else value.astimezone()
+    except ValueError:
+        return None
+
+
+def _row(entry: HflEntry, path: str = "") -> dict[str, Any]:
+    return {
+        "when": entry.when.isoformat() if entry.when else None,
+        "moment": entry.moment,
+        "what_happened": entry.what_happened,
+        "why_it_stayed": entry.why_it_stayed,
+        "possible_use": entry.possible_use,
+        "tags": list(entry.tags),
+        "references": list(entry.references),
+        "source": entry.source,
+        "entry_id": entry.entry_id,
+        "path": path,
+    }
+
+
+def _corpus_rows(since: datetime, limit: int) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    corpus = resolve_corpus_dir()
+    for path in sorted(corpus.glob("*.md"), reverse=True):
+        try:
+            if datetime.strptime(path.stem, "%Y-%m-%d").date() < since.date():
+                break
+            text = path.read_text(encoding="utf-8")
+        except (OSError, ValueError):
+            continue
+        matches = list(_ENTRY_RE.finditer(text))
+        for index, match in enumerate(matches):
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+            entry = HflEntry.from_markdown(match.group(1), text[match.end():end])
+            when = entry.when
+            if when and (when if when.tzinfo else when.astimezone()) >= since:
+                rows.append(_row(entry, str(path)))
+            if len(rows) >= limit:
+                return rows
+    return rows
+
+
+def retrieve_entries(
+    since: datetime, *, query: str = "", tags: list[str] | None = None,
+    source: str | None = None, limit: int = 120,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Return exactly-windowed entries, falling back to canonical Markdown."""
+    degraded: list[str] = []
+    result = query_hfl_entries_status(
+        query=query, since=since.date().isoformat(), tags=tags, source=source, limit=limit,
+    )
+    rows = list(result.rows)
+    if not result.available:
+        degraded.append("Elasticsearch unavailable; canonical Markdown fallback used")
+        rows = _corpus_rows(since, limit)
+    filtered = []
+    for row in rows:
+        when = _parse_when(row)
+        row_tags = {str(tag).strip().lower().lstrip("#") for tag in row.get("tags") or []}
+        wanted_tags = {str(tag).strip().lower().lstrip("#") for tag in tags or []}
+        haystack = " ".join(str(row.get(key, "")) for key in ("moment", "what_happened", "why_it_stayed", "possible_use")).lower()
+        if not when or when < since or row.get("source") == "activity-radar":
+            continue
+        if source and str(row.get("source", "")).lower() != source.lower():
+            continue
+        if wanted_tags and not wanted_tags.issubset(row_tags):
+            continue
+        if query and query.lower() not in haystack and query.lower().lstrip("#") not in row_tags:
+            continue
+        filtered.append(row)
+    return filtered[:limit], degraded
+
+
+def infer_topics(rows: Iterable[dict[str, Any]], limit: int = 8) -> list[str]:
+    counts: dict[str, int] = {}
+    stop = {"manual-entry", "notes", "reminders", "fyi", "retrospective", "activity-radar"}
+    for row in rows:
+        for tag in row.get("tags") or []:
+            value = str(tag).strip().lower().lstrip("#")
+            if value and value not in stop:
+                counts[value] = counts.get(value, 0) + 3
+        for word in re.findall(r"[A-Za-z][A-Za-z0-9_-]{3,}", str(row.get("moment", "")).lower()):
+            if word not in {"with", "from", "that", "this", "have", "about"}:
+                counts[word] = counts.get(word, 0) + 1
+    return [key for key, _ in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]]
+
+
+def _evidence_rows(recent: list[dict[str, Any]], history: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    compact, lookup = [], {}
+    for prefix, rows in (("N", recent), ("H", history)):
+        for index, row in enumerate(rows, 1):
+            eid = f"{prefix}{index}"
+            safe_row = {
+                **row,
+                **{key: redact_secrets(row.get(key, "")) for key in ("moment", "what_happened", "why_it_stayed", "possible_use")},
+                "references": [redact_secrets(value) for value in (row.get("references") or [])],
+            }
+            item = {
+                "id": eid, "when": safe_row.get("when"), "source": safe_row.get("source"),
+                "moment": safe_row["moment"][:300],
+                "details": safe_row["what_happened"][:1500],
+                "possible_use": safe_row["possible_use"][:500],
+                "tags": (safe_row.get("tags") or [])[:12],
+                "references": safe_row["references"][:8],
+            }
+            compact.append(item)
+            lookup[eid] = safe_row
+    return compact, lookup
+
+
+def synthesize_findings(
+    evidence: list[dict[str, Any]], *, context: str = "", model: str = _DEFAULT_MODEL,
+    cfg_id: str = "ANTHROPIC", max_tokens: int = 2200,
+) -> dict[str, Any]:
+    from apps.antropic.config import get_config as get_anthropic_config
+    from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
+    from workflows.hfl.tasks.ingest_git import _parse_model_json
+
+    client = BaseApiServiceAnthropic(get_anthropic_config(cfg_id))
+    if not getattr(client, "base_client", None):
+        raise RuntimeError("Anthropic client is not configured")
+    response = client.send_message(
+        prompt=json.dumps({"additional_context": redact_secrets(context), "evidence": evidence}, ensure_ascii=False),
+        system=load_prompt("activity_radar").strip(), model=model, max_tokens=max_tokens,
+    )
+    text = response.content[0].text if response and response.content else ""
+    parsed = _parse_model_json(text)
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("findings"), list):
+        raise RuntimeError("Activity radar returned invalid JSON")
+    return parsed
+
+
+def validate_findings(data: dict[str, Any], valid_ids: set[str]) -> list[dict[str, Any]]:
+    findings = []
+    for raw in data.get("findings", []):
+        if not isinstance(raw, dict) or raw.get("category") not in _SECTIONS:
+            continue
+        evidence = [str(x) for x in raw.get("evidence", []) if str(x) in valid_ids]
+        severity = str(raw.get("severity", "low")).lower()
+        if severity not in {"critical", "high", "medium", "low"}:
+            severity = "low"
+        if severity in {"critical", "high"} and not evidence:
+            continue
+        confidence = str(raw.get("confidence", "medium")).lower()
+        if confidence not in {"high", "medium", "low"}:
+            confidence = "medium"
+        finding = {
+            "category": raw["category"], "severity": severity,
+            "confidence": confidence,
+            "title": str(raw.get("title", "Untitled finding")).strip()[:240],
+            "observation": str(raw.get("observation", "")).strip(),
+            "inference": str(raw.get("inference", "")).strip(),
+            "recommendation": str(raw.get("recommendation", "")).strip(),
+            "evidence": evidence,
+        }
+        canonical = json.dumps({k: finding[k] for k in ("category", "title", "evidence")}, sort_keys=True)
+        finding["fingerprint"] = hashlib.sha256(canonical.encode()).hexdigest()[:16]
+        finding["evidence_signature"] = hashlib.sha256("|".join(evidence).encode()).hexdigest()[:12]
+        findings.append(finding)
+    return findings
+
+
+def bind_evidence_signatures(findings: list[dict[str, Any]], lookup: dict[str, dict[str, Any]]) -> None:
+    """Bind suppression to cited content, not merely stable evidence IDs."""
+    for finding in findings:
+        payload = [lookup[eid] for eid in finding["evidence"] if eid in lookup]
+        canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+        finding["evidence_signature"] = hashlib.sha256(canonical.encode()).hexdigest()[:12]
+
+
+def select_notifications(findings: list[dict[str, Any]], state: dict[str, Any]) -> list[dict[str, Any]]:
+    selected = []
+    previous = state.get("findings", {})
+    for finding in findings:
+        old = previous.get(finding["fingerprint"], {})
+        unchanged = old.get("evidence_signature") == finding["evidence_signature"]
+        if old.get("status") == "resolved" and unchanged:
+            continue
+        if old.get("status") == "dismissed" and finding["severity"] != "critical" and unchanged:
+            continue
+        if finding["severity"] == "critical" or not old or old.get("evidence_signature") != finding["evidence_signature"]:
+            selected.append(finding)
+    return selected
+
+
+def render_markdown(findings: list[dict[str, Any]], lookup: dict[str, dict[str, Any]], degraded: list[str] | None = None) -> str:
+    if not findings:
+        text = "No new material findings."
+    else:
+        blocks = ["# HFL Activity Radar"]
+        for key, title in _SECTIONS.items():
+            section = [f for f in findings if f["category"] == key]
+            if not section:
+                continue
+            blocks.append(f"\n## {title}")
+            for finding in section:
+                blocks.append(f"\n### [{finding['severity'].upper()} · {finding['confidence']} confidence] {finding['title']} `{finding['fingerprint']}`")
+                if finding["observation"]:
+                    blocks.append(f"**Fact:** {finding['observation']}")
+                if finding["inference"]:
+                    blocks.append(f"**Inference:** {finding['inference']}")
+                if finding["recommendation"]:
+                    blocks.append(f"**Recommendation:** {finding['recommendation']}")
+                blocks.append("**Evidence:** " + ", ".join(finding["evidence"]))
+        blocks.append("\n## Evidence")
+        used = dict.fromkeys(eid for finding in findings for eid in finding["evidence"])
+        for eid in used:
+            row = lookup[eid]
+            refs = "; ".join(str(x) for x in (row.get("references") or [])[:3])
+            suffix = f" — {refs}" if refs else ""
+            blocks.append(f"- **{eid}** {row.get('when', '')} [{row.get('source', 'unknown')}] {row.get('moment', '')}{suffix}")
+        text = "\n".join(blocks)
+    if degraded:
+        text += "\n\n> Partial report: " + "; ".join(degraded)
+    return text
+
+
+def _notify(text: str) -> None:
+    from apps.telegram.config import CONFIG as telegram_config
+    from apps.telegram.references.web.api.messages import ApiServiceTelegramMessages
+    chat_id = telegram_config.app_data.get("default_chat_id")
+    if not chat_id:
+        raise RuntimeError("Telegram default_chat_id is missing")
+    chunks: list[str] = []
+    remaining = text.strip()
+    while remaining:
+        if len(remaining) <= 3900:
+            chunks.append(remaining)
+            break
+        split = remaining.rfind("\n\n", 0, 3900)
+        if split < 1000:
+            split = remaining.rfind("\n", 0, 3900)
+        if split < 1000:
+            split = 3900
+        chunks.append(remaining[:split].rstrip())
+        remaining = remaining[split:].lstrip()
+    for index, chunk in enumerate(chunks, 1):
+        prefix = f"HFL Activity Radar ({index}/{len(chunks)})\n\n" if len(chunks) > 1 else ""
+        ApiServiceTelegramMessages(telegram_config).send_message(chat_id=chat_id, text=prefix + chunk)
+
+
+def _writeback(text: str, now: datetime) -> dict[str, Any]:
+    entry = HflEntry(
+        when=now, moment="HFL activity radar retrospective", what_happened=text,
+        why_it_stayed="Retains a point-in-time review of current work and risks.",
+        possible_use="Use these findings to prioritize follow-up work.",
+        tags=("fyi", "retrospective", "activity-radar"), source="activity-radar", synthesized=True,
+    )
+    return submit_hfl_entry(entry, source="activity-radar", synthesized=True)
+
+
+def record_activity_radar_feedback(fingerprint: str, status: str, *, path: Path | None = None, dry_run: bool = False) -> dict[str, Any]:
+    if status not in {"useful", "dismissed", "resolved"}:
+        raise ValueError("status must be useful, dismissed, or resolved")
+    state = load_state(path)
+    if fingerprint not in state["findings"]:
+        raise KeyError(f"unknown finding fingerprint: {fingerprint}")
+    if not dry_run:
+        state["findings"][fingerprint]["status"] = status
+        save_state(state, path)
+    return {"fingerprint": fingerprint, "status": status, "dry_run": dry_run}
+
+
+def run_activity_radar(
+    *, scheduled: bool = False, recent_hours: int = 8, retrospective_days: int = 90,
+    query: str = "", tags: list[str] | None = None, source: str | None = None,
+    context: str = "", model: str = _DEFAULT_MODEL, cfg_id__anthropic: str = "ANTHROPIC",
+    notify: bool | None = None, save_to_hfl: bool = False, dry_run: bool = False,
+    state_file: Path | None = None, now: datetime | None = None,
+    synthesizer: Callable[..., dict[str, Any]] = synthesize_findings,
+) -> dict[str, Any]:
+    now = now or datetime.now().astimezone()
+    state = load_state(state_file)
+    if scheduled:
+        marker = _parse_when({"when": state.get("last_success_at")})
+        since = marker or now - timedelta(hours=48)
+        since = max(since, now - timedelta(hours=48))
+    else:
+        since = now - timedelta(hours=max(1, recent_hours))
+    recent, degraded = retrieve_entries(since, query=query, tags=tags, source=source)
+    if not recent:
+        if scheduled and not dry_run and not degraded:
+            state["last_success_at"] = now.astimezone(timezone.utc).isoformat()
+            save_state(state, state_file)
+        status = "partial" if degraded else "no-findings"
+        return {"status": status, "text": render_markdown([], {}, degraded), "recent_count": 0, "degraded": degraded}
+
+    topics = infer_topics(recent)
+    history_since = now - timedelta(days=max(1, retrospective_days))
+    history: list[dict[str, Any]] = []
+    def identity(row: dict[str, Any]) -> tuple[Any, ...]:
+        return (row.get("entry_id") or "", row.get("when") or "", row.get("source") or "", row.get("moment") or "")
+    seen = {identity(item) for item in recent}
+    for topic in topics[:5] or [query]:
+        if not topic:
+            continue
+        rows, notes = retrieve_entries(history_since, query=topic, tags=tags, source=source, limit=30)
+        degraded.extend(note for note in notes if note not in degraded)
+        for row in rows:
+            if identity(row) not in seen:
+                history.append(row)
+                seen.add(identity(row))
+            if len(history) >= 60:
+                break
+    evidence, lookup = _evidence_rows(recent[:40], history[:60])
+    try:
+        raw = synthesizer(evidence, context=context, model=model, cfg_id=cfg_id__anthropic)
+        findings = validate_findings(raw, set(lookup))
+        bind_evidence_signatures(findings, lookup)
+    except Exception as exc:
+        degraded.append(f"analysis unavailable: {type(exc).__name__}")
+        return {"status": "partial", "text": render_markdown([], lookup, degraded), "recent_count": len(recent), "degraded": degraded}
+
+    material = select_notifications(findings, state) if scheduled else findings
+    text = render_markdown(material, lookup, degraded)
+    should_notify = scheduled if notify is None else notify
+    if material and should_notify and not dry_run:
+        _notify(text)
+    writeback = _writeback(text, now) if material and save_to_hfl and not dry_run else None
+    if scheduled and not dry_run:
+        timestamp = now.astimezone(timezone.utc).isoformat()
+        for finding in findings:
+            old = state["findings"].get(finding["fingerprint"], {})
+            state["findings"][finding["fingerprint"]] = {
+                **old, "first_seen": old.get("first_seen", timestamp), "last_seen": timestamp,
+                "severity": finding["severity"], "title": finding["title"],
+                "evidence_signature": finding["evidence_signature"], "status": old.get("status", "open"),
+            }
+        if not degraded:
+            state["last_success_at"] = timestamp
+        save_state(state, state_file)
+    status = "partial" if degraded else ("findings" if material else "no-findings")
+    return {
+        "status": status, "text": text,
+        "recent_count": len(recent), "history_count": len(history),
+        "finding_count": len(material), "degraded": degraded, "writeback": writeback,
+    }
+
+
+@SPROUT.task()
+@log_result()
+def activity_radar(**kwargs: Any) -> dict[str, Any]:
+    """Run the scheduled HFL watchdog; notify only for material findings."""
+    return run_activity_radar(scheduled=True, notify=True, **kwargs)
