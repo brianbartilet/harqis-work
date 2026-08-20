@@ -20,6 +20,10 @@ DEFAULT_OUTBOX = REPO_ROOT / "logs" / "write-notes-outbox"
 MAX_FILES = 10
 MAX_FILE_BYTES = 50 * 1024 * 1024
 MAX_TOTAL_BYTES = 200 * 1024 * 1024
+DEFAULT_OCR_MAX_CHARS = 12_000
+SUPPORTED_IMAGE_SUFFIXES = {
+    ".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp",
+}
 _TAG_TOKEN = re.compile(r"[^\w-]+", re.UNICODE)
 _MARKDOWN_LINK = re.compile(r"^\[[^]]+\]\((https?://[^)]+)\)$", re.IGNORECASE)
 _ENV_LOADED = False
@@ -163,6 +167,89 @@ def validate_files(values: Iterable[str]) -> list[str]:
             raise ValueError("Attachments exceed the 200 MB combined limit.")
         normalized.append(str(path))
     return normalized
+
+
+def _clean_ocr_text(value: str) -> str:
+    lines = [line.rstrip() for line in (value or "").replace("\r\n", "\n").split("\n")]
+    cleaned: list[str] = []
+    blank = False
+    for line in lines:
+        if line.strip():
+            cleaned.append(line.strip())
+            blank = False
+        elif cleaned and not blank:
+            cleaned.append("")
+            blank = True
+    return "\n".join(cleaned).strip()
+
+
+def _bounded_text(value: str, limit: int) -> tuple[str, bool]:
+    if len(value) <= limit:
+        return value, False
+    clipped = value[:limit].rstrip()
+    boundary = max(clipped.rfind("\n"), clipped.rfind(" "))
+    if boundary >= max(1, limit // 2):
+        clipped = clipped[:boundary].rstrip()
+    return clipped, True
+
+
+def analyze_image(
+    value: str,
+    *,
+    max_chars: int = DEFAULT_OCR_MAX_CHARS,
+    ocr_func: Callable[[Any], str] | None = None,
+) -> dict[str, Any]:
+    """OCR one image locally; failures remain explicit and non-blocking."""
+    path = Path(value).expanduser().resolve()
+    result: dict[str, Any] = {"path": str(path), "filename": path.name}
+    if path.suffix.casefold() not in SUPPORTED_IMAGE_SUFFIXES:
+        return {**result, "status": "unsupported", "ocr_text": "", "truncated": False}
+    try:
+        from PIL import Image
+        if ocr_func is None:
+            import pytesseract
+            ocr_func = pytesseract.image_to_string
+        with Image.open(path) as source:
+            source.seek(0)
+            frame = source.convert("RGB")
+            try:
+                text = _clean_ocr_text(ocr_func(frame))
+            finally:
+                frame.close()
+        bounded, truncated = _bounded_text(text, max_chars)
+        return {
+            **result,
+            "status": "ok" if text else "no-text",
+            "ocr_text": bounded,
+            "characters": len(text),
+            "truncated": truncated,
+        }
+    except Exception as exc:  # OCR is optional; never invent text on failure
+        return {
+            **result,
+            "status": "error",
+            "ocr_text": "",
+            "truncated": False,
+            "error_type": type(exc).__name__,
+        }
+
+
+def analyze_images(
+    values: Iterable[str],
+    *,
+    max_chars: int = DEFAULT_OCR_MAX_CHARS,
+    ocr_func: Callable[[Any], str] | None = None,
+) -> dict[str, Any]:
+    if not 1 <= max_chars <= 20_000:
+        raise ValueError("OCR max characters must be between 1 and 20,000.")
+    files = validate_files(values)
+    return {
+        "status": "analyzed",
+        "images": [
+            analyze_image(path, max_chars=max_chars, ocr_func=ocr_func)
+            for path in files
+        ],
+    }
 
 
 def _service():
@@ -320,6 +407,9 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     preview = commands.add_parser("preview", help="Validate and print a payload without writing")
     preview.add_argument("--json", required=True, help="JSON file path, or - for stdin")
+    analyze = commands.add_parser("analyze-images", help="Run local OCR without writing")
+    analyze.add_argument("--file", action="append", required=True, help="Image attachment path")
+    analyze.add_argument("--max-chars", type=int, default=DEFAULT_OCR_MAX_CHARS)
     submit = commands.add_parser("submit", help="Submit a note or retain it in the outbox")
     submit.add_argument("--json", required=True, help="JSON file path, or - for stdin")
     submit.add_argument("--file", action="append", default=[], help="Explicit attachment path")
@@ -336,6 +426,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "preview":
             output, code = {"status": "preview", "preview": prepare_payload(_read_json(args.json))}, 0
+        elif args.command == "analyze-images":
+            output, code = analyze_images(args.file, max_chars=args.max_chars), 0
         else:
             _load_environment()
             root = resolve_outbox(args.outbox_dir)

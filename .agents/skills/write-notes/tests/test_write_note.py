@@ -90,6 +90,52 @@ def test_missing_attachment_prevents_service_call(tmp_path):
     assert service.calls == []
 
 
+def test_analyze_image_cleans_and_bounds_local_ocr(tmp_path):
+    from PIL import Image
+
+    image = tmp_path / "receipt.png"
+    Image.new("RGB", (20, 20), "white").save(image)
+
+    result = write_note.analyze_images(
+        [str(image)],
+        max_chars=20,
+        ocr_func=lambda _image: "  TOTAL  $12.00  \r\n\r\n\r\n Thank you for shopping here today ",
+    )["images"][0]
+
+    assert result["status"] == "ok"
+    assert result["ocr_text"] == "TOTAL  $12.00"
+    assert result["characters"] > len(result["ocr_text"])
+    assert result["truncated"] is True
+
+
+def test_analyze_image_reports_ocr_failure_without_raising(tmp_path):
+    from PIL import Image
+
+    image = tmp_path / "damaged-text.jpg"
+    Image.new("RGB", (20, 20), "white").save(image)
+
+    def fail(_image):
+        raise RuntimeError("OCR unavailable")
+
+    result = write_note.analyze_images(
+        [str(image)], ocr_func=fail
+    )["images"][0]
+
+    assert result["status"] == "error"
+    assert result["ocr_text"] == ""
+    assert result["error_type"] == "RuntimeError"
+
+
+def test_analyze_image_marks_unsupported_file_for_upload(tmp_path):
+    attachment = tmp_path / "diagram.svg"
+    attachment.write_text("<svg/>", encoding="utf-8")
+
+    result = write_note.analyze_images([str(attachment)])["images"][0]
+
+    assert result["status"] == "unsupported"
+    assert result["ocr_text"] == ""
+
+
 def test_submit_returns_document_link_and_uploads(tmp_path):
     attachment = tmp_path / "photo one.jpg"
     attachment.write_bytes(b"image")
