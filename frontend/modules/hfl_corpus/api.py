@@ -11,6 +11,7 @@ from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import ValidationError
 
 from config import get_settings
@@ -53,17 +54,29 @@ from services.safe_paths import (
 )
 
 
-router = APIRouter(prefix="/api/hfl", tags=["hfl-corpus-api"])
 _log = logging.getLogger(__name__)
+_bearer = HTTPBearer(auto_error=False)
 
 
-def _authorize(request: Request) -> None:
+def _authorize(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> None:
     expected = get_settings().hfl_corpus_api_token.strip()
     if not expected:
         raise HTTPException(status_code=503, detail="HFL corpus API token is not configured")
-    scheme, _, supplied = request.headers.get("Authorization", "").partition(" ")
-    if scheme.casefold() != "bearer" or not hmac.compare_digest(supplied, expected):
+    if (
+        credentials is None
+        or credentials.scheme.casefold() != "bearer"
+        or not hmac.compare_digest(credentials.credentials, expected)
+    ):
         raise HTTPException(status_code=401, detail="Invalid HFL corpus API token")
+
+
+router = APIRouter(
+    prefix="/api/hfl",
+    tags=["hfl-corpus-api"],
+    dependencies=[Depends(_authorize)],
+)
 
 
 def _preview_reference_path(token: str):
@@ -134,7 +147,6 @@ async def hfl_api_create_entry(
     request: Request,
     payload: CreateEntryRequest,
 ):
-    _authorize(request)
     try:
         result = persist_manual_entry(payload, corpus_dir=resolve_corpus_root())
         corpus_index.documents(force=True)
@@ -153,7 +165,6 @@ async def hfl_api_preview_entry(
     request: Request,
     payload: CreateEntryRequest,
 ):
-    _authorize(request)
     try:
         enriched, enrichment = await asyncio.to_thread(enrich_manual_entry, payload)
         return preview_manual_entry(enriched, enrichment=enrichment)
@@ -161,7 +172,7 @@ async def hfl_api_preview_entry(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/entries/upload", dependencies=[Depends(_authorize)])
+@router.post("/entries/upload")
 async def hfl_api_upload_entry(
     payload: str = Form(...),
     files: list[UploadFile] = File(default=[]),
@@ -200,7 +211,6 @@ async def hfl_api_documents(
     include_secrets: bool = False,
     secret_tags: str = "",
 ):
-    _authorize(request)
     if date_field not in {"created", "updated"}:
         date_field = "created"
     if sort not in {"asc", "desc"}:
@@ -278,7 +288,6 @@ async def hfl_api_tree(
     include_secrets: bool = False,
     secret_tags: str = "",
 ):
-    _authorize(request)
     view = corpus_view_cache.get(
         corpus_index.documents(),
         include_secrets=include_secrets,
@@ -301,7 +310,6 @@ async def hfl_api_matches(
     include_secrets: bool = False,
     secret_tags: str = "",
 ):
-    _authorize(request)
     document = corpus_index.get(relative_path)
     if not document:
         raise HTTPException(status_code=404, detail="Corpus document not found")
@@ -343,7 +351,6 @@ async def hfl_api_document(
     include_secrets: bool = False,
     secret_tags: str = "",
 ):
-    _authorize(request)
     document = corpus_index.get(relative_path)
     if not document or document.path is None:
         raise HTTPException(status_code=404, detail="Corpus document not found")
@@ -412,7 +419,6 @@ async def hfl_api_update_document(
     relative_path: str,
     payload: UpdateDocumentRequest,
 ):
-    _authorize(request)
     document = corpus_index.get(relative_path)
     if not document:
         raise HTTPException(status_code=404, detail="Corpus document not found")
@@ -440,7 +446,6 @@ async def hfl_api_update_document(
 
 @router.get("/reference/{token}")
 async def hfl_api_reference(request: Request, token: str):
-    _authorize(request)
     root = resolve_corpus_root()
     path = load_download_token(token, allowed_reference_roots(root))
     if not path:
@@ -450,7 +455,6 @@ async def hfl_api_reference(request: Request, token: str):
 
 @router.get("/reference/{token}/preview")
 async def hfl_api_reference_preview(request: Request, token: str):
-    _authorize(request)
     path, preview = _preview_reference_path(token)
     if preview.kind in {"image", "video"}:
         return HTMLResponse("", status_code=204, headers={"Cache-Control": "no-store"})
@@ -478,7 +482,6 @@ async def hfl_api_reference_preview(request: Request, token: str):
 
 @router.get("/reference/{token}/media")
 async def hfl_api_reference_media(request: Request, token: str):
-    _authorize(request)
     path, preview = _preview_reference_path(token)
     if preview.kind not in {"image", "video"}:
         raise HTTPException(status_code=415, detail="This is not a media reference.")
@@ -497,7 +500,6 @@ async def hfl_api_reference_media(request: Request, token: str):
 
 @router.get("/reference/{token}/thumbnail")
 async def hfl_api_reference_thumbnail(request: Request, token: str):
-    _authorize(request)
     path, preview = _preview_reference_path(token)
     if preview.kind not in {"image", "video"}:
         raise HTTPException(status_code=415, detail="No thumbnail is available.")

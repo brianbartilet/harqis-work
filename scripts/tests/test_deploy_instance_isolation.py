@@ -138,3 +138,25 @@ def test_capture_worker_is_opt_in_and_uses_isolated_solo_queue():
     assert command[command.index("--queues") + 1] == "capture"
     assert command[command.index("--pool") + 1] == "solo"
     assert command[command.index("--concurrency") + 1] == "1"
+
+
+def test_hfl_api_is_opt_in_for_the_canonical_host():
+    deploy = load_deploy_module()
+    args = deploy.build_parser().parse_args([])
+
+    without_hfl_api = deploy.select_services({"role": "host"}, args)
+    with_hfl_api = deploy.select_services(
+        {"role": "host", "hfl_api": True},
+        args,
+    )
+    disabled = deploy.build_parser().parse_args(["--no-hfl-api"])
+
+    assert "hfl-api" not in without_hfl_api
+    assert "hfl-api" in with_hfl_api
+    assert "hfl-api" not in deploy.select_services(
+        {"role": "host", "hfl_api": True},
+        disabled,
+    )
+    assert deploy.build_service_cmd(
+        "hfl-api", {"role": "host", "hfl_api": True}, args
+    )[-1] == "hfl-api"

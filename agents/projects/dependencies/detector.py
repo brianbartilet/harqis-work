@@ -86,6 +86,8 @@ class DependencyDetector:
         (r"\bAIRTABLE\b",                         "AIRTABLE_API_TOKEN"),
         (r"\bAPP\s*SHEET\b|\bAPPSHEET\b",         "APPSHEET_APPLICATION_ACCESS_KEY"),
         (r"\bNOTION\b",                           "NOTION_API_TOKEN"),
+        (r"\bHFL\s*(?:API|CORPUS)\b|\bHOMEWORK\s*FOR\s*LIFE\s*API\b|\bACTIVITY\s*CORPUS\b",
+                                                  "HFL_CORPUS_API_TOKEN"),
         # Communication
         (r"\bDISCORD\b",                          "DISCORD_BOT_TOKEN"),
         (r"\bTELEGRAM\b",                         "TELEGRAM_BOT_TOKEN"),

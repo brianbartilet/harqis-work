@@ -789,4 +789,19 @@ YOUTUBE:
   return_data_only: True
 
 
+HFL_CORPUS:
+  app_id: 'hfl_corpus'
+  client: 'rest'
+  parameters:
+    base_url: 'http://127.0.0.1:8082/api/hfl/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: False
+  app_data:
+    api_url: ${HFL_CORPUS_API_URL}
+    api_key: ${HFL_CORPUS_API_TOKEN}
+  return_data_only: True
+
+
 

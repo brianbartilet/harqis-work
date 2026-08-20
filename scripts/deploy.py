@@ -203,6 +203,7 @@ SERVICES: dict[str, dict] = {
         "console": True,
     },
     "frontend":  {"cmd": ["frontend"],          "roles": {"host"}},
+    "hfl-api":   {"cmd": ["hfl-api"],           "roles": {"host"}},
     # HARQIS MCP is a stdio server: clients (Hermes, Claude Desktop, etc.)
     # spawn it on demand and keep stdin/stdout attached. Running it as a
     # detached deploy daemon closes stdin immediately, so it exits cleanly
@@ -907,6 +908,7 @@ _STATUS_NEEDLES = {
     # the previous hard-coded "\\" only matched on Windows, so on macOS/Linux
     # `--status` and the stray-sweep silently missed running frontend/mcp.
     "frontend":  f"frontend{os.sep}main.py",
+    "hfl-api":   f"frontend{os.sep}hfl_api.py",
     "mcp":       f"mcp{os.sep}server.py",
     "kanban":    "agents.projects.orchestrator.local",
     "command-runner": f"n8n{os.sep}utilities{os.sep}command_runner.py",
@@ -1672,6 +1674,7 @@ def select_services(machine: dict, args: argparse.Namespace) -> list[str]:
     disabled: set[str] = set(machine.get("disable", []))
     if args.no_scheduler: disabled.add("scheduler")
     if args.no_frontend:  disabled.add("frontend")
+    if args.no_hfl_api:   disabled.add("hfl-api")
     if args.no_mcp:       disabled.add("mcp")
     if args.no_kanban:    disabled.add("kanban")
     if args.no_flower:    disabled.add("flower")
@@ -1680,6 +1683,7 @@ def select_services(machine: dict, args: argparse.Namespace) -> list[str]:
         if role in info["roles"]
         and s not in disabled
         and (s != "capture-worker" or machine.get("capture_worker", False))
+        and (s != "hfl-api" or machine.get("hfl_api", False))
     ]
 
 
@@ -1701,6 +1705,7 @@ def build_parser() -> argparse.ArgumentParser:
                         "one canonical Beat runner — duplicate Beat instances fire every "
                         "scheduled task N times.")
     p.add_argument("--no-frontend", action="store_true")
+    p.add_argument("--no-hfl-api",  action="store_true")
     p.add_argument("--no-mcp",      action="store_true")
     p.add_argument("--no-kanban",   action="store_true")
     p.add_argument("--no-flower",   action="store_true")

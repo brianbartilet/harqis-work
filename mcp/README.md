@@ -298,6 +298,36 @@ Wraps xAI Grok via the OpenAI-compatible SDK (`https://api.x.ai/v1`). Requires v
 
 ---
 
+### HFL Activity Corpus (`apps/hfl_corpus/mcp.py`)
+
+Authenticated client for the canonical Homework-for-Life Markdown corpus and
+its best-effort Elasticsearch projection. Requires `HFL_CORPUS_API_URL` and
+`HFL_CORPUS_API_TOKEN`. Create, upload, update, and download operations write
+remote or local state.
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `create_hfl_corpus_entry` | entry date/time and HFL fields | Persistence result with `entry_id`, `indexed`, `doc_id`, and `delivery` |
+| `preview_hfl_corpus_entry` | entry date/time and HFL fields | Rendered Markdown/HTML preview without persistence |
+| `upload_hfl_corpus_entry` | entry fields, `file_paths` | Persistence result plus uploaded reference paths |
+| `list_hfl_corpus_documents` | search, dates, paging, source, secret controls | Paginated corpus search payload |
+| `get_hfl_corpus_tree` | `path?`, secret controls | Shallow directory tree |
+| `list_hfl_corpus_matches` | `relative_path`, query/paging filters | Matching parsed entries |
+| `get_hfl_corpus_document` | `relative_path`, secret controls | Document text, parsed entries, and safe references |
+| `update_hfl_corpus_document` | `relative_path`, complete `text` | Update status (destructive) |
+| `get_hfl_corpus_reference_preview` | reference `token` | Safe HTML preview |
+| `download_hfl_corpus_reference` | `token`, `destination` | Local path, byte count, and content type |
+| `download_hfl_corpus_reference_media` | `token`, `destination` | Downloaded media metadata |
+| `download_hfl_corpus_reference_thumbnail` | `token`, `destination` | Downloaded thumbnail metadata |
+
+**Example prompts:**
+
+- *"Add this debugging lesson to HFL and tell me whether Elasticsearch indexed it."*
+- *"Search the Activity Corpus for entries tagged #workers from August 2026."*
+- *"Preview an HFL entry for this moment without saving it."*
+
+---
+
 ### Perplexity (`apps/perplexity/mcp.py`)
 
 Wraps Perplexity Sonar — chat completions with built-in live web search and inline citations, a direct search endpoint, embeddings, and async deep research. [API docs](https://docs.perplexity.ai/). Requires valid `PERPLEXITY` section in `apps_config.yaml`.
