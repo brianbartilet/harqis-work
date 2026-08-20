@@ -13,6 +13,7 @@ of truth.
 
 | Skill | Purpose |
 |---|---|
+| `/activity-radar` | Compare recent HFL activity with relevant history to surface missed commitments, risks, contradictions, and recommendations. |
 | `/add-script` | Add or reorganize scripts using the repository's `scripts/` taxonomy and documentation conventions. |
 | `/agent-prompt` | Run a named prompt from `agents/prompts/` against the codebase. |
 | `/capture-hfl-session` | Capture a sanitized prompt/outcome pair for HFL when an automatic surface hook is unavailable or needs a manual retry. |
@@ -32,6 +33,7 @@ of truth.
 | `/dumps-summary` | Generate the daily dumps summary Markdown through the canonical repository script. |
 | `/generate-gherkin-scenarios` | Generate repository-standard Gherkin scenarios from requirements or tickets. |
 | `/generate-registry` | Regenerate the frontend workflow catalogue from workflow task configurations. |
+| `/ingest-meta-archive` | Prepare, preview, dispatch, replay, and verify private Facebook or Instagram archive imports into HFL. |
 | `/manage-queues` | Maintain Celery task-to-queue assignments and report live machine coverage. |
 | `/manage-fork-fleet` | Discover, compare, test, deploy, and safely synchronize harqis-work forks through isolated worktrees and PRs. |
 | `/max-plan` | Perform a deep reasoning planning pass and persist the resulting plan. |
@@ -44,9 +46,10 @@ of truth.
 | `/time-capsule-synthesizer` | Synthesize a set of files into one period-based HFL time-capsule entry. |
 | `/update-docs` | Audit documentation against current code and apply the smallest accurate corrections. |
 | `/workflow-token-audit` | Estimate scheduled workflow API calls, model/token exposure, embedding usage, and cost drivers. |
+| `/write-notes` | Save notes, reminders, URLs, and provided media as structured HFL entries with image OCR and visual analysis. |
 | `/zapier-mcp` | Search, enable, and wire Zapier MCP actions into workflows or direct agent use. |
 
-**Current canonical count: 32 skills.** The count is derived from directories
+**Current canonical count: 35 skills.** The count is derived from directories
 containing `.agents/skills/*/SKILL.md`; cache or generated directories do not
 count.
 
@@ -59,6 +62,8 @@ count.
 | Add tools for an existing app | `/create-new-mcp` |
 | Add a desktop widget | `/create-new-hud` |
 | Add an Activity Corpus source | `/create-new-ingest-source-hfl` |
+| Review recent HFL activity | `/activity-radar` |
+| Save a personal HFL note | `/write-notes` |
 | Capture a prompt audit event | `/capture-hfl-session` |
 | Govern harqis-work forks | `/manage-fork-fleet` |
 | Ship a feature across forks | `/ship-feature-to-forks` |

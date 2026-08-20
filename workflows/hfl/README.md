@@ -740,6 +740,41 @@ Read-only inspection is available through the `agent_session_activity` MCP
 tool. This feature captures new events only; it does not scan historical
 Codex, Claude, Hermes, or OpenClaw transcripts.
 
+### `activity_radar` (HFL activity watchdog)
+
+**Shipped active** in `tasks_config.py`. Every two hours at 08:00, 10:00,
+12:00, 14:00, 16:00, 18:00, 20:00, and 22:00 Asia/Singapore, it compares HFL
+entries since the last successful marker (first run and maximum overlap: 48
+hours) with topic-relevant activity from the previous 90 days. It produces an
+evidence-grounded Markdown report covering critical risks, possibly missed
+commitments, current focus, related history, recommendations, contradictions,
+and an evidence index.
+
+**Apps chained:** HFL Elasticsearch/Markdown corpus → Anthropic Haiku analysis
+→ Telegram notification. Elasticsearch degradation falls back to the canonical
+Markdown corpus. Reference/RAG/analysis degradation is marked as partial and
+does not advance the marker. A successful no-findings pass advances the marker
+without sending Telegram; notification failure leaves the marker untouched.
+
+**Queue:** `WorkflowQueue.HFL`. **OS:** cross-platform. **Required config:**
+existing `ANTHROPIC`, `ELASTIC_LOGGING`, `TELEGRAM`, HFL corpus configuration,
+and their existing environment variables. No new package or credential is
+introduced. Runtime state is atomically stored under
+`$HARQIS_DATA_ROOT/runtime/activity-radar/state.json` (or
+`logs/activity-radar/state.json` when the data root is unset).
+
+The shared `$activity-radar` skill is the interactive entry point. It defaults
+to the latest eight hours, supports time/source/tag/query/context overrides,
+and never sends Telegram. `--dry-run` has no notification, marker, feedback, or
+HFL write side effect. Reports are read-only by default; explicit
+`--save-to-hfl` writes source `activity-radar` with `#fyi #retrospective
+#activity-radar`, and those entries are excluded from later radar input.
+Finding fingerprints accept `useful`, `dismissed`, or `resolved` feedback.
+Open critical findings repeat; unchanged lower-severity and dismissed/resolved
+findings remain suppressed until evidence changes.
+
+**AI prompt:** `workflows/hfl/prompts/activity_radar.md`.
+
 ## Elasticsearch entry index (dual-write)
 
 The canonical Markdown corpus is the source of truth. Every ingest source
@@ -903,6 +938,7 @@ New writers must call `submit_hfl_entry` (or the compatibility
 | `ingest_agent_session_events` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `rollup_agent_sessions` | distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `flush_hfl_outbox` | express | resource | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `False` |
+| `activity_radar` | distill+express | area | `telegram+es_log` | `es_log+telegram` | `False` (`tenant_safe`) |
 
 This block is also persisted on each beat entry's `'manifesto'` key — see
 `workflows/hfl/tasks_config.py`. `scripts/agents/repo-quality/manifesto_audit.py` reads from
