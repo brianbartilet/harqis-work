@@ -38,30 +38,31 @@ from workflows.queues import WorkflowQueue
 
 
 WORKFLOW_HFL = {
-    # HFL Activity Radar — every two hours during waking hours, Singapore time.
-    # The persistent marker advances only after a complete analysis and any
-    # required notification succeed. A successful no-findings run is silent.
-    'run-job--activity_radar': {
-        'task': 'workflows.hfl.tasks.activity_radar.activity_radar',
-        'schedule': crontab(hour='8,10,12,14,16,18,20,22', minute=0),
-        'kwargs': {
-            'cfg_id__anthropic': 'ANTHROPIC',
-            'model': 'claude-haiku-4-5-20251001',
-            'retrospective_days': 90,
-        },
-        'options': {
-            'queue': WorkflowQueue.HFL,
-            'expires': 60 * 90,
-        },
-        'manifesto': {
-            'code_role': 'distill+express',
-            'para_bucket': 'area',
-            'express_target': 'telegram+es_log',
-            'review_artifact': 'es_log+telegram',
-            'hfl_signal': False,
-            'tenant_safe': True,
-        },
-    },
+    # HFL Activity Radar — Beat scheduling is disabled because the Hermes agent
+    # owns the waking-hours schedule. Hermes dispatches this canonical Celery
+    # task so marker, suppression, Telegram, and Elasticsearch behavior remain
+    # in harqis-work.
+    # 'run-job--activity_radar': {
+    #     'task': 'workflows.hfl.tasks.activity_radar.activity_radar',
+    #     'schedule': crontab(hour='8,10,12,14,16,18,20,22', minute=0),
+    #     'kwargs': {
+    #         'cfg_id__anthropic': 'ANTHROPIC',
+    #         'model': 'claude-haiku-4-5-20251001',
+    #         'retrospective_days': 90,
+    #     },
+    #     'options': {
+    #         'queue': WorkflowQueue.HFL,
+    #         'expires': 60 * 90,
+    #     },
+    #     'manifesto': {
+    #         'code_role': 'distill+express',
+    #         'para_bucket': 'area',
+    #         'express_target': 'telegram+es_log',
+    #         'review_artifact': 'es_log+telegram',
+    #         'hfl_signal': False,
+    #         'tenant_safe': True,
+    #     },
+    # },
 
     # Adhoc capture — schedule is effectively disabled (Sunday 03:33). Real
     # invocation is via .delay() from an agent, an MCP tool, or a hotkey.

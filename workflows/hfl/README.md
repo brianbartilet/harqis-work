@@ -742,10 +742,13 @@ Codex, Claude, Hermes, or OpenClaw transcripts.
 
 ### `activity_radar` (HFL activity watchdog)
 
-**Shipped active** in `tasks_config.py`. Every two hours at 08:00, 10:00,
-12:00, 14:00, 16:00, 18:00, 20:00, and 22:00 Asia/Singapore, it compares HFL
-entries since the last successful marker (first run and maximum overlap: 48
-hours) with topic-relevant activity from the previous 90 days. It produces an
+**Beat schedule disabled** in `tasks_config.py`; the Hermes agent owns the
+waking-hours schedule at 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, and
+22:00 Asia/Singapore. Hermes dispatches the canonical
+`workflows.hfl.tasks.activity_radar.activity_radar` Celery task to the `hfl`
+queue rather than duplicating its analysis. The task compares HFL entries since
+the last successful marker (first run and maximum overlap: 48 hours) with
+topic-relevant activity from the previous 90 days. It produces an
 evidence-grounded Markdown report covering critical risks, possibly missed
 commitments, current focus, related history, recommendations, contradictions,
 and an evidence index.
@@ -938,11 +941,12 @@ New writers must call `submit_hfl_entry` (or the compatibility
 | `ingest_agent_session_events` | capture+distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `rollup_agent_sessions` | distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `flush_hfl_outbox` | express | resource | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `False` |
-| `activity_radar` | distill+express | area | `telegram+es_log` | `es_log+telegram` | `False` (`tenant_safe`) |
+| `activity_radar` (Hermes-scheduled) | distill+express | area | `telegram+es_log` | `es_log+telegram` | `False` (`tenant_safe`) |
 
-This block is also persisted on each beat entry's `'manifesto'` key — see
-`workflows/hfl/tasks_config.py`. `scripts/agents/repo-quality/manifesto_audit.py` reads from
-there.
+Active Beat entries persist this block on their `'manifesto'` key — see
+`workflows/hfl/tasks_config.py`. `scripts/agents/repo-quality/manifesto_audit.py`
+reads from there. The disabled Activity Radar block retains its contract beside
+the task definition so the Hermes-owned schedule remains reviewable.
 
 ---
 
