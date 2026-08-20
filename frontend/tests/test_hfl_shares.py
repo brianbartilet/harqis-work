@@ -1001,6 +1001,42 @@ def test_owner_page_paginates_recipes_and_shares_with_mobile_first_saved_list(
     )
 
 
+def test_owner_share_page_uses_snapshot_free_sql_pagination(
+    authenticated_client, sharing_corpus, monkeypatch
+):
+    store = get_share_store()
+    snapshot = build_snapshot(_configuration(), (sharing_corpus,))
+    for index in range(7):
+        store.create_share(
+            configuration_id="",
+            name=f"Metadata share {index + 1}",
+            token_hash=f"metadata-page-token-{index}",
+            pin_hash="",
+            auth_mode="qr",
+            allowed_email="",
+            snapshot=snapshot,
+            ttl_seconds=3600,
+            single_use=False,
+            device_limit=1,
+        )
+
+    monkeypatch.setattr(
+        store,
+        "list_shares",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("owner listing must not load full snapshots")
+        ),
+    )
+    summaries = store.list_share_summaries(limit=2, offset=5)
+    response = authenticated_client.get("/sharing?share_page=2")
+
+    assert len(summaries) == 2
+    assert all(summary.entry_count == 1 for summary in summaries)
+    assert response.status_code == 200
+    assert response.text.count('class="item generated-share-item"') == 2
+    assert "1 entries" in response.text
+
+
 def test_snapshot_is_source_first_and_removes_owner_metadata(
     tmp_path, monkeypatch
 ):

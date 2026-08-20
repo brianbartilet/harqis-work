@@ -604,8 +604,53 @@ def test_workflows_module_preserves_reorderable_subtabs(authenticated_client):
     assert 'role="tablist"' in response.text
     assert 'role="tab"' in response.text
     assert 'role="tabpanel"' in response.text
+    assert response.text.count('role="tabpanel"') == 1
+    assert 'hx-select="#workflow-panel-host"' in response.text
+    assert 'hx-push-url="true"' in response.text
     assert "initKeyboardLayout" in response.text
     assert "This browser" in response.text
+
+
+def test_workflow_panels_are_loaded_one_at_a_time(authenticated_client):
+    from modules.workflows.service import refresh_registry
+
+    workflows = refresh_registry()
+    selected = next(key for key in workflows if key != "hud")
+    response = authenticated_client.get(f"/workflows?workflow={selected}")
+
+    assert response.status_code == 200
+    assert f'id="workflow-panel-{selected}"' in response.text
+    assert response.text.count('role="tabpanel"') == 1
+    assert response.text.count('class="group flex flex-col') == len(
+        workflows[selected]["tasks"]
+    )
+    assert len(response.content) < 300_000
+
+
+def test_workflow_registry_skips_unchanged_source_regeneration(monkeypatch):
+    import modules.workflows.service as workflow_service
+
+    workflow_service.refresh_registry()
+    monkeypatch.setattr(
+        workflow_service.generate_registry,
+        "main",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("unchanged sources must not regenerate the registry")
+        ),
+    )
+
+    assert workflow_service.refresh_registry()
+
+
+def test_dynamic_pages_are_compressed_and_timed(authenticated_client):
+    response = authenticated_client.get(
+        "/workflows",
+        headers={"Accept-Encoding": "gzip"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-encoding"] == "gzip"
+    assert response.headers["server-timing"].startswith("app;dur=")
 
 
 def test_workflow_trigger_preserves_existing_dispatch_endpoint(

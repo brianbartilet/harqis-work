@@ -480,6 +480,31 @@ def _close_macos_terminal_windows(services: list[str] | None = None) -> None:
     )
 
 
+def _rotate_service_log(log_file: Path) -> None:
+    """Bound daemon logs at restart while retaining recent history."""
+    try:
+        max_bytes = max(
+            1_048_576,
+            int(os.environ.get("HARQIS_LOG_MAX_BYTES", "10485760")),
+        )
+        backups = max(
+            1,
+            min(10, int(os.environ.get("HARQIS_LOG_BACKUP_COUNT", "3"))),
+        )
+        if not log_file.exists() or log_file.stat().st_size < max_bytes:
+            return
+        oldest = log_file.with_name(f"{log_file.name}.{backups}")
+        if oldest.exists():
+            oldest.unlink()
+        for index in range(backups - 1, 0, -1):
+            source = log_file.with_name(f"{log_file.name}.{index}")
+            if source.exists():
+                source.replace(log_file.with_name(f"{log_file.name}.{index + 1}"))
+        log_file.replace(log_file.with_name(f"{log_file.name}.1"))
+    except (OSError, ValueError) as exc:
+        print(f"[logs] Could not rotate {log_file}: {exc}")
+
+
 def spawn_detached(
     cmd: list[str],
     log_file: Path,
@@ -516,6 +541,8 @@ def spawn_detached(
     terminal's signal group so Ctrl-C here doesn't kill the daemon.
     """
     log_file.parent.mkdir(parents=True, exist_ok=True)
+    if not show_console:
+        _rotate_service_log(log_file)
 
     # Compose the child's environment. When extra_env is empty we pass
     # env=None so subprocess inherits our env unchanged (the cheap path).

@@ -2,8 +2,10 @@
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
+from fastapi.responses import RedirectResponse
 
 from modules.applications.inventory import (
+    clear_application_cache,
     discover_applications,
     get_application,
     resolve_document,
@@ -34,6 +36,15 @@ async def applications_page(request: Request):
             latest={app.key: test_runs.latest_for_app(app.key, 1) for app in applications},
         ),
     )
+
+
+@router.post("/refresh")
+async def refresh_applications(request: Request):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    clear_application_cache()
+    return RedirectResponse("/applications", status_code=303)
 
 
 @router.get("/{app_key}", response_class=HTMLResponse)

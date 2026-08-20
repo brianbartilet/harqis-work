@@ -13,13 +13,22 @@ router = APIRouter()
 
 
 @router.get("/workflows", response_class=HTMLResponse)
-async def workflows_page(request: Request):
+async def workflows_page(request: Request, workflow: str = ""):
     user, redirect = require_user(request)
     if redirect:
         return redirect
-    workflows = refresh_registry()
-    default_workflow = "hud" if "hud" in workflows else next(iter(workflows), "")
-    task_count = sum(len(workflow.get("tasks", [])) for workflow in workflows.values())
+    workflow_tabs = refresh_registry()
+    default_workflow = "hud" if "hud" in workflow_tabs else next(iter(workflow_tabs), "")
+    selected_workflow = workflow if workflow in workflow_tabs else default_workflow
+    active_workflows = (
+        {selected_workflow: workflow_tabs[selected_workflow]}
+        if selected_workflow
+        else {}
+    )
+    task_count = sum(
+        len(workflow_definition.get("tasks", []))
+        for workflow_definition in workflow_tabs.values()
+    )
     return templates.TemplateResponse(
         request,
         "modules/workflows/index.html",
@@ -27,9 +36,10 @@ async def workflows_page(request: Request):
             request,
             user,
             "workflows",
-            workflows=workflows,
-            default_workflow=default_workflow,
-            workflow_count=len(workflows),
+            workflows=active_workflows,
+            workflow_tabs=workflow_tabs,
+            default_workflow=selected_workflow,
+            workflow_count=len(workflow_tabs),
             task_count=task_count,
         ),
     )

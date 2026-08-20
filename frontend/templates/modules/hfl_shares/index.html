@@ -386,7 +386,7 @@
         {% set share = row.grant %}
         <div class="item generated-share-item">
           <div class="flex items-start justify-between gap-2"><strong class="wrap text-sm text-slate-200">{{ share.name }}</strong><span class="status-pill status-{{ row.status }}">{{ row.status }}</span></div>
-          <p class="mt-1 text-xs text-slate-500">{{ share.snapshot.entries|length }} entries · {{ "live recipe" if share.live_updates else "fixed snapshot" }} · {% if share.no_expiry %}no expiry{% else %}expires {{ row.expires_at_display }}{% endif %}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ share.entry_count }} entries · {{ "live recipe" if share.live_updates else "fixed snapshot" }} · {% if share.no_expiry %}no expiry{% else %}expires {{ row.expires_at_display }}{% endif %}</p>
           {% if share.available %}
           <div class="actions mt-2">
             <a class="btn btn-soft" href="/sharing/shares/{{ share.id }}/preview" target="_blank" rel="noopener">Preview</a>
