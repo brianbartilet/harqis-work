@@ -1,0 +1,4 @@
+interface:
+  display_name: "Check Activity Corpus Sources"
+  short_description: "Diagnose and recover stale HFL sources"
+  default_prompt: "Use $check-activity-corpus-sources to scan every HFL source and remediate failures safely."
