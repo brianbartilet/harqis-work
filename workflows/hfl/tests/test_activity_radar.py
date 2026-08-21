@@ -77,6 +77,33 @@ def test__run_activity_radar_partial_fallback_does_not_advance_marker(tmp_path, 
     assert module.load_state(path)["last_success_at"] is None
 
 
+def test__run_activity_radar_notification_failure_does_not_advance_marker(tmp_path, monkeypatch):
+    now = datetime(2026, 8, 20, 10, tzinfo=timezone.utc)
+    row = {"when": (now - timedelta(hours=1)).isoformat(), "entry_id": "x", "source": "notes", "moment": "Release", "tags": []}
+    monkeypatch.setattr(module, "retrieve_entries", lambda *a, **k: ([row], []))
+    monkeypatch.setattr(module, "_notify", lambda _text: (_ for _ in ()).throw(RuntimeError("Telegram rejected request")))
+    path = tmp_path / "state.json"
+
+    with pytest.raises(RuntimeError, match="Telegram rejected request"):
+        module.run_activity_radar(
+            scheduled=True, now=now, state_file=path,
+            synthesizer=lambda *a, **k: _finding(),
+        )
+
+    assert not path.exists()
+
+
+def test__notify_requires_message_id(monkeypatch):
+    from apps.telegram import config as telegram_config
+    from apps.telegram.references.web.api import messages
+
+    monkeypatch.setitem(telegram_config.CONFIG.app_data, "default_chat_id", "123")
+    monkeypatch.setattr(messages.ApiServiceTelegramMessages, "send_message", lambda *a, **k: {})
+
+    with pytest.raises(RuntimeError, match="valid message_id"):
+        module._notify("Finding")
+
+
 def test__bind_evidence_signatures_detects_changed_content():
     finding = module.validate_findings(_finding(), {"N1"})[0]
     module.bind_evidence_signatures([finding], {"N1": {"moment": "old"}})

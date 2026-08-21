@@ -1,8 +1,8 @@
 ---
 name: generate-gherkin-scenarios
 description: >
-  You are the **Gherkin Scenario Generator** for `harqis-work`.
-user-invocable: true
+  Generate idiomatic Gherkin scenarios from Jira tickets or pasted acceptance criteria,
+  writing ticket-based output to the repository's generated-results directory by default.
 allowed-tools: Bash Read Glob Grep Edit Write
 ---
 
@@ -23,6 +23,8 @@ generating speculative tests against vague ACs produces brittle, low-value scena
 - A direct paste of requirements / ACs.
 - A Trello card title or description.
 - A constraint like "AC2 and AC3 only" — honour the subset.
+- An output preference: default generated file, inline-only output, or a custom `.feature`
+  path.
 
 Always confirm the AC subset before generating if the user hasn't specified one.
 
@@ -173,16 +175,32 @@ Q × @edge, R × @smoke`. This makes it easy to spot under-tested AC types at a 
 
 ---
 
-## Step 5 — Decide on file output
+## Step 5 — Write the output
 
-By default, **print the feature content inline in the chat**. Only write to disk if the
-user explicitly asks ("save it to <path>", "create the file"). When writing:
+For a Jira ticket input, **write the generated Gherkin to a `.feature` file by default**.
+Use the repository-relative path:
 
-- Default filename: `<ticket-key-lower>.feature` (e.g. `icon-2074.feature`).
-- Default location: the directory the user asks for, or the repo's existing Gherkin
-  location if one is in use (run a quick `Glob` for `**/*.feature`). If neither is
-  obvious, ask once.
-- Never overwrite an existing `.feature` file without confirmation.
+```text
+results/gherkin-generated/<TICKET-KEY>.feature
+```
+
+Keep the ticket key uppercase in the filename (for example,
+`results/gherkin-generated/ICON-2563.feature`). Create the
+`results/gherkin-generated` directory when it does not exist.
+
+Output modes:
+
+- **Default:** write the complete `Feature:` document to the default ticket-key path.
+- **Inline only:** when the user explicitly asks to print, preview, or return the Gherkin
+  without saving, provide it in chat and do not create a file.
+- **Custom path:** honour an explicitly requested `.feature` destination instead of the
+  default path.
+
+For pasted requirements or another source without a ticket key, ask for a filename or
+destination before writing. Never overwrite an existing `.feature` file without explicit
+confirmation. After writing, report the file path and provide the AC↔scenario mapping and
+type-coverage tally in chat; do not duplicate the full feature content inline unless the
+user requests it.
 
 ### Jira Test issue output
 

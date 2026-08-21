@@ -48,7 +48,7 @@ class ApiServiceTelegramMessages(BaseApiServiceTelegram):
             .add_uri_parameter('sendMessage') \
             .add_json_payload(payload)
 
-        return self.client.execute_request(self.request.build())
+        return self.execute_telegram_request()
 
     @deserialized(dict, child='result')
     def get_chat(self, chat_id: Any):
@@ -62,7 +62,7 @@ class ApiServiceTelegramMessages(BaseApiServiceTelegram):
             .add_uri_parameter('getChat') \
             .add_query_string('chat_id', chat_id)
 
-        return self.client.execute_request(self.request.build())
+        return self.execute_telegram_request()
 
     @deserialized(dict, child='result')
     def forward_message(self, chat_id: Any, from_chat_id: Any, message_id: int,
@@ -86,7 +86,7 @@ class ApiServiceTelegramMessages(BaseApiServiceTelegram):
             .add_uri_parameter('forwardMessage') \
             .add_json_payload(payload)
 
-        return self.client.execute_request(self.request.build())
+        return self.execute_telegram_request()
 
     @deserialized(dict, child='result')
     def get_file(self, file_id: str):
@@ -104,4 +104,4 @@ class ApiServiceTelegramMessages(BaseApiServiceTelegram):
             .add_uri_parameter('getFile') \
             .add_query_string('file_id', file_id)
 
-        return self.client.execute_request(self.request.build())
+        return self.execute_telegram_request()

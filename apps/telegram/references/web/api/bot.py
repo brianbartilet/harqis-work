@@ -24,7 +24,7 @@ class ApiServiceTelegramBot(BaseApiServiceTelegram):
         self.request.get() \
             .add_uri_parameter('getMe')
 
-        return self.client.execute_request(self.request.build())
+        return self.execute_telegram_request()
 
     @deserialized(List[dict], child='result')
     def get_updates(self, offset: int = None, limit: int = 100, timeout: int = 0):
@@ -49,4 +49,4 @@ class ApiServiceTelegramBot(BaseApiServiceTelegram):
         if offset is not None:
             self.request.add_query_string('offset', offset)
 
-        return self.client.execute_request(self.request.build())
+        return self.execute_telegram_request()

@@ -295,7 +295,7 @@ def render_markdown(findings: list[dict[str, Any]], lookup: dict[str, dict[str, 
     return text
 
 
-def _notify(text: str) -> None:
+def _notify(text: str) -> list[int]:
     from apps.telegram.config import CONFIG as telegram_config
     from apps.telegram.references.web.api.messages import ApiServiceTelegramMessages
     chat_id = telegram_config.app_data.get("default_chat_id")
@@ -314,9 +314,20 @@ def _notify(text: str) -> None:
             split = 3900
         chunks.append(remaining[:split].rstrip())
         remaining = remaining[split:].lstrip()
+    message_ids: list[int] = []
     for index, chunk in enumerate(chunks, 1):
         prefix = f"HFL Activity Radar ({index}/{len(chunks)})\n\n" if len(chunks) > 1 else ""
-        ApiServiceTelegramMessages(telegram_config).send_message(chat_id=chat_id, text=prefix + chunk)
+        result = ApiServiceTelegramMessages(telegram_config).send_message(
+            chat_id=chat_id, text=prefix + chunk
+        )
+        message_id = result.get("message_id") if isinstance(result, dict) else None
+        if isinstance(message_id, bool) or not isinstance(message_id, int) or message_id <= 0:
+            raise RuntimeError(
+                f"Telegram sendMessage response for chunk {index}/{len(chunks)} "
+                "did not contain a valid message_id"
+            )
+        message_ids.append(message_id)
+    return message_ids
 
 
 def _writeback(text: str, now: datetime) -> dict[str, Any]:
