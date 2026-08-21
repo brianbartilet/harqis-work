@@ -16,7 +16,9 @@ of truth.
 | `/activity-radar` | Compare recent HFL activity with relevant history to surface missed commitments, risks, contradictions, and recommendations. |
 | `/add-script` | Add or reorganize scripts using the repository's `scripts/` taxonomy and documentation conventions. |
 | `/agent-prompt` | Run a named prompt from `agents/prompts/` against the codebase. |
+| `/analyze-jira-feature` | Analyze a Jira feature and its related stories into Gherkin, dependencies, risks, and an end-to-end overview. |
 | `/capture-hfl-session` | Capture a sanitized prompt/outcome pair for HFL when an automatic surface hook is unavailable or needs a manual retry. |
+| `/check-activity-corpus-sources` | Audit HFL source freshness and Markdown/Elasticsearch parity, diagnose failures, and perform bounded recovery with review evidence. |
 | `/clarify-feature` | Convert an enhancement request into an approved implementation spec before files change. |
 | `/choose-automation-runtime` | Classify automation as Celery, agent-orchestrated, or hybrid and record its ownership and controls. |
 | `/commit` | Review, stage, and create a Conventional Commit, with optional push and guarded host-sync chaining. |
@@ -51,7 +53,7 @@ of truth.
 | `/write-notes` | Save notes, reminders, URLs, and provided media as structured HFL entries with image OCR and visual analysis. |
 | `/zapier-mcp` | Search, enable, and wire Zapier MCP actions into workflows or direct agent use. |
 
-**Current canonical count: 36 skills.** The count is derived from directories
+**Current canonical count: 38 skills.** The count is derived from directories
 containing `.agents/skills/*/SKILL.md`; cache or generated directories do not
 count.
 
@@ -66,6 +68,7 @@ count.
 | Add a desktop widget | `/create-new-hud` |
 | Add an Activity Corpus source | `/create-new-ingest-source-hfl` |
 | Review recent HFL activity | `/activity-radar` |
+| Check HFL source ingestion health | `/check-activity-corpus-sources` |
 | Save a personal HFL note | `/write-notes` |
 | Capture a prompt audit event | `/capture-hfl-session` |
 | Govern harqis-work forks | `/manage-fork-fleet` |

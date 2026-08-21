@@ -52,6 +52,7 @@ this scaffold closes.
 | `ingest_notes_activity` | Diffs each configured note repository from its saved ingest cursor after a verified host pull. Text notes are split at natural heading/semantic topic transitions (bounded per file and per run), producing one entry per topic; images remain one entry. A summary covers deleted, unsupported, or overflow material. Tags include `#notes #repo-<name> #<core-topic>`; `#dsm` is added only to explicit Scrum daily-standup segments. References include a pinned GitHub line anchor plus the host path. First activation records HEAD without backfilling. | `file:hfl_corpus+es:hfl-entries` | Daily 22:50 local on the `hfl` queue. |
 | `ingest_agent_session_event` / `ingest_agent_session_events` | Captures one sanitized HFL audit entry per user-prompt/assistant-outcome pair from Codex, Claude Code, Hermes, or OpenClaw. Hidden reasoning and tool output are excluded; stable event IDs deduplicate retries. | `file:hfl_corpus+es:hfl-entries` | Immediate from supported hooks/manual skill; retained-event retry every 10 minutes on the `hfl` queue. |
 | `rollup_agent_sessions` | Distils the processed prompt audit events in the 24-hour window ending at 23:40 into one cross-surface HFL rollup. Prompts after the cutoff appear in the next rollup; empty windows are a clean no-op. | `file:hfl_corpus+es:hfl-entries` | Daily 23:40 local on the `hfl` queue. |
+| `check_activity_corpus_sources` | Checks every registered HFL source across task heartbeat, upstream capture, Markdown freshness, and Elasticsearch parity. Healthy runs are silent; failures produce a report, HFL audit, and Telegram notification. | `file:hfl_source_health+hfl_audit+telegram+es_log` | Monday 07:30 local on the `hfl` queue; the paired skill is separately invoked daily by Hermes. |
 | `ingest_ai_activity` | Alternate source (OpenAI **Platform API** assistant threads, via `OPENAI_HFL_THREAD_IDS`). Superseded by `ingest_chatgpt_activity` — kept in code but its beat entry is **disabled** (commented-out) to avoid a nightly no-op. | `file:hfl_corpus` | Disabled (uncomment in `tasks_config.py` if you also want Platform-API threads). |
 | `ingest_browsing_activity` | Daily web-browsing digest. Reads the Chrome + Edge `History` SQLite DBs directly (copy-to-temp to dodge the browser lock; no app/credential), distils the day's visits into ONE corpus entry with the most-visited pages as `references`. Haiku-distilled, raw fallback. No history DB / no visits → no entry, no call. No domain filtering by default (`exclude_domains` kwarg to redact). | `file:hfl_corpus+es:hfl-entries` | Daily 23:00 local (active — `os: windows`; no config needed). |
 | `ingest_location_activity` | Daily location timeline. Pulls the day's GPS track from the local OwnTracks Recorder (`apps/own_tracks`), clusters fixes into **stay-points** (dwell ≥ N min), reverse-geocodes each via OpenStreetMap Nominatim (free, no key), and distils ONE "where I was today" timeline entry. Haiku-distilled, raw fallback. No device configured / Recorder unreachable / no fixes → no entry, no call. Meaningful movement without stays becomes a named route/round-trip timeline; only low-distance/noisy tracks use the generic movement-only breadcrumb. | `file:hfl_corpus+es:hfl-entries` | Daily 23:05 local (active — clean no-op until OwnTracks reports). |
@@ -740,6 +741,34 @@ Read-only inspection is available through the `agent_session_activity` MCP
 tool. This feature captures new events only; it does not scan historical
 Codex, Claude, Hermes, or OpenClaw transcripts.
 
+### `check_activity_corpus_sources`
+
+The Monday 07:30 Celery Beat task performs the deterministic half of the HFL
+source-health audit on `WorkflowQueue.HFL`. It reads the maintained registry in
+`.agents/skills/check-activity-corpus-sources/references/sources.toml`, verifies
+that every active `WORKFLOW_HFL` task is represented, and evaluates task
+heartbeats, Markdown freshness, Elasticsearch freshness/parity, and available
+upstream capture evidence. Manual, event-driven, Hermes-owned, and unscheduled
+sources remain inventoried even when they have no periodic freshness SLA.
+
+Healthy runs are silent: no result file, HFL entry, or Telegram message. A
+failed/degraded run writes a failure-only Markdown report beneath
+`results/hfl/`, records one canonical HFL audit entry, and sends a Telegram
+summary. Elasticsearch or upstream evidence that cannot be read is reported as
+degraded rather than as a false empty result. The task never retries, backfills,
+deletes, or rewrites source data itself.
+
+The `$check-activity-corpus-sources` skill is the daily Hermes-owned adaptive
+half. It diagnoses where a source stopped, chooses existing idempotent recovery
+operations, caps automatic backfill at 15 days, tests verified code repairs,
+and records task/commit/PR evidence. There is intentionally no daily Beat entry
+and no weekly Hermes duplicate.
+
+**Runtime:** hybrid. **Apps chained:** HFL Markdown corpus + Elasticsearch task
+and entry indexes → failure report + HFL audit + Telegram. **AI prompt:** none.
+**Config:** existing HFL, Elasticsearch, and Telegram configuration; no new
+package, credential, or environment variable.
+
 ### `activity_radar` (HFL activity watchdog)
 
 **Beat schedule disabled** in `tasks_config.py`; the Hermes agent owns the
@@ -953,6 +982,7 @@ New writers must call `submit_hfl_entry` (or the compatibility
 | `rollup_agent_sessions` | distill+express | area | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `True` (`tenant_safe`) |
 | `flush_hfl_outbox` | express | resource | `file:hfl_corpus+es:hfl-entries` | `es_log+file` | `False` |
 | `activity_radar` (Hermes-scheduled) | distill+express | area | `telegram+es_log` | `es_log+telegram` | `False` (`tenant_safe`) |
+| `check_activity_corpus_sources` | distill+express | area | `file:hfl_source_health+hfl_audit+telegram+es_log` | `es_log+file+hfl+telegram` | `False` (`tenant_safe`) |
 
 Active Beat entries persist this block on their `'manifesto'` key — see
 `workflows/hfl/tasks_config.py`. `scripts/agents/repo-quality/manifesto_audit.py`
