@@ -26,6 +26,8 @@ Tasks:
   - ingest_*             : scheduled source-specific capture and distillation.
   - flush_hfl_outbox     : every five minutes on hfl_broadcast; retries durable
                            envelopes from every participating worker.
+  - check_activity_corpus_sources: weekly — failure-only source/task/corpus/ES
+                           health snapshot; daily adaptive scan is Hermes-owned.
 
 This workflow is active — `WORKFLOW_HFL` is merged into
 `workflows/config.py`'s beat schedule.
@@ -656,6 +658,32 @@ WORKFLOW_HFL = {
             'express_target': 'file:hfl_corpus+es:hfl-entries',
             'review_artifact': 'es_log+file',
             'hfl_signal': True,
+            'tenant_safe': True,
+        },
+    },
+
+    # Weekly deterministic activity-corpus source audit. This is a separate
+    # automation from the Hermes-owned daily adaptive skill invocation: Beat
+    # owns this Monday snapshot, while the skill owns daily diagnosis/repair.
+    'run-job--check_activity_corpus_sources': {
+        'task': 'workflows.hfl.tasks.check_activity_corpus_sources.check_activity_corpus_sources',
+        'schedule': crontab(day_of_week='monday', hour=7, minute=30),
+        'kwargs': {
+            'mode': 'weekly',
+            'write_report': True,
+            'save_to_hfl': True,
+            'notify': True,
+        },
+        'options': {
+            'queue': WorkflowQueue.HFL,
+            'expires': 60 * 60 * 6,
+        },
+        'manifesto': {
+            'code_role': 'distill+express',
+            'para_bucket': 'area',
+            'express_target': 'file:hfl_source_health+hfl_audit+telegram+es_log',
+            'review_artifact': 'es_log+file+hfl+telegram',
+            'hfl_signal': False,
             'tenant_safe': True,
         },
     },

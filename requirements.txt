@@ -18,7 +18,9 @@ google-auth-oauthlib>=1.2,<2
 httplib2>=0.31,<1
 httpx>=0.28.1,<1
 ijson>=3.4,<4
-mcp>=1.26,<2
+# 1.29.0 enters an invalid-request/error-notification loop with Codex 0.149.0
+# on Windows, causing the stdio server to retain gigabytes of memory.
+mcp==1.28.1
 numpy>=1.26,<3
 openai>=1.50,<2
 paho-mqtt>=2.1,<3

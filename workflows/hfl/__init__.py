@@ -31,3 +31,4 @@ import workflows.hfl.tasks.ingest_facebook  # noqa: F401
 import workflows.hfl.tasks.ingest_instagram  # noqa: F401
 import workflows.hfl.tasks.persist        # noqa: F401
 import workflows.hfl.tasks.activity_radar  # noqa: F401
+import workflows.hfl.tasks.check_activity_corpus_sources  # noqa: F401
