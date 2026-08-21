@@ -1,13 +1,26 @@
 ---
 name: write-notes
-description: Save free-form notes, reminders, URLs, and explicitly provided media as structured Homework-for-Life entries through the HFL Corpus API, with automatic local OCR and visual analysis for attached images. Use when the user invokes $write-notes or asks to write, save, capture, or preview a personal note in HFL.
+description: Save, review, list, or update personal Homework-for-Life notes through the HFL Corpus API, with automatic local OCR and visual analysis for new image attachments. Use when the user invokes $write-notes or asks to write, save, capture, preview, find, or revise an HFL note.
 ---
 
 # Write Notes
 
-Turn the user's note into a reviewed HFL payload, show it, and submit it without
-an additional confirmation. Use the bundled helper for validation, uploads,
-document links, and durable retry state.
+Use the bundled helper to create notes, return recent note links, or safely
+update one canonical `Source: notes` / `#manual-entry` entry by GUID.
+
+## Choose the mode
+
+- **New note:** prepare, preview, and submit the note without another
+  confirmation. The user's write request is authorization.
+- **Recent notes:** run `recent` for requests to list, find, review, or select a
+  note. Show the result as a Markdown table with columns **GUID**, **What
+  happened**, **Timestamp**, and **HFL document**. Also surface
+  `latest_document_url` separately. A bare `$write-notes` invocation with no
+  note content also uses this mode. Default to 10 rows; accept 1–20.
+- **Update:** if the user has not supplied an exact GUID, run `recent`, show the
+  table, and ask which GUID to update. If the user supplies one GUID and the
+  exact requested changes, retrieve it with `get`, show the before/after fields,
+  and run `update` without another confirmation.
 
 ## Prepare the entry
 
@@ -76,9 +89,46 @@ Example payload:
 - Otherwise, show the inferred fields in a concise visible update and state that
   submission is starting. This preview is informational; do not pause for
   confirmation. Then pass the exact same JSON to `submit`.
-- Reject an empty note. If any requested attachment is missing, unreadable, over
+- Reject an empty new-note request. If any requested attachment is missing, unreadable, over
   50 MB, or makes the total exceed 200 MB, do not submit any part of the entry.
   The API accepts at most 10 files.
+
+## Review and update existing notes
+
+Recent-note discovery is read-only and restricted to canonical `Source: notes`
+entries tagged `#manual-entry`, excluding automated note-repository ingestion.
+Run:
+
+```powershell
+.venv\Scripts\python.exe .agents\skills\write-notes\scripts\write_note.py recent --limit 10
+```
+
+Retrieve the selected GUID immediately before proposing changes:
+
+```powershell
+.venv\Scripts\python.exe .agents\skills\write-notes\scripts\write_note.py get --guid "hfl-..."
+```
+
+Show only the fields that will change, alongside their current values. Preserve
+the original timestamp, source, machine, GUID, unspecified fields, and generated
+attachment references. Updating is allowed only for `Source: notes` entries
+tagged `#manual-entry`; never
+reinterpret this mode as permission to alter generated activity entries.
+
+Pipe the reviewed partial update as JSON and pass the exact
+`document_updated_at` returned by `get`:
+
+```powershell
+$changes | ConvertTo-Json -Depth 5 | .venv\Scripts\python.exe .agents\skills\write-notes\scripts\write_note.py update --guid "hfl-..." --expected-updated-at "<observed timestamp>" --json -
+```
+
+Allowed fields are `moment`, `what_happened`, `why_it_stayed`, `possible_use`,
+`tags`, `references`, and `is_reminder`. The helper aborts if the document
+changed after review, replaces exactly one GUID block through the validated HFL
+document API, and then upserts that GUID in Elasticsearch. If Markdown succeeds
+but indexing does not, report the parity failure explicitly; do not claim the
+update is fully indexed. Existing local attachment references are preserved
+when HTTP references change. Updating attachments themselves is not supported.
 
 Analyze attached images before building the payload:
 
@@ -115,6 +165,10 @@ On success, report:
 - delivery and Elasticsearch indexing status;
 - uploaded filenames, when present;
 - the `document_url` as a clickable manual-edit link.
+
+For `recent`, report the four-column table and latest document URL. For
+`update`, report the GUID, changed fields, canonical delivery status,
+Elasticsearch indexing status, and clickable `document_url`.
 
 If submission fails, report the outbox path and that delivery remains pending;
 do not claim that the entry was saved. The outbox contains note content and
