@@ -770,8 +770,39 @@ def _all_processes_matching(needle: str) -> list[int]:
         return []
 
 
+def _pid_working_directory(pid: int) -> Path | None:
+    """Return a POSIX process working directory without requiring site packages."""
+    if IS_WIN:
+        return None
+    proc_cwd = Path("/proc") / str(pid) / "cwd"
+    if IS_LIN:
+        try:
+            return proc_cwd.resolve(strict=True)
+        except OSError:
+            return None
+    if IS_MAC:
+        try:
+            result = subprocess.run(
+                ["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except (FileNotFoundError, OSError):
+            return None
+        if result.returncode != 0:
+            return None
+        for line in result.stdout.splitlines():
+            if line.startswith("n"):
+                try:
+                    return Path(line[1:]).resolve(strict=True)
+                except OSError:
+                    return None
+    return None
+
+
 def _pid_belongs_to_repo(pid: int) -> bool:
-    """Return whether a process command line identifies this exact checkout."""
+    """Return whether a process command line or working directory identifies this checkout."""
     try:
         result = subprocess.run(
             ["ps", "-p", str(pid), "-o", "command="],
@@ -781,9 +812,12 @@ def _pid_belongs_to_repo(pid: int) -> bool:
         )
     except (FileNotFoundError, OSError):
         return False
-    marker = str(REPO_ROOT.resolve()).replace("\\", "/").casefold()
+    repo_root = REPO_ROOT.resolve()
+    marker = str(repo_root).replace("\\", "/").casefold()
     command = result.stdout.replace("\\", "/").casefold()
-    return marker in command
+    if marker in command:
+        return True
+    return _pid_working_directory(pid) == repo_root
 
 
 def kill_stray_celery() -> None:

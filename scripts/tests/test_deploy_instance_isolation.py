@@ -51,6 +51,29 @@ def test_service_names_and_runtime_paths_are_instance_scoped(monkeypatch):
     assert deploy.log_path("worker").parent.parts[-2:] == ("logs", "alam-tech-labs")
 
 
+def test_process_filter_accepts_matching_checkout_working_directory(monkeypatch):
+    deploy = load_deploy_module()
+    monkeypatch.setattr(deploy, "IS_MAC", True)
+    monkeypatch.setattr(deploy, "IS_LIN", False)
+
+    class Result:
+        returncode = 0
+
+        def __init__(self, stdout):
+            self.stdout = stdout
+
+    def fake_run(command, **kwargs):
+        if command[0] == "ps":
+            return Result(".venv/bin/python -m celery -A core.apps.sprout:SPROUT worker")
+        if command[0] == "lsof":
+            return Result(f"p42\nfcwd\nn{deploy.REPO_ROOT}\n")
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(deploy.subprocess, "run", fake_run)
+
+    assert deploy._pid_belongs_to_repo(42) is True
+
+
 def test_process_filter_rejects_other_checkout(monkeypatch):
     deploy = load_deploy_module()
 
