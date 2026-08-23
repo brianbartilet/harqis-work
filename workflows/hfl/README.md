@@ -748,13 +748,24 @@ waking-hours schedule at 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, and
 `workflows.hfl.tasks.activity_radar.activity_radar` Celery task to the `hfl`
 queue rather than duplicating its analysis. The task compares HFL entries since
 the last successful marker (first run and maximum overlap: 48 hours) with
-topic-relevant activity from the previous 90 days. It produces an
-evidence-grounded Markdown report covering critical risks, possibly missed
+topic-relevant activity from the previous 90 days. Interactive runs produce a
+full evidence-grounded Markdown report covering critical risks, possibly missed
 commitments, current focus, related history, recommendations, contradictions,
-and an evidence index.
+and an evidence index. Scheduled Telegram delivery is a compact mobile plain-text
+summary: only critical/high-priority findings, numbered with
+What/Why/Next/Evidence labels. Fields are normalized and bounded; Telegram shows
+at most four findings and points to the linked corpus entry for the complete
+high-priority summary. Lower-priority findings remain available to analysis and
+state tracking but are not sent to Telegram. Before notification, the complete
+summary is submitted as an `activity-radar` HFL entry with a scheduled-window
+deduplication key; the Telegram message ends with a `CORPUS` link to that daily
+document. An undelivered HFL writeback blocks notification and marker advance.
+Unchanged unresolved critical findings repeat until resolved; unchanged high
+findings remain suppressed unless their evidence or priority changes.
 
 **Apps chained:** HFL Elasticsearch/Markdown corpus → Anthropic Haiku analysis
-→ Telegram notification. Elasticsearch degradation falls back to the canonical
+→ canonical HFL writeback → Telegram notification. Elasticsearch degradation
+falls back to the canonical
 Markdown corpus. Reference/RAG/analysis degradation is marked as partial and
 does not advance the marker. A successful no-findings pass advances the marker
 without sending Telegram; notification failure leaves the marker untouched.
