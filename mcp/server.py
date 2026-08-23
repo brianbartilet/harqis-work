@@ -1,29 +1,39 @@
 import logging
 import os
 import sys
+from contextlib import redirect_stdout
 from pathlib import Path
-from dotenv import load_dotenv
 
-_repo_root = Path(__file__).resolve().parent.parent
-load_dotenv(_repo_root / ".env" / "apps.env")
+# A stdio MCP server owns stdout: every byte written there must be JSON-RPC.
+# Several legacy imports configure logging to stdout or print while loading
+# configuration, so keep those diagnostics away from the protocol from the
+# first application import onward.  The runtime transport captures the real
+# stdout before the same protection is applied to tool execution below.
+with redirect_stdout(sys.stderr):
+    from dotenv import load_dotenv
 
-# Ensure the production config file is used regardless of ENV setting
-os.environ.setdefault("APP_CONFIG_FILE", "apps_config.yaml")
+    _repo_root = Path(__file__).resolve().parent.parent
+    load_dotenv(_repo_root / ".env" / "apps.env")
 
-# Allow `python mcp/server.py` to resolve `apps.*` imports without PYTHONPATH
-if str(_repo_root) not in sys.path:
-    sys.path.insert(0, str(_repo_root))
+    # Ensure the production config file is used regardless of ENV setting
+    os.environ.setdefault("APP_CONFIG_FILE", "apps_config.yaml")
 
-from mcp.server.fastmcp import FastMCP
-from tools.catalog import APP_CATALOG, register_app_tools
+    # Allow `python mcp/server.py` to resolve `apps.*` imports without PYTHONPATH
+    if str(_repo_root) not in sys.path:
+        sys.path.insert(0, str(_repo_root))
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
-)
-logger = logging.getLogger("harqis-mcp")
+    import anyio
+    from mcp.server.fastmcp import FastMCP
+    from mcp.server.stdio import stdio_server
+    from tools.catalog import APP_CATALOG, register_app_tools
 
-mcp = FastMCP("harqis-work")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+    )
+    logger = logging.getLogger("harqis-mcp")
+
+    mcp = FastMCP("harqis-work")
 
 # Backward-compatible tuple view for code that inspects the legacy symbol.
 APP_REGISTRARS = [(spec.label, *spec.registrar.rsplit(".", 1)) for spec in APP_CATALOG]
@@ -60,18 +70,34 @@ _filtered_registrars = [(spec.label, *spec.registrar.rsplit(".", 1)) for spec in
 
 # Lazy-import each app's mcp module so a missing config section in one app
 # does not prevent the rest from loading. Skipped apps log a warning.
-for spec in _filtered_specs:
-    try:
-        logger.info("Registering %s tools", spec.label)
-        register_app_tools(mcp, spec)
-    except Exception as e:
-        logger.warning("Skipping %s tools — %s: %s", spec.label, type(e).__name__, e)
+with redirect_stdout(sys.stderr):
+    for spec in _filtered_specs:
+        try:
+            logger.info("Registering %s tools", spec.label)
+            register_app_tools(mcp, spec)
+        except Exception as e:
+            logger.warning("Skipping %s tools — %s: %s", spec.label, type(e).__name__, e)
 
-logger.info(
-    "MCP server: registered %d tool(s) from %d app(s) (filtered from %d total)",
-    len(mcp._tool_manager._tools), len(_filtered_registrars), _total_apps,
-)
+    logger.info(
+        "MCP server: registered %d tool(s) from %d app(s) (filtered from %d total)",
+        len(mcp._tool_manager._tools), len(_filtered_registrars), _total_apps,
+    )
+
+
+async def _run_stdio_safely() -> None:
+    """Run MCP while reserving stdout exclusively for its JSON-RPC transport."""
+    # stdio_server captures the current, original stdout during __aenter__.
+    # Redirect only after that point so prints from tool code go to stderr
+    # without moving the protocol writer away from stdout.
+    async with stdio_server() as (read_stream, write_stream):
+        with redirect_stdout(sys.stderr):
+            await mcp._mcp_server.run(
+                read_stream,
+                write_stream,
+                mcp._mcp_server.create_initialization_options(),
+            )
+
 
 if __name__ == "__main__":
     logger.info("Starting harqis-work MCP server (stdio transport)")
-    mcp.run()
+    anyio.run(_run_stdio_safely)
