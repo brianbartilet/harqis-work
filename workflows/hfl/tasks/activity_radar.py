@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import os
 import re
+import socket
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable
+from urllib.parse import quote
+
+import httpx
 
 from core.apps.es_logging.app.elasticsearch import log_result
 from core.apps.sprout.app.celery import SPROUT
@@ -258,7 +263,16 @@ def select_notifications(findings: list[dict[str, Any]], state: dict[str, Any]) 
             continue
         if old.get("status") == "dismissed" and finding["severity"] != "critical" and unchanged:
             continue
-        if finding["severity"] == "critical" or not old or old.get("evidence_signature") != finding["evidence_signature"]:
+        promoted_to_high = (
+            finding["severity"] == "high"
+            and old.get("severity") in {"medium", "low"}
+        )
+        if (
+            finding["severity"] == "critical"
+            or not old
+            or old.get("evidence_signature") != finding["evidence_signature"]
+            or promoted_to_high
+        ):
             selected.append(finding)
     return selected
 
@@ -293,6 +307,137 @@ def render_markdown(findings: list[dict[str, Any]], lookup: dict[str, dict[str, 
     if degraded:
         text += "\n\n> Partial report: " + "; ".join(degraded)
     return text
+
+
+def _compact_plain_text(value: Any, *, limit: int) -> str:
+    text = " ".join(str(value or "").split())
+    if not text:
+        return "Not provided."
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
+
+
+def render_telegram_message(
+    findings: list[dict[str, Any]],
+    degraded: list[str] | None = None,
+    *,
+    max_findings: int | None = None,
+) -> str:
+    """Render urgent findings as a compact, mobile-scannable plain-text message."""
+    priority = {"critical": 0, "high": 1}
+    findings = sorted(
+        (finding for finding in findings if finding["severity"] in priority),
+        key=lambda finding: priority[finding["severity"]],
+    )
+    visible = findings if max_findings is None else findings[:max(0, max_findings)]
+    if not findings:
+        text = "No high-priority findings."
+    else:
+        noun = "FINDING" if len(findings) == 1 else "FINDINGS"
+        count_line = f"{len(findings)} HIGH-PRIORITY {noun}"
+        if len(visible) < len(findings):
+            count_line += f" (SHOWING {len(visible)})"
+        blocks = [f"HFL ACTIVITY RADAR\n{count_line}"]
+        for index, finding in enumerate(visible, 1):
+            severity = finding["severity"].upper()
+            icon = "🚨" if finding["severity"] == "critical" else "⚠️"
+            title = _compact_plain_text(finding["title"], limit=96)
+            lines = [f"{index}. {icon} {severity} — {title}"]
+            lines.append(
+                "WHAT: " + _compact_plain_text(finding["observation"], limit=140)
+            )
+            lines.append(
+                "WHY: " + _compact_plain_text(finding["inference"], limit=140)
+            )
+            lines.append(
+                "NEXT: " + _compact_plain_text(finding["recommendation"], limit=140)
+            )
+            lines.append(
+                "EVIDENCE: "
+                + _compact_plain_text(", ".join(finding["evidence"]), limit=96)
+            )
+            blocks.append("\n".join(lines))
+        if len(visible) < len(findings):
+            blocks.append(
+                f"MORE: {len(findings) - len(visible)} additional findings are in "
+                "the linked HFL entry."
+            )
+        text = "\n\n".join(blocks)
+    if degraded:
+        partial = "; ".join(
+            _compact_plain_text(note, limit=120) for note in degraded[:3]
+        )
+        if len(degraded) > 3:
+            partial += f"; +{len(degraded) - 3} more"
+        text += "\n\nPARTIAL REPORT: " + partial
+    return text
+
+
+def _valid_web_hostname(hostname: str) -> bool:
+    try:
+        ipaddress.ip_address(hostname)
+        return True
+    except ValueError:
+        pass
+    try:
+        socket.inet_aton(hostname)
+    except OSError:
+        pass
+    else:
+        return False
+    if len(hostname) > 253:
+        return False
+    return all(
+        re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
+        for label in hostname.split(".")
+    )
+
+
+def _validated_web_origin(configured: str) -> str:
+    if (
+        not configured
+        or len(configured) > 320
+        or any(not 0x21 <= ord(char) <= 0x7E for char in configured)
+        or any(char in configured for char in ("\\", "?", "#", "@"))
+    ):
+        raise RuntimeError("HFL_CORPUS_WEB_URL must contain a canonical web origin")
+    try:
+        parsed = httpx.URL(configured)
+    except (httpx.InvalidURL, ValueError) as exc:
+        raise RuntimeError("HFL_CORPUS_WEB_URL has an invalid authority") from exc
+    hostname = parsed.host
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not hostname
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+        or parsed.username
+        or parsed.password
+        or (parsed.port is not None and not 1 <= parsed.port <= 65535)
+        or not _valid_web_hostname(hostname)
+    ):
+        raise RuntimeError("HFL_CORPUS_WEB_URL must contain a canonical web origin")
+    canonical = str(parsed)
+    if canonical.endswith("/"):
+        canonical = canonical[:-1]
+    if configured not in {canonical, f"{canonical}/"}:
+        raise RuntimeError("HFL_CORPUS_WEB_URL must use its canonical spelling")
+    return canonical
+
+
+def _corpus_web_origin() -> str:
+    return _validated_web_origin(os.environ.get("HFL_CORPUS_WEB_URL", ""))
+
+
+def corpus_document_url(
+    writeback: dict[str, Any], *, fallback_filename: str = "",
+) -> str:
+    filename = Path(str(writeback.get("path") or "")).name or fallback_filename
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}\.md", filename):
+        raise RuntimeError("HFL writeback did not identify a daily Markdown document")
+    return f"{_corpus_web_origin()}/hfl-corpus/document/{quote(filename, safe='')}"
 
 
 def _notify(text: str) -> list[int]:
@@ -330,14 +475,30 @@ def _notify(text: str) -> list[int]:
     return message_ids
 
 
-def _writeback(text: str, now: datetime) -> dict[str, Any]:
+def _writeback(
+    text: str, now: datetime, *, dedup_key: str | None = None,
+) -> dict[str, Any]:
     entry = HflEntry(
         when=now, moment="HFL activity radar retrospective", what_happened=text,
         why_it_stayed="Retains a point-in-time review of current work and risks.",
         possible_use="Use these findings to prioritize follow-up work.",
         tags=("fyi", "retrospective", "activity-radar"), source="activity-radar", synthesized=True,
     )
-    return submit_hfl_entry(entry, source="activity-radar", synthesized=True)
+    return submit_hfl_entry(
+        entry,
+        source="activity-radar",
+        synthesized=True,
+        dedup_key=dedup_key,
+        replace_duplicate=bool(dedup_key),
+    )
+
+
+def scheduled_dedup_key(state: dict[str, Any], now: datetime) -> str:
+    """Identify one scheduled daily window; same-day retries replace it."""
+    marker = str(state.get("last_success_at") or "first-run")
+    identity = f"activity-radar-window-v1:{now.date().isoformat()}:{marker}"
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
+    return f"activity-radar:{digest}"
 
 
 def record_activity_radar_feedback(fingerprint: str, status: str, *, path: Path | None = None, dry_run: bool = False) -> dict[str, Any]:
@@ -403,12 +564,38 @@ def run_activity_radar(
         return {"status": "partial", "text": render_markdown([], lookup, degraded), "recent_count": len(recent), "degraded": degraded}
 
     material = select_notifications(findings, state) if scheduled else findings
-    text = render_markdown(material, lookup, degraded)
+    if scheduled:
+        material = [
+            finding for finding in material
+            if finding["severity"] in {"critical", "high"}
+        ]
+        archive_text = render_telegram_message(material, degraded)
+        text = render_telegram_message(material, degraded, max_findings=4)
+    else:
+        text = render_markdown(material, lookup, degraded)
+        archive_text = text
     should_notify = scheduled if notify is None else notify
+    writeback = None
+    should_write = bool(material) and (scheduled or save_to_hfl) and not dry_run
+    if should_write:
+        dedup_key = scheduled_dedup_key(state, now) if scheduled else None
+        if scheduled:
+            _corpus_web_origin()  # Validate the Express link before mutating HFL.
+        writeback = _writeback(archive_text, now, dedup_key=dedup_key)
+        if scheduled:
+            if writeback.get("delivery") not in {"persisted", "forwarded"}:
+                raise RuntimeError("HFL writeback was not delivered")
+            document_url = corpus_document_url(
+                writeback,
+                fallback_filename=f"{now.date().isoformat()}.md",
+            )
+            text += f"\n\nCORPUS: {document_url}"
+    notification_succeeded = False
     if material and should_notify and not dry_run:
         _notify(text)
-    writeback = _writeback(text, now) if material and save_to_hfl and not dry_run else None
-    if scheduled and not dry_run:
+        notification_succeeded = True
+    can_record_scheduled_state = not material or notification_succeeded
+    if scheduled and not dry_run and can_record_scheduled_state:
         timestamp = now.astimezone(timezone.utc).isoformat()
         for finding in findings:
             old = state["findings"].get(finding["fingerprint"], {})
