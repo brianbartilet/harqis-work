@@ -3,7 +3,7 @@
 Usage:
     python scripts/second_brain_feed.py --url http://127.0.0.1:8080
 
-Set SECOND_BRAIN_SESSION_TOKEN to the authenticated frontend session cookie.
+Set SECOND_BRAIN_API_TOKEN to the shared, scoped Second Brain API token.
 The token is read from the environment so it does not appear in process args.
 """
 
@@ -20,7 +20,7 @@ import urllib.request
 def _request(url: str, token: str, *, accept: str = "application/json"):
     return urllib.request.Request(
         url,
-        headers={"Accept": accept, "Cookie": f"session={token}"},
+        headers={"Accept": accept, "Authorization": f"Bearer {token}"},
         method="GET",
     )
 
@@ -58,9 +58,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--url", default="http://127.0.0.1:8080")
     parser.add_argument("--once", action="store_true", help="Print one snapshot and exit")
     args = parser.parse_args(argv)
-    token = os.environ.get("SECOND_BRAIN_SESSION_TOKEN", "").strip()
+    token = os.environ.get("SECOND_BRAIN_API_TOKEN", "").strip()
     if not token:
-        parser.error("SECOND_BRAIN_SESSION_TOKEN is required")
+        parser.error("SECOND_BRAIN_API_TOKEN is required")
     if args.once:
         print_snapshot(args.url, token)
         return 0

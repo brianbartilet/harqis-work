@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
 
-ALLOWED_MODES = frozenset({"work", "play", "finance"})
 ALLOWED_CLIENTS = frozenset({"web", "telegram", "rainmeter", "cli"})
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+MODE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]{0,47}$")
 
 
 def utc_now() -> datetime:
@@ -30,10 +31,64 @@ def stable_id(prefix: str, *parts: object) -> str:
 
 def normalize_modes(modes: Iterable[str]) -> tuple[str, ...]:
     normalized = tuple(dict.fromkeys(str(mode).strip().casefold() for mode in modes if str(mode).strip()))
-    invalid = set(normalized) - ALLOWED_MODES
+    invalid = {mode for mode in normalized if not MODE_ID_PATTERN.fullmatch(mode)}
     if invalid:
         raise ValueError(f"unsupported Second Brain mode(s): {', '.join(sorted(invalid))}")
-    return tuple(mode for mode in ("work", "play", "finance") if mode in normalized)
+    return normalized
+
+
+@dataclass(frozen=True)
+class ModeDefinition:
+    mode_id: str
+    name: str
+    color: str = "#38bdf8"
+    order: int = 0
+    enabled: bool = True
+    archived: bool = False
+    keywords: tuple[str, ...] = ()
+    calendar_categories: tuple[str, ...] = ()
+    operation_ids: tuple[str, ...] = ()
+    refresh_minutes: int = 15
+    client_eligibility: tuple[str, ...] = ("web", "telegram", "rainmeter", "cli")
+    fallback_windows: tuple[dict[str, Any], ...] = ()
+
+    def __post_init__(self) -> None:
+        mode_id = self.mode_id.strip().casefold()
+        if not MODE_ID_PATTERN.fullmatch(mode_id):
+            raise ValueError("mode id must be a lowercase slug")
+        if not self.name.strip():
+            raise ValueError("mode name is required")
+        color = self.color.strip().lower()
+        if not re.fullmatch(r"#[0-9a-f]{6}", color):
+            raise ValueError("mode color must be a six-digit hex value")
+        clients = tuple(dict.fromkeys(str(value).strip().casefold() for value in self.client_eligibility))
+        if set(clients) - ALLOWED_CLIENTS:
+            raise ValueError("mode has unsupported clients")
+        object.__setattr__(self, "mode_id", mode_id)
+        object.__setattr__(self, "name", self.name.strip()[:80])
+        object.__setattr__(self, "color", color)
+        object.__setattr__(self, "order", max(0, int(self.order)))
+        object.__setattr__(self, "keywords", tuple(dict.fromkeys(k.strip().casefold() for k in self.keywords if k.strip())))
+        object.__setattr__(self, "calendar_categories", tuple(dict.fromkeys(str(v).strip() for v in self.calendar_categories if str(v).strip())))
+        object.__setattr__(self, "operation_ids", tuple(dict.fromkeys(str(v).strip() for v in self.operation_ids if str(v).strip())))
+        object.__setattr__(self, "refresh_minutes", max(1, min(1440, int(self.refresh_minutes))))
+        object.__setattr__(self, "client_eligibility", clients)
+        windows = []
+        for value in self.fallback_windows:
+            start, end = str(value.get("start", "")), str(value.get("end", ""))
+            if not (re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", start) and re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", end)):
+                raise ValueError("fallback windows require valid HH:MM start and end")
+            days = tuple(sorted({int(day) for day in value.get("days", range(7))}))
+            if not days or any(day < 0 or day > 6 for day in days):
+                raise ValueError("fallback window days must be between 0 and 6")
+            windows.append({"start": start, "end": end, "days": list(days)})
+        object.__setattr__(self, "fallback_windows", tuple(windows))
+
+    def to_payload(self) -> dict[str, Any]:
+        payload = asdict(self)
+        for key in ("keywords", "calendar_categories", "operation_ids", "client_eligibility", "fallback_windows"):
+            payload[key] = list(payload[key])
+        return payload
 
 
 @dataclass(frozen=True)
@@ -146,7 +201,7 @@ class FeedItem:
 
     def __post_init__(self) -> None:
         category = self.category.strip().casefold()
-        if category not in ALLOWED_MODES:
+        if not MODE_ID_PATTERN.fullmatch(category):
             raise ValueError(f"unsupported feed category: {category}")
         if not self.logical_key.strip() or not self.title.strip():
             raise ValueError("feed items require logical_key and title")

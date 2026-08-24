@@ -9,28 +9,31 @@ ambiguous context and returns a schema-validated candidate only.
 **Celery owner:** context persistence, override precedence, reconciliation,
 read-only collection, feed projection, retries, and review evidence.
 
-Manual overrides and privacy/configuration controls are deterministic and never
-delegated to an LLM. When Hermes is disabled or unavailable, the deterministic
-resolver continues from recent typed context and time-window fallbacks.
+Manual selections and privacy/configuration controls are deterministic and never
+delegated to an LLM. Keywords and current `ScheduleCategory` calendar blocks are
+additive signals. When Hermes or Calendar is unavailable, the resolver continues
+from remaining typed context and the configured time-window/default fallback.
 
 ### `reconcile_second_brain`
 
-**Goal:** resolve the current modes and refresh every allowlisted advisory
-operation for those modes.
+**Goal:** resolve owner-configured categories and refresh each due, allowlisted
+advisory operation attached to those categories.
 
 **Runtime:** `hybrid` — Hermes may propose modes; Celery owns execution.
 **Schedule owner:** `Celery Beat`
 **Apps chained:** `apps/jira` supplies recent owner-relevant issue changes;
 results are normalized into the canonical feed.
-**Schedule:** every 15 minutes plus manual/event-triggered runs
+**Schedule:** every 15 minutes plus event-triggered runs; category refresh
+intervals suppress collection that is still fresh
 **Queue:** `WorkflowQueue.HOST`
 **OS:** cross-platform canonical host
 **Required config keys:** `JIRA`
 **Required env vars:** existing Jira variables; optional
 `SECOND_BRAIN_HERMES_BASE_URL`, `SECOND_BRAIN_HERMES_API_KEY`, and
 `SECOND_BRAIN_HERMES_MODEL` when Hermes is enabled.
-**Data flow:** typed context → deterministic/Hermes mode candidate → allowlisted
-operation → Jira read → normalized feed item → SQLite + Redis notification.
+**Data flow:** typed context + current calendar blocks → deterministic/Hermes
+category candidate → allowlisted operation → normalized category projections →
+SQLite revision + SSE/Redis notification.
 **AI prompt:** `workflows/second_brain/prompts/context_interpreter.md`
 **Outputs / side effects:** advisory feed state and Elasticsearch task review;
 no external system mutation.

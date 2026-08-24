@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import os
+import urllib.request
+
 from core.apps.es_logging.app.elasticsearch import log_result
 from core.apps.sprout.app.celery import SPROUT
 
@@ -26,19 +30,28 @@ from workflows.second_brain.store import get_store
 @feed(filename_prefix="second-brain")
 def render_second_brain_rainmeter(ini=ConfigHelperRainmeter(), **_kwargs):
     """Render the latest redacted canonical snapshot on the Windows HUD."""
-    store = get_store()
-    config = store.get_config()
-    if not (config.get("clients") or {}).get("rainmeter", False):
-        return {"text": "SECOND BRAIN\n\nRainmeter delivery is disabled."}
-    decision = store.latest_decision() or {}
-    items = client_items(
-        store.feed_snapshot(
+    canonical_url = os.environ.get("SECOND_BRAIN_CANONICAL_URL", "").strip().rstrip("/")
+    api_token = os.environ.get("SECOND_BRAIN_API_TOKEN", "").strip()
+    if canonical_url:
+        if not api_token:
+            raise RuntimeError("SECOND_BRAIN_API_TOKEN is required for remote Rainmeter delivery")
+        request = urllib.request.Request(
+            canonical_url + "/second-brain/api/feed?client=rainmeter&limit=12",
+            headers={"Accept": "application/json", "Authorization": f"Bearer {api_token}"},
+        )
+        with urllib.request.urlopen(request, timeout=15) as response:
+            snapshot = json.load(response)
+        items = client_items(snapshot, client="rainmeter")
+    else:
+        store = get_store()
+        config = store.get_config()
+        if not (config.get("clients") or {}).get("rainmeter", False):
+            return {"text": "SECOND BRAIN\n\nRainmeter delivery is disabled."}
+        decision = store.latest_decision() or {}
+        items = client_items(
+            store.feed_snapshot(client="rainmeter", limit=12, modes=decision.get("effective_modes") or ()),
             client="rainmeter",
-            limit=12,
-            modes=decision.get("effective_modes") or (),
-        ),
-        client="rainmeter",
-    )
+        )
     text = render_text(items, limit=12)
     ini["Variables"]["ItemLines"] = str(max(6, min(18, len(text.splitlines()) + 1)))
     ini["MeterDisplay"]["W"] = "(3*190*#Scale#)"

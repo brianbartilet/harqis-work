@@ -36,6 +36,7 @@ of truth.
 | `/generate-registry` | Regenerate the frontend workflow catalogue from workflow task configurations. |
 | `/ingest-meta-archive` | Prepare, preview, dispatch, replay, and verify private Facebook or Instagram archive imports into HFL. |
 | `/manage-queues` | Maintain Celery task-to-queue assignments and report live machine coverage. |
+| `/manage-second-brain` | Inspect, configure, validate, reconcile, and diagnose advisory Second Brain categories, operations, clients, and runtime health. |
 | `/manage-fork-fleet` | Discover, compare, test, deploy, and safely synchronize harqis-work forks through isolated worktrees and PRs. |
 | `/max-plan` | Perform a deep reasoning planning pass and persist the resulting plan. |
 | `/migrate-to-core` | Move reusable generic code from `harqis-work` into `harqis-core`. |

@@ -12,7 +12,16 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
-from workflows.second_brain.models import ContextEvent, FeedItem, ModeDecision, isoformat, normalize_modes
+from workflows.second_brain.models import ContextEvent, FeedItem, ModeDecision, ModeDefinition, isoformat, normalize_modes
+
+
+DEFAULT_MODE = ModeDefinition(
+    mode_id="default",
+    name="Default",
+    color="#38bdf8",
+    keywords=("jira", "meeting", "coding", "review"),
+    operation_ids=("jira.changed",),
+).to_payload()
 
 
 DEFAULT_CONFIG = {
@@ -26,6 +35,8 @@ DEFAULT_CONFIG = {
     },
     "hermes_enabled": False,
     "reconcile_minutes": 15,
+    "chat_retention_hours": 8,
+    "modes": [DEFAULT_MODE],
 }
 
 
@@ -96,6 +107,16 @@ CREATE TABLE IF NOT EXISTS config_versions (
     created_at TEXT NOT NULL,
     config_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS chat_messages (
+    message_id TEXT PRIMARY KEY,
+    role TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    correlation_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    citations_json TEXT NOT NULL DEFAULT '[]'
+);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at DESC);
 """
 
 
@@ -160,9 +181,12 @@ class SecondBrainStore:
 
     def set_override(self, modes: Iterable[str], *, duration_minutes: int, correlation_id: str) -> dict[str, Any]:
         normalized = normalize_modes(modes)
+        available = {mode["mode_id"] for mode in self.list_modes() if mode["enabled"] and not mode["archived"]}
+        if set(normalized) - available:
+            raise ValueError("manual selection contains an unavailable category")
         if not normalized:
             raise ValueError("manual overrides require at least one mode")
-        duration = max(1, min(24 * 60, int(duration_minutes)))
+        duration = max(30, min(12 * 60, int(duration_minutes)))
         created = datetime.now(timezone.utc)
         expires = created + timedelta(minutes=duration)
         with self._lock, self._connect() as connection:
@@ -242,6 +266,18 @@ class SecondBrainStore:
                    WHERE run_id=?""",
                 (state, isoformat(), json.dumps(result, sort_keys=True, default=str), error_type, run_id),
             )
+
+    def operation_due(self, operation_id: str, refresh_minutes: int) -> bool:
+        """Return whether an operation lacks a recent successful reconciliation."""
+        cutoff = isoformat(datetime.now(timezone.utc) - timedelta(minutes=max(1, int(refresh_minutes))))
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT 1 FROM workflow_runs
+                   WHERE operation_id=? AND state='success' AND finished_at>=?
+                   LIMIT 1""",
+                (operation_id, cutoff),
+            ).fetchone()
+        return row is None
 
     def upsert_feed_item(self, item: FeedItem) -> tuple[dict[str, Any], bool]:
         payload = item.to_payload()
@@ -347,25 +383,95 @@ class SecondBrainStore:
                 "SELECT version, created_at, config_json FROM config_versions ORDER BY version DESC LIMIT 1"
             ).fetchone()
         config = json.loads(row["config_json"]) if row else dict(DEFAULT_CONFIG)
+        for key, value in DEFAULT_CONFIG.items():
+            config.setdefault(key, value)
+        if not config.get("modes"):
+            config["modes"] = [DEFAULT_MODE]
         return {"version": int(row["version"]) if row else 0, "created_at": row["created_at"] if row else "", **config}
 
-    def update_config(self, *, clients: dict[str, bool], hermes_enabled: bool = False) -> dict[str, Any]:
-        allowed = {name: bool(clients.get(name, False)) for name in ("web", "telegram", "rainmeter", "cli")}
-        allowed["web"] = True
+    def save_config(self, changes: dict[str, Any]) -> dict[str, Any]:
         current = self.get_config()
-        config = {
-            "enabled": True,
-            "clients": allowed,
-            "disclosure": current.get("disclosure", DEFAULT_CONFIG["disclosure"]),
-            "hermes_enabled": bool(hermes_enabled),
-            "reconcile_minutes": 15,
-        }
+        config = {key: value for key, value in current.items() if key not in {"version", "created_at"}}
+        config.update(changes)
+        clients = config.get("clients") or {}
+        config["clients"] = {name: bool(clients.get(name, False)) for name in ("web", "telegram", "rainmeter", "cli")}
+        config["clients"]["web"] = True
+        config["hermes_enabled"] = bool(config.get("hermes_enabled", False))
+        config["chat_retention_hours"] = max(1, min(168, int(config.get("chat_retention_hours", 8))))
+        modes = [ModeDefinition(**mode).to_payload() for mode in config.get("modes") or [DEFAULT_MODE]]
+        if not any(mode["mode_id"] == "default" and not mode["archived"] for mode in modes):
+            raise ValueError("the default category cannot be removed or archived")
+        config["modes"] = sorted(modes, key=lambda mode: (mode["order"], mode["name"].casefold()))
         with self._lock, self._connect() as connection:
             cursor = connection.execute(
                 "INSERT INTO config_versions(created_at, config_json) VALUES (?, ?)",
                 (isoformat(), json.dumps(config, sort_keys=True)),
             )
         return {"version": int(cursor.lastrowid), "created_at": isoformat(), **config}
+
+    def update_config(self, *, clients: dict[str, bool], hermes_enabled: bool = False) -> dict[str, Any]:
+        return self.save_config({"clients": clients, "hermes_enabled": hermes_enabled})
+
+    def list_modes(self, *, include_archived: bool = False) -> list[dict[str, Any]]:
+        modes = self.get_config().get("modes") or [DEFAULT_MODE]
+        return [dict(mode) for mode in modes if include_archived or not mode.get("archived")]
+
+    def save_mode(self, mode: ModeDefinition) -> dict[str, Any]:
+        config = self.get_config()
+        modes = [dict(value) for value in config.get("modes") or []]
+        for index, current in enumerate(modes):
+            if current["mode_id"] == mode.mode_id:
+                modes[index] = mode.to_payload()
+                break
+        else:
+            modes.append(mode.to_payload())
+        return self.save_config({"modes": modes})
+
+    def archive_mode(self, mode_id: str) -> dict[str, Any]:
+        normalized = normalize_modes((mode_id,))[0]
+        if normalized == "default":
+            raise ValueError("the default category cannot be archived")
+        modes = self.list_modes(include_archived=True)
+        found = False
+        for mode in modes:
+            if mode["mode_id"] == normalized:
+                mode["archived"] = True
+                mode["enabled"] = False
+                found = True
+        if not found:
+            raise ValueError("category not found")
+        return self.save_config({"modes": modes})
+
+    def append_chat(self, *, role: str, content: str, correlation_id: str, citations: Iterable[str] = ()) -> dict[str, Any]:
+        if role not in {"user", "assistant"}:
+            raise ValueError("unsupported chat role")
+        clean = str(content).strip()
+        if not clean or len(clean) > 12_000:
+            raise ValueError("chat content must contain 1-12000 characters")
+        retention = self.get_config().get("chat_retention_hours", 8)
+        created = datetime.now(timezone.utc)
+        expires = created + timedelta(hours=int(retention))
+        message_id = f"chat-{os.urandom(12).hex()}"
+        with self._lock, self._connect() as connection:
+            connection.execute("DELETE FROM chat_messages WHERE expires_at<=?", (isoformat(created),))
+            connection.execute(
+                "INSERT INTO chat_messages VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (message_id, role, isoformat(created), isoformat(expires), correlation_id, clean, json.dumps(list(citations))),
+            )
+        return {"message_id": message_id, "role": role, "content": clean, "created_at": isoformat(created), "citations": list(citations)}
+
+    def recent_chat(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        now = isoformat()
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT message_id, role, created_at, correlation_id, content, citations_json
+                   FROM chat_messages WHERE expires_at>? ORDER BY created_at DESC LIMIT ?""",
+                (now, max(1, min(200, int(limit)))),
+            ).fetchall()
+        return [
+            {**dict(row), "citations": json.loads(row["citations_json"])}
+            for row in reversed(rows)
+        ]
 
 
 @lru_cache(maxsize=4)

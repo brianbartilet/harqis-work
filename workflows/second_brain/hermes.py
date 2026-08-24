@@ -28,7 +28,7 @@ def _response_content(payload: Any) -> str:
     return value.strip()
 
 
-def interpret_context(events: list[dict[str, Any]]) -> dict[str, Any]:
+def interpret_context(events: list[dict[str, Any]], modes: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Return a validated mode candidate or raise without affecting fallback."""
     base_url = os.environ.get("SECOND_BRAIN_HERMES_BASE_URL", "http://127.0.0.1:8643/v1").rstrip("/")
     api_key = os.environ.get("SECOND_BRAIN_HERMES_API_KEY", "").strip()
@@ -74,7 +74,7 @@ def interpret_context(events: list[dict[str, Any]]) -> dict[str, Any]:
                 "model": model,
                 "messages": [
                     {"role": "system", "content": load_prompt("context_interpreter")},
-                    {"role": "user", "content": json.dumps({"events": safe_events}, ensure_ascii=False)},
+                    {"role": "user", "content": json.dumps({"available_modes": modes or [], "events": safe_events}, ensure_ascii=False)},
                 ],
                 "max_tokens": 240,
                 "stream": False,
@@ -105,3 +105,37 @@ def interpret_context(events: list[dict[str, Any]]) -> dict[str, Any]:
     if not modes:
         raise HermesUnavailable("Hermes returned no modes")
     return {"modes": list(modes), "confidence": confidence, "reason_codes": list(reasons), "model": model}
+
+
+def chat_with_feed(*, question: str, history: list[dict[str, Any]], feed_items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return a bounded advisory answer grounded only in the supplied feed."""
+    base_url = os.environ.get("SECOND_BRAIN_HERMES_BASE_URL", "http://127.0.0.1:8643/v1").rstrip("/")
+    api_key = os.environ.get("SECOND_BRAIN_HERMES_API_KEY", "").strip()
+    model = os.environ.get("SECOND_BRAIN_HERMES_MODEL", "second-brain").strip()
+    parsed = urlparse(base_url)
+    if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "::1"} or parsed.path.rstrip("/") != "/v1" or not api_key:
+        raise HermesUnavailable("Hermes must be a configured loopback profile")
+    evidence = [
+        {
+            "ref": str(item.get("logical_key") or "")[:160],
+            "title": str(item.get("title") or "")[:240],
+            "summary": str(item.get("summary") or "")[:600],
+            "category": str(item.get("category") or "")[:48],
+        }
+        for item in feed_items[:20]
+    ]
+    messages = [{"role": "system", "content": "You are the advisory HARQIS Second Brain. Answer from the supplied feed evidence, cite logical refs in brackets, and never claim to perform actions."}]
+    messages.extend({"role": row["role"], "content": str(row["content"])[:4000]} for row in history[-12:])
+    messages.append({"role": "user", "content": json.dumps({"question": question[:2000], "feed": evidence}, ensure_ascii=False)})
+    response = httpx.post(
+        base_url + "/chat/completions",
+        headers={"Authorization": f"Bearer {api_key}"},
+        json={"model": model, "messages": messages, "max_tokens": 900, "stream": False},
+        timeout=45,
+        follow_redirects=False,
+        trust_env=False,
+    )
+    response.raise_for_status()
+    answer = _response_content(response.json())
+    citations = [item["ref"] for item in evidence if f"[{item['ref']}]" in answer]
+    return {"answer": answer, "citations": citations, "model": model}

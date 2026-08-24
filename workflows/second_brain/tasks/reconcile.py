@@ -11,7 +11,7 @@ from core.apps.sprout.app.celery import SPROUT
 
 from workflows.second_brain.events import publish_feed_change
 from workflows.second_brain.models import FeedItem, isoformat
-from workflows.second_brain.registry import operations_for_modes
+from workflows.second_brain.registry import selected_operations
 from workflows.second_brain.resolver import resolve_modes
 from workflows.second_brain.store import get_store
 
@@ -23,24 +23,40 @@ def _load_callable(path: str):
     return getattr(importlib.import_module(module_name), attribute)
 
 
-def reconcile(*, store=None, correlation_id: str | None = None, task_id: str = "") -> dict[str, Any]:
+def _current_calendar_signal() -> dict[str, Any] | None:
+    try:
+        from apps.apps_config import CONFIG_MANAGER
+        from apps.google_apps.references.web.api.calendar import ApiServiceGoogleCalendarEvents, EventType
+
+        events = ApiServiceGoogleCalendarEvents(CONFIG_MANAGER.get("GOOGLE_APPS")).get_all_events_today(EventType.NOW)
+        summaries = sorted({str(event.get("calendarSummary") or "") for event in events if event.get("calendarSummary")})
+        return {"event_type": "calendar", "payload": {"calendar_categories": summaries}}
+    except Exception:
+        return None
+
+
+def reconcile(*, store=None, correlation_id: str | None = None, task_id: str = "", force: bool = False) -> dict[str, Any]:
     """Resolve active modes and materialize all allowlisted advisory operations."""
     canonical = store or get_store()
     correlation = correlation_id or str(uuid.uuid4())
     config = canonical.get_config()
     signals = canonical.recent_context(limit=50)
+    calendar_signal = _current_calendar_signal()
+    if calendar_signal:
+        signals.insert(0, calendar_signal)
     agent_candidate = None
     agent_state = "disabled"
     if config.get("hermes_enabled"):
         try:
             from workflows.second_brain.hermes import interpret_context
 
-            agent_candidate = interpret_context(signals)
+            agent_candidate = interpret_context(signals, config.get("modes") or [])
             agent_state = "available"
         except Exception:
             agent_state = "degraded"
     decision = resolve_modes(
         signals,
+        mode_definitions=config.get("modes") or [],
         manual_override=canonical.active_override(),
         agent_candidate=agent_candidate,
         correlation_id=correlation,
@@ -51,7 +67,11 @@ def reconcile(*, store=None, correlation_id: str | None = None, task_id: str = "
     unchanged = 0
     failures: list[dict[str, str]] = []
     operation_results: list[dict[str, Any]] = []
-    for operation in operations_for_modes(decision.effective_modes):
+    mode_by_id = {mode["mode_id"]: mode for mode in config.get("modes") or []}
+    for operation, categories, refresh_minutes in selected_operations(decision.effective_modes, config.get("modes") or []):
+        if not force and not canonical.operation_due(operation.operation_id, refresh_minutes):
+            operation_results.append({"operation_id": operation.operation_id, "state": "fresh", "changed": 0})
+            continue
         run_id = f"run-{uuid.uuid4().hex}"
         canonical.start_run(
             run_id=run_id,
@@ -61,20 +81,31 @@ def reconcile(*, store=None, correlation_id: str | None = None, task_id: str = "
         )
         try:
             collector = _load_callable(operation.collector)
-            items = collector(correlation_id=correlation)
+            items = collector(correlation_id=correlation, **operation.kwargs)
             operation_changed = 0
             for item in items:
                 if not isinstance(item, FeedItem):
                     raise TypeError(f"{operation.operation_id} returned a non-FeedItem")
-                item = FeedItem(**{**item.__dict__, "run_id": run_id})
-                payload, was_changed = canonical.upsert_feed_item(item)
-                if was_changed:
-                    changed += 1
-                    operation_changed += 1
-                    changed_payloads.append(payload)
-                    publish_feed_change(payload)
-                else:
-                    unchanged += 1
+                for category in categories:
+                    eligible_clients = tuple(mode_by_id.get(category, {}).get("client_eligibility") or ("web",))
+                    projected = FeedItem(
+                        **{
+                            **item.__dict__,
+                            "logical_key": f"{category}:{operation.operation_id}:{item.logical_key}",
+                            "category": category,
+                            "allowed_clients": tuple(client for client in item.allowed_clients if client in eligible_clients),
+                            "run_id": run_id,
+                            "item_id": "",
+                        }
+                    )
+                    payload, was_changed = canonical.upsert_feed_item(projected)
+                    if was_changed:
+                        changed += 1
+                        operation_changed += 1
+                        changed_payloads.append(payload)
+                        publish_feed_change(payload)
+                    else:
+                        unchanged += 1
             result = {"items": len(items), "changed": operation_changed}
             canonical.finish_run(run_id=run_id, state="success", result=result)
             operation_results.append({"operation_id": operation.operation_id, **result})
@@ -84,9 +115,11 @@ def reconcile(*, store=None, correlation_id: str | None = None, task_id: str = "
             canonical.finish_run(run_id=run_id, state="failure", result=error, error_type=type(exc).__name__)
             from datetime import datetime, timedelta, timezone
 
+            failure_category = categories[0] if categories else "default"
+            category_clients = mode_by_id.get(failure_category, {}).get("client_eligibility") or ("web",)
             failure_item = FeedItem(
                 logical_key=f"source-error:{operation.operation_id}",
-                category=operation.category,
+                category=failure_category,
                 kind="source_error",
                 title=f"{operation.operation_id} is temporarily unavailable",
                 summary=f"Collection failed with {type(exc).__name__}; other sources continue.",
@@ -96,7 +129,7 @@ def reconcile(*, store=None, correlation_id: str | None = None, task_id: str = "
                 source_refs=(operation.operation_id,),
                 fresh_until=isoformat(datetime.now(timezone.utc) + timedelta(minutes=5)),
                 expires_at=isoformat(datetime.now(timezone.utc) + timedelta(minutes=30)),
-                allowed_clients=("web", "cli", "rainmeter"),
+                allowed_clients=tuple(client for client in ("web", "cli", "rainmeter") if client in category_clients),
                 reason_codes=("collector-failure",),
                 correlation_id=correlation,
                 run_id=run_id,
@@ -146,4 +179,5 @@ def reconcile_second_brain(**kwargs):
     return reconcile(
         correlation_id=kwargs.get("correlation_id"),
         task_id=str(getattr(request, "id", "") or ""),
+        force=bool(kwargs.get("force", False)),
     )

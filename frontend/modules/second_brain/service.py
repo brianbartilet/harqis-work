@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from config import get_settings
+from services.markdown import render_markdown
 
 
 @lru_cache(maxsize=1)
@@ -43,12 +44,34 @@ def snapshot(*, client: str = "web", limit: int = 100) -> dict[str, Any]:
     result = store.feed_snapshot(
         client=client,
         limit=limit,
-        modes=(decision or {}).get("effective_modes") or (),
+        modes=(),
     )
+    active_modes = set((decision or {}).get("effective_modes") or ())
+    known_modes = {mode["mode_id"] for mode in config.get("modes") or []}
+    result["items"] = [
+        {**item, "archived_source": item.get("category") not in known_modes}
+        for item in result["items"]
+        if not active_modes or item.get("category") in active_modes or item.get("category") not in known_modes
+    ][:limit]
     result["items"] = [_redact(item, client=client) for item in result["items"]]
+    if client == "web":
+        for item in result["items"]:
+            item["details_html"] = render_markdown(item.get("details") or item.get("summary") or "")
+        result["chat"] = [
+            {**message, "content_html": render_markdown(message["content"])}
+            for message in store.recent_chat(limit=40)
+        ]
     result["decision"] = decision
     result["override"] = store.active_override()
     result["config"] = config
+    result["modes"] = store.list_modes()
+    result["mode_map"] = {mode["mode_id"]: mode for mode in result["modes"]}
+    result["automatic_feed"] = result["override"] is None
+    from workflows.second_brain.registry import operation_catalog
+    from apps.google_apps.references.constants import ScheduleCategory
+
+    result["operations"] = operation_catalog()
+    result["calendar_categories"] = [value.value for value in ScheduleCategory if value.name not in {"PINNED", "DEACTIVATED"}]
     return result
 
 
