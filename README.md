@@ -283,6 +283,7 @@ Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and 
 | `social` | Active | 1 | Monthly LinkedIn post — git history → Claude → LinkedIn draft + Gmail notification |
 | `tcg` | Manual | 6 | Pokedex proxy-printing pipeline (MPC) — manual/pytest-triggered, ships an empty Beat dict |
 | `testing` | Hybrid | 2 | Hermes/manual-dispatched test farm generation plus Celery Beat report delivery |
+| `second_brain` | Hybrid | 1 | Context-aware advisory feed with deterministic overrides, optional Hermes interpretation, and web/Telegram/Rainmeter/CLI adapters |
 | `workers` | Active | 1 | Worker-pool fanout — each worker reports its own location to the `harqis-worker-locations` ES index |
 | `mobile` | On-demand | 14 | Android SDK/AVD/device/scrcpy Celery controls; also includes a standalone Termux screen logger |
 | `finance` | Manual | 1 | Parse bank-statement PDFs and import categorized transactions into YNAB |
@@ -403,7 +404,7 @@ temporary scope-limited corpus sharing.
 
 > Full setup: [`frontend/README.md`](frontend/README.md)
 
-**Features:** Home manifesto · reorderable workflow and app layouts · one-click task triggering · live HTMX status polling · app documentation and controlled pytest runs · recursive HFL browsing, tag cloud, date search, authenticated canonical-host reads, and signed reference downloads · immutable source-scoped guest portals with QR/PIN access and cited Q&A · Flower link
+**Features:** Home manifesto · context-aware Second Brain feed and mode overrides · reorderable workflow and app layouts · one-click task triggering · live HTMX status polling · app documentation and controlled pytest runs · recursive HFL browsing, tag cloud, date search, authenticated canonical-host reads, and signed reference downloads · immutable source-scoped guest portals with QR/PIN access and cited Q&A · Flower link
 
 ```sh
 cd frontend && python main.py

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}HARQIS — Second Brain{% endblock %}
+
+{% block head %}
+<style>
+  .brain-spectrum {
+    height: 3px;
+    background: linear-gradient(90deg, #38bdf8 0 34%, #a78bfa 34% 67%, #fbbf24 67% 100%);
+    box-shadow: 0 0 24px rgba(56,189,248,.22);
+  }
+  .brain-card { position: relative; overflow: hidden; }
+  .brain-card::before {
+    position: absolute; inset: 0 auto 0 0; width: 3px; content: "";
+    background: var(--mode-color, #38bdf8);
+  }
+  .brain-card[data-mode="play"] { --mode-color: #a78bfa; }
+  .brain-card[data-mode="finance"] { --mode-color: #fbbf24; }
+  .brain-card[data-status="stale"] { opacity: .76; }
+  .brain-pulse { animation: brain-breathe 2.4s ease-in-out infinite; }
+  @keyframes brain-breathe { 50% { opacity: .35; transform: scale(.8); } }
+</style>
+{% endblock %}
+{% block content %}
+<main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+  <div class="brain-spectrum" aria-hidden="true"></div>
+  <div id="second-brain-shell" class="mt-7">
+    {% include "modules/second_brain/_shell.html" %}
+  </div>
+</main>
+<script>
+(function () {
+  var stream;
+  function refreshFeed() {
+    htmx.ajax('GET', '/second-brain/feed-fragment', {target: '#second-brain-shell', swap: 'innerHTML'});
+  }
+  function connect() {
+    if (!window.EventSource) return;
+    stream = new EventSource('/second-brain/api/events');
+    stream.addEventListener('feed', refreshFeed);
+    stream.addEventListener('snapshot', function () {});
+  }
+  document.addEventListener('DOMContentLoaded', connect);
+  document.addEventListener('second-brain-refresh', function () { window.setTimeout(refreshFeed, 1200); });
+  window.addEventListener('beforeunload', function () { if (stream) stream.close(); });
+})();
+</script>
+{% endblock %}

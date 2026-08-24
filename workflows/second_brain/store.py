@@ -1,0 +1,377 @@
+"""Transactional SQLite state for the Second Brain canonical host."""
+
+from __future__ import annotations
+
+import json
+import os
+import sqlite3
+import threading
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Iterable
+
+from workflows.second_brain.models import ContextEvent, FeedItem, ModeDecision, isoformat, normalize_modes
+
+
+DEFAULT_CONFIG = {
+    "enabled": True,
+    "clients": {"web": True, "telegram": False, "rainmeter": False, "cli": False},
+    "disclosure": {
+        "web": "owner_full",
+        "telegram": "owner_redacted",
+        "rainmeter": "local_redacted",
+        "cli": "owner_redacted",
+    },
+    "hermes_enabled": False,
+    "reconcile_minutes": 15,
+}
+
+
+_SCHEMA = """
+PRAGMA journal_mode=WAL;
+PRAGMA foreign_keys=ON;
+CREATE TABLE IF NOT EXISTS context_events (
+    event_id TEXT PRIMARY KEY,
+    observed_at TEXT NOT NULL,
+    received_at TEXT NOT NULL,
+    source TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    sensitivity TEXT NOT NULL,
+    expires_at TEXT NOT NULL DEFAULT '',
+    correlation_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_context_events_received ON context_events(received_at DESC);
+CREATE TABLE IF NOT EXISTS manual_overrides (
+    override_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    modes_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    revoked_at TEXT NOT NULL DEFAULT '',
+    correlation_id TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_manual_overrides_active ON manual_overrides(expires_at DESC, revoked_at);
+CREATE TABLE IF NOT EXISTS mode_decisions (
+    decision_id TEXT PRIMARY KEY,
+    evaluated_at TEXT NOT NULL,
+    valid_until TEXT NOT NULL DEFAULT '',
+    correlation_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mode_decisions_latest ON mode_decisions(evaluated_at DESC);
+CREATE TABLE IF NOT EXISTS workflow_runs (
+    run_id TEXT PRIMARY KEY,
+    operation_id TEXT NOT NULL,
+    state TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    finished_at TEXT NOT NULL DEFAULT '',
+    correlation_id TEXT NOT NULL,
+    task_id TEXT NOT NULL DEFAULT '',
+    error_type TEXT NOT NULL DEFAULT '',
+    result_json TEXT NOT NULL DEFAULT '{}'
+);
+CREATE TABLE IF NOT EXISTS feed_items (
+    item_id TEXT PRIMARY KEY,
+    logical_key TEXT NOT NULL UNIQUE,
+    category TEXT NOT NULL,
+    priority INTEGER NOT NULL,
+    generated_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL DEFAULT '',
+    content_hash TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    payload_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_feed_items_rank ON feed_items(priority DESC, generated_at DESC);
+CREATE TABLE IF NOT EXISTS feed_revisions (
+    revision INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id TEXT NOT NULL,
+    logical_key TEXT NOT NULL,
+    changed_at TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS config_versions (
+    version INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    config_json TEXT NOT NULL
+);
+"""
+
+
+def default_store_path() -> Path:
+    configured = os.environ.get("SECOND_BRAIN_STORE_PATH", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
+    data_root = os.environ.get("HARQIS_DATA_ROOT", "").strip()
+    root = Path(data_root).expanduser().resolve() if data_root else Path(__file__).resolve().parents[2] / ".harqis-data"
+    return (root / "second-brain.sqlite3").resolve()
+
+
+class SecondBrainStore:
+    def __init__(self, path: Path | str):
+        self.path = Path(path).expanduser().resolve()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.RLock()
+        with self._connect() as connection:
+            connection.executescript(_SCHEMA)
+            count = connection.execute("SELECT COUNT(*) FROM config_versions").fetchone()[0]
+            if not count:
+                connection.execute(
+                    "INSERT INTO config_versions(created_at, config_json) VALUES (?, ?)",
+                    (isoformat(), json.dumps(DEFAULT_CONFIG, sort_keys=True)),
+                )
+
+    def _connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.path, timeout=15)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA busy_timeout=15000")
+        connection.execute("PRAGMA foreign_keys=ON")
+        return connection
+
+    def append_context(self, event: ContextEvent) -> bool:
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute(
+                """INSERT OR IGNORE INTO context_events
+                   (event_id, observed_at, received_at, source, event_type, sensitivity,
+                    expires_at, correlation_id, payload_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    event.event_id,
+                    event.observed_at,
+                    event.received_at,
+                    event.source,
+                    event.event_type,
+                    event.sensitivity,
+                    event.expires_at,
+                    event.correlation_id,
+                    json.dumps(event.to_payload(), sort_keys=True, ensure_ascii=False),
+                ),
+            )
+            return cursor.rowcount == 1
+
+    def recent_context(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT payload_json FROM context_events ORDER BY received_at DESC LIMIT ?",
+                (max(1, min(500, int(limit))),),
+            ).fetchall()
+        return [json.loads(row["payload_json"]) for row in rows]
+
+    def set_override(self, modes: Iterable[str], *, duration_minutes: int, correlation_id: str) -> dict[str, Any]:
+        normalized = normalize_modes(modes)
+        if not normalized:
+            raise ValueError("manual overrides require at least one mode")
+        duration = max(1, min(24 * 60, int(duration_minutes)))
+        created = datetime.now(timezone.utc)
+        expires = created + timedelta(minutes=duration)
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                "UPDATE manual_overrides SET revoked_at=? WHERE revoked_at='' AND expires_at>?",
+                (isoformat(created), isoformat(created)),
+            )
+            cursor = connection.execute(
+                "INSERT INTO manual_overrides(modes_json, created_at, expires_at, correlation_id) VALUES (?, ?, ?, ?)",
+                (json.dumps(normalized), isoformat(created), isoformat(expires), correlation_id),
+            )
+        return {"override_id": cursor.lastrowid, "modes": list(normalized), "expires_at": isoformat(expires)}
+
+    def clear_override(self) -> None:
+        now = isoformat()
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                "UPDATE manual_overrides SET revoked_at=? WHERE revoked_at='' AND expires_at>?",
+                (now, now),
+            )
+
+    def active_override(self, *, now: str | None = None) -> dict[str, Any] | None:
+        current = now or isoformat()
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT override_id, modes_json, created_at, expires_at, correlation_id
+                   FROM manual_overrides
+                   WHERE revoked_at='' AND expires_at>?
+                   ORDER BY override_id DESC LIMIT 1""",
+                (current,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "override_id": row["override_id"],
+            "modes": json.loads(row["modes_json"]),
+            "created_at": row["created_at"],
+            "expires_at": row["expires_at"],
+            "correlation_id": row["correlation_id"],
+        }
+
+    def record_decision(self, decision: ModeDecision) -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """INSERT OR IGNORE INTO mode_decisions
+                   (decision_id, evaluated_at, valid_until, correlation_id, payload_json)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    decision.decision_id,
+                    decision.evaluated_at,
+                    decision.valid_until,
+                    decision.correlation_id,
+                    json.dumps(decision.to_payload(), sort_keys=True, ensure_ascii=False),
+                ),
+            )
+
+    def latest_decision(self) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT payload_json FROM mode_decisions ORDER BY evaluated_at DESC LIMIT 1"
+            ).fetchone()
+        return json.loads(row["payload_json"]) if row else None
+
+    def start_run(self, *, run_id: str, operation_id: str, correlation_id: str, task_id: str = "") -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """INSERT OR IGNORE INTO workflow_runs
+                   (run_id, operation_id, state, started_at, correlation_id, task_id)
+                   VALUES (?, ?, 'running', ?, ?, ?)""",
+                (run_id, operation_id, isoformat(), correlation_id, task_id),
+            )
+
+    def finish_run(self, *, run_id: str, state: str, result: dict[str, Any], error_type: str = "") -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """UPDATE workflow_runs SET state=?, finished_at=?, result_json=?, error_type=?
+                   WHERE run_id=?""",
+                (state, isoformat(), json.dumps(result, sort_keys=True, default=str), error_type, run_id),
+            )
+
+    def upsert_feed_item(self, item: FeedItem) -> tuple[dict[str, Any], bool]:
+        payload = item.to_payload()
+        content_hash = payload["content_hash"]
+        with self._lock, self._connect() as connection:
+            current = connection.execute(
+                "SELECT content_hash, revision FROM feed_items WHERE logical_key=?",
+                (item.logical_key,),
+            ).fetchone()
+            if current and current["content_hash"] == content_hash:
+                refreshed = replace(item, revision=int(current["revision"]))
+                payload = refreshed.to_payload()
+                encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+                connection.execute(
+                    """UPDATE feed_items SET generated_at=?, expires_at=?, payload_json=?
+                       WHERE logical_key=?""",
+                    (item.generated_at, item.expires_at, encoded, item.logical_key),
+                )
+                return payload, False
+            revision_cursor = connection.execute(
+                "INSERT INTO feed_revisions(item_id, logical_key, changed_at, payload_json) VALUES (?, ?, ?, '{}')",
+                (item.item_id, item.logical_key, isoformat()),
+            )
+            revision = int(revision_cursor.lastrowid)
+            persisted = replace(item, revision=revision)
+            payload = persisted.to_payload()
+            encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+            connection.execute(
+                "UPDATE feed_revisions SET payload_json=? WHERE revision=?",
+                (encoded, revision),
+            )
+            connection.execute(
+                """INSERT INTO feed_items
+                   (item_id, logical_key, category, priority, generated_at, expires_at,
+                    content_hash, revision, payload_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(logical_key) DO UPDATE SET
+                     item_id=excluded.item_id, category=excluded.category,
+                     priority=excluded.priority, generated_at=excluded.generated_at,
+                     expires_at=excluded.expires_at, content_hash=excluded.content_hash,
+                     revision=excluded.revision, payload_json=excluded.payload_json""",
+                (
+                    item.item_id,
+                    item.logical_key,
+                    item.category,
+                    item.priority,
+                    item.generated_at,
+                    item.expires_at,
+                    content_hash,
+                    revision,
+                    encoded,
+                ),
+            )
+        return payload, True
+
+    def feed_snapshot(
+        self,
+        *,
+        client: str = "web",
+        limit: int = 100,
+        modes: Iterable[str] | None = None,
+    ) -> dict[str, Any]:
+        now = isoformat()
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT payload_json FROM feed_items
+                   WHERE expires_at='' OR expires_at>?
+                   ORDER BY priority DESC, generated_at DESC LIMIT 500""",
+                (now,),
+            ).fetchall()
+            cursor = connection.execute("SELECT COALESCE(MAX(revision), 0) FROM feed_revisions").fetchone()[0]
+        active_modes = set(normalize_modes(modes or ()))
+        items = []
+        for row in rows:
+            payload = json.loads(row["payload_json"])
+            if client in payload.get("allowed_clients", []) and (
+                not active_modes or payload.get("category") in active_modes
+            ):
+                items.append(payload)
+        return {
+            "cursor": int(cursor),
+            "items": items[:max(1, min(500, int(limit)))],
+            "generated_at": now,
+        }
+
+    def changes_after(self, cursor: int, *, client: str = "web", limit: int = 100) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT revision, payload_json FROM feed_revisions
+                   WHERE revision>? ORDER BY revision LIMIT ?""",
+                (max(0, int(cursor)), max(1, min(500, int(limit)))),
+            ).fetchall()
+        changes = []
+        for row in rows:
+            payload = json.loads(row["payload_json"])
+            if client in payload.get("allowed_clients", []):
+                changes.append({"revision": row["revision"], "item": payload})
+        return changes
+
+    def get_config(self) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT version, created_at, config_json FROM config_versions ORDER BY version DESC LIMIT 1"
+            ).fetchone()
+        config = json.loads(row["config_json"]) if row else dict(DEFAULT_CONFIG)
+        return {"version": int(row["version"]) if row else 0, "created_at": row["created_at"] if row else "", **config}
+
+    def update_config(self, *, clients: dict[str, bool], hermes_enabled: bool = False) -> dict[str, Any]:
+        allowed = {name: bool(clients.get(name, False)) for name in ("web", "telegram", "rainmeter", "cli")}
+        allowed["web"] = True
+        current = self.get_config()
+        config = {
+            "enabled": True,
+            "clients": allowed,
+            "disclosure": current.get("disclosure", DEFAULT_CONFIG["disclosure"]),
+            "hermes_enabled": bool(hermes_enabled),
+            "reconcile_minutes": 15,
+        }
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute(
+                "INSERT INTO config_versions(created_at, config_json) VALUES (?, ?)",
+                (isoformat(), json.dumps(config, sort_keys=True)),
+            )
+        return {"version": int(cursor.lastrowid), "created_at": isoformat(), **config}
+
+
+@lru_cache(maxsize=4)
+def get_store(path: str = "") -> SecondBrainStore:
+    return SecondBrainStore(Path(path).expanduser().resolve() if path else default_store_path())
+
+
+def reset_store_cache() -> None:
+    get_store.cache_clear()

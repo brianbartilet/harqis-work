@@ -60,6 +60,7 @@ from modules.git_forks.router import router as git_forks_router
 from modules.home.router import router as home_router
 from modules.manifesto.router import router as manifesto_router
 from modules.profile.router import router as profile_router
+from modules.second_brain.router import router as second_brain_router
 from modules.workflows.router import router as workflows_router
 from web import require_user as _require_auth, templates
 
@@ -267,6 +268,7 @@ app.include_router(hfl_share_owner_router)
 app.include_router(hfl_share_guest_router)
 app.include_router(git_forks_router)
 app.include_router(profile_router)
+app.include_router(second_brain_router)
 
 
 # ── Security headers ──────────────────────────────────────────────────────────

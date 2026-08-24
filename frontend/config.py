@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     profile_store_path: str = str(
         _DATA_ROOT / "profile.sqlite3"
     )
+    second_brain_store_path: str = str(
+        _DATA_ROOT / "second-brain.sqlite3"
+    )
 
     model_config = SettingsConfigDict(
         env_file=[str(_APPS_ENV), str(_LOCAL_ENV)],
