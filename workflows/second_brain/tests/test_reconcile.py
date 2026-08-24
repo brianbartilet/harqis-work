@@ -6,9 +6,10 @@ from workflows.second_brain.tasks import reconcile as module
 
 def test__reconcile_persists_partial_results_without_hermes(tmp_path, monkeypatch):
     store = SecondBrainStore(tmp_path / "brain.sqlite3")
-    store.set_override(("work",), duration_minutes=30, correlation_id="corr")
-    operation = OperationSpec("work.fake", "work", "tests.fake.collect")
-    monkeypatch.setattr(module, "operations_for_modes", lambda modes: (operation,))
+    store.set_override(("default",), duration_minutes=30, correlation_id="corr")
+    operation = OperationSpec("test.fake", "tests.fake.collect")
+    monkeypatch.setattr(module, "selected_operations", lambda modes, definitions: ((operation, ("default",), 15),))
+    monkeypatch.setattr(module, "_current_calendar_signal", lambda: None)
     monkeypatch.setattr(
         module,
         "_load_callable",
@@ -24,7 +25,7 @@ def test__reconcile_persists_partial_results_without_hermes(tmp_path, monkeypatc
     )
     monkeypatch.setattr(module, "publish_feed_change", lambda payload: "disabled")
     result = module.reconcile(store=store, correlation_id="corr")
-    assert result["effective_modes"] == ["work"]
+    assert result["effective_modes"] == ["default"]
     assert result["agent_state"] == "disabled"
     assert result["changed"] == 1
     assert result["failures"] == []
@@ -33,8 +34,9 @@ def test__reconcile_persists_partial_results_without_hermes(tmp_path, monkeypatc
 
 def test__reconcile_isolates_collector_failure(tmp_path, monkeypatch):
     store = SecondBrainStore(tmp_path / "brain.sqlite3")
-    operation = OperationSpec("work.fake", "work", "tests.fake.collect")
-    monkeypatch.setattr(module, "operations_for_modes", lambda modes: (operation,))
+    operation = OperationSpec("test.fake", "tests.fake.collect")
+    monkeypatch.setattr(module, "selected_operations", lambda modes, definitions: ((operation, ("default",), 15),))
+    monkeypatch.setattr(module, "_current_calendar_signal", lambda: None)
 
     def fail(_path):
         def collector(**_kwargs):
@@ -44,5 +46,5 @@ def test__reconcile_isolates_collector_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(module, "_load_callable", fail)
     result = module.reconcile(store=store, correlation_id="corr")
     assert result["changed"] == 1
-    assert result["failures"] == [{"operation_id": "work.fake", "error_type": "ConnectionError"}]
+    assert result["failures"] == [{"operation_id": "test.fake", "error_type": "ConnectionError"}]
     assert store.feed_snapshot()["items"][0]["status"] == "degraded"

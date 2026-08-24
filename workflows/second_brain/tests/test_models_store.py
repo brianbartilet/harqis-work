@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from workflows.second_brain.models import ContextEvent, FeedItem
+from workflows.second_brain.models import ContextEvent, FeedItem, ModeDefinition
 from workflows.second_brain.resolver import resolve_modes
 from workflows.second_brain.store import SecondBrainStore
 
@@ -50,15 +50,17 @@ def test__store_deduplicates_context_and_versions_material_feed_changes(tmp_path
 
 def test__manual_override_wins_and_expires_deterministically(tmp_path):
     store = SecondBrainStore(tmp_path / "brain.sqlite3")
-    override = store.set_override(("play", "finance"), duration_minutes=30, correlation_id="corr")
+    store.save_mode(ModeDefinition(mode_id="deep-work", name="Deep Work", keywords=("coding",)))
+    override = store.set_override(("deep-work",), duration_minutes=30, correlation_id="corr")
     decision = resolve_modes(
         [{"event_type": "jira", "payload": {"text": "coding"}}],
+        mode_definitions=store.list_modes(),
         manual_override=store.active_override(),
         now=datetime(2026, 8, 24, 10, 0, tzinfo=timezone.utc),
         correlation_id="corr",
     )
-    assert decision.detected_modes == ("work",)
-    assert decision.effective_modes == ("play", "finance")
+    assert set(decision.detected_modes) == {"default", "deep-work"}
+    assert decision.effective_modes == ("deep-work",)
     assert decision.confidence == 1.0
     assert override["expires_at"]
     store.clear_override()
@@ -78,6 +80,40 @@ def test__client_configuration_keeps_web_enabled(tmp_path):
         "cli": True,
     }
     assert config["hermes_enabled"] is True
+
+
+def test__categories_are_configurable_and_default_cannot_be_archived(tmp_path):
+    store = SecondBrainStore(tmp_path / "brain.sqlite3")
+    saved = store.save_mode(
+        ModeDefinition(
+            mode_id="tabletop",
+            name="Tabletop Lab",
+            color="#a78bfa",
+            keywords=("mtg", "deck"),
+            calendar_categories=("Mischief | Misdirection | Play",),
+        )
+    )
+    assert {mode["mode_id"] for mode in saved["modes"]} == {"default", "tabletop"}
+    with pytest.raises(ValueError, match="default"):
+        store.archive_mode("default")
+
+
+def test__overnight_fallback_window_resolves_category():
+    local_tz = datetime.now().astimezone().tzinfo
+    decision = resolve_modes(
+        [],
+        mode_definitions=[
+            ModeDefinition(mode_id="default", name="Default").to_payload(),
+            ModeDefinition(
+                mode_id="night-owl",
+                name="Night Owl",
+                fallback_windows=({"start": "22:00", "end": "03:00", "days": [0]},),
+            ).to_payload(),
+        ],
+        now=datetime(2026, 8, 24, 23, 0, tzinfo=local_tz),
+        correlation_id="overnight",
+    )
+    assert decision.effective_modes == ("night-owl",)
 
 
 def test__feed_store_refreshes_expiry_without_creating_revision(tmp_path):
@@ -109,6 +145,14 @@ def test__feed_store_refreshes_expiry_without_creating_revision(tmp_path):
     assert refreshed_changed is False
     assert refreshed["revision"] == first["revision"]
     assert refreshed["fresh_until"] == "2026-08-24T10:15:00Z"
+
+
+def test__successful_operation_is_not_due_until_refresh_interval(tmp_path):
+    store = SecondBrainStore(tmp_path / "brain.sqlite3")
+    assert store.operation_due("jira.changed", 30) is True
+    store.start_run(run_id="run-1", operation_id="jira.changed", correlation_id="corr")
+    store.finish_run(run_id="run-1", state="success", result={"items": 0})
+    assert store.operation_due("jira.changed", 30) is False
 
 
 def test__feed_store_applies_limit_after_mode_filtering(tmp_path):
