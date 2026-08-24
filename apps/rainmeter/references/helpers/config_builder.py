@@ -7,6 +7,7 @@ import hashlib
 import os
 import sys
 import tempfile
+import threading
 import time
 
 if sys.platform == "win32":
@@ -32,7 +33,7 @@ from core.utilities.logging.custom_logger import logger as log
 from apps.google_apps.references.constants import ScheduleCategory
 from apps.google_apps.references.web.api.calendar import ApiServiceGoogleCalendarEvents, EventType
 from apps.apps_config import CONFIG_MANAGER
-from apps.desktop.helpers.feed import _atomic_write_text
+from apps.desktop.helpers.feed import _atomic_replace, _atomic_write_text
 
 
 WAIT_SECS_DEFAULT = 10
@@ -97,8 +98,9 @@ def init_meter(
     template_path = static_path / template_name
 
     def wrapper(func: Callable) -> Callable:
-        @functools.wraps(func)
-        def inner(*args, **kwargs):
+        render_lock = threading.Lock()
+
+        def render(*args, **kwargs):
             try:
                 # 1) Ensure skin folder structure/resources exist
                 _ensure_dirs_and_resources(
@@ -229,6 +231,28 @@ def init_meter(
                 log.exception("Failed HUD initialization")
                 raise
 
+        @functools.wraps(func)
+        def inner(*args, **kwargs):
+            if not render_lock.acquire(blocking=False):
+                log.warning(
+                    "Skipping overlapping HUD render for %s; an invocation is already active.",
+                    hud_item_name,
+                )
+                return _build_return(
+                    hud_item_name,
+                    False,
+                    ini_path,
+                    note_path,
+                    {
+                        "summary": "Skipped overlapping HUD render",
+                        "skipped": True,
+                    },
+                )
+            try:
+                return render(*args, **kwargs)
+            finally:
+                render_lock.release()
+
         inner._hud_item_name = hud_item_name
         setattr(inner, "_hud_folder_name", hud_folder_name or hud_item_name)
         inner._hud_config = config
@@ -332,7 +356,7 @@ def _atomic_write_bytes(path: Path, data: bytes) -> None:
     with tempfile.NamedTemporaryFile("wb", delete=False, dir=str(path.parent)) as tmp:
         tmp.write(data)
         tmp_path = Path(tmp.name)
-    os.replace(tmp_path, path)
+    _atomic_replace(tmp_path, path)
 
 
 def _copytree(src: Path, dst: Path) -> None:
@@ -391,7 +415,7 @@ class ConfigHelperRainmeter(ConfigParser):
         with tempfile.NamedTemporaryFile("w", delete=False, dir=str(path.parent), encoding=encoding) as tmp:
             self.write(tmp)
             tmp_path = Path(tmp.name)
-        os.replace(tmp_path, path)
+        _atomic_replace(tmp_path, path)
 
 
 class NotesTextHelperRainmeter:

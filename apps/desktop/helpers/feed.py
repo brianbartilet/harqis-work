@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -25,6 +26,14 @@ DEFAULT_ENCODING = "utf-8"
 DEFAULT_LOCK_DIRNAME = "feed-locks"          # stored under %TEMP%
 DEFAULT_LOCK_SLEEP_SECS = 0.1
 DEFAULT_STALE_LOCK_MAX_AGE_SECS = 300.0      # 5 minutes
+DEFAULT_REPLACE_ATTEMPTS = 8
+DEFAULT_REPLACE_INITIAL_DELAY_SECS = 0.025
+
+# HUD tasks share a threaded Celery worker. Keep replacements to the same live
+# Rainmeter resource in-process serialized, then retry the short sharing
+# violations Windows raises while Rainmeter is reloading that resource.
+_REPLACE_LOCKS: dict[str, threading.RLock] = {}
+_REPLACE_LOCKS_GUARD = threading.Lock()
 
 # Per-OS feed-path override env var. One shared .env/apps.env (or, once
 # GH#11 lands, a machines.local.toml [<machine>.env_vars] block) can carry
@@ -101,6 +110,44 @@ def _read_text_best_effort(path: Path, *, encoding: str) -> str:
         return path.read_bytes().decode(encoding, errors="ignore")
 
 
+def _replace_lock_for(path: Path) -> threading.RLock:
+    key = os.path.normcase(str(path.resolve()))
+    with _REPLACE_LOCKS_GUARD:
+        return _REPLACE_LOCKS.setdefault(key, threading.RLock())
+
+
+def _atomic_replace(
+    tmp_path: Path,
+    path: Path,
+    *,
+    attempts: int = DEFAULT_REPLACE_ATTEMPTS,
+    initial_delay_secs: float = DEFAULT_REPLACE_INITIAL_DELAY_SECS,
+) -> None:
+    """Replace ``path`` with retry/backoff and always clean up ``tmp_path``."""
+    if attempts < 1:
+        raise ValueError("attempts must be at least 1")
+
+    delay = initial_delay_secs
+    try:
+        with _replace_lock_for(path):
+            for attempt in range(1, attempts + 1):
+                try:
+                    os.replace(tmp_path, path)
+                    return
+                except PermissionError:
+                    if attempt == attempts:
+                        raise
+                    time.sleep(delay)
+                    delay *= 2
+    finally:
+        # os.replace removes the source on success. On failure, do not leave
+        # hundreds of anonymous temp files in live Rainmeter skin folders.
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def _atomic_write_text(
     path: Path,
     text: str,
@@ -131,7 +178,7 @@ def _atomic_write_text(
         tmp.write(text_to_write)
         tmp_path = Path(tmp.name)
 
-    os.replace(tmp_path, path)
+    _atomic_replace(tmp_path, path)
 
 
 def _acquire_lock(lock_path: Path, cfg: FeedLockConfig, *, target_path: Path) -> None:
