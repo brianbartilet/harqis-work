@@ -104,14 +104,17 @@ def test__second_brain_feed_accepts_scoped_api_bearer(authenticated_client, monk
 
     from modules.second_brain.service import get_second_brain_store
 
-    get_second_brain_store().save_config(
+    store = get_second_brain_store()
+    store.save_config(
         {"clients": {"web": True, "telegram": False, "rainmeter": False, "cli": True}}
     )
+    store.append_chat(role="user", content="private advisory context", correlation_id="chat-private")
     response = authenticated_client.get(
         "/second-brain/api/feed?client=cli",
         headers={"Authorization": "Bearer test-second-brain-token"},
     )
     assert response.status_code == 200
+    assert "chat" not in response.json()
     full_detail = authenticated_client.get(
         "/second-brain/api/feed?client=web",
         headers={"Authorization": "Bearer test-second-brain-token"},

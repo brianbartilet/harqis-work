@@ -57,16 +57,16 @@ def snapshot(*, client: str = "web", limit: int = 100) -> dict[str, Any]:
     if client == "web":
         for item in result["items"]:
             item["details_html"] = render_markdown(item.get("details") or item.get("summary") or "")
+        result["chat"] = [
+            {**message, "content_html": render_markdown(message["content"])}
+            for message in store.recent_chat(limit=40)
+        ]
     result["decision"] = decision
     result["override"] = store.active_override()
     result["config"] = config
     result["modes"] = store.list_modes()
     result["mode_map"] = {mode["mode_id"]: mode for mode in result["modes"]}
     result["automatic_feed"] = result["override"] is None
-    result["chat"] = [
-        {**message, "content_html": render_markdown(message["content"])}
-        for message in store.recent_chat(limit=40)
-    ]
     from workflows.second_brain.registry import operation_catalog
     from apps.google_apps.references.constants import ScheduleCategory
 
