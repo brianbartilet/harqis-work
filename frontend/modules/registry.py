@@ -44,6 +44,13 @@ MODULES: tuple[ModuleDefinition, ...] = (
         detail="CODE, PARA, the 7 Habits, and the principles that guide how HARQIS captures, distills, and expresses work.",
     ),
     ModuleDefinition(
+        key="second_brain",
+        label="Second Brain",
+        route="/second-brain",
+        description="A context-aware feed of what matters now.",
+        detail="Blend automatic signals with temporary manual modes, then trace every advisory item to its source and freshness.",
+    ),
+    ModuleDefinition(
         key="workflows",
         label="Workflows",
         route="/workflows",

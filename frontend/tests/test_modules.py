@@ -507,8 +507,10 @@ def test_module_registry_has_fixed_primary_navigation():
         "hfl_corpus",
         "sharing",
         "manifesto",
+        "second_brain",
         "workflows",
         "applications",
+        "git_forks",
     ]
     manifesto = module_by_key("manifesto")
     assert manifesto is not None
@@ -525,7 +527,7 @@ def test_module_pages_require_authentication():
 
     with TestClient(app) as client:
         for route in (
-            "/home", "/manifesto", "/workflows", "/applications", "/hfl-corpus"
+            "/home", "/manifesto", "/second-brain", "/workflows", "/applications", "/hfl-corpus"
         ):
             response = client.get(route, follow_redirects=False)
             assert response.status_code == 302

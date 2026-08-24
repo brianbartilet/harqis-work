@@ -35,6 +35,10 @@ os.environ["PROFILE_STORE_PATH"] = str(
     Path(tempfile.gettempdir())
     / f"harqis-frontend-profile-{os.getpid()}.sqlite3"
 )
+os.environ["SECOND_BRAIN_STORE_PATH"] = str(
+    Path(tempfile.gettempdir())
+    / f"harqis-frontend-second-brain-{os.getpid()}.sqlite3"
+)
 
 
 @pytest.fixture(autouse=True)

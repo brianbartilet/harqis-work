@@ -30,6 +30,10 @@ active weekly scan combines the committed registry with GitHub fallback
 discovery, writes the ignored machine-readable drift report, and submits one
 canonical HFL entry per fork instance plus a fleet summary.
 
+The [`second_brain`](second_brain/README.md) hybrid workflow turns typed context
+and time-bounded manual overrides into a deduplicated advisory feed. Celery is
+the sole schedule owner; optional Hermes interpretation cannot invoke tools.
+
 ## Choosing Celery, an agent, or both
 
 Before adding a non-trivial automation, apply

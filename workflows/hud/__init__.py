@@ -13,6 +13,7 @@ if sys.platform == "win32":
     import workflows.hud.tasks.hud_jira
     import workflows.hud.tasks.hud_api_costs
     import workflows.hud.tasks.hud_radar
+    import workflows.hud.tasks.second_brain
 
 # Host-safe HUD support tasks run on the always-on host (non-Windows included).
 # These modules contain collectors/feed/export logic only — no Rainmeter calls.

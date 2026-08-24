@@ -79,6 +79,17 @@ machine-local agent state, never committed.
 | `~/.hermes/logs/` | cron jobs | maintainer |
 | `.hermes/plans/` (repo-local) | `/max-plan` | maintainer / agents |
 
+### Second Brain profile
+
+The optional Thinking Second Brain profile is a narrow interpretation boundary,
+not a scheduler or executor. It receives bounded, structured context over a
+loopback-only OpenAI-compatible endpoint and may propose `work`, `play`, and/or
+`finance` with confidence and reason codes. Celery remains the sole schedule
+owner, validates the candidate, applies deterministic manual-override precedence,
+and invokes only code-owned read-only operations. If Hermes is unavailable, the
+deterministic resolver continues. See
+[`SECOND-BRAIN.md`](SECOND-BRAIN.md) for the full contract.
+
 ---
 
 ## MCP registration

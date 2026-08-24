@@ -31,6 +31,7 @@ from workflows.workers.tasks_config import WORKFLOW_WORKERS
 from workflows.testing.tasks_config import WORKFLOW_TESTING
 from workflows.tcg.tasks_config import WORKFLOW_TCG
 from workflows.git_forks.tasks_config import WORKFLOW_GIT_FORKS
+from workflows.second_brain.tasks_config import WORKFLOW_SECOND_BRAIN
 
 # Set Celery to use the same timezone settings as the Django project
 SPROUT.conf.enable_utc = USE_TZ
@@ -53,6 +54,7 @@ CONFIG_DICTIONARY = (
     | WORKFLOW_TESTING
     | WORKFLOW_TCG
     | WORKFLOW_GIT_FORKS
+    | WORKFLOW_SECOND_BRAIN
 )
 
 # Celery's ScheduleEntry.__init__ only accepts these per-entry keys. Our
@@ -138,6 +140,8 @@ SPROUT.conf.task_routes = {
     # when Windows is offline — defeating their purpose.
     "workflows.hud.tasks.hud_data_only.*": {"queue": WorkflowQueue.HOST.value},
     "workflows.hud.tasks.*":               {"queue": WorkflowQueue.HUD.value},
+    "workflows.second_brain.tasks.deliver.*": {"queue": WorkflowQueue.HOST.value},
+    "workflows.second_brain.tasks.*":      {"queue": WorkflowQueue.HOST.value},
 }
 
 

@@ -6,7 +6,7 @@ HTMX, Alpine.js, Tailwind CSS, and SortableJS. Production serves compiled,
 content-versioned assets from `/static/`; the generated files are committed so
 runtime deployment does not require Node.js.
 
-The frontend currently exposes seven modules:
+The frontend currently exposes eight modules:
 
 | Module | Route | Purpose |
 |---|---|---|
@@ -17,6 +17,7 @@ The frontend currently exposes seven modules:
 | Activity Corpus | `/hfl-corpus` | Browses and searches HARQIS activity logs, based on the Homework for Life reflection practice, and their references. |
 | Social | `/sharing` | Builds reviewed, immutable Activity Corpus snapshots and temporary guest portals. |
 | Git Forks | `/git-forks` | Maps fork drift and launches guarded synchronization, regression, and isolated deployment operations. |
+| Second Brain | `/second-brain` | Shows a ranked context-aware advisory feed, manual mode overrides, and opt-in presentation settings. |
 
 `/dashboard` remains as a compatibility redirect to `/home`.
 
@@ -112,6 +113,9 @@ frontend/
 │   │   └── test_policy.toml
 │   ├── git_forks/
 │   │   └── router.py
+│   ├── second_brain/
+│   │   ├── router.py              # Authenticated feed, SSE, commands, and settings
+│   │   └── service.py             # Canonical-store projections
 │   ├── hfl_corpus/
 │   │   ├── router.py
 │   │   └── corpus.py
@@ -604,6 +608,7 @@ guidance is in
 | `HFL_SHARE_RETRIEVAL_K` | `8` | Maximum snapshot entries supplied to Hermes per question (clamped to 1–20). |
 | `HFL_SHARE_SEMANTIC_WEIGHT` | `0.75` | Semantic share of hybrid semantic/lexical ranking, clamped to 0–1. |
 | `HFL_SHARE_TRUST_PROXY_IDENTITY` | `false` | Trust Cloudflare Access identity headers for email OTP mode; enable only with a locked-down origin. |
+| `SECOND_BRAIN_STORE_PATH` | `.harqis-data/second-brain.sqlite3` | Canonical context, mode, configuration, run, and feed state. |
 
 ## Testing
 
