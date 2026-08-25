@@ -8,20 +8,25 @@
   .brain-primary { display:grid; gap:1rem; }
   .brain-control-rail { min-width:0; }
   .brain-control-panel { overflow:hidden; box-shadow:0 16px 40px rgba(2,6,23,.22); }
+  .brain-automatic-row { background:linear-gradient(135deg,rgba(15,23,42,.94),rgba(8,47,73,.22)); }
   .brain-control-summary::-webkit-details-marker { display:none; }
   .brain-control-summary { transition:background-color .2s ease; }
   .brain-control-summary:hover { background:rgba(15,23,42,.72); }
   .brain-control-action { display:inline-flex; align-items:center; gap:.4rem; color:#94a3b8; font-size:.75rem; }
   .brain-control-action::before { content:"Show"; }
-  .brain-control-panel[open] .brain-control-action::before { content:"Hide"; }
+  .brain-control-disclosure[open] .brain-control-action::before { content:"Hide"; }
   .brain-control-chevron { width:1rem; height:1rem; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; transition:transform .2s ease; }
-  .brain-control-panel[open] .brain-control-chevron { transform:rotate(180deg); }
+  .brain-control-disclosure[open] .brain-control-chevron { transform:rotate(180deg); }
   .brain-control-section { margin-top:1rem; padding-top:1rem; border-top:1px solid #1e293b; }
   .brain-manage-button:hover { border-color:rgba(34,211,238,.65); color:#fff; }
-  .brain-mode-pill { border-color: color-mix(in srgb, var(--mode-color) 45%, #1e293b); color: color-mix(in srgb, var(--mode-color) 78%, white); background: color-mix(in srgb, var(--mode-color) 8%, transparent); }
-  .brain-mode-pill[data-selected="true"] { background: color-mix(in srgb, var(--mode-color) 22%, #020617); border-color: var(--mode-color); box-shadow: 0 0 22px color-mix(in srgb, var(--mode-color) 18%, transparent); }
+  .brain-mode-pill { position:relative; display:inline-flex; min-height:2.6rem; align-items:center; gap:.5rem; border-width:1.5px; border-color:color-mix(in srgb,var(--mode-color) 48%,#334155); color:color-mix(in srgb,var(--mode-color) 74%,white); background:color-mix(in srgb,var(--mode-color) 8%,transparent); font-weight:550; transition:border-color .2s ease,background-color .2s ease,box-shadow .2s ease,transform .2s ease; }
+  .brain-mode-pill::before { width:.45rem; height:.45rem; border-radius:999px; background:var(--mode-color); content:""; opacity:.5; }
+  .brain-mode-pill:not(:disabled):hover { border-color:var(--mode-color); background:color-mix(in srgb,var(--mode-color) 15%,#020617); }
+  .brain-mode-pill[data-selected="true"] { transform:translateY(-1px); border-color:color-mix(in srgb,var(--mode-color) 82%,white); color:white; background:color-mix(in srgb,var(--mode-color) 38%,#020617); box-shadow:0 0 0 2px color-mix(in srgb,var(--mode-color) 26%,transparent),0 10px 28px color-mix(in srgb,var(--mode-color) 25%,transparent),inset 0 1px rgba(255,255,255,.16); }
+  .brain-mode-pill[data-selected="true"]::before { opacity:1; box-shadow:0 0 10px var(--mode-color); }
   .brain-feed-launcher { box-shadow:inset 0 1px rgba(148,163,184,.04); }
-  .brain-view-feed { background:linear-gradient(90deg,#22d3ee,#38bdf8); color:#082f49; box-shadow:0 8px 24px rgba(34,211,238,.16); transition:filter .2s ease,transform .2s ease; }
+  .brain-primary-action { min-height:4.15rem; border:1px solid #67e8f9; box-shadow:inset 0 1px rgba(255,255,255,.38),0 8px 24px rgba(34,211,238,.16); }
+  .brain-view-feed { background:linear-gradient(90deg,#22d3ee,#38bdf8); color:#082f49; transition:filter .2s ease,transform .2s ease; }
   .brain-view-feed:hover { filter:brightness(1.08); }
   .brain-view-feed:active { transform:translateY(1px); }
   .brain-view-feed-count { border-radius:999px; background:rgba(8,47,73,.14); padding:.2rem .55rem; font-size:.7rem; font-weight:600; }
@@ -81,6 +86,17 @@
   .brain-option-row small { display:block; margin-top:.15rem; color:#475569; }
   .brain-locked-list > summary { cursor:pointer; color:#64748b; }
   .brain-locked-list > summary:hover { color:#94a3b8; }
+  .brain-number-stepper { display:grid; grid-template-columns:2.5rem minmax(0,1fr) 2.5rem; min-height:2.65rem; overflow:hidden; border:1px solid #334155; border-radius:.6rem; background:#0f172a; }
+  .brain-number-stepper:focus-within { border-color:#22d3ee; box-shadow:0 0 0 2px rgba(34,211,238,.18); }
+  .brain-number-stepper button { border:0; background:#1e293b; color:#cbd5e1; font-size:1.1rem; }
+  .brain-number-stepper button:hover { background:#334155; color:white; }
+  .brain-number-stepper input { min-width:0; border:0; background:transparent; padding:.55rem .75rem; color:white; text-align:center; outline:none; appearance:textfield; }
+  .brain-number-stepper input::-webkit-inner-spin-button,.brain-number-stepper input::-webkit-outer-spin-button { margin:0; appearance:none; }
+  .brain-notice { position:fixed; z-index:80; top:1rem; left:50%; width:min(34rem,calc(100% - 2rem)); transform:translateX(-50%); border:1px solid #475569; border-radius:.75rem; background:#0f172a; padding:.8rem 1rem; color:#e2e8f0; box-shadow:0 18px 50px rgba(2,6,23,.62); font-size:.875rem; }
+  .brain-notice[data-tone="error"] { border-color:#fb7185; color:#ffe4e6; }
+  .brain-notice[data-tone="success"] { border-color:#22d3ee; color:#cffafe; }
+  .brain-notice[hidden] { display:none; }
+  .brain-primary-action:focus-visible,.brain-mode-pill:focus-visible,.brain-control-summary:focus-visible,.brain-number-stepper button:focus-visible,.brain-manage-button:focus-visible { outline:2px solid #67e8f9; outline-offset:2px; }
   .brain-pulse { animation:brain-breathe 2.4s ease-in-out infinite; }
   @keyframes brain-breathe { 50% { opacity:.35; transform:scale(.8); } }
   @media (min-width:1024px) {
@@ -94,7 +110,7 @@
     .brain-feed-dialog { width:calc(100% - 1rem); }
     .brain-feed { height:72vh; padding:.75rem; }
     .brain-chat-form { grid-template-columns:1fr; }
-    .brain-chat-submit { min-height:2.75rem; }
+    .brain-primary-action { min-height:3.25rem; }
   }
   @media (prefers-reduced-motion:reduce) { .brain-pulse { animation:none; } .brain-feed::before,.brain-feed::after { display:none; } }
 </style>
@@ -103,8 +119,9 @@
 <main class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8"><div id="second-brain-shell">{% include "modules/second_brain/_shell.html" %}</div></main>
 <script>
 (function () {
-  var stream, tickerFrame, tickerResumeTimer, countdownTimer, settingsDirty=false, settingsDialogOpen=false, controlsExpanded=false, feedDialogOpen=false, currentKey = '';
+  var stream, tickerFrame, tickerResumeTimer, countdownTimer, noticeTimer, settingsDirty=false, settingsDialogOpen=false, controlsExpanded=false, feedDialogOpen=false, currentKey = '';
   function jsonPost(url, body) { return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}).then(async r => { var p=await r.json(); if(!r.ok) throw new Error(p.error||'Request failed'); return p; }); }
+  function showNotice(message,tone){var notice=document.getElementById('brain-notice');if(!notice)return;clearTimeout(noticeTimer);notice.textContent=message;notice.dataset.tone=tone||'error';notice.hidden=false;noticeTimer=setTimeout(()=>notice.hidden=true,5000);}
   function refreshFeed() { var visible=document.querySelector('[data-ticker-original].brain-visible');var controls=document.querySelector('[data-controls-panel]'),feedDialog=document.getElementById('brain-feed-dialog'),settingsDialog=document.getElementById('brain-settings-dialog');currentKey=visible?visible.dataset.logicalKey:currentKey;controlsExpanded=controls?controls.open:controlsExpanded;feedDialogOpen=feedDialog?feedDialog.open:feedDialogOpen;settingsDialogOpen=settingsDialog?settingsDialog.open:settingsDialogOpen;htmx.ajax('GET','/second-brain/feed-fragment',{target:'#second-brain-shell',swap:'innerHTML'}); }
   function formatDuration(value) { var n=Number(value), h=Math.floor(n/60), m=n%60; return (h?h+'h ':'')+(m?m+'m':''); }
   function selectedModes() { return Array.from(document.querySelectorAll('.brain-mode-pill[data-selected="true"]')).map(x=>x.dataset.modeId); }
@@ -138,15 +155,16 @@
     var feedDialog=document.getElementById('brain-feed-dialog');function openFeed(){if(!feedDialog.open)feedDialog.showModal();feedDialogOpen=true;requestAnimationFrame(setupTicker);}function closeFeed(){if(feedDialog.open)feedDialog.close();}if(feedDialog){document.querySelectorAll('[data-open-brain-feed]').forEach(b=>b.onclick=openFeed);document.querySelectorAll('[data-close-brain-feed]').forEach(b=>b.onclick=closeFeed);feedDialog.onclick=e=>{if(e.target===feedDialog)closeFeed();};feedDialog.onclose=()=>{feedDialogOpen=false;cancelAnimationFrame(tickerFrame);clearTimeout(tickerResumeTimer);};if(feedDialogOpen)openFeed();}
     var slider=document.getElementById('brain-duration'), label=document.getElementById('brain-duration-label'); if(slider){var remembered=sessionStorage.getItem('secondBrainDuration');if(remembered)slider.value=remembered;label.textContent=formatDuration(slider.value);slider.oninput=()=>{label.textContent=formatDuration(slider.value);sessionStorage.setItem('secondBrainDuration',slider.value);};}
     clearInterval(countdownTimer);var expires=shell.dataset.expires; if(expires){var countdown=document.getElementById('brain-countdown'); var tick=()=>{var ms=new Date(expires)-Date.now();if(ms<=0){countdown.textContent='Returning to Automatic Feed…';clearInterval(countdownTimer);setTimeout(refreshFeed,1000);return;}var min=Math.ceil(ms/60000);countdown.textContent=formatDuration(min)+' remaining';};tick();countdownTimer=setInterval(tick,30000);}
-    document.querySelectorAll('.brain-mode-pill').forEach(p=>p.onclick=()=>{p.dataset.selected=p.dataset.selected==='true'?'false':'true';var modes=selectedModes();if(!modes.length){p.dataset.selected='true';return;}jsonPost('/second-brain/selection',{modes:modes,duration_minutes:Number(slider.value)}).then(refreshFeed).catch(e=>alert(e.message));});
-    var automatic=document.getElementById('brain-automatic-toggle'); if(automatic)automatic.onchange=()=>jsonPost('/second-brain/automatic',{enabled:automatic.checked,modes:selectedModes(),duration_minutes:Number(slider.value)}).then(refreshFeed).catch(e=>{automatic.checked=!automatic.checked;alert(e.message);});
+    document.querySelectorAll('.brain-mode-pill').forEach(p=>p.onclick=()=>{var previous=p.dataset.selected;p.dataset.selected=previous==='true'?'false':'true';var modes=selectedModes();if(!modes.length){p.dataset.selected='true';showNotice('Keep at least one category selected.');return;}jsonPost('/second-brain/selection',{modes:modes,duration_minutes:Number(slider.value)}).then(refreshFeed).catch(e=>{p.dataset.selected=previous;showNotice(e.message);});});
+    var automatic=document.getElementById('brain-automatic-toggle'); if(automatic)automatic.onchange=()=>jsonPost('/second-brain/automatic',{enabled:automatic.checked,modes:selectedModes(),duration_minutes:Number(slider.value)}).then(refreshFeed).catch(e=>{automatic.checked=!automatic.checked;showNotice(e.message);});
     document.querySelectorAll('.brain-delivery').forEach(c=>c.onchange=()=>{var s=document.getElementById('brain-delivery-status');s.textContent='Saving…';jsonPost('/second-brain/delivery/'+c.dataset.client,{enabled:c.checked}).then(()=>s.textContent='Saved.').catch(e=>{c.checked=!c.checked;s.textContent=e.message;});});
     var settingsDialog=document.getElementById('brain-settings-dialog');document.querySelectorAll('[data-open-brain-settings]').forEach(b=>b.onclick=()=>{settingsDialogOpen=true;settingsDialog.showModal();});document.querySelectorAll('[data-close-brain-settings]').forEach(b=>b.onclick=()=>{settingsDialogOpen=false;settingsDialog.close();if(settingsDirty){settingsDirty=false;refreshFeed();}});if(settingsDialogOpen&&!settingsDialog.open)settingsDialog.showModal();
-    async function saveCategory(form){var fd=new FormData(form);fd.set('calendar_categories',fd.getAll('calendar_choice').join(','));fd.set('operation_ids',fd.getAll('operation_choice').join(','));fd.set('client_eligibility',fd.getAll('client_choice').join(','));var status=form.querySelector('.brain-form-status');if(status)status.textContent='Saving…';var r=await fetch('/second-brain/categories',{method:'POST',body:fd});var p=await r.json();if(!r.ok){if(status)status.textContent=p.error;else alert(p.error);return false;}if(status)status.textContent='Saved.';settingsDirty=true;return true;}
+    async function saveCategory(form){var fd=new FormData(form);fd.set('calendar_categories',fd.getAll('calendar_choice').join(','));fd.set('operation_ids',fd.getAll('operation_choice').join(','));fd.set('client_eligibility',fd.getAll('client_choice').join(','));var status=form.querySelector('.brain-form-status');if(status)status.textContent='Saving…';var r=await fetch('/second-brain/categories',{method:'POST',body:fd});var p=await r.json();if(!r.ok){if(status)status.textContent=p.error;showNotice(p.error);return false;}if(status)status.textContent='Saved.';settingsDirty=true;return true;}
     document.querySelectorAll('.brain-category-form').forEach(form=>{var timer;form.onsubmit=e=>e.preventDefault();form.onchange=()=>{clearTimeout(timer);timer=setTimeout(()=>saveCategory(form),350);};});var newForm=document.getElementById('brain-new-category');if(newForm)newForm.onsubmit=async e=>{e.preventDefault();if(await saveCategory(newForm))refreshFeed();};
-    document.querySelectorAll('[data-archive-mode]').forEach(b=>b.onclick=()=>jsonPost('/second-brain/categories/'+b.dataset.archiveMode+'/archive',{}).then(refreshFeed).catch(e=>alert(e.message)));
+    document.querySelectorAll('[data-number-step]').forEach(button=>button.onclick=()=>{var input=button.parentElement.querySelector('input[type="number"]');if(!input)return;Number(button.dataset.numberStep)>0?input.stepUp():input.stepDown();input.dispatchEvent(new Event('change',{bubbles:true}));});
+    document.querySelectorAll('[data-archive-mode]').forEach(b=>b.onclick=()=>jsonPost('/second-brain/categories/'+b.dataset.archiveMode+'/archive',{}).then(refreshFeed).catch(e=>showNotice(e.message)));
     var hermes=document.getElementById('brain-hermes'),retention=document.getElementById('brain-chat-retention'),agentStatus=document.getElementById('brain-agent-status'); function saveAgent(){agentStatus.textContent='Saving…';jsonPost('/second-brain/agent-settings',{hermes_enabled:hermes.checked,chat_retention_hours:Number(retention.value)}).then(()=>agentStatus.textContent='Saved.').catch(e=>agentStatus.textContent=e.message);} if(hermes)hermes.onchange=saveAgent;if(retention)retention.onchange=saveAgent;
-    var chat=document.getElementById('brain-chat-form'); if(chat)chat.onsubmit=async e=>{e.preventDefault();var input=document.getElementById('brain-chat-input'),status=document.getElementById('brain-chat-status'),message=input.value.trim();if(!message)return;input.value='';status.textContent='Thinking from your current briefing…';var response=await fetch('/second-brain/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:message})});var text=await response.text();if(text.includes('event: answer')){status.textContent='Answer added.';refreshFeed();}else status.textContent='Advisory answer unavailable; context was still recorded.';};
+    var chat=document.getElementById('brain-chat-form'); if(chat)chat.onsubmit=async e=>{e.preventDefault();var input=document.getElementById('brain-chat-input'),status=document.getElementById('brain-chat-status'),message=input.value.trim();if(!message)return;input.value='';status.textContent='Thinking from your current briefing…';try{var response=await fetch('/second-brain/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:message})});var text=await response.text();if(text.includes('event: answer')){status.textContent='Answer added.';refreshFeed();}else status.textContent='Advisory answer unavailable; context was still recorded.';}catch(error){status.textContent='Could not reach the advisory channel.';showNotice('Could not reach the advisory channel.');}};
   }
   document.addEventListener('DOMContentLoaded',()=>{setupBrain();stream=new EventSource('/second-brain/api/events');stream.addEventListener('feed',refreshFeed);});document.body.addEventListener('htmx:afterSwap',setupBrain);window.addEventListener('beforeunload',()=>{if(stream)stream.close();cancelAnimationFrame(tickerFrame);clearTimeout(tickerResumeTimer);clearInterval(countdownTimer);});
 })();

@@ -43,6 +43,26 @@ def _split_values(value: str) -> tuple[str, ...]:
     return tuple(part.strip() for part in re.split(r"[,\n]+", value or "") if part.strip())
 
 
+def _available_manual_modes(store, requested) -> list[str]:
+    available = [
+        mode["mode_id"]
+        for mode in store.list_modes()
+        if mode.get("enabled", True) and not mode.get("archived", False)
+    ]
+    selected = [
+        str(mode).strip().casefold()
+        for mode in (requested or ())
+        if str(mode).strip().casefold() in available
+    ]
+    if selected:
+        return list(dict.fromkeys(selected))
+    if "default" in available:
+        return ["default"]
+    if available:
+        return [available[0]]
+    raise ValueError("enable at least one category before using manual selection")
+
+
 def _category_id(name: str, existing_ids: set[str]) -> str:
     """Create an immutable, human-readable category key from its initial name."""
     base = re.sub(r"[^a-z0-9]+", "-", name.strip().casefold()).strip("-")
@@ -234,7 +254,7 @@ async def update_automatic_feed(request: Request):
         store.clear_override()
     else:
         try:
-            modes = payload.get("modes") or ["default"]
+            modes = _available_manual_modes(store, payload.get("modes"))
             store.set_override(
                 modes,
                 duration_minutes=int(payload.get("duration_minutes", 120)),
@@ -253,8 +273,9 @@ async def update_selection(request: Request):
     payload = await request.json()
     correlation_id = str(uuid.uuid4())
     try:
-        override = get_second_brain_store().set_override(
-            payload.get("modes") or (),
+        store = get_second_brain_store()
+        override = store.set_override(
+            _available_manual_modes(store, payload.get("modes")),
             duration_minutes=int(payload.get("duration_minutes", 120)),
             correlation_id=correlation_id,
         )
