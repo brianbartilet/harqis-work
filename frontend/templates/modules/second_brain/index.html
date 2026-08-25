@@ -2,10 +2,27 @@
 {% block title %}HARQIS — Second Brain{% endblock %}
 {% block head %}
 <style>
+  .brain-shell { display:grid; gap:1.25rem; }
   .brain-hero { background: radial-gradient(circle at 84% 10%, rgba(34,211,238,.12), transparent 28%), linear-gradient(135deg, rgba(15,23,42,.96), rgba(2,6,23,.96)); }
+  .brain-layout { display:grid; gap:1rem; align-items:start; }
+  .brain-primary { display:grid; gap:1rem; }
+  .brain-control-rail { min-width:0; }
+  .brain-control-panel { overflow:hidden; box-shadow:0 16px 40px rgba(2,6,23,.22); }
+  .brain-control-summary::-webkit-details-marker { display:none; }
+  .brain-control-summary { transition:background-color .2s ease; }
+  .brain-control-summary:hover { background:rgba(15,23,42,.72); }
+  .brain-control-chevron { display:grid; width:1.75rem; height:1.75rem; place-items:center; border:1px solid #334155; border-radius:999px; color:#67e8f9; transition:transform .2s ease; }
+  .brain-control-panel[open] .brain-control-chevron { transform:rotate(180deg); }
+  .brain-control-section { margin-top:1rem; padding-top:1rem; border-top:1px solid #1e293b; }
+  .brain-manage-button:hover { border-color:rgba(34,211,238,.65); color:#fff; }
   .brain-mode-pill { border-color: color-mix(in srgb, var(--mode-color) 45%, #1e293b); color: color-mix(in srgb, var(--mode-color) 78%, white); background: color-mix(in srgb, var(--mode-color) 8%, transparent); }
   .brain-mode-pill[data-selected="true"] { background: color-mix(in srgb, var(--mode-color) 22%, #020617); border-color: var(--mode-color); box-shadow: 0 0 22px color-mix(in srgb, var(--mode-color) 18%, transparent); }
-  .brain-card { position: relative; overflow: hidden; }
+  .brain-feed { position:relative; height:clamp(28rem,62vh,44rem); overflow:hidden; padding:1rem; }
+  .brain-feed::before,.brain-feed::after { position:absolute; z-index:2; right:0; left:0; height:2.5rem; content:""; pointer-events:none; }
+  .brain-feed::before { top:0; background:linear-gradient(#020617, transparent); }
+  .brain-feed::after { bottom:0; background:linear-gradient(transparent, #020617); }
+  .brain-feed-track { display:flex; flex-direction:column; gap:1rem; will-change:transform; }
+  .brain-card { position:relative; flex:none; overflow:hidden; }
   .brain-card::before { position:absolute; inset:0 auto 0 0; width:3px; content:""; background:var(--mode-color); }
   .brain-category-dot { background:var(--mode-color); box-shadow:0 0 12px var(--mode-color); }
   .brain-result pre { overflow:auto; border:1px solid #1e293b; border-radius:.5rem; background:#020617; padding:.75rem; }
@@ -16,24 +33,59 @@
   .brain-switch span::after { content:""; position:absolute; width:1.1rem; height:1.1rem; left:.2rem; top:.2rem; border-radius:50%; background:white; transition:.2s; }
   .brain-switch input:checked + span { background:#22d3ee; }
   .brain-switch input:checked + span::after { transform:translateX(1.25rem); background:#082f49; }
+  .brain-chat-form { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.75rem; align-items:stretch; }
+  .brain-chat-submit { min-width:5rem; background:#22d3ee; color:#082f49; transition:background-color .2s ease, transform .2s ease; }
+  .brain-chat-submit:hover { background:#67e8f9; }
+  .brain-chat-submit:active { transform:translateY(1px); }
   .brain-dialog::backdrop { backdrop-filter:blur(8px); }
   .brain-pulse { animation:brain-breathe 2.4s ease-in-out infinite; }
   @keyframes brain-breathe { 50% { opacity:.35; transform:scale(.8); } }
-  @media (prefers-reduced-motion:reduce) { .brain-pulse { animation:none; } .brain-feed { scroll-behavior:auto!important; } }
+  @media (min-width:1024px) {
+    .brain-layout { grid-template-columns:minmax(0,1fr) 21rem; gap:1.25rem; }
+    .brain-primary { grid-column:1; grid-row:1; }
+    .brain-control-rail { position:sticky; top:1rem; grid-column:2; grid-row:1; }
+  }
+  @media (max-width:639px) {
+    .brain-shell { gap:1rem; }
+    .brain-hero { padding:1.25rem; }
+    .brain-feed { height:34rem; padding:.75rem; }
+    .brain-chat-form { grid-template-columns:1fr; }
+    .brain-chat-submit { min-height:2.75rem; }
+  }
+  @media (prefers-reduced-motion:reduce) { .brain-pulse { animation:none; } .brain-feed { overflow-y:auto; } .brain-feed::before,.brain-feed::after { display:none; } .brain-feed-track { transform:none!important; will-change:auto; } }
 </style>
 {% endblock %}
 {% block content %}
 <main class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8"><div id="second-brain-shell">{% include "modules/second_brain/_shell.html" %}</div></main>
 <script>
 (function () {
-  var stream, scrollTimer, resumeTimer, countdownTimer, settingsDirty=false, currentKey = '';
+  var stream, tickerFrame, tickerResumeTimer, countdownTimer, settingsDirty=false, controlsExpanded=false, currentKey = '';
   function jsonPost(url, body) { return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}).then(async r => { var p=await r.json(); if(!r.ok) throw new Error(p.error||'Request failed'); return p; }); }
-  function refreshFeed() { var visible=document.querySelector('[data-feed-item].brain-visible'); currentKey=visible?visible.dataset.logicalKey:currentKey; htmx.ajax('GET','/second-brain/feed-fragment',{target:'#second-brain-shell',swap:'innerHTML'}); }
+  function refreshFeed() { var visible=document.querySelector('[data-ticker-original].brain-visible');var controls=document.querySelector('[data-controls-panel]');currentKey=visible?visible.dataset.logicalKey:currentKey;controlsExpanded=controls?controls.open:controlsExpanded;htmx.ajax('GET','/second-brain/feed-fragment',{target:'#second-brain-shell',swap:'innerHTML'}); }
   function formatDuration(value) { var n=Number(value), h=Math.floor(n/60), m=n%60; return (h?h+'h ':'')+(m?m+'m':''); }
   function selectedModes() { return Array.from(document.querySelectorAll('.brain-mode-pill[data-selected="true"]')).map(x=>x.dataset.modeId); }
-  function setupScroll() { clearInterval(scrollTimer); var feed=document.getElementById('brain-feed'); if(!feed || matchMedia('(prefers-reduced-motion: reduce)').matches) return; var cards=Array.from(feed.querySelectorAll('[data-feed-item]')); if(cards.length<2)return; var index=Math.max(0,cards.findIndex(c=>c.dataset.logicalKey===currentKey)); function mark(){cards.forEach(c=>c.classList.remove('brain-visible'));cards[index].classList.add('brain-visible');currentKey=cards[index].dataset.logicalKey;} mark(); function advance(){index=(index+1)%cards.length;mark();feed.scrollTo({top:cards[index].offsetTop-feed.offsetTop,behavior:'smooth'});} function start(){clearInterval(scrollTimer);scrollTimer=setInterval(advance,10000);} function pause(){clearInterval(scrollTimer);clearTimeout(resumeTimer);resumeTimer=setTimeout(start,15000);} ['mouseenter','focusin','touchstart','wheel','scroll'].forEach(e=>feed.addEventListener(e,pause,{passive:true})); feed.addEventListener('mouseleave',start); start(); }
+  function setupTicker() {
+    cancelAnimationFrame(tickerFrame);clearTimeout(tickerResumeTimer);
+    var feed=document.getElementById('brain-feed'),track=feed&&feed.querySelector('[data-ticker-track]');if(!track)return;
+    var originals=Array.from(track.querySelectorAll('[data-ticker-original]'));if(!originals.length)return;
+    if(matchMedia('(prefers-reduced-motion: reduce)').matches){originals[0].classList.add('brain-visible');return;}
+    function appendCycle(){originals.forEach(card=>{var clone=card.cloneNode(true);clone.removeAttribute('data-ticker-original');clone.setAttribute('aria-hidden','true');clone.querySelectorAll('a,button,input,textarea,select').forEach(el=>el.setAttribute('tabindex','-1'));track.appendChild(clone);});}
+    appendCycle();
+    var cloneStart=track.querySelector('[data-feed-item][aria-hidden="true"]'),cycleHeight=cloneStart.offsetTop-originals[0].offsetTop;
+    if(cycleHeight<=0)return;
+    while(track.scrollHeight<feed.clientHeight+cycleHeight)appendCycle();
+    var selected=originals.find(card=>card.dataset.logicalKey===currentKey);var offset=selected?selected.offsetTop-originals[0].offsetTop:0;
+    var lastTime=0,paused=false,speed=12;
+    function markVisible(){var marker=offset+feed.clientHeight*.18,index=0;for(var i=0;i<originals.length;i++){if(originals[i].offsetTop-originals[0].offsetTop<=marker)index=i;}originals.forEach(card=>card.classList.remove('brain-visible'));originals[index].classList.add('brain-visible');currentKey=originals[index].dataset.logicalKey;}
+    function frame(time){if(!lastTime)lastTime=time;if(!paused&&cycleHeight>0){offset=(offset+(time-lastTime)*speed/1000)%cycleHeight;track.style.transform='translate3d(0,'+(-offset)+'px,0)';markVisible();}lastTime=time;tickerFrame=requestAnimationFrame(frame);}
+    function pause(){paused=true;clearTimeout(tickerResumeTimer);}
+    function resume(delay){clearTimeout(tickerResumeTimer);tickerResumeTimer=setTimeout(()=>{paused=false;lastTime=performance.now();},delay||0);}
+    feed.addEventListener('mouseenter',pause);feed.addEventListener('mouseleave',()=>resume(800));feed.addEventListener('focusin',pause);feed.addEventListener('focusout',()=>resume(1200));feed.addEventListener('pointerdown',pause);feed.addEventListener('pointerup',()=>resume(1800));document.onvisibilitychange=()=>{if(document.hidden)pause();else resume(0);};
+    markVisible();tickerFrame=requestAnimationFrame(frame);
+  }
   function setupBrain() {
-    setupScroll(); var shell=document.querySelector('[data-brain-shell]'); if(!shell)return;
+    setupTicker(); var shell=document.querySelector('[data-brain-shell]'); if(!shell)return;
+    var controls=document.querySelector('[data-controls-panel]');if(controls){controls.open=controlsExpanded;controls.ontoggle=()=>controlsExpanded=controls.open;}
     var slider=document.getElementById('brain-duration'), label=document.getElementById('brain-duration-label'); if(slider){var remembered=sessionStorage.getItem('secondBrainDuration');if(remembered)slider.value=remembered;label.textContent=formatDuration(slider.value);slider.oninput=()=>{label.textContent=formatDuration(slider.value);sessionStorage.setItem('secondBrainDuration',slider.value);};}
     clearInterval(countdownTimer);var expires=shell.dataset.expires; if(expires){var countdown=document.getElementById('brain-countdown'); var tick=()=>{var ms=new Date(expires)-Date.now();if(ms<=0){countdown.textContent='Returning to Automatic Feed…';clearInterval(countdownTimer);setTimeout(refreshFeed,1000);return;}var min=Math.ceil(ms/60000);countdown.textContent=formatDuration(min)+' remaining';};tick();countdownTimer=setInterval(tick,30000);}
     document.querySelectorAll('.brain-mode-pill').forEach(p=>p.onclick=()=>{p.dataset.selected=p.dataset.selected==='true'?'false':'true';var modes=selectedModes();if(!modes.length){p.dataset.selected='true';return;}jsonPost('/second-brain/selection',{modes:modes,duration_minutes:Number(slider.value)}).then(refreshFeed).catch(e=>alert(e.message));});
@@ -46,7 +98,7 @@
     var hermes=document.getElementById('brain-hermes'),retention=document.getElementById('brain-chat-retention'),agentStatus=document.getElementById('brain-agent-status'); function saveAgent(){agentStatus.textContent='Saving…';jsonPost('/second-brain/agent-settings',{hermes_enabled:hermes.checked,chat_retention_hours:Number(retention.value)}).then(()=>agentStatus.textContent='Saved.').catch(e=>agentStatus.textContent=e.message);} if(hermes)hermes.onchange=saveAgent;if(retention)retention.onchange=saveAgent;
     var chat=document.getElementById('brain-chat-form'); if(chat)chat.onsubmit=async e=>{e.preventDefault();var input=document.getElementById('brain-chat-input'),status=document.getElementById('brain-chat-status'),message=input.value.trim();if(!message)return;input.value='';status.textContent='Thinking from your current briefing…';var response=await fetch('/second-brain/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:message})});var text=await response.text();if(text.includes('event: answer')){status.textContent='Answer added.';refreshFeed();}else status.textContent='Advisory answer unavailable; context was still recorded.';};
   }
-  document.addEventListener('DOMContentLoaded',()=>{setupBrain();stream=new EventSource('/second-brain/api/events');stream.addEventListener('feed',refreshFeed);});document.body.addEventListener('htmx:afterSwap',setupBrain);window.addEventListener('beforeunload',()=>{if(stream)stream.close();clearInterval(scrollTimer);clearInterval(countdownTimer);});
+  document.addEventListener('DOMContentLoaded',()=>{setupBrain();stream=new EventSource('/second-brain/api/events');stream.addEventListener('feed',refreshFeed);});document.body.addEventListener('htmx:afterSwap',setupBrain);window.addEventListener('beforeunload',()=>{if(stream)stream.close();cancelAnimationFrame(tickerFrame);clearTimeout(tickerResumeTimer);clearInterval(countdownTimer);});
 })();
 </script>
 {% endblock %}
