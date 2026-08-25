@@ -71,17 +71,20 @@
     if(matchMedia('(prefers-reduced-motion: reduce)').matches){originals[0].classList.add('brain-visible');return;}
     function appendCycle(){originals.forEach(card=>{var clone=card.cloneNode(true);clone.removeAttribute('data-ticker-original');clone.setAttribute('aria-hidden','true');clone.querySelectorAll('a,button,input,textarea,select').forEach(el=>el.setAttribute('tabindex','-1'));track.appendChild(clone);});}
     appendCycle();
-    var cloneStart=track.querySelector('[data-feed-item][aria-hidden="true"]'),cycleHeight=cloneStart.offsetTop-originals[0].offsetTop;
-    if(cycleHeight<=0)return;
-    while(track.scrollHeight<feed.clientHeight+cycleHeight)appendCycle();
-    var selected=originals.find(card=>card.dataset.logicalKey===currentKey);var offset=selected?selected.offsetTop-originals[0].offsetTop:0;
-    var lastTime=0,paused=false,speed=12;
-    function markVisible(){var marker=offset+feed.clientHeight*.18,index=0;for(var i=0;i<originals.length;i++){if(originals[i].offsetTop-originals[0].offsetTop<=marker)index=i;}originals.forEach(card=>card.classList.remove('brain-visible'));originals[index].classList.add('brain-visible');currentKey=originals[index].dataset.logicalKey;}
-    function frame(time){if(!lastTime)lastTime=time;if(!paused&&cycleHeight>0){offset=(offset+(time-lastTime)*speed/1000)%cycleHeight;track.style.transform='translate3d(0,'+(-offset)+'px,0)';markVisible();}lastTime=time;tickerFrame=requestAnimationFrame(frame);}
-    function pause(){paused=true;clearTimeout(tickerResumeTimer);}
-    function resume(delay){clearTimeout(tickerResumeTimer);tickerResumeTimer=setTimeout(()=>{paused=false;lastTime=performance.now();},delay||0);}
-    feed.addEventListener('mouseenter',pause);feed.addEventListener('mouseleave',()=>resume(800));feed.addEventListener('focusin',pause);feed.addEventListener('focusout',()=>resume(1200));feed.addEventListener('pointerdown',pause);feed.addEventListener('pointerup',()=>resume(1800));document.onvisibilitychange=()=>{if(document.hidden)pause();else resume(0);};
-    markVisible();tickerFrame=requestAnimationFrame(frame);
+    function startTicker(attempt){
+      var cloneStart=track.querySelector('[data-feed-item][aria-hidden="true"]'),cycleHeight=cloneStart.offsetTop-originals[0].offsetTop;
+      if(cycleHeight<=0){if(attempt<120)tickerFrame=requestAnimationFrame(()=>startTicker(attempt+1));return;}
+      while(track.scrollHeight<feed.clientHeight+cycleHeight)appendCycle();
+      var selected=originals.find(card=>card.dataset.logicalKey===currentKey);var offset=selected?selected.offsetTop-originals[0].offsetTop:0;
+      var lastTime=0,paused=false,speed=12;
+      function markVisible(){var marker=offset+feed.clientHeight*.18,index=0;for(var i=0;i<originals.length;i++){if(originals[i].offsetTop-originals[0].offsetTop<=marker)index=i;}originals.forEach(card=>card.classList.remove('brain-visible'));originals[index].classList.add('brain-visible');currentKey=originals[index].dataset.logicalKey;}
+      function frame(time){if(!lastTime)lastTime=time;if(!paused&&cycleHeight>0){offset=(offset+(time-lastTime)*speed/1000)%cycleHeight;track.style.transform='translate3d(0,'+(-offset)+'px,0)';markVisible();}lastTime=time;tickerFrame=requestAnimationFrame(frame);}
+      function pause(){paused=true;clearTimeout(tickerResumeTimer);}
+      function resume(delay){clearTimeout(tickerResumeTimer);tickerResumeTimer=setTimeout(()=>{paused=false;lastTime=performance.now();},delay||0);}
+      feed.addEventListener('mouseenter',pause);feed.addEventListener('mouseleave',()=>resume(800));feed.addEventListener('focusin',pause);feed.addEventListener('focusout',()=>resume(1200));feed.addEventListener('pointerdown',pause);feed.addEventListener('pointerup',()=>resume(1800));document.onvisibilitychange=()=>{if(document.hidden)pause();else resume(0);};
+      markVisible();tickerFrame=requestAnimationFrame(frame);
+    }
+    tickerFrame=requestAnimationFrame(()=>startTicker(0));
   }
   function setupBrain() {
     setupTicker(); var shell=document.querySelector('[data-brain-shell]'); if(!shell)return;
