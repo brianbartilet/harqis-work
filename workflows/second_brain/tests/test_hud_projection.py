@@ -11,12 +11,14 @@ def test__hud_projection_redacts_secrets_and_bounds_payload():
         {
             "text": "useful output token=plain-secret account 123456789012",
             "api_key": "do-not-store",
+            "account_id": 123456789012,
             "nested": {"access-token": "also-secret"},
         }
     )
 
     assert payload["text"] == "useful output token=[redacted] account ••••9012"
     assert payload["api_key"] == "[redacted]"
+    assert payload["account_id"] == "••••9012"
     assert payload["nested"]["access-token"] == "[redacted]"
 
 

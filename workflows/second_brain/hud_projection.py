@@ -62,8 +62,10 @@ def _safe_value(value: Any, *, key: str = "", depth: int = 0) -> Any:
         return "[redacted]"
     if depth >= 6:
         return _clean_text(value, limit=500)
-    if value is None or isinstance(value, (bool, int, float)):
+    if value is None or isinstance(value, (bool, float)):
         return value
+    if isinstance(value, int):
+        return _clean_text(value) if abs(value) >= 10_000_000 else value
     if isinstance(value, str):
         return _clean_text(value)
     if isinstance(value, Mapping):
