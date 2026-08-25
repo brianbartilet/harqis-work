@@ -50,9 +50,13 @@
   .brain-category-dot { background:var(--mode-color); box-shadow:0 0 12px var(--mode-color); }
   .brain-result pre { overflow:auto; border:1px solid #1e293b; border-radius:.5rem; background:#020617; padding:.75rem; }
   .brain-card-summary { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
-  .brain-card-details { max-height:4.4rem; overflow:hidden; }
-  .brain-card-details > :first-child { margin-top:0; }
-  .brain-card-details > :last-child { margin-bottom:0; }
+  .brain-card-details-summary::-webkit-details-marker { display:none; }
+  .brain-card-details-summary:hover { background:rgba(30,41,59,.45); color:#fff; }
+  .brain-card-details-action::before { content:"Show"; color:#67e8f9; }
+  .brain-card-details[open] .brain-card-details-action::before { content:"Hide"; }
+  .brain-card-details-content { max-height:min(45vh,24rem); overflow:auto; overscroll-behavior:contain; scrollbar-color:#334155 transparent; }
+  .brain-card-details-content > :first-child { margin-top:0; }
+  .brain-card-details-content > :last-child { margin-bottom:0; }
   .brain-result table { width:100%; border-collapse:collapse; }
   .brain-result th,.brain-result td { border-bottom:1px solid #1e293b; padding:.4rem; text-align:left; }
   .brain-switch input { position:absolute; opacity:0; }
@@ -96,7 +100,7 @@
   .brain-notice[data-tone="error"] { border-color:#fb7185; color:#ffe4e6; }
   .brain-notice[data-tone="success"] { border-color:#22d3ee; color:#cffafe; }
   .brain-notice[hidden] { display:none; }
-  .brain-primary-action:focus-visible,.brain-mode-pill:focus-visible,.brain-control-summary:focus-visible,.brain-number-stepper button:focus-visible,.brain-manage-button:focus-visible { outline:2px solid #67e8f9; outline-offset:2px; }
+  .brain-primary-action:focus-visible,.brain-mode-pill:focus-visible,.brain-control-summary:focus-visible,.brain-card-details-summary:focus-visible,.brain-number-stepper button:focus-visible,.brain-manage-button:focus-visible { outline:2px solid #67e8f9; outline-offset:2px; }
   .brain-pulse { animation:brain-breathe 2.4s ease-in-out infinite; }
   @keyframes brain-breathe { 50% { opacity:.35; transform:scale(.8); } }
   @media (min-width:1024px) {
@@ -128,9 +132,10 @@
   function setupTicker() {
     cancelAnimationFrame(tickerFrame);clearTimeout(tickerResumeTimer);
     var feed=document.getElementById('brain-feed'),track=feed&&feed.querySelector('[data-ticker-track]');if(!track)return;
+    track.querySelectorAll('[data-feed-item][aria-hidden="true"]').forEach(card=>card.remove());
     var originals=Array.from(track.querySelectorAll('[data-ticker-original]'));if(!originals.length)return;
     if(matchMedia('(prefers-reduced-motion: reduce)').matches){originals[0].classList.add('brain-visible');return;}
-    function appendCycle(){originals.forEach(card=>{var clone=card.cloneNode(true);clone.removeAttribute('data-ticker-original');clone.setAttribute('aria-hidden','true');clone.querySelectorAll('a,button,input,textarea,select').forEach(el=>el.setAttribute('tabindex','-1'));track.appendChild(clone);});}
+    function appendCycle(){originals.forEach(card=>{var clone=card.cloneNode(true);clone.removeAttribute('data-ticker-original');clone.setAttribute('aria-hidden','true');clone.querySelectorAll('a,button,input,textarea,select,summary').forEach(el=>el.setAttribute('tabindex','-1'));track.appendChild(clone);});}
     appendCycle();
     function startTicker(attempt){
       var cloneStart=track.querySelector('[data-feed-item][aria-hidden="true"]'),cycleHeight=cloneStart.offsetTop-originals[0].offsetTop;
@@ -145,6 +150,7 @@
       function resume(delay){clearTimeout(tickerResumeTimer);tickerResumeTimer=setTimeout(()=>{paused=false;lastTime=performance.now();},delay||0);}
       function syncManualScroll(){if(paused)offset=normalized(feed.scrollTop);markVisible();}
       feed.addEventListener('mouseenter',pause);feed.addEventListener('mouseleave',()=>resume(800));feed.addEventListener('focusin',pause);feed.addEventListener('focusout',()=>resume(1000));feed.addEventListener('touchstart',pause,{passive:true});feed.addEventListener('touchend',()=>resume(1400),{passive:true});feed.addEventListener('touchcancel',()=>resume(1400),{passive:true});feed.addEventListener('wheel',()=>{pause();resume(1400);},{passive:true});feed.addEventListener('scroll',syncManualScroll,{passive:true});document.onvisibilitychange=()=>{if(document.hidden)pause();else resume(0);};
+      originals.forEach(card=>card.querySelectorAll('.brain-card-details').forEach(details=>details.addEventListener('toggle',()=>requestAnimationFrame(setupTicker),{once:true})));
       markVisible();tickerFrame=requestAnimationFrame(frame);
     }
     tickerFrame=requestAnimationFrame(()=>startTicker(0));

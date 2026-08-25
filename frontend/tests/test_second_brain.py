@@ -94,6 +94,9 @@ def test__second_brain_places_ticker_in_dismissible_feed_dialog(authenticated_cl
     assert "brain-primary-action" in response.text
     assert "brain-number-stepper" in response.text
     assert "brain-notice" in response.text
+    assert "brain-card-details-content" in response.text
+    assert "max-height:4.4rem" not in response.text
+    assert "requestAnimationFrame(setupTicker)" in response.text
     assert "alert(" not in response.text
 
 
