@@ -157,6 +157,55 @@ def test__feed_store_refreshes_expiry_without_creating_revision(tmp_path):
     assert refreshed["fresh_until"] == "2026-08-24T10:15:00Z"
 
 
+def test__feed_store_retires_detached_operation_items_and_preserves_attached_items(tmp_path):
+    store = SecondBrainStore(tmp_path / "brain.sqlite3")
+    store.upsert_feed_item(
+        FeedItem(
+            logical_key="default:jira.changed:jira:ABC-1",
+            category="default",
+            kind="jira_changed",
+            title="ABC-1 changed",
+            summary="In progress",
+            operation_id="jira.changed",
+        )
+    )
+    store.upsert_feed_item(
+        FeedItem(
+            logical_key="default:hud.daily_radar:hud-projection:hud.daily_radar",
+            category="default",
+            kind="hud_projection",
+            title="Daily radar",
+            summary="Ready",
+            operation_id="hud.daily_radar",
+        )
+    )
+
+    retired = store.retire_feed_items({("default", "hud.daily_radar")})
+
+    assert [item["logical_key"] for item in retired] == ["default:jira.changed:jira:ABC-1"]
+    assert retired[0]["status"] == "retired"
+    assert retired[0]["retirement_reason"] == "configuration_changed"
+    assert [item["title"] for item in store.feed_snapshot()["items"]] == ["Daily radar"]
+
+
+def test__feed_store_retires_legacy_items_by_category_prefixed_logical_key(tmp_path):
+    store = SecondBrainStore(tmp_path / "brain.sqlite3")
+    store.upsert_feed_item(
+        FeedItem(
+            logical_key="default:jira.changed:jira:ABC-1",
+            category="default",
+            kind="jira_changed",
+            title="ABC-1 changed",
+            summary="In progress",
+        )
+    )
+
+    retired = store.retire_feed_items(set())
+
+    assert retired[0]["operation_id"] == "jira.changed"
+    assert store.feed_snapshot()["items"] == []
+
+
 def test__successful_operation_is_not_due_until_refresh_interval(tmp_path):
     store = SecondBrainStore(tmp_path / "brain.sqlite3")
     assert store.operation_due("jira.changed", 30) is True

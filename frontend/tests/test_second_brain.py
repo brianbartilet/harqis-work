@@ -91,6 +91,33 @@ def test__second_brain_places_ticker_in_dismissible_feed_dialog(authenticated_cl
     assert "touchend" in response.text
     assert "Second Brain Feed" in response.text
     assert "Showing latest updates" in response.text
+
+
+def test__second_brain_cards_expand_complete_content_in_a_scrollable_panel(authenticated_client):
+    from modules.second_brain.service import get_second_brain_store
+    from workflows.second_brain.models import FeedItem
+
+    get_second_brain_store().upsert_feed_item(
+        FeedItem(
+            logical_key="default:hud.daily_radar:hud-projection:hud.daily_radar",
+            category="default",
+            kind="hud_projection",
+            title="Daily radar",
+            summary="A compact briefing",
+            details="Metrics\n```json\n{\"calendar\": 24}\n```",
+            operation_id="hud.daily_radar",
+        )
+    )
+
+    response = authenticated_client.get("/second-brain")
+
+    assert response.status_code == 200
+    assert 'data-card-toggle aria-expanded="false"' in response.text
+    assert "data-card-expanded hidden" in response.text
+    assert "brain-card-scroll" in response.text
+    assert "max-height:min(50vh,26rem)" in response.text
+    assert "max-height:4.4rem" not in response.text
+    assert "var expanded=track.querySelector" in response.text
     assert "brain-primary-action" in response.text
     assert "brain-number-stepper" in response.text
     assert "brain-notice" in response.text
@@ -165,6 +192,41 @@ def test__second_brain_category_settings_are_configurable(authenticated_client, 
     assert modes["tabletop"]["keywords"] == ["mtg", "deck"]
     assert modes["tabletop"]["client_eligibility"] == ["web", "telegram"]
     assert modes["tabletop"]["fallback_windows"][0]["start"] == "18:00"
+
+
+def test__detaching_an_operation_immediately_retires_its_visible_cards(
+    authenticated_client, monkeypatch
+):
+    from modules.second_brain import router
+    from modules.second_brain.service import get_second_brain_store
+    from workflows.second_brain.models import FeedItem
+
+    monkeypatch.setattr(router, "_dispatch_reconcile", lambda correlation_id: "task-category")
+    get_second_brain_store().upsert_feed_item(
+        FeedItem(
+            logical_key="default:jira.changed:jira:ABC-1",
+            category="default",
+            kind="jira_changed",
+            title="ABC-1 changed",
+            summary="In progress",
+        )
+    )
+
+    response = authenticated_client.post(
+        "/second-brain/categories",
+        data={
+            "mode_id": "default",
+            "name": "Default",
+            "color": "#38bdf8",
+            "enabled": "on",
+            "operation_ids": "",
+            "client_eligibility": "web",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["retired"] == 1
+    assert authenticated_client.get("/second-brain/api/feed").json()["items"] == []
 
 
 def test__second_brain_category_creation_generates_a_unique_permanent_key(

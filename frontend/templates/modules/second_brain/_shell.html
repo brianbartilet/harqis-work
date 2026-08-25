@@ -79,17 +79,23 @@
           {% if second_brain['items'] %}
             {% for item in second_brain['items'] %}
             {% set mode = second_brain.mode_map.get(item.category, {'name': item.category, 'color': '#64748b'}) %}
-            <article class="brain-card rounded-xl border border-slate-800 bg-slate-900/90 p-3 sm:p-4" data-feed-item data-ticker-original data-logical-key="{{ item.logical_key }}" style="--mode-color: {{ mode.color }}">
+            <article class="brain-card rounded-xl border border-slate-800 bg-slate-900/90" data-feed-item data-ticker-original data-logical-key="{{ item.logical_key }}" data-expanded="false" style="--mode-color: {{ mode.color }}">
+              <button type="button" class="brain-card-toggle w-full p-3 text-left sm:p-4" data-card-toggle aria-expanded="false" aria-controls="brain-card-panel-{{ loop.index }}">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
                   <div class="flex flex-wrap items-center gap-1.5 text-[10px]"><span class="brain-category-dot h-1.5 w-1.5 rounded-full"></span><span class="font-mono uppercase tracking-[.12em] text-slate-400">{{ mode.name }}</span>{% if item.archived_source %}<span class="rounded-full border border-amber-900 px-1.5 py-0.5 text-amber-300">archived</span>{% endif %}<span class="text-slate-700">/</span><span class="text-slate-500">{{ item.kind | replace('_', ' ') }}</span><span class="text-slate-600">·</span><span class="text-slate-500">{{ item.status }}</span></div>
                   <h3 class="mt-2 text-base font-semibold leading-snug text-white">{{ item.title }}</h3>
                   <p class="brain-card-summary mt-1 text-xs leading-relaxed text-slate-400">{{ item.summary }}</p>
                 </div>
-                <div class="shrink-0 text-right"><p class="font-mono text-lg text-white">{{ item.priority }}</p><p class="text-[9px] uppercase tracking-widest text-slate-600">signal</p></div>
+                <div class="shrink-0 text-right"><p class="font-mono text-lg text-white">{{ item.priority }}</p><p class="text-[9px] uppercase tracking-widest text-slate-600">signal</p><span class="brain-card-toggle-label mt-2 block text-[9px] uppercase tracking-wider text-cyan-400"></span></div>
               </div>
-              {% if item.details %}<div class="markdown-body brain-result brain-card-details mt-3 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-xs leading-relaxed text-slate-400">{{ item.details_html }}</div>{% endif %}
-              <footer class="mt-3 flex flex-wrap justify-between gap-2 border-t border-slate-800 pt-2 text-[10px] text-slate-600"><span>{{ item.source_at or 'source time unavailable' }} · rev {{ item.revision }}</span>{% if item.links.jira %}<a class="font-medium text-cyan-300 hover:text-cyan-200" href="{{ item.links.jira }}" rel="noreferrer">Open source →</a>{% endif %}</footer>
+              </button>
+              <div id="brain-card-panel-{{ loop.index }}" class="brain-card-expanded border-t border-slate-800" data-card-expanded hidden>
+                <div class="brain-card-scroll p-3 sm:p-4">
+                  {% if item.details %}<div class="markdown-body brain-result text-xs leading-relaxed text-slate-400">{{ item.details_html }}</div>{% else %}<p class="text-xs leading-relaxed text-slate-400">{{ item.summary }}</p>{% endif %}
+                  <footer class="mt-3 flex flex-wrap justify-between gap-2 border-t border-slate-800 pt-2 text-[10px] text-slate-600"><span>{{ item.source_at or 'source time unavailable' }} · rev {{ item.revision }}</span>{% if item.links.jira %}<a class="font-medium text-cyan-300 hover:text-cyan-200" href="{{ item.links.jira }}" rel="noreferrer">Open source →</a>{% endif %}</footer>
+                </div>
+              </div>
             </article>
             {% endfor %}
           {% else %}

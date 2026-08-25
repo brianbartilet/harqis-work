@@ -48,3 +48,29 @@ def test__reconcile_isolates_collector_failure(tmp_path, monkeypatch):
     assert result["changed"] == 1
     assert result["failures"] == [{"operation_id": "test.fake", "error_type": "ConnectionError"}]
     assert store.feed_snapshot()["items"][0]["status"] == "degraded"
+
+
+def test__reconcile_retires_items_after_an_operation_is_detached(tmp_path, monkeypatch):
+    from workflows.second_brain.models import ModeDefinition
+
+    store = SecondBrainStore(tmp_path / "brain.sqlite3")
+    store.upsert_feed_item(
+        FeedItem(
+            logical_key="default:jira.changed:jira:ABC-1",
+            category="default",
+            kind="jira_changed",
+            title="ABC-1 changed",
+            summary="In progress",
+        )
+    )
+    store.save_mode(ModeDefinition(mode_id="default", name="Default", operation_ids=()))
+    published = []
+    monkeypatch.setattr(module, "_current_calendar_signal", lambda: None)
+    monkeypatch.setattr(module, "publish_feed_change", published.append)
+
+    result = module.reconcile(store=store, correlation_id="corr")
+
+    assert result["retired"] == 1
+    assert result["changed"] == 1
+    assert store.feed_snapshot()["items"] == []
+    assert published[0]["status"] == "retired"

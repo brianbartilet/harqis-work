@@ -346,6 +346,67 @@ class SecondBrainStore:
             )
         return payload, True
 
+    def retire_feed_items(
+        self,
+        allowed_bindings: Iterable[tuple[str, str]],
+    ) -> list[dict[str, Any]]:
+        """Expire items whose category no longer owns their source operation.
+
+        Older feed rows predate the explicit ``operation_id`` field, so their
+        category-prefixed logical keys are parsed during this rolling migration.
+        Revision history remains intact and a new tombstone revision wakes SSE
+        clients so they reload the canonical snapshot immediately.
+        """
+        allowed = {
+            (str(category).strip().casefold(), str(operation_id).strip())
+            for category, operation_id in allowed_bindings
+            if str(category).strip() and str(operation_id).strip()
+        }
+        retired: list[dict[str, Any]] = []
+        current = isoformat()
+        with self._lock, self._connect() as connection:
+            rows = connection.execute(
+                """SELECT item_id, logical_key, category, content_hash, payload_json
+                   FROM feed_items WHERE expires_at='' OR expires_at>?""",
+                (current,),
+            ).fetchall()
+            for row in rows:
+                payload = json.loads(row["payload_json"])
+                operation_id = str(payload.get("operation_id") or "").strip()
+                if not operation_id:
+                    prefix = f"{row['category']}:"
+                    remainder = row["logical_key"][len(prefix):] if row["logical_key"].startswith(prefix) else ""
+                    operation_id = remainder.split(":", 1)[0] if ":" in remainder else ""
+                if not operation_id or (row["category"], operation_id) in allowed:
+                    continue
+                revision_cursor = connection.execute(
+                    "INSERT INTO feed_revisions(item_id, logical_key, changed_at, payload_json) VALUES (?, ?, ?, '{}')",
+                    (row["item_id"], row["logical_key"], current),
+                )
+                revision = int(revision_cursor.lastrowid)
+                tombstone = {
+                    **payload,
+                    "operation_id": operation_id,
+                    "status": "retired",
+                    "expires_at": current,
+                    "retired_at": current,
+                    "retirement_reason": "configuration_changed",
+                    "revision": revision,
+                }
+                encoded = json.dumps(tombstone, sort_keys=True, ensure_ascii=False)
+                connection.execute(
+                    "UPDATE feed_revisions SET payload_json=? WHERE revision=?",
+                    (encoded, revision),
+                )
+                connection.execute(
+                    """UPDATE feed_items
+                       SET expires_at=?, content_hash=?, revision=?, payload_json=?
+                       WHERE logical_key=?""",
+                    (current, f"retired:{revision}:{row['content_hash']}", revision, encoded, row["logical_key"]),
+                )
+                retired.append(tombstone)
+        return retired
+
     def feed_snapshot(
         self,
         *,
