@@ -25,6 +25,7 @@ from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropi
 
 from workflows.hud.tasks.sections import sections__check_desktop, sections__check_world_checks
 from workflows.hud.prompts import load_prompt
+from workflows.second_brain.hud_projection import capture_hud_projection
 
 _DESKTOP_ANALYSIS_PROMPT = load_prompt('desktop_analysis')
 
@@ -70,6 +71,7 @@ def _trim_dump_file(path: str, keep_bytes: int) -> None:
 
 @SPROUT.task()
 @log_result()
+@capture_hud_projection()
 @init_meter(RAINMETER_CONFIG, hud_item_name='DESKTOP LOGS', new_sections_dict=sections__check_desktop,
             play_sound=True, schedule_categories=[ScheduleCategory.PINNED, ], prepend_if_exists=True)
 @feed()
@@ -350,6 +352,7 @@ def get_desktop_logs(timedelta_previous_hours=1, ini=ConfigHelperRainmeter(), **
 
 @SPROUT.task()
 @log_result()
+@capture_hud_projection()
 @init_meter(RAINMETER_CONFIG,
             hud_item_name='GPT INFO', new_sections_dict=sections__check_world_checks, play_sound=False,
             schedule_categories=[ScheduleCategory.WORK, ])

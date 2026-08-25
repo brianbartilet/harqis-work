@@ -19,10 +19,12 @@ from workflows.hud.tasks_config import WORKFLOWS_HUD
 from workflows.purchases.tasks_config import WORKFLOW_PURCHASES
 
 from apps.google_apps.references.constants import ScheduleCategory
+from workflows.second_brain.hud_projection import capture_hud_projection
 
 
 @SPROUT.task()
 @log_result()
+@capture_hud_projection()
 @init_meter(RAINMETER_CONFIG, hud_item_name='FAILED JOBS TODAY', new_sections_dict=sections__check_logs, play_sound=False)
 @feed()
 def get_failed_jobs(ini=ConfigHelperRainmeter()):
@@ -190,6 +192,7 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
 
 @SPROUT.task()
 @log_result()
+@capture_hud_projection()
 @init_meter(RAINMETER_CONFIG, hud_item_name='CELERY SPROUTS', new_sections_dict=sections__check_logs,
             play_sound=False, schedule_categories=[ScheduleCategory.DEACTIVATED])
 @feed()

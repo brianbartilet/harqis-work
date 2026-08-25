@@ -6,6 +6,10 @@
 - Aggregates data from Google Calendar, OANDA forex, TCG Marketplace, YNAB budgets, AppSheet (PC INVOICE table), and Elasticsearch logs.
 - 15 scheduled Celery tasks push data to the desktop feed at various intervals.
 - Tasks use the decorator chain: `@SPROUT.task` → `@log_result` → `@init_meter` → `@feed`.
+- Current HUD panels also include `@capture_hud_projection` immediately before
+  `@init_meter`. Successful return payloads are redacted and capped before being
+  projected to Elasticsearch for read-only Second Brain adapters; projection
+  failure never interrupts Rainmeter rendering.
 
 ## Queues
 

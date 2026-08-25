@@ -28,6 +28,7 @@ from workflows.hud.collectors.hermes_pushes import (
     displayed_item_count,
     load_snapshot,
 )
+from workflows.second_brain.hud_projection import capture_hud_projection
 
 DAILY_RADAR_MAX_HUD_LINES: int = 19
 DAILY_RADAR_WRAP_AT: int = 56
@@ -93,6 +94,7 @@ def _configure_radar_ini(
 
 @SPROUT.task()
 @log_result()
+@capture_hud_projection()
 @init_meter(
     RAINMETER_CONFIG,
     hud_item_name="HERMES RADAR",
@@ -132,6 +134,7 @@ def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
 
 
 @SPROUT.task()
+@capture_hud_projection()
 @init_meter(
     RAINMETER_CONFIG,
     hud_item_name="HERMES RADAR",

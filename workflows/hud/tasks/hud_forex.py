@@ -16,10 +16,12 @@ from apps.oanda.config import APP_NAME as APP_NAME_OANDA
 from apps.google_apps.references.constants import ScheduleCategory
 
 from workflows.hud.tasks.sections import sections__oanda
+from workflows.second_brain.hud_projection import capture_hud_projection
 
 
 @SPROUT.task()
 @log_result()
+@capture_hud_projection()
 @init_meter(RAINMETER_CONFIG, hud_item_name='OANDA ACCOUNT', new_sections_dict=sections__oanda, play_sound=False,
             schedule_categories=[ScheduleCategory.FINANCE, ])
 @feed()

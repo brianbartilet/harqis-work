@@ -20,6 +20,7 @@ from apps.apps_config import CONFIG_MANAGER
 
 from workflows.hud.tasks.sections import sections__utilities_desktop, sections__utilities_i_cue, sections__utilities_ai, sections__utilities_ahk
 from workflows.hud.dto.constants import Profile, AppExe, HUD_NAME_MOUSE_BINDINGS, HUD_NAME_AHK_BINDINGS, APP_TO_PROFILE
+from workflows.second_brain.hud_projection import capture_hud_projection
 
 
 def _get_profile_for_process_name(proc_name: str) -> Profile:
@@ -71,6 +72,7 @@ def _get_active_window_app(print_all=False):
 
 @SPROUT.task()
 @log_result()
+@capture_hud_projection()
 @init_meter(RAINMETER_CONFIG,
             hud_item_name="HUD PROFILES",
             new_sections_dict=sections__utilities_desktop,
@@ -170,6 +172,7 @@ def show_hud_profiles(ini=ConfigHelperRainmeter()):
 
 
 @SPROUT.task()
+@capture_hud_projection()
 @init_meter(RAINMETER_CONFIG,
             hud_item_name=HUD_NAME_MOUSE_BINDINGS,
             new_sections_dict=sections__utilities_i_cue,
@@ -278,6 +281,7 @@ def build_summary_mouse_bindings(**kwargs):
 
 @SPROUT.task()
 @log_result()
+@capture_hud_projection()
 @init_meter(RAINMETER_CONFIG,
             hud_item_name="AGENTS CORE",
             new_sections_dict=sections__utilities_ai,
@@ -396,6 +400,7 @@ def show_ai_helper(ini=ConfigHelperRainmeter(), **kwargs):
 
 @SPROUT.task()
 @log_result()
+@capture_hud_projection()
 @init_meter(RAINMETER_CONFIG,
             hud_item_name=HUD_NAME_AHK_BINDINGS,
             new_sections_dict=sections__utilities_ahk,

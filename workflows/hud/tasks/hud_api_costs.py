@@ -33,6 +33,7 @@ from apps.antropic.references.web.api.usage import ApiServiceAnthropicUsage
 from apps.antropic.config import APP_NAME as APP_NAME_ANTHROPIC
 
 from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
+from workflows.second_brain.hud_projection import capture_hud_projection
 from apps.apps_config import CONFIG_MANAGER
 
 from apps.google_apps.references.constants import ScheduleCategory
@@ -215,6 +216,7 @@ def _render_api_costs_dump(
 
 @SPROUT.task()
 @log_result()
+@capture_hud_projection()
 @init_meter(RAINMETER_CONFIG, hud_item_name='TOKEN BURN',
             new_sections_dict=sections__api_costs, play_sound=False,
             schedule_categories=[ScheduleCategory.ORGANIZE, ScheduleCategory.FINANCE])
