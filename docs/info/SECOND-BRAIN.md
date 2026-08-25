@@ -132,8 +132,9 @@ The web feed receives updates over authenticated SSE and replaces only its feed
 fragment. The main page keeps context management and advisory chat visible; a
 `View feed` control opens the cards in a dismissible dialog. Inside that dialog,
 sanitized Markdown cards move through a continuously looping ticker viewport on
-desktop and mobile. Motion pauses for interaction and falls back to manual
-scrolling for reduced-motion preferences. The collapsed context panel is sticky
+desktop and mobile. The viewport uses native scrolling: touch or wheel input
+temporarily overrides the ticker, which resumes after inactivity. Automatic
+motion is disabled for reduced-motion preferences. The collapsed context panel is sticky
 beside chat on desktop and appears before it on mobile. The advisory Hermes chat
 stores history for eight hours by default
 (configurable from one to 168 hours) and cites feed logical keys. Hermes failure

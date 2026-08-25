@@ -40,14 +40,12 @@
 
     <div class="brain-primary min-w-0">
       <section class="brain-feed-launcher rounded-2xl border border-slate-800 bg-slate-950/55 p-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="flex flex-wrap gap-2" aria-label="Briefing categories">
-            {% for mode in second_brain.modes %}
-            <button type="button" class="brain-mode-pill rounded-full border px-4 py-2 text-sm transition disabled:cursor-default" data-mode-id="{{ mode.mode_id }}" data-selected="{{ 'true' if mode.mode_id in active_modes else 'false' }}" style="--mode-color: {{ mode.color }}" {% if second_brain.automatic_feed %}disabled{% endif %}>{{ mode.name }}</button>
-            {% endfor %}
-          </div>
-          <button type="button" class="brain-view-feed inline-flex items-center gap-2 text-sm font-medium" data-open-brain-feed>View feed <span aria-hidden="true">↗</span></button>
+        <div class="flex flex-wrap gap-2" aria-label="Briefing categories">
+          {% for mode in second_brain.modes %}
+          <button type="button" class="brain-mode-pill rounded-full border px-4 py-2 text-sm transition disabled:cursor-default" data-mode-id="{{ mode.mode_id }}" data-selected="{{ 'true' if mode.mode_id in active_modes else 'false' }}" style="--mode-color: {{ mode.color }}" {% if second_brain.automatic_feed %}disabled{% endif %}>{{ mode.name }}</button>
+          {% endfor %}
         </div>
+        <button type="button" class="brain-view-feed mt-4 flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm font-semibold" data-open-brain-feed><span>View feed</span><span class="brain-view-feed-count">{{ second_brain['items'] | length }} latest</span></button>
       </section>
 
       <section class="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5" aria-labelledby="brain-chat-heading">
@@ -63,8 +61,8 @@
 
   <dialog id="brain-feed-dialog" class="brain-feed-dialog rounded-2xl border border-slate-700 bg-slate-950 p-0 text-slate-200" aria-labelledby="brain-feed-dialog-title">
     <div class="brain-feed-dialog-frame">
-      <header class="brain-feed-dialog-header flex items-center justify-between gap-4 border-b border-slate-800 px-4 py-3 sm:px-5">
-        <div><p class="text-xs uppercase tracking-[.18em] text-cyan-300">Live briefing</p><h2 id="brain-feed-dialog-title" class="mt-1 text-lg font-semibold text-white">What needs your attention</h2></div>
+      <header class="brain-feed-dialog-header flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-3">
+        <div class="min-w-0"><p class="text-[10px] uppercase tracking-[.18em] text-cyan-300">Second Brain Feed</p><h2 id="brain-feed-dialog-title" class="mt-0.5 text-sm font-semibold text-white">Showing latest updates</h2><div class="mt-2 flex flex-wrap gap-1.5" aria-label="Active feed categories">{% for mode in second_brain.modes %}{% if mode.mode_id in active_modes %}<span class="brain-dialog-mode" style="--mode-color: {{ mode.color }}"><span></span>{{ mode.name }}</span>{% endif %}{% endfor %}</div></div>
         <button type="button" class="brain-feed-close" data-close-brain-feed aria-label="Close feed"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"></path></svg></button>
       </header>
       <div class="p-3 sm:p-4">
@@ -73,17 +71,17 @@
           {% if second_brain['items'] %}
             {% for item in second_brain['items'] %}
             {% set mode = second_brain.mode_map.get(item.category, {'name': item.category, 'color': '#64748b'}) %}
-            <article class="brain-card min-h-[15rem] rounded-xl border border-slate-800 bg-slate-900/90 p-5 sm:p-6" data-feed-item data-ticker-original data-logical-key="{{ item.logical_key }}" style="--mode-color: {{ mode.color }}">
-              <div class="flex items-start justify-between gap-4">
+            <article class="brain-card rounded-xl border border-slate-800 bg-slate-900/90 p-3 sm:p-4" data-feed-item data-ticker-original data-logical-key="{{ item.logical_key }}" style="--mode-color: {{ mode.color }}">
+              <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
-                  <div class="flex flex-wrap items-center gap-2 text-xs"><span class="brain-category-dot h-2 w-2 rounded-full"></span><span class="font-mono uppercase tracking-[.16em] text-slate-400">{{ mode.name }}</span>{% if item.archived_source %}<span class="rounded-full border border-amber-900 px-2 py-0.5 text-amber-300">archived source</span>{% endif %}<span class="text-slate-700">/</span><span class="text-slate-500">{{ item.kind | replace('_', ' ') }}</span><span class="rounded-full bg-slate-950 px-2 py-0.5 text-slate-500">{{ item.status }}</span></div>
-                  <h3 class="mt-3 text-lg font-semibold leading-snug text-white sm:text-xl">{{ item.title }}</h3>
-                  <p class="mt-2 text-sm leading-relaxed text-slate-300">{{ item.summary }}</p>
+                  <div class="flex flex-wrap items-center gap-1.5 text-[10px]"><span class="brain-category-dot h-1.5 w-1.5 rounded-full"></span><span class="font-mono uppercase tracking-[.12em] text-slate-400">{{ mode.name }}</span>{% if item.archived_source %}<span class="rounded-full border border-amber-900 px-1.5 py-0.5 text-amber-300">archived</span>{% endif %}<span class="text-slate-700">/</span><span class="text-slate-500">{{ item.kind | replace('_', ' ') }}</span><span class="text-slate-600">·</span><span class="text-slate-500">{{ item.status }}</span></div>
+                  <h3 class="mt-2 text-base font-semibold leading-snug text-white">{{ item.title }}</h3>
+                  <p class="brain-card-summary mt-1 text-xs leading-relaxed text-slate-400">{{ item.summary }}</p>
                 </div>
-                <div class="shrink-0 text-right"><p class="font-mono text-xl text-white">{{ item.priority }}</p><p class="text-[10px] uppercase tracking-widest text-slate-600">signal</p></div>
+                <div class="shrink-0 text-right"><p class="font-mono text-lg text-white">{{ item.priority }}</p><p class="text-[9px] uppercase tracking-widest text-slate-600">signal</p></div>
               </div>
-              {% if item.details %}<div class="markdown-body brain-result mt-5 rounded-lg border border-slate-800 bg-slate-950/70 p-4 text-sm text-slate-300">{{ item.details_html }}</div>{% endif %}
-              <footer class="mt-5 flex flex-wrap justify-between gap-3 border-t border-slate-800 pt-3 text-xs text-slate-500"><span>{{ item.source_at or 'source time unavailable' }} · rev {{ item.revision }}</span>{% if item.links.jira %}<a class="text-cyan-300 hover:text-cyan-200" href="{{ item.links.jira }}" rel="noreferrer">Open source →</a>{% endif %}</footer>
+              {% if item.details %}<div class="markdown-body brain-result brain-card-details mt-3 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-xs leading-relaxed text-slate-400">{{ item.details_html }}</div>{% endif %}
+              <footer class="mt-3 flex flex-wrap justify-between gap-2 border-t border-slate-800 pt-2 text-[10px] text-slate-600"><span>{{ item.source_at or 'source time unavailable' }} · rev {{ item.revision }}</span>{% if item.links.jira %}<a class="font-medium text-cyan-300 hover:text-cyan-200" href="{{ item.links.jira }}" rel="noreferrer">Open source →</a>{% endif %}</footer>
             </article>
             {% endfor %}
           {% else %}

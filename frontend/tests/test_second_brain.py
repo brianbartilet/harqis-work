@@ -61,7 +61,14 @@ def test__second_brain_places_ticker_in_dismissible_feed_dialog(authenticated_cl
     assert "function startTicker(attempt)" in response.text
     assert "if(attempt<120)" in response.text
     assert "startTicker(attempt+1)" in response.text
-    assert "speed=16" in response.text
+    assert "speed=20" in response.text
+    assert "function normalized(value)" in response.text
+    assert "if(paused)offset=normalized(feed.scrollTop)" in response.text
+    assert "feed.scrollTop=offset" in response.text
+    assert "touchstart" in response.text
+    assert "touchend" in response.text
+    assert "Second Brain Feed" in response.text
+    assert "Showing latest updates" in response.text
 
 
 def test__second_brain_mode_override_is_expiring(authenticated_client, monkeypatch):
