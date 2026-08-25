@@ -43,6 +43,21 @@ def _split_values(value: str) -> tuple[str, ...]:
     return tuple(part.strip() for part in re.split(r"[,\n]+", value or "") if part.strip())
 
 
+def _category_id(name: str, existing_ids: set[str]) -> str:
+    """Create an immutable, human-readable category key from its initial name."""
+    base = re.sub(r"[^a-z0-9]+", "-", name.strip().casefold()).strip("-")
+    if not base or not base[0].isalpha():
+        base = f"category-{base or 'new'}"
+    base = base[:48].rstrip("-")
+    candidate = base
+    suffix = 2
+    while candidate in existing_ids:
+        marker = f"-{suffix}"
+        candidate = f"{base[:48 - len(marker)].rstrip('-')}{marker}"
+        suffix += 1
+    return candidate
+
+
 def _api_authenticated(request: Request) -> bool:
     if get_current_user(request):
         return True
@@ -281,7 +296,7 @@ async def update_delivery(request: Request, client: str):
 @router.post("/second-brain/categories")
 async def save_category(
     request: Request,
-    mode_id: str = Form(...),
+    mode_id: str = Form(""),
     name: str = Form(...),
     color: str = Form("#38bdf8"),
     order: int = Form(0),
@@ -315,7 +330,13 @@ async def save_category(
             if not (re.fullmatch(clock, fallback_start) and re.fullmatch(clock, fallback_end)):
                 raise ValueError("fallback start and end must both use HH:MM")
             fallback_windows = ({"start": fallback_start, "end": fallback_end, "days": list(range(7))},)
-        config = get_second_brain_store().save_mode(
+        store = get_second_brain_store()
+        if not mode_id.strip():
+            mode_id = _category_id(
+                name,
+                {mode["mode_id"] for mode in store.list_modes(include_archived=True)},
+            )
+        config = store.save_mode(
             ModeDefinition(
                 mode_id=mode_id,
                 name=name,
@@ -333,7 +354,7 @@ async def save_category(
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     _dispatch_reconcile(str(uuid.uuid4()))
-    return JSONResponse({"saved": True, "version": config["version"]})
+    return JSONResponse({"saved": True, "version": config["version"], "mode_id": mode_id})
 
 
 @router.post("/second-brain/categories/{mode_id}/archive")

@@ -91,7 +91,12 @@ is disabled or absent from an item's allowlist cannot fetch that item.
 ## Configuration
 
 The current config is versioned in the canonical SQLite store. The settings
-dialog creates, edits, orders, disables, and archives categories. Each category
+dialog creates, edits, orders, disables, and archives categories. Creation only
+asks for the user-facing name and pill color; the server generates a unique,
+immutable key used by saved selections and history. Existing category editors
+autosave changes. Calendar mappings and operations use bounded scrollable lists,
+and inventoried HUD tasks remain visibly unavailable until they have an explicit
+read-only feed normalization adapter. Each category
 owns its pill color, keywords, `ScheduleCategory` calendar mappings, refresh
 interval, eligible clients, optional time fallback, and registered operations.
 Calendar matches are additive with other signals. Automatic Feed locks the
