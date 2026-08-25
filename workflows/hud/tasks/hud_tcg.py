@@ -33,6 +33,7 @@ from apps.tcg_mp.config import APP_NAME as APP_NAME_TCG_MP
 from apps.apps_config import CONFIG_MANAGER
 
 from workflows.purchases.helpers.helper import load_scryfall_bulk_data
+from workflows.second_brain.hud_projection import capture_hud_projection
 from workflows.purchases.helpers.constants import image_guid_pattern
 from workflows.purchases.helpers.mp_logging import log_mp_summary
 from workflows.hud.tasks.sections import sections__tcg_mp_sections, sections__tcg_mp_sell_cart_sections
@@ -101,6 +102,7 @@ def _sort_info_from_scryfall_image(
 
 @SPROUT.task()
 @log_result()
+@capture_hud_projection()
 @init_meter(RAINMETER_CONFIG, hud_item_name='TCG ORDERS', new_sections_dict=sections__tcg_mp_sections,
             play_sound=True,
             schedule_categories=[ScheduleCategory.PLAY, ]
@@ -573,6 +575,7 @@ def _worker_match_and_add_to_sell_cart(task: dict) -> dict:
 
 @SPROUT.task()
 @log_result()
+@capture_hud_projection()
 @init_meter(RAINMETER_CONFIG, hud_item_name='TCG SELL CART',
             new_sections_dict=sections__tcg_mp_sell_cart_sections,
             play_sound=True,

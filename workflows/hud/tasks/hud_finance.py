@@ -23,10 +23,12 @@ from apps.google_apps.references.constants import ScheduleCategory
 
 from workflows.hud.helpers.sizing import compute_max_hud_lines
 from workflows.hud.tasks.sections import sections__ynab, sections__pc_daily_sales
+from workflows.second_brain.hud_projection import capture_hud_projection
 
 
 @SPROUT.task()
 @log_result()
+@capture_hud_projection()
 @init_meter(RAINMETER_CONFIG, hud_item_name='BUDGETING INFO', new_sections_dict=sections__ynab, play_sound=True,
             schedule_categories=[ScheduleCategory.ORGANIZE, ])
 @feed()
@@ -214,6 +216,7 @@ def _render_pc_daily_sales_dump(daily_totals) -> str:
 
 @SPROUT.task()
 @log_result()
+@capture_hud_projection()
 @init_meter(RAINMETER_CONFIG, hud_item_name='PC DAILY SALES',
             new_sections_dict=sections__pc_daily_sales, play_sound=False,
             schedule_categories=[ScheduleCategory.FINANCE, ScheduleCategory.ORGANIZE])

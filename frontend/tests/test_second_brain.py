@@ -43,7 +43,7 @@ def test__second_brain_page_renders_empty_guidance(authenticated_client):
     assert "Second Brain live context" in response.text
 
 
-def test__second_brain_settings_prioritize_creation_and_explain_locked_operations(
+def test__second_brain_settings_prioritize_creation_and_offer_hud_adapters(
     authenticated_client,
 ):
     response = authenticated_client.get("/second-brain")
@@ -57,8 +57,9 @@ def test__second_brain_settings_prioritize_creation_and_explain_locked_operation
     assert "brain-settings-body" in response.text
     assert "brain-settings-header" in response.text
     assert ".brain-settings-dialog[open] { display:flex;" in response.text
-    assert "HUD tasks awaiting adapters" in response.text
-    assert "Adapter required" in response.text
+    assert "API costs" in response.text
+    assert "Mouse bindings" in response.text
+    assert "HUD tasks awaiting adapters" not in response.text
 
 
 def test__second_brain_places_ticker_in_dismissible_feed_dialog(authenticated_client):

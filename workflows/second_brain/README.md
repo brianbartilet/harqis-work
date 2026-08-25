@@ -21,8 +21,11 @@ advisory operation attached to those categories.
 
 **Runtime:** `hybrid` — Hermes may propose modes; Celery owns execution.
 **Schedule owner:** `Celery Beat`
-**Apps chained:** `apps/jira` supplies recent owner-relevant issue changes;
-results are normalized into the canonical feed.
+**Apps chained:** `apps/jira` supplies recent owner-relevant issue changes.
+Every current legacy HUD panel also publishes its successful return payload to
+the dedicated `harqis-second-brain-hud` Elasticsearch projection index; 18
+explicit, code-owned read-only adapters normalize those projections without
+importing or executing Rainmeter tasks on the host.
 **Schedule:** every 15 minutes plus event-triggered runs; category refresh
 intervals suppress collection that is still fresh
 **Queue:** `WorkflowQueue.HOST`
@@ -39,6 +42,18 @@ SQLite revision + SSE/Redis notification.
 no external system mutation.
 **Failure behavior:** each operation records an isolated failure while other
 operations and the canonical snapshot remain available.
+
+## HUD projection adapters
+
+`workflows.second_brain.hud_projection.capture_hud_projection` is applied inside
+the existing HUD task decorator stacks. It redacts credential-shaped keys,
+removes control sequences, caps each projection at 64 KiB, and never changes or
+fails the original HUD result. API-backed and Windows-local panels use the same
+portable contract: the latter show `awaiting_source` until their Windows task
+runs through Celery, then remain available as freshness-labelled cached context.
+Direct Python/test calls do not publish projections. Second Brain
+only reads these projections; attaching an operation never invokes its source
+HUD task or widens the advisory-only boundary.
 
 ## Client defaults
 

@@ -12,10 +12,12 @@ from apps.rainmeter.config import CONFIG as RAINMETER_CONFIG
 from apps.apps_config import CONFIG_MANAGER
 
 from workflows.hud.tasks.sections import sections__calendar
+from workflows.second_brain.hud_projection import capture_hud_projection
 
 
 @SPROUT.task()
 @log_result()
+@capture_hud_projection()
 @init_meter(RAINMETER_CONFIG, hud_item_name='CALENDAR INFO', new_sections_dict=sections__calendar, play_sound=False)
 @feed()
 def show_calendar_information(ini=ConfigHelperRainmeter(), **kwargs):

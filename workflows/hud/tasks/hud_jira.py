@@ -32,6 +32,7 @@ from apps.jira.config import APP_NAME as APP_NAME_JIRA
 from apps.apps_config import CONFIG_MANAGER
 
 from workflows.hud.helpers.layout import compute_horizontal_link_layout
+from workflows.second_brain.hud_projection import capture_hud_projection
 from workflows.hud.helpers.sizing import (
     DEFAULT_MAX_HUD_LINES,
     compute_max_hud_lines,
@@ -91,6 +92,7 @@ _ASSIGNED_EXCLUDED_STATUSES: frozenset = frozenset({"done", "closed"})
 
 @SPROUT.task()
 @log_result()
+@capture_hud_projection()
 @init_meter(RAINMETER_CONFIG, hud_item_name='JIRA BOARD',
             new_sections_dict=sections__jira_board,
             play_sound=False,
