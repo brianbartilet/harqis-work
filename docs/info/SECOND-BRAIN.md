@@ -129,11 +129,13 @@ delivery immediately projects the current snapshot; later material revisions
 are pushed automatically.
 
 The web feed receives updates over authenticated SSE and replaces only its feed
-fragment. Cards render sanitized Markdown and advance at a readable cadence on
-desktop and mobile, pausing for interaction and respecting reduced-motion
-preferences. The advisory Hermes chat below the feed stores history for eight
-hours by default (configurable from one to 168 hours) and cites feed logical
-keys. Hermes failure never prevents deterministic context capture or collection.
+fragment. Cards render sanitized Markdown inside a continuously looping ticker
+viewport on desktop and mobile; motion pauses for interaction and falls back to
+manual scrolling for reduced-motion preferences. A collapsed control panel is
+sticky beside the feed on desktop and appears before it on mobile. The advisory
+Hermes chat below the feed stores history for eight hours by default
+(configurable from one to 168 hours) and cites feed logical keys. Hermes failure
+never prevents deterministic context capture or collection.
 
 ## Adding a workflow
 

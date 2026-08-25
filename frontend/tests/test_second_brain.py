@@ -43,6 +43,21 @@ def test__second_brain_page_renders_empty_guidance(authenticated_client):
     assert "Second Brain live context" in response.text
 
 
+def test__second_brain_places_collapsed_controls_before_ticker(authenticated_client):
+    response = authenticated_client.get("/second-brain")
+    assert response.status_code == 200
+    controls_at = response.text.index('data-controls-panel')
+    ticker_at = response.text.index('data-ticker-track')
+    assert controls_at < ticker_at
+    assert '<details id="brain-controls-panel"' in response.text
+    assert '<details id="brain-controls-panel" open' not in response.text
+    assert "requestAnimationFrame(frame)" in response.text
+    assert "function startTicker(attempt)" in response.text
+    assert "if(attempt<120)" in response.text
+    assert "startTicker(attempt+1)" in response.text
+    assert "speed=12" in response.text
+
+
 def test__second_brain_mode_override_is_expiring(authenticated_client, monkeypatch):
     from modules.second_brain import router
 
