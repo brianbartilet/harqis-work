@@ -43,6 +43,24 @@ def test__second_brain_page_renders_empty_guidance(authenticated_client):
     assert "Second Brain live context" in response.text
 
 
+def test__second_brain_settings_prioritize_creation_and_explain_locked_operations(
+    authenticated_client,
+):
+    response = authenticated_client.get("/second-brain")
+
+    assert response.status_code == 200
+    assert response.text.index("Add category") < response.text.index("Manage categories")
+    assert 'placeholder="stable-id"' not in response.text
+    assert "Permanent key:" in response.text
+    assert "Changes save automatically." in response.text
+    assert "brain-option-list" in response.text
+    assert "brain-settings-body" in response.text
+    assert "brain-settings-header" in response.text
+    assert ".brain-settings-dialog[open] { display:flex;" in response.text
+    assert "HUD tasks awaiting adapters" in response.text
+    assert "Adapter required" in response.text
+
+
 def test__second_brain_places_ticker_in_dismissible_feed_dialog(authenticated_client):
     response = authenticated_client.get("/second-brain")
     assert response.status_code == 200
@@ -119,6 +137,38 @@ def test__second_brain_category_settings_are_configurable(authenticated_client, 
     assert modes["tabletop"]["keywords"] == ["mtg", "deck"]
     assert modes["tabletop"]["client_eligibility"] == ["web", "telegram"]
     assert modes["tabletop"]["fallback_windows"][0]["start"] == "18:00"
+
+
+def test__second_brain_category_creation_generates_a_unique_permanent_key(
+    authenticated_client, monkeypatch
+):
+    from modules.second_brain import router
+
+    monkeypatch.setattr(router, "_dispatch_reconcile", lambda correlation_id: "task-category")
+    first = authenticated_client.post(
+        "/second-brain/categories",
+        data={"name": "Tabletop Lab", "color": "#a78bfa", "enabled": "on"},
+    )
+    second = authenticated_client.post(
+        "/second-brain/categories",
+        data={"name": "Tabletop Lab", "color": "#22d3ee", "enabled": "on"},
+    )
+
+    assert first.status_code == 200
+    assert first.json()["mode_id"] == "tabletop-lab"
+    assert second.status_code == 200
+    assert second.json()["mode_id"] == "tabletop-lab-2"
+
+    renamed = authenticated_client.post(
+        "/second-brain/categories",
+        data={
+            "mode_id": "tabletop-lab",
+            "name": "Friday Night Magic",
+            "color": "#a78bfa",
+            "enabled": "on",
+        },
+    )
+    assert renamed.json()["mode_id"] == "tabletop-lab"
 
 
 def test__second_brain_feed_accepts_scoped_api_bearer(authenticated_client, monkeypatch):
