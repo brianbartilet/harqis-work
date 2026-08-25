@@ -98,13 +98,15 @@
       var cloneStart=track.querySelector('[data-feed-item][aria-hidden="true"]'),cycleHeight=cloneStart.offsetTop-originals[0].offsetTop;
       if(cycleHeight<=0){if(attempt<120)tickerFrame=requestAnimationFrame(()=>startTicker(attempt+1));return;}
       while(track.scrollHeight<feed.clientHeight+cycleHeight)appendCycle();
-      var selected=originals.find(card=>card.dataset.logicalKey===currentKey);feed.scrollTop=selected?selected.offsetTop-originals[0].offsetTop:0;
+      var selected=originals.find(card=>card.dataset.logicalKey===currentKey),offset=selected?selected.offsetTop-originals[0].offsetTop:0;feed.scrollTop=offset;
       var lastTime=0,paused=false,speed=20;
-      function markVisible(){var marker=((feed.scrollTop%cycleHeight)+cycleHeight)%cycleHeight+feed.clientHeight*.18,index=0;if(marker>=cycleHeight)marker-=cycleHeight;for(var i=0;i<originals.length;i++){if(originals[i].offsetTop-originals[0].offsetTop<=marker)index=i;}originals.forEach(card=>card.classList.remove('brain-visible'));originals[index].classList.add('brain-visible');currentKey=originals[index].dataset.logicalKey;}
-      function frame(time){if(!lastTime)lastTime=time;if(!paused&&cycleHeight>0){var next=feed.scrollTop+(time-lastTime)*speed/1000;next=((next%cycleHeight)+cycleHeight)%cycleHeight;feed.scrollTop=next;markVisible();}lastTime=time;tickerFrame=requestAnimationFrame(frame);}
+      function normalized(value){return ((value%cycleHeight)+cycleHeight)%cycleHeight;}
+      function markVisible(){var marker=normalized(offset)+feed.clientHeight*.18,index=0;if(marker>=cycleHeight)marker-=cycleHeight;for(var i=0;i<originals.length;i++){if(originals[i].offsetTop-originals[0].offsetTop<=marker)index=i;}originals.forEach(card=>card.classList.remove('brain-visible'));originals[index].classList.add('brain-visible');currentKey=originals[index].dataset.logicalKey;}
+      function frame(time){if(!lastTime)lastTime=time;if(!paused&&cycleHeight>0){offset=normalized(offset+(time-lastTime)*speed/1000);feed.scrollTop=offset;markVisible();}lastTime=time;tickerFrame=requestAnimationFrame(frame);}
       function pause(){paused=true;clearTimeout(tickerResumeTimer);}
       function resume(delay){clearTimeout(tickerResumeTimer);tickerResumeTimer=setTimeout(()=>{paused=false;lastTime=performance.now();},delay||0);}
-      feed.addEventListener('mouseenter',pause);feed.addEventListener('mouseleave',()=>resume(800));feed.addEventListener('focusin',pause);feed.addEventListener('focusout',()=>resume(1000));feed.addEventListener('touchstart',pause,{passive:true});feed.addEventListener('touchend',()=>resume(1400),{passive:true});feed.addEventListener('touchcancel',()=>resume(1400),{passive:true});feed.addEventListener('wheel',()=>{pause();resume(1400);},{passive:true});feed.addEventListener('scroll',markVisible,{passive:true});document.onvisibilitychange=()=>{if(document.hidden)pause();else resume(0);};
+      function syncManualScroll(){if(paused)offset=normalized(feed.scrollTop);markVisible();}
+      feed.addEventListener('mouseenter',pause);feed.addEventListener('mouseleave',()=>resume(800));feed.addEventListener('focusin',pause);feed.addEventListener('focusout',()=>resume(1000));feed.addEventListener('touchstart',pause,{passive:true});feed.addEventListener('touchend',()=>resume(1400),{passive:true});feed.addEventListener('touchcancel',()=>resume(1400),{passive:true});feed.addEventListener('wheel',()=>{pause();resume(1400);},{passive:true});feed.addEventListener('scroll',syncManualScroll,{passive:true});document.onvisibilitychange=()=>{if(document.hidden)pause();else resume(0);};
       markVisible();tickerFrame=requestAnimationFrame(frame);
     }
     tickerFrame=requestAnimationFrame(()=>startTicker(0));
