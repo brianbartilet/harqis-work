@@ -195,6 +195,7 @@ class FeedItem:
     reason_codes: tuple[str, ...] = ()
     correlation_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     run_id: str = ""
+    operation_id: str = ""
     item_id: str = ""
     revision: int = 0
     schema_version: int = SCHEMA_VERSION
@@ -234,6 +235,7 @@ class FeedItem:
             "links": self.links,
             "actions": self.actions,
             "reason_codes": self.reason_codes,
+            "operation_id": self.operation_id,
         }
         encoded = json.dumps(material, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()

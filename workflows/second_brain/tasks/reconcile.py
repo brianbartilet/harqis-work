@@ -11,7 +11,7 @@ from core.apps.sprout.app.celery import SPROUT
 
 from workflows.second_brain.events import publish_feed_change
 from workflows.second_brain.models import FeedItem, isoformat
-from workflows.second_brain.registry import selected_operations
+from workflows.second_brain.registry import configured_bindings, selected_operations
 from workflows.second_brain.resolver import resolve_modes
 from workflows.second_brain.store import get_store
 
@@ -62,8 +62,11 @@ def reconcile(*, store=None, correlation_id: str | None = None, task_id: str = "
         correlation_id=correlation,
     )
     canonical.record_decision(decision)
-    changed = 0
-    changed_payloads: list[dict[str, Any]] = []
+    retired_payloads = canonical.retire_feed_items(configured_bindings(config.get("modes") or []))
+    for payload in retired_payloads:
+        publish_feed_change(payload)
+    changed = len(retired_payloads)
+    changed_payloads: list[dict[str, Any]] = list(retired_payloads)
     unchanged = 0
     failures: list[dict[str, str]] = []
     operation_results: list[dict[str, Any]] = []
@@ -95,6 +98,7 @@ def reconcile(*, store=None, correlation_id: str | None = None, task_id: str = "
                             "category": category,
                             "allowed_clients": tuple(client for client in item.allowed_clients if client in eligible_clients),
                             "run_id": run_id,
+                            "operation_id": operation.operation_id,
                             "item_id": "",
                         }
                     )
@@ -133,6 +137,7 @@ def reconcile(*, store=None, correlation_id: str | None = None, task_id: str = "
                 reason_codes=("collector-failure",),
                 correlation_id=correlation,
                 run_id=run_id,
+                operation_id=operation.operation_id,
             )
             payload, was_changed = canonical.upsert_feed_item(failure_item)
             if was_changed:
@@ -165,6 +170,7 @@ def reconcile(*, store=None, correlation_id: str | None = None, task_id: str = "
         "decision_id": decision.decision_id,
         "agent_state": agent_state,
         "changed": changed,
+        "retired": len(retired_payloads),
         "unchanged": unchanged,
         "failures": failures,
         "operations": operation_results,

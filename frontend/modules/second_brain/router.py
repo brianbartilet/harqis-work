@@ -43,6 +43,16 @@ def _split_values(value: str) -> tuple[str, ...]:
     return tuple(part.strip() for part in re.split(r"[,\n]+", value or "") if part.strip())
 
 
+def _retire_unconfigured_items(store, config: dict) -> int:
+    from workflows.second_brain.events import publish_feed_change
+    from workflows.second_brain.registry import configured_bindings
+
+    retired = store.retire_feed_items(configured_bindings(config.get("modes") or []))
+    for payload in retired:
+        publish_feed_change(payload)
+    return len(retired)
+
+
 def _available_manual_modes(store, requested) -> list[str]:
     available = [
         mode["mode_id"]
@@ -372,10 +382,11 @@ async def save_category(
                 fallback_windows=fallback_windows,
             )
         )
+        retired = _retire_unconfigured_items(store, config)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     _dispatch_reconcile(str(uuid.uuid4()))
-    return JSONResponse({"saved": True, "version": config["version"], "mode_id": mode_id})
+    return JSONResponse({"saved": True, "version": config["version"], "mode_id": mode_id, "retired": retired})
 
 
 @router.post("/second-brain/categories/{mode_id}/archive")
@@ -383,11 +394,13 @@ async def archive_category(request: Request, mode_id: str):
     if not get_current_user(request):
         return _unauthorized()
     try:
-        config = get_second_brain_store().archive_mode(mode_id)
+        store = get_second_brain_store()
+        config = store.archive_mode(mode_id)
+        retired = _retire_unconfigured_items(store, config)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     _dispatch_reconcile(str(uuid.uuid4()))
-    return JSONResponse({"saved": True, "version": config["version"]})
+    return JSONResponse({"saved": True, "version": config["version"], "retired": retired})
 
 
 @router.post("/second-brain/agent-settings")

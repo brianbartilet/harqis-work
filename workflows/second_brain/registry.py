@@ -185,6 +185,17 @@ def operation_catalog() -> list[dict[str, Any]]:
     return sorted(catalog, key=lambda value: (not value["eligible"], value["label"]))
 
 
+def configured_bindings(mode_definitions: list[dict[str, Any]]) -> set[tuple[str, str]]:
+    """Return every enabled category-to-operation ownership pair."""
+    return {
+        (str(mode.get("mode_id") or "").strip().casefold(), str(operation_id).strip())
+        for mode in mode_definitions
+        if mode.get("enabled", True) and not mode.get("archived", False)
+        for operation_id in mode.get("operation_ids") or ()
+        if str(mode.get("mode_id") or "").strip() and str(operation_id).strip()
+    }
+
+
 def selected_operations(
     mode_ids: tuple[str, ...], mode_definitions: list[dict[str, Any]]
 ) -> tuple[tuple[OperationSpec, tuple[str, ...], int], ...]:
