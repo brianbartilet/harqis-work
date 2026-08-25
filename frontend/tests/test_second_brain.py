@@ -54,6 +54,9 @@ def test__second_brain_settings_prioritize_creation_and_explain_locked_operation
     assert "Permanent key:" in response.text
     assert "Changes save automatically." in response.text
     assert "brain-option-list" in response.text
+    assert "brain-settings-body" in response.text
+    assert "brain-settings-header" in response.text
+    assert ".brain-settings-dialog[open] { display:flex;" in response.text
     assert "HUD tasks awaiting adapters" in response.text
     assert "Adapter required" in response.text
 

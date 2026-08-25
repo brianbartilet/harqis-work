@@ -60,7 +60,12 @@
   .brain-chat-submit:hover { background:#67e8f9; }
   .brain-chat-submit:active { transform:translateY(1px); }
   .brain-dialog::backdrop { backdrop-filter:blur(8px); }
-  .brain-settings-dialog { width:min(60rem,calc(100% - 2rem)); max-width:none; box-shadow:0 30px 90px rgba(2,6,23,.72); }
+  .brain-settings-dialog { width:min(60rem,calc(100% - 2rem)); max-width:none; max-height:calc(100dvh - 2rem); overflow:hidden; box-shadow:0 30px 90px rgba(2,6,23,.72); }
+  .brain-settings-dialog[open] { display:flex; flex-direction:column; }
+  .brain-settings-dialog > :first-child { flex:none; }
+  .brain-settings-header { flex-wrap:wrap; gap:.75rem; }
+  .brain-settings-header > div { min-width:0; }
+  .brain-settings-body { min-height:0; flex:1 1 auto; overflow-y:auto; }
   .brain-settings-dialog::backdrop { background:rgba(2,6,23,.78); }
   .brain-create-panel { background:linear-gradient(135deg,rgba(8,47,73,.34),rgba(15,23,42,.38)); }
   .brain-category-editor > summary::-webkit-details-marker,.brain-locked-list > summary::-webkit-details-marker { display:none; }
