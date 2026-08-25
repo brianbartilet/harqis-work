@@ -67,6 +67,16 @@ def test__manual_override_wins_and_expires_deterministically(tmp_path):
     assert store.active_override() is None
 
 
+def test__active_override_is_revoked_when_its_category_becomes_disabled(tmp_path):
+    store = SecondBrainStore(tmp_path / "brain.sqlite3")
+    store.save_mode(ModeDefinition(mode_id="notes", name="Notes"))
+    store.set_override(("notes",), duration_minutes=30, correlation_id="corr")
+
+    store.save_mode(ModeDefinition(mode_id="notes", name="Notes", enabled=False))
+
+    assert store.active_override() is None
+
+
 def test__client_configuration_keeps_web_enabled(tmp_path):
     store = SecondBrainStore(tmp_path / "brain.sqlite3")
     config = store.update_config(

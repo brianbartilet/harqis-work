@@ -11,18 +11,23 @@
     </div>
     <div class="font-mono text-xs text-slate-500">revision {{ second_brain.cursor }}</div>
   </header>
+  <div id="brain-notice" class="brain-notice" role="status" aria-live="polite" hidden></div>
 
   <div class="brain-layout">
     <aside class="brain-control-rail">
-      <details id="brain-controls-panel" class="brain-control-panel rounded-2xl border border-slate-800 bg-slate-900" data-controls-panel>
-        <summary class="brain-control-summary flex cursor-pointer list-none items-center justify-between gap-4 p-4">
-          <div><p class="text-xs uppercase tracking-[.18em] text-cyan-300">Briefing controls</p><p class="mt-1 text-sm text-slate-300">{{ 'Automatic Feed' if second_brain.automatic_feed else 'Manual selection' }}</p></div>
+      <div class="brain-control-panel rounded-2xl border border-slate-800 bg-slate-900">
+        <div class="brain-automatic-row flex items-center justify-between gap-4 p-4">
+          <div><p class="text-xs uppercase tracking-[.18em] text-cyan-300">Briefing controls</p><label for="brain-automatic-toggle" class="mt-1 block text-sm font-medium text-white">Automatic feed</label><p class="mt-1 text-xs text-slate-500">{{ 'Following live context' if second_brain.automatic_feed else 'Using selected categories' }}</p></div>
+          <label class="brain-switch"><input id="brain-automatic-toggle" type="checkbox" {% if second_brain.automatic_feed %}checked{% endif %}><span></span></label>
+        </div>
+      <details id="brain-controls-panel" class="brain-control-disclosure border-t border-slate-800" data-controls-panel>
+        <summary class="brain-control-summary flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
+          <div><p class="text-sm text-slate-300">More controls</p><p class="mt-0.5 text-xs text-slate-600">Duration, delivery and evidence</p></div>
           <span class="brain-control-action" aria-hidden="true"><svg class="brain-control-chevron" viewBox="0 0 20 20" focusable="false"><path d="m5 7.5 5 5 5-5"></path></svg></span>
         </summary>
         <div class="brain-control-body border-t border-slate-800 p-4">
           <section>
-            <div class="flex items-center justify-between gap-4"><div><p class="text-xs uppercase tracking-[.18em] text-slate-500">Context</p><p class="mt-1 text-sm text-slate-300" id="brain-mode-state">{{ 'Automatic Feed' if second_brain.automatic_feed else 'Selected briefing' }}</p></div><label class="brain-switch"><input id="brain-automatic-toggle" type="checkbox" {% if second_brain.automatic_feed %}checked{% endif %}><span></span></label></div>
-            <div class="mt-4"><div class="flex justify-between text-xs text-slate-500"><label for="brain-duration">Duration</label><span id="brain-duration-label">2h</span></div><input id="brain-duration" class="mt-2 w-full accent-cyan-400" type="range" min="30" max="720" step="30" value="120" {% if second_brain.automatic_feed %}disabled{% endif %}><p id="brain-countdown" class="mt-2 font-mono text-xs text-cyan-300"></p></div>
+            <div><div class="flex justify-between text-xs text-slate-500"><label for="brain-duration">Manual duration</label><span id="brain-duration-label">2h</span></div><input id="brain-duration" class="mt-2 w-full accent-cyan-400" type="range" min="30" max="720" step="30" value="120" {% if second_brain.automatic_feed %}disabled{% endif %}><p id="brain-countdown" class="mt-2 font-mono text-xs text-cyan-300"></p></div>
             <button type="button" data-open-brain-settings class="brain-manage-button mt-4 w-full rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300">Manage context</button>
           </section>
 
@@ -38,16 +43,17 @@
           <section class="brain-control-section text-xs leading-relaxed text-slate-500"><p class="text-slate-300">Decision evidence</p><p class="mt-2">Confidence {{ ((decision.confidence or 0) * 100) | round | int }}% · {{ decision.resolver_version or 'awaiting first run' }}</p><p class="mt-1">{{ (decision.reason_codes or ['No decision evidence yet']) | join(' · ') }}</p></section>
         </div>
       </details>
+      </div>
     </aside>
 
     <div class="brain-primary min-w-0">
       <section class="brain-feed-launcher rounded-2xl border border-slate-800 bg-slate-950/55 p-4">
         <div class="flex flex-wrap gap-2" aria-label="Briefing categories">
           {% for mode in second_brain.modes %}
-          <button type="button" class="brain-mode-pill rounded-full border px-4 py-2 text-sm transition disabled:cursor-default" data-mode-id="{{ mode.mode_id }}" data-selected="{{ 'true' if mode.mode_id in active_modes else 'false' }}" style="--mode-color: {{ mode.color }}" {% if second_brain.automatic_feed %}disabled{% endif %}>{{ mode.name }}</button>
+          {% if mode.enabled %}<button type="button" class="brain-mode-pill rounded-full border px-4 py-2 text-sm transition disabled:cursor-default" data-mode-id="{{ mode.mode_id }}" data-selected="{{ 'true' if mode.mode_id in active_modes else 'false' }}" style="--mode-color: {{ mode.color }}" {% if second_brain.automatic_feed %}disabled{% endif %}>{{ mode.name }}</button>{% endif %}
           {% endfor %}
         </div>
-        <button type="button" class="brain-view-feed mt-4 flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm font-semibold" data-open-brain-feed><span>View feed</span><span class="brain-view-feed-count">{{ second_brain['items'] | length }} latest</span></button>
+        <button type="button" class="brain-primary-action brain-view-feed mt-4 flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm font-semibold" data-open-brain-feed><span>View feed</span><span class="brain-view-feed-count">{{ second_brain['items'] | length }} latest</span></button>
       </section>
 
       <section class="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5" aria-labelledby="brain-chat-heading">
@@ -55,7 +61,7 @@
         <div id="brain-chat-history" class="mt-4 max-h-72 space-y-3 overflow-y-auto">
           {% for message in second_brain.chat %}<div class="rounded-xl px-4 py-3 text-sm {{ 'ml-8 bg-cyan-500/10 text-cyan-50' if message.role == 'user' else 'mr-8 bg-slate-950 text-slate-300' }}"><div class="markdown-body">{{ message.content_html }}</div>{% if message.citations %}<p class="mt-2 font-mono text-xs text-slate-500">{{ message.citations | join(' · ') }}</p>{% endif %}</div>{% endfor %}
         </div>
-        <form id="brain-chat-form" class="brain-chat-form mt-4"><label class="sr-only" for="brain-chat-input">Ask Second Brain</label><textarea id="brain-chat-input" rows="2" maxlength="2000" class="min-w-0 resize-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" placeholder="Ask about the signals in this briefing…"></textarea><button class="brain-chat-submit rounded-xl px-5 font-semibold">Ask</button></form>
+        <form id="brain-chat-form" class="brain-chat-form mt-4"><label class="sr-only" for="brain-chat-input">Ask Second Brain</label><textarea id="brain-chat-input" rows="2" maxlength="2000" class="min-w-0 resize-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" placeholder="Ask about the signals in this briefing…"></textarea><button type="submit" class="brain-primary-action brain-chat-submit rounded-xl px-5 font-semibold">Ask</button></form>
         <p id="brain-chat-status" class="mt-2 text-xs text-slate-500"></p>
       </section>
     </div>
@@ -113,7 +119,7 @@
         <summary class="flex cursor-pointer list-none items-center gap-3 p-4"><span class="brain-editor-color" style="--mode-color: {{ mode.color }}"></span><span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium text-white">{{ mode.name }}</span><span class="mt-0.5 block font-mono text-[10px] text-slate-600">key: {{ mode.mode_id }}</span></span><span class="brain-editor-action text-xs text-slate-500">Edit</span><svg class="brain-editor-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5"></path></svg></summary>
       <form class="brain-category-form grid gap-3 border-t border-slate-800 p-4 md:grid-cols-2">
         <input type="hidden" name="mode_id" value="{{ mode.mode_id }}"><div class="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-400 md:col-span-2"><span class="text-slate-200">Permanent key: <code>{{ mode.mode_id }}</code></span><span class="mt-1 block text-slate-500">Used by saved selections and history. Renaming this category will not change its key.</span></div><label class="text-xs text-slate-400">Category name<input name="name" value="{{ mode.name }}" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white"></label><label class="text-xs text-slate-400">Pill color<input name="color" type="color" value="{{ mode.color }}" class="mt-1 h-10 w-full rounded-lg border border-slate-700 bg-slate-900"></label>
-        <label class="text-xs text-slate-400">Keywords<textarea name="keywords" rows="2" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2">{{ mode.keywords | join(', ') }}</textarea></label><label class="text-xs text-slate-400">Order<input name="order" type="number" min="0" value="{{ mode.order }}" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2"></label>
+        <label class="text-xs text-slate-400">Keywords<textarea name="keywords" rows="2" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2">{{ mode.keywords | join(', ') }}</textarea></label><label class="text-xs text-slate-400">Display order<div class="brain-number-stepper mt-1"><button type="button" data-number-step="-1" aria-label="Move category earlier">−</button><input name="order" type="number" min="0" value="{{ mode.order }}" aria-label="Display order"><button type="button" data-number-step="1" aria-label="Move category later">+</button></div></label>
         <label class="text-xs text-slate-400">Refresh interval (minutes)<input name="refresh_minutes" type="number" min="1" max="1440" value="{{ mode.refresh_minutes }}" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2"></label>
         <div class="grid grid-cols-2 gap-2"><label class="text-xs text-slate-400">Fallback starts<input name="fallback_start" type="time" value="{{ mode.fallback_windows[0].start if mode.fallback_windows else '' }}" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2"></label><label class="text-xs text-slate-400">Fallback ends<input name="fallback_end" type="time" value="{{ mode.fallback_windows[0].end if mode.fallback_windows else '' }}" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2"></label></div>
         <fieldset class="text-xs text-slate-400"><legend class="font-medium text-slate-300">Calendar blocks</legend><p class="mt-1 text-slate-600">Matching blocks add this category to the automatic feed.</p><div class="brain-option-list mt-2">{% for category in second_brain.calendar_categories %}<label class="brain-option-row"><input type="checkbox" name="calendar_choice" value="{{ category }}" {% if category in mode.calendar_categories %}checked{% endif %}><span>{{ category }}</span></label>{% endfor %}</div></fieldset>

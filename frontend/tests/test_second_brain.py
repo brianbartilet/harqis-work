@@ -65,9 +65,12 @@ def test__second_brain_settings_prioritize_creation_and_offer_hud_adapters(
 def test__second_brain_places_ticker_in_dismissible_feed_dialog(authenticated_client):
     response = authenticated_client.get("/second-brain")
     assert response.status_code == 200
+    toggle_at = response.text.index('id="brain-automatic-toggle"')
     controls_at = response.text.index('data-controls-panel')
     ticker_at = response.text.index('data-ticker-track')
+    assert toggle_at < controls_at
     assert controls_at < ticker_at
+    assert response.text.count('for="brain-automatic-toggle"') == 1
     assert '<details id="brain-controls-panel"' in response.text
     assert '<details id="brain-controls-panel" open' not in response.text
     assert 'data-open-brain-feed' in response.text
@@ -88,6 +91,10 @@ def test__second_brain_places_ticker_in_dismissible_feed_dialog(authenticated_cl
     assert "touchend" in response.text
     assert "Second Brain Feed" in response.text
     assert "Showing latest updates" in response.text
+    assert "brain-primary-action" in response.text
+    assert "brain-number-stepper" in response.text
+    assert "brain-notice" in response.text
+    assert "alert(" not in response.text
 
 
 def test__second_brain_mode_override_is_expiring(authenticated_client, monkeypatch):
@@ -101,6 +108,26 @@ def test__second_brain_mode_override_is_expiring(authenticated_client, monkeypat
     assert response.status_code == 200
     payload = authenticated_client.get("/second-brain/api/feed").json()
     assert payload["override"]["modes"] == ["default"]
+
+
+def test__automatic_toggle_repairs_an_unavailable_category(authenticated_client, monkeypatch):
+    from modules.second_brain import router
+    from modules.second_brain.service import get_second_brain_store
+    from workflows.second_brain.models import ModeDefinition
+
+    monkeypatch.setattr(router, "_dispatch_reconcile", lambda correlation_id: "task-1")
+    get_second_brain_store().save_mode(ModeDefinition(mode_id="notes", name="Notes", enabled=False))
+
+    response = authenticated_client.post(
+        "/second-brain/automatic",
+        json={"enabled": False, "modes": ["notes"], "duration_minutes": 120},
+    )
+
+    assert response.status_code == 200
+    payload = authenticated_client.get("/second-brain/api/feed").json()
+    assert payload["override"]["modes"] == ["default"]
+    page = authenticated_client.get("/second-brain")
+    assert 'data-mode-id="notes"' not in page.text
 
 
 def test__second_brain_settings_keep_optional_clients_off_by_default(authenticated_client):

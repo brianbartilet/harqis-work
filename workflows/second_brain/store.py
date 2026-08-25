@@ -220,9 +220,22 @@ class SecondBrainStore:
             ).fetchone()
         if not row:
             return None
+        modes = json.loads(row["modes_json"])
+        available = {
+            mode["mode_id"]
+            for mode in self.list_modes()
+            if mode["enabled"] and not mode["archived"]
+        }
+        if not modes or set(modes) - available:
+            with self._lock, self._connect() as connection:
+                connection.execute(
+                    "UPDATE manual_overrides SET revoked_at=? WHERE override_id=?",
+                    (current, row["override_id"]),
+                )
+            return None
         return {
             "override_id": row["override_id"],
-            "modes": json.loads(row["modes_json"]),
+            "modes": modes,
             "created_at": row["created_at"],
             "expires_at": row["expires_at"],
             "correlation_id": row["correlation_id"],
