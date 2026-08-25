@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import bleach
 import markdown
 from markupsafe import Markup
@@ -26,6 +28,8 @@ _ALLOWED_ATTRIBUTES = {
     "th": ["align"],
 }
 _ALLOWED_PROTOCOLS = {"http", "https", "mailto"}
+_CODE_ELEMENT = re.compile(r"<(pre|code)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
+_DOUBLE_ESCAPED_ENTITY = re.compile(r"&amp;((?:#\d+|#x[0-9a-f]+|[a-z][a-z0-9]+));", re.IGNORECASE)
 
 
 def _external_link_attributes(attrs, new=False):
@@ -34,6 +38,15 @@ def _external_link_attributes(attrs, new=False):
         attrs[(None, "target")] = "_blank"
         attrs[(None, "rel")] = "noopener noreferrer"
     return attrs
+
+
+def _restore_code_entities(rendered: str) -> str:
+    """Undo linkify's extra entity layer inside already-sanitized code text."""
+
+    return _CODE_ELEMENT.sub(
+        lambda match: _DOUBLE_ESCAPED_ENTITY.sub(r"&\1;", match.group(0)),
+        rendered,
+    )
 
 
 def render_markdown(source: str) -> Markup:
@@ -55,4 +68,4 @@ def render_markdown(source: str) -> Markup:
         skip_tags={"pre", "code"},
         parse_email=False,
     )
-    return Markup(linked)
+    return Markup(_restore_code_entities(linked))
