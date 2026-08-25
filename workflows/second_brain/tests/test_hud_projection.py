@@ -20,6 +20,20 @@ def test__hud_projection_redacts_secrets_and_bounds_payload():
     assert payload["nested"]["access-token"] == "[redacted]"
 
 
+def test__hud_projection_redacts_secrets_from_text_and_mapping_keys():
+    payload = hud_projection._bounded_payload(
+        {
+            "text": "access_token=plain-secret cookie=session-secret",
+            "authorization=Bearer hidden": "also-secret",
+        }
+    )
+
+    encoded = str(payload)
+    assert "plain-secret" not in encoded
+    assert "session-secret" not in encoded
+    assert "Bearer hidden" not in encoded
+
+
 def test__capture_hud_projection_never_changes_the_task_result(monkeypatch):
     captured = []
     monkeypatch.setattr(
@@ -51,6 +65,30 @@ def test__capture_hud_projection_skips_direct_calls(monkeypatch):
         return {"text": "direct"}
 
     assert sample_task() == {"text": "direct"}
+
+
+def test__capture_hud_projection_does_not_log_projection_error_details(monkeypatch):
+    warnings = []
+    monkeypatch.setattr(hud_projection, "_should_capture_projection", lambda: True)
+    monkeypatch.setattr(
+        hud_projection,
+        "_publish_projection",
+        lambda source_task, result: (_ for _ in ()).throw(RuntimeError("token=plain-secret")),
+    )
+    monkeypatch.setattr(hud_projection.log, "warning", lambda *args: warnings.append(args))
+
+    @hud_projection.capture_hud_projection()
+    def sample_task():
+        return {"text": "safe"}
+
+    assert sample_task() == {"text": "safe"}
+    assert warnings == [
+        (
+            "Second Brain HUD projection skipped for %s (%s)",
+            f"{sample_task.__module__}.{sample_task.__qualname__}",
+            "RuntimeError",
+        )
+    ]
 
 
 def test__collect_hud_projection_normalizes_a_fresh_result(monkeypatch):
