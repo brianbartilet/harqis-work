@@ -43,7 +43,7 @@ def test__second_brain_page_renders_empty_guidance(authenticated_client):
     assert "Second Brain live context" in response.text
 
 
-def test__second_brain_places_collapsed_controls_before_ticker(authenticated_client):
+def test__second_brain_places_ticker_in_dismissible_feed_dialog(authenticated_client):
     response = authenticated_client.get("/second-brain")
     assert response.status_code == 200
     controls_at = response.text.index('data-controls-panel')
@@ -51,11 +51,17 @@ def test__second_brain_places_collapsed_controls_before_ticker(authenticated_cli
     assert controls_at < ticker_at
     assert '<details id="brain-controls-panel"' in response.text
     assert '<details id="brain-controls-panel" open' not in response.text
+    assert 'data-open-brain-feed' in response.text
+    assert 'data-close-brain-feed' in response.text
+    assert response.text.index('id="brain-chat-form"') < response.text.index('id="brain-feed-dialog"')
+    assert "Manage context" in response.text
+    assert "Manage categories and agent" not in response.text
+    assert "if(e.target===feedDialog)closeFeed()" in response.text
     assert "requestAnimationFrame(frame)" in response.text
     assert "function startTicker(attempt)" in response.text
     assert "if(attempt<120)" in response.text
     assert "startTicker(attempt+1)" in response.text
-    assert "speed=12" in response.text
+    assert "speed=16" in response.text
 
 
 def test__second_brain_mode_override_is_expiring(authenticated_client, monkeypatch):
