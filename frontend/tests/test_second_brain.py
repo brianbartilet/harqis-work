@@ -52,6 +52,9 @@ def test__second_brain_places_collapsed_controls_before_ticker(authenticated_cli
     assert '<details id="brain-controls-panel"' in response.text
     assert '<details id="brain-controls-panel" open' not in response.text
     assert "requestAnimationFrame(frame)" in response.text
+    assert "function startTicker(attempt)" in response.text
+    assert "if(attempt<120)" in response.text
+    assert "startTicker(attempt+1)" in response.text
     assert "speed=12" in response.text
 
 
