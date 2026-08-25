@@ -40,8 +40,8 @@ _SENSITIVE_KEYS = frozenset(
 _ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _SECRET_ASSIGNMENT = re.compile(
-    r"(?i)\b(api[_ -]?key|authorization|bearer|password|refresh[_ -]?token|secret|token)"
-    r"(\s*[:=]\s*|\s+)([^\s,;]+)"
+    r"(?i)\b(access[_ -]?token|api[_ -]?key|authorization|bearer|cookie|credentials|password|"
+    r"refresh[_ -]?token|secret|token)(\s*[:=]\s*|\s+)((?:bearer\s+)?[^\s,;]+)"
 )
 _TOKEN_SHAPE = re.compile(r"\b(?:sk|ghp|github_pat|xox[baprs])[-_][A-Za-z0-9_-]{12,}\b")
 _LONG_NUMBER = re.compile(r"(?<!\d)\d{8,}(?!\d)")
@@ -62,13 +62,15 @@ def _safe_value(value: Any, *, key: str = "", depth: int = 0) -> Any:
         return "[redacted]"
     if depth >= 6:
         return _clean_text(value, limit=500)
-    if value is None or isinstance(value, (bool, int, float)):
+    if value is None or isinstance(value, (bool, float)):
         return value
+    if isinstance(value, int):
+        return _clean_text(value) if abs(value) >= 10_000_000 else value
     if isinstance(value, str):
         return _clean_text(value)
     if isinstance(value, Mapping):
         return {
-            str(child_key)[:120]: _safe_value(child, key=str(child_key), depth=depth + 1)
+            _clean_text(child_key, limit=120): _safe_value(child, key=str(child_key), depth=depth + 1)
             for child_key, child in list(value.items())[:100]
         }
     if isinstance(value, (list, tuple, set)):
@@ -132,7 +134,11 @@ def capture_hud_projection() -> Callable:
             try:
                 _publish_projection(source_task, result)
             except Exception as exc:
-                log.warning("Second Brain HUD projection skipped for %s: %s", source_task, exc)
+                log.warning(
+                    "Second Brain HUD projection skipped for %s (%s)",
+                    source_task,
+                    type(exc).__name__,
+                )
             return result
 
         return wrapper
