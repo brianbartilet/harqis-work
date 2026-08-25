@@ -47,6 +47,10 @@
   .brain-card[data-expanded="true"] { border-color:color-mix(in srgb,var(--mode-color) 60%,#334155); box-shadow:0 12px 35px rgba(2,6,23,.38); }
   .brain-card-toggle { display:block; border:0; background:transparent; color:inherit; }
   .brain-card-toggle:hover { background:rgba(30,41,59,.3); }
+  .brain-card-header { display:grid; grid-template-columns:minmax(0,1fr) 4rem; align-items:start; gap:.75rem; }
+  .brain-card-copy { min-width:0; text-align:left; }
+  .brain-card-copy h3,.brain-card-copy p { text-align:left; }
+  .brain-card-signal { width:4rem; text-align:right; }
   .brain-card-toggle-label::before { content:"Open"; }
   .brain-card[data-expanded="true"] .brain-card-toggle-label::before { content:"Close"; }
   .brain-card-expanded[hidden] { display:none; }
@@ -56,7 +60,7 @@
   [data-feed-item][aria-hidden="true"] .brain-card-toggle { pointer-events:none; }
   .brain-category-dot { background:var(--mode-color); box-shadow:0 0 12px var(--mode-color); }
   .brain-result pre { overflow:auto; border:1px solid #1e293b; border-radius:.5rem; background:#020617; padding:.75rem; }
-  .brain-card-summary { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:1; }
+  .brain-card-summary { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
   .brain-result > :first-child { margin-top:0; }
   .brain-result > :last-child { margin-bottom:0; }
   .brain-result table { width:100%; border-collapse:collapse; }

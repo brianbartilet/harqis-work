@@ -118,6 +118,10 @@ def test__second_brain_cards_expand_complete_content_in_a_scrollable_panel(authe
     assert "max-height:min(50vh,26rem)" in response.text
     assert "max-height:4.4rem" not in response.text
     assert "var expanded=track.querySelector" in response.text
+    assert "brain-card-header" in response.text
+    assert "grid-template-columns:minmax(0,1fr) 4rem" in response.text
+    assert "&amp;quot;calendar&amp;quot;" not in response.text
+    assert "&quot;calendar&quot;" in response.text
     assert "brain-primary-action" in response.text
     assert "brain-number-stepper" in response.text
     assert "brain-notice" in response.text
