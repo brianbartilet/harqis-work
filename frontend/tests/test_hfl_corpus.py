@@ -1813,6 +1813,28 @@ def test_corpus_api_returns_canonical_documents(authenticated_client, monkeypatc
     assert response.json()["results"][0]["entries"][0]["moment"] == "A useful moment"
 
 
+def test_corpus_api_applies_owner_configured_secret_tags(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.api as hfl_api
+
+    document = _document("private.md", tags=("private",), source="notes")
+    profile_store = SimpleNamespace(
+        get=lambda: SimpleNamespace(secret_tags="#private")
+    )
+    monkeypatch.setattr(hfl_api, "get_profile_store", lambda: profile_store)
+    monkeypatch.setattr(hfl_api.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get(
+        "/api/hfl/documents?source=notes",
+        headers={"Authorization": "Bearer frontend-test-hfl-api-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["document_count"] == 0
+    assert response.json()["results"] == []
+
+
 def test_corpus_api_paginates_results_and_returns_page_metadata(
     authenticated_client, monkeypatch
 ):

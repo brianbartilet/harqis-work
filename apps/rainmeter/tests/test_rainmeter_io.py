@@ -152,6 +152,28 @@ def test_path_lock_blocks_a_second_process(tmp_path):
     assert process.exitcode == 0
 
 
+def test_aged_live_lock_cannot_be_stolen(tmp_path):
+    target = tmp_path / "shared.ini"
+    lock_path = tmp_path / "shared.lock"
+    cfg = feed.FeedLockConfig(
+        lock_timeout_secs=0,
+        lock_sleep_secs=0.001,
+        stale_lock_max_age_secs=0,
+    )
+    owner = feed._acquire_lock(lock_path, cfg, target_path=target)
+    try:
+        old = time.time() - 600
+        lock_path.touch(exist_ok=True)
+        feed.os.utime(lock_path, (old, old))
+        with pytest.raises(TimeoutError):
+            feed._acquire_lock(lock_path, cfg, target_path=target)
+    finally:
+        feed._release_lock(owner)
+
+    next_owner = feed._acquire_lock(lock_path, cfg, target_path=target)
+    feed._release_lock(next_owner)
+
+
 def test_separate_hud_decorators_share_destination_lock(monkeypatch, tmp_path):
     static_path = tmp_path / "static"
     static_path.mkdir()

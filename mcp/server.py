@@ -1,3 +1,4 @@
+import ctypes
 import logging
 import os
 import sys
@@ -16,6 +17,8 @@ def _stdout_to_stderr():
         with redirect_stdout(sys.stderr):
             yield
     finally:
+        native_runtime = ctypes.CDLL("msvcrt" if os.name == "nt" else None)
+        native_runtime.fflush(None)
         sys.stderr.flush()
         os.dup2(saved_stdout, 1)
         os.close(saved_stdout)
@@ -108,6 +111,8 @@ if os.environ.get("MCP_STDIO_LEAK_PROBE") == "1":
 
         print("python stdout probe")
         os.write(1, b"native fd stdout probe\n")
+        native_runtime = ctypes.CDLL("msvcrt" if os.name == "nt" else None)
+        native_runtime.printf(b"buffered native stdout probe")
         subprocess.run(
             [sys.executable, "-c", "print('child stdout probe')"],
             check=True,

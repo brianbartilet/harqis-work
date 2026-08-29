@@ -12,6 +12,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional, TypeVar
 
+from filelock import BaseFileLock, FileLock, Timeout
+
 from apps.desktop.config import CONFIG
 from core.utilities.data.strings import make_separator
 from core.utilities.logging.custom_logger import logger as log
@@ -69,7 +71,8 @@ class FeedLockConfig:
 
     Notes:
     - lock files live in a local temp directory to avoid Google Drive locking/sync issues.
-    - stale locks are treated as best-effort removable; PermissionError is ignored and we wait.
+    - locks are OS-backed and released by the kernel if the owning process exits.
+    - `stale_lock_max_age_secs` remains for call-site compatibility and is ignored.
     """
     lock_timeout_secs: Optional[float] = None
     lock_sleep_secs: float = DEFAULT_LOCK_SLEEP_SECS
@@ -181,60 +184,26 @@ def _atomic_write_text(
     _atomic_replace(tmp_path, path)
 
 
-def _acquire_lock(lock_path: Path, cfg: FeedLockConfig, *, target_path: Path) -> None:
-    """
-    Spin until we can create the lock file exclusively.
-    Handles stale locks and Windows PermissionError gracefully.
-    """
-    start = time.time()
-
-    while True:
-        try:
-            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            try:
-                # Debug metadata can help when diagnosing "stuck" locks
-                os.write(
-                    fd,
-                    f"pid={os.getpid()} time={time.time()} target={target_path}\n".encode(
-                        DEFAULT_ENCODING, errors="ignore"
-                    ),
-                )
-            finally:
-                os.close(fd)
-            return  # acquired
-
-        except FileExistsError:
-            # Stale lock handling
-            if cfg.stale_lock_max_age_secs is not None and lock_path.exists():
-                try:
-                    age = time.time() - lock_path.stat().st_mtime
-                    if age > cfg.stale_lock_max_age_secs:
-                        try:
-                            os.remove(lock_path)
-                            continue
-                        except FileNotFoundError:
-                            continue
-                        except PermissionError:
-                            # Windows/Drive sync might hold the file briefly; do not crash.
-                            pass
-                except FileNotFoundError:
-                    continue
-
-            # Timeout handling
-            if cfg.lock_timeout_secs is not None and (time.time() - start) > cfg.lock_timeout_secs:
-                raise TimeoutError(f"Timed out waiting for lock on {target_path}")
-
-            time.sleep(cfg.lock_sleep_secs)
-
-
-def _release_lock(lock_path: Path) -> None:
-    """
-    Best-effort lock cleanup. On Windows a lock file can be temporarily undeletable.
-    """
+def _acquire_lock(
+    lock_path: Path,
+    cfg: FeedLockConfig,
+    *,
+    target_path: Path,
+) -> BaseFileLock:
+    """Acquire an OS-backed lock that the kernel releases if its owner dies."""
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock = FileLock(str(lock_path))
+    timeout = -1 if cfg.lock_timeout_secs is None else cfg.lock_timeout_secs
     try:
-        os.remove(lock_path)
-    except (FileNotFoundError, PermissionError):
-        pass
+        lock.acquire(timeout=timeout, poll_interval=cfg.lock_sleep_secs)
+    except Timeout as exc:
+        raise TimeoutError(f"Timed out waiting for lock on {target_path}") from exc
+    return lock
+
+
+def _release_lock(lock: BaseFileLock) -> None:
+    """Release only the advisory lock owned by this lock instance."""
+    lock.release()
 
 
 @contextmanager
@@ -253,18 +222,17 @@ def _path_lock(path: Path, *, timeout: float | None = None) -> Iterator[bool]:
 
     lock_path = _lock_path_for(path).with_suffix(".transaction.lock")
     cfg = FeedLockConfig(lock_timeout_secs=timeout)
-    acquired_process = False
+    process_lock: BaseFileLock | None = None
     try:
         try:
-            _acquire_lock(lock_path, cfg, target_path=path)
-            acquired_process = True
+            process_lock = _acquire_lock(lock_path, cfg, target_path=path)
         except TimeoutError:
             yield False
             return
         yield True
     finally:
-        if acquired_process:
-            _release_lock(lock_path)
+        if process_lock is not None:
+            _release_lock(process_lock)
         thread_lock.release()
 
 
@@ -279,18 +247,18 @@ def _prepend_with_lock(
     Prepend `block_text` to `path` using a temp-based lock file for process safety.
 
     - Lock file stored in %TEMP% to avoid Google Drive / sync lock contention.
-    - Stale lock cleanup is best-effort; PermissionError never crashes the task.
+    - OS-backed ownership prevents one process from releasing another's lock.
     - Final write uses atomic replace.
     """
     cfg = lock_cfg or FeedLockConfig()
     lock_path = _lock_path_for(path, lock_dir=cfg.lock_dir)
 
-    _acquire_lock(lock_path, cfg, target_path=path)
+    process_lock = _acquire_lock(lock_path, cfg, target_path=path)
     try:
         existing = _read_text_best_effort(path, encoding=encoding) if path.exists() else ""
         _atomic_write_text(path, block_text + existing, encoding=encoding)
     finally:
-        _release_lock(lock_path)
+        _release_lock(process_lock)
 
 
 def _safe_stringify(obj: Any) -> str:

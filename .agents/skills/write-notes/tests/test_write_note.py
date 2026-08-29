@@ -348,6 +348,22 @@ def test_update_note_preserves_existing_http_references():
     assert "C:\\notes\\attachment.txt" in service.updated_text
 
 
+def test_update_note_preserves_mandatory_classification_tags():
+    service = FakeDocumentService()
+
+    write_note.update_note(
+        "hfl-note-123",
+        {"tags": ["reviewed"]},
+        expected_updated_at=service.updated_at,
+        web_url="https://notes.example.test",
+        service_factory=lambda: service,
+        index_func=lambda entry: entry.entry_id,
+    )
+
+    assert service.updated_text is not None
+    assert "Tags:            #manual-entry #notes #reviewed" in service.updated_text
+
+
 def test_update_note_refuses_a_stale_document_revision():
     service = FakeDocumentService()
 

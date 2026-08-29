@@ -71,7 +71,11 @@ def filter_documents(
     documents: tuple[CorpusDocument, ...], tags: tuple[str, ...]
 ) -> tuple[CorpusDocument, ...]:
     filtered = tuple(filter_document(document, tags) for document in documents)
-    return tuple(document for document in filtered if document.entries or not document.entry_count)
+    return tuple(
+        visible
+        for original, visible in zip(documents, filtered)
+        if visible.entries or not original.entry_count
+    )
 
 
 def _serializer() -> URLSafeTimedSerializer:

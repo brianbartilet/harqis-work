@@ -45,6 +45,7 @@ from modules.hfl_corpus.secrets import (
     normalize_secret_tags,
 )
 from modules.hfl_corpus.view import corpus_view_cache
+from modules.profile.store import get_profile_store
 from modules.hfl_shares.viewer import (
     classify_preview,
     read_preview_text,
@@ -60,6 +61,11 @@ from services.safe_paths import (
 
 _log = logging.getLogger(__name__)
 _bearer = HTTPBearer(auto_error=False)
+
+
+def _protected_tags(requested: str = "") -> tuple[str, ...]:
+    configured = get_profile_store().get().secret_tags
+    return normalize_secret_tags(",".join(filter(None, (configured, requested))))
 
 
 def _authorize(
@@ -220,7 +226,7 @@ async def hfl_api_documents(
     if sort not in {"asc", "desc"}:
         sort = "desc"
     raw_documents = corpus_index.documents()
-    protected_tags = normalize_secret_tags(secret_tags)
+    protected_tags = _protected_tags(secret_tags)
     view = corpus_view_cache.get(
         raw_documents,
         include_secrets=include_secrets,
@@ -295,7 +301,7 @@ async def hfl_api_tree(
     view = corpus_view_cache.get(
         corpus_index.documents(),
         include_secrets=include_secrets,
-        secret_tags=normalize_secret_tags(secret_tags),
+        secret_tags=_protected_tags(secret_tags),
     )
     node = find_tree_node(view.tree, path)
     if not node:
@@ -318,7 +324,7 @@ async def hfl_api_matches(
     if not document:
         raise HTTPException(status_code=404, detail="Corpus document not found")
     selected_tags, text_query = parse_search_query(q)
-    protected_tags = normalize_secret_tags(secret_tags)
+    protected_tags = _protected_tags(secret_tags)
     view = corpus_view_cache.get(
         corpus_index.documents(),
         include_secrets=include_secrets,
@@ -358,7 +364,7 @@ async def hfl_api_document(
     document = corpus_index.get(relative_path)
     if not document or document.path is None:
         raise HTTPException(status_code=404, detail="Corpus document not found")
-    protected_tags = normalize_secret_tags(secret_tags)
+    protected_tags = _protected_tags(secret_tags)
     response_document = document
     if not include_secrets and document_has_secrets(document, protected_tags):
         visible = filter_document(document, protected_tags)
