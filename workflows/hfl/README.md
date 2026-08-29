@@ -781,16 +781,22 @@ topic-relevant activity from the previous 90 days. Interactive runs produce a
 full evidence-grounded Markdown report covering critical risks, possibly missed
 commitments, current focus, related history, recommendations, contradictions,
 and an evidence index. Scheduled Telegram delivery is a compact mobile plain-text
-summary: only critical/high-priority findings, numbered with
-What/Why/Next/Evidence labels. Fields are normalized and bounded; Telegram shows
-at most four findings and points to the linked corpus entry for the complete
-high-priority summary. Lower-priority findings remain available to analysis and
-state tracking but are not sent to Telegram. Before notification, the complete
-summary is submitted as an `activity-radar` HFL entry with a scheduled-window
-deduplication key; the Telegram message ends with a `CORPUS` link to that daily
-document. An undelivered HFL writeback blocks notification and marker advance.
-Unchanged unresolved critical findings repeat until resolved; unchanged high
-findings remain suppressed unless their evidence or priority changes.
+summary: only critical/high-priority findings whose newest relevant evidence
+explicitly proves they remain open, numbered with What/Why/Next/Source labels.
+The source label expands internal evidence IDs into a dated source and readable
+moment; raw `H46`-style labels are not exposed. Fields are normalized, bounded,
+and shortened at sentence or word boundaries rather than with dangling ellipses.
+Telegram shows at most four findings and points to the linked corpus entry for
+the complete high-priority summary. Resolved or uncertain findings cannot cross
+the critical/high notification gate; lower-priority findings remain available to
+analysis and state tracking but are not sent to Telegram. Before notification,
+the complete summary is submitted as an `activity-radar` HFL entry with a
+scheduled-window deduplication key; the Telegram message ends with a `CORPUS`
+link to that daily document. An undelivered HFL writeback blocks notification
+and marker advance.
+Open critical findings supported by current recent evidence can repeat until
+resolved; unchanged high findings remain suppressed unless their evidence or
+priority changes.
 
 **Apps chained:** HFL Elasticsearch/Markdown corpus → Anthropic Haiku analysis
 → canonical HFL writeback → Telegram notification. Elasticsearch degradation

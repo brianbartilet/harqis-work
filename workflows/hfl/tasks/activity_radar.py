@@ -38,7 +38,7 @@ _SECTIONS = {
 _ENTRY_RE = re.compile(r"^## (.+?)\s*$", re.MULTILINE)
 _SECRET_PATTERNS = (
     re.compile(r"(?i)(authorization\s*:\s*bearer\s+)[^\s]+"),
-    re.compile(r"(?i)((?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret)\s*[:=]\s*)[^\s&]+"),
+    re.compile(r"(?i)((?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret)\s*[:=]\s*)[^\s&]+"),
     re.compile(r"(?i)([?&](?:token|key|api_key|signature|sig)=)[^&#\s]+"),
 )
 
@@ -178,6 +178,8 @@ def _evidence_rows(recent: list[dict[str, Any]], history: list[dict[str, Any]]) 
             safe_row = {
                 **row,
                 **{key: redact_secrets(row.get(key, "")) for key in ("moment", "what_happened", "why_it_stayed", "possible_use")},
+                "source": redact_secrets(row.get("source", "")),
+                "tags": [redact_secrets(value) for value in (row.get("tags") or [])],
                 "references": [redact_secrets(value) for value in (row.get("references") or [])],
             }
             item = {
@@ -215,16 +217,48 @@ def synthesize_findings(
     return parsed
 
 
-def validate_findings(data: dict[str, Any], valid_ids: set[str]) -> list[dict[str, Any]]:
+def validate_findings(
+    data: dict[str, Any], valid_ids: set[str],
+    *, lookup: dict[str, dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     findings = []
     for raw in data.get("findings", []):
         if not isinstance(raw, dict) or raw.get("category") not in _SECTIONS:
             continue
         evidence = [str(x) for x in raw.get("evidence", []) if str(x) in valid_ids]
+        latest_evidence = [
+            str(x) for x in raw.get("latest_evidence", [])
+            if str(x) in valid_ids and str(x) in evidence
+        ]
         severity = str(raw.get("severity", "low")).lower()
         if severity not in {"critical", "high", "medium", "low"}:
             severity = "low"
         if severity in {"critical", "high"} and not evidence:
+            continue
+        status = str(raw.get("status", "uncertain")).strip().lower()
+        if status not in {"open", "resolved", "uncertain"}:
+            status = "uncertain"
+        resolution_check = str(raw.get("resolution_check", "")).strip()
+        claimed_latest_is_current = True
+        if lookup:
+            timestamps = {
+                eid: _parse_when(lookup[eid])
+                for eid in evidence
+                if eid in lookup
+            }
+            dated = [when for when in timestamps.values() if when is not None]
+            if dated:
+                newest = max(dated)
+                claimed_latest_is_current = bool(latest_evidence) and all(
+                    timestamps.get(eid) == newest for eid in latest_evidence
+                )
+        if severity in {"critical", "high"} and (
+            status != "open"
+            or not resolution_check
+            or not latest_evidence
+            or not any(eid.startswith("N") for eid in latest_evidence)
+            or not claimed_latest_is_current
+        ):
             continue
         confidence = str(raw.get("confidence", "medium")).lower()
         if confidence not in {"high", "medium", "low"}:
@@ -237,6 +271,9 @@ def validate_findings(data: dict[str, Any], valid_ids: set[str]) -> list[dict[st
             "inference": str(raw.get("inference", "")).strip(),
             "recommendation": str(raw.get("recommendation", "")).strip(),
             "evidence": evidence,
+            "status": status,
+            "latest_evidence": latest_evidence,
+            "resolution_check": resolution_check,
         }
         canonical = json.dumps({k: finding[k] for k in ("category", "title", "evidence")}, sort_keys=True)
         finding["fingerprint"] = hashlib.sha256(canonical.encode()).hexdigest()[:16]
@@ -302,7 +339,11 @@ def render_markdown(findings: list[dict[str, Any]], lookup: dict[str, dict[str, 
             row = lookup[eid]
             refs = "; ".join(str(x) for x in (row.get("references") or [])[:3])
             suffix = f" — {refs}" if refs else ""
-            blocks.append(f"- **{eid}** {row.get('when', '')} [{row.get('source', 'unknown')}] {row.get('moment', '')}{suffix}")
+            source = redact_secrets(row.get("source", "unknown"))
+            blocks.append(
+                f"- **{eid}** {row.get('when', '')} [{source}] "
+                f"{row.get('moment', '')}{suffix}"
+            )
         text = "\n".join(blocks)
     if degraded:
         text += "\n\n> Partial report: " + "; ".join(degraded)
@@ -315,7 +356,36 @@ def _compact_plain_text(value: Any, *, limit: int) -> str:
         return "Not provided."
     if len(text) <= limit:
         return text
-    return text[: limit - 1].rstrip() + "…"
+    candidate = text[:limit].rstrip()
+    sentence_end = max(candidate.rfind(". "), candidate.rfind("! "), candidate.rfind("? "))
+    if sentence_end >= min(60, limit // 2):
+        return candidate[: sentence_end + 1]
+    candidate = text[: max(0, limit - 1)].rstrip()
+    word_end = candidate.rfind(" ")
+    if word_end > 0:
+        candidate = candidate[:word_end].rstrip(" ,;:-")
+    return candidate.rstrip(".!?") + "."
+
+
+def _telegram_evidence_summary(
+    finding: dict[str, Any], lookup: dict[str, dict[str, Any]], *, limit: int = 140,
+) -> str:
+    ids = finding.get("latest_evidence") or finding.get("evidence") or []
+    summaries: list[str] = []
+    for eid in ids[:2]:
+        row = lookup.get(str(eid), {})
+        if not row:
+            continue
+        when = _parse_when(row)
+        date = f"{when.strftime('%b')} {when.day}" if when else "Undated"
+        source = _compact_plain_text(
+            redact_secrets(row.get("source") or "unknown"), limit=30
+        )
+        moment = _compact_plain_text(row.get("moment"), limit=110)
+        summaries.append(f"{date} {source} — {moment}")
+    if not summaries:
+        return "See the linked corpus report."
+    return _compact_plain_text("; ".join(summaries), limit=limit)
 
 
 def render_telegram_message(
@@ -323,6 +393,7 @@ def render_telegram_message(
     degraded: list[str] | None = None,
     *,
     max_findings: int | None = None,
+    lookup: dict[str, dict[str, Any]] | None = None,
 ) -> str:
     """Render urgent findings as a compact, mobile-scannable plain-text message."""
     priority = {"critical": 0, "high": 1}
@@ -345,17 +416,16 @@ def render_telegram_message(
             title = _compact_plain_text(finding["title"], limit=96)
             lines = [f"{index}. {icon} {severity} — {title}"]
             lines.append(
-                "WHAT: " + _compact_plain_text(finding["observation"], limit=140)
+                "WHAT: " + _compact_plain_text(finding["observation"], limit=150)
             )
             lines.append(
-                "WHY: " + _compact_plain_text(finding["inference"], limit=140)
+                "WHY: " + _compact_plain_text(finding["inference"], limit=150)
             )
             lines.append(
-                "NEXT: " + _compact_plain_text(finding["recommendation"], limit=140)
+                "NEXT: " + _compact_plain_text(finding["recommendation"], limit=150)
             )
             lines.append(
-                "EVIDENCE: "
-                + _compact_plain_text(", ".join(finding["evidence"]), limit=96)
+                "SOURCE: " + _telegram_evidence_summary(finding, lookup or {})
             )
             blocks.append("\n".join(lines))
         if len(visible) < len(findings):
@@ -557,7 +627,7 @@ def run_activity_radar(
     evidence, lookup = _evidence_rows(recent[:40], history[:60])
     try:
         raw = synthesizer(evidence, context=context, model=model, cfg_id=cfg_id__anthropic)
-        findings = validate_findings(raw, set(lookup))
+        findings = validate_findings(raw, set(lookup), lookup=lookup)
         bind_evidence_signatures(findings, lookup)
     except Exception as exc:
         degraded.append(f"analysis unavailable: {type(exc).__name__}")
@@ -569,8 +639,10 @@ def run_activity_radar(
             finding for finding in material
             if finding["severity"] in {"critical", "high"}
         ]
-        archive_text = render_telegram_message(material, degraded)
-        text = render_telegram_message(material, degraded, max_findings=4)
+        archive_text = render_telegram_message(material, degraded, lookup=lookup)
+        text = render_telegram_message(
+            material, degraded, max_findings=4, lookup=lookup
+        )
     else:
         text = render_markdown(material, lookup, degraded)
         archive_text = text

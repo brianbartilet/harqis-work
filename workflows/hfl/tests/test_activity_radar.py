@@ -19,12 +19,94 @@ def _finding(severity="high", evidence=None):
             "title": "Verify release", "observation": "Verification was promised.",
             "inference": "It may still be open.", "recommendation": "Verify it.",
             "evidence": ["N1"] if evidence is None else evidence,
+            "status": "open",
+            "latest_evidence": ["N1"],
+            "resolution_check": "N1 is the newest relevant evidence and records no outcome.",
         }]
     }
 
 
 def test__validate_findings_requires_evidence_for_high_severity():
     assert module.validate_findings(_finding(evidence=[]), {"N1"}) == []
+
+
+@pytest.mark.parametrize("status", ["resolved", "uncertain", ""])
+def test__validate_findings_suppresses_high_priority_items_not_proven_open(status):
+    raw = _finding(severity="critical")
+    raw["findings"][0]["status"] = status
+
+    assert module.validate_findings(raw, {"N1"}) == []
+
+
+def test__validate_findings_requires_latest_recent_evidence_for_high_priority():
+    raw = _finding()
+    raw["findings"][0]["evidence"] = ["H46"]
+    raw["findings"][0]["latest_evidence"] = ["H46"]
+
+    assert module.validate_findings(raw, {"H46"}) == []
+
+
+def test__validate_findings_rejects_claimed_latest_evidence_when_newer_evidence_exists():
+    raw = _finding()
+    raw["findings"][0]["evidence"] = ["N1", "N2"]
+    raw["findings"][0]["latest_evidence"] = ["N1"]
+    lookup = {
+        "N1": {"when": "2026-08-14T10:00:00+00:00"},
+        "N2": {"when": "2026-08-14T20:00:00+00:00"},
+    }
+
+    assert module.validate_findings(raw, set(lookup), lookup=lookup) == []
+
+    raw["findings"][0]["latest_evidence"] = ["N2"]
+    assert len(module.validate_findings(raw, set(lookup), lookup=lookup)) == 1
+
+
+def test__validate_findings_keeps_resolved_item_below_notification_threshold():
+    raw = _finding(severity="medium")
+    raw["findings"][0]["status"] = "resolved"
+    raw["findings"][0]["latest_evidence"] = ["H2"]
+    raw["findings"][0]["evidence"] = ["H1", "H2"]
+    raw["findings"][0]["resolution_check"] = "H2 records the merged fix and passing tests."
+
+    findings = module.validate_findings(raw, {"H1", "H2"})
+
+    assert len(findings) == 1
+    assert findings[0]["severity"] == "medium"
+    assert findings[0]["status"] == "resolved"
+
+
+def test__activity_radar_prompt_requires_latest_status_resolution_check():
+    prompt = module.load_prompt("activity_radar")
+
+    assert '"status":"open|resolved|uncertain"' in prompt
+    assert '"latest_evidence"' in prompt
+    assert '"resolution_check"' in prompt
+    assert "Mere recent activity on the same broad topic is insufficient." in prompt
+
+
+def test__evidence_rows_redacts_source_and_tags_before_downstream_use():
+    evidence, lookup = module._evidence_rows(
+        [
+            {
+                "when": "2026-08-20T10:00:00+00:00",
+                "source": "notes token=private-value",
+                "tags": ["api_key=secret-value", "activity-radar"],
+                "moment": "Current status",
+            }
+        ],
+        [],
+    )
+
+    assert "private-value" not in str(evidence)
+    assert "secret-value" not in str(evidence)
+    assert lookup["N1"]["source"] == "notes token=[REDACTED]"
+    assert lookup["N1"]["tags"] == ["api_key=[REDACTED]", "activity-radar"]
+
+    markdown = module.render_markdown(
+        module.validate_findings(_finding(), {"N1"}), lookup
+    )
+    assert "private-value" not in markdown
+    assert "secret-value" not in markdown
 
 
 def test__select_notifications_repeats_critical_but_suppresses_unchanged_lower():
@@ -167,6 +249,9 @@ def test__render_telegram_message_is_compact_and_scannable():
                     "inference": "Recovery coverage may be incomplete.",
                     "recommendation": "Repair the backup and run a restore check.",
                     "evidence": ["N1"],
+                    "status": "open",
+                    "latest_evidence": ["N1"],
+                    "resolution_check": "N1 is the latest backup outcome.",
                 },
                 {
                     "category": "missed_commitments",
@@ -177,13 +262,28 @@ def test__render_telegram_message_is_compact_and_scannable():
                     "inference": "The check may have been missed.",
                     "recommendation": "Verify the release and record the result.",
                     "evidence": ["N2"],
+                    "status": "open",
+                    "latest_evidence": ["N2"],
+                    "resolution_check": "N2 contains no verification outcome.",
                 },
             ]
         },
         {"N1", "N2"},
     )
 
-    text = module.render_telegram_message(findings)
+    lookup = {
+        "N1": {
+            "when": "2026-08-20T09:00:00+00:00",
+            "source": "backup",
+            "moment": "Nightly backup failed",
+        },
+        "N2": {
+            "when": "2026-08-20T10:00:00+00:00",
+            "source": "agent-session",
+            "moment": "Release verification promised",
+        },
+    }
+    text = module.render_telegram_message(findings, lookup=lookup)
 
     assert text.startswith("HFL ACTIVITY RADAR\n2 HIGH-PRIORITY FINDINGS")
     assert "1. 🚨 CRITICAL — Production backup is failing" in text
@@ -191,11 +291,57 @@ def test__render_telegram_message_is_compact_and_scannable():
     assert "WHAT: The latest backup ended with an error." in text
     assert "WHY: Recovery coverage may be incomplete." in text
     assert "NEXT: Repair the backup and run a restore check." in text
-    assert "EVIDENCE: N1" in text
+    assert "SOURCE: Aug 20 backup — Nightly backup failed" in text
+    assert "SOURCE: N1" not in text
     assert "confidence" not in text
     assert "## Evidence" not in text
     assert "**" not in text
     assert findings[0]["fingerprint"] not in text
+
+
+def test__render_telegram_message_never_ends_fields_with_opaque_ellipsis():
+    raw = _finding()
+    raw["findings"][0]["observation"] = (
+        "A long but clear sentence describing the current issue in enough detail. "
+        + "Additional context " * 30
+    )
+    finding = module.validate_findings(raw, {"N1"})
+
+    text = module.render_telegram_message(
+        finding,
+        lookup={
+            "N1": {
+                "when": "2026-08-20T10:00:00+00:00",
+                "source": "notes",
+                "moment": "A concrete current record",
+            }
+        },
+    )
+
+    assert "…" not in text
+    assert "WHAT: A long but clear sentence describing the current issue in enough detail." in text
+
+
+def test__render_telegram_message_redacts_sensitive_source_metadata():
+    finding = module.validate_findings(_finding(), {"N1"})
+
+    text = module.render_telegram_message(
+        finding,
+        lookup={
+            "N1": {
+                "when": "2026-08-20T10:00:00+00:00",
+                "source": "notes token=private-value",
+                "moment": "Current status",
+            }
+        },
+    )
+
+    assert "private-value" not in text
+    assert "[REDACTED]" in text
+
+
+def test__compact_plain_text_never_exceeds_requested_limit():
+    assert len(module._compact_plain_text("x" * 100, limit=20)) <= 20
 
 
 def test__render_telegram_message_caps_and_normalizes_mobile_output():
@@ -231,6 +377,43 @@ def test__render_telegram_message_caps_and_normalizes_mobile_output():
     assert len(text) + len("\n\nCORPUS: ") + 320 + len(
         "/hfl-corpus/document/2026-08-20.md"
     ) < 3900
+
+
+def test__render_telegram_message_stays_single_chunk_at_worst_case_size():
+    raw = {
+        "findings": [
+            {
+                **_finding()["findings"][0],
+                "title": f"Finding {index} " + "T" * 200,
+                "observation": "O" * 400,
+                "inference": "I" * 400,
+                "recommendation": "R" * 400,
+                "evidence": [f"N{index}"],
+                "latest_evidence": [f"N{index}"],
+            }
+            for index in range(1, 5)
+        ]
+    }
+    valid_ids = {f"N{index}" for index in range(1, 5)}
+    findings = module.validate_findings(raw, valid_ids)
+    lookup = {
+        eid: {
+            "when": "2026-08-20T10:00:00+00:00",
+            "source": "source-" + "S" * 80,
+            "moment": "M" * 300,
+        }
+        for eid in valid_ids
+    }
+
+    text = module.render_telegram_message(
+        findings,
+        degraded=["D" * 300, "E" * 300, "F" * 300],
+        max_findings=4,
+        lookup=lookup,
+    )
+    delivered = text + "\n\nCORPUS: " + "https://" + "x" * 312
+
+    assert len(delivered) < 3900
 
 
 def test__scheduled_dedup_key_changes_after_marker_or_day_advance():
