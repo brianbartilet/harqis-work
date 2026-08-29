@@ -10,7 +10,6 @@ from __future__ import annotations
 import ast
 import json
 import os
-import sqlite3
 import tomllib
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -56,6 +55,7 @@ class EntryEvidence:
     entry_id: str = ""
     available: bool = True
     error: str = ""
+    entry_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -349,12 +349,14 @@ def evaluate_source(
     result.evidence["corpus"] = {
         "last_entry": _iso(corpus_latest.when),
         "entry_id": corpus_latest.entry_id or None,
+        "entry_ids": list(corpus_latest.entry_ids),
         "age_hours": round(entry_age, 2) if entry_age is not None else None,
         "available": corpus_latest.available,
     }
     result.evidence["elasticsearch"] = {
         "last_entry": _iso(es_latest.when),
         "entry_id": es_latest.entry_id or None,
+        "entry_ids": list(es_latest.entry_ids),
         "available": es_latest.available,
         "error": es_latest.error or None,
     }
@@ -373,11 +375,9 @@ def evaluate_source(
         result.reasons.append("Elasticsearch entry has no Markdown source record")
     elif corpus_latest.when and es_latest.when:
         skew = abs((corpus_latest.when - es_latest.when).total_seconds()) / 60
-        ids_disagree = bool(
-            corpus_latest.entry_id
-            and es_latest.entry_id
-            and corpus_latest.entry_id != es_latest.entry_id
-        )
+        corpus_ids = set(corpus_latest.entry_ids or ((corpus_latest.entry_id,) if corpus_latest.entry_id else ()))
+        es_ids = set(es_latest.entry_ids or ((es_latest.entry_id,) if es_latest.entry_id else ()))
+        ids_disagree = bool(corpus_ids and es_ids and corpus_ids != es_ids)
         timestamps_disagree_without_ids = bool(
             not corpus_latest.entry_id
             and not es_latest.entry_id
@@ -463,45 +463,11 @@ def _finish_diagnosis(result: SourceHealth, policy: SourcePolicy) -> None:
     result.recommendations = list(dict.fromkeys(result.recommendations))
 
 
-def _latest_sqlite_activity(path: Path, tz: ZoneInfo) -> tuple[Optional[datetime], tuple[str, ...]]:
-    if not path.is_file():
-        return None, ("Hermes state database not found",)
-    candidates = {
-        "updated_at", "created_at", "timestamp", "last_activity_at", "closed_at",
-        "ended_at", "completed_at", "started_at", "mtime",
-    }
-    latest: Optional[datetime] = None
-    evidence: list[str] = []
-    connection = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
-    try:
-        tables = [
-            row[0] for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-            )
-        ]
-        for table in tables:
-            safe_table = table.replace('"', '""')
-            columns = [row[1] for row in connection.execute(f'PRAGMA table_info("{safe_table}")')]
-            for column in columns:
-                if column.casefold() not in candidates:
-                    continue
-                safe_column = column.replace('"', '""')
-                try:
-                    raw = connection.execute(
-                        f'SELECT MAX("{safe_column}") FROM "{safe_table}"'
-                    ).fetchone()[0]
-                except sqlite3.DatabaseError:
-                    continue
-                parsed = _parse_when(raw, default_tz=tz)
-                if parsed and (latest is None or parsed > latest):
-                    latest = parsed
-                    evidence = [f"Hermes state activity found in {table}.{column}"]
-    finally:
-        connection.close()
-    return latest, tuple(evidence or ["Hermes state database had no recognized activity timestamp"])
-
-
-def probe_agent_sessions(*, now: datetime) -> UpstreamEvidence:
+def probe_agent_sessions(
+    *,
+    now: datetime,
+    pair_loader: Optional[Callable[..., list[dict[str, Any]]]] = None,
+) -> UpstreamEvidence:
     tz = ZoneInfo(str(now.tzinfo)) if str(now.tzinfo) else ZoneInfo("Asia/Singapore")
     from scripts.agents.hfl.capture_session_event import audit_root
 
@@ -525,7 +491,28 @@ def probe_agent_sessions(*, now: datetime) -> UpstreamEvidence:
                 pending += 1
 
     state_path = Path(os.environ.get("HERMES_STATE_DB", "~/.hermes/state.db")).expanduser()
-    latest_activity, details = _latest_sqlite_activity(state_path, tz)
+    custom_pair_loader = pair_loader is not None
+    if pair_loader is None:
+        from scripts.agents.hfl.migrate_hermes_sessions import collect_session_pairs
+
+        pair_loader = collect_session_pairs
+    since = (
+        latest_capture + timedelta(microseconds=1)
+        if latest_capture
+        else now - timedelta(days=15)
+    )
+    pairs = (
+        pair_loader(state_path, since=since, until=now)
+        if state_path.is_file() or custom_pair_loader
+        else []
+    )
+    eligible_times = [
+        parsed
+        for pair in pairs
+        if (parsed := _parse_when(pair.get("timestamp"), default_tz=tz)) is not None
+    ]
+    latest_activity = max(eligible_times) if eligible_times else None
+    details = (f"eligible closed CLI/Telegram pairs after capture: {len(pairs)}",)
     available = root.is_dir() or state_path.is_file()
     return UpstreamEvidence(
         latest_activity=latest_activity,
@@ -544,21 +531,48 @@ def load_live_corpus_evidence(
 
     wanted = set(entry_sources)
     output = {source: EntryEvidence() for source in wanted}
+    corpus_dir = resolve_corpus_dir()
     try:
-        scanned = scan_corpus(resolve_corpus_dir())
+        scanned = scan_corpus(corpus_dir)
     except Exception as exc:  # noqa: BLE001 - availability is evidence
         return {
             source: EntryEvidence(available=False, error=type(exc).__name__)
             for source in wanted
         }
+    latest_ids: dict[str, set[str]] = {source: set() for source in wanted}
     for doc in scanned.documents.values():
         source = str(doc.get("source") or "")
         if source not in wanted:
             continue
         parsed = _parse_when(doc.get("when"), default_tz=ZoneInfo("Asia/Singapore"))
-        candidate = EntryEvidence(parsed, str(doc.get("entry_id") or ""))
-        if parsed and (not output[source].when or parsed > output[source].when):
-            output[source] = candidate
+        entry_id = str(doc.get("entry_id") or "")
+        current = output[source]
+        if parsed and (not current.when or parsed > current.when):
+            latest_ids[source] = {entry_id} if entry_id else set()
+            output[source] = EntryEvidence(parsed, entry_id)
+        elif parsed and current.when and parsed == current.when and entry_id:
+            latest_ids[source].add(entry_id)
+    for source, ids in latest_ids.items():
+        if ids:
+            current = output[source]
+            ordered = tuple(sorted(ids))
+            output[source] = EntryEvidence(
+                current.when, current.entry_id or ordered[0], entry_ids=ordered
+            )
+    if "summarize" in wanted and corpus_dir.is_dir():
+        artifacts = [
+            path
+            for path in corpus_dir.rglob("*-rollup.md")
+            if not any(part.startswith(".") for part in path.relative_to(corpus_dir).parts)
+        ]
+        if artifacts:
+            latest_artifact = max(artifacts, key=lambda path: path.stat().st_mtime)
+            output["summarize"] = EntryEvidence(
+                datetime.fromtimestamp(
+                    latest_artifact.stat().st_mtime,
+                    tz=ZoneInfo("Asia/Singapore"),
+                )
+            )
     return output
 
 
@@ -568,14 +582,34 @@ def load_live_es_evidence(entry_sources: Iterable[str]) -> dict[str, EntryEviden
     output: dict[str, EntryEvidence] = {}
     tz = ZoneInfo("Asia/Singapore")
     for source in sorted(set(entry_sources)):
-        result = query_hfl_entries_status(source=source, limit=1)
+        result = query_hfl_entries_status(source=source, limit=500)
         if not result.available:
             output[source] = EntryEvidence(available=False, error=result.error)
             continue
-        row = result.rows[0] if result.rows else {}
+        rows = [
+            row for row in result.rows
+            if str(row.get("source") or "").strip() == source
+        ]
+        if result.rows and not rows:
+            output[source] = EntryEvidence(
+                available=False, error="exact_source_mismatch"
+            )
+            continue
+        latest_when: Optional[datetime] = None
+        latest_ids: set[str] = set()
+        for row in rows:
+            parsed = _parse_when(row.get("when"), default_tz=tz)
+            entry_id = str(row.get("entry_id") or "")
+            if parsed and (latest_when is None or parsed > latest_when):
+                latest_when = parsed
+                latest_ids = {entry_id} if entry_id else set()
+            elif parsed and parsed == latest_when and entry_id:
+                latest_ids.add(entry_id)
+        ordered = tuple(sorted(latest_ids))
         output[source] = EntryEvidence(
-            _parse_when(row.get("when"), default_tz=tz),
-            str(row.get("entry_id") or ""),
+            latest_when,
+            ordered[0] if ordered else "",
+            entry_ids=ordered,
         )
     return output
 
