@@ -8,7 +8,7 @@ import json
 import os
 import re
 import sys
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, is_dataclass, replace
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -26,6 +26,7 @@ SUPPORTED_IMAGE_SUFFIXES = {
 }
 _TAG_TOKEN = re.compile(r"[^\w-]+", re.UNICODE)
 _MARKDOWN_LINK = re.compile(r"^\[[^]]+\]\((https?://[^)]+)\)$", re.IGNORECASE)
+_ENTRY_HEADER = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 _ENV_LOADED = False
 
 
@@ -260,6 +261,16 @@ def _service():
     return ApiServiceHflCorpusEntries(CONFIG)
 
 
+def _document_service():
+    _load_environment()
+    from apps.hfl_corpus.config import CONFIG
+    from apps.hfl_corpus.references.web.api.documents import (
+        ApiServiceHflCorpusDocuments,
+    )
+
+    return ApiServiceHflCorpusDocuments(CONFIG)
+
+
 def _as_dict(result: Any) -> dict[str, Any]:
     if isinstance(result, dict):
         return result
@@ -294,6 +305,397 @@ def document_url(web_url: str, payload: dict[str, Any], result: dict[str, Any]) 
     if not filename:
         filename = f"{payload['date']}.md"
     return f"{web_url}/hfl-corpus/document/{quote(filename, safe='')}"
+
+
+def note_document_url(web_url: str, relative_path: str, anchor: str = "") -> str:
+    """Return a browser link to one canonical corpus document or entry."""
+    normalized = str(relative_path or "").replace("\\", "/").strip("/")
+    if not normalized:
+        raise ValueError("The note document path is missing.")
+    url = f"{web_url}/hfl-corpus/document/{quote(normalized, safe='/')}"
+    return f"{url}#{quote(anchor, safe='-')}" if anchor else url
+
+
+def _parse_entry_item(item: dict[str, Any]):
+    """Recover the canonical DTO embedded in a corpus entry search result."""
+    _load_environment()
+    from workflows.hfl.dto import HflEntry
+
+    header = str(item.get("header") or "").strip()
+    text = str(item.get("text") or "")
+    first, separator, remainder = text.partition("\n")
+    if first.strip().removeprefix("## ").strip() == header:
+        body = remainder if separator else ""
+    else:
+        body = text
+    return HflEntry.from_markdown(header, body)
+
+
+def _timestamp_text(entry: Any, fallback: str = "") -> str:
+    if entry.when is None:
+        return fallback.strip()
+    rendered = entry.when.strftime("%Y-%m-%d %H:%M")
+    if entry.when.second or entry.when.microsecond:
+        rendered = entry.when.isoformat(sep=" ", timespec="seconds")
+    return rendered
+
+
+def _one_line(value: str, limit: int = 240) -> str:
+    rendered = " ".join(str(value or "").split())
+    return rendered if len(rendered) <= limit else rendered[: limit - 3].rstrip() + "..."
+
+
+def _note_summary(
+    entry: Any,
+    *,
+    relative_path: str,
+    anchor: str,
+    web_url: str,
+) -> dict[str, Any]:
+    return {
+        "guid": entry.entry_id,
+        "what_happened": _one_line(entry.what_happened),
+        "timestamp": _timestamp_text(entry),
+        "document_hfl": note_document_url(web_url, relative_path, anchor),
+    }
+
+
+def recent_notes(
+    *,
+    limit: int,
+    web_url: str,
+    include_secrets: bool = False,
+    service_factory: Callable[[], Any] | None = None,
+) -> dict[str, Any]:
+    """Return table-ready recent canonical notes without exposing other sources."""
+    if not 1 <= int(limit) <= 20:
+        raise ValueError("Recent note limit must be between 1 and 20.")
+    service = (service_factory or _document_service)()
+    listing = _as_dict(service.list_documents(
+        query="#manual-entry",
+        sort="desc",
+        page=1,
+        page_size=20,
+        compact=True,
+        source="notes",
+        include_secrets=include_secrets,
+    ))
+    notes: list[dict[str, Any]] = []
+    for document in listing.get("results") or []:
+        if len(notes) >= limit:
+            break
+        relative_path = str(document.get("relative_path") or "")
+        if not relative_path:
+            continue
+        matches = _as_dict(service.list_matches(
+            relative_path,
+            query="#manual-entry",
+            source="notes",
+            offset=0,
+            limit=min(20, limit - len(notes)),
+            include_secrets=include_secrets,
+        ))
+        for item in matches.get("entries") or []:
+            entry = _parse_entry_item(item)
+            if (
+                entry.source.casefold() != "notes"
+                or "manual-entry" not in {tag.casefold() for tag in entry.tags}
+                or not entry.entry_id
+            ):
+                continue
+            notes.append(_note_summary(
+                entry,
+                relative_path=relative_path,
+                anchor=str(item.get("anchor") or ""),
+                web_url=web_url,
+            ))
+            if len(notes) >= limit:
+                break
+    notes.sort(key=lambda item: (item["timestamp"], item["guid"]), reverse=True)
+    return {
+        "status": "recent",
+        "latest_document_url": notes[0]["document_hfl"] if notes else None,
+        "notes": notes[:limit],
+    }
+
+
+def _find_note(
+    guid: str,
+    *,
+    service: Any,
+    include_secrets: bool = False,
+) -> tuple[Any, dict[str, Any], dict[str, Any]]:
+    normalized = str(guid or "").strip()
+    if not re.fullmatch(r"hfl-[A-Za-z0-9-]{3,120}", normalized):
+        raise ValueError("Note GUID must be a canonical hfl-* entry ID.")
+    listing = _as_dict(service.list_documents(
+        query=f"#manual-entry {normalized}",
+        sort="desc",
+        page=1,
+        page_size=20,
+        compact=True,
+        source="notes",
+        include_secrets=include_secrets,
+    ))
+    found: list[tuple[Any, dict[str, Any], dict[str, Any]]] = []
+    for document in listing.get("results") or []:
+        relative_path = str(document.get("relative_path") or "")
+        if not relative_path:
+            continue
+        response = _as_dict(service.get_document(
+            relative_path,
+            include_secrets=include_secrets,
+        ))
+        full_document = response.get("document") or {}
+        for item in full_document.get("entries") or []:
+            entry = _parse_entry_item(item)
+            if (
+                entry.entry_id == normalized
+                and entry.source.casefold() == "notes"
+                and "manual-entry" in {tag.casefold() for tag in entry.tags}
+            ):
+                found.append((entry, full_document, item))
+    if not found:
+        raise ValueError(
+            f"No manual Source: notes entry found for GUID {normalized}."
+        )
+    if len(found) != 1:
+        raise ValueError(f"GUID {normalized} is not unique in the canonical corpus.")
+    return found[0]
+
+
+def _full_note(
+    entry: Any,
+    *,
+    document: dict[str, Any],
+    item: dict[str, Any],
+    web_url: str,
+) -> dict[str, Any]:
+    return {
+        "guid": entry.entry_id,
+        "timestamp": _timestamp_text(entry, str(item.get("header") or "")),
+        "moment": entry.moment,
+        "what_happened": entry.what_happened,
+        "why_it_stayed": entry.why_it_stayed,
+        "possible_use": entry.possible_use,
+        "tags": list(entry.tags),
+        "references": list(entry.references),
+        "source": entry.source,
+        "machine": entry.machine,
+        "document_updated_at": str(document.get("updated_at") or ""),
+        "document_hfl": note_document_url(
+            web_url,
+            str(document.get("relative_path") or ""),
+            str(item.get("anchor") or ""),
+        ),
+    }
+
+
+def get_note(
+    guid: str,
+    *,
+    web_url: str,
+    include_secrets: bool = False,
+    service_factory: Callable[[], Any] | None = None,
+) -> dict[str, Any]:
+    service = (service_factory or _document_service)()
+    entry, document, item = _find_note(
+        guid,
+        service=service,
+        include_secrets=include_secrets,
+    )
+    return {
+        "status": "found",
+        "note": _full_note(
+            entry,
+            document=document,
+            item=item,
+            web_url=web_url,
+        ),
+    }
+
+
+def _prepare_update(raw: dict[str, Any], current: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ValueError("The update payload must be a JSON object.")
+    allowed = {
+        "moment", "what_happened", "why_it_stayed", "possible_use",
+        "tags", "references", "is_reminder",
+    }
+    unsupported = sorted(set(raw) - allowed)
+    if unsupported:
+        raise ValueError(
+            "Unsupported update fields: " + ", ".join(unsupported)
+            + ". Timestamp, source, machine, and GUID are immutable."
+        )
+    if not raw:
+        raise ValueError("At least one note field must be updated.")
+
+    changes: dict[str, Any] = {}
+    for key, limit in (
+        ("moment", 500),
+        ("what_happened", 20_000),
+        ("why_it_stayed", 10_000),
+        ("possible_use", 5_000),
+    ):
+        if key not in raw:
+            continue
+        value = str(raw.get(key) or "").strip()
+        if key in {"moment", "what_happened"} and not value:
+            raise ValueError(f"{key} cannot be blank.")
+        if len(value) > limit:
+            raise ValueError(f"{key} exceeds the HFL {limit:,} character limit.")
+        changes[key] = value
+
+    if "references" in raw:
+        rendered = _normalize_references(raw.get("references"))
+        attachment_references = tuple(
+            reference
+            for reference in current.references
+            if urlsplit(reference).scheme.casefold() not in {"http", "https"}
+        )
+        requested = tuple(rendered.splitlines()) if rendered else ()
+        changes["references"] = tuple(
+            dict.fromkeys((*attachment_references, *requested))
+        )
+
+    if "tags" in raw or "is_reminder" in raw:
+        reminder = raw.get("is_reminder", "reminders" in current.tags)
+        if not isinstance(reminder, bool):
+            raise ValueError("is_reminder must be true or false.")
+        raw_tags = raw.get("tags", list(current.tags))
+        tag_items = [_normalize_tag(item) for item in _as_items(raw_tags)]
+        if not reminder:
+            tag_items = [item for item in tag_items if item != "reminders"]
+        rendered = _normalize_tags(tag_items, is_reminder=reminder)
+        changes["tags"] = tuple(token.lstrip("#") for token in rendered.split())
+
+    effective = {
+        key: value
+        for key, value in changes.items()
+        if getattr(current, key) != value
+    }
+    if not effective:
+        raise ValueError("The update does not change the selected note.")
+    return effective
+
+
+def _replace_note_block(
+    text: str,
+    guid: str,
+    updated: Any,
+    *,
+    preserve_references: bool,
+) -> str:
+    _load_environment()
+    from workflows.hfl.dto import HflEntry
+
+    matches = list(_ENTRY_HEADER.finditer(text or ""))
+    selected: list[tuple[int, int]] = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        parsed = HflEntry.from_markdown(match.group(1), text[match.end():end])
+        if parsed.entry_id == guid:
+            selected.append((match.start(), end))
+    if len(selected) != 1:
+        raise ValueError(
+            f"Expected exactly one canonical block for {guid}; found {len(selected)}."
+        )
+    start, end = selected[0]
+    rendered = updated.to_markdown()
+    if preserve_references:
+        original = text[start:end]
+        references = re.search(r"(?m)^References:\s*$", original)
+        if references:
+            rendered = (
+                rendered.split("\nReferences:\n", 1)[0].rstrip()
+                + "\n"
+                + original[references.start():].strip()
+                + "\n\n"
+            )
+    return text[:start] + rendered + text[end:]
+
+
+def _index_updated_note(entry: Any) -> str | None:
+    _load_environment()
+    from workflows.hfl.es_store import index_hfl_entry
+
+    return index_hfl_entry(
+        entry,
+        source=entry.source,
+        synthesized=bool(entry.synthesized),
+        doc_id=entry.entry_id,
+    )
+
+
+def update_note(
+    guid: str,
+    raw: dict[str, Any],
+    *,
+    expected_updated_at: str,
+    web_url: str,
+    include_secrets: bool = False,
+    service_factory: Callable[[], Any] | None = None,
+    index_func: Callable[[Any], str | None] | None = None,
+) -> dict[str, Any]:
+    """Replace one reviewed note block and upsert the same GUID in ES."""
+    if not str(expected_updated_at or "").strip():
+        raise ValueError("expected_updated_at is required for a safe note update.")
+    service = (service_factory or _document_service)()
+    current, document, item = _find_note(
+        guid,
+        service=service,
+        include_secrets=include_secrets,
+    )
+    observed = str(document.get("updated_at") or "")
+    if observed != str(expected_updated_at).strip():
+        raise ValueError(
+            "The HFL document changed after review; retrieve the note again before updating."
+        )
+    changes = _prepare_update(raw, current)
+    updated = replace(current, **changes)
+    relative_path = str(document.get("relative_path") or "")
+    replacement = _replace_note_block(
+        str(document.get("text") or ""),
+        current.entry_id,
+        updated,
+        preserve_references="references" not in changes,
+    )
+    result = _as_dict(service.update_document(
+        relative_path,
+        replacement,
+        expected_updated_at=observed,
+    ))
+    if not result.get("updated"):
+        raise RuntimeError("The canonical HFL document did not confirm the update.")
+    try:
+        doc_id = (index_func or _index_updated_note)(updated)
+    except Exception:
+        doc_id = None
+    after = _full_note(
+        updated,
+        document=document,
+        item=item,
+        web_url=web_url,
+    )
+    return {
+        "status": "updated",
+        "before": _full_note(
+            current,
+            document=document,
+            item=item,
+            web_url=web_url,
+        ),
+        "after": after,
+        "result": {
+            **result,
+            "entry_id": current.entry_id,
+            "indexed": doc_id is not None,
+            "doc_id": doc_id,
+            "delivery": "persisted",
+        },
+        "document_url": after["document_hfl"],
+    }
 
 
 def resolve_outbox(explicit: str | None = None) -> Path:
@@ -418,6 +820,20 @@ def _parser() -> argparse.ArgumentParser:
     retry = commands.add_parser("retry", help="Retry retained submissions")
     retry.add_argument("--item", action="append", default=[], help="Specific outbox JSON path")
     retry.add_argument("--outbox-dir")
+    recent = commands.add_parser("recent", help="List recent canonical Source: notes entries")
+    recent.add_argument("--limit", type=int, default=10)
+    recent.add_argument("--web-url")
+    recent.add_argument("--include-secrets", action="store_true")
+    get = commands.add_parser("get", help="Retrieve one canonical note by GUID")
+    get.add_argument("--guid", required=True)
+    get.add_argument("--web-url")
+    get.add_argument("--include-secrets", action="store_true")
+    update = commands.add_parser("update", help="Update one reviewed note by GUID")
+    update.add_argument("--guid", required=True)
+    update.add_argument("--json", required=True, help="JSON file path, or - for stdin")
+    update.add_argument("--expected-updated-at", required=True)
+    update.add_argument("--web-url")
+    update.add_argument("--include-secrets", action="store_true")
     return parser
 
 
@@ -428,6 +844,29 @@ def main(argv: list[str] | None = None) -> int:
             output, code = {"status": "preview", "preview": prepare_payload(_read_json(args.json))}, 0
         elif args.command == "analyze-images":
             output, code = analyze_images(args.file, max_chars=args.max_chars), 0
+        elif args.command in {"recent", "get", "update"}:
+            _load_environment()
+            web_url = resolve_web_url(args.web_url)
+            if args.command == "recent":
+                output, code = recent_notes(
+                    limit=args.limit,
+                    web_url=web_url,
+                    include_secrets=args.include_secrets,
+                ), 0
+            elif args.command == "get":
+                output, code = get_note(
+                    args.guid,
+                    web_url=web_url,
+                    include_secrets=args.include_secrets,
+                ), 0
+            else:
+                output, code = update_note(
+                    args.guid,
+                    _read_json(args.json),
+                    expected_updated_at=args.expected_updated_at,
+                    web_url=web_url,
+                    include_secrets=args.include_secrets,
+                ), 0
         else:
             _load_environment()
             root = resolve_outbox(args.outbox_dir)
@@ -440,7 +879,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
             else:
                 output, code = retry_items(root, args.item)
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
         output, code = {
             "status": "error",
             "error_type": type(exc).__name__,

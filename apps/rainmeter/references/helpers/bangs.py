@@ -3,8 +3,12 @@
 import subprocess
 from pathlib import Path
 
+from apps.desktop.helpers.feed import _path_lock
+
 # Adjust this if Rainmeter is installed in a different path
 RAINMETER_EXE = Path(r"C:\Program Files\Rainmeter\Rainmeter.exe")
+RAINMETER_COMMAND_TIMEOUT_SECS = 5.0
+
 
 
 def _send_rainmeter_cmd_no_focus(*args: str) -> None:
@@ -27,12 +31,29 @@ def _send_rainmeter_cmd_no_focus(*args: str) -> None:
     CREATE_NO_WINDOW = 0x08000000
 
     try:
-        subprocess.run(
-            [str(RAINMETER_EXE), *args],
-            check=False,
-            startupinfo=startupinfo,
-            creationflags=CREATE_NO_WINDOW,
-        )
+        # Rainmeter forwards CLI bangs to its running instance. If that
+        # instance hangs, an unbounded subprocess call exhausts every thread in
+        # the HUD worker and causes queued tasks to stampede after a restart.
+        with _path_lock(
+            RAINMETER_EXE,
+            timeout=RAINMETER_COMMAND_TIMEOUT_SECS,
+        ) as acquired:
+            if not acquired:
+                raise RuntimeError(
+                    "Timed out waiting for the Rainmeter command channel"
+                )
+            subprocess.run(
+                [str(RAINMETER_EXE), *args],
+                check=False,
+                startupinfo=startupinfo,
+                creationflags=CREATE_NO_WINDOW,
+                timeout=RAINMETER_COMMAND_TIMEOUT_SECS,
+            )
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(
+            f"Rainmeter command timed out after {RAINMETER_COMMAND_TIMEOUT_SECS:g}s "
+            f"with args={args!r}"
+        ) from e
     except Exception as e:
         raise RuntimeError(f"Failed to call Rainmeter with args={args!r}") from e
 

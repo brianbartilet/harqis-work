@@ -121,7 +121,7 @@ Entries use exact `Source: facebook` / `Source: instagram` values. Their
 `References:` lines use portable `meta-archive://` identifiers and are copied
 into the Elasticsearch `references` array. The implementation thesis and
 future server-sync boundary are documented in
-`docs/thesis/meta-archive-hfl-ingestion.md`.
+`docs/thesis/META-ARCHIVE-HFL-INGEST.md`.
 
 Each thread-week uses its ISO Monday as a stable entry timestamp. A reviewed
 overlapping export replaces the exact stable-ID Markdown block atomically, and

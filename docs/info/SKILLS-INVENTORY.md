@@ -50,7 +50,7 @@ of truth.
 | `/time-capsule-synthesizer` | Synthesize a set of files into one period-based HFL time-capsule entry. |
 | `/update-docs` | Audit documentation against current code and apply the smallest accurate corrections. |
 | `/workflow-token-audit` | Estimate scheduled workflow API calls, model/token exposure, embedding usage, and cost drivers. |
-| `/write-notes` | Save notes, reminders, URLs, and provided media as structured HFL entries with image OCR and visual analysis. |
+| `/write-notes` | Save OCR-enriched HFL notes, list recent notes with document links, and safely update one note by GUID. |
 | `/zapier-mcp` | Search, enable, and wire Zapier MCP actions into workflows or direct agent use. |
 
 **Current canonical count: 38 skills.** The count is derived from directories

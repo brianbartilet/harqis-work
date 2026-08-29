@@ -4,11 +4,15 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, Callable, Iterator, Optional, TypeVar
+
+from filelock import BaseFileLock, FileLock, Timeout
 
 from apps.desktop.config import CONFIG
 from core.utilities.data.strings import make_separator
@@ -25,6 +29,14 @@ DEFAULT_ENCODING = "utf-8"
 DEFAULT_LOCK_DIRNAME = "feed-locks"          # stored under %TEMP%
 DEFAULT_LOCK_SLEEP_SECS = 0.1
 DEFAULT_STALE_LOCK_MAX_AGE_SECS = 300.0      # 5 minutes
+DEFAULT_REPLACE_ATTEMPTS = 8
+DEFAULT_REPLACE_INITIAL_DELAY_SECS = 0.025
+
+# HUD tasks share a threaded Celery worker. Keep replacements to the same live
+# Rainmeter resource in-process serialized, then retry the short sharing
+# violations Windows raises while Rainmeter is reloading that resource.
+_REPLACE_LOCKS: dict[str, threading.RLock] = {}
+_REPLACE_LOCKS_GUARD = threading.Lock()
 
 # Per-OS feed-path override env var. One shared .env/apps.env (or, once
 # GH#11 lands, a machines.local.toml [<machine>.env_vars] block) can carry
@@ -59,9 +71,10 @@ class FeedLockConfig:
 
     Notes:
     - lock files live in a local temp directory to avoid Google Drive locking/sync issues.
-    - stale locks are treated as best-effort removable; PermissionError is ignored and we wait.
+    - locks are OS-backed and released by the kernel if the owning process exits.
+    - `stale_lock_max_age_secs` remains for call-site compatibility and is ignored.
     """
-    lock_timeout_secs: Optional[int] = None
+    lock_timeout_secs: Optional[float] = None
     lock_sleep_secs: float = DEFAULT_LOCK_SLEEP_SECS
     stale_lock_max_age_secs: Optional[float] = DEFAULT_STALE_LOCK_MAX_AGE_SECS
     lock_dir: Optional[Path] = None
@@ -101,6 +114,44 @@ def _read_text_best_effort(path: Path, *, encoding: str) -> str:
         return path.read_bytes().decode(encoding, errors="ignore")
 
 
+def _replace_lock_for(path: Path) -> threading.RLock:
+    key = os.path.normcase(str(path.resolve()))
+    with _REPLACE_LOCKS_GUARD:
+        return _REPLACE_LOCKS.setdefault(key, threading.RLock())
+
+
+def _atomic_replace(
+    tmp_path: Path,
+    path: Path,
+    *,
+    attempts: int = DEFAULT_REPLACE_ATTEMPTS,
+    initial_delay_secs: float = DEFAULT_REPLACE_INITIAL_DELAY_SECS,
+) -> None:
+    """Replace ``path`` with retry/backoff and always clean up ``tmp_path``."""
+    if attempts < 1:
+        raise ValueError("attempts must be at least 1")
+
+    delay = initial_delay_secs
+    try:
+        with _replace_lock_for(path):
+            for attempt in range(1, attempts + 1):
+                try:
+                    os.replace(tmp_path, path)
+                    return
+                except PermissionError:
+                    if attempt == attempts:
+                        raise
+                    time.sleep(delay)
+                    delay *= 2
+    finally:
+        # os.replace removes the source on success. On failure, do not leave
+        # hundreds of anonymous temp files in live Rainmeter skin folders.
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def _atomic_write_text(
     path: Path,
     text: str,
@@ -116,11 +167,10 @@ def _atomic_write_text(
     """
     _ensure_dir(path.parent)
 
-    if prepend_if_exists and path.exists():
-        existing = _read_text_best_effort(path, encoding=encoding)
-        text_to_write = text + existing
-    else:
-        text_to_write = text
+    if prepend_if_exists:
+        _prepend_with_lock(path=path, block_text=text, encoding=encoding)
+        return
+    text_to_write = text
 
     with tempfile.NamedTemporaryFile(
         mode="w",
@@ -131,63 +181,59 @@ def _atomic_write_text(
         tmp.write(text_to_write)
         tmp_path = Path(tmp.name)
 
-    os.replace(tmp_path, path)
+    _atomic_replace(tmp_path, path)
 
 
-def _acquire_lock(lock_path: Path, cfg: FeedLockConfig, *, target_path: Path) -> None:
-    """
-    Spin until we can create the lock file exclusively.
-    Handles stale locks and Windows PermissionError gracefully.
-    """
-    start = time.time()
-
-    while True:
-        try:
-            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            try:
-                # Debug metadata can help when diagnosing "stuck" locks
-                os.write(
-                    fd,
-                    f"pid={os.getpid()} time={time.time()} target={target_path}\n".encode(
-                        DEFAULT_ENCODING, errors="ignore"
-                    ),
-                )
-            finally:
-                os.close(fd)
-            return  # acquired
-
-        except FileExistsError:
-            # Stale lock handling
-            if cfg.stale_lock_max_age_secs is not None and lock_path.exists():
-                try:
-                    age = time.time() - lock_path.stat().st_mtime
-                    if age > cfg.stale_lock_max_age_secs:
-                        try:
-                            os.remove(lock_path)
-                            continue
-                        except FileNotFoundError:
-                            continue
-                        except PermissionError:
-                            # Windows/Drive sync might hold the file briefly; do not crash.
-                            pass
-                except FileNotFoundError:
-                    continue
-
-            # Timeout handling
-            if cfg.lock_timeout_secs is not None and (time.time() - start) > cfg.lock_timeout_secs:
-                raise TimeoutError(f"Timed out waiting for lock on {target_path}")
-
-            time.sleep(cfg.lock_sleep_secs)
-
-
-def _release_lock(lock_path: Path) -> None:
-    """
-    Best-effort lock cleanup. On Windows a lock file can be temporarily undeletable.
-    """
+def _acquire_lock(
+    lock_path: Path,
+    cfg: FeedLockConfig,
+    *,
+    target_path: Path,
+) -> BaseFileLock:
+    """Acquire an OS-backed lock that the kernel releases if its owner dies."""
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock = FileLock(str(lock_path))
+    timeout = -1 if cfg.lock_timeout_secs is None else cfg.lock_timeout_secs
     try:
-        os.remove(lock_path)
-    except (FileNotFoundError, PermissionError):
-        pass
+        lock.acquire(timeout=timeout, poll_interval=cfg.lock_sleep_secs)
+    except Timeout as exc:
+        raise TimeoutError(f"Timed out waiting for lock on {target_path}") from exc
+    return lock
+
+
+def _release_lock(lock: BaseFileLock) -> None:
+    """Release only the advisory lock owned by this lock instance."""
+    lock.release()
+
+
+@contextmanager
+def _path_lock(path: Path, *, timeout: float | None = None) -> Iterator[bool]:
+    """Serialize one destination across decorators, threads, and processes."""
+    thread_lock = _replace_lock_for(path)
+    if timeout == 0:
+        acquired_thread = thread_lock.acquire(blocking=False)
+    elif timeout is None:
+        acquired_thread = thread_lock.acquire()
+    else:
+        acquired_thread = thread_lock.acquire(timeout=timeout)
+    if not acquired_thread:
+        yield False
+        return
+
+    lock_path = _lock_path_for(path).with_suffix(".transaction.lock")
+    cfg = FeedLockConfig(lock_timeout_secs=timeout)
+    process_lock: BaseFileLock | None = None
+    try:
+        try:
+            process_lock = _acquire_lock(lock_path, cfg, target_path=path)
+        except TimeoutError:
+            yield False
+            return
+        yield True
+    finally:
+        if process_lock is not None:
+            _release_lock(process_lock)
+        thread_lock.release()
 
 
 def _prepend_with_lock(
@@ -201,18 +247,18 @@ def _prepend_with_lock(
     Prepend `block_text` to `path` using a temp-based lock file for process safety.
 
     - Lock file stored in %TEMP% to avoid Google Drive / sync lock contention.
-    - Stale lock cleanup is best-effort; PermissionError never crashes the task.
+    - OS-backed ownership prevents one process from releasing another's lock.
     - Final write uses atomic replace.
     """
     cfg = lock_cfg or FeedLockConfig()
     lock_path = _lock_path_for(path, lock_dir=cfg.lock_dir)
 
-    _acquire_lock(lock_path, cfg, target_path=path)
+    process_lock = _acquire_lock(lock_path, cfg, target_path=path)
     try:
         existing = _read_text_best_effort(path, encoding=encoding) if path.exists() else ""
         _atomic_write_text(path, block_text + existing, encoding=encoding)
     finally:
-        _release_lock(lock_path)
+        _release_lock(process_lock)
 
 
 def _safe_stringify(obj: Any) -> str:

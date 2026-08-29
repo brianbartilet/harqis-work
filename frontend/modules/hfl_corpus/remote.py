@@ -444,10 +444,21 @@ class RemoteCorpusClient:
             ))
         return document, references
 
-    def update_document(self, relative_path: str, text: str) -> dict[str, Any]:
+    def update_document(
+        self,
+        relative_path: str,
+        text: str,
+        expected_updated_at: str | None = None,
+    ) -> dict[str, Any]:
         encoded = quote(relative_path.replace("\\", "/"), safe="/")
         try:
-            payload = self._post(f"/document/{encoded}", json={"text": text}).json()
+            payload = self._post(
+                f"/document/{encoded}",
+                json={
+                    "text": text,
+                    "expected_updated_at": expected_updated_at,
+                },
+            ).json()
             return {
                 "updated": bool(payload["updated"]),
                 "relative_path": str(payload["relative_path"]),

@@ -1,5 +1,6 @@
 import io
 import json
+import os
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -968,6 +969,39 @@ def test_document_page_offers_plaintext_edit_save_and_discard(
     assert source.read_text(encoding="utf-8") == "# After\n\nEdited safely.\n"
 
 
+def test_corpus_document_update_rejects_stale_revision(
+    authenticated_client, monkeypatch, tmp_path
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    source = corpus / "2026-07-10.md"
+    source.write_text("# Before\n", encoding="utf-8")
+    expected = datetime.fromtimestamp(source.stat().st_mtime).isoformat()
+    document = replace(
+        _document("2026-07-10.md", text="# Before\n"),
+        path=source,
+    )
+    source.write_text("# Concurrent edit\n", encoding="utf-8")
+    stat = source.stat()
+    os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+    monkeypatch.setattr(hfl_routes.corpus_index, "get", lambda path: document)
+    monkeypatch.setattr(hfl_routes, "resolve_corpus_root", lambda: corpus)
+
+    response = authenticated_client.post(
+        "/hfl-corpus/document/2026-07-10.md",
+        json={
+            "text": "# Stale replacement\n",
+            "expected_updated_at": expected,
+        },
+    )
+
+    assert response.status_code == 409
+    assert "changed after review" in response.json()["detail"]
+    assert source.read_text(encoding="utf-8") == "# Concurrent edit\n"
+
+
 def test_corpus_text_reference_preview_is_authenticated_and_sanitized(
     authenticated_client, monkeypatch, tmp_path
 ):
@@ -1777,6 +1811,28 @@ def test_corpus_api_returns_canonical_documents(authenticated_client, monkeypatc
     assert response.json()["selected_source"] == ""
     assert response.json()["documents"][0]["relative_path"] == "2026-07-10.md"
     assert response.json()["results"][0]["entries"][0]["moment"] == "A useful moment"
+
+
+def test_corpus_api_applies_owner_configured_secret_tags(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.api as hfl_api
+
+    document = _document("private.md", tags=("private",), source="notes")
+    profile_store = SimpleNamespace(
+        get=lambda: SimpleNamespace(secret_tags="#private")
+    )
+    monkeypatch.setattr(hfl_api, "get_profile_store", lambda: profile_store)
+    monkeypatch.setattr(hfl_api.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get(
+        "/api/hfl/documents?source=notes",
+        headers={"Authorization": "Bearer frontend-test-hfl-api-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["document_count"] == 0
+    assert response.json()["results"] == []
 
 
 def test_corpus_api_paginates_results_and_returns_page_metadata(
