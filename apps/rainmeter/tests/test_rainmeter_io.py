@@ -9,6 +9,23 @@ from apps.rainmeter.references.helpers import bangs
 from apps.rainmeter.references.helpers.config_builder import init_meter
 
 
+@pytest.fixture(autouse=True)
+def windows_subprocess_compat(monkeypatch):
+    """Provide the Windows subprocess surface when unit tests run elsewhere."""
+    if not hasattr(bangs.subprocess, "STARTUPINFO"):
+        class StartupInfo:
+            def __init__(self):
+                self.dwFlags = 0
+                self.wShowWindow = None
+
+        monkeypatch.setattr(
+            bangs.subprocess, "STARTUPINFO", StartupInfo, raising=False
+        )
+    monkeypatch.setattr(
+        bangs.subprocess, "STARTF_USESHOWWINDOW", 1, raising=False
+    )
+
+
 def test_atomic_replace_retries_windows_sharing_violation(monkeypatch, tmp_path):
     source = tmp_path / "temporary"
     destination = tmp_path / "skin.ini"
