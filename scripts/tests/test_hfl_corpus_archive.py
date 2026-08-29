@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import errno
 import os
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
+import scripts.agents.hfl.archive_corpus as archive_module
 from scripts.agents.hfl.archive_corpus import archive_corpus, document_date
 
 
@@ -84,3 +86,28 @@ def test_archive_falls_back_to_exclusive_copy_when_hard_links_are_unsupported(
     assert destination.read_text(encoding="utf-8") == (
         "## 2026-06-10\nMoment: Source\n"
     )
+
+
+def test_archive_mutation_holds_corpus_write_lock_but_dry_run_does_not(
+    monkeypatch, tmp_path
+):
+    _write(tmp_path / "old.md", "## 2026-06-10\nMoment: Source\n")
+    events = []
+
+    @contextmanager
+    def lock(root, *, timeout):
+        events.append((Path(root), timeout, "entered"))
+        try:
+            yield
+        finally:
+            events.append((Path(root), timeout, "exited"))
+
+    monkeypatch.setattr(archive_module, "corpus_write_lock", lock)
+    archive_corpus(tmp_path, today=datetime(2026, 7, 1).date(), dry_run=True)
+    assert events == []
+
+    archive_corpus(tmp_path, today=datetime(2026, 7, 1).date())
+    assert events == [
+        (tmp_path.resolve(), 120, "entered"),
+        (tmp_path.resolve(), 120, "exited"),
+    ]

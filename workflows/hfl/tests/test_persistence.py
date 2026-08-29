@@ -19,6 +19,37 @@ def _entry(moment: str = "A durable moment") -> HflEntry:
     )
 
 
+def test_persist_envelope_holds_corpus_wide_lock(tmp_path, monkeypatch):
+    from workflows.hfl import write_lock
+
+    events = []
+
+    class Lock:
+        def __enter__(self):
+            events.append("entered")
+
+        def __exit__(self, *_args):
+            events.append("exited")
+
+    monkeypatch.setattr(
+        write_lock, "corpus_write_lock",
+        lambda root: (events.append(root) or Lock()),
+    )
+
+    def persist_locked(envelope, **kwargs):
+        assert events[-1] == "entered"
+        assert kwargs["corpus_dir"] == tmp_path.resolve()
+        return {"entry_id": envelope.entry.entry_id}
+
+    monkeypatch.setattr(persistence, "_persist_envelope_locked", persist_locked)
+    envelope = persistence.make_envelope(
+        _entry(), source="capture", machine="windows-work-all",
+    )
+    result = persistence.persist_envelope(envelope, corpus_dir=tmp_path)
+    assert result == {"entry_id": envelope.entry.entry_id}
+    assert events == [tmp_path.resolve(), "entered", "exited"]
+
+
 def test_envelope_is_deterministic_and_round_trips():
     first = persistence.make_envelope(
         _entry(), source="capture", machine="windows-work-all"

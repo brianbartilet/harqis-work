@@ -404,6 +404,7 @@ def test_echomtg_persist_uses_stable_daily_identity_and_required_tags(monkeypatc
     assert result["doc_id"] == "echomtg-inventory-2026-08-08"
     assert captured["dedup_key"] == "echomtg-inventory-2026-08-08"
     assert captured["es_doc_id"] == "echomtg-inventory-2026-08-08"
+    assert captured["entry"].source == "echomtg-inventory"
     assert captured["entry"].tags[:2] == ("echomtg", "inventory")
     assert captured["entry"].references == (module._ECHOMTG_REFERENCE,)
 

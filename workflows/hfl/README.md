@@ -63,7 +63,7 @@ this scaffold closes.
 | `ingest_trello_activity` | Reads actions authored by the authenticated Trello member and writes **one entry per meaningful action** using the original event time. Routine activity is rendered deterministically; long comments and unfamiliar actions may use Haiku. Stable action IDs make daily runs and overlapping backfills idempotent. References link to the action/card, board, Workspace, and profile activity page. | `file:hfl_corpus+es:hfl-entries` | Daily 23:25 local on the `hfl` queue (active; previous completed day). Manual runs support `last 30 days`, previous-calendar `last year`, explicit dates, and `all`. |
 | `ingest_android_media_activity` | Reads Android screen-time/activity export logs, reports only application categories and session counts, and writes one privacy-bounded entry. Raw titles/content are not sent to the model or corpus. A missing log directory is a clean no-op. | `file:hfl_corpus+es:hfl-entries` | Daily 23:15 local on the `hfl` queue; inactive until `HFL_ANDROID_SCREEN_LOG_DIR` is configured. |
 | `analyze_desktop_capture` | **Desktop capture vision pass.** Selects only exact HARQIS `sc-desktop-check_monitorN` filenames or timestamped native Windows screenshots in the canonical `Screenshots 1` dump folder under the approved workstation daily-dump sources, writes `Source: desktop`, and uses the shared secure media/vision/geolocation pipeline. Already-referenced media is skipped before the model call; `media_path=<inbox file>` targets one artifact. Near matches and unknown provenance remain unprocessed. | `file:hfl_corpus+es:hfl-entries` | Daily 22:00 local (active). |
-| `analyze_android_capture` | **Android durable-media vision pass.** Selects only the exact configured Android dump source plus canonical Camera/DCIM/Screenshots/Screenrecord folders, writes `Source: android_capture`, and cannot be starved by desktop volume. This is separate from privacy-reduced `android_media` attention logs. | `file:hfl_corpus+es:hfl-entries` | Daily 22:05 local (active). |
+| `analyze_android_capture` | **Android durable-media vision pass.** Selects only the exact configured Android dump source plus canonical Camera/DCIM/Screenshots/Screenrecord folders, writes `Source: android-capture`, and cannot be starved by desktop volume. This is separate from privacy-reduced `android_media` attention logs. | `file:hfl_corpus+es:hfl-entries` | Daily 22:05 local (active). |
 | `collect_time_capsule` | **On-demand, time-ranged archive ingest.** Sweeps a directory (and subdirs) for files dated within a period, extracts text / docs / Haiku vision captions into a bounded manifest + digest. The COLLECT half of the `/time-capsule-synthesizer` skill (Claude synthesizes ONE rollup entry from the digest, then dual-writes it via `capture_hfl_entry`). Not scheduled. | `file:hfl_corpus+es:hfl-entries` (via the skill) | Adhoc — driven by `/time-capsule-synthesizer`. |
 
 Each carries the manifesto metadata block on the beat entry — see
@@ -160,7 +160,7 @@ one dated folder per day, never auto-deleted:
 new file, captioning it with Haiku vision and **geo-tagging** it — EXIF GPS first, else the
 nearest OwnTracks fix to its capture time → Nominatim place — writing one entry
 per story-worthy item with the file path + an OSM pin as `references` and
-`Source: android_capture`. Android has its own task and quota, so desktop
+`Source: android-capture`. Android has its own task and quota, so desktop
 screenshot volume cannot starve the phone stream. Android
 classification requires the exact configured `nothing-phone-daily-dumps-YYYY-MM-DD`
 source identity plus a canonical Camera/DCIM/Screenshots/Screenrecord folder;
@@ -188,7 +188,7 @@ screenshot taken downtown comes out tagged with the place.
 | --- | --- | --- |
 | 00:05 | `pull_daily_dumps_from_remotes` | phone photos/screenshots → dumps inbox (retained) |
 | 22:00 | `analyze_desktop_capture` | workstation captures → `Source: desktop` entries |
-| 22:05 | `analyze_android_capture` | phone photos/screenshots → `Source: android_capture` entries |
+| 22:05 | `analyze_android_capture` | phone photos/screenshots → `Source: android-capture` entries |
 | 22:55 | `ingest_echomtg_inventory_activity` | EchoMTG collection snapshot delta → added/removed card rollup |
 | 23:00 | `ingest_browsing_activity` / `ingest_chatgpt_activity` | browsing + research → entries |
 | 23:05 | `ingest_location_activity` | day's movement → one timeline entry |
@@ -338,8 +338,10 @@ entry IDs and every non-taxonomy Markdown/Elasticsearch field, backs up affected
 Markdown and full ES documents, updates ES-only history in place, and leaves
 unresolved provenance as `media`. On ExFAT, which lacks the normal
 hard-link and atomic-name-exchange guards, apply requires the explicit
-`--offline-exfat` flag after every HFL scheduler/worker has been stopped and
-quiescence verified; the fallback is never selected automatically.
+`--offline-exfat` flag. The migration holds the same corpus-wide lock as canonical
+writers and updates each retained inode in place, preserving birthtime, ACLs,
+xattrs/AppleDouble, ownership, mode, flags, and timestamps; the fallback is never
+selected automatically.
 
 The legacy `analyze_hfl_media` Celery task remains registered but unscheduled for
 one compatibility release. It accepts no source override: it derives the durable
@@ -380,7 +382,7 @@ compare stable `inventory_id` values.
 One daily entry lists every changed variant with quantity, set, foil/non-foil,
 and condition, always tagged `#echomtg #inventory`. It dual-writes through the
 canonical Markdown + `harqis-hfl-entries` persistence boundary with source
-`echomtg_inventory` and a stable daily identity.
+`echomtg-inventory` and a stable daily identity.
 
 The snapshot advances only after a baseline, a verified no-change result, or a
 durably submitted HFL entry. Missing credentials, API failures, malformed or

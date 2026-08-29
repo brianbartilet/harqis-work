@@ -156,7 +156,7 @@ def classify_android_media_candidate(relative: Path) -> dict | None:
 def classify_media_source(relative: Path) -> str | None:
     """Return the durable HFL source for a canonical dump-relative media path."""
     if classify_android_media_candidate(relative):
-        return "android_capture"
+        return "android-capture"
     if len(relative.parts) < 2:
         return None
     parsed_source = parse_dump_dir_name(relative.parts[0].casefold())
@@ -768,7 +768,7 @@ def _analyze_hfl_media(
          "model", "window_days"}
     """
     if required_source != entry_source or required_source not in {
-        None, "desktop", "android_capture",
+        None, "desktop", "android-capture",
     }:
         raise ValueError("source-specific ingest requires one matching durable source")
     target = get_dumps_target()

@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from workflows.hfl.write_lock import corpus_write_lock
+
 _DATE = re.compile(r"(?<!\d)((?:19|20)\d{2})[-./](0[1-9]|1[0-2])[-./](0[1-9]|[12]\d|3[01])(?!\d)")
 _ISO_WEEK = re.compile(r"(?<!\d)((?:19|20)\d{2})-W(0[1-9]|[1-4]\d|5[0-3])(?!\d)", re.IGNORECASE)
 _FRONTMATTER_FIELD = re.compile(
@@ -131,6 +133,21 @@ def document_date(path: Path) -> date | None:
 
 
 def archive_corpus(
+    root: str | Path,
+    *,
+    today: date | None = None,
+    dry_run: bool = False,
+) -> ArchiveResult:
+    corpus_root = Path(root).expanduser().resolve()
+    if not corpus_root.is_dir():
+        raise NotADirectoryError(f"Corpus root is not a directory: {corpus_root}")
+    if dry_run:
+        return _archive_corpus(corpus_root, today=today, dry_run=True)
+    with corpus_write_lock(corpus_root, timeout=120):
+        return _archive_corpus(corpus_root, today=today, dry_run=False)
+
+
+def _archive_corpus(
     root: str | Path,
     *,
     today: date | None = None,

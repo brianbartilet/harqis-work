@@ -12,7 +12,6 @@ from pathlib import Path
 from filelock import BaseFileLock, FileLock
 from pydantic import BaseModel, Field
 
-
 class UpdateDocumentRequest(BaseModel):
     text: str = Field(max_length=5_000_000)
     expected_updated_at: str | None = None
@@ -46,7 +45,9 @@ def update_document_text(
     if path.suffix.casefold() != ".md" or not path.is_file():
         raise ValueError("Corpus document is not an editable Markdown file.")
 
-    with _document_lock(path):
+    from workflows.hfl.write_lock import corpus_write_lock
+
+    with corpus_write_lock(root), _document_lock(path):
         if expected_updated_at:
             observed = datetime.fromtimestamp(path.stat().st_mtime).isoformat()
             if observed != expected_updated_at:

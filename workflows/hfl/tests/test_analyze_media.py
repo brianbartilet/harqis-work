@@ -172,10 +172,10 @@ def test__classify_media_source_separates_desktop_android_and_unknown():
     ) == "desktop"
     assert classify_media_source(
         Path("nothing-phone-daily-dumps-2026-07-19/Screenshots/shot.png")
-    ) == "android_capture"
+    ) == "android-capture"
     assert classify_media_source(
         Path("nothing-phone-daily-dumps-2026-07-19/DCIM/Camera/photo.jpg")
-    ) == "android_capture"
+    ) == "android-capture"
     assert classify_media_source(
         Path("windows-work-all-daily-dumps-2026-07-19/DCIM/photo.jpg")
     ) is None
@@ -251,7 +251,7 @@ def test__filter_media_candidates_by_source_keeps_only_requested_origin(tmp_path
     ]
 
     desktop = _filter_media_candidates_by_source(candidates, "desktop")
-    android = _filter_media_candidates_by_source(candidates, "android_capture")
+    android = _filter_media_candidates_by_source(candidates, "android-capture")
 
     assert [item.path.name for item in desktop] == ["sc-desktop-check_monitor1.png"]
     assert [item.path.name for item in android] == ["android.png"]
@@ -609,7 +609,7 @@ def test__targeted_source_mismatch_skips_before_anthropic_init(tmp_path, monkeyp
     )
 
     assert result["skipped"] == "source mismatch"
-    assert result["classified_source"] == "android_capture"
+    assert result["classified_source"] == "android-capture"
     assert result["entries_written"] == 0
 
 
@@ -622,7 +622,7 @@ def test__compatibility_task_rejects_caller_forced_sources(monkeypatch):
     forced_task = cast(Any, analyze_hfl_media)
 
     forced_task(entry_source="media")
-    forced_task(required_source="desktop", entry_source="android_capture")
+    forced_task(required_source="desktop", entry_source="android-capture")
 
     assert calls == []
 
@@ -680,7 +680,7 @@ def test__compatibility_task_writes_classified_source_not_legacy_media(
     result = analyze_hfl_media(media_path=str(media))
 
     assert result["entries_written"] == 1
-    assert submitted == [{"source": "android_capture", "synthesized": True}]
+    assert submitted == [{"source": "android-capture", "synthesized": True}]
 
 
 def test__malformed_model_response_releases_claim_for_retry(tmp_path, monkeypatch):

@@ -99,10 +99,12 @@ def persist_scan_entries(report: dict[str, Any]) -> dict[str, Any]:
         outcomes.append(submit_hfl_entry(
             entry, source="git", synthesized=False,
             dedup_key=f"git-forks:{week}:{repository}",
+            replace_duplicate=True,
         ))
     summary = submit_hfl_entry(
         fleet_entry(report, when=when), source="git", synthesized=False,
         dedup_key=f"git-forks:{week}:fleet-summary",
+        replace_duplicate=True,
     )
     return {"fork_entries": outcomes, "fleet_entry": summary, "entries": len(outcomes) + 1}
 

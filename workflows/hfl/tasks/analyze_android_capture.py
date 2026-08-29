@@ -31,6 +31,6 @@ def analyze_android_capture(
         frames_per_video=frames_per_video,
         max_tokens=max_tokens,
         media_path=media_path,
-        required_source="android_capture",
-        entry_source="android_capture",
+        required_source="android-capture",
+        entry_source="android-capture",
     )

@@ -11,6 +11,7 @@ remain ``media`` and are reported by ID only.
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
 import ctypes
 import errno
@@ -28,7 +29,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Never
+from typing import Any, Iterable, Mapping, Never
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
@@ -52,6 +53,7 @@ from scripts.agents.hfl.migrate_references import (  # noqa: E402
     safe_report_id,
 )
 from workflows.hfl.tasks.analyze_media import classify_media_source  # noqa: E402
+from workflows.hfl.write_lock import corpus_write_lock  # noqa: E402
 
 DEFAULT_BACKUP_ROOT = REPO_ROOT / ".harqis-data" / "hfl-media-source-migrations"
 _ENTRY_HEADER = re.compile(
@@ -76,6 +78,33 @@ _SYNTHESIZED = re.compile(
     re.MULTILINE | re.IGNORECASE,
 )
 _REFERENCE = re.compile(r"^\s*[-*•]\s+(.+?)\s*$")
+_SOURCE_TOKEN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+APPROVED_SOURCE_RENAMES = {
+    "echomtg_inventory": "echomtg-inventory",
+    "android_capture": "android-capture",
+}
+
+
+def _validated_source_renames(
+    source_renames: Mapping[str, str] | None,
+) -> dict[str, str] | None:
+    if source_renames is None:
+        return None
+    validated = dict(source_renames)
+    if not validated:
+        raise ValueError("At least one approved source rename is required.")
+    for old, new in validated.items():
+        if not isinstance(old, str) or not isinstance(new, str):
+            raise ValueError("Source rename labels must be strings.")
+        if old != old.strip() or new != new.strip() or old == new:
+            raise ValueError(f"Invalid HFL source rename: {old!r} -> {new!r}.")
+        if not _SOURCE_TOKEN.fullmatch(new):
+            raise ValueError(f"Invalid canonical HFL source label: {new!r}.")
+        if APPROVED_SOURCE_RENAMES.get(old) != new:
+            raise ValueError(f"Unapproved HFL source rename: {old!r} -> {new!r}.")
+    if set(validated).intersection(validated.values()):
+        raise ValueError("Source rename chains/cycles are not supported.")
+    return validated
 
 
 
@@ -309,7 +338,10 @@ def _canonical_entry_id(value: str) -> str:
     return raw
 
 
-def _migrate_entry_block(block: str) -> tuple[str, SourceChange | None, str | None]:
+def _migrate_entry_block(
+    block: str,
+    source_renames: Mapping[str, str] | None = None,
+) -> tuple[str, SourceChange | None, str | None]:
     source_fields = tuple(_SOURCE_FIELD.finditer(block))
     if not source_fields:
         return block, None, None
@@ -319,7 +351,11 @@ def _migrate_entry_block(block: str) -> tuple[str, SourceChange | None, str | No
     header_end = block.find("\n") + 1
     if header_end <= 0 or source_match.start() != header_end:
         raise RuntimeError("HFL entry Source field is not in canonical position.")
-    if source_match.group("value").strip().casefold() != "media":
+    old_source = source_match.group("value").strip()
+    if source_renames is None:
+        if old_source.casefold() != "media":
+            return block, None, None
+    elif old_source not in source_renames:
         return block, None, None
     id_fields = tuple(_ENTRY_ID_FIELD.finditer(block))
     narrative_match = _NARRATIVE_FIELD.search(block)
@@ -329,17 +365,24 @@ def _migrate_entry_block(block: str) -> tuple[str, SourceChange | None, str | No
         or (narrative_match is not None and id_fields[0].start() >= narrative_match.start())
     ):
         raise RuntimeError(
-            "Classifiable HFL media entry lacks one canonical metadata Entry ID."
+            "Classifiable HFL source entry lacks one canonical metadata Entry ID."
         )
     entry_id = _canonical_entry_id(id_fields[0].group("value"))
-    new_source = classify_references(_references_from_block(block))
+    new_source = (
+        classify_references(_references_from_block(block))
+        if source_renames is None
+        else source_renames[old_source]
+    )
     if new_source is None:
         return block, None, entry_id
     updated = block[:source_match.start()] + source_match.group("prefix") + new_source + source_match.group("suffix") + block[source_match.end():]
-    return updated, SourceChange(entry_id, "media", new_source), None
+    return updated, SourceChange(entry_id, old_source, new_source), None
 
 
-def migrate_markdown_text(text: str) -> tuple[str, tuple[SourceChange, ...], tuple[str, ...]]:
+def migrate_markdown_text(
+    text: str,
+    source_renames: Mapping[str, str] | None = None,
+) -> tuple[str, tuple[SourceChange, ...], tuple[str, ...]]:
     headers = _entry_headers(text or "")
     if not headers:
         return text, (), ()
@@ -348,7 +391,9 @@ def migrate_markdown_text(text: str) -> tuple[str, tuple[SourceChange, ...], tup
     unresolved: list[str] = []
     for index, header in enumerate(headers):
         end = headers[index + 1].start if index + 1 < len(headers) else len(text)
-        updated, change, unresolved_id = _migrate_entry_block(text[header.start:end])
+        updated, change, unresolved_id = _migrate_entry_block(
+            text[header.start:end], source_renames,
+        )
         output.append(updated)
         if change:
             changes.append(change)
@@ -370,6 +415,45 @@ def _open_directory_no_follow(path: Path) -> tuple[Path, int]:
         os.close(descriptor)
         raise
     return absolute, descriptor
+
+
+def _open_relative_directory_no_follow(root_fd: int, relative: Path) -> int:
+    if relative.is_absolute() or any(
+        part in {"", ".", ".."} for part in relative.parts
+    ):
+        raise RuntimeError(f"Invalid corpus-relative directory: {relative}.")
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor = os.dup(root_fd)
+    try:
+        for part in relative.parts:
+            child = os.open(part, flags, dir_fd=descriptor)
+            if not stat.S_ISDIR(os.fstat(child).st_mode):
+                os.close(child)
+                raise RuntimeError(f"Refusing non-directory corpus path: {relative}.")
+            os.close(descriptor)
+            descriptor = child
+        return descriptor
+    except Exception:
+        os.close(descriptor)
+        raise
+
+
+@contextmanager
+def _change_parent_directory(corpus_root: Path, corpus_fd: int, path: Path):
+    relative = path.relative_to(corpus_root)
+    if not relative.parts or relative.name.startswith("."):
+        raise RuntimeError(f"Invalid HFL corpus path: {relative}.")
+    parent_relative = relative.parent
+    parent_fd = _open_relative_directory_no_follow(corpus_fd, parent_relative)
+    try:
+        _verify_directory_binding(corpus_root / parent_relative, parent_fd)
+        yield relative, parent_fd
+    finally:
+        os.close(parent_fd)
 
 
 def _markdown_files_from_fd(
@@ -400,13 +484,26 @@ def _markdown_files_from_fd(
             continue
         if not stat.S_ISREG(item_stat.st_mode):
             raise RuntimeError(f"Refusing non-regular HFL corpus file: {item}")
-        text, identity = _read_markdown_exact(
-            Path(name), _file_identity(item_stat), dir_fd=descriptor,
-        )
+        try:
+            text, identity = _read_markdown_exact(
+                Path(name), _file_identity(item_stat), dir_fd=descriptor,
+            )
+        finally:
+            os.utime(
+                name,
+                ns=(item_stat.st_atime_ns, item_stat.st_mtime_ns),
+                dir_fd=descriptor,
+                follow_symlinks=False,
+            )
         yield item, text, identity
 
 
-def scan_markdown(corpus_root: Path, *, corpus_fd: int | None = None) -> MarkdownScan:
+def scan_markdown(
+    corpus_root: Path,
+    *,
+    corpus_fd: int | None = None,
+    source_renames: Mapping[str, str] | None = None,
+) -> MarkdownScan:
     raw_root = Path(corpus_root)
     _reject_symlink_components(raw_root)
     owned_fd = corpus_fd is None
@@ -434,18 +531,16 @@ def scan_markdown(corpus_root: Path, *, corpus_fd: int | None = None) -> Markdow
                 entry_id = id_match.group(1).strip()
                 if previous := seen_ids.get(entry_id):
                     raise RuntimeError(
-                        f"Duplicate HFL entry ID {entry_id} in {previous.name} and {path.name}."
+                        f"Duplicate HFL entry ID {entry_id} in "
+                        f"{previous.name} and {path.name}."
                     )
                 seen_ids[entry_id] = path
                 source_fields = tuple(_SOURCE_FIELD.finditer(block))
                 if len(source_fields) == 1:
                     entry_sources[entry_id] = source_fields[0].group("value").strip()
-            updated, changes, unresolved_ids = migrate_markdown_text(original)
-            if len(relative.parts) != 1 and (changes or unresolved_ids):
-                raise RuntimeError(
-                    "Nested HFL Markdown with legacy media is unsupported by this "
-                    f"migration: {relative}."
-                )
+            updated, changes, unresolved_ids = migrate_markdown_text(
+                original, source_renames,
+            )
             unresolved.extend(unresolved_ids)
             counts.update(change.new_source for change in changes)
             if changes:
@@ -540,7 +635,11 @@ def _enrich_markdown_scan(markdown: MarkdownScan, elasticsearch: ElasticsearchSc
 
 
 class ElasticsearchClient(_BaseElasticsearchClient):
-    def scan_media(self, index: str) -> ElasticsearchScan:
+    def scan_media(
+        self,
+        index: str,
+        source_renames: Mapping[str, str] | None = None,
+    ) -> ElasticsearchScan:
         from urllib.parse import quote
 
         encoded = quote(index, safe="-_.")
@@ -592,20 +691,25 @@ class ElasticsearchClient(_BaseElasticsearchClient):
                         raise RuntimeError("Elasticsearch HFL document omitted a valid source.")
                     doc_id = str(hit.get("_id") or "")
                     entry_id = _canonical_entry_id(str(source.get("entry_id") or doc_id))
+                    current_source = str(source.get("source", "")).strip()
                     if previous := seen_entry_ids.get(entry_id):
                         raise RuntimeError(
                             f"Duplicate Elasticsearch HFL entry ID {entry_id} "
                             f"in documents {previous} and {doc_id}."
                         )
                     seen_entry_ids[entry_id] = doc_id
-                    current_source = str(source.get("source", "")).strip()
                     entry_sources[entry_id] = current_source
-                    if current_source.casefold() != "media":
-                        continue
-                    references = source.get("references")
-                    new_source = classify_references(
-                        str(item) for item in references
-                    ) if isinstance(references, list) else None
+                    if source_renames is None:
+                        if current_source.casefold() != "media":
+                            continue
+                        references = source.get("references")
+                        new_source = classify_references(
+                            str(item) for item in references
+                        ) if isinstance(references, list) else None
+                    else:
+                        if current_source not in source_renames:
+                            continue
+                        new_source = source_renames[current_source]
                     if new_source is None:
                         unresolved.append(entry_id)
                         continue
@@ -616,7 +720,8 @@ class ElasticsearchClient(_BaseElasticsearchClient):
                         )
                     changes.append(ElasticsearchChange(
                         index=str(hit.get("_index") or index), doc_id=doc_id,
-                        entry_id=entry_id, old_source="media", new_source=new_source,
+                        entry_id=entry_id, old_source=current_source,
+                        new_source=new_source,
                         document=copy.deepcopy(source),
                         seq_no=(int(hit["_seq_no"]) if "_seq_no" in hit else None),
                         primary_term=(
@@ -642,6 +747,79 @@ class ElasticsearchClient(_BaseElasticsearchClient):
                 f"expected {expected_hits} hits, observed {observed_hits}."
             )
         return ElasticsearchScan(tuple(changes), tuple(unresolved), entry_sources)
+
+    def verify_updated_documents(
+        self,
+        changes: Iterable[ElasticsearchChange],
+    ) -> None:
+        pending = tuple(changes)
+        if not pending:
+            return
+        response = self._request(
+            "POST",
+            "/_mget",
+            {"docs": [
+                {"_index": change.index, "_id": change.doc_id}
+                for change in pending
+            ]},
+        )
+        documents = response.get("docs") if isinstance(response, dict) else None
+        if not isinstance(documents, list) or len(documents) != len(pending):
+            raise RuntimeError("Elasticsearch postflight returned malformed documents.")
+        by_key = {
+            (str(document.get("_index") or ""), str(document.get("_id") or "")): document
+            for document in documents
+            if isinstance(document, dict)
+        }
+        for change in pending:
+            document = by_key.get((change.index, change.doc_id))
+            source = document.get("_source") if isinstance(document, dict) else None
+            if not isinstance(source, dict):
+                raise RuntimeError(
+                    f"Elasticsearch postflight omitted {change.entry_id}."
+                )
+            expected = copy.deepcopy(change.document)
+            expected["source"] = change.new_source
+            if source != expected:
+                raise RuntimeError(
+                    f"Elasticsearch postflight mismatch for {change.entry_id}."
+                )
+
+    def verify_restored_documents(
+        self,
+        changes: Iterable[ElasticsearchChange],
+    ) -> None:
+        """Fail if rollback did not restore every original `_source` byte-value."""
+        pending = tuple(changes)
+        if not pending:
+            return
+        response = self._request(
+            "POST",
+            "/_mget",
+            {"docs": [
+                {"_index": change.index, "_id": change.doc_id}
+                for change in pending
+            ]},
+        )
+        documents = response.get("docs") if isinstance(response, dict) else None
+        if not isinstance(documents, list) or len(documents) != len(pending):
+            raise RuntimeError("Elasticsearch rollback verification was malformed.")
+        by_key = {
+            (str(document.get("_index") or ""), str(document.get("_id") or "")): document
+            for document in documents
+            if isinstance(document, dict)
+        }
+        unresolved: list[str] = []
+        for change in pending:
+            document = by_key.get((change.index, change.doc_id))
+            source = document.get("_source") if isinstance(document, dict) else None
+            if source != change.document:
+                unresolved.append(change.entry_id)
+        if unresolved:
+            raise RuntimeError(
+                "manual recovery required for Elasticsearch documents: "
+                + ", ".join(sorted(unresolved))
+            )
 
     def _reconcile_batch(
         self,
@@ -813,7 +991,8 @@ def elasticsearch_client_from_env() -> ElasticsearchClient:
 
 
 def _copy_file_metadata(source_fd: int, target_fd: int) -> None:
-    fcopyfile = getattr(ctypes.CDLL(None, use_errno=True), "fcopyfile", None)
+    copyfile_library = ctypes.CDLL(None, use_errno=True)
+    fcopyfile = getattr(copyfile_library, "fcopyfile", None)
     if fcopyfile is None:
         raise RuntimeError("Filesystem metadata copying is unavailable; refusing apply.")
     fcopyfile.argtypes = [
@@ -823,7 +1002,79 @@ def _copy_file_metadata(source_fd: int, target_fd: int) -> None:
         ctypes.c_uint,
     ]
     fcopyfile.restype = ctypes.c_int
-    if fcopyfile(source_fd, target_fd, None, 0x00000007) != 0:
+    transient = {getattr(errno, "ENOATTR", 93), getattr(errno, "ENODATA", 61), errno.ENOTSUP}
+    copied = False
+    last_error = 0
+    for flags in (0x00000007, 0x00000003, 0x00000002):
+        if fcopyfile(source_fd, target_fd, None, flags) == 0:
+            copied = True
+            break
+        last_error = ctypes.get_errno()
+        if last_error not in transient:
+            raise OSError(last_error, os.strerror(last_error))
+    if not copied:
+        raise OSError(last_error, os.strerror(last_error))
+
+    source_xattrs = _xattrs_base64(source_fd)
+    if source_xattrs:
+        fsetxattr = copyfile_library.fsetxattr
+        fsetxattr.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_void_p,
+            ctypes.c_size_t,
+            ctypes.c_uint32,
+            ctypes.c_int,
+        ]
+        fsetxattr.restype = ctypes.c_int
+        for name, encoded in source_xattrs.items():
+            raw_name = name.encode("utf-8", errors="surrogateescape")
+            value = base64.b64decode(encoded)
+            value_buffer = ctypes.create_string_buffer(value)
+            if fsetxattr(
+                target_fd, raw_name, value_buffer, len(value), 0, 0,
+            ) != 0:
+                error = ctypes.get_errno()
+                raise OSError(error, os.strerror(error))
+
+    class AttrList(ctypes.Structure):
+        _fields_ = [
+            ("bitmapcount", ctypes.c_ushort),
+            ("reserved", ctypes.c_uint16),
+            ("commonattr", ctypes.c_uint32),
+            ("volattr", ctypes.c_uint32),
+            ("dirattr", ctypes.c_uint32),
+            ("fileattr", ctypes.c_uint32),
+            ("forkattr", ctypes.c_uint32),
+        ]
+
+    class TimeSpec(ctypes.Structure):
+        _fields_ = [("tv_sec", ctypes.c_long), ("tv_nsec", ctypes.c_long)]
+
+    birthtime_ns = int(getattr(os.fstat(source_fd), "st_birthtime", 0) * 1_000_000_000)
+    attributes = AttrList(bitmapcount=5, commonattr=0x00000200)
+    timestamp = TimeSpec(
+        tv_sec=birthtime_ns // 1_000_000_000,
+        tv_nsec=birthtime_ns % 1_000_000_000,
+    )
+    fsetattrlist = getattr(ctypes.CDLL(None, use_errno=True), "fsetattrlist", None)
+    if fsetattrlist is None:
+        raise RuntimeError("Birthtime preservation is unavailable; refusing apply.")
+    fsetattrlist.argtypes = [
+        ctypes.c_int,
+        ctypes.POINTER(AttrList),
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+        ctypes.c_uint,
+    ]
+    fsetattrlist.restype = ctypes.c_int
+    if fsetattrlist(
+        target_fd,
+        ctypes.byref(attributes),
+        ctypes.byref(timestamp),
+        ctypes.sizeof(timestamp),
+        0,
+    ) != 0:
         error = ctypes.get_errno()
         raise OSError(error, os.strerror(error))
 
@@ -859,22 +1110,17 @@ def _write_temp_at(
                 handle.flush()
                 _copy_file_metadata(source_fd, handle.fileno())
                 os.fchmod(handle.fileno(), mode)
-                source_stat = os.fstat(source_fd)
-                target_stat = os.fstat(handle.fileno())
-                source_metadata = (
-                    source_stat.st_uid,
-                    source_stat.st_gid,
-                    stat.S_IMODE(source_stat.st_mode),
-                    source_stat.st_mtime_ns,
-                )
-                target_metadata = (
-                    target_stat.st_uid,
-                    target_stat.st_gid,
-                    stat.S_IMODE(target_stat.st_mode),
-                    target_stat.st_mtime_ns,
-                )
+                source_metadata = _backup_metadata(source_fd)
+                target_metadata = _backup_metadata(handle.fileno())
                 if target_metadata != source_metadata:
-                    raise RuntimeError("Markdown filesystem metadata was not preserved.")
+                    differences = sorted(
+                        key for key in source_metadata
+                        if target_metadata.get(key) != source_metadata.get(key)
+                    )
+                    raise RuntimeError(
+                        "Markdown filesystem metadata was not preserved: "
+                        + ", ".join(differences)
+                    )
                 os.fsync(handle.fileno())
             return _file_identity(
                 os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
@@ -886,6 +1132,131 @@ def _write_temp_at(
             raise
     finally:
         os.close(source_fd)
+
+
+def _write_fd_payload(file_fd: int, payload: bytes) -> None:
+    os.lseek(file_fd, 0, os.SEEK_SET)
+    written = 0
+    while written < len(payload):
+        count = os.write(file_fd, payload[written:])
+        if count <= 0:
+            raise OSError("Short write while publishing HFL Markdown.")
+        written += count
+    os.ftruncate(file_fd, len(payload))
+    os.fsync(file_fd)
+
+
+def _offline_in_place_write(
+    path: Path,
+    text: str,
+    *,
+    dir_fd: int,
+    mode: int = 0o600,
+    expected_text: str,
+    expected_identity: tuple[int, int, int, int, int],
+) -> tuple[int, int, int, int, int]:
+    """Write through the retained inode while the corpus-wide lock is held.
+
+    ExFAT cannot publish a replacement inode without losing exact creation-time
+    precision. The transaction backup is the crash-recovery artifact; this helper
+    performs immediate byte rollback for every caught failure.
+    """
+    flags = os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+    file_fd = os.open(path.name, flags, dir_fd=dir_fd)
+    publication_started = False
+    retained_stat: os.stat_result | None = None
+    original_metadata: dict[str, Any] | None = None
+    try:
+        retained_stat = os.fstat(file_fd)
+        if _file_identity(retained_stat) != expected_identity:
+            raise RuntimeError(f"HFL file changed before offline write: {path.name}.")
+        original_metadata = _backup_metadata(file_fd)
+        current = os.pread(file_fd, retained_stat.st_size, 0).decode("utf-8")
+        os.utime(
+            file_fd,
+            ns=(original_metadata["atime_ns"], original_metadata["mtime_ns"]),
+        )
+        if current != expected_text:
+            raise RuntimeError(f"HFL file content changed before offline write: {path.name}.")
+
+        publication_started = True
+        _write_fd_payload(file_fd, text.encode("utf-8"))
+        os.utime(
+            file_fd,
+            ns=(original_metadata["atime_ns"], original_metadata["mtime_ns"]),
+        )
+        published_stat = os.stat(path.name, dir_fd=dir_fd, follow_symlinks=False)
+        published_identity = _file_identity(published_stat)
+        if (published_stat.st_dev, published_stat.st_ino) != (
+            retained_stat.st_dev, retained_stat.st_ino,
+        ):
+            raise RuntimeError(f"HFL path changed during offline write: {path.name}.")
+        observed, _ = _read_markdown_exact(
+            path, published_identity, dir_fd=dir_fd,
+        )
+        os.utime(
+            file_fd,
+            ns=(original_metadata["atime_ns"], original_metadata["mtime_ns"]),
+        )
+        if observed != text:
+            raise RuntimeError(f"Offline publication verification failed for {path.name}.")
+        final_metadata = _backup_metadata(file_fd)
+        if final_metadata != original_metadata:
+            differences = sorted(
+                key for key in original_metadata
+                if final_metadata.get(key) != original_metadata[key]
+            )
+            raise RuntimeError(
+                "Offline publication changed filesystem metadata: "
+                + ", ".join(differences)
+            )
+        final_stat = os.fstat(file_fd)
+        canonical_stat = os.stat(path.name, dir_fd=dir_fd, follow_symlinks=False)
+        if (canonical_stat.st_dev, canonical_stat.st_ino) != (
+            final_stat.st_dev, final_stat.st_ino,
+        ):
+            raise RuntimeError(f"HFL path changed after offline write: {path.name}.")
+        return _file_identity(final_stat)
+    except Exception as exc:
+        if publication_started and original_metadata is not None and retained_stat is not None:
+            try:
+                _write_fd_payload(file_fd, expected_text.encode("utf-8"))
+                os.utime(
+                    file_fd,
+                    ns=(original_metadata["atime_ns"], original_metadata["mtime_ns"]),
+                )
+                restored_stat = os.fstat(file_fd)
+                restored = os.pread(file_fd, restored_stat.st_size, 0).decode("utf-8")
+                if restored != expected_text:
+                    raise RuntimeError("restored bytes differ from expected bytes")
+                os.utime(
+                    file_fd,
+                    ns=(original_metadata["atime_ns"], original_metadata["mtime_ns"]),
+                )
+                if _backup_metadata(file_fd) != original_metadata:
+                    raise RuntimeError("restored filesystem metadata differs")
+            except Exception as rollback_exc:
+                raise RuntimeError(
+                    f"Offline write failed for {path.name}; immediate rollback failed: "
+                    f"{rollback_exc}."
+                ) from exc
+            try:
+                canonical_stat = os.stat(
+                    path.name, dir_fd=dir_fd, follow_symlinks=False,
+                )
+            except OSError:
+                canonical_stat = None
+            if canonical_stat is None or (
+                canonical_stat.st_dev, canonical_stat.st_ino,
+            ) != (retained_stat.st_dev, retained_stat.st_ino):
+                raise RuntimeError(
+                    f"Offline write failed for {path.name}; retained inode was restored "
+                    "but the canonical path changed. Use the recovery backup to restore "
+                    "the canonical path."
+                ) from exc
+        raise
+    finally:
+        os.close(file_fd)
 
 
 def _swap_names(dir_fd: int, first: str, second: str) -> None:
@@ -920,6 +1291,8 @@ def _guarded_atomic_write(
     expected_text: str,
     expected_identity: tuple[int, int, int, int, int],
 ) -> tuple[int, int, int, int, int]:
+    original_stat = os.stat(path.name, dir_fd=dir_fd, follow_symlinks=False)
+    original_times = (original_stat.st_atime_ns, original_stat.st_mtime_ns)
     nonce = f"{os.getpid()}-{uuid.uuid4().hex}"
     guard_name = f".{path.name}.guard-{nonce}"
     temporary_name = f".{path.name}.tmp-{nonce}"
@@ -980,6 +1353,11 @@ def _guarded_atomic_write(
             os.unlink(guard_name, dir_fd=dir_fd)
             guard_exists = False
             swapped = False
+            os.utime(
+                path.name, ns=original_times, dir_fd=dir_fd,
+                follow_symlinks=False,
+            )
+            os.fsync(dir_fd)
             return published_identity
         except Exception:
             published, _identity = _read_markdown_exact(
@@ -996,6 +1374,10 @@ def _guarded_atomic_write(
             _swap_names(dir_fd, recovery_name, path.name)
             swapped = False
             os.fsync(dir_fd)
+            os.utime(
+                path.name, ns=original_times, dir_fd=dir_fd,
+                follow_symlinks=False,
+            )
             if recovery_name == temporary_name:
                 temporary_exists = True
             else:
@@ -1018,129 +1400,6 @@ def _guarded_atomic_write(
                     pass
             if cleaned:
                 os.fsync(dir_fd)
-
-
-def _offline_replace_write(
-    path: Path,
-    text: str,
-    *,
-    mode: int,
-    dir_fd: int,
-    expected_text: str,
-    expected_identity: tuple[int, int, int, int, int],
-) -> tuple[int, int, int, int, int]:
-    """Publish on filesystems without links/exchange while all writers are offline.
-
-    This deliberately weaker fallback is never selected automatically. The caller
-    must opt in after stopping every HFL writer. Exact-byte and inode checks still
-    bracket the descriptor-relative replacement, and any post-publication failure
-    restores the expected bytes before returning control to the transaction.
-    """
-    nonce = f"{os.getpid()}-{uuid.uuid4().hex}"
-    temporary_name = f".{path.name}.offline-tmp-{nonce}"
-    recovery_name = f".{path.name}.offline-recovery-{nonce}"
-    temporary_exists = False
-    recovery_exists = False
-    published = False
-    published_identity: tuple[int, int, int, int, int] | None = None
-    try:
-        current, _identity = _read_markdown_exact(
-            path, expected_identity, dir_fd=dir_fd,
-        )
-        if current != expected_text:
-            raise RuntimeError(
-                f"Concurrent HFL corpus change detected for {path.name}."
-            )
-        candidate_identity = _write_temp_at(
-            temporary_name,
-            text,
-            mode=mode,
-            dir_fd=dir_fd,
-            metadata_source=path.name,
-        )
-        temporary_exists = True
-        current, _identity = _read_markdown_exact(
-            path, expected_identity, dir_fd=dir_fd,
-        )
-        if current != expected_text:
-            raise RuntimeError(
-                f"Concurrent HFL corpus change detected for {path.name}."
-            )
-        os.replace(
-            temporary_name,
-            path.name,
-            src_dir_fd=dir_fd,
-            dst_dir_fd=dir_fd,
-        )
-        temporary_exists = False
-        published = True
-        published_identity = candidate_identity
-        os.fsync(dir_fd)
-        current, _identity = _read_markdown_exact(
-            path, candidate_identity, dir_fd=dir_fd,
-        )
-        if current != text:
-            raise RuntimeError(
-                f"Offline publication verification failed for {path.name}."
-            )
-        return candidate_identity
-    except Exception:
-        if published:
-            try:
-                if published_identity is None:
-                    raise RuntimeError("Missing offline publication ownership state.")
-                current, _identity = _read_markdown_exact(
-                    path, published_identity, dir_fd=dir_fd,
-                )
-                if current != text:
-                    raise RuntimeError(
-                        f"Migration no longer owns published file {path.name}; "
-                        "use the recovery backup for manual restoration."
-                    )
-                recovery_identity = _write_temp_at(
-                    recovery_name,
-                    expected_text,
-                    mode=mode,
-                    dir_fd=dir_fd,
-                    metadata_source=path.name,
-                )
-                recovery_exists = True
-                os.replace(
-                    recovery_name,
-                    path.name,
-                    src_dir_fd=dir_fd,
-                    dst_dir_fd=dir_fd,
-                )
-                recovery_exists = False
-                os.fsync(dir_fd)
-                restored, _identity = _read_markdown_exact(
-                    path, recovery_identity, dir_fd=dir_fd,
-                )
-                if restored != expected_text:
-                    raise RuntimeError(
-                        f"Offline rollback verification failed for {path.name}."
-                    )
-            except Exception as rollback_exc:
-                raise RuntimeError(
-                    f"Offline publication failed and rollback failed for {path.name}: "
-                    f"{rollback_exc}"
-                ) from rollback_exc
-        raise
-    finally:
-        cleaned = False
-        for name, exists in (
-            (temporary_name, temporary_exists),
-            (recovery_name, recovery_exists),
-        ):
-            if not exists:
-                continue
-            try:
-                os.unlink(name, dir_fd=dir_fd)
-                cleaned = True
-            except FileNotFoundError:
-                pass
-        if cleaned:
-            os.fsync(dir_fd)
 
 
 def _verify_directory_binding(path: Path, descriptor: int) -> None:
@@ -1175,6 +1434,132 @@ def _write_bytes_fsync_at(
     finally:
         os.close(file_fd)
     os.fsync(descriptor)
+
+
+def _acl_text(file_fd: int) -> str | None:
+    libc = ctypes.CDLL(None, use_errno=True)
+    acl_get_fd_np = getattr(libc, "acl_get_fd_np", None)
+    acl_to_text = getattr(libc, "acl_to_text", None)
+    acl_free = getattr(libc, "acl_free", None)
+    if acl_get_fd_np is None or acl_to_text is None or acl_free is None:
+        return None
+    acl_get_fd_np.argtypes = [ctypes.c_int, ctypes.c_int]
+    acl_get_fd_np.restype = ctypes.c_void_p
+    acl_to_text.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ssize_t)]
+    acl_to_text.restype = ctypes.c_void_p
+    acl_free.argtypes = [ctypes.c_void_p]
+    acl_free.restype = ctypes.c_int
+    acl = acl_get_fd_np(file_fd, 0x00000100)
+    if not acl:
+        error = ctypes.get_errno()
+        if error in {0, errno.ENOENT}:
+            return None
+        raise OSError(error, os.strerror(error))
+    text_pointer: int | None = None
+    try:
+        length = ctypes.c_ssize_t()
+        text_pointer = acl_to_text(acl, ctypes.byref(length))
+        if not text_pointer:
+            error = ctypes.get_errno()
+            raise OSError(error, os.strerror(error))
+        return ctypes.string_at(text_pointer, length.value).decode(
+            "utf-8", errors="surrogateescape",
+        )
+    finally:
+        if text_pointer:
+            acl_free(text_pointer)
+        acl_free(acl)
+
+
+def _xattrs_base64(file_fd: int) -> dict[str, str]:
+    libc = ctypes.CDLL(None, use_errno=True)
+    flistxattr = libc.flistxattr
+    fgetxattr = libc.fgetxattr
+    flistxattr.argtypes = [
+        ctypes.c_int, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int,
+    ]
+    flistxattr.restype = ctypes.c_ssize_t
+    fgetxattr.argtypes = [
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+        ctypes.c_uint32,
+        ctypes.c_int,
+    ]
+    fgetxattr.restype = ctypes.c_ssize_t
+    transient = {getattr(errno, "ENOATTR", 93), getattr(errno, "ENODATA", 61), errno.ERANGE}
+    last_retrievable: dict[str, str] = {}
+    for _attempt in range(5):
+        size = flistxattr(file_fd, None, 0, 0)
+        if size < 0:
+            error = ctypes.get_errno()
+            if error in transient:
+                continue
+            raise OSError(error, os.strerror(error))
+        if size == 0:
+            return {}
+        names_buffer = ctypes.create_string_buffer(size)
+        observed_size = flistxattr(file_fd, names_buffer, size, 0)
+        if observed_size != size:
+            error = ctypes.get_errno()
+            if observed_size < 0 and error not in transient:
+                raise OSError(error, os.strerror(error))
+            continue
+        values: dict[str, str] = {}
+        retry = False
+        for raw_name in names_buffer.raw[:size].split(b"\0"):
+            if not raw_name:
+                continue
+            value_size = fgetxattr(file_fd, raw_name, None, 0, 0, 0)
+            if value_size < 0:
+                error = ctypes.get_errno()
+                if error in transient:
+                    retry = True
+                    break
+                raise OSError(error, os.strerror(error))
+            value_buffer = ctypes.create_string_buffer(value_size)
+            if value_size and fgetxattr(
+                file_fd, raw_name, value_buffer, value_size, 0, 0,
+            ) != value_size:
+                error = ctypes.get_errno()
+                if error in transient:
+                    retry = True
+                    break
+                raise OSError(error, os.strerror(error))
+            name = raw_name.decode("utf-8", errors="surrogateescape")
+            values[name] = base64.b64encode(
+                value_buffer.raw[:value_size],
+            ).decode("ascii")
+        if not retry:
+            return values
+        last_retrievable = values
+    # ExFAT can permanently advertise an AppleDouble-backed name whose value is
+    # unavailable through fgetxattr. The separately backed-up AppleDouble bytes
+    # are authoritative for recovery; retain and compare every retrievable xattr.
+    return last_retrievable
+
+
+def _backup_metadata(
+    file_fd: int,
+    *,
+    opaque_appledouble: bool = False,
+) -> dict[str, Any]:
+    info = os.fstat(file_fd)
+    metadata = {
+        "uid": info.st_uid,
+        "gid": info.st_gid,
+        "mode": stat.S_IMODE(info.st_mode),
+        "atime_ns": info.st_atime_ns,
+        "mtime_ns": info.st_mtime_ns,
+        "birthtime_ns": int(getattr(info, "st_birthtime", 0) * 1_000_000_000),
+        "flags": int(getattr(info, "st_flags", 0)),
+        "acl": None if opaque_appledouble else _acl_text(file_fd),
+        "xattrs_base64": {} if opaque_appledouble else _xattrs_base64(file_fd),
+    }
+    if opaque_appledouble:
+        metadata["opaque_appledouble"] = True
+    return metadata
 
 
 def _open_or_create_private_directory(
@@ -1218,6 +1603,18 @@ def _create_private_child(parent_fd: int, name: str) -> int:
     return descriptor
 
 
+def _open_or_create_private_child(parent_fd: int, name: str) -> int:
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        return _create_private_child(parent_fd, name)
+    except FileExistsError:
+        descriptor = os.open(name, flags, dir_fd=parent_fd)
+        if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
+            os.close(descriptor)
+            raise RuntimeError(f"Backup component is not a directory: {name}.")
+        return descriptor
+
+
 def _create_backup(
     corpus_root: Path,
     markdown: MarkdownScan,
@@ -1237,28 +1634,100 @@ def _create_backup(
     target = backup_root_path / target_name
     target_fd: int | None = None
     files_fd: int | None = None
+    appledouble_fd: int | None = None
     try:
         target_fd = _create_private_child(backup_root_fd, target_name)
         files_fd = _create_private_child(target_fd, "markdown")
+        appledouble_fd = _create_private_child(target_fd, "appledouble")
         markdown_hashes: dict[str, str] = {}
+        markdown_metadata: dict[str, dict[str, Any]] = {}
+        appledouble_hashes: dict[str, str] = {}
+        appledouble_metadata: dict[str, dict[str, Any]] = {}
         for change in markdown.changes:
             relative = change.path.relative_to(corpus_root)
-            if len(relative.parts) != 1:
-                raise RuntimeError(
-                    f"Nested backup publication is unsupported: {relative}."
+            with _change_parent_directory(
+                corpus_root, corpus_fd, change.path,
+            ) as (_relative, source_parent_fd):
+                current, _identity = _read_markdown_exact(
+                    Path(relative.name),
+                    change.identity,
+                    dir_fd=source_parent_fd,
                 )
-            current, _identity = _read_markdown_exact(
-                change.path,
-                change.identity,
-                dir_fd=corpus_fd,
-            )
+                source_file_fd = os.open(
+                    relative.name,
+                    os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                    dir_fd=source_parent_fd,
+                )
+                try:
+                    markdown_metadata[str(relative)] = _backup_metadata(source_file_fd)
+                finally:
+                    os.close(source_file_fd)
+                sidecar_name = f"._{relative.name}"
+                try:
+                    sidecar_fd = os.open(
+                        sidecar_name,
+                        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                        dir_fd=source_parent_fd,
+                    )
+                except FileNotFoundError:
+                    sidecar_payload = None
+                else:
+                    sidecar_times: tuple[int, int] | None = None
+                    try:
+                        sidecar_stat = os.fstat(sidecar_fd)
+                        if not stat.S_ISREG(sidecar_stat.st_mode):
+                            raise RuntimeError(
+                                f"AppleDouble sidecar is not a regular file: {sidecar_name}."
+                            )
+                        sidecar_times = (
+                            sidecar_stat.st_atime_ns,
+                            sidecar_stat.st_mtime_ns,
+                        )
+                        appledouble_metadata[str(relative)] = _backup_metadata(
+                            sidecar_fd, opaque_appledouble=True,
+                        )
+                        chunks: list[bytes] = []
+                        while True:
+                            chunk = os.read(sidecar_fd, 1024 * 1024)
+                            if not chunk:
+                                break
+                            chunks.append(chunk)
+                        sidecar_payload = b"".join(chunks)
+                    finally:
+                        if sidecar_times is not None:
+                            os.utime(sidecar_fd, ns=sidecar_times)
+                        os.close(sidecar_fd)
+                _verify_directory_binding(
+                    corpus_root / relative.parent, source_parent_fd,
+                )
             if current != change.original_text:
                 raise RuntimeError(
                     f"Concurrent HFL corpus change detected for {change.path.name}."
                 )
             payload = change.original_text.encode("utf-8")
-            _write_bytes_fsync_at(files_fd, relative.name, payload)
+            destination_fd = os.dup(files_fd)
+            try:
+                for part in relative.parent.parts:
+                    child_fd = _open_or_create_private_child(destination_fd, part)
+                    os.close(destination_fd)
+                    destination_fd = child_fd
+                _write_bytes_fsync_at(destination_fd, relative.name, payload)
+            finally:
+                os.close(destination_fd)
             markdown_hashes[str(relative)] = hashlib.sha256(payload).hexdigest()
+            if sidecar_payload is not None:
+                destination_fd = os.dup(appledouble_fd)
+                try:
+                    for part in relative.parent.parts:
+                        child_fd = _open_or_create_private_child(destination_fd, part)
+                        os.close(destination_fd)
+                        destination_fd = child_fd
+                    _write_bytes_fsync_at(destination_fd, sidecar_name, sidecar_payload)
+                finally:
+                    os.close(destination_fd)
+                appledouble_hashes[str(relative)] = hashlib.sha256(
+                    sidecar_payload,
+                ).hexdigest()
         es_payload = b"".join(
             (
                 json.dumps({
@@ -1280,6 +1749,9 @@ def _create_backup(
             "unresolved_elasticsearch": list(elasticsearch.unresolved_ids),
             "source_counts": markdown.source_counts,
             "markdown_sha256": markdown_hashes,
+            "markdown_metadata": markdown_metadata,
+            "appledouble_sha256": appledouble_hashes,
+            "appledouble_metadata": appledouble_metadata,
             "elasticsearch_ndjson_sha256": hashlib.sha256(es_payload).hexdigest(),
             "entry_ids": sorted({
                 source.entry_id
@@ -1293,6 +1765,7 @@ def _create_backup(
             (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8"),
         )
         os.fsync(files_fd)
+        os.fsync(appledouble_fd)
         os.fsync(target_fd)
         os.fsync(backup_root_fd)
         _verify_directory_binding(target, target_fd)
@@ -1302,6 +1775,8 @@ def _create_backup(
     finally:
         if files_fd is not None:
             os.close(files_fd)
+        if appledouble_fd is not None:
+            os.close(appledouble_fd)
         if target_fd is not None:
             os.close(target_fd)
         os.close(backup_root_fd)
@@ -1375,21 +1850,35 @@ def _write_markdown_changes(
     offline_replace: bool = False,
 ) -> dict[Path, tuple[int, int, int, int, int]]:
     if not locks_held:
-        with _markdown_locks(corpus_root, changes) as (pending, locked_fd):
-            return _write_markdown_changes(
-                corpus_root,
-                pending,
-                restore=restore,
-                locks_held=True,
-                corpus_fd=locked_fd,
-                expected_identities=expected_identities,
-                offline_replace=offline_replace,
-            )
+        pending_input = tuple(changes)
+        times = {}
+        for change in pending_input:
+            info = os.stat(change.path, follow_symlinks=False)
+            times[change.path] = (info.st_atime_ns, info.st_mtime_ns)
+        try:
+            with _markdown_locks(corpus_root, pending_input) as (pending, locked_fd):
+                return _write_markdown_changes(
+                    corpus_root,
+                    pending,
+                    restore=restore,
+                    locks_held=True,
+                    corpus_fd=locked_fd,
+                    expected_identities=expected_identities,
+                    offline_replace=offline_replace,
+                )
+        finally:
+            active_failure = sys.exc_info()[0] is not None
+            for path, file_times in times.items():
+                try:
+                    os.utime(path, ns=file_times, follow_symlinks=False)
+                except (FileNotFoundError, NotADirectoryError):
+                    if not active_failure:
+                        raise
     if corpus_fd is None:
         raise RuntimeError("A retained corpus directory descriptor is required.")
     pending = tuple(sorted(changes, key=lambda change: str(change.path)))
     written: list[
-        tuple[MarkdownFileChange, tuple[int, int, int, int, int]]
+        tuple[MarkdownFileChange, tuple[int, int, int, int, int], int]
     ] = []
 
     def ownership(change: MarkdownFileChange) -> tuple[int, int, int, int, int]:
@@ -1405,11 +1894,26 @@ def _write_markdown_changes(
     def verify(change: MarkdownFileChange) -> None:
         _verify_directory_binding(corpus_root, corpus_fd)
         expected = change.updated_text if restore else change.original_text
-        current, _identity = _read_markdown_exact(
-            change.path,
-            ownership(change),
-            dir_fd=corpus_fd,
-        )
+        with _change_parent_directory(
+            corpus_root, corpus_fd, change.path,
+        ) as (relative, parent_fd):
+            observed_stat = os.stat(
+                relative.name, dir_fd=parent_fd, follow_symlinks=False,
+            )
+            try:
+                current, _identity = _read_markdown_exact(
+                    Path(relative.name),
+                    ownership(change),
+                    dir_fd=parent_fd,
+                )
+            finally:
+                os.utime(
+                    relative.name,
+                    ns=(observed_stat.st_atime_ns, observed_stat.st_mtime_ns),
+                    dir_fd=parent_fd,
+                    follow_symlinks=False,
+                )
+            _verify_directory_binding(corpus_root / relative.parent, parent_fd)
         if current != expected:
             raise RuntimeError(
                 f"Concurrent HFL corpus change detected for {change.path.name}."
@@ -1422,27 +1926,36 @@ def _write_markdown_changes(
             verify(change)
             expected_text = change.updated_text if restore else change.original_text
             target_text = change.original_text if restore else change.updated_text
-            writer = _offline_replace_write if offline_replace else _guarded_atomic_write
-            published_identity = writer(
-                change.path,
-                target_text,
-                mode=change.identity[4],
-                dir_fd=corpus_fd,
-                expected_text=expected_text,
-                expected_identity=ownership(change),
-            )
-            written.append((change, published_identity))
+            writer = _offline_in_place_write if offline_replace else _guarded_atomic_write
+            with _change_parent_directory(
+                corpus_root, corpus_fd, change.path,
+            ) as (relative, parent_fd):
+                retained_parent_fd = os.dup(parent_fd)
+                try:
+                    published_identity = writer(
+                        Path(relative.name),
+                        target_text,
+                        mode=change.identity[4],
+                        dir_fd=parent_fd,
+                        expected_text=expected_text,
+                        expected_identity=ownership(change),
+                    )
+                except Exception:
+                    os.close(retained_parent_fd)
+                    raise
+                written.append((change, published_identity, retained_parent_fd))
+                _verify_directory_binding(corpus_root / relative.parent, parent_fd)
             _verify_directory_binding(corpus_root, corpus_fd)
     except Exception as exc:
         rollback_errors: list[str] = []
-        for change, published_identity in reversed(written):
-            writer = _offline_replace_write if offline_replace else _guarded_atomic_write
+        for change, published_identity, retained_parent_fd in reversed(written):
+            writer = _offline_in_place_write if offline_replace else _guarded_atomic_write
             try:
                 writer(
-                    change.path,
+                    Path(change.path.name),
                     change.updated_text if restore else change.original_text,
                     mode=change.identity[4],
-                    dir_fd=corpus_fd,
+                    dir_fd=retained_parent_fd,
                     expected_text=(
                         change.original_text if restore else change.updated_text
                     ),
@@ -1450,13 +1963,18 @@ def _write_markdown_changes(
                 )
             except Exception as rollback_exc:
                 rollback_errors.append(f"{change.path.name}: {rollback_exc}")
+            finally:
+                os.close(retained_parent_fd)
         if rollback_errors:
             raise RuntimeError(
                 f"Markdown publication failed ({exc}); rollback failures: "
                 + "; ".join(rollback_errors)
             ) from exc
         raise
-    return {change.path: identity for change, identity in written}
+    result = {change.path: identity for change, identity, _parent_fd in written}
+    for _change, _identity, retained_parent_fd in written:
+        os.close(retained_parent_fd)
+    return result
 
 
 def _validate_cross_store_sources(
@@ -1470,6 +1988,15 @@ def _validate_cross_store_sources(
     }
     elasticsearch_sources = {
         change.entry_id: change.new_source
+        for change in elasticsearch.changes
+    }
+    markdown_old_sources = {
+        source.entry_id: source.old_source
+        for change in markdown.changes
+        for source in change.changes
+    }
+    elasticsearch_old_sources = {
+        change.entry_id: change.old_source
         for change in elasticsearch.changes
     }
     split_brain_ids = (
@@ -1492,14 +2019,22 @@ def _validate_cross_store_sources(
         )
     for entry_id, intended in markdown_sources.items():
         counterpart = elasticsearch.entry_sources.get(entry_id, "")
-        if counterpart and counterpart.casefold() not in {"media", intended.casefold()}:
+        allowed = {
+            intended.casefold(),
+            markdown_old_sources[entry_id].casefold(),
+        }
+        if counterpart and counterpart.casefold() not in allowed:
             raise RuntimeError(
                 f"Cross-store source conflict for {entry_id}: "
                 f"Markdown={intended}, Elasticsearch={counterpart}."
             )
     for entry_id, intended in elasticsearch_sources.items():
         counterpart = markdown.entry_sources.get(entry_id, "")
-        if counterpart and counterpart.casefold() not in {"media", intended.casefold()}:
+        allowed = {
+            intended.casefold(),
+            elasticsearch_old_sources[entry_id].casefold(),
+        }
+        if counterpart and counterpart.casefold() not in allowed:
             raise RuntimeError(
                 f"Cross-store source conflict for {entry_id}: "
                 f"Markdown={counterpart}, Elasticsearch={intended}."
@@ -1513,6 +2048,95 @@ def _validate_cross_store_sources(
             )
 
 
+def _verify_successful_apply(
+    corpus: Path,
+    corpus_fd: int,
+    markdown: MarkdownScan,
+    elasticsearch: ElasticsearchScan,
+    markdown_identities: Mapping[Path, tuple[int, int, int, int, int]],
+    client: Any,
+    *,
+    index: str,
+    source_renames: Mapping[str, str] | None,
+) -> None:
+    times: dict[Path, tuple[int, int]] = {}
+    for change in markdown.changes:
+        info = os.stat(change.path, follow_symlinks=False)
+        times[change.path] = (info.st_atime_ns, info.st_mtime_ns)
+    try:
+        _verify_successful_apply_inner(
+            corpus, corpus_fd, markdown, elasticsearch,
+            markdown_identities, client, index=index,
+            source_renames=source_renames,
+        )
+    finally:
+        for path, file_times in times.items():
+            os.utime(path, ns=file_times, follow_symlinks=False)
+
+
+def _verify_successful_apply_inner(
+    corpus: Path,
+    corpus_fd: int,
+    markdown: MarkdownScan,
+    elasticsearch: ElasticsearchScan,
+    markdown_identities: Mapping[Path, tuple[int, int, int, int, int]],
+    client: Any,
+    *,
+    index: str,
+    source_renames: Mapping[str, str] | None,
+) -> None:
+    for change in markdown.changes:
+        with _change_parent_directory(
+            corpus, corpus_fd, change.path,
+        ) as (relative, parent_fd):
+            current, _identity = _read_markdown_exact(
+                Path(relative.name),
+                markdown_identities[change.path],
+                dir_fd=parent_fd,
+            )
+        if current != change.updated_text:
+            raise RuntimeError(
+                f"Markdown postflight mismatch for {change.path.name}."
+            )
+    verifier = getattr(client, "verify_updated_documents", None)
+    if not callable(verifier):
+        raise RuntimeError("Elasticsearch client lacks postflight document verification.")
+    verifier(elasticsearch.changes)
+    replay_markdown = scan_markdown(
+        corpus, corpus_fd=corpus_fd, source_renames=source_renames,
+    )
+    replay_elasticsearch = (
+        client.scan_media(index)
+        if source_renames is None
+        else client.scan_media(index, source_renames=source_renames)
+    )
+    if (
+        replay_markdown.changes
+        or replay_elasticsearch.changes
+        or replay_markdown.unresolved_ids
+        or replay_elasticsearch.unresolved_ids
+    ):
+        raise RuntimeError("Migration postflight was not idempotent.")
+    expected_markdown = {
+        source.entry_id: source.new_source
+        for change in markdown.changes
+        for source in change.changes
+    }
+    expected_elasticsearch = {
+        change.entry_id: change.new_source
+        for change in elasticsearch.changes
+    }
+    for entry_id, expected in expected_markdown.items():
+        if replay_markdown.entry_sources.get(entry_id) != expected:
+            raise RuntimeError(f"Markdown postflight source mismatch for {entry_id}.")
+    for entry_id, expected in expected_elasticsearch.items():
+        if replay_elasticsearch.entry_sources.get(entry_id) != expected:
+            raise RuntimeError(f"Elasticsearch postflight source mismatch for {entry_id}.")
+    for entry_id in set(expected_markdown).intersection(expected_elasticsearch):
+        if expected_markdown[entry_id] != expected_elasticsearch[entry_id]:
+            raise RuntimeError(f"Cross-store postflight mismatch for {entry_id}.")
+
+
 def _apply_transaction(
     corpus: Path,
     corpus_fd: int,
@@ -1521,6 +2145,8 @@ def _apply_transaction(
     elasticsearch: ElasticsearchScan,
     client: Any,
     *,
+    index: str,
+    source_renames: Mapping[str, str] | None,
     offline_exfat: bool,
     backup_dir: Path,
     backup_fd: int,
@@ -1540,6 +2166,16 @@ def _apply_transaction(
         markdown_written = True
         client.update_sources(elasticsearch.changes)
         elasticsearch_written = True
+        _verify_successful_apply(
+            corpus,
+            corpus_fd,
+            markdown,
+            elasticsearch,
+            markdown_identities,
+            client,
+            index=index,
+            source_renames=source_renames,
+        )
         _verify_directory_binding(backup_dir, backup_fd)
     except Exception as exc:
         if hasattr(exc, "add_note"):
@@ -1553,9 +2189,16 @@ def _apply_transaction(
         if applied_changes:
             try:
                 client.update_sources(applied_changes, restore=True)
+                verifier = getattr(client, "verify_restored_documents", None)
+                if not callable(verifier):
+                    raise RuntimeError(
+                        "manual recovery required: Elasticsearch client lacks "
+                        "full-document rollback verification"
+                    )
+                verifier(applied_changes)
             except Exception as rollback_exc:
                 rollback_errors.append(
-                    f"Elasticsearch rollback failed: {rollback_exc}"
+                    f"Elasticsearch rollback incomplete: {rollback_exc}"
                 )
         if markdown_written:
             try:
@@ -1576,7 +2219,8 @@ def _apply_transaction(
             rollback_errors.append(f"Backup binding lost: {backup_exc}")
         if rollback_errors:
             raise RuntimeError(
-                f"Migration failed ({exc}); " + "; ".join(rollback_errors)
+                f"Migration failed ({exc}); recovery backup: {backup_dir}; "
+                + "; ".join(rollback_errors)
             ) from exc
         raise
 
@@ -1589,10 +2233,24 @@ def run_migration(
     apply: bool = False,
     backup_root: Path = DEFAULT_BACKUP_ROOT,
     offline_exfat: bool = False,
+    source_renames: Mapping[str, str] | None = None,
 ) -> MigrationSummary:
+    source_renames = _validated_source_renames(source_renames)
     _reject_symlink_components(Path(corpus_root))
     corpus, corpus_fd = _open_directory_no_follow(Path(corpus_root))
     try:
+        if apply and offline_exfat:
+            with corpus_write_lock(corpus, timeout=120):
+                return _run_migration_retained(
+                    corpus,
+                    corpus_fd,
+                    client,
+                    index=index,
+                    apply=apply,
+                    backup_root=backup_root,
+                    offline_exfat=offline_exfat,
+                    source_renames=source_renames,
+                )
         return _run_migration_retained(
             corpus,
             corpus_fd,
@@ -1601,6 +2259,7 @@ def run_migration(
             apply=apply,
             backup_root=backup_root,
             offline_exfat=offline_exfat,
+            source_renames=source_renames,
         )
     finally:
         os.close(corpus_fd)
@@ -1615,9 +2274,16 @@ def _run_migration_retained(
     apply: bool,
     backup_root: Path,
     offline_exfat: bool,
+    source_renames: Mapping[str, str] | None,
 ) -> MigrationSummary:
-    markdown = scan_markdown(corpus, corpus_fd=corpus_fd)
-    elasticsearch = client.scan_media(index)
+    markdown = scan_markdown(
+        corpus, corpus_fd=corpus_fd, source_renames=source_renames,
+    )
+    elasticsearch = (
+        client.scan_media(index)
+        if source_renames is None
+        else client.scan_media(index, source_renames=source_renames)
+    )
     _validate_cross_store_sources(markdown, elasticsearch)
     counts = Counter(markdown.source_counts)
     counts.update(change.new_source for change in elasticsearch.changes)
@@ -1660,6 +2326,8 @@ def _run_migration_retained(
                 markdown,
                 elasticsearch,
                 client,
+                index=index,
+                source_renames=source_renames,
                 offline_exfat=offline_exfat,
                 backup_dir=backup_dir,
                 backup_fd=backup_fd,
@@ -1685,11 +2353,21 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--index", default=DEFAULT_INDEX)
     parser.add_argument("--backup-root", default=str(DEFAULT_BACKUP_ROOT))
     parser.add_argument(
+        "--rename",
+        action="append",
+        default=[],
+        metavar="OLD=NEW",
+        help=(
+            "Rename an exact source label while preserving entry IDs; may be "
+            "repeated. Without --rename, the legacy media classifier is used."
+        ),
+    )
+    parser.add_argument(
         "--offline-exfat",
         action="store_true",
         help=(
-            "Use descriptor-relative replace on filesystems without hard links/"
-            "atomic exchange; requires every HFL writer to be stopped externally"
+            "Use retained-inode writes on filesystems without hard links/atomic "
+            "exchange; apply holds the corpus-wide writer lock"
         ),
     )
     return parser
@@ -1698,10 +2376,24 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     _load_env_file()
+    source_renames: dict[str, str] | None = None
+    if args.rename:
+        source_renames = {}
+        for item in args.rename:
+            old, separator, new = item.partition("=")
+            old, new = old.strip(), new.strip()
+            if not separator or not old or not new or old == new:
+                raise SystemExit(f"Invalid --rename value: {item!r}; expected OLD=NEW")
+            if old in source_renames and source_renames[old] != new:
+                raise SystemExit(f"Conflicting --rename values for {old!r}")
+            source_renames[old] = new
+        if set(source_renames).intersection(source_renames.values()):
+            raise SystemExit("Source rename chains/cycles are not supported")
     summary = run_migration(
         resolve_corpus_root(args.corpus), elasticsearch_client_from_env(),
         index=args.index, apply=args.apply, backup_root=Path(args.backup_root),
         offline_exfat=args.offline_exfat,
+        source_renames=source_renames,
     )
     print(json.dumps({
         "mode": "apply" if args.apply else "dry-run",

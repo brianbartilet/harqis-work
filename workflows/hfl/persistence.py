@@ -263,16 +263,36 @@ def persist_envelope(
     merge_duplicate_references: bool = False,
     replace_duplicate: bool | None = None,
 ) -> dict[str, Any]:
-    """Prepend exactly once under a per-day cross-process file lock."""
+    """Persist Markdown and Elasticsearch under the corpus-wide write lock."""
+    if corpus_dir is None:
+        from workflows.hfl.tasks.capture import resolve_corpus_dir
+
+        corpus_dir = resolve_corpus_dir()
+    resolved = Path(corpus_dir).expanduser().resolve()
+    from workflows.hfl.write_lock import corpus_write_lock
+
+    with corpus_write_lock(resolved):
+        return _persist_envelope_locked(
+            envelope,
+            corpus_dir=resolved,
+            merge_duplicate_references=merge_duplicate_references,
+            replace_duplicate=replace_duplicate,
+        )
+
+
+def _persist_envelope_locked(
+    envelope: EntryEnvelope,
+    *,
+    corpus_dir: Path,
+    merge_duplicate_references: bool = False,
+    replace_duplicate: bool | None = None,
+) -> dict[str, Any]:
+    """Prepend exactly once while the caller holds the corpus-wide lock."""
     entry = envelope.entry
     if not entry.when:
         raise ValueError("canonical HFL entries require a timestamp")
     if not entry.moment:
         raise ValueError("canonical HFL entries require a moment")
-    if corpus_dir is None:
-        from workflows.hfl.tasks.capture import resolve_corpus_dir
-
-        corpus_dir = resolve_corpus_dir()
     corpus_dir = Path(corpus_dir).expanduser().resolve()
     corpus_dir.mkdir(parents=True, exist_ok=True)
     day_file = corpus_dir / f"{entry.when:%Y-%m-%d}.md"

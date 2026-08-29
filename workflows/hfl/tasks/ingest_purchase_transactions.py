@@ -58,7 +58,7 @@ _log = create_logger("hfl.ingest_purchase_transactions")
 
 _DEFAULT_HAIKU = "claude-haiku-4-5-20251001"
 _SOURCE = "purchase_transactions"
-_ECHOMTG_SOURCE = "echomtg_inventory"
+_ECHOMTG_SOURCE = "echomtg-inventory"
 _ECHOMTG_REFERENCE = "https://www.echomtg.com/inventory/"
 _ECHOMTG_SNAPSHOT_VERSION = 1
 _REPO_ROOT = Path(__file__).resolve().parents[3]

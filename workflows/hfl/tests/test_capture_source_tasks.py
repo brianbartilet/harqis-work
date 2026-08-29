@@ -45,8 +45,8 @@ def test_android_task_constrains_shared_pipeline(monkeypatch):
     result = android_mod.analyze_android_capture(window_days=3, max_files=10)
 
     assert result == {"entries_written": 1}
-    assert calls[0]["required_source"] == "android_capture"
-    assert calls[0]["entry_source"] == "android_capture"
+    assert calls[0]["required_source"] == "android-capture"
+    assert calls[0]["entry_source"] == "android-capture"
     assert calls[0]["android_min_files"] == 0
 
 

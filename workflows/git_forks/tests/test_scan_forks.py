@@ -56,6 +56,7 @@ def test__persist_scan_entries_writes_each_fork(monkeypatch):
     assert result["entries"] == 2
     assert len(calls) == 2
     assert all(kwargs["source"] == "git" for _, kwargs in calls)
+    assert all(kwargs["replace_duplicate"] is True for _, kwargs in calls)
 
 
 def test__rollout_entry_captures_validation_and_pr_reference():

@@ -42,14 +42,98 @@ def test_migrate_markdown_reclassifies_only_conclusive_media_and_preserves_ids()
     updated, changes, unresolved = migration.migrate_markdown_text(original)
 
     assert [change.entry_id for change in changes] == ["hfl-desktop", "hfl-android"]
-    assert [change.new_source for change in changes] == ["desktop", "android_capture"]
+    assert [change.new_source for change in changes] == ["desktop", "android-capture"]
     assert unresolved == ("hfl-unknown",)
     assert "Entry ID:        hfl-desktop" in updated
     assert "Entry ID:        hfl-android" in updated
     assert updated.count("Source:          desktop") == 1
-    assert updated.count("Source:          android_capture") == 1
+    assert updated.count("Source:          android-capture") == 1
     assert updated.count("Source:          media") == 1
     assert updated.count("Source:          capture") == 1
+
+
+def test_migrate_markdown_exact_source_renames_preserve_ids_links_and_text():
+    echomtg = _entry(
+        "hfl-echomtg", "https://www.echomtg.com/inventory/",
+        source="echomtg_inventory",
+    )
+    android_reference = "/Volumes/harqis-data/dumps/android/screenshot.png"
+    android = _entry(
+        "hfl-android", android_reference, source="android_capture",
+    )
+    unrelated = _entry("hfl-git", "https://example.test/commit", source="git")
+    original = echomtg + android + unrelated
+
+    updated, changes, unresolved = migration.migrate_markdown_text(
+        original,
+        {
+            "echomtg_inventory": "echomtg-inventory",
+            "android_capture": "android-capture",
+        },
+    )
+
+    assert [(change.entry_id, change.old_source, change.new_source) for change in changes] == [
+        ("hfl-echomtg", "echomtg_inventory", "echomtg-inventory"),
+        ("hfl-android", "android_capture", "android-capture"),
+    ]
+    assert unresolved == ()
+    assert "Source:          echomtg-inventory" in updated
+    assert "Source:          android-capture" in updated
+    assert "Source:          git" in updated
+    assert updated.replace("echomtg-inventory", "echomtg_inventory").replace(
+        "android-capture", "android_capture",
+    ) == original
+
+
+def test_exact_source_scan_rejects_unrelated_duplicate_ids(tmp_path):
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    (corpus / "2026-08-17.md").write_text(
+        _entry("hfl-duplicate", "https://example.test/one", source="git"),
+        encoding="utf-8",
+    )
+    (corpus / "2026-08-23.md").write_text(
+        _entry("hfl-duplicate", "https://example.test/two", source="git"),
+        encoding="utf-8",
+    )
+    (corpus / "2026-08-29.md").write_text(
+        _entry("hfl-target", "https://www.echomtg.com/inventory/", source="echomtg_inventory"),
+        encoding="utf-8",
+    )
+
+    try:
+        migration.scan_markdown(
+            corpus,
+            source_renames={"echomtg_inventory": "echomtg-inventory"},
+        )
+    except RuntimeError as exc:
+        assert "Duplicate HFL entry ID hfl-duplicate" in str(exc)
+    else:
+        raise AssertionError("all duplicate entry IDs must fail closed")
+
+
+def test_exact_source_scan_rejects_duplicate_affected_ids(tmp_path):
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    for day in ("2026-08-28", "2026-08-29"):
+        (corpus / f"{day}.md").write_text(
+            _entry(
+                "hfl-target",
+                "https://www.echomtg.com/inventory/",
+                source="echomtg_inventory",
+            ),
+            encoding="utf-8",
+        )
+
+    try:
+        migration.scan_markdown(
+            corpus,
+            source_renames={"echomtg_inventory": "echomtg-inventory"},
+        )
+    except RuntimeError as exc:
+        assert "Duplicate HFL entry ID hfl-target" in str(exc)
+    else:
+        raise AssertionError("duplicates among affected entries must fail closed")
 
 
 def test_classification_rejects_forged_or_noncanonical_dump_references():
@@ -221,7 +305,7 @@ def test_markdown_write_rejects_symlink_swap_after_scan(tmp_path):
     assert outside.read_text(encoding="utf-8") == "outside"
 
 
-def test_scan_markdown_rejects_nested_corpus_files(tmp_path):
+def test_scan_and_write_support_nested_archive_files(tmp_path):
     corpus = tmp_path / "corpus"
     nested = corpus / "nested"
     nested.mkdir(parents=True)
@@ -229,17 +313,72 @@ def test_scan_markdown_rejects_nested_corpus_files(tmp_path):
         "/Volumes/harqis-data/dumps/"
         "windows-work-all-daily-dumps-2026-07-26/archive/sc-desktop-check_monitor1.jpg"
     )
-    (nested / "2026-07-26.md").write_text(
+    day = nested / "2026-07-26.md"
+    day.write_text(
         _entry("hfl-nested", reference),
         encoding="utf-8",
     )
 
+    scan = migration.scan_markdown(corpus)
+
+    assert len(scan.changes) == 1
+    migration._write_markdown_changes(corpus, scan.changes)
+    updated = day.read_text(encoding="utf-8")
+    assert "Source:          desktop" in updated
+    assert "Entry ID:        hfl-nested" in updated
+
+
+def test_backup_preserves_nested_archive_layout(tmp_path):
+    corpus = tmp_path / "corpus"
+    nested = corpus / "2026" / "Jul"
+    nested.mkdir(parents=True)
+    reference = (
+        "/Volumes/harqis-data/dumps/"
+        "windows-work-all-daily-dumps-2026-07-26/archive/sc-desktop-check_monitor1.jpg"
+    )
+    day = nested / "2026-07-26.md"
+    original = _entry("hfl-nested-backup", reference)
+    day.write_text(original, encoding="utf-8")
+    sidecar = day.with_name(f"._{day.name}")
+    sidecar_payload = b"opaque-appledouble"
+    sidecar.write_bytes(sidecar_payload)
+    scan = migration.scan_markdown(corpus)
+    _root, corpus_fd = migration._open_directory_no_follow(corpus)
     try:
-        migration.scan_markdown(corpus)
-    except RuntimeError as exc:
-        assert "Nested HFL Markdown" in str(exc)
-    else:
-        raise AssertionError("nested corpus paths must fail closed")
+        backup = migration._create_backup(
+            corpus,
+            scan,
+            migration.ElasticsearchScan((), ()),
+            tmp_path / "backups",
+            corpus_fd=corpus_fd,
+        )
+    finally:
+        os.close(corpus_fd)
+
+    assert isinstance(backup, Path)
+    copied = backup / "markdown" / "2026" / "Jul" / day.name
+    assert copied.read_text(encoding="utf-8") == original
+    copied_sidecar = backup / "appledouble" / "2026" / "Jul" / sidecar.name
+    assert copied_sidecar.read_bytes() == sidecar_payload
+    manifest = json.loads((backup / "manifest.json").read_text(encoding="utf-8"))
+    metadata = manifest["markdown_metadata"]["2026/Jul/2026-07-26.md"]
+    original_stat = day.stat()
+    assert metadata["uid"] == original_stat.st_uid
+    assert metadata["gid"] == original_stat.st_gid
+    assert metadata["mode"] == stat.S_IMODE(original_stat.st_mode)
+    assert metadata["mtime_ns"] == original_stat.st_mtime_ns
+    assert "atime_ns" in metadata
+    assert "birthtime_ns" in metadata
+    assert "flags" in metadata
+    assert "acl" in metadata
+    assert isinstance(metadata["xattrs_base64"], dict)
+    sidecar_metadata = manifest["appledouble_metadata"]["2026/Jul/2026-07-26.md"]
+    assert sidecar_metadata["opaque_appledouble"] is True
+    assert sidecar_metadata["acl"] is None
+    assert sidecar_metadata["xattrs_base64"] == {}
+    sidecar_stat = sidecar.stat()
+    assert sidecar_metadata["atime_ns"] == sidecar_stat.st_atime_ns
+    assert sidecar_metadata["mtime_ns"] == sidecar_stat.st_mtime_ns
 
 
 def test_markdown_write_rejects_corpus_root_symlink_swap(tmp_path):
@@ -401,7 +540,9 @@ def test_run_migration_is_dry_run_by_default_and_apply_is_idempotent(tmp_path):
 
         def scan_media(self, _index):
             if self.source != "media":
-                return migration.ElasticsearchScan((), ())
+                return migration.ElasticsearchScan(
+                    (), (), {"hfl-desktop": "desktop"},
+                )
             return migration.ElasticsearchScan((migration.ElasticsearchChange(
                 index="hfl", doc_id="hfl-desktop", entry_id="hfl-desktop",
                 old_source="media", new_source="desktop",
@@ -412,6 +553,10 @@ def test_run_migration_is_dry_run_by_default_and_apply_is_idempotent(tmp_path):
         def update_sources(self, changes, *, restore=False):
             self.calls.append((tuple(changes), restore))
             self.source = "media" if restore else "desktop"
+
+        def verify_updated_documents(self, changes):
+            assert self.source == "desktop"
+            assert tuple(changes)
 
     client = FakeClient()
     dry = migration.run_migration(
@@ -1057,6 +1202,9 @@ def test_partial_es_failure_rolls_back_only_confirmed_updates(tmp_path):
                 return submitted
             raise migration.BulkUpdateError("partial failure", (changes[0],))
 
+        def verify_restored_documents(self, submitted):
+            assert tuple(submitted) == self.restored
+
     client = Client()
     try:
         migration.run_migration(
@@ -1231,6 +1379,56 @@ def test_offline_replace_restores_after_post_publication_fsync_failure(
     assert not any(".offline-" in path.name for path in corpus.iterdir())
 
 
+def test_offline_path_swap_restores_retained_inode_without_touching_replacement(
+    tmp_path, monkeypatch,
+):
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    day = corpus / "day.md"
+    moved = corpus / "moved.md"
+    original = "original\n"
+    day.write_text(original, encoding="utf-8")
+    identity = migration._file_identity(day.stat())
+    replacement_times = (1_700_000_000_000_000_000, 1_700_000_001_000_000_000)
+    write_payload = migration._write_fd_payload
+    calls = 0
+
+    def swap_after_write(file_fd, payload):
+        nonlocal calls
+        calls += 1
+        write_payload(file_fd, payload)
+        if calls == 1:
+            day.rename(moved)
+            day.write_text("replacement\n", encoding="utf-8")
+            os.utime(day, ns=replacement_times)
+            raise OSError("injected canonical path swap")
+
+    monkeypatch.setattr(migration, "_write_fd_payload", swap_after_write)
+    _root, corpus_fd = migration._open_directory_no_follow(corpus)
+    try:
+        try:
+            migration._offline_in_place_write(
+                day,
+                "updated\n",
+                dir_fd=corpus_fd,
+                expected_text=original,
+                expected_identity=identity,
+            )
+        except RuntimeError as exc:
+            assert "retained inode was restored" in str(exc)
+            assert "canonical path changed" in str(exc)
+        else:
+            raise AssertionError("canonical path swap must abort publication")
+    finally:
+        os.close(corpus_fd)
+
+    replacement_stat = day.stat()
+    assert replacement_stat.st_atime_ns == replacement_times[0]
+    assert replacement_stat.st_mtime_ns == replacement_times[1]
+    assert day.read_text(encoding="utf-8") == "replacement\n"
+    assert moved.read_text(encoding="utf-8") == original
+
+
 def test_multi_file_rollback_attempts_every_published_file(tmp_path, monkeypatch):
     corpus = tmp_path / "corpus"
     corpus.mkdir()
@@ -1256,7 +1454,7 @@ def test_multi_file_rollback_attempts_every_published_file(tmp_path, monkeypatch
             raise OSError("first rollback failure")
         return kwargs["expected_identity"]
 
-    monkeypatch.setattr(migration, "_offline_replace_write", writer)
+    monkeypatch.setattr(migration, "_offline_in_place_write", writer)
     try:
         migration._write_markdown_changes(
             corpus, scan.changes, offline_replace=True,
@@ -1460,6 +1658,9 @@ def test_run_migration_offline_es_failure_restores_both_stores(tmp_path):
                 raise migration.BulkUpdateError("injected ES failure", tuple(changes))
             return tuple(changes)
 
+        def verify_restored_documents(self, changes):
+            assert tuple(changes) == (es_change,)
+
     client = Client()
     try:
         migration.run_migration(
@@ -1477,39 +1678,29 @@ def test_run_migration_offline_es_failure_restores_both_stores(tmp_path):
     assert client.restores == [False, True]
 
 
-def test_private_temp_collision_is_never_unlinked(tmp_path, monkeypatch):
+def test_offline_in_place_write_never_touches_foreign_temp_like_file(tmp_path):
     corpus = tmp_path / "corpus"
     corpus.mkdir()
     day = corpus / "day.md"
     original = "original\n"
     day.write_text(original, encoding="utf-8")
     identity = migration._file_identity(day.stat())
-
-    class FixedUuid:
-        hex = "fixed"
-
-    monkeypatch.setattr(migration.uuid, "uuid4", lambda: FixedUuid())
     collision = corpus / f".day.md.offline-tmp-{os.getpid()}-fixed"
     collision.write_text("foreign\n", encoding="utf-8")
     _root, corpus_fd = migration._open_directory_no_follow(corpus)
     try:
-        try:
-            migration._offline_replace_write(
-                day,
-                "updated\n",
-                mode=0o600,
-                dir_fd=corpus_fd,
-                expected_text=original,
-                expected_identity=identity,
-            )
-        except FileExistsError:
-            pass
-        else:
-            raise AssertionError("private temporary collisions must fail closed")
+        migration._offline_in_place_write(
+            day,
+            "updated\n",
+            mode=0o600,
+            dir_fd=corpus_fd,
+            expected_text=original,
+            expected_identity=identity,
+        )
     finally:
         os.close(corpus_fd)
+    assert day.read_text(encoding="utf-8") == "updated\n"
     assert collision.read_text(encoding="utf-8") == "foreign\n"
-    assert day.read_text(encoding="utf-8") == original
 
 
 def test_cli_forwards_offline_exfat_flag(monkeypatch, tmp_path):
@@ -1580,8 +1771,9 @@ def test_unknown_es_batch_compensates_every_attempted_document(tmp_path):
             offline_exfat=True,
             backup_root=tmp_path / "backups",
         )
-    except migration.BulkUpdateError:
-        pass
+    except RuntimeError as exc:
+        assert "rollback incomplete" in str(exc)
+        assert "rollback verification was malformed" in str(exc)
     else:
         raise AssertionError("unknown initial bulk state must abort after compensation")
     assert day.read_text(encoding="utf-8") == original
@@ -1763,15 +1955,26 @@ def test_run_migration_changes_only_taxonomy_not_es_metadata(tmp_path):
     )
 
     class Client:
+        def __init__(self):
+            self.source = "media"
+
         def scan_media(self, index):
             assert index == "harqis-hfl-entries"
+            if self.source != "media":
+                return migration.ElasticsearchScan(
+                    (), (), {entry_id: "desktop"},
+                )
             return migration.ElasticsearchScan(
                 (es_change,), (), {entry_id: "media"}
             )
 
         def update_sources(self, changes, *, restore=False):
-            assert restore is False
+            self.source = "media" if restore else "desktop"
             return tuple(changes)
+
+        def verify_updated_documents(self, changes):
+            assert self.source == "desktop"
+            assert tuple(changes) == (es_change,)
 
     migration.run_migration(
         corpus,
@@ -1785,3 +1988,322 @@ def test_run_migration_changes_only_taxonomy_not_es_metadata(tmp_path):
     assert migrated == expected
     assert "## 2026-07-26 19:59\n" in migrated
     assert "Synthesized:" not in migrated
+
+
+def test_exact_source_renames_are_allowlisted_and_canonical():
+    approved = {
+        "android_capture": "android-capture",
+        "echomtg_inventory": "echomtg-inventory",
+    }
+    assert migration._validated_source_renames(approved) == approved
+    for invalid in (
+        {"android_capture": "android_capture"},
+        {"android_capture": "android-capture\nspoofed"},
+        {"other_source": "other-source"},
+    ):
+        try:
+            migration._validated_source_renames(invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("unapproved or noncanonical renames must fail closed")
+
+
+def test_descriptor_exhaustion_before_publication_leaves_markdown_unchanged(
+    tmp_path, monkeypatch,
+):
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    reference = (
+        "/Volumes/harqis-data/dumps/"
+        "windows-work-all-daily-dumps-2026-07-26/archive/"
+        "sc-desktop-check_monitor1.jpg"
+    )
+    day = corpus / "2026-07-26.md"
+    original = _entry("hfl-dup-before-publish", reference)
+    day.write_text(original, encoding="utf-8")
+    scan = migration.scan_markdown(corpus)
+    real_dup = os.dup
+    calls = 0
+
+    def fail_retained_descriptor(file_fd):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError(errno.EMFILE, "injected descriptor exhaustion")
+        return real_dup(file_fd)
+
+    with migration._markdown_locks(corpus, scan.changes) as (changes, corpus_fd):
+        monkeypatch.setattr(os, "dup", fail_retained_descriptor)
+        try:
+            migration._write_markdown_changes(
+                corpus,
+                changes,
+                locks_held=True,
+                corpus_fd=corpus_fd,
+            )
+        except OSError as exc:
+            assert exc.errno == errno.EMFILE
+        else:
+            raise AssertionError("descriptor exhaustion must abort before publication")
+
+    assert day.read_text(encoding="utf-8") == original
+
+
+def test_elasticsearch_postflight_rejects_non_source_document_drift():
+    original = {
+        "entry_id": "hfl-postflight-drift",
+        "source": "android_capture",
+        "when": "2026-08-01T12:00:00",
+        "moment": "capture",
+    }
+    change = migration.ElasticsearchChange(
+        index="harqis-hfl-entries",
+        doc_id="hfl-postflight-drift",
+        entry_id="hfl-postflight-drift",
+        old_source="android_capture",
+        new_source="android-capture",
+        document=original,
+    )
+
+    class Client(migration.ElasticsearchClient):
+        def _request(self, method, path, body=None, **kwargs):
+            assert (method, path) == ("POST", "/_mget")
+            current = dict(original)
+            current["source"] = "android-capture"
+            current["when"] = "2026-08-01T12:01:00"
+            return {"docs": [{
+                "_index": "harqis-hfl-entries",
+                "_id": "hfl-postflight-drift",
+                "_source": current,
+            }]}
+
+    try:
+        Client("http://elasticsearch.invalid").verify_updated_documents((change,))
+    except RuntimeError as exc:
+        assert "postflight mismatch" in str(exc)
+    else:
+        raise AssertionError("postflight must reject non-source document drift")
+
+
+def test_postflight_drift_reports_manual_recovery_after_transaction_rollback(tmp_path):
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    reference = "/Volumes/harqis-data/dumps/nothing-phone/DCIM/Camera/photo.jpg"
+    day = corpus / "2026-08-01.md"
+    original_text = _entry(
+        "hfl-postflight-transaction", reference, source="android_capture",
+    )
+    day.write_text(original_text, encoding="utf-8")
+    original_document = {
+        "entry_id": "hfl-postflight-transaction",
+        "source": "android_capture",
+        "when": "2026-08-01T12:00:00",
+        "references": [reference],
+    }
+    change = migration.ElasticsearchChange(
+        index="hfl", doc_id="hfl-postflight-transaction",
+        entry_id="hfl-postflight-transaction", old_source="android_capture",
+        new_source="android-capture", document=dict(original_document),
+    )
+
+    class Client:
+        def __init__(self):
+            self.document = dict(original_document)
+
+        def scan_media(self, _index, *, source_renames=None):
+            assert source_renames == {"android_capture": "android-capture"}
+            if self.document["source"] == "android_capture":
+                return migration.ElasticsearchScan(
+                    (change,), (), {change.entry_id: "android_capture"},
+                )
+            return migration.ElasticsearchScan(
+                (), (), {change.entry_id: "android-capture"},
+            )
+
+        def update_sources(self, changes, *, restore=False):
+            assert tuple(changes) == (change,)
+            self.document["source"] = "android_capture" if restore else "android-capture"
+
+        def verify_updated_documents(self, changes):
+            assert tuple(changes) == (change,)
+            self.document["when"] = "2026-08-01T12:01:00"
+            raise RuntimeError("Elasticsearch postflight mismatch")
+
+        def verify_restored_documents(self, changes):
+            assert tuple(changes) == (change,)
+            if self.document != original_document:
+                raise RuntimeError(
+                    "manual recovery required for Elasticsearch documents: "
+                    + change.entry_id
+                )
+
+    client = Client()
+    try:
+        migration.run_migration(
+            corpus, client, index="hfl", apply=True, offline_exfat=True,
+            backup_root=tmp_path / "backups",
+            source_renames={"android_capture": "android-capture"},
+        )
+    except RuntimeError as exc:
+        assert "Elasticsearch rollback incomplete" in str(exc)
+        assert "manual recovery required" in str(exc)
+        assert str(tmp_path / "backups") in str(exc)
+    else:
+        raise AssertionError("postflight drift must fail the full transaction")
+    assert day.read_text(encoding="utf-8") == original_text
+    assert client.document["source"] == "android_capture"
+    assert client.document["when"] == "2026-08-01T12:01:00"
+
+
+def test_offline_apply_acquires_corpus_wide_quiescence_lock(tmp_path, monkeypatch):
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    events = []
+
+    class Lock:
+        def __enter__(self):
+            events.append("entered")
+
+        def __exit__(self, *_args):
+            events.append("exited")
+
+    monkeypatch.setattr(
+        migration, "corpus_write_lock",
+        lambda root, timeout: (events.append((Path(root), timeout)) or Lock()),
+    )
+
+    class Client:
+        def scan_media(self, _index):
+            assert events[-1] == "entered"
+            return migration.ElasticsearchScan((), (), {})
+
+    migration.run_migration(
+        corpus, Client(), apply=True, offline_exfat=True,
+        backup_root=tmp_path / "backups",
+    )
+    assert events == [(corpus.resolve(), 120), "entered", "exited"]
+
+
+def test_offline_later_file_failure_restores_appledouble_sidecars(tmp_path, monkeypatch):
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    reference = (
+        "/Volumes/harqis-data/dumps/windows-work-all-daily-dumps-2026-07-26/"
+        "archive/sc-desktop-check_monitor1.jpg"
+    )
+    files = [corpus / "2026-07-25.md", corpus / "2026-07-26.md"]
+    originals = {}
+    sidecars = {}
+    for index, path in enumerate(files):
+        text = _entry(f"hfl-sidecar-{index}", reference)
+        path.write_text(text, encoding="utf-8")
+        sidecar = path.with_name(f"._{path.name}")
+        payload = f"appledouble-{index}".encode()
+        sidecar.write_bytes(payload)
+        originals[path] = text
+        sidecars[sidecar] = payload
+
+    real_writer = migration._offline_in_place_write
+    calls = 0
+
+    def fail_second(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError(errno.EIO, "injected later-file failure")
+        return real_writer(*args, **kwargs)
+
+    monkeypatch.setattr(migration, "_offline_in_place_write", fail_second)
+    try:
+        migration._write_markdown_changes(
+            corpus, migration.scan_markdown(corpus).changes,
+            offline_replace=True,
+        )
+    except OSError as exc:
+        assert exc.errno == errno.EIO
+    else:
+        raise AssertionError("later-file failure must abort the offline write")
+    for path, text in originals.items():
+        assert path.read_text(encoding="utf-8") == text
+    for path, payload in sidecars.items():
+        assert path.read_bytes() == payload
+    assert not [path for path in corpus.iterdir() if "offline-" in path.name]
+
+
+def test_offline_partial_write_restores_bytes_and_metadata(tmp_path, monkeypatch):
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    reference = (
+        "/Volumes/harqis-data/dumps/windows-work-all-daily-dumps-2026-07-26/"
+        "archive/sc-desktop-check_monitor1.jpg"
+    )
+    day = corpus / "2026-07-26.md"
+    original = _entry("hfl-partial-write", reference)
+    day.write_text(original, encoding="utf-8")
+    scan = migration.scan_markdown(corpus)
+    source_fd = os.open(day, os.O_RDONLY)
+    try:
+        original_metadata = migration._backup_metadata(source_fd)
+    finally:
+        os.close(source_fd)
+    real_write = migration._write_fd_payload
+    calls = 0
+
+    def partial_once(file_fd, payload):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            os.lseek(file_fd, 0, os.SEEK_SET)
+            os.write(file_fd, payload[:7])
+            os.fsync(file_fd)
+            raise OSError(errno.EIO, "injected partial write")
+        return real_write(file_fd, payload)
+
+    monkeypatch.setattr(migration, "_write_fd_payload", partial_once)
+    try:
+        migration._write_markdown_changes(
+            corpus, scan.changes, offline_replace=True,
+        )
+    except OSError as exc:
+        assert exc.errno == errno.EIO
+    else:
+        raise AssertionError("partial write must fail")
+    target_fd = os.open(day, os.O_RDONLY)
+    try:
+        assert migration._backup_metadata(target_fd) == original_metadata
+    finally:
+        os.close(target_fd)
+    assert day.read_text(encoding="utf-8") == original
+
+
+def test_acl_and_complete_metadata_survive_publication(tmp_path):
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    reference = (
+        "/Volumes/harqis-data/dumps/windows-work-all-daily-dumps-2026-07-26/"
+        "archive/sc-desktop-check_monitor1.jpg"
+    )
+    day = corpus / "2026-07-26.md"
+    day.write_text(_entry("hfl-acl", reference), encoding="utf-8")
+    result = subprocess.run(
+        ["chmod", "+a", "everyone allow read", str(day)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return
+    source_fd = os.open(day, os.O_RDONLY)
+    try:
+        before = migration._backup_metadata(source_fd)
+    finally:
+        os.close(source_fd)
+    assert before["acl"]
+    migration._write_markdown_changes(corpus, migration.scan_markdown(corpus).changes)
+    target_fd = os.open(day, os.O_RDONLY)
+    try:
+        after = migration._backup_metadata(target_fd)
+    finally:
+        os.close(target_fd)
+    assert after == before
+    subprocess.run(["chmod", "-N", str(day)], check=True)
