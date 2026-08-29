@@ -52,7 +52,8 @@
   .item { border-top:1px solid #1e293b; padding:.8rem 0; }
   .item:first-child { border-top:0; }
   .pill { display:inline-block; border-radius:999px; background:#172554; color:#bfdbfe; font-size:.68rem; padding:.18rem .5rem; }
-  .source-pill { background:#3b0764; color:#e9d5ff; box-shadow:inset 0 0 0 1px #6b21a8; }
+  .source-pill { max-width:12rem; overflow:hidden; background:#3b0764; color:#e9d5ff; box-shadow:inset 0 0 0 1px #6b21a8; text-overflow:ellipsis; white-space:nowrap; }
+  .preview-entry-heading { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:.75rem; }
   .status-pill { display:inline-flex; border-radius:999px; font-size:.68rem; font-weight:700; padding:.2rem .55rem; text-transform:capitalize; }
   .status-active { background:#064e3b; color:#a7f3d0; }
   .status-expired { background:#4c0519; color:#fecdd3; }
@@ -87,6 +88,8 @@
   .owner-pagination a { border-radius:.4rem; background:#1e293b; color:#cbd5e1; font-size:.72rem; padding:.35rem .55rem; }
   .owner-pagination a:hover { background:#334155; color:#f8fafc; }
   .owner-pagination span { color:#64748b; font-size:.7rem; text-align:center; }
+  .generated-shares-content { transition:opacity .15s ease; }
+  .generated-shares-content[aria-busy="true"] { opacity:.5; pointer-events:none; }
   @keyframes toast-enter { from { opacity:0; transform:translateY(-.5rem); } }
   @keyframes toast-exit { to { opacity:0; transform:translateY(-.35rem); } }
   .wrap { overflow-wrap:anywhere; word-break:break-word; }
@@ -116,6 +119,7 @@
     .progress-spinner { animation-duration:2.5s; }
     .progress-bar { width:100%; animation:none; opacity:.75; }
     .success-toast,.success-toast.is-closing { animation:none; }
+    .generated-shares-content { transition:none; }
   }
   @media(max-width:900px) {
     .share-page { max-width:100%; overflow-x:hidden; }
@@ -373,7 +377,7 @@
       </section>
       {% endif %}
 
-      <details class="panel generated-shares-panel owner-list-panel">
+      <details class="panel generated-shares-panel owner-list-panel" data-generated-shares-panel{% if share_page > 1 %} open{% endif %}>
         <summary>
           <span class="text-base font-semibold text-white">Generated shares</span>
           <span class="flex items-center gap-3">
@@ -381,27 +385,9 @@
             <svg class="owner-list-arrow h-4 w-4 shrink-0 text-blue-400 transition" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg>
           </span>
         </summary>
-        <div class="generated-shares-content mt-2">
-        {% for row in shares %}
-        {% set share = row.grant %}
-        <div class="item generated-share-item">
-          <div class="flex items-start justify-between gap-2"><strong class="wrap text-sm text-slate-200">{{ share.name }}</strong><span class="status-pill status-{{ row.status }}">{{ row.status }}</span></div>
-          <p class="mt-1 text-xs text-slate-500">{{ share.entry_count }} entries · {{ "live recipe" if share.live_updates else "fixed snapshot" }} · {% if share.no_expiry %}no expiry{% else %}expires {{ row.expires_at_display }}{% endif %}</p>
-          {% if share.available %}
-          <div class="actions mt-2">
-            <a class="btn btn-soft" href="/sharing/shares/{{ share.id }}/preview" target="_blank" rel="noopener">Preview</a>
-            <form method="post" action="/sharing/shares/{{ share.id }}/revoke"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-danger">Revoke now</button></form>
-          </div>
-          {% endif %}
-        </div>
-        {% else %}<p class="mt-2 text-xs text-slate-500">No shares generated yet.</p>{% endfor %}
-        {% if share_total_pages > 1 %}
-        <nav class="owner-pagination" aria-label="Generated share pages">
-          {% if share_page > 1 %}<a href="/sharing?recipe_page={{ recipe_page }}&share_page={{ share_page - 1 }}{% if cfg and cfg.id %}&configuration_id={{ cfg.id }}{% endif %}">Previous</a>{% else %}<span></span>{% endif %}
-          <span>Page {{ share_page }} of {{ share_total_pages }}</span>
-          {% if share_page < share_total_pages %}<a href="/sharing?recipe_page={{ recipe_page }}&share_page={{ share_page + 1 }}{% if cfg and cfg.id %}&configuration_id={{ cfg.id }}{% endif %}">Next</a>{% else %}<span></span>{% endif %}
-        </nav>
-        {% endif %}
+        <div class="generated-shares-content mt-2" data-generated-shares-content aria-live="polite">
+        {% set configuration_id = cfg.id if cfg else '' %}
+        {% include "modules/hfl_shares/partials/generated_shares.html" %}
         </div>
       </details>
     </aside>
@@ -468,11 +454,40 @@
   const progressHeading = progressOverlay?.querySelector('[data-progress-heading]');
   const progressMessage = progressOverlay?.querySelector('[data-progress-message]');
   const successToast = document.querySelector('[data-success-toast]');
+  const generatedSharesPanel = document.querySelector('[data-generated-shares-panel]');
+  const generatedSharesContent = document.querySelector('[data-generated-shares-content]');
   const instantDialog = document.querySelector('[data-instant-dialog]');
   const instantDialogCard = instantDialog?.querySelector('[data-instant-dialog-card]');
   const instantTitle = instantDialog?.querySelector('[data-instant-title]');
   const instantQr = instantDialog?.querySelector('[data-instant-qr]');
   let instantTrigger = null;
+
+  generatedSharesContent?.addEventListener('click', async event => {
+    const link = event.target.closest('[data-generated-shares-page]');
+    if (
+      !link || event.defaultPrevented || event.button !== 0 ||
+      event.metaKey || event.ctrlKey || event.shiftKey || event.altKey
+    ) return;
+    event.preventDefault();
+    generatedSharesPanel.open = true;
+    generatedSharesContent.setAttribute('aria-busy', 'true');
+    try {
+      const pageUrl = new URL(link.href);
+      const fragmentUrl = new URL(pageUrl);
+      fragmentUrl.pathname = '/sharing/generated-shares';
+      const response = await fetch(fragmentUrl, {
+        headers: {'Accept': 'text/html'},
+      });
+      if (!response.ok) throw new Error('Generated shares could not be loaded.');
+      generatedSharesContent.innerHTML = await response.text();
+      window.history.replaceState({}, '', pageUrl);
+    } catch (error) {
+      window.location.assign(link.href);
+    } finally {
+      generatedSharesContent.removeAttribute('aria-busy');
+    }
+  });
+
   if (!form || !selector || !allSources || !sourceSummary || !tagCloud) return;
 
   const specificSources = () =>

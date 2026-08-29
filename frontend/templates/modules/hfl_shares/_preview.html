@@ -27,7 +27,7 @@
   <div class="mt-4 max-h-96 overflow-y-auto pr-2">
     {% for entry in preview.entries[:250] %}
     <div class="item">
-      <div class="flex items-start justify-between gap-3">
+      <div class="preview-entry-heading">
         <strong class="wrap text-sm text-white">{{ entry.moment or entry.header }}</strong>
         <span class="pill source-pill">{{ entry.source }}</span>
       </div>

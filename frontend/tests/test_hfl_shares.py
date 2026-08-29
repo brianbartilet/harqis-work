@@ -383,8 +383,12 @@ def test_automatic_preview_fragment_defaults_references_and_places_tags_below_ti
         response.text,
     )
     assert 'data-toggle-all-references checked' in response.text
-    assert "input[name=\"enabled_reference_ids\"]" in authenticated_client.get("/sharing").text
+    owner_page = authenticated_client.get("/sharing")
+    assert "input[name=\"enabled_reference_ids\"]" in owner_page.text
     assert 'class="pill source-pill">notes</span>' in response.text
+    assert 'class="preview-entry-heading"' in response.text
+    assert ".source-pill { max-width:12rem; overflow:hidden;" in owner_page.text
+    assert "text-overflow:ellipsis; white-space:nowrap;" in owner_page.text
     assert " · generated " not in response.text
 
 
@@ -986,8 +990,15 @@ def test_owner_page_paginates_recipes_and_shares_with_mobile_first_saved_list(
     assert third.text.count('class="item generated-share-item"') == 1
     assert 'aria-label="Saved recipe pages"' in first.text
     assert 'aria-label="Generated share pages"' in first.text
+    assert "data-generated-shares-content" in first.text
+    assert "data-generated-shares-page" in first.text
+    assert "fragmentUrl.pathname = '/sharing/generated-shares';" in first.text
     assert 'class="panel saved-recipes-panel owner-list-panel" open' in first.text
-    assert 'class="panel generated-shares-panel owner-list-panel">' in first.text
+    assert (
+        'class="panel generated-shares-panel owner-list-panel" '
+        'data-generated-shares-panel>'
+    ) in first.text
+    assert 'data-generated-shares-panel open' in second.text
     assert ".saved-recipes-panel { order:1; }" in first.text
     assert ".recipe-editor { order:2; }" in first.text
     assert ".owner-sidebar { display:contents; }" in first.text
@@ -999,6 +1010,14 @@ def test_owner_page_paginates_recipes_and_shares_with_mobile_first_saved_list(
     assert first.text.index("data-preview-shell") < first.text.index(
         'formaction="/sharing/generate"'
     )
+
+    fragment = authenticated_client.get(
+        "/sharing/generated-shares?recipe_page=2&share_page=2"
+    )
+    assert fragment.status_code == 200
+    assert fragment.text.count('class="item generated-share-item"') == 5
+    assert "Page 2 of 3" in fragment.text
+    assert "social-recipe-form" not in fragment.text
 
 
 def test_owner_share_page_uses_snapshot_free_sql_pagination(
@@ -1656,6 +1675,7 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
     assert "data-drawer-toggle" in second.text
     assert 'id="shared-moments-drawer" type="checkbox"' in second.text
     assert 'for="shared-moments-drawer"' in second.text
+    assert '<span class="drawer-toggle-label">Show moments</span>' in second.text
     assert 'class="drawer-close" type="button"' in second.text
     assert "event.stopPropagation();" in second.text
     assert "drawerState.checked = !isCompact();" in second.text

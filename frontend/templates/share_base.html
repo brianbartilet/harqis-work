@@ -112,6 +112,7 @@
     .drawer-head { display:flex; height:74px; min-height:74px; flex:0 0 74px; align-items:flex-start; justify-content:space-between; gap:10px; border-bottom:1px solid #1e293b; padding:15px; }
     .drawer-head h2 { margin:0; font-size:.96rem; }
     .drawer-close, .drawer-toggle { display:grid; width:36px; height:36px; flex:0 0 36px; place-items:center; border:0; border-radius:9px; background:#172033; color:#cbd5e1; cursor:pointer; font-weight:700; padding:0; user-select:none; }
+    .drawer-toggle-label { display:none; }
     .drawer-close:focus-visible, .drawer-toggle:focus-visible { outline:2px solid #38bdf8; outline-offset:2px; }
     .drawer-search { border-bottom:1px solid #1e293b; padding:12px; }
     .drawer-search, .drawer-search input { width:100%; min-width:0; max-width:100%; }
@@ -242,6 +243,9 @@
       .entry-drawer { position:absolute; inset:0; z-index:30; width:auto; max-width:none; border-right:0; box-shadow:none; transform:translateX(-105%); }
       .drawer-open .entry-drawer { transform:translateX(0); }
       .drawer-collapsed .entry-drawer { margin-left:0; }
+      .drawer-toggle { display:inline-flex; width:auto; flex:0 0 auto; padding:0 11px; font-size:.72rem; white-space:nowrap; }
+      .drawer-toggle-icon { display:none; }
+      .drawer-toggle-label { display:inline; }
       .share-workspace:has(.drawer-state:checked) { display:block; }
       .share-workspace:has(.drawer-state:checked) .entry-drawer { margin-left:0; transform:translateX(0); }
       .drawer-backdrop { position:absolute; inset:0; z-index:20; background:rgba(2,6,23,.7); }

@@ -71,7 +71,7 @@
 
   <section class="chat-workspace">
     <header class="workspace-header">
-      <label class="drawer-toggle" for="shared-moments-drawer" role="button" tabindex="0" data-drawer-toggle aria-label="Toggle shared moments" aria-expanded="true">☰</label>
+      <label class="drawer-toggle" for="shared-moments-drawer" role="button" tabindex="0" data-drawer-toggle aria-label="Show shared moments" aria-controls="shared-moments-drawer" aria-expanded="true"><span class="drawer-toggle-icon" aria-hidden="true">☰</span><span class="drawer-toggle-label">Show moments</span></label>
       <div class="workspace-heading">
         <h1>{{ grant.name }}</h1>
         <p class="muted">{{ grant.snapshot.entries|length }} moments ingested and analyzed · {% if grant.live_updates %}content refreshed {{ content_refreshed_at }} · {% endif %}{% if grant.no_expiry %}no expiry{% else %}available until {{ expires_at_display }}{% endif %}</p>

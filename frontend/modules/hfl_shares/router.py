@@ -402,6 +402,49 @@ def _owner_page_number(total: int, raw_page: str, page_size: int) -> tuple[int, 
     return min(requested, total_pages), total_pages
 
 
+def _generated_shares_context_sync(request: Request, user: str) -> dict[str, Any]:
+    """Build only the inexpensive generated-share list fragment context."""
+    store = get_share_store()
+    share_count = store.count_shares()
+    share_page, share_total_pages = _owner_page_number(
+        share_count,
+        request.query_params.get("share_page", "1"),
+        _OWNER_SHARE_PAGE_SIZE,
+    )
+    share_page_items = store.list_share_summaries(
+        limit=_OWNER_SHARE_PAGE_SIZE,
+        offset=(share_page - 1) * _OWNER_SHARE_PAGE_SIZE,
+    )
+    try:
+        recipe_page = max(
+            1,
+            int(request.query_params.get("recipe_page", "1") or "1"),
+        )
+    except ValueError:
+        recipe_page = 1
+    return {
+        "request": request,
+        "shares": tuple(
+            {
+                "grant": share,
+                "status": (
+                    "revoked"
+                    if share.status == "revoked"
+                    else "expired" if share.expired else share.status
+                ),
+                "expires_at_display": _expiry_display(share),
+            }
+            for share in share_page_items
+        ),
+        "share_page": share_page,
+        "share_total_pages": share_total_pages,
+        "share_count": share_count,
+        "recipe_page": recipe_page,
+        "configuration_id": request.query_params.get("configuration_id", ""),
+        "csrf": make_csrf_token(user),
+    }
+
+
 def _owner_context_sync(
     request: Request,
     user: str,
@@ -586,6 +629,23 @@ async def sharing_page(
             configuration=configuration,
             success=success,
         ),
+    )
+
+
+@owner_router.get("/generated-shares", response_class=HTMLResponse)
+async def generated_shares_fragment(request: Request):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    context = await asyncio.to_thread(
+        _generated_shares_context_sync,
+        request,
+        user,
+    )
+    return templates.TemplateResponse(
+        request,
+        "modules/hfl_shares/partials/generated_shares.html",
+        context,
     )
 
 
