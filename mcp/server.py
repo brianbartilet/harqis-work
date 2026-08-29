@@ -1,25 +1,71 @@
 import ctypes
 import logging
 import os
+import subprocess
 import sys
 from contextlib import contextmanager, redirect_stdout
 from io import TextIOWrapper
 from pathlib import Path
 
 
+if os.name == "nt":
+    import msvcrt
+    from ctypes import wintypes
+
+    _STD_OUTPUT_HANDLE = wintypes.DWORD(-11).value
+    _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _kernel32.GetStdHandle.argtypes = [wintypes.DWORD]
+    _kernel32.GetStdHandle.restype = wintypes.HANDLE
+    _kernel32.SetStdHandle.argtypes = [wintypes.DWORD, wintypes.HANDLE]
+    _kernel32.SetStdHandle.restype = wintypes.BOOL
+    # Nested Windows processes can deadlock when they inherit the async pipe
+    # used for MCP stderr. Give Win32/native stdout a process-lifetime NUL sink;
+    # Python and CRT fd-1 writes are still redirected to stderr via os.dup2.
+    _windows_stdout_sink_fd = os.open(os.devnull, os.O_WRONLY)
+    _windows_stdout_sink_handle = msvcrt.get_osfhandle(_windows_stdout_sink_fd)
+    os.set_handle_inheritable(_windows_stdout_sink_handle, True)
+
+    _OriginalPopen = subprocess.Popen
+
+    class _ProtocolSafePopen(_OriginalPopen):
+        """Keep implicit Windows child stdio away from MCP transport pipes."""
+
+        def __init__(self, *args, **kwargs):
+            if kwargs.get("stdin") is None:
+                kwargs["stdin"] = subprocess.DEVNULL
+            if kwargs.get("stdout") is None:
+                kwargs["stdout"] = subprocess.DEVNULL
+            super().__init__(*args, **kwargs)
+
+    subprocess.Popen = _ProtocolSafePopen
+
+
+def _set_windows_stdout_handle(handle: int) -> None:
+    """Set the Win32 stdout handle inherited by native code and children."""
+    if not _kernel32.SetStdHandle(_STD_OUTPUT_HANDLE, wintypes.HANDLE(handle)):
+        raise ctypes.WinError(ctypes.get_last_error())
+
+
 @contextmanager
 def _stdout_to_stderr():
-    """Redirect Python and inherited fd-1 output while preserving restoration."""
+    """Keep Python, native, and inherited child output off the protocol."""
     sys.stdout.flush()
     saved_stdout = os.dup(1)
-    os.dup2(2, 1)
+    saved_windows_stdout: int | None = None
     try:
+        if os.name == "nt":
+            saved_windows_stdout = int(_kernel32.GetStdHandle(_STD_OUTPUT_HANDLE))
+        os.dup2(2, 1)
+        if os.name == "nt":
+            _set_windows_stdout_handle(_windows_stdout_sink_handle)
         with redirect_stdout(sys.stderr):
             yield
     finally:
         native_runtime = ctypes.CDLL("msvcrt" if os.name == "nt" else None)
         native_runtime.fflush(None)
         sys.stderr.flush()
+        if saved_windows_stdout is not None:
+            _set_windows_stdout_handle(saved_windows_stdout)
         os.dup2(saved_stdout, 1)
         os.close(saved_stdout)
 
@@ -107,8 +153,6 @@ if os.environ.get("MCP_STDIO_LEAK_PROBE") == "1":
     @mcp.tool(name="stdio_leak_probe")
     def stdio_leak_probe() -> str:
         """Exercise Python, native-fd, and child-process stdout isolation."""
-        import subprocess
-
         print("python stdout probe")
         os.write(1, b"native fd stdout probe\n")
         native_runtime = ctypes.CDLL("msvcrt" if os.name == "nt" else None)
@@ -117,6 +161,15 @@ if os.environ.get("MCP_STDIO_LEAK_PROBE") == "1":
             [sys.executable, "-c", "print('child stdout probe')"],
             check=True,
         )
+        captured = subprocess.run(
+            [sys.executable, "-c", "import sys; print(sys.stdin.read())"],
+            input="explicit pipe probe",
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        if captured.stdout.strip() != "explicit pipe probe":
+            raise RuntimeError("Explicit child-process pipes were not preserved")
         return "isolated"
 
 
