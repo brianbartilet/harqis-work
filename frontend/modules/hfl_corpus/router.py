@@ -44,7 +44,11 @@ from modules.hfl_corpus.entry_create import (
     persist_manual_entry_with_uploads,
     preview_manual_entry,
 )
-from modules.hfl_corpus.document_edit import UpdateDocumentRequest, update_document_text
+from modules.hfl_corpus.document_edit import (
+    DocumentConflictError,
+    UpdateDocumentRequest,
+    update_document_text,
+)
 from modules.hfl_corpus.entry_enrichment import enrich_manual_entry
 from modules.hfl_corpus.secrets import (
     document_has_secrets,
@@ -876,6 +880,7 @@ async def hfl_document_update(
                 RemoteCorpusClient.from_settings().update_document,
                 relative_path,
                 payload.text,
+                payload.expected_updated_at,
             )
         document = corpus_index.get(relative_path)
         if not document:
@@ -887,6 +892,7 @@ async def hfl_document_update(
             document,
             payload.text,
             corpus_dir=resolve_corpus_root(),
+            expected_updated_at=payload.expected_updated_at,
         )
         corpus_index.documents(force=True)
         return {
@@ -894,6 +900,8 @@ async def hfl_document_update(
             "relative_path": document.relative_path,
             "size": path.stat().st_size,
         }
+    except DocumentConflictError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=409)
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except RemoteCorpusError as exc:

@@ -66,6 +66,7 @@ def _canonical_note(
     guid="hfl-note-123",
     timestamp="2026-08-22 01:34",
     what_happened="Captured the original thought.",
+    references=(),
 ):
     body = (
         "Source:          notes\n"
@@ -75,7 +76,14 @@ def _canonical_note(
         f"What happened:   {what_happened}\n"
         "Why it stayed:   It may be useful.\n"
         "Possible use:    Review it later.\n"
-        "Tags:            #manual-entry #notes #idea\n\n"
+        "Tags:            #manual-entry #notes #idea\n"
+        + (
+            "References:\n"
+            + "".join(f"                 - {value}\n" for value in references)
+            if references
+            else ""
+        )
+        + "\n"
     )
     item = {
         "anchor": "hfl-entry-1-2026-08-22-01-34",
@@ -117,8 +125,8 @@ class FakeDocumentService:
             }
         }
 
-    def update_document(self, relative_path, text):
-        self.calls.append(("update", relative_path))
+    def update_document(self, relative_path, text, expected_updated_at=None):
+        self.calls.append(("update", relative_path, expected_updated_at))
         self.updated_text = text
         return {"updated": True, "relative_path": relative_path, "size": len(text)}
 
@@ -242,6 +250,22 @@ def test_recent_notes_returns_table_ready_rows_and_latest_url():
     assert service.calls[0][1]["compact"] is True
     assert service.calls[0][1]["source"] == "notes"
     assert service.calls[0][1]["query"] == "#manual-entry"
+    assert service.calls[0][1]["include_secrets"] is False
+    assert service.calls[1][2]["include_secrets"] is False
+
+
+def test_recent_notes_requires_explicit_secret_opt_in():
+    service = FakeDocumentService()
+
+    write_note.recent_notes(
+        limit=10,
+        web_url="https://notes.example.test",
+        include_secrets=True,
+        service_factory=lambda: service,
+    )
+
+    assert service.calls[0][1]["include_secrets"] is True
+    assert service.calls[1][2]["include_secrets"] is True
 
 
 def test_recent_notes_excludes_automated_source_notes_entries():
@@ -298,6 +322,30 @@ def test_update_note_replaces_only_selected_guid_and_reindexes():
     assert "Captured the original thought." not in service.updated_text
     assert indexed[0].entry_id == "hfl-note-123"
     assert indexed[0].when.strftime("%Y-%m-%d %H:%M") == "2026-08-22 01:34"
+    assert service.calls[-1][2] == service.updated_at
+
+
+def test_update_note_preserves_existing_http_references():
+    service = FakeDocumentService()
+    service.item, service.text = _canonical_note(references=(
+        "http://legacy.example/item",
+        "https://example.com/current",
+        "C:\\notes\\attachment.txt",
+    ))
+
+    write_note.update_note(
+        "hfl-note-123",
+        {"moment": "Revised note"},
+        expected_updated_at=service.updated_at,
+        web_url="https://notes.example.test",
+        service_factory=lambda: service,
+        index_func=lambda entry: entry.entry_id,
+    )
+
+    assert service.updated_text is not None
+    assert "http://legacy.example/item" in service.updated_text
+    assert "https://example.com/current" in service.updated_text
+    assert "C:\\notes\\attachment.txt" in service.updated_text
 
 
 def test_update_note_refuses_a_stale_document_revision():

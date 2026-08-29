@@ -1,12 +1,21 @@
+import multiprocessing
 import subprocess
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
 from apps.desktop.helpers import feed
 from apps.rainmeter.references.helpers import bangs
 from apps.rainmeter.references.helpers.config_builder import init_meter
+
+
+def _hold_path_lock(path, entered, release):
+    with feed._path_lock(Path(path), timeout=1) as acquired:
+        if acquired:
+            entered.set()
+            release.wait(timeout=5)
 
 
 @pytest.fixture(autouse=True)
@@ -120,7 +129,30 @@ def test_rainmeter_commands_are_serialized(monkeypatch, tmp_path):
     assert max_active == 1
 
 
-def test_overlapping_hud_render_is_skipped(monkeypatch, tmp_path):
+def test_path_lock_blocks_a_second_process(tmp_path):
+    context = multiprocessing.get_context("spawn")
+    entered = context.Event()
+    release = context.Event()
+    target = tmp_path / "shared.ini"
+    process = context.Process(
+        target=_hold_path_lock,
+        args=(str(target), entered, release),
+    )
+    process.start()
+    try:
+        assert entered.wait(timeout=5)
+        with feed._path_lock(target, timeout=0) as acquired:
+            assert acquired is False
+    finally:
+        release.set()
+        process.join(timeout=5)
+        if process.is_alive():
+            process.kill()
+            process.join(timeout=2)
+    assert process.exitcode == 0
+
+
+def test_separate_hud_decorators_share_destination_lock(monkeypatch, tmp_path):
     static_path = tmp_path / "static"
     static_path.mkdir()
     (static_path / "base.ini").write_text(
@@ -158,6 +190,16 @@ def test_overlapping_hud_render_is_skipped(monkeypatch, tmp_path):
         release.wait(timeout=1)
         return "rendered"
 
+    @init_meter(
+        config,
+        hud_item_name="SERIAL HUD",
+        include_notes_bin=False,
+        reset_alerts_secs=0,
+        play_sound=False,
+    )
+    def competing_render(ini=None, **_kwargs):
+        return "competing"
+
     first_result = {}
     first = threading.Thread(
         target=lambda: first_result.setdefault("value", render())
@@ -165,10 +207,11 @@ def test_overlapping_hud_render_is_skipped(monkeypatch, tmp_path):
     first.start()
     assert entered.wait(timeout=1)
 
-    overlapping = render()
+    overlapping = competing_render()
     release.set()
     first.join(timeout=2)
 
+    assert isinstance(overlapping, dict)
     assert overlapping["skipped"] is True
     assert overlapping["summary"] == "Skipped overlapping HUD render"
     assert first_result["value"]["hud"] == "SERIAL HUD"

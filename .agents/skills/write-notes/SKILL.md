@@ -17,6 +17,9 @@ update one canonical `Source: notes` / `#manual-entry` entry by GUID.
   happened**, **Timestamp**, and **HFL document**. Also surface
   `latest_document_url` separately. A bare `$write-notes` invocation with no
   note content also uses this mode. Default to 10 rows; accept 1–20.
+- **Protected notes:** recent/get/update exclude protected tags by default. Use
+  `--include-secrets` only after the user explicitly asks to access protected
+  notes through the configured secret-unlock boundary.
 - **Update:** if the user has not supplied an exact GUID, run `recent`, show the
   table, and ask which GUID to update. If the user supplies one GUID and the
   exact requested changes, retrieve it with `get`, show the before/after fields,
@@ -129,6 +132,8 @@ document API, and then upserts that GUID in Elasticsearch. If Markdown succeeds
 but indexing does not, report the parity failure explicitly; do not claim the
 update is fully indexed. Existing local attachment references are preserved
 when HTTP references change. Updating attachments themselves is not supported.
+The expected revision is enforced atomically by the corpus write API; a
+concurrent edit returns a conflict instead of being overwritten.
 
 Analyze attached images before building the payload:
 

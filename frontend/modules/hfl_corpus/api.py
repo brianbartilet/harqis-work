@@ -32,7 +32,11 @@ from modules.hfl_corpus.entry_create import (
     persist_manual_entry_with_uploads,
     preview_manual_entry,
 )
-from modules.hfl_corpus.document_edit import UpdateDocumentRequest, update_document_text
+from modules.hfl_corpus.document_edit import (
+    DocumentConflictError,
+    UpdateDocumentRequest,
+    update_document_text,
+)
 from modules.hfl_corpus.entry_enrichment import enrich_manual_entry
 from modules.hfl_corpus.secrets import (
     document_has_secrets,
@@ -427,6 +431,7 @@ async def hfl_api_update_document(
             document,
             payload.text,
             corpus_dir=resolve_corpus_root(),
+            expected_updated_at=payload.expected_updated_at,
         )
         corpus_index.documents(force=True)
         return {
@@ -434,6 +439,8 @@ async def hfl_api_update_document(
             "relative_path": document.relative_path,
             "size": path.stat().st_size,
         }
+    except DocumentConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except OSError as exc:

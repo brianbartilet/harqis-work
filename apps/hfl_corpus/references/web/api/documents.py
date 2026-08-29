@@ -101,12 +101,20 @@ class ApiServiceHflCorpusDocuments(BaseApiServiceHflCorpus):
         return self.client.execute_request(self.request.build())
 
     @deserialized(DtoHflCorpusUpdateResult)
-    def update_document(self, relative_path: str, text: str) -> DtoHflCorpusUpdateResult:
+    def update_document(
+        self,
+        relative_path: str,
+        text: str,
+        expected_updated_at: str | None = None,
+    ) -> DtoHflCorpusUpdateResult:
         """Replace a corpus Markdown document after server-side validation."""
         self.request.post() \
             .add_uri_parameter("document") \
             .add_uri_parameter(relative_path) \
-            .add_json_payload({"text": text})
+            .add_json_payload({
+                "text": text,
+                "expected_updated_at": expected_updated_at,
+            })
         return self.client.execute_request(self.request.build())
 
     def get_reference_preview(self, token: str) -> dict:

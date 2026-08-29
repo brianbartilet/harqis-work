@@ -364,6 +364,7 @@ def recent_notes(
     *,
     limit: int,
     web_url: str,
+    include_secrets: bool = False,
     service_factory: Callable[[], Any] | None = None,
 ) -> dict[str, Any]:
     """Return table-ready recent canonical notes without exposing other sources."""
@@ -377,7 +378,7 @@ def recent_notes(
         page_size=20,
         compact=True,
         source="notes",
-        include_secrets=True,
+        include_secrets=include_secrets,
     ))
     notes: list[dict[str, Any]] = []
     for document in listing.get("results") or []:
@@ -392,7 +393,7 @@ def recent_notes(
             source="notes",
             offset=0,
             limit=min(20, limit - len(notes)),
-            include_secrets=True,
+            include_secrets=include_secrets,
         ))
         for item in matches.get("entries") or []:
             entry = _parse_entry_item(item)
@@ -422,6 +423,7 @@ def _find_note(
     guid: str,
     *,
     service: Any,
+    include_secrets: bool = False,
 ) -> tuple[Any, dict[str, Any], dict[str, Any]]:
     normalized = str(guid or "").strip()
     if not re.fullmatch(r"hfl-[A-Za-z0-9-]{3,120}", normalized):
@@ -433,7 +435,7 @@ def _find_note(
         page_size=20,
         compact=True,
         source="notes",
-        include_secrets=True,
+        include_secrets=include_secrets,
     ))
     found: list[tuple[Any, dict[str, Any], dict[str, Any]]] = []
     for document in listing.get("results") or []:
@@ -442,7 +444,7 @@ def _find_note(
             continue
         response = _as_dict(service.get_document(
             relative_path,
-            include_secrets=True,
+            include_secrets=include_secrets,
         ))
         full_document = response.get("document") or {}
         for item in full_document.get("entries") or []:
@@ -493,10 +495,15 @@ def get_note(
     guid: str,
     *,
     web_url: str,
+    include_secrets: bool = False,
     service_factory: Callable[[], Any] | None = None,
 ) -> dict[str, Any]:
     service = (service_factory or _document_service)()
-    entry, document, item = _find_note(guid, service=service)
+    entry, document, item = _find_note(
+        guid,
+        service=service,
+        include_secrets=include_secrets,
+    )
     return {
         "status": "found",
         "note": _full_note(
@@ -573,7 +580,13 @@ def _prepare_update(raw: dict[str, Any], current: Any) -> dict[str, Any]:
     return effective
 
 
-def _replace_note_block(text: str, guid: str, updated: Any) -> str:
+def _replace_note_block(
+    text: str,
+    guid: str,
+    updated: Any,
+    *,
+    preserve_references: bool,
+) -> str:
     _load_environment()
     from workflows.hfl.dto import HflEntry
 
@@ -589,7 +602,18 @@ def _replace_note_block(text: str, guid: str, updated: Any) -> str:
             f"Expected exactly one canonical block for {guid}; found {len(selected)}."
         )
     start, end = selected[0]
-    return text[:start] + updated.to_markdown() + text[end:]
+    rendered = updated.to_markdown()
+    if preserve_references:
+        original = text[start:end]
+        references = re.search(r"(?m)^References:\s*$", original)
+        if references:
+            rendered = (
+                rendered.split("\nReferences:\n", 1)[0].rstrip()
+                + "\n"
+                + original[references.start():].strip()
+                + "\n\n"
+            )
+    return text[:start] + rendered + text[end:]
 
 
 def _index_updated_note(entry: Any) -> str | None:
@@ -610,6 +634,7 @@ def update_note(
     *,
     expected_updated_at: str,
     web_url: str,
+    include_secrets: bool = False,
     service_factory: Callable[[], Any] | None = None,
     index_func: Callable[[Any], str | None] | None = None,
 ) -> dict[str, Any]:
@@ -617,7 +642,11 @@ def update_note(
     if not str(expected_updated_at or "").strip():
         raise ValueError("expected_updated_at is required for a safe note update.")
     service = (service_factory or _document_service)()
-    current, document, item = _find_note(guid, service=service)
+    current, document, item = _find_note(
+        guid,
+        service=service,
+        include_secrets=include_secrets,
+    )
     observed = str(document.get("updated_at") or "")
     if observed != str(expected_updated_at).strip():
         raise ValueError(
@@ -630,8 +659,13 @@ def update_note(
         str(document.get("text") or ""),
         current.entry_id,
         updated,
+        preserve_references="references" not in changes,
     )
-    result = _as_dict(service.update_document(relative_path, replacement))
+    result = _as_dict(service.update_document(
+        relative_path,
+        replacement,
+        expected_updated_at=observed,
+    ))
     if not result.get("updated"):
         raise RuntimeError("The canonical HFL document did not confirm the update.")
     try:
@@ -789,14 +823,17 @@ def _parser() -> argparse.ArgumentParser:
     recent = commands.add_parser("recent", help="List recent canonical Source: notes entries")
     recent.add_argument("--limit", type=int, default=10)
     recent.add_argument("--web-url")
+    recent.add_argument("--include-secrets", action="store_true")
     get = commands.add_parser("get", help="Retrieve one canonical note by GUID")
     get.add_argument("--guid", required=True)
     get.add_argument("--web-url")
+    get.add_argument("--include-secrets", action="store_true")
     update = commands.add_parser("update", help="Update one reviewed note by GUID")
     update.add_argument("--guid", required=True)
     update.add_argument("--json", required=True, help="JSON file path, or - for stdin")
     update.add_argument("--expected-updated-at", required=True)
     update.add_argument("--web-url")
+    update.add_argument("--include-secrets", action="store_true")
     return parser
 
 
@@ -811,15 +848,24 @@ def main(argv: list[str] | None = None) -> int:
             _load_environment()
             web_url = resolve_web_url(args.web_url)
             if args.command == "recent":
-                output, code = recent_notes(limit=args.limit, web_url=web_url), 0
+                output, code = recent_notes(
+                    limit=args.limit,
+                    web_url=web_url,
+                    include_secrets=args.include_secrets,
+                ), 0
             elif args.command == "get":
-                output, code = get_note(args.guid, web_url=web_url), 0
+                output, code = get_note(
+                    args.guid,
+                    web_url=web_url,
+                    include_secrets=args.include_secrets,
+                ), 0
             else:
                 output, code = update_note(
                     args.guid,
                     _read_json(args.json),
                     expected_updated_at=args.expected_updated_at,
                     web_url=web_url,
+                    include_secrets=args.include_secrets,
                 ), 0
         else:
             _load_environment()

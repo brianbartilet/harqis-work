@@ -1,15 +1,31 @@
 import logging
 import os
 import sys
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
+from io import TextIOWrapper
 from pathlib import Path
+
+
+@contextmanager
+def _stdout_to_stderr():
+    """Redirect Python and inherited fd-1 output while preserving restoration."""
+    sys.stdout.flush()
+    saved_stdout = os.dup(1)
+    os.dup2(2, 1)
+    try:
+        with redirect_stdout(sys.stderr):
+            yield
+    finally:
+        sys.stderr.flush()
+        os.dup2(saved_stdout, 1)
+        os.close(saved_stdout)
 
 # A stdio MCP server owns stdout: every byte written there must be JSON-RPC.
 # Several legacy imports configure logging to stdout or print while loading
 # configuration, so keep those diagnostics away from the protocol from the
 # first application import onward.  The runtime transport captures the real
 # stdout before the same protection is applied to tool execution below.
-with redirect_stdout(sys.stderr):
+with _stdout_to_stderr():
     from dotenv import load_dotenv
 
     _repo_root = Path(__file__).resolve().parent.parent
@@ -70,7 +86,7 @@ _filtered_registrars = [(spec.label, *spec.registrar.rsplit(".", 1)) for spec in
 
 # Lazy-import each app's mcp module so a missing config section in one app
 # does not prevent the rest from loading. Skipped apps log a warning.
-with redirect_stdout(sys.stderr):
+with _stdout_to_stderr():
     for spec in _filtered_specs:
         try:
             logger.info("Registering %s tools", spec.label)
@@ -84,18 +100,40 @@ with redirect_stdout(sys.stderr):
     )
 
 
+if os.environ.get("MCP_STDIO_LEAK_PROBE") == "1":
+    @mcp.tool(name="stdio_leak_probe")
+    def stdio_leak_probe() -> str:
+        """Exercise Python, native-fd, and child-process stdout isolation."""
+        import subprocess
+
+        print("python stdout probe")
+        os.write(1, b"native fd stdout probe\n")
+        subprocess.run(
+            [sys.executable, "-c", "print('child stdout probe')"],
+            check=True,
+        )
+        return "isolated"
+
+
 async def _run_stdio_safely() -> None:
     """Run MCP while reserving stdout exclusively for its JSON-RPC transport."""
-    # stdio_server captures the current, original stdout during __aenter__.
-    # Redirect only after that point so prints from tool code go to stderr
-    # without moving the protocol writer away from stdout.
-    async with stdio_server() as (read_stream, write_stream):
-        with redirect_stdout(sys.stderr):
-            await mcp._mcp_server.run(
+    protocol_binary = os.fdopen(os.dup(1), "wb", buffering=0)
+    protocol_text = TextIOWrapper(
+        protocol_binary,
+        encoding="utf-8",
+        write_through=True,
+    )
+    async with anyio.wrap_file(protocol_text) as protocol_stdout:
+        with _stdout_to_stderr():
+            async with stdio_server(stdout=protocol_stdout) as (
                 read_stream,
                 write_stream,
-                mcp._mcp_server.create_initialization_options(),
-            )
+            ):
+                await mcp._mcp_server.run(
+                    read_stream,
+                    write_stream,
+                    mcp._mcp_server.create_initialization_options(),
+                )
 
 
 if __name__ == "__main__":

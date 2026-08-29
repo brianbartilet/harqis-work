@@ -6,10 +6,11 @@ import sys
 import tempfile
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, Callable, Iterator, Optional, TypeVar
 
 from apps.desktop.config import CONFIG
 from core.utilities.data.strings import make_separator
@@ -70,7 +71,7 @@ class FeedLockConfig:
     - lock files live in a local temp directory to avoid Google Drive locking/sync issues.
     - stale locks are treated as best-effort removable; PermissionError is ignored and we wait.
     """
-    lock_timeout_secs: Optional[int] = None
+    lock_timeout_secs: Optional[float] = None
     lock_sleep_secs: float = DEFAULT_LOCK_SLEEP_SECS
     stale_lock_max_age_secs: Optional[float] = DEFAULT_STALE_LOCK_MAX_AGE_SECS
     lock_dir: Optional[Path] = None
@@ -163,11 +164,10 @@ def _atomic_write_text(
     """
     _ensure_dir(path.parent)
 
-    if prepend_if_exists and path.exists():
-        existing = _read_text_best_effort(path, encoding=encoding)
-        text_to_write = text + existing
-    else:
-        text_to_write = text
+    if prepend_if_exists:
+        _prepend_with_lock(path=path, block_text=text, encoding=encoding)
+        return
+    text_to_write = text
 
     with tempfile.NamedTemporaryFile(
         mode="w",
@@ -235,6 +235,37 @@ def _release_lock(lock_path: Path) -> None:
         os.remove(lock_path)
     except (FileNotFoundError, PermissionError):
         pass
+
+
+@contextmanager
+def _path_lock(path: Path, *, timeout: float | None = None) -> Iterator[bool]:
+    """Serialize one destination across decorators, threads, and processes."""
+    thread_lock = _replace_lock_for(path)
+    if timeout == 0:
+        acquired_thread = thread_lock.acquire(blocking=False)
+    elif timeout is None:
+        acquired_thread = thread_lock.acquire()
+    else:
+        acquired_thread = thread_lock.acquire(timeout=timeout)
+    if not acquired_thread:
+        yield False
+        return
+
+    lock_path = _lock_path_for(path).with_suffix(".transaction.lock")
+    cfg = FeedLockConfig(lock_timeout_secs=timeout)
+    acquired_process = False
+    try:
+        try:
+            _acquire_lock(lock_path, cfg, target_path=path)
+            acquired_process = True
+        except TimeoutError:
+            yield False
+            return
+        yield True
+    finally:
+        if acquired_process:
+            _release_lock(lock_path)
+        thread_lock.release()
 
 
 def _prepend_with_lock(
