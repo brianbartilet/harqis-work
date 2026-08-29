@@ -1,4 +1,6 @@
+import os
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -10,7 +12,10 @@ from workflows.hfl.source_health import (
     TaskEvidence,
     UpstreamEvidence,
     evaluate_source,
+    load_live_corpus_evidence,
+    load_live_es_evidence,
     load_source_registry,
+    probe_agent_sessions,
     render_failure_report,
     validate_registry_coverage,
     write_failure_report,
@@ -108,6 +113,149 @@ def test__evaluate_source_accepts_proven_empty_success():
     assert result.reasons == [
         "task ran successfully and no upstream activity requires an entry"
     ]
+
+
+def test__evaluate_source_accepts_equal_timestamp_id_sets_in_different_orders():
+    policy = _policy(entry_max_age_hours=24)
+    latest = NOW - timedelta(hours=1)
+
+    result = evaluate_source(
+        policy,
+        now=NOW,
+        corpus={
+            "agent-session": EntryEvidence(
+                latest, "hfl-b", entry_ids=("hfl-b", "hfl-a", "hfl-c")
+            )
+        },
+        elasticsearch={
+            "agent-session": EntryEvidence(
+                latest, "hfl-a", entry_ids=("hfl-a", "hfl-c", "hfl-b")
+            )
+        },
+        tasks={policy.task: TaskEvidence(NOW - timedelta(minutes=5), passed=2)},
+    )
+
+    assert result.status == "healthy"
+    assert "latest Markdown and Elasticsearch entries do not match" not in result.reasons
+
+
+def test__load_live_corpus_evidence_retains_all_ids_at_latest_timestamp(monkeypatch, tmp_path):
+    when = "2026-08-28T22:29:49+08:00"
+    scanned = SimpleNamespace(documents={
+        "one": {"source": "notes", "when": when, "entry_id": "hfl-b"},
+        "two": {"source": "notes", "when": when, "entry_id": "hfl-a"},
+        "old": {
+            "source": "notes",
+            "when": "2026-08-27T22:29:49+08:00",
+            "entry_id": "hfl-old",
+        },
+    })
+    reconcile = __import__(
+        "scripts.agents.hfl.reconcile_elasticsearch", fromlist=["scan_corpus"]
+    )
+    capture = __import__("workflows.hfl.tasks.capture", fromlist=["resolve_corpus_dir"])
+    monkeypatch.setattr(reconcile, "scan_corpus", lambda root: scanned)
+    monkeypatch.setattr(capture, "resolve_corpus_dir", lambda: tmp_path)
+
+    evidence = load_live_corpus_evidence(["notes"])["notes"]
+
+    assert evidence.entry_ids == ("hfl-a", "hfl-b")
+    assert evidence.entry_id in evidence.entry_ids
+
+
+def test__load_live_corpus_evidence_recognizes_weekly_rollup_artifact(monkeypatch, tmp_path):
+    rollup = tmp_path / "2026-W34-rollup.md"
+    rollup.write_text("# Weekly rollup — 2026-W34\n", encoding="utf-8")
+    expected = datetime(2026, 8, 23, 21, 0, 19, tzinfo=TZ)
+    os.utime(rollup, (expected.timestamp(), expected.timestamp()))
+    reconcile = __import__(
+        "scripts.agents.hfl.reconcile_elasticsearch", fromlist=["scan_corpus"]
+    )
+    capture = __import__("workflows.hfl.tasks.capture", fromlist=["resolve_corpus_dir"])
+    monkeypatch.setattr(
+        reconcile, "scan_corpus", lambda root: SimpleNamespace(documents={})
+    )
+    monkeypatch.setattr(capture, "resolve_corpus_dir", lambda: tmp_path)
+
+    evidence = load_live_corpus_evidence(["summarize"])["summarize"]
+
+    assert evidence.when == expected
+    assert evidence.entry_id == ""
+
+
+def test__load_live_es_evidence_filters_exact_source_and_retains_latest_ids(monkeypatch):
+    es = __import__("workflows.hfl.es_store", fromlist=["HflQueryResult"])
+    calls = []
+
+    def fake_query(**kwargs):
+        calls.append(kwargs)
+        return es.HflQueryResult((
+            {
+                "source": "activity-radar",
+                "when": "2026-08-29T16:02:18+08:00",
+                "entry_id": "hfl-wrong",
+            },
+            {
+                "source": "radar",
+                "when": "2026-08-28T23:20:13+08:00",
+                "entry_id": "hfl-b",
+            },
+            {
+                "source": "radar",
+                "when": "2026-08-28T23:20:13+08:00",
+                "entry_id": "hfl-a",
+            },
+        ), available=True)
+
+    monkeypatch.setattr(es, "query_hfl_entries_status", fake_query)
+
+    evidence = load_live_es_evidence(["radar"])["radar"]
+
+    assert calls == [{"source": "radar", "limit": 500}]
+    assert evidence.entry_ids == ("hfl-a", "hfl-b")
+    assert evidence.entry_id in evidence.entry_ids
+
+
+def test__probe_agent_sessions_uses_only_eligible_closed_pairs(monkeypatch, tmp_path):
+    capture_module = __import__(
+        "scripts.agents.hfl.capture_session_event", fromlist=["audit_root"]
+    )
+    monkeypatch.setattr(capture_module, "audit_root", lambda: tmp_path)
+    events = tmp_path / "events" / "2026-08-28"
+    events.mkdir(parents=True)
+    captured_at = NOW - timedelta(days=1)
+    (events / "captured.json").write_text(
+        '{"timestamp": "' + captured_at.isoformat()
+        + '", "ingest": {"entry_id": "hfl-old"}}',
+        encoding="utf-8",
+    )
+    eligible_at = NOW - timedelta(hours=2)
+    calls = []
+
+    def pair_loader(database, *, since, until):
+        calls.append((database, since, until))
+        return [{"timestamp": eligible_at.isoformat()}]
+
+    evidence = probe_agent_sessions(now=NOW, pair_loader=pair_loader)
+
+    assert evidence.latest_activity == eligible_at
+    assert calls[0][1] == captured_at + timedelta(microseconds=1)
+    assert calls[0][2] == NOW
+    assert "eligible closed CLI/Telegram pairs after capture: 1" in evidence.details
+
+
+def test__probe_agent_sessions_handles_missing_state_database(monkeypatch, tmp_path):
+    capture_module = __import__(
+        "scripts.agents.hfl.capture_session_event", fromlist=["audit_root"]
+    )
+    monkeypatch.setattr(capture_module, "audit_root", lambda: tmp_path / "missing-audit")
+    monkeypatch.setenv("HERMES_STATE_DB", str(tmp_path / "missing-state.db"))
+
+    evidence = probe_agent_sessions(now=NOW)
+
+    assert evidence.available is False
+    assert evidence.latest_activity is None
+    assert evidence.pending == 0
 
 
 def test__evaluate_source_reports_markdown_es_parity_gap():
