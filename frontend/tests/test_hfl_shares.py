@@ -250,6 +250,8 @@ def test_share_corpus_form_uses_new_labels_defaults_and_collapsed_sections(
     assert response.status_code == 200
     assert "<title>Share Corpus · HARQIS</title>" in response.text
     assert ">Share Corpus</h1>" in response.text
+    assert "Save selection recipes, then generate fixed or live shares from matching entries." in response.text
+    assert response.text.count('class="owner-list-arrow-shell"') == 2
     assert ">New recipe</h2>" in response.text
     assert "Verification mode" in response.text
     assert 'id="recipient" name="recipient" required maxlength="20"' in response.text

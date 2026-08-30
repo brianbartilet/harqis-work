@@ -3,7 +3,6 @@
 {% block head %}
 <style>
   .brain-shell { display:grid; gap:1.25rem; }
-  .brain-hero { background: radial-gradient(circle at 84% 10%, rgba(34,211,238,.12), transparent 28%), linear-gradient(135deg, rgba(15,23,42,.96), rgba(2,6,23,.96)); }
   .brain-layout { display:grid; gap:1rem; align-items:start; }
   .brain-primary { display:grid; gap:1rem; }
   .brain-control-rail { min-width:0; }
@@ -116,7 +115,6 @@
   }
   @media (max-width:639px) {
     .brain-shell { gap:1rem; }
-    .brain-hero { padding:1.25rem; }
     .brain-feed-dialog { width:calc(100% - 1rem); }
     .brain-feed { height:72vh; padding:.75rem; }
     .brain-chat-form { grid-template-columns:1fr; }
@@ -126,7 +124,7 @@
 </style>
 {% endblock %}
 {% block content %}
-<main class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8"><div id="second-brain-shell">{% include "modules/second_brain/_shell.html" %}</div></main>
+<main class="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8"><div id="second-brain-shell">{% include "modules/second_brain/_shell.html" %}</div></main>
 <script>
 (function () {
   var stream, tickerFrame, tickerResumeTimer, tickerEvents, countdownTimer, noticeTimer, settingsDirty=false, settingsDialogOpen=false, controlsExpanded=false, feedDialogOpen=false, currentKey = '';

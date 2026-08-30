@@ -38,6 +38,7 @@ def test__second_brain_page_requires_authentication():
 def test__second_brain_page_renders_empty_guidance(authenticated_client):
     response = authenticated_client.get("/second-brain")
     assert response.status_code == 200
+    assert ">Second Brain</h1>" in response.text
     assert "Your adaptive briefing" in response.text
     assert "Your briefing is assembling" in response.text
     assert "Second Brain live context" in response.text

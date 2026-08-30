@@ -602,6 +602,7 @@ def test_workflows_module_preserves_reorderable_subtabs(authenticated_client):
     assert "Edit Layout" in response.text
     assert "Automation inventory" in response.text
     assert "automations across" in response.text
+    assert response.text.index(">Workflows</h1>") < response.text.index('role="tablist"')
     assert "border-blue-500 text-blue-400" in response.text
     assert 'role="tablist"' in response.text
     assert 'role="tab"' in response.text

@@ -9,42 +9,6 @@
 </button>
 {% endblock %}
 
-{% block subnav %}
-<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-  <nav class="-mb-px flex gap-6 overflow-x-auto" data-sortable-tabs
-       role="tablist" aria-label="Workflow categories">
-    {% for wf_key, wf in workflow_tabs.items() %}
-    <button id="workflow-tab-{{ wf_key }}" data-wf-key="{{ wf_key }}" data-workflow-tab
-            type="button" role="tab" aria-controls="workflow-panel-{{ wf_key }}"
-            :aria-selected="workflowTab === '{{ wf_key }}'"
-            :tabindex="workflowTab === '{{ wf_key }}' ? 0 : -1"
-            @click="if (customize) { $event.preventDefault(); $event.stopImmediatePropagation() } else { workflowTab = '{{ wf_key }}' }"
-            hx-get="/workflows?workflow={{ wf_key }}"
-            hx-target="#workflow-panel-host"
-            hx-select="#workflow-panel-host"
-            hx-swap="outerHTML"
-            hx-push-url="true"
-            :class="workflowTab === '{{ wf_key }}'
-              ? 'border-blue-500 text-blue-400'
-              : 'border-transparent text-slate-500 hover:text-slate-300 hover:border-slate-600'"
-            class="flex items-center gap-1.5 whitespace-nowrap border-b-2 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-            aria-description="Use the left and right arrow keys to change category. In Edit Layout, use Alt plus an arrow key to reorder.">
-      <span x-show="customize" x-cloak
-            class="drag-handle cursor-grab text-slate-600 hover:text-slate-400 touch-none"
-            @click.stop>
-        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
-          <circle cx="5" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/>
-          <circle cx="10" cy="4" r="1.2"/><circle cx="10" cy="8" r="1.2"/><circle cx="10" cy="12" r="1.2"/>
-        </svg>
-      </span>
-      {{ wf.label }}
-      <span class="ml-1.5 rounded-full px-1.5 py-0.5 text-xs bg-slate-800 text-slate-400">{{ wf.tasks | length }}</span>
-    </button>
-    {% endfor %}
-  </nav>
-</div>
-{% endblock %}
-
 {% block content %}
 {%- set queue_badge = {
   "hud":     "bg-blue-950/60 text-blue-300 ring-1 ring-blue-500/30",
@@ -138,14 +102,46 @@
   </div>
 
   {# ── Main content ─────────────────────────────────────────────────────── #}
-  <main class="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8">
-    <div class="page-header mb-7">
+  <main class="flex-1 mx-auto max-w-7xl w-full px-4 py-5 sm:px-6 lg:px-8">
+    <div class="page-header mb-4">
       <p class="page-header-eyebrow">Automation inventory</p>
       <h1 class="page-header-title">Workflows</h1>
       <p class="page-header-description">
         Celery tasks, schedules, and execution controls for {{ task_count }} automations across {{ workflow_count }} categories.
       </p>
     </div>
+
+    <nav class="mb-6 flex gap-6 overflow-x-auto border-b border-slate-800" data-sortable-tabs
+         role="tablist" aria-label="Workflow categories">
+      {% for wf_key, wf in workflow_tabs.items() %}
+      <button id="workflow-tab-{{ wf_key }}" data-wf-key="{{ wf_key }}" data-workflow-tab
+              type="button" role="tab" aria-controls="workflow-panel-{{ wf_key }}"
+              :aria-selected="workflowTab === '{{ wf_key }}'"
+              :tabindex="workflowTab === '{{ wf_key }}' ? 0 : -1"
+              @click="if (customize) { $event.preventDefault(); $event.stopImmediatePropagation() } else { workflowTab = '{{ wf_key }}' }"
+              hx-get="/workflows?workflow={{ wf_key }}"
+              hx-target="#workflow-panel-host"
+              hx-select="#workflow-panel-host"
+              hx-swap="outerHTML"
+              hx-push-url="true"
+              :class="workflowTab === '{{ wf_key }}'
+                ? 'border-blue-500 text-blue-400'
+                : 'border-transparent text-slate-500 hover:text-slate-300 hover:border-slate-600'"
+              class="flex items-center gap-1.5 whitespace-nowrap border-b-2 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+              aria-description="Use the left and right arrow keys to change category. In Edit Layout, use Alt plus an arrow key to reorder.">
+        <span x-show="customize" x-cloak
+              class="drag-handle cursor-grab text-slate-600 hover:text-slate-400 touch-none"
+              @click.stop>
+          <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="5" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/>
+            <circle cx="10" cy="4" r="1.2"/><circle cx="10" cy="8" r="1.2"/><circle cx="10" cy="12" r="1.2"/>
+          </svg>
+        </span>
+        {{ wf.label }}
+        <span class="ml-1.5 rounded-full bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400">{{ wf.tasks | length }}</span>
+      </button>
+      {% endfor %}
+    </nav>
 
     <div id="workflow-panel-host" aria-live="polite">
     {% for wf_key, wf in workflows.items() %}

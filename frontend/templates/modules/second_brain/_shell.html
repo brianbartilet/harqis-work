@@ -3,11 +3,11 @@
 {% set eligible_operations = second_brain.operations | selectattr('eligible') | list %}
 {% set pending_operations = second_brain.operations | rejectattr('eligible') | list %}
 <section aria-labelledby="second-brain-heading" class="brain-shell" data-brain-shell data-automatic="{{ 'true' if second_brain.automatic_feed else 'false' }}" data-expires="{{ second_brain.override.expires_at if second_brain.override else '' }}">
-  <header class="brain-hero flex flex-col gap-5 rounded-2xl border border-slate-800 p-6 lg:flex-row lg:items-end lg:justify-between">
+  <header class="page-header flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
     <div class="max-w-3xl">
-      <div class="flex items-center gap-2"><span class="brain-pulse h-2 w-2 rounded-full bg-cyan-300"></span><p class="page-header-eyebrow">Second Brain live context</p></div>
-      <h1 id="second-brain-heading" class="page-header-title">Your adaptive briefing</h1>
-      <p class="page-header-description">A living signal rail assembled from your active context, source evidence, and configured workflows.</p>
+      <p class="page-header-eyebrow">Second Brain live context</p>
+      <h1 id="second-brain-heading" class="page-header-title">Second Brain</h1>
+      <p class="page-header-description">Your adaptive briefing, assembled from active context, source evidence, and configured workflows.</p>
     </div>
     <div class="font-mono text-xs text-slate-500">revision {{ second_brain.cursor }}</div>
   </header>

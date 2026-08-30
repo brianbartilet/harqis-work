@@ -83,6 +83,8 @@
   .recipe-header-actions { display:flex; flex:0 0 auto; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:.55rem; }
   .owner-list-panel > summary { display:flex; list-style:none; align-items:center; justify-content:space-between; gap:.75rem; cursor:pointer; }
   .owner-list-panel > summary::-webkit-details-marker { display:none; }
+  .owner-list-arrow-shell { display:inline-flex; width:1.75rem; height:1.75rem; flex:0 0 auto; align-items:center; justify-content:center; border:1px solid #334155; border-radius:9999px; background:rgba(15,23,42,.85); color:#67e8f9; transition:border-color .15s ease,background-color .15s ease,color .15s ease; }
+  .owner-list-panel > summary:hover .owner-list-arrow-shell { border-color:#0e7490; background:#164e63; color:#cffafe; }
   .owner-list-panel[open] .owner-list-arrow { transform:rotate(180deg); }
   .owner-pagination { display:flex; align-items:center; justify-content:space-between; gap:.65rem; border-top:1px solid #1e293b; padding-top:.75rem; }
   .owner-pagination a { border-radius:.4rem; background:#1e293b; color:#cbd5e1; font-size:.72rem; padding:.35rem .55rem; }
@@ -154,11 +156,11 @@
 {% endblock %}
 {% block content %}
 {% set cfg = configuration %}
-<main class="share-page mx-auto max-w-7xl px-4 py-8 sm:px-6">
-  <div class="page-header mb-6">
+<main class="share-page mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+  <div class="page-header mb-4">
     <p class="page-header-eyebrow">Activity Corpus</p>
     <h1 class="page-header-title">Share Corpus</h1>
-    <p class="page-header-description">Recipes keep your selection rules. Generated shares can use a fixed snapshot or stay updated with the latest matching entries.</p>
+    <p class="page-header-description">Save selection recipes, then generate fixed or live shares from matching entries.</p>
   </div>
 
   {% if error %}<div class="message error">{{ error }}</div>{% endif %}
@@ -333,7 +335,7 @@
             <span class="block text-base font-semibold text-white">Saved recipes</span>
             <span class="mt-1 block text-xs font-normal text-slate-500">Click on recipe to load · {{ recipe_count }} total</span>
           </span>
-          <svg class="owner-list-arrow h-4 w-4 shrink-0 text-blue-400 transition" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg>
+          <span class="owner-list-arrow-shell" aria-hidden="true"><svg class="owner-list-arrow h-4 w-4 transition" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg></span>
         </summary>
         <div class="saved-recipes-content mt-2">
         {% for row in configurations %}
@@ -382,7 +384,7 @@
           <span class="text-base font-semibold text-white">Generated shares</span>
           <span class="flex items-center gap-3">
             <span class="text-xs text-slate-500">{{ share_count }} total</span>
-            <svg class="owner-list-arrow h-4 w-4 shrink-0 text-blue-400 transition" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg>
+            <span class="owner-list-arrow-shell" aria-hidden="true"><svg class="owner-list-arrow h-4 w-4 transition" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg></span>
           </span>
         </summary>
         <div class="generated-shares-content mt-2" data-generated-shares-content aria-live="polite">

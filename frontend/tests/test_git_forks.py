@@ -24,6 +24,7 @@ def test_git_forks_renders_latest_topology(authenticated_client, monkeypatch):
     response = authenticated_client.get("/git-forks")
     assert response.status_code == 200
     assert "owner/fork" in response.text
+    assert ">Git Forks</h1>" in response.text
     assert "One source. Many deliberate departures." in response.text
 
 
