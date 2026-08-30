@@ -1328,9 +1328,22 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
 
     assert response.status_code == 200
     assert "data-activity-panel" in response.text
+    assert 'class="corpus-header-shell mb-4 shrink-0"' in response.text
+    assert 'class="corpus-page-header page-header"' in response.text
+    corpus_header = response.text.split('class="corpus-header-shell', 1)[1].split(
+        "</div>\n  </div>", 1
+    )[0]
+    assert "corpus-secrets-control" in corpus_header
+    assert "corpus-create-entry" in corpus_header
+    assert ".corpus-page-header,.corpus-header-actions { display:contents; }" in response.text
     assert 'data-activity-toggle aria-expanded="true"' in response.text
     assert "data-activity-body" in response.text
     assert 'data-activity-year aria-label="Activity year"' in response.text
+    activity_header_actions = response.text.split(
+        "data-activity-header-actions", 1
+    )[1].split("</div>", 1)[0]
+    assert 'data-activity-year aria-label="Activity year"' in activity_header_actions
+    assert "data-activity-toggle" in activity_header_actions
     assert 'data-activity-year-list role="listbox"' in response.text
     assert 'data-activity-year-option="2026"' in response.text
     activity_body = response.text.split("data-activity-body", 1)[1].split(
@@ -1338,6 +1351,7 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     )[0]
     assert "data-activity-year" in activity_body
     assert "data-activity-year-list" in activity_body
+    assert 'data-activity-year aria-label="Activity year"' not in activity_body
     assert "grid-template-columns:minmax(0,1fr) 4.75rem" in response.text
     assert '<option value="2026" selected>2026</option>' in response.text
     assert '<option value="2025"' in response.text
@@ -1372,6 +1386,12 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "form.elements.time.value = selectedDate ? ''" in response.text
     assert "successUrl.searchParams.set('date_from', savedActivityDate)" in response.text
     assert "const selectedDay = panel.querySelector('[data-activity-day][data-selected=\"true\"]')" in response.text
+    assert "const centerSelectedYear = () =>" in response.text
+    assert "yearList.scrollTop + selectedRect.top - listRect.top" in response.text
+    assert "window.addEventListener('pageshow', centerSelectedYear" in response.text
+    assert "window.requestAnimationFrame(() => {\n        window.requestAnimationFrame" in response.text
+    assert "hfl-corpus:activity-expanded" in response.text
+    assert "writeActivityState(nextExpanded)" in response.text
     assert "Activity rhythm" not in response.text
     assert "data-result-tags" in response.text
 
@@ -1609,6 +1629,13 @@ def test_corpus_mobile_results_disclosure_is_open_by_default_and_uses_page_flow(
     assert " checked" in toggle
     assert 'for="mobile-results-toggle"' in response.text
     assert ">Document results<" in response.text
+    results_disclosure = response.text.split('for="mobile-results-toggle"', 1)[1].split(
+        "</label>", 1
+    )[0]
+    assert "corpus-disclosure-caret" in results_disclosure
+    assert "data-disclosure-caret" in results_disclosure
+    assert "hfl-corpus:results-expanded" in response.text
+    assert "restoreDisclosure(resultsToggle, stateKeys.results)" in response.text
     assert "peer-focus-visible:ring-2" in response.text
     assert "overflow-visible" in results
     assert "lg:min-h-0" in results
@@ -1621,8 +1648,13 @@ def test_corpus_mobile_results_disclosure_is_open_by_default_and_uses_page_flow(
     assert response.text.index('data-corpus-results-toolbar') < response.text.index(
         'data-corpus-results-scroll'
     )
-    assert 'onchange="this.form.submit()"' in response.text
+    assert "data-results-page-size" in response.text
+    assert "event.currentTarget.form?.requestSubmit()" in response.text
     assert 'form="corpus-search-form"' in response.text
+    assert response.text.count("data-focus-results") >= 2
+    assert "data-corpus-result" in response.text
+    assert "firstResult" in response.text
+    assert "scrollIntoView" in response.text
 
 
 def test_corpus_mobile_layout_prioritizes_search_results(
@@ -1692,6 +1724,13 @@ def test_corpus_mobile_all_filters_include_source_dates_and_tag_cloud(
     assert 'aria-controls="mobile-date-filter-fields"' in toggle
     assert " checked" not in toggle
     assert 'for="mobile-date-filters"' in filters
+    filters_disclosure = filters.split('for="mobile-date-filters"', 1)[1].split(
+        "</label>", 1
+    )[0]
+    assert "corpus-disclosure-caret" in filters_disclosure
+    assert "data-disclosure-caret" in filters_disclosure
+    assert "hfl-corpus:filters-expanded" in response.text
+    assert "restoreDisclosure(filtersToggle, stateKeys.filters)" in response.text
     assert "peer-focus-visible:ring-2" in filters
     assert "peer-focus-visible:ring-blue-500" in filters
     assert 'id="mobile-date-filter-fields"' in filters
@@ -1730,7 +1769,7 @@ def test_corpus_defaults_to_first_20_results_and_paginates_search(
         "/hfl-corpus?q=root&page=2&page_size=20"
     )
 
-    card_marker = '<article class="rounded-xl bg-slate-900'
+    card_marker = '<article data-corpus-result class="rounded-xl bg-slate-900'
     assert default_response.text.count(card_marker) == 20
     assert "45 matches · showing 1–20" in default_response.text
     assert second_page.text.count(card_marker) == 20
@@ -1756,7 +1795,7 @@ def test_corpus_supports_50_and_100_result_page_sizes(
     page_50 = authenticated_client.get("/hfl-corpus?page=2&page_size=50")
     page_100 = authenticated_client.get("/hfl-corpus?page=2&page_size=100")
 
-    card_marker = '<article class="rounded-xl bg-slate-900'
+    card_marker = '<article data-corpus-result class="rounded-xl bg-slate-900'
     assert page_50.text.count(card_marker) == 50
     assert "120 matches · showing 51–100" in page_50.text
     assert "Page 2 of 3" in page_50.text

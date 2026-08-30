@@ -4,7 +4,7 @@
 {% block head %}
 <style>
   .activity-panel { --activity-cell:12px; --activity-gap:3px; border:1px solid rgba(30,64,175,.62); border-radius:1rem; background:linear-gradient(135deg,rgba(15,23,42,.98),rgba(8,47,73,.28)); box-shadow:inset 0 1px rgba(148,163,184,.04),0 14px 38px rgba(2,6,23,.2); }
-  .activity-year-select { min-height:2.25rem; border:1px solid #334155; border-radius:.55rem; background:#020617; color:#dbeafe; padding:.4rem 2rem .4rem .65rem; font:650 .75rem/1 ui-monospace,SFMono-Regular,Consolas,monospace; color-scheme:dark; }
+  .activity-year-select { width:5.25rem; min-height:2.25rem; border:1px solid #334155; border-radius:.55rem; background:#020617; color:#dbeafe; padding:.4rem 1.75rem .4rem .6rem; font:650 .75rem/1 ui-monospace,SFMono-Regular,Consolas,monospace; color-scheme:dark; }
   .activity-year-list { display:none; width:4.75rem; max-height:7.25rem; overflow-y:auto; border:1px solid #334155; border-radius:.55rem; background:#020617; padding:.2rem; scrollbar-width:none; }
   .activity-year-list::-webkit-scrollbar { width:0; height:0; }
   .activity-year-option { display:block; width:100%; border-radius:.35rem; padding:.35rem .45rem; color:#94a3b8; font:650 .7rem/1 ui-monospace,SFMono-Regular,Consolas,monospace; text-align:center; }
@@ -13,7 +13,7 @@
   .activity-toggle-chevron { transition:transform .15s ease; }
   [data-activity-toggle][aria-expanded="false"] .activity-toggle-chevron { transform:rotate(-90deg); }
   .activity-layout { display:flex; min-width:0; flex-direction:column; }
-  .activity-year-controls { order:-1; display:flex; justify-content:flex-end; margin-bottom:.75rem; }
+  .activity-year-controls { display:none; }
   .activity-chart-shell { display:flex; min-width:0; align-items:flex-start; gap:.5rem; }
   .activity-weekdays { display:grid; flex:0 0 1.55rem; grid-template-rows:14px repeat(7,var(--activity-cell)) 12px; gap:var(--activity-gap); color:#64748b; font:600 .56rem/var(--activity-cell) ui-monospace,SFMono-Regular,Consolas,monospace; text-align:right; }
   .activity-scroll { min-width:0; flex:1; overflow-x:auto; overflow-y:hidden; padding:0 2px .3rem; scrollbar-color:#155e75 #0f172a; scrollbar-width:thin; scroll-padding-inline:45%; }
@@ -44,6 +44,15 @@
   .activity-legend-cell[data-level="2"] { background:#0e7490; }
   .activity-legend-cell[data-level="3"] { background:#06b6d4; }
   .activity-legend-cell[data-level="4"] { border-color:#a5f3fc; background:#67e8f9; }
+  .corpus-header-shell { display:grid; grid-template-columns:minmax(0,1fr) auto; column-gap:.75rem; row-gap:.375rem; }
+  .corpus-page-header,.corpus-header-actions { display:contents; }
+  .corpus-page-header .page-header-eyebrow { grid-column:1 / -1; grid-row:1; }
+  .corpus-page-header .page-header-title { grid-column:1; grid-row:2; align-self:center; margin-top:.125rem; }
+  .corpus-page-header .page-header-description { grid-column:1 / -1; grid-row:3; margin-top:0; }
+  .corpus-secrets-control { grid-column:2; grid-row:2; align-self:center; min-height:2.25rem; padding:.25rem 0 .25rem .5rem; }
+  .corpus-create-entry { grid-column:1 / -1; grid-row:4; margin-top:.5rem; }
+  .corpus-disclosure-caret { display:inline-flex; width:1.75rem; height:1.75rem; flex:0 0 auto; align-items:center; justify-content:center; border-radius:9999px; color:#67e8f9; box-shadow:inset 0 0 0 1px #334155; transition:transform .15s ease,color .15s ease,background-color .15s ease,box-shadow .15s ease; }
+  label:hover > .corpus-disclosure-caret { background:#1e293b; color:#cffafe; box-shadow:inset 0 0 0 1px #0e7490; }
   [data-result-tags] { min-height:2.875rem; max-height:2.875rem; overflow:hidden; align-content:flex-start; }
   @media (prefers-reduced-motion: reduce) {
     .activity-day { transition:none; }
@@ -57,8 +66,13 @@
     .activity-day-menu { inset:auto .75rem calc(.75rem + env(safe-area-inset-bottom)); width:auto; }
   }
   @media (min-width: 640px) {
+    .corpus-header-shell { display:flex; align-items:flex-end; justify-content:space-between; gap:1rem; }
+    .corpus-page-header { display:block; }
+    .corpus-header-actions { display:flex; gap:.5rem; }
+    .corpus-secrets-control { min-height:2.75rem; padding:.5rem; }
+    .corpus-create-entry { margin-top:0; }
     .activity-layout { display:grid; grid-template-columns:minmax(0,1fr) 4.75rem; align-items:start; gap:1rem; }
-    .activity-year-controls { order:0; display:block; margin-bottom:0; }
+    .activity-year-controls { display:block; }
     .activity-chart-shell { justify-content:center; }
     .activity-scroll { flex:0 1 auto; }
     .activity-year-select-wrap { display:none; }
@@ -84,27 +98,27 @@
 
 {% block content %}
 <main data-corpus-index class="mx-auto flex h-auto max-w-7xl flex-col overflow-x-clip py-5 pl-4 pr-5 sm:px-6 md:h-[calc(100dvh-3.5rem)] md:overflow-y-auto md:overscroll-contain lg:h-[calc(100vh-3.5rem)] lg:overflow-hidden lg:px-8">
-  <div class="mb-4 flex shrink-0 flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-end sm:gap-4">
-    <div class="page-header">
+  <div class="corpus-header-shell mb-4 shrink-0">
+    <div class="corpus-page-header page-header">
       <p class="page-header-eyebrow">Everything everywhere, eventually indexed</p>
       <h1 class="page-header-title">Activity Corpus</h1>
       <p class="page-header-description">Search and browse captured moments, source documents, tags, and references.</p>
     </div>
-    <div data-corpus-header-actions class="flex flex-col gap-2 sm:flex-row">
+    <div data-corpus-header-actions class="corpus-header-actions">
     {% if secrets_configured %}
     <button type="button" data-secrets-toggle data-secrets-on="{{ 'true' if show_secrets else 'false' }}" data-secrets-authorized="{{ 'true' if secrets_authorized else 'false' }}"
             role="switch" aria-checked="{{ 'true' if show_secrets else 'false' }}"
-            class="order-2 inline-flex min-h-11 shrink-0 self-start items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-semibold text-violet-300 transition hover:text-violet-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 sm:order-1">
+            class="corpus-secrets-control inline-flex shrink-0 items-center gap-2 rounded-lg text-sm font-semibold text-violet-300 transition hover:text-violet-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400">
       <span>Secrets</span>
       <span aria-hidden="true" class="secrets-toggle-track">
         <span class="secrets-toggle-thumb"></span>
       </span>
     </button>
     {% else %}
-    <a href="/profile#profile-secrets-title" class="order-2 inline-flex min-h-11 self-start items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-300 ring-1 ring-slate-700 sm:order-1">Secrets</a>
+    <a href="/profile#profile-secrets-title" class="corpus-secrets-control inline-flex shrink-0 items-center rounded-lg bg-slate-900 text-sm font-semibold text-slate-300 ring-1 ring-slate-700">Secrets</a>
     {% endif %}
     <button type="button" data-create-entry-open
-            class="order-1 min-h-11 w-full shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 sm:order-2 sm:min-h-0 sm:w-auto">
+            class="corpus-create-entry min-h-11 w-full shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 sm:min-h-0 sm:w-auto">
       Create entry
     </button>
     </div>
@@ -129,10 +143,18 @@
         <p class="text-[10px] font-semibold uppercase tracking-[.18em] text-cyan-400">Memory signal</p>
         <h2 id="activity-title" class="mt-0.5 text-sm font-semibold text-white">{{ activity_heatmap.total }} {{ 'entry' if activity_heatmap.total == 1 else 'entries' }}</h2>
       </div>
-      <button type="button" data-activity-toggle aria-expanded="true" aria-controls="activity-heatmap-body" aria-label="Hide activity heat map"
-              class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-cyan-300 ring-1 ring-slate-700 transition hover:bg-slate-800 hover:text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
-        <svg class="activity-toggle-chevron h-4 w-4" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 12.5 5-5 5 5"/></svg>
-      </button>
+      <div class="flex items-center gap-2" data-activity-header-actions>
+        <label class="activity-year-select-wrap">
+          <span class="sr-only">Year</span>
+          <select class="activity-year-select block" data-activity-year aria-label="Activity year">
+            {% for year in activity_years %}<option value="{{ year }}" {% if year == activity_year %}selected{% endif %}>{{ year }}</option>{% endfor %}
+          </select>
+        </label>
+        <button type="button" data-activity-toggle aria-expanded="true" aria-controls="activity-heatmap-body" aria-label="Hide activity heat map"
+                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-cyan-300 ring-1 ring-slate-700 transition hover:bg-slate-800 hover:text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
+          <svg class="activity-toggle-chevron h-4 w-4" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 12.5 5-5 5 5"/></svg>
+        </button>
+      </div>
     </div>
     <div id="activity-heatmap-body" data-activity-body class="mt-3">
     <div class="activity-layout">
@@ -157,11 +179,6 @@
         </div>
       </div>
       <div class="activity-year-controls">
-        <label class="activity-year-select-wrap text-[10px] font-medium uppercase tracking-[.12em] text-slate-500">Year
-          <select class="activity-year-select mt-1 block" data-activity-year aria-label="Activity year">
-            {% for year in activity_years %}<option value="{{ year }}" {% if year == activity_year %}selected{% endif %}>{{ year }}</option>{% endfor %}
-          </select>
-        </label>
         <div>
           <p class="mb-1 hidden text-[10px] font-medium uppercase tracking-[.12em] text-slate-500 sm:block">Year</p>
           <div class="activity-year-list" data-activity-year-list role="listbox" aria-label="Activity year">
@@ -209,7 +226,9 @@
         <input id="mobile-date-filters" data-mobile-date-filter-toggle type="checkbox" aria-controls="mobile-date-filter-fields" class="peer sr-only lg:hidden">
         <label for="mobile-date-filters" class="flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-xs font-medium text-slate-400 peer-checked:[&>span:last-child]:rotate-180 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-slate-900 lg:hidden">
           <span>See all filters</span>
-          <span aria-hidden="true" class="text-blue-400 transition">⌄</span>
+          <span aria-hidden="true" class="corpus-disclosure-caret" data-disclosure-caret>
+            <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"/></svg>
+          </span>
         </label>
         <div id="mobile-date-filter-fields" data-date-filter-fields class="hidden gap-3 border-t border-slate-800 px-3 pb-3 pt-2 peer-checked:grid lg:contents lg:border-0 lg:p-0">
           <label class="block text-xs text-slate-500 lg:block">Source
@@ -284,7 +303,9 @@
       <input id="mobile-results-toggle" data-mobile-results-toggle type="checkbox" checked aria-controls="corpus-results-body" class="peer sr-only lg:hidden">
       <label for="mobile-results-toggle" class="flex cursor-pointer items-center justify-between rounded-xl bg-slate-950/95 px-4 py-3 text-sm font-semibold text-white peer-checked:rounded-b-none peer-checked:[&>span:last-child]:rotate-180 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-slate-900 lg:hidden">
         <span>Document results</span>
-        <span aria-hidden="true" class="text-blue-400 transition">⌄</span>
+        <span aria-hidden="true" class="corpus-disclosure-caret" data-disclosure-caret>
+          <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"/></svg>
+        </span>
       </label>
       <div id="corpus-results-body" data-corpus-results-body class="hidden min-w-0 flex-col peer-checked:flex lg:flex lg:min-h-0 lg:flex-1">
       <div data-corpus-results-toolbar class="flex shrink-0 flex-col gap-2 border-b border-blue-900/70 bg-slate-950/95 px-4 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
@@ -292,14 +313,14 @@
         <div data-corpus-results-controls class="flex flex-wrap items-center gap-2 [@media(max-height:600px)]:gap-[4px]">
           <span data-corpus-results-count class="operator-meta w-full text-xs sm:w-auto [@media(max-height:600px)]:hidden">{{ total_results }} matches · showing {{ result_page.start }}–{{ result_page.end }}</span>
           <label class="text-xs text-slate-500">Show
-            <select name="page_size" form="corpus-search-form" onchange="this.form.submit()"
+            <select name="page_size" form="corpus-search-form" data-focus-results data-results-page-size
                     class="ml-1 rounded-md bg-slate-900 px-1.5 py-1 text-xs text-slate-300 ring-1 ring-slate-700">
               {% for size in (20, 50, 100) %}
               <option value="{{ size }}" {% if size == result_page.page_size %}selected{% endif %}>{{ size }}</option>
               {% endfor %}
             </select>
           </label>
-          <a href="{{ sort_toggle_url }}"
+          <a href="{{ sort_toggle_url }}" data-focus-results
              aria-label="Show {{ 'oldest' if sort_order == 'desc' else 'newest' }} results first"
              title="Show {{ 'oldest' if sort_order == 'desc' else 'newest' }} first"
              class="inline-flex h-7 items-center gap-1 rounded-md bg-slate-900 px-2 text-xs text-slate-400 ring-1 ring-slate-700 hover:text-blue-300 hover:ring-blue-700">
@@ -313,7 +334,7 @@
         <div class="space-y-3">
           {% for document in results %}
           {% set matching_count = document.matching_entry_count if document.matching_entry_count is not none else (document.matching_entries(selected_tags, text_query, source) | length) %}
-          <article class="rounded-xl bg-slate-900 p-4 ring-1 ring-slate-800 transition hover:ring-blue-500/40">
+          <article data-corpus-result class="rounded-xl bg-slate-900 p-4 ring-1 ring-slate-800 transition hover:ring-blue-500/40">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0">
                 <a href="{{ url_for('hfl_document', relative_path=document.relative_path) }}" class="block transition hover:text-blue-300">
@@ -364,11 +385,11 @@
         {% endif %}
         <nav class="mt-4 flex items-center justify-between border-t border-blue-900/50 pt-3 text-xs" aria-label="Corpus result pages">
           {% if result_page.has_previous %}
-          <a class="rounded-md bg-slate-900 px-3 py-1.5 text-blue-300 ring-1 ring-slate-700 hover:ring-blue-600" href="{{ previous_page_url }}">← Previous</a>
+          <a data-focus-results class="rounded-md bg-slate-900 px-3 py-1.5 text-blue-300 ring-1 ring-slate-700 hover:ring-blue-600" href="{{ previous_page_url }}">← Previous</a>
           {% else %}<span></span>{% endif %}
           <span class="text-slate-500">Page {{ result_page.page }} of {{ result_page.total_pages }}</span>
           {% if result_page.has_next %}
-          <a class="rounded-md bg-slate-900 px-3 py-1.5 text-blue-300 ring-1 ring-slate-700 hover:ring-blue-600" href="{{ next_page_url }}">Next →</a>
+          <a data-focus-results class="rounded-md bg-slate-900 px-3 py-1.5 text-blue-300 ring-1 ring-slate-700 hover:ring-blue-600" href="{{ next_page_url }}">Next →</a>
           {% else %}<span></span>{% endif %}
         </nav>
       </div>
@@ -535,6 +556,15 @@
 
 <script>
 (() => {
+  const activityStateKey = 'hfl-corpus:activity-expanded';
+  const readActivityState = () => {
+    try { return window.sessionStorage.getItem(activityStateKey); }
+    catch (error) { return null; }
+  };
+  const writeActivityState = expanded => {
+    try { window.sessionStorage.setItem(activityStateKey, String(expanded)); }
+    catch (error) { /* Storage can be unavailable in private contexts. */ }
+  };
   const syncYearState = value => {
     const pageUrl = new URL(window.location.href);
     pageUrl.searchParams.set('activity_year', value);
@@ -600,6 +630,16 @@
     const activityController = new AbortController();
     panel.activityAbortController = activityController;
     let menuTrigger = null;
+
+    const setActivityExpanded = expanded => {
+      toggle.setAttribute('aria-expanded', String(expanded));
+      toggle.setAttribute('aria-label', `${expanded ? 'Hide' : 'Show'} activity heat map`);
+      body.hidden = !expanded;
+    };
+    const storedActivityState = readActivityState();
+    if (storedActivityState !== null) {
+      setActivityExpanded(storedActivityState === 'true');
+    }
 
     const closeDayMenu = (restoreFocus = false) => {
       if (menu.hidden) return;
@@ -682,42 +722,120 @@
     yearOptions.forEach(option => option.addEventListener('click', () => {
       if (option.getAttribute('aria-selected') !== 'true') loadYear(panel, option.dataset.activityYearOption);
     }));
-    if (yearList && window.matchMedia('(min-width: 640px)').matches) {
-      const selectedYear = yearList.querySelector('[aria-selected="true"]');
-      if (selectedYear) {
-        yearList.scrollTop = Math.max(
+    const centerSelectedYear = () => {
+      if (body.hidden || !yearList || !window.matchMedia('(min-width: 640px)').matches) return;
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const selectedYear = yearList.querySelector('[aria-selected="true"]');
+          if (!selectedYear) return;
+          const listRect = yearList.getBoundingClientRect();
+          const selectedRect = selectedYear.getBoundingClientRect();
+          yearList.scrollTop = Math.max(
+            0,
+            yearList.scrollTop + selectedRect.top - listRect.top
+              - (yearList.clientHeight - selectedRect.height) / 2,
+          );
+        });
+      });
+    };
+    const centerSelectedDay = () => {
+      if (body.hidden) return;
+      window.requestAnimationFrame(() => {
+        const selectedDay = panel.querySelector('[data-activity-day][data-selected="true"]');
+        const isMobile = window.matchMedia('(max-width: 639px)').matches;
+        const activeDays = interactiveDays.filter(day => day.dataset.level !== '0');
+        const target = selectedDay || (isMobile
+          ? panel.querySelector('[data-activity-day][data-today="true"]')
+            || activeDays.at(-1)
+            || interactiveDays.at(-1)
+          : null);
+        const week = target?.closest('[data-activity-week]');
+        if (!week) return;
+        scroll.scrollLeft = Math.max(
           0,
-          selectedYear.offsetTop - (yearList.clientHeight - selectedYear.offsetHeight) / 2,
+          week.offsetLeft - (scroll.clientWidth - week.offsetWidth) / 2,
         );
-      }
-    }
+      });
+    };
+    centerSelectedYear();
+    centerSelectedDay();
+    window.addEventListener('pageshow', centerSelectedYear, {signal: activityController.signal});
     toggle.addEventListener('click', () => {
       const expanded = toggle.getAttribute('aria-expanded') === 'true';
       closeDayMenu();
-      toggle.setAttribute('aria-expanded', String(!expanded));
-      toggle.setAttribute('aria-label', `${expanded ? 'Show' : 'Hide'} activity heat map`);
-      body.hidden = expanded;
-    });
-
-    window.requestAnimationFrame(() => {
-      const selectedDay = panel.querySelector('[data-activity-day][data-selected="true"]');
-      const isMobile = window.matchMedia('(max-width: 639px)').matches;
-      const activeDays = interactiveDays.filter(day => day.dataset.level !== '0');
-      const target = selectedDay || (isMobile
-        ? panel.querySelector('[data-activity-day][data-today="true"]')
-          || activeDays.at(-1)
-          || interactiveDays.at(-1)
-        : null);
-      const week = target?.closest('[data-activity-week]');
-      if (!week) return;
-      scroll.scrollLeft = Math.max(
-        0,
-        week.offsetLeft - (scroll.clientWidth - week.offsetWidth) / 2,
-      );
+      const nextExpanded = !expanded;
+      setActivityExpanded(nextExpanded);
+      writeActivityState(nextExpanded);
+      if (nextExpanded) {
+        centerSelectedYear();
+        centerSelectedDay();
+      }
     });
   };
 
   initActivityPanel(document.querySelector('[data-activity-panel]'));
+})();
+</script>
+
+<script>
+(() => {
+  const stateKeys = {
+    filters: 'hfl-corpus:filters-expanded',
+    results: 'hfl-corpus:results-expanded',
+    focusResults: 'hfl-corpus:focus-results',
+  };
+  const readState = key => {
+    try { return window.sessionStorage.getItem(key); }
+    catch (error) { return null; }
+  };
+  const writeState = (key, value) => {
+    try { window.sessionStorage.setItem(key, String(value)); }
+    catch (error) { /* Storage can be unavailable in private contexts. */ }
+  };
+  const removeState = key => {
+    try { window.sessionStorage.removeItem(key); }
+    catch (error) { /* Storage can be unavailable in private contexts. */ }
+  };
+  const restoreDisclosure = (toggle, key) => {
+    if (!toggle) return;
+    const stored = readState(key);
+    if (stored !== null) toggle.checked = stored === 'true';
+    toggle.addEventListener('change', () => writeState(key, toggle.checked));
+  };
+
+  const filtersToggle = document.querySelector('[data-mobile-date-filter-toggle]');
+  const resultsToggle = document.querySelector('[data-mobile-results-toggle]');
+  restoreDisclosure(filtersToggle, stateKeys.filters);
+  restoreDisclosure(resultsToggle, stateKeys.results);
+
+  const markResultsForFocus = () => writeState(stateKeys.focusResults, true);
+  const searchForm = document.querySelector('[data-index-search-panel]');
+  searchForm?.addEventListener('submit', markResultsForFocus);
+  document.querySelectorAll('a[data-focus-results]').forEach(control => {
+    control.addEventListener('click', markResultsForFocus);
+  });
+  document.querySelector('[data-results-page-size]')?.addEventListener('change', event => {
+    markResultsForFocus();
+    event.currentTarget.form?.requestSubmit();
+  });
+
+  if (readState(stateKeys.focusResults) === 'true') {
+    removeState(stateKeys.focusResults);
+    window.addEventListener('pageshow', () => {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const firstResult = document.querySelector('[data-corpus-result]');
+          const target = resultsToggle?.checked
+            ? firstResult
+            : document.querySelector('[data-corpus-results]');
+          target?.scrollIntoView({
+            behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+            block: 'center',
+          });
+        });
+      });
+    }, {once: true});
+  }
 })();
 </script>
 
