@@ -846,12 +846,14 @@ async def hfl_matches(
         visible_documents = (document,) if include_secrets else filter_documents(
             (document,), protected_tags
         )
-        matching_entries = (
-            visible_documents[0].matching_entries(
+        if not visible_documents:
+            matching_entries = ()
+        elif selected_tags or text_query or selected_source:
+            matching_entries = visible_documents[0].matching_entries(
                 selected_tags, text_query, selected_source
             )
-            if visible_documents else ()
-        )
+        else:
+            matching_entries = visible_documents[0].entries
         normalized_offset = max(0, offset)
         normalized_limit = min(max(1, limit), 20)
         entries = matching_entries[

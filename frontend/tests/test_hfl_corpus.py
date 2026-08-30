@@ -1375,14 +1375,27 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "await fetch(url" in response.text
     assert "panel.replaceWith(replacement)" in response.text
     assert "data-activity-day-menu" in response.text
-    assert "data-activity-menu-show" in response.text
     assert "data-activity-menu-create" in response.text
-    assert "No entries" not in response.text
-    assert "const canShowEntries = Boolean(documentUrl && count > 0)" in response.text
-    assert "showEntries.setAttribute('aria-disabled', String(!canShowEntries))" in response.text
+    assert "data-activity-menu-document" in response.text
+    assert "data-activity-menu-matches" in response.text
+    assert "data-activity-menu-matches-panel" in response.text
+    day_menu = response.text.split('data-activity-day-menu', 1)[1].split("</div>\n    </div>", 1)[0]
+    assert day_menu.index("Create entry") < day_menu.index("Show document")
+    assert day_menu.index("Show document") < day_menu.index("Matching entries")
+    assert "const hasDocument = Boolean(documentUrl && matchesUrl)" in response.text
+    assert "showDocument.setAttribute('aria-disabled', String(!hasDocument))" in response.text
+    assert "matchingEntries.disabled = !hasDocument" in response.text
+    assert "resetMatchingEntries()" in response.text
+    assert "matchingContent.dataset.loaded === 'true'" in response.text
+    assert "window.htmx?.process(matchingContent)" in response.text
     assert "openDayMenu(button)" in response.text
     assert "hfl:create-entry-for-date" in response.text
     assert 'data-document-url="http://testserver/hfl-corpus/document/2026-08-24.md"' in response.text
+    assert (
+        'data-matches-url="http://testserver/hfl-corpus/matches/2026-08-24.md?'
+        in selected_cell
+    )
+    assert "q=%23work" in selected_cell
     assert "form.elements.time.value = selectedDate ? ''" in response.text
     assert "successUrl.searchParams.set('date_from', savedActivityDate)" in response.text
     assert "const selectedDay = panel.querySelector('[data-activity-day][data-selected=\"true\"]')" in response.text
@@ -1873,6 +1886,57 @@ def test_matching_entry_endpoint_returns_at_most_20_rows(
     assert 'class="h-64' not in next_response.text
 
 
+def test_matching_entry_endpoint_returns_all_entries_without_filters(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    entries = (
+        CorpusEntry(
+            anchor="entry-one",
+            header="Entry one",
+            moment="First memory",
+            what_happened="First event",
+            tags=("work",),
+        ),
+        CorpusEntry(
+            anchor="entry-two",
+            header="Entry two",
+            moment="Second memory",
+            what_happened="Second event",
+            tags=("personal",),
+        ),
+    )
+    document = _document("2026-08-24.md", entry_count=2, entries=entries)
+    monkeypatch.setattr(hfl_routes.corpus_index, "get", lambda path: document)
+
+    response = authenticated_client.get(
+        "/hfl-corpus/matches/2026-08-24.md"
+    )
+
+    assert response.status_code == 200
+    assert response.text.count('data-matching-entry=') == 2
+    assert "First memory" in response.text
+    assert "Second memory" in response.text
+
+
+def test_matching_entry_endpoint_shows_empty_filtered_state(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document("2026-08-24.md", tags=("work",))
+    monkeypatch.setattr(hfl_routes.corpus_index, "get", lambda path: document)
+
+    response = authenticated_client.get(
+        "/hfl-corpus/matches/2026-08-24.md?q=%23personal"
+    )
+
+    assert response.status_code == 200
+    assert 'data-matching-entry=' not in response.text
+    assert "No entries match the current filters." in response.text
+
+
 def test_selected_cloud_tag_missing_from_top_counts_is_rendered_first_and_highlighted(
     authenticated_client, monkeypatch
 ):
@@ -2238,6 +2302,44 @@ def test_corpus_api_returns_bounded_matching_entries(
     assert payload["total"] == 25
     assert payload["offset"] == 20
     assert len(payload["entries"]) == 5
+
+
+def test_corpus_api_returns_all_matching_entries_without_filters(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.api as hfl_api
+
+    entries = (
+        CorpusEntry(
+            anchor="entry-one",
+            header="Entry one",
+            moment="First memory",
+            what_happened="First event",
+            tags=("work",),
+        ),
+        CorpusEntry(
+            anchor="entry-two",
+            header="Entry two",
+            moment="Second memory",
+            what_happened="Second event",
+            tags=("personal",),
+        ),
+    )
+    document = _document("2026-08-24.md", entry_count=2, entries=entries)
+    monkeypatch.setattr(hfl_api.corpus_index, "get", lambda path: document)
+
+    response = authenticated_client.get(
+        "/api/hfl/matches/2026-08-24.md",
+        headers={"Authorization": "Bearer frontend-test-hfl-api-token"},
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["total"] == 2
+    assert [entry["anchor"] for entry in payload["entries"]] == [
+        "entry-one",
+        "entry-two",
+    ]
 
 
 def test_corpus_api_exposes_only_safe_resolved_references(

@@ -356,11 +356,14 @@ async def hfl_api_matches(
     visible_document = document if include_secrets else filter_document(
         document, protected_tags
     )
-    entries = visible_document.matching_entries(
-        selected_tags,
-        text_query,
-        selected_source,
-    )
+    if selected_tags or text_query or selected_source:
+        entries = visible_document.matching_entries(
+            selected_tags,
+            text_query,
+            selected_source,
+        )
+    else:
+        entries = visible_document.entries
     normalized_offset = max(0, offset)
     normalized_limit = min(max(1, limit), 20)
     return {

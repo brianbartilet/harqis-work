@@ -1,4 +1,7 @@
 {% if offset == 0 %}<div class="h-64 space-y-3 overflow-y-auto">{% endif %}
+  {% if offset == 0 and not entries %}
+  <p class="rounded-lg bg-slate-900/80 px-3 py-4 text-center text-xs text-slate-500">No entries match the current filters.</p>
+  {% endif %}
   {% for entry in entries %}
   <a data-matching-entry="{{ entry.anchor }}"
      href="{{ url_for('hfl_document', relative_path=relative_path) }}{% if selected_tag %}?tag={{ selected_tag | urlencode }}{% endif %}#{{ entry.anchor }}"
