@@ -173,7 +173,6 @@
     <div class="activity-day-menu" data-activity-day-menu role="menu" aria-label="Day actions" hidden>
       <p class="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[.14em] text-cyan-400" data-activity-menu-date></p>
       <a class="activity-day-menu-action text-cyan-200" data-activity-menu-show role="menuitem">Show entries</a>
-      <span class="activity-day-menu-action activity-day-menu-disabled" data-activity-menu-empty role="menuitem" aria-disabled="true">No entries</span>
       <button type="button" class="activity-day-menu-action text-slate-200" data-activity-menu-create role="menuitem">Create entry</button>
     </div>
     <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500">
@@ -596,9 +595,8 @@
     const menu = panel.querySelector('[data-activity-day-menu]');
     const menuDate = menu?.querySelector('[data-activity-menu-date]');
     const showEntries = menu?.querySelector('[data-activity-menu-show]');
-    const noEntries = menu?.querySelector('[data-activity-menu-empty]');
     const createEntry = menu?.querySelector('[data-activity-menu-create]');
-    if (!scroll || !year || !toggle || !body || !menu || !menuDate || !showEntries || !noEntries || !createEntry) return;
+    if (!scroll || !year || !toggle || !body || !menu || !menuDate || !showEntries || !createEntry) return;
     const activityController = new AbortController();
     panel.activityAbortController = activityController;
     let menuTrigger = null;
@@ -638,13 +636,15 @@
         weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
       })} · ${count} ${count === 1 ? 'entry' : 'entries'}`;
       const documentUrl = button.dataset.documentUrl;
-      showEntries.hidden = !documentUrl;
-      noEntries.hidden = Boolean(documentUrl);
-      if (documentUrl) showEntries.href = documentUrl;
+      const canShowEntries = Boolean(documentUrl && count > 0);
+      showEntries.classList.toggle('activity-day-menu-disabled', !canShowEntries);
+      showEntries.setAttribute('aria-disabled', String(!canShowEntries));
+      showEntries.tabIndex = canShowEntries ? 0 : -1;
+      if (canShowEntries) showEntries.href = documentUrl;
       else showEntries.removeAttribute('href');
       menu.hidden = false;
       positionDayMenu(button);
-      (documentUrl ? showEntries : createEntry).focus();
+      (canShowEntries ? showEntries : createEntry).focus();
     };
 
     interactiveDays.forEach((button, index) => {
@@ -699,21 +699,22 @@
       body.hidden = expanded;
     });
 
-    if (window.matchMedia('(max-width: 639px)').matches) {
-      window.requestAnimationFrame(() => {
-        const activeDays = interactiveDays.filter(day => day.dataset.level !== '0');
-        const target = panel.querySelector('[data-activity-day][data-selected="true"]')
-          || panel.querySelector('[data-activity-day][data-today="true"]')
+    window.requestAnimationFrame(() => {
+      const selectedDay = panel.querySelector('[data-activity-day][data-selected="true"]');
+      const isMobile = window.matchMedia('(max-width: 639px)').matches;
+      const activeDays = interactiveDays.filter(day => day.dataset.level !== '0');
+      const target = selectedDay || (isMobile
+        ? panel.querySelector('[data-activity-day][data-today="true"]')
           || activeDays.at(-1)
-          || interactiveDays.at(-1);
-        const week = target?.closest('[data-activity-week]');
-        if (!week) return;
-        scroll.scrollLeft = Math.max(
-          0,
-          week.offsetLeft - (scroll.clientWidth - week.offsetWidth) / 2,
-        );
-      });
-    }
+          || interactiveDays.at(-1)
+        : null);
+      const week = target?.closest('[data-activity-week]');
+      if (!week) return;
+      scroll.scrollLeft = Math.max(
+        0,
+        week.offsetLeft - (scroll.clientWidth - week.offsetWidth) / 2,
+      );
+    });
   };
 
   initActivityPanel(document.querySelector('[data-activity-panel]'));

@@ -1192,6 +1192,32 @@ def test_activity_counts_and_entry_date_search_use_occurrence_headers():
     ) == []
 
 
+def test_activity_counts_all_entries_in_a_canonical_daily_document():
+    entries = tuple(
+        CorpusEntry(
+            anchor=f"entry-{index}",
+            header=("2026-08-20 09:00" if index < 3 else f"Imported item {index}"),
+            moment=f"Memory {index}",
+            what_happened=f"Memory {index}",
+            tags=("work",),
+            source="notes",
+            text=f"Memory {index}",
+        )
+        for index in range(72)
+    )
+    document = _document(
+        "2026-08-20.md",
+        tags=("work",),
+        entry_count=72,
+        entries=entries,
+    )
+
+    assert activity_counts((document,), year=2026) == {"2026-08-20": 72}
+    assert activity_counts(
+        (document,), year=2026, query="#work", source="notes"
+    ) == {"2026-08-20": 72}
+
+
 def test_activity_calendar_includes_twenty_years_and_canonical_date_documents():
     documents = (
         _document("2026-08-24.md"),
@@ -1337,12 +1363,15 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "data-activity-day-menu" in response.text
     assert "data-activity-menu-show" in response.text
     assert "data-activity-menu-create" in response.text
-    assert "No entries" in response.text
+    assert "No entries" not in response.text
+    assert "const canShowEntries = Boolean(documentUrl && count > 0)" in response.text
+    assert "showEntries.setAttribute('aria-disabled', String(!canShowEntries))" in response.text
     assert "openDayMenu(button)" in response.text
     assert "hfl:create-entry-for-date" in response.text
     assert 'data-document-url="http://testserver/hfl-corpus/document/2026-08-24.md"' in response.text
     assert "form.elements.time.value = selectedDate ? ''" in response.text
     assert "successUrl.searchParams.set('date_from', savedActivityDate)" in response.text
+    assert "const selectedDay = panel.querySelector('[data-activity-day][data-selected=\"true\"]')" in response.text
     assert "Activity rhythm" not in response.text
     assert "data-result-tags" in response.text
 

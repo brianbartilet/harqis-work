@@ -571,21 +571,27 @@ def activity_calendar_years(
     return tuple(range(current_year, current_year - max(1, span), -1))
 
 
+def _dated_document_date(document: CorpusDocument) -> date | None:
+    """Return the day represented by a canonical root-level corpus document."""
+    normalized = document.relative_path.replace("\\", "/").strip("/")
+    if "/" in normalized or not normalized.endswith(".md"):
+        return None
+    try:
+        return date.fromisoformat(normalized[:-3])
+    except ValueError:
+        return None
+
+
 def dated_document_paths(
     documents: tuple[CorpusDocument, ...],
 ) -> dict[str, str]:
     """Map canonical root-level YYYY-MM-DD documents to their relative paths."""
     paths: dict[str, str] = {}
     for document in documents:
-        normalized = document.relative_path.replace("\\", "/").strip("/")
-        if "/" in normalized or not normalized.endswith(".md"):
+        occurred = _dated_document_date(document)
+        if occurred is None:
             continue
-        value = normalized[:-3]
-        try:
-            date.fromisoformat(value)
-        except ValueError:
-            continue
-        paths[value] = document.relative_path
+        paths[occurred.isoformat()] = document.relative_path
     return paths
 
 
@@ -606,6 +612,13 @@ def activity_counts(
             if filtered
             else document.entries
         )
+        document_day = _dated_document_date(document)
+        if document_day is not None:
+            if document_day.year == year:
+                counts[document_day.isoformat()] += (
+                    len(entries) if filtered else document.entry_count
+                )
+            continue
         for entry in entries:
             occurred = entry_occurrence_date(entry)
             if occurred is not None and occurred.year == year:
