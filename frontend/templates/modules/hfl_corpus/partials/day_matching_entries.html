@@ -1,0 +1,21 @@
+{% if offset == 0 %}<div class="h-64 space-y-3 overflow-y-auto">{% endif %}
+  {% if offset == 0 and not matches %}
+  <p class="rounded-lg bg-slate-900/80 px-3 py-4 text-center text-xs text-slate-500">No entries match the current filters.</p>
+  {% endif %}
+  {% for relative_path, entry in matches %}
+  <a data-matching-entry="{{ entry.anchor }}"
+     href="{{ url_for('hfl_document', relative_path=relative_path) }}{% if selected_tag %}?tag={{ selected_tag | urlencode }}{% endif %}#{{ entry.anchor }}"
+     class="block rounded-lg bg-slate-900/80 p-3 transition hover:bg-slate-800 hover:ring-1 hover:ring-blue-700/70"
+     title="Open this entry in {{ relative_path.rsplit('/', 1)[-1] }}">
+    <p class="text-xs"><span class="font-semibold text-slate-300">Moment:</span> <span class="text-slate-400">{{ entry.moment or '—' }}</span></p>
+    <p class="mt-2 text-xs"><span class="font-semibold text-slate-300">What happened:</span> <span class="text-slate-400">{{ entry.what_happened or '—' }}</span></p>
+  </a>
+  {% endfor %}
+  {% if offset + (matches | length) < total %}
+  <button hx-get="{{ url_for('hfl_day_matches', activity_day=activity_day) }}?q={{ query | urlencode }}&source={{ source | urlencode }}&offset={{ offset + limit }}&limit={{ limit }}{% if show_secrets %}&show_secrets=true{% endif %}"
+          hx-target="this" hx-swap="outerHTML"
+          class="w-full rounded-md bg-blue-950/60 px-3 py-2 text-xs text-blue-300 ring-1 ring-blue-800/60 hover:bg-blue-900">
+    Load next {{ [limit, total - offset - (matches | length)] | min }}
+  </button>
+  {% endif %}
+{% if offset == 0 %}</div>{% endif %}

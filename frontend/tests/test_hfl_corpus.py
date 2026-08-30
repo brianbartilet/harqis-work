@@ -17,6 +17,7 @@ from modules.hfl_corpus.corpus import (
     CorpusIndex,
     activity_calendar_years,
     activity_counts,
+    activity_day_entries,
     activity_years,
     build_tree,
     common_sources,
@@ -1218,6 +1219,40 @@ def test_activity_counts_all_entries_in_a_canonical_daily_document():
     ) == {"2026-08-20": 72}
 
 
+def test_activity_day_entries_include_noncanonical_historical_documents():
+    historical = CorpusEntry(
+        anchor="historical-entry",
+        header="2023-01-04 09:30",
+        moment="Historical memory",
+        what_happened="An older event",
+        tags=("history",),
+        source="notes",
+    )
+    other_day = CorpusEntry(
+        anchor="other-entry",
+        header="2023-01-05 09:30",
+        moment="Other memory",
+        what_happened="Another event",
+        tags=("history",),
+        source="notes",
+    )
+    archive = _document(
+        "archive/import.md",
+        tags=("history",),
+        entry_count=2,
+        entries=(historical, other_day),
+    )
+
+    assert activity_day_entries(
+        (archive,), activity_day=date(2023, 1, 4)
+    ) == (("archive/import.md", historical),)
+    assert activity_day_entries(
+        (archive,),
+        activity_day=date(2023, 1, 4),
+        query="#missing",
+    ) == ()
+
+
 def test_activity_calendar_includes_twenty_years_and_canonical_date_documents():
     documents = (
         _document("2026-08-24.md"),
@@ -1382,9 +1417,10 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     day_menu = response.text.split('data-activity-day-menu', 1)[1].split("</div>\n    </div>", 1)[0]
     assert day_menu.index("Create entry") < day_menu.index("Show document")
     assert day_menu.index("Show document") < day_menu.index("Matching entries")
-    assert "const hasDocument = Boolean(documentUrl && matchesUrl)" in response.text
+    assert "const hasDocument = Boolean(documentUrl)" in response.text
+    assert "const canShowMatches = Boolean(matchesUrl && (hasDocument || count > 0))" in response.text
     assert "showDocument.setAttribute('aria-disabled', String(!hasDocument))" in response.text
-    assert "matchingEntries.disabled = !hasDocument" in response.text
+    assert "matchingEntries.disabled = !canShowMatches" in response.text
     assert "resetMatchingEntries()" in response.text
     assert "matchingContent.dataset.loaded === 'true'" in response.text
     assert "window.htmx?.process(matchingContent)" in response.text
@@ -1392,7 +1428,7 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "hfl:create-entry-for-date" in response.text
     assert 'data-document-url="http://testserver/hfl-corpus/document/2026-08-24.md"' in response.text
     assert (
-        'data-matches-url="http://testserver/hfl-corpus/matches/2026-08-24.md?'
+        'data-matches-url="http://testserver/hfl-corpus/day-matches/2026-08-24?'
         in selected_cell
     )
     assert "q=%23work" in selected_cell
@@ -1407,6 +1443,40 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "writeActivityState(nextExpanded)" in response.text
     assert "Activity rhythm" not in response.text
     assert "data-result-tags" in response.text
+
+
+def test_historical_counted_day_enables_matching_without_canonical_document(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    historical = CorpusEntry(
+        anchor="historical-entry",
+        header="2023-01-04 09:30",
+        moment="Historical memory",
+        what_happened="An older event",
+        tags=("history",),
+    )
+    archive = _document(
+        "archive/import.md",
+        tags=("history",),
+        entries=(historical,),
+    )
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (archive,))
+
+    response = authenticated_client.get("/hfl-corpus?activity_year=2023")
+
+    assert response.status_code == 200
+    historical_cell = response.text.split(
+        'data-activity-day="2023-01-04"', 1
+    )[1].split(">", 1)[0]
+    assert 'data-count="1"' in historical_cell
+    assert 'data-document-url=""' in historical_cell
+    assert (
+        "hfl-corpus/day-matches/2023-01-04"
+        in historical_cell
+    )
+    assert "matchingEntries.disabled = !canShowMatches" in response.text
 
 
 def test_corpus_search_uses_compact_date_controls(authenticated_client, monkeypatch):
@@ -1937,6 +2007,72 @@ def test_matching_entry_endpoint_shows_empty_filtered_state(
     assert "No entries match the current filters." in response.text
 
 
+def test_day_matching_endpoint_opens_entries_from_historical_documents(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    historical = CorpusEntry(
+        anchor="historical-entry",
+        header="2023-01-04 09:30",
+        moment="Historical memory",
+        what_happened="An older event",
+        tags=("history",),
+        source="notes",
+    )
+    archive = _document(
+        "archive/import.md",
+        tags=("history",),
+        entries=(historical,),
+    )
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (archive,))
+
+    response = authenticated_client.get(
+        "/hfl-corpus/day-matches/2023-01-04?q=%23history"
+    )
+
+    assert response.status_code == 200
+    assert 'data-matching-entry="historical-entry"' in response.text
+    assert (
+        "hfl-corpus/document/archive/import.md?tag=history#historical-entry"
+        in response.text
+    )
+
+
+def test_day_matching_endpoint_keeps_twenty_entry_pagination(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    entries = tuple(
+        CorpusEntry(
+            anchor=f"historical-{index}",
+            header="2023-01-04 09:30",
+            moment=f"Historical memory {index}",
+            what_happened="An older event",
+            tags=("history",),
+        )
+        for index in range(25)
+    )
+    archive = _document(
+        "archive/import.md",
+        tags=("history",),
+        entry_count=25,
+        entries=entries,
+    )
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (archive,))
+
+    response = authenticated_client.get(
+        "/hfl-corpus/day-matches/2023-01-04"
+    )
+
+    assert response.status_code == 200
+    assert response.text.count('data-matching-entry=') == 20
+    assert "day-matches/2023-01-04" in response.text
+    assert "offset=20" in response.text
+    assert "Load next 5" in response.text
+
+
 def test_selected_cloud_tag_missing_from_top_counts_is_rendered_first_and_highlighted(
     authenticated_client, monkeypatch
 ):
@@ -2342,6 +2478,37 @@ def test_corpus_api_returns_all_matching_entries_without_filters(
     ]
 
 
+def test_corpus_api_returns_day_matches_from_historical_documents(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.api as hfl_api
+
+    historical = CorpusEntry(
+        anchor="historical-entry",
+        header="2023-01-04 09:30",
+        moment="Historical memory",
+        what_happened="An older event",
+        tags=("history",),
+    )
+    archive = _document(
+        "archive/import.md",
+        tags=("history",),
+        entries=(historical,),
+    )
+    monkeypatch.setattr(hfl_api.corpus_index, "documents", lambda: (archive,))
+
+    response = authenticated_client.get(
+        "/api/hfl/day-matches/2023-01-04",
+        headers={"Authorization": "Bearer frontend-test-hfl-api-token"},
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["total"] == 1
+    assert payload["matches"][0]["relative_path"] == "archive/import.md"
+    assert payload["matches"][0]["entry"]["anchor"] == "historical-entry"
+
+
 def test_corpus_api_exposes_only_safe_resolved_references(
     authenticated_client, monkeypatch, tmp_path
 ):
@@ -2558,6 +2725,51 @@ def test_remote_client_reuses_and_closes_process_connection_pool():
         assert replacement is not first
     finally:
         remote_module.close_remote_http_client()
+
+
+def test_remote_client_loads_historical_day_matches(monkeypatch):
+    from modules.hfl_corpus.remote import RemoteCorpusClient
+
+    requests = []
+    payload = {
+        "matches": [{
+            "relative_path": "archive/import.md",
+            "entry": {
+                "anchor": "historical-entry",
+                "header": "2023-01-04 09:30",
+                "moment": "Historical memory",
+                "what_happened": "An older event",
+                "tags": ["history"],
+            },
+        }],
+        "total": 1,
+        "offset": 0,
+        "limit": 20,
+    }
+
+    def remote_get(url, **kwargs):
+        requests.append((url, kwargs["params"]))
+        return httpx.Response(
+            200,
+            json=payload,
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(
+        remote_module,
+        "_http_client",
+        lambda: SimpleNamespace(get=remote_get),
+    )
+
+    result = RemoteCorpusClient(
+        "http://canonical:8081", "secret"
+    ).day_matches(date(2023, 1, 4), query="#history")
+
+    assert requests[0][0].endswith("/api/hfl/day-matches/2023-01-04")
+    assert requests[0][1]["q"] == "#history"
+    assert result["total"] == 1
+    assert result["matches"][0][0] == "archive/import.md"
+    assert result["matches"][0][1].anchor == "historical-entry"
 
 
 def test_remote_client_builds_corpus_previewer_urls(monkeypatch):

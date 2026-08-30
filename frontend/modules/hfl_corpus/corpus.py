@@ -626,6 +626,37 @@ def activity_counts(
     return dict(sorted(counts.items()))
 
 
+def activity_day_entries(
+    documents: tuple[CorpusDocument, ...],
+    *,
+    activity_day: date,
+    query: str = "",
+    source: str = "",
+) -> tuple[tuple[str, CorpusEntry], ...]:
+    """Return matching entries and owning documents for one activity day."""
+    selected_tags, text_query = parse_search_query(query)
+    filtered = bool(selected_tags or text_query or source)
+    matches: list[tuple[str, CorpusEntry]] = []
+    for document in documents:
+        entries = (
+            document.matching_entries(selected_tags, text_query, source)
+            if filtered
+            else document.entries
+        )
+        document_day = _dated_document_date(document)
+        if document_day == activity_day:
+            matches.extend((document.relative_path, entry) for entry in entries)
+            continue
+        if document_day is not None:
+            continue
+        matches.extend(
+            (document.relative_path, entry)
+            for entry in entries
+            if entry_occurrence_date(entry) == activity_day
+        )
+    return tuple(matches)
+
+
 def _reference_markup(reference: "ReferenceLink") -> str:
     label = html.escape(reference.label, quote=False)
     href = html.escape(reference.href or "", quote=True)

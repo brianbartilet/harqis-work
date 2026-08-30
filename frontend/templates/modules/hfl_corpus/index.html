@@ -173,7 +173,7 @@
               <span class="activity-month" aria-hidden="true">{{ week.month }}</span>
               {% for day in week.days %}
                 {% if day.in_year %}
-                <button type="button" class="activity-day" data-activity-day="{{ day.date }}" data-level="{{ day.level }}" data-today="{{ 'true' if day.is_today else 'false' }}" data-selected="{{ 'true' if day.selected else 'false' }}" data-count="{{ day.count }}" data-document-url="{% if day.document_path %}{{ url_for('hfl_document', relative_path=day.document_path) }}{% endif %}" data-matches-url="{% if day.document_path %}{{ url_for('hfl_matches', relative_path=day.document_path) }}?q={{ query | urlencode }}&source={{ source | urlencode }}{% if show_secrets %}&show_secrets=true{% endif %}{% endif %}" aria-label="{{ day.label }}{% if day.is_future %} · Future date{% endif %}" aria-pressed="{{ 'true' if day.selected else 'false' }}" aria-haspopup="menu" aria-expanded="false" title="{{ day.label }}{% if day.is_future %} · Future date{% endif %}" {% if day.is_future %}disabled{% endif %}></button>
+                <button type="button" class="activity-day" data-activity-day="{{ day.date }}" data-level="{{ day.level }}" data-today="{{ 'true' if day.is_today else 'false' }}" data-selected="{{ 'true' if day.selected else 'false' }}" data-count="{{ day.count }}" data-document-url="{% if day.document_path %}{{ url_for('hfl_document', relative_path=day.document_path) }}{% endif %}" data-matches-url="{{ url_for('hfl_day_matches', activity_day=day.date) }}?q={{ query | urlencode }}&source={{ source | urlencode }}{% if show_secrets %}&show_secrets=true{% endif %}" aria-label="{{ day.label }}{% if day.is_future %} · Future date{% endif %}" aria-pressed="{{ 'true' if day.selected else 'false' }}" aria-haspopup="menu" aria-expanded="false" title="{{ day.label }}{% if day.is_future %} · Future date{% endif %}" {% if day.is_future %}disabled{% endif %}></button>
                 {% else %}<span class="activity-day-blank" aria-hidden="true"></span>{% endif %}
               {% endfor %}
               <span class="activity-week-number" aria-hidden="true">{% if week.show_week %}{{ '%02d' | format(week.week) }}{% endif %}</span>
@@ -705,15 +705,16 @@
       })} · ${count} ${count === 1 ? 'entry' : 'entries'}`;
       const documentUrl = button.dataset.documentUrl;
       const matchesUrl = button.dataset.matchesUrl;
-      const hasDocument = Boolean(documentUrl && matchesUrl);
+      const hasDocument = Boolean(documentUrl);
+      const canShowMatches = Boolean(matchesUrl && (hasDocument || count > 0));
       showDocument.classList.toggle('activity-day-menu-disabled', !hasDocument);
       showDocument.setAttribute('aria-disabled', String(!hasDocument));
       showDocument.tabIndex = hasDocument ? 0 : -1;
       if (hasDocument) showDocument.href = documentUrl;
       else showDocument.removeAttribute('href');
-      matchingEntries.disabled = !hasDocument;
-      matchingEntries.classList.toggle('activity-day-menu-disabled', !hasDocument);
-      matchingEntries.setAttribute('aria-disabled', String(!hasDocument));
+      matchingEntries.disabled = !canShowMatches;
+      matchingEntries.classList.toggle('activity-day-menu-disabled', !canShowMatches);
+      matchingEntries.setAttribute('aria-disabled', String(!canShowMatches));
       menu.hidden = false;
       positionDayMenu(button);
       createEntry.focus();

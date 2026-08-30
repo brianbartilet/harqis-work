@@ -29,6 +29,7 @@ from modules.hfl_corpus.corpus import (
     CorpusPage,
     activity_calendar_years,
     activity_counts,
+    activity_day_entries,
     build_tree,
     corpus_index,
     dated_document_paths,
@@ -790,6 +791,81 @@ async def hfl_tree(request: Request, path: str = "", show_secrets: bool = False)
         request,
         "modules/hfl_corpus/partials/tree.html",
         {"tree": branch, "show_secrets": include_secrets},
+    )
+
+
+@router.get(
+    "/day-matches/{activity_day}",
+    response_class=HTMLResponse,
+    name="hfl_day_matches",
+)
+async def hfl_day_matches(
+    request: Request,
+    activity_day: date,
+    q: str = "",
+    source: str = "",
+    offset: int = 0,
+    limit: int = 20,
+    show_secrets: bool = False,
+):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    profile = get_profile_store().get()
+    protected_tags = normalize_secret_tags(profile.secret_tags)
+    include_secrets = bool(show_secrets and secrets_unlocked(request, profile))
+    if _uses_remote_corpus():
+        try:
+            match_page = await asyncio.to_thread(
+                RemoteCorpusClient.from_settings().day_matches,
+                activity_day,
+                query=q,
+                source=source,
+                offset=offset,
+                limit=limit,
+                include_secrets=include_secrets,
+                secret_tags=protected_tags,
+            )
+        except RemoteCorpusError as exc:
+            return HTMLResponse(str(exc), status_code=502)
+        matches = match_page["matches"]
+        total = match_page["total"]
+        normalized_offset = match_page["offset"]
+        normalized_limit = match_page["limit"]
+    else:
+        view = corpus_view_cache.get(
+            corpus_index.documents(),
+            include_secrets=include_secrets,
+            secret_tags=protected_tags,
+        )
+        selected_source = normalize_source(source, view.sources)
+        all_matches = activity_day_entries(
+            view.documents,
+            activity_day=activity_day,
+            query=q,
+            source=selected_source,
+        )
+        normalized_offset = max(0, offset)
+        normalized_limit = min(max(1, limit), 20)
+        matches = all_matches[
+            normalized_offset: normalized_offset + normalized_limit
+        ]
+        total = len(all_matches)
+    selected_tags, _ = parse_search_query(q)
+    return templates.TemplateResponse(
+        request,
+        "modules/hfl_corpus/partials/day_matching_entries.html",
+        {
+            "activity_day": activity_day,
+            "matches": matches,
+            "total": total,
+            "offset": normalized_offset,
+            "limit": normalized_limit,
+            "query": q,
+            "source": source,
+            "selected_tag": selected_tags[0] if len(selected_tags) == 1 else "",
+            "show_secrets": include_secrets,
+        },
     )
 
 

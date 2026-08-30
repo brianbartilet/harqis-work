@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -416,6 +416,43 @@ class RemoteCorpusClient:
         except (KeyError, TypeError, ValueError) as exc:
             raise RemoteCorpusError(
                 "Canonical HFL corpus returned invalid matching entries"
+            ) from exc
+
+    def day_matches(
+        self,
+        activity_day: date,
+        *,
+        query: str,
+        source: str = "",
+        offset: int = 0,
+        limit: int = 20,
+        include_secrets: bool = False,
+        secret_tags: tuple[str, ...] = (),
+    ) -> dict[str, Any]:
+        try:
+            payload = self._get(
+                f"/day-matches/{activity_day.isoformat()}",
+                params={
+                    "q": query,
+                    "source": source,
+                    "offset": offset,
+                    "limit": limit,
+                    "include_secrets": str(include_secrets).lower(),
+                    "secret_tags": ",".join(secret_tags),
+                },
+            ).json()
+            return {
+                "matches": tuple(
+                    (str(item["relative_path"]), _entry(item["entry"]))
+                    for item in payload["matches"]
+                ),
+                "total": int(payload["total"]),
+                "offset": int(payload["offset"]),
+                "limit": int(payload["limit"]),
+            }
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RemoteCorpusError(
+                "Canonical HFL corpus returned invalid day matching entries"
             ) from exc
 
     def document(

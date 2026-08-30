@@ -8,7 +8,7 @@ import hmac
 import logging
 from dataclasses import replace
 from dataclasses import asdict
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
@@ -20,6 +20,7 @@ from modules.hfl_corpus.corpus import (
     CorpusDocument,
     activity_calendar_years,
     activity_counts,
+    activity_day_entries,
     corpus_index,
     dated_document_paths,
     find_tree_node,
@@ -374,6 +375,45 @@ async def hfl_api_matches(
             ]
         ],
         "total": len(entries),
+        "offset": normalized_offset,
+        "limit": normalized_limit,
+    }
+
+
+@router.get("/day-matches/{activity_day}")
+async def hfl_api_day_matches(
+    request: Request,
+    activity_day: date,
+    q: str = "",
+    source: str = "",
+    offset: int = 0,
+    limit: int = 20,
+    include_secrets: bool = False,
+    secret_tags: str = "",
+):
+    protected_tags = _protected_tags(secret_tags)
+    view = corpus_view_cache.get(
+        corpus_index.documents(),
+        include_secrets=include_secrets,
+        secret_tags=protected_tags,
+    )
+    selected_source = normalize_source(source, view.sources)
+    matches = activity_day_entries(
+        view.documents,
+        activity_day=activity_day,
+        query=q,
+        source=selected_source,
+    )
+    normalized_offset = max(0, offset)
+    normalized_limit = min(max(1, limit), 20)
+    return {
+        "matches": [
+            {"relative_path": relative_path, "entry": asdict(entry)}
+            for relative_path, entry in matches[
+                normalized_offset: normalized_offset + normalized_limit
+            ]
+        ],
+        "total": len(matches),
         "offset": normalized_offset,
         "limit": normalized_limit,
     }
