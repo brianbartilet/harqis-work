@@ -87,25 +87,44 @@ class CorpusDocument:
         selected_tags: str | tuple[str, ...],
         phrase: str = "",
         source: str = "",
+        occurrence_from: date | None = None,
+        occurrence_to: date | None = None,
     ) -> tuple[CorpusEntry, ...]:
         needles = _tag_needles(selected_tags)
         text_needle = (phrase or "").strip().casefold()
         source_needle = (source or "").strip().casefold()
-        if not needles and not text_needle and not source_needle:
+        if (
+            not needles
+            and not text_needle
+            and not source_needle
+            and occurrence_from is None
+            and occurrence_to is None
+        ):
             return ()
-        return tuple(
-            entry
-            for entry in self.entries
-            if all(
+        matches = []
+        for entry in self.entries:
+            if not all(
                 any(needle in tag.casefold() for tag in entry.tags)
                 for needle in needles
-            )
-            and (not text_needle or text_needle in entry.text.casefold())
-            and (
-                not source_needle
-                or entry.source.strip().casefold() == source_needle
-            )
-        )
+            ):
+                continue
+            if text_needle and text_needle not in entry.text.casefold():
+                continue
+            if (
+                source_needle
+                and entry.source.strip().casefold() != source_needle
+            ):
+                continue
+            if occurrence_from is not None or occurrence_to is not None:
+                occurred = entry_occurrence_date(entry)
+                if occurred is None:
+                    continue
+                if occurrence_from is not None and occurred < occurrence_from:
+                    continue
+                if occurrence_to is not None and occurred > occurrence_to:
+                    continue
+            matches.append(entry)
+        return tuple(matches)
 
     def first_matching_entry_anchor(self, tag: str) -> str:
         normalized = tag.strip().lstrip("#").casefold()
@@ -515,6 +534,56 @@ def parse_date(value: str | None) -> date | None:
         return None
 
 
+def entry_occurrence_date(entry: CorpusEntry) -> date | None:
+    """Return the canonical occurrence date encoded in an entry heading."""
+    value = entry.header.strip()
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def activity_years(documents: tuple[CorpusDocument, ...]) -> tuple[int, ...]:
+    """Return descending years containing at least one dated visible entry."""
+    return tuple(
+        sorted(
+            {
+                occurred.year
+                for document in documents
+                for entry in document.entries
+                if (occurred := entry_occurrence_date(entry)) is not None
+            },
+            reverse=True,
+        )
+    )
+
+
+def activity_counts(
+    documents: tuple[CorpusDocument, ...],
+    *,
+    year: int,
+    query: str = "",
+    source: str = "",
+) -> dict[str, int]:
+    """Count visible entries by occurrence day for the requested filter scope."""
+    selected_tags, text_query = parse_search_query(query)
+    filtered = bool(selected_tags or text_query or source)
+    counts: Counter[str] = Counter()
+    for document in documents:
+        entries = (
+            document.matching_entries(selected_tags, text_query, source)
+            if filtered
+            else document.entries
+        )
+        for entry in entries:
+            occurred = entry_occurrence_date(entry)
+            if occurred is not None and occurred.year == year:
+                counts[occurred.isoformat()] += 1
+    return dict(sorted(counts.items()))
+
+
 def _reference_markup(reference: "ReferenceLink") -> str:
     label = html.escape(reference.label, quote=False)
     href = html.escape(reference.href or "", quote=True)
@@ -670,7 +739,10 @@ def search_documents(
 ) -> list[CorpusDocument]:
     tag_needles, text_needle = parse_search_query(query)
     source_needle = (source or "").strip()
-    if date_from or date_to:
+    entry_from = entry_to = None
+    if date_field == "entry":
+        entry_from, entry_to = parse_date(date_from), parse_date(date_to)
+    elif date_from or date_to:
         if date_field == "updated":
             updated_from, updated_to = date_from, date_to
         else:
@@ -680,6 +752,17 @@ def search_documents(
 
     results: list[CorpusDocument] = []
     for document in documents:
+        if entry_from or entry_to:
+            if not document.matching_entries(
+                tag_needles,
+                text_needle,
+                source_needle,
+                entry_from,
+                entry_to,
+            ):
+                continue
+            results.append(document)
+            continue
         if source_needle and not document.matching_entries(
             tag_needles,
             text_needle,

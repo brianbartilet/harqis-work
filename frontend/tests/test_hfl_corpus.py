@@ -15,6 +15,8 @@ from modules.hfl_corpus.corpus import (
     CorpusDocument,
     CorpusEntry,
     CorpusIndex,
+    activity_counts,
+    activity_years,
     build_tree,
     common_sources,
     common_tags,
@@ -1125,6 +1127,171 @@ def test_source_filter_requires_query_and_source_on_the_same_entry():
     assert matching.matching_entries((), "", "BROWSING") == (browsing,)
 
 
+def test_activity_counts_and_entry_date_search_use_occurrence_headers():
+    first = CorpusEntry(
+        anchor="first",
+        header="2026-01-05 09:30",
+        moment="First memory",
+        what_happened="Worked on the corpus",
+        tags=("work",),
+        source="notes",
+        text="First corpus memory",
+    )
+    second = CorpusEntry(
+        anchor="second",
+        header="2026-01-05 18:00:00",
+        moment="Second memory",
+        what_happened="Reviewed the corpus",
+        tags=("work",),
+        source="git",
+        text="Second corpus memory",
+    )
+    historical = CorpusEntry(
+        anchor="historical",
+        header="2025-12-31",
+        moment="Historical memory",
+        what_happened="Closed the year",
+        tags=("personal",),
+        source="notes",
+        text="Historical memory",
+    )
+    malformed = CorpusEntry(
+        anchor="malformed",
+        header="Undated entry",
+        moment="Undated memory",
+        what_happened="Missing a canonical date",
+        tags=("work",),
+        source="notes",
+        text="Undated memory",
+    )
+    document = _document(
+        "mixed.md",
+        tags=("work", "personal"),
+        entry_count=4,
+        entries=(first, second, historical, malformed),
+    )
+
+    assert activity_years((document,)) == (2026, 2025)
+    assert activity_counts((document,), year=2026) == {"2026-01-05": 2}
+    assert activity_counts(
+        (document,), year=2026, query="#work", source="notes"
+    ) == {"2026-01-05": 1}
+    assert search_documents(
+        (document,),
+        date_field="entry",
+        date_from="2026-01-05",
+        date_to="2026-01-05",
+    ) == [document]
+    assert search_documents(
+        (document,),
+        date_field="entry",
+        date_from="2026-01-06",
+        date_to="2026-01-06",
+    ) == []
+
+
+def test_activity_heatmap_covers_leap_day_and_iso_week_boundaries():
+    import modules.hfl_corpus.router as hfl_routes
+
+    heatmap = hfl_routes._activity_heatmap(
+        2020,
+        {"2020-02-29": 3},
+        selected_day=datetime(2020, 2, 29).date(),
+    )
+    days = [
+        day
+        for week in heatmap["weeks"]
+        for day in week["days"]
+        if day["in_year"]
+    ]
+
+    assert len(days) == 366
+    assert heatmap["weeks"][0]["week"] == 1
+    assert heatmap["weeks"][-1]["week"] == 53
+    leap_day = next(day for day in days if day["date"] == "2020-02-29")
+    assert leap_day["count"] == 3
+    assert leap_day["selected"] is True
+
+
+def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    matching = _document(
+        "matching.md",
+        tags=("work",),
+        entry_count=2,
+        entries=(
+            CorpusEntry(
+                anchor="morning",
+                header="2026-08-24 09:00",
+                moment="Morning work",
+                what_happened="Started the work",
+                tags=("work",),
+                source="notes",
+                text="Morning work",
+            ),
+            CorpusEntry(
+                anchor="evening",
+                header="2026-08-24 18:30",
+                moment="Evening work",
+                what_happened="Finished the work",
+                tags=("work",),
+                source="notes",
+                text="Evening work",
+            ),
+        ),
+    )
+    other = _document(
+        "other.md",
+        tags=("personal",),
+        entries=(
+            CorpusEntry(
+                anchor="other",
+                header="2025-03-02 12:00",
+                moment="Other memory",
+                what_happened="Did something else",
+                tags=("personal",),
+                source="notes",
+                text="Other memory",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        hfl_routes.corpus_index,
+        "documents",
+        lambda: (matching, other),
+    )
+
+    response = authenticated_client.get(
+        "/hfl-corpus?activity_year=2026&q=%23work&date_field=entry&"
+        "date_from=2026-08-24&date_to=2026-08-24"
+    )
+
+    assert response.status_code == 200
+    assert "data-activity-panel" in response.text
+    assert 'data-activity-year aria-label="Activity year"' in response.text
+    assert '<option value="2026" selected>2026</option>' in response.text
+    assert '<option value="2025"' in response.text
+    assert response.text.count('data-activity-day="') == 365
+    assert 'data-activity-day="2026-08-24"' in response.text
+    assert "Week 35 · 2 entries" in response.text
+    selected_cell = response.text.split(
+        'data-activity-day="2026-08-24"', 1
+    )[1].split(">", 1)[0]
+    assert 'aria-pressed="true"' in selected_cell
+    assert '<option value="entry" selected>Entry date</option>' in response.text
+    result_cards = response.text.split("data-corpus-results-scroll", 1)[1]
+    assert "matching.md" in result_cards
+    assert "other.md" not in result_cards
+    assert "ArrowDown: 7" in response.text
+    assert "scroll-snap-type:x proximity" in response.text
+    assert "week.offsetLeft - (scroll.clientWidth - week.offsetWidth) / 2" in response.text
+    assert "url.searchParams.set('date_field', 'entry')" in response.text
+    assert "select again to clear" in response.text
+
+
 def test_corpus_search_uses_compact_date_controls(authenticated_client, monkeypatch):
     import modules.hfl_corpus.router as hfl_routes
 
@@ -1813,6 +1980,54 @@ def test_corpus_api_returns_canonical_documents(authenticated_client, monkeypatc
     assert response.json()["results"][0]["entries"][0]["moment"] == "A useful moment"
 
 
+def test_corpus_api_returns_filtered_activity_without_date_range_bias(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.api as hfl_api
+
+    document = _document(
+        "activity.md",
+        tags=("work", "personal"),
+        entry_count=2,
+        entries=(
+            CorpusEntry(
+                anchor="work",
+                header="2026-02-02 08:00",
+                moment="Work entry",
+                what_happened="Worked",
+                tags=("work",),
+                source="notes",
+                text="Focused work",
+            ),
+            CorpusEntry(
+                anchor="personal",
+                header="2025-12-31 20:00",
+                moment="Personal entry",
+                what_happened="Rested",
+                tags=("personal",),
+                source="notes",
+                text="Personal time",
+            ),
+        ),
+    )
+    monkeypatch.setattr(hfl_api.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get(
+        "/api/hfl/documents?activity_year=2026&q=%23work&date_field=entry&"
+        "date_from=2026-02-03&date_to=2026-02-03",
+        headers={"Authorization": "Bearer frontend-test-hfl-api-token"},
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["results"] == []
+    assert payload["activity"] == {
+        "year": 2026,
+        "years": [2026, 2025],
+        "counts": {"2026-02-02": 1},
+    }
+
+
 def test_corpus_api_applies_owner_configured_secret_tags(
     authenticated_client, monkeypatch
 ):
@@ -1833,6 +2048,7 @@ def test_corpus_api_applies_owner_configured_secret_tags(
     assert response.status_code == 200
     assert response.json()["document_count"] == 0
     assert response.json()["results"] == []
+    assert response.json()["activity"]["counts"] == {}
 
 
 def test_corpus_api_paginates_results_and_returns_page_metadata(
@@ -2056,6 +2272,11 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
         "tag_cloud": [["hfl", 1]],
         "sources": ["browsing", "manual-entry"],
         "selected_source": "browsing",
+        "activity": {
+            "year": 2026,
+            "years": [2026, 2025],
+            "counts": {"2026-07-19": 3},
+        },
     }
     monkeypatch.setattr(
         remote_module,
@@ -2078,6 +2299,11 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
     assert result["has_next"] is False
     assert result["sources"] == ["browsing", "manual-entry"]
     assert result["selected_source"] == "browsing"
+    assert result["activity"] == {
+        "year": 2026,
+        "years": [2026, 2025],
+        "counts": {"2026-07-19": 3},
+    }
     assert result["documents"] == ()
     assert result["tree"]["files"][0].path is None
     assert result["tree"]["files"][0].relative_path == "2026-07-19.md"

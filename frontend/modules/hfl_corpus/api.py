@@ -8,6 +8,7 @@ import hmac
 import logging
 from dataclasses import replace
 from dataclasses import asdict
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
@@ -17,6 +18,8 @@ from pydantic import ValidationError
 from config import get_settings
 from modules.hfl_corpus.corpus import (
     CorpusDocument,
+    activity_counts,
+    activity_years,
     corpus_index,
     find_tree_node,
     paginate_documents,
@@ -220,8 +223,9 @@ async def hfl_api_documents(
     source: str = "",
     include_secrets: bool = False,
     secret_tags: str = "",
+    activity_year: int = 0,
 ):
-    if date_field not in {"created", "updated"}:
+    if date_field not in {"created", "updated", "entry"}:
         date_field = "created"
     if sort not in {"asc", "desc"}:
         sort = "desc"
@@ -235,6 +239,12 @@ async def hfl_api_documents(
     documents = view.documents
     sources = view.sources
     selected_source = normalize_source(source, sources)
+    visible_years = activity_years(documents)
+    selected_activity_year = (
+        activity_year
+        if activity_year in visible_years or activity_year == datetime.now().year
+        else datetime.now().year
+    )
     results = search_documents(
         documents,
         query=q,
@@ -281,6 +291,19 @@ async def hfl_api_documents(
         "tag_cloud": view.tag_cloud,
         "sources": sources,
         "selected_source": selected_source,
+        "activity": {
+            "year": selected_activity_year,
+            "years": sorted(
+                {datetime.now().year, *visible_years},
+                reverse=True,
+            ),
+            "counts": activity_counts(
+                documents,
+                year=selected_activity_year,
+                query=q,
+                source=selected_source,
+            ),
+        },
     }
     if compact:
         payload["tree"] = _tree_payload(shallow_tree(view.tree))

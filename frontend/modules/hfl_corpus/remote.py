@@ -282,6 +282,12 @@ class RemoteCorpusClient:
                 total_pages = int(payload["total_pages"])
                 has_previous = bool(payload["has_previous"])
                 has_next = bool(payload["has_next"])
+            activity = payload.get("activity") or {}
+            activity_year = int(
+                activity.get("year")
+                or params.get("activity_year")
+                or datetime.now().year
+            )
             return {
                 "documents": documents,
                 "tree": tree,
@@ -296,6 +302,17 @@ class RemoteCorpusClient:
                 "tag_cloud": [tuple(item) for item in payload.get("tag_cloud") or ()],
                 "sources": [str(source) for source in payload.get("sources") or ()],
                 "selected_source": str(payload.get("selected_source") or ""),
+                "activity": {
+                    "year": activity_year,
+                    "years": [
+                        int(year)
+                        for year in activity.get("years") or (datetime.now().year,)
+                    ],
+                    "counts": {
+                        str(day): int(count)
+                        for day, count in (activity.get("counts") or {}).items()
+                    },
+                },
             }
         except (KeyError, TypeError, ValueError) as exc:
             raise RemoteCorpusError("Canonical HFL corpus returned an invalid index") from exc

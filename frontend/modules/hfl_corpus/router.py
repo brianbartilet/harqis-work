@@ -5,8 +5,10 @@ import base64
 import html
 import json
 import logging
+import math
 import re
 from dataclasses import replace
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode
@@ -25,6 +27,8 @@ from pydantic import BaseModel, ValidationError
 from config import get_settings
 from modules.hfl_corpus.corpus import (
     CorpusPage,
+    activity_counts,
+    activity_years,
     build_tree,
     corpus_index,
     find_tree_node,
@@ -309,6 +313,7 @@ def _index_url(
     page: int = 1,
     page_size: int = 20,
     show_secrets: bool = False,
+    activity_year: int = 0,
 ) -> str:
     params = {}
     if query:
@@ -329,7 +334,74 @@ def _index_url(
         params["page_size"] = page_size
     if show_secrets:
         params["show_secrets"] = "true"
+    if activity_year and activity_year != datetime.now().year:
+        params["activity_year"] = activity_year
     return "/hfl-corpus" + (f"?{urlencode(params)}" if params else "")
+
+
+def _activity_level(count: int, peak: int) -> int:
+    if count <= 0 or peak <= 0:
+        return 0
+    return min(4, max(1, math.ceil(math.log1p(count) / math.log1p(peak) * 4)))
+
+
+def _activity_heatmap(
+    year: int,
+    counts: dict[str, int],
+    *,
+    selected_day: date | None = None,
+) -> dict[str, Any]:
+    """Build a Monday-first yearly activity grid with ISO week metadata."""
+    first = date(year, 1, 1)
+    last = date(year, 12, 31)
+    cursor = first - timedelta(days=first.weekday())
+    final = last + timedelta(days=6 - last.weekday())
+    today = date.today()
+    peak = max(counts.values(), default=0)
+    weeks = []
+    index = 0
+    while cursor <= final:
+        days = []
+        month_label = ""
+        for offset in range(7):
+            day = cursor + timedelta(days=offset)
+            in_year = day.year == year
+            count = counts.get(day.isoformat(), 0) if in_year else 0
+            if in_year and (day.day <= 7 or (day.month == 1 and not month_label)):
+                month_label = day.strftime("%b")
+            days.append(
+                {
+                    "date": day.isoformat(),
+                    "day": day.day,
+                    "count": count,
+                    "level": _activity_level(count, peak),
+                    "in_year": in_year,
+                    "is_today": day == today,
+                    "selected": day == selected_day,
+                    "label": (
+                        f"{day.strftime('%A, %d %B %Y')} · "
+                        f"Week {day.isocalendar().week} · "
+                        f"{count} {'entry' if count == 1 else 'entries'}"
+                    ),
+                }
+            )
+        iso_week = cursor.isocalendar().week
+        weeks.append(
+            {
+                "days": days,
+                "month": month_label,
+                "week": iso_week,
+                "show_week": index % 4 == 0 or iso_week == 1,
+            }
+        )
+        cursor += timedelta(days=7)
+        index += 1
+    return {
+        "year": year,
+        "weeks": weeks,
+        "peak": peak,
+        "total": sum(counts.values()),
+    }
 
 
 @router.get("", response_class=HTMLResponse)
@@ -349,11 +421,12 @@ async def hfl_corpus_page(
     created: bool = False,
     source: str = "",
     show_secrets: bool = False,
+    activity_year: int = 0,
 ):
     user, redirect = require_user(request)
     if redirect:
         return redirect
-    if date_field not in {"created", "updated"}:
+    if date_field not in {"created", "updated", "entry"}:
         date_field = "created"
     if sort not in {"asc", "desc"}:
         sort = "desc"
@@ -363,6 +436,17 @@ async def hfl_corpus_page(
             date_field, date_from, date_to = "updated", updated_from, updated_to
         elif created_from or created_to:
             date_field, date_from, date_to = "created", created_from, created_to
+    selected_activity_day = None
+    if date_field == "entry" and date_from and date_from == date_to:
+        try:
+            selected_activity_day = date.fromisoformat(date_from)
+        except ValueError:
+            pass
+    requested_activity_year = activity_year or (
+        selected_activity_day.year
+        if selected_activity_day is not None
+        else datetime.now().year
+    )
     profile = get_profile_store().get()
     protected_tags = normalize_secret_tags(profile.secret_tags)
     authorized = secrets_unlocked(request, profile)
@@ -383,6 +467,7 @@ async def hfl_corpus_page(
                     "page_size": str(page_size),
                     "include_secrets": str(include_secrets).lower(),
                     "secret_tags": ",".join(protected_tags),
+                    "activity_year": str(requested_activity_year),
                 },
             )
             documents = remote["documents"]
@@ -393,6 +478,7 @@ async def hfl_corpus_page(
             tag_cloud = remote["tag_cloud"]
             source_options = remote.get("sources", [])
             selected_source = remote.get("selected_source", "")
+            activity = remote["activity"]
             result_page = CorpusPage(
                 items=tuple(results),
                 page=remote["page"],
@@ -411,6 +497,11 @@ async def hfl_corpus_page(
             tag_cloud = []
             source_options = []
             selected_source = ""
+            activity = {
+                "year": datetime.now().year,
+                "years": [datetime.now().year],
+                "counts": {},
+            }
             result_page = paginate_documents((), page=page, page_size=page_size)
             remote_error = str(exc)
     else:
@@ -424,6 +515,26 @@ async def hfl_corpus_page(
         documents = view.documents
         source_options = view.sources
         selected_source = normalize_source(source, source_options)
+        visible_years = activity_years(documents)
+        selected_activity_year = (
+            requested_activity_year
+            if requested_activity_year in visible_years
+            or requested_activity_year == datetime.now().year
+            else datetime.now().year
+        )
+        activity = {
+            "year": selected_activity_year,
+            "years": sorted(
+                {datetime.now().year, *visible_years},
+                reverse=True,
+            ),
+            "counts": activity_counts(
+                documents,
+                year=selected_activity_year,
+                query=q,
+                source=selected_source,
+            ),
+        }
         tree = shallow_tree(view.tree)
         all_results = search_documents(
             documents,
@@ -453,6 +564,7 @@ async def hfl_corpus_page(
         sort=reverse_sort,
         page_size=result_page.page_size,
         show_secrets=include_secrets,
+        activity_year=activity["year"],
     )
     tag_options = []
     for tag, count in tag_cloud:
@@ -479,6 +591,7 @@ async def hfl_corpus_page(
                 sort=sort,
                 page_size=result_page.page_size,
                 show_secrets=include_secrets,
+                activity_year=activity["year"],
             ),
         })
     page_url_values = {
@@ -490,12 +603,18 @@ async def hfl_corpus_page(
         "sort": sort,
         "page_size": result_page.page_size,
         "show_secrets": include_secrets,
+        "activity_year": activity["year"],
     }
     previous_page_url = _index_url(
         **page_url_values, page=result_page.page - 1
     )
     next_page_url = _index_url(
         **page_url_values, page=result_page.page + 1
+    )
+    heatmap = _activity_heatmap(
+        int(activity["year"]),
+        dict(activity["counts"]),
+        selected_day=selected_activity_day,
     )
     return templates.TemplateResponse(
         request,
@@ -529,6 +648,14 @@ async def hfl_corpus_page(
             secrets_configured=bool(profile.secret_pin_hash),
             secrets_authorized=authorized,
             show_secrets=include_secrets,
+            activity_year=activity["year"],
+            activity_years=activity["years"],
+            activity_heatmap=heatmap,
+            selected_activity_day=(
+                selected_activity_day.isoformat()
+                if selected_activity_day is not None
+                else ""
+            ),
         ),
     )
 
