@@ -719,6 +719,7 @@
       matchingEntries.setAttribute('aria-disabled', String(!canShowMatches));
       menu.hidden = false;
       positionDayMenu(button);
+      if (canShowMatches) matchingEntries.click();
       createEntry.focus();
     };
 

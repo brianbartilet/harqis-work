@@ -14,10 +14,10 @@ from apps.ynab.references.dto.transaction import DtoSaveTransaction
 # These call the real Anthropic + YNAB APIs.
 # Place the PDF in workflows/finance/transactions/ before running.
 
-@pytest.mark.skip(reason="Manual integration test: requires local PDF plus real Anthropic and YNAB APIs")
+#@pytest.mark.skip(reason="Manual integration test: requires local PDF plus real Anthropic and YNAB APIs")
 def test__add_ynab_transactions_from_pdf_credit():
     add_ynab_transactions_from_pdf(
-        input_pdf="transaction_history_07062026_232941.pdf",
+        input_pdf="transaction_history_30082026_223950.pdf",
         ynab_budget_name="Daily Bankroll - SGD",
         ynab_account_name="DBS Vantage",
         split=True,

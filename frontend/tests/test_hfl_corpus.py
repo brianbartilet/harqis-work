@@ -1500,6 +1500,7 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "const canShowMatches = Boolean(matchesUrl && (hasDocument || count > 0))" in response.text
     assert "showDocument.setAttribute('aria-disabled', String(!hasDocument))" in response.text
     assert "matchingEntries.disabled = !canShowMatches" in response.text
+    assert "if (canShowMatches) matchingEntries.click()" in response.text
     assert "resetMatchingEntries()" in response.text
     assert "matchingContent.dataset.loaded === 'true'" in response.text
     assert "window.htmx?.process(matchingContent)" in response.text
