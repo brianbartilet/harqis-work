@@ -5,6 +5,12 @@
 <style>
   .activity-panel { --activity-cell:12px; --activity-gap:3px; border:1px solid rgba(30,64,175,.62); border-radius:1rem; background:linear-gradient(135deg,rgba(15,23,42,.98),rgba(8,47,73,.28)); box-shadow:inset 0 1px rgba(148,163,184,.04),0 14px 38px rgba(2,6,23,.2); }
   .activity-year-select { min-height:2.25rem; border:1px solid #334155; border-radius:.55rem; background:#020617; color:#dbeafe; padding:.4rem 2rem .4rem .65rem; font:650 .75rem/1 ui-monospace,SFMono-Regular,Consolas,monospace; color-scheme:dark; }
+  .activity-year-list { display:none; width:4.75rem; max-height:3.4rem; overflow-y:auto; border:1px solid #334155; border-radius:.55rem; background:#020617; padding:.2rem; scrollbar-color:#155e75 #0f172a; scrollbar-width:thin; }
+  .activity-year-option { display:block; width:100%; border-radius:.35rem; padding:.35rem .45rem; color:#94a3b8; font:650 .7rem/1 ui-monospace,SFMono-Regular,Consolas,monospace; text-align:center; }
+  .activity-year-option:hover { background:#0f172a; color:#e0f2fe; }
+  .activity-year-option[aria-selected="true"] { background:#164e63; color:#cffafe; }
+  .activity-toggle-chevron { transition:transform .15s ease; }
+  [data-activity-toggle][aria-expanded="false"] .activity-toggle-chevron { transform:rotate(-90deg); }
   .activity-chart-shell { display:flex; min-width:0; align-items:flex-start; gap:.5rem; }
   .activity-weekdays { display:grid; flex:0 0 1.55rem; grid-template-rows:14px repeat(7,var(--activity-cell)) 12px; gap:var(--activity-gap); color:#64748b; font:600 .56rem/var(--activity-cell) ui-monospace,SFMono-Regular,Consolas,monospace; text-align:right; }
   .activity-scroll { min-width:0; flex:1; overflow-x:auto; overflow-y:hidden; padding:0 2px .3rem; scrollbar-color:#155e75 #0f172a; scrollbar-width:thin; scroll-padding-inline:45%; }
@@ -28,6 +34,7 @@
   .activity-legend-cell[data-level="2"] { background:#0e7490; }
   .activity-legend-cell[data-level="3"] { background:#06b6d4; }
   .activity-legend-cell[data-level="4"] { border-color:#a5f3fc; background:#67e8f9; }
+  [data-result-tags] { min-height:2.875rem; max-height:2.875rem; overflow:hidden; align-content:flex-start; }
   @media (prefers-reduced-motion: reduce) {
     .activity-day { transition:none; }
   }
@@ -39,6 +46,11 @@
     .activity-day { border-radius:4px; }
   }
   @media (min-width: 640px) {
+    .activity-chart-shell { justify-content:center; }
+    .activity-scroll { flex:0 1 auto; }
+    .activity-year-select-wrap { display:none; }
+    .activity-year-list { display:block; }
+    [data-result-tags] { min-height:0; max-height:none; overflow:visible; }
     dialog[data-create-entry-dialog] {
       height: fit-content !important;
     }
@@ -92,23 +104,33 @@
   {% endif %}
 
   <section class="activity-panel mb-4 shrink-0 p-3 sm:p-4" data-activity-panel aria-labelledby="activity-title">
-    <div class="mb-3 flex items-start justify-between gap-3">
+    <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
         <p class="text-[10px] font-semibold uppercase tracking-[.18em] text-cyan-400">Memory signal</p>
-        <div class="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <h2 id="activity-title" class="text-sm font-semibold text-white">Activity rhythm</h2>
-          <p class="font-mono text-[10px] text-slate-500">{{ activity_heatmap.total }} matching {{ 'entry' if activity_heatmap.total == 1 else 'entries' }}</p>
-        </div>
+        <h2 id="activity-title" class="mt-0.5 text-sm font-semibold text-white">{{ activity_heatmap.total }} {{ 'entry' if activity_heatmap.total == 1 else 'entries' }}</h2>
       </div>
-      <label class="shrink-0 text-[10px] font-medium uppercase tracking-[.12em] text-slate-500">Year
-        <select class="activity-year-select mt-1 block" data-activity-year aria-label="Activity year">
-          {% for year in activity_years %}<option value="{{ year }}" {% if year == activity_year %}selected{% endif %}>{{ year }}</option>{% endfor %}
-        </select>
-      </label>
+      <div class="flex shrink-0 items-start gap-2">
+        <label class="activity-year-select-wrap text-[10px] font-medium uppercase tracking-[.12em] text-slate-500">Year
+          <select class="activity-year-select mt-1 block" data-activity-year aria-label="Activity year">
+            {% for year in activity_years %}<option value="{{ year }}" {% if year == activity_year %}selected{% endif %}>{{ year }}</option>{% endfor %}
+          </select>
+        </label>
+        <div>
+          <p class="mb-1 hidden text-[10px] font-medium uppercase tracking-[.12em] text-slate-500 sm:block">Year</p>
+          <div class="activity-year-list" data-activity-year-list role="listbox" aria-label="Activity year">
+            {% for year in activity_years %}<button type="button" class="activity-year-option" data-activity-year-option="{{ year }}" role="option" aria-selected="{{ 'true' if year == activity_year else 'false' }}">{{ year }}</button>{% endfor %}
+          </div>
+        </div>
+        <button type="button" data-activity-toggle aria-expanded="true" aria-controls="activity-heatmap-body" aria-label="Hide activity heat map"
+                class="mt-4 inline-flex h-9 w-9 items-center justify-center rounded-lg text-cyan-300 ring-1 ring-slate-700 transition hover:bg-slate-800 hover:text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 sm:mt-4">
+          <svg class="activity-toggle-chevron h-4 w-4" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 12.5 5-5 5 5"/></svg>
+        </button>
+      </div>
     </div>
+    <div id="activity-heatmap-body" data-activity-body class="mt-3">
     <div class="activity-chart-shell">
       <div class="activity-weekdays" aria-hidden="true">
-        <span></span><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span></span><span></span>
+        <span></span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span><span></span>
       </div>
       <div class="activity-scroll" data-activity-scroll tabindex="0" role="region" aria-label="{{ activity_year }} activity heatmap. Scroll horizontally to traverse weeks.">
         <div class="activity-grid" data-activity-grid>
@@ -129,6 +151,7 @@
     <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500">
       <p>{% if selected_activity_day %}<span class="text-amber-300">{{ selected_activity_day }}</span> selected · select again to clear{% else %}Select a day to filter document results{% endif %}</p>
       <div class="flex items-center gap-1" aria-label="Activity intensity from less to more"><span>Less</span>{% for level in range(5) %}<span class="activity-legend-cell" data-level="{{ level }}"></span>{% endfor %}<span>More</span></div>
+    </div>
     </div>
   </section>
 
@@ -276,8 +299,8 @@
 
             <div class="mt-3">
               <p class="text-xs font-medium text-slate-400">{{ document.entry_count | default(0) }} entries</p>
+              <div class="mt-2 flex flex-wrap items-center gap-1.5" data-result-tags aria-label="Document tags">
               {% if document.tag_counts %}
-              <div class="mt-2 flex flex-wrap items-center gap-1.5">
                 {% for tag, count in document.ordered_tag_counts(selected_tags) %}
                 {% set active = document.tag_matches(tag, selected_tags) %}
                 {% set tag_entry_anchor = document.first_matching_entry_anchor(tag) %}
@@ -287,8 +310,8 @@
                   <span>#{{ tag }}</span><span class="{% if active %}text-emerald-400{% else %}text-blue-500{% endif %}">{{ count }}</span>
                 </a>
                 {% endfor %}
-              </div>
               {% endif %}
+              </div>
             </div>
 
             {% if (selected_tags or text_query or source) and matching_count %}
@@ -485,12 +508,6 @@
 
 <script>
 (() => {
-  const panel = document.querySelector('[data-activity-panel]');
-  const scroll = panel?.querySelector('[data-activity-scroll]');
-  const year = panel?.querySelector('[data-activity-year]');
-  const days = Array.from(panel?.querySelectorAll('[data-activity-day]') || []);
-  if (!panel || !scroll || !year) return;
-
   const openDate = button => {
     const url = new URL(window.location.href);
     const selected = button.dataset.selected === 'true';
@@ -508,43 +525,106 @@
     window.location.assign(url);
   };
 
-  days.forEach((button, index) => {
-    button.addEventListener('click', () => openDate(button));
-    button.addEventListener('keydown', event => {
-      const movement = {
-        ArrowLeft: -1,
-        ArrowRight: 1,
-        ArrowUp: -7,
-        ArrowDown: 7,
-      }[event.key];
-      if (!movement) return;
-      event.preventDefault();
-      days[Math.min(days.length - 1, Math.max(0, index + movement))]?.focus();
+  const syncYearState = value => {
+    const pageUrl = new URL(window.location.href);
+    pageUrl.searchParams.set('activity_year', value);
+    pageUrl.searchParams.delete('page');
+    if (pageUrl.searchParams.get('date_field') === 'entry') {
+      pageUrl.searchParams.delete('date_field');
+      pageUrl.searchParams.delete('date_from');
+      pageUrl.searchParams.delete('date_to');
+    }
+    window.history.replaceState({}, '', pageUrl);
+    const hiddenYear = document.querySelector('input[name="activity_year"]');
+    if (hiddenYear) hiddenYear.value = value;
+    document.querySelectorAll('a[href^="/hfl-corpus"]').forEach(link => {
+      const linkUrl = new URL(link.href);
+      if (linkUrl.pathname !== '/hfl-corpus') return;
+      linkUrl.searchParams.set('activity_year', value);
+      link.href = `${linkUrl.pathname}${linkUrl.search}${linkUrl.hash}`;
     });
-  });
+  };
 
-  year.addEventListener('change', () => {
+  const loadYear = async (panel, value) => {
     const url = new URL(window.location.href);
-    url.searchParams.set('activity_year', year.value);
+    url.searchParams.set('activity_year', value);
     url.searchParams.delete('page');
     if (url.searchParams.get('date_field') === 'entry') {
       url.searchParams.delete('date_field');
       url.searchParams.delete('date_from');
       url.searchParams.delete('date_to');
     }
-    window.location.assign(url);
-  });
+    panel.setAttribute('aria-busy', 'true');
+    panel.querySelectorAll('[data-activity-year], [data-activity-year-option]').forEach(control => { control.disabled = true; });
+    try {
+      const response = await fetch(url, {headers: {'X-Requested-With': 'activity-heatmap'}});
+      if (!response.ok) throw new Error(`Activity request failed: ${response.status}`);
+      const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+      const replacement = page.querySelector('[data-activity-panel]');
+      if (!replacement) throw new Error('Activity panel missing from response');
+      panel.replaceWith(replacement);
+      syncYearState(value);
+      initActivityPanel(replacement);
+    } catch (error) {
+      window.location.assign(url);
+    }
+  };
 
-  window.requestAnimationFrame(() => {
-    const target = panel.querySelector('[data-activity-day][data-selected="true"]')
-      || panel.querySelector('[data-activity-day][data-today="true"]');
-    const week = target?.closest('[data-activity-week]');
-    if (!week) return;
-    scroll.scrollLeft = Math.max(
-      0,
-      week.offsetLeft - (scroll.clientWidth - week.offsetWidth) / 2,
-    );
-  });
+  const initActivityPanel = panel => {
+    if (!panel || panel.dataset.activityReady === 'true') return;
+    panel.dataset.activityReady = 'true';
+    const scroll = panel.querySelector('[data-activity-scroll]');
+    const year = panel.querySelector('[data-activity-year]');
+    const yearOptions = Array.from(panel.querySelectorAll('[data-activity-year-option]'));
+    const toggle = panel.querySelector('[data-activity-toggle]');
+    const body = panel.querySelector('[data-activity-body]');
+    const days = Array.from(panel.querySelectorAll('[data-activity-day]'));
+    if (!scroll || !year || !toggle || !body) return;
+
+    days.forEach((button, index) => {
+      button.addEventListener('click', () => openDate(button));
+      button.addEventListener('keydown', event => {
+        const movement = {
+          ArrowLeft: -1,
+          ArrowRight: 1,
+          ArrowUp: -7,
+          ArrowDown: 7,
+        }[event.key];
+        if (!movement) return;
+        event.preventDefault();
+        days[Math.min(days.length - 1, Math.max(0, index + movement))]?.focus();
+      });
+    });
+
+    year.addEventListener('change', () => loadYear(panel, year.value));
+    yearOptions.forEach(option => option.addEventListener('click', () => {
+      if (option.getAttribute('aria-selected') !== 'true') loadYear(panel, option.dataset.activityYearOption);
+    }));
+    toggle.addEventListener('click', () => {
+      const expanded = toggle.getAttribute('aria-expanded') === 'true';
+      toggle.setAttribute('aria-expanded', String(!expanded));
+      toggle.setAttribute('aria-label', `${expanded ? 'Show' : 'Hide'} activity heat map`);
+      body.hidden = expanded;
+    });
+
+    if (window.matchMedia('(max-width: 639px)').matches) {
+      window.requestAnimationFrame(() => {
+        const activeDays = days.filter(day => day.dataset.level !== '0');
+        const target = panel.querySelector('[data-activity-day][data-selected="true"]')
+          || panel.querySelector('[data-activity-day][data-today="true"]')
+          || activeDays.at(-1)
+          || days.at(-1);
+        const week = target?.closest('[data-activity-week]');
+        if (!week) return;
+        scroll.scrollLeft = Math.max(
+          0,
+          week.offsetLeft - (scroll.clientWidth - week.offsetWidth) / 2,
+        );
+      });
+    }
+  };
+
+  initActivityPanel(document.querySelector('[data-activity-panel]'));
 })();
 </script>
 

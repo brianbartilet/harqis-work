@@ -1208,6 +1208,10 @@ def test_activity_heatmap_covers_leap_day_and_iso_week_boundaries():
     assert len(days) == 366
     assert heatmap["weeks"][0]["week"] == 1
     assert heatmap["weeks"][-1]["week"] == 53
+    assert [week["month"] for week in heatmap["weeks"] if week["month"]] == [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]
     leap_day = next(day for day in days if day["date"] == "2020-02-29")
     assert leap_day["count"] == 3
     assert leap_day["selected"] is True
@@ -1271,7 +1275,11 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
 
     assert response.status_code == 200
     assert "data-activity-panel" in response.text
+    assert 'data-activity-toggle aria-expanded="true"' in response.text
+    assert "data-activity-body" in response.text
     assert 'data-activity-year aria-label="Activity year"' in response.text
+    assert 'data-activity-year-list role="listbox"' in response.text
+    assert 'data-activity-year-option="2026"' in response.text
     assert '<option value="2026" selected>2026</option>' in response.text
     assert '<option value="2025"' in response.text
     assert response.text.count('data-activity-day="') == 365
@@ -1286,10 +1294,17 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "matching.md" in result_cards
     assert "other.md" not in result_cards
     assert "ArrowDown: 7" in response.text
+    assert "<span>Tue</span>" in response.text
+    assert "<span>Sun</span>" in response.text
     assert "scroll-snap-type:x proximity" in response.text
     assert "week.offsetLeft - (scroll.clientWidth - week.offsetWidth) / 2" in response.text
+    assert "activeDays.at(-1)" in response.text
+    assert "await fetch(url" in response.text
+    assert "panel.replaceWith(replacement)" in response.text
     assert "url.searchParams.set('date_field', 'entry')" in response.text
     assert "select again to clear" in response.text
+    assert "Activity rhythm" not in response.text
+    assert "data-result-tags" in response.text
 
 
 def test_corpus_search_uses_compact_date_controls(authenticated_client, monkeypatch):

@@ -360,6 +360,7 @@ def _activity_heatmap(
     peak = max(counts.values(), default=0)
     weeks = []
     index = 0
+    last_labeled_month: int | None = None
     while cursor <= final:
         days = []
         month_label = ""
@@ -367,8 +368,9 @@ def _activity_heatmap(
             day = cursor + timedelta(days=offset)
             in_year = day.year == year
             count = counts.get(day.isoformat(), 0) if in_year else 0
-            if in_year and (day.day <= 7 or (day.month == 1 and not month_label)):
+            if in_year and day.month != last_labeled_month:
                 month_label = day.strftime("%b")
+                last_labeled_month = day.month
             days.append(
                 {
                     "date": day.isoformat(),
