@@ -523,7 +523,49 @@ class CorpusIndex:
 
     def get(self, relative_path: str) -> CorpusDocument | None:
         normalized = (relative_path or "").replace("\\", "/")
-        return next((doc for doc in self.documents() if doc.relative_path == normalized), None)
+        force = False
+        for _ in range(3):
+            if force:
+                documents = self.documents(force=True)
+            else:
+                documents = self.documents()
+            listed = next(
+                (doc for doc in documents if doc.relative_path == normalized),
+                None,
+            )
+            if listed is not None and listed.path is None:
+                return listed
+            with self._lock:
+                document = next(
+                    (
+                        doc
+                        for doc in self._documents
+                        if doc.relative_path == normalized
+                    ),
+                    None,
+                )
+                cached = self._file_cache.get(normalized)
+            if document is None or document.path is None:
+                return document
+
+            try:
+                stat = document.path.stat()
+                before = (stat.st_mtime_ns, stat.st_size)
+            except OSError:
+                before = None
+            if cached is None or cached[:2] != before:
+                force = True
+                continue
+
+            try:
+                stat = document.path.stat()
+                after = (stat.st_mtime_ns, stat.st_size)
+            except OSError:
+                after = None
+            if before == after:
+                return document
+            force = True
+        return None
 
 
 def parse_date(value: str | None) -> date | None:

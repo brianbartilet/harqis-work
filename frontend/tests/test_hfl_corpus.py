@@ -197,6 +197,83 @@ def test_recursive_index_reuses_unchanged_documents_on_refresh(tmp_path, monkeyp
     assert "changed and longer" in refreshed[0].text
 
 
+def _cached_daily_index(tmp_path, monkeypatch):
+    source = tmp_path / "2026-08-30.md"
+    source.write_text(
+        "## 2026-08-30 08:00\nSource: git\nMoment: Existing entry\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(corpus_module, "resolve_corpus_root", lambda: tmp_path)
+    index = CorpusIndex(ttl_seconds=3600)
+    return source, index, index.documents(force=True)[0]
+
+
+def _prepend_trello_entry(source, initial):
+    source.write_text(
+        "## 2026-08-30 15:29\n"
+        "Source: trello\n"
+        "Moment: Completed checklist item\n\n"
+        + initial.text,
+        encoding="utf-8",
+    )
+
+
+def _assert_trello_refresh(refreshed, initial):
+    assert refreshed is not None
+    assert refreshed is not initial
+    assert [entry.source for entry in refreshed.entries] == ["trello", "git"]
+
+
+def test_recursive_index_get_refreshes_external_append_inside_ttl(
+    tmp_path, monkeypatch
+):
+    source, index, initial = _cached_daily_index(tmp_path, monkeypatch)
+    _prepend_trello_entry(source, initial)
+
+    _assert_trello_refresh(index.get("2026-08-30.md"), initial)
+
+
+def test_recursive_index_get_uses_consistent_snapshot_during_refresh(
+    tmp_path, monkeypatch
+):
+    source, index, initial = _cached_daily_index(tmp_path, monkeypatch)
+    original_documents = index.documents
+    raced = False
+
+    def racing_documents(force=False):
+        nonlocal raced
+        documents = original_documents(force=force)
+        if not force and not raced:
+            raced = True
+            _prepend_trello_entry(source, initial)
+            original_documents(force=True)
+        return documents
+
+    monkeypatch.setattr(index, "documents", racing_documents)
+
+    _assert_trello_refresh(index.get("2026-08-30.md"), initial)
+
+
+def test_recursive_index_get_retries_when_file_changes_after_stat(
+    tmp_path, monkeypatch
+):
+    source, index, initial = _cached_daily_index(tmp_path, monkeypatch)
+    original_stat = Path.stat
+    raced = False
+
+    def racing_stat(path, *args, **kwargs):
+        nonlocal raced
+        stat = original_stat(path, *args, **kwargs)
+        if path == source and not raced:
+            raced = True
+            _prepend_trello_entry(source, initial)
+        return stat
+
+    monkeypatch.setattr(Path, "stat", racing_stat)
+
+    _assert_trello_refresh(index.get("2026-08-30.md"), initial)
+
+
 def test_recursive_index_serves_stale_documents_while_refresh_starts(
     tmp_path, monkeypatch
 ):
