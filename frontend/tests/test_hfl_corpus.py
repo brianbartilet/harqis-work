@@ -1442,6 +1442,8 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "data-activity-panel" in response.text
     assert 'class="corpus-header-shell mb-4 shrink-0"' in response.text
     assert 'class="corpus-page-header page-header"' in response.text
+    assert ".corpus-page-header .page-header-title { margin-top:.5rem; }" in response.text
+    assert ".corpus-page-header .page-header-description { margin-top:.375rem; }" in response.text
     corpus_header = response.text.split('class="corpus-header-shell', 1)[1].split(
         "</div>\n  </div>", 1
     )[0]
