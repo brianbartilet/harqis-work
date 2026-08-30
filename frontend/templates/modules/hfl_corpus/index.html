@@ -782,6 +782,7 @@
   const stateKeys = {
     filters: 'hfl-corpus:filters-expanded',
     results: 'hfl-corpus:results-expanded',
+    tags: 'hfl-corpus:tags-expanded',
     focusResults: 'hfl-corpus:focus-results',
   };
   const readState = key => {
@@ -802,11 +803,19 @@
     if (stored !== null) toggle.checked = stored === 'true';
     toggle.addEventListener('change', () => writeState(key, toggle.checked));
   };
+  const restoreDetails = (details, key) => {
+    if (!details) return;
+    const stored = readState(key);
+    if (stored !== null) details.open = stored === 'true';
+    details.addEventListener('toggle', () => writeState(key, details.open));
+  };
 
   const filtersToggle = document.querySelector('[data-mobile-date-filter-toggle]');
   const resultsToggle = document.querySelector('[data-mobile-results-toggle]');
+  const tagCloud = document.querySelector('[data-tag-cloud]');
   restoreDisclosure(filtersToggle, stateKeys.filters);
   restoreDisclosure(resultsToggle, stateKeys.results);
+  restoreDetails(tagCloud, stateKeys.tags);
 
   const markResultsForFocus = () => writeState(stateKeys.focusResults, true);
   const searchForm = document.querySelector('[data-index-search-panel]');

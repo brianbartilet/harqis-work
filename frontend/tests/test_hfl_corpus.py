@@ -1746,6 +1746,9 @@ def test_corpus_mobile_all_filters_include_source_dates_and_tag_cloud(
     assert 'name="date_from"' in filters
     assert 'name="date_to"' in filters
     assert 'data-tag-cloud' in filters
+    assert "hfl-corpus:tags-expanded" in response.text
+    assert "restoreDetails(tagCloud, stateKeys.tags)" in response.text
+    assert "details.addEventListener('toggle'" in response.text
     assert filters.index('name="source"') < filters.index('name="date_field"')
     assert filters.index('name="date_to"') < filters.index('data-tag-cloud')
 
