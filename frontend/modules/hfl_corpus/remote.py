@@ -312,6 +312,10 @@ class RemoteCorpusClient:
                         str(day): int(count)
                         for day, count in (activity.get("counts") or {}).items()
                     },
+                    "documents": {
+                        str(day): str(path)
+                        for day, path in (activity.get("documents") or {}).items()
+                    },
                 },
             }
         except (KeyError, TypeError, ValueError) as exc:

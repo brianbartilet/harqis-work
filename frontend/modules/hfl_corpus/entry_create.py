@@ -54,6 +54,8 @@ def _timestamp(payload: CreateEntryRequest) -> datetime:
         selected_time = time.fromisoformat(payload.time)
     except ValueError as exc:
         raise ValueError("Enter a valid date and time.") from exc
+    if selected_date > date.today():
+        raise ValueError("Entries cannot be created for a future date.")
     return datetime.combine(selected_date, selected_time).replace(second=0, microsecond=0)
 
 

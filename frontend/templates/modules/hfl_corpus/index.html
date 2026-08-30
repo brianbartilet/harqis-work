@@ -5,7 +5,8 @@
 <style>
   .activity-panel { --activity-cell:12px; --activity-gap:3px; border:1px solid rgba(30,64,175,.62); border-radius:1rem; background:linear-gradient(135deg,rgba(15,23,42,.98),rgba(8,47,73,.28)); box-shadow:inset 0 1px rgba(148,163,184,.04),0 14px 38px rgba(2,6,23,.2); }
   .activity-year-select { min-height:2.25rem; border:1px solid #334155; border-radius:.55rem; background:#020617; color:#dbeafe; padding:.4rem 2rem .4rem .65rem; font:650 .75rem/1 ui-monospace,SFMono-Regular,Consolas,monospace; color-scheme:dark; }
-  .activity-year-list { display:none; width:4.75rem; max-height:7.25rem; overflow-y:auto; border:1px solid #334155; border-radius:.55rem; background:#020617; padding:.2rem; scrollbar-color:#155e75 #0f172a; scrollbar-width:thin; }
+  .activity-year-list { display:none; width:4.75rem; max-height:7.25rem; overflow-y:auto; border:1px solid #334155; border-radius:.55rem; background:#020617; padding:.2rem; scrollbar-width:none; }
+  .activity-year-list::-webkit-scrollbar { width:0; height:0; }
   .activity-year-option { display:block; width:100%; border-radius:.35rem; padding:.35rem .45rem; color:#94a3b8; font:650 .7rem/1 ui-monospace,SFMono-Regular,Consolas,monospace; text-align:center; }
   .activity-year-option:hover { background:#0f172a; color:#e0f2fe; }
   .activity-year-option[aria-selected="true"] { background:#164e63; color:#cffafe; }
@@ -30,6 +31,13 @@
   .activity-day:focus-visible { z-index:3; outline:2px solid #f8fafc; outline-offset:2px; }
   .activity-day[data-today="true"] { box-shadow:0 0 0 1px #fbbf24; }
   .activity-day[data-selected="true"] { border-color:#fbbf24; box-shadow:0 0 0 2px #fbbf24,0 0 0 4px rgba(251,191,36,.2); }
+  .activity-day:disabled { cursor:not-allowed; border-color:rgba(30,41,59,.42); background:rgba(15,23,42,.42); opacity:.42; }
+  .activity-day:disabled:hover { transform:none; border-color:rgba(30,41,59,.42); }
+  .activity-day-menu { position:fixed; z-index:60; width:13rem; border:1px solid rgba(14,116,144,.8); border-radius:.75rem; background:#020617; padding:.45rem; color:#e2e8f0; box-shadow:0 18px 45px rgba(2,6,23,.65); }
+  .activity-day-menu-action { display:flex; width:100%; min-height:2.35rem; align-items:center; border-radius:.5rem; padding:.55rem .65rem; font-size:.75rem; font-weight:650; text-align:left; }
+  .activity-day-menu-action:hover { background:#0f172a; color:#cffafe; }
+  .activity-day-menu-action:focus-visible { outline:2px solid #22d3ee; outline-offset:1px; }
+  .activity-day-menu-disabled { color:#475569; cursor:not-allowed; }
   .activity-legend-cell { width:.65rem; height:.65rem; border-radius:3px; border:1px solid rgba(51,65,85,.55); }
   .activity-legend-cell[data-level="0"] { background:#111827; }
   .activity-legend-cell[data-level="1"] { background:#164e63; }
@@ -46,6 +54,7 @@
     .activity-scroll { overscroll-behavior-x:contain; scroll-snap-type:x proximity; touch-action:pan-x; }
     .activity-week { scroll-snap-align:center; }
     .activity-day { border-radius:4px; }
+    .activity-day-menu { inset:auto .75rem calc(.75rem + env(safe-area-inset-bottom)); width:auto; }
   }
   @media (min-width: 640px) {
     .activity-layout { display:grid; grid-template-columns:minmax(0,1fr) 4.75rem; align-items:start; gap:1rem; }
@@ -138,7 +147,7 @@
               <span class="activity-month" aria-hidden="true">{{ week.month }}</span>
               {% for day in week.days %}
                 {% if day.in_year %}
-                <button type="button" class="activity-day" data-activity-day="{{ day.date }}" data-level="{{ day.level }}" data-today="{{ 'true' if day.is_today else 'false' }}" data-selected="{{ 'true' if day.selected else 'false' }}" aria-label="{{ day.label }}" aria-pressed="{{ 'true' if day.selected else 'false' }}" title="{{ day.label }}"></button>
+                <button type="button" class="activity-day" data-activity-day="{{ day.date }}" data-level="{{ day.level }}" data-today="{{ 'true' if day.is_today else 'false' }}" data-selected="{{ 'true' if day.selected else 'false' }}" data-count="{{ day.count }}" data-document-url="{% if day.document_path %}{{ url_for('hfl_document', relative_path=day.document_path) }}{% endif %}" aria-label="{{ day.label }}{% if day.is_future %} · Future date{% endif %}" aria-pressed="{{ 'true' if day.selected else 'false' }}" aria-haspopup="menu" aria-expanded="false" title="{{ day.label }}{% if day.is_future %} · Future date{% endif %}" {% if day.is_future %}disabled{% endif %}></button>
                 {% else %}<span class="activity-day-blank" aria-hidden="true"></span>{% endif %}
               {% endfor %}
               <span class="activity-week-number" aria-hidden="true">{% if week.show_week %}{{ '%02d' | format(week.week) }}{% endif %}</span>
@@ -161,8 +170,14 @@
         </div>
       </div>
     </div>
+    <div class="activity-day-menu" data-activity-day-menu role="menu" aria-label="Day actions" hidden>
+      <p class="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[.14em] text-cyan-400" data-activity-menu-date></p>
+      <a class="activity-day-menu-action text-cyan-200" data-activity-menu-show role="menuitem">Show entries</a>
+      <span class="activity-day-menu-action activity-day-menu-disabled" data-activity-menu-empty role="menuitem" aria-disabled="true">No entries</span>
+      <button type="button" class="activity-day-menu-action text-slate-200" data-activity-menu-create role="menuitem">Create entry</button>
+    </div>
     <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500">
-      <p>{% if selected_activity_day %}<span class="text-amber-300">{{ selected_activity_day }}</span> selected · select again to clear{% else %}Select a day to filter document results{% endif %}</p>
+      <p>{% if selected_activity_day %}<span class="text-amber-300">{{ selected_activity_day }}</span> selected{% else %}Select a day to recall or create a memory{% endif %}</p>
       <div class="flex items-center gap-1" aria-label="Activity intensity from less to more"><span>Less</span>{% for level in range(5) %}<span class="activity-legend-cell" data-level="{{ level }}"></span>{% endfor %}<span>More</span></div>
     </div>
     </div>
@@ -383,7 +398,7 @@
 
       <div class="grid grid-cols-2 gap-3 sm:mt-5 sm:gap-4">
         <label class="min-w-0 text-sm text-slate-300">Date <span class="text-rose-400">*</span>
-          <input type="date" name="date" required
+          <input type="date" name="date" required max="{{ today_iso }}"
                  class="mt-1.5 block min-h-11 w-full min-w-0 rounded-lg bg-slate-900 px-2 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 [color-scheme:dark] sm:px-3 sm:text-sm">
         </label>
         <label class="min-w-0 text-sm text-slate-300">Time <span class="text-rose-400">*</span>
@@ -521,23 +536,6 @@
 
 <script>
 (() => {
-  const openDate = button => {
-    const url = new URL(window.location.href);
-    const selected = button.dataset.selected === 'true';
-    url.searchParams.set('activity_year', button.dataset.activityDay.slice(0, 4));
-    url.searchParams.delete('page');
-    if (selected) {
-      url.searchParams.delete('date_field');
-      url.searchParams.delete('date_from');
-      url.searchParams.delete('date_to');
-    } else {
-      url.searchParams.set('date_field', 'entry');
-      url.searchParams.set('date_from', button.dataset.activityDay);
-      url.searchParams.set('date_to', button.dataset.activityDay);
-    }
-    window.location.assign(url);
-  };
-
   const syncYearState = value => {
     const pageUrl = new URL(window.location.href);
     pageUrl.searchParams.set('activity_year', value);
@@ -575,6 +573,7 @@
       const page = new DOMParser().parseFromString(await response.text(), 'text/html');
       const replacement = page.querySelector('[data-activity-panel]');
       if (!replacement) throw new Error('Activity panel missing from response');
+      panel.activityAbortController?.abort();
       panel.replaceWith(replacement);
       syncYearState(value);
       initActivityPanel(replacement);
@@ -588,14 +587,68 @@
     panel.dataset.activityReady = 'true';
     const scroll = panel.querySelector('[data-activity-scroll]');
     const year = panel.querySelector('[data-activity-year]');
+    const yearList = panel.querySelector('[data-activity-year-list]');
     const yearOptions = Array.from(panel.querySelectorAll('[data-activity-year-option]'));
     const toggle = panel.querySelector('[data-activity-toggle]');
     const body = panel.querySelector('[data-activity-body]');
     const days = Array.from(panel.querySelectorAll('[data-activity-day]'));
-    if (!scroll || !year || !toggle || !body) return;
+    const interactiveDays = days.filter(day => !day.disabled);
+    const menu = panel.querySelector('[data-activity-day-menu]');
+    const menuDate = menu?.querySelector('[data-activity-menu-date]');
+    const showEntries = menu?.querySelector('[data-activity-menu-show]');
+    const noEntries = menu?.querySelector('[data-activity-menu-empty]');
+    const createEntry = menu?.querySelector('[data-activity-menu-create]');
+    if (!scroll || !year || !toggle || !body || !menu || !menuDate || !showEntries || !noEntries || !createEntry) return;
+    const activityController = new AbortController();
+    panel.activityAbortController = activityController;
+    let menuTrigger = null;
 
-    days.forEach((button, index) => {
-      button.addEventListener('click', () => openDate(button));
+    const closeDayMenu = (restoreFocus = false) => {
+      if (menu.hidden) return;
+      menu.hidden = true;
+      menuTrigger?.setAttribute('aria-expanded', 'false');
+      if (restoreFocus) menuTrigger?.focus();
+      menuTrigger = null;
+    };
+    const positionDayMenu = button => {
+      if (window.matchMedia('(max-width: 639px)').matches) {
+        menu.style.removeProperty('left');
+        menu.style.removeProperty('top');
+        return;
+      }
+      const rect = button.getBoundingClientRect();
+      const left = Math.min(
+        window.innerWidth - menu.offsetWidth - 8,
+        Math.max(8, rect.left + rect.width / 2 - menu.offsetWidth / 2),
+      );
+      const below = rect.bottom + 8;
+      const top = below + menu.offsetHeight <= window.innerHeight - 8
+        ? below
+        : Math.max(8, rect.top - menu.offsetHeight - 8);
+      menu.style.left = `${left}px`;
+      menu.style.top = `${top}px`;
+    };
+    const openDayMenu = button => {
+      menuTrigger?.setAttribute('aria-expanded', 'false');
+      menuTrigger = button;
+      button.setAttribute('aria-expanded', 'true');
+      const selectedDate = new Date(`${button.dataset.activityDay}T12:00:00`);
+      const count = Number(button.dataset.count || 0);
+      menuDate.textContent = `${selectedDate.toLocaleDateString(undefined, {
+        weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+      })} · ${count} ${count === 1 ? 'entry' : 'entries'}`;
+      const documentUrl = button.dataset.documentUrl;
+      showEntries.hidden = !documentUrl;
+      noEntries.hidden = Boolean(documentUrl);
+      if (documentUrl) showEntries.href = documentUrl;
+      else showEntries.removeAttribute('href');
+      menu.hidden = false;
+      positionDayMenu(button);
+      (documentUrl ? showEntries : createEntry).focus();
+    };
+
+    interactiveDays.forEach((button, index) => {
+      button.addEventListener('click', () => openDayMenu(button));
       button.addEventListener('keydown', event => {
         const movement = {
           ArrowLeft: -1,
@@ -605,16 +658,42 @@
         }[event.key];
         if (!movement) return;
         event.preventDefault();
-        days[Math.min(days.length - 1, Math.max(0, index + movement))]?.focus();
+        interactiveDays[Math.min(interactiveDays.length - 1, Math.max(0, index + movement))]?.focus();
       });
     });
+    createEntry.addEventListener('click', () => {
+      const selectedDate = menuTrigger?.dataset.activityDay;
+      closeDayMenu();
+      if (selectedDate) {
+        document.dispatchEvent(new CustomEvent('hfl:create-entry-for-date', {detail: {date: selectedDate}}));
+      }
+    });
+    document.addEventListener('pointerdown', event => {
+      if (menu.hidden || menu.contains(event.target) || event.target === menuTrigger) return;
+      closeDayMenu();
+    }, {signal: activityController.signal});
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Escape' || menu.hidden) return;
+      event.preventDefault();
+      closeDayMenu(true);
+    }, {signal: activityController.signal});
 
     year.addEventListener('change', () => loadYear(panel, year.value));
     yearOptions.forEach(option => option.addEventListener('click', () => {
       if (option.getAttribute('aria-selected') !== 'true') loadYear(panel, option.dataset.activityYearOption);
     }));
+    if (yearList && window.matchMedia('(min-width: 640px)').matches) {
+      const selectedYear = yearList.querySelector('[aria-selected="true"]');
+      if (selectedYear) {
+        yearList.scrollTop = Math.max(
+          0,
+          selectedYear.offsetTop - (yearList.clientHeight - selectedYear.offsetHeight) / 2,
+        );
+      }
+    }
     toggle.addEventListener('click', () => {
       const expanded = toggle.getAttribute('aria-expanded') === 'true';
+      closeDayMenu();
       toggle.setAttribute('aria-expanded', String(!expanded));
       toggle.setAttribute('aria-label', `${expanded ? 'Show' : 'Hide'} activity heat map`);
       body.hidden = expanded;
@@ -622,11 +701,11 @@
 
     if (window.matchMedia('(max-width: 639px)').matches) {
       window.requestAnimationFrame(() => {
-        const activeDays = days.filter(day => day.dataset.level !== '0');
+        const activeDays = interactiveDays.filter(day => day.dataset.level !== '0');
         const target = panel.querySelector('[data-activity-day][data-selected="true"]')
           || panel.querySelector('[data-activity-day][data-today="true"]')
           || activeDays.at(-1)
-          || days.at(-1);
+          || interactiveDays.at(-1);
         const week = target?.closest('[data-activity-week]');
         if (!week) return;
         scroll.scrollLeft = Math.max(
@@ -666,13 +745,14 @@
   let pendingPayload = null;
   let pendingFiles = [];
   let enrichmentCache = null;
+  let returnActivityDate = '';
 
-  const localDateAndTime = () => {
+  const localDateAndTime = selectedDate => {
     const now = new Date();
     const offset = now.getTimezoneOffset() * 60000;
     const local = new Date(now.getTime() - offset).toISOString();
-    form.elements.date.value = local.slice(0, 10);
-    form.elements.time.value = local.slice(11, 16);
+    form.elements.date.value = selectedDate || local.slice(0, 10);
+    form.elements.time.value = selectedDate ? '' : local.slice(11, 16);
   };
 
   const selectedFiles = () => Array.from(fileInput.files || []);
@@ -752,14 +832,15 @@
       field.scrollIntoView({behavior: 'smooth', block: 'center'});
     }, 120);
   };
-  const openCreate = () => {
+  const openCreate = (selectedDate = '') => {
     form.reset();
     moreDetails.open = false;
-    localDateAndTime();
+    localDateAndTime(selectedDate);
     showError('');
     pendingPayload = null;
     pendingFiles = [];
     enrichmentCache = null;
+    returnActivityDate = selectedDate;
     fileList.replaceChildren();
     fileList.hidden = true;
     initialState = serialize();
@@ -780,7 +861,8 @@
     discardDialog.showModal();
   };
 
-  document.querySelector('[data-create-entry-open]')?.addEventListener('click', openCreate);
+  document.querySelector('[data-create-entry-open]')?.addEventListener('click', () => openCreate());
+  document.addEventListener('hfl:create-entry-for-date', event => openCreate(event.detail?.date || ''));
   form.querySelectorAll('[data-entry-cancel]').forEach(button => button.addEventListener('click', requestCancel));
 
   createDialog.addEventListener('cancel', event => {
@@ -801,6 +883,7 @@
     pendingPayload = null;
     pendingFiles = [];
     enrichmentCache = null;
+    returnActivityDate = '';
   });
 
   const readableBytes = bytes => {
@@ -924,7 +1007,16 @@
         body = await response.json();
         if (!response.ok) throw new Error(responseMessage(body, 'The entry could not be saved.'));
       }
-      window.location.assign('/hfl-corpus?created=true');
+      const successUrl = new URL('/hfl-corpus', window.location.origin);
+      successUrl.searchParams.set('created', 'true');
+      const savedActivityDate = returnActivityDate ? pendingPayload.date : '';
+      if (savedActivityDate) {
+        successUrl.searchParams.set('activity_year', savedActivityDate.slice(0, 4));
+        successUrl.searchParams.set('date_field', 'entry');
+        successUrl.searchParams.set('date_from', savedActivityDate);
+        successUrl.searchParams.set('date_to', savedActivityDate);
+      }
+      window.location.assign(successUrl);
     } catch (error) {
       reviewDialog.close();
       progressPanel.hidden = true;

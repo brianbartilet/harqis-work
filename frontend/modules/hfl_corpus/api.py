@@ -18,9 +18,10 @@ from pydantic import ValidationError
 from config import get_settings
 from modules.hfl_corpus.corpus import (
     CorpusDocument,
+    activity_calendar_years,
     activity_counts,
-    activity_years,
     corpus_index,
+    dated_document_paths,
     find_tree_node,
     paginate_documents,
     parse_search_query,
@@ -239,11 +240,11 @@ async def hfl_api_documents(
     documents = view.documents
     sources = view.sources
     selected_source = normalize_source(source, sources)
-    visible_years = activity_years(documents)
+    calendar_years = activity_calendar_years()
     selected_activity_year = (
         activity_year
-        if activity_year in visible_years or activity_year == datetime.now().year
-        else datetime.now().year
+        if activity_year in calendar_years
+        else calendar_years[0]
     )
     results = search_documents(
         documents,
@@ -293,16 +294,14 @@ async def hfl_api_documents(
         "selected_source": selected_source,
         "activity": {
             "year": selected_activity_year,
-            "years": sorted(
-                {datetime.now().year, *visible_years},
-                reverse=True,
-            ),
+            "years": calendar_years,
             "counts": activity_counts(
                 documents,
                 year=selected_activity_year,
                 query=q,
                 source=selected_source,
             ),
+            "documents": dated_document_paths(documents),
         },
     }
     if compact:

@@ -27,10 +27,11 @@ from pydantic import BaseModel, ValidationError
 from config import get_settings
 from modules.hfl_corpus.corpus import (
     CorpusPage,
+    activity_calendar_years,
     activity_counts,
-    activity_years,
     build_tree,
     corpus_index,
+    dated_document_paths,
     find_tree_node,
     format_hfl_markdown,
     paginate_documents,
@@ -350,6 +351,7 @@ def _activity_heatmap(
     counts: dict[str, int],
     *,
     selected_day: date | None = None,
+    document_paths: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build a Monday-first yearly activity grid with ISO week metadata."""
     first = date(year, 1, 1)
@@ -358,6 +360,7 @@ def _activity_heatmap(
     final = last + timedelta(days=6 - last.weekday())
     today = date.today()
     peak = max(counts.values(), default=0)
+    paths = document_paths or {}
     weeks = []
     index = 0
     last_labeled_month: int | None = None
@@ -379,7 +382,9 @@ def _activity_heatmap(
                     "level": _activity_level(count, peak),
                     "in_year": in_year,
                     "is_today": day == today,
+                    "is_future": day > today,
                     "selected": day == selected_day,
+                    "document_path": paths.get(day.isoformat(), ""),
                     "label": (
                         f"{day.strftime('%A, %d %B %Y')} · "
                         f"Week {day.isocalendar().week} · "
@@ -499,10 +504,12 @@ async def hfl_corpus_page(
             tag_cloud = []
             source_options = []
             selected_source = ""
+            calendar_years = activity_calendar_years()
             activity = {
-                "year": datetime.now().year,
-                "years": [datetime.now().year],
+                "year": calendar_years[0],
+                "years": calendar_years,
                 "counts": {},
+                "documents": {},
             }
             result_page = paginate_documents((), page=page, page_size=page_size)
             remote_error = str(exc)
@@ -517,25 +524,22 @@ async def hfl_corpus_page(
         documents = view.documents
         source_options = view.sources
         selected_source = normalize_source(source, source_options)
-        visible_years = activity_years(documents)
+        calendar_years = activity_calendar_years()
         selected_activity_year = (
             requested_activity_year
-            if requested_activity_year in visible_years
-            or requested_activity_year == datetime.now().year
-            else datetime.now().year
+            if requested_activity_year in calendar_years
+            else calendar_years[0]
         )
         activity = {
             "year": selected_activity_year,
-            "years": sorted(
-                {datetime.now().year, *visible_years},
-                reverse=True,
-            ),
+            "years": calendar_years,
             "counts": activity_counts(
                 documents,
                 year=selected_activity_year,
                 query=q,
                 source=selected_source,
             ),
+            "documents": dated_document_paths(documents),
         }
         tree = shallow_tree(view.tree)
         all_results = search_documents(
@@ -617,6 +621,7 @@ async def hfl_corpus_page(
         int(activity["year"]),
         dict(activity["counts"]),
         selected_day=selected_activity_day,
+        document_paths=dict(activity.get("documents") or {}),
     )
     return templates.TemplateResponse(
         request,
@@ -653,6 +658,7 @@ async def hfl_corpus_page(
             activity_year=activity["year"],
             activity_years=activity["years"],
             activity_heatmap=heatmap,
+            today_iso=date.today().isoformat(),
             selected_activity_day=(
                 selected_activity_day.isoformat()
                 if selected_activity_day is not None

@@ -51,6 +51,7 @@ _HFL_FIELD_LABELS = {
     "entry id": "Entry ID",
 }
 PAGE_SIZES = (20, 50, 100)
+ACTIVITY_CALENDAR_YEARS = 20
 
 
 @dataclass(frozen=True)
@@ -558,6 +559,34 @@ def activity_years(documents: tuple[CorpusDocument, ...]) -> tuple[int, ...]:
             reverse=True,
         )
     )
+
+
+def activity_calendar_years(
+    *,
+    today: date | None = None,
+    span: int = ACTIVITY_CALENDAR_YEARS,
+) -> tuple[int, ...]:
+    """Return the rolling calendar years available to the memory recaller."""
+    current_year = (today or date.today()).year
+    return tuple(range(current_year, current_year - max(1, span), -1))
+
+
+def dated_document_paths(
+    documents: tuple[CorpusDocument, ...],
+) -> dict[str, str]:
+    """Map canonical root-level YYYY-MM-DD documents to their relative paths."""
+    paths: dict[str, str] = {}
+    for document in documents:
+        normalized = document.relative_path.replace("\\", "/").strip("/")
+        if "/" in normalized or not normalized.endswith(".md"):
+            continue
+        value = normalized[:-3]
+        try:
+            date.fromisoformat(value)
+        except ValueError:
+            continue
+        paths[value] = document.relative_path
+    return paths
 
 
 def activity_counts(

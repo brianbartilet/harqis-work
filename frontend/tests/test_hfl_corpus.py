@@ -2,7 +2,7 @@ import io
 import json
 import os
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -15,11 +15,13 @@ from modules.hfl_corpus.corpus import (
     CorpusDocument,
     CorpusEntry,
     CorpusIndex,
+    activity_calendar_years,
     activity_counts,
     activity_years,
     build_tree,
     common_sources,
     common_tags,
+    dated_document_paths,
     format_hfl_markdown,
     search_documents,
 )
@@ -1190,6 +1192,23 @@ def test_activity_counts_and_entry_date_search_use_occurrence_headers():
     ) == []
 
 
+def test_activity_calendar_includes_twenty_years_and_canonical_date_documents():
+    documents = (
+        _document("2026-08-24.md"),
+        _document("archive/2025-01-02.md"),
+        _document("notes.md"),
+    )
+
+    years = activity_calendar_years(today=date(2026, 8, 30))
+
+    assert len(years) == 20
+    assert years[0] == 2026
+    assert years[-1] == 2007
+    assert dated_document_paths(documents) == {
+        "2026-08-24": "2026-08-24.md",
+    }
+
+
 def test_activity_heatmap_covers_leap_day_and_iso_week_boundaries():
     import modules.hfl_corpus.router as hfl_routes
 
@@ -1216,6 +1235,14 @@ def test_activity_heatmap_covers_leap_day_and_iso_week_boundaries():
     assert leap_day["count"] == 3
     assert leap_day["selected"] is True
 
+    future = hfl_routes._activity_heatmap(date.today().year + 1, {})
+    assert all(
+        day["is_future"]
+        for week in future["weeks"]
+        for day in week["days"]
+        if day["in_year"]
+    )
+
 
 def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     authenticated_client, monkeypatch
@@ -1223,7 +1250,7 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     import modules.hfl_corpus.router as hfl_routes
 
     matching = _document(
-        "matching.md",
+        "2026-08-24.md",
         tags=("work",),
         entry_count=2,
         entries=(
@@ -1297,7 +1324,7 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert 'aria-pressed="true"' in selected_cell
     assert '<option value="entry" selected>Entry date</option>' in response.text
     result_cards = response.text.split("data-corpus-results-scroll", 1)[1]
-    assert "matching.md" in result_cards
+    assert "2026-08-24.md" in result_cards
     assert "other.md" not in result_cards
     assert "ArrowDown: 7" in response.text
     assert "<span>Tue</span>" in response.text
@@ -1307,8 +1334,15 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "activeDays.at(-1)" in response.text
     assert "await fetch(url" in response.text
     assert "panel.replaceWith(replacement)" in response.text
-    assert "url.searchParams.set('date_field', 'entry')" in response.text
-    assert "select again to clear" in response.text
+    assert "data-activity-day-menu" in response.text
+    assert "data-activity-menu-show" in response.text
+    assert "data-activity-menu-create" in response.text
+    assert "No entries" in response.text
+    assert "openDayMenu(button)" in response.text
+    assert "hfl:create-entry-for-date" in response.text
+    assert 'data-document-url="http://testserver/hfl-corpus/document/2026-08-24.md"' in response.text
+    assert "form.elements.time.value = selectedDate ? ''" in response.text
+    assert "successUrl.searchParams.set('date_from', savedActivityDate)" in response.text
     assert "Activity rhythm" not in response.text
     assert "data-result-tags" in response.text
 
@@ -2007,7 +2041,7 @@ def test_corpus_api_returns_filtered_activity_without_date_range_bias(
     import modules.hfl_corpus.api as hfl_api
 
     document = _document(
-        "activity.md",
+        "2026-02-02.md",
         tags=("work", "personal"),
         entry_count=2,
         entries=(
@@ -2044,8 +2078,9 @@ def test_corpus_api_returns_filtered_activity_without_date_range_bias(
     assert payload["results"] == []
     assert payload["activity"] == {
         "year": 2026,
-        "years": [2026, 2025],
+        "years": list(activity_calendar_years()),
         "counts": {"2026-02-02": 1},
+        "documents": {"2026-02-02": "2026-02-02.md"},
     }
 
 
@@ -2297,6 +2332,7 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
             "year": 2026,
             "years": [2026, 2025],
             "counts": {"2026-07-19": 3},
+            "documents": {"2026-07-19": "2026-07-19.md"},
         },
     }
     monkeypatch.setattr(
@@ -2324,6 +2360,7 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
         "year": 2026,
         "years": [2026, 2025],
         "counts": {"2026-07-19": 3},
+        "documents": {"2026-07-19": "2026-07-19.md"},
     }
     assert result["documents"] == ()
     assert result["tree"]["files"][0].path is None
@@ -2564,6 +2601,7 @@ def test_corpus_index_renders_create_review_and_discard_dialogs(
     assert "Catch it before it wanders" in response.text
     assert 'data-create-entry-dialog' in response.text
     assert 'name="date"' in response.text
+    assert f'name="date" required max="{date.today().isoformat()}"' in response.text
     assert 'name="time"' in response.text
     assert 'name="moment"' in response.text
     assert 'name="moment" required maxlength="500" placeholder="description"' in response.text
@@ -2581,6 +2619,16 @@ def test_corpus_index_renders_create_review_and_discard_dialogs(
     assert "request.upload.addEventListener('progress'" in response.text
     assert ">Review and save</button>" in response.text
     assert "HFL entry created successfully." in response.text
+
+
+def test_manual_entry_rejects_future_dates():
+    from modules.hfl_corpus.entry_create import CreateEntryRequest, _timestamp
+
+    request = _create_entry_payload()
+    request["date"] = (date.today() + timedelta(days=1)).isoformat()
+
+    with pytest.raises(ValueError, match="future date"):
+        _timestamp(CreateEntryRequest.model_validate(request))
 
 
 def test_create_entry_dialog_uses_mobile_sheets_and_touch_friendly_controls(
