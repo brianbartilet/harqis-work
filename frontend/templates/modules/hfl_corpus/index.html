@@ -39,6 +39,9 @@
   .activity-day-menu-action:hover { background:#0f172a; color:#cffafe; }
   .activity-day-menu-action:focus-visible { outline:2px solid #22d3ee; outline-offset:1px; }
   .activity-day-menu-disabled { color:#475569; cursor:not-allowed; }
+  .activity-day-menu-chevron { display:inline-flex; width:1.5rem; height:1.5rem; flex-shrink:0; align-items:center; justify-content:center; border:1px solid rgba(51,65,85,.9); border-radius:9999px; background:rgba(15,23,42,.85); color:#67e8f9; transition:transform .18s ease, border-color .18s ease, background-color .18s ease; }
+  .activity-day-menu-action:hover .activity-day-menu-chevron { border-color:rgba(6,182,212,.7); background:#164e63; }
+  [data-activity-menu-matches][aria-expanded="true"] .activity-day-menu-chevron { transform:rotate(180deg); }
   .activity-legend-cell { width:.65rem; height:.65rem; border-radius:3px; border:1px solid rgba(51,65,85,.55); }
   .activity-legend-cell[data-level="0"] { background:#111827; }
   .activity-legend-cell[data-level="1"] { background:#164e63; }
@@ -193,7 +196,10 @@
       <button type="button" class="activity-day-menu-action text-slate-200" data-activity-menu-create role="menuitem">Create entry</button>
       <a class="activity-day-menu-action text-cyan-200" data-activity-menu-document role="menuitem">Show document</a>
       <button type="button" class="activity-day-menu-action justify-between text-cyan-200" data-activity-menu-matches role="menuitem" aria-expanded="false">
-        <span>Matching entries</span><span aria-hidden="true">⌄</span>
+        <span>Matching entries</span>
+        <span class="activity-day-menu-chevron" aria-hidden="true">
+          <svg class="h-3 w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 7.5 5 5 5-5"/></svg>
+        </span>
       </button>
       <div class="mt-1 border-t border-slate-800 pt-2" data-activity-menu-matches-panel hidden>
         <div class="text-xs text-slate-500" data-activity-menu-matches-content></div>
