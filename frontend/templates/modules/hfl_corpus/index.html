@@ -5,12 +5,14 @@
 <style>
   .activity-panel { --activity-cell:12px; --activity-gap:3px; border:1px solid rgba(30,64,175,.62); border-radius:1rem; background:linear-gradient(135deg,rgba(15,23,42,.98),rgba(8,47,73,.28)); box-shadow:inset 0 1px rgba(148,163,184,.04),0 14px 38px rgba(2,6,23,.2); }
   .activity-year-select { min-height:2.25rem; border:1px solid #334155; border-radius:.55rem; background:#020617; color:#dbeafe; padding:.4rem 2rem .4rem .65rem; font:650 .75rem/1 ui-monospace,SFMono-Regular,Consolas,monospace; color-scheme:dark; }
-  .activity-year-list { display:none; width:4.75rem; max-height:3.4rem; overflow-y:auto; border:1px solid #334155; border-radius:.55rem; background:#020617; padding:.2rem; scrollbar-color:#155e75 #0f172a; scrollbar-width:thin; }
+  .activity-year-list { display:none; width:4.75rem; max-height:7.25rem; overflow-y:auto; border:1px solid #334155; border-radius:.55rem; background:#020617; padding:.2rem; scrollbar-color:#155e75 #0f172a; scrollbar-width:thin; }
   .activity-year-option { display:block; width:100%; border-radius:.35rem; padding:.35rem .45rem; color:#94a3b8; font:650 .7rem/1 ui-monospace,SFMono-Regular,Consolas,monospace; text-align:center; }
   .activity-year-option:hover { background:#0f172a; color:#e0f2fe; }
   .activity-year-option[aria-selected="true"] { background:#164e63; color:#cffafe; }
   .activity-toggle-chevron { transition:transform .15s ease; }
   [data-activity-toggle][aria-expanded="false"] .activity-toggle-chevron { transform:rotate(-90deg); }
+  .activity-layout { display:flex; min-width:0; flex-direction:column; }
+  .activity-year-controls { order:-1; display:flex; justify-content:flex-end; margin-bottom:.75rem; }
   .activity-chart-shell { display:flex; min-width:0; align-items:flex-start; gap:.5rem; }
   .activity-weekdays { display:grid; flex:0 0 1.55rem; grid-template-rows:14px repeat(7,var(--activity-cell)) 12px; gap:var(--activity-gap); color:#64748b; font:600 .56rem/var(--activity-cell) ui-monospace,SFMono-Regular,Consolas,monospace; text-align:right; }
   .activity-scroll { min-width:0; flex:1; overflow-x:auto; overflow-y:hidden; padding:0 2px .3rem; scrollbar-color:#155e75 #0f172a; scrollbar-width:thin; scroll-padding-inline:45%; }
@@ -46,6 +48,8 @@
     .activity-day { border-radius:4px; }
   }
   @media (min-width: 640px) {
+    .activity-layout { display:grid; grid-template-columns:minmax(0,1fr) 4.75rem; align-items:start; gap:1rem; }
+    .activity-year-controls { order:0; display:block; margin-bottom:0; }
     .activity-chart-shell { justify-content:center; }
     .activity-scroll { flex:0 1 auto; }
     .activity-year-select-wrap { display:none; }
@@ -58,6 +62,13 @@
     dialog[data-create-entry-dialog] > form {
       height: fit-content !important;
     }
+  }
+  @media (min-width: 1100px) {
+    .activity-layout { grid-template-columns:max-content 4.75rem; justify-content:center; }
+    .activity-panel { --activity-cell:13px; --activity-gap:3px; }
+  }
+  @media (min-width: 1200px) {
+    .activity-panel { --activity-cell:14px; --activity-gap:4px; }
   }
 </style>
 {% endblock %}
@@ -109,7 +120,34 @@
         <p class="text-[10px] font-semibold uppercase tracking-[.18em] text-cyan-400">Memory signal</p>
         <h2 id="activity-title" class="mt-0.5 text-sm font-semibold text-white">{{ activity_heatmap.total }} {{ 'entry' if activity_heatmap.total == 1 else 'entries' }}</h2>
       </div>
-      <div class="flex shrink-0 items-start gap-2">
+      <button type="button" data-activity-toggle aria-expanded="true" aria-controls="activity-heatmap-body" aria-label="Hide activity heat map"
+              class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-cyan-300 ring-1 ring-slate-700 transition hover:bg-slate-800 hover:text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
+        <svg class="activity-toggle-chevron h-4 w-4" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 12.5 5-5 5 5"/></svg>
+      </button>
+    </div>
+    <div id="activity-heatmap-body" data-activity-body class="mt-3">
+    <div class="activity-layout">
+      <div class="activity-chart-shell">
+        <div class="activity-weekdays" aria-hidden="true">
+          <span></span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span><span></span>
+        </div>
+        <div class="activity-scroll" data-activity-scroll tabindex="0" role="region" aria-label="{{ activity_year }} activity heatmap. Scroll horizontally to traverse weeks.">
+          <div class="activity-grid" data-activity-grid>
+            {% for week in activity_heatmap.weeks %}
+            <div class="activity-week" data-activity-week="{{ week.week }}">
+              <span class="activity-month" aria-hidden="true">{{ week.month }}</span>
+              {% for day in week.days %}
+                {% if day.in_year %}
+                <button type="button" class="activity-day" data-activity-day="{{ day.date }}" data-level="{{ day.level }}" data-today="{{ 'true' if day.is_today else 'false' }}" data-selected="{{ 'true' if day.selected else 'false' }}" aria-label="{{ day.label }}" aria-pressed="{{ 'true' if day.selected else 'false' }}" title="{{ day.label }}"></button>
+                {% else %}<span class="activity-day-blank" aria-hidden="true"></span>{% endif %}
+              {% endfor %}
+              <span class="activity-week-number" aria-hidden="true">{% if week.show_week %}{{ '%02d' | format(week.week) }}{% endif %}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="activity-year-controls">
         <label class="activity-year-select-wrap text-[10px] font-medium uppercase tracking-[.12em] text-slate-500">Year
           <select class="activity-year-select mt-1 block" data-activity-year aria-label="Activity year">
             {% for year in activity_years %}<option value="{{ year }}" {% if year == activity_year %}selected{% endif %}>{{ year }}</option>{% endfor %}
@@ -120,31 +158,6 @@
           <div class="activity-year-list" data-activity-year-list role="listbox" aria-label="Activity year">
             {% for year in activity_years %}<button type="button" class="activity-year-option" data-activity-year-option="{{ year }}" role="option" aria-selected="{{ 'true' if year == activity_year else 'false' }}">{{ year }}</button>{% endfor %}
           </div>
-        </div>
-        <button type="button" data-activity-toggle aria-expanded="true" aria-controls="activity-heatmap-body" aria-label="Hide activity heat map"
-                class="mt-4 inline-flex h-9 w-9 items-center justify-center rounded-lg text-cyan-300 ring-1 ring-slate-700 transition hover:bg-slate-800 hover:text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 sm:mt-4">
-          <svg class="activity-toggle-chevron h-4 w-4" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 12.5 5-5 5 5"/></svg>
-        </button>
-      </div>
-    </div>
-    <div id="activity-heatmap-body" data-activity-body class="mt-3">
-    <div class="activity-chart-shell">
-      <div class="activity-weekdays" aria-hidden="true">
-        <span></span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span><span></span>
-      </div>
-      <div class="activity-scroll" data-activity-scroll tabindex="0" role="region" aria-label="{{ activity_year }} activity heatmap. Scroll horizontally to traverse weeks.">
-        <div class="activity-grid" data-activity-grid>
-          {% for week in activity_heatmap.weeks %}
-          <div class="activity-week" data-activity-week="{{ week.week }}">
-            <span class="activity-month" aria-hidden="true">{{ week.month }}</span>
-            {% for day in week.days %}
-              {% if day.in_year %}
-              <button type="button" class="activity-day" data-activity-day="{{ day.date }}" data-level="{{ day.level }}" data-today="{{ 'true' if day.is_today else 'false' }}" data-selected="{{ 'true' if day.selected else 'false' }}" aria-label="{{ day.label }}" aria-pressed="{{ 'true' if day.selected else 'false' }}" title="{{ day.label }}"></button>
-              {% else %}<span class="activity-day-blank" aria-hidden="true"></span>{% endif %}
-            {% endfor %}
-            <span class="activity-week-number" aria-hidden="true">{% if week.show_week %}{{ '%02d' | format(week.week) }}{% endif %}</span>
-          </div>
-          {% endfor %}
         </div>
       </div>
     </div>

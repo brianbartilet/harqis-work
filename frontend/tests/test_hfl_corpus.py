@@ -1280,6 +1280,12 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert 'data-activity-year aria-label="Activity year"' in response.text
     assert 'data-activity-year-list role="listbox"' in response.text
     assert 'data-activity-year-option="2026"' in response.text
+    activity_body = response.text.split("data-activity-body", 1)[1].split(
+        "</section>", 1
+    )[0]
+    assert "data-activity-year" in activity_body
+    assert "data-activity-year-list" in activity_body
+    assert "grid-template-columns:minmax(0,1fr) 4.75rem" in response.text
     assert '<option value="2026" selected>2026</option>' in response.text
     assert '<option value="2025"' in response.text
     assert response.text.count('data-activity-day="') == 365
