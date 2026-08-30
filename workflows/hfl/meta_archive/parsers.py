@@ -41,7 +41,8 @@ def _reference(platform: str, export_root: Path, artifact: Path) -> str:
 def _attachment(platform: str, export_root: Path, source: Path, kind: str,
                 raw: dict[str, Any]) -> MetaAttachment:
     uri = _text(raw.get("uri") or raw.get("url") or "")
-    candidate = export_root / Path(unquote(uri)) if uri else None
+    is_remote = uri.startswith(("http://", "https://", "mailto:"))
+    candidate = export_root / Path(unquote(uri)) if uri and not is_remote else None
     if candidate and not candidate.exists():
         candidate = source.parent / unquote(uri)
     path = str(candidate.resolve()) if candidate and candidate.exists() else ""

@@ -75,6 +75,29 @@ def test__parse_facebook_thread_structure(tmp_path):
     assert events[0].references[0].startswith("meta-archive://facebook/")
 
 
+def test__facebook_remote_attachment_url_stays_metadata_only(tmp_path, monkeypatch):
+    export, path = _facebook_export(tmp_path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    remote_url = "https://video.example.invalid/clip.mp4?token=test"
+    payload["messages"][0]["photos"] = [{"uri": remote_url}]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    original_exists = Path.exists
+
+    def reject_remote_path_probe(candidate):
+        if "https:" in str(candidate):
+            raise AssertionError("remote attachment URL was probed as a local path")
+        return original_exists(candidate)
+
+    monkeypatch.setattr(Path, "exists", reject_remote_path_probe)
+
+    events = parse_facebook_thread(path, export)
+
+    assert len(events) == 1
+    assert events[0].attachments[0].uri == remote_url
+    assert events[0].attachments[0].path == ""
+    assert events[0].attachments[0].reference == events[0].source_reference
+
+
 def test__parse_instagram_html_structure(tmp_path):
     export = tmp_path / "instagram-owner-2026-test"
     thread = export / "your_instagram_activity" / "messages" / "inbox" / "friend_2"
@@ -135,6 +158,42 @@ def test__build_import_plan_deduplicates_overlapping_parts(tmp_path):
     assert Path(plan["manifest_path"]).exists()
     assert len(plan["manifest_sha256"]) == 64
     assert len(plan["items"][0]["sha256"]) == 64
+
+
+def test__build_import_plan_ignores_appledouble_artifacts(tmp_path):
+    meta = tmp_path / "meta-download"
+    facebook, _ = _facebook_export(meta)
+    facebook_posts = facebook / "your_facebook_activity" / "posts"
+    facebook_posts.mkdir(parents=True)
+    (facebook_posts / "._posts.json").write_bytes(b"\x00\x05AppleDouble")
+
+    instagram = meta / "instagram-owner-2026-test"
+    instagram_messages = (
+        instagram / "your_instagram_activity" / "messages" / "inbox" / "friend_2"
+    )
+    instagram_messages.mkdir(parents=True)
+    (instagram_messages / "message_1.html").write_text(
+        '<div class="pam"><h2>Owner</h2><div class="_a6-p">Message</div>'
+        '<div>Jun 03, 2024 9:30 pm</div></div>',
+        encoding="utf-8",
+    )
+    instagram_media = instagram / "your_instagram_activity" / "media"
+    instagram_media.mkdir(parents=True)
+    (instagram_media / "._posts.html").write_bytes(b"\x00\x05AppleDouble")
+
+    facebook_plan = build_import_plan(
+        platform="facebook", archive_roots=[str(meta)],
+        work_dir=str(tmp_path / "facebook-work"), max_events=0,
+    )
+    instagram_plan = build_import_plan(
+        platform="instagram", archive_roots=[str(meta)],
+        work_dir=str(tmp_path / "instagram-work"), max_events=0,
+    )
+
+    assert facebook_plan["ok"] is True
+    assert facebook_plan["counts"]["parser_failures"] == 0
+    assert instagram_plan["ok"] is True
+    assert instagram_plan["counts"]["parser_failures"] == 0
 
 
 def test__preparation_fails_closed_at_cap_with_exact_counts(tmp_path):

@@ -62,6 +62,8 @@ def _iter_event_batches(platform: str, exports: list[Path],
     if platform == "facebook":
         for root in exports:
             for path in root.glob("your_facebook_activity/messages/**/message_*.json"):
+                if path.name.startswith("._"):
+                    continue
                 try:
                     yield parse_facebook_thread(path, root)
                 except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
@@ -70,6 +72,8 @@ def _iter_event_batches(platform: str, exports: list[Path],
                         artifact=path, error=exc,
                     )
             for path in root.glob("your_facebook_activity/**/*post*.json"):
+                if path.name.startswith("._"):
+                    continue
                 try:
                     yield parse_facebook_posts(path, root)
                 except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
@@ -80,6 +84,8 @@ def _iter_event_batches(platform: str, exports: list[Path],
     elif platform == "instagram":
         for root in exports:
             for path in root.glob("your_instagram_activity/messages/**/message_*.html"):
+                if path.name.startswith("._"):
+                    continue
                 try:
                     yield parse_instagram_html(path, root, thread_id=path.parent.name)
                 except (OSError, ValueError, TypeError) as exc:
@@ -88,6 +94,8 @@ def _iter_event_batches(platform: str, exports: list[Path],
                         artifact=path, error=exc,
                     )
             for path in root.glob("your_instagram_activity/media/*.html"):
+                if path.name.startswith("._"):
+                    continue
                 if "post" in path.name.lower() or "stor" in path.name.lower():
                     try:
                         yield parse_instagram_html(
