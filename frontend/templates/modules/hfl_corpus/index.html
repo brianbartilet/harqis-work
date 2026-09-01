@@ -1042,7 +1042,7 @@
       const last = new Date(`${selectedYear}-12-31T12:00:00`);
       first.setDate(first.getDate() - ((first.getDay() + 6) % 7));
       last.setDate(last.getDate() + (7 - (last.getDay() || 7)));
-      return Math.round((last - first) / 604800000) + 1;
+      return Math.floor((last - first) / 604800000) + 1;
     };
     panel.querySelectorAll('[data-activity-year-segment]').forEach(segment => {
       segment.style.setProperty('--activity-weeks', calendarWeekCount(Number(segment.dataset.activityYearSegment)));

@@ -1488,6 +1488,8 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert 'style="--activity-weeks:53" data-activity-year-segment="2026"' in response.text
     assert "overflow-clip-margin:6px" in response.text
     assert "calendarWeekCount" in response.text
+    assert "Math.floor((last - first) / 604800000) + 1" in response.text
+    assert "Math.round((last - first) / 604800000) + 1" not in response.text
     assert "segment.style.setProperty('--activity-weeks', weekIndex)" in response.text
     assert "activity-year-segment::before" not in response.text
     assert "activity-year-marker" not in response.text
