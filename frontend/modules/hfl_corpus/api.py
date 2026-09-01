@@ -20,6 +20,7 @@ from modules.hfl_corpus.corpus import (
     CorpusDocument,
     activity_calendar_years,
     activity_counts,
+    activity_counts_between,
     activity_day_entries,
     corpus_index,
     dated_document_paths,
@@ -226,6 +227,7 @@ async def hfl_api_documents(
     include_secrets: bool = False,
     secret_tags: str = "",
     activity_year: int = 0,
+    activity_from_year: int = 0,
 ):
     if date_field not in {"created", "updated", "entry"}:
         date_field = "created"
@@ -246,6 +248,12 @@ async def hfl_api_documents(
         activity_year
         if activity_year in calendar_years
         else calendar_years[0]
+    )
+    today = date.today()
+    timeline_start = date(
+        activity_from_year if 1900 <= activity_from_year <= today.year else today.year - 19,
+        1,
+        1,
     )
     results = search_documents(
         documents,
@@ -303,6 +311,13 @@ async def hfl_api_documents(
                 source=selected_source,
             ),
             "documents": dated_document_paths(documents),
+            "timeline_counts": activity_counts_between(
+                documents,
+                start=timeline_start,
+                end=today,
+                query=q,
+                source=selected_source,
+            ),
         },
     }
     if compact:

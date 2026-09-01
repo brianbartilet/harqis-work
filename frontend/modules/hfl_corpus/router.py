@@ -66,8 +66,10 @@ from modules.hfl_corpus.secrets import (
     set_unlocked_cookie,
     verify_owner_pin,
 )
+from modules.hfl_corpus.memory_pins import get_memory_pin_store
 from modules.hfl_corpus.view import corpus_view_cache
 from modules.profile.store import get_profile_store
+from modules.hfl_shares.security import make_csrf_token, verify_csrf_token
 from modules.hfl_shares.viewer import (
     classify_preview,
     read_preview_text,
@@ -88,6 +90,64 @@ _log = logging.getLogger(__name__)
 
 class SecretPinRequest(BaseModel):
     pin: str
+
+
+class MemoryPinRequest(BaseModel):
+    csrf: str
+    action: str
+    category_id: int | None = None
+    range_id: int | None = None
+    name: str = ""
+    color: str = ""
+    start_date: str = ""
+    end_date: str = ""
+    note: str = ""
+
+
+@router.post("/memory-pins")
+async def hfl_memory_pins(request: Request, payload: MemoryPinRequest):
+    user, redirect = require_user(request)
+    if redirect:
+        return JSONResponse({"detail": "Authentication required"}, status_code=401)
+    if not verify_csrf_token(payload.csrf, user):
+        return JSONResponse({"detail": "Invalid form token."}, status_code=403)
+    store = get_memory_pin_store()
+    try:
+        if payload.action == "save_category":
+            store.save_category(
+                category_id=payload.category_id, name=payload.name, color=payload.color
+            )
+        elif payload.action == "delete_category" and payload.category_id:
+            store.delete_category(payload.category_id)
+        elif payload.action == "save_range":
+            if not payload.category_id:
+                raise ValueError("Choose a category.")
+            try:
+                range_start = date.fromisoformat(payload.start_date)
+                range_end = date.fromisoformat(payload.end_date)
+            except ValueError as exc:
+                raise ValueError("Choose valid start and end dates.") from exc
+            range_start, range_end = sorted((range_start, range_end))
+            profile = get_profile_store().get()
+            profile_birthdate = date.fromisoformat(profile.birthdate) if profile.birthdate else None
+            if profile_birthdate and range_start < profile_birthdate:
+                raise ValueError("Pinned dates cannot be earlier than your birthdate.")
+            if range_end > date.today():
+                raise ValueError("Pinned dates cannot be in the future.")
+            store.save_range(
+                range_id=payload.range_id,
+                category_id=payload.category_id,
+                start_date=payload.start_date,
+                end_date=payload.end_date,
+                note=payload.note,
+            )
+        elif payload.action == "delete_range" and payload.range_id:
+            store.delete_range(payload.range_id)
+        else:
+            raise ValueError("Choose a valid Memory Signal action.")
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=422)
+    return JSONResponse(store.snapshot())
 
 
 @router.post("/secrets/unlock")
@@ -124,6 +184,76 @@ def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
 
 def _uses_remote_corpus() -> bool:
     return bool(get_settings().hfl_corpus_api_url.strip())
+
+
+@router.get("/activity-year/{activity_year}")
+async def hfl_activity_year(
+    request: Request,
+    activity_year: int,
+    q: str = "",
+    source: str = "",
+    show_secrets: bool = False,
+):
+    user, redirect = require_user(request)
+    if redirect:
+        return JSONResponse({"detail": "Authentication required"}, status_code=401)
+    profile = get_profile_store().get()
+    try:
+        birth_year = date.fromisoformat(profile.birthdate).year if profile.birthdate else None
+    except ValueError:
+        birth_year = None
+    today = date.today()
+    first_year = birth_year or today.year - 19
+    if activity_year < first_year or activity_year > today.year:
+        return JSONResponse({"detail": "Year is outside the Memory Signal."}, status_code=404)
+
+    protected_tags = normalize_secret_tags(profile.secret_tags)
+    include_secrets = bool(show_secrets and secrets_unlocked(request, profile))
+    try:
+        if _uses_remote_corpus():
+            remote = await asyncio.to_thread(
+                RemoteCorpusClient.from_settings().index,
+                params={
+                    "q": q,
+                    "source": source,
+                    "page": "1",
+                    "page_size": "1",
+                    "compact": "true",
+                    "include_secrets": str(include_secrets).lower(),
+                    "secret_tags": ",".join(protected_tags),
+                    "activity_year": str(activity_year),
+                },
+            )
+            activity = remote["activity"]
+            counts = dict(activity.get("counts") or {})
+            document_paths = dict(activity.get("documents") or {})
+        else:
+            view = corpus_view_cache.get(
+                corpus_index.documents(),
+                include_secrets=include_secrets,
+                secret_tags=protected_tags,
+            )
+            selected_source = normalize_source(source, view.sources)
+            counts = activity_counts(
+                view.documents,
+                year=activity_year,
+                query=q,
+                source=selected_source,
+            )
+            document_paths = dated_document_paths(view.documents)
+    except RemoteCorpusError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=503)
+
+    prefix = f"{activity_year}-"
+    return JSONResponse(
+        {
+            "year": activity_year,
+            "counts": {key: value for key, value in counts.items() if key.startswith(prefix)},
+            "documents": {
+                key: value for key, value in document_paths.items() if key.startswith(prefix)
+            },
+        }
+    )
 
 
 def _reference_token(reference) -> str:
@@ -353,6 +483,8 @@ def _activity_heatmap(
     *,
     selected_day: date | None = None,
     document_paths: dict[str, str] | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
 ) -> dict[str, Any]:
     """Build a Monday-first yearly activity grid with ISO week metadata."""
     first = date(year, 1, 1)
@@ -370,7 +502,9 @@ def _activity_heatmap(
         month_label = ""
         for offset in range(7):
             day = cursor + timedelta(days=offset)
-            in_year = day.year == year
+            in_year = day.year == year and (start_date is None or day >= start_date) and (
+                end_date is None or day <= end_date
+            )
             count = counts.get(day.isoformat(), 0) if in_year else 0
             if in_year and day.month != last_labeled_month:
                 month_label = day.strftime("%b")
@@ -456,6 +590,17 @@ async def hfl_corpus_page(
         else datetime.now().year
     )
     profile = get_profile_store().get()
+    try:
+        memory_birthdate = date.fromisoformat(profile.birthdate) if profile.birthdate else None
+    except ValueError:
+        memory_birthdate = None
+    today = date.today()
+    calendar_end = date(today.year, 12, 31)
+    timeline_start = memory_birthdate or date(today.year - 19, 1, 1)
+    timeline_years = tuple(range(timeline_start.year, today.year + 1))
+    selected_timeline_year = (
+        requested_activity_year if requested_activity_year in timeline_years else today.year
+    )
     protected_tags = normalize_secret_tags(profile.secret_tags)
     authorized = secrets_unlocked(request, profile)
     include_secrets = bool(show_secrets and authorized)
@@ -476,6 +621,7 @@ async def hfl_corpus_page(
                     "include_secrets": str(include_secrets).lower(),
                     "secret_tags": ",".join(protected_tags),
                     "activity_year": str(requested_activity_year),
+                    "activity_from_year": str(timeline_start.year),
                 },
             )
             documents = remote["documents"]
@@ -571,7 +717,7 @@ async def hfl_corpus_page(
         sort=reverse_sort,
         page_size=result_page.page_size,
         show_secrets=include_secrets,
-        activity_year=activity["year"],
+        activity_year=selected_timeline_year,
     )
     tag_options = []
     for tag, count in tag_cloud:
@@ -598,7 +744,7 @@ async def hfl_corpus_page(
                 sort=sort,
                 page_size=result_page.page_size,
                 show_secrets=include_secrets,
-                activity_year=activity["year"],
+                activity_year=selected_timeline_year,
             ),
         })
     page_url_values = {
@@ -610,7 +756,7 @@ async def hfl_corpus_page(
         "sort": sort,
         "page_size": result_page.page_size,
         "show_secrets": include_secrets,
-        "activity_year": activity["year"],
+        "activity_year": selected_timeline_year,
     }
     previous_page_url = _index_url(
         **page_url_values, page=result_page.page - 1
@@ -618,12 +764,22 @@ async def hfl_corpus_page(
     next_page_url = _index_url(
         **page_url_values, page=result_page.page + 1
     )
+    timeline_counts = dict(activity["counts"])
+    selected_year_prefix = f"{selected_timeline_year}-"
+    timeline_paths = {
+        key: value
+        for key, value in dict(activity.get("documents") or {}).items()
+        if key.startswith(selected_year_prefix)
+    }
     heatmap = _activity_heatmap(
-        int(activity["year"]),
-        dict(activity["counts"]),
+        selected_timeline_year,
+        timeline_counts,
         selected_day=selected_activity_day,
-        document_paths=dict(activity.get("documents") or {}),
+        document_paths=timeline_paths,
+        start_date=timeline_start,
+        end_date=calendar_end,
     )
+    memory_pins = get_memory_pin_store().snapshot()
     return templates.TemplateResponse(
         request,
         "modules/hfl_corpus/index.html",
@@ -656,9 +812,25 @@ async def hfl_corpus_page(
             secrets_configured=bool(profile.secret_pin_hash),
             secrets_authorized=authorized,
             show_secrets=include_secrets,
-            activity_year=activity["year"],
-            activity_years=activity["years"],
+            activity_year=selected_timeline_year,
+            activity_years=tuple(reversed(timeline_years)),
             activity_heatmap=heatmap,
+            activity_timeline_years=timeline_years,
+            activity_timeline={
+                "start": timeline_start.isoformat(),
+                "end": today.isoformat(),
+                "calendar_end": calendar_end.isoformat(),
+                "counts": timeline_counts,
+                "documents": timeline_paths,
+                "selected_day": selected_activity_day.isoformat() if selected_activity_day else "",
+                "query": q,
+                "source": selected_source,
+                "show_secrets": include_secrets,
+            },
+            activity_timeline_total=sum(timeline_counts.values()),
+            activity_has_birthdate=memory_birthdate is not None,
+            memory_pins=memory_pins,
+            memory_csrf=make_csrf_token(user),
             today_iso=date.today().isoformat(),
             selected_activity_day=(
                 selected_activity_day.isoformat()

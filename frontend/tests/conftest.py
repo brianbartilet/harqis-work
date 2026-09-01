@@ -43,14 +43,22 @@ os.environ["SECOND_BRAIN_STORE_PATH"] = str(
 
 @pytest.fixture(autouse=True)
 def _empty_owner_profile():
+    from modules.hfl_corpus.memory_pins import get_memory_pin_store
     from modules.profile.store import get_profile_store
 
     store = get_profile_store()
+    pin_store = get_memory_pin_store()
     with store._connect() as connection:
         connection.execute("DELETE FROM owner_profile")
+    with pin_store._connect() as connection:
+        connection.execute("DELETE FROM memory_pin_ranges")
+        connection.execute("DELETE FROM memory_pin_categories")
     yield
     with store._connect() as connection:
         connection.execute("DELETE FROM owner_profile")
+    with pin_store._connect() as connection:
+        connection.execute("DELETE FROM memory_pin_ranges")
+        connection.execute("DELETE FROM memory_pin_categories")
 
 
 @pytest.fixture

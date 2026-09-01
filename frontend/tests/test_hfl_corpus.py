@@ -1456,21 +1456,45 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     activity_header_actions = response.text.split(
         "data-activity-header-actions", 1
     )[1].split("</div>", 1)[0]
-    assert 'data-activity-year aria-label="Activity year"' in activity_header_actions
+    assert 'data-activity-year aria-label="Activity year"' not in activity_header_actions
     assert "data-activity-toggle" in activity_header_actions
     assert 'data-activity-year-list role="listbox"' in response.text
+    assert 'data-activity-year-trigger aria-haspopup="listbox" aria-expanded="false"' in response.text
+    assert 'data-activity-year-trigger-value>2026</span>' in response.text
+    assert 'activity-year-controls[data-year-menu-open="true"] .activity-year-list' in response.text
+    assert "setYearMenuOpen" in response.text
     assert 'data-activity-year-option="2026"' in response.text
     activity_body = response.text.split("data-activity-body", 1)[1].split(
-        "</section>", 1
+        "data-activity-day-menu", 1
     )[0]
     assert "data-activity-year" in activity_body
     assert "data-activity-year-list" in activity_body
-    assert 'data-activity-year aria-label="Activity year"' not in activity_body
-    assert "grid-template-columns:minmax(0,1fr) 4.75rem" in response.text
+    assert 'data-activity-year aria-label="Activity year"' in activity_body
+    assert "corpus-select-shell" not in response.text
+    assert "corpus-select-caret" not in response.text
+    assert 'class="activity-year-select corpus-select block"' in response.text
+    assert response.text.count('class="corpus-select mt-1.5 block w-full') == 2
+    assert "background-position:right .85rem center" in response.text
+    assert "grid-template-columns:4.75rem minmax(0,1fr) 11rem" in response.text
     assert '<option value="2026" selected>2026</option>' in response.text
     assert '<option value="2025"' in response.text
-    assert response.text.count('data-activity-day="') == 365
+    assert 200 < response.text.count('data-activity-day="') <= 366
+    assert 'data-activity-year-segment="2026"' in response.text
+    assert 'style="--activity-weeks:53" data-activity-year-segment="2026"' in response.text
+    assert "calendarWeekCount" in response.text
+    assert "segment.style.setProperty('--activity-weeks', weekIndex)" in response.text
+    assert "activity-year-segment::before" not in response.text
+    assert "activity-year-marker" not in response.text
+    assert "data-activity-previous-year" in response.text
+    assert "updatePreviousYearCoachmark" in response.text
+    assert "new IntersectionObserver" in response.text
+    assert "hydrateYear(segment)" in response.text
     assert 'data-activity-day="2026-08-24"' in response.text
+    future_cell = response.text.split(
+        'data-activity-day="2026-12-31"', 1
+    )[1].split(">", 1)[0]
+    assert "Future date" in future_cell
+    assert "disabled" in future_cell
     assert "Week 35 · 2 entries" in response.text
     selected_cell = response.text.split(
         'data-activity-day="2026-08-24"', 1
@@ -1480,16 +1504,25 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     result_cards = response.text.split("data-corpus-results-scroll", 1)[1]
     assert "2026-08-24.md" in result_cards
     assert "other.md" not in result_cards
-    assert "ArrowDown: 7" in response.text
+    assert "ArrowDown: 1" in response.text
+    assert "ArrowRight: 7" in response.text
     assert "<span>Tue</span>" in response.text
     assert "<span>Sun</span>" in response.text
     assert "scroll-snap-type:x proximity" in response.text
-    assert "week.offsetLeft - (scroll.clientWidth - week.offsetWidth) / 2" in response.text
+    assert "target.scrollIntoView({" in response.text
+    assert "inline:'center'" in response.text
     assert "activeDays.at(-1)" in response.text
-    assert "await fetch(url" in response.text
-    assert "panel.replaceWith(replacement)" in response.text
+    assert "rootMargin:'0px 100%'" in response.text
+    assert 'data-activity-loaded="true"' in response.text
+    assert "const yearLoads = new Map()" in response.text
+    assert "yearLoads.has(selectedYear)" in response.text
+    assert "`/hfl-corpus/activity-year/${selectedYear}`" in response.text
+    assert "hydrateYear(segment, {animate:true})" in response.text
+    assert "delay:weekIndex * 11" in response.text
+    assert "prefers-reduced-motion: reduce" in response.text
     assert "data-activity-day-menu" in response.text
     assert "data-activity-menu-create" in response.text
+    assert "data-activity-menu-pin" in response.text
     assert "data-activity-menu-document" in response.text
     assert "data-activity-menu-matches" in response.text
     assert "data-activity-menu-matches-panel" in response.text
@@ -1514,7 +1547,46 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "q=%23work" in selected_cell
     assert "form.elements.time.value = selectedDate ? ''" in response.text
     assert "successUrl.searchParams.set('date_from', savedActivityDate)" in response.text
-    assert "const selectedDay = panel.querySelector('[data-activity-day][data-selected=\"true\"]')" in response.text
+    assert "let selectedDay = panel.querySelector('[data-activity-day][data-selected=\"true\"]')" in response.text
+    assert "left: Math.max(0, segment.offsetLeft)" in response.text
+    assert "-06-" not in response.text.split("const scrollToYear = async value =>", 1)[1].split("year.addEventListener", 1)[0]
+    assert "scrollbar-width:none" in response.text
+    assert ".activity-grid { display:flex; width:max-content; align-items:stretch; gap:var(--activity-cell); }" in response.text
+    assert '<div class="activity-chart-column">' in response.text
+    assert '<div class="activity-legend"' in response.text
+    assert ".activity-chart-column { order:1; }" in response.text
+    assert ".activity-chart-shell { justify-content:flex-start; }" in response.text
+    assert "enableDragScroll(scroll, 'x'" in response.text
+    assert "enableWheelScroll(scroll)" in response.text
+    wheel_handler = response.text.split("const enableWheelScroll =", 1)[1].split(
+        "const isoWeek =", 1
+    )[0]
+    assert "element.addEventListener('wheel'" in wheel_handler
+    assert "event.preventDefault()" in wheel_handler
+    assert "element.scrollLeft > 0" in wheel_handler
+    assert "element.scrollLeft < maxScroll" in wheel_handler
+    assert "{passive:false}" in wheel_handler
+    assert "enableDragScroll(pinList, 'y')" in response.text
+    assert "const formatPinnedEnd = range =>" in response.text
+    assert "return `ENDS ${day} ${month} ${value.getFullYear()}`" in response.text
+    assert "details.open = true" not in response.text
+    assert "segment.offsetLeft + week.offsetLeft" in response.text
+    assert "button.addEventListener('click', () => scrollToDate(midpoint(range)))" in response.text
+    assert "editRange.addEventListener('click', () => openMemoryDialog({range}))" in response.text
+    assert "[data-memory-range-save] { border:1px solid #fbbf24" in response.text
+    assert "memory-dialog-select-caret" in response.text
+    assert ".memory-dialog-select { appearance:none; padding-right:2.5rem; }" in response.text
+    drag_handler = response.text.split("const enableDragScroll =", 1)[1].split(
+        "const isoWeek =", 1
+    )[0]
+    pointer_down, pointer_move = drag_handler.split(
+        "element.addEventListener('pointermove'", 1
+    )
+    assert "setPointerCapture" not in pointer_down
+    assert "setPointerCapture" in pointer_move
+    assert "Create a category first" in response.text
+    assert "memoryRefs.categorySelect.disabled = !memoryState.categories.length" in response.text
+    assert "Select a day to recall or create a memory" not in response.text
     assert "const centerSelectedYear = () =>" in response.text
     assert "yearList.scrollTop + selectedRect.top - listRect.top" in response.text
     assert "window.addEventListener('pageshow', centerSelectedYear" in response.text
@@ -1523,6 +1595,139 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "writeActivityState(nextExpanded)" in response.text
     assert "Activity rhythm" not in response.text
     assert "data-result-tags" in response.text
+
+
+def test_memory_pins_persist_categories_ranges_and_notes(authenticated_client):
+    from modules.hfl_shares.security import make_csrf_token
+
+    csrf = make_csrf_token("frontend-test-user")
+    category = authenticated_client.post(
+        "/hfl-corpus/memory-pins",
+        json={
+            "csrf": csrf,
+            "action": "save_category",
+            "name": "Turning points",
+            "color": "#f59e0b",
+        },
+    )
+    category_id = category.json()["categories"][0]["id"]
+    pinned = authenticated_client.post(
+        "/hfl-corpus/memory-pins",
+        json={
+            "csrf": csrf,
+            "action": "save_range",
+            "category_id": category_id,
+            "start_date": "2018-06-12",
+            "end_date": "2018-06-18",
+            "note": "Recall the week the direction changed.",
+        },
+    )
+
+    assert category.status_code == 200
+    assert pinned.status_code == 200
+    assert pinned.json()["ranges"][0]["start_date"] == "2018-06-12"
+    assert pinned.json()["ranges"][0]["end_date"] == "2018-06-18"
+    page = authenticated_client.get("/hfl-corpus?activity_year=2018")
+    assert "Turning points" in page.text
+    assert "Recall the week the direction changed." in page.text
+    assert "Nothing here" in page.text  # Client-side empty-state copy remains available.
+
+
+def test_activity_year_endpoint_returns_local_counts(authenticated_client, monkeypatch):
+    import modules.hfl_corpus.router as hfl_routes
+
+    document = _document("2023-04-05.md", entry_count=3)
+    monkeypatch.setattr(hfl_routes, "_uses_remote_corpus", lambda: False)
+    monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: (document,))
+
+    response = authenticated_client.get("/hfl-corpus/activity-year/2023")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "year": 2023,
+        "counts": {"2023-04-05": 3},
+        "documents": {"2023-04-05": "2023-04-05.md"},
+    }
+
+
+def test_activity_year_endpoint_uses_legacy_remote_year_counts(
+    authenticated_client, monkeypatch
+):
+    import modules.hfl_corpus.router as hfl_routes
+
+    requested = {}
+
+    class FakeRemote:
+        def index(self, *, params):
+            requested.update(params)
+            return {
+                "activity": {
+                    "counts": {"2023-04-05": 2, "2024-01-01": 9},
+                    "documents": {
+                        "2023-04-05": "2023-04-05.md",
+                        "2024-01-01": "2024-01-01.md",
+                    },
+                }
+            }
+
+    monkeypatch.setattr(hfl_routes, "_uses_remote_corpus", lambda: True)
+    monkeypatch.setattr(
+        hfl_routes.RemoteCorpusClient,
+        "from_settings",
+        classmethod(lambda cls: FakeRemote()),
+    )
+
+    response = authenticated_client.get(
+        "/hfl-corpus/activity-year/2023?q=%23work&source=notes"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "year": 2023,
+        "counts": {"2023-04-05": 2},
+        "documents": {"2023-04-05": "2023-04-05.md"},
+    }
+    assert requested["activity_year"] == "2023"
+    assert requested["q"] == "#work"
+    assert requested["source"] == "notes"
+    assert requested["compact"] == "true"
+
+
+def test_memory_pin_mutations_require_valid_csrf(authenticated_client):
+    response = authenticated_client.post(
+        "/hfl-corpus/memory-pins",
+        json={"csrf": "", "action": "delete_range", "range_id": 1},
+    )
+
+    assert response.status_code == 403
+
+
+def test_memory_pin_range_rejects_future_dates(authenticated_client):
+    from modules.hfl_shares.security import make_csrf_token
+
+    csrf = make_csrf_token("frontend-test-user")
+    category = authenticated_client.post(
+        "/hfl-corpus/memory-pins",
+        json={
+            "csrf": csrf,
+            "action": "save_category",
+            "name": "Future",
+            "color": "#3b82f6",
+        },
+    ).json()["categories"][0]
+    response = authenticated_client.post(
+        "/hfl-corpus/memory-pins",
+        json={
+            "csrf": csrf,
+            "action": "save_range",
+            "category_id": category["id"],
+            "start_date": "2999-01-01",
+            "end_date": "2999-01-02",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Pinned dates cannot be in the future."
 
 
 def test_historical_counted_day_enables_matching_without_canonical_document(
@@ -1680,7 +1885,8 @@ def test_corpus_search_explains_combined_search_and_supports_tag_cloud_toggles(
     assert 'placeholder="Try a topic, phrase, or #tag"' in response.text
     assert 'aria-label="How corpus search works"' in response.text
     assert "every space-delimited tag must match" in response.text
-    assert response.text.count('aria-pressed="true"') == 2
+    tag_cloud = response.text.split("data-tag-cloud", 1)[1].split("</details>", 1)[0]
+    assert tag_cloud.count('aria-pressed="true"') == 2
     assert (
         'href="/hfl-corpus?q=%23notes+testing+topic"' in response.text
     )
@@ -2432,6 +2638,7 @@ def test_corpus_api_returns_filtered_activity_without_date_range_bias(
         "years": list(activity_calendar_years()),
         "counts": {"2026-02-02": 1},
         "documents": {"2026-02-02": "2026-02-02.md"},
+        "timeline_counts": {"2026-02-02": 1},
     }
 
 

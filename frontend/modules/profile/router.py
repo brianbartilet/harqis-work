@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import date
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -39,6 +40,7 @@ def _context(
         saved=saved,
         remove_avatar=remove_avatar,
         csrf=make_csrf_token(user),
+        today_iso=date.today().isoformat(),
     )
 
 

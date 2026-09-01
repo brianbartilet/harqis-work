@@ -80,6 +80,11 @@
               {% if errors.nickname %}<p class="profile-error">{{ errors.nickname }}</p>{% endif %}
             </div>
             <div>
+              <label class="profile-label" for="birthdate">Birthdate <span class="profile-hint">Starts your Memory Signal</span></label>
+              <input class="profile-input [color-scheme:dark]" id="birthdate" name="birthdate" type="date" value="{{ profile.birthdate }}" max="{{ today_iso }}" onclick="if (this.showPicker) this.showPicker()">
+              {% if errors.birthdate %}<p class="profile-error">{{ errors.birthdate }}</p>{% endif %}
+            </div>
+            <div>
               <label class="profile-label" for="location">Location <span class="profile-hint">Country-level inference</span></label>
               <div class="profile-location-row">
                 <input class="profile-input" id="location" name="location" maxlength="120" value="{{ profile.location }}" autocomplete="country-name" data-profile-location>

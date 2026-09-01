@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import re
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
@@ -18,6 +18,7 @@ _LIMITS = {
     "first_name": 80,
     "last_name": 80,
     "nickname": 50,
+    "birthdate": 10,
     "location": 120,
     "phone": 32,
     "bio": 500,
@@ -62,6 +63,13 @@ def profile_from_form(form: Any, saved: OwnerProfile) -> tuple[OwnerProfile, dic
     for field, limit in _LIMITS.items():
         if len(values[field]) > limit:
             errors[field] = f"Use {limit} characters or fewer."
+    if values["birthdate"]:
+        try:
+            parsed_birthdate = date.fromisoformat(values["birthdate"])
+            if parsed_birthdate > date.today():
+                errors["birthdate"] = "Birthdate cannot be in the future."
+        except ValueError:
+            errors["birthdate"] = "Enter a valid birthdate."
     if values["email"] and not _valid_email(values["email"]):
         errors["email"] = "Enter a valid email address."
     phone_digits = sum(char.isdigit() for char in values["phone"])

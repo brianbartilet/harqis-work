@@ -668,6 +668,38 @@ def activity_counts(
     return dict(sorted(counts.items()))
 
 
+def activity_counts_between(
+    documents: tuple[CorpusDocument, ...],
+    *,
+    start: date,
+    end: date,
+    query: str = "",
+    source: str = "",
+) -> dict[str, int]:
+    """Count visible entries across an inclusive date span in one corpus pass."""
+    selected_tags, text_query = parse_search_query(query)
+    filtered = bool(selected_tags or text_query or source)
+    counts: Counter[str] = Counter()
+    for document in documents:
+        entries = (
+            document.matching_entries(selected_tags, text_query, source)
+            if filtered
+            else document.entries
+        )
+        document_day = _dated_document_date(document)
+        if document_day is not None:
+            if start <= document_day <= end:
+                counts[document_day.isoformat()] += (
+                    len(entries) if filtered else document.entry_count
+                )
+            continue
+        for entry in entries:
+            occurred = entry_occurrence_date(entry)
+            if occurred is not None and start <= occurred <= end:
+                counts[occurred.isoformat()] += 1
+    return dict(sorted(counts.items()))
+
+
 def activity_day_entries(
     documents: tuple[CorpusDocument, ...],
     *,

@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS owner_profile (
     first_name TEXT NOT NULL DEFAULT '',
     last_name TEXT NOT NULL DEFAULT '',
     nickname TEXT NOT NULL DEFAULT '',
+    birthdate TEXT NOT NULL DEFAULT '',
     location TEXT NOT NULL DEFAULT '',
     phone TEXT NOT NULL DEFAULT '',
     bio TEXT NOT NULL DEFAULT '',
@@ -42,7 +43,7 @@ class ProfileStore:
             columns = {
                 row["name"] for row in connection.execute("PRAGMA table_info(owner_profile)")
             }
-            for name in ("secret_pin_hash", "secret_tags"):
+            for name in ("secret_pin_hash", "secret_tags", "birthdate"):
                 if name not in columns:
                     connection.execute(
                         f"ALTER TABLE owner_profile ADD COLUMN {name} TEXT NOT NULL DEFAULT ''"

@@ -11,6 +11,7 @@ class OwnerProfile:
     first_name: str = ""
     last_name: str = ""
     nickname: str = ""
+    birthdate: str = ""
     location: str = ""
     phone: str = ""
     bio: str = ""

@@ -15,6 +15,7 @@ def _profile_form(**overrides):
         "first_name": "Sam",
         "last_name": "Rivera",
         "nickname": "Sami",
+        "birthdate": "1990-06-15",
         "location": "Singapore",
         "phone": "+65 8123 4567",
         "bio": "I turn lived activity into useful systems.",
@@ -72,6 +73,7 @@ def test_profile_saves_and_updates_authenticated_header(authenticated_client):
     assert saved.headers["location"] == "/profile?saved=true"
     assert profile.display_name == "Sami"
     assert profile.email == "sami@example.test"
+    assert profile.birthdate == "1990-06-15"
     assert "Active shares now use this identity." in authenticated_client.get(
         saved.headers["location"]
     ).text
@@ -172,3 +174,13 @@ def test_profile_rejects_missing_csrf(authenticated_client):
     )
 
     assert response.status_code == 403
+
+
+def test_profile_rejects_future_birthdate(authenticated_client):
+    response = authenticated_client.post(
+        "/profile",
+        data=_profile_form(birthdate="2999-01-01"),
+    )
+
+    assert response.status_code == 422
+    assert "Birthdate cannot be in the future." in response.text
