@@ -1499,7 +1499,8 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
         'data-activity-day="2026-12-31"', 1
     )[1].split(">", 1)[0]
     assert "Future date" in future_cell
-    assert "disabled" in future_cell
+    assert 'data-future="true"' in future_cell
+    assert "disabled" not in future_cell
     assert "Week 35 · 2 entries" in response.text
     selected_cell = response.text.split(
         'data-activity-day="2026-08-24"', 1
@@ -1534,8 +1535,8 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     day_menu = response.text.split('data-activity-day-menu', 1)[1].split("</div>\n    </div>", 1)[0]
     assert day_menu.index("Create entry") < day_menu.index("Show document")
     assert day_menu.index("Show document") < day_menu.index("Matching entries")
-    assert "const hasDocument = Boolean(documentUrl)" in response.text
-    assert "const canShowMatches = Boolean(matchesUrl && (hasDocument || count > 0))" in response.text
+    assert "const hasDocument = !isFuture && Boolean(documentUrl)" in response.text
+    assert "const canShowMatches = !isFuture" in response.text
     assert "showDocument.setAttribute('aria-disabled', String(!hasDocument))" in response.text
     assert "matchingEntries.disabled = !canShowMatches" in response.text
     assert "if (canShowMatches) matchingEntries.click()" in response.text
@@ -1543,6 +1544,7 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "matchingContent.dataset.loaded === 'true'" in response.text
     assert "window.htmx?.process(matchingContent)" in response.text
     assert "openDayMenu(button)" in response.text
+    assert "createEntry.disabled = isFuture" in response.text
     assert "hfl:create-entry-for-date" in response.text
     assert 'data-document-url="http://testserver/hfl-corpus/document/2026-08-24.md"' in response.text
     assert (
@@ -1600,6 +1602,8 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "setPointerCapture" in pointer_move
     assert "Create a category first" in response.text
     assert "memoryRefs.categorySelect.disabled = !memoryState.categories.length" in response.text
+    assert "memoryRefs.start.max = timelineData.calendar_end" in response.text
+    assert "memoryRefs.end.max = timelineData.calendar_end" in response.text
     assert ">Edit category</button>" in response.text
     assert "Create or edit a category" not in response.text
     assert "Select a day to recall or create a memory" not in response.text
@@ -1795,7 +1799,9 @@ def test_memory_pin_mutations_require_valid_csrf(authenticated_client):
     assert response.status_code == 403
 
 
-def test_memory_pin_range_rejects_future_dates(authenticated_client):
+def test_memory_pin_range_accepts_future_dates_through_five_year_limit(
+    authenticated_client,
+):
     from modules.hfl_shares.security import make_csrf_token
 
     csrf = make_csrf_token("frontend-test-user")
@@ -1808,19 +1814,66 @@ def test_memory_pin_range_rejects_future_dates(authenticated_client):
             "color": "#3b82f6",
         },
     ).json()["categories"][0]
+    allowed = date.today().replace(year=date.today().year + 5)
     response = authenticated_client.post(
         "/hfl-corpus/memory-pins",
         json={
             "csrf": csrf,
             "action": "save_range",
             "category_id": category["id"],
-            "start_date": "2999-01-01",
-            "end_date": "2999-01-02",
+            "start_date": date.today().isoformat(),
+            "end_date": allowed.isoformat(),
         },
     )
 
-    assert response.status_code == 422
-    assert response.json()["detail"] == "Pinned dates cannot be in the future."
+    assert response.status_code == 200
+    assert response.json()["ranges"][0]["end_date"] == allowed.isoformat()
+
+    rejected = authenticated_client.post(
+        "/hfl-corpus/memory-pins",
+        json={
+            "csrf": csrf,
+            "action": "save_range",
+            "category_id": category["id"],
+            "start_date": allowed.isoformat(),
+            "end_date": (allowed + timedelta(days=1)).isoformat(),
+        },
+    )
+
+    assert rejected.status_code == 422
+    assert allowed.isoformat() in rejected.json()["detail"]
+
+
+def test_memory_signal_exposes_exact_five_year_future_boundary(authenticated_client):
+    import modules.hfl_corpus.router as hfl_routes
+
+    today = date.today()
+    max_pin_date = hfl_routes._add_calendar_years(today, 5)
+
+    page = authenticated_client.get("/hfl-corpus")
+    future_year = authenticated_client.get(
+        f"/hfl-corpus/activity-year/{max_pin_date.year}"
+    )
+    beyond_limit = authenticated_client.get(
+        f"/hfl-corpus/activity-year/{max_pin_date.year + 1}"
+    )
+
+    assert page.status_code == 200
+    assert f'<option value="{max_pin_date.year}"' in page.text
+    assert f'"calendar_end": "{max_pin_date.isoformat()}"' in page.text
+    assert future_year.status_code == 200
+    assert future_year.json() == {
+        "year": max_pin_date.year,
+        "counts": {},
+        "documents": {},
+    }
+    assert beyond_limit.status_code == 404
+
+
+def test_five_year_boundary_clamps_leap_day():
+    import modules.hfl_corpus.router as hfl_routes
+
+    assert hfl_routes._add_calendar_years(date(2024, 2, 29), 5) == date(2029, 2, 28)
 
 
 def test_historical_counted_day_enables_matching_without_canonical_document(

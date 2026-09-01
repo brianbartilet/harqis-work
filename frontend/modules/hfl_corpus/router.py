@@ -88,6 +88,14 @@ _H2 = re.compile(r"<h2(?:\s+[^>]*)?>")
 _log = logging.getLogger(__name__)
 
 
+def _add_calendar_years(value: date, years: int) -> date:
+    """Return the same calendar date in a later year, clamping leap day."""
+    try:
+        return value.replace(year=value.year + years)
+    except ValueError:
+        return value.replace(year=value.year + years, day=28)
+
+
 class SecretPinRequest(BaseModel):
     pin: str
 
@@ -132,8 +140,11 @@ async def hfl_memory_pins(request: Request, payload: MemoryPinRequest):
             profile_birthdate = date.fromisoformat(profile.birthdate) if profile.birthdate else None
             if profile_birthdate and range_start < profile_birthdate:
                 raise ValueError("Pinned dates cannot be earlier than your birthdate.")
-            if range_end > date.today():
-                raise ValueError("Pinned dates cannot be in the future.")
+            max_pin_date = _add_calendar_years(date.today(), 5)
+            if range_end > max_pin_date:
+                raise ValueError(
+                    f"Pinned dates cannot be later than {max_pin_date.isoformat()}."
+                )
             store.save_range(
                 range_id=payload.range_id,
                 category_id=payload.category_id,
@@ -203,9 +214,12 @@ async def hfl_activity_year(
     except ValueError:
         birth_year = None
     today = date.today()
+    max_pin_date = _add_calendar_years(today, 5)
     first_year = birth_year or today.year - 19
-    if activity_year < first_year or activity_year > today.year:
+    if activity_year < first_year or activity_year > max_pin_date.year:
         return JSONResponse({"detail": "Year is outside the Memory Signal."}, status_code=404)
+    if activity_year > today.year:
+        return JSONResponse({"year": activity_year, "counts": {}, "documents": {}})
 
     protected_tags = normalize_secret_tags(profile.secret_tags)
     include_secrets = bool(show_secrets and secrets_unlocked(request, profile))
@@ -595,9 +609,10 @@ async def hfl_corpus_page(
     except ValueError:
         memory_birthdate = None
     today = date.today()
-    calendar_end = date(today.year, 12, 31)
+    max_pin_date = _add_calendar_years(today, 5)
+    calendar_end = max_pin_date
     timeline_start = memory_birthdate or date(today.year - 19, 1, 1)
-    timeline_years = tuple(range(timeline_start.year, today.year + 1))
+    timeline_years = tuple(range(timeline_start.year, max_pin_date.year + 1))
     selected_timeline_year = (
         requested_activity_year if requested_activity_year in timeline_years else today.year
     )
@@ -764,12 +779,15 @@ async def hfl_corpus_page(
     next_page_url = _index_url(
         **page_url_values, page=result_page.page + 1
     )
-    timeline_counts = dict(activity["counts"])
+    today_iso = today.isoformat()
+    timeline_counts = {
+        key: value for key, value in dict(activity["counts"]).items() if key <= today_iso
+    }
     selected_year_prefix = f"{selected_timeline_year}-"
     timeline_paths = {
         key: value
         for key, value in dict(activity.get("documents") or {}).items()
-        if key.startswith(selected_year_prefix)
+        if key.startswith(selected_year_prefix) and key <= today_iso
     }
     heatmap = _activity_heatmap(
         selected_timeline_year,

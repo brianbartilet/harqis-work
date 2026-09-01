@@ -59,8 +59,8 @@
   .activity-day[data-pinned="true"][data-today="true"] { box-shadow:inset 0 0 0 1px var(--pin-color),0 0 0 1px #fbbf24; }
   .activity-day[data-pinned="true"][data-selected="true"] { border-color:var(--pin-color); box-shadow:inset 0 0 0 1px var(--pin-color),0 0 0 2px #fbbf24,0 0 0 4px rgba(251,191,36,.2); }
   .activity-day[data-range-preview="true"] { outline:2px solid #f8fafc; outline-offset:1px; }
-  .activity-day:disabled { cursor:not-allowed; border-color:rgba(30,41,59,.42); background:rgba(15,23,42,.42); opacity:.42; }
-  .activity-day:disabled:hover { transform:none; border-color:rgba(30,41,59,.42); }
+  .activity-day[data-future="true"] { border-color:rgba(30,41,59,.42); background:rgba(15,23,42,.42); opacity:.42; }
+  .activity-day[data-future="true"]:hover { border-color:rgba(51,65,85,.78); opacity:.64; }
   .activity-day-menu { position:fixed; z-index:60; width:13rem; border:1px solid rgba(14,116,144,.8); border-radius:.75rem; background:#020617; padding:.45rem; color:#e2e8f0; box-shadow:0 18px 45px rgba(2,6,23,.65); }
   .activity-day-menu[data-matches-expanded="true"] { width:min(24rem, calc(100vw - 1rem)); }
   .activity-day-menu-action { display:flex; width:100%; min-height:2.35rem; align-items:center; border-radius:.5rem; padding:.55rem .65rem; font-size:.75rem; font-weight:650; text-align:left; }
@@ -247,7 +247,7 @@
                 <span class="activity-month" aria-hidden="true">{{ week.month }}</span>
                 {% for day in week.days %}
                   {% if day.in_year %}
-                  <button type="button" class="activity-day" data-activity-day="{{ day.date }}" data-level="{{ day.level }}" data-today="{{ 'true' if day.is_today else 'false' }}" data-selected="{{ 'true' if day.selected else 'false' }}" data-count="{{ day.count }}" data-document-url="{% if day.document_path %}{{ url_for('hfl_document', relative_path=day.document_path) }}{% endif %}" data-matches-url="{{ url_for('hfl_day_matches', activity_day=day.date) }}?q={{ query | urlencode }}&source={{ source | urlencode }}{% if show_secrets %}&show_secrets=true{% endif %}" aria-label="{{ day.label }}{% if day.is_future %} · Future date{% endif %}" aria-pressed="{{ 'true' if day.selected else 'false' }}" aria-haspopup="menu" aria-expanded="false" title="{{ day.label }}{% if day.is_future %} · Future date{% endif %}" {% if day.is_future %}disabled{% endif %}></button>
+                  <button type="button" class="activity-day" data-activity-day="{{ day.date }}" data-level="{{ day.level }}" data-today="{{ 'true' if day.is_today else 'false' }}" data-future="{{ 'true' if day.is_future else 'false' }}" data-selected="{{ 'true' if day.selected else 'false' }}" data-count="{{ day.count }}" data-document-url="{% if day.document_path and not day.is_future %}{{ url_for('hfl_document', relative_path=day.document_path) }}{% endif %}" data-matches-url="{{ url_for('hfl_day_matches', activity_day=day.date) }}?q={{ query | urlencode }}&source={{ source | urlencode }}{% if show_secrets %}&show_secrets=true{% endif %}" aria-label="{{ day.label }}{% if day.is_future %} · Future date{% endif %}" aria-pressed="{{ 'true' if day.selected else 'false' }}" aria-haspopup="menu" aria-expanded="false" title="{{ day.label }}{% if day.is_future %} · Future date{% endif %}"></button>
                   {% else %}<span class="activity-day-blank" aria-hidden="true"></span>{% endif %}
                 {% endfor %}
                 <span class="activity-week-number" aria-hidden="true">{% if week.show_week %}{{ '%02d' | format(week.week) }}{% endif %}</span>
@@ -871,9 +871,9 @@
       memoryRefs.start.value = start || range?.start_date || '';
       memoryRefs.end.value = end || range?.end_date || '';
       memoryRefs.start.min = timelineData.start;
-      memoryRefs.start.max = timelineData.end;
+      memoryRefs.start.max = timelineData.calendar_end;
       memoryRefs.end.min = timelineData.start;
-      memoryRefs.end.max = timelineData.end;
+      memoryRefs.end.max = timelineData.calendar_end;
       memoryRefs.note.value = range?.note || '';
       populateCategories(range?.category_id || memoryState.categories[0]?.id);
       if (categoryOnly) openCategoryEditor(category);
@@ -1097,13 +1097,13 @@
           if (timelineData.show_secrets) matches.searchParams.set('show_secrets', 'true');
           button.dataset.matchesUrl = `${matches.pathname}${matches.search}`;
           const isFuture = iso > timelineData.end;
+          button.dataset.future = String(isFuture);
           const label = `${value.toLocaleDateString(undefined, {weekday:'long', year:'numeric', month:'long', day:'numeric'})} · Week ${isoWeek(value)} · ${count} ${count === 1 ? 'entry' : 'entries'}${isFuture ? ' · Future date' : ''}`;
           button.setAttribute('aria-label', label);
           button.setAttribute('aria-pressed', String(iso === timelineData.selected_day));
           button.setAttribute('aria-haspopup', 'menu');
           button.setAttribute('aria-expanded', 'false');
           button.title = label;
-          button.disabled = isFuture;
           weekDays.push(button);
         }
         const month = document.createElement('span');
@@ -1224,8 +1224,12 @@
       })} · ${count} ${count === 1 ? 'entry' : 'entries'}`;
       const documentUrl = button.dataset.documentUrl;
       const matchesUrl = button.dataset.matchesUrl;
-      const hasDocument = Boolean(documentUrl);
-      const canShowMatches = Boolean(matchesUrl && (hasDocument || count > 0));
+      const isFuture = button.dataset.future === 'true';
+      const hasDocument = !isFuture && Boolean(documentUrl);
+      const canShowMatches = !isFuture && Boolean(matchesUrl && (hasDocument || count > 0));
+      createEntry.disabled = isFuture;
+      createEntry.classList.toggle('activity-day-menu-disabled', isFuture);
+      createEntry.setAttribute('aria-disabled', String(isFuture));
       showDocument.classList.toggle('activity-day-menu-disabled', !hasDocument);
       showDocument.setAttribute('aria-disabled', String(!hasDocument));
       showDocument.tabIndex = hasDocument ? 0 : -1;
@@ -1237,7 +1241,7 @@
       menu.hidden = false;
       positionDayMenu(button);
       if (canShowMatches) matchingEntries.click();
-      createEntry.focus();
+      (isFuture ? pinDates : createEntry).focus();
     };
 
     let draggingRange = false;
