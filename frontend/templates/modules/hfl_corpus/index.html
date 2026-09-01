@@ -36,9 +36,9 @@
   .activity-chart-shell { display:flex; min-width:0; align-items:flex-start; gap:.5rem; }
   .activity-legend { display:flex; align-items:center; gap:.25rem; color:#64748b; font-size:.625rem; }
   .activity-weekdays { display:grid; flex:0 0 1.55rem; grid-template-rows:14px repeat(7,var(--activity-cell)) 12px; gap:var(--activity-gap); color:#64748b; font:600 .56rem/var(--activity-cell) ui-monospace,SFMono-Regular,Consolas,monospace; text-align:right; }
-  .activity-scroll { min-width:0; flex:1; overflow-x:auto; overflow-y:hidden; padding:0 2px .3rem; scrollbar-width:none; scroll-padding-inline:0; cursor:grab; }
+  .activity-scroll { min-width:0; flex:1; overflow-x:auto; overflow-y:hidden; overflow-anchor:none; padding:0 2px .3rem; scrollbar-width:none; scroll-padding-inline:0; cursor:grab; }
   .activity-grid { display:flex; width:max-content; align-items:stretch; gap:var(--activity-cell); }
-  .activity-year-segment { position:relative; display:flex; width:max-content; min-width:calc(var(--activity-weeks) * (var(--activity-cell) + var(--activity-gap))); gap:var(--activity-gap); content-visibility:auto; contain-intrinsic-size:850px 160px; }
+  .activity-year-segment { position:relative; display:flex; width:max-content; min-width:calc(var(--activity-weeks) * (var(--activity-cell) + var(--activity-gap))); gap:var(--activity-gap); content-visibility:auto; contain-intrinsic-size:850px 160px; overflow-clip-margin:6px; }
   .activity-coachmark-anchor { position:sticky; left:.35rem; z-index:8; display:block; width:0; height:0; pointer-events:none; }
   .activity-previous-year { position:absolute; top:.05rem; left:0; width:max-content; padding:.15rem .35rem; border:1px solid rgba(51,65,85,.8); border-radius:999px; background:rgba(15,23,42,.9); color:#94a3b8; font:650 .54rem/1 ui-monospace,SFMono-Regular,Consolas,monospace; box-shadow:0 3px 10px rgba(2,6,23,.32); }
   .activity-previous-year[hidden] { display:none; }
@@ -59,8 +59,8 @@
   .activity-day[data-pinned="true"][data-today="true"] { box-shadow:inset 0 0 0 1px var(--pin-color),0 0 0 1px #fbbf24; }
   .activity-day[data-pinned="true"][data-selected="true"] { border-color:var(--pin-color); box-shadow:inset 0 0 0 1px var(--pin-color),0 0 0 2px #fbbf24,0 0 0 4px rgba(251,191,36,.2); }
   .activity-day[data-range-preview="true"] { outline:2px solid #f8fafc; outline-offset:1px; }
-  .activity-day[data-future="true"] { border-color:rgba(30,41,59,.42); background:rgba(15,23,42,.42); opacity:.42; }
-  .activity-day[data-future="true"]:hover { border-color:rgba(51,65,85,.78); opacity:.64; }
+  .activity-day[data-future="true"] { border-color:rgba(51,65,85,.7); background:rgba(30,41,59,.58); opacity:.52; }
+  .activity-day[data-future="true"]:hover { border-color:rgba(71,85,105,.82); opacity:.7; }
   .activity-day-menu { position:fixed; z-index:60; width:13rem; border:1px solid rgba(14,116,144,.8); border-radius:.75rem; background:#020617; padding:.45rem; color:#e2e8f0; box-shadow:0 18px 45px rgba(2,6,23,.65); }
   .activity-day-menu[data-matches-expanded="true"] { width:min(24rem, calc(100vw - 1rem)); }
   .activity-day-menu-action { display:flex; width:100%; min-height:2.35rem; align-items:center; border-radius:.5rem; padding:.55rem .65rem; font-size:.75rem; font-weight:650; text-align:left; }
@@ -793,7 +793,7 @@
       renderMemoryState();
       return result;
     };
-    const scrollToDate = async value => {
+    const scrollToDate = async (value, {behavior='', focus=true}={}) => {
       const selectedYear = value.slice(0, 4);
       const segment = panel.querySelector(`[data-activity-year-segment="${selectedYear}"]`);
       await loadYear(segment, {retry:true});
@@ -806,11 +806,11 @@
       centerSelectedYear();
       window.requestAnimationFrame(() => {
         target.scrollIntoView({
-          behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+          behavior: behavior || (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'),
           block:'nearest',
           inline:'center',
         });
-        target.focus({preventScroll:true});
+        if (focus) target.focus({preventScroll:true});
       });
     };
     const midpoint = range => {
@@ -1489,23 +1489,7 @@
     };
     const centerSelectedDay = async () => {
       if (body.hidden) return;
-      const currentSegment = panel.querySelector(`[data-activity-year-segment="${timelineData.end.slice(0, 4)}"]`);
-      await loadYear(currentSegment, {retry:true});
-      window.requestAnimationFrame(() => {
-        let selectedDay = panel.querySelector('[data-activity-day][data-selected="true"]');
-        const activeDays = interactiveDays.filter(day => day.dataset.level !== '0');
-        const target = selectedDay
-          || panel.querySelector('[data-activity-day][data-today="true"]')
-          || activeDays.at(-1)
-          || interactiveDays.at(-1);
-        const week = target?.closest('[data-activity-week]');
-        if (!week) return;
-        const segment = week.closest('[data-activity-year-segment]');
-        scroll.scrollLeft = Math.max(
-          0,
-          segment.offsetLeft + week.offsetLeft - (scroll.clientWidth - week.offsetWidth) / 2,
-        );
-      });
+      await scrollToDate(timelineData.end, {behavior:'auto', focus:false});
     };
     let yearScrollFrame = 0;
     scroll.addEventListener('scroll', () => {
@@ -1532,7 +1516,10 @@
     updatePreviousYearCoachmark(year.value);
     centerSelectedYear();
     centerSelectedDay();
-    window.addEventListener('pageshow', centerSelectedYear, {signal: activityController.signal});
+    window.addEventListener('pageshow', () => {
+      centerSelectedYear();
+      void centerSelectedDay();
+    }, {signal: activityController.signal});
     toggle.addEventListener('click', () => {
       const expanded = toggle.getAttribute('aria-expanded') === 'true';
       closeDayMenu();

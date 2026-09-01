@@ -1486,6 +1486,7 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert 200 < response.text.count('data-activity-day="') <= 366
     assert 'data-activity-year-segment="2026"' in response.text
     assert 'style="--activity-weeks:53" data-activity-year-segment="2026"' in response.text
+    assert "overflow-clip-margin:6px" in response.text
     assert "calendarWeekCount" in response.text
     assert "segment.style.setProperty('--activity-weeks', weekIndex)" in response.text
     assert "activity-year-segment::before" not in response.text
@@ -1501,6 +1502,8 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "Future date" in future_cell
     assert 'data-future="true"' in future_cell
     assert "disabled" not in future_cell
+    assert 'background:rgba(30,41,59,.58); opacity:.52' in response.text
+    assert 'border-color:rgba(71,85,105,.82); opacity:.7' in response.text
     assert "Week 35 · 2 entries" in response.text
     selected_cell = response.text.split(
         'data-activity-day="2026-08-24"', 1
@@ -1517,7 +1520,8 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "scroll-snap-type:x proximity" in response.text
     assert "target.scrollIntoView({" in response.text
     assert "inline:'center'" in response.text
-    assert "activeDays.at(-1)" in response.text
+    assert "overflow-anchor:none" in response.text
+    assert "const scrollToDate = async (value, {behavior='', focus=true}={})" in response.text
     assert "rootMargin:'0px 100%'" in response.text
     assert 'data-activity-loaded="true"' in response.text
     assert "const yearLoads = new Map()" in response.text
@@ -1554,7 +1558,6 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "q=%23work" in selected_cell
     assert "form.elements.time.value = selectedDate ? ''" in response.text
     assert "successUrl.searchParams.set('date_from', savedActivityDate)" in response.text
-    assert "let selectedDay = panel.querySelector('[data-activity-day][data-selected=\"true\"]')" in response.text
     assert "left: Math.max(0, segment.offsetLeft)" in response.text
     assert "-06-" not in response.text.split("const scrollToYear = async value =>", 1)[1].split("year.addEventListener", 1)[0]
     assert "scrollbar-width:none" in response.text
@@ -1586,7 +1589,7 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "const todayShortcuts = Array.from" in response.text
     assert "void scrollToDate(timelineData.end)" in response.text
     assert "closeDayMenu();" in response.text
-    assert "segment.offsetLeft + week.offsetLeft" in response.text
+    assert "if (focus) target.focus({preventScroll:true})" in response.text
     assert "button.addEventListener('click', () => scrollToDate(midpoint(range)))" in response.text
     assert "editRange.addEventListener('click', () => openMemoryDialog({range}))" in response.text
     assert "[data-memory-range-save] { border:1px solid #fbbf24" in response.text
@@ -1613,7 +1616,9 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "background:" not in pinned_style
     assert "const centerSelectedYear = () =>" in response.text
     assert "yearList.scrollTop + selectedRect.top - listRect.top" in response.text
-    assert "window.addEventListener('pageshow', centerSelectedYear" in response.text
+    assert "await scrollToDate(timelineData.end, {behavior:'auto', focus:false})" in response.text
+    assert "window.addEventListener('pageshow', () => {" in response.text
+    assert "void centerSelectedDay();" in response.text
     assert "window.requestAnimationFrame(() => {\n        window.requestAnimationFrame" in response.text
     assert "hfl-corpus:activity-expanded" in response.text
     assert "writeActivityState(nextExpanded)" in response.text
