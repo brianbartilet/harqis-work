@@ -55,8 +55,9 @@
   .activity-day:focus-visible { z-index:3; outline:2px solid #f8fafc; outline-offset:2px; }
   .activity-day[data-today="true"] { box-shadow:0 0 0 1px #fbbf24; }
   .activity-day[data-selected="true"] { border-color:#fbbf24; box-shadow:0 0 0 2px #fbbf24,0 0 0 4px rgba(251,191,36,.2); }
-  .activity-day[data-pinned="true"] { border-color:var(--pin-color); background:color-mix(in srgb,var(--pin-color) 52%,#111827); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--pin-color) 78%,white); }
-  .activity-day[data-pinned="true"]::after { position:absolute; right:1px; bottom:1px; width:3px; height:3px; border-radius:999px; background:#fff; content:""; }
+  .activity-day[data-pinned="true"] { border-color:var(--pin-color); box-shadow:inset 0 0 0 1px var(--pin-color); }
+  .activity-day[data-pinned="true"][data-today="true"] { box-shadow:inset 0 0 0 1px var(--pin-color),0 0 0 1px #fbbf24; }
+  .activity-day[data-pinned="true"][data-selected="true"] { border-color:var(--pin-color); box-shadow:inset 0 0 0 1px var(--pin-color),0 0 0 2px #fbbf24,0 0 0 4px rgba(251,191,36,.2); }
   .activity-day[data-range-preview="true"] { outline:2px solid #f8fafc; outline-offset:1px; }
   .activity-day:disabled { cursor:not-allowed; border-color:rgba(30,41,59,.42); background:rgba(15,23,42,.42); opacity:.42; }
   .activity-day:disabled:hover { transform:none; border-color:rgba(30,41,59,.42); }
@@ -213,7 +214,10 @@
     {% endif %}
     <div class="activity-layout">
       <div class="activity-year-controls">
-        <p class="mb-1 text-[10px] font-medium uppercase tracking-[.12em] text-slate-500">Year</p>
+        <div class="mb-1 flex items-center justify-between gap-2">
+          <p class="text-[10px] font-medium uppercase tracking-[.12em] text-slate-500">Year</p>
+          <button type="button" class="text-[10px] font-semibold text-cyan-400 hover:text-cyan-200 focus:outline-none focus-visible:underline" data-activity-today>Today</button>
+        </div>
         <label class="activity-year-select-wrap">
           <span class="sr-only">Year</span>
           <select class="activity-year-select corpus-select block" data-activity-year aria-label="Activity year">
@@ -257,7 +261,10 @@
         <div class="activity-legend" aria-label="Activity intensity from less to more"><span>Less</span>{% for level in range(5) %}<span class="activity-legend-cell" data-level="{{ level }}"></span>{% endfor %}<span>More</span></div>
       </div>
       <aside class="activity-pin-controls" aria-label="Pinned memory categories">
-        <p class="mb-1 text-[10px] font-medium uppercase tracking-[.12em] text-slate-500">Pinned</p>
+        <div class="mb-1 flex items-center justify-between gap-2">
+          <p class="text-[10px] font-medium uppercase tracking-[.12em] text-slate-500">Pinned</p>
+          <button type="button" class="text-[10px] font-semibold text-cyan-400 hover:text-cyan-200 focus:outline-none focus-visible:underline" data-activity-today>Today</button>
+        </div>
         <div class="activity-pin-list" data-activity-pin-list tabindex="0"></div>
         <button type="button" class="activity-pin-add" data-memory-category-new>+ Category</button>
       </aside>
@@ -292,7 +299,7 @@
       <p class="mt-3 rounded-lg bg-rose-950/45 px-3 py-2 text-xs text-rose-200" data-memory-error hidden></p>
       <div class="mt-4 grid gap-4">
         <label class="memory-dialog-field"><span class="memory-dialog-label">Category</span><span class="memory-dialog-select-shell"><select class="memory-dialog-input memory-dialog-select" data-memory-category-select></select><svg class="memory-dialog-select-caret" aria-hidden="true" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m2.5 4.5 3.5 3 3.5-3"/></svg></span></label>
-        <button type="button" class="justify-self-start text-xs font-semibold text-cyan-300 hover:text-cyan-100" data-memory-category-toggle>+ Create or edit a category</button>
+        <button type="button" class="justify-self-start text-xs font-semibold text-cyan-300 hover:text-cyan-100" data-memory-category-toggle>Edit category</button>
         <div class="grid gap-3 rounded-lg border border-slate-800 bg-slate-950/55 p-3" data-memory-category-editor hidden>
           <label class="memory-dialog-field"><span class="memory-dialog-label">Category name</span><input class="memory-dialog-input" maxlength="60" data-memory-category-name placeholder="Family, school, turning points…"></label>
           <div><span class="memory-dialog-label">Color</span><div class="memory-palette" data-memory-palette></div></div>
@@ -721,6 +728,7 @@
     const memoryDialog = document.querySelector('[data-memory-dialog]');
     const memoryForm = memoryDialog?.querySelector('[data-memory-form]');
     const pinList = panel.querySelector('[data-activity-pin-list]');
+    const todayShortcuts = Array.from(panel.querySelectorAll('[data-activity-today]'));
     const selectionStatus = panel.querySelector('[data-pin-selection-status]');
     if (!scroll || !previousYearCoachmark || !year || !toggle || !body || !menu || !menuDate || !createEntry || !pinDates || !showDocument || !matchingEntries || !matchingPanel || !matchingContent || !memoryDialog || !memoryForm || !pinList) return;
     const activityController = new AbortController();
@@ -1296,6 +1304,11 @@
       if (selectionStatus) selectionStatus.hidden = false;
     });
     panel.querySelector('[data-memory-category-new]')?.addEventListener('click', () => openMemoryDialog({categoryOnly:true}));
+    todayShortcuts.forEach(shortcut => shortcut.addEventListener('click', () => {
+        closeDayMenu();
+        setYearMenuOpen(false);
+        void scrollToDate(timelineData.end);
+      }, {signal: activityController.signal}));
     memoryDialog.querySelectorAll('[data-memory-dialog-close]').forEach(button => button.addEventListener('click', () => memoryDialog.close()));
     memoryDialog.querySelector('[data-memory-category-toggle]')?.addEventListener('click', () => {
       const selected = categoryFor(memoryRefs.categorySelect.value);

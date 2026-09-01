@@ -1470,6 +1470,11 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "data-activity-year" in activity_body
     assert "data-activity-year-list" in activity_body
     assert 'data-activity-year aria-label="Activity year"' in activity_body
+    year_header = activity_body.split('class="activity-year-controls"', 1)[1].split(
+        'class="activity-year-select-wrap"', 1
+    )[0]
+    assert "Year" in year_header
+    assert "data-activity-today>Today</button>" in year_header
     assert "corpus-select-shell" not in response.text
     assert "corpus-select-caret" not in response.text
     assert 'class="activity-year-select corpus-select block"' in response.text
@@ -1570,6 +1575,15 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "const formatPinnedEnd = range =>" in response.text
     assert "return `ENDS ${day} ${month} ${value.getFullYear()}`" in response.text
     assert "details.open = true" not in response.text
+    pinned_header = response.text.split('class="activity-pin-controls"', 1)[1].split(
+        'data-activity-pin-list', 1
+    )[0]
+    assert "Pinned" in pinned_header
+    assert "data-activity-today>Today</button>" in pinned_header
+    assert response.text.count("data-activity-today>Today</button>") == 2
+    assert "const todayShortcuts = Array.from" in response.text
+    assert "void scrollToDate(timelineData.end)" in response.text
+    assert "closeDayMenu();" in response.text
     assert "segment.offsetLeft + week.offsetLeft" in response.text
     assert "button.addEventListener('click', () => scrollToDate(midpoint(range)))" in response.text
     assert "editRange.addEventListener('click', () => openMemoryDialog({range}))" in response.text
@@ -1586,7 +1600,13 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "setPointerCapture" in pointer_move
     assert "Create a category first" in response.text
     assert "memoryRefs.categorySelect.disabled = !memoryState.categories.length" in response.text
+    assert ">Edit category</button>" in response.text
+    assert "Create or edit a category" not in response.text
     assert "Select a day to recall or create a memory" not in response.text
+    assert '.activity-day[data-pinned="true"] { border-color:var(--pin-color); box-shadow:inset 0 0 0 1px var(--pin-color); }' in response.text
+    assert '.activity-day[data-pinned="true"]::after' not in response.text
+    pinned_style = response.text.split('.activity-day[data-pinned="true"] {', 1)[1].split('}', 1)[0]
+    assert "background:" not in pinned_style
     assert "const centerSelectedYear = () =>" in response.text
     assert "yearList.scrollTop + selectedRect.top - listRect.top" in response.text
     assert "window.addEventListener('pageshow', centerSelectedYear" in response.text
@@ -1631,6 +1651,79 @@ def test_memory_pins_persist_categories_ranges_and_notes(authenticated_client):
     assert "Turning points" in page.text
     assert "Recall the week the direction changed." in page.text
     assert "Nothing here" in page.text  # Client-side empty-state copy remains available.
+
+
+def test_memory_pin_categories_share_colors_and_exceed_palette_size(tmp_path):
+    from modules.hfl_corpus.memory_pins import MemoryPinStore, PIN_COLORS
+
+    store = MemoryPinStore(tmp_path / "memory-pins.db")
+    for index in range(13):
+        store.save_category(
+            category_id=None,
+            name=f"Category {index + 1}",
+            color=PIN_COLORS[0],
+        )
+
+    snapshot = store.snapshot()
+    assert len(snapshot["categories"]) == 13
+    assert {category["color"] for category in snapshot["categories"]} == {
+        PIN_COLORS[0]
+    }
+    assert len(snapshot["palette"]) == 12
+    assert snapshot["palette"][-4:] == ["#e5e7eb", "#9ca3af", "#64748b", "#475569"]
+
+
+def test_memory_pin_store_migrates_legacy_unique_colors_without_data_loss(tmp_path):
+    import sqlite3
+
+    from modules.hfl_corpus.memory_pins import MemoryPinStore
+
+    path = tmp_path / "legacy-memory-pins.db"
+    with sqlite3.connect(path) as connection:
+        connection.executescript(
+            """
+            PRAGMA foreign_keys = ON;
+            CREATE TABLE memory_pin_categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                color TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE memory_pin_ranges (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category_id INTEGER NOT NULL REFERENCES memory_pin_categories(id) ON DELETE CASCADE,
+                start_date TEXT NOT NULL,
+                end_date TEXT NOT NULL,
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                CHECK (start_date <= end_date)
+            );
+            INSERT INTO memory_pin_categories
+                (id, name, color, created_at, updated_at)
+            VALUES (1, 'Existing', '#f59e0b', 'before', 'before');
+            INSERT INTO memory_pin_ranges
+                (category_id, start_date, end_date, note, created_at, updated_at)
+            VALUES (1, '2020-06-01', '2020-06-02', 'Keep this', 'before', 'before');
+            """
+        )
+
+    store = MemoryPinStore(path)
+    store.save_category(
+        category_id=None,
+        name="Same color",
+        color="#f59e0b",
+    )
+
+    snapshot = store.snapshot()
+    assert [category["name"] for category in snapshot["categories"]] == [
+        "Existing",
+        "Same color",
+    ]
+    assert snapshot["ranges"][0]["note"] == "Keep this"
+    with store._connect() as connection:
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
 
 
 def test_activity_year_endpoint_returns_local_counts(authenticated_client, monkeypatch):

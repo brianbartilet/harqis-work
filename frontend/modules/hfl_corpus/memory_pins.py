@@ -20,6 +20,10 @@ PIN_COLORS = (
     "#3b82f6",  # blue
     "#14b8a6",  # teal
     "#84cc16",  # lime
+    "#e5e7eb",  # light grey
+    "#9ca3af",  # medium grey
+    "#64748b",  # slate
+    "#475569",  # charcoal
 )
 
 
@@ -50,7 +54,7 @@ class MemoryPinStore:
                 CREATE TABLE IF NOT EXISTS memory_pin_categories (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL COLLATE NOCASE UNIQUE,
-                    color TEXT NOT NULL UNIQUE,
+                    color TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -68,12 +72,62 @@ class MemoryPinStore:
                     ON memory_pin_ranges(start_date, end_date);
                 """
             )
+            self._remove_legacy_color_uniqueness(connection)
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
+
+    @staticmethod
+    def _remove_legacy_color_uniqueness(connection: sqlite3.Connection) -> None:
+        """Rebuild legacy category tables whose color column was unique."""
+        color_is_unique = False
+        for index in connection.execute("PRAGMA index_list(memory_pin_categories)"):
+            if not index["unique"]:
+                continue
+            columns = [
+                row["name"]
+                for row in connection.execute(
+                    f"PRAGMA index_info('{index['name']}')"
+                )
+            ]
+            if columns == ["color"]:
+                color_is_unique = True
+                break
+        if not color_is_unique:
+            return
+
+        connection.execute("PRAGMA foreign_keys = OFF")
+        try:
+            connection.executescript(
+                """
+                BEGIN IMMEDIATE;
+                CREATE TABLE memory_pin_categories_rebuilt (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                    color TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                INSERT INTO memory_pin_categories_rebuilt
+                    (id, name, color, created_at, updated_at)
+                SELECT id, name, color, created_at, updated_at
+                FROM memory_pin_categories;
+                DROP TABLE memory_pin_categories;
+                ALTER TABLE memory_pin_categories_rebuilt RENAME TO memory_pin_categories;
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.execute("PRAGMA foreign_keys = ON")
+        violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+        if violations:
+            raise sqlite3.IntegrityError("Memory pin migration violated foreign keys.")
 
     def snapshot(self) -> dict[str, list[dict[str, object]]]:
         with self._connect() as connection:
@@ -95,7 +149,7 @@ class MemoryPinStore:
         if not name or len(name) > 60:
             raise ValueError("Category names must contain 1 to 60 characters.")
         if color not in PIN_COLORS:
-            raise ValueError("Choose one of the eight Memory Signal colors.")
+            raise ValueError("Choose one of the twelve Memory Signal colors.")
         now = datetime.now(timezone.utc).isoformat()
         try:
             with self._connect() as connection:
@@ -108,18 +162,13 @@ class MemoryPinStore:
                     if not cursor.rowcount:
                         raise ValueError("That category no longer exists.")
                 else:
-                    count = connection.execute(
-                        "SELECT COUNT(*) FROM memory_pin_categories"
-                    ).fetchone()[0]
-                    if count >= len(PIN_COLORS):
-                        raise ValueError("All eight Memory Signal categories are in use.")
                     connection.execute(
                         """INSERT INTO memory_pin_categories(name, color, created_at, updated_at)
                            VALUES (?, ?, ?, ?)""",
                         (name, color, now, now),
                     )
         except sqlite3.IntegrityError as exc:
-            raise ValueError("Category names and colors must be unique.") from exc
+            raise ValueError("Category names must be unique.") from exc
 
     def delete_category(self, category_id: int) -> None:
         with self._connect() as connection:
