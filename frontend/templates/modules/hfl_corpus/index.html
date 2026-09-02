@@ -40,8 +40,11 @@
   .activity-grid { display:flex; width:max-content; align-items:stretch; gap:var(--activity-cell); }
   .activity-year-segment { position:relative; display:flex; width:max-content; min-width:calc(var(--activity-weeks) * (var(--activity-cell) + var(--activity-gap))); gap:var(--activity-gap); content-visibility:auto; contain-intrinsic-size:850px 160px; overflow-clip-margin:6px; }
   .activity-coachmark-anchor { position:sticky; left:.35rem; z-index:8; display:block; width:0; height:0; pointer-events:none; }
-  .activity-previous-year { position:absolute; top:.05rem; left:0; width:max-content; padding:.15rem .35rem; border:1px solid rgba(51,65,85,.8); border-radius:999px; background:rgba(15,23,42,.9); color:#94a3b8; font:650 .54rem/1 ui-monospace,SFMono-Regular,Consolas,monospace; box-shadow:0 3px 10px rgba(2,6,23,.32); }
-  .activity-previous-year[hidden] { display:none; }
+  .activity-coachmark-anchor-next { left:calc(100% - .35rem); }
+  .activity-previous-year,.activity-next-year { position:absolute; top:.05rem; width:max-content; padding:.15rem .35rem; border:1px solid rgba(51,65,85,.8); border-radius:999px; background:rgba(15,23,42,.9); color:#94a3b8; font:650 .54rem/1 ui-monospace,SFMono-Regular,Consolas,monospace; box-shadow:0 3px 10px rgba(2,6,23,.32); }
+  .activity-previous-year { left:0; }
+  .activity-next-year { right:0; }
+  .activity-previous-year[hidden],.activity-next-year[hidden] { display:none; }
   .activity-week { display:grid; width:var(--activity-cell); grid-template-rows:14px repeat(7,var(--activity-cell)) 12px; gap:var(--activity-gap); }
   .activity-month { width:max-content; color:#94a3b8; font:650 .58rem/14px ui-monospace,SFMono-Regular,Consolas,monospace; pointer-events:none; }
   .activity-week-number { color:#475569; font:500 .48rem/12px ui-monospace,SFMono-Regular,Consolas,monospace; text-align:center; }
@@ -239,6 +242,7 @@
           </div>
           <div class="activity-scroll" data-activity-scroll tabindex="0" role="region" aria-label="Lifetime activity heatmap. Scroll horizontally to traverse dates and years.">
             <span class="activity-coachmark-anchor" aria-hidden="true"><span class="activity-previous-year" data-activity-previous-year hidden></span></span>
+            <span class="activity-coachmark-anchor activity-coachmark-anchor-next" aria-hidden="true"><span class="activity-next-year" data-activity-next-year hidden></span></span>
             <div class="activity-grid" data-activity-grid>
               {% for timeline_year in activity_timeline_years %}
               <section class="activity-year-segment" style="--activity-weeks:{{ activity_heatmap.weeks | length if timeline_year == activity_year else 54 }}" data-activity-year-segment="{{ timeline_year }}" data-activity-hydrated="{{ 'true' if timeline_year == activity_year else 'false' }}" data-activity-loaded="{{ 'true' if timeline_year == activity_year else 'false' }}" aria-label="{{ timeline_year }}">
@@ -706,6 +710,7 @@
     panel.dataset.activityReady = 'true';
     const scroll = panel.querySelector('[data-activity-scroll]');
     const previousYearCoachmark = panel.querySelector('[data-activity-previous-year]');
+    const nextYearCoachmark = panel.querySelector('[data-activity-next-year]');
     const year = panel.querySelector('[data-activity-year]');
     const yearControls = panel.querySelector('.activity-year-controls');
     const yearTrigger = panel.querySelector('[data-activity-year-trigger]');
@@ -730,7 +735,7 @@
     const pinList = panel.querySelector('[data-activity-pin-list]');
     const todayShortcuts = Array.from(panel.querySelectorAll('[data-activity-today]'));
     const selectionStatus = panel.querySelector('[data-pin-selection-status]');
-    if (!scroll || !previousYearCoachmark || !year || !toggle || !body || !menu || !menuDate || !createEntry || !pinDates || !showDocument || !matchingEntries || !matchingPanel || !matchingContent || !memoryDialog || !memoryForm || !pinList) return;
+    if (!scroll || !previousYearCoachmark || !nextYearCoachmark || !year || !toggle || !body || !menu || !menuDate || !createEntry || !pinDates || !showDocument || !matchingEntries || !matchingPanel || !matchingContent || !memoryDialog || !memoryForm || !pinList) return;
     const activityController = new AbortController();
     panel.activityAbortController = activityController;
     let menuTrigger = null;
@@ -802,7 +807,7 @@
       year.value = selectedYear;
       yearOptions.forEach(option => option.setAttribute('aria-selected', String(option.dataset.activityYearOption === selectedYear)));
       syncYearState(selectedYear);
-      updatePreviousYearCoachmark(selectedYear);
+      updateYearCoachmarks(selectedYear);
       centerSelectedYear();
       window.requestAnimationFrame(() => {
         target.scrollIntoView({
@@ -907,7 +912,11 @@
         return;
       }
       memoryState.categories.forEach(category => {
-        const categoryRanges = pinnedRanges.filter(range => range.category_id === category.id);
+        const categoryRanges = pinnedRanges
+          .filter(range => range.category_id === category.id)
+          .sort((a, b) => b.end_date.localeCompare(a.end_date)
+            || b.start_date.localeCompare(a.start_date)
+            || Number(b.id) - Number(a.id));
         if (!categoryRanges.length) return;
         const details = document.createElement('details');
         details.className = 'activity-category';
@@ -1418,11 +1427,15 @@
       closeDayMenu(true);
     }, {signal: activityController.signal});
 
-    const updatePreviousYearCoachmark = value => {
+    const updateYearCoachmarks = value => {
       const previousValue = String(Number(value) - 1);
       const hasPrevious = Boolean(panel.querySelector(`[data-activity-year-segment="${previousValue}"]`));
       previousYearCoachmark.textContent = hasPrevious ? previousValue : '';
       previousYearCoachmark.hidden = !hasPrevious;
+      const nextValue = String(Number(value) + 1);
+      const hasNext = Boolean(panel.querySelector(`[data-activity-year-segment="${nextValue}"]`));
+      nextYearCoachmark.textContent = hasNext ? nextValue : '';
+      nextYearCoachmark.hidden = !hasNext;
     };
     const setYearMenuOpen = open => {
       if (!yearControls || !yearTrigger || !yearList) return;
@@ -1436,20 +1449,17 @@
     const syncYearPicker = value => {
       if (yearTriggerValue) yearTriggerValue.textContent = value;
     };
+    const centerDateForYear = value => {
+      if (value === timelineData.end.slice(0, 4)) return timelineData.end;
+      const midpoint = `${value}-07-01`;
+      if (midpoint < timelineData.start) return timelineData.start;
+      if (midpoint > timelineData.calendar_end) return timelineData.calendar_end;
+      return midpoint;
+    };
     const scrollToYear = async value => {
       const segment = panel.querySelector(`[data-activity-year-segment="${value}"]`);
       if (!segment) return;
-      await loadYear(segment, {retry:true});
-      scroll.scrollTo({
-        left: Math.max(0, segment.offsetLeft),
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-      });
-      year.value = value;
-      yearOptions.forEach(option => option.setAttribute('aria-selected', String(option.dataset.activityYearOption === String(value))));
-      syncYearPicker(value);
-      syncYearState(value);
-      updatePreviousYearCoachmark(value);
-      centerSelectedYear();
+      await scrollToDate(centerDateForYear(value), {focus:false});
     };
     year.addEventListener('change', () => scrollToYear(year.value));
     yearTrigger?.addEventListener('click', event => {
@@ -1491,20 +1501,22 @@
       if (body.hidden) return;
       await scrollToDate(timelineData.end, {behavior:'auto', focus:false});
     };
+    const yearAtViewportCenter = () => {
+      const center = (scroll.getBoundingClientRect().left + scroll.getBoundingClientRect().right) / 2;
+      return Array.from(panel.querySelectorAll('[data-activity-year-segment]')).reduce((best, segment) => {
+        const rect = segment.getBoundingClientRect();
+        const distance = center < rect.left ? rect.left - center : center > rect.right ? center - rect.right : 0;
+        return !best || distance < best.distance ? {segment, distance} : best;
+      }, null)?.segment;
+    };
     let yearScrollFrame = 0;
     scroll.addEventListener('scroll', () => {
       if (yearScrollFrame) return;
       yearScrollFrame = window.requestAnimationFrame(() => {
         yearScrollFrame = 0;
-        const center = scroll.scrollLeft + scroll.clientWidth / 2;
-        const segments = Array.from(panel.querySelectorAll('[data-activity-year-segment]'));
-        const nearest = segments.reduce((best, segment) => {
-          const distance = Math.abs(segment.offsetLeft + segment.offsetWidth / 2 - center);
-          return !best || distance < best.distance ? {segment, distance} : best;
-        }, null)?.segment;
-        const value = nearest?.dataset.activityYearSegment;
+        const value = yearAtViewportCenter()?.dataset.activityYearSegment;
         if (!value) return;
-        updatePreviousYearCoachmark(value);
+        updateYearCoachmarks(value);
         if (year.value === value) return;
         year.value = value;
         yearOptions.forEach(option => option.setAttribute('aria-selected', String(option.dataset.activityYearOption === value)));
@@ -1513,7 +1525,7 @@
         centerSelectedYear();
       });
     }, {signal: activityController.signal, passive:true});
-    updatePreviousYearCoachmark(year.value);
+    updateYearCoachmarks(year.value);
     centerSelectedYear();
     centerSelectedDay();
     window.addEventListener('pageshow', () => {

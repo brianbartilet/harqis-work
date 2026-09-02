@@ -1494,7 +1494,11 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "activity-year-segment::before" not in response.text
     assert "activity-year-marker" not in response.text
     assert "data-activity-previous-year" in response.text
-    assert "updatePreviousYearCoachmark" in response.text
+    assert "data-activity-next-year" in response.text
+    assert "activity-coachmark-anchor-next" in response.text
+    assert "const updateYearCoachmarks = value =>" in response.text
+    assert "nextYearCoachmark.textContent = hasNext ? nextValue : ''" in response.text
+    assert "nextYearCoachmark.hidden = !hasNext" in response.text
     assert "new IntersectionObserver" in response.text
     assert "hydrateYear(segment)" in response.text
     assert 'data-activity-day="2026-08-24"' in response.text
@@ -1560,8 +1564,16 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "q=%23work" in selected_cell
     assert "form.elements.time.value = selectedDate ? ''" in response.text
     assert "successUrl.searchParams.set('date_from', savedActivityDate)" in response.text
-    assert "left: Math.max(0, segment.offsetLeft)" in response.text
-    assert "-06-" not in response.text.split("const scrollToYear = async value =>", 1)[1].split("year.addEventListener", 1)[0]
+    assert "const centerDateForYear = value =>" in response.text
+    assert "if (value === timelineData.end.slice(0, 4)) return timelineData.end" in response.text
+    assert "const midpoint = `${value}-07-01`" in response.text
+    assert "if (midpoint < timelineData.start) return timelineData.start" in response.text
+    assert "if (midpoint > timelineData.calendar_end) return timelineData.calendar_end" in response.text
+    assert "await scrollToDate(centerDateForYear(value), {focus:false})" in response.text
+    assert "const yearAtViewportCenter = () =>" in response.text
+    assert "const distance = center < rect.left ? rect.left - center : center > rect.right ? center - rect.right : 0" in response.text
+    assert "const value = yearAtViewportCenter()?.dataset.activityYearSegment" in response.text
+    assert "segment.offsetLeft + segment.offsetWidth / 2" not in response.text
     assert "scrollbar-width:none" in response.text
     assert ".activity-grid { display:flex; width:max-content; align-items:stretch; gap:var(--activity-cell); }" in response.text
     assert '<div class="activity-chart-column">' in response.text
@@ -1581,6 +1593,9 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "enableDragScroll(pinList, 'y')" in response.text
     assert "const formatPinnedEnd = range =>" in response.text
     assert "return `ENDS ${day} ${month} ${value.getFullYear()}`" in response.text
+    assert "b.end_date.localeCompare(a.end_date)" in response.text
+    assert "b.start_date.localeCompare(a.start_date)" in response.text
+    assert "Number(b.id) - Number(a.id)" in response.text
     assert "details.open = true" not in response.text
     pinned_header = response.text.split('class="activity-pin-controls"', 1)[1].split(
         'data-activity-pin-list', 1
