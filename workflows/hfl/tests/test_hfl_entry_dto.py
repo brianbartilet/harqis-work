@@ -95,6 +95,28 @@ def test__multiline_markdown_field_starts_after_label_and_round_trips():
     assert restored.what_happened == entry.what_happened
 
 
+def test__nested_source_label_does_not_replace_canonical_source_on_parse():
+    entry = HflEntry(
+        when=datetime(2026, 9, 1, 22, 5),
+        source="activity-radar",
+        moment="HFL activity radar retrospective",
+        what_happened=(
+            "HFL ACTIVITY RADAR\n"
+            "Source: Sep 1 activity-corpus-source-check — HFL source-health audit found 1 finding(s)"
+        ),
+        why_it_stayed="Retains a point-in-time review.",
+        possible_use="Prioritize follow-up work.",
+        tags=("activity-radar", "fyi"),
+    )
+
+    markdown = entry.to_markdown()
+    header, body = markdown.split("\n", 1)
+    restored = HflEntry.from_markdown(header, body)
+
+    assert restored.source == "activity-radar"
+    assert "Source: Sep 1 activity-corpus-source-check" in restored.what_happened
+
+
 def test_visible_h1_h2_in_narrative_are_demoted_without_changing_fenced_examples():
     entry = HflEntry(
         when=datetime(2026, 7, 29, 1, 56),

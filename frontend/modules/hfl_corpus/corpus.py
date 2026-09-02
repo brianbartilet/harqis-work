@@ -258,7 +258,11 @@ def _field_blocks(body: str) -> dict[str, str]:
     for raw in body.splitlines():
         field = _HFL_FIELD.match(raw)
         if field:
-            current = field.group(1).casefold()
+            candidate = field.group(1).casefold()
+            if candidate == "source" and current and current != "source":
+                fields[current].append(raw.rstrip())
+                continue
+            current = candidate
             fields[current] = [field.group(2).strip()]
         elif current:
             fields[current].append(raw.rstrip())

@@ -141,6 +141,34 @@ def test_entry_previews_read_plain_text_prompt_audit_sections():
     assert entries[0].what_happened == "Pulled and restarted the HARQIS stack."
 
 
+def test_nested_source_label_stays_narrative_and_cannot_enter_source_filters():
+    text = (
+        "## 2026-09-01 22:05\n"
+        "Source:          activity-radar\n"
+        "Moment:          HFL activity radar retrospective\n"
+        "What happened:\n"
+        "HFL ACTIVITY RADAR\n"
+        "WHAT: Agent-session ingestion stopped.\n"
+        "SOURCE: Sep 1 activity-corpus-source-check — HFL source-health audit found 1 finding(s)\n"
+        "Why it stayed:   Retains a point-in-time review.\n"
+        "Possible use:    Prioritize follow-up work.\n"
+        "Tags:            #activity-radar #fyi\n"
+    )
+
+    entry = corpus_module.parse_entries(text)[0]
+    document = _document("2026-09-01.md", entries=(entry,))
+
+    assert entry.source == "activity-radar"
+    assert "SOURCE: Sep 1 activity-corpus-source-check" in entry.text
+    assert common_sources((document,)) == ["activity-radar"]
+    assert document.matching_entries((), "", "activity-radar") == (entry,)
+    assert document.matching_entries(
+        (),
+        "",
+        "Sep 1 activity-corpus-source-check — HFL source-health audit found 1 finding(s)",
+    ) == ()
+
+
 def test_recursive_index_ignores_bare_git_hash_references(tmp_path, monkeypatch):
     source = tmp_path / "2026-07-21.md"
     source.write_text(

@@ -240,6 +240,9 @@ class HflEntry:
             key = raw.split(":", 1)[0].strip() if ":" in raw else ""
             field_name = _LABELS.get(key)
             if field_name:
+                if field_name == "source" and current_field and current_field != "source":
+                    vals[current_field] = f"{vals.get(current_field, '')}\n{raw.rstrip()}"
+                    continue
                 current_field = field_name
                 if field_name == "references":
                     collecting_refs = True
