@@ -778,9 +778,13 @@
       return `ENDS ${day} ${month} ${value.getFullYear()}`;
     };
     const categoryFor = id => memoryState.categories.find(category => category.id === Number(id));
+    const rangeDuration = range => Date.parse(`${range.end_date}T00:00:00Z`)
+      - Date.parse(`${range.start_date}T00:00:00Z`);
     const rangesForDate = value => memoryState.ranges
       .filter(range => range.start_date <= value && value <= range.end_date)
-      .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+      .sort((a, b) => rangeDuration(a) - rangeDuration(b)
+        || b.updated_at.localeCompare(a.updated_at)
+        || Number(b.id) - Number(a.id));
 
     const showMemoryError = message => {
       memoryRefs.error.textContent = message;

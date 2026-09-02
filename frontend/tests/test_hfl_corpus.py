@@ -1593,9 +1593,12 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "enableDragScroll(pinList, 'y')" in response.text
     assert "const formatPinnedEnd = range =>" in response.text
     assert "return `ENDS ${day} ${month} ${value.getFullYear()}`" in response.text
+    assert "const rangeDuration = range =>" in response.text
+    assert "rangeDuration(a) - rangeDuration(b)" in response.text
+    assert "b.updated_at.localeCompare(a.updated_at)" in response.text
     assert "b.end_date.localeCompare(a.end_date)" in response.text
     assert "b.start_date.localeCompare(a.start_date)" in response.text
-    assert "Number(b.id) - Number(a.id)" in response.text
+    assert response.text.count("Number(b.id) - Number(a.id)") == 2
     assert "details.open = true" not in response.text
     pinned_header = response.text.split('class="activity-pin-controls"', 1)[1].split(
         'data-activity-pin-list', 1
