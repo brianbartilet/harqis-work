@@ -24,6 +24,7 @@ _DATE_IN_NAME = re.compile(r"(20\d{2}-\d{2}-\d{2})")
 _TAG_LINE = re.compile(r"^\s*Tags:\s*(.+?)\s*$", re.MULTILINE | re.IGNORECASE)
 _TAG_TOKEN = re.compile(r"(?<!\w)#([\w-]+)", re.UNICODE)
 _NON_SLUG = re.compile(r"[^a-z0-9]+")
+_SOURCE_FILTER_VALUE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _GIT_SHA = re.compile(r"^[0-9a-f]{7,40}$", re.IGNORECASE)
 _MONTH_DIRECTORY_ORDER = {
     name.casefold(): index
@@ -834,13 +835,18 @@ def common_tags(
     return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]
 
 
+def valid_source_filter_value(value: str) -> bool:
+    """Return whether a source is a canonical, filter-safe identifier."""
+    return bool(_SOURCE_FILTER_VALUE.fullmatch((value or "").strip()))
+
+
 def common_sources(documents: tuple[CorpusDocument, ...]) -> list[str]:
-    """Return distinct nonblank entry sources in case-insensitive name order."""
+    """Return distinct canonical entry sources in case-insensitive name order."""
     sources: dict[str, str] = {}
     for document in documents:
         for entry in document.entries:
             source = entry.source.strip()
-            if source:
+            if valid_source_filter_value(source):
                 sources.setdefault(source.casefold(), source)
     return sorted(sources.values(), key=str.casefold)
 

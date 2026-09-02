@@ -17,8 +17,10 @@ from modules.hfl_corpus.corpus import (
     CorpusDocument,
     CorpusEntry,
     build_tree,
+    normalize_source,
     paginate_documents,
     shallow_tree,
+    valid_source_filter_value,
 )
 from services.safe_paths import ReferenceLink
 
@@ -288,6 +290,11 @@ class RemoteCorpusClient:
                 or params.get("activity_year")
                 or datetime.now().year
             )
+            sources = [
+                str(source).strip()
+                for source in payload.get("sources") or ()
+                if valid_source_filter_value(str(source))
+            ]
             return {
                 "documents": documents,
                 "tree": tree,
@@ -300,8 +307,10 @@ class RemoteCorpusClient:
                 "has_next": has_next,
                 "document_count": int(payload["document_count"]),
                 "tag_cloud": [tuple(item) for item in payload.get("tag_cloud") or ()],
-                "sources": [str(source) for source in payload.get("sources") or ()],
-                "selected_source": str(payload.get("selected_source") or ""),
+                "sources": sources,
+                "selected_source": normalize_source(
+                    str(payload.get("selected_source") or ""), sources
+                ),
                 "activity": {
                     "year": activity_year,
                     "years": [

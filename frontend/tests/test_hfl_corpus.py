@@ -1161,6 +1161,13 @@ def test_common_sources_are_distinct_trimmed_and_alphabetical():
         _document("manual.md", source="manual-entry"),
         _document("browse.md", source="Browsing"),
         _document("browse-again.md", source="browsing"),
+        _document(
+            "invalid.md",
+            source=(
+                "Sep 1 activity-corpus-source-check — "
+                "HFL source-health audit found 1 finding(s)"
+            ),
+        ),
         _document("legacy.md", source=""),
     )
 
@@ -3124,7 +3131,11 @@ def test_remote_client_reads_index_without_local_paths(monkeypatch):
         "has_next": False,
         "document_count": 1,
         "tag_cloud": [["hfl", 1]],
-        "sources": ["browsing", "manual-entry"],
+        "sources": [
+            "browsing",
+            "Sep 1 activity-corpus-source-check — HFL source-health audit found 1 finding(s)",
+            "manual-entry",
+        ],
         "selected_source": "browsing",
         "activity": {
             "year": 2026,
