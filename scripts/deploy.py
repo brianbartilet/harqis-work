@@ -14,6 +14,10 @@ Override the auto-detection or add ad-hoc daemons via flags:
     python scripts/deploy.py --role node --queues agent,worker
     python scripts/deploy.py --role host --no-mcp --no-kanban --no-flower
 
+Run the verified host restart workflow over SSH:
+
+    python scripts/deploy.py --remote harqis-mac-mini
+
 Single-instance mode (skip the full stack — run just one celery process):
 
     python scripts/deploy.py --scheduler                    # only Beat
@@ -276,6 +280,215 @@ def load_machine_config(name: str | None) -> dict:
     # re-loading the file. Per-machine values still override shared ones —
     # the merge happens in the consumer (see machine_env_vars below).
     return {**machine, "_name": name, "_shared": cfg.get("shared", {})}
+
+
+def load_remote_target(machine_key: str) -> dict[str, str]:
+    """Resolve one SSH deployment target from machines.local.toml."""
+    local_path = MACHINES_TOML.with_suffix(".local.toml")
+    if not local_path.exists():
+        raise RuntimeError(
+            f"{local_path} is required for --remote; add an [ssh.{machine_key}] block"
+        )
+
+    cfg = tomllib.loads(local_path.read_text(encoding="utf-8"))
+    target = cfg.get("ssh", {}).get(machine_key)
+    if not isinstance(target, dict):
+        available = ", ".join(sorted(cfg.get("ssh", {}))) or "(none)"
+        raise RuntimeError(
+            f"[ssh.{machine_key}] not found in {local_path}; configured targets: {available}"
+        )
+
+    values: dict[str, str] = {}
+    for field in ("user", "host", "path"):
+        value = target.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise RuntimeError(f"[ssh.{machine_key}] is missing '{field}'")
+        if "\n" in value or "\r" in value or "\0" in value:
+            raise RuntimeError(f"[ssh.{machine_key}].{field} contains invalid characters")
+        values[field] = value.strip()
+
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", values["user"]):
+        raise RuntimeError(f"[ssh.{machine_key}].user contains unsupported characters")
+    if not re.fullmatch(r"[A-Za-z0-9._:-]+", values["host"]):
+        raise RuntimeError(f"[ssh.{machine_key}].host contains unsupported characters")
+    return values
+
+
+def _remote_path_expression(path: str) -> str:
+    """Quote a remote path while preserving a leading ~/ expansion."""
+    if path == "~":
+        return '"$HOME"'
+    if path.startswith("~/"):
+        return f'"$HOME"/{shlex.quote(path[2:])}'
+    return shlex.quote(path)
+
+
+def build_remote_restart_script(remote_path: str) -> str:
+    """Build the fail-fast host restart and verification script run over SSH."""
+    repo = _remote_path_expression(remote_path)
+    return f"""#!/usr/bin/env bash
+set -euo pipefail
+
+repo={repo}
+cd "$repo"
+repo="$(pwd -P)"
+
+echo '==> Runtime clone'
+echo "path=$repo"
+test -f scripts/deploy.py
+test -d .git
+
+branch_before="$(git branch --show-current)"
+head_before="$(git rev-parse HEAD)"
+status_before="$(git status --short --branch)"
+echo "branch=$branch_before"
+echo "head=$head_before"
+echo 'git_status_before:'
+printf '%s\n' "$status_before"
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo 'ERROR: runtime clone is not clean; refusing to pull or restart services.' >&2
+  exit 20
+fi
+
+python_bin=.venv/bin/python
+test -x "$python_bin"
+
+echo '==> Service state before restart'
+"$python_bin" scripts/deploy.py --role host --status || true
+
+echo '==> Fast-forward checked-out branch'
+git pull --ff-only
+head_after_pull="$(git rev-parse HEAD)"
+echo "head_after_pull=$head_after_pull"
+echo 'changed_files:'
+if [[ "$head_before" == "$head_after_pull" ]]; then
+  echo '(none; runtime branch was already up to date)'
+else
+  git diff --name-only "$head_before..$head_after_pull"
+fi
+
+if git show-ref --verify --quiet refs/remotes/origin/main; then
+  echo "runtime_vs_origin_main=$(git rev-list --left-right --count HEAD...origin/main)"
+fi
+
+echo '==> Stop host stack'
+"$python_bin" scripts/deploy.py --role host --down
+
+echo '==> Start host stack in console mode'
+"$python_bin" scripts/deploy.py --role host --console
+
+frontend_port="$("$python_bin" - <<'PY'
+from scripts.launch import setup_env
+setup_env()
+import os
+print(os.environ.get("FRONTEND_PORT", "8081"))
+PY
+)"
+echo "==> Verify frontend health on port $frontend_port"
+frontend_ok=0
+for _ in {{1..15}}; do
+  if curl --fail --silent --show-error "http://localhost:$frontend_port/health"; then
+    echo
+    frontend_ok=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$frontend_ok" != 1 ]]; then
+  echo "ERROR: frontend health check on port $frontend_port did not pass within 30 seconds." >&2
+  exit 21
+fi
+
+echo '==> Verify Docker core services'
+docker compose ps --format 'table {{{{.Name}}}}\t{{{{.Status}}}}\t{{{{.Ports}}}}'
+for service in rabbitmq redis elasticsearch; do
+  service_ok=0
+  for _ in {{1..30}}; do
+    container_id="$(docker compose ps -q "$service")"
+    if [[ -n "$container_id" ]]; then
+      state="$(docker inspect --format '{{{{.State.Status}}}} {{{{if .State.Health}}}}{{{{.State.Health.Status}}}}{{{{end}}}}' "$container_id")"
+      if [[ "$state" == 'running healthy' || "$state" == 'running ' || "$state" == 'running' ]]; then
+        echo "$service=$state"
+        service_ok=1
+        break
+      fi
+    fi
+    sleep 2
+  done
+  if [[ "$service_ok" != 1 ]]; then
+    echo "ERROR: Docker service $service is not running and healthy." >&2
+    docker compose logs --tail=20 "$service" || true
+    exit 22
+  fi
+done
+
+echo '==> Verify Celery workers and queues'
+"$python_bin" - <<'PY'
+import json
+from scripts.launch import setup_env
+
+setup_env()
+from core.apps.sprout import SPROUT
+
+inspect = SPROUT.control.inspect(timeout=10)
+pings = inspect.ping() or {{}}
+queues = inspect.active_queues() or {{}}
+if not pings:
+    raise SystemExit("ERROR: no Celery workers responded to ping")
+summary = {{
+    "nodes": sorted(pings),
+    "queues": {{
+        worker: [item.get("alias") or item.get("name") for item in items]
+        for worker, items in queues.items()
+    }},
+}}
+print(json.dumps(summary, indent=2, sort_keys=True))
+PY
+
+echo '==> Verify service PIDs'
+"$python_bin" scripts/deploy.py --role host --status
+
+echo '==> Verify final Git state'
+branch_after="$(git branch --show-current)"
+status_after="$(git status --short --branch)"
+echo "branch=$branch_after"
+echo "head=$head_after_pull"
+printf '%s\n' "$status_after"
+if [[ "$branch_after" != "$branch_before" ]]; then
+  echo 'ERROR: checked-out branch changed during remote deployment.' >&2
+  exit 23
+fi
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo 'ERROR: runtime clone is not clean after deployment.' >&2
+  exit 24
+fi
+echo 'REMOTE HOST RESTART VERIFIED'
+"""
+
+
+def remote_verified_restart(machine_key: str) -> None:
+    """Run a verified host restart on a configured SSH target."""
+    if not shutil.which("ssh"):
+        raise RuntimeError("ssh is not installed or not available on PATH")
+    target = load_remote_target(machine_key)
+    ssh_target = f'{target["user"]}@{target["host"]}'
+    script = build_remote_restart_script(target["path"])
+    print(f"==> Remote verified host restart: machine={machine_key}")
+    print(f"    ssh={ssh_target}")
+    print(f"    repo={target['path']}")
+    try:
+        result = subprocess.run(
+            ["ssh", "-o", "ConnectTimeout=10", ssh_target, "bash -s"],
+            input=script,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise RuntimeError(f"could not start ssh for {machine_key}: {exc}") from exc
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"remote host restart failed for {machine_key} (ssh exit {result.returncode})"
+        )
 
 
 def machine_env_vars(machine: dict) -> dict[str, str]:
@@ -1756,6 +1969,11 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--machine", help="Machine name in machines.toml (default: auto-detect by hostname)")
+    p.add_argument(
+        "--remote",
+        metavar="MACHINE",
+        help="SSH to [ssh.MACHINE] from machines.local.toml and run a verified host restart",
+    )
     p.add_argument("--role", choices=["host", "node"], help="Override role from machines.toml")
     p.add_argument("-q", "--queues", help="Override worker queues (comma-separated)")
     p.add_argument("-p", "--profile", help="Override Kanban profile filter")
@@ -1996,6 +2214,43 @@ def _main(args: argparse.Namespace, runtime_machine: dict) -> None:
 
 def main() -> None:
     args = build_parser().parse_args()
+    if args.remote:
+        if args.role not in (None, "host"):
+            raise SystemExit("ERROR: --remote only supports the host role")
+        incompatible = {
+            "--machine": args.machine,
+            "--queues": args.queues,
+            "--profile": args.profile,
+            "--num-agents": args.num_agents,
+            "--docker-only": args.docker_only,
+            "--no-scheduler": args.no_scheduler,
+            "--no-frontend": args.no_frontend,
+            "--no-hfl-api": args.no_hfl_api,
+            "--no-mcp": args.no_mcp,
+            "--no-kanban": args.no_kanban,
+            "--no-flower": args.no_flower,
+            "--console": args.console,
+            "--scheduler": args.scheduler,
+            "--concurrency": args.concurrency,
+            "--down": args.down,
+            "--status": args.status,
+            "--stop": args.stop,
+            "--restart": args.restart,
+            "--register": args.register,
+            "--unregister": args.unregister,
+            "--rebuild-venv": args.rebuild_venv,
+        }
+        supplied = [name for name, value in incompatible.items() if value not in (None, False)]
+        if supplied:
+            raise SystemExit(
+                "ERROR: --remote runs the fixed verified host workflow and cannot be combined with "
+                + ", ".join(supplied)
+            )
+        try:
+            remote_verified_restart(args.remote)
+        except RuntimeError as exc:
+            raise SystemExit(f"ERROR: {exc}") from exc
+        return
     load_env_into_os()
     runtime_machine = load_machine_config(args.machine)
     if args.role:

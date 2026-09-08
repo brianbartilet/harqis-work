@@ -1,13 +1,12 @@
 ---
 name: deploy-harqis
 description: >
-  Deploy the harqis-work platform on this machine as a full host or worker node,
-  covering Docker services, env loading, workers, frontend, MCP, and orchestration.
-user-invocable: true
+  Deploy harqis-work locally as a full host or worker node, or remotely pull,
+  restart, and verify a configured host over SSH.
 allowed-tools: Bash Read Glob Grep
 ---
 
-Deploy the harqis-work platform on this machine — full stack ("host") or worker-only ("node"). Walks through Docker services, env loading, scheduler, workers, frontend, MCP server, and the Kanban agent orchestrator. Uses the cross-platform Python entry point `python scripts/deploy.py`, which auto-detects OS and reads `machines.toml` for hostname → role/queues mapping (override via `--machine NAME` or `--role`/`--queues` flags). Auto-start: `python scripts/deploy.py --register` writes a launchd plist (macOS) / systemd user unit (Linux) / Scheduled Task (Windows); `--unregister` removes them. If `host` is selected, the Kanban orchestrator also acts as 1 in-process agent worker.
+Deploy the harqis-work platform locally — full stack ("host") or worker-only ("node") — or trigger a verified full-stack restart on a configured remote host. Local deployment uses the cross-platform Python entry point `python scripts/deploy.py`, which auto-detects OS and reads `machines.toml` for hostname → role/queues mapping (override via `--machine NAME` or `--role`/`--queues` flags). Auto-start: `python scripts/deploy.py --register` writes a launchd plist (macOS) / systemd user unit (Linux) / Scheduled Task (Windows); `--unregister` removes them. If `host` is selected, the Kanban orchestrator also acts as 1 in-process agent worker.
 
 ## Arguments
 
@@ -15,11 +14,13 @@ Deploy the harqis-work platform on this machine — full stack ("host") or worke
 
 ```
 <role> [-q <queues>] [-p <profile>] [--os <labels>] [--down] [--no-frontend] [--no-mcp] [--no-kanban] [--no-flower] [--num-agents N] [--dry-run]
+--remote <machine-key>
 ```
 
 | Token | Required | Description |
 |---|---|---|
 | `role` | Yes | `host` or `node`. `host` is the always-on hub (Docker stack + Beat scheduler + worker + frontend + MCP + Kanban + Flower). `node` is a remote worker that connects to the host's broker — and **also** runs a profile-scoped Kanban orchestrator unless `--no-kanban` is set. |
+| `--remote <MACHINE>` | Alternative to local role | Resolve `[ssh.<MACHINE>]` from `machines.local.toml`, pull the checked-out runtime branch with `--ff-only`, explicitly restart the full host stack, and verify Git plus core runtime health. Do not combine it with local lifecycle or component-selection flags. |
 | `-q`, `--queues <LIST>` | No | Comma-separated Celery queue list for the worker, e.g. `hud,tcg,default` or `code,write`. **Default:** `default` (both roles). |
 | `-p`, `--profile <ID>` | Yes for `node`, optional for `host` | Kanban profile id this orchestrator owns (e.g. `agent:default`, `agent:code`, `agent:write`). The orchestrator only claims cards whose resolved profile matches. **Defaults:** host → `agent:default` (so the host also acts as 1 default-queue node); node → **no default — must be passed**. If the user invokes `/deploy-harqis node` without `-p`, **ask which profile** before continuing (list available profiles from `agents/projects/profiles/examples/`). |
 | `--os <LABELS>` | No | Comma-separated `os:*` labels this orchestrator satisfies, e.g. `os:linux,os:gpu`. Unset = auto-detect from `platform.system()` (darwin → `os:darwin,os:macos,os:mac`; linux → `os:linux`; windows → `os:windows,os:win`; all hosts also satisfy `os:any`). Cards with no `os:*` label run on any node; cards with `os:windows` only run on Windows nodes. |
@@ -34,7 +35,23 @@ Deploy the harqis-work platform on this machine — full stack ("host") or worke
 | `--scheduler` | No | **Single-instance mode** — run ONLY the Celery Beat scheduler. Skips worker, frontend, mcp, kanban, flower, and Docker. `role` is ignored. Mutually exclusive with `-c`. |
 | `-c N`, `--concurrency N` | No | **Single-instance mode** — run ONLY a worker with concurrency N (sets `WORKFLOW_CONCURRENCY=N`). Skips other services and Docker. `role` is ignored. Mutually exclusive with `--scheduler`. |
 
-`role` is mandatory **unless** `--scheduler` or `-c` is passed (those put deploy.py in single-instance mode and bypass role-based selection). If the user invokes `/deploy-harqis` without args, ask which role and which queues (the latter only matters for `node`).
+`role` is mandatory **unless** `--remote`, `--scheduler`, or `-c` is passed. If the user invokes `/deploy-harqis` without args, ask whether to deploy a local `host`, a local `node`, or a configured remote host; queues matter only for `node`.
+
+### Remote verified host restart
+
+When `--remote <machine-key>` is requested, read and follow
+[references/stack-restart-verification.md](references/stack-restart-verification.md).
+Run the deterministic entry point from the local repository root:
+
+```powershell
+.venv\Scripts\python.exe scripts\deploy.py --remote <machine-key>
+```
+
+The command performs the SSH operation and verification. Do not separately run
+the local deployment steps below, and do not claim success unless the remote
+command prints `REMOTE HOST RESTART VERIFIED`. A request to add, inspect, or
+explain remote deployment does not authorize executing it; an explicit request
+to deploy or restart the named remote host does.
 
 ### Scheduler vs queues — the rule that must never break
 
