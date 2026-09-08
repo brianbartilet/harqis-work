@@ -329,6 +329,9 @@ def build_remote_restart_script(remote_path: str) -> str:
     return f"""#!/usr/bin/env bash
 set -euo pipefail
 
+# Non-interactive macOS SSH sessions omit common Docker/Homebrew locations.
+export PATH="/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"
+
 repo={repo}
 cd "$repo"
 repo="$(pwd -P)"
@@ -479,8 +482,9 @@ def remote_verified_restart(machine_key: str) -> None:
     try:
         result = subprocess.run(
             ["ssh", "-o", "ConnectTimeout=10", ssh_target, "bash -s"],
-            input=script,
-            text=True,
+            # Send bytes so Windows does not translate LF to CRLF on stdin;
+            # remote Bash treats the resulting carriage returns as syntax.
+            input=script.encode("utf-8"),
             check=False,
         )
     except OSError as exc:

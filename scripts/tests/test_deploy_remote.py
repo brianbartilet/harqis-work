@@ -55,6 +55,7 @@ def test_remote_restart_script_contains_required_verified_workflow():
     assert "git rev-parse HEAD" in script
     assert "git status --short --branch" in script
     assert "git pull --ff-only" in script
+    assert "/Applications/Docker.app/Contents/Resources/bin" in script
     assert "scripts/deploy.py --role host --down" in script
     assert "scripts/deploy.py --role host --console" in script
     assert 'os.environ.get("FRONTEND_PORT", "8081")' in script
@@ -95,8 +96,11 @@ def test_remote_verified_restart_streams_script_over_ssh(monkeypatch):
         "harqis-one@harqis-host",
         "bash -s",
     ]
-    assert "git pull --ff-only" in observed["kwargs"]["input"]
-    assert observed["kwargs"]["text"] is True
+    payload = observed["kwargs"]["input"]
+    assert isinstance(payload, bytes)
+    assert b"git pull --ff-only" in payload
+    assert b"\r\n" not in payload
+    assert "text" not in observed["kwargs"]
     assert observed["kwargs"]["check"] is False
 
 
