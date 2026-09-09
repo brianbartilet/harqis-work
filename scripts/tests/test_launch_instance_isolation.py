@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import glob
 import importlib.util
+import shelve
 from pathlib import Path
 
 
@@ -27,6 +29,24 @@ def test_fork_beat_schedule_lives_under_instance_data_root(tmp_path, monkeypatch
 
     assert launch._beat_schedule_base() == tmp_path / "runtime" / "celerybeat-schedule"
     assert (tmp_path / "runtime").is_dir()
+
+
+def test_beat_schedule_without_entries_is_rotated(tmp_path, monkeypatch):
+    launch = load_launch_module()
+    base = tmp_path / "celerybeat-schedule"
+    with shelve.open(str(base)) as db:
+        db["tz"] = "Asia/Singapore"
+        db["__version__"] = "5.6.3"
+    original_paths = set(glob.glob(str(base) + "*"))
+
+    monkeypatch.setattr(launch, "_beat_schedule_base", lambda: base)
+
+    launch._heal_beat_schedule()
+
+    remaining_paths = set(glob.glob(str(base) + "*"))
+    assert original_paths
+    assert original_paths.isdisjoint(remaining_paths)
+    assert any(".corrupt-" in path for path in remaining_paths)
 
 
 def test_setup_env_adds_repo_to_live_python_import_path(monkeypatch):

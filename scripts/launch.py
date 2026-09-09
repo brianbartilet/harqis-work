@@ -31,6 +31,7 @@ import os
 import shelve
 import sys
 import time
+from collections.abc import Mapping
 from pathlib import Path
 
 
@@ -245,9 +246,9 @@ def _heal_beat_schedule() -> None:
     write a pidfile. The scheduler then stays dead through every redeploy
     until a human clears the file. This probe breaks that permanent-death
     loop: read the shelve exactly the way Celery will; if it can't be
-    unpickled, rename every matching file aside (kept, not deleted, for
-    forensics) and let beat regenerate a fresh one. Healthy db: a few KB,
-    probe is microseconds, no-op.
+    unpickled or lacks a valid ``entries`` mapping, rename every matching file
+    aside (kept, not deleted, for forensics) and let beat regenerate a fresh
+    one. Healthy db: a few KB, probe is microseconds, no-op.
     """
     base = str(_beat_schedule_base())
     if not glob.glob(base + "*") and not os.path.exists(base):
@@ -257,8 +258,10 @@ def _heal_beat_schedule() -> None:
     try:
         db = shelve.open(base, flag="r")
         try:
-            db.get("entries", None)      # the exact key Celery unpickles
-            for key in db:               # force-read every pickled value
+            entries = db.get("entries", None)  # the exact key Celery unpickles
+            if not isinstance(entries, Mapping):
+                raise ValueError("missing or invalid 'entries' mapping")
+            for key in db:                     # force-read every pickled value
                 _ = db[key]
         finally:
             db.close()
