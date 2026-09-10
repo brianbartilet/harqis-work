@@ -796,11 +796,9 @@ def test_document_orders_entries_before_floating_navigator_without_reference_sum
     assert "overflow-wrap: anywhere" in response.text
     assert "word-break: break-word" in response.text
     assert 'data-document-header class="corpus-document-header"' in response.text
-    assert "position: sticky" in response.text
-    assert "top: var(--corpus-document-header-offset)" in response.text
-    assert ".corpus-document-header::before" in response.text
-    assert "height: var(--corpus-document-header-offset)" in response.text
-    assert ".corpus-document-header.is-editing" in response.text
+    assert ".corpus-document-header {\n    position: relative;" in response.text
+    assert "--corpus-document-header-offset" not in response.text
+    assert ".corpus-document-header::before" not in response.text
     assert "scroll-margin-top:6rem" in response.text
     assert "textarea.focus({ preventScroll: true })" in response.text
     assert "editor.scrollIntoView({ block: 'start' })" in response.text
@@ -817,12 +815,14 @@ def test_document_floating_navigator_can_be_minimized(
     response = authenticated_client.get("/hfl-corpus/document/2026-07-10.md")
 
     assert response.status_code == 200
-    assert 'data-navigator-toggle aria-expanded="true"' in response.text
-    assert 'id="navigator-content" data-navigator-content class="mt-3"' in response.text
+    assert 'data-navigator-toggle aria-expanded="false"' in response.text
+    assert 'id="navigator-content" data-navigator-content class="mt-3" hidden' in response.text
     assert "Search &amp; navigate" in response.text
     assert "setNavigatorCollapsed" in response.text
-    assert "hfl-corpus-document-navigator-collapsed" in response.text
-    assert "navigator-collapsed" in response.text
+    assert "setNavigatorCollapsed(true)" in response.text
+    assert "hfl-corpus-document-navigator-collapsed" not in response.text
+    assert '<div data-navigator-actions' in response.text
+    assert "new ResizeObserver(updateNavigatorClearance)" in response.text
 
 
 def test_document_tag_navigator_shows_counts_in_descending_order(
