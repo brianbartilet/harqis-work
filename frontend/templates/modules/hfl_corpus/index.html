@@ -293,7 +293,8 @@
     </div>
   </section>
 
-  <dialog class="memory-dialog" data-memory-dialog>
+  {% include 'modules/hfl_corpus/partials/timeline.html' %}
+<dialog class="memory-dialog" data-memory-dialog>
     <form method="dialog" data-memory-form class="p-5">
       <div class="flex items-start justify-between gap-4">
         <div><p class="text-[10px] font-semibold uppercase tracking-[.16em] text-cyan-400">Memory marker</p><h3 class="mt-1 text-base font-semibold text-white" data-memory-dialog-title>Pin a date block</h3></div>
@@ -952,6 +953,7 @@
           button.append(label);
           button.title = range.note || formatRange(range);
           button.addEventListener('click', () => scrollToDate(midpoint(range)));
+          button.addEventListener('click', () => window.dispatchEvent(new CustomEvent('hfl:timeline-period',{detail:{start:range.start_date,end:range.end_date}})));
           const editRange = document.createElement('button');
           editRange.type = 'button';
           editRange.className = 'activity-range-edit';
@@ -1225,7 +1227,12 @@
       menu.style.left = `${left}px`;
       menu.style.top = `${top}px`;
     };
+    const timelineButton = document.createElement('button');
+    timelineButton.type = 'button';timelineButton.textContent = 'Ideas & actions ↓';timelineButton.className = 'activity-day-menu-action';
+    menu.append(timelineButton);
+    timelineButton.addEventListener('click',()=>{const day=menuTrigger?.dataset.activityDay;closeDayMenu();if(day)window.dispatchEvent(new CustomEvent('hfl:timeline-period',{detail:{start:day,end:day,scroll:true}}));});
     const openDayMenu = button => {
+      window.dispatchEvent(new CustomEvent('hfl:timeline-period',{detail:{start:button.dataset.activityDay,end:button.dataset.activityDay}}));
       menuTrigger?.setAttribute('aria-expanded', 'false');
       resetMatchingEntries();
       menuTrigger = button;

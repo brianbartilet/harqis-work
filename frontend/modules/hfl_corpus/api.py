@@ -607,3 +607,7 @@ async def hfl_api_reference_thumbnail(request: Request, token: str):
             "X-Content-Type-Options": "nosniff",
         },
     )
+
+
+from modules.hfl_corpus.timeline import router as timeline_router
+router.include_router(timeline_router)

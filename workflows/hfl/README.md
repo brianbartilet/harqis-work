@@ -12,6 +12,8 @@ phone dumps-pull target); §Activation covers what each one needs.
 
 ---
 
+See [Activity Corpus timeline](../../docs/info/HFL-TIMELINE.md) for cached daily ideas, evidence-linked actions, planned markers, and completion receipts.
+
 ## Why this workflow exists
 
 `docs/MANIFESTO.md` calls Homework for Life out by name and specifies a

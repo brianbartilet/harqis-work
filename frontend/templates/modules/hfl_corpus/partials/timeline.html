@@ -1,0 +1,35 @@
+<link rel="stylesheet" href="{{ static_asset('css/hfl-timeline.css') }}">
+<section id="followup-agenda" class="agenda" aria-labelledby="agenda-heading">
+  <header class="agenda-header">
+    <div><p class="agenda-eyebrow">Activity Corpus / Timeline</p><h1 id="agenda-heading">Ideas &amp; follow-ups</h1><p class="agenda-description">Explore the evidence behind a day. Choose what deserves a next step.</p></div>
+  </header>
+  <form id="timeline-period-form" class="agenda-toolbar"><label>From <input id="timeline-start" type="date" required></label><label>To <input id="timeline-end" type="date" required></label><button>View period</button><button type="button" id="timeline-explore">Explore this period</button></form>
+  <p class="agenda-description">● Planned · ◇ Action history. Markers do not add to activity counts and do not send notifications. Suggestions cover all unprotected entries in the selected dates.</p>
+  <p id="timeline-run" role="status" class="agenda-description"></p>
+  <div id="timeline-suggestions"></div>
+  <h2>Actions connected to this period</h2>
+  <label class="agenda-description"><input type="checkbox" id="timeline-all"> Show actions from all dates</label>
+  <div class="agenda-toolbar"><div class="agenda-tabs" aria-label="Follow-up status"><button type="button" data-agenda-closed="false" aria-pressed="true">Open actions</button><button type="button" data-agenda-closed="true" aria-pressed="false">Completed & dismissed</button></div><button type="button" id="agenda-refresh">Refresh</button></div>
+  <p id="agenda-status" class="agenda-description" role="status" aria-live="polite">Loading follow-ups…</p>
+  <p id="agenda-error" class="agenda-error" role="alert" hidden></p>
+  <div id="agenda-items"></div>
+  <p class="agenda-footnote">Dates are in Singapore time. A review date resurfaces an item; only a deadline makes it overdue.</p>
+</section>
+<dialog id="followup-editor" class="agenda-dialog" aria-labelledby="followup-editor-title">
+  <form id="followup-form">
+    <header class="agenda-dialog-header"><h2 id="followup-editor-title">New follow-up</h2><button type="button" data-agenda-close aria-label="Close follow-up editor">×</button></header>
+    <div class="agenda-form-body">
+      <p id="followup-evidence" class="agenda-evidence" hidden></p>
+      <label>Follow-up<input name="title" required maxlength="200" placeholder="Check Essential Space sync feasibility"></label>
+      <label>Expected outcome<textarea name="expected_outcome" required maxlength="3000" rows="3" placeholder="What would a useful, completed result look like?"></textarea></label>
+      <div class="agenda-form-dates"><label>Review on<input name="review_date" type="date"><small>Bring this back to my attention.</small></label><label>Deadline <span>(optional)</span><input name="due_date" type="date"><small>When the outcome needs to be ready.</small></label></div>
+      <label id="followup-state-label">Status<select name="status"><option value="open">Open</option><option value="active">Active</option><option value="waiting">Waiting</option><option value="done">Done</option><option value="dismissed">Dismissed</option></select></label>
+      <label>Notes <span>(optional)</span><textarea name="notes" rows="2" maxlength="6000" placeholder="Useful context or the next step"></textarea></label>
+      <label id="followup-completion-label">Completion note <span>(optional)</span><textarea name="completion_note" rows="2" maxlength="3000" placeholder="What happened? What was the result?"></textarea></label>
+      <p id="followup-save-error" class="agenda-error" role="alert" hidden></p>
+    </div>
+    <footer class="agenda-dialog-footer"><button type="button" data-agenda-close>Cancel</button><button type="submit" class="agenda-primary">Save follow-up</button></footer>
+  </form>
+</dialog>
+<dialog id="followup-history" class="agenda-dialog" aria-labelledby="followup-history-title"><header class="agenda-dialog-header"><h2 id="followup-history-title">Follow-up history</h2><button type="button" id="followup-history-close" aria-label="Close history">×</button></header><div id="followup-history-items" class="agenda-form-body"></div></dialog>
+<script defer src="{{ static_asset('js/hfl-timeline.js') }}"></script>

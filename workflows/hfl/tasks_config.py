@@ -40,6 +40,18 @@ from workflows.queues import WorkflowQueue
 
 
 WORKFLOW_HFL = {
+    # Canonical host only. Previous Singapore day; browsing never invokes this.
+    'run-job--generate_timeline_suggestions': {
+        'task': 'workflows.hfl.tasks.timeline_suggestions.generate_timeline_suggestions',
+        'schedule': crontab(hour=4, minute=15),
+        'kwargs': {},
+        'options': {'queue': WorkflowQueue.HOST, 'expires': 60 * 60 * 12},
+        'manifesto': {
+            'code_role': 'distill+express', 'para_bucket': 'area',
+            'express_target': 'api:hfl-timeline', 'review_artifact': 'es_log+timeline_cache',
+            'hfl_signal': False, 'tenant_safe': True,
+        },
+    },
     # HFL Activity Radar — Beat scheduling is disabled because the Hermes agent
     # owns the waking-hours schedule. Hermes dispatches this canonical Celery
     # task so marker, suppression, Telegram, and Elasticsearch behavior remain
