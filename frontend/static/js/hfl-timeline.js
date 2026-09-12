@@ -42,11 +42,6 @@
   }
   function button(label, fn) { const b = node('button', label); b.type='button'; b.addEventListener('click',fn); return b; }
   async function patch(item, changes, trigger) {
-    if(!item.due_date){
-      openEditor(item,changes.status||item.status);
-      error('followup-save-error','Set Complete by before saving.');
-      return;
-    }
     trigger.disabled = true; error('agenda-error');
     try { await api('/'+item.id, {method:'PATCH',body:JSON.stringify({version:item.version,...changes})}); await load(); }
     catch (e) { error('agenda-error',e.message); } finally {trigger.disabled=false;}
@@ -81,7 +76,7 @@
     const actions=node('div',null,'agenda-card-actions action-controls');
     actions.append(button('Edit',()=>openEditor(item)));
     if(!['done','dismissed'].includes(item.status)){
-      actions.append(button('Dismiss',e=>patch(item,{status:'dismissed'},e.currentTarget)),button('Done',()=>openEditor(item,'done')));
+      actions.append(button('Dismiss',e=>patch(item,{status:'dismissed'},e.currentTarget)),button('Done',e=>patch(item,{status:'done'},e.currentTarget)));
     } else actions.append(button('Reopen',e=>patch(item,{status:'open'},e.currentTarget)));
     actions.append(button('History',()=>showHistory(item)));
     el.append(actions);return el;
