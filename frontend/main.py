@@ -54,12 +54,14 @@ from modules.hfl_corpus.api import router as hfl_corpus_api_router
 from modules.hfl_corpus.corpus import corpus_index
 from modules.hfl_corpus.remote import close_remote_http_client
 from modules.hfl_corpus.router import router as hfl_corpus_router
+from modules.hfl_corpus.agent_bridge import owner_router as agent_bridge_owner_router, worker_router as agent_bridge_worker_router
 from modules.hfl_shares.router import guest_router as hfl_share_guest_router
 from modules.hfl_shares.router import owner_router as hfl_share_owner_router
 from modules.git_forks.router import router as git_forks_router
 from modules.home.router import router as home_router
 from modules.manifesto.router import router as manifesto_router
 from modules.profile.router import router as profile_router
+from modules.app_settings.router import router as app_settings_router
 from modules.second_brain.router import router as second_brain_router
 from modules.workflows.router import router as workflows_router
 from web import require_user as _require_auth, templates
@@ -264,10 +266,13 @@ app.include_router(workflows_router)
 app.include_router(applications_router)
 app.include_router(hfl_corpus_api_router)
 app.include_router(hfl_corpus_router)
+app.include_router(agent_bridge_owner_router)
+app.include_router(agent_bridge_worker_router)
 app.include_router(hfl_share_owner_router)
 app.include_router(hfl_share_guest_router)
 app.include_router(git_forks_router)
 app.include_router(profile_router)
+app.include_router(app_settings_router)
 app.include_router(second_brain_router)
 
 

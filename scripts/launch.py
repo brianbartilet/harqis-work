@@ -331,6 +331,16 @@ def cmd_frontend(args: argparse.Namespace) -> None:
     _exec(_python(), str(REPO_ROOT / "frontend" / "main.py"))
 
 
+def cmd_hfl_agent(args: argparse.Namespace) -> None:
+    setup_env()
+    if not os.environ.get("HFL_AGENT_BRIDGE_TOKEN", "").strip():
+        sys.exit("HFL_AGENT_BRIDGE_TOKEN must be set before starting hfl-agent")
+    runner = str(REPO_ROOT / "scripts" / "agents" / "hfl" / "agent_bridge_runner.py")
+    subprocess.run([_python(), str(REPO_ROOT / 'scripts/agents/hfl/setup_agent_bridge.py'), '--apply'], check=True)
+    print("[launch] HFL Hermes execution worker", flush=True)
+    _exec(_python(), runner, "--watch")
+
+
 def cmd_hfl_api(args: argparse.Namespace) -> None:
     setup_env()
     if not os.environ.get("HFL_CORPUS_API_TOKEN", "").strip():
@@ -482,6 +492,8 @@ def build_parser() -> argparse.ArgumentParser:
     fe = sub.add_parser("frontend", help="FastAPI frontend dashboard")
     fe.set_defaults(func=cmd_frontend)
 
+    agent = sub.add_parser("hfl-agent", help="HFL Hermes execution worker")
+    agent.set_defaults(func=cmd_hfl_agent)
     ha = sub.add_parser("hfl-api", help="Standalone HFL Activity Corpus API")
     ha.set_defaults(func=cmd_hfl_api)
 

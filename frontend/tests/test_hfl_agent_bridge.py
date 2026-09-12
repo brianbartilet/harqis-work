@@ -10,11 +10,11 @@ def bridge(monkeypatch, tmp_path):
     from workflows.hfl.timeline_store import FollowUpStore
     monkeypatch.setenv('HFL_TIMELINE_LOCAL_PREVIEW', '1')
     monkeypatch.setenv('HFL_AGENT_BRIDGE_TOKEN', 'test-worker-token')
+    monkeypatch.setenv('HFL_AGENT_BRIDGE_STORE_PATH', str(tmp_path / 'bridge.sqlite3'))
     store = AgentBridgeStore(tmp_path / 'bridge.sqlite3')
     actions = FollowUpStore(tmp_path / 'actions.sqlite3')
     monkeypatch.setattr(module, 'bridge_store', lambda: store)
     monkeypatch.setattr(module.timeline, 'store', lambda: actions)
-    monkeypatch.setattr(module, 'deliver_pending', lambda: None)
     return module, store, actions
 
 
@@ -47,6 +47,183 @@ def event(client, run, kind, payload, key=None):
 RESULT = {'summary': 'Design completed with cited documentation.', 'evidence': ['https://example.org/docs'], 'complete': True}
 
 
+def test_settings_persist_validate_and_require_owner_csrf(bridge, authenticated_client):
+    from modules.app_settings.store import read_settings
+    from modules.hfl_shares.security import make_csrf_token
+    assert read_settings() == {'actions_polling_minutes': 30, 'pin_backfill_days': 7}
+    page = authenticated_client.get('/settings')
+    assert page.status_code == 200 and 'Actions polling minutes' in page.text
+    assert 'App Settings' in authenticated_client.get('/profile').text
+    values = {'csrf': make_csrf_token('frontend-test-user'), 'actions_polling_minutes': '5', 'pin_backfill_days': '7'}
+    assert authenticated_client.post('/settings', data=values).status_code == 200
+    assert read_settings()['actions_polling_minutes'] == 5
+    assert authenticated_client.post('/settings', data={**values, 'actions_polling_minutes': '0'}).status_code == 422
+    assert authenticated_client.post('/settings', data={**values, 'csrf': ''}).status_code == 403
+    authenticated_client.cookies.clear()
+    assert authenticated_client.get('/settings', follow_redirects=False).status_code in {302, 303}
+
+
+def test_polling_skips_blank_prompts_and_reopen_creates_fresh_attempt(bridge, authenticated_client):
+    module, store, actions = bridge
+    blank = create_action(actions)
+    actions.update(blank['id'], {'version': 1, 'prompt': '  '}, actor='owner')
+    item = create_action(actions)
+    ids = module.sweep()['runs']
+    assert len(ids) == 1
+    assert actions.get(blank['id'])['status'] == 'open'
+    assert actions.get(item['id'])['status'] == 'active'
+    first = authenticated_client.post(f'/api/hfl-agent/runs/{ids[0]}/claim', headers=WORKER, json={}).json()
+    event(authenticated_client, first, 'failed', {'summary': 'Download failed.'})
+    assert actions.get(item['id'])['status'] == 'incomplete'
+    current = actions.get(item['id'])
+    actions.update(item['id'], {'version': current['version'], 'status': 'open'}, actor='owner')
+    assert module.sweep()['runs'] == []  # Configured cadence is durable across ticks.
+    with store.connect() as db:
+        db.execute("DELETE FROM agent_dispatch_state WHERE key='actions-poll'")
+    second = module.sweep()['runs'][0]
+    assert second != first['id']
+    assert len(store.list('actionable:' + item['id'])) == 2
+    assert event(authenticated_client, first, 'progress', {'summary': 'Late result'}).status_code == 409
+    assert actions.get(item['id'])['status'] == 'active'
+
+
+def test_reopened_running_attempt_cannot_complete_new_revision(bridge, authenticated_client):
+    module, store, actions = bridge
+    item = create_action(actions)
+    first = start(authenticated_client, item, auto=True)
+    current = actions.get(item['id'])
+    actions.update(item['id'], {'version': current['version'], 'status': 'open'}, actor='owner')
+    second = module.enqueue('actionable', item['id'], 'reopened', 'owner')
+    assert second['id'] != first['id']
+    assert store.get(first['id'])['state'] == 'cancelled'
+    assert event(authenticated_client, first, 'succeeded', RESULT).status_code == 409
+
+
+@pytest.mark.parametrize('kind,payload', [('failed', {'summary': 'Failed'}), ('awaiting_input', {'summary': 'Need authorization'}), ('succeeded', {**RESULT, 'complete': False})])
+def test_unfulfilled_prompt_becomes_incomplete(bridge, authenticated_client, kind, payload):
+    module, store, actions = bridge
+    item = create_action(actions)
+    run = start(authenticated_client, item, auto=True)
+    event(authenticated_client, run, 'plan', {'summary': 'Plan'})
+    assert event(authenticated_client, run, kind, payload).status_code == 200
+    assert actions.get(item['id'])['status'] == 'incomplete'
+
+
+def test_pin_hour_backfill_and_older_gap_notice_are_deduplicated(bridge, monkeypatch):
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    module, store, actions = bridge
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 9, 12, 10, tzinfo=ZoneInfo('Asia/Singapore'))
+    monkeypatch.setattr(module, 'datetime', Clock)
+    pins = module.get_memory_pin_store()
+    pins.save_category(category_id=None, name='Daily', color='#f59e0b', instructions='Category context')
+    category = pins.snapshot()['categories'][0]
+    pins.save_range(range_id=None, category_id=category['id'], start_date='2026-09-01', end_date='2026-09-13', title='Daily review', prompt='Summarize the occurrence day', note='Pin context', execution_hour=12)
+    pin = pins.snapshot()['ranges'][0]
+    assert pin['agent_enabled']
+    occurrences = []
+    for _ in range(7):
+        run = store.get(module.sweep()['runs'][0])
+        occurrences.append(run['snapshot']['occurrence_date'])
+        assert run['snapshot']['category_guidance'] == 'Category context'
+        store.owner_transition(run['id'], 'cancelled', 'owner', 'Accounted for')
+    assert occurrences == [(Clock.now().date() - timedelta(days=n)).isoformat() for n in range(7, 0, -1)]
+    assert module.sweep()['runs'] == []  # Today's noon has not arrived.
+    assert store.notice_sent(f"older-gap:pin:{pin['id']}:2026-09-01")
+    pins.archive_category(category['id'])
+    assert module.sweep()['runs'] == []
+
+
+def test_existing_pin_opt_out_survives_edits(bridge):
+    module, store, actions = bridge
+    pins = module.get_memory_pin_store()
+    pins.save_category(category_id=None, name='Legacy', color='#f59e0b')
+    category = pins.snapshot()['categories'][0]
+    values = dict(category_id=category['id'], start_date='2026-09-12', end_date='2026-09-12', title='Existing', prompt='Review', note='')
+    pins.save_range(range_id=None, **values, agent_enabled=False)
+    pin = pins.snapshot()['ranges'][0]
+    pins.save_range(range_id=pin['id'], **values)
+    assert not pins.snapshot()['ranges'][0]['agent_enabled']
+    assert module.sweep()['runs'] == []
+    store.subscribe('pin', str(pin['id']), 'daily', True)
+    assert pins.snapshot()['ranges'][0]['agent_enabled']
+
+
+def test_artifacts_require_lease_and_owner_and_render_safe_markdown(bridge, authenticated_client):
+    module, store, actions = bridge
+    item = create_action(actions)
+    run = start(authenticated_client, item, auto=True)
+    path = f"/api/hfl-agent/runs/{run['id']}/artifacts/report.md"
+    assert authenticated_client.post(path, headers=WORKER, content=b'# Report').status_code == 409
+    headers = {**WORKER, 'X-Execution-Lease': run['lease_token']}
+    uploaded = authenticated_client.post(path, headers=headers, content=b'# Report\n\n[Docs](https://example.org)\n<script>alert(1)</script>')
+    assert uploaded.status_code == 200, uploaded.text
+    assert authenticated_client.post(path, headers=headers, content=b'Changed').status_code == 409
+    url = uploaded.json()['url']
+    preview = authenticated_client.get(url + '?view=true')
+    assert '<h1' in preview.text and '<script>' not in preview.text
+    assert 'href="https://example.org"' in preview.text
+    assert 'attachment' in authenticated_client.get(url).headers['content-disposition']
+    event(authenticated_client, run, 'plan', {'summary': 'Create report'})
+    event(authenticated_client, run, 'succeeded', {**RESULT, 'summary': f'**Finished** [Report]({url}) <img src=x onerror=alert(1)>'})
+    view = authenticated_client.get(f"/hfl-corpus/agent-bridge/sources/actionable/{item['id']}").json()
+    assert '<strong>Finished</strong>' in view['runs'][0]['result']['output_html']
+    assert 'onerror=' not in view['runs'][0]['result']['output_html']
+    assert authenticated_client.post(path, headers=headers, content=b'# Late').status_code == 409
+    authenticated_client.cookies.clear()
+    assert authenticated_client.get(url).status_code == 401
+
+
+def test_browser_settings_and_future_dates(bridge, authenticated_client, monkeypatch, tmp_path):
+    from datetime import date
+    from urllib.parse import urlparse
+    playwright = pytest.importorskip('playwright.sync_api')
+    module, store, actions = bridge
+    monkeypatch.setattr(module.corpus_index, 'documents', lambda: ())
+    with playwright.sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(channel='chrome', headless=True)
+        except playwright.Error:
+            pytest.skip('Installed Chrome is required.')
+        page = browser.new_page(viewport={'width': 1200, 'height': 900})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        def route(request_route):
+            req = request_route.request
+            url = urlparse(req.url)
+            if url.hostname != 'bridge.test':
+                request_route.abort()
+                return
+            response = authenticated_client.request(req.method, url.path + ('?' + url.query if url.query else ''), content=req.post_data,
+                headers={key: value for key, value in req.headers.items() if key.lower() in {'content-type', 'x-csrf-token'}})
+            request_route.fulfill(status=response.status_code, headers={'content-type': response.headers.get('content-type', 'text/html')}, body=response.content)
+        page.route('**/*', route)
+        page.goto('https://bridge.test/settings')
+        page.get_by_text('Actions polling minutes', exact=False).first.wait_for()
+        page.locator('summary[aria-label="Profile menu"]').click()
+        assert page.locator('nav[aria-label="Profile menu"] a[href="/settings"]').is_visible()
+        page.locator('summary[aria-label="Profile menu"]').click()
+        page.screenshot(path=str(tmp_path / 'settings-desktop.png'))
+        page.set_viewport_size({'width': 390, 'height': 844})
+        page.screenshot(path=str(tmp_path / 'settings-mobile.png'))
+        assert page.locator('body').evaluate('(el) => el.scrollWidth <= window.innerWidth')
+        page.set_viewport_size({'width': 1200, 'height': 900})
+        page.goto(f'https://bridge.test/hfl-corpus?activity_year={date.today().year + 1}')
+        day = page.locator('[data-activity-day][data-future="true"]').first
+        day.click()
+        ideas = page.locator('[data-activity-menu-ideas]')
+        assert ideas.is_disabled()
+        assert page.locator('[data-activity-menu-actions]').get_attribute('aria-expanded') == 'true'
+        assert page.locator('[data-day-actions]').is_visible()
+        page.screenshot(path=str(tmp_path / 'future-actions.png'))
+        assert page.locator('#pin-execution-hour option').count() == 24
+        assert errors == []
+        browser.close()
+
+
 def test_agent_run_updates_status_records_events_and_requires_acceptance(bridge, authenticated_client):
     module, store, actions = bridge
     item = create_action(actions)
@@ -61,7 +238,7 @@ def test_agent_run_updates_status_records_events_and_requires_acceptance(bridge,
     accepted = authenticated_client.post(f"/hfl-corpus/agent-bridge/runs/{run['id']}/accept", headers=owner_headers(), json={})
     assert accepted.status_code == 200, accepted.text
     assert actions.get(item['id'])['status'] == 'done'
-    assert len(actions.history(item['id'])) == 3
+    assert len(actions.history(item['id'])) == 4
     assert [row['kind'] for row in store.events('actionable:' + item['id'])] == ['succeeded', 'accepted', 'succeeded', 'plan', 'running', 'queued']
     assert event(authenticated_client, run, 'succeeded', RESULT).status_code == 200
     assert event(authenticated_client, run, 'succeeded', {**RESULT, 'summary': 'Changed'}).status_code == 409
@@ -72,7 +249,7 @@ def test_concurrent_claim_and_owner_edit_cannot_be_overwritten(bridge, authentic
     item = create_action(actions)
     run = start(authenticated_client, item, auto=True)
     assert authenticated_client.post(f"/api/hfl-agent/runs/{run['id']}/claim", headers=WORKER, json={}).status_code == 409
-    actions.update(item['id'], {'version': 2, 'prompt': 'A different task'}, actor='owner')
+    actions.update(item['id'], {'version': 3, 'prompt': 'A different task'}, actor='owner')
     event(authenticated_client, run, 'plan', {'summary': 'Plan'})
     assert event(authenticated_client, run, 'succeeded', RESULT).json()['state'] == 'review'
     assert actions.get(item['id'])['prompt'] == 'A different task'
@@ -106,14 +283,12 @@ def test_auth_and_csrf_do_not_expose_worker_authority(bridge, authenticated_clie
     assert authenticated_client.post(path, headers=WORKER, json={'request_key': 'a'}).status_code == 401
 
 
-def test_daily_opt_in_and_duplicate_requests(bridge):
+def test_automatic_open_discovery_and_duplicate_requests(bridge):
     module, store, actions = bridge
     item = create_action(actions)
-    assert module.sweep()['runs'] == []
-    store.subscribe('actionable', item['id'], 'daily', False)
     first = module.sweep()['runs']
     assert len(first) == 1
-    assert module.sweep()['runs'] == first
+    assert module.sweep()['runs'] == []
     manual = module.enqueue('actionable', item['id'], 'manual', 'owner')
     assert manual['id'] == first[0]
     assert len(store.list()) == 1
@@ -141,11 +316,11 @@ def test_stale_instructions_cancel_before_claim(bridge, authenticated_client):
     module, store, actions = bridge
     item = create_action(actions)
     run = module.enqueue('actionable', item['id'], 'stale', 'owner')
-    actions.update(item['id'], {'version': 1, 'prompt': 'Changed'}, actor='owner')
+    actions.update(item['id'], {'version': 2, 'prompt': 'Changed'}, actor='owner')
     response = authenticated_client.post(f"/api/hfl-agent/runs/{run['id']}/claim", headers=WORKER, json={})
     assert response.status_code == 409
     assert store.get(run['id'])['state'] == 'cancelled'
-    assert actions.get(item['id'])['status'] == 'open'
+    assert actions.get(item['id'])['status'] == 'active'
 
 
 def test_after_period_schedule_runs_once_and_ignores_future_pins(bridge):
@@ -157,7 +332,7 @@ def test_after_period_schedule_runs_once_and_ignores_future_pins(bridge):
     category = pins.snapshot()['categories'][0]
     today = datetime.now(ZoneInfo('Asia/Singapore')).date()
     for day in (today - timedelta(days=1), today + timedelta(days=1)):
-        pins.save_range(range_id=None, category_id=category['id'], start_date=day.isoformat(), end_date=day.isoformat(), title='Review', prompt='Review this period')
+        pins.save_range(range_id=None, category_id=category['id'], start_date=day.isoformat(), end_date=day.isoformat(), title='Review', prompt='Review this period', note='')
     past, future = pins.snapshot()['ranges']
     for pin in (past, future):
         store.subscribe('pin', str(pin['id']), 'after_period', False)
@@ -165,7 +340,7 @@ def test_after_period_schedule_runs_once_and_ignores_future_pins(bridge):
     assert len(result) == 1
     assert store.get(result[0])['source_key'] == 'pin:' + str(past['id'])
     store.owner_transition(result[0], 'cancelled', 'owner', 'Keep the receipt')
-    assert module.sweep()['runs'] == result
+    assert module.sweep()['runs'] == []
     assert len(store.list()) == 1
 
 
@@ -178,11 +353,42 @@ def test_corpus_context_excludes_protected_linked_entry(bridge, monkeypatch):
     assert context['entries'] == []
 
 
-def test_receipt_failure_retries_from_durable_request(bridge, monkeypatch):
-    import importlib
+def test_agent_completion_receipt_is_attributed_correctly(bridge):
+    from workflows.hfl.timeline import write_completion
     module, store, actions = bridge
-    delivery = importlib.reload(module).deliver_pending
-    monkeypatch.setattr(module, 'bridge_store', lambda: store)
+    item = create_action(actions)
+    item = actions.update(item['id'], {'version': 1, 'status': 'done', 'completion_note': 'Evidence-backed draft.'}, actor='agent:hermes:' + 'a' * 32 + ':done')
+    entries = []
+    write_completion(item['id'], item['version'], store=actions, submit=lambda entry, **kwargs: entries.append(entry) or {'delivery': 'persisted'})
+    assert 'agent-completion' in entries[0].tags
+    assert 'Agent completion: Evidence-backed draft.' in entries[0].what_happened
+    assert 'Manual completion' not in entries[0].what_happened
+
+
+def test_remote_actionable_api_preserves_attribution_and_version_checks(bridge, authenticated_client, monkeypatch):
+    import httpx
+    from types import SimpleNamespace
+    module, store, actions = bridge
+    item = create_action(actions)
+    original_client = httpx.Client
+    def transport(request):
+        response = authenticated_client.request(request.method, request.url.raw_path.decode(), content=request.content,
+                                                headers={'Authorization': request.headers['Authorization'], 'Content-Type': 'application/json'})
+        return httpx.Response(response.status_code, content=response.content)
+    monkeypatch.setattr(module, 'get_settings', lambda: SimpleNamespace(hfl_corpus_api_url='https://canonical.test', hfl_corpus_api_token='frontend-test-hfl-api-token'))
+    monkeypatch.setattr(module.httpx, 'Client', lambda **kwargs: original_client(transport=httpx.MockTransport(transport), **kwargs))
+    monkeypatch.delenv('HFL_TIMELINE_LOCAL_PREVIEW')
+    assert module.action_call('GET', '/' + item['id'])['item']['version'] == 1
+    actor = 'agent:hermes:' + 'b' * 32 + ':in_progress'
+    module.action_call('PATCH', '/' + item['id'], {'version': 1, 'status': 'in_progress', '_agent_actor': actor})
+    assert actions.history(item['id'])[0]['actor'] == actor
+    with pytest.raises(ValueError, match='changed'):
+        module.action_call('PATCH', '/' + item['id'], {'version': 1, 'status': 'in_progress', '_agent_actor': actor})
+
+
+def test_receipt_failure_retries_from_durable_request(bridge, monkeypatch):
+    module, store, actions = bridge
+    delivery = module.deliver_pending
     from workflows.hfl import persistence
     item = create_action(actions)
     snapshot = {'kind': 'actionable', 'source_id': item['id'], 'source_key': 'actionable:' + item['id'], 'source': item, 'instruction_hash': 'test'}
@@ -237,21 +443,25 @@ def test_browser_review_lifecycle_and_mobile_layout(bridge, authenticated_client
         page.add_style_tag(path=str(frontend / 'static/css/hfl-timeline.css'))
         page.add_script_tag(path=str(frontend / 'static/js/hfl-agent-bridge.js'))
         page.evaluate('(item) => window.hflAgentBridge.open("actionable", item.id, item.title)', item)
+        page.get_by_role('heading', name='No results yet').wait_for()
+        page.screenshot(path=str(tmp_path / 'agent-results-empty.png'))
+        page.set_viewport_size({'width': 390, 'height': 844})
+        page.screenshot(path=str(tmp_path / 'agent-results-empty-mobile.png'))
+        page.set_viewport_size({'width': 1100, 'height': 850})
         page.get_by_role('button', name='Run now', exact=True).click()
-        page.get_by_text('Waiting for the Hermes worker.').wait_for()
+        page.get_by_text('Waiting for an agent to start. You can leave this dialog and check back later.').wait_for()
         run_id = store.list()[0]['id']
         run = authenticated_client.post(f'/api/hfl-agent/runs/{run_id}/claim', headers=WORKER, json={}).json()
         event(authenticated_client, run, 'plan', {'summary': 'Check the expected outcome.'})
         event(authenticated_client, run, 'succeeded', {**RESULT, 'summary': 'Draft ready. <img src=x onerror=alert(1)> is literal text.'})
         page.get_by_role('button', name='Refresh', exact=True).click()
-        page.get_by_role('button', name='Accept and mark done').wait_for()
+        page.get_by_role('heading', name='Completed', exact=True).wait_for()
         page.screenshot(path=str(tmp_path / 'agent-bridge-desktop.png'))
         page.set_viewport_size({'width': 390, 'height': 844})
         page.screenshot(path=str(tmp_path / 'agent-bridge-mobile.png'))
-        assert page.locator('dialog img').count() == 0
+        assert page.locator('dialog [onerror]').count() == 0
         assert page.locator('dialog').evaluate('(el) => el.scrollWidth <= el.clientWidth')
-        page.get_by_role('button', name='Accept and mark done').click()
-        page.get_by_role('heading', name='succeeded', exact=True).wait_for()
+        page.get_by_role('heading', name='Completed', exact=True).wait_for()
         assert actions.get(item['id'])['status'] == 'done'
         assert errors == []
         browser.close()

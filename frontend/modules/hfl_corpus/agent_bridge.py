@@ -4,15 +4,21 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import hashlib
+import re
+from urllib.parse import quote
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse
 
 from auth import get_current_user
 from config import get_settings
+from modules.app_settings.store import read_settings
+from services.markdown import render_markdown
 from modules.hfl_corpus import timeline
 from modules.hfl_corpus.memory_pins import get_memory_pin_store
 from modules.hfl_corpus.corpus import activity_day_entries, corpus_index
@@ -24,7 +30,7 @@ from workflows.hfl.agent_bridge_store import AgentBridgeStore, BridgeConflict, d
 from workflows.hfl.timeline_store import FollowUpConflict
 
 
-POLICY = 'research-draft-v1'
+POLICY = 'prompt-execution-v2'
 PROMPT_PATH = Path(__file__).resolve().parents[3] / 'workflows/hfl/prompts/agent_bridge.md'
 
 
@@ -46,6 +52,10 @@ def action_call(method, suffix, payload=None):
         response.raise_for_status()
         return response.json()
     store = timeline.store()
+    if suffix == '' or suffix.startswith('?'):
+        items = store.list()
+        offset = int(suffix.split('offset=')[-1]) if 'offset=' in suffix else 0
+        return {'items': items[offset:offset + 500], 'total': len(items)}
     if suffix.endswith('/history'):
         return {'history': store.history(suffix[1:-8])}
     if method == 'GET':
@@ -59,7 +69,7 @@ def source_snapshot(kind, source_id):
         item = action_call('GET', '/' + source_id)['item']
         if item['status'] in {'done', 'dismissed'}:
             raise BridgeConflict('Closed actionables cannot be executed.')
-        source = {key: item.get(key, '') for key in ('id', 'title', 'prompt', 'expected_outcome', 'notes', 'version', 'source')}
+        source = {key: item.get(key, '') for key in ('id', 'title', 'prompt', 'expected_outcome', 'notes', 'version', 'status', 'source')}
         guidance = ''
     elif kind == 'pin':
         pins = get_memory_pin_store().snapshot()
@@ -79,15 +89,21 @@ def source_snapshot(kind, source_id):
     runtime = PROMPT_PATH.read_text(encoding='utf-8')
     return {'source_key': f'{kind}:{source_id}', 'kind': kind, 'source_id': source_id,
             'source': source, 'category_guidance': guidance, 'policy': POLICY,
-            'runtime_prompt': runtime, 'skill': 'hfl-agent-bridge', 'skill_hash': digest(runtime),
-            'instruction_hash': digest({'source': source, 'guidance': guidance, 'runtime': runtime})}
+            'runtime_prompt': runtime, 'prompt_path': 'workflows/hfl/prompts/agent_bridge.md', 'prompt_hash': digest(runtime),
+            'instruction_hash': digest({'source': {k: v for k, v in source.items() if k not in {'version', 'status', 'updated_at'}}, 'guidance': guidance, 'runtime': runtime})}
 
 
-def enqueue(kind, source_id, request_key, actor, auto_complete=False):
+def enqueue(kind, source_id, request_key, actor, auto_complete=True):
     snapshot = source_snapshot(kind, source_id)
     snapshot['auto_complete'] = auto_complete
     snapshot['context'] = evidence_context(snapshot)
-    return bridge_store().enqueue(snapshot, request_key, actor)
+    store = bridge_store()
+    if kind == 'actionable':
+        retire_reopened(snapshot)
+    run = store.enqueue(snapshot, request_key, actor)
+    if run['state'] == 'queued':
+        apply_action(run, 'active')
+    return store.get(run['id'])
 
 
 def evidence_context(snapshot):
@@ -105,7 +121,7 @@ def evidence_context(snapshot):
             document = remote.document(ref['path'], include_secrets=False, secret_tags=tags)[0] if remote else corpus_index.get(ref['path'])
             selected = [(ref['path'], entry) for entry in (document.entries if document else ()) if timeline.entry_guid(entry) == ref.get('entry_id')]
         else:
-            end = min(date.fromisoformat(source['end_date']), datetime.now(ZoneInfo('Asia/Singapore')).date())
+            end = min(date.fromisoformat(source['end_date']), date.fromisoformat(snapshot['occurrence_date']) if snapshot.get('occurrence_date') else datetime.now(ZoneInfo('Asia/Singapore')).date())
             start = max(date.fromisoformat(source['start_date']), end - timedelta(days=6))
             coverage.update(start=start.isoformat(), end=end.isoformat(), truncated=start.isoformat() != source['start_date'])
             documents = () if remote or start > end else corpus_index.documents()
@@ -121,30 +137,128 @@ def evidence_context(snapshot):
         return {'entries': [], 'coverage': {'unavailable': True, 'reason': 'Corpus recall could not complete; do not assume there is no evidence.'}}
 
 
+def retire_reopened(snapshot):
+    """A new owner revision cannot inherit an old execution's authority."""
+    source = snapshot['source']
+    if source.get('status') != 'open':
+        return
+    store = bridge_store()
+    for run in store.list(snapshot['source_key']):
+        if run['state'] in {'queued', 'running', 'awaiting_input', 'review'} and source['version'] > (run['expected_version'] or run['snapshot']['source']['version']):
+            store.owner_transition(run['id'], 'cancelled', 'bridge', 'Action reopened; this attempt is superseded.')
+
+
+def older_gap_notice(snapshot, start, end):
+    store = bridge_store()
+    key = 'older-gap:' + snapshot['source_key'] + ':' + snapshot['source']['start_date']
+    if start > end or store.notice_sent(key):
+        return
+    # An existing run, even a failed run, has already been accounted for in history.
+    with store.connect() as db:
+        accounted = {row['request_key'] for row in db.execute('SELECT request_key FROM agent_requests WHERE source_key=?', (snapshot['source_key'],))}
+    missing = []
+    day = start
+    while day <= end:
+        if f"{snapshot['source_key']}:daily:{day.isoformat()}" not in accounted:
+            missing.append(day)
+        day += timedelta(days=1)
+    if not missing:
+        return
+    from workflows.hfl.dto import HflEntry
+    from workflows.hfl.persistence import submit_hfl_entry
+    entry = HflEntry(when=datetime.now(ZoneInfo('Asia/Singapore')),
+        moment='Review older missed agent runs: ' + snapshot['source']['title'][:120],
+        what_happened=f"{len(missing)} older scheduled occurrences need review, from {missing[0]} through {missing[-1]}. Source: {snapshot['source_key']}. Automatic backfill is limited to the configured recent window. Review the pin and run older work on demand if still useful.",
+        why_it_stayed='Makes older scheduling gaps visible without executing stale instructions automatically.',
+        tags=('agent-execution', 'follow-up'), source='hfl-agent-execution')
+    if os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1':
+        store.mark_notice(key)
+    elif submit_hfl_entry(entry, source='hfl-agent-execution', dedup_key=key, synthesized=True).get('delivery') in {'persisted', 'forwarded', 'outbox'}:
+        store.mark_notice(key)
+
+
 def sweep():
     store = bridge_store()
     store.expire()
-    today = datetime.now(ZoneInfo('Asia/Singapore')).date().isoformat()
+    settings = read_settings()
+    instant = datetime.now(ZoneInfo('Asia/Singapore'))
+    today = instant.date()
     results, skipped = [], []
-    for sub in store.subscriptions():
-        if sub['cadence'] == 'off':
+    if store.dispatch_due('actions-poll', settings['actions_polling_minutes']):
+        try:
+            offset = 0
+            while True:
+                page = action_call('GET', f'?offset={offset}')
+                # Collect before mutation: status edits can reorder the canonical list.
+                if offset == 0:
+                    items = []
+                items.extend(page['items'])
+                offset += len(page['items'])
+                if offset >= page['total'] or not page['items']:
+                    break
+            for item in items:
+                if item['status'] == 'open' and item.get('prompt', '').strip():
+                    try:
+                        run = enqueue('actionable', item['id'], f"actionable:{item['id']}:revision:{item['version']}", 'hermes-schedule')
+                        results.append(run['id'])
+                    except (ValueError, KeyError, httpx.HTTPError):
+                        skipped.append('actionable:' + item['id'])
+        except httpx.HTTPError:
+            skipped.append('actionables:service-unavailable')
+    subscriptions = {sub['source_key']: sub for sub in store.subscriptions()}
+    for pin in get_memory_pin_store().snapshot()['ranges']:
+        key = 'pin:' + str(pin['id'])
+        sub = subscriptions.get(key)
+        enabled = sub['cadence'] != 'off' if sub else bool(pin.get('agent_enabled'))
+        if not enabled or not pin.get('prompt', '').strip():
             continue
         try:
-            snapshot = source_snapshot(sub['kind'], sub['source_id'])
-            source = snapshot['source']
-            if sub['kind'] == 'pin':
-                if sub['cadence'] == 'daily' and not source['start_date'] <= today <= source['end_date']:
+            snap = source_snapshot('pin', str(pin['id']))
+            start, end = date.fromisoformat(pin['start_date']), date.fromisoformat(pin['end_date'])
+            earliest = today - timedelta(days=settings['pin_backfill_days'])
+            if sub and sub['cadence'] == 'after_period':
+                days = [end] if today > end else []
+                cadence = 'after_period'
+            else:
+                older_gap_notice(snap, start, min(end, earliest - timedelta(days=1)))
+                day = max(start, earliest)
+                days = []
+                while day <= min(end, today):
+                    if day < today or instant.hour >= pin.get('execution_hour', 0):
+                        days.append(day)
+                    day += timedelta(days=1)
+                cadence = 'daily'
+            for day in days:
+                occurrence = f'{key}:{cadence}:{day.isoformat()}'
+                if store.request_exists(occurrence):
                     continue
-                if sub['cadence'] == 'after_period' and today <= source['end_date']:
-                    continue
-            occurrence = source['end_date'] if sub['cadence'] == 'after_period' else today
-            snapshot['auto_complete'] = bool(sub['auto_complete'])
-            snapshot['context'] = evidence_context(snapshot)
-            results.append(store.enqueue(snapshot, f"{sub['source_key']}:{sub['cadence']}:{occurrence}", 'hermes-schedule')['id'])
+                snap['auto_complete'] = True
+                snap['occurrence_date'] = day.isoformat()
+                snap['context'] = evidence_context(snap)
+                run = store.enqueue(snap, occurrence, 'hermes-schedule')
+                results.append(run['id'])
+                break  # One live run per source; the next tick catches up the next occurrence.
         except (ValueError, KeyError, httpx.HTTPError):
-            skipped.append(sub['source_key'])
+            skipped.append(key)
+    reconcile_runs()
     deliver_pending()
-    return {'runs': results, 'skipped': skipped}
+    return {'runs': list(dict.fromkeys(results)), 'skipped': skipped}
+
+
+def reconcile_runs():
+    store = bridge_store()
+    for state in ('queued', 'review', 'accepting', 'failed', 'awaiting_input'):
+        for run in store.list(state=state, limit=1000, oldest=True):
+            try:
+                if state == 'queued':
+                    apply_action(run, 'active')
+                elif state in {'review', 'accepting'} and run['snapshot'].get('auto_complete'):
+                    accept(run['id'], 'policy:' + POLICY)
+                elif state in {'failed', 'awaiting_input'} and not run['applied']:
+                    apply_action(run, 'incomplete')
+                    store.mark_applied(run['id'])
+            except (ValueError, KeyError, httpx.HTTPError):
+                continue  # Optimistic revisions prevent old attempts from changing a reopened item.
 
 
 def apply_action(run, status):
@@ -155,15 +269,15 @@ def apply_action(run, status):
     history = action_call('GET', '/' + source_id + '/history')['history']
     existing = next((row for row in history if row['actor'] == actor), None)
     if existing:
-        if status == 'in_progress':
+        if status in {'active', 'in_progress'}:
             bridge_store().set_version(run['id'], existing['item']['version'])
         return
-    version = run['snapshot']['source']['version'] if status == 'in_progress' else run['expected_version']
+    version = run['expected_version'] or run['snapshot']['source']['version']
     payload = {'version': version, 'status': status, '_agent_actor': actor}
     if status == 'done':
         payload['completion_note'] = (run['result']['summary'] + '\n\nAgent run: ' + run['id'])[:3000]
     item = action_call('PATCH', '/' + source_id, payload)['item']
-    if status == 'in_progress':
+    if status in {'active', 'in_progress'}:
         bridge_store().set_version(run['id'], item['version'])
 
 
@@ -174,13 +288,12 @@ def accept(run_id, actor):
         return run
     run = store.begin_accept(run_id, actor)
     try:
-        if run['result'].get('complete'):
-            apply_action(run, 'done')
+        apply_action(run, 'done' if run['result'].get('complete') else 'incomplete')
     except Exception:
         store.acceptance_failed(run_id)
         raise
     store.mark_applied(run_id)
-    return store.owner_transition(run_id, 'succeeded', actor, 'Result accepted' + ('; expected outcome completed.' if run['result'].get('complete') else '; further work remains.'))
+    return store.owner_transition(run_id, 'succeeded', actor, 'Result accepted' + ('; prompt completed.' if run['result'].get('complete') else '; further work remains.'))
 
 
 def deliver_pending():
@@ -218,7 +331,8 @@ def owner_auth(request: Request):
 
 def worker_auth(request: Request):
     expected = os.environ.get('HFL_AGENT_BRIDGE_TOKEN', '').strip()
-    supplied = request.headers.get('Authorization', '').removeprefix('Bearer ')
+    authorization = request.headers.get('Authorization', '')
+    supplied = authorization[7:] if authorization.startswith('Bearer ') else ''
     if not expected:
         raise HTTPException(503, 'Agent bridge worker token is not configured.')
     if not hmac.compare_digest(expected, supplied):
@@ -228,6 +342,74 @@ def worker_auth(request: Request):
 
 owner_router = APIRouter(prefix='/hfl-corpus/agent-bridge', dependencies=[Depends(owner_auth)])
 worker_router = APIRouter(prefix='/api/hfl-agent', dependencies=[Depends(worker_auth)])
+
+
+def artifact_path(run_id, content_hash):
+    root = bridge_store().path.parent / 'agent-artifacts'
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / run_id / content_hash
+    if not path.resolve().is_relative_to(root.resolve()):
+        raise HTTPException(400, 'Invalid artifact location.')
+    return path
+
+
+@worker_router.post('/runs/{run_id}/artifacts/{name}')
+async def upload_artifact(run_id: str, name: str, request: Request, agent=Depends(worker_auth)):
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,119}', name):
+        raise HTTPException(400, 'Use a simple artifact filename (up to 120 characters).')
+    store = bridge_store()
+    run = checked(store.get, run_id, private=True)
+    token = request.headers.get('X-Execution-Lease', '')
+    if run['agent'] != agent or not token or not hmac.compare_digest(run['lease_token'], token) or run['state'] != 'running':
+        raise HTTPException(409, 'An active execution lease is required.')
+    content = bytearray()
+    async for chunk in request.stream():
+        content.extend(chunk)
+        if len(content) > 20 * 1024 * 1024:
+            raise HTTPException(413, 'Artifacts are limited to 20 MB each.')
+    content_hash = hashlib.sha256(content).hexdigest()
+    path = artifact_path(run_id, content_hash)
+    with store.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        from workflows.hfl.agent_bridge_store import now
+        current = db.execute('SELECT state,lease_until FROM agent_requests WHERE id=?', (run_id,)).fetchone()
+        if current['state'] != 'running' or current['lease_until'] < now():
+            raise HTTPException(409, 'The execution lease expired.')
+        previous = db.execute('SELECT digest FROM agent_artifacts WHERE run_id=? AND name=?', (run_id, name)).fetchone()
+        if previous and previous['digest'] != content_hash:
+            raise HTTPException(409, 'Artifact filenames are immutable within an attempt.')
+        if not previous and len(store.artifacts(run_id)) >= 30:
+            raise HTTPException(400, 'At most 30 artifacts are allowed per attempt.')
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            temporary = path.with_suffix('.tmp')
+            temporary.write_bytes(content)
+            temporary.replace(path)
+        db.execute('INSERT OR IGNORE INTO agent_artifacts VALUES (?,?,?,?)', (run_id, name, content_hash, len(content)))
+    return {'name': name, 'url': f'/hfl-corpus/agent-bridge/artifacts/{run_id}/{quote(name)}'}
+
+
+@owner_router.get('/artifacts/{run_id}/{name}')
+def download_artifact(run_id: str, name: str, view: bool = False):
+    artifact = next((item for item in bridge_store().artifacts(run_id) if item['name'] == name), None)
+    if not artifact:
+        raise HTTPException(404, 'Artifact not found.')
+    path = artifact_path(run_id, artifact['digest'])
+    if not path.is_file():
+        raise HTTPException(404, 'Artifact file is unavailable on this host.')
+    headers = {'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, no-store',
+               'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox"}
+    suffix = Path(name).suffix.lower()
+    if view and suffix in {'.md', '.txt', '.csv', '.json', '.py', '.log'} and artifact['size'] <= 1024 * 1024:
+        content = path.read_text(encoding='utf-8', errors='replace')
+        if suffix != '.md':
+            import html
+            return HTMLResponse('<pre>' + html.escape(content) + '</pre>', headers=headers)
+        return HTMLResponse(str(render_markdown(content)), headers=headers)
+    media = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.pdf': 'application/pdf'}
+    inline = view and suffix in media
+    return FileResponse(path, filename=name, media_type=media.get(suffix, 'application/octet-stream'),
+                        content_disposition_type='inline' if inline else 'attachment', headers=headers)
 
 
 def checked(operation, *args, **kwargs):
@@ -250,12 +432,19 @@ def source_view(kind: str, source_id: str):
     key = f'{kind}:{source_id}'
     store = bridge_store()
     store.expire()
-    return {'runs': store.list(key), 'events': store.events(key),
-            'subscription': next((sub for sub in store.subscriptions() if sub['source_key'] == key), {'cadence': 'off', 'auto_complete': False})}
+    runs, events = store.list(key), store.events(key)
+    for run in runs:
+        run['result']['output_html'] = str(render_markdown(run['result'].get('summary', '')))
+    for event in events:
+        event['payload']['output_html'] = str(render_markdown(event['payload'].get('summary', '')))
+    return {'runs': runs, 'events': events,
+            'subscription': next((sub for sub in store.subscriptions() if sub['source_key'] == key), {'cadence': 'daily' if kind == 'actionable' or any(str(p['id']) == source_id and p.get('agent_enabled') for p in get_memory_pin_store().snapshot()['ranges']) else 'off', 'auto_complete': True})}
 
 
 @owner_router.post('/sources/{kind}/{source_id}/configure')
 def configure(kind: str, source_id: str, payload: dict):
+    if kind == 'actionable':
+        raise HTTPException(400, 'Action discovery is configured in App Settings. Use Open to request another attempt.')
     if payload.get('cadence') != 'off':
         checked(source_snapshot, kind, source_id)
     if kind not in {'actionable', 'pin'}:
@@ -266,7 +455,7 @@ def configure(kind: str, source_id: str, payload: dict):
 
 @owner_router.post('/sources/{kind}/{source_id}/run')
 def run_now(kind: str, source_id: str, payload: dict, user=Depends(owner_auth)):
-    auto = payload.get('auto_complete', False)
+    auto = payload.get('auto_complete', True)
     if type(auto) is not bool:
         raise HTTPException(400, 'Invalid completion policy.')
     return checked(enqueue, kind, source_id, payload.get('request_key'), user, auto)
@@ -287,6 +476,7 @@ def decide(run_id: str, decision: str, background_tasks: BackgroundTasks, user=D
 @worker_router.get('/queue')
 def queue():
     bridge_store().expire()
+    reconcile_runs()
     return {'runs': [{'id': run['id']} for run in bridge_store().list(state='queued', oldest=True)]}
 
 
@@ -314,7 +504,7 @@ def claim(run_id: str, agent=Depends(worker_auth)):
         raise HTTPException(409, 'Source is no longer eligible for execution.') from None
     except httpx.HTTPError:
         raise HTTPException(502, 'The canonical actionable service is unavailable.') from None
-    if current['instruction_hash'] != run['snapshot']['instruction_hash']:
+    if current['instruction_hash'] != run['snapshot']['instruction_hash'] or (current['kind'] == 'actionable' and current['source']['version'] != (run['expected_version'] or run['snapshot']['source']['version'])):
         checked(store.owner_transition, run_id, 'cancelled', 'bridge', 'Source changed before execution; request a new run.')
         raise HTTPException(409, 'Instructions changed; request a new run.')
     run = checked(store.claim, run_id, agent)
@@ -334,6 +524,12 @@ def report(run_id: str, payload: dict, background_tasks: BackgroundTasks, agent=
             run = accept(run_id, 'policy:' + POLICY)
         except (ValueError, KeyError, httpx.HTTPError):
             pass  # Preserve result for owner review if a concurrent edit prevents completion.
+    if run['state'] in {'failed', 'awaiting_input'}:
+        try:
+            apply_action(run, 'incomplete')
+            bridge_store().mark_applied(run_id)
+        except (ValueError, KeyError, httpx.HTTPError):
+            pass
     if run['delivery'] == 'pending':
         background_tasks.add_task(deliver_pending)
     return run

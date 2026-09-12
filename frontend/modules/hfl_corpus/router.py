@@ -112,6 +112,8 @@ class MemoryPinRequest(BaseModel):
     note: str = ""
     title: str = ""
     prompt: str = ""
+    execution_hour: int = 0
+    agent_enabled: bool | None = None
     instructions: str = ""
     event_key: str = ""
     output: str = ""
@@ -177,7 +179,16 @@ async def hfl_memory_pins(request: Request, payload: MemoryPinRequest):
                 note=payload.note,
                 title=payload.title,
                 prompt=payload.prompt,
+                execution_hour=payload.execution_hour,
+                agent_enabled=payload.agent_enabled,
             )
+            if payload.range_id and payload.agent_enabled is not None:
+                from modules.hfl_corpus.agent_bridge import bridge_store
+                bridge = bridge_store()
+                sub = next((s for s in bridge.subscriptions() if s['source_key'] == f'pin:{payload.range_id}'), None)
+                if sub:
+                    cadence = (sub['cadence'] if sub['cadence'] != 'off' else 'daily') if payload.agent_enabled else 'off'
+                    bridge.subscribe('pin', str(payload.range_id), cadence, True)
         elif payload.action == "delete_range" and payload.range_id:
             store.delete_range(payload.range_id)
         else:

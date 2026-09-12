@@ -374,6 +374,7 @@ def test_review_on_is_optional_and_can_be_cleared(agenda,authenticated_client):
 
 
 @pytest.mark.parametrize('statuses,expected',[
+    (['incomplete'],'incomplete'), (['incomplete','open','in_progress','done'],'incomplete'),
     (['open'],'open'), (['active'],'open'), (['in_progress'],'in_progress'),
     (['in_progress','in_progress'],'in_progress'), (['done'],'done'),
     (['done','done'],'done'), (['done','in_progress'],'in_progress'),

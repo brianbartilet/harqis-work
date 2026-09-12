@@ -259,6 +259,358 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '415': {description: Thumbnail is unavailable}
         '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/hfl/day-matches/{activity_day}:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Hfl Api Day Matches
+      operationId: hfl_api_day_matches_api_hfl_day_matches__activity_day__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: activity_day
+        in: path
+        required: true
+        schema:
+          type: string
+          format: date
+          title: Activity Day
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Q
+      - name: source
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Source
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Offset
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 20
+          title: Limit
+      - name: include_secrets
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Secrets
+      - name: secret_tags
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Secret Tags
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/source:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Followup Source
+      operationId: followup_source_api_hfl_timeline_source_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Path
+      - name: entry_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Entry Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/evidence:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Followup Evidence
+      operationId: followup_evidence_api_hfl_timeline_evidence_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Path
+      - name: entry_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Entry Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/items:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Followup List
+      operationId: followup_list_api_hfl_timeline_items_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: closed
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Closed
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Followup Create
+      operationId: followup_create_api_hfl_timeline_items_post
+      security:
+      - HTTPBearer: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/hfl/timeline/items/{followup_id}:
+    patch:
+      tags:
+      - hfl-corpus-api
+      summary: Followup Update
+      operationId: followup_update_api_hfl_timeline_items__followup_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: followup_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Followup Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Followup Get
+      operationId: followup_get_api_hfl_timeline_items__followup_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: followup_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Followup Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/items/{followup_id}/history:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Followup History
+      operationId: followup_history_api_hfl_timeline_items__followup_id__history_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: followup_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Followup Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/markers:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Markers
+      operationId: markers_api_hfl_timeline_markers_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /api/hfl/timeline/period:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Timeline Period
+      operationId: timeline_period_api_hfl_timeline_period_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: start
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Start
+      - name: end
+        in: query
+        required: true
+        schema:
+          type: string
+          title: End
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/suggestions/{sid}/dismiss:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Dismiss Suggestion
+      operationId: dismiss_suggestion_api_hfl_timeline_suggestions__sid__dismiss_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sid
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/explore:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Explore
+      operationId: explore_api_hfl_timeline_explore_post
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
 components:
   securitySchemes:
     HTTPBearer:

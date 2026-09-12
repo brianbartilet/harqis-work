@@ -53,6 +53,7 @@ def test_service_names_and_runtime_paths_are_instance_scoped(monkeypatch):
 
 def test_process_filter_accepts_matching_checkout_working_directory(monkeypatch):
     deploy = load_deploy_module()
+    monkeypatch.setattr(deploy, "IS_WIN", False)
     monkeypatch.setattr(deploy, "IS_MAC", True)
     monkeypatch.setattr(deploy, "IS_LIN", False)
 
@@ -196,3 +197,13 @@ def test_hfl_api_is_opt_in_for_the_canonical_host():
     assert deploy.build_service_cmd(
         "hfl-api", {"role": "host", "hfl_api": True}, args
     )[-1] == "hfl-api"
+
+
+def test_hfl_agent_is_host_only_opt_in_and_can_be_disabled():
+    deploy = load_deploy_module()
+    args = deploy.build_parser().parse_args([])
+    assert 'hfl-agent' in deploy.select_services({'role': 'host', 'hfl_agent': True}, args)
+    assert 'hfl-agent' not in deploy.select_services({'role': 'node', 'hfl_agent': True}, args)
+    assert 'hfl-agent' not in deploy.select_services({'role': 'host'}, args)
+    disabled = deploy.build_parser().parse_args(['--no-hfl-agent'])
+    assert 'hfl-agent' not in deploy.select_services({'role': 'host', 'hfl_agent': True}, disabled)

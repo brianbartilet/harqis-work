@@ -91,3 +91,45 @@
 .activity-day-menu .agenda-empty-actions button { margin-top:.75rem; margin-right:.4rem; }
 .activity-day-menu .agenda-empty-actions .agenda-empty-explore { display:block; min-height:42px; margin:1rem auto .25rem; padding:.6rem 1.25rem; border-color:#0891b2; background:#0e7490; color:#fff; font-size:.8rem; font-weight:650; }
 .activity-day-menu .agenda-empty-actions .agenda-empty-explore:hover { background:#0891b2; border-color:#22d3ee; }
+.agent-bridge-dialog { width:min(46rem,calc(100vw - 2rem)); }
+.agent-bridge-dialog pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:25rem; overflow:auto; }
+.agent-bridge-dialog small { overflow-wrap:anywhere; }
+.agent-bridge-dialog .agenda-history-row > button { margin:.5rem .5rem .5rem 0; }
+
+.action-status[data-status="incomplete"] { color:#fca5a5; background:rgba(239,68,68,.15); border-color:#ef4444; }
+.activity-day[data-timeline-status="incomplete"] { --timeline-dot-color:#ef4444; }
+.agent-bridge-dialog .markdown-body { overflow-wrap:anywhere; font-size:.8rem; }
+.agent-bridge-dialog .markdown-body pre { overflow:auto; }
+.agent-bridge-dialog .markdown-body a, .agenda-history-row .markdown-body a { color:#67e8f9; text-decoration:underline; }
+
+.agent-bridge-dialog .agent-results-body { padding:1.5rem; display:flex; flex-direction:column; gap:1.25rem; }
+.agent-results-task > span { display:block; margin-bottom:.5rem; font-size:.65rem; font-weight:700; letter-spacing:.12em; color:#94a3b8; }
+.agent-results-task h3 { margin:0; font-size:1.05rem; font-weight:600; line-height:1.5; color:#e2e8f0; overflow-wrap:anywhere; }
+.agent-results-controls { margin:0; gap:.6rem; }
+.agent-results-controls button { min-height:40px; padding:.55rem 1rem; font-size:.8rem; }
+.agent-results-controls .agent-results-primary { color:#ecfeff; background:#0e7490; border-color:#0891b2; font-weight:600; }
+.agent-results-controls .agent-results-primary:hover:not(:disabled) { background:#155e75; border-color:#67e8f9; }
+.agent-results-controls button:disabled { opacity:.5; cursor:not-allowed; }
+.agent-results-list { display:flex; flex-direction:column; gap:1rem; }
+.agent-results-empty { padding:2.5rem 1.25rem; text-align:center; border:1px dashed #334155; border-radius:.75rem; background:#080f1e; }
+.agent-results-empty h3 { margin:0 0 .6rem; font-size:1rem; color:#e2e8f0; }
+.agent-results-empty p { margin:0 auto; max-width:24rem; color:#94a3b8; font-size:.85rem; line-height:1.7; }
+.agent-bridge-dialog .agent-result-card { margin:0; padding:1.1rem; border:1px solid #334155; border-radius:.75rem; background:#080f1e; }
+.agent-result-meta { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.6rem; margin-bottom:1rem; }
+.agent-result-meta .agent-result-state { margin:0; padding:.25rem .6rem; border-radius:2rem; background:#164e633d; color:#67e8f9; font-size:.75rem; line-height:1.5; }
+.agent-result-state[data-state="succeeded"] { background:#064e3b55; color:#6ee7b7; }
+.agent-result-state[data-state="failed"], .agent-result-state[data-state="awaiting_input"] { background:#7f1d1d44; color:#fca5a5; }
+.agent-result-meta time { color:#94a3b8; font-size:.72rem; }
+.agent-result-card > p { color:#94a3b8; font-size:.85rem; line-height:1.7; }
+.agent-result-card .markdown-body { font-size:.85rem; line-height:1.75; }
+.agent-result-card details, .agent-results-events { margin-top:1rem; border-top:1px solid #233047; padding-top:.8rem; }
+.agent-result-card summary, .agent-results-events > summary { color:#94a3b8; cursor:pointer; font-size:.75rem; padding:.25rem 0; }
+.agent-result-card details small { display:block; margin-top:.6rem; color:#64748b; }
+.agent-results-footer { display:flex; align-items:center; justify-content:space-between; gap:1rem; border-top:1px solid #233047; padding-top:1rem; }
+.agent-results-footer p { margin:0; color:#94a3b8; font-size:.75rem; line-height:1.6; }
+.agent-results-footer a { flex-shrink:0; color:#67e8f9; font-size:.75rem; text-decoration:underline; text-underline-offset:3px; }
+@media (max-width:520px) {
+  .agent-bridge-dialog .agent-results-body { padding:1.1rem; }
+  .agent-results-empty { padding:2rem 1rem; }
+  .agent-results-footer { align-items:flex-start; flex-direction:column; gap:.6rem; }
+}

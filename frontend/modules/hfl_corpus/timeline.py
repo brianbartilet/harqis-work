@@ -107,7 +107,7 @@ async def followup_evidence(request: Request, path: str, entry_id: str):
 
 
 @router.get("/items")
-async def followup_list(request: Request, closed: bool = False):
+async def followup_list(request: Request, closed: bool = False, offset: int = 0):
     owner(request)
     today = datetime.now(ZoneInfo("Asia/Singapore")).date().isoformat()
     items = store().list(closed=closed)
@@ -120,7 +120,9 @@ async def followup_list(request: Request, closed: bool = False):
     order = {"Overdue": 0, "Today": 1, "Upcoming": 2, "Unscheduled": 3, "Completed": 4, "Dismissed": 5}
     if not closed:
         items.sort(key=lambda item: (order[item["group"]], min(filter(None, [item["due_date"], item["review_date"]]), default="9999"), item["created_at"]))
-    return {"items": items[:500], "total": len(items), "today": today, "timezone": "Asia/Singapore"}
+    if offset < 0:
+        raise HTTPException(422, 'Offset cannot be negative.')
+    return {"items": items[offset:offset + 500], "total": len(items), "today": today, "timezone": "Asia/Singapore"}
 
 
 @router.post("/items")
@@ -158,6 +160,11 @@ async def followup_create(request: Request):
 async def followup_update(request: Request, followup_id: str, background_tasks: BackgroundTasks):
     user = owner(request)
     raw = await body(request)
+    agent_actor = raw.pop('_agent_actor', None)
+    if agent_actor is not None:
+        if not request.url.path.startswith('/api/hfl/') or not isinstance(agent_actor, str) or not re.fullmatch(r'agent:hermes:[a-f0-9]{32}:(active|in_progress|done|incomplete)', agent_actor):
+            raise HTTPException(400, 'Invalid agent attribution.')
+        user = agent_actor
     try:
         item = store().update(followup_id, raw, actor=user)
     except KeyError:
@@ -169,6 +176,15 @@ async def followup_update(request: Request, followup_id: str, background_tasks: 
     if any(r['followup_id'] == item['id'] and r['version'] == item['version'] for r in store().receipts(pending_only=True)):
         background_tasks.add_task(write_completion, item['id'], item['version'], store=store())
     return {"item": item}
+
+
+@router.get("/items/{followup_id}")
+async def followup_get(request: Request, followup_id: str):
+    owner(request)
+    try:
+        return {'item': store().get(followup_id)}
+    except KeyError:
+        raise HTTPException(404, 'Follow-up not found.') from None
 
 
 @router.get("/items/{followup_id}/history")
@@ -214,7 +230,7 @@ async def markers(request: Request):
                 day[key].append(item['id'])
     for day, value in days.items():
         statuses = scheduled_statuses.get(day, set())
-        value['dot_status'] = ('open' if statuses & {'open', 'active'} else
+        value['dot_status'] = ('incomplete' if 'incomplete' in statuses else 'open' if statuses & {'open', 'active'} else
                                'in_progress' if 'in_progress' in statuses else
                                'done' if statuses == {'done'} else None)
     return {'days': days}

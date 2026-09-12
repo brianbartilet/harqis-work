@@ -23,7 +23,7 @@
       <label>Actionable<input name="title" required maxlength="200" placeholder="Check Essential Space sync feasibility"></label>
       <label>Expected outcome<textarea name="expected_outcome" required maxlength="3000" rows="3" placeholder="What would a useful, completed result look like?"></textarea></label>
       <div class="agenda-form-dates"><label>Review on<input name="review_date" type="date"><small>Revisit this action or check progress. Adds a heatmap marker; no notification.</small></label><label>Complete by<input name="due_date" type="date"><small>When the outcome needs to be ready.</small></label></div>
-      <label id="followup-state-label">Status<select name="status"><option value="open">Open</option><option value="active">Active</option><option value="in_progress">In Progress</option><option value="done">Done</option><option value="dismissed">Dismissed</option></select></label>
+      <label id="followup-state-label">Status<select name="status"><option value="open">Open</option><option value="active">Active</option><option value="in_progress">In Progress</option><option value="incomplete">Incomplete</option><option value="done">Done</option><option value="dismissed">Dismissed</option></select></label>
       <label>Prompt<textarea name="prompt" rows="5" maxlength="20000" placeholder="Write instructions for an LLM. Plain text or Markdown is supported."></textarea><small>Saved instructions for later use. Nothing runs when you save.</small></label>
       <label>Notes<textarea name="notes" rows="2" maxlength="6000" placeholder="Useful context or the next step"></textarea></label>
       <label id="followup-completion-label">Completion note<textarea name="completion_note" rows="2" maxlength="3000" placeholder="What happened? What was the result?"></textarea></label>
@@ -32,5 +32,6 @@
     <footer class="agenda-dialog-footer"><button type="button" data-agenda-close>Cancel</button><button type="submit" class="agenda-primary">Save</button></footer>
   </form>
 </dialog>
-<dialog id="followup-history" class="agenda-dialog" aria-labelledby="followup-history-title"><header class="agenda-dialog-header"><h2 id="followup-history-title">Follow-up history</h2><button type="button" id="followup-history-close" aria-label="Close history">×</button></header><div id="followup-history-items" class="agenda-form-body"></div></dialog>
+<dialog id="followup-history" class="agenda-dialog" aria-labelledby="followup-history-title"><header class="agenda-dialog-header"><h2 id="followup-history-title">Actions history</h2><button type="button" id="followup-history-close" aria-label="Close history">×</button></header><div id="followup-history-items" class="agenda-form-body"></div></dialog>
+<script defer src="{{ static_asset('js/hfl-agent-bridge.js') }}"></script>
 <script defer src="{{ static_asset('js/hfl-timeline.js') }}"></script>
