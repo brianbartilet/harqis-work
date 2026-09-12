@@ -18,7 +18,7 @@ def agenda(monkeypatch, tmp_path):
 
 
 def payload(**extra):
-    return {"request_id": str(uuid4()), "title": "Investigate Essential Space", "expected_outcome": "Record a feasible sync route or explain why none exists.", **extra}
+    return {"request_id": str(uuid4()), "title": "Investigate Essential Space", "expected_outcome": "Record a feasible sync route or explain why none exists.", "review_date": (date.today()+timedelta(days=1)).isoformat(), "due_date": (date.today()+timedelta(days=7)).isoformat(), **extra}
 
 
 def test_lifecycle_persists_completion_and_reopen_history(agenda, authenticated_client):
@@ -70,10 +70,10 @@ def test_review_dates_do_not_become_overdue_deadlines(agenda, authenticated_clie
     today = datetime.now(ZoneInfo("Asia/Singapore")).date()
     yesterday = (today - timedelta(days=1)).isoformat()
     tomorrow = (today + timedelta(days=1)).isoformat()
-    for title, fields in [("Review", {"review_date": yesterday}), ("Deadline", {"due_date": yesterday}), ("Future", {"review_date": tomorrow}), ("Undated", {})]:
+    for title, fields in [("Review", {"review_date": yesterday}), ("Deadline", {"due_date": yesterday}), ("Future", {"review_date": tomorrow})]:
         authenticated_client.post("/hfl-corpus/timeline/items", json=payload(title=title, **fields))
     items = authenticated_client.get("/hfl-corpus/timeline/items").json()["items"]
-    assert [(item["title"], item["group"]) for item in items] == [("Deadline", "Overdue"), ("Review", "Today"), ("Future", "Upcoming"), ("Undated", "Unscheduled")]
+    assert [(item["title"], item["group"]) for item in items] == [("Deadline", "Overdue"), ("Review", "Today"), ("Future", "Upcoming")]
     assert items[1]["overdue"] is False
 
 
@@ -171,14 +171,14 @@ def test_markers_and_period_follow_source_plan_and_history(agenda, authenticated
     future = (date.today()+timedelta(days=20)).isoformat()
     item, _ = agenda.create(payload(due_date=future, review_date=future), actor='owner', source=suggestion()['source'])
     markers = authenticated_client.get('/hfl-corpus/timeline/markers').json()['days']
-    assert markers[future] == {'planned': [item['id']], 'actions': []}
+    assert markers[future] == {'planned': [item['id']], 'actions': [], 'dot_status':'open'}
     assert markers['2026-09-09']['actions'] == [item['id']]
     assert 'count' not in markers[future]
     result = authenticated_client.get(f'/hfl-corpus/timeline/period?start={future}&end={future}').json()
     assert result['items'][0]['id'] == item['id']
     agenda.update(item['id'], {'version': 1, 'status': 'done'}, actor='owner')
     markers = authenticated_client.get('/hfl-corpus/timeline/markers').json()['days']
-    assert markers[future] == {'planned': [], 'actions': [item['id']]}
+    assert markers[future] == {'planned': [item['id']], 'actions': [], 'dot_status':'done'}
 
 
 def test_run_claim_and_failure_preserve_cached_evidence(agenda):
@@ -304,3 +304,264 @@ def test_preview_completion_stays_local(agenda,monkeypatch):
     result=write_completion(item['id'],2,store=agenda)
     assert result['delivery'] == 'preview'
     assert agenda.receipts(pending_only=True) == []
+
+
+def test_action_prompt_persists_markdown_and_revision_history(agenda, authenticated_client):
+    prompt = '    Indented Markdown\n\n# Goal\n\n- Check the export path\n- Preserve source links\n\n```text\nDo not execute yet.\n```'
+    result=authenticated_client.post('/hfl-corpus/timeline/items',json=payload(prompt=prompt))
+    assert result.status_code == 201
+    item=result.json()['item']
+    assert item['prompt'] == prompt
+    assert agenda.get(item['id'])['prompt'] == prompt
+    edited=authenticated_client.patch('/hfl-corpus/timeline/items/'+item['id'],json={'version':1,'prompt':'## Revised instructions'})
+    assert edited.status_code == 200
+    assert agenda.history(item['id'])[0]['item']['prompt'] == '## Revised instructions'
+    assert agenda.history(item['id'])[1]['item']['prompt'] == prompt
+    assert authenticated_client.patch('/hfl-corpus/timeline/items/'+item['id'],json={'version':2,'prompt':''}).status_code == 200
+    assert agenda.get(item['id'])['prompt'] == ''
+
+
+@pytest.mark.parametrize('prompt',[123,'x'*20001])
+def test_action_prompt_rejects_invalid_values(agenda,authenticated_client,prompt):
+    assert authenticated_client.post('/hfl-corpus/timeline/items',json=payload(prompt=prompt)).status_code == 400
+    assert agenda.list() == []
+
+
+@pytest.mark.parametrize('field',['due_date'])
+@pytest.mark.parametrize('mode',['omitted','blank'])
+def test_action_dates_required_on_creation(agenda,authenticated_client,field,mode):
+    data=payload()
+    if mode=='omitted': data.pop(field)
+    else: data[field]=''
+    response=authenticated_client.post('/hfl-corpus/timeline/items',json=data)
+    assert response.status_code == 400
+    assert 'required' in response.json()['detail']
+    assert agenda.list() == []
+
+
+@pytest.mark.parametrize('field',['due_date'])
+def test_action_dates_cannot_be_cleared(agenda,authenticated_client,field):
+    item=authenticated_client.post('/hfl-corpus/timeline/items',json=payload()).json()['item']
+    response=authenticated_client.patch('/hfl-corpus/timeline/items/'+item['id'],json={'version':1,field:''})
+    assert response.status_code == 400
+    assert agenda.get(item['id'])[field] == item[field]
+    assert len(agenda.history(item['id'])) == 1
+
+
+def test_legacy_undated_action_requires_dates_on_next_save(agenda,authenticated_client):
+    import json
+    item,_=agenda.create(payload(),actor='owner')
+    item['review_date']=item['due_date']=''
+    with agenda.connect() as db:
+        db.execute('UPDATE followups SET payload=? WHERE id=?',(json.dumps(item),item['id']))
+    assert authenticated_client.get('/hfl-corpus/timeline/items').status_code==200
+    url='/hfl-corpus/timeline/items/'+item['id']
+    assert authenticated_client.patch(url,json={'version':1,'status':'dismissed'}).status_code==400
+    dates=payload()
+    assert authenticated_client.patch(url,json={'version':1,'review_date':dates['review_date'],'due_date':dates['due_date']}).status_code==200
+
+
+def test_review_on_is_optional_and_can_be_cleared(agenda,authenticated_client):
+    data=payload()
+    data.pop('review_date')
+    response=authenticated_client.post('/hfl-corpus/timeline/items',json=data)
+    assert response.status_code==201
+    item=response.json()['item']
+    assert item['review_date']==''
+    url='/hfl-corpus/timeline/items/'+item['id']
+    assert authenticated_client.patch(url,json={'version':1,'review_date':data['due_date']}).status_code==200
+    response=authenticated_client.patch(url,json={'version':2,'review_date':''})
+    assert response.status_code==200
+    assert response.json()['item']['review_date']==''
+    assert response.json()['item']['due_date']==data['due_date']
+
+
+@pytest.mark.parametrize('statuses,expected',[
+    (['open'],'open'), (['active'],'open'), (['in_progress'],'in_progress'),
+    (['in_progress','in_progress'],'in_progress'), (['done'],'done'),
+    (['done','done'],'done'), (['done','in_progress'],'in_progress'),
+    (['open','in_progress'],'open'), (['active','done'],'open'),
+    (['open','in_progress','done'],'open'), (['dismissed'],None),
+    (['dismissed','in_progress'],'in_progress'), (['dismissed','done'],'done'),
+])
+def test_date_dot_aggregates_current_statuses(agenda,authenticated_client,statuses,expected):
+    scheduled=(date.today()+timedelta(days=15)).isoformat()
+    for status in statuses:
+        item,_=agenda.create(payload(review_date=scheduled,due_date=scheduled),actor='owner')
+        if status!='open': agenda.update(item['id'],{'version':1,'status':status},actor='owner')
+    day=authenticated_client.get('/hfl-corpus/timeline/markers').json()['days'][scheduled]
+    assert day['dot_status']==expected
+    assert len(day['planned'])==sum(status!='dismissed' for status in statuses)
+    assert 'count' not in day
+
+
+def test_reschedule_and_reopen_update_dots(agenda,authenticated_client):
+    first=(date.today()+timedelta(days=15)).isoformat()
+    second=(date.today()+timedelta(days=16)).isoformat()
+    item,_=agenda.create(payload(review_date=first,due_date=second),actor='owner')
+    agenda.update(item['id'],{'version':1,'status':'done'},actor='owner')
+    days=authenticated_client.get('/hfl-corpus/timeline/markers').json()['days']
+    assert days[first]['dot_status']==days[second]['dot_status']=='done'
+    agenda.update(item['id'],{'version':2,'status':'in_progress','review_date':'','due_date':second},actor='owner')
+    days=authenticated_client.get('/hfl-corpus/timeline/markers').json()['days']
+    assert days[first]['dot_status'] is None
+    assert days[second]['dot_status']=='in_progress'
+
+
+def test_waiting_records_migrate_to_in_progress_without_losing_history(agenda):
+    import json
+    from workflows.hfl.timeline_store import FollowUpStore
+    item,_=agenda.create(payload(),actor='owner')
+    item['status']='waiting'
+    with agenda.connect() as db:
+        db.execute("UPDATE followups SET status='waiting',payload=? WHERE id=?",(json.dumps(item),item['id']))
+    migrated=FollowUpStore(agenda.path)
+    assert migrated.get(item['id'])['status']=='in_progress'
+    assert migrated.get(item['id'])['version']==1
+    assert len(migrated.history(item['id']))==1
+    assert FollowUpStore(agenda.path).get(item['id'])['status']=='in_progress'
+
+
+def high_idea(agenda,title='Verify the phone export',start='2026-09-09'):
+    item={**suggestion(),'title':title,'confidence':'high','status':'uncertain'}
+    run=agenda.claim_period(start,start,force=True)
+    agenda.save_suggestions(start,start,run,[item],{})
+    return agenda.suggestions(start,start)[0]
+
+
+def create_decision(item):
+    return {'suggestion_id':item['id'],'decision':'create','confidence':'high','completion_check':'clear','reason':'Concrete new feasibility check; no completion evidence or existing equivalent.'}
+
+
+def test_high_confidence_auto_action_uses_today_and_configurable_offset(agenda):
+    from workflows.hfl.timeline import create_automatic_actions
+    item=high_idea(agenda)
+    agenda.save_settings(12)
+    result=create_automatic_actions('2026-09-09','2026-09-09',agenda,[],today=date(2026,9,12),review=lambda *args:[create_decision(item)])
+    assert result['created']==1
+    action=agenda.list()[0]
+    assert action['review_date']=='2026-09-12'
+    assert action['due_date']=='2026-09-24'
+    assert action['status']=='open'
+    assert action['creation_mode']=='automatic'
+    assert action['source']==item['source']
+    assert action['prompt']==''
+    assert agenda.history(action['id'])[0]['actor']=='timeline-automation'
+    agenda.save_settings(7)
+    again=create_automatic_actions('2026-09-09','2026-09-09',agenda,[],review=lambda *args:pytest.fail('Already adopted'))
+    assert again['created']==0
+    assert agenda.get(action['id'])['due_date']=='2026-09-24'
+
+
+@pytest.mark.parametrize('status',['open','done','dismissed'])
+def test_semantic_duplicate_preserves_existing_action(agenda,status):
+    from workflows.hfl.timeline import create_automatic_actions
+    action,_=agenda.create(payload(title='Test exporting phone notes'),actor='owner')
+    if status!='open':action=agenda.update(action['id'],{'version':1,'status':status},actor='owner')
+    item=high_idea(agenda,title='Validate Essential Space data extraction')
+    def review(candidates,snapshot,evidence):
+        assert snapshot['actions'][0]['title'] != candidates[0]['title']
+        return [{'suggestion_id':item['id'],'decision':'duplicate','existing_action_id':action['id']}]
+    result=create_automatic_actions('2026-09-09','2026-09-09',agenda,[],review=review)
+    assert result['duplicates']==1
+    assert agenda.get(action['id'])==action
+    assert len(agenda.list()+agenda.list(closed=True))==1
+    assert agenda.suggestion(item['id'])['followup_id']==action['id']
+
+
+@pytest.mark.parametrize('change',[{'completion_check':'uncertain'},{'completion_check':'resolved'},{'confidence':'medium'},{'decision':'defer'},{'reason':''},{'decision':'duplicate','existing_action_id':'invented'}])
+def test_auto_review_uncertainty_or_invalid_decision_keeps_idea(agenda,change):
+    from workflows.hfl.timeline import create_automatic_actions
+    item=high_idea(agenda)
+    result=create_automatic_actions('2026-09-09','2026-09-09',agenda,[],review=lambda *args:[{**create_decision(item),**change}])
+    assert result['created']==0
+    assert agenda.list()==[]
+    assert agenda.suggestion(item['id'])['status']=='suggested'
+
+
+def test_auto_creation_rechecks_snapshot_after_concurrent_manual_change(agenda):
+    from workflows.hfl.timeline import create_automatic_actions
+    from workflows.hfl.timeline_store import FollowUpConflict
+    item=high_idea(agenda)
+    def review(*args):
+        agenda.create(payload(),actor='owner')
+        return [create_decision(item)]
+    result=create_automatic_actions('2026-09-09','2026-09-09',agenda,[],review=review)
+    assert result['state']=='failed'
+    assert result['error']=='FollowUpConflict'
+    assert len(agenda.list())==1
+    assert agenda.suggestion(item['id'])['status']=='suggested'
+
+
+def test_dismissed_idea_suppresses_reworded_recommendation(agenda):
+    from workflows.hfl.timeline import create_automatic_actions
+    previous=high_idea(agenda,title='Original idea')
+    agenda.mark_suggestion(previous['id'],'dismissed')
+    current=high_idea(agenda,title='Same outcome with different words')
+    result=create_automatic_actions('2026-09-09','2026-09-09',agenda,[],review=lambda *args:[{'suggestion_id':current['id'],'decision':'duplicate','duplicate_suggestion_id':previous['id']}])
+    assert result['duplicates']==1
+    assert agenda.list()==[]
+    assert agenda.suggestion(current['id'])['status']=='dismissed'
+
+
+def test_analysis_chains_automatic_actions_and_keeps_cache_on_review_failure(agenda):
+    from workflows.hfl.timeline import explore_period
+    row={'entry_id':'hfl-test','path':'2026-09-09.md','when':'2026-09-09T12:00:00+08:00','moment':'Export','what_happened':'Explore export','source':'notes'}
+    finding={**suggestion(),'confidence':'high','evidence':['N1'],'status':'uncertain','severity':'low','latest_evidence':['N1']}
+    def fail(*args):raise RuntimeError('Review unavailable')
+    result=explore_period('2026-09-09','2026-09-09',store=agenda,collect=lambda *args:([row],{}),related=lambda *args:[],analyze=lambda *args,**kwargs:{'findings':[finding]},auto_review=fail)
+    assert result['state']=='complete'
+    assert result['automatic_actions']['state']=='failed'
+    assert len(agenda.suggestions('2026-09-09','2026-09-09'))==1
+    assert agenda.list()==[]
+
+
+def test_timeline_settings_api_validates_and_persists(agenda,authenticated_client):
+    assert authenticated_client.get('/hfl-corpus/timeline/settings').json()=={'complete_after_days':7}
+    for value in [0,366,'7',True,7.5]:
+        assert authenticated_client.patch('/hfl-corpus/timeline/settings',json={'complete_after_days':value}).status_code==400
+    assert authenticated_client.patch('/hfl-corpus/timeline/settings',json={'complete_after_days':14}).status_code==200
+    assert agenda.settings()=={'complete_after_days':14}
+
+
+def test_second_brain_profile_settings_save_and_validation(agenda,authenticated_client,monkeypatch):
+    from modules.profile import router as profile_router
+    from modules.hfl_shares.security import make_csrf_token
+    async def settings(days=None):return agenda.settings() if days is None else agenda.save_settings(days)
+    monkeypatch.setattr(profile_router,'timeline_settings',settings)
+    page=authenticated_client.get('/profile')
+    assert page.status_code==200
+    assert 'Second brain settings' in page.text
+    csrf=make_csrf_token('frontend-test-user')
+    assert authenticated_client.post('/profile/second-brain',data={'csrf':'bad','complete_after_days':'12'}).status_code==403
+    assert authenticated_client.post('/profile/second-brain',data={'csrf':csrf,'complete_after_days':'0'}).status_code==422
+    response=authenticated_client.post('/profile/second-brain',data={'csrf':csrf,'complete_after_days':'12'},follow_redirects=False)
+    assert response.status_code==303
+    assert agenda.settings()['complete_after_days']==12
+
+
+def test_explore_chains_creation_with_seven_day_default(agenda):
+    from workflows.hfl.timeline import explore_period,SGT
+    from datetime import datetime
+    row={'entry_id':'hfl-test','path':'2026-09-09.md','when':'2026-09-09T12:00:00+08:00','moment':'Export','what_happened':'Explore export','source':'notes'}
+    finding={**suggestion(),'confidence':'high','evidence':['N1'],'status':'uncertain','severity':'low','latest_evidence':['N1']}
+    result=explore_period('2026-09-09','2026-09-09',store=agenda,collect=lambda *args:([row],{}),related=lambda *args:[],analyze=lambda *args,**kwargs:{'findings':[finding]},auto_review=lambda candidates,*args:[create_decision(candidates[0])])
+    assert result['automatic_actions']['created']==1
+    action=agenda.list()[0]
+    today=datetime.now(SGT).date()
+    assert action['review_date']==today.isoformat()
+    assert action['due_date']==(today+timedelta(days=7)).isoformat()
+    assert agenda.run_for('2026-09-09','2026-09-09')['result']['automatic_actions']['created']==1
+
+
+def test_duplicate_candidates_in_one_batch_create_only_one_action(agenda):
+    from workflows.hfl.timeline import create_automatic_actions
+    first={**suggestion(),'title':'First phrasing','confidence':'high'}
+    second={**suggestion(),'title':'Another phrasing','confidence':'high'}
+    run=agenda.claim_period('2026-09-09','2026-09-09')
+    agenda.save_suggestions('2026-09-09','2026-09-09',run,[first,second],{})
+    def review(candidates,*args):
+        return [create_decision(candidates[0]),{'suggestion_id':candidates[1]['id'],'decision':'duplicate','duplicate_suggestion_id':candidates[0]['id'],'reason':'Same outcome.'}]
+    result=create_automatic_actions('2026-09-09','2026-09-09',agenda,[],review=review)
+    assert result['created']==result['duplicates']==1
+    assert len(agenda.list())==1

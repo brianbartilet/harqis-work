@@ -69,3 +69,5 @@ def authenticated_client():
     with TestClient(app) as client:
         client.cookies.set("session", create_session_token("frontend-test-user"))
         yield client
+
+os.environ["HFL_TIMELINE_STORE_PATH"] = str(Path(tempfile.gettempdir()) / f"harqis-frontend-timeline-{os.getpid()}.sqlite3")

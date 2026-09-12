@@ -790,3 +790,17 @@ def test_primary_navigation_pages_share_header_typography(
     assert "color: #60a5fa;" in base_styles
     assert ".page-header-title {" in base_styles
     assert "font-size: 1.875rem;" in base_styles
+
+
+def test_static_asset_version_changes_after_edit_without_restart(tmp_path, monkeypatch):
+    import os
+    import web
+    monkeypatch.setattr(web, 'STATIC_ROOT', tmp_path)
+    asset = tmp_path / 'timeline.js'
+    asset.write_text('old script')
+    first = web.static_asset('timeline.js')
+    assert web.static_asset('timeline.js') == first
+    before = asset.stat().st_mtime_ns
+    asset.write_text('new script')
+    os.utime(asset, ns=(before + 1000000, before + 1000000))
+    assert web.static_asset('timeline.js') != first

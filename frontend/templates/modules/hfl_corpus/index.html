@@ -64,7 +64,7 @@
   .activity-day[data-range-preview="true"] { outline:2px solid #f8fafc; outline-offset:1px; }
   .activity-day[data-future="true"] { border-color:rgba(51,65,85,.7); background:rgba(30,41,59,.58); opacity:.52; }
   .activity-day[data-future="true"]:hover { border-color:rgba(71,85,105,.82); opacity:.7; }
-  .activity-day-menu { position:fixed; z-index:60; width:13rem; border:1px solid rgba(14,116,144,.8); border-radius:.75rem; background:#020617; padding:.45rem; color:#e2e8f0; box-shadow:0 18px 45px rgba(2,6,23,.65); }
+  .activity-day-menu { position:fixed; z-index:60; width:min(24rem, calc(100vw - 1rem)); border:1px solid rgba(14,116,144,.8); border-radius:.75rem; background:#020617; padding:.45rem; color:#e2e8f0; box-shadow:0 18px 45px rgba(2,6,23,.65); }
   .activity-day-menu[data-matches-expanded="true"] { width:min(24rem, calc(100vw - 1rem)); }
   .activity-day-menu-action { display:flex; width:100%; min-height:2.35rem; align-items:center; border-radius:.5rem; padding:.55rem .65rem; font-size:.75rem; font-weight:650; text-align:left; }
   .activity-day-menu-action:hover { background:#0f172a; color:#cffafe; }
@@ -87,7 +87,7 @@
   [data-memory-range-save]:disabled { border-color:#475569; background:#1e293b; color:#94a3b8; box-shadow:none; cursor:not-allowed; opacity:1; }
   .activity-day-menu-chevron { display:inline-flex; width:1.5rem; height:1.5rem; flex-shrink:0; align-items:center; justify-content:center; border:1px solid rgba(51,65,85,.9); border-radius:9999px; background:rgba(15,23,42,.85); color:#67e8f9; transition:transform .18s ease, border-color .18s ease, background-color .18s ease; }
   .activity-day-menu-action:hover .activity-day-menu-chevron { border-color:rgba(6,182,212,.7); background:#164e63; }
-  [data-activity-menu-matches][aria-expanded="true"] .activity-day-menu-chevron { transform:rotate(180deg); }
+  :is([data-activity-menu-matches], [data-activity-menu-ideas], [data-activity-menu-actions])[aria-expanded="true"] .activity-day-menu-chevron { transform:rotate(180deg); }
   .activity-legend-cell { width:.65rem; height:.65rem; border-radius:3px; border:1px solid rgba(51,65,85,.55); }
   .activity-legend-cell[data-level="0"] { background:#111827; }
   .activity-legend-cell[data-level="1"] { background:#164e63; }
@@ -275,9 +275,11 @@
     </div>
     <div class="activity-day-menu" data-activity-day-menu data-matches-expanded="false" role="menu" aria-label="Day actions" hidden>
       <p class="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[.14em] text-cyan-400" data-activity-menu-date></p>
+      <div class="activity-day-quick-actions">
       <button type="button" class="activity-day-menu-action text-slate-200" data-activity-menu-create role="menuitem">Create entry</button>
       <button type="button" class="activity-day-menu-action text-amber-200" data-activity-menu-pin role="menuitem">Pin dates</button>
       <a class="activity-day-menu-action text-cyan-200" data-activity-menu-document role="menuitem">Show document</a>
+      </div>
       <button type="button" class="activity-day-menu-action justify-between text-cyan-200" data-activity-menu-matches role="menuitem" aria-expanded="false">
         <span>Matching entries</span>
         <span class="activity-day-menu-chevron" aria-hidden="true">
@@ -287,6 +289,16 @@
       <div class="mt-1 border-t border-slate-800 pt-2" data-activity-menu-matches-panel hidden>
         <div class="text-xs text-slate-500" data-activity-menu-matches-content></div>
       </div>
+      <button type="button" class="activity-day-menu-action justify-between text-cyan-200" data-activity-menu-ideas aria-controls="activity-ideas-panel" aria-expanded="false">
+        <span>Ideas</span>
+        <span class="activity-day-menu-chevron" aria-hidden="true"><svg class="h-3 w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 7.5 5 5 5-5"/></svg></span>
+      </button>
+      <div id="activity-ideas-panel" data-day-ideas hidden></div>
+      <button type="button" class="activity-day-menu-action justify-between text-cyan-200" data-activity-menu-actions aria-controls="activity-actions-panel" aria-expanded="false">
+        <span>Actions</span>
+        <span class="activity-day-menu-chevron" aria-hidden="true"><svg class="h-3 w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 7.5 5 5 5-5"/></svg></span>
+      </button>
+      <div id="activity-actions-panel" data-day-actions hidden></div>
     </div>
     <p class="mt-2 text-[10px] text-slate-500" data-pin-selection-status hidden>Select an end date. Drag or choose another cell to create a date block.</p>
     {% if selected_activity_day %}<p class="mt-2 text-[10px] text-slate-500"><span class="text-amber-300">{{ selected_activity_day }}</span> selected</p>{% endif %}
@@ -1195,6 +1207,7 @@
     const closeDayMenu = (restoreFocus = false) => {
       if (menu.hidden) return;
       menu.hidden = true;
+      window.dispatchEvent(new Event('hfl:timeline-close'));
       menuTrigger?.setAttribute('aria-expanded', 'false');
       if (restoreFocus) menuTrigger?.focus();
       resetMatchingEntries();
@@ -1227,11 +1240,24 @@
       menu.style.left = `${left}px`;
       menu.style.top = `${top}px`;
     };
-    const timelineButton = document.createElement('button');
-    timelineButton.type = 'button';timelineButton.textContent = 'Ideas & actions ↓';timelineButton.className = 'activity-day-menu-action';
-    menu.append(timelineButton);
-    timelineButton.addEventListener('click',()=>{const day=menuTrigger?.dataset.activityDay;closeDayMenu();if(day)window.dispatchEvent(new CustomEvent('hfl:timeline-period',{detail:{start:day,end:day,scroll:true}}));});
+    const selectDaySection = selected => {
+      for (const name of ['matches','ideas','actions']) {
+        const content = name === 'matches' ? matchingPanel : menu.querySelector(`[data-day-${name}]`);
+        content.hidden = name !== selected;
+        menu.querySelector(`[data-activity-menu-${name}]`).setAttribute('aria-expanded', String(name === selected));
+      }
+      menu.dataset.matchesExpanded = String(selected === 'matches');
+      if (menuTrigger && !menu.hidden) positionDayMenu(menuTrigger);
+    };
+    for (const name of ['ideas','actions']) {
+      menu.querySelector(`[data-activity-menu-${name}]`).addEventListener('click', event => {
+        selectDaySection(event.currentTarget.getAttribute('aria-expanded') === 'true' ? null : name);
+      });
+    }
+    window.addEventListener('hfl:day-section', event => selectDaySection(event.detail.section), {signal: activityController.signal});
+    window.addEventListener('hfl:timeline-rendered', () => { if (!menu.hidden && menuTrigger) positionDayMenu(menuTrigger); }, {signal: activityController.signal});
     const openDayMenu = button => {
+      selectDaySection(null);
       window.dispatchEvent(new CustomEvent('hfl:timeline-period',{detail:{start:button.dataset.activityDay,end:button.dataset.activityDay}}));
       menuTrigger?.setAttribute('aria-expanded', 'false');
       resetMatchingEntries();
@@ -1259,6 +1285,7 @@
       matchingEntries.classList.toggle('activity-day-menu-disabled', !canShowMatches);
       matchingEntries.setAttribute('aria-disabled', String(!canShowMatches));
       menu.hidden = false;
+      menu.scrollTop = 0;
       positionDayMenu(button);
       if (canShowMatches) matchingEntries.click();
       (isFuture ? pinDates : createEntry).focus();
@@ -1394,9 +1421,7 @@
     matchingEntries.addEventListener('click', async () => {
       if (matchingEntries.disabled || !menuTrigger) return;
       const expanding = matchingPanel.hidden;
-      matchingPanel.hidden = !expanding;
-      matchingEntries.setAttribute('aria-expanded', String(expanding));
-      menu.dataset.matchesExpanded = String(expanding);
+      selectDaySection(expanding ? 'matches' : null);
       positionDayMenu(menuTrigger);
       if (!expanding || matchingContent.dataset.loaded === 'true') return;
       matchingContent.textContent = 'Loading matching entries…';
@@ -1422,11 +1447,13 @@
       }
     });
     document.addEventListener('pointerdown', event => {
+      if (document.querySelector('#followup-editor[open], #followup-history[open]')) return;
       if (menu.hidden || menu.contains(event.target) || event.target === menuTrigger) return;
       closeDayMenu();
     }, {signal: activityController.signal});
     document.addEventListener('keydown', event => {
       if (event.key !== 'Escape') return;
+      if (document.querySelector('#followup-editor[open], #followup-history[open]')) return;
       if (pinStart) {
         pinStart = '';
         clearPreview();

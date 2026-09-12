@@ -184,7 +184,7 @@ def item_events(item, canonical):
     events = []
     if (item.get('source') or {}).get('date'):
         events.append({'date': item['source']['date'], 'kind': 'source'})
-    if item['status'] not in {'done', 'dismissed'}:
+    if item['status'] != 'dismissed':
         for field in ('review_date', 'due_date'):
             if item[field]:
                 events.append({'date': item[field], 'kind': 'planned'})
@@ -202,12 +202,21 @@ async def markers(request: Request):
     owner(request)
     canonical = store()
     days = {}
+    scheduled_statuses = {}
     for item in canonical.list() + canonical.list(closed=True):
+        if item['status'] != 'dismissed':
+            for scheduled in {item['review_date'], item['due_date']} - {''}:
+                scheduled_statuses.setdefault(scheduled, set()).add(item['status'])
         for event in item_events(item, canonical):
             day = days.setdefault(event['date'], {'planned': [], 'actions': []})
             key = 'planned' if event['kind'] == 'planned' else 'actions'
             if item['id'] not in day[key]:
                 day[key].append(item['id'])
+    for day, value in days.items():
+        statuses = scheduled_statuses.get(day, set())
+        value['dot_status'] = ('open' if statuses & {'open', 'active'} else
+                               'in_progress' if 'in_progress' in statuses else
+                               'done' if statuses == {'done'} else None)
     return {'days': days}
 
 
@@ -265,3 +274,21 @@ async def explore(request: Request, background_tasks: BackgroundTasks):
                 canonical.finish_period(start, end, run_id, {'message': 'Could not queue exploration. Retry when the worker is available.'}, state='failed')
                 raise HTTPException(503, 'Could not queue exploration.') from None
     return {'run': canonical.run_for(start, end)}
+
+
+@router.get('/settings')
+async def timeline_settings(request: Request):
+    owner(request)
+    return store().settings()
+
+
+@router.patch('/settings')
+async def update_timeline_settings(request: Request):
+    owner(request)
+    raw=await body(request)
+    if set(raw)!={'complete_after_days'}:
+        raise HTTPException(400,'Expected complete_after_days.')
+    try:
+        return store().save_settings(raw['complete_after_days'])
+    except ValueError as exc:
+        raise HTTPException(400,str(exc)) from None

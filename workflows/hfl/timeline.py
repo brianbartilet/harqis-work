@@ -108,7 +108,51 @@ def synthesize(evidence, *, start, end):
     return result
 
 
-def explore_period(start, end, *, run_id=None, store=None, collect=collect_period, related=collect_related, analyze=synthesize):
+def review_actions(candidates, snapshot, evidence):
+    from apps.antropic.config import get_config
+    from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
+    from workflows.hfl.prompts import load_prompt
+    from workflows.hfl.tasks.ingest_git import _parse_model_json
+    from workflows.hfl.tasks.activity_radar import redact_secrets
+    actions=[{key:item.get(key) for key in ('id','title','expected_outcome','status','source')} for item in snapshot['actions']]
+    dismissed=[{key:item.get(key) for key in ('id','title','expected_outcome','source')} for item in snapshot['dismissed_ideas']]
+    payload=redact_secrets(json.dumps({'candidates':candidates,'existing_actions':actions,'dismissed_ideas':dismissed,'evidence':evidence},ensure_ascii=False))
+    if len(payload)>250000:
+        raise ValueError('Duplicate-check context exceeds the bounded review limit.')
+    client=BaseApiServiceAnthropic(get_config('ANTHROPIC'))
+    response=client.send_message(prompt=payload,system=load_prompt('timeline_action_review'),model='claude-haiku-4-5-20251001',max_tokens=3000)
+    result=_parse_model_json(response.content[0].text)
+    if not isinstance(result,dict) or not isinstance(result.get('decisions'),list):
+        raise ValueError('Automatic action review returned invalid JSON.')
+    return result['decisions']
+
+
+def create_automatic_actions(start,end,canonical,evidence,*,review=review_actions,today=None):
+    today=today or datetime.now(SGT).date()
+    candidates=[item for item in canonical.suggestions(start,end) if item['status']=='suggested' and item.get('confidence')=='high']
+    result={'state':'complete','created':0,'duplicates':0,'deferred':0,'created_ids':[]}
+    # Full comparison is required: exceeding the bound defers, never truncates old actions.
+    for offset in range(0,min(len(candidates),40),8):
+        batch=candidates[offset:offset+8]
+        snapshot=canonical.automation_snapshot()
+        if len(snapshot['actions'])+len(snapshot['dismissed_ideas'])>500:
+            result.update(state='deferred',message='Too many existing records for a complete duplicate check. Review manually.')
+            result['deferred']+=len(candidates)-offset
+            return result
+        try:
+            decisions=review(batch,snapshot,evidence)
+            applied=canonical.apply_auto_decisions(batch,decisions,snapshot['digest'],today)
+        except Exception as exc:
+            result.update(state='failed',message='Automatic creation paused; review or duplicate check could not finish. Explore can retry.',error=type(exc).__name__)
+            result['deferred']+=len(candidates)-offset
+            return result
+        for key in ('created','duplicates','deferred'): result[key]+=applied[key]
+        result['created_ids']+=applied['created_ids']
+    result['deferred']+=max(0,len(candidates)-40)
+    return result
+
+
+def explore_period(start, end, *, run_id=None, store=None, collect=collect_period, related=collect_related, analyze=synthesize, auto_review=review_actions):
     from workflows.hfl.tasks.activity_radar import _evidence_rows, validate_findings
     canonical = store or FollowUpStore(store_path())
     first, last = period(start,end)
@@ -136,7 +180,14 @@ def explore_period(start, end, *, run_id=None, store=None, collect=collect_perio
                 primary = lookup[primary_ids[0]]
                 suggestions.append({**finding,"evidence":refs,"source":{"entry_id":primary["entry_id"],"path":primary["path"],"title":primary["moment"],"date":str(primary["when"])[:10]},"expected_outcome":finding["recommendation"],"generated_at":datetime.now(SGT).isoformat()})
         result = {**coverage,"suggestions":len(suggestions),"related_entries":len(history),"model":"claude-haiku-4-5-20251001","analysis":"bounded evidence review; absence of evidence is not proof of non-completion"}
-        canonical.save_suggestions(start,end,run_id,suggestions,result)
+        if not canonical.save_suggestions(start,end,run_id,suggestions,result,state="running"):
+            return {'state':'superseded'}
+        compact,_ = _evidence_rows(rows,history)
+        try:
+            result['automatic_actions']=create_automatic_actions(start,end,canonical,compact,review=auto_review)
+        except Exception as exc:
+            result['automatic_actions']={'state':'failed','message':'Automatic creation did not finish. Cached ideas remain available; Explore can retry.','error':type(exc).__name__}
+        canonical.finish_period(start,end,run_id,result)
         return {"state":"complete",**result}
     except Exception as exc:
         canonical.finish_period(start,end,run_id,{"error":type(exc).__name__,"message":"Analysis did not finish. Previous cached suggestions are preserved; retry exploration."},state="failed")
