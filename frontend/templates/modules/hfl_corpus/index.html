@@ -1002,7 +1002,18 @@
         pinList.append(empty);
         return;
       }
-      memoryState.categories.forEach(category => {
+      const todayStamp = Date.parse(`${timelineData.end}T00:00:00Z`);
+      const categoryDistance = new Map();
+      pinnedRanges.forEach(range => {
+        const start = Date.parse(`${range.start_date}T00:00:00Z`);
+        const end = Date.parse(`${range.end_date}T00:00:00Z`);
+        const distance = Math.max(start - todayStamp, todayStamp - end, 0);
+        categoryDistance.set(range.category_id, Math.min(categoryDistance.get(range.category_id) ?? Infinity, distance));
+      });
+      const sortedCategories = [...memoryState.categories].sort((a, b) =>
+        (categoryDistance.get(a.id) ?? Infinity) - (categoryDistance.get(b.id) ?? Infinity)
+        || a.name.localeCompare(b.name) || a.id - b.id);
+      sortedCategories.forEach(category => {
         const categoryRanges = pinnedRanges
           .filter(range => range.category_id === category.id)
           .sort((a, b) => b.end_date.localeCompare(a.end_date)
