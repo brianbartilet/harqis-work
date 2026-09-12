@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}App Settings{% endblock %}
+{% block content %}
+<main class="mx-auto max-w-3xl px-5 py-10 text-slate-200">
+  <h1 class="text-2xl font-semibold">App Settings</h1>
+  <p class="mt-2 text-sm text-slate-400">Manage agents and application behavior. Personal details are in <a class="text-cyan-300" href="/profile">Profile</a>.</p>
+  {% if saved %}<p role="status" class="mt-5 text-emerald-300">Settings saved.</p>{% endif %}
+  <form method="post" class="mt-8 space-y-6 rounded-xl border border-slate-700 bg-slate-900 p-6">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <h2 class="text-lg font-semibold">Agents</h2>
+    <label class="block">Actions polling minutes
+      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="number" name="actions_polling_minutes" min="1" max="1440" required value="{{ values.actions_polling_minutes }}">
+      <span class="mt-2 block text-sm text-slate-400">Open actions with a prompt are queued automatically. Reopen an action to run its prompt again.</span>
+    </label>
+    <label class="block">Pinned dates backfill days
+      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="number" name="pin_backfill_days" min="1" max="31" required value="{{ values.pin_backfill_days }}">
+      <span class="mt-2 block text-sm text-slate-400">Catch up missed daily runs within this window. Older gaps create an HFL review entry.</span>
+    </label>
+    <p class="text-sm text-slate-400">Pin hours use Asia/Singapore. The default is 00:00 each day of the pinned period.</p>
+    <p class="text-sm">Hermes worker authentication: {{ 'Configured' if worker_configured else 'Not configured on this host' }}. Credentials and provider configuration are managed on the host.</p>
+    <button class="rounded-lg bg-cyan-900 px-5 py-2 text-cyan-100" type="submit">Save settings</button>
+  </form>
+</main>
+{% endblock %}
