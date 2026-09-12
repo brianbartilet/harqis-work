@@ -1,0 +1,10 @@
+{
+  "name": "hfl-agent-bridge-daily",
+  "schedule_owner": "Hermes",
+  "schedule": "0 8 * * *",
+  "timezone": "Asia/Singapore",
+  "mode": "no_agent",
+  "delivery": "local",
+  "runner": "scripts/agents/hfl/agent_bridge_runner.py",
+  "arguments": ["--daily"]
+}
