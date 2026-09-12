@@ -110,6 +110,16 @@ class MemoryPinRequest(BaseModel):
     start_date: str = ""
     end_date: str = ""
     note: str = ""
+    title: str = ""
+    prompt: str = ""
+    instructions: str = ""
+    event_key: str = ""
+    output: str = ""
+    agent: str = ""
+    model: str = ""
+    status: str = "completed"
+    system_prompt: str | None = None
+    before_id: int = 0
 
 
 @router.post("/memory-pins")
@@ -119,14 +129,28 @@ async def hfl_memory_pins(request: Request, payload: MemoryPinRequest):
         return JSONResponse({"detail": "Authentication required"}, status_code=401)
     if not verify_csrf_token(payload.csrf, user):
         return JSONResponse({"detail": "Invalid form token."}, status_code=403)
+    if payload.action == "preview_prompt":
+        if len(payload.prompt) > 20000:
+            return JSONResponse({"detail": "Use 20,000 characters or fewer."}, status_code=422)
+        return JSONResponse({"html": str(render_markdown(payload.prompt))})
     store = get_memory_pin_store()
     try:
         if payload.action == "save_category":
             store.save_category(
-                category_id=payload.category_id, name=payload.name, color=payload.color
+                category_id=payload.category_id, name=payload.name, color=payload.color, instructions=payload.instructions
             )
-        elif payload.action == "delete_category" and payload.category_id:
-            store.delete_category(payload.category_id)
+        elif payload.action in {"delete_category", "archive_category", "restore_category"} and payload.category_id:
+            store.archive_category(payload.category_id, restore=payload.action == "restore_category")
+        elif payload.action == "agent_history" and payload.category_id:
+            events = store.agent_history(payload.category_id, before_id=payload.before_id)
+            for event in events:
+                event['output_html'] = str(render_markdown(event['output']))
+            return JSONResponse({"events": events})
+        elif payload.action == "record_agent_event" and payload.category_id and payload.range_id:
+            event_id = store.record_agent_event(category_id=payload.category_id, range_id=payload.range_id,
+                event_key=payload.event_key, output=payload.output, agent=payload.agent,
+                model=payload.model, status=payload.status, system_prompt=payload.system_prompt)
+            return JSONResponse({"event_id": event_id})
         elif payload.action == "save_range":
             if not payload.category_id:
                 raise ValueError("Choose a category.")
@@ -151,6 +175,8 @@ async def hfl_memory_pins(request: Request, payload: MemoryPinRequest):
                 start_date=payload.start_date,
                 end_date=payload.end_date,
                 note=payload.note,
+                title=payload.title,
+                prompt=payload.prompt,
             )
         elif payload.action == "delete_range" and payload.range_id:
             store.delete_range(payload.range_id)

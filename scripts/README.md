@@ -57,6 +57,7 @@ up from `scripts/agents/<bucket>/`).
 | Path | Purpose |
 |---|---|
 | `archive_corpus.py` | Archives completed HFL corpus periods. |
+| `migrate_pin_titles.py` | Preview or back up and migrate pinned-date Notes into Title in an explicit profile SQLite database, retaining Notes and existing title edits. |
 | `migrate_media_sources.py` | Dry-run-first `media` → `desktop` / `android-capture` classification or exact `--rename OLD=NEW` migration across Markdown and Elasticsearch, preserving IDs and creating recovery artifacts. |
 | `migrate_references.py` | Dry-run-first removal of insecure HTTP references from HFL Markdown and Elasticsearch, with apply-mode backups and rollback. |
 | [`capture_session_event.py`](#scriptsagentshflcapture_session_eventpy) | Normalizes, redacts, spools, and best-effort enqueues Codex/Claude/Hermes/OpenClaw prompt-outcome audit events. |
@@ -159,6 +160,24 @@ python scripts/agents/hfl/capture_session_event.py --surface openclaw --json eve
 ```
 
 ---
+
+### `scripts/agents/hfl/migrate_pin_titles.py`
+
+Use the frontend's configured `PROFILE_STORE_PATH`, not the timeline database.
+Preview is read-only; `--apply` creates a consistent adjacent SQLite backup before
+adding Title and copying Notes. Blank notes become `Untitled pin`; Notes and all
+existing metadata remain intact. If Title already exists, the script does nothing.
+
+```bash
+python scripts/agents/hfl/migrate_pin_titles.py --database /path/to/profile.sqlite3
+python scripts/agents/hfl/migrate_pin_titles.py --database /path/to/profile.sqlite3 --apply
+```
+
+The JSON result reports counts and the backup path without printing note contents.
+Backups contain private profile data; keep them private. For rollback, stop all
+processes using the profile database and restore the backup using SQLite's backup
+API, then run the matching older application version. Do not copy files over an
+active SQLite database or leave stale WAL files alongside a restored database.
 
 ### `scripts/agents/hfl/migrate_references.py`
 

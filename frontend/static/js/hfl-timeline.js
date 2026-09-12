@@ -98,9 +98,26 @@
       list.replaceChildren();const groups=new Map();
       data.items.forEach(item=>{if(!groups.has(item.group)){const section=node('section',null,'agenda-group');section.dataset.group=item.group;const cards=node('div');section.append(node('h2',item.group),cards);list.append(section);groups.set(item.group,cards);}const el=card(item);if(expanded.has(item.id))el.querySelector('details')?.setAttribute('open','');groups.get(item.group).append(el);});
       document.getElementById('agenda-status').textContent=(data.total>data.items.length ? 'Showing '+data.items.length+' of '+data.total : data.total)+' '+(closed?'completed or dismissed':'open')+' follow-up'+(data.total===1?'':'s')+' · '+today+' SGT';
-      if(!data.items.length){const empty=node('div',null,'agenda-empty');empty.append(node('h2',closed?'No completed follow-ups yet.':'No actions yet.'),node('p',closed?'Completed and dismissed items stay here with their history.':'Make an idea actionable to track it here.','agenda-description'));list.append(empty);}
+      const actionsPanel=document.getElementById('timeline-actions');
+      const isEmpty=!data.items.length;
+      actionsPanel.querySelector('.agenda-toolbar').hidden=!periodData.items.length;
+      document.getElementById('agenda-status').hidden=isEmpty;
+      actionsPanel.querySelector('.agenda-footnote').hidden=isEmpty;
+      if(isEmpty){
+        const empty=node('div',null,'agenda-empty agenda-empty-actions');
+        const hasIdeas=periodData.suggestions.some(item=>item.status==='suggested');
+        const future=startInput.value>today;
+        const running=['queued','running'].includes(periodData.run?.state);
+        empty.append(node('h2',closed&&periodData.items.length?'Nothing completed yet.':'No actions yet.'),node('p',closed&&periodData.items.length?'Completed and dismissed actions will appear here.':hasIdeas?'Choose an idea and make it actionable, or explore this period for more.':future?'Select today or a past day to explore its activity for ideas.':'Explore this period’s activity for ideas, then make one actionable.','agenda-description'));
+        const showIdeas=()=>{const toggle=document.querySelector('[data-activity-menu-ideas]');if(toggle?.getAttribute('aria-expanded')!=='true')toggle?.click();};
+        if(!closed||!periodData.items.length){
+          if(hasIdeas)empty.append(button('View ideas',showIdeas));
+          if(!future){const explore=button(running?'View analysis':'Explore ideas',()=>{showIdeas();if(!running)document.getElementById('timeline-explore').click();});explore.classList.add('agenda-empty-explore');empty.append(explore);}
+        }
+        list.append(empty);
+      }
       window.dispatchEvent(new Event('hfl:timeline-rendered'));
-    } catch(e){if(ticket===sequence){error('agenda-error',e.message);document.getElementById('agenda-status').textContent='Could not load the agenda. Use Refresh to retry.';}}
+    } catch(e){if(ticket===sequence){error('agenda-error',e.message);document.querySelector('#timeline-actions .agenda-toolbar').hidden=false;document.getElementById('agenda-status').hidden=false;document.getElementById('agenda-status').textContent='Could not load the agenda. Use Refresh to retry.';}}
   }
   async function timelineApi(path, options={}) {
     const response=await fetch('/hfl-corpus/timeline'+path,{...options,headers:{'Content-Type':'application/json'}});

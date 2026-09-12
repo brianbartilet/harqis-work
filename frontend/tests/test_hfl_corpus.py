@@ -1672,6 +1672,7 @@ def test_memory_pins_persist_categories_ranges_and_notes(authenticated_client):
         json={
             "csrf": csrf,
             "action": "save_range",
+            "title": "Test period",
             "category_id": category_id,
             "start_date": "2018-06-12",
             "end_date": "2018-06-18",
@@ -1745,6 +1746,9 @@ def test_memory_pin_store_migrates_legacy_unique_colors_without_data_loss(tmp_pa
             """
         )
 
+    with sqlite3.connect(path) as connection:
+        for note in ('', 'Long note ' * 200):
+            connection.execute("INSERT INTO memory_pin_ranges (category_id,start_date,end_date,note,created_at,updated_at) VALUES (1,'2020-06-01','2020-06-02',?,'before','before')", (note,))
     store = MemoryPinStore(path)
     store.save_category(
         category_id=None,
@@ -1758,6 +1762,18 @@ def test_memory_pin_store_migrates_legacy_unique_colors_without_data_loss(tmp_pa
         "Same color",
     ]
     assert snapshot["ranges"][0]["note"] == "Keep this"
+    assert snapshot["ranges"][0]["title"] == "Keep this"
+    assert snapshot["ranges"][0]["prompt"] == ""
+    assert snapshot['ranges'][1]['title'] == 'Untitled pin'
+    assert snapshot['ranges'][2]['title'] == snapshot['ranges'][2]['note'] == 'Long note ' * 200
+    assert all(item['updated_at'] == 'before' for item in snapshot['ranges'])
+    store.save_range(range_id=snapshot['ranges'][0]['id'], category_id=1,
+                     start_date='2020-06-01',end_date='2020-06-02',note='Keep this',title='Edited title',prompt='# Task')
+    reopened=MemoryPinStore(path).snapshot()['ranges'][0]
+    assert reopened['title']=='Edited title'
+    assert reopened['note']=='Keep this'
+    assert reopened['prompt']=='# Task'
+    assert reopened['category_id']==1
     with store._connect() as connection:
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
 
@@ -1852,6 +1868,7 @@ def test_memory_pin_range_accepts_future_dates_through_five_year_limit(
         json={
             "csrf": csrf,
             "action": "save_range",
+            "title": "Test period",
             "category_id": category["id"],
             "start_date": date.today().isoformat(),
             "end_date": allowed.isoformat(),
@@ -1866,6 +1883,7 @@ def test_memory_pin_range_accepts_future_dates_through_five_year_limit(
         json={
             "csrf": csrf,
             "action": "save_range",
+            "title": "Test period",
             "category_id": category["id"],
             "start_date": allowed.isoformat(),
             "end_date": (allowed + timedelta(days=1)).isoformat(),
@@ -4285,3 +4303,63 @@ def test_markdown_external_reference_uses_short_label(tmp_path):
     assert reference.kind == "external"
     assert reference.label == "VivoCity"
     assert reference.href == "https://www.openstreetmap.org/search?query=VivoCity"
+
+
+def test_memory_pin_agent_history_and_archive(authenticated_client):
+    from modules.hfl_shares.security import make_csrf_token
+    def post(**fields):
+        return authenticated_client.post('/hfl-corpus/memory-pins', json={'csrf': make_csrf_token('frontend-test-user'), **fields})
+    category = post(action='save_category', name='History test', color='#14b8a6', instructions='Original guidance').json()['categories'][0]
+    fields = dict(action='save_range', category_id=category['id'], start_date='2024-01-01', end_date='2024-01-28', title='Original title', note='Keep notes', prompt='Original task')
+    pin = post(**fields).json()['ranges'][0]
+    receipt = dict(action='record_agent_event', category_id=category['id'], range_id=pin['id'], event_key='run-1', agent='test-agent', output='**Result** <img src=x onerror="alert(1)">')
+    first = post(**receipt)
+    assert first.status_code == 200
+    assert post(**{**receipt, 'output': 'retry'}).json() == first.json()
+    assert post(**{**receipt, 'event_key': 'bad', 'range_id': 999999}).status_code == 422
+    post(**{**fields, 'range_id': pin['id'], 'title': 'Edited title', 'prompt': 'Edited task'})
+    post(action='save_category', category_id=category['id'], name='History test', color='#14b8a6', instructions='Edited guidance')
+    history = post(action='agent_history', category_id=category['id']).json()['events']
+    assert len(history) == 1
+    assert (history[0]['period_title'], history[0]['system_prompt'], history[0]['instructions']) == ('Original title', 'Original guidance', 'Original task')
+    assert '<strong>Result</strong>' in history[0]['output_html'] and 'onerror' not in history[0]['output_html']
+    assert post(action='agent_history', category_id=category['id'], before_id=history[0]['id']).json()['events'] == []
+    archived = post(action='delete_category', category_id=category['id']).json()
+    assert archived['categories'] == [] and archived['ranges'] == []
+    assert archived['archived_categories'][0]['id'] == category['id']
+    assert post(**{**receipt, 'event_key': 'after-archive'}).status_code == 422
+    assert post(action='agent_history', category_id=category['id']).json()['events'] == history
+    restored = post(action='restore_category', category_id=category['id']).json()
+    assert restored['ranges'][0]['note'] == 'Keep notes'
+    assert restored['ranges'][0]['title'] == 'Edited title'
+    post(action='delete_range', range_id=pin['id'])
+    assert post(action='agent_history', category_id=category['id']).json()['events'] == history
+    assert post(**{**receipt, 'csrf': 'bad'}).status_code == 403
+
+
+def test_memory_pin_prompt_fields_and_preview(authenticated_client):
+    from modules.hfl_shares.security import make_csrf_token
+    csrf=make_csrf_token('frontend-test-user')
+    def post(**fields): return authenticated_client.post('/hfl-corpus/memory-pins',json={'csrf':csrf,**fields})
+    instructions='    preserved indentation\n\n# Instructions\n- Read the evidence'
+    result=post(action='save_category',name='Prompt test',color='#14b8a6',instructions=instructions)
+    category=result.json()['categories'][0]
+    assert category['instructions']==instructions
+    fields=dict(action='save_range',category_id=category['id'],start_date='2024-01-01',end_date='2024-01-28',note='Context',prompt='## Daily summary\n\n**Summarize** topic X.')
+    assert post(**fields).status_code==422
+    assert post(**fields,title=' ').status_code==422
+    saved=post(**fields,title='January research').json()['ranges'][0]
+    assert saved['title']=='January research'
+    assert saved['prompt']==fields['prompt']
+    assert saved['note']=='Context'
+    edited=post(**{**fields,'range_id':saved['id'],'title':'Revised title','prompt':''})
+    assert edited.json()['ranges'][0]['prompt']==''
+    assert post(**{**fields,'title':'Test','prompt':'x'*20001}).status_code==422
+    assert post(action='save_category',category_id=category['id'],name='Prompt test',color='#14b8a6',instructions='x'*20001).status_code==422
+    preview=post(action='preview_prompt',prompt='# Heading\n\n**Bold** <img src=x onerror="alert(1)"> [bad](javascript:alert(1))')
+    assert preview.status_code==200
+    html=preview.json()['html']
+    assert '<h1' in html and '<strong>Bold</strong>' in html
+    assert 'onerror' not in html and 'javascript:' not in html
+    assert post(action='preview_prompt',prompt='x'*20001).status_code==422
+    assert authenticated_client.post('/hfl-corpus/memory-pins',json={'csrf':'bad','action':'preview_prompt','prompt':'text'}).status_code==403

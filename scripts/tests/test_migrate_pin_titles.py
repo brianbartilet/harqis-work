@@ -1,5 +1,6 @@
 """Synthetic SQLite checks; never reads the configured profile database."""
 
+from contextlib import closing
 import importlib.util
 from pathlib import Path
 import sqlite3
@@ -17,12 +18,12 @@ class PinTitleMigrationTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.database = Path(self.temp.name) / "profile.sqlite3"
-        with sqlite3.connect(self.database) as db:
+        with closing(sqlite3.connect(self.database)) as db, db:
             db.execute("CREATE TABLE memory_pin_ranges (id INTEGER PRIMARY KEY, category_id INTEGER, start_date TEXT, end_date TEXT, note TEXT NOT NULL, created_at TEXT, updated_at TEXT)")
             db.executemany("INSERT INTO memory_pin_ranges VALUES (?, 4, '2024-01-01', '2024-01-28', ?, 'created', 'updated')", [(1, ' SG Peon Start '), (2, ''), (3, '   '), (4, '# Long note\n' * 180)])
 
     def rows(self, path=None):
-        with sqlite3.connect(path or self.database) as db:
+        with closing(sqlite3.connect(path or self.database)) as db:
             return db.execute("SELECT * FROM memory_pin_ranges ORDER BY id").fetchall()
 
     def test_preview_is_read_only(self):
@@ -39,7 +40,7 @@ class PinTitleMigrationTests(unittest.TestCase):
         after = self.rows()
         self.assertEqual([row[:-1] for row in after], before)
         self.assertEqual([row[-1] for row in after], [' SG Peon Start ', 'Untitled pin', 'Untitled pin', '# Long note\n' * 180])
-        with sqlite3.connect(self.database) as db:
+        with closing(sqlite3.connect(self.database)) as db, db:
             db.execute("UPDATE memory_pin_ranges SET title='Edited title' WHERE id=1")
         self.assertEqual(migration.migrate(self.database, apply=True)['status'], 'already_migrated')
         self.assertEqual(self.rows()[0][-1], 'Edited title')
@@ -50,13 +51,13 @@ class PinTitleMigrationTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             migration.migrate(missing, apply=True)
         self.assertFalse(missing.exists())
-        with sqlite3.connect(self.database) as db:
+        with closing(sqlite3.connect(self.database)) as db, db:
             db.execute('DROP TABLE memory_pin_ranges')
         with self.assertRaises(ValueError):
             migration.migrate(self.database, apply=True)
 
     def test_wal_backup_includes_committed_notes(self):
-        with sqlite3.connect(self.database) as writer:
+        with closing(sqlite3.connect(self.database)) as writer, writer:
             writer.execute('PRAGMA journal_mode=WAL')
             writer.execute("UPDATE memory_pin_ranges SET note='WAL note' WHERE id=1")
             writer.commit()

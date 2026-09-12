@@ -58,3 +58,54 @@ Semantic duplicates link the new idea to the prior action without modifying its 
 At most 40 candidates are reviewed in batches of eight (up to five additional model calls). More than 500 existing action/suppression records, or a review payload over 250,000 characters, defers automatic creation; comparison history is never silently truncated. Model errors retain cached ideas and any previously committed actions. The run reports created, skipped-duplicate, and deferred counts, with failure detail when applicable. Explore retries unadopted ideas; adopted ideas remain deduplicated.
 
 The running status includes the automatic review phase. Daily scheduling and model IDs are unchanged. This feature creates internal action records only; execution bridges, external notifications, and automatic completion remain out of scope.
+
+
+## Pinned categories and date-block instructions
+
+Memory Signal categories have optional **Agent guidance** (stored in the category `instructions` property), and date blocks have a required **Title**, optional **Notes**, and optional **Instructions** (stored in the pin `prompt` property). Both instruction fields store up to 20,000 characters of plain text or Markdown, preserving whitespace. Saved text opens in a sanitized Markdown preview; **Edit** switches to the text editor and **Preview** renders the current draft. Saving stores the raw text. These fields do not run agents, send messages, or register schedules. Category Agent guidance describes shared sources, tone, constraints, and output format. Pin Instructions describe the task and expected result for its date range. A future bridge may combine runtime rules, category guidance, pin instructions, and evidence; scheduling, recipients, and execution permissions still require explicit configuration. Both fields remain independent; no inheritance or execution bridge is implemented.
+
+On first opening the upgraded pin store, existing Notes are copied into Title and retained in Notes. Blank notes become **Untitled pin**. Migration preserves IDs, category assignments, dates, and timestamps and does not overwrite later title edits. Titles allow 2,000 characters to retain existing notes without truncation; long labels truncate only visually in the pinned list.
+
+For an explicit migration before upgrading a host, use the standalone script against
+that host's frontend `PROFILE_STORE_PATH` (not `HFL_TIMELINE_STORE_PATH`):
+
+```bash
+python scripts/agents/hfl/migrate_pin_titles.py --database /path/to/profile.sqlite3
+python scripts/agents/hfl/migrate_pin_titles.py --database /path/to/profile.sqlite3 --apply
+```
+
+The first command previews counts without changing data. Apply creates a consistent
+SQLite backup beside the database, then adds and populates Title in one transaction.
+Notes are retained verbatim. An existing Title column makes the migration a no-op,
+including when the app already migrated it; edited titles are never overwritten.
+The script migrates only Title/Notes; the app adds instruction fields on startup.
+See the [script usage and recovery notes](../../scripts/README.md#scriptsagentshflmigrate_pin_titlespy).
+
+The pinned list displays Title, with **ENDS DD MMM YYYY** on hover. The edit dialog continues to expose both dates on mobile. Memory Signal retains its original compact height, with a bounded scrolling pinned list so expanding categories does not grow the panel. **+ Category** remains below the list. Pin metadata remains private and uses the existing owner-authenticated, CSRF-protected memory-pins endpoint and store.
+
+### Category agent history and archiving
+
+The category editor has an **Agent history** button that opens a separate dialog with event cards. Each card lets you
+read its sanitized Markdown output, recorded period, agent/model, outcome, timestamp,
+and prompt snapshots. Events load newest first in pages of 20; output is not loaded
+with the heatmap. Snapshots survive category/pin edits and pin removal.
+
+History is an append-only collection in `memory_pin_agent_events`, not an editable
+text property. The owner-authenticated, CSRF-protected `/hfl-corpus/memory-pins`
+endpoint accepts `record_agent_event` with `category_id`, `range_id`, a unique
+`event_key`, `agent`, `output`, optional `model`, `status` (completed/partial/failed),
+and optional `system_prompt` (the actual runtime prompt). If omitted, system_prompt
+snapshots current category guidance. The server snapshots the saved pin title,
+dates, and instructions at recording time. Delayed receipts should be recorded before
+editing the source pin; this is not a reconstruction of historical execution context.
+Retries with the same category/event key retain the original receipt. Output supports
+100,000 characters, prompt 20,000; do not include credentials or secrets in receipts.
+`agent_history` accepts category_id and optional before_id for pagination. There is
+no event edit/delete UI and no scheduler or external agent bridge.
+
+**Archive category** replaces deletion, including legacy delete_category requests.
+Pins and events remain stored but archived categories and their pins are excluded
+from the heatmap and pin selection. **Archived categories** in the category dialog
+lets you inspect history and restore the category. New events/pins require an active
+category; existing retry receipts remain accessible. Archived names stay reserved.
+Schema additions run automatically when the pin store opens.

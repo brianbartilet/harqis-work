@@ -16,7 +16,7 @@
   [data-activity-toggle][aria-expanded="false"] .activity-toggle-chevron { transform:rotate(-90deg); }
   .activity-layout { display:flex; min-width:0; flex-direction:column; gap:.65rem; }
   .activity-pin-controls { min-width:0; }
-  .activity-pin-list { max-height:10rem; overflow:auto; border:1px solid #334155; border-radius:.55rem; background:#020617; padding:.3rem; scrollbar-width:none; cursor:grab; }
+  .activity-pin-list { height:10rem; overflow:auto; overscroll-behavior:contain; border:1px solid #334155; border-radius:.55rem; background:#020617; padding:.3rem; scrollbar-width:none; cursor:grab; }
   .activity-pin-list::-webkit-scrollbar,.activity-scroll::-webkit-scrollbar { width:0; height:0; }
   .activity-pin-list[data-dragging="true"],.activity-scroll[data-dragging="true"] { cursor:grabbing; user-select:none; }
   .activity-pin-empty { padding:.7rem .45rem; color:#64748b; font-size:.65rem; text-align:center; }
@@ -30,7 +30,7 @@
   .activity-range-button { flex:1; color:#94a3b8; font:550 .58rem/1.25 ui-monospace,SFMono-Regular,Consolas,monospace; }
   .activity-range-edit { flex:0 0 auto; padding:.35rem .3rem; color:#64748b; font-size:.58rem; }
   .activity-range-edit:hover { color:#e0f2fe; }
-  .activity-pin-add { display:flex; width:100%; align-items:center; justify-content:center; margin-top:.3rem; border:1px dashed #334155; border-radius:.45rem; padding:.38rem; color:#67e8f9; font-size:.62rem; font-weight:650; }
+  .activity-pin-add { display:flex; width:100%; flex-shrink:0; align-items:center; justify-content:center; margin-top:.3rem; border:1px dashed #334155; border-radius:.45rem; padding:.38rem; color:#67e8f9; font-size:.62rem; font-weight:650; }
   .activity-year-controls { display:block; min-width:0; }
   .activity-chart-column { display:flex; min-width:0; flex-direction:column; gap:.45rem; }
   .activity-chart-shell { display:flex; min-width:0; align-items:flex-start; gap:.5rem; }
@@ -70,7 +70,19 @@
   .activity-day-menu-action:hover { background:#0f172a; color:#cffafe; }
   .activity-day-menu-action:focus-visible { outline:2px solid #22d3ee; outline-offset:1px; }
   .activity-day-menu-disabled { color:#475569; cursor:not-allowed; }
-  .memory-dialog { width:min(31rem,calc(100vw - 1.5rem)); border:1px solid #334155; border-radius:1rem; background:#07101f; color:#e2e8f0; padding:0; box-shadow:0 26px 80px rgba(2,6,23,.82); }
+  .memory-dialog { max-height:calc(100dvh - 2rem); overflow-y:auto; width:min(31rem,calc(100vw - 1.5rem)); border:1px solid #334155; border-radius:1rem; background:#07101f; color:#e2e8f0; padding:0; box-shadow:0 26px 80px rgba(2,6,23,.82); }
+  .memory-prompt-preview { padding:.75rem; border:1px solid #1e293b; border-radius:.55rem; background:#020617; max-height:16rem; overflow:auto; overflow-wrap:anywhere; font-size:.8rem; }
+  .memory-prompt-preview pre { overflow:auto; }
+  .memory-instructions-heading { display:flex; align-items:center; gap:.4rem; position:relative; }
+  .memory-instructions-heading .memory-dialog-label { margin:0; }
+  .memory-instructions-help summary { display:grid; place-items:center; width:1rem; height:1rem; border:1px solid #475569; border-radius:50%; color:#94a3b8; font-size:.65rem; cursor:pointer; list-style:none; }
+  .memory-instructions-help summary::-webkit-details-marker { display:none; }
+  .memory-instructions-help summary:focus-visible { outline:2px solid #67e8f9; outline-offset:2px; }
+  .memory-instructions-help-content { position:absolute; left:0; top:calc(100% + .5rem); z-index:5; width:min(20rem,calc(100vw - 7rem)); padding:.75rem; border:1px solid #334155; border-radius:.6rem; background:#0f172a; color:#cbd5e1; font-size:.75rem; line-height:1.6; box-shadow:0 8px 24px #020617; }
+  .memory-dialog textarea[data-prompt-input] { display:block; min-height:10rem; height:10rem; max-height:none; resize:vertical; overflow:auto; line-height:1.6; }
+  .memory-prompt-preview > :first-child { margin-top:0; }
+  .memory-prompt-preview > :last-child { margin-bottom:0; }
+  .memory-prompt-preview :is(h1,h2,h3,h4,h5,h6) { font-size:1rem; margin:.75rem 0 .4rem; }
   .memory-dialog::backdrop { background:rgba(2,6,23,.78); backdrop-filter:blur(3px); }
   .memory-dialog-field { display:block; }
   .memory-dialog-label { display:block; margin-bottom:.35rem; color:#94a3b8; font-size:.68rem; font-weight:650; }
@@ -133,6 +145,8 @@
     .corpus-secrets-control { min-height:2.75rem; margin-right:0; padding:.5rem; }
     .corpus-create-entry { margin-top:0; }
     .activity-layout { display:grid; grid-template-columns:4.75rem minmax(0,1fr) 11rem; align-items:start; gap:1rem; }
+    .activity-pin-controls { display:flex; flex-direction:column; align-self:stretch; min-height:0; contain:size; }
+    .activity-pin-list { flex:1; height:auto; min-height:0; }
     .activity-year-controls { display:block; }
     .activity-chart-shell { justify-content:flex-start; }
     .activity-scroll { flex:0 1 auto; }
@@ -306,6 +320,17 @@
   </section>
 
   {% include 'modules/hfl_corpus/partials/timeline.html' %}
+<dialog class="memory-dialog" data-agent-history-dialog aria-labelledby="agent-history-title" style="width:min(42rem,calc(100vw - 1.5rem))">
+  <div class="p-5">
+    <div class="flex items-start justify-between gap-4">
+      <div><h3 id="agent-history-title" class="text-base font-semibold text-white">Agent history</h3><p class="mt-1 text-xs text-slate-400" data-history-category></p></div>
+      <button type="button" data-history-close autofocus class="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-800" aria-label="Close agent history">×</button>
+    </div>
+    <p class="my-3 text-xs text-slate-400">Saved outputs with the instructions used at the time.</p>
+    <div class="grid gap-3 text-sm text-slate-400" data-category-events aria-live="polite"></div>
+    <button type="button" class="mt-3 rounded-lg border border-slate-700 px-3 py-2 text-xs text-cyan-300" data-history-more hidden>Load older events</button>
+  </div>
+</dialog>
 <dialog class="memory-dialog" data-memory-dialog>
     <form method="dialog" data-memory-form class="p-5">
       <div class="flex items-start justify-between gap-4">
@@ -319,11 +344,16 @@
         <button type="button" class="justify-self-start text-xs font-semibold text-cyan-300 hover:text-cyan-100" data-memory-category-toggle>Edit category</button>
         <div class="grid gap-3 rounded-lg border border-slate-800 bg-slate-950/55 p-3" data-memory-category-editor hidden>
           <label class="memory-dialog-field"><span class="memory-dialog-label">Category name</span><input class="memory-dialog-input" maxlength="60" data-memory-category-name placeholder="Family, school, turning points…"></label>
+          <div data-prompt-editor="category"><div class="flex items-center justify-between mb-2"><div class="memory-instructions-heading"><span class="memory-dialog-label">Agent guidance</span><details class="memory-instructions-help"><summary aria-label="About category agent guidance">i</summary><div class="memory-instructions-help-content">Describe shared guidance for future agents working with this category: preferred sources, tone, constraints, and output format. For example: use reliable sources, cite links, and keep summaries concise. Supports Markdown headings, lists, and code blocks; use Edit to write and Preview to check formatting. A future bridge can combine this guidance with each pin’s instructions while retaining the runtime’s rules. Saving does not apply inheritance or start execution.</div></details></div><button type="button" class="text-xs text-cyan-300" data-prompt-toggle aria-expanded="false">Edit</button></div><textarea aria-label="Agent guidance" class="memory-dialog-input min-h-24 resize-y" maxlength="20000" data-prompt-input hidden></textarea><div class="memory-prompt-preview markdown-body" data-prompt-preview></div><p class="mt-1 text-xs text-slate-500">Shared guidance for this category. Stored only; nothing runs when you save.</p></div>
           <div><span class="memory-dialog-label">Color</span><div class="memory-palette" data-memory-palette></div></div>
-          <div class="flex gap-2"><button type="button" class="rounded-lg bg-cyan-700 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-600" data-memory-category-save>Save category</button><button type="button" class="rounded-lg px-3 py-2 text-xs text-rose-300 hover:bg-rose-950/50" data-memory-category-delete hidden>Delete category</button></div>
+          <button type="button" class="justify-self-start rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-cyan-200 hover:bg-slate-800" data-category-history aria-haspopup="dialog" hidden>Agent history</button>
+          <div class="flex gap-2"><button type="button" class="rounded-lg bg-cyan-700 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-600" data-memory-category-save>Save category</button><button type="button" class="rounded-lg px-3 py-2 text-xs text-amber-300 hover:bg-slate-800" data-memory-category-delete hidden>Archive category</button></div>
         </div>
+        <details class="text-sm text-slate-400" data-archived-categories hidden><summary class="cursor-pointer">Archived categories</summary><p class="my-2 text-xs">Pins and agent history are retained. Restore a category to show it on the heatmap.</p><div class="grid gap-2" data-archived-list></div></details>
         <div class="grid gap-4" data-memory-range-fields><div class="grid grid-cols-2 gap-3"><label class="memory-dialog-field"><span class="memory-dialog-label">From</span><input type="date" class="memory-dialog-input [color-scheme:dark]" data-memory-start></label><label class="memory-dialog-field"><span class="memory-dialog-label">To</span><input type="date" class="memory-dialog-input [color-scheme:dark]" data-memory-end></label></div>
-        <label class="memory-dialog-field"><span class="memory-dialog-label">Note</span><textarea class="memory-dialog-input min-h-24 resize-y" maxlength="2000" data-memory-note placeholder="What are you trying to remember?"></textarea></label></div>
+        <label class="memory-dialog-field"><span class="memory-dialog-label">Title</span><input class="memory-dialog-input" maxlength="2000" data-memory-pin-title placeholder="Name this pinned period"></label>
+        <label class="memory-dialog-field"><span class="memory-dialog-label">Notes</span><textarea class="memory-dialog-input min-h-24 resize-y" maxlength="2000" data-memory-note placeholder="What are you trying to remember?"></textarea></label>
+        <div data-prompt-editor="range"><div class="flex items-center justify-between mb-2"><div class="memory-instructions-heading"><span class="memory-dialog-label">Instructions</span><details class="memory-instructions-help"><summary aria-label="About pinned-date instructions">i</summary><div class="memory-instructions-help-content">Describe the specific task for this pinned period: its goal, relevant evidence, and expected result. For example: prepare a daily summary about topic X during these dates. Supports Markdown headings, lists, and code blocks; use Edit to write and Preview to check formatting. A future bridge can combine these instructions with category guidance. Schedules, recipients, and execution permissions will need explicit configuration; writing them here does not activate them.</div></details></div><button type="button" class="text-xs text-cyan-300" data-prompt-toggle aria-expanded="false">Edit</button></div><textarea aria-label="Instructions" class="memory-dialog-input min-h-24 resize-y" maxlength="20000" data-prompt-input hidden></textarea><div class="memory-prompt-preview markdown-body" data-prompt-preview></div><p class="mt-1 text-xs text-slate-500">Task instructions for this pinned period. Nothing runs when you save.</p></div></div>
       </div>
       <div class="mt-5 flex items-center justify-between gap-3"><button type="button" class="text-xs text-rose-300 hover:text-rose-100" data-memory-range-delete hidden>Remove pin</button><div class="ml-auto flex gap-2"><button type="button" class="rounded-lg px-3 py-2 text-xs text-slate-300 hover:bg-slate-800" data-memory-dialog-close>Cancel</button><button type="submit" data-memory-range-save class="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400">Save pin</button></div></div>
     </form>
@@ -776,6 +806,7 @@
       start: memoryDialog.querySelector('[data-memory-start]'),
       end: memoryDialog.querySelector('[data-memory-end]'),
       note: memoryDialog.querySelector('[data-memory-note]'),
+      pinTitle: memoryDialog.querySelector('[data-memory-pin-title]'),
       rangeDelete: memoryDialog.querySelector('[data-memory-range-delete]'),
       rangeSave: memoryDialog.querySelector('[data-memory-range-save]'),
     };
@@ -787,7 +818,7 @@
     const formatPinnedEnd = range => {
       const value = new Date(`${range.end_date}T12:00:00`);
       const day = String(value.getDate()).padStart(2, '0');
-      const month = value.toLocaleDateString(undefined, {month:'short'});
+      const month = value.toLocaleDateString('en-GB', {month:'short'}).toUpperCase();
       return `ENDS ${day} ${month} ${value.getFullYear()}`;
     };
     const categoryFor = id => memoryState.categories.find(category => category.id === Number(id));
@@ -815,6 +846,27 @@
       renderMemoryState();
       return result;
     };
+    const promptEditors = {};
+    memoryDialog.querySelectorAll('[data-prompt-editor]').forEach(el => {
+      const input=el.querySelector('[data-prompt-input]'), preview=el.querySelector('[data-prompt-preview]'), toggle=el.querySelector('[data-prompt-toggle]');
+      let version=0;
+      const showPreview=async () => {
+        const ticket=++version;
+        input.hidden=true;preview.hidden=false;toggle.textContent='Edit';toggle.setAttribute('aria-expanded','false');
+        preview.textContent=input.value.trim()?'Loading preview…':'Select edit to add';
+        if(!input.value.trim())return;
+        try {
+          const response=await fetch('/hfl-corpus/memory-pins',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:memoryCsrf,action:'preview_prompt',prompt:input.value})});
+          const result=await response.json();if(!response.ok)throw new Error(result.detail||'Preview unavailable');
+          if(ticket===version)preview.innerHTML=result.html;
+        } catch(error) {if(ticket===version)preview.textContent='Preview unavailable. Select Edit to view your text.';}
+      };
+      toggle.addEventListener('click',()=>{
+        if(input.hidden){++version;input.hidden=false;preview.hidden=true;toggle.textContent='Preview';toggle.setAttribute('aria-expanded','true');input.focus();}
+        else void showPreview();
+      });
+      promptEditors[el.dataset.promptEditor]={input,set(value){input.value=value||'';void showPreview();}};
+    });
     const scrollToDate = async (value, {behavior='', focus=true}={}) => {
       const selectedYear = value.slice(0, 4);
       const segment = panel.querySelector(`[data-activity-year-segment="${selectedYear}"]`);
@@ -871,11 +923,18 @@
         memoryRefs.palette.append(button);
       });
     };
+    const historyDialog = document.querySelector('[data-agent-history-dialog]');
     const openCategoryEditor = category => {
       editingCategory = category || null;
       selectedColor = category?.color || memoryState.palette.find(color => !memoryState.categories.some(item => item.color === color)) || memoryState.palette[0];
       memoryRefs.categoryName.value = category?.name || '';
+      promptEditors.category.set(category?.instructions);
       memoryRefs.categoryDelete.hidden = !category;
+      memoryRefs.categoryDelete.textContent = category?.archived_at ? 'Restore category' : 'Archive category';
+      const history = memoryDialog.querySelector('[data-category-history]');
+      history.hidden = !category;
+      historyDialog.querySelector('[data-category-events]').replaceChildren();
+      historyDialog.querySelector('[data-history-more]').hidden = true;
       memoryRefs.categoryEditor.hidden = false;
       renderPalette();
       memoryRefs.categoryName.focus();
@@ -897,12 +956,27 @@
       memoryRefs.end.min = timelineData.start;
       memoryRefs.end.max = timelineData.calendar_end;
       memoryRefs.note.value = range?.note || '';
+      memoryRefs.pinTitle.value = range?.title || '';
+      memoryRefs.pinTitle.required = !categoryOnly;
+      promptEditors.range.set(range?.prompt);
       populateCategories(range?.category_id || memoryState.categories[0]?.id);
       if (categoryOnly) openCategoryEditor(category);
       else if (!memoryState.categories.length) openCategoryEditor(null);
       memoryDialog.showModal();
     };
     const renderMemoryState = () => {
+      const archived = memoryDialog.querySelector('[data-archived-categories]');
+      const archivedList = memoryDialog.querySelector('[data-archived-list]');
+      archived.hidden = !(memoryState.archived_categories || []).length;
+      archivedList.replaceChildren();
+      (memoryState.archived_categories || []).forEach(category => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'text-left rounded-lg border border-slate-700 p-2 text-xs text-slate-200';
+        button.textContent = `${category.name} · View history / restore`;
+        button.addEventListener('click', () => openCategoryEditor(category));
+        archivedList.append(button);
+      });
       days.forEach(day => {
         const matches = rangesForDate(day.dataset.activityDay);
         const primary = matches[0];
@@ -961,16 +1035,16 @@
           button.className = 'activity-range-button';
           const label = document.createElement('span');
           label.className = 'activity-range-label';
-          label.textContent = formatPinnedEnd(range);
+          label.textContent = range.title || 'Untitled pin';
           button.append(label);
-          button.title = range.note || formatRange(range);
+          button.title = formatPinnedEnd(range);
           button.addEventListener('click', () => scrollToDate(midpoint(range)));
           button.addEventListener('click', () => window.dispatchEvent(new CustomEvent('hfl:timeline-period',{detail:{start:range.start_date,end:range.end_date}})));
           const editRange = document.createElement('button');
           editRange.type = 'button';
           editRange.className = 'activity-range-edit';
           editRange.textContent = 'Edit';
-          editRange.setAttribute('aria-label', `Edit ${formatPinnedEnd(range)}`);
+          editRange.setAttribute('aria-label', `Edit ${range.title || 'Untitled pin'}`);
           editRange.addEventListener('click', () => openMemoryDialog({range}));
           row.append(button, editRange);
           rangeList.append(row);
@@ -1374,6 +1448,7 @@
           category_id:editingCategory?.id || null,
           name,
           color:selectedColor,
+          instructions:promptEditors.category.input.value,
         });
         const saved = memoryState.categories.find(category => category.name.toLocaleLowerCase() === name.trim().toLocaleLowerCase());
         populateCategories(saved?.id);
@@ -1383,12 +1458,74 @@
       } catch (error) { showMemoryError(error.message); }
     });
     memoryRefs.categoryDelete.addEventListener('click', async () => {
-      if (!editingCategory || !window.confirm(`Delete ${editingCategory.name} and all its pinned ranges?`)) return;
+      if (!editingCategory) return;
+      const restore = Boolean(editingCategory.archived_at);
+      if (!restore && !window.confirm(`Archive ${editingCategory.name}? Pins and agent history will be retained and hidden from the heatmap.`)) return;
       try {
-        await postMemory({action:'delete_category', category_id:editingCategory.id});
+        await postMemory({action:restore ? 'restore_category' : 'archive_category', category_id:editingCategory.id});
         memoryDialog.close();
       } catch (error) { showMemoryError(error.message); }
     });
+    let historyVersion = 0;
+    const loadAgentHistory = async (older = false) => {
+      const categoryId = editingCategory?.id;
+      if (!categoryId) return;
+      const ticket = ++historyVersion;
+      const list = historyDialog.querySelector('[data-category-events]');
+      const more = historyDialog.querySelector('[data-history-more]');
+      const before = older ? Number(more.dataset.before || 0) : 0;
+      if (!older) list.textContent = 'Loading history…';
+      more.disabled = true;
+      try {
+        const response = await fetch('/hfl-corpus/memory-pins', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({csrf:memoryCsrf, action:'agent_history', category_id:categoryId, before_id:before})});
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || 'Could not load history.');
+        if (ticket !== historyVersion || categoryId !== editingCategory?.id) return;
+        if (!older) list.replaceChildren();
+        if (!result.events.length && !older) list.textContent = 'No agent events yet. Recorded outputs will appear here.';
+        result.events.forEach(event => {
+          const card = document.createElement('article');
+          card.className = 'rounded-lg border border-slate-700 p-3 text-xs';
+          const summary = document.createElement('h4');
+          summary.className = 'font-semibold text-slate-200 break-words';
+          summary.textContent = `${event.period_title} · ${event.status} · ${new Date(event.created_at).toLocaleString()}`;
+          card.append(summary);
+          const meta = document.createElement('p');
+          meta.className = 'my-2 text-slate-400';
+          meta.textContent = `${event.start_date} – ${event.end_date} · ${event.agent}${event.model ? ' · ' + event.model : ''}`;
+          card.append(meta);
+          const output = document.createElement('div');
+          output.className = 'memory-prompt-preview markdown-body';
+          output.innerHTML = event.output_html; // Server-rendered, sanitized Markdown only.
+          card.append(output);
+          const prompts = document.createElement('details');
+          const label = document.createElement('summary');
+          label.className = 'mt-3 cursor-pointer text-cyan-200';
+          label.textContent = 'Prompt snapshots';
+          prompts.append(label);
+          const text = document.createElement('pre');
+          text.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;max-height:16rem;overflow:auto';
+          text.textContent = `System prompt / category guidance\n${event.system_prompt || '(empty)'}\n\nPin instructions\n${event.instructions || '(empty)'}`;
+          prompts.append(text);card.append(prompts);list.append(card);
+        });
+        more.hidden = result.events.length < 20;
+        more.dataset.before = result.events.at(-1)?.id || '';
+      } catch (error) {
+        if (ticket === historyVersion && categoryId === editingCategory?.id) {
+          if (!older) list.textContent = error.message;
+          else showMemoryError(error.message);
+        }
+      } finally { if (ticket === historyVersion) more.disabled = false; }
+    };
+    memoryDialog.querySelector('[data-category-history]').addEventListener('click', () => {
+      historyDialog.querySelector('[data-history-category]').textContent = editingCategory?.name || '';
+      historyDialog.querySelector('[data-history-more]').hidden = true;
+      historyDialog.showModal();
+      void loadAgentHistory();
+    });
+    historyDialog.querySelector('[data-history-close]').addEventListener('click', () => historyDialog.close());
+    historyDialog.addEventListener('close', () => { ++historyVersion; });
+    historyDialog.querySelector('[data-history-more]').addEventListener('click', () => void loadAgentHistory(true));
     memoryForm.addEventListener('submit', async event => {
       event.preventDefault();
       showMemoryError('');
@@ -1400,6 +1537,8 @@
           start_date:memoryRefs.start.value,
           end_date:memoryRefs.end.value,
           note:memoryRefs.note.value,
+          title:memoryRefs.pinTitle.value,
+          prompt:promptEditors.range.input.value,
         });
         memoryDialog.close();
       } catch (error) { showMemoryError(error.message); }
