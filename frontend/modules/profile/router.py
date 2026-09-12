@@ -16,13 +16,14 @@ from modules.hfl_corpus.secrets import (
 from modules.hfl_shares.security import make_csrf_token, verify_csrf_token, verify_pin
 from modules.profile.service import apply_avatar, profile_from_form, stamp
 from modules.profile.store import get_profile_store
+from modules.profile.second_brain import timeline_settings
 from web import page_context, require_user, templates
 
 
 router = APIRouter(prefix="/profile")
 
 
-def _context(
+async def _context(
     request: Request,
     user: str,
     *,
@@ -30,7 +31,13 @@ def _context(
     errors=None,
     saved=False,
     remove_avatar=False,
+    second_brain_error="",
 ):
+    try:
+        brain_settings=await timeline_settings()
+    except Exception:
+        brain_settings=None
+        second_brain_error=second_brain_error or "Second brain settings are unavailable. Try again shortly."
     return page_context(
         request,
         user,
@@ -41,6 +48,8 @@ def _context(
         remove_avatar=remove_avatar,
         csrf=make_csrf_token(user),
         today_iso=date.today().isoformat(),
+        second_brain_settings=brain_settings,
+        second_brain_error=second_brain_error,
     )
 
 
@@ -52,7 +61,7 @@ async def profile_page(request: Request, saved: bool = False):
     return templates.TemplateResponse(
         request,
         "modules/profile/index.html",
-        _context(request, user, saved=saved),
+        await _context(request, user, saved=saved),
     )
 
 
@@ -104,7 +113,7 @@ async def save_profile(request: Request):
         return templates.TemplateResponse(
             request,
             "modules/profile/index.html",
-            _context(
+            await _context(
                 request,
                 user,
                 profile=draft,
@@ -118,3 +127,25 @@ async def save_profile(request: Request):
     if pin_change:
         clear_unlocked_cookie(response)
     return response
+
+
+@router.post('/second-brain', response_class=HTMLResponse)
+async def save_second_brain_settings(request: Request):
+    user,redirect=require_user(request)
+    if redirect: return redirect
+    form=await request.form(max_fields=4)
+    if not verify_csrf_token(str(form.get('csrf') or ''),user):
+        raise HTTPException(403,'Invalid form token.')
+    message=''
+    try:
+        raw=str(form.get('complete_after_days') or '')
+        if not raw.isdigit() or not 1<=int(raw)<=365:
+            raise ValueError('Use a whole number from 1 to 365 days.')
+        await timeline_settings(int(raw))
+    except ValueError as exc:
+        message=str(exc)
+    except Exception:
+        message='Second brain settings could not be saved. Try again shortly.'
+    if message:
+        return templates.TemplateResponse(request,'modules/profile/index.html',await _context(request,user,second_brain_error=message),status_code=422)
+    return RedirectResponse('/profile?second_brain_saved=true#second-brain-settings',status_code=303)

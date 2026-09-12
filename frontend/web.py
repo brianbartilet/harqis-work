@@ -23,7 +23,12 @@ STATIC_ROOT = FRONTEND_ROOT / "static"
 templates = Jinja2Templates(directory=str(FRONTEND_ROOT / "templates"))
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=256)
+def _asset_digest(asset_path: Path, modified_ns: int, size: int) -> str:
+    """Cache unchanged files while invalidating URLs after local edits."""
+    return hashlib.sha256(asset_path.read_bytes()).hexdigest()[:12]
+
+
 def static_asset(relative_path: str) -> str:
     """Return a same-origin static URL versioned by its content digest."""
     asset_path = (STATIC_ROOT / relative_path).resolve()
@@ -31,7 +36,8 @@ def static_asset(relative_path: str) -> str:
         asset_path.relative_to(STATIC_ROOT.resolve())
     except ValueError as exc:
         raise ValueError("static asset must remain under frontend/static") from exc
-    digest = hashlib.sha256(asset_path.read_bytes()).hexdigest()[:12]
+    stat = asset_path.stat()
+    digest = _asset_digest(asset_path, stat.st_mtime_ns, stat.st_size)
     return f"/static/{relative_path}?v={digest}"
 
 

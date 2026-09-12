@@ -184,11 +184,23 @@ async def hfl_secrets_unlock(request: Request, payload: SecretPinRequest):
 
 
 def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
-    anchors = iter(entry.anchor for entry in document.entries)
+    from urllib.parse import urlencode
+    from modules.hfl_corpus.timeline import entry_guid
+
+    entries = iter(document.entries)
+    protected_tags = normalize_secret_tags(get_profile_store().get().secret_tags)
 
     def replace(match: re.Match) -> str:
-        anchor = next(anchors, "")
-        return f'<h2 id="{anchor}" class="scroll-mt-40">' if anchor else match.group(0)
+        entry = next(entries, None)
+        if entry is None:
+            return match.group(0)
+        action = ""
+        guid = entry_guid(entry)
+        if guid and not is_secret_entry(entry, protected_tags):
+            query = urlencode({"source_path": document.relative_path, "source_entry": guid})
+            action = (f'<div class="corpus-followup-action"><a href="/hfl-corpus?{html.escape(query, quote=True)}" '
+                      'aria-label="Create a follow-up from this HFL entry">Make actionable ↗</a></div>')
+        return action + f'<h2 id="{html.escape(entry.anchor, quote=True)}" class="scroll-mt-40">'
 
     return Markup(_H2.sub(replace, str(rendered)))
 
@@ -1425,3 +1437,7 @@ async def hfl_remote_reference_media(request: Request, token: str):
 @router.get("/remote-references/{token}/thumbnail")
 async def hfl_remote_reference_thumbnail(request: Request, token: str):
     return await _remote_reference_response(request, token, "thumbnail")
+
+
+from modules.hfl_corpus.timeline import router as timeline_router
+router.include_router(timeline_router)
