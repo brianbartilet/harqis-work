@@ -220,14 +220,20 @@
         </a>
         {% endif %}
         <span class="operator-meta hidden sm:inline text-xs">{{ user }}</span>
-        <a href="/profile" aria-label="Profile" title="Profile"
+        <details class="relative">
+        <summary aria-label="Profile menu" title="Profile menu" style="list-style:none;cursor:pointer"
            class="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full bg-blue-950 text-xs font-bold text-blue-100 ring-1 transition {% if active_module == 'profile' %}ring-sky-400{% else %}ring-blue-700/70 hover:ring-sky-400{% endif %}">
           {% if owner_profile.avatar_data_uri %}
           <img src="{{ owner_profile.avatar_data_uri }}" alt="" class="h-full w-full object-cover">
           {% else %}
           <span aria-hidden="true">{{ owner_profile.initial }}</span>
           {% endif %}
-        </a>
+        </summary>
+        <nav aria-label="Profile menu" class="absolute right-0 z-50 mt-3 w-40 rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-xl">
+          <a href="/profile" class="block rounded px-3 py-2 text-sm hover:bg-slate-800">Profile</a>
+          <a href="/settings" class="block rounded px-3 py-2 text-sm hover:bg-slate-800">App Settings</a>
+        </nav>
+        </details>
         <a href="/logout" class="rounded text-xs text-slate-400 transition hover:text-red-300">Sign out</a>
       </div>
     </div>

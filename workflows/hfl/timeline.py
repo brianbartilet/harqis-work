@@ -199,14 +199,17 @@ def write_completion(followup_id, version, *, store=None, submit=None):
     from workflows.hfl.persistence import submit_hfl_entry
     import os
     canonical=store or FollowUpStore(store_path())
-    item=next(row["item"] for row in canonical.history(followup_id) if row["item"]["version"]==version)
+    revision=next(row for row in canonical.history(followup_id) if row["item"]["version"]==version)
+    item=revision['item']
+    agent_completion=revision['actor'].startswith('agent:')
     origin=os.environ.get("HFL_CORPUS_WEB_URL", "").rstrip("/")
     refs=[]
     if origin and item.get("source"):
         refs.append(origin+"/hfl-corpus/timeline/evidence?"+urlencode({"path":item["source"]["path"],"entry_id":item["source"]["entry_id"]}))
     source = item.get('source') or {}
     source_note = f"Original HFL: {source.get('path', '')} · {source.get('entry_id', '')}"
-    entry=HflEntry(when=datetime.fromisoformat(item["updated_at"]).astimezone(SGT),moment="Completed: "+item["title"],what_happened=f"Expected outcome: {item['expected_outcome']}\n\nManual completion: {item['completion_note'] or 'Marked complete by the owner.'}\n\nTimeline action: {followup_id}; revision {version}.\n\n{source_note}",why_it_stayed="Closes the loop between the original memory, intended action, and recorded outcome.",tags=("follow-up","manual-completion"),references=tuple(refs),source="hfl-followup-outcome")
+    label='Agent completion' if agent_completion else 'Manual completion'
+    entry=HflEntry(when=datetime.fromisoformat(item["updated_at"]).astimezone(SGT),moment="Completed: "+item["title"],what_happened=f"Expected outcome: {item['expected_outcome']}\n\n{label}: {item['completion_note'] or 'Marked complete by the owner.'}\n\nTimeline action: {followup_id}; revision {version}.\n\n{source_note}",why_it_stayed="Closes the loop between the original memory, intended action, and recorded outcome.",tags=("follow-up","agent-completion" if agent_completion else "manual-completion"),references=tuple(refs),source="hfl-followup-outcome")
     if submit is None and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1':
         result = {'delivery': 'preview', 'message': 'Completion retained in the local preview; no corpus entry submitted.'}
         canonical.record_receipt(followup_id, version, result)

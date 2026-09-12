@@ -144,6 +144,13 @@ doesn't spam the delivery channel. Examples already in the repo:
 
 ## Agent memory & lessons
 
+The [Activity Corpus agent bridge](HFL-AGENT-BRIDGE.md) runs explicitly delegated
+actionable and pinned-period prompts with local Hermes, a current runtime
+dependency. Fresh sessions support web research, downloads, files, coding and
+shell work, with Markdown history and authenticated artifact delivery. Hermes
+owns the minute dispatcher; App Settings controls action discovery frequency
+and pin backfill. Existing HFL/Celery persistence owns durable receipt delivery.
+
 Hermes agents get better over time through a capture → distill → recall loop on top of
 `~/.hermes/memory/` (this is the [MANIFESTO](../MANIFESTO.md) CODE loop applied to the
 agent's own work):

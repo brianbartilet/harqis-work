@@ -1,5 +1,10 @@
 # `workflows/hfl/` — Homework for Life
 
+The [Activity Corpus agent bridge](../../docs/info/HFL-AGENT-BRIDGE.md) connects
+saved actionable/pin prompts to local Hermes and returns attributed execution
+receipts and artifact links through this workflow's existing persistence/outbox. Its minute dispatcher
+is Hermes-owned; it adds no Beat entry or Celery task.
+
 > The manifesto's principle 2 made concrete: a workflow surface for the daily
 > story-moment habit from Matthew Dicks' *Storyworthy*. Treats Homework for
 > Life as a **first-class data source** — captured, retrievable, summarizable —

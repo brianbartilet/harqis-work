@@ -37,16 +37,29 @@ class AgentBridgeStore:
                     lease_token TEXT NOT NULL DEFAULT '', lease_until TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
                     result TEXT NOT NULL DEFAULT '{}', delivery TEXT NOT NULL DEFAULT 'none',
-                    applied INTEGER NOT NULL DEFAULT 0
+                    applied INTEGER NOT NULL DEFAULT 0, expected_version INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS agent_one_live_source ON agent_requests(source_key)
-                    WHERE state IN ('queued','running','awaiting_input','review');
+                    WHERE state IN ('queued','running','awaiting_input','review','accepting');
                 CREATE TABLE IF NOT EXISTS agent_events (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES agent_requests(id),
                     event_key TEXT NOT NULL, kind TEXT NOT NULL, actor TEXT NOT NULL,
                     created_at TEXT NOT NULL, payload TEXT NOT NULL, UNIQUE(run_id,event_key)
                 );
+                CREATE TABLE IF NOT EXISTS agent_dispatch_state (
+                    key TEXT PRIMARY KEY, value TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS agent_artifacts (
+                    run_id TEXT NOT NULL REFERENCES agent_requests(id), name TEXT NOT NULL,
+                    digest TEXT NOT NULL, size INTEGER NOT NULL,
+                    PRIMARY KEY(run_id,name)
+                );
             """)
+            db.execute('BEGIN IMMEDIATE')
+            index = db.execute("SELECT sql FROM sqlite_master WHERE name='agent_one_live_source'").fetchone()
+            if index and 'awaiting_input' in index['sql']:
+                db.execute('DROP INDEX agent_one_live_source')
+                db.execute("CREATE UNIQUE INDEX agent_one_live_source ON agent_requests(source_key) WHERE state IN ('queued','running','review','accepting')")
 
     def connect(self):
         db = sqlite3.connect(self.path, timeout=15)
@@ -70,10 +83,11 @@ class AgentBridgeStore:
             raise KeyError(run_id)
         return self.decode(row, private=private)
 
-    def list(self, source_key=None, *, state=None, limit=100):
+    def list(self, source_key=None, *, state=None, delivery=None, limit=100, oldest=False):
         with self.connect() as db:
-            rows = db.execute('SELECT * FROM agent_requests WHERE (? IS NULL OR source_key=?) AND (? IS NULL OR state=?) ORDER BY created_at DESC LIMIT ?',
-                              (source_key, source_key, state, state, limit)).fetchall()
+            order = 'ASC' if oldest else 'DESC'
+            rows = db.execute('SELECT * FROM agent_requests WHERE (? IS NULL OR source_key=?) AND (? IS NULL OR state=?) AND (? IS NULL OR delivery=?) ORDER BY created_at ' + order + ' LIMIT ?',
+                              (source_key, source_key, state, state, delivery, delivery, limit)).fetchall()
         return [self.decode(row) for row in rows]
 
     def subscribe(self, kind, source_id, cadence, auto_complete):
@@ -105,7 +119,7 @@ class AgentBridgeStore:
                 if previous['source_key'] != source_key:
                     raise BridgeConflict('Request key already belongs to another source.')
                 return self.decode(previous)
-            previous = db.execute("SELECT * FROM agent_requests WHERE source_key=? AND state IN ('queued','running','awaiting_input','review')", (source_key,)).fetchone()
+            previous = db.execute("SELECT * FROM agent_requests WHERE source_key=? AND state IN ('queued','running','review','accepting')", (source_key,)).fetchone()
             if previous:
                 return self.decode(previous)
             run_id, timestamp = uuid.uuid4().hex, now()
@@ -131,8 +145,11 @@ class AgentBridgeStore:
             raise ValueError('Unsupported agent event.')
         if not isinstance(event_key, str) or not 1 <= len(event_key) <= 160:
             raise ValueError('A bounded event key is required.')
+        event_key = 'agent:' + event_key
         if not isinstance(payload, dict) or len(json.dumps(payload)) > 120000:
             raise ValueError('Event payload is too large or invalid.')
+        if not isinstance(payload.get('model', ''), str) or len(payload.get('model', '')) > 200:
+            raise ValueError('Model attribution must be text of at most 200 characters.')
         summary = payload.get('summary', '')
         if not isinstance(summary, str) or len(summary) > 100000 or (kind != 'heartbeat' and not summary.strip()):
             raise ValueError('An event summary is required (up to 100,000 characters).')
@@ -174,13 +191,30 @@ class AgentBridgeStore:
                 raise KeyError(run_id)
             if row['state'] == state:
                 return self.decode(row)
-            if state == 'succeeded' and row['state'] != 'review':
+            if state == 'succeeded' and row['state'] != 'accepting':
                 raise BridgeConflict('Only a submitted result can be accepted.')
             if state == 'cancelled' and row['state'] not in {'queued', 'running', 'awaiting_input', 'review'}:
                 raise BridgeConflict('This run already ended.')
             db.execute('UPDATE agent_requests SET state=?,lease_until=?,updated_at=? WHERE id=?', (state, '', now(), run_id))
-            self.event(db, run_id, state, state, actor, {'summary': summary})
+            self.event(db, run_id, 'owner:' + state, state, actor, {'summary': summary})
         return self.get(run_id)
+
+    def begin_accept(self, run_id, actor):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT * FROM agent_requests WHERE id=?', (run_id,)).fetchone()
+            if not row:
+                raise KeyError(run_id)
+            if row['state'] not in {'review', 'accepting'}:
+                raise BridgeConflict('Only a submitted result can be accepted.')
+            if row['state'] == 'review':
+                db.execute("UPDATE agent_requests SET state='accepting',updated_at=? WHERE id=?", (now(), run_id))
+                self.event(db, run_id, 'approval:' + uuid.uuid4().hex, 'accepted', actor, {'summary': 'Result approved for application under the recorded completion policy.'})
+        return self.get(run_id)
+
+    def acceptance_failed(self, run_id):
+        with self.connect() as db:
+            db.execute("UPDATE agent_requests SET state='review' WHERE id=? AND state='accepting' AND applied=0", (run_id,))
 
     def expire(self):
         with self.connect() as db:
@@ -202,3 +236,33 @@ class AgentBridgeStore:
     def mark_applied(self, run_id):
         with self.connect() as db:
             db.execute('UPDATE agent_requests SET applied=1 WHERE id=?', (run_id,))
+
+    def set_version(self, run_id, version):
+        with self.connect() as db:
+            db.execute('UPDATE agent_requests SET expected_version=? WHERE id=?', (version, run_id))
+
+    def dispatch_due(self, key, minutes):
+        """Serialize competing scheduler ticks; persist the next discovery time."""
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT value FROM agent_dispatch_state WHERE key=?', (key,)).fetchone()
+            if row and (datetime.fromisoformat(row['value']) + timedelta(minutes=minutes)).isoformat() > now():
+                return False
+            db.execute('INSERT INTO agent_dispatch_state VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', (key, now()))
+            return True
+
+    def request_exists(self, key):
+        with self.connect() as db:
+            return bool(db.execute('SELECT 1 FROM agent_requests WHERE request_key=?', (key,)).fetchone())
+
+    def notice_sent(self, key):
+        with self.connect() as db:
+            return bool(db.execute('SELECT 1 FROM agent_dispatch_state WHERE key=?', (key,)).fetchone())
+
+    def mark_notice(self, key):
+        with self.connect() as db:
+            db.execute('INSERT OR IGNORE INTO agent_dispatch_state VALUES (?,?)', (key, now()))
+
+    def artifacts(self, run_id):
+        with self.connect() as db:
+            return [dict(row) for row in db.execute('SELECT name,digest,size FROM agent_artifacts WHERE run_id=? ORDER BY name', (run_id,))]

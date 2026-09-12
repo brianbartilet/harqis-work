@@ -207,6 +207,7 @@ SERVICES: dict[str, dict] = {
         "console": True,
     },
     "frontend":  {"cmd": ["frontend"],          "roles": {"host"}},
+    "hfl-agent": {"cmd": ["hfl-agent"], "roles": {"host"}},
     "hfl-api":   {"cmd": ["hfl-api"],           "roles": {"host"}},
     # HARQIS MCP is a stdio server: clients (Hermes, Claude Desktop, etc.)
     # spawn it on demand and keep stdin/stdout attached. Running it as a
@@ -1186,6 +1187,7 @@ _STATUS_NEEDLES = {
     # the previous hard-coded "\\" only matched on Windows, so on macOS/Linux
     # `--status` and the stray-sweep silently missed running frontend/mcp.
     "frontend":  f"frontend{os.sep}main.py",
+    "hfl-agent": f"scripts{os.sep}agents{os.sep}hfl{os.sep}agent_bridge_runner.py",
     "hfl-api":   f"frontend{os.sep}hfl_api.py",
     "mcp":       f"mcp{os.sep}server.py",
     "kanban":    "agents.projects.orchestrator.local",
@@ -1952,6 +1954,7 @@ def select_services(machine: dict, args: argparse.Namespace) -> list[str]:
     disabled: set[str] = set(machine.get("disable", []))
     if args.no_scheduler: disabled.add("scheduler")
     if args.no_frontend:  disabled.add("frontend")
+    if args.no_hfl_agent: disabled.add("hfl-agent")
     if args.no_hfl_api:   disabled.add("hfl-api")
     if args.no_mcp:       disabled.add("mcp")
     if args.no_kanban:    disabled.add("kanban")
@@ -1962,6 +1965,7 @@ def select_services(machine: dict, args: argparse.Namespace) -> list[str]:
         and s not in disabled
         and (s != "capture-worker" or machine.get("capture_worker", False))
         and (s != "hfl-api" or machine.get("hfl_api", False))
+        and (s != "hfl-agent" or machine.get("hfl_agent", False))
     ]
 
 
@@ -1988,6 +1992,7 @@ def build_parser() -> argparse.ArgumentParser:
                         "one canonical Beat runner — duplicate Beat instances fire every "
                         "scheduled task N times.")
     p.add_argument("--no-frontend", action="store_true")
+    p.add_argument("--no-hfl-agent", action="store_true")
     p.add_argument("--no-hfl-api",  action="store_true")
     p.add_argument("--no-mcp",      action="store_true")
     p.add_argument("--no-kanban",   action="store_true")
@@ -2230,6 +2235,7 @@ def main() -> None:
             "--no-scheduler": args.no_scheduler,
             "--no-frontend": args.no_frontend,
             "--no-hfl-api": args.no_hfl_api,
+            "--no-hfl-agent": args.no_hfl_agent,
             "--no-mcp": args.no_mcp,
             "--no-kanban": args.no_kanban,
             "--no-flower": args.no_flower,

@@ -20,7 +20,7 @@ def store_path():
     return Path(configured).expanduser().resolve() if configured else root / "runtime" / "hfl-timeline.sqlite3"
 
 
-STATES = {"open", "active", "in_progress", "done", "dismissed"}
+STATES = {"open", "active", "in_progress", "incomplete", "done", "dismissed"}
 FIELDS = {"title", "expected_outcome", "notes", "prompt", "review_date", "due_date", "status", "completion_note"}
 
 

@@ -26,6 +26,7 @@ Deploy the harqis-work platform locally — full stack ("host") or worker-only (
 | `--os <LABELS>` | No | Comma-separated `os:*` labels this orchestrator satisfies, e.g. `os:linux,os:gpu`. Unset = auto-detect from `platform.system()` (darwin → `os:darwin,os:macos,os:mac`; linux → `os:linux`; windows → `os:windows,os:win`; all hosts also satisfy `os:any`). Cards with no `os:*` label run on any node; cards with `os:windows` only run on Windows nodes. |
 | `--down` | No | Tear down services for this role instead of starting them. |
 | `--no-frontend` | No | Skip the FastAPI dashboard (host only). |
+| `--no-hfl-agent` | No | Skip the Hermes execution worker (host only, opt-in through `hfl_agent = true`). |
 | `--no-hfl-api` | No | Skip the standalone canonical HFL Activity Corpus API (host only and opt-in through `hfl_api = true`). |
 | `--no-mcp` | No | Skip the MCP server daemon (host only). |
 | `--no-kanban` | No | Skip the Kanban orchestrator. On node this also relaxes the `--profile` requirement. |
@@ -210,6 +211,8 @@ For each component below, the launch is cross-platform via `python scripts/launc
 
 7b. **HFL Activity Corpus API** — when the machine profile sets `hfl_api = true`, run `python scripts/launch.py hfl-api`. It listens on `HFL_API_HOST:HFL_API_PORT` (`0.0.0.0:8082` by default), exposes health at `/health`, OpenAPI at `/openapi.json`, and Swagger UI at `/docs`. Probe `http://localhost:${HFL_API_PORT:-8082}/health` until it returns 200, max 15s. Skip if `--no-hfl-api`; never enable it on a non-canonical corpus host.
 
+7b-agent. **HFL Hermes execution worker** — when `hfl_agent = true`, run `python scripts/launch.py hfl-agent`. Requires local Hermes with working provider auth, a running Hermes gateway, and `HFL_AGENT_BRIDGE_TOKEN` on the owning frontend and worker. Set `HFL_AGENT_BRIDGE_URL` to that frontend origin (including its port). Startup reconciles the minute dispatcher cron before consuming work. Verify with `python scripts/agents/hfl/agent_bridge_runner.py --check`; use `--smoke` for two synthetic fresh-session file tasks. Skip with `--no-hfl-agent`. See [bridge operations](../../../docs/info/HFL-AGENT-BRIDGE.md).
+
 7c. **MCP server daemon** — runs `python scripts/launch.py mcp`. Note: typically the MCP server is spawned as a stdio subprocess by the active agent client, so this daemon is only needed for SSH-stdio remote access or HTTP-transport setups. Skip if `--no-mcp`.
 
 7d. **Projects orchestrator (acts as 1 agent worker on the host)** — runs `python scripts/launch.py kanban` (module is `agents.projects.orchestrator.local`). Default `KANBAN_NUM_AGENTS=1`. If `--num-agents N` was passed, export it before launching. If `--dry-run`, set `KANBAN_DRY_RUN=1`. Skip if `--no-kanban`.
@@ -302,6 +305,7 @@ Standard label-to-service mapping:
 | `work.harqis.worker` | `worker` |
 | `work.harqis.frontend` | `frontend` |
 | `work.harqis.hfl-api` | `hfl-api` |
+| `work.harqis.hfl-agent` | `hfl-agent` |
 | `work.harqis.mcp` | `mcp` |
 | `work.harqis.kanban` | `kanban` |
 | `work.harqis.flower` | `flower` |
@@ -345,6 +349,7 @@ On Windows, `python scripts/deploy.py --register` (must run elevated) installs e
 | `work.harqis.worker` | `python scripts/launch.py worker` |
 | `work.harqis.frontend` | `python scripts/launch.py frontend` |
 | `work.harqis.hfl-api` | `python scripts/launch.py hfl-api` |
+| `work.harqis.hfl-agent` | `python scripts/launch.py hfl-agent` |
 | `work.harqis.mcp` | `python scripts/launch.py mcp` |
 | `work.harqis.kanban` | `python scripts/launch.py kanban` |
 | `work.harqis.flower` | `python scripts/launch.py flower` |
@@ -395,6 +400,7 @@ python scripts/deploy.py --role host --down --unregister
 - [ ] Worker registered with broker (`celery inspect ping` succeeds)
 - [ ] Worker subscribed to every requested queue (`celery inspect active_queues` lists all of them)
 - [ ] Frontend `/health` returns 200 (host, unless `--no-frontend`)
+- [ ] HFL agent `--check` passes and Hermes has exactly one minute bridge dispatcher when `hfl_agent = true` (unless `--no-hfl-agent`)
 - [ ] HFL API `/health` returns 200 and `/openapi.json` is valid when `hfl_api = true` (canonical host, unless `--no-hfl-api`)
 - [ ] Kanban orchestrator polling (host, unless `--no-kanban`)
 - [ ] Flower `/api/workers` returns 200 with `FLOWER_USER:FLOWER_PASSWORD` basic auth (host, unless `--no-flower`)

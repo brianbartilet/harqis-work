@@ -1,10 +1,10 @@
 {
-  "name": "hfl-agent-bridge-daily",
+  "name": "hfl-agent-bridge-dispatch",
   "schedule_owner": "Hermes",
-  "schedule": "0 8 * * *",
+  "schedule": "* * * * *",
   "timezone": "Asia/Singapore",
   "mode": "no_agent",
   "delivery": "local",
   "runner": "scripts/agents/hfl/agent_bridge_runner.py",
-  "arguments": ["--daily"]
+  "arguments": ["--dispatch"]
 }

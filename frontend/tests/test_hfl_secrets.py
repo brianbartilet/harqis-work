@@ -121,11 +121,20 @@ def test_secret_pages_render_custom_pin_dialog_without_native_prompt(
     corpus_toggle = corpus_page.text.split(
         '<button type="button" data-secrets-toggle', 1
     )[1].split(">", 1)[0]
-    assert 'data-corpus-header-actions class="flex flex-col gap-2 sm:flex-row"' in corpus_page.text
-    assert "order-2" in corpus_toggle
-    assert "sm:order-1" in corpus_toggle
+    assert 'data-corpus-header-actions class="corpus-header-actions"' in corpus_page.text
+    assert "corpus-secrets-control" in corpus_toggle
     assert "bg-slate-900" not in corpus_toggle
     assert "bg-violet-900" not in corpus_toggle
+
+
+def test_secrets_without_pin_offers_setup_without_direct_navigation(authenticated_client):
+    page = authenticated_client.get('/hfl-corpus')
+    assert page.status_code == 200
+    assert '<button type="button" data-secrets-setup aria-haspopup="dialog"' in page.text
+    assert 'data-secrets-setup-dialog' in page.text
+    assert 'Set up your secrets PIN' in page.text
+    assert 'href="/profile#profile-secrets-title">Set up PIN in Profile</a>' in page.text
+    assert '<button type="button" data-secrets-toggle' not in page.text
 
 
 def test_mixed_document_blurs_secret_entry_and_protects_editor(

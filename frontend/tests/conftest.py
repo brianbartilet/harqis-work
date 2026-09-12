@@ -40,14 +40,36 @@ os.environ["SECOND_BRAIN_STORE_PATH"] = str(
     / f"harqis-frontend-second-brain-{os.getpid()}.sqlite3"
 )
 
+# A caller may have imported the live app before invoking pytest. Discard that
+# configuration before any fixture can open a store or perform cleanup.
+from config import get_settings
+from modules.profile.store import reset_profile_store
+from modules.hfl_corpus.memory_pins import reset_memory_pin_store
+
+get_settings.cache_clear()
+reset_profile_store()
+reset_memory_pin_store()
+_TEST_PROFILE_PATH = Path(os.environ["PROFILE_STORE_PATH"]).resolve()
+
+
+def _require_test_profile_path(path):
+    if Path(path).expanduser().resolve() != _TEST_PROFILE_PATH:
+        raise RuntimeError("Refusing test cleanup outside the isolated test profile database")
+
 
 @pytest.fixture(autouse=True)
 def _empty_owner_profile():
     from modules.hfl_corpus.memory_pins import get_memory_pin_store
     from modules.profile.store import get_profile_store
 
+    from modules.app_settings.store import connection as settings_connection
+    _require_test_profile_path(get_settings().profile_store_path)
     store = get_profile_store()
     pin_store = get_memory_pin_store()
+    _require_test_profile_path(store.path)
+    _require_test_profile_path(pin_store.path)
+    with settings_connection() as db:
+        db.execute("DELETE FROM app_settings")
     with store._connect() as connection:
         connection.execute("DELETE FROM owner_profile")
     with pin_store._connect() as connection:

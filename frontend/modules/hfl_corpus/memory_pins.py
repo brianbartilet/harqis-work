@@ -45,6 +45,8 @@ class PinRange:
     updated_at: str
     title: str
     prompt: str
+    execution_hour: int = 0
+    agent_enabled: bool = False
 
 
 class MemoryPinStore:
@@ -79,6 +81,10 @@ class MemoryPinStore:
             connection.execute("BEGIN IMMEDIATE")
             category_columns = {row['name'] for row in connection.execute('PRAGMA table_info(memory_pin_categories)')}
             range_columns = {row['name'] for row in connection.execute('PRAGMA table_info(memory_pin_ranges)')}
+            if 'execution_hour' not in range_columns:
+                connection.execute('ALTER TABLE memory_pin_ranges ADD COLUMN execution_hour INTEGER NOT NULL DEFAULT 0')
+            if 'agent_enabled' not in range_columns:
+                connection.execute('ALTER TABLE memory_pin_ranges ADD COLUMN agent_enabled INTEGER NOT NULL DEFAULT 0')
             if 'instructions' not in category_columns:
                 connection.execute("ALTER TABLE memory_pin_categories ADD COLUMN instructions TEXT NOT NULL DEFAULT ''")
             if 'title' not in range_columns:
@@ -167,15 +173,27 @@ class MemoryPinStore:
                 "SELECT id, name, color, instructions FROM memory_pin_categories WHERE archived_at IS NULL ORDER BY id"
             ).fetchall()
             ranges = connection.execute(
-                """SELECT id, category_id, start_date, end_date, note, updated_at, title, prompt
+                """SELECT id, category_id, start_date, end_date, note, updated_at, title, prompt, execution_hour, agent_enabled
                    FROM memory_pin_ranges WHERE category_id IN
                    (SELECT id FROM memory_pin_categories WHERE archived_at IS NULL)
                    ORDER BY start_date, end_date, id"""
             ).fetchall()
             archived = connection.execute("SELECT id, name, color, instructions, archived_at FROM memory_pin_categories WHERE archived_at IS NOT NULL ORDER BY name").fetchall()
+        # Read legacy opt-ins without activating old pins that never opted in.
+        import os
+        bridge_path = Path(os.getenv('HFL_AGENT_BRIDGE_STORE_PATH') or self.path.with_name('hfl-agent-bridge.sqlite3')).expanduser()
+        subscriptions = {}
+        if bridge_path.is_file():
+            with sqlite3.connect(bridge_path) as db:
+                if db.execute("SELECT 1 FROM sqlite_master WHERE name='agent_subscriptions'").fetchone():
+                    subscriptions = dict(db.execute("SELECT source_id,cadence FROM agent_subscriptions WHERE kind='pin'"))
+        pin_ranges = [asdict(PinRange(**dict(row))) for row in ranges]
+        for pin in pin_ranges:
+            if str(pin['id']) in subscriptions:
+                pin['agent_enabled'] = subscriptions[str(pin['id'])] != 'off'
         return {
             "categories": [asdict(PinCategory(**dict(row))) for row in categories],
-            "ranges": [asdict(PinRange(**dict(row))) for row in ranges],
+            "ranges": pin_ranges,
             "palette": list(PIN_COLORS),
             "archived_categories": [dict(row) for row in archived],
         }
@@ -252,6 +270,18 @@ class MemoryPinStore:
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", (category_id,event_key,range_id,pin['title'],pin['start_date'],pin['end_date'],pin['guidance'] if system_prompt is None else system_prompt,pin['prompt'],output,agent,model,status,datetime.now(timezone.utc).isoformat()))
             return connection.execute("SELECT id FROM memory_pin_agent_events WHERE category_id=? AND event_key=?", (category_id,event_key)).fetchone()['id']
 
+    def record_execution_snapshot(self, run: dict) -> None:
+        """Project a bridge receipt using dispatch-time instructions, even after edits."""
+        snap, result = run['snapshot'], run['result']
+        pin = snap['source']
+        state = 'completed' if run['state'] in {'review', 'succeeded'} and result.get('complete') else 'failed' if run['state'] == 'failed' else 'partial'
+        with self._connect() as connection:
+            connection.execute("""INSERT OR IGNORE INTO memory_pin_agent_events
+                (category_id,event_key,range_id,period_title,start_date,end_date,system_prompt,instructions,output,agent,model,status,created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (pin['category_id'], 'bridge:' + run['id'], pin['id'], pin['title'], pin['start_date'], pin['end_date'],
+                 snap['category_guidance'], pin['prompt'], result.get('summary', ''), run['agent'], result.get('model', ''), state, run['updated_at']))
+
     def save_range(
         self,
         *,
@@ -262,7 +292,13 @@ class MemoryPinStore:
         note: str,
         title: str = "",
         prompt: str = "",
+        execution_hour: int = 0,
+        agent_enabled: bool | None = None,
     ) -> None:
+        if type(execution_hour) is not int or not 0 <= execution_hour <= 23:
+            raise ValueError('Choose an execution hour from 00 to 23 (Asia/Singapore).')
+        if agent_enabled is not None and type(agent_enabled) is not bool:
+            raise ValueError('Choose whether scheduled agent runs are enabled.')
         try:
             start = date.fromisoformat(start_date)
             end = date.fromisoformat(end_date)
@@ -289,18 +325,18 @@ class MemoryPinStore:
                 if range_id:
                     cursor = connection.execute(
                         """UPDATE memory_pin_ranges
-                           SET category_id=?, start_date=?, end_date=?, note=?, title=?, prompt=?, updated_at=?
+                           SET category_id=?, start_date=?, end_date=?, note=?, title=?, prompt=?, updated_at=?, execution_hour=?, agent_enabled=COALESCE(?,agent_enabled)
                            WHERE id=?""",
-                        (category_id, start.isoformat(), end.isoformat(), note, title, prompt, now, range_id),
+                        (category_id, start.isoformat(), end.isoformat(), note, title, prompt, now, execution_hour, agent_enabled, range_id),
                     )
                     if not cursor.rowcount:
                         raise ValueError("That pinned range no longer exists.")
                 else:
                     connection.execute(
                         """INSERT INTO memory_pin_ranges
-                           (category_id, start_date, end_date, note, title, prompt, created_at, updated_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (category_id, start.isoformat(), end.isoformat(), note, title, prompt, now, now),
+                           (category_id, start_date, end_date, note, title, prompt, created_at, updated_at, execution_hour, agent_enabled)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (category_id, start.isoformat(), end.isoformat(), note, title, prompt, now, now, execution_hour, bool(prompt.strip()) if agent_enabled is None else agent_enabled),
                     )
         except sqlite3.IntegrityError as exc:
             raise ValueError("The pinned range could not be saved.") from exc

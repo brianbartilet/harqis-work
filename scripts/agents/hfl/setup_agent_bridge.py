@@ -1,4 +1,4 @@
-"""Preview/reconcile the repository-owned Hermes daily bridge schedule.
+"""Preview/reconcile the repository-owned Hermes minute bridge schedule.
 
 Usage: python scripts/agents/hfl/setup_agent_bridge.py [--apply]
 The preview is read-only. --apply installs the wrapper and creates/updates only
@@ -29,18 +29,18 @@ data = json.load(sys.stdin)
 spec = data['spec']
 tz = get_timezone()
 expected = ZoneInfo(spec['timezone'])
-local_matches = tz is None and all(datetime(2026, month, 1).astimezone().utcoffset() == datetime(2026, month, 1, tzinfo=expected).utcoffset() for month in (1, 7))
+local_matches = tz is None and all(datetime(datetime.now().year, month, 1).astimezone().utcoffset() == datetime(datetime.now().year, month, 1, tzinfo=expected).utcoffset() for month in (1, 7))
 if str(tz) != spec['timezone'] and not local_matches:
     raise SystemExit('Set the Hermes timezone to ' + spec['timezone'] + ' before installing this schedule.')
-jobs = [job for job in list_jobs(include_disabled=True) if job.get('name') == spec['name']]
+jobs = [job for job in list_jobs(include_disabled=True) if job.get('name') in {spec['name'], 'hfl-agent-bridge-daily'}]
 if len(jobs) > 1:
     raise SystemExit('Multiple bridge schedules exist; reconcile them before installing.')
-script = get_hermes_home() / 'scripts' / 'hfl_agent_bridge_daily.py'
+script = get_hermes_home() / 'scripts' / 'hfl_agent_bridge_dispatch.py'
 if data['apply']:
     script.parent.mkdir(parents=True, exist_ok=True)
     script.write_text(data['wrapper'], encoding='utf-8')
     if jobs:
-        job = update_job(jobs[0]['id'], {'schedule': spec['schedule'], 'script': str(script), 'no_agent': True, 'deliver': 'local', 'workdir': data['repo']})
+        job = update_job(jobs[0]['id'], {'name': spec['name'], 'schedule': spec['schedule'], 'script': str(script), 'no_agent': True, 'deliver': 'local', 'workdir': data['repo']})
     else:
         job = create_job(prompt='', schedule=spec['schedule'], name=spec['name'], script=str(script), no_agent=True, deliver='local', workdir=data['repo'])
     print(json.dumps({'job_id': job['id'], 'installed': True, 'script': str(script)}))

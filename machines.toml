@@ -16,6 +16,7 @@
 #   disable         list of services NOT to run here
 #   capture_worker  launch an isolated solo worker for the `capture` queue
 #   hfl_api         launch the standalone canonical Activity Corpus API
+#   hfl_agent       launch the local Hermes execution worker and reconcile its cron
 #   kanban_profile  agent profile filter for the kanban orchestrator
 #                   (e.g. "agent:default", "agent:code")
 #   kanban_num_agents  concurrent in-process kanban agents (default: 1)
@@ -38,6 +39,7 @@ role = "host"
 queues = ["default", "tcg", "host", "adhoc", "hfl", "default_broadcast", "hfl_broadcast", "n8n"]
 kanban_num_agents = 4
 hfl_api = true
+hfl_agent = true
 
 # ── Windows work box: DEFAULT + HUD, no Kanban here ──────────────────────────
 [windows-work]

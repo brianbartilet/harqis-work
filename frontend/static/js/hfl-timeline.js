@@ -46,12 +46,24 @@
     try { await api('/'+item.id, {method:'PATCH',body:JSON.stringify({version:item.version,...changes})}); await load(); }
     catch (e) { error('agenda-error',e.message); } finally {trigger.disabled=false;}
   }
+  let historySequence = 0;
   async function showHistory(item) {
+    const ticket = ++historySequence;
     const list=document.getElementById('followup-history-items');list.replaceChildren(node('p','Loading history…'));historyDialog.showModal();
-    try { const data=await api('/'+item.id+'/history'); list.replaceChildren(); data.history.forEach(row => {const el=node('section',null,'agenda-history-row');el.append(node('h3','Revision '+row.item.version+' · '+statusLabel(row.item.status)),node('p',new Date(row.changed_at).toLocaleString('en-SG',{timeZone:'Asia/Singapore'})+' SGT'),node('p',row.item.title),node('p','Expected outcome: '+row.item.expected_outcome),node('p','Review: '+(row.item.review_date||'Unscheduled')+' · Complete by: '+(row.item.due_date||'None')));if(row.item.prompt)el.append(node('h4','Prompt'),node('pre',row.item.prompt,'action-prompt'));if(row.item.notes)el.append(node('p',row.item.notes));if(row.item.completion_note)el.append(node('p','Outcome: '+row.item.completion_note));list.append(el);}); }
+    try { const data=await api('/'+item.id+'/history'); if(ticket !== historySequence)return; list.replaceChildren(); data.history.forEach(row => {const el=node('section',null,'agenda-history-row');el.dataset.changedAt=row.changed_at;el.append(node('h3','Revision '+row.item.version+' · '+statusLabel(row.item.status)),node('p',new Date(row.changed_at).toLocaleString('en-SG',{timeZone:'Asia/Singapore'})+' SGT'),node('p',row.item.title),node('p','Expected outcome: '+row.item.expected_outcome),node('p','Review: '+(row.item.review_date||'Unscheduled')+' · Complete by: '+(row.item.due_date||'None')));if(row.item.prompt)el.append(node('h4','Prompt'),node('pre',row.item.prompt,'action-prompt'));if(row.item.notes)el.append(node('p',row.item.notes));if(row.item.completion_note)el.append(node('p','Outcome: '+row.item.completion_note));list.append(el);}); }
     catch(e){list.replaceChildren(node('p',e.message,'agenda-error'));}
+    try {
+      const events = await window.hflAgentBridge.events('actionable',item.id);
+      if(ticket !== historySequence || !historyDialog.open)return;
+      const revisions = Array.from(list.children);
+
+      const combined = revisions.map(el=>({el,time:el.dataset.changedAt || ''}));
+      events.forEach(event=>combined.push({el:window.hflAgentBridge.eventCard(event),time:event.created_at}));
+      combined.sort((a,b)=>(Date.parse(b.time)||0)-(Date.parse(a.time)||0)); list.replaceChildren(...combined.map(row=>row.el));
+    } catch(e) { list.append(node('p','Agent history unavailable: '+e.message,'agenda-error')); }
   }
   const statusLabel = value => ({in_progress:'In Progress',waiting:'In Progress'}[value] || value[0].toUpperCase()+value.slice(1));
+  window.addEventListener('hfl:agent-updated',()=>load());
   function card(item) {
     const el=node('article',null,'agenda-card');el.dataset.overdue=String(item.overdue);el.dataset.followupId=item.id;
     const meta=node('div',null,'agenda-card-meta');const status=node('span',statusLabel(item.status),'action-status');status.dataset.status=item.status;meta.append(status);
@@ -77,8 +89,9 @@
     actions.append(button('Edit',()=>openEditor(item)));
     if(!['done','dismissed'].includes(item.status)){
       actions.append(button('Dismiss',e=>patch(item,{status:'dismissed'},e.currentTarget)),button('Done',e=>patch(item,{status:'done'},e.currentTarget)));
-    } else actions.append(button('Reopen',e=>patch(item,{status:'open'},e.currentTarget)));
+    } if(item.status !== 'open') actions.append(button('Reopen',e=>patch(item,{status:'open'},e.currentTarget)));
     actions.append(button('History',()=>showHistory(item)));
+    actions.append(button('Results',()=>window.hflAgentBridge.open('actionable',item.id,item.title)));
     el.append(actions);return el;
   }
   async function load() {
@@ -125,7 +138,7 @@
       if(markers?.dot_status)day.dataset.timelineStatus=markers.dot_status;else delete day.dataset.timelineStatus;
       day.toggleAttribute('data-timeline-action', Boolean(markers?.actions.length));
       if(!day.dataset.timelineLabel)day.dataset.timelineLabel=day.getAttribute('aria-label')||day.dataset.activityDay;
-      const suffix=markers ? `; ${markers.planned.length} scheduled${markers.dot_status ? ' · '+({open:'Open or active',in_progress:'In progress',done:'All done'}[markers.dot_status]) : ''}, ${markers.actions.length} linked actions` : '';
+      const suffix=markers ? `; ${markers.planned.length} scheduled${markers.dot_status ? ' · '+({open:'Open or active',in_progress:'In progress',incomplete:'Incomplete',done:'All done'}[markers.dot_status]) : ''}, ${markers.actions.length} linked actions` : '';
       day.setAttribute('aria-label',day.dataset.timelineLabel+suffix);day.title=day.dataset.timelineLabel+suffix;
     });
   }

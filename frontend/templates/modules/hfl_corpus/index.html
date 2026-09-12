@@ -75,7 +75,7 @@
   .memory-prompt-preview pre { overflow:auto; }
   .memory-instructions-heading { display:flex; align-items:center; gap:.4rem; position:relative; }
   .memory-instructions-heading .memory-dialog-label { margin:0; }
-  .memory-instructions-help summary { display:grid; place-items:center; width:1rem; height:1rem; border:1px solid #475569; border-radius:50%; color:#94a3b8; font-size:.65rem; cursor:pointer; list-style:none; }
+  .memory-instructions-help summary { display:grid; place-items:center; width:1rem; height:1rem; border:1px solid #475569; border-radius:50%; color:#94a3b8; font-size:.65rem; line-height:1; padding:0; cursor:pointer; list-style:none; }
   .memory-instructions-help summary::-webkit-details-marker { display:none; }
   .memory-instructions-help summary:focus-visible { outline:2px solid #67e8f9; outline-offset:2px; }
   .memory-instructions-help-content { position:absolute; left:0; top:calc(100% + .5rem); z-index:5; width:min(20rem,calc(100vw - 7rem)); padding:.75rem; border:1px solid #334155; border-radius:.6rem; background:#0f172a; color:#cbd5e1; font-size:.75rem; line-height:1.6; box-shadow:0 8px 24px #020617; }
@@ -190,7 +190,7 @@
       </span>
     </button>
     {% else %}
-    <a href="/profile#profile-secrets-title" class="corpus-secrets-control inline-flex shrink-0 items-center rounded-lg bg-slate-900 text-sm font-semibold text-slate-300 ring-1 ring-slate-700">Secrets</a>
+    <button type="button" data-secrets-setup aria-haspopup="dialog" class="corpus-secrets-control inline-flex shrink-0 items-center rounded-lg bg-slate-900 text-sm font-semibold text-slate-300 ring-1 ring-slate-700">Secrets</button>
     {% endif %}
     <button type="button" data-create-entry-open
             class="corpus-create-entry min-h-11 w-full shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 sm:min-h-0 sm:w-auto">
@@ -344,7 +344,7 @@
         <button type="button" class="justify-self-start text-xs font-semibold text-cyan-300 hover:text-cyan-100" data-memory-category-toggle>Edit category</button>
         <div class="grid gap-3 rounded-lg border border-slate-800 bg-slate-950/55 p-3" data-memory-category-editor hidden>
           <label class="memory-dialog-field"><span class="memory-dialog-label">Category name</span><input class="memory-dialog-input" maxlength="60" data-memory-category-name placeholder="Family, school, turning points…"></label>
-          <div data-prompt-editor="category"><div class="flex items-center justify-between mb-2"><div class="memory-instructions-heading"><span class="memory-dialog-label">Agent guidance</span><details class="memory-instructions-help"><summary aria-label="About category agent guidance">i</summary><div class="memory-instructions-help-content">Describe shared guidance for future agents working with this category: preferred sources, tone, constraints, and output format. For example: use reliable sources, cite links, and keep summaries concise. Supports Markdown headings, lists, and code blocks; use Edit to write and Preview to check formatting. A future bridge can combine this guidance with each pin’s instructions while retaining the runtime’s rules. Saving does not apply inheritance or start execution.</div></details></div><button type="button" class="text-xs text-cyan-300" data-prompt-toggle aria-expanded="false">Edit</button></div><textarea aria-label="Agent guidance" class="memory-dialog-input min-h-24 resize-y" maxlength="20000" data-prompt-input hidden></textarea><div class="memory-prompt-preview markdown-body" data-prompt-preview></div><p class="mt-1 text-xs text-slate-500">Shared guidance for this category. Stored only; nothing runs when you save.</p></div>
+          <div data-prompt-editor="category"><div class="flex items-center justify-between mb-2"><div class="memory-instructions-heading"><span class="memory-dialog-label">Agent guidance</span><details class="memory-instructions-help"><summary aria-label="About category agent guidance">i</summary><div class="memory-instructions-help-content">Describe shared guidance for future agents working with this category: preferred sources, tone, constraints, and output format. For example: use reliable sources, cite links, and keep summaries concise. Supports Markdown headings, lists, and code blocks; use Edit to write and Preview to check formatting. Agent work combines this guidance with each pin’s instructions when you request a run. Saving guidance does not start execution.</div></details></div><button type="button" class="text-xs text-cyan-300" data-prompt-toggle aria-expanded="false">Edit</button></div><textarea aria-label="Agent guidance" class="memory-dialog-input min-h-24 resize-y" maxlength="20000" data-prompt-input hidden></textarea><div class="memory-prompt-preview markdown-body" data-prompt-preview></div><p class="mt-1 text-xs text-slate-500">Shared guidance for this category. Stored only; nothing runs when you save.</p></div>
           <div><span class="memory-dialog-label">Color</span><div class="memory-palette" data-memory-palette></div></div>
           <button type="button" class="justify-self-start rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-cyan-200 hover:bg-slate-800" data-category-history aria-haspopup="dialog" hidden>Agent history</button>
           <div class="flex gap-2"><button type="button" class="rounded-lg bg-cyan-700 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-600" data-memory-category-save>Save category</button><button type="button" class="rounded-lg px-3 py-2 text-xs text-amber-300 hover:bg-slate-800" data-memory-category-delete hidden>Archive category</button></div>
@@ -353,7 +353,7 @@
         <div class="grid gap-4" data-memory-range-fields><div class="grid grid-cols-2 gap-3"><label class="memory-dialog-field"><span class="memory-dialog-label">From</span><input type="date" class="memory-dialog-input [color-scheme:dark]" data-memory-start></label><label class="memory-dialog-field"><span class="memory-dialog-label">To</span><input type="date" class="memory-dialog-input [color-scheme:dark]" data-memory-end></label></div>
         <label class="memory-dialog-field"><span class="memory-dialog-label">Title</span><input class="memory-dialog-input" maxlength="2000" data-memory-pin-title placeholder="Name this pinned period"></label>
         <label class="memory-dialog-field"><span class="memory-dialog-label">Notes</span><textarea class="memory-dialog-input min-h-24 resize-y" maxlength="2000" data-memory-note placeholder="What are you trying to remember?"></textarea></label>
-        <div data-prompt-editor="range"><div class="flex items-center justify-between mb-2"><div class="memory-instructions-heading"><span class="memory-dialog-label">Instructions</span><details class="memory-instructions-help"><summary aria-label="About pinned-date instructions">i</summary><div class="memory-instructions-help-content">Describe the specific task for this pinned period: its goal, relevant evidence, and expected result. For example: prepare a daily summary about topic X during these dates. Supports Markdown headings, lists, and code blocks; use Edit to write and Preview to check formatting. A future bridge can combine these instructions with category guidance. Schedules, recipients, and execution permissions will need explicit configuration; writing them here does not activate them.</div></details></div><button type="button" class="text-xs text-cyan-300" data-prompt-toggle aria-expanded="false">Edit</button></div><textarea aria-label="Instructions" class="memory-dialog-input min-h-24 resize-y" maxlength="20000" data-prompt-input hidden></textarea><div class="memory-prompt-preview markdown-body" data-prompt-preview></div><p class="mt-1 text-xs text-slate-500">Task instructions for this pinned period. Nothing runs when you save.</p></div></div>
+        <label class="memory-dialog-label">Agent run hour (Asia/Singapore)<select id="pin-execution-hour" class="memory-dialog-input">{% for hour in range(24) %}<option value="{{ hour }}">{{ '%02d'|format(hour) }}:00</option>{% endfor %}</select></label><label class="flex items-center gap-2 text-sm"><input id="pin-agent-enabled" type="checkbox" checked>Run instructions daily during this period</label><div data-prompt-editor="range"><div class="flex items-center justify-between mb-2"><div class="memory-instructions-heading"><span class="memory-dialog-label">Instructions</span><details class="memory-instructions-help"><summary aria-label="About pinned-date instructions">i</summary><div class="memory-instructions-help-content">Describe the specific task for this pinned period: its goal, relevant evidence, and expected result. For example: prepare a daily summary about topic X during these dates. Supports Markdown headings, lists, and code blocks; use Edit to write and Preview to check formatting. Agent work combines these instructions with category guidance when you request a run. New pins with instructions run daily by default. Use the schedule checkbox and hour selector to control execution.</div></details></div><button type="button" class="text-xs text-cyan-300" data-prompt-toggle aria-expanded="false">Edit</button></div><textarea aria-label="Instructions" class="memory-dialog-input min-h-24 resize-y" maxlength="20000" data-prompt-input hidden></textarea><div class="memory-prompt-preview markdown-body" data-prompt-preview></div><p class="mt-1 text-xs text-slate-500">Task instructions for this pinned period. Enabled schedules run at the selected hour, with recent missed runs caught up automatically.</p></div></div>
       </div>
       <div class="mt-5 flex items-center justify-between gap-3"><button type="button" class="text-xs text-rose-300 hover:text-rose-100" data-memory-range-delete hidden>Remove pin</button><div class="ml-auto flex gap-2"><button type="button" class="rounded-lg px-3 py-2 text-xs text-slate-300 hover:bg-slate-800" data-memory-dialog-close>Cancel</button><button type="submit" data-memory-range-save class="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400">Save pin</button></div></div>
     </form>
@@ -959,6 +959,8 @@
       memoryRefs.pinTitle.value = range?.title || '';
       memoryRefs.pinTitle.required = !categoryOnly;
       promptEditors.range.set(range?.prompt);
+      document.getElementById('pin-execution-hour').value = range?.execution_hour ?? 0;
+      document.getElementById('pin-agent-enabled').checked = range ? Boolean(range.agent_enabled) : true;
       populateCategories(range?.category_id || memoryState.categories[0]?.id);
       if (categoryOnly) openCategoryEditor(category);
       else if (!memoryState.categories.length) openCategoryEditor(null);
@@ -1057,7 +1059,11 @@
           editRange.textContent = 'Edit';
           editRange.setAttribute('aria-label', `Edit ${range.title || 'Untitled pin'}`);
           editRange.addEventListener('click', () => openMemoryDialog({range}));
-          row.append(button, editRange);
+          const agentWork = document.createElement('button');
+          agentWork.type = 'button'; agentWork.className = 'activity-range-edit'; agentWork.textContent = 'Agent';
+          agentWork.setAttribute('aria-label', `Agent work for ${range.title || 'Untitled pin'}`);
+          agentWork.addEventListener('click', () => window.hflAgentBridge.open('pin', range.id, range.title || 'Untitled pin'));
+          row.append(button, editRange, agentWork);
           rangeList.append(row);
         });
         details.append(summary, rangeList);
@@ -1326,6 +1332,7 @@
       menu.style.top = `${top}px`;
     };
     const selectDaySection = selected => {
+      if (selected === 'ideas' && menu.querySelector('[data-activity-menu-ideas]').disabled) selected = 'actions';
       for (const name of ['matches','ideas','actions']) {
         const content = name === 'matches' ? matchingPanel : menu.querySelector(`[data-day-${name}]`);
         content.hidden = name !== selected;
@@ -1356,6 +1363,11 @@
       const documentUrl = button.dataset.documentUrl;
       const matchesUrl = button.dataset.matchesUrl;
       const isFuture = button.dataset.future === 'true';
+      const ideasToggle = menu.querySelector('[data-activity-menu-ideas]');
+      ideasToggle.disabled = isFuture;
+      ideasToggle.setAttribute('aria-disabled', String(isFuture));
+      ideasToggle.classList.toggle('activity-day-menu-disabled', isFuture);
+      if (isFuture) selectDaySection('actions');
       const hasDocument = !isFuture && Boolean(documentUrl);
       const canShowMatches = !isFuture && Boolean(matchesUrl && (hasDocument || count > 0));
       createEntry.disabled = isFuture;
@@ -1550,6 +1562,8 @@
           note:memoryRefs.note.value,
           title:memoryRefs.pinTitle.value,
           prompt:promptEditors.range.input.value,
+          execution_hour:Number(document.getElementById('pin-execution-hour').value),
+          agent_enabled:document.getElementById('pin-agent-enabled').checked,
         });
         memoryDialog.close();
       } catch (error) { showMemoryError(error.message); }
@@ -2118,8 +2132,21 @@
 })();
 </script>
 {% include "modules/hfl_corpus/partials/secrets_pin_dialog.html" %}
+{% if not secrets_configured %}
+<dialog data-secrets-setup-dialog aria-labelledby="secrets-setup-title" class="agenda-dialog">
+  <header class="agenda-dialog-header"><h2 id="secrets-setup-title">Set up your secrets PIN</h2><button type="button" data-secrets-setup-close aria-label="Close secrets setup">×</button></header>
+  <div class="agenda-form-body">
+    <p>No secrets PIN is configured on this app instance. Set a six-digit PIN in Profile to unlock protected activity here.</p>
+    <p class="mt-3 text-sm text-slate-400">Once configured, this button will switch secrets on and off.</p>
+    <div class="agenda-card-actions mt-5"><button type="button" data-secrets-setup-close>Cancel</button><a class="text-cyan-300 underline" href="/profile#profile-secrets-title">Set up PIN in Profile</a></div>
+  </div>
+</dialog>
+{% endif %}
 <script>
 (() => {
+  const setup = document.querySelector('[data-secrets-setup-dialog]');
+  document.querySelector('[data-secrets-setup]')?.addEventListener('click', () => setup.showModal());
+  setup?.querySelectorAll('[data-secrets-setup-close]').forEach(button => button.addEventListener('click', () => setup.close()));
   const button = document.querySelector('[data-secrets-toggle]');
   if (!button) return;
   button.addEventListener('click', async () => {
