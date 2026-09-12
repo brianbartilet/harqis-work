@@ -50,9 +50,6 @@ class FollowUpStore:
                     payload TEXT NOT NULL,
                     PRIMARY KEY (followup_id, version)
                 );
-                CREATE TABLE IF NOT EXISTS timeline_settings (
-                    id INTEGER PRIMARY KEY CHECK(id=1), complete_after_days INTEGER NOT NULL DEFAULT 7
-                );
                 CREATE TABLE IF NOT EXISTS timeline_runs (
                     period_key TEXT PRIMARY KEY, start_date TEXT NOT NULL, end_date TEXT NOT NULL,
                     state TEXT NOT NULL, lease_until TEXT NOT NULL, run_id TEXT NOT NULL,
@@ -102,8 +99,6 @@ class FollowUpStore:
             value = result.get(key, "")
             if not isinstance(value, str):
                 raise ValueError("Dates must use YYYY-MM-DD.")
-            if key == "due_date" and not value:
-                raise ValueError("Complete by is required.")
             if value:
                 try:
                     if date.fromisoformat(value).isoformat() != value:
@@ -270,28 +265,14 @@ class FollowUpStore:
             db.execute("UPDATE timeline_receipts SET state=?,payload=? WHERE followup_id=? AND version=?",(state,json.dumps(result),followup_id,version))
 
 
-    def settings(self):
-        with self.connect() as db:
-            row=db.execute('SELECT complete_after_days FROM timeline_settings WHERE id=1').fetchone()
-        return {'complete_after_days': row[0] if row else 7}
-
-    def save_settings(self, days):
-        if type(days) is not int or not 1 <= days <= 365:
-            raise ValueError('Use a whole number from 1 to 365 days.')
-        with self.connect() as db:
-            db.execute('INSERT INTO timeline_settings VALUES (1,?) ON CONFLICT(id) DO UPDATE SET complete_after_days=excluded.complete_after_days',(days,))
-        return {'complete_after_days':days}
-
     @staticmethod
     def _automation_snapshot(db):
         actions=[json.loads(row['payload']) for row in db.execute('SELECT payload FROM followups ORDER BY id')]
         suggestions=[dict(row) for row in db.execute('SELECT id,status,followup_id,payload FROM timeline_suggestions ORDER BY id')]
-        setting=db.execute('SELECT complete_after_days FROM timeline_settings WHERE id=1').fetchone()
-        days=setting[0] if setting else 7
         runs=[tuple(row) for row in db.execute('SELECT period_key,run_id FROM timeline_runs ORDER BY period_key')]
-        digest=hashlib.sha256(json.dumps([actions,suggestions,days,runs],sort_keys=True).encode()).hexdigest()
+        digest=hashlib.sha256(json.dumps([actions,suggestions,runs],sort_keys=True).encode()).hexdigest()
         suppressed=[{**json.loads(row['payload']),'status':row['status'],'followup_id':row['followup_id']} for row in suggestions if row['status']=='dismissed']
-        return {'actions':actions,'dismissed_ideas':suppressed,'complete_after_days':days,'digest':digest}
+        return {'actions':actions,'dismissed_ideas':suppressed,'digest':digest}
 
     def automation_snapshot(self):
         with self.connect() as db:
@@ -335,7 +316,7 @@ class FollowUpStore:
                     counts['deferred']+=1
                     continue
                 raw={'title':candidate['title'][:200],'expected_outcome':candidate['expected_outcome'][:3000],
-                     'review_date':today.isoformat(),'due_date':(today+timedelta(days=snapshot['complete_after_days'])).isoformat(),'status':'open'}
+                     'review_date':today.isoformat(),'due_date':'','status':'open'}
                 item=self.validate(raw)
                 now=isoformat()
                 item.update(id='followup-'+uuid.uuid4().hex,version=1,created_at=now,updated_at=now,completed_at='',

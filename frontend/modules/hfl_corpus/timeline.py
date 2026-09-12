@@ -274,21 +274,3 @@ async def explore(request: Request, background_tasks: BackgroundTasks):
                 canonical.finish_period(start, end, run_id, {'message': 'Could not queue exploration. Retry when the worker is available.'}, state='failed')
                 raise HTTPException(503, 'Could not queue exploration.') from None
     return {'run': canonical.run_for(start, end)}
-
-
-@router.get('/settings')
-async def timeline_settings(request: Request):
-    owner(request)
-    return store().settings()
-
-
-@router.patch('/settings')
-async def update_timeline_settings(request: Request):
-    owner(request)
-    raw=await body(request)
-    if set(raw)!={'complete_after_days'}:
-        raise HTTPException(400,'Expected complete_after_days.')
-    try:
-        return store().save_settings(raw['complete_after_days'])
-    except ValueError as exc:
-        raise HTTPException(400,str(exc)) from None
