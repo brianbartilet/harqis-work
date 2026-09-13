@@ -1476,8 +1476,9 @@
       }
     });
     menu.querySelector('[data-activity-menu-create-action]').addEventListener('click', () => {
+      const selectedDate = menuTrigger?.dataset.activityDay;
       closeDayMenu();
-      window.dispatchEvent(new Event('hfl:create-action'));
+      window.dispatchEvent(new CustomEvent('hfl:create-action', {detail: {date: selectedDate}}));
     });
     pinDates.addEventListener('click', () => {
       pinStart = menuTrigger?.dataset.activityDay || '';

@@ -22,7 +22,7 @@ def payload(**extra):
 
 
 @pytest.mark.parametrize('width', [390, 1100])
-def test_day_menu_creates_blank_action(agenda, authenticated_client, monkeypatch, width):
+def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_client, monkeypatch, width):
     from urllib.parse import urlparse
     import modules.hfl_corpus.router as corpus
     playwright = pytest.importorskip('playwright.sync_api')
@@ -60,7 +60,8 @@ def test_day_menu_creates_blank_action(agenda, authenticated_client, monkeypatch
             playwright.expect(page.locator('#followup-editor')).to_be_visible()
             playwright.expect(page.locator('[data-activity-day-menu]')).to_be_hidden()
             playwright.expect(page.locator('#followup-evidence')).to_be_hidden()
-            for name in ('title', 'expected_outcome', 'review_date', 'due_date', 'prompt', 'notes'):
+            assert form.locator('[name="due_date"]').input_value() == selected
+            for name in ('title', 'expected_outcome', 'review_date', 'prompt', 'notes'):
                 assert form.locator(f'[name="{name}"]').input_value() == ''
             form.locator('[name="title"]').fill('Manual action')
             if offset < 1:
@@ -73,7 +74,8 @@ def test_day_menu_creates_blank_action(agenda, authenticated_client, monkeypatch
         saved = agenda.list()
         assert len(saved) == 1
         assert saved[0]['title'] == 'Manual action'
-        assert saved[0]['review_date'] == saved[0]['due_date'] == ''
+        assert saved[0]['review_date'] == ''
+        assert saved[0]['due_date'] == selected
         assert not saved[0]['source']
         browser.close()
 

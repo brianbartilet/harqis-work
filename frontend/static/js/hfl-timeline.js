@@ -220,7 +220,10 @@
     try{await timelineApi('/explore',{method:'POST',body:JSON.stringify({start:startInput.value,end:endInput.value})});await load();}catch(err){error('agenda-error',err.message);analysisStatus('failed','Could not start review','Try Explore again.');b.disabled=false;}
   });
   document.getElementById('followup-new')?.addEventListener('click',()=>openEditor());
-  window.addEventListener('hfl:create-action',()=>openEditor());
+  window.addEventListener('hfl:create-action',event=>{
+    openEditor();
+    form.elements.due_date.value = event.detail?.date || '';
+  });
   document.getElementById('agenda-refresh').addEventListener('click',load);
   document.querySelectorAll('[data-agenda-closed]').forEach(b=>b.addEventListener('click',()=>{closed=b.dataset.agendaClosed==='true';document.querySelectorAll('[data-agenda-closed]').forEach(v=>v.setAttribute('aria-pressed',String(v===b)));load();}));
   document.querySelectorAll('[data-agenda-close]').forEach(b=>b.addEventListener('click',()=>{if(!busy)editor.close();}));
