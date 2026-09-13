@@ -57,7 +57,7 @@
 .action-prompt { white-space:pre-wrap; overflow-wrap:anywhere; font-size:.78rem; line-height:1.6; padding:.65rem; background:#020617; border-radius:.4rem; margin-top:.5rem; }
 .agenda-dialog textarea[name="prompt"] { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.8rem; }
 
-.activity-day-quick-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.35rem; margin:.4rem 0 .55rem; }
+.activity-day-quick-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.35rem; margin:.4rem 0 .55rem; }
 .activity-day-quick-actions .activity-day-menu-action { min-width:0; min-height:36px; justify-content:center; padding:.4rem .25rem; border:1px solid rgba(71,85,105,.35); background:rgba(148,163,184,.035); border-radius:.5rem; font-size:.7rem; line-height:1.25; white-space:normal; text-align:center; }
 .activity-day-quick-actions .activity-day-menu-action:hover { background:rgba(148,163,184,.085); border-color:rgba(100,116,139,.5); }
 .activity-day-quick-actions .activity-day-menu-disabled { background:transparent; border-color:rgba(51,65,85,.3); }

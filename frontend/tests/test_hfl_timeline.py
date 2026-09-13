@@ -21,6 +21,63 @@ def payload(**extra):
     return {"request_id": str(uuid4()), "title": "Investigate Essential Space", "expected_outcome": "Record a feasible sync route or explain why none exists.", "review_date": (date.today()+timedelta(days=1)).isoformat(), "due_date": (date.today()+timedelta(days=7)).isoformat(), **extra}
 
 
+@pytest.mark.parametrize('width', [390, 1100])
+def test_day_menu_creates_blank_action(agenda, authenticated_client, monkeypatch, width):
+    from urllib.parse import urlparse
+    import modules.hfl_corpus.router as corpus
+    playwright = pytest.importorskip('playwright.sync_api')
+    monkeypatch.setattr(corpus.corpus_index, 'documents', lambda: ())
+    with playwright.sync_playwright() as driver:
+        browser = driver.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page(viewport={'width': width, 'height': 1000})
+
+        def route(request_route):
+            request = request_route.request
+            url = urlparse(request.url)
+            if url.hostname != 'timeline.test':
+                request_route.abort()
+                return
+            response = authenticated_client.request(
+                request.method, url.path + ('?' + url.query if url.query else ''),
+                content=request.post_data,
+                headers={key: value for key, value in request.headers.items()
+                         if key.lower() in {'content-type', 'x-csrf-token'}},
+            )
+            request_route.fulfill(status=response.status_code, body=response.content,
+                                  headers={'content-type': response.headers.get('content-type', 'text/html')})
+
+        page.route('**/*', route)
+        page.goto('https://timeline.test/hfl-corpus')
+        form = page.locator('#followup-form')
+        for offset in (-1, 0, 1):
+            selected = (date.today() + timedelta(days=offset)).isoformat()
+            page.locator(f'[data-activity-day="{selected}"]').click()
+            buttons = page.locator('.activity-day-quick-actions').locator('button, a')
+            assert buttons.all_text_contents() == ['Create entry', 'Create action', 'Pin dates', 'Show document']
+            boxes = [buttons.nth(index).bounding_box() for index in range(4)]
+            assert boxes[0]['y'] == boxes[1]['y'] < boxes[2]['y'] == boxes[3]['y']
+            page.locator('[data-activity-menu-create-action]').click()
+            playwright.expect(page.locator('#followup-editor')).to_be_visible()
+            playwright.expect(page.locator('[data-activity-day-menu]')).to_be_hidden()
+            playwright.expect(page.locator('#followup-evidence')).to_be_hidden()
+            for name in ('title', 'expected_outcome', 'review_date', 'due_date', 'prompt', 'notes'):
+                assert form.locator(f'[name="{name}"]').input_value() == ''
+            form.locator('[name="title"]').fill('Manual action')
+            if offset < 1:
+                page.locator('#followup-editor [data-agenda-close]').first.click()
+                assert agenda.list() == []
+            else:
+                form.locator('[name="expected_outcome"]').fill('Record the result')
+                form.locator('[type="submit"]').click()
+                playwright.expect(page.locator('#followup-editor')).to_be_hidden()
+        saved = agenda.list()
+        assert len(saved) == 1
+        assert saved[0]['title'] == 'Manual action'
+        assert saved[0]['review_date'] == saved[0]['due_date'] == ''
+        assert not saved[0]['source']
+        browser.close()
+
+
 def test_lifecycle_persists_completion_and_reopen_history(agenda, authenticated_client):
     created = authenticated_client.post("/hfl-corpus/timeline/items", json=payload()).json()["item"]
     completed = authenticated_client.patch(f"/hfl-corpus/timeline/items/{created['id']}", json={"version": 1, "status": "done", "completion_note": "Export verified."})

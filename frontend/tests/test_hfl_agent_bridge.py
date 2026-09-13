@@ -220,7 +220,26 @@ def test_browser_settings_and_future_dates(bridge, authenticated_client, monkeyp
         assert page.locator('[data-activity-menu-actions]').get_attribute('aria-expanded') == 'true'
         assert page.locator('[data-day-actions]').is_visible()
         page.screenshot(path=str(tmp_path / 'future-actions.png'))
-        assert page.locator('#pin-execution-hour option').count() == 24
+        assert page.locator('#pin-execution-hour option').count() == 12
+        assert page.locator('#pin-execution-period option').count() == 2
+        page.locator('[data-activity-menu-pin]').click()
+        day.click()
+        playwright.expect(page.locator('[data-memory-dialog]')).to_be_visible()
+        helper = page.locator('[data-pin-schedule-help]')
+        playwright.expect(helper).to_contain_text('12:00 AM (Asia/Singapore)')
+        page.locator('#pin-execution-hour').select_option('2')
+        page.locator('#pin-execution-period').select_option('PM')
+        playwright.expect(helper).to_contain_text('2:00 PM (Asia/Singapore)')
+        page.locator('#pin-agent-enabled').uncheck()
+        playwright.expect(helper).to_contain_text('Daily runs are off')
+        assert page.locator('#pin-execution-hour').is_disabled()
+        page.locator('#pin-agent-enabled').check()
+        page.set_viewport_size({'width':390, 'height':844})
+        toggle = page.locator('.pin-schedule-toggle').bounding_box()
+        controls = page.locator('.pin-schedule-time').bounding_box()
+        assert abs(toggle['y'] - controls['y']) < 2
+        assert page.locator('[data-memory-dialog]').evaluate('(el) => el.scrollWidth <= el.clientWidth')
+        page.screenshot(path=str(tmp_path / 'pin-schedule-mobile.png'))
         assert errors == []
         browser.close()
 

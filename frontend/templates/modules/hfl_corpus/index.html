@@ -87,6 +87,13 @@
   .memory-dialog-field { display:block; }
   .memory-dialog-label { display:block; margin-bottom:.35rem; color:#94a3b8; font-size:.68rem; font-weight:650; }
   .memory-dialog-input { width:100%; border:1px solid #334155; border-radius:.55rem; background:#020617; padding:.6rem .7rem; color:#f8fafc; font-size:.75rem; }
+  .pin-schedule-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(9.5rem,1.1fr); align-items:center; gap:.75rem; }
+  .pin-schedule-toggle { display:flex; align-items:center; gap:.5rem; font-size:.8rem; line-height:1.4; min-height:44px; }
+  .pin-schedule-toggle input { flex-shrink:0; }
+  .pin-schedule-time { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.5rem; }
+  .pin-schedule-time select { width:100%; min-height:44px; padding-right:2rem; }
+  .pin-schedule-time select:disabled { opacity:.5; }
+  .pin-schedule-help { margin:0; padding-top:.75rem; line-height:1.5; }
   .memory-dialog-select-shell { position:relative; display:block; }
   .memory-dialog-select { appearance:none; padding-right:2.5rem; }
   .memory-dialog-select-caret { position:absolute; top:50%; right:.8rem; width:.8rem; height:.8rem; color:#67e8f9; pointer-events:none; transform:translateY(-50%); }
@@ -291,6 +298,7 @@
       <p class="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[.14em] text-cyan-400" data-activity-menu-date></p>
       <div class="activity-day-quick-actions">
       <button type="button" class="activity-day-menu-action text-slate-200" data-activity-menu-create role="menuitem">Create entry</button>
+      <button type="button" class="activity-day-menu-action text-cyan-200" data-activity-menu-create-action role="menuitem">Create action</button>
       <button type="button" class="activity-day-menu-action text-amber-200" data-activity-menu-pin role="menuitem">Pin dates</button>
       <a class="activity-day-menu-action text-cyan-200" data-activity-menu-document role="menuitem">Show document</a>
       </div>
@@ -353,7 +361,14 @@
         <div class="grid gap-4" data-memory-range-fields><div class="grid grid-cols-2 gap-3"><label class="memory-dialog-field"><span class="memory-dialog-label">From</span><input type="date" class="memory-dialog-input [color-scheme:dark]" data-memory-start></label><label class="memory-dialog-field"><span class="memory-dialog-label">To</span><input type="date" class="memory-dialog-input [color-scheme:dark]" data-memory-end></label></div>
         <label class="memory-dialog-field"><span class="memory-dialog-label">Title</span><input class="memory-dialog-input" maxlength="2000" data-memory-pin-title placeholder="Name this pinned period"></label>
         <label class="memory-dialog-field"><span class="memory-dialog-label">Notes</span><textarea class="memory-dialog-input min-h-24 resize-y" maxlength="2000" data-memory-note placeholder="What are you trying to remember?"></textarea></label>
-        <label class="memory-dialog-label">Agent run hour (Asia/Singapore)<select id="pin-execution-hour" class="memory-dialog-input">{% for hour in range(24) %}<option value="{{ hour }}">{{ '%02d'|format(hour) }}:00</option>{% endfor %}</select></label><label class="flex items-center gap-2 text-sm"><input id="pin-agent-enabled" type="checkbox" checked>Run instructions daily during this period</label><div data-prompt-editor="range"><div class="flex items-center justify-between mb-2"><div class="memory-instructions-heading"><span class="memory-dialog-label">Instructions</span><details class="memory-instructions-help"><summary aria-label="About pinned-date instructions">i</summary><div class="memory-instructions-help-content">Describe the specific task for this pinned period: its goal, relevant evidence, and expected result. For example: prepare a daily summary about topic X during these dates. Supports Markdown headings, lists, and code blocks; use Edit to write and Preview to check formatting. Agent work combines these instructions with category guidance when you request a run. New pins with instructions run daily by default. Use the schedule checkbox and hour selector to control execution.</div></details></div><button type="button" class="text-xs text-cyan-300" data-prompt-toggle aria-expanded="false">Edit</button></div><textarea aria-label="Instructions" class="memory-dialog-input min-h-24 resize-y" maxlength="20000" data-prompt-input hidden></textarea><div class="memory-prompt-preview markdown-body" data-prompt-preview></div><p class="mt-1 text-xs text-slate-500">Task instructions for this pinned period. Enabled schedules run at the selected hour, with recent missed runs caught up automatically.</p></div></div>
+        <div data-prompt-editor="range"><div class="flex items-center justify-between mb-2"><div class="memory-instructions-heading"><span class="memory-dialog-label">Instructions</span><details class="memory-instructions-help"><summary aria-label="About pinned-date instructions">i</summary><div class="memory-instructions-help-content">Describe the specific task for this pinned period: its goal, relevant evidence, and expected result. For example: prepare a daily summary about topic X during these dates. Supports Markdown headings, lists, and code blocks; use Edit to write and Preview to check formatting. Agent work combines these instructions with category guidance when you request a run. New pins with instructions run daily by default. Use the schedule checkbox and hour selector to control execution.</div></details></div><button type="button" class="text-xs text-cyan-300" data-prompt-toggle aria-expanded="false">Edit</button></div><textarea aria-label="Instructions" class="memory-dialog-input min-h-24 resize-y" maxlength="20000" data-prompt-input hidden></textarea><div class="memory-prompt-preview markdown-body" data-prompt-preview></div><p class="pin-schedule-help text-xs text-slate-500" data-pin-schedule-help aria-live="polite"></p></div>
+        <div class="pin-schedule-row" data-pin-timezone="Asia/Singapore">
+          <label class="pin-schedule-toggle"><input id="pin-agent-enabled" type="checkbox" checked>Run instructions daily</label>
+          <div class="pin-schedule-time">
+            <span class="memory-dialog-select-shell"><select id="pin-execution-hour" aria-label="Run hour" class="memory-dialog-input memory-dialog-select">{% for hour in range(1,13) %}<option value="{{ hour }}">{{ hour }}:00</option>{% endfor %}</select><svg class="memory-dialog-select-caret" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg></span>
+            <span class="memory-dialog-select-shell"><select id="pin-execution-period" aria-label="AM or PM" class="memory-dialog-input memory-dialog-select"><option value="AM">AM</option><option value="PM">PM</option></select><svg class="memory-dialog-select-caret" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg></span>
+          </div>
+        </div></div>
       </div>
       <div class="mt-5 flex items-center justify-between gap-3"><button type="button" class="text-xs text-rose-300 hover:text-rose-100" data-memory-range-delete hidden>Remove pin</button><div class="ml-auto flex gap-2"><button type="button" class="rounded-lg px-3 py-2 text-xs text-slate-300 hover:bg-slate-800" data-memory-dialog-close>Cancel</button><button type="submit" data-memory-range-save class="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400">Save pin</button></div></div>
     </form>
@@ -959,13 +974,29 @@
       memoryRefs.pinTitle.value = range?.title || '';
       memoryRefs.pinTitle.required = !categoryOnly;
       promptEditors.range.set(range?.prompt);
-      document.getElementById('pin-execution-hour').value = range?.execution_hour ?? 0;
+      const savedHour = range?.execution_hour ?? 0;
+      document.getElementById('pin-execution-hour').value = savedHour % 12 || 12;
+      document.getElementById('pin-execution-period').value = savedHour >= 12 ? 'PM' : 'AM';
       document.getElementById('pin-agent-enabled').checked = range ? Boolean(range.agent_enabled) : true;
+      updatePinScheduleHelp();
       populateCategories(range?.category_id || memoryState.categories[0]?.id);
       if (categoryOnly) openCategoryEditor(category);
       else if (!memoryState.categories.length) openCategoryEditor(null);
       memoryDialog.showModal();
     };
+    function updatePinScheduleHelp() {
+      const enabled = document.getElementById('pin-agent-enabled').checked;
+      const hour = document.getElementById('pin-execution-hour');
+      const period = document.getElementById('pin-execution-period');
+      const timezone = document.querySelector('[data-pin-timezone]').dataset.pinTimezone;
+      hour.disabled = period.disabled = !enabled;
+      document.querySelector('[data-pin-schedule-help]').textContent = enabled
+        ? `Runs daily at ${hour.value}:00 ${period.value} (${timezone}) during this pinned period. Recent missed runs are caught up automatically.`
+        : `Daily runs are off. Enable Run instructions daily to schedule these instructions (${timezone}).`;
+    }
+    for (const id of ['pin-agent-enabled', 'pin-execution-hour', 'pin-execution-period']) {
+      document.getElementById(id).addEventListener('change', updatePinScheduleHelp);
+    }
     const renderMemoryState = () => {
       const archived = memoryDialog.querySelector('[data-archived-categories]');
       const archivedList = memoryDialog.querySelector('[data-archived-list]');
@@ -1444,6 +1475,10 @@
         document.dispatchEvent(new CustomEvent('hfl:create-entry-for-date', {detail: {date: selectedDate}}));
       }
     });
+    menu.querySelector('[data-activity-menu-create-action]').addEventListener('click', () => {
+      closeDayMenu();
+      window.dispatchEvent(new Event('hfl:create-action'));
+    });
     pinDates.addEventListener('click', () => {
       pinStart = menuTrigger?.dataset.activityDay || '';
       closeDayMenu();
@@ -1562,7 +1597,7 @@
           note:memoryRefs.note.value,
           title:memoryRefs.pinTitle.value,
           prompt:promptEditors.range.input.value,
-          execution_hour:Number(document.getElementById('pin-execution-hour').value),
+          execution_hour:Number(document.getElementById('pin-execution-hour').value) % 12 + (document.getElementById('pin-execution-period').value === 'PM' ? 12 : 0),
           agent_enabled:document.getElementById('pin-agent-enabled').checked,
         });
         memoryDialog.close();
