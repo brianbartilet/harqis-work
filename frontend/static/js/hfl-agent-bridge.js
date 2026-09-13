@@ -34,7 +34,7 @@
   }
   function eventCard(event) {
     const card = element('section'); card.className = 'agenda-history-row';
-    card.append(element('h3', 'Agent · ' + event.kind.replaceAll('_', ' ')),
+    card.append(element('h3', 'Agent · ' + event.kind.replaceAll('_', ' ').replace(/^./, letter => letter.toUpperCase())),
       element('p', new Date(event.created_at).toLocaleString('en-SG', {timeZone:'Asia/Singapore'}) + ' SGT · ' + event.actor),
       outputCard(event.payload), element('small', 'Run ' + event.run_id));
     if (event.payload.plan) card.append(element('p', 'Agent analysis: ' + event.payload.plan));
@@ -114,6 +114,7 @@
         const details = element('details'); details.append(element('summary', 'Run details'));
         const snapshot = element('pre', [run.snapshot.category_guidance, run.snapshot.source.prompt].filter(Boolean).join('\n\n')); snapshot.className = 'action-prompt'; details.append(element('p', 'Instructions used'), snapshot, element('small', 'Run ' + run.id));
         if (run.result.session_id) details.append(element('small', 'Hermes session: ' + run.result.session_id));
+        if (run.result.model) details.append(element('p', 'Model: ' + run.result.model + (run.result.provider ? ' · Provider: ' + run.result.provider : '')));
         card.append(details);
         runs.append(card);
       }
