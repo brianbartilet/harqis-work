@@ -67,6 +67,9 @@
 .action-evidence-link a { color:#7dd3fc; text-decoration:underline; text-underline-offset:3px; }
 .agenda-card-actions.action-controls { display:flex; flex-wrap:nowrap; gap:.35rem; margin-top:.9rem; }
 .activity-day-menu .action-controls button { flex:1; min-width:0; padding:.35rem .25rem; font-size:.72rem; white-space:nowrap; }
+.action-controls .action-results-button { background:#164e63; border-color:#0891b2; color:#ecfeff; font-weight:600; }
+.action-controls .action-results-button:hover:not(:disabled) { background:#155e75; border-color:#67e8f9; }
+.action-controls .action-results-button:focus-visible { outline:2px solid #7dd3fc; outline-offset:2px; }
 .agenda-card-meta .action-status { border:1px solid transparent; }
 .agenda-card-meta .action-status[data-status="open"] { color:#bae6fd; background:rgba(14,165,233,.12); border-color:rgba(14,165,233,.22); }
 .agenda-card-meta .action-status[data-status="active"] { color:#c4b5fd; background:rgba(139,92,246,.12); border-color:rgba(139,92,246,.22); }

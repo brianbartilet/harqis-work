@@ -91,7 +91,9 @@
       actions.append(button('Dismiss',e=>patch(item,{status:'dismissed'},e.currentTarget)),button('Done',e=>patch(item,{status:'done'},e.currentTarget)));
     } if(item.status !== 'open') actions.append(button('Reopen',e=>patch(item,{status:'open'},e.currentTarget)));
     actions.append(button('History',()=>showHistory(item)));
-    actions.append(button('Results',()=>window.hflAgentBridge.open('actionable',item.id,item.title)));
+    const resultsButton = button('Results',()=>window.hflAgentBridge.open('actionable',item.id,item.title));
+    resultsButton.className = 'action-results-button';
+    actions.append(resultsButton);
     el.append(actions);return el;
   }
   async function load() {
