@@ -8,6 +8,42 @@
   <form method="post" class="mt-8 space-y-6 rounded-xl border border-slate-700 bg-slate-900 p-6">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <h2 class="text-lg font-semibold">Agents</h2>
+    <label class="block">Execution mode
+      <select name="agent_mode" class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2">
+        <option value="trusted" {% if values.agent_mode == 'trusted' %}selected{% endif %}>Trusted Hermes</option>
+        <option value="restricted" {% if values.agent_mode == 'restricted' %}selected{% endif %}>Restricted tools</option>
+      </select>
+      <span class="mt-2 block text-sm text-slate-400">Trusted mode loads your Hermes rules, skills, integrations and host environment. Both modes use local shell access; these settings do not isolate the host. Runtime or scheduler changes require an explicit task instruction.</span>
+    </label>
+    <label class="block">Hermes profile
+      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="text" name="hermes_profile" value="{{ values.hermes_profile }}">
+      <span class="mt-2 block text-sm text-slate-400">Leave blank to inherit the worker profile.</span>
+    </label>
+    <label class="block">Toolsets and MCP servers
+      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="text" name="agent_toolsets" value="{{ values.agent_toolsets }}">
+      <span class="mt-2 block text-sm text-slate-400">Leave blank to use the profile defaults. A comma-separated list selects specific toolsets or configured MCP server names.</span>
+    </label>
+    <label class="block">Model override
+      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="text" name="agent_model" value="{{ values.agent_model }}">
+      <span class="mt-2 block text-sm text-slate-400">Leave blank to use the profile model.</span>
+    </label>
+    <label class="block">Provider override
+      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="text" name="agent_provider" value="{{ values.agent_provider }}">
+      <span class="mt-2 block text-sm text-slate-400">Leave blank to use the profile provider.</span>
+    </label>
+    <label class="block">Default email recipient
+      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="email" name="agent_default_recipient" value="{{ values.agent_default_recipient }}">
+      <span class="mt-2 block text-sm text-slate-400">Used when your task says "email me".</span>
+    </label>
+    <label class="block">Execution timeout (seconds)
+      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="number" name="agent_timeout_seconds" value="{{ values.agent_timeout_seconds }}">
+      <span class="mt-2 block text-sm text-slate-400">Maximum 7200 seconds.</span>
+    </label>
+    <label class="block">Maximum agent turns
+      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="number" name="agent_max_turns" value="{{ values.agent_max_turns }}">
+      <span class="mt-2 block text-sm text-slate-400">Maximum 200 turns. The worker executes one task at a time.</span>
+    </label>
+
     <label class="block">Actions polling minutes
       <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="number" name="actions_polling_minutes" min="1" max="1440" required value="{{ values.actions_polling_minutes }}">
       <span class="mt-2 block text-sm text-slate-400">Open actions with a prompt are queued automatically. Reopen an action to run its prompt again.</span>

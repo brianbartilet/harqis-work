@@ -52,3 +52,22 @@ def test_invalid_attachment_and_headers_do_not_send(gmail, tmp_path):
     with pytest.raises(ValueError):
         gmail.send_email('owner@example.org', 'Report', 'Body', attachments=[str(tmp_path / 'missing')])
     gmail.service.users().messages().send.assert_not_called()
+
+
+def test_mcp_exposes_send_with_stable_key(monkeypatch):
+    from apps.google_apps import mcp as module
+    tools = {}
+    class Registry:
+        def tool(self):
+            def register(function):
+                tools[function.__name__] = function
+                return function
+            return register
+    module.register_google_apps_tools(Registry())
+    service = MagicMock()
+    service.send_email.return_value = {'id': 'receipt'}
+    monkeypatch.setattr(module, 'ApiServiceGoogleGmail', lambda config: service)
+    assert tools['send_gmail_email']('owner@example.org', 'Report', 'Body', 'operation:email:1')['id'] == 'receipt'
+    assert 'search_gmail' in tools
+    with pytest.raises(ValueError):
+        tools['send_gmail_email']('owner@example.org', 'Report', 'Body', '')

@@ -200,3 +200,11 @@ its memory model*, not the platform underneath it.
 - [`SKILLS-GUIDE.md`](SKILLS-GUIDE.md) — model-neutral agent skills and Hermes integration patterns.
 - [`mcp/README.md`](../../mcp/README.md) — the MCP tool catalog Hermes agents call.
 - [`OPENCLAW-SYNC.md`](OPENCLAW-SYNC.md) — **deprecated** legacy reference for the old OpenClaw sync model.
+
+## Activity Corpus execution
+
+Activity Corpus can load the normal Hermes profile in Trusted mode, with MCP and
+host credentials available for authorized tasks. Configure the profile and run
+limits in App Settings; each attempt remains a fresh session. See
+[the bridge guide](HFL-AGENT-BRIDGE.md) for tool discovery, Gmail attachments,
+duplicate-send receipts and the host-access limitations.

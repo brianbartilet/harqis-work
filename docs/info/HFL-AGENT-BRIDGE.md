@@ -9,7 +9,8 @@ sessions and returns Markdown output, evidence, files and attributed history.
 Open **App Settings** from the avatar menu (alongside **Profile**), or visit
 `/settings`. **Actions polling minutes** defaults to 30 (1–1440).
 **Pinned dates backfill days** defaults to 7 (1–31). Personal profile fields stay
-in Profile; credentials and Hermes provider settings stay on the host.
+in Profile; credentials stay on the host, while optional model/provider overrides
+are available in App Settings.
 
 All **Open** actionables with nonblank prompts are discovered automatically.
 The **prompt is the main instruction and completion criterion**. Title, expected
@@ -25,7 +26,7 @@ pass. Old attempts retain their history and cannot overwrite the new revision.
 
 **Actions history** interleaves revisions and execution events newest first.
 Outputs render sanitized Markdown and working source links. Files have signed-in
-View and Download links. The Agent work dialog shows frozen instructions, run
+View and Download links. The Agent results dialog shows frozen instructions, run
 state, session ID, and recovery controls for results that need review.
 
 Pins have an optional hour selector, default **00:00 Asia/Singapore**, and a daily
@@ -60,20 +61,123 @@ actionables are read/updated through the canonical timeline API; the worker poin
 to the owning frontend, not the standalone corpus API. Deploy both frontend and
 canonical timeline changes together.
 
-The `prompt-execution-v2` policy exposes web, terminal, file and code execution.
-Hermes safe mode suppresses unrelated rules, plugins and MCP integrations. Each
-attempt runs without resume in its own workspace, with 30 tool turns and a
-20-minute timeout. This is an owner-authorized local execution worker, not an OS
-sandbox. External consequential actions still require authorization in the task;
-retrieved pages and corpus entries cannot grant that authority. Provider/web
-credentials are retained; bridge and application credentials are excluded from
-the child environment. Host files remain subject to the OS account's permissions.
+The trusted execution policy loads the selected Hermes profile, rules, skills and
+configured MCP integrations in a fresh session. App Settings controls trusted or
+restricted mode, profile name, optional toolset/MCP selection, model/provider,
+default email recipient, timeout (1-7200 seconds) and turns (1-200). Empty profile
+inherits the worker profile; empty model/provider inherit host defaults. Empty
+toolsets use Hermes defaults. Settings are frozen at enqueue; later changes affect
+new runs. Existing snapshots without settings retain restricted execution.
+
+Trusted mode inherits the host environment except the bridge token. Credentials
+may be used for the task, but must not be printed or published. Shell access is
+local in both modes: these controls are not an OS sandbox or enforceable tool
+isolation. Runtime/scheduler changes require explicit task instructions and a
+rollback record. Retrieved content cannot authorize unrelated work. The worker
+remains sequential; no spending limit is enforced by the bridge. Configure provider
+budgets separately when available.
+
+Results show profile, mode, selected model/provider and configured MCP names.
+These are configuration attribution, not proof that every tool or provider works.
+To discover actual tools without inference or consuming production tasks, run on
+the worker host using its repository Python:
+
+```sh
+.venv/bin/python scripts/agents/hfl/agent_bridge_runner.py --capabilities
+```
+
+This uses the authenticated owning frontend settings endpoint. Check that the
+catalog includes `send_gmail_email`, Gmail search, and other required tools. Missing
+Google tools can indicate `MCP_ENABLED_APPS` filtering, registration/config errors,
+or an MCP server using a stale checkout. Restart that server after deploying.
+
+### Gmail delivery
+
+`send_gmail_email` supports text/HTML and up to 30 host-file attachments (20 MB total).
+The configured Gmail credential needs a send-capable OAuth grant (`gmail.send`);
+adding the tool does not grant scopes. The default recipient resolves “email me”.
+The prompt itself authorizes its specified delivery; ambiguous recipients need input.
+Only verified task deliverables should be attached and declared for download.
+
+Use a stable `operation_scope + ':email:1'` key. The service stores content hashes
+and Gmail receipts in `HARQIS_DATA_ROOT/runtime/gmail-send-receipts.sqlite3` (repository
+`.harqis-data` fallback). Repeating the key returns the recorded receipt; changed
+content is rejected. An interrupted send remains uncertain and is never automatically
+resent. Search Gmail using the RFC822 Message-ID reported by the error and reconcile
+before intentionally authorizing another operation. Do not delete the ledger to retry.
+Keep this database durable and shared by MCP processes serving the same host.
+Reopening an action creates a new intentional operation and can send again.
+
+Gmail message IDs confirm API acceptance, not delivery or reading. Duplicate
+protection applies to this tool; direct shell/API sends and other integrations do
+not acquire it automatically. The agent must retain and reconcile their receipts.
 
 Actionables recall their linked entry. Pins recall at most seven days / 20 entries
 of 2,000 characters each; protected entries are excluded and coverage is recorded.
 Snapshots freeze source, policy and instruction hashes. Source edits before claim
 cancel stale runs. Concurrent edits prevent applying completion to newer revisions.
 The result is an attributed agent claim, not independent proof that evidence is true.
+
+## Settings reference
+
+These settings belong to the owning frontend's profile database. Configure them
+on the frontend used by the worker, not an unrelated local preview instance.
+
+| App Settings field | Default | Behavior |
+|---|---|---|
+| Execution mode | Trusted Hermes | Loads normal Hermes configuration and task-relevant host access. Restricted tools remains available. |
+| Hermes profile | Empty | Inherits the worker profile. A named profile must already exist on the worker; this does not create it. |
+| Toolsets and MCP servers | Empty | Uses profile defaults. A comma-separated selection must use installed Hermes toolset or configured MCP server names. |
+| Model override | Empty | App setting takes precedence over `HFL_AGENT_MODEL`, then the selected profile model. |
+| Provider override | Empty | App setting takes precedence over `HFL_AGENT_PROVIDER`, then the selected profile provider. |
+| Default email recipient | Empty | One email address used when the task says “email me”; does not change the sending account. |
+| Execution timeout (seconds) | 1200 | Integer from 1 to 7200. |
+| Maximum agent turns | 30 | Integer from 1 to 200. |
+| Actions polling minutes | 30 | Integer from 1 to 1440. |
+| Pinned dates backfill days | 7 | Integer from 1 to 31. |
+
+Fresh session means no resumed conversation; the selected profile can still load
+its persistent rules and memory. Selecting Restricted tools reduces the offered
+tools and restores prompt restrictions; it does not revoke the OS account's access.
+Neither execution mode authorizes tasks inferred from unrelated context.
+
+## Verification and troubleshooting
+
+After deployment, verify the owning frontend, worker and HARQIS MCP process all
+use the intended checkout. Restart long-lived processes to pick up Python changes.
+
+1. Save the intended profile and default recipient in **App Settings → Agents**.
+2. Run the documented `--check` on the worker host to verify bridge authentication.
+3. Run `--capabilities` there to inspect real tool discovery. Unlike `--check`, it
+   loads the selected Hermes configuration and asks Hermes to list tools; it does
+   not run an inference task or send email. Discovery does not test OAuth scopes.
+4. Verify the MCP process's `GOOGLE_GMAIL` credential has the required read/send
+   grants. This tool uses **`GOOGLE_GMAIL`, not `GOOGLE_GMAIL_SEND`**. For interactive
+   reauthorization, see `reauth_gmail_send.py` in the [script reference](../../scripts/README.md).
+   Select the `GOOGLE_GMAIL` configuration. The repair utility uses the scopes in
+   that configuration and replaces its cached token by default; reauthorizing a
+   read-only configuration alone cannot add sending access.
+5. Create an explicit test action requesting a small Markdown file and delivery
+   to your own address. Run it intentionally: this step sends a real email.
+6. Check **Agent results** for the file preview/download, recipient, attachment
+   details and Gmail message ID; independently check the receiving mailbox.
+   Do not treat a historical file-only smoke test as proof of Gmail delivery.
+
+| Symptom | Check / recovery |
+|---|---|
+| Gmail tool missing | Check trusted mode, selected profile/toolsets, `MCP_ENABLED_APPS`, registration logs and the MCP checkout. Restart the MCP process after code changes. |
+| Tool exists but Gmail rejects authorization | Inspect the `GOOGLE_GMAIL` scope configuration and grant on the MCP host. Complete interactive consent outside the unattended worker. |
+| Agent asks who “me” is | Set the default recipient or put an explicit address in the saved prompt. |
+| Configured profile does not exist | Create/configure the profile on the worker or select an existing profile; frontend-local profiles do not count. |
+| Changed settings did not affect a queued run | Settings were frozen at enqueue. Cancel the old attempt and request a new one. |
+| Send outcome uncertain | Search for the reported RFC822 Message-ID and inspect Sent/recipient evidence. A missing search result alone may be inconclusive. Do not bypass the pending operation by changing its key. There is no automatic reconciliation/reset UI. |
+| Same operation key, different content | Verify whether this is a retry or an intentionally new message. Retry keys must retain the same recipient, body and attachments. |
+| Action marked Incomplete after an email was sent | Check the send receipt before reopening: a new action attempt can send again. Request only the unfinished portion when appropriate. |
+| Attachment rejected | Use existing regular files and stay below 30 attachments / 20 MB total. Downloadable bridge artifacts separately allow 20 MB per file. |
+
+Known environment secret values are redacted from runner output and diagnostic
+logs as defense in depth. This does not detect every secret read from files or
+scan all artifacts. Keep host access task-relevant and review sensitive exports.
 
 ## Deployment and operation
 
@@ -138,6 +242,6 @@ Markdown previews are sanitized and active HTML is never served inline. The
 artifact directory and bridge/profile databases must be backed up together.
 
 Owner session/CSRF APIs live under `/hfl-corpus/agent-bridge`; worker-token APIs
-under `/api/hfl-agent` expose queue, sweep, deliver, claim, events and artifact
+under `/api/hfl-agent` expose settings, queue, sweep, deliver, claim, events and artifact
 upload. Worker credentials do not grant owner profile or corpus access. Lease
 tokens appear only in claim responses, never owner history.

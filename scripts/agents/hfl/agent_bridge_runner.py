@@ -31,21 +31,46 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 HERMES_PROGRAM = """
 import json, os, sys
 sys.path.insert(0, os.environ['HFL_AGENT_HERMES_ROOT'])
+settings = json.loads(os.environ.get('HFL_AGENT_EXECUTION_SETTINGS', '{}'))
+trusted = settings.get('agent_mode') == 'trusted'
+profile = settings.get('hermes_profile')
+if profile:
+    from hermes_cli.profiles import get_profile_dir
+    profile_dir = get_profile_dir(profile)
+    if not profile_dir.is_dir():
+        raise RuntimeError('Configured Hermes profile does not exist.')
+    os.environ['HERMES_HOME'] = str(profile_dir)
+    os.environ['HERMES_PROFILE'] = profile
+    os.environ.pop('HERMES_CONFIG', None)
+    os.environ.pop('HERMES_ENV', None)
+for key in ('HERMES_SAFE_MODE', 'HERMES_IGNORE_USER_CONFIG', 'HERMES_IGNORE_RULES'):
+    if trusted:
+        os.environ.pop(key, None)
+    else:
+        os.environ[key] = '1'
 from hermes_cli.config import load_config_readonly
-model_config = load_config_readonly().get('model', {})
+config = load_config_readonly()
+model_config = config.get('model', {})
 if not isinstance(model_config, dict):
     model_config = {'default': model_config}
-os.environ['HERMES_SAFE_MODE'] = '1'
-os.environ['HERMES_IGNORE_USER_CONFIG'] = '1'
-os.environ['HERMES_IGNORE_RULES'] = '1'
 os.environ['HERMES_SESSION_SOURCE'] = 'hfl-agent-bridge'
 from cli import main
-selected_model = os.environ.get('HFL_AGENT_MODEL') or model_config.get('default') or None
-selected_provider = os.environ.get('HFL_AGENT_PROVIDER') or model_config.get('provider') or None
-main(query=sys.stdin.read(), toolsets='web,terminal,file,code_execution', quiet=True, max_turns=30,
-     ignore_user_config=True, ignore_rules=True,
+selected_model = settings.get('agent_model') or os.environ.get('HFL_AGENT_MODEL') or model_config.get('default') or None
+selected_provider = settings.get('agent_provider') or os.environ.get('HFL_AGENT_PROVIDER') or model_config.get('provider') or None
+toolsets = (settings.get('agent_toolsets') or None) if trusted else 'web,terminal,file,code_execution'
+runtime = {'model': selected_model, 'provider': selected_provider,
+           'profile': profile or os.environ.get('HERMES_PROFILE') or 'default',
+           'mode': 'trusted' if trusted else 'restricted',
+           'toolsets': toolsets or 'profile defaults',
+           'configured_mcp_servers': list(config.get('mcp_servers') or {}) if trusted else []}
+print('HFL_BRIDGE_RUNTIME=' + json.dumps(runtime), flush=True)
+if os.environ.get('HFL_AGENT_CAPABILITY_CHECK') == '1':
+    main(list_tools=True, toolsets=toolsets, quiet=True,
+         ignore_user_config=not trusted, ignore_rules=not trusted)
+    sys.exit(0)
+main(query=sys.stdin.read(), toolsets=toolsets, quiet=True, max_turns=settings.get('agent_max_turns', 30),
+     ignore_user_config=not trusted, ignore_rules=not trusted,
      model=selected_model, provider=selected_provider)
-print('HFL_BRIDGE_RUNTIME=' + json.dumps({'model': selected_model, 'provider': selected_provider}))
 """
 
 
@@ -128,15 +153,23 @@ class BridgeClient:
 def run_hermes(run, heartbeat, *, timeout=1200):
     command, root = hermes_command()
     snapshot = run['snapshot']
+    settings = snapshot.get('execution_settings', {'agent_mode': 'restricted'})
+    timeout = settings.get('agent_timeout_seconds', timeout)
     workspace = spool_root() / 'workspaces' / run['id']
     workspace.mkdir(parents=True, exist_ok=True)
-    prompt = snapshot['runtime_prompt'] + '\n\n' + json.dumps({**{key: snapshot.get(key) for key in ('source_key', 'source', 'category_guidance', 'context', 'occurrence_date')}, 'artifact_directory': str(workspace.resolve())}, ensure_ascii=False)
+    prompt = snapshot['runtime_prompt'] + '\n\n' + json.dumps({**{key: snapshot.get(key) for key in ('source_key', 'source', 'category_guidance', 'context', 'occurrence_date')}, 'artifact_directory': str(workspace.resolve()), 'execution_settings': settings, 'operation_scope': run.get('request_key', run['id'])}, ensure_ascii=False)
     environment = {key: value for key, value in os.environ.items() if key in {
         'PATH', 'PATHEXT', 'SYSTEMROOT', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'TMPDIR', 'HOME', 'USERPROFILE',
         'APPDATA', 'LOCALAPPDATA', 'COMSPEC', 'LANG', 'HERMES_HOME', 'HERMES_PROFILE',
         'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENROUTER_API_KEY', 'FIRECRAWL_API_KEY',
         'TAVILY_API_KEY', 'HFL_AGENT_MODEL', 'HFL_AGENT_PROVIDER',
     }}
+    if settings.get('agent_mode') == 'trusted':
+        environment = dict(os.environ)
+    # The queue lease and owner API token are not needed by the agent subprocess.
+    environment.pop('HFL_AGENT_BRIDGE_TOKEN', None)
+    environment.pop('HFL_AGENT_CAPABILITY_CHECK', None)
+    environment['HFL_AGENT_EXECUTION_SETTINGS'] = json.dumps(settings)
     environment['PYTHONIOENCODING'] = 'utf-8'
     environment['PYTHONUTF8'] = '1'
     environment['HFL_AGENT_HERMES_ROOT'] = str(root)
@@ -161,17 +194,19 @@ def run_hermes(run, heartbeat, *, timeout=1200):
                 output.seek(0)
                 diagnostics = spool_root() / ('hermes-' + run.get('id', 'check') + '.log')
                 diagnostics.parent.mkdir(parents=True, exist_ok=True)
-                diagnostics.write_text(output.read(250000), encoding='utf-8')
+                diagnostics.write_text(redact_credentials(output.read(250000), environment), encoding='utf-8')
                 raise RuntimeError('Hermes execution failed; inspect local Hermes diagnostics.')
             output.seek(0)
             text = output.read(250001)
             if len(text) > 250000:
                 raise ValueError('Hermes output exceeded the execution limit.')
+            text = redact_credentials(text, environment)
             result = parse_result(text)
             metadata = next((line.removeprefix('HFL_BRIDGE_RUNTIME=') for line in reversed(text.splitlines()) if line.startswith('HFL_BRIDGE_RUNTIME=')), '{}')
             runtime = json.loads(metadata)
             result['model'] = str(runtime.get('model') or 'provider default')[:200]
             result['provider'] = str(runtime.get('provider') or 'auto')[:200]
+            result['runtime'] = runtime
             sessions = re.findall(r'^session_id:\s*([A-Za-z0-9_-]+)', text, flags=re.MULTILINE)
             result['session_id'] = sessions[-1] if sessions else ''
             return result
@@ -186,6 +221,15 @@ def run_hermes(run, heartbeat, *, timeout=1200):
 
 def spool_root():
     return Path(os.environ.get('HARQIS_DATA_ROOT') or REPO_ROOT / '.harqis-data') / 'runtime' / 'agent-bridge-results'
+
+
+def redact_credentials(text, environment):
+    """Defense in depth for known environment secrets, not arbitrary file secrets."""
+    values = {value for key, value in environment.items()
+              if re.search(r'(KEY|TOKEN|PASSWORD|SECRET)', key, re.I) and len(value) >= 8}
+    for value in sorted(values, key=len, reverse=True):
+        text = text.replace(value, '[REDACTED]')
+    return text
 
 
 def replay_results(client):
@@ -246,7 +290,7 @@ def consume(client, *, limit=10):
                 continue
             raise
         try:
-            client.event(run, 'plan', 'plan', {'summary': 'Read the prompt and supporting context, perform the requested task with available tools, and verify the output against the prompt.'})
+            client.event(run, 'plan', 'plan', {'summary': 'Read the prompt and supporting context, perform the requested task with available tools, and verify the output against the prompt.', 'execution_settings': run['snapshot'].get('execution_settings', {})})
             result = run_hermes(run, lambda: client.event(run, 'heartbeat', 'heartbeat', {}))
             upload_artifacts(client, run, result)
         except Exception as exc:
@@ -270,6 +314,7 @@ def main():
     mode.add_argument('--daily', action='store_true')
     mode.add_argument('--dispatch', action='store_true', help='Discover due work without executing it (Hermes cron).')
     mode.add_argument('--check', action='store_true')
+    mode.add_argument('--capabilities', action='store_true', help='Discover profile tools without inference or consuming tasks.')
     mode.add_argument('--smoke', action='store_true', help='Run two synthetic file tasks, without consuming the production queue.')
     args = parser.parse_args()
     bootstrap()
@@ -279,6 +324,15 @@ def main():
         return
     client = BridgeClient()
     try:
+        if args.capabilities:
+            settings = client.call('settings')
+            command, root = hermes_command()
+            environment = dict(os.environ)
+            environment.pop('HFL_AGENT_BRIDGE_TOKEN', None)
+            environment.update(HFL_AGENT_EXECUTION_SETTINGS=json.dumps(settings),
+                               HFL_AGENT_HERMES_ROOT=str(root), HFL_AGENT_CAPABILITY_CHECK='1')
+            subprocess.run(command, env=environment, cwd=root, check=True, timeout=120)
+            return
         if args.check:
             client.call('queue')
             print('Hermes installation and authenticated bridge are available.')

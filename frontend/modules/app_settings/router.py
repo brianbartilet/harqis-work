@@ -24,7 +24,7 @@ async def update_settings(request: Request):
     user, redirect = require_user(request)
     if redirect:
         return redirect
-    form = await request.form(max_files=0, max_fields=8)
+    form = await request.form(max_files=0, max_fields=20)
     if not verify_csrf_token(str(form.get('csrf', '')), user):
         raise HTTPException(403, 'Invalid form token.')
     try:

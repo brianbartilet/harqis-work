@@ -58,7 +58,7 @@ up from `scripts/agents/<bucket>/`).
 |---|---|
 | `archive_corpus.py` | Archives completed HFL corpus periods. |
 | `run_archive.py` | Loads the repository and machine environment before the monthly HFL archive; forwards `--root` and `--dry-run`. |
-| `agent_bridge_runner.py` | Consume explicit HFL actionable/pin requests with local Hermes, renew leases, and durably report results; supports once, watch, dispatch, check, and isolated smoke modes. |
+| `agent_bridge_runner.py` | Consume HFL actionable/pin requests with local Hermes, renew leases, and durably report results; supports once, watch, dispatch, check, capabilities discovery (no inference), and isolated smoke modes. See [settings and troubleshooting](../docs/info/HFL-AGENT-BRIDGE.md). |
 | `setup_agent_bridge.py` | Preview or reconcile the Hermes minute bridge job from `agent_bridge_schedule.json`. See [setup and operation](../docs/info/HFL-AGENT-BRIDGE.md). |
 | `migrate_pin_titles.py` | Preview or back up and migrate pinned-date Notes into Title in an explicit profile SQLite database, retaining Notes and existing title edits. |
 | `migrate_media_sources.py` | Dry-run-first `media` → `desktop` / `android-capture` classification or exact `--rename OLD=NEW` migration across Markdown and Elasticsearch, preserving IDs and creating recovery artifacts. |

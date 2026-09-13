@@ -111,6 +111,10 @@
         state.className = 'agent-result-state'; state.dataset.state = run.state;
         const time = element('time', new Date(run.created_at).toLocaleString('en-SG', {timeZone:'Asia/Singapore',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) + ' SGT'); time.dateTime = run.created_at;
         meta.append(state, time); card.append(meta);
+        if (run.snapshot?.execution_settings) {
+          const settings = run.snapshot.execution_settings;
+          card.append(element('small', 'Execution: ' + settings.agent_mode + ' · Profile: ' + (settings.hermes_profile || 'Worker default')));
+        }
         if (run.state === 'queued') card.append(element('p', 'Waiting for an agent to start. You can leave this dialog and check back later.'));
         if (run.result.summary) card.append(outputCard(run.result));
         if (['review','accepting'].includes(run.state)) card.append(button(run.state === 'accepting' ? 'Retry acceptance' : run.result.complete && kind === 'actionable' ? 'Accept and mark done' : 'Accept result', async () => { await api('/runs/' + run.id + '/accept', {}); await refresh(); window.dispatchEvent(new Event('hfl:agent-updated')); }));
@@ -120,6 +124,12 @@
         const snapshot = element('pre', [run.snapshot.category_guidance, run.snapshot.source.prompt].filter(Boolean).join('\n\n')); snapshot.className = 'action-prompt'; details.append(element('p', 'Instructions used'), snapshot, element('small', 'Run ' + run.id));
         if (run.result.session_id) details.append(element('small', 'Hermes session: ' + run.result.session_id));
         if (run.result.model) details.append(element('p', 'Model: ' + run.result.model + (run.result.provider ? ' · Provider: ' + run.result.provider : '')));
+        if (run.result.runtime) {
+          const runtime = run.result.runtime;
+          details.append(element('p', 'Profile: ' + runtime.profile + ' · Mode: ' + runtime.mode));
+          details.append(element('p', 'Toolsets: ' + runtime.toolsets));
+          if (runtime.configured_mcp_servers?.length) details.append(element('p', 'Configured MCP servers: ' + runtime.configured_mcp_servers.join(', ')));
+        }
         card.append(details);
         runs.append(card);
       }

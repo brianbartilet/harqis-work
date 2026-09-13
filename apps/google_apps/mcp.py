@@ -22,6 +22,22 @@ _TRANSLATION_CONFIG = CONFIG_MANAGER.get("GOOGLE_TRANSLATION")
 def register_google_apps_tools(mcp: FastMCP):
 
     @mcp.tool()
+    def send_gmail_email(to: str, subject: str, body: str, operation_key: str,
+                         attachments: list[str] | None = None, body_html: str | None = None) -> dict:
+        """Send an authorized email and optional host-file attachments through Gmail.
+
+        Requires gmail.send authorization. Recipient and content must follow the task.
+        For Activity Corpus use operation_scope + ':email:1' as the operation_key,
+        reusing it for retries. Attach only verified deliverable files. Returns the
+        Gmail message ID and attachment hashes, not proof of delivery or reading.
+        An uncertain outcome must be reconciled using Gmail search before another send.
+        """
+        if not operation_key.strip():
+            raise ValueError('A stable operation key is required.')
+        return ApiServiceGoogleGmail(_GMAIL_CONFIG).send_email(
+            to, subject, body, body_html, attachments, operation_key)
+
+    @mcp.tool()
     def get_google_calendar_events_today(event_type: str = "ALL") -> list[dict]:
         """Get Google Calendar events for today across all calendars.
 

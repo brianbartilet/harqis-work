@@ -383,9 +383,18 @@ Config sections required in `apps_config.yaml`:
 | `create_google_keep_note` | `title`, `text` | Create a new Keep note |
 | `get_gmail_recent_emails` | `max_results?`, `query?` | Recent emails with subject, sender, date, snippet, body |
 | `search_gmail` | `query`, `max_results?` | Search Gmail using Gmail search syntax |
+| `send_gmail_email` | `to`, `subject`, `body`, `operation_key`, `attachments?`, `body_html?` | Send an authorized message and host-file attachments; stable keys protect against duplicate retries |
 
 **Gmail OAuth note:** On first use, the Gmail tool will open a browser to complete the OAuth consent
 flow and write the token to `storage-gmail.json`. Subsequent calls use the cached token silently.
+
+Sending uses `GOOGLE_GMAIL`, not `GOOGLE_GMAIL_SEND`, and requires a send-capable
+grant in addition to reading access. The tracked configuration is read-only;
+complete scope configuration and interactive consent on the MCP host first.
+Attachments must exist on that host (30 files / 20 MB total). Keep the send receipt
+ledger durable and reconcile uncertain outcomes before another send. See the
+[Gmail service reference](../apps/google_apps/README.md#gmail-sending-and-attachments)
+and [Activity Corpus operations guide](../docs/info/HFL-AGENT-BRIDGE.md).
 
 **Example prompts:**
 - *"What meetings do I have today?"*

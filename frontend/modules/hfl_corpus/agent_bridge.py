@@ -30,7 +30,7 @@ from workflows.hfl.agent_bridge_store import AgentBridgeStore, BridgeConflict, d
 from workflows.hfl.timeline_store import FollowUpConflict
 
 
-POLICY = 'prompt-execution-v2'
+POLICY = 'prompt-execution-v3'
 PROMPT_PATH = Path(__file__).resolve().parents[3] / 'workflows/hfl/prompts/agent_bridge.md'
 
 
@@ -89,6 +89,7 @@ def source_snapshot(kind, source_id):
     runtime = PROMPT_PATH.read_text(encoding='utf-8')
     return {'source_key': f'{kind}:{source_id}', 'kind': kind, 'source_id': source_id,
             'source': source, 'category_guidance': guidance, 'policy': POLICY,
+            'execution_settings': read_settings(),
             'runtime_prompt': runtime, 'prompt_path': 'workflows/hfl/prompts/agent_bridge.md', 'prompt_hash': digest(runtime),
             'instruction_hash': digest({'source': {k: v for k, v in source.items() if k not in {'version', 'status', 'updated_at'}}, 'guidance': guidance, 'runtime': runtime})}
 
@@ -478,6 +479,11 @@ def queue():
     bridge_store().expire()
     reconcile_runs()
     return {'runs': [{'id': run['id']} for run in bridge_store().list(state='queued', oldest=True)]}
+
+
+@worker_router.get('/settings')
+def worker_settings():
+    return read_settings()
 
 
 @worker_router.post('/sweep')

@@ -14,7 +14,7 @@ References:
 | API | Service File | Scope | MCP Tools |
 |-----|-------------|-------|-----------|
 | Google Calendar | `calendar.py` | `calendar.readonly` | `get_google_calendar_events_today`, `get_google_calendar_holidays` |
-| Gmail | `gmail.py` | `gmail.readonly` | `get_gmail_recent_emails`, `search_gmail` |
+| Gmail | `gmail.py` | `gmail.readonly` for reading; `gmail.send` additionally for sending | `get_gmail_recent_emails`, `search_gmail`, `send_gmail_email` |
 | Google Keep | `keep.py` | `keep` | `list_google_keep_notes`, `get_google_keep_note`, `create_google_keep_note` |
 | Google Sheets | `sheets.py` | `spreadsheets` | None (code only) |
 | **Google Tasks** | `tasks.py` | `tasks` | `list_google_task_lists`, `list_google_tasks`, `list_all_google_tasks`, `create_google_task`, `complete_google_task` |
@@ -73,6 +73,35 @@ All OAuth flows use `credentials.json` and `credentials-ha.json` placed in `.env
 | Cloud Translation API | [Enable](https://console.cloud.google.com/apis/library/translate.googleapis.com) | Translation |
 
 ---
+
+## Gmail sending and attachments
+
+`send_gmail_email(to, subject, body, operation_key, attachments=None, body_html=None)`
+uses the **`GOOGLE_GMAIL`** configuration, including its token storage and sending
+account. The separate `GOOGLE_GMAIL_SEND` configuration used by other jobs is not
+selected by this MCP tool. The tracked `GOOGLE_GMAIL` scopes are currently read-only;
+configure a send-capable grant on the MCP host and complete consent before using
+the new tool. Merely exposing a tool does not grant OAuth permissions.
+
+Attachments are regular host-file paths, at most 30 files and 20 MB total. They
+must exist on the **MCP server host**; a file on a different worker is not automatically
+transferred. For Activity Corpus, attach verified deliverables and also declare
+them as bridge artifacts so they remain available through View/Download.
+
+The MCP tool requires a nonblank stable `operation_key`. Repeated calls with the
+same content return the saved receipt; changed content is rejected. Pending sends
+after an interruption remain uncertain and are blocked from automatic resend.
+Receipts live in `HARQIS_DATA_ROOT/runtime/gmail-send-receipts.sqlite3`, falling back
+to the repository `.harqis-data/runtime` directory. Back up this ledger and keep
+its location consistent across MCP restarts. Direct Python `send_email` callers
+only get this protection when they supply an operation key.
+
+Results include the Gmail message ID, recipient, RFC822 Message-ID and attachment
+names/hashes. API acceptance does not prove delivery or reading. No email is sent
+by the mocked regression tests in `tests/test_gmail_send.py`.
+
+See the [Activity Corpus bridge guide](../../docs/info/HFL-AGENT-BRIDGE.md) for
+profile setup, discovery, recipient defaults and uncertain-send recovery.
 
 ## Google Keep — Not Available for Third-Party Apps
 

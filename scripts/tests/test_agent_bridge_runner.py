@@ -96,3 +96,30 @@ def test_schedule_reconciliation_is_idempotent_in_isolated_hermes_home(tmp_path)
     assert len(rows) == 1
     assert rows[0]['no_agent'] is True
     assert rows[0]['deliver'] == 'local'
+
+
+@pytest.mark.parametrize('mode,restricted', [('trusted', False), ('restricted', True)])
+def test_hermes_program_loads_profile_and_mode(tmp_path, mode, restricted):
+    package = tmp_path / 'hermes_cli'
+    package.mkdir()
+    (package / '__init__.py').write_text('')
+    (package / 'config.py').write_text("def load_config_readonly(): return {'model': {'default': 'profile-model', 'provider': 'profile-provider'}, 'mcp_servers': {'harqis': {}}}")
+    (package / 'profiles.py').write_text("from pathlib import Path\ndef get_profile_dir(name): return Path(__file__).parent")
+    (tmp_path / 'cli.py').write_text("import json, os\ndef main(**kwargs):\n print('CALL=' + json.dumps(kwargs))\n print('SAFE=' + str(os.environ.get('HERMES_SAFE_MODE')))\n")
+    environment = dict(os.environ)
+    environment.update(HFL_AGENT_HERMES_ROOT=str(tmp_path), HFL_AGENT_EXECUTION_SETTINGS=json.dumps({'agent_mode': mode, 'hermes_profile': 'research', 'agent_max_turns': 45}), HERMES_SAFE_MODE='1')
+    environment.pop('HFL_AGENT_CAPABILITY_CHECK', None)
+    result = subprocess.run([sys.executable, '-c', runner.HERMES_PROGRAM], input='Task', text=True, capture_output=True, env=environment, cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    call = json.loads(next(line[5:] for line in result.stdout.splitlines() if line.startswith('CALL=')))
+    assert call['ignore_user_config'] is restricted
+    assert call['ignore_rules'] is restricted
+    assert call['max_turns'] == 45
+    assert call['toolsets'] == ('web,terminal,file,code_execution' if restricted else None)
+    runtime = json.loads(next(line.split('=', 1)[1] for line in result.stdout.splitlines() if line.startswith('HFL_BRIDGE_RUNTIME=')))
+    assert runtime['profile'] == 'research'
+    assert runtime['configured_mcp_servers'] == ([] if restricted else ['harqis'])
+
+
+def test_known_credentials_redacted_from_diagnostics_and_output():
+    assert runner.redact_credentials('token secret-value and result', {'API_TOKEN': 'secret-value', 'PATH': 'result'}) == 'token [REDACTED] and result'

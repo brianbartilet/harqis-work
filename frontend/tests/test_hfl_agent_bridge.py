@@ -50,7 +50,8 @@ RESULT = {'summary': 'Design completed with cited documentation.', 'evidence': [
 def test_settings_persist_validate_and_require_owner_csrf(bridge, authenticated_client):
     from modules.app_settings.store import read_settings
     from modules.hfl_shares.security import make_csrf_token
-    assert read_settings() == {'actions_polling_minutes': 30, 'pin_backfill_days': 7}
+    assert read_settings()['agent_mode'] == 'trusted'
+    assert read_settings()['actions_polling_minutes'] == 30
     page = authenticated_client.get('/settings')
     assert page.status_code == 200 and 'Actions polling minutes' in page.text
     assert 'App Settings' in authenticated_client.get('/profile').text
@@ -465,3 +466,23 @@ def test_browser_review_lifecycle_and_mobile_layout(bridge, authenticated_client
         assert actions.get(item['id'])['status'] == 'done'
         assert errors == []
         browser.close()
+
+
+def test_execution_settings_frozen_at_enqueue(bridge, authenticated_client):
+    from modules.app_settings.store import save_settings
+    module, store, actions = bridge
+    item = create_action(actions)
+    save_settings({'hermes_profile': 'research', 'agent_max_turns': 45})
+    run = start(authenticated_client, item)
+    save_settings({'hermes_profile': 'default'})
+    assert run['snapshot']['execution_settings']['hermes_profile'] == 'research'
+    assert run['snapshot']['execution_settings']['agent_max_turns'] == 45
+
+
+def test_agent_settings_validation(bridge):
+    from modules.app_settings.store import save_settings
+    for values in ({'hermes_profile': '../escape'}, {'agent_mode': 'unknown'},
+                   {'agent_max_turns': 201}, {'agent_timeout_seconds': 0},
+                   {'agent_default_recipient': 'bad\naddress@example.org'}):
+        with pytest.raises(ValueError):
+            save_settings(values)

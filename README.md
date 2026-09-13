@@ -174,6 +174,13 @@ Tests: `pytest agents/projects/tests/ -m "not integration"` — 290 unit tests, 
 
 ### Hermes Agent
 
+Activity Corpus actions and pinned instructions can use **Trusted Hermes** with
+the selected profile's MCP integrations and task-relevant host access. App Settings
+controls profile/model selection, recipient defaults and execution limits; Gmail
+delivery supports attachments and durable retry receipts. See the
+[Activity Corpus agent guide](docs/info/HFL-AGENT-BRIDGE.md) for setup, capability
+verification, authorization boundaries and troubleshooting.
+
 **Hermes** is the agent runtime that hosts Claude agents on top of this platform, registers the harqis-work MCP server, and schedules cron jobs (with or without a reasoning loop). It supersedes the deprecated OpenClaw Gateway; agent memory, plans, and logs now live locally under `~/.hermes/` on each machine (no separate sync repo).
 
 #### Primary use case: wiring and manual triggering
