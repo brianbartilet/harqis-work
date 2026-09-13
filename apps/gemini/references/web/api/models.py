@@ -41,7 +41,7 @@ class ApiServiceGeminiModels(BaseApiServiceGemini):
         Get metadata for a specific Gemini model.
 
         Args:
-            model_name: Full resource name, e.g. 'models/gemini-2.0-flash'.
+            model_name: Full resource name, e.g. 'models/gemini-3.6-flash'.
 
         Returns:
             DtoGeminiModel with token limits and supported methods.

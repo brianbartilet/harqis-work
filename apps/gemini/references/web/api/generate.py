@@ -4,7 +4,7 @@ from core.web.services.core.decorators.deserializer import deserialized
 from apps.gemini.references.web.base_api_service import BaseApiServiceGemini
 from apps.gemini.references.dto.models import DtoGeminiModel
 
-DEFAULT_MODEL = 'models/gemini-2.0-flash'
+DEFAULT_MODEL = 'models/gemini-3.6-flash'
 
 
 class ApiServiceGeminiGenerate(BaseApiServiceGemini):
@@ -35,7 +35,7 @@ class ApiServiceGeminiGenerate(BaseApiServiceGemini):
 
         Args:
             prompt:             The user text prompt.
-            model:              Model resource name (default 'models/gemini-2.0-flash').
+            model:              Model resource name (default 'models/gemini-3.6-flash').
             temperature:        Sampling temperature 0.0–2.0. Lower = deterministic.
             max_output_tokens:  Maximum tokens in the response.
             top_p:              Nucleus sampling probability mass.
@@ -79,7 +79,7 @@ class ApiServiceGeminiGenerate(BaseApiServiceGemini):
 
         Args:
             prompt: The text prompt to tokenize.
-            model:  Model resource name (default 'models/gemini-2.0-flash').
+            model:  Model resource name (default 'models/gemini-3.6-flash').
 
         Returns:
             Raw dict with key: totalTokens (int).

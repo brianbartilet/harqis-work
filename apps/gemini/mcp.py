@@ -30,7 +30,7 @@ def register_gemini_tools(mcp: FastMCP):
         """Get metadata for a specific Gemini model.
 
         Args:
-            model_name: Full resource name, e.g. 'models/gemini-2.0-flash'.
+            model_name: Full resource name, e.g. 'models/gemini-3.6-flash'.
         """
         logger.info("Tool called: get_gemini_model model_name=%s", model_name)
         result = ApiServiceGeminiModels(CONFIG).get_model(model_name)
@@ -48,7 +48,7 @@ def register_gemini_tools(mcp: FastMCP):
 
         Args:
             prompt:             The user text prompt to send to Gemini.
-            model:              Model resource name (default 'models/gemini-2.0-flash').
+            model:              Model resource name (default 'models/gemini-3.6-flash').
             temperature:        Sampling temperature 0.0–2.0. Lower = more deterministic.
             max_output_tokens:  Maximum number of tokens in the response.
             system_instruction: Optional system-level instruction for the model.
@@ -80,7 +80,7 @@ def register_gemini_tools(mcp: FastMCP):
 
         Args:
             prompt: The text prompt to tokenize.
-            model:  Model resource name (default 'models/gemini-2.0-flash').
+            model:  Model resource name (default 'models/gemini-3.6-flash').
 
         Returns:
             Dict with totalTokens count.
