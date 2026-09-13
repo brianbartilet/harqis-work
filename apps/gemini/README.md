@@ -119,8 +119,8 @@ Requires `GEMINI_API_KEY` set in `.env/apps.env`.
 
 ## Notes
 
-- **Default generation model:** `models/gemini-2.0-flash` (fast, cost-efficient).
+- **Default generation model:** `models/gemini-3.6-flash` (fast, cost-efficient).
 - **Default embedding model:** `models/text-embedding-004` (768-dimensional output).
-- **Rate limits:** Free tier is 15 RPM / 1 500 RPD for Gemini 2.0 Flash. Use `count_tokens` before large batches.
+- **Rate limits:** Depend on the model and project billing tier. Use `count_tokens` before large batches.
 - **task_type values for embeddings:** `RETRIEVAL_DOCUMENT`, `RETRIEVAL_QUERY`, `SEMANTIC_SIMILARITY`, `CLASSIFICATION`, `CLUSTERING`.
 - The API key is appended automatically to every request via `session.params` — no per-method changes needed.

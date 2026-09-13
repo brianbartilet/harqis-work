@@ -309,6 +309,19 @@ auto_retry = false
 backfill = "none"
 
 [[sources]]
+key = "timeline-suggestions"
+kind = "operation"
+monitor_mode = "scheduled"
+task = "workflows.hfl.tasks.timeline_suggestions.generate_timeline_suggestions"
+entry_sources = []
+schedule = "daily 04:15; canonical-host timeline cache generation"
+task_max_age_hours = 36
+expects_entry = false
+allow_empty = true
+auto_retry = false
+backfill = "manual"
+
+[[sources]]
 key = "activity-corpus-source-health"
 kind = "operation"
 monitor_mode = "self"

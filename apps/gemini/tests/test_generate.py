@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+from unittest.mock import Mock
+
 import pytest
 from hamcrest import assert_that, not_none, instance_of, greater_than
 
@@ -9,6 +12,28 @@ from apps.gemini.tests._helpers import skip_if_gemini_api_error
 @pytest.fixture()
 def given():
     return ApiServiceGeminiGenerate(CONFIG)
+
+
+@pytest.mark.parametrize('method, action', [
+    ('count_tokens', 'countTokens'),
+    ('generate_content', 'generateContent'),
+])
+@pytest.mark.parametrize('model_kwargs, expected_model', [
+    ({}, 'models/gemini-3.6-flash'),
+    ({'model': 'models/custom-model'}, 'models/custom-model'),
+])
+def test_generation_model_request_path(given, monkeypatch, method, action,
+                                       model_kwargs, expected_model):
+    """Omitted models use the supported default; explicit overrides pass through."""
+    add_uri = Mock(wraps=given.request.add_uri_parameter)
+    monkeypatch.setattr(given.request, 'add_uri_parameter', add_uri)
+    execute = Mock(return_value=SimpleNamespace(data={}))
+    monkeypatch.setattr(given.client, 'execute_request', execute)
+
+    getattr(given, method)(prompt='Hello', **model_kwargs)
+
+    add_uri.assert_called_once_with(f'{expected_model}:{action}')
+    execute.assert_called_once()
 
 
 @pytest.mark.skip(reason="API quota depleted - requires billing credits")
