@@ -123,3 +123,32 @@ def test_hermes_program_loads_profile_and_mode(tmp_path, mode, restricted):
 
 def test_known_credentials_redacted_from_diagnostics_and_output():
     assert runner.redact_credentials('token secret-value and result', {'API_TOKEN': 'secret-value', 'PATH': 'result'}) == 'token [REDACTED] and result'
+
+
+def test_continuation_restores_verified_files_and_preserves_operation_scope(tmp_path, monkeypatch):
+    import hashlib
+    import httpx
+    from types import SimpleNamespace
+    monkeypatch.setattr(runner, 'spool_root', lambda: tmp_path)
+    content = b'# Existing report'
+    artifact = {'name': 'report.md', 'digest': hashlib.sha256(content).hexdigest(), 'size': len(content)}
+    run = {'id': 'second', 'request_key': 'new-attempt', 'lease_token': 'lease', 'snapshot': {
+        'runtime_prompt': 'Continue the task.', 'operation_scope': 'original-operation',
+        'continuation': {'reply': 'Email the existing file.', 'history': [{'result': {'summary': 'File ready'}}], 'artifacts': [artifact]}}}
+    def transport(request):
+        assert request.headers['X-Execution-Lease'] == 'lease'
+        assert request.url.path.endswith('/runs/second/prior-artifacts/report.md')
+        return httpx.Response(200, content=content)
+    with httpx.Client(base_url='https://bridge.test/api/hfl-agent/', transport=httpx.MockTransport(transport)) as client:
+        runner.restore_prior_artifacts(SimpleNamespace(client=client), run)
+        workspace = tmp_path / 'workspaces/second'
+        assert (workspace / 'report.md').read_bytes() == content
+        prompt = json.loads(runner.execution_prompt(run, workspace).split('\n\n', 1)[1])
+        assert prompt['operation_scope'] == 'original-operation'
+        assert prompt['continuation']['reply'] == 'Email the existing file.'
+        artifact['digest'] = '0' * 64
+        with pytest.raises(ValueError, match='integrity'):
+            runner.restore_prior_artifacts(SimpleNamespace(client=client), run)
+        artifact['name'] = '../escape.md'
+        with pytest.raises(ValueError, match='filename'):
+            runner.restore_prior_artifacts(SimpleNamespace(client=client), run)

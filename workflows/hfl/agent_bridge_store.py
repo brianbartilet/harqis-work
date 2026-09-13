@@ -140,6 +140,35 @@ class AgentBridgeStore:
             self.event(db, run_id, 'claimed', 'running', agent, {'summary': 'Agent claimed this request.'})
         return self.get(run_id, private=True)
 
+    def continue_run(self, run_id, snapshot, request_key, actor, reply):
+        """Atomically supersede a stopped attempt; deduplicate owner submissions."""
+        if not isinstance(request_key, str) or not 1 <= len(request_key) <= 200:
+            raise ValueError('A bounded request key is required.')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            previous = db.execute('SELECT * FROM agent_requests WHERE request_key=?', (request_key,)).fetchone()
+            if previous:
+                saved = self.decode(previous)
+                continuation = saved['snapshot'].get('continuation', {})
+                if continuation.get('parent_run_id') != run_id or continuation.get('reply') != reply:
+                    raise BridgeConflict('Request key already used for another continuation.')
+                return saved
+            row = db.execute('SELECT * FROM agent_requests WHERE id=?', (run_id,)).fetchone()
+            if not row:
+                raise KeyError(run_id)
+            latest = db.execute('SELECT id FROM agent_requests WHERE source_key=? ORDER BY created_at DESC, rowid DESC LIMIT 1', (row['source_key'],)).fetchone()
+            if row['state'] not in {'awaiting_input', 'failed'} or latest['id'] != run_id:
+                raise BridgeConflict('Only the latest stopped attempt can be continued. Refresh the results.')
+            if snapshot['source_key'] != row['source_key']:
+                raise BridgeConflict('Continuation source does not match.')
+            new_id, timestamp = uuid.uuid4().hex, now()
+            db.execute("UPDATE agent_requests SET state='cancelled',applied=1,lease_until='',updated_at=? WHERE id=?", (timestamp, run_id))
+            db.execute('INSERT INTO agent_requests(id,request_key,source_key,state,snapshot,created_at,updated_at) VALUES (?,?,?,?,?,?,?)',
+                       (new_id, request_key, row['source_key'], 'queued', json.dumps(snapshot, ensure_ascii=False), timestamp, timestamp))
+            self.event(db, run_id, 'continued', 'continued', actor, {'summary': reply or 'Retry requested after fixing the blocker.', 'next_run_id': new_id})
+            self.event(db, new_id, 'queued', 'queued', actor, {'summary': 'Continuing the previous attempt.', 'parent_run_id': run_id})
+        return self.get(new_id)
+
     def report(self, run_id, agent, token, event_key, kind, payload):
         if kind not in {'heartbeat', 'plan', 'progress', 'awaiting_input', 'succeeded', 'failed'}:
             raise ValueError('Unsupported agent event.')
@@ -148,6 +177,10 @@ class AgentBridgeStore:
         event_key = 'agent:' + event_key
         if not isinstance(payload, dict) or len(json.dumps(payload)) > 120000:
             raise ValueError('Event payload is too large or invalid.')
+        if payload.get('blocked_reason') not in (None, 'input', 'integration'):
+            raise ValueError('Choose input or integration for the blocker.')
+        if not isinstance(payload.get('question', ''), str) or len(payload.get('question', '')) > 8000:
+            raise ValueError('The input question must be bounded text.')
         if not isinstance(payload.get('model', ''), str) or len(payload.get('model', '')) > 200:
             raise ValueError('Model attribution must be text of at most 200 characters.')
         summary = payload.get('summary', '')

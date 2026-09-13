@@ -48,8 +48,19 @@ prose or additional JSON examples:
  "evidence":["source_key or an actual source URL"], "artifacts":["result.md"],
  "complete":true, "state":"succeeded"}
 
-Use state awaiting_input when a required decision or authorization blocks work,
-failed when execution fails, and complete false whenever the prompt is not fully
+If continuation is present, resume the unfinished work using its history and the
+owner's replies. Prior results are evidence of work already attempted; replies are
+additional owner instructions. Verified prior artifacts are restored directly in
+artifact_directory. Preserve and reuse them when appropriate instead of regenerating
+completed deliverables. Use the supplied operation_scope, which stays stable across
+continuations. Never repeat a completed send or change keys to bypass an uncertain
+receipt. Retrying after a fix does not itself reconcile a pending external send.
+
+Use state awaiting_input with blocked_reason "input" and a concise question when
+a required answer or decision blocks work. Use state failed with blocked_reason
+"integration" for missing tools, credentials, API scopes or unavailable services;
+describe what needs fixing in summary. Do not ask the owner to repeat authorization
+already present in the task. Omit blocked_reason for success. Use complete false whenever the prompt is not fully
 fulfilled. Include actual output, sources and limitations in summary. A successful
 complete result marks the action Done; failed, blocked or partial work marks it
 Incomplete. Never invent evidence or claim actions that did not occur. Evidence

@@ -43,6 +43,7 @@ Each service uses its own `storage-*.json` token file to avoid scope conflicts. 
 |-----------|-------------|---------|-------|
 | `GOOGLE_APPS` | `credentials.json` | `storage.json` | `calendar.readonly`, `spreadsheets` |
 | `GOOGLE_GMAIL` | `credentials.json` | `storage-gmail.json` | `gmail.readonly` |
+| `GOOGLE_GMAIL_SEND` | `credentials.json` | `storage-gmail-send.json` | `gmail.send` |
 | `GOOGLE_KEEP` | `credentials-ha.json` | `storage-ha.json` | `keep` |
 | `GOOGLE_TASKS` | `credentials.json` | `storage-tasks.json` | `tasks` |
 | `GOOGLE_DRIVE` | `credentials.json` | `storage-drive.json` | `drive` |
@@ -77,11 +78,12 @@ All OAuth flows use `credentials.json` and `credentials-ha.json` placed in `.env
 ## Gmail sending and attachments
 
 `send_gmail_email(to, subject, body, operation_key, attachments=None, body_html=None)`
-uses the **`GOOGLE_GMAIL`** configuration, including its token storage and sending
-account. The separate `GOOGLE_GMAIL_SEND` configuration used by other jobs is not
-selected by this MCP tool. The tracked `GOOGLE_GMAIL` scopes are currently read-only;
-configure a send-capable grant on the MCP host and complete consent before using
-the new tool. Merely exposing a tool does not grant OAuth permissions.
+uses the **`GOOGLE_GMAIL_SEND`** configuration and `storage-gmail-send.json`,
+matching the test farm email workflow. This credential needs the `gmail.send`
+grant on the MCP host. Reading and searching continue to use **`GOOGLE_GMAIL`**
+and `storage-gmail.json` with `gmail.readonly`. Merely exposing a tool does not
+grant OAuth permissions; both credentials should refer to the intended account
+so Gmail search can reconcile sends.
 
 Attachments are regular host-file paths, at most 30 files and 20 MB total. They
 must exist on the **MCP server host**; a file on a different worker is not automatically

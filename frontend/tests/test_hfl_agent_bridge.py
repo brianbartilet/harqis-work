@@ -453,10 +453,68 @@ def test_browser_review_lifecycle_and_mobile_layout(bridge, authenticated_client
         page.get_by_text('Waiting for an agent to start. You can leave this dialog and check back later.').wait_for()
         run_id = store.list()[0]['id']
         run = authenticated_client.post(f'/api/hfl-agent/runs/{run_id}/claim', headers=WORKER, json={}).json()
+        original_scope = run['request_key']
+        event(authenticated_client, run, 'awaiting_input', {'summary': 'Choose the report format.', 'blocked_reason': 'input', 'question': 'Which format should I use?', 'complete': False})
+        page.get_by_role('button', name='Refresh', exact=True).click()
+        page.get_by_role('button', name='Answer and continue').click()
+        page.get_by_text('Enter your answer before continuing.').wait_for()
+        page.get_by_label('Your reply').fill('Use Markdown and keep the existing evidence.')
+        page.screenshot(path=str(tmp_path / 'agent-reply-desktop.png'))
+        page.set_viewport_size({'width': 390, 'height': 844})
+        assert page.locator('dialog').evaluate('(el) => el.scrollWidth <= el.clientWidth')
+        page.screenshot(path=str(tmp_path / 'agent-reply-mobile.png'))
+        page.get_by_role('button', name='Answer and continue').click()
+        page.get_by_text('Waiting for an agent to start. You can leave this dialog and check back later.').wait_for()
+        run_id = store.list()[0]['id']
+        run = authenticated_client.post(f'/api/hfl-agent/runs/{run_id}/claim', headers=WORKER, json={}).json()
+        assert run['snapshot']['operation_scope'] == original_scope
+        event(authenticated_client, run, 'failed', {'summary': 'Gmail service unavailable.', 'blocked_reason': 'integration', 'complete': False})
+        page.get_by_role('button', name='Refresh', exact=True).click()
+        page.get_by_role('heading', name='Blocked by integration', exact=True).wait_for()
+        page.get_by_role('button', name='Retry after fix').click()
+        page.get_by_text('Waiting for an agent to start. You can leave this dialog and check back later.').wait_for()
+        run_id = store.list()[0]['id']
+        run = authenticated_client.post(f'/api/hfl-agent/runs/{run_id}/claim', headers=WORKER, json={}).json()
+        assert run['snapshot']['operation_scope'] == original_scope
+        page.set_viewport_size({'width': 1100, 'height': 850})
         event(authenticated_client, run, 'plan', {'summary': 'Check the expected outcome.'})
-        event(authenticated_client, run, 'succeeded', {**RESULT, 'summary': 'Draft ready. <img src=x onerror=alert(1)> is literal text.'})
+        summary = '''# Release report
+
+**Integration verified:** 745 unique bugs, including 245 without a fixVersion.
+
+## Monthly releases
+
+| FixVersion | Release month | Bugs |
+| --- | --- | --- |
+| R26.08 | August 2026 | 123 |
+| R26.09 | September 2026 | 42 |
+
+## Scope and verification
+
+- Reviewed **745 distinct issues** across eight pages.
+- Counts reflect version assignments, not necessarily shipped fixes.
+
+Draft ready. <img src=x onerror=alert(1)> is literal text.
+
+### Files
+
+[result.md](/hfl-corpus/agent-bridge/artifacts/sample/result.md?view=true) · [Download](/hfl-corpus/agent-bridge/artifacts/sample/result.md)
+
+[release_counts.csv](/hfl-corpus/agent-bridge/artifacts/sample/release_counts.csv?view=true) · [Download](/hfl-corpus/agent-bridge/artifacts/sample/release_counts.csv)
+'''
+        event(authenticated_client, run, 'succeeded', {**RESULT, 'summary': summary,
+            'evidence': ['actionable:' + item['id'], 'https://example.org/issues/?jql=project%20%3D%20ICON']})
         page.get_by_role('button', name='Refresh', exact=True).click()
         page.get_by_role('heading', name='Completed', exact=True).wait_for()
+        report = page.locator('.agent-result-card').first
+        assert report.locator('.markdown-body').evaluate('(el) => getComputedStyle(el).whiteSpace') == 'normal'
+        assert report.locator('.agent-output-file').count() == 2
+        assert report.get_by_role('link', name='Download result.md').get_attribute('href').endswith('/result.md')
+        assert report.locator('.agent-output-evidence').get_attribute('open') is None
+        report.get_by_text('Sources and evidence · 2', exact=True).click()
+        assert report.get_by_role('link', name='example.org/issues/').get_attribute('href') == 'https://example.org/issues/?jql=project%20%3D%20ICON'
+        report.get_by_text('Sources and evidence · 2', exact=True).click()
+        page.locator('dialog').evaluate('(el) => { el.scrollTop = 0; }')
         page.screenshot(path=str(tmp_path / 'agent-bridge-desktop.png'))
         page.set_viewport_size({'width': 390, 'height': 844})
         page.screenshot(path=str(tmp_path / 'agent-bridge-mobile.png'))
@@ -486,3 +544,56 @@ def test_agent_settings_validation(bridge):
                    {'agent_default_recipient': 'bad\naddress@example.org'}):
         with pytest.raises(ValueError):
             save_settings(values)
+
+
+def test_continue_preserves_context_files_and_operation_scope(bridge, authenticated_client):
+    module, store, actions = bridge
+    item = create_action(actions)
+    first = start(authenticated_client, item)
+    upload = authenticated_client.post(f"/api/hfl-agent/runs/{first['id']}/artifacts/report.md",
+        headers={**WORKER, 'X-Execution-Lease': first['lease_token']}, content=b'# Original report')
+    assert upload.status_code == 200
+    stopped = {'summary': 'Report ready; which recipient?', 'blocked_reason': 'input', 'question': 'Who should receive it?', 'complete': False}
+    assert event(authenticated_client, first, 'awaiting_input', stopped).status_code == 200
+    path = f"/hfl-corpus/agent-bridge/runs/{first['id']}/continue"
+    payload = {'request_key': str(uuid4()), 'reply': 'Use owner@example.org.'}
+    assert authenticated_client.post(path, json=payload).status_code == 403
+    assert authenticated_client.post(path, headers=owner_headers(), json={**payload, 'reply': ''}).status_code == 400
+    response = authenticated_client.post(path, headers=owner_headers(), json=payload)
+    assert response.status_code == 200, response.text
+    second = response.json()
+    assert second['snapshot']['source']['prompt'] == first['snapshot']['source']['prompt']
+    assert second['snapshot']['operation_scope'] == first['request_key']
+    assert second['snapshot']['continuation']['history'][0]['result'] == stopped
+    assert second['snapshot']['continuation']['artifacts'][0]['name'] == 'report.md'
+    assert actions.get(item['id'])['status'] == 'active'
+    assert store.get(first['id'])['state'] == 'cancelled'
+    assert authenticated_client.post(path, headers=owner_headers(), json=payload).json()['id'] == second['id']
+    assert authenticated_client.post(path, headers=owner_headers(), json={**payload, 'reply': 'Different'}).status_code == 409
+    assert authenticated_client.post(path, headers=owner_headers(), json={**payload, 'request_key': str(uuid4())}).status_code == 409
+    second = authenticated_client.post(f"/api/hfl-agent/runs/{second['id']}/claim", headers=WORKER, json={}).json()
+    file_url = f"/api/hfl-agent/runs/{second['id']}/prior-artifacts/report.md"
+    assert authenticated_client.get(file_url, headers=WORKER).status_code == 409
+    assert authenticated_client.get(file_url, headers={**WORKER, 'X-Execution-Lease': second['lease_token']}).content == b'# Original report'
+    event(authenticated_client, second, 'failed', {'summary': 'Gmail unavailable', 'blocked_reason': 'integration'})
+    assert authenticated_client.get(file_url, headers={**WORKER, 'X-Execution-Lease': second['lease_token']}).status_code == 409
+    third = authenticated_client.post(f"/hfl-corpus/agent-bridge/runs/{second['id']}/continue",
+        headers=owner_headers(), json={'request_key': str(uuid4()), 'reply': ''}).json()
+    assert third['snapshot']['operation_scope'] == first['request_key']
+    assert len(third['snapshot']['continuation']['history']) == 2
+    assert third['snapshot']['continuation']['artifacts'][0]['run_id'] == first['id']
+
+
+def test_continue_rejects_changed_source_and_invalid_reply(bridge, authenticated_client):
+    module, store, actions = bridge
+    item = create_action(actions)
+    first = start(authenticated_client, item)
+    event(authenticated_client, first, 'failed', {'summary': 'Service unavailable'})
+    path = f"/hfl-corpus/agent-bridge/runs/{first['id']}/continue"
+    for reply in (None, 123, 'x' * 8001):
+        assert authenticated_client.post(path, headers=owner_headers(), json={'request_key': str(uuid4()), 'reply': reply}).status_code == 400
+    current = actions.get(item['id'])
+    actions.update(item['id'], {'version': current['version'], 'prompt': 'A different task'}, actor='owner')
+    response = authenticated_client.post(path, headers=owner_headers(), json={'request_key': str(uuid4()), 'reply': 'Continue'})
+    assert response.status_code == 409
+    assert len(store.list()) == 1

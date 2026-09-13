@@ -373,6 +373,7 @@ Config sections required in `apps_config.yaml`:
 - `GOOGLE_APPS` — Calendar (uses `credentials.json` / `storage.json`)
 - `GOOGLE_KEEP` — Keep notes (uses `credentials-ha.json` / `storage-ha.json`)
 - `GOOGLE_GMAIL` — Gmail (uses `credentials.json` / `storage-gmail.json`)
+- `GOOGLE_GMAIL_SEND` — Gmail sending (uses `credentials.json` / `storage-gmail-send.json`)
 
 | Tool | Args | Returns |
 |------|------|---------|
@@ -388,9 +389,9 @@ Config sections required in `apps_config.yaml`:
 **Gmail OAuth note:** On first use, the Gmail tool will open a browser to complete the OAuth consent
 flow and write the token to `storage-gmail.json`. Subsequent calls use the cached token silently.
 
-Sending uses `GOOGLE_GMAIL`, not `GOOGLE_GMAIL_SEND`, and requires a send-capable
-grant in addition to reading access. The tracked configuration is read-only;
-complete scope configuration and interactive consent on the MCP host first.
+Sending uses `GOOGLE_GMAIL_SEND` with its `gmail.send` grant, matching the test farm
+email workflow. Reading and searching use `GOOGLE_GMAIL` with `gmail.readonly`.
+Both credentials must be authorized for the intended account on the MCP host.
 Attachments must exist on that host (30 files / 20 MB total). Keep the send receipt
 ledger durable and reconcile uncertain outcomes before another send. See the
 [Gmail service reference](../apps/google_apps/README.md#gmail-sending-and-attachments)

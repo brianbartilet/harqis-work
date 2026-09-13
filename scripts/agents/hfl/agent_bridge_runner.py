@@ -11,6 +11,7 @@ Minute discovery belongs to Hermes; --watch consumes queued requests.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -116,6 +117,10 @@ def parse_result(output):
     result = candidates[0]
     if result['state'] not in {'succeeded', 'failed', 'awaiting_input'} or type(result['complete']) is not bool:
         raise ValueError('Invalid Hermes outcome.')
+    if result.get('blocked_reason') not in (None, 'input', 'integration'):
+        raise ValueError('Invalid blocker type.')
+    if not isinstance(result.get('question', ''), str) or len(result.get('question', '')) > 8000:
+        raise ValueError('Invalid input question.')
     for field in ('plan', 'summary'):
         if not isinstance(result[field], str) or not result[field].strip() or len(result[field]) > 100000:
             raise ValueError('Invalid Hermes plan or output.')
@@ -150,6 +155,40 @@ class BridgeClient:
         return self.call('runs/' + run['id'] + '/events', {'lease_token': run['lease_token'], 'event_key': key, 'kind': kind, 'payload': payload})
 
 
+def execution_prompt(run, workspace):
+    snapshot = run['snapshot']
+    return snapshot['runtime_prompt'] + '\n\n' + json.dumps({
+        **{key: snapshot.get(key) for key in ('source_key', 'source', 'category_guidance', 'context', 'occurrence_date', 'continuation')},
+        'artifact_directory': str(workspace.resolve()),
+        'execution_settings': snapshot.get('execution_settings', {'agent_mode': 'restricted'}),
+        'operation_scope': snapshot.get('operation_scope', run.get('request_key', run['id'])),
+    }, ensure_ascii=False)
+
+
+def restore_prior_artifacts(client, run):
+    """Fetch only declared prior files with the new attempt's execution lease."""
+    workspace = spool_root() / 'workspaces' / run['id']
+    workspace.mkdir(parents=True, exist_ok=True)
+    for artifact in run['snapshot'].get('continuation', {}).get('artifacts', []):
+        name = artifact['name']
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,119}', name):
+            raise ValueError('Invalid prior artifact filename.')
+        path = workspace / name
+        if path.is_symlink() or not path.resolve().is_relative_to(workspace.resolve()):
+            raise ValueError('Prior artifact escapes the workspace.')
+        with client.client.stream('GET', 'runs/' + run['id'] + '/prior-artifacts/' + name,
+                                 headers={'X-Execution-Lease': run['lease_token']}) as response:
+            response.raise_for_status()
+            content = bytearray()
+            for chunk in response.iter_bytes():
+                content.extend(chunk)
+                if len(content) > 20 * 1024 * 1024:
+                    raise ValueError('Prior artifact exceeds 20 MB.')
+        if len(content) != artifact['size'] or hashlib.sha256(content).hexdigest() != artifact['digest']:
+            raise ValueError('Prior artifact integrity check failed.')
+        path.write_bytes(content)
+
+
 def run_hermes(run, heartbeat, *, timeout=1200):
     command, root = hermes_command()
     snapshot = run['snapshot']
@@ -157,7 +196,7 @@ def run_hermes(run, heartbeat, *, timeout=1200):
     timeout = settings.get('agent_timeout_seconds', timeout)
     workspace = spool_root() / 'workspaces' / run['id']
     workspace.mkdir(parents=True, exist_ok=True)
-    prompt = snapshot['runtime_prompt'] + '\n\n' + json.dumps({**{key: snapshot.get(key) for key in ('source_key', 'source', 'category_guidance', 'context', 'occurrence_date')}, 'artifact_directory': str(workspace.resolve()), 'execution_settings': settings, 'operation_scope': run.get('request_key', run['id'])}, ensure_ascii=False)
+    prompt = execution_prompt(run, workspace)
     environment = {key: value for key, value in os.environ.items() if key in {
         'PATH', 'PATHEXT', 'SYSTEMROOT', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'TMPDIR', 'HOME', 'USERPROFILE',
         'APPDATA', 'LOCALAPPDATA', 'COMSPEC', 'LANG', 'HERMES_HOME', 'HERMES_PROFILE',
@@ -291,10 +330,11 @@ def consume(client, *, limit=10):
             raise
         try:
             client.event(run, 'plan', 'plan', {'summary': 'Read the prompt and supporting context, perform the requested task with available tools, and verify the output against the prompt.', 'execution_settings': run['snapshot'].get('execution_settings', {})})
+            restore_prior_artifacts(client, run)
             result = run_hermes(run, lambda: client.event(run, 'heartbeat', 'heartbeat', {}))
             upload_artifacts(client, run, result)
         except Exception as exc:
-            result = {'state': 'failed', 'summary': f'Execution did not finish ({type(exc).__name__}). Inspect the local worker before retrying.', 'complete': False, 'evidence': []}
+            result = {'state': 'failed', 'blocked_reason': 'integration', 'summary': f'Execution did not finish ({type(exc).__name__}). Inspect the local worker before retrying.', 'complete': False, 'evidence': []}
         result.setdefault('model', os.environ.get('HFL_AGENT_MODEL', 'Hermes provider default'))
         receipt = {'run': {'id': run['id'], 'lease_token': run['lease_token']}, 'result': result, 'delivered': False}
         path = spool_root() / (run['id'] + '.json')

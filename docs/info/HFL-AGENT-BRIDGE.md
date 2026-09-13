@@ -29,6 +29,35 @@ Outputs render sanitized Markdown and working source links. Files have signed-in
 View and Download links. The Agent results dialog shows frozen instructions, run
 state, session ID, and recovery controls for results that need review.
 
+### Answering questions and retrying blocked work
+
+The latest stopped attempt offers a continuation form directly in **Agent results**:
+
+- **Needs your answer**: enter a reply and choose **Answer and continue**.
+- **Blocked by integration**: fix the indicated service/configuration problem, then
+  choose **Retry after fix**. You can add a note explaining what changed.
+- Older results without a blocker category offer both controls.
+
+There is no need to edit the original prompt or set the action back to Open.
+Continuation queues a fresh Hermes session linked to the stopped attempt. It carries
+the original task and occurrence date, previous results, owner replies and up to 30
+saved artifacts. Files are fetched using the active worker lease and verified by
+size/hash before execution. Current execution settings apply to the continuation.
+The original result and files remain in history; the old attempt is marked cancelled
+when superseded. Only the latest failed/awaiting-input attempt can be continued.
+Changed task instructions require a new run instead. History is bounded to 20
+continuations and 1 MB; reaching the limit requires a new task summarizing remaining work.
+
+Continuation preserves the original delivery operation scope. Completed send receipts
+are reused, and uncertain sends still require reconciliation; **Retry after fix**
+does not clear a pending Gmail receipt or authorize a duplicate delivery. A fresh
+**Run now** / reopened task remains a new operation, distinct from continuation.
+
+Replies and retries use the signed-in owner API with CSRF protection. Repeated
+submissions of the same request key return the same attempt. The worker cannot
+submit owner replies, and artifact downloads are limited to the continuation's
+declared files while its execution lease is active.
+
 Pins have an optional hour selector, default **00:00 Asia/Singapore**, and a daily
 schedule checkbox. New pins with instructions are enabled by default. Existing
 pins preserve prior opt-in, including legacy daily/after-period subscriptions.
@@ -151,12 +180,12 @@ use the intended checkout. Restart long-lived processes to pick up Python change
 3. Run `--capabilities` there to inspect real tool discovery. Unlike `--check`, it
    loads the selected Hermes configuration and asks Hermes to list tools; it does
    not run an inference task or send email. Discovery does not test OAuth scopes.
-4. Verify the MCP process's `GOOGLE_GMAIL` credential has the required read/send
-   grants. This tool uses **`GOOGLE_GMAIL`, not `GOOGLE_GMAIL_SEND`**. For interactive
+4. Verify the MCP process's **`GOOGLE_GMAIL_SEND`** credential has the `gmail.send`
+   grant. Reading and searching use **`GOOGLE_GMAIL`** with `gmail.readonly`;
+   both credentials should refer to the intended account. For interactive
    reauthorization, see `reauth_gmail_send.py` in the [script reference](../../scripts/README.md).
-   Select the `GOOGLE_GMAIL` configuration. The repair utility uses the scopes in
-   that configuration and replaces its cached token by default; reauthorizing a
-   read-only configuration alone cannot add sending access.
+   Select the `GOOGLE_GMAIL_SEND` configuration for sending. The repair utility
+   uses the scopes in that configuration and replaces its cached token by default.
 5. Create an explicit test action requesting a small Markdown file and delivery
    to your own address. Run it intentionally: this step sends a real email.
 6. Check **Agent results** for the file preview/download, recipient, attachment
@@ -166,7 +195,7 @@ use the intended checkout. Restart long-lived processes to pick up Python change
 | Symptom | Check / recovery |
 |---|---|
 | Gmail tool missing | Check trusted mode, selected profile/toolsets, `MCP_ENABLED_APPS`, registration logs and the MCP checkout. Restart the MCP process after code changes. |
-| Tool exists but Gmail rejects authorization | Inspect the `GOOGLE_GMAIL` scope configuration and grant on the MCP host. Complete interactive consent outside the unattended worker. |
+| Tool exists but Gmail rejects authorization | Inspect `GOOGLE_GMAIL_SEND` for sending, or `GOOGLE_GMAIL` for reading/searching, on the MCP host. Complete interactive consent outside the unattended worker if the required grant is missing. |
 | Agent asks who “me” is | Set the default recipient or put an explicit address in the saved prompt. |
 | Configured profile does not exist | Create/configure the profile on the worker or select an existing profile; frontend-local profiles do not count. |
 | Changed settings did not affect a queued run | Settings were frozen at enqueue. Cancel the old attempt and request a new one. |

@@ -18,17 +18,53 @@
   document.body.append(dialog);
   let generation = 0;
   function outputCard(payload) {
-    const output = element('div'); output.className = 'markdown-body';
-    if (payload.output_html) output.innerHTML = payload.output_html;
-    else output.textContent = payload.summary || '';
-    if (payload.evidence?.length) {
-      const refs = element('p', 'Evidence: ');
-      payload.evidence.forEach((ref, index) => {
-        if(index) refs.append(document.createTextNode(' · '));
-        if (/^https?:\/\//i.test(ref)) { const link = element('a', ref); link.href = ref; link.target = '_blank'; link.rel = 'noopener noreferrer'; refs.append(link); }
-        else refs.append(document.createTextNode(ref));
+    const output = element('div'); output.className = 'agent-output';
+    const report = element('div'); report.className = 'markdown-body';
+    if (payload.output_html) report.innerHTML = payload.output_html;
+    else { report.textContent = payload.summary || ''; report.classList.add('agent-output-plain'); }
+    output.append(report);
+    report.querySelectorAll('table').forEach(table => {
+      const scroll = element('div'); scroll.className = 'agent-report-table'; scroll.tabIndex = 0;
+      scroll.setAttribute('role', 'region'); scroll.setAttribute('aria-label', 'Report table');
+      table.replaceWith(scroll); scroll.append(table);
+    });
+    // Compact only the bridge-generated file footer; retain authored report links.
+    const headings = [...report.children].filter(node => node.tagName === 'H3' && node.textContent.trim() === 'Files');
+    headings.forEach(heading => {
+      const rows = [];
+      for (let row = heading.nextElementSibling; row?.tagName === 'P'; row = row.nextElementSibling) {
+        const links = [...row.querySelectorAll('a')];
+        if (links.length !== 2 || links[1].textContent.trim() !== 'Download' ||
+            links.some(link => !/^\/hfl-corpus\/agent-bridge\/artifacts\/[^/]+\/[^/?]+(?:\?view=true)?$/.test(link.getAttribute('href') || '')) ||
+            row.textContent.replace(links[0].textContent, '').replace(links[1].textContent, '').trim() !== '·') break;
+        rows.push(row);
+      }
+      if (!rows.length) return;
+      const files = element('section'); files.className = 'agent-output-files';
+      const title = element('h4', 'Files · ' + rows.length); files.append(title);
+      rows.forEach(row => {
+        row.className = 'agent-output-file';
+        const links = [...row.querySelectorAll('a')];
+        links[1].setAttribute('aria-label', 'Download ' + links[0].textContent);
+        row.replaceChildren(...links); files.append(row);
       });
-      output.append(refs);
+      heading.replaceWith(files);
+    });
+    if (payload.evidence?.length) {
+      const refs = element('details'); refs.className = 'agent-output-evidence';
+      const evidence = [...new Set(payload.evidence)];
+      refs.append(element('summary', 'Sources and evidence · ' + evidence.length));
+      const list = element('ul');
+      evidence.forEach(ref => {
+        const item = element('li');
+        if (/^https?:\/\//i.test(ref)) {
+          const link = element('a', ref); link.href = ref; link.target = '_blank'; link.rel = 'noopener noreferrer';
+          try { const url = new URL(ref); link.textContent = url.hostname + (url.pathname === '/' ? '' : url.pathname); } catch (_) { /* Keep the original reference. */ }
+          link.title = ref; item.append(link);
+        } else item.append(element('code', ref));
+        list.append(item);
+      });
+      refs.append(list); output.append(refs);
     }
     return output;
   }
@@ -107,7 +143,8 @@
       for (const run of data.runs) {
         const card = element('section'); card.className = 'agenda-history-row agent-result-card';
         const meta = element('div'); meta.className = 'agent-result-meta';
-        const state = element('h3', ({queued:'Queued',running:'In progress',succeeded:run.result.complete ? 'Completed' : 'Incomplete',failed:'Incomplete',awaiting_input:'Needs input',review:'Ready for review',accepting:'Applying result',cancelled:'Cancelled'})[run.state] || run.state);
+        const integrationBlocked = run.result.blocked_reason === 'integration';
+        const state = element('h3', ({queued:'Queued',running:'In progress',succeeded:run.result.complete ? 'Completed' : 'Incomplete',failed:integrationBlocked ? 'Blocked by integration' : 'Incomplete',awaiting_input:integrationBlocked ? 'Blocked by integration' : 'Needs your answer',review:'Ready for review',accepting:'Applying result',cancelled:'Cancelled'})[run.state] || run.state);
         state.className = 'agent-result-state'; state.dataset.state = run.state;
         const time = element('time', new Date(run.created_at).toLocaleString('en-SG', {timeZone:'Asia/Singapore',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) + ' SGT'); time.dateTime = run.created_at;
         meta.append(state, time); card.append(meta);
@@ -116,10 +153,46 @@
           card.append(element('small', 'Execution: ' + settings.agent_mode + ' · Profile: ' + (settings.hermes_profile || 'Worker default')));
         }
         if (run.state === 'queued') card.append(element('p', 'Waiting for an agent to start. You can leave this dialog and check back later.'));
+        if (run.snapshot?.continuation) {
+          const reply = element('p', run.snapshot.continuation.reply ? 'Your reply: ' + run.snapshot.continuation.reply : 'Retry requested after a fix.');
+          reply.className = 'agent-continuation-reply'; card.append(reply);
+        }
+        if (run.id === data.runs[0]?.id && ['awaiting_input','failed'].includes(run.state)) {
+          const form = element('form'); form.className = 'agent-continuation-form';
+          const label = element('label', integrationBlocked ? 'What changed? (optional)' : 'Your reply');
+          const input = element('textarea'); input.id = 'agent-reply-' + run.id; input.rows = 3; input.maxLength = 8000;
+          label.htmlFor = input.id;
+          input.placeholder = integrationBlocked ? 'Describe the fix or add instructions for the retry.' : 'Answer the question or clarify what the agent should do next.';
+          if (run.result.question) form.append(element('p', run.result.question));
+          form.append(label, input, element('small', 'Continues with previous results and files. You do not need to edit the task or set it to Open.'));
+          const feedback = element('p'); feedback.setAttribute('role', 'alert'); feedback.hidden = true;
+          input.addEventListener('input', () => { feedback.hidden = true; });
+          const submit = element('button', integrationBlocked ? 'Retry after fix' : 'Answer and continue'); submit.type = 'submit';
+          const actions = element('div'); actions.className = 'agent-result-actions'; actions.append(submit);
+          // Legacy results have no blocker type; allow retrying them after an external fix.
+          const retry = !run.result.blocked_reason ? element('button', 'Retry after fix') : null;
+          if (retry) { retry.type = 'button'; actions.append(retry); }
+          let continuationKey = crypto.randomUUID(), submittedReply = null;
+          const send = async (allowEmpty) => {
+            const reply = input.value.trim();
+            if (!reply && !allowEmpty) { feedback.textContent = 'Enter your answer before continuing.'; feedback.hidden = false; input.focus(); return; }
+            if (submittedReply !== null && submittedReply !== reply) continuationKey = crypto.randomUUID();
+            submittedReply = reply; submit.disabled = true; if (retry) retry.disabled = true; feedback.hidden = true;
+            try {
+              await api('/runs/' + run.id + '/continue', {request_key: continuationKey, reply});
+              await refresh(); window.dispatchEvent(new Event('hfl:agent-updated'));
+            } catch (e) { feedback.textContent = e.message; feedback.hidden = false; }
+            finally { submit.disabled = false; if (retry) retry.disabled = false; }
+          };
+          form.onsubmit = e => { e.preventDefault(); send(integrationBlocked || run.state === 'failed'); };
+          if (retry) retry.onclick = () => send(true);
+          form.append(actions, feedback); card.append(form);
+        }
         if (run.result.summary) card.append(outputCard(run.result));
-        if (['review','accepting'].includes(run.state)) card.append(button(run.state === 'accepting' ? 'Retry acceptance' : run.result.complete && kind === 'actionable' ? 'Accept and mark done' : 'Accept result', async () => { await api('/runs/' + run.id + '/accept', {}); await refresh(); window.dispatchEvent(new Event('hfl:agent-updated')); }));
-        if (['queued','running','awaiting_input','review'].includes(run.state)) card.append(button('Cancel run', async () => { await api('/runs/' + run.id + '/cancel', {}); await refresh(); }));
-        if (run.state === 'awaiting_input') card.append(element('p', 'Update the source instructions, cancel this attempt, then run again.'));
+        const actions = element('div'); actions.className = 'agent-result-actions';
+        if (['review','accepting'].includes(run.state)) actions.append(button(run.state === 'accepting' ? 'Retry acceptance' : run.result.complete && kind === 'actionable' ? 'Accept and mark done' : 'Accept result', async () => { await api('/runs/' + run.id + '/accept', {}); await refresh(); window.dispatchEvent(new Event('hfl:agent-updated')); }));
+        if (['queued','running','awaiting_input','review'].includes(run.state)) actions.append(button('Cancel run', async () => { await api('/runs/' + run.id + '/cancel', {}); await refresh(); }));
+        if (actions.childElementCount) card.append(actions);
         const details = element('details'); details.append(element('summary', 'Run details'));
         const snapshot = element('pre', [run.snapshot.category_guidance, run.snapshot.source.prompt].filter(Boolean).join('\n\n')); snapshot.className = 'action-prompt'; details.append(element('p', 'Instructions used'), snapshot, element('small', 'Run ' + run.id));
         if (run.result.session_id) details.append(element('small', 'Hermes session: ' + run.result.session_id));

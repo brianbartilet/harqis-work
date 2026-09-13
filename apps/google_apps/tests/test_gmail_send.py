@@ -66,8 +66,14 @@ def test_mcp_exposes_send_with_stable_key(monkeypatch):
     module.register_google_apps_tools(Registry())
     service = MagicMock()
     service.send_email.return_value = {'id': 'receipt'}
-    monkeypatch.setattr(module, 'ApiServiceGoogleGmail', lambda config: service)
+    factory = MagicMock(return_value=service)
+    monkeypatch.setattr(module, 'ApiServiceGoogleGmail', factory)
     assert tools['send_gmail_email']('owner@example.org', 'Report', 'Body', 'operation:email:1')['id'] == 'receipt'
-    assert 'search_gmail' in tools
+    factory.assert_called_once_with(module.CONFIG_MANAGER.get('GOOGLE_GMAIL_SEND'))
+    service.send_email.assert_called_once_with('owner@example.org', 'Report', 'Body', None, None, 'operation:email:1')
+    factory.reset_mock()
     with pytest.raises(ValueError):
         tools['send_gmail_email']('owner@example.org', 'Report', 'Body', '')
+    factory.assert_not_called()
+    tools['search_gmail']('in:sent')
+    factory.assert_called_once_with(module.CONFIG_MANAGER.get('GOOGLE_GMAIL'))

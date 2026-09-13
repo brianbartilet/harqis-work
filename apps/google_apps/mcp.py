@@ -14,6 +14,7 @@ logger = logging.getLogger("harqis-mcp.google_apps")
 
 _KEEP_CONFIG = CONFIG_MANAGER.get("GOOGLE_KEEP")
 _GMAIL_CONFIG = CONFIG_MANAGER.get("GOOGLE_GMAIL")
+_GMAIL_SEND_CONFIG = CONFIG_MANAGER.get("GOOGLE_GMAIL_SEND")
 _TASKS_CONFIG = CONFIG_MANAGER.get("GOOGLE_TASKS")
 _DRIVE_CONFIG = CONFIG_MANAGER.get("GOOGLE_DRIVE")
 _TRANSLATION_CONFIG = CONFIG_MANAGER.get("GOOGLE_TRANSLATION")
@@ -26,7 +27,7 @@ def register_google_apps_tools(mcp: FastMCP):
                          attachments: list[str] | None = None, body_html: str | None = None) -> dict:
         """Send an authorized email and optional host-file attachments through Gmail.
 
-        Requires gmail.send authorization. Recipient and content must follow the task.
+        Uses GOOGLE_GMAIL_SEND with gmail.send authorization. Recipient and content must follow the task.
         For Activity Corpus use operation_scope + ':email:1' as the operation_key,
         reusing it for retries. Attach only verified deliverable files. Returns the
         Gmail message ID and attachment hashes, not proof of delivery or reading.
@@ -34,7 +35,7 @@ def register_google_apps_tools(mcp: FastMCP):
         """
         if not operation_key.strip():
             raise ValueError('A stable operation key is required.')
-        return ApiServiceGoogleGmail(_GMAIL_CONFIG).send_email(
+        return ApiServiceGoogleGmail(_GMAIL_SEND_CONFIG).send_email(
             to, subject, body, body_html, attachments, operation_key)
 
     @mcp.tool()

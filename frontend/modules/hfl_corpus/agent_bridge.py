@@ -26,7 +26,7 @@ from modules.hfl_corpus.remote import RemoteCorpusClient, RemoteCorpusError
 from modules.hfl_corpus.secrets import is_secret_entry, normalize_secret_tags
 from modules.profile.store import get_profile_store
 from modules.hfl_shares.security import verify_csrf_token
-from workflows.hfl.agent_bridge_store import AgentBridgeStore, BridgeConflict, digest
+from workflows.hfl.agent_bridge_store import AgentBridgeStore, BridgeConflict, digest, now
 from workflows.hfl.timeline_store import FollowUpConflict
 
 
@@ -463,15 +463,65 @@ def run_now(kind: str, source_id: str, payload: dict, user=Depends(owner_auth)):
 
 
 @owner_router.post('/runs/{run_id}/{decision}')
-def decide(run_id: str, decision: str, background_tasks: BackgroundTasks, user=Depends(owner_auth)):
+def decide(run_id: str, decision: str, background_tasks: BackgroundTasks, payload: dict | None = None, user=Depends(owner_auth)):
+    if decision == 'continue':
+        return continue_attempt(run_id, payload or {}, user)
     if decision == 'accept':
         run = checked(accept, run_id, user)
     elif decision == 'cancel':
         run = checked(bridge_store().owner_transition, run_id, 'cancelled', user, 'Cancelled by owner; any late agent result will be rejected.')
     else:
-        raise HTTPException(400, 'Choose accept or cancel.')
+        raise HTTPException(400, 'Choose accept, cancel, or continue.')
     background_tasks.add_task(deliver_pending)
     return run
+
+
+def continue_attempt(run_id: str, payload: dict, user: str):
+    store = bridge_store()
+    parent = checked(store.get, run_id)
+    reply = payload.get('reply', '')
+    if not isinstance(reply, str) or len(reply) > 8000:
+        raise HTTPException(400, 'Reply must be text of at most 8,000 characters.')
+    reply = reply.strip()
+    if not reply and parent['state'] == 'awaiting_input' and parent['result'].get('blocked_reason') == 'input':
+        raise HTTPException(400, 'Answer the question before continuing.')
+    original = parent['snapshot']
+    current = checked(source_snapshot, original['kind'], original['source_id'])
+    def instructions(source):
+        return {k: v for k, v in source.items() if k not in {'version', 'status', 'updated_at'}}
+    if instructions(current['source']) != instructions(original['source']) or current['category_guidance'] != original['category_guidance']:
+        raise HTTPException(409, 'The task instructions changed. Start a new run for the edited task.')
+    history = list(original.get('continuation', {}).get('history', []))
+    history.append({'run_id': run_id, 'result': {k: v for k, v in parent['result'].items() if k != 'output_html'}, 'reply': reply})
+    if len(history) > 20 or len(json.dumps(history)) > 1000000:
+        raise HTTPException(400, 'Continuation history is full. Summarize the remaining work in a new task.')
+    artifacts = {item['name']: item for item in original.get('continuation', {}).get('artifacts', [])}
+    artifacts.update({item['name']: {**item, 'run_id': run_id} for item in store.artifacts(run_id)})
+    if len(artifacts) > 30:
+        raise HTTPException(400, 'Continuation exceeds the 30-file limit.')
+    current.update(auto_complete=original.get('auto_complete', True), context=original.get('context', {}),
+                   occurrence_date=original.get('occurrence_date'),
+                   operation_scope=original.get('operation_scope', parent['request_key']),
+                   continuation={'parent_run_id': run_id, 'reply': reply, 'history': history, 'artifacts': list(artifacts.values())})
+    run = checked(store.continue_run, run_id, current, payload.get('request_key'), user, reply)
+    if run['state'] == 'queued':
+        checked(apply_action, run, 'active')
+    return store.get(run['id'])
+
+
+@worker_router.get('/runs/{run_id}/prior-artifacts/{name}')
+def prior_artifact(run_id: str, name: str, request: Request, agent=Depends(worker_auth)):
+    run = checked(bridge_store().get, run_id, private=True)
+    token = request.headers.get('X-Execution-Lease', '')
+    if run['state'] != 'running' or run['agent'] != agent or not token or not hmac.compare_digest(run['lease_token'], token) or run['lease_until'] < now():
+        raise HTTPException(409, 'An active execution lease is required.')
+    artifact = next((item for item in run['snapshot'].get('continuation', {}).get('artifacts', []) if item['name'] == name), None)
+    if not artifact:
+        raise HTTPException(404, 'Prior artifact not found.')
+    path = artifact_path(artifact['run_id'], artifact['digest'])
+    if not path.is_file():
+        raise HTTPException(404, 'Prior artifact is unavailable.')
+    return FileResponse(path, media_type='application/octet-stream', headers={'Cache-Control': 'no-store'})
 
 
 @worker_router.get('/queue')
