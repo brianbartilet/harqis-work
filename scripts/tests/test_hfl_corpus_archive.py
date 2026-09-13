@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import errno
 import os
+import subprocess
+import sys
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +16,20 @@ def _write(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
     return path
+
+
+def test_archive_launcher_from_outside_checkout_supports_dry_run(tmp_path):
+    root = tmp_path / 'corpus'
+    source = _write(root / '2001-01-01.md', '# 2001-01-01\n')
+    launcher = Path(__file__).resolve().parents[1] / 'agents/hfl/run_archive.py'
+    result = subprocess.run(
+        [sys.executable, str(launcher), '--root', str(root), '--dry-run'],
+        cwd=tmp_path, capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert 'would move 1' in result.stdout
+    assert source.exists()
+    assert not (root / '2001/Jan/2001-01-01.md').exists()
 
 
 def test_document_date_prefers_created_metadata_over_title_and_filename(tmp_path):

@@ -42,6 +42,7 @@ of truth.
 | `/manage-fork-fleet` | Discover, compare, test, deploy, and safely synchronize harqis-work forks through isolated worktrees and PRs. |
 | `/max-plan` | Perform a deep reasoning planning pass and persist the resulting plan. |
 | `/migrate-to-core` | Move reusable generic code from `harqis-work` into `harqis-core`. |
+| `/manifesto-audit` | Audit CODE/PARA flows and manifesto alignment with any LLM runtime; produce evidence-backed reports and authorized remediation. |
 | `/radar-sold-inventory` | Cross-reference sold TCG orders with inventory and radar data. |
 | `/replay-expired-celery-tasks` | Reconstruct, review, and safely replay missed Celery Beat executions that expired before a worker consumed them. |
 | `/run-tests` | Run app-specific, targeted, or full pytest suites using repository conventions. |
@@ -49,6 +50,7 @@ of truth.
 | `/sync-host` | Preflight and synchronize configured local files to a remote HARQIS checkout over SSH. |
 | `/time-capsule-synthesizer` | Synthesize a set of files into one period-based HFL time-capsule entry. |
 | `/update-docs` | Audit documentation against current code and apply the smallest accurate corrections. |
+| `/weekly-docs-pr` | Review documentation with any LLM and prepare an isolated draft PR with explicit delivery handling. |
 | `/workflow-token-audit` | Estimate scheduled workflow API calls, model/token exposure, embedding usage, and cost drivers. |
 | `/write-notes` | Save OCR-enriched HFL notes, list recent notes with document links, and safely update one note by GUID. |
 | `/zapier-mcp` | Search, enable, and wire Zapier MCP actions into workflows or direct agent use. |

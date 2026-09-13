@@ -45,7 +45,12 @@
     dialog.replaceChildren();
     const header = element('header'); header.className = 'agenda-dialog-header';
     const heading = element('h2', 'Agent results'); heading.id = 'agent-bridge-title';
-    const close = element('button', '×'); close.type = 'button'; close.setAttribute('aria-label', 'Close agent results'); close.onclick = () => dialog.close();
+    heading.tabIndex = -1; heading.setAttribute('autofocus', '');
+    const close = element('button'); close.type = 'button'; close.className = 'agent-results-close'; close.setAttribute('aria-label', 'Close agent results'); close.title = 'Close (Esc)'; close.onclick = () => dialog.close();
+    const closeIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    closeIcon.setAttribute('viewBox', '0 0 24 24'); closeIcon.setAttribute('aria-hidden', 'true'); closeIcon.setAttribute('focusable', 'false');
+    const closePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    closePath.setAttribute('d', 'M6 6l12 12M18 6L6 18'); closeIcon.append(closePath); close.append(closeIcon);
     header.append(heading, close);
     const body = element('div'); body.className = 'agenda-form-body agent-results-body';
     const task = element('section'); task.className = 'agent-results-task';

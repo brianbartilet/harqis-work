@@ -9,6 +9,18 @@ allowed-tools: Bash Read Glob Grep Edit Write
 
 Sweep the root `README.md` (or a targeted doc) against the live state of the codebase, surface drift between docs and reality, and apply the smallest necessary edits.
 
+## Agent runtime
+
+Perform the review with the current LLM and its available tools. This skill does
+not require Claude Code, subscription OAuth, or any specific model. Python checks
+use the checkout's virtual environment and standard HARQIS machine environment;
+the Hermes interpreter is not a substitute for repository dependencies.
+
+For a scheduled documentation review that should produce a draft PR, follow
+[`weekly-docs-pr`](../weekly-docs-pr/SKILL.md), which adds Git isolation,
+publication, and delivery rules. An ordinary update-docs invocation keeps the
+existing local-edit scope; it does not implicitly publish or notify anyone.
+
 ## When to use
 
 - User asks to **update**, **review**, **check**, or **refresh** docs / documentation / a README

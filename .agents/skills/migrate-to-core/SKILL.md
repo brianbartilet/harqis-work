@@ -17,6 +17,21 @@ upstream) is done by `scripts/agents/repo-quality/migrate_to_core_scan.py`; **yo
 the *purpose* judgment and author the PRs. This keeps a monthly headless run cheap
 and the synthesis high-quality.
 
+## Agent runtime
+
+The active LLM performs this skill using its available repository, shell, and
+GitHub tools. No Claude Code executable, Claude subscription, or specific model
+is required. Authentication checks concern the selected runtime and GitHub;
+Claude OAuth is relevant only when the caller explicitly uses a Claude adapter.
+Do not spawn another LLM solely to execute this skill. The scheduler owns cadence
+and model selection; a direct invocation is not subject to a calendar gate.
+
+Use isolated worktrees for both repositories when working on a running host.
+Preserve the host's checked-out branches and existing edits. Before Python
+imports `apps` or `workflows`, load the standard HARQIS machine environment using
+the repository bootstrap. Record the actual runtime/model when known in the run
+report, along with validation results and unresolved prerequisites.
+
 ## Arguments
 
 `$ARGUMENTS` (parse left to right; all optional):
