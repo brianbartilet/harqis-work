@@ -2680,6 +2680,50 @@ def test_plain_text_search_shows_clickable_matching_entry_previews(
     )
 
 
+@pytest.mark.parametrize("source, expected", [
+    ("2026-09-14 00:04:52.466062", "Mon Sep 14 2026 12:04 AM"),
+    ("2026-09-13 23:44:52.466062", "Sun Sep 13 2026 11:44 PM"),
+    ("2026-09-14T12:04:00+08:00", "Mon Sep 14 2026 12:04 PM UTC+08:00"),
+    ("2026-02-30 12:00", "2026-02-30 12:00"),
+    ("A normal heading", "A normal heading"),
+    ("2026-09-14", "2026-09-14"),
+])
+def test_entry_heading_display_date(source, expected):
+    from modules.hfl_corpus.router import _display_entry_header
+
+    assert _display_entry_header(source) == expected
+
+
+def test_document_formats_dates_without_changing_source(authenticated_client, monkeypatch):
+    import base64
+    import modules.hfl_corpus.router as hfl_routes
+
+    timestamp = "2026-09-14 00:04:52.466062"
+    source = f"## {timestamp}\n\nSource: agent-session\nEntry ID: hfl-layout-test\n"
+    document = _document("2026-09-14.md", text=source, entries=(
+        CorpusEntry(anchor="original-entry-anchor", header=timestamp,
+                    moment="", what_happened="", tags=(), text=source),
+    ))
+    monkeypatch.setattr(hfl_routes.corpus_index, "get", lambda path: document)
+
+    response = authenticated_client.get("/hfl-corpus/document/2026-09-14.md")
+
+    assert response.status_code == 200
+    assert 'id="original-entry-anchor" class="scroll-mt-40">Mon Sep 14 2026 12:04 AM</h2>' in response.text
+    from bs4 import BeautifulSoup
+    page = BeautifulSoup(response.text, "html.parser")
+    heading = page.find(id="original-entry-anchor")
+    assert heading.parent.get("class") == ["corpus-entry-header"]
+    action = heading.parent.find("a", class_="corpus-followup-action")
+    assert action is not None
+    assert action["aria-describedby"] == heading["id"]
+    assert "source_path=2026-09-14.md" in action["href"]
+    assert "Updated Sun Jul 12 2026 12:00 AM" in response.text
+    assert "Created Fri Jul 10 2026 12:00 AM" in response.text
+    assert base64.b64encode(source.encode()).decode() in response.text
+    assert document.text == source
+
+
 def test_document_adds_entry_anchors_and_wraparound_tag_navigation(
     authenticated_client, monkeypatch
 ):

@@ -393,6 +393,32 @@ def test_date_dot_aggregates_current_statuses(agenda,authenticated_client,status
     assert 'count' not in day
 
 
+def test_incomplete_history_action_overrides_completed_schedule(agenda, authenticated_client, monkeypatch):
+    import modules.hfl_corpus.timeline as timeline
+
+    selected = '2026-09-13'
+    incomplete, _ = agenda.create(payload(review_date='2026-09-14', due_date=''), actor='owner')
+    agenda.update(incomplete['id'], {'version': 1, 'status': 'incomplete'}, actor='owner')
+    complete, _ = agenda.create(payload(review_date=selected, due_date=''), actor='owner')
+    agenda.update(complete['id'], {'version': 1, 'status': 'done'}, actor='owner')
+    original_events = timeline.item_events
+
+    def events(item, canonical):
+        result = original_events(item, canonical)
+        if item['id'] == incomplete['id']:
+            result.append({'date': selected, 'kind': 'done', 'version': 1})
+        return result
+
+    monkeypatch.setattr(timeline, 'item_events', events)
+    day = authenticated_client.get('/hfl-corpus/timeline/markers').json()['days'][selected]
+    assert incomplete['id'] in day['actions']
+    assert complete['id'] in day['planned']
+    assert day['dot_status'] == 'incomplete'
+    agenda.update(incomplete['id'], {'version': 2, 'status': 'done'}, actor='owner')
+    day = authenticated_client.get('/hfl-corpus/timeline/markers').json()['days'][selected]
+    assert day['dot_status'] == 'done'
+
+
 def test_reschedule_and_reopen_update_dots(agenda,authenticated_client):
     first=(date.today()+timedelta(days=15)).isoformat()
     second=(date.today()+timedelta(days=16)).isoformat()

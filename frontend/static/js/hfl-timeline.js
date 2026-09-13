@@ -101,7 +101,7 @@
     try {
       const [data, periodData, markers] = await Promise.all([api('?closed='+closed), timelineApi('/period?'+new URLSearchParams({start:startInput.value,end:endInput.value})), timelineApi('/markers')]);
       if(ticket!==sequence)return;today=data.today;
-      markerDays=markers.days;paintMarkers();renderSuggestions(periodData);
+      markerDays=markers.days;reconcilePeriodMarkers(periodData.items);paintMarkers();paintActionsIndicator(periodData.items);renderSuggestions(periodData);
       if(!document.getElementById('timeline-all').checked) {data.items=periodData.items.filter(item=>['done','dismissed'].includes(item.status)===closed).map(item=>({...item,group:'This period'}));data.total=data.items.length;}
       const list=document.getElementById('agenda-items');
       const expanded=new Set(Array.from(list.querySelectorAll('details[open]')).map(el=>el.closest('[data-followup-id]').dataset.followupId));
@@ -132,6 +132,34 @@
   async function timelineApi(path, options={}) {
     const response=await fetch('/hfl-corpus/timeline'+path,{...options,headers:{'Content-Type':'application/json'}});
     const data=await response.json();if(!response.ok)throw new Error(data.detail||'Timeline unavailable.');return data;
+  }
+  function actionDotStatus(statuses) {
+    return statuses.has('incomplete') ? 'incomplete' : ['open','active'].some(value => statuses.has(value)) ? 'open' : ['in_progress','waiting'].some(value => statuses.has(value)) ? 'in_progress' : statuses.has('done') ? 'done' : null;
+  }
+  function reconcilePeriodMarkers(items) {
+    // Remote marker services may still summarize only scheduled actions.
+    // The complete period response is authoritative for each selected day.
+    for (const [date, marker] of Object.entries(markerDays)) {
+      if (date < startInput.value || date > endInput.value) continue;
+      const statuses = new Set(items.filter(item => item.events?.some(event => event.date === date)).map(item => item.status));
+      marker.dot_status = actionDotStatus(statuses);
+    }
+  }
+  function paintActionsIndicator(items = null) {
+    const indicator = document.querySelector('[data-actions-indicator]');
+    if (!indicator) return;
+    const days = Object.entries(markerDays).filter(([day]) => day >= startInput.value && day <= endInput.value).map(([, marker]) => marker);
+    const statuses = new Set(days.map(marker => marker.dot_status).filter(Boolean));
+    // Include every displayed action, even when a scheduled marker already exists.
+    // An incomplete historical action must take priority over a completed schedule.
+    if (items) items.forEach(item => statuses.add(item.status));
+    const status = actionDotStatus(statuses) || 'dismissed';
+    const available = items ? items.length > 0 : days.some(marker => marker.planned.length || marker.actions.length);
+    indicator.hidden = !available;
+    indicator.dataset.timelineStatus = status;
+    const label = 'Actions available · ' + ({open:'Open or active',in_progress:'In progress',incomplete:'Incomplete',done:'Done',dismissed:'Dismissed or historical'}[status]);
+    indicator.setAttribute('aria-label', label);
+    indicator.title = label;
   }
   function paintMarkers() {
     document.querySelectorAll('[data-activity-day]').forEach(day=>{
@@ -186,7 +214,7 @@
   }
   document.getElementById('timeline-period-form').addEventListener('submit',e=>{e.preventDefault();load();});
   document.getElementById('timeline-all').addEventListener('change',load);
-  window.addEventListener('hfl:timeline-period',e=>{startInput.value=e.detail.start;endInput.value=e.detail.end;document.getElementById('timeline-all').checked=false;load();});
+  window.addEventListener('hfl:timeline-period',e=>{startInput.value=e.detail.start;endInput.value=e.detail.end;paintActionsIndicator();document.getElementById('timeline-all').checked=false;load();});
   document.getElementById('timeline-explore').addEventListener('click',async e=>{
     const b=e.currentTarget;b.disabled=true;error('agenda-error');analysisStatus('queued','Starting review…','Checking entries and related evidence.');
     try{await timelineApi('/explore',{method:'POST',body:JSON.stringify({start:startInput.value,end:endInput.value})});await load();}catch(err){error('agenda-error',err.message);analysisStatus('failed','Could not start review','Try Explore again.');b.disabled=false;}

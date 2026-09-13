@@ -84,7 +84,7 @@ from web import page_context, require_user, templates
 
 
 router = APIRouter(prefix="/hfl-corpus")
-_H2 = re.compile(r"<h2(?:\s+[^>]*)?>")
+_H2 = re.compile(r"<h2(?:\s+[^>]*)?>(.*?)</h2>", re.DOTALL)
 _log = logging.getLogger(__name__)
 
 
@@ -220,6 +220,20 @@ async def hfl_secrets_unlock(request: Request, payload: SecretPinRequest):
     return response
 
 
+def _display_entry_header(header: str) -> str:
+    """Format timestamp-only headings for display, preserving source wall time."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?", header):
+        return header
+    try:
+        when = datetime.fromisoformat(header.replace("Z", "+00:00"))
+    except ValueError:
+        return header
+    label = when.strftime("%a %b %d %Y %I:%M %p")
+    if when.tzinfo is not None:
+        label += " " + when.tzname()
+    return label
+
+
 def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
     from urllib.parse import urlencode
     from modules.hfl_corpus.timeline import entry_guid
@@ -235,9 +249,12 @@ def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
         guid = entry_guid(entry)
         if guid and not is_secret_entry(entry, protected_tags):
             query = urlencode({"source_path": document.relative_path, "source_entry": guid})
-            action = (f'<div class="corpus-followup-action"><a href="/hfl-corpus?{html.escape(query, quote=True)}" '
-                      'aria-label="Create a follow-up from this HFL entry">Make actionable ↗</a></div>')
-        return action + f'<h2 id="{html.escape(entry.anchor, quote=True)}" class="scroll-mt-40">'
+            action = (f'<a class="corpus-followup-action" href="/hfl-corpus?{html.escape(query, quote=True)}" '
+                      f'aria-describedby="{html.escape(entry.anchor, quote=True)}" '
+                      'aria-label="Create a follow-up from this HFL entry">Make actionable ↗</a>')
+        header = _display_entry_header(match.group(1))
+        heading = f'<h2 id="{html.escape(entry.anchor, quote=True)}" class="scroll-mt-40">{header}</h2>'
+        return f'<div class="corpus-entry-header">{heading}{action}</div>'
 
     return Markup(_H2.sub(replace, str(rendered)))
 
@@ -1252,7 +1269,7 @@ async def hfl_document(
             )
         else:
             anchor = html.escape(entry.anchor, quote=True)
-            header = html.escape(entry.header)
+            header = html.escape(_display_entry_header(entry.header))
             rendered_parts.append(
                 f'<h2 id="{anchor}" class="scroll-mt-40">{header}</h2>'
                 f'<section class="secret-entry-placeholder" data-secret-entry="{anchor}" '

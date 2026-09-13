@@ -2,8 +2,17 @@
 {% block title %}HARQIS — {{ document.name }}{% endblock %}
 {% block head %}
 <style>
-  .corpus-followup-action { display:flex; justify-content:flex-end; margin-top:1rem; }
-  .corpus-followup-action a { font:600 .75rem/1.5 system-ui; color:#7dd3fc; border:1px solid #155e75; border-radius:.5rem; padding:.4rem .7rem; text-decoration:none; }
+  .corpus-entry-header { display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:center; gap:.75rem; margin:1.8rem 0 .85rem; padding-bottom:.6rem; border-bottom:1px solid #1e293b; }
+  .corpus-entry-header:first-child { margin-top:0; }
+  .markdown-body .corpus-entry-header h2 { margin:0; padding:0; border:0; overflow-wrap:anywhere; }
+  .markdown-body .corpus-followup-action { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; min-height:44px; font:600 .75rem/1.5 system-ui; white-space:nowrap; color:#7dd3fc; background:#082f49; border:1px solid #155e75; border-radius:.5rem; padding:.4rem .7rem; text-decoration:none; }
+  .markdown-body .corpus-followup-action:hover { background:#0c4a6e; border-color:#38bdf8; }
+  .corpus-followup-action:focus-visible { outline:2px solid #7dd3fc; outline-offset:3px; }
+  @media (max-width:639px) {
+    .markdown-body .corpus-entry-header h2 { font-size:1rem; line-height:1.4; }
+    .corpus-entry-header { gap:.5rem; }
+    .markdown-body .corpus-followup-action { padding:.4rem .5rem; font-size:.7rem; }
+  }
   .corpus-reference-preview {
     display: grid;
     width: 100%;
@@ -132,11 +141,11 @@
     <div class="min-w-0">
       <p class="text-xs uppercase tracking-[0.22em] text-blue-400">Corpus document</p>
       <h1 class="mt-2 truncate text-xl font-semibold text-white">{{ document.name }}</h1>
-      <p class="mt-1 text-xs text-slate-500">Updated {{ document.updated_at.strftime('%Y-%m-%d %H:%M') }}</p>
+      <p class="mt-1 text-xs text-slate-500">Updated {{ document.updated_at.strftime('%a %b %d %Y %I:%M %p') }}</p>
     </div>
     <div class="shrink-0 pt-1 text-right text-xs">
       <button type="button" data-document-edit-open class="mb-3 block w-full text-right font-semibold text-blue-300 hover:text-blue-200">Edit</button>
-      <p class="operator-meta">Created {{ document.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+      <p class="operator-meta">Created {{ document.created_at.strftime('%a %b %d %Y %I:%M %p') }}</p>
     </div>
     </div>
   </header>

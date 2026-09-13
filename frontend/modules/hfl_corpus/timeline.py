@@ -218,18 +218,20 @@ async def markers(request: Request):
     owner(request)
     canonical = store()
     days = {}
-    scheduled_statuses = {}
+    day_statuses = {}
     for item in canonical.list() + canonical.list(closed=True):
-        if item['status'] != 'dismissed':
-            for scheduled in {item['review_date'], item['due_date']} - {''}:
-                scheduled_statuses.setdefault(scheduled, set()).add(item['status'])
         for event in item_events(item, canonical):
             day = days.setdefault(event['date'], {'planned': [], 'actions': []})
+            # Source and status-history days expose these actions too. Use their
+            # current state so an old completion cannot hide an incomplete action.
+            # A removed schedule alone must not retain a deadline dot.
+            if item['status'] != 'dismissed' and event['kind'] != 'previous-plan':
+                day_statuses.setdefault(event['date'], set()).add(item['status'])
             key = 'planned' if event['kind'] == 'planned' else 'actions'
             if item['id'] not in day[key]:
                 day[key].append(item['id'])
     for day, value in days.items():
-        statuses = scheduled_statuses.get(day, set())
+        statuses = day_statuses.get(day, set())
         value['dot_status'] = ('incomplete' if 'incomplete' in statuses else 'open' if statuses & {'open', 'active'} else
                                'in_progress' if 'in_progress' in statuses else
                                'done' if statuses == {'done'} else None)
