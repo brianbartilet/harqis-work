@@ -92,6 +92,11 @@
 .activity-day-menu .agenda-empty-actions .agenda-empty-explore { display:block; min-height:42px; margin:1rem auto .25rem; padding:.6rem 1.25rem; border-color:#0891b2; background:#0e7490; color:#fff; font-size:.8rem; font-weight:650; }
 .activity-day-menu .agenda-empty-actions .agenda-empty-explore:hover { background:#0891b2; border-color:#22d3ee; }
 .agent-bridge-dialog { width:min(46rem,calc(100vw - 2rem)); }
+.agent-bridge-dialog .agent-results-close { display:grid; place-items:center; width:44px; height:44px; flex:0 0 44px; padding:0; border:0; border-radius:.65rem; background:transparent; color:#94a3b8; }
+.agent-bridge-dialog .agent-results-close svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; }
+.agent-bridge-dialog .agent-results-close:hover { background:#1e293b; color:#f8fafc; }
+.agent-bridge-dialog .agent-results-close:active { background:#334155; }
+.agent-bridge-dialog .agent-results-close:focus-visible { outline:2px solid #7dd3fc; outline-offset:2px; }
 .agent-bridge-dialog pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:25rem; overflow:auto; }
 .agent-bridge-dialog small { overflow-wrap:anywhere; }
 .agent-bridge-dialog .agenda-history-row > button { margin:.5rem .5rem .5rem 0; }

@@ -57,6 +57,7 @@ up from `scripts/agents/<bucket>/`).
 | Path | Purpose |
 |---|---|
 | `archive_corpus.py` | Archives completed HFL corpus periods. |
+| `run_archive.py` | Loads the repository and machine environment before the monthly HFL archive; forwards `--root` and `--dry-run`. |
 | `agent_bridge_runner.py` | Consume explicit HFL actionable/pin requests with local Hermes, renew leases, and durably report results; supports once, watch, dispatch, check, and isolated smoke modes. |
 | `setup_agent_bridge.py` | Preview or reconcile the Hermes minute bridge job from `agent_bridge_schedule.json`. See [setup and operation](../docs/info/HFL-AGENT-BRIDGE.md). |
 | `migrate_pin_titles.py` | Preview or back up and migrate pinned-date Notes into Title in an explicit profile SQLite database, retaining Notes and existing title edits. |
@@ -66,6 +67,17 @@ up from `scripts/agents/<bucket>/`).
 | `capture_session_hook.ps1` | Fail-open Windows launcher that forwards Codex lifecycle-hook stdin to the repository capture entry point without inline-shell quoting. |
 | `capture_session_hook.sh` | Selects the repository Python interpreter across macOS/Linux/Windows shells for the Claude Code lifecycle hook. |
 | [`setup_hfl_share_hermes.py`](#scriptsagentshflsetup_hfl_share_hermespy) | Dry-run-first setup/check for a locked-down Hermes profile that serves Share Corpus Q&A through a connected Codex model. |
+
+Monthly HFL archive launch (from the repository root):
+
+```bash
+.venv/bin/python -m scripts.agents.hfl.run_archive --root "<corpus directory>" --dry-run
+```
+
+On Windows use `.venv/Scripts/python.exe`. Remove `--dry-run` only to move prior
+months. Hermes wrappers must use this repository interpreter, forward their
+arguments, and set the repository working directory. The launcher loads machine
+configuration before importing the archive; its exit code reaches the scheduler.
 
 ### `testing/` — test execution + reporting
 
@@ -86,6 +98,22 @@ up from `scripts/agents/<bucket>/`).
 | [`reauth_gmail_send.py`](#scriptsagentsdiagnosticsreauth_gmail_sendpy) | Interactive re-authorization of a HARQIS Google OAuth credential when its refresh token expires/revokes (`invalid_grant`). |
 
 ### `dumps/` — device dump ops
+
+`archive_google_drive_logs.py` archives Drive LOGS with buffered copies, SHA-256
+verification, three attempts for transient errors (1s/2s delays), and per-file
+failure reporting. Source files are removed only after verification. Existing
+archives are retained; identical files are reused and conflicts get new names.
+Interrupted `.archive-*.partial` files are never treated as finished archives.
+An OS lock prevents overlapping runs. Failed files remain at the source and make
+the run exit nonzero. Keep the source available offline in Google Drive.
+
+```bash
+python scripts/agents/dumps/archive_google_drive_logs.py --source "<Drive LOGS directory>" --destination "<archive directory>" --require-mount "<archive volume>" --dry-run
+```
+
+Remove `--dry-run` to archive. Configure paths in the host's Hermes wrapper; the
+maintained script has no account-specific paths. The existing monthly job can
+call it using the repository venv without changing its schedule or delivery.
 
 | Path | Purpose |
 |---|---|

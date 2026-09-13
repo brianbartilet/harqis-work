@@ -69,7 +69,7 @@ def build_prompt(core_path: Path, max_pairs: int) -> str:
     timestamp = datetime.now().isoformat()
     return f"""/migrate-to-core --max {max_pairs} --core-path {core_path}
 
-You are Claude Code running under Brian's local Claude Max subscription. Execute the HARQIS-work `/migrate-to-core` skill headlessly, using the full canonical skill markdown included below as the source of truth.
+Execute the HARQIS-work `/migrate-to-core` skill using the current agent runtime and the full canonical skill markdown included below as the source of truth.
 
 Operating constraints:
 - Repo: {REPO_ROOT}
@@ -80,7 +80,7 @@ Operating constraints:
 - Ingest harqis-core before proposing anything: README.md, core/docs/FEATURES.md, and the relevant core subpackages.
 - Open at most {max_pairs} candidate PR pairs.
 - Never auto-merge anything.
-- Respect the exclusions: workflows, AI/Claude scaffold, HFL, Kanban, MCP, manifesto-specific code.
+- Respect the exclusions: workflows, AI/agent scaffold, HFL, Kanban, MCP, manifesto-specific code.
 - If preconditions fail or no candidates survive judgment/idempotency checks, write a concise report and stop cleanly.
 - Save a run report under {DATA_DIR}/migrate_to_core_{datetime.now().strftime('%Y-%m-%d')}.md and print the same summary to stdout.
 
