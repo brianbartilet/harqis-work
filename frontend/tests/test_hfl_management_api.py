@@ -177,3 +177,136 @@ def test_missing_records_and_invalid_patch_leave_state_unchanged(management):
     for changes in ({"notes": None}, {"agent_enabled": True}, {"source": {}}, {"status": "invalid"}):
         assert client.patch(url, json={"version": 1, **changes}).status_code == 422
     assert store.get(item["id"])["version"] == 1
+
+
+def test_mcp_service_requests_round_trip_through_standalone_api(management, monkeypatch):
+    from mcp.server.fastmcp import FastMCP
+    from apps.hfl_corpus import mcp as adapter
+    from apps.hfl_corpus.references.web.api.management import ApiServiceHflCorpusManagement
+    from tools.catalog import is_write_tool
+
+    client, _ = management
+    responses = []
+
+    def service(config):
+        result = ApiServiceHflCorpusManagement(config, api_url="http://testserver", api_key="frontend-test-hfl-api-token")
+
+        def execute(request):
+            method = request.get_request_method()
+            method = getattr(method, "value", method)
+            response = client.request(method, "/api/hfl/" + request.get_full_url().lstrip("/"),
+                                      params=request.get_query_strings(), **(request.get_body() or {}))
+            assert response.status_code < 400, response.text
+            responses.append(response)
+            return SimpleNamespace(data=response.json())
+
+        monkeypatch.setattr(result.client, "execute_request", execute)
+        return result
+
+    monkeypatch.setattr(adapter, "ApiServiceHflCorpusManagement", service)
+    mcp = FastMCP("management-test")
+    adapter.register_hfl_corpus_tools(mcp)
+
+    def call(tool_name, **kwargs):
+        return mcp._tool_manager._tools[tool_name].fn(**kwargs)
+
+    item = call("create_hfl_corpus_action", **action(prompt="Save for later"))["item"]
+    assert not item["agent_enabled"]
+    assert call("get_hfl_corpus_action", action_id=item["id"])["item"] == item
+    assert call("list_hfl_corpus_actions")["total"] == 1
+    updated = call("update_hfl_corpus_action", action_id=item["id"], version=1, changes={"notes": "Revised"})
+    assert updated["item"]["notes"] == "Revised"
+    assert len(call("get_hfl_corpus_action_history", action_id=item["id"])["history"]) == 2
+    cat = call("create_hfl_corpus_category", name="Tool category", color="#3b82f6")["category"]
+    assert call("list_hfl_corpus_categories")["categories"] == [cat]
+    assert call("get_hfl_corpus_category", category_id=cat["id"])["category"] == cat
+    assert call("update_hfl_corpus_category", category_id=cat["id"], changes={"instructions": "Guidance"})["category"]["instructions"] == "Guidance"
+    pin = call("create_hfl_corpus_pin", category_id=cat["id"], start_date=date.today().isoformat(),
+               end_date=date.today().isoformat(), title="Tool pin", prompt="Saved prompt")["pin"]
+    assert not pin["agent_enabled"]
+    assert call("get_hfl_corpus_pin", pin_id=pin["id"])["pin"] == pin
+    assert call("list_hfl_corpus_pins", category_id=cat["id"])["pins"] == [pin]
+    assert call("update_hfl_corpus_pin", pin_id=pin["id"], changes={"note": "More context"})["pin"]["note"] == "More context"
+    assert call("delete_hfl_corpus_pin", pin_id=pin["id"])["deleted"]
+    assert call("archive_hfl_corpus_category", category_id=cat["id"])["category"]["archived_at"]
+    assert len(responses) == 15
+    for name in mcp._tool_manager._tools:
+        if name.startswith(("create_", "update_", "delete_", "archive_")):
+            assert is_write_tool(name), name
+
+
+@pytest.mark.parametrize('resource', ['actions', 'pins'])
+def test_input_attachments_upload_retry_detach_and_isolation(management, resource):
+    client, _ = management
+    if resource == 'actions':
+        item = client.post('/api/hfl/actions', json=action()).json()['item']
+    else:
+        item = client.post('/api/hfl/pins', json={'category_id': category(client)['id'],
+            'start_date': date.today().isoformat(), 'end_date': date.today().isoformat(), 'title': 'Pin'}).json()['pin']
+    url = f"/api/hfl/{resource}/{item['id']}/attachments"
+    files = [('files', ('brief.md', b'# Brief\nUse the supplied link')), ('files', ('data.csv', b'x,y\n1,2'))]
+    uploaded = client.post(url, files=files)
+    assert uploaded.status_code == 200, uploaded.text
+    rows = uploaded.json()['attachments']
+    assert len(rows) == 2
+    assert client.post(url, files=files).json()['attachments'] == rows
+    assert client.get(url).json()['attachments'] == rows
+    download = client.get(url + '/' + rows[0]['id'])
+    assert download.content == files[0][1][1]
+    assert download.headers['content-type'] == 'application/octet-stream'
+    assert 'attachment;' in download.headers['content-disposition']
+    assert client.get(f"/api/hfl/{resource}/other/attachments/{rows[0]['id']}").status_code == 404
+    assert len(client.delete(url + '/' + rows[0]['id']).json()['attachments']) == 1
+    assert client.get(url + '/' + rows[0]['id']).content == files[0][1][1]
+    client.headers.pop('Authorization')
+    for method, path in [('GET', url), ('POST', url), ('DELETE', url + '/' + rows[1]['id']), ('GET', url + '/' + rows[1]['id'])]:
+        assert client.request(method, path).status_code == 401
+
+
+def test_attachment_limits_are_atomic_and_filenames_are_safe(management, monkeypatch):
+    from modules.hfl_corpus import attachments
+    client, actions = management
+    item = client.post('/api/hfl/actions', json=action()).json()['item']
+    url = f"/api/hfl/actions/{item['id']}/attachments"
+    monkeypatch.setattr(attachments, 'MAX_FILE_BYTES', 5)
+    response = client.post(url, files=[('files', ('good.txt', b'good')), ('files', ('big.txt', b'123456'))])
+    assert response.status_code == 413
+    assert client.get(url).json()['attachments'] == []
+    assert not list(actions.path.with_suffix('.inputs').glob('.upload-*'))
+    row = client.post(url, files=[('files', ('../../outside.html', b'hello'))]).json()['attachments'][0]
+    assert row['name'] == 'outside.html'
+    assert '/' not in row['filename'] and row['filename'].endswith('.html')
+    assert client.get(url + '/' + row['id']).headers['x-content-type-options'] == 'nosniff'
+    monkeypatch.setattr(attachments, 'MAX_FILES', 1)
+    assert client.post(url, files=[('files', ('other.txt', b'good'))]).status_code == 413
+    assert len(client.get(url).json()['attachments']) == 1
+
+
+def test_attachment_service_and_mcp_transport(management, monkeypatch, tmp_path):
+    from apps.hfl_corpus import mcp as adapter
+    from apps.hfl_corpus.references.web.api.management import ApiServiceHflCorpusManagement
+    from mcp.server.fastmcp import FastMCP
+    from tools.catalog import is_write_tool
+    client, _ = management
+    item = client.post('/api/hfl/actions', json=action()).json()['item']
+    source = tmp_path / 'brief.md'; source.write_text('Read this briefing', encoding='utf-8')
+
+    def service(config):
+        instance = ApiServiceHflCorpusManagement(config, api_url='http://testserver', api_key='test-token')
+        def request(method, path, **kwargs):
+            response = client.request(method, '/api/hfl/' + path, **kwargs)
+            response.raise_for_status()
+            return response
+        monkeypatch.setattr(instance, '_raw_request', request)
+        return instance
+    monkeypatch.setattr(adapter, 'ApiServiceHflCorpusManagement', service)
+    server = FastMCP('attachment-test'); adapter.register_hfl_corpus_tools(server)
+    invoke = lambda name, **kwargs: server._tool_manager._tools[name].fn(**kwargs)
+    args = {'resource': 'actions', 'source_id': item['id']}
+    rows = invoke('upload_hfl_corpus_attachments', **args, file_paths=[str(source)])['attachments']
+    assert invoke('list_hfl_corpus_attachments', **args)['attachments'] == rows
+    output = tmp_path / 'download.md'
+    invoke('download_hfl_corpus_attachment', **args, attachment_id=rows[0]['id'], destination=str(output))
+    assert output.read_bytes() == source.read_bytes()
+    assert is_write_tool('download_hfl_corpus_attachment')
+    assert invoke('delete_hfl_corpus_attachment', **args, attachment_id=rows[0]['id'])['attachments'] == []

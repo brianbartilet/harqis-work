@@ -3,6 +3,7 @@
 .activity-day[data-timeline-planned] { position:relative; opacity:1; }
 .activity-day[data-timeline-planned]::after { content:""; position:absolute; width:4px; height:4px; border-radius:50%; background:var(--timeline-dot-color,#fbbf24); bottom:1px; right:1px; box-shadow:0 0 0 1px #111827; }
 .activity-day[data-timeline-action] { outline:1px solid #67e8f9; outline-offset:1px; }
+.activity-day[data-timeline-action]:not([data-timeline-status]) { outline-color:#64748b; }
 #followup-agenda { margin:1.5rem 0; scroll-margin-top:6rem; }
 #timeline-period-form { flex-wrap:wrap; gap:.6rem; }
 #timeline-period-form input { color-scheme:dark; background:#111827; color:#e2e8f0; border:1px solid #334155; border-radius:6px; padding:.4rem; max-width:100%; }
@@ -28,6 +29,32 @@
 
 [data-day-ideas][hidden], [data-day-actions][hidden] { display:none !important; }
 .activity-day-menu { scrollbar-gutter:stable; }
+/* Keep form scrollbars inside the rounded dialog shell. */
+/* Entry forms share the action and pinned-date field typography and accents. */
+:is([data-create-entry-dialog], [data-entry-review-dialog]) { background:#07101f; border-color:#334155; }
+:is([data-entry-dialog-header], [data-entry-dialog-actions], [data-entry-review-header], [data-entry-review-actions]) { background:#07101f; }
+[data-create-entry-form] .entry-form-label { color:#94a3b8; font-size:.68rem; font-weight:650; }
+[data-create-entry-form] .entry-form-help { color:#94a3b8; font-size:.75rem; font-weight:400; line-height:1.5; }
+[data-create-entry-form] :is(input:not([type=checkbox]), textarea, select) { background:#020617; color:#f1f5f9; font-weight:400; }
+[data-create-entry-form] :is(input, textarea, select, button, summary):focus-visible { outline:2px solid #7dd3fc; outline-offset:3px; --tw-ring-color:#38bdf8; }
+:is([data-entry-review], [data-entry-confirm]) { background:#0c4a6e; border:1px solid #38bdf8; color:#e0f2fe; }
+:is([data-entry-review], [data-entry-confirm]):hover { background:#075985; }
+[data-create-entry-form] input[type=file]::file-selector-button { background:#1e293b; color:#e2e8f0; }
+@media(min-width:640px) {
+  [data-create-entry-form] :is(input:not([type=checkbox]), textarea, select) { font-size:.85rem; }
+  [data-create-entry-dialog] { padding:.5rem 0; }
+  [data-create-entry-form] { max-height:calc(90dvh - 1rem - 2px); scrollbar-width:thin; scrollbar-color:#475569 transparent; }
+}
+:is(#followup-editor, [data-memory-dialog]) { overflow:hidden; padding:.5rem 0; }
+:is(#followup-editor, [data-memory-dialog]) > form { max-height:calc(100dvh - 3rem - 2px); overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#475569 transparent; }
+/* Chromium needs native scrollbar styling reset before hiding its arrow buttons. */
+@supports selector(::-webkit-scrollbar) {
+  :is(.agenda-dialog, [data-memory-dialog], [data-create-entry-dialog], [data-entry-review-dialog]) :is(form, textarea, [data-entry-form-body], [data-entry-preview]) { scrollbar-width:auto; scrollbar-color:auto; }
+  :is(.agenda-dialog, [data-memory-dialog], [data-create-entry-dialog], [data-entry-review-dialog]) ::-webkit-scrollbar { width:6px; height:6px; }
+  :is(.agenda-dialog, [data-memory-dialog], [data-create-entry-dialog], [data-entry-review-dialog]) ::-webkit-scrollbar-track { background:transparent; }
+  :is(.agenda-dialog, [data-memory-dialog], [data-create-entry-dialog], [data-entry-review-dialog]) ::-webkit-scrollbar-thumb { background:#475569; border-radius:999px; }
+  :is(.agenda-dialog, [data-memory-dialog], [data-create-entry-dialog], [data-entry-review-dialog]) ::-webkit-scrollbar-button { display:none; width:0; height:0; }
+}
 @media(max-width:639px) {
   .activity-day-menu { max-height:calc(100dvh - 1.5rem - env(safe-area-inset-bottom)); }
   .activity-day-menu-action { min-height:44px; }

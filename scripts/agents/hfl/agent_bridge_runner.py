@@ -160,9 +160,41 @@ def execution_prompt(run, workspace):
     return snapshot['runtime_prompt'] + '\n\n' + json.dumps({
         **{key: snapshot.get(key) for key in ('source_key', 'source', 'category_guidance', 'context', 'occurrence_date', 'continuation')},
         'artifact_directory': str(workspace.resolve()),
+        'input_directory': str((workspace / 'inputs').resolve()),
         'execution_settings': snapshot.get('execution_settings', {'agent_mode': 'restricted'}),
         'operation_scope': snapshot.get('operation_scope', run.get('request_key', run['id'])),
     }, ensure_ascii=False)
+
+
+def restore_input_attachments(client, run):
+    """Materialize the immutable input manifest on this worker, checking every byte."""
+    root = spool_root() / 'workspaces' / run['id'] / 'inputs'
+    if root.is_symlink() or not root.resolve().is_relative_to((spool_root() / 'workspaces').resolve()):
+        raise ValueError('Input directory cannot be a symlink.')
+    root.mkdir(parents=True, exist_ok=True)
+    total = 0
+    attachments = run['snapshot']['source'].get('attachments', [])
+    if len(attachments) > 10:
+        raise ValueError('Too many input attachments.')
+    for item in attachments:
+        name = item['filename']
+        if not re.fullmatch(r'[a-f0-9]{32}(?:\.[a-z0-9]{1,12})?', name) or not re.fullmatch('[a-f0-9]{32}', item['id']):
+            raise ValueError('Invalid input filename.')
+        path = root / name
+        if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
+            raise ValueError('Input escapes the workspace.')
+        content = bytearray()
+        with client.client.stream('GET', 'runs/' + run['id'] + '/inputs/' + item['id'],
+                                 headers={'X-Execution-Lease': run['lease_token']}) as response:
+            response.raise_for_status()
+            for chunk in response.iter_bytes():
+                content.extend(chunk)
+                total += len(chunk)
+                if len(content) > 50 * 1024 * 1024 or total > 200 * 1024 * 1024:
+                    raise ValueError('Input attachment size limit exceeded.')
+        if len(content) != item['size'] or hashlib.sha256(content).hexdigest() != item['digest']:
+            raise ValueError('Input attachment integrity check failed.')
+        path.write_bytes(content)
 
 
 def restore_prior_artifacts(client, run):
@@ -330,6 +362,7 @@ def consume(client, *, limit=10):
             raise
         try:
             client.event(run, 'plan', 'plan', {'summary': 'Read the prompt and supporting context, perform the requested task with available tools, and verify the output against the prompt.', 'execution_settings': run['snapshot'].get('execution_settings', {})})
+            restore_input_attachments(client, run)
             restore_prior_artifacts(client, run)
             result = run_hermes(run, lambda: client.event(run, 'heartbeat', 'heartbeat', {}))
             upload_artifacts(client, run, result)

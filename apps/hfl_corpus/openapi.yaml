@@ -5,6 +5,8 @@ info:
   description: >-
     Authenticated API for writing the canonical Homework-for-Life Markdown corpus
     and its best-effort Elasticsearch projection, then searching and retrieving it.
+    Manage actions, Memory Signal categories, and date pins. New management API
+    actions and pins have scheduled agent execution disabled.
 servers:
   - url: http://localhost:8082
     description: Standalone hfl-api daemon
@@ -15,7 +17,620 @@ tags:
     description: Canonical Activity Corpus operations
   - name: operations
     description: Service operations
+  - name: hfl-management
+    description: Actions, Memory Signal categories, and date pins
 paths:
+  /api/hfl/{resource}/{source_id}/attachments:
+    get:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: List Attachments
+      operationId: list_attachments_api_hfl__resource___source_id__attachments_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: resource
+        in: path
+        required: true
+        schema:
+          enum:
+          - actions
+          - pins
+          type: string
+          title: Resource
+      - name: source_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Source Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: Upload Attachments
+      description: Attach multiple inputs; identical name/content retries are deduplicated.
+      operationId: upload_attachments_api_hfl__resource___source_id__attachments_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: resource
+        in: path
+        required: true
+        schema:
+          enum:
+          - actions
+          - pins
+          type: string
+          title: Resource
+      - name: source_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Source Id
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_attachments_api_hfl__resource___source_id__attachments_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/{resource}/{source_id}/attachments/{attachment_id}:
+    get:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: Download Attachment
+      description: Download immutable input, including detached files retained for prior
+        runs.
+      operationId: download_attachment_api_hfl__resource___source_id__attachments__attachment_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: resource
+        in: path
+        required: true
+        schema:
+          enum:
+          - actions
+          - pins
+          type: string
+          title: Resource
+      - name: source_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Source Id
+      - name: attachment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Attachment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: Detach Attachment
+      description: Remove an input from future runs; preserve files referenced by run
+        history.
+      operationId: detach_attachment_api_hfl__resource___source_id__attachments__attachment_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: resource
+        in: path
+        required: true
+        schema:
+          enum:
+          - actions
+          - pins
+          type: string
+          title: Resource
+      - name: source_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Source Id
+      - name: attachment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Attachment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/actions:
+    get:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: List Actions
+      description: List up to 500 open or closed actions; continue using offset and
+        total.
+      operationId: list_actions_api_hfl_actions_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: closed
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Closed
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: Create Action
+      description: Create standalone or entry-linked intent with scheduled agent execution
+        disabled.
+      operationId: create_action_api_hfl_actions_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAction'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '200':
+          description: Idempotent replay
+        '409':
+          description: Request ID already used with different content
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/actions/{action_id}:
+    get:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: Get Action
+      operationId: get_action_api_hfl_actions__action_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Action Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: Update Action
+      description: Edit or complete/dismiss an action. Completion retains the existing
+        HFL receipt behavior.
+      operationId: update_action_api_hfl_actions__action_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Action Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAction'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '409':
+          description: Stale version
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/actions/{action_id}/history:
+    get:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: Action History
+      operationId: action_history_api_hfl_actions__action_id__history_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Action Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/categories:
+    get:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: List Categories
+      operationId: list_categories_api_hfl_categories_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: Create Category
+      operationId: create_category_api_hfl_categories_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveCategory'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/hfl/categories/{category_id}:
+    get:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: Get Category
+      operationId: get_category_api_hfl_categories__category_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: category_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Category Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: Update Category
+      operationId: update_category_api_hfl_categories__category_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: category_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Category Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCategory'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/categories/{category_id}/archive:
+    post:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: Archive Category
+      description: Archive a category and hide its pins without deleting their history.
+      operationId: archive_category_api_hfl_categories__category_id__archive_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: category_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Category Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/pins:
+    get:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: List Pins
+      operationId: list_pins_api_hfl_pins_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: category_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0
+          - type: 'null'
+          title: Category Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: Create Pin
+      description: Pin a date or inclusive date range, with agent execution disabled
+        even with a prompt.
+      operationId: create_pin_api_hfl_pins_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePin'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/pins/{pin_id}:
+    get:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: Get Pin
+      operationId: get_pin_api_hfl_pins__pin_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: pin_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Pin Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: Update Pin
+      operationId: update_pin_api_hfl_pins__pin_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: pin_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Pin Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePin'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - hfl-corpus-api
+      - hfl-management
+      summary: Delete Pin
+      operationId: delete_pin_api_hfl_pins__pin_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: pin_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Pin Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /health:
     get:
       tags: [operations]
@@ -617,6 +1232,334 @@ components:
       type: http
       scheme: bearer
   schemas:
+    Body_hfl_api_upload_entry_api_hfl_entries_upload_post:
+      properties:
+        payload:
+          type: string
+          title: Payload
+        files:
+          items:
+            type: string
+            contentMediaType: application/octet-stream
+          type: array
+          title: Files
+          default: []
+      type: object
+      required:
+      - payload
+      title: Body_hfl_api_upload_entry_api_hfl_entries_upload_post
+    Body_upload_attachments_api_hfl__resource___source_id__attachments_post:
+      properties:
+        files:
+          items:
+            type: string
+            contentMediaType: application/octet-stream
+          type: array
+          title: Files
+      type: object
+      required:
+      - files
+      title: Body_upload_attachments_api_hfl__resource___source_id__attachments_post
+    UpdateDocumentRequest:
+      properties:
+        text:
+          type: string
+          maxLength: 5000000
+          title: Text
+        expected_updated_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Expected Updated At
+      type: object
+      required:
+      - text
+      title: UpdateDocumentRequest
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    ActionSource:
+      properties:
+        path:
+          type: string
+          title: Path
+        entry_id:
+          type: string
+          title: Entry Id
+      additionalProperties: false
+      type: object
+      required:
+      - path
+      - entry_id
+      title: ActionSource
+    CreateAction:
+      properties:
+        request_id:
+          type: string
+          format: uuid
+          title: Request Id
+          description: Caller-generated UUID. Reuse unchanged on retry.
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        expected_outcome:
+          type: string
+          maxLength: 3000
+          minLength: 1
+          title: Expected Outcome
+        review_date:
+          type: string
+          title: Review Date
+          default: ''
+        due_date:
+          type: string
+          title: Due Date
+          default: ''
+        prompt:
+          type: string
+          maxLength: 20000
+          title: Prompt
+          default: ''
+        notes:
+          type: string
+          maxLength: 6000
+          title: Notes
+          default: ''
+        source:
+          anyOf:
+          - $ref: '#/components/schemas/ActionSource'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - title
+      - expected_outcome
+      title: CreateAction
+    CreatePin:
+      properties:
+        category_id:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Category Id
+        start_date:
+          type: string
+          format: date
+          title: Start Date
+        end_date:
+          type: string
+          format: date
+          title: End Date
+        title:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          title: Title
+        note:
+          type: string
+          maxLength: 2000
+          title: Note
+          default: ''
+        prompt:
+          type: string
+          maxLength: 20000
+          title: Prompt
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - category_id
+      - start_date
+      - end_date
+      - title
+      title: CreatePin
+    SaveCategory:
+      properties:
+        name:
+          type: string
+          maxLength: 60
+          minLength: 1
+          title: Name
+        color:
+          type: string
+          title: Color
+          description: A color from GET /categories palette.
+        instructions:
+          type: string
+          maxLength: 20000
+          title: Instructions
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - color
+      title: SaveCategory
+    UpdateAction:
+      properties:
+        version:
+          type: integer
+          minimum: 1.0
+          title: Version
+          description: Version returned by the latest read; stale versions return 409.
+        title:
+          anyOf:
+          - type: string
+            maxLength: 200
+            minLength: 1
+          - type: 'null'
+          title: Title
+        expected_outcome:
+          anyOf:
+          - type: string
+            maxLength: 3000
+            minLength: 1
+          - type: 'null'
+          title: Expected Outcome
+        review_date:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Review Date
+        due_date:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Due Date
+        prompt:
+          anyOf:
+          - type: string
+            maxLength: 20000
+          - type: 'null'
+          title: Prompt
+        notes:
+          anyOf:
+          - type: string
+            maxLength: 6000
+          - type: 'null'
+          title: Notes
+        status:
+          anyOf:
+          - type: string
+            enum:
+            - open
+            - active
+            - in_progress
+            - incomplete
+            - done
+            - dismissed
+          - type: 'null'
+          title: Status
+        completion_note:
+          anyOf:
+          - type: string
+            maxLength: 3000
+          - type: 'null'
+          title: Completion Note
+      additionalProperties: false
+      type: object
+      required:
+      - version
+      title: UpdateAction
+    UpdateCategory:
+      properties:
+        name:
+          anyOf:
+          - type: string
+            maxLength: 60
+            minLength: 1
+          - type: 'null'
+          title: Name
+        color:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Color
+        instructions:
+          anyOf:
+          - type: string
+            maxLength: 20000
+          - type: 'null'
+          title: Instructions
+      additionalProperties: false
+      type: object
+      title: UpdateCategory
+    UpdatePin:
+      properties:
+        category_id:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Category Id
+        start_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Start Date
+        end_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: End Date
+        title:
+          anyOf:
+          - type: string
+            maxLength: 2000
+            minLength: 1
+          - type: 'null'
+          title: Title
+        note:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Note
+        prompt:
+          anyOf:
+          - type: string
+            maxLength: 20000
+          - type: 'null'
+          title: Prompt
+      additionalProperties: false
+      type: object
+      title: UpdatePin
     CreateEntryRequest:
       type: object
       required: [date, time, moment, what_happened]

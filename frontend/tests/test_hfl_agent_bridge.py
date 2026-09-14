@@ -88,6 +88,73 @@ def test_polling_skips_blank_prompts_and_reopen_creates_fresh_attempt(bridge, au
     assert actions.get(item['id'])['status'] == 'active'
 
 
+def test_external_action_opt_out_survives_edits_and_scheduler_ticks(bridge):
+    module, store, actions = bridge
+    item = actions.create({'request_id': str(uuid4()), 'title': 'Save intent',
+                           'expected_outcome': 'Review later', 'prompt': 'A complete prompt',
+                           'agent_enabled': False}, actor='owner-api')[0]
+    actions.update(item['id'], {'version': 1, 'notes': 'Edited'}, actor='owner')
+    assert module.sweep()['runs'] == []
+    assert actions.get(item['id'])['status'] == 'open'
+    assert actions.get(item['id'])['agent_enabled'] is False
+
+
+def test_run_inputs_are_lease_scoped_and_survive_detachment(bridge, authenticated_client):
+    module, store, actions = bridge
+    item = create_action(actions)
+    url = f"/hfl-corpus/agent-bridge/inputs/actionable/{item['id']}"
+    assert authenticated_client.post(url, files={'files': ('brief.md', b'Brief')}).status_code == 403
+    uploaded = authenticated_client.post(url, headers=owner_headers(), files=[('files', ('brief.md', b'Brief')), ('files', ('data.csv', b'a,b'))])
+    assert uploaded.status_code == 200, uploaded.text
+    rows = uploaded.json()['attachments']
+    run = start(authenticated_client, item)
+    assert run['snapshot']['source']['attachments'] == rows
+    download = f"/api/hfl-agent/runs/{run['id']}/inputs/{rows[0]['id']}"
+    assert authenticated_client.get(download, headers=WORKER).status_code == 409
+    headers = {**WORKER, 'X-Execution-Lease': run['lease_token']}
+    assert authenticated_client.get(download, headers=headers).content == b'Brief'
+    assert authenticated_client.get(download.rsplit('/', 1)[0] + '/unknown', headers=headers).status_code == 404
+    assert authenticated_client.delete(url + '/' + rows[0]['id'], headers=owner_headers()).status_code == 200
+    assert len(authenticated_client.get(url).json()['attachments']) == 1
+    assert authenticated_client.get(download, headers=headers).content == b'Brief'
+    assert store.get(run['id'])['snapshot']['source']['attachments'] == rows
+
+
+def test_unavailable_inputs_prevent_dispatch_without_stopping_sweep(bridge, monkeypatch):
+    from fastapi import HTTPException
+    module, store, actions = bridge
+    item = create_action(actions)
+    def unavailable(*args):
+        raise HTTPException(502, 'Canonical attachment service unavailable.')
+    monkeypatch.setattr(module, 'input_manifest', unavailable)
+    result = module.sweep()
+    assert result['runs'] == []
+    assert actions.get(item['id'])['status'] == 'open'
+
+
+def test_owner_attachment_proxy_uses_canonical_bearer_and_preserves_bytes(bridge, authenticated_client, monkeypatch):
+    import httpx
+    from types import SimpleNamespace
+    module, store, actions = bridge
+    item = create_action(actions)
+    original = httpx.Client
+    def transport(request):
+        assert request.headers['Authorization'] == 'Bearer frontend-test-hfl-api-token'
+        response = authenticated_client.request(request.method, request.url.raw_path.decode(), content=request.content,
+            headers={'Authorization': request.headers['Authorization'], 'Content-Type': request.headers.get('Content-Type', '')})
+        return httpx.Response(response.status_code, content=response.content, headers=response.headers)
+    monkeypatch.setattr(module, 'get_settings', lambda: SimpleNamespace(hfl_corpus_api_url='https://canonical.test', hfl_corpus_api_token='frontend-test-hfl-api-token'))
+    monkeypatch.setattr(module.httpx, 'Client', lambda **kw: original(transport=httpx.MockTransport(transport), **kw))
+    monkeypatch.delenv('HFL_TIMELINE_LOCAL_PREVIEW')
+    url = f"/hfl-corpus/agent-bridge/inputs/actionable/{item['id']}"
+    result = authenticated_client.post(url, headers=owner_headers(), files={'files': ('remote.txt', b'Remote input')})
+    assert result.status_code == 200, result.text
+    row = result.json()['attachments'][0]
+    assert authenticated_client.get(url).json()['attachments'] == [row]
+    assert authenticated_client.get(url + '/' + row['id']).content == b'Remote input'
+    assert authenticated_client.delete(url + '/' + row['id'], headers=owner_headers()).json()['attachments'] == []
+
+
 def test_reopened_running_attempt_cannot_complete_new_revision(bridge, authenticated_client):
     module, store, actions = bridge
     item = create_action(actions)

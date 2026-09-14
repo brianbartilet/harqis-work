@@ -136,6 +136,7 @@ async def hfl_memory_pins(request: Request, payload: MemoryPinRequest):
             return JSONResponse({"detail": "Use 20,000 characters or fewer."}, status_code=422)
         return JSONResponse({"html": str(render_markdown(payload.prompt))})
     store = get_memory_pin_store()
+    saved_range_id = None
     try:
         if payload.action == "save_category":
             store.save_category(
@@ -171,7 +172,7 @@ async def hfl_memory_pins(request: Request, payload: MemoryPinRequest):
                 raise ValueError(
                     f"Pinned dates cannot be later than {max_pin_date.isoformat()}."
                 )
-            store.save_range(
+            saved_range_id = store.save_range(
                 range_id=payload.range_id,
                 category_id=payload.category_id,
                 start_date=payload.start_date,
@@ -195,7 +196,10 @@ async def hfl_memory_pins(request: Request, payload: MemoryPinRequest):
             raise ValueError("Choose a valid Memory Signal action.")
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=422)
-    return JSONResponse(store.snapshot())
+    snapshot = store.snapshot()
+    if saved_range_id is not None:
+        snapshot['saved_range_id'] = saved_range_id
+    return JSONResponse(snapshot)
 
 
 @router.post("/secrets/unlock")
@@ -1308,6 +1312,7 @@ async def hfl_document(
             user,
             "hfl_corpus",
             document=document,
+            memory_csrf=make_csrf_token(user),
             document_text_encoded=(
                 base64.b64encode(document.text.encode("utf-8")).decode("ascii")
                 if not has_secrets or authorized else ""

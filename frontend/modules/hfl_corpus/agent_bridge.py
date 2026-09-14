@@ -6,14 +6,15 @@ import json
 import os
 import hashlib
 import re
+import asyncio
 from urllib.parse import quote
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from auth import get_current_user
 from config import get_settings
@@ -86,6 +87,10 @@ def source_snapshot(kind, source_id):
         raise ValueError('Choose actionable or pin.')
     if not source.get('prompt', '').strip():
         raise ValueError('Save task instructions before running an agent.')
+    try:
+        source['attachments'] = input_manifest(kind, source_id)['attachments']
+    except HTTPException as exc:
+        raise ValueError('Supporting files could not be loaded: ' + str(exc.detail)) from None
     runtime = PROMPT_PATH.read_text(encoding='utf-8')
     return {'source_key': f'{kind}:{source_id}', 'kind': kind, 'source_id': source_id,
             'source': source, 'category_guidance': guidance, 'policy': POLICY,
@@ -198,7 +203,7 @@ def sweep():
                 if offset >= page['total'] or not page['items']:
                     break
             for item in items:
-                if item['status'] == 'open' and item.get('prompt', '').strip():
+                if item['status'] == 'open' and item.get('agent_enabled', True) and item.get('prompt', '').strip():
                     try:
                         run = enqueue('actionable', item['id'], f"actionable:{item['id']}:revision:{item['version']}", 'hermes-schedule')
                         results.append(run['id'])
@@ -343,6 +348,95 @@ def worker_auth(request: Request):
 
 owner_router = APIRouter(prefix='/hfl-corpus/agent-bridge', dependencies=[Depends(owner_auth)])
 worker_router = APIRouter(prefix='/api/hfl-agent', dependencies=[Depends(worker_auth)])
+
+
+def remote_inputs(kind):
+    return kind == 'actionable' and get_settings().hfl_corpus_api_url and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') != '1'
+
+
+def input_remote(method, source_id, attachment_id='', **kwargs):
+    settings = get_settings()
+    path = '/api/hfl/actions/' + quote(str(source_id), safe='') + '/attachments'
+    if attachment_id:
+        path += '/' + quote(attachment_id, safe='')
+    try:
+        with httpx.Client(timeout=120, follow_redirects=False) as client:
+            response = client.request(method, settings.hfl_corpus_api_url.rstrip('/') + path,
+                                      headers={'Authorization': 'Bearer ' + settings.hfl_corpus_api_token}, **kwargs)
+    except httpx.HTTPError:
+        raise HTTPException(502, 'The canonical attachment service is unavailable.') from None
+    if response.is_error:
+        raise HTTPException(response.status_code, 'The canonical attachment request failed.')
+    return response
+
+
+def input_manifest(kind, source_id):
+    from modules.hfl_corpus.attachments import source_store, require_source
+    if remote_inputs(kind):
+        return input_remote('GET', source_id).json()
+    require_source(kind, source_id)
+    store, source = source_store(kind, source_id)
+    return {'attachments': store.list(source)}
+
+
+def input_download(kind, source_id, attachment_id):
+    from modules.hfl_corpus.attachments import source_store
+    if remote_inputs(kind):
+        response = input_remote('GET', source_id, attachment_id)
+        return Response(response.content, media_type='application/octet-stream', headers={
+            'Content-Disposition': response.headers.get('Content-Disposition', 'attachment'),
+            'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
+    store, source = source_store(kind, source_id)
+    manifest = store.get(source, attachment_id)
+    return FileResponse(store.path(manifest), filename=manifest['name'], media_type='application/octet-stream',
+                        headers={'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
+
+
+@owner_router.get('/inputs/{kind}/{source_id}')
+def owner_inputs(kind: str, source_id: str):
+    return input_manifest(kind, source_id)
+
+
+@owner_router.post('/inputs/{kind}/{source_id}')
+async def owner_upload_inputs(kind: str, source_id: str, files: list[UploadFile] = File(...)):
+    from modules.hfl_corpus.attachments import source_store, require_source
+    if remote_inputs(kind):
+        try:
+            return (await asyncio.to_thread(input_remote, 'POST', source_id,
+                    files=[('files', (f.filename, f.file, 'application/octet-stream')) for f in files])).json()
+        finally:
+            for upload in files:
+                await upload.close()
+    require_source(kind, source_id)
+    store, source = source_store(kind, source_id)
+    return {'attachments': await store.upload(source, files)}
+
+
+@owner_router.get('/inputs/{kind}/{source_id}/{attachment_id}')
+def owner_download_input(kind: str, source_id: str, attachment_id: str):
+    return input_download(kind, source_id, attachment_id)
+
+
+@owner_router.delete('/inputs/{kind}/{source_id}/{attachment_id}')
+def owner_detach_input(kind: str, source_id: str, attachment_id: str):
+    from modules.hfl_corpus.attachments import source_store, require_source
+    if remote_inputs(kind):
+        return input_remote('DELETE', source_id, attachment_id).json()
+    require_source(kind, source_id)
+    store, source = source_store(kind, source_id)
+    store.detach(source, attachment_id)
+    return {'attachments': store.list(source)}
+
+
+@worker_router.get('/runs/{run_id}/inputs/{attachment_id}')
+def worker_input(run_id: str, attachment_id: str, request: Request, agent=Depends(worker_auth)):
+    run = checked(bridge_store().get, run_id, private=True)
+    token = request.headers.get('X-Execution-Lease', '')
+    if run['state'] != 'running' or run['agent'] != agent or not token or not hmac.compare_digest(run['lease_token'], token) or run['lease_until'] < now():
+        raise HTTPException(409, 'An active execution lease is required.')
+    if not any(item['id'] == attachment_id for item in run['snapshot']['source'].get('attachments', [])):
+        raise HTTPException(404, 'Attachment is not part of this run.')
+    return input_download(run['snapshot']['kind'], run['snapshot']['source_id'], attachment_id)
 
 
 def artifact_path(run_id, content_hash):

@@ -28,10 +28,12 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="HARQIS HFL Activity Corpus API",
-    summary="Capture and query canonical Homework-for-Life entries.",
+    summary="Capture and query Homework-for-Life entries, actions, categories, and date pins.",
     description=(
         "Authenticated API for writing the canonical Markdown Activity Corpus and its "
-        "best-effort Elasticsearch projection, plus searching and retrieving entries."
+        "best-effort Elasticsearch projection, plus searching and retrieving entries. "
+        "Manage actions, Memory Signal categories, and date pins with bearer authentication. "
+        "New management API actions and pins have scheduled agent execution disabled."
     ),
     version="1.0.0",
     docs_url="/docs",

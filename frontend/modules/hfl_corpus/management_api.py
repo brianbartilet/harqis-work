@@ -9,8 +9,8 @@ from datetime import date
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from modules.hfl_corpus import timeline
@@ -20,6 +20,47 @@ from workflows.hfl.timeline_store import FollowUpConflict
 
 
 router = APIRouter(tags=["hfl-management"])
+
+
+def attachment_source(resource, source_id):
+    from modules.hfl_corpus.attachments import source_store
+    return source_store('actionable' if resource == 'actions' else 'pin', source_id)
+
+
+@router.get('/{resource}/{source_id}/attachments')
+def list_attachments(resource: Literal['actions', 'pins'], source_id: str):
+    from modules.hfl_corpus.attachments import require_source
+    require_source('actionable' if resource == 'actions' else 'pin', source_id)
+    store, source = attachment_source(resource, source_id)
+    return {'attachments': store.list(source)}
+
+
+@router.post('/{resource}/{source_id}/attachments')
+async def upload_attachments(resource: Literal['actions', 'pins'], source_id: str, files: list[UploadFile] = File(...)):
+    """Attach multiple inputs; identical name/content retries are deduplicated."""
+    from modules.hfl_corpus.attachments import require_source
+    require_source('actionable' if resource == 'actions' else 'pin', source_id)
+    store, source = attachment_source(resource, source_id)
+    return {'attachments': await store.upload(source, files)}
+
+
+@router.get('/{resource}/{source_id}/attachments/{attachment_id}')
+def download_attachment(resource: Literal['actions', 'pins'], source_id: str, attachment_id: str):
+    """Download immutable input, including detached files retained for prior runs."""
+    store, source = attachment_source(resource, source_id)
+    manifest = store.get(source, attachment_id)
+    return FileResponse(store.path(manifest), filename=manifest['name'], media_type='application/octet-stream',
+                        headers={'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
+
+
+@router.delete('/{resource}/{source_id}/attachments/{attachment_id}')
+def detach_attachment(resource: Literal['actions', 'pins'], source_id: str, attachment_id: str):
+    """Remove an input from future runs; preserve files referenced by run history."""
+    from modules.hfl_corpus.attachments import require_source
+    require_source('actionable' if resource == 'actions' else 'pin', source_id)
+    store, source = attachment_source(resource, source_id)
+    store.detach(source, attachment_id)
+    return {'attachments': store.list(source)}
 
 
 class Command(BaseModel):

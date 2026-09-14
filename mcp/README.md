@@ -308,6 +308,25 @@ remote or local state.
 | Tool | Args | Returns |
 |------|------|---------|
 | `create_hfl_corpus_entry` | entry date/time and HFL fields | Persistence result with `entry_id`, `indexed`, `doc_id`, and `delivery` |
+| `create_hfl_corpus_action` | `request_id` UUID, `title`, `expected_outcome`, optional dates/prompt/notes/source | `{item, duplicate}`; agents disabled (write) |
+| `upload_hfl_corpus_attachments` | `resource` actions/pins, `source_id`, `file_paths` | Input manifest, identical retries deduplicated (write) |
+| `list_hfl_corpus_attachments` | `resource`, `source_id` | Attached input files |
+| `download_hfl_corpus_attachment` | `resource`, `source_id`, `attachment_id`, `destination` | Local downloaded input (write) |
+| `delete_hfl_corpus_attachment` | `resource`, `source_id`, `attachment_id` | Manifest after detaching; prior run files retained (write) |
+| `list_hfl_corpus_actions` | `closed?`, `offset?` | Paginated actions and total |
+| `get_hfl_corpus_action` | `action_id` | Action and current version |
+| `update_hfl_corpus_action` | `action_id`, `version`, `changes` | Edited/completed/dismissed action (write) |
+| `get_hfl_corpus_action_history` | `action_id` | Immutable revisions |
+| `create_hfl_corpus_category` | `name`, `color`, `instructions?` | Category (write) |
+| `list_hfl_corpus_categories` | none | Active/archived categories and palette |
+| `get_hfl_corpus_category` | `category_id` | Category |
+| `update_hfl_corpus_category` | `category_id`, `changes` | Edited category (write) |
+| `archive_hfl_corpus_category` | `category_id` | Archived category, history retained (write) |
+| `create_hfl_corpus_pin` | `category_id`, `start_date`, `end_date`, `title`, `note?`, `prompt?` | Date pin; agents disabled (write) |
+| `list_hfl_corpus_pins` | `category_id?` | Active date pins |
+| `get_hfl_corpus_pin` | `pin_id` | Date pin |
+| `update_hfl_corpus_pin` | `pin_id`, `changes` | Edited pin (write) |
+| `delete_hfl_corpus_pin` | `pin_id` | Deletion result (destructive write) |
 | `preview_hfl_corpus_entry` | entry date/time and HFL fields | Rendered Markdown/HTML preview without persistence |
 | `upload_hfl_corpus_entry` | entry fields, `file_paths` | Persistence result plus uploaded reference paths |
 | `list_hfl_corpus_documents` | search, dates, paging, source, secret controls | Paginated corpus search payload |

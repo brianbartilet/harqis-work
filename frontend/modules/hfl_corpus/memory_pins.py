@@ -198,7 +198,7 @@ class MemoryPinStore:
             "archived_categories": [dict(row) for row in archived],
         }
 
-    def save_category(self, *, category_id: int | None, name: str, color: str, instructions: str = "") -> None:
+    def save_category(self, *, category_id: int | None, name: str, color: str, instructions: str = "") -> int:
         if len(instructions) > 20000:
             raise ValueError("Use 20,000 characters or fewer for instructions.")
         name = name.strip()
@@ -218,11 +218,12 @@ class MemoryPinStore:
                     if not cursor.rowcount:
                         raise ValueError("That category no longer exists.")
                 else:
-                    connection.execute(
+                    cursor = connection.execute(
                         """INSERT INTO memory_pin_categories(name, color, instructions, created_at, updated_at)
                            VALUES (?, ?, ?, ?, ?)""",
                         (name, color, instructions, now, now),
                     )
+                return category_id or cursor.lastrowid
         except sqlite3.IntegrityError as exc:
             raise ValueError("Category names must be unique.") from exc
 
@@ -294,7 +295,7 @@ class MemoryPinStore:
         prompt: str = "",
         execution_hour: int = 0,
         agent_enabled: bool | None = None,
-    ) -> None:
+    ) -> int:
         if type(execution_hour) is not int or not 0 <= execution_hour <= 23:
             raise ValueError('Choose an execution hour from 00 to 23 (Asia/Singapore).')
         if agent_enabled is not None and type(agent_enabled) is not bool:
@@ -332,12 +333,13 @@ class MemoryPinStore:
                     if not cursor.rowcount:
                         raise ValueError("That pinned range no longer exists.")
                 else:
-                    connection.execute(
+                    cursor = connection.execute(
                         """INSERT INTO memory_pin_ranges
                            (category_id, start_date, end_date, note, title, prompt, created_at, updated_at, execution_hour, agent_enabled)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (category_id, start.isoformat(), end.isoformat(), note, title, prompt, now, now, execution_hour, bool(prompt.strip()) if agent_enabled is None else agent_enabled),
                     )
+                return range_id or cursor.lastrowid
         except sqlite3.IntegrityError as exc:
             raise ValueError("The pinned range could not be saved.") from exc
 

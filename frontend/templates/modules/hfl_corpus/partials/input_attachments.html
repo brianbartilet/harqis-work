@@ -1,6 +1,11 @@
-<div class="agent-inputs" data-input-editor data-csrf="{{ memory_csrf|default('') }}">
-  <label>Supporting files<input type="file" multiple data-input-files aria-label="Supporting files"></label>
+<div data-input-editor data-csrf="{{ memory_csrf|default('') }}">
+  <span class="memory-dialog-label agent-input-heading">Supporting files</span>
+  <div class="agent-inputs">
   <small>Add up to 10 files, 50 MB each, 200 MB total. Changes apply when you save.</small>
-  <div data-input-list></div><p data-input-error role="status"></p>
   <small>Include relevant web links in your instructions. Agents will try available integrations or signed-in sessions when access is needed.</small>
+  <div class="agent-input-picker"><button type="button" data-input-choose>Choose files</button></div>
+  <input type="file" multiple data-input-files aria-label="Supporting files" hidden>
+  <div data-input-list></div>
+  <div class="agent-input-status" data-input-status hidden><small data-input-error role="status"></small><button type="button" data-input-retry hidden>Retry</button></div>
+  </div>
 </div>

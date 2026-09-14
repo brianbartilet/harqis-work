@@ -8,6 +8,7 @@
       <div class="agenda-form-dates"><label>Review on<input name="review_date" type="date"><small>Revisit this action or check progress. Adds a heatmap marker; no notification.</small></label><label>Complete by<input name="due_date" type="date"><small>When the outcome needs to be ready.</small></label></div>
       <label id="followup-state-label">Status<select name="status"><option value="open">Open</option><option value="active">Active</option><option value="in_progress">In Progress</option><option value="incomplete">Incomplete</option><option value="done">Done</option><option value="dismissed">Dismissed</option></select></label>
       <label>Prompt<textarea name="prompt" rows="5" maxlength="20000" placeholder="Write instructions for an LLM. Plain text or Markdown is supported."></textarea><small>Saved instructions for later use. Nothing runs when you save.</small></label>
+      {% include "modules/hfl_corpus/partials/input_attachments.html" %}
       <label>Notes<textarea name="notes" rows="2" maxlength="6000" placeholder="Useful context or the next step"></textarea></label>
       <label id="followup-completion-label">Completion note<textarea name="completion_note" rows="2" maxlength="3000" placeholder="What happened? What was the result?"></textarea></label>
       <p id="followup-save-error" class="agenda-error" role="alert" hidden></p>
@@ -15,3 +16,25 @@
     <footer class="agenda-dialog-footer"><button type="button" data-agenda-close>Cancel</button><button type="submit" class="agenda-primary">Save</button></footer>
   </form>
 </dialog>
+<script src="{{ static_asset('js/hfl-input-attachments.js') }}"></script>
+<style>
+  .agent-inputs { padding:1rem; border:1px solid #334155; border-radius:.65rem; background:rgba(15,23,42,.45); font-size:.8rem; }
+  .agent-inputs label,.agent-inputs small { display:block; }
+  .agent-inputs small { margin:.5rem 0; color:#94a3b8; line-height:1.5; }
+  .agent-inputs input[type=file] { display:none; }
+  .agent-input-picker { display:flex; justify-content:center; margin:.75rem 0; }
+  .agent-input-picker button { padding:.5rem 1rem; border:1px solid #475569; border-radius:.45rem; background:#1e293b; color:#e2e8f0; cursor:pointer; }
+  .agent-input-picker button:hover { background:#334155; }
+  .agent-input-picker button:focus-visible { outline:2px solid #38bdf8; outline-offset:3px; }
+  .agent-input-row { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.5rem 0; }
+  .agent-input-row :is(a,span) { overflow-wrap:anywhere; min-width:0; }
+  .agent-input-row button { flex-shrink:0; padding:.35rem .6rem; border-radius:.4rem; background:#1e293b; color:#cbd5e1; }
+  .agent-input-heading { display:block; margin-bottom:.35rem; color:#94a3b8; font-size:.68rem; font-weight:650; }
+  .agenda-form-body label,.agenda-form-body .agent-input-heading { color:#94a3b8; font-size:.68rem; font-weight:650; }
+  .agenda-form-body input,.agenda-form-body textarea,.agenda-form-body select { font-size:.85rem; font-weight:400; }
+  .agenda-form-body small { display:block; margin:.5rem 0; color:#94a3b8; font-size:.75rem; font-weight:400; line-height:1.5; }
+  .agenda-form-body [data-input-editor] { margin-bottom:1.25rem; }
+  .agent-input-status:not([hidden]) { display:flex; align-items:center; gap:.5rem; }
+  .agent-input-status [data-input-retry] { color:#7dd3fc; font-size:.75rem; background:none; border:0; padding:.25rem; cursor:pointer; }
+  .agent-input-picker button:disabled { opacity:.5; cursor:default; }
+</style>

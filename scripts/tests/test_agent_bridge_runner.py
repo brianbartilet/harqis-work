@@ -25,6 +25,33 @@ def test_parse_result_accepts_cli_session_footer_but_rejects_ambiguous_results()
         runner.parse_result(json.dumps({**result, 'complete': 'yes'}))
 
 
+def test_worker_restores_verified_inputs_separately_from_outputs(tmp_path, monkeypatch):
+    import hashlib
+    import httpx
+    from types import SimpleNamespace
+    monkeypatch.setattr(runner, 'spool_root', lambda: tmp_path)
+    content = b'Original briefing'
+    item = {'id': 'a' * 32, 'filename': 'a' * 32 + '.md', 'name': 'Brief.md',
+            'digest': hashlib.sha256(content).hexdigest(), 'size': len(content)}
+    run = {'id': 'run', 'lease_token': 'lease', 'snapshot': {'runtime_prompt': 'Read inputs', 'source': {'attachments': [item]}}}
+    def transport(request):
+        assert request.headers['X-Execution-Lease'] == 'lease'
+        assert request.url.path == '/runs/run/inputs/' + item['id']
+        return httpx.Response(200, content=content)
+    with httpx.Client(base_url='https://worker.test/', transport=httpx.MockTransport(transport)) as client:
+        runner.restore_input_attachments(SimpleNamespace(client=client), run)
+        workspace = tmp_path / 'workspaces/run'
+        assert (workspace / 'inputs' / item['filename']).read_bytes() == content
+        prompt = json.loads(runner.execution_prompt(run, workspace).split('\n\n', 1)[1])
+        assert prompt['input_directory'] == str((workspace / 'inputs').resolve())
+        item['digest'] = '0' * 64
+        with pytest.raises(ValueError, match='integrity'):
+            runner.restore_input_attachments(SimpleNamespace(client=client), run)
+        item['filename'] = '../escape.md'
+        with pytest.raises(ValueError, match='filename'):
+            runner.restore_input_attachments(SimpleNamespace(client=client), run)
+
+
 def test_worker_rejects_remote_plaintext_and_missing_token(monkeypatch):
     monkeypatch.setenv('HFL_AGENT_BRIDGE_URL', 'http://remote.example')
     monkeypatch.setenv('HFL_AGENT_BRIDGE_TOKEN', 'test-token')

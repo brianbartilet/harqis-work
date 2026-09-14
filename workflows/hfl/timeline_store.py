@@ -21,7 +21,7 @@ def store_path():
 
 
 STATES = {"open", "active", "in_progress", "incomplete", "done", "dismissed"}
-FIELDS = {"title", "expected_outcome", "notes", "prompt", "review_date", "due_date", "status", "completion_note"}
+FIELDS = {"title", "expected_outcome", "notes", "prompt", "review_date", "due_date", "status", "completion_note", "agent_enabled"}
 
 
 class FollowUpConflict(ValueError):
@@ -85,6 +85,8 @@ class FollowUpStore:
     @staticmethod
     def validate(payload):
         result = dict(payload)
+        if type(result.get("agent_enabled", True)) is not bool:
+            raise ValueError("agent_enabled must be a boolean.")
         for key, limit in {"title": 200, "expected_outcome": 3000, "notes": 6000, "prompt": 20000, "completion_note": 3000}.items():
             value = result.get(key, "")
             if not isinstance(value, str) or len(value if key == "prompt" else value.strip()) > limit:
@@ -133,7 +135,7 @@ class FollowUpStore:
             if previous:
                 existing = json.loads(previous["payload"])
                 original = json.loads(db.execute("SELECT payload FROM followup_history WHERE followup_id=? AND version=1", (existing["id"],)).fetchone()["payload"])
-                if any(original.get(k, "") != item.get(k, "") for k in FIELDS) or original.get("source") != source:
+                if any(original.get(k, True if k == "agent_enabled" else "") != item.get(k, True if k == "agent_enabled" else "") for k in FIELDS) or original.get("source") != source:
                     raise FollowUpConflict("This creation request was already used. Reload before creating another follow-up.")
                 return existing, True
             encoded = json.dumps(item)

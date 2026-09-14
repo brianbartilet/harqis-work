@@ -8,6 +8,7 @@
   document.querySelector('[data-activity-day-menu]').append(document.getElementById('agenda-error'));
   const editor = document.getElementById('followup-editor');
   const form = document.getElementById('followup-form');
+  const attachments = new window.HflInputAttachments(form.querySelector('[data-input-editor]'), 'actionable');
   const historyDialog = document.getElementById('followup-history');
   let suggestionId = null, markerDays = {}, pollTimer;
   const startInput = document.getElementById('timeline-start'), endInput = document.getElementById('timeline-end');
@@ -29,6 +30,7 @@
   function openEditor(item = null, desiredStatus = '') {
     suggestionId = null; editing = item; source = item?.source || null; requestId = crypto.randomUUID();
     form.reset();
+    attachments.reset(item?.id);
     for (const name of ['title', 'expected_outcome', 'notes', 'prompt', 'review_date', 'due_date', 'completion_note']) form.elements[name].value = item?.[name] || '';
     form.elements.status.value = desiredStatus || item?.status || 'open';
     document.getElementById('followup-state-label').hidden = !item;
@@ -236,9 +238,21 @@
     const save=form.querySelector('[type=submit]');save.disabled=true;save.textContent='Saving…';
     const payload=Object.fromEntries(new FormData(form));
     if(editing)payload.version=editing.version;else{payload.request_id=requestId;payload.source=source;if(suggestionId)payload.suggestion_id=suggestionId;}
-    try {await api(editing?'/'+editing.id:'',{method:editing?'PATCH':'POST',body:JSON.stringify(payload)});editor.close();await load();}
+    try {
+      attachments.validate();
+      attachments.root.inert = true;
+      const prompt = payload.prompt, changed = attachments.changed;
+      if (changed) payload.prompt = '';
+      const saved = await api(editing?'/'+editing.id:'',{method:editing?'PATCH':'POST',body:JSON.stringify(payload)});
+      editing = saved.item;
+      if (changed) {
+        await attachments.save(editing.id);
+        editing = (await api('/'+editing.id,{method:'PATCH',body:JSON.stringify({version:editing.version,prompt})})).item;
+      }
+      editor.close();await load();
+    }
     catch(err){error('followup-save-error',err.message);}
-    finally{busy=false;save.disabled=false;save.textContent='Save';}
+    finally{attachments.root.inert=false;busy=false;save.disabled=false;save.textContent='Save';}
   });
   timelineApi('/markers').then(data=>{markerDays=data.days;paintMarkers();}).catch(()=>{});
   window.addEventListener('hfl:timeline-close',()=>{clearTimeout(pollTimer);++sequence;});

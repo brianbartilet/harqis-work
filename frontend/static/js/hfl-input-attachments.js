@@ -3,6 +3,10 @@ window.HflInputAttachments = class {
   constructor(root, kind) {
     this.root = root; this.kind = kind; this.sequence = 0;
     this.input = root.querySelector('[data-input-files]');
+    this.choose = root.querySelector('[data-input-choose]');
+    this.choose.addEventListener('click', () => this.input.click());
+    this.retry = root.querySelector('[data-input-retry]');
+    this.retry.addEventListener('click', () => this.reset(this.id));
     this.list = root.querySelector('[data-input-list]');
     this.error = root.querySelector('[data-input-error]');
     this.input.addEventListener('change', () => {
@@ -14,7 +18,10 @@ window.HflInputAttachments = class {
   async request(url, options = {}) {
     const token = this.root.dataset.csrf || JSON.parse(document.querySelector('[data-memory-csrf]')?.textContent || '""');
     const response = await fetch(url, {...options, headers: {'X-CSRF-Token': token}});
-    const result = await response.json();
+    if (response.status === 404) throw new Error('Attachments are unavailable for this task. The task or attachment service may no longer be available.');
+    let result;
+    try { result = await response.json(); }
+    catch (_) { throw new Error('Could not load attachments. Please try again.'); }
     if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : 'Could not save attachments.');
     return result;
   }
@@ -28,6 +35,8 @@ window.HflInputAttachments = class {
   }
   get changed() { return this.pending.length > 0 || this.removed.size > 0; }
   validate() {
+    // Unavailable file metadata must not block edits that leave files untouched.
+    if (!this.changed) return;
     if (this.loading) throw new Error('Attachments are still loading. Try Save again shortly.');
     if (this.failure) throw new Error(this.failure + ' Reopen the editor to reload attachments.');
     const files = [...this.saved.filter(file => !this.removed.has(file.id)), ...this.pending];
@@ -48,7 +57,11 @@ window.HflInputAttachments = class {
     };
     this.saved.filter(file => !this.removed.has(file.id)).forEach(file => add(file, true));
     this.pending.forEach((file, index) => add(file, false, index));
-    this.error.textContent = this.failure || (this.loading ? 'Loading attachments…' : '');
+    this.error.textContent = this.failure ? 'Couldn’t load saved files.' : (this.loading ? 'Loading files…' : '');
+    this.error.hidden = !this.error.textContent;
+    this.root.querySelector('[data-input-status]').hidden = !this.error.textContent;
+    this.retry.hidden = !this.failure;
+    this.choose.disabled = this.input.disabled = this.loading || !!this.failure;
   }
   async save(id) {
     this.validate(); this.id = id;

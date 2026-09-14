@@ -195,6 +195,16 @@
         if (actions.childElementCount) card.append(actions);
         const details = element('details'); details.append(element('summary', 'Run details'));
         const snapshot = element('pre', [run.snapshot.category_guidance, run.snapshot.source.prompt].filter(Boolean).join('\n\n')); snapshot.className = 'action-prompt'; details.append(element('p', 'Instructions used'), snapshot, element('small', 'Run ' + run.id));
+        if (run.snapshot.source.attachments?.length) {
+          const inputs = element('div'); inputs.append(element('p', 'Supporting files used'));
+          run.snapshot.source.attachments.forEach(file => {
+            const link = element('a', file.name);
+            link.href = '/hfl-corpus/agent-bridge/inputs/' + encodeURIComponent(run.snapshot.kind) + '/' + encodeURIComponent(run.snapshot.source_id) + '/' + encodeURIComponent(file.id);
+            link.setAttribute('download', '');
+            const row = element('p'); row.append(link); inputs.append(row);
+          });
+          details.append(inputs);
+        }
         if (run.result.session_id) details.append(element('small', 'Hermes session: ' + run.result.session_id));
         if (run.result.model) details.append(element('p', 'Model: ' + run.result.model + (run.result.provider ? ' · Provider: ' + run.result.provider : '')));
         if (run.result.runtime) {

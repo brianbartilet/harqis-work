@@ -1,6 +1,6 @@
 ---
 name: create-action
-description: Create a standalone or HFL entry-linked Activity Corpus action with optional review date, due date, Markdown prompt, and notes. Use when the user asks to save an action or invokes $create-action; this records intent without scheduling agent execution.
+description: Create a standalone or HFL entry-linked Activity Corpus action with optional dates, Markdown instructions, web links, notes, and multiple supporting files. Use when the user asks to save an action or invokes $create-action; this records intent without scheduling agent execution.
 ---
 
 # Create an Activity Corpus action
@@ -46,6 +46,20 @@ returns 200 with `duplicate: true`. Inspect `item.id`, `item.version`, and
 `item.agent_enabled` (false). If needed, verify with `get_hfl_corpus_action`.
 Report the action title, ID, and any saved review/due dates. Say that it was
 saved with scheduled agent execution disabled; saving a prompt does not run it.
+
+When supporting files are supplied, create the action first, then call
+`upload_hfl_corpus_attachments` with `resource: "actions"`, the saved ID as
+`source_id`, and the user's local `file_paths`. Up to 10 attachments, 50 MB each,
+200 MB total are supported. Check the returned manifest before reporting that
+all files were attached. If upload fails, preserve the saved action ID and retry
+the upload rather than creating another action. Identical filenames/content are
+deduplicated. Agents receive verified local copies on their executing host;
+removal excludes a file from future runs and preserves prior run evidence.
+
+Preserve relevant user-provided web URLs in the prompt or notes. At execution,
+agents try configured authenticated integrations and then available signed-in
+browser sessions, within their execution mode. Do not claim remote workers have
+access to the user's local browser or that an inaccessible link was read.
 
 Retry a transient transport failure once with the same payload and ID. On a
 second failure, report that persistence is unconfirmed and retain the ID for

@@ -6,6 +6,8 @@
   const save = form.querySelector('[type="submit"]');
   const error = document.getElementById('followup-save-error');
   const evidence = document.getElementById('followup-evidence');
+  const attachments = new window.HflInputAttachments(form.querySelector('[data-input-editor]'), 'actionable');
+  let savedAction = null;
   let source = null, requestId = '', trigger = null, busy = false, sequence = 0;
   function showError(message = '') {
     error.textContent = message;
@@ -28,6 +30,7 @@
     const ticket = ++sequence;
     const params = new URL(link.href).searchParams;
     form.reset(); source = null; requestId = crypto.randomUUID(); showError();
+    attachments.reset(); savedAction = null;
     document.getElementById('followup-state-label').hidden = true;
     document.getElementById('followup-completion-label').hidden = true;
     evidence.hidden = false; evidence.textContent = 'Loading entry…';
@@ -59,9 +62,19 @@
     if (busy || !source) return;
     busy = true; save.disabled = true; save.textContent = 'Saving…'; showError();
     try {
-      await api('/items', {method: 'POST', body: JSON.stringify({
-        ...Object.fromEntries(new FormData(form)), source, request_id: requestId,
-      })});
+      attachments.validate();
+      attachments.root.inert = true;
+      const values = Object.fromEntries(new FormData(form));
+      const prompt = values.prompt, changed = attachments.changed;
+      if (changed) values.prompt = '';
+      const payload = savedAction ? {...values, version: savedAction.version} : {...values, source, request_id: requestId};
+      savedAction = (await api(savedAction ? '/items/' + savedAction.id : '/items', {
+        method: savedAction ? 'PATCH' : 'POST', body: JSON.stringify(payload),
+      })).item;
+      if (changed) {
+        await attachments.save(savedAction.id);
+        savedAction = (await api('/items/' + savedAction.id, {method:'PATCH', body:JSON.stringify({version:savedAction.version,prompt})})).item;
+      }
       dialog.close();
       const entryTrigger = trigger;
       const header = entryTrigger.closest('.corpus-entry-header');
@@ -81,6 +94,6 @@
       toast.append(message, dismiss);
       header.after(toast);
     } catch (err) { showError(err.message); }
-    finally { busy = false; save.disabled = false; save.textContent = 'Save'; }
+    finally { attachments.root.inert = false; busy = false; save.disabled = false; save.textContent = 'Save'; }
   });
 })();

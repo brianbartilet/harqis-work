@@ -3657,7 +3657,7 @@ def test_compiled_css_contains_manual_entry_location_toggle_utilities():
     assert ".w-11{width:2.75rem}" in css
     assert ".left-1{left:.25rem}" in css
     assert ".bg-white{" in css
-    assert "peer-checked\\:bg-blue-600" in css
+    assert "peer-checked\\:bg-sky-600" in css
     assert "peer-checked\\:translate-x-5" in css
 
 

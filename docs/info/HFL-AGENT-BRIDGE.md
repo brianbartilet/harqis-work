@@ -255,6 +255,42 @@ and the minute schedule still require deployment before production use.
 
 ## Durability and files
 
+### Supporting input files and web links
+
+Action and pinned-date editors accept multiple supporting files beside the task
+instructions. Saving a file change temporarily clears the task prompt until all
+uploads/removals succeed, then restores the saved prompt; schedule settings are
+preserved. If upload fails, retry in the open editor using the saved record.
+The API/MCP surface also supports upload/list/download/detach operations; see
+[Activity Corpus attachment routes](../../apps/hfl_corpus/README.md#supporting-files-and-authenticated-links).
+
+Inputs allow 10 files per task, 50 MB per file and 200 MB total. Each run records
+immutable metadata (original name, local filename, SHA-256 and size). Workers
+download those specific files into a separate `inputs/` directory and verify
+integrity before starting Hermes. `input_directory` and `source.attachments`
+identify them in the execution prompt. Inputs are not automatically published as
+output artifacts. Run details include download links to the files actually used.
+Detaching files only affects future manifests; existing run files remain readable.
+
+Owner attachment routes under `/hfl-corpus/agent-bridge/inputs/{kind}/{source_id}`
+require the owner session and CSRF for writes. Remote actions forward to the
+canonical HFL API using its bearer token; pins use their owning profile store.
+Workers fetch `/api/hfl-agent/runs/{run_id}/inputs/{attachment_id}` with the worker
+token and an active matching execution lease. Only IDs in that run's snapshot
+are allowed. Timeline/profile databases and their adjacent `.inputs` directories
+must be backed up together. Detached blobs are retained; there is no automatic
+garbage collection in this release.
+
+The runtime prompt directs agents to read relevant supplied files and open supplied
+links. For protected resources, prefer configured authenticated integrations,
+then a browser session available on the executing worker. Existing trusted-mode
+host access may be reused for the requested task. Restricted mode remains restricted;
+remote workers cannot assume access to a user's local browser. Missing scopes,
+login/MFA or sessions must be reported precisely. File contents and web pages remain
+supporting evidence, not authority to execute unrelated commands or expose secrets.
+
+### Output files and retention
+
 Only one live attempt per source is allowed. Request/event keys are idempotent.
 Transactional claims have five-minute leases renewed every 30 seconds. Expired
 runs become Incomplete; they are not silently rerun. Result envelopes are spooled
