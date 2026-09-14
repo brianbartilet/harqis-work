@@ -24,6 +24,7 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
   $('info').addEventListener('blur',()=>{infoPaused=false;});
   const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3'};
   const color = kind => palette[kind] || '#e9c96c';
+  const defaultLabelKinds = new Set(['sources', 'people', 'tools', 'companies']);
   let data = {nodes:[],edges:[]}, nodes = [], edges = [], selected = null, enabled = new Set();
   let exampleMode=new URLSearchParams(location.search).get('example')==='1';
   let requestVersion=0, requestController=null;
@@ -121,13 +122,14 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
         ctx.font=`600 ${14/globalScale}px ${uiFont}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#10263c';ctx.fillText(mark,node.x,node.y);ctx.textAlign='left';
       }
       if(emphasis){ctx.beginPath();ctx.arc(node.x,node.y,radius+5/globalScale,0,2*Math.PI);ctx.strokeStyle=ink+'aa';ctx.lineWidth=1/globalScale;ctx.stroke();}
-      if(emphasis||(!activeId&&node.labelRank<(data.nodes.length<=35?35:9))||activeId&&near.has(node.id)&&near.size<16||globalScale>2.5&&visible){
+      const defaultLabel = !activeId && defaultLabelKinds.has(node.kind);
+      if(defaultLabel||emphasis||(!activeId&&node.labelRank<(data.nodes.length<=35?35:9))||activeId&&near.has(node.id)&&near.size<16||globalScale>2.5&&visible){
         const fontSize=(emphasis?13:data.nodes.length<=35?12:11)/globalScale;ctx.font=`500 ${fontSize}px ${uiFont}`;
         const label=node.label.length>34?node.label.slice(0,32)+'…':node.label;
         const x=node.x+radius+9/globalScale,y=node.y,w=ctx.measureText(label).width;
         const box={x:x-6/globalScale,y:y-12/globalScale,w:w+12/globalScale,h:24/globalScale};
         const overlaps=labelBoxes.current.some(b=>box.x<b.x+b.w&&box.x+box.w>b.x&&box.y<b.y+b.h&&box.y+box.h>b.y);
-        if(!overlaps||emphasis){
+        if(defaultLabel||!overlaps||emphasis){
         labelBoxes.current.push(box);
         ctx.fillStyle=emphasis?'#142a42f5':'#0a1728dd';ctx.beginPath();ctx.roundRect(x-5/globalScale,y-11/globalScale,w+10/globalScale,22/globalScale,5/globalScale);ctx.fill();
         ctx.strokeStyle=ink+(emphasis?'90':'30');ctx.lineWidth=.6/globalScale;ctx.stroke();
