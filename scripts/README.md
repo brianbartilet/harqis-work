@@ -14,6 +14,7 @@ Operational scripts for **harqis-work**, organised by purpose:
 
 | Path | Purpose |
 |---|---|
+| `knowledge_preview.py` | Launch the corpus entities localhost preview, isolated enrichment worker, or manual backfill. |
 | [`launch.py`](#launchpy) | Single-process launcher — runs one daemon in the foreground (`worker`, `scheduler`, `flower`, `frontend`, `mcp`, `kanban`, `trigger-hud-tasks`, `push-config`, `serve-config`). |
 | [`deploy.py`](#deploypy) | Multi-daemon orchestrator — reads `machines.toml` from the repo root, brings the whole stack up/down, optionally registers OS auto-start units. |
 | [`verify_instance_isolation.py`](#verify_instance_isolationpy) | Captures and compares a sibling HARQIS Compose project and checkout-specific processes during a co-deployment soak test. |
@@ -24,6 +25,11 @@ Operational scripts for **harqis-work**, organised by purpose:
 | [`tailscale/`](#tailscale) | Tailscale ACL policy. Unchanged. |
 
 ## `scripts/agents/`
+
+Activity Corpus entities preview: `python scripts/knowledge_preview.py frontend --port 8092`.
+Start its manual worker separately with `python scripts/knowledge_preview.py worker`.
+Use `refresh` to queue historical enrichment. Optional Obsidian export is available on the Entities page.
+State lives in `.harqis-data/connected-preview`; no recurring scheduler is launched.
 
 Agent-support scripts are grouped into **context subfolders**. Each script
 resolves the repo root via `Path(__file__).resolve().parents[3]` (three levels

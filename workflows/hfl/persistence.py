@@ -381,6 +381,10 @@ def _persist_envelope_locked(
         synthesized=envelope.synthesized,
         doc_id=envelope.es_doc_id or indexed_entry.entry_id,
     )
+    from workflows.hfl.entity_events import notify_change
+    # Also notify on recovery/deduplication: Markdown may have succeeded before
+    # a previous Elasticsearch attempt failed. Hash checks make this idempotent.
+    notify_change(entry.entry_id)
     return {
         "entry_id": entry.entry_id,
         "path": str(day_file),
@@ -478,6 +482,11 @@ def submit_hfl_entry(
 
 
 def flush_outbox(*, limit: int = 100) -> dict[str, int]:
+    from workflows.hfl.entity_events import dispatch_pending
+    try:
+        dispatch_pending()
+    except Exception:
+        pass
     root = outbox_dir()
     counts = {"found": 0, "delivered": 0, "failed": 0, "invalid": 0}
     if not root.exists():

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -59,6 +60,7 @@ def page_context(
 ) -> dict[str, Any]:
     return {
         "request": request,
+        "corpus_entities_enabled": bool(os.environ.get('HARQIS_ENTITIES_DB')),
         "user": user,
         "active_module": active_module,
         "modules": PRIMARY_MODULES,

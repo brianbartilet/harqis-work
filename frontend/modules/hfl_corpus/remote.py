@@ -27,6 +27,8 @@ from services.safe_paths import ReferenceLink
 
 _client_lock = Lock()
 _client: httpx.Client | None = None
+_entity_document_cache = {}
+_entity_cache_lock = Lock()
 
 
 def _http_client() -> httpx.Client:
@@ -119,6 +121,54 @@ def _tree(payload: dict[str, Any]) -> dict:
 
 
 class RemoteCorpusClient:
+    def knowledge_documents(self, month: str, *, secret_tags: tuple[str, ...] = ()):
+        """Read one complete date scope, including entries without a source label."""
+        import calendar
+        params = {'include_secrets': 'false', 'secret_tags': ','.join(secret_tags),
+                  'compact': 'false', 'date_field': 'entry', 'activity_from_year': '1900',
+                  'include_entries': 'true',
+                  # Older canonical APIs include entries for a nonempty query;
+                  # whitespace has no search terms and preserves the full scope.
+                  'q': ' '}
+        if month == 'latest':
+            index = self._get('/documents', params={**params, 'compact': 'true'}).json()
+            counts = index.get('activity', {}).get('timeline_counts')
+            if counts is None:
+                raise RemoteCorpusError('Canonical API lacks complete activity date coverage')
+            days = [day for day, count in counts.items() if int(count) > 0]
+            month = max(days)[:7] if days else date.today().isoformat()[:7]
+        if month != 'all':
+            start = date.fromisoformat(month + '-01')
+            end = date(start.year, start.month, calendar.monthrange(start.year, start.month)[1])
+            params.update(date_from=start.isoformat(), date_to=end.isoformat())
+        payload = self._get('/documents', params=params).json()
+        listed = payload['results']
+        if len(listed) != int(payload['total_results']):
+            raise RemoteCorpusError('Canonical API returned an incomplete date scope')
+        if all('entries' in item for item in listed):
+            return tuple(_document(item) for item in listed), month
+        # Revalidate the permitted manifest on every read. Reuse only unchanged,
+        # identically scoped documents; never fall back to cached data on failure.
+        import hashlib
+        from concurrent.futures import ThreadPoolExecutor
+        scope = (self.base_url, hashlib.sha256(self.headers['Authorization'].encode()).hexdigest(), secret_tags)
+        def read(item):
+            key = (scope, item['relative_path'])
+            fingerprint = json.dumps(item, sort_keys=True)
+            with _entity_cache_lock:
+                cached = _entity_document_cache.get(key)
+            if cached and cached[0] == fingerprint:
+                return cached[1]
+            document = self.document(item['relative_path'], secret_tags=secret_tags)[0]
+            with _entity_cache_lock:
+                _entity_document_cache[key] = (fingerprint, document)
+                while len(_entity_document_cache) > 512:
+                    _entity_document_cache.pop(next(iter(_entity_document_cache)))
+            return document
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            documents = tuple(pool.map(read, listed))
+        return documents, month
+
     def __init__(self, base_url: str, token: str, *, timeout: float = 20.0):
         if not base_url.strip() or not token.strip():
             raise RemoteCorpusError(

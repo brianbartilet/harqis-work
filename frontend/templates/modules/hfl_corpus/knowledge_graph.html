@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}HARQIS — Activity graph{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/knowledge-graph.css?v=7">{% endblock %}
+{% block content %}
+<main class="kg-shell">
+  <header><a href="/hfl-corpus">← Activity Corpus</a> · <a href="/hfl-corpus/entities">Entities and timelines</a><h1>Activity graph</h1>
+    <p>Explore corpus entries through their sources, dates, and evidenced entity mentions.</p></header>
+  <div class="kg-toolbar">
+    <label>Find a node<input id="kg-search" type="search" placeholder="Search entries or entities" autocomplete="off"></label>
+    <label class="kg-toggle"><input id="kg-shared" type="checkbox" checked> Shared connections only</label>
+    <label class="kg-density">Detail<select id="kg-density"><option value="120">Overview · 120</option><option value="300">Expanded · 300</option><option value="800">Dense · 800</option></select></label>
+    <button id="kg-example" type="button" aria-pressed="false">Try example graph</button>
+    <button id="kg-reset" type="button">Reset view</button><button id="kg-reload" type="button">Reload graph</button>
+  </div>
+  <p id="kg-example-note" hidden>Fictional example · Explore three projects connected by shared people and tools. Select a node to inspect or focus its connections.</p>
+  <div class="kg-toolbar" style="margin-top:12px">
+    <label class="kg-density">Source<input id="kg-source" placeholder="All sources" aria-label="Filter source"></label>
+    <label class="kg-density">From<input id="kg-since" type="date"></label><label class="kg-density">To<input id="kg-until" type="date"></label>
+    <button id="kg-filter">Apply filters</button>
+    <label class="kg-density">Group by<select id="kg-group"><option value="relationships">Connections</option><option value="source">Source</option><option value="date">Month</option></select></label>
+  </div>
+  <div id="kg-types" aria-label="Node types"></div>
+  <p id="kg-status" role="status">Loading your graph…</p>
+  <div class="kg-workspace">
+    <section class="kg-map" aria-label="Interactive knowledge graph">
+      <div id="kg-canvas" aria-label="Interactive force graph. Select nodes with the list below or beside the graph."></div>
+      <div class="kg-zoom"><button id="kg-in" aria-label="Zoom in">+</button><button id="kg-out" aria-label="Zoom out">−</button><button id="kg-fit">Fit</button></div>
+      <div class="kg-map-caption"><span class="kg-eyebrow">EXPLORE YOUR CONNECTIONS</span><strong id="kg-map-title">Knowledge constellation</strong><span id="kg-map-count"></span></div><span class="kg-help">Drag nodes to arrange · Drag background to pan · Scroll to zoom</span>
+    </section>
+    <aside class="kg-inspector">
+      <div id="kg-detail"><h2>Explore a connection</h2><p>Select a node to see its linked entries and entities.</p></div>
+      <h2 id="kg-list-title">Nodes</h2><div id="kg-list" aria-labelledby="kg-list-title"></div>
+    </aside>
+  </div>
+  <p class="kg-footnote">Links show explicit mentions, source membership, or occurrence dates. Layout proximity does not assert a relationship. Extraction suggestions remain reviewable.</p>
+</main>
+<script src="/static/js/knowledge-graph.js?v=7" defer></script>
+{% endblock %}

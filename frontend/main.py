@@ -51,6 +51,7 @@ from auth import (
 from config import get_settings, warn_insecure_defaults
 from modules.applications.router import router as applications_router
 from modules.hfl_corpus.api import router as hfl_corpus_api_router
+from modules.hfl_corpus.entities_api import router as entities_router
 from modules.hfl_corpus.corpus import corpus_index
 from modules.hfl_corpus.remote import close_remote_http_client
 from modules.hfl_corpus.router import router as hfl_corpus_router
@@ -265,6 +266,7 @@ app.include_router(manifesto_router)
 app.include_router(workflows_router)
 app.include_router(applications_router)
 app.include_router(hfl_corpus_api_router)
+app.include_router(entities_router)
 app.include_router(hfl_corpus_router)
 app.include_router(agent_bridge_owner_router)
 app.include_router(agent_bridge_worker_router)
@@ -279,6 +281,11 @@ app.include_router(second_brain_router)
 # ── Security headers ──────────────────────────────────────────────────────────
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
+    if (os.environ.get('HARQIS_CONNECTED_PREVIEW') == '1'
+            and request.method not in {'GET', 'HEAD', 'OPTIONS'}
+            and request.url.path not in {'/login', '/logout'}
+            and not request.url.path.startswith('/api/hfl/entities')):
+        return JSONResponse({'error': 'This preview supports derived corpus metadata changes only.'}, status_code=403)
     started_at = time.perf_counter()
     request.state.csp_nonce = secrets.token_urlsafe(24)
     response = await call_next(request)

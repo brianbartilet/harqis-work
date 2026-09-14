@@ -1,4 +1,9 @@
 # Per-machine deployment topology for scripts/deploy.py.
+# Corpus entities can set HARQIS_ENTITIES_DB, HARQIS_OBSIDIAN_VAULT,
+# HARQIS_ENTITIES_QUEUE in the host's env_vars
+# table in machines.local.toml. Paths must be local to that host. A dedicated
+# queue consumer is required; these settings do not enable a Beat schedule.
+# See docs/info/CONNECTED-KNOWLEDGE-PREVIEW.md for preview and source settings.
 #
 # How auto-detection works:
 #   1. python scripts/deploy.py reads socket.gethostname()

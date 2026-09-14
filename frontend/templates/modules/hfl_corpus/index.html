@@ -180,6 +180,7 @@
 {% endblock %}
 
 {% block content %}
+{% if corpus_entities_enabled %}<a href="/hfl-corpus/graph" class="inline-block text-cyan-300 px-6 py-3">Graph →</a><a href="/hfl-corpus/entities" class="inline-block text-cyan-300 px-6 py-3">Entities →</a>{% endif %}
 <main data-corpus-index class="mx-auto flex h-auto max-w-7xl flex-col overflow-x-clip py-5 pl-4 pr-5 sm:px-6 md:h-[calc(100dvh-3.5rem)] md:overflow-y-auto md:overscroll-contain lg:h-[calc(100vh-3.5rem)] lg:overflow-hidden lg:px-8">
   <div class="corpus-header-shell mb-4 shrink-0">
     <div class="corpus-page-header page-header">

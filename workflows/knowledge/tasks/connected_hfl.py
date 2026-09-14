@@ -1,0 +1,41 @@
+"""Corpus-derived enrichment: fixed schema, bounded batches, Celery-owned retries."""
+import os
+import sys
+import time
+from pathlib import Path
+from filelock import FileLock
+from core.apps.sprout.app.celery import SPROUT
+
+@SPROUT.task(bind=True, acks_late=True, reject_on_worker_lost=True, max_retries=4)
+def refresh_corpus_entities(self, entry_id='*', revision=None, use_model=True):
+    frontend = str(Path(__file__).resolve().parents[3] / 'frontend')
+    if frontend not in sys.path:
+        sys.path.insert(0, frontend)
+    from workflows.hfl.entity_store import get_store
+    from modules.hfl_corpus.entities import enrich
+    store = get_store()
+    try:
+        with FileLock(str(store.path) + '.worker.lock', timeout=0):
+            if revision:
+                with store.connection() as db:
+                    row = db.execute('SELECT revision FROM pending WHERE id=?', (entry_id,)).fetchone()
+                    if not row or row['revision'] != revision:
+                        return {'state': 'superseded'}
+                    db.execute('UPDATE pending SET queued_at=? WHERE id=?', (time.time(), entry_id))
+            store.state('job', {'state': 'running', 'id': self.request.id})
+            result = enrich(entry_id=None if entry_id == '*' else entry_id, use_model=use_model)
+            if result['pending'] and result['processed']:
+                child = self.apply_async(kwargs=dict(entry_id=entry_id, revision=revision, use_model=use_model),
+                                        queue=os.environ.get('HARQIS_ENTITIES_QUEUE', 'hfl'), countdown=2)
+                store.state('job', {'state': 'queued', 'id': str(child.id), 'result': result})
+            elif result['pending']:
+                raise RuntimeError('Provider returned no usable results; pending work retained')
+            else:
+                with store.connection() as db:
+                    db.execute('DELETE FROM pending WHERE id=? AND revision=?', (entry_id, revision))
+                store.state('job', {'state': 'complete', 'id': self.request.id, 'result': result})
+            return result
+    except Exception as exc:
+        store.state('job', {'state': 'retrying' if self.request.retries < 4 else 'failed',
+                            'error': type(exc).__name__, 'id': self.request.id})
+        raise self.retry(exc=exc, countdown=min(300, 15 * 2 ** self.request.retries))

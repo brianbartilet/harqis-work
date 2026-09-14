@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}HARQIS — {{ entry.title }}{% endblock %}
+{% block content %}
+<main class="max-w-5xl mx-auto p-6 text-slate-200">
+<a class="text-cyan-300" href="/hfl-corpus/entities">← Corpus entities</a>
+<h1 class="text-2xl my-4">{{ entry.title }}</h1>
+<p class="text-slate-400">{{ entry.date }} · {{ entry.source }}</p>
+<a class="text-cyan-300" href="{{ entry.ref }}">Open corpus document →</a>
+<pre class="whitespace-pre-wrap my-6" style="overflow-wrap:anywhere">{{ entry.text }}</pre>
+</main>
+{% endblock %}

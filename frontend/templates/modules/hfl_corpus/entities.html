@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}HARQIS — Corpus entities{% endblock %}
+
+{% block head %}<style>
+
+.entity-shell{max-width:1100px;margin:auto;padding:32px 24px;color:#dbe5ef;overflow-wrap:anywhere}.entity-shell h1{font-size:30px;margin:20px 0}.entity-shell nav{display:flex;gap:24px}.entity-shell a{color:#67e8f9}.entity-shell details{padding:16px;border:1px solid #334155;border-radius:8px;margin:12px 0}.entity-shell input,.entity-shell select{max-width:100%;box-sizing:border-box}.entity-shell blockquote{padding:12px;border-left:2px solid #557d99;color:#aebfd2;white-space:pre-wrap}.entity-shell #entity-list{max-height:65vh;overflow-y:auto;padding-right:8px}.entity-shell button{cursor:pointer}.entity-shell :focus-visible{outline:2px solid #67e8f9;outline-offset:3px}
+
+.directory-filters,.profile-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:20px 0}.entity-shell label{display:block;font-size:14px;color:#aebfd2}.entity-shell input,.entity-shell select,.entity-shell textarea{display:block;width:100%;padding:10px;background:#101c30;color:#dbe5ef;border:1px solid #465d79;border-radius:6px;margin-top:6px;font:inherit}.entity-shell textarea{min-height:90px;resize:vertical}.entity-shell button{padding:8px 14px;border:1px solid #465d79;border-radius:6px;background:#172b43;color:#dbe5ef}.entity-shell button:disabled{opacity:.4;cursor:default}.entity-shell summary{cursor:pointer;font-weight:600}.entity-shell .profile-wide{grid-column:1/-1}.entity-shell .entity-meta{color:#aebfd2;font-size:13px;margin:8px 0}.entity-shell .profile-feedback{margin-left:12px}.entity-shell .pagination{align-items:center;justify-content:center;margin:24px 0}.entity-shell #entity-list{max-height:none;overflow:visible;padding:0}.entity-shell .contact-line{color:#67e8f9;margin:12px 0;white-space:pre-wrap}.entity-shell .profile-editor{background:#0e192a}.entity-shell h2{font-size:18px;margin:22px 0 12px}@media(max-width:650px){.directory-filters,.profile-fields{grid-template-columns:1fr}.entity-shell{padding:20px 16px}.entity-shell h1{font-size:26px}}
+
+.directory-header{display:flex;align-items:center;justify-content:space-between;gap:24px}.directory-header nav{flex-shrink:0;font-size:14px}.entity-shell .directory-filters{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}.type-cloud{border:0;padding:0;margin:22px 0 12px}.type-cloud legend,.filter-label{font-size:13px;color:#aebfd2;margin-bottom:8px}.pill-cloud{display:flex;flex-wrap:wrap;gap:8px}.entity-shell .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid #334d70;background:#112039;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:500;color:#afc7e7;line-height:1.5}.entity-shell button.pill[aria-pressed="true"]{background:#164e63;border-color:#22d3ee;color:#cffafe}.pill-count{opacity:.65}.entity-shell .multi-filter{position:relative;margin:6px 0 0;padding:0;background:#101c30;border-color:#465d79;border-radius:6px}.multi-filter>summary{padding:10px;font-size:14px;font-weight:400}.checkbox-options{position:absolute;top:calc(100% + 5px);left:0;min-width:100%;width:max-content;max-width:320px;max-height:260px;overflow:auto;z-index:20;background:#101c30;border:1px solid #465d79;border-radius:8px;padding:8px;box-shadow:0 12px 24px #0008}.entity-shell .checkbox-options label{display:flex;align-items:center;gap:10px;padding:8px;cursor:pointer}.entity-shell .checkbox-options input{width:16px;height:16px;margin:0;accent-color:#22d3ee}.results-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;margin:20px 0}.entity-shell #clear-filters{background:none;border:none;color:#94aecb;padding:4px;white-space:nowrap;font-size:12px}.entity-shell #clear-filters:hover{color:#67e8f9;text-decoration:underline}.entity-shell .entity-card>summary{list-style:none;position:relative;padding-left:22px}.entity-card>summary::-webkit-details-marker{display:none}.entity-card>summary:before{content:'›';position:absolute;left:0;top:0;color:#8ba8c9;font-size:22px}.entity-card[open]>summary:before{transform:rotate(90deg)}.entity-title-row,.entity-detail-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.entity-title-row{font-size:17px}.entity-detail-row{margin-top:9px;font-size:12px;font-weight:400;color:#8ba8c9}.entity-detail-row .pill{font-size:11px;padding:2px 8px;background:#111a2b;border-color:#2b3b52;color:#9fb2c9}.entity-count{margin-right:4px}#entity-loading{display:flex;gap:12px;justify-content:center;align-items:center;padding:48px 16px;color:#aebfd2}#entity-loading[hidden]{display:none}.loading-spinner{width:22px;height:22px;border:2px solid #334155;border-top-color:#67e8f9;border-radius:50%;animation:entity-spin .8s linear infinite}@keyframes entity-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.loading-spinner{animation:none}}@media(max-width:650px){.directory-header{align-items:flex-start;flex-direction:column;gap:0}.directory-header nav{margin-bottom:20px}.entity-shell .directory-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.checkbox-options{width:100%;max-width:100%;box-sizing:border-box}.entity-title-row{font-size:16px}}
+#entity-filters{border:0;padding:0;margin:0;min-width:0}#entity-filters:disabled{opacity:.5}
+.entity-shell .directory-header nav{gap:12px;flex-wrap:wrap}.entity-shell .directory-header nav a{display:inline-flex;align-items:center;justify-content:center;background:#2563eb;color:#fff;padding:12px 16px;border-radius:8px;font-size:14px;font-weight:600;line-height:20px;text-decoration:none;box-shadow:0 10px 15px -3px #17255466}.entity-shell .directory-header nav a:hover{background:#3b82f6}
+#load-more[hidden]{display:none}
+.entity-shell .entity-card>summary{display:flex;align-items:center;flex-wrap:wrap;gap:10px 18px}.entity-shell .entity-detail-row{margin-top:0}.entity-shell label,.type-cloud legend,.filter-label{font-size:15px;font-weight:600}.entity-shell #load-more{margin:12px 0 24px;padding:12px 20px;border-radius:8px;font-weight:600}.entity-shell #load-scope{margin-top:12px;line-height:1.6}
+</style>{% endblock %}
+
+{% block content %}
+
+<main class="entity-shell">
+
+<header class="directory-header"><h1>Actuvity Corpus Entities</h1><nav aria-label="Related views"><a href="/hfl-corpus">Activity Corpus</a><a href="/hfl-corpus/graph">Activity Graph</a></nav></header>
+
+<p class="text-slate-400">People, organizations, tools and topics from your activity. Keep contact details and notes alongside their evidence. Web links stay in source entries.</p>
+
+<fieldset id="entity-filters" disabled inert aria-busy="true">
+<label class="block my-4">Find an entity<input id="entity-query" class="block w-full p-3 bg-slate-900 border border-slate-600 rounded" type="search" placeholder="Search names, emails, phone numbers, categories or notes"></label>
+
+<fieldset class="type-cloud"><legend>Entity types</legend><div id="filter-kind" class="pill-cloud" aria-label="Filter entity types"></div></fieldset>
+<div class="directory-filters">
+<div><span class="filter-label">Category</span><details class="multi-filter" id="category-menu"><summary id="category-caption">All categories</summary><div id="filter-category" class="checkbox-options"></div></details></div>
+<div><span class="filter-label">Activity source</span><details class="multi-filter" id="source-menu"><summary id="source-caption">All sources</summary><div id="filter-source" class="checkbox-options"></div></details></div>
+<label>Profile<select id="filter-contact"><option value="">All profiles</option><option value="contact">Has contact details</option><option value="curated">Edited profiles</option><option value="unreviewed">Without a profile</option></select></label>
+
+<label>Sort by<select id="sort"><option value="name">Name A–Z</option><option value="activity">Most activity</option><option value="recent">Latest activity</option></select></label>
+
+
+
+</div>
+
+</fieldset>
+<div class="results-toolbar"><p id="entity-status" role="status" class="text-slate-400">Loading current corpus…</p><button id="clear-filters" type="button" disabled>Clear filters</button></div>
+<p id="load-scope" class="text-slate-400 text-sm"></p><button id="load-more" type="button" hidden>Load more entities</button>
+<div id="entity-loading" role="status"><span class="loading-spinner" aria-hidden="true"></span><span>Loading entities from your activity…</span></div>
+
+
+
+<details class="my-6 border border-slate-700 rounded p-4"><summary>Processing and optional export</summary>
+
+<p class="my-3 text-slate-400">Historical enrichment runs in bounded background batches. Explicit references are available even before extraction finishes.</p>
+
+<button id="backfill" class="border rounded p-2">Enrich corpus history</button>
+
+<button id="export" class="border rounded p-2">Export Obsidian vault</button>
+
+<button id="status-refresh" class="border rounded p-2">Check progress</button>
+
+<pre id="job" class="whitespace-pre-wrap my-3"></pre></details>
+
+<div id="entity-list" class="space-y-4" aria-busy="true"></div><nav class="pagination" aria-label="Directory pages"><button id="previous">Previous</button><span id="page-number"></span><button id="next">Next</button></nav>
+
+<details class="my-6 border border-slate-700 rounded p-4"><summary>Resolve an uncertain identity</summary>
+
+<p class="my-3 text-slate-400">Explicit object IDs join automatically. Only merge uncertain names when their evidence establishes the same identity. Decisions can be undone.</p>
+
+<form id="merge-form" class="space-y-3"><label class="block">Alias<select id="alias" class="block w-full bg-slate-900 p-2"></select></label>
+
+<label class="block">Canonical identity<select id="canonical" class="block w-full bg-slate-900 p-2"></select></label>
+
+<label class="block">Evidence for the decision<input id="reason" required minlength="5" maxlength="1000" class="block w-full bg-slate-900 p-2"></label>
+
+<button class="border rounded p-2">Record reversible merge</button></form><div id="decisions" class="my-4"></div></details>
+
+</main>
+
+<script src="/static/js/corpus-entities.js?v=directory-20260914-3" defer></script>
+
+{% endblock %}
+

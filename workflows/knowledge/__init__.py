@@ -4,3 +4,4 @@ import workflows.knowledge.tasks.ingest_jira
 import workflows.knowledge.tasks.ingest_github
 import workflows.knowledge.tasks.ingest_gdrive
 import workflows.knowledge.tasks.answer
+import workflows.knowledge.tasks.connected_hfl
