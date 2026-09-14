@@ -66,3 +66,10 @@ def collect_entries(store, month: str = 'latest') -> tuple[list[dict], str]:
                            ref=source_url.rstrip('/') + '/hfl-corpus/document/' + quote(document.relative_path, safe='/') + '#' + quote(entry.anchor)))
     return result, month
 
+
+
+def entry_locator(item):
+    """Signed location hint; entry content and permissions are still read live."""
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(get_settings().secret_key, salt='graph-entry-location').dumps(
+        {'id': item['id'], 'path': item['path'], 'anchor': item['anchor']})

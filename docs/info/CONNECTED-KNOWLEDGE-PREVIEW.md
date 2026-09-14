@@ -48,7 +48,7 @@ Host settings: HARQIS_ENTITIES_DB identifies a local SQLite path; HARQIS_ENTITIE
 
 Regression coverage includes authentication, removal of duplicate APIs, source/date filters, edge evidence, stale/removed entry suppression, source failure without pruning, ambiguous-name separation, explicit-ID linking, reversible merges, model revalidation, and broker failure retention. Optional export conflict/path tests remain.
 
-Semantic similarity and inferred relationship assertions are intentionally deferred. The 120/300/800 node display budgets and grouping are navigation tools, not completeness or community-discovery claims. Enrichment is not deployed to the remote source host by launching this local preview. The graph can show explicit references immediately; model-derived entities depend on completed enrichment.
+Semantic similarity and inferred relationship assertions are intentionally deferred. The 100/500/1,000 node display budgets and grouping are navigation tools, not completeness or community-discovery claims. Enrichment is not deployed to the remote source host by launching this local preview. The graph can show explicit references immediately; model-derived entities depend on completed enrichment.
 
 See the approved architecture and runtime record in ../thesis/CONNECTED-HFL-KNOWLEDGE.md.
 
@@ -68,8 +68,25 @@ Entities now support durable curated profiles: display name, multiple email addr
 
 URLs, web domains and email addresses are excluded as entity names from both existing cached mentions and new extraction. Links remain in corpus text. Repository-qualified references such as `org/repo#123` remain legitimate referenced objects. Extraction does not automatically fill or overwrite contact fields, and a shared contact value does not automatically merge identities.
 
-The directory offers type, category, activity-source and profile/contact filters, combined search across names/contact details/categories/notes, name/activity/recency sorting, and 25-item pagination. Existing type classifications organize entries immediately; custom categories are user-maintained, with an Uncategorized filter for unfinished records. Search is literal and runs locally over the permitted index.
+The directory offers type, category, activity-source and profile/contact filters, combined search across names/contact details/categories/notes, name/activity/recency sorting, and 25-item pagination. Existing type classifications organize entries immediately; custom categories are user-maintained, with an Uncategorized filter for unfinished records. Search is literal and runs locally over the loaded portion of the permitted index. The directory initially loads 100 entities; Load more entities adds another 100.
 
 Identity merges retain the canonical profile; an alias profile is preserved separately for undo rather than silently combining potentially conflicting contact details. Curated profile/contact data is not included in the optional Obsidian export, which remains a corpus-derived export.
 
 Directory follow-up validation: 17 focused tests passed. Live desktop/mobile browser checks covered filters, pagination and profile editing; an isolated browser fixture verified profile saving and combined contact/category search without modifying live contacts. The permitted live directory contained 283 entities after URL exclusion (42 people) at verification time.
+
+## Bounded graph responses
+
+The graph API accepts `limit` (1–1,000, default 100), `query`, `shared`, `source` (or repeated `sources`), `since`, and `until`. It filters before selection, favors recent matching entries and their connected neighbors, and returns at most `limit` nodes and `4 * limit` links. Metadata includes `total_nodes`, `matching_entries`, and `truncated`. The UI sends search/detail/shared changes to the server and discards superseded responses. Type toggles and focus operate within the returned view. Source reads still scan the current permitted corpus; this bounds graph construction and transfer, not ingestion/source-reading cost. No stale-result cache is introduced.
+
+## Browser layout saving
+
+The graph automatically saves node positions and pan/zoom in localStorage, scoped to the signed-in user. It retains the latest ten views keyed by search, detail, sources, dates, shared-only, grouping, types and focus. Returning to the same view restores its coordinates; newly appearing nodes still receive a layout. Reset removes the current view layout before resetting display controls. Saved layouts are local to this browser/origin, are not synchronized to the server, and contain node IDs/coordinates plus filter values rather than entry text. Storage failure is shown in the view status.
+
+Graph detail limits are now Overview 100, Expanded 500 and Dense 1,000 (API default 100, maximum 1,000). The latest selected detail, search, applied source/date filters, shared-only setting and grouping are remembered per user/browser and restored before the initial graph request.
+
+Saved graph coordinates restore starting positions. Manually dragged nodes also retain their drop constraints; dragging a connected node releases its neighbors so they can follow. Earlier snapshots without constraint flags remain compatible.
+
+
+## Production rollout
+
+See [Activity Graph deployment and propagation](ACTIVITY-GRAPH-DEPLOYMENT.md) for required server settings, initial historical enrichment, verification, and persistence boundaries. The local preview launcher is not the production deployment command.

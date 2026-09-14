@@ -36,9 +36,12 @@ async def page(request: Request):
 
 
 @router.get('/api/hfl/entities/graph')
-async def graph(request: Request, source: str = '', since: str = '', until: str = ''):
+async def graph(request: Request, source: str = '', since: str = '', until: str = '',
+                limit: int = Query(default=100, ge=1, le=1000),
+                query: str = Query(default='', max_length=200), shared: bool = False,
+                sources: list[str] = Query(default=[])):
     authorize(request)
-    return await run_in_threadpool(entities.graph, source, since, until)
+    return await run_in_threadpool(entities.graph, sources or source, since, until, limit, query, shared)
 
 
 @router.get('/api/hfl/entities')
@@ -79,6 +82,73 @@ async def save_profile(request: Request, identity: str, payload: Profile):
         raise HTTPException(404, 'Entity unavailable')
     get_store().save_profile(identity, available[identity]['kind'], data)
     return {'profile': get_store().profiles()[identity]}
+
+
+def _entry_document(path):
+    """Use the document view's allowlisted reference resolver."""
+    from modules.hfl_corpus import router as document_view
+    if document_view._uses_remote_corpus():
+        profile = document_view.get_profile_store().get()
+        document, references = document_view.RemoteCorpusClient.from_settings().document(
+            path, include_secrets=False,
+            secret_tags=document_view.normalize_secret_tags(profile.secret_tags))
+    else:
+        document = document_view.corpus_index.get(path)
+        if not document:
+            raise HTTPException(404, 'Entry unavailable')
+        root = document_view.resolve_corpus_root()
+        references = [document_view.resolve_reference(
+            reference, source_document=document.path or root / document.relative_path,
+            corpus_root=root) for reference in document.references]
+        references = [document_view._with_reference_preview(r) for r in references]
+    return document, [r for r in references if r.kind in {'download', 'external'} and r.href]
+
+
+def _entry_references(item):
+    return _entry_document(item['path'])[1]
+
+
+@router.get('/api/hfl/entities/entry/{entry_id}')
+async def entry_preview(request: Request, entry_id: str, locator: str = ''):
+    authorize(request)
+    from services.markdown import render_markdown
+    from modules.hfl_corpus.corpus import format_hfl_markdown, entry_occurrence_date
+    from modules.hfl_corpus.router import _pill_rendered_tags
+    from modules.hfl_corpus.remote import RemoteCorpusError
+    try:
+        if locator:
+            from itsdangerous import URLSafeTimedSerializer, BadSignature
+            from config import get_settings
+            from modules.hfl_corpus.secrets import is_secret_entry, normalize_secret_tags
+            from modules.profile.store import get_profile_store
+            try:
+                location = URLSafeTimedSerializer(get_settings().secret_key, salt='graph-entry-location').loads(locator)
+            except BadSignature as exc:
+                raise HTTPException(400, 'Invalid entry location') from exc
+            if location['id'] != entry_id:
+                raise HTTPException(400, 'Entry location mismatch')
+            document, references = await run_in_threadpool(_entry_document, location['path'])
+            protected = normalize_secret_tags(get_profile_store().get().secret_tags)
+            entry = next((e for e in document.entries if e.anchor == location['anchor'] and not is_secret_entry(e, protected)), None)
+            if entry is None:
+                raise HTTPException(404, 'Entry unavailable')
+            import re
+            identity = re.search(r'^\s*Entry ID:\s*(\S+)', entry.text, re.M | re.I)
+            if identity and identity.group(1) != entry_id:
+                raise HTTPException(404, 'Entry unavailable')
+            occurred = entry_occurrence_date(entry)
+            item = dict(title=entry.moment, text=entry.text, date=occurred.isoformat() if occurred else '', source=entry.source)
+        else:
+            rows = await run_in_threadpool(entities.current_entries)
+            item = next((e for e in rows if e['id'] == entry_id), None)
+            if item is None:
+                raise HTTPException(404, 'Entry unavailable')
+            references = await run_in_threadpool(_entry_references, item)
+    except RemoteCorpusError as exc:
+        raise HTTPException(502, 'Entry could not load') from exc
+    html = await run_in_threadpool(
+        lambda: _pill_rendered_tags(render_markdown(format_hfl_markdown('## '+item['text'], references))))
+    return {'title': item['title'], 'date': item['date'], 'source': item['source'], 'html': str(html)}
 
 
 @router.get('/hfl-corpus/entities/entry/{entry_id}')

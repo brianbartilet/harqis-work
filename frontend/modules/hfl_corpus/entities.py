@@ -139,16 +139,50 @@ def projection(source='', since='', until=''):
     return rows
 
 
-def graph(source='', since='', until=''):
-    rows = projection(source, since, until)
+def graph(source='', since='', until='', limit=100, query='', shared=False):
+    rows = projection('', since, until)
+    available_sources = sorted({e['source'] for e in rows if e['source']})
+    selected_sources = {source} if isinstance(source, str) and source else set(source or [])
+    if selected_sources:
+        rows = [e for e in rows if e['source'] in selected_sources]
     profiles = get_store().profiles()
+    # Scan compact references first; construct nodes/evidence only for the bounded view.
+    from collections import Counter
+    def targets(entry):
+        found = {m['id'] for m in entry['mentions']}
+        if entry['source']: found.add('sources:' + entry['source'])
+        if entry['date']: found.add('daily:' + entry['date'][:10])
+        return found
+    degrees = Counter(t for entry in rows for t in targets(entry))
+    query = query.strip().casefold()
+    def matches(entry):
+        return (not query or query in entry['title'].casefold()
+                or query in entry['source'].casefold() or query in entry['date'].casefold()
+                or any(query in profiles.get(m['id'], {}).get('name', m['label']).casefold()
+                       for m in entry['mentions']))
+    candidates = sorted((e for e in rows if matches(e)), key=lambda e: (e['date'], e['id']), reverse=True)
+    allowed = {t for t, count in degrees.items() if not shared or count > 1}
+    selected_entries, selected_targets = set(), set()
+    limit = max(1, min(int(limit), 1000))
+    # Reserve entry slots, then fill with their shared neighbors.
+    available_targets = {t for e in candidates for t in targets(e) if t in allowed}
+    entry_budget = len(candidates) if len(candidates) + len(available_targets) <= limit else max(1, limit // 2)
+    for entry in candidates[:entry_budget]:
+        selected_entries.add(entry['id'])
+    local = Counter(t for e in candidates if e['id'] in selected_entries for t in targets(e) if t in allowed)
+    selected_targets.update(sorted(local, key=lambda t: (-local[t], t))[:limit-len(selected_entries)])
     nodes, edges = {}, {}
-    for entry in rows:
+    for entry in candidates:
+        if entry['id'] not in selected_entries:
+            continue
+        from modules.hfl_corpus.entity_source import entry_locator
         identity = 'entry:' + entry['id']
         nodes[identity] = dict(id=identity, label=entry['title'], kind='entries', date=entry['date'],
-                               source=entry['source'], tags=entry['tags'],
+                               source=entry['source'], tags=entry['tags'], locator=entry_locator(entry),
                                href='/hfl-corpus/entities/entry/' + quote(entry['id'], safe=''))
         for m in entry['mentions']:
+            if m['id'] not in selected_targets:
+                continue
             node = {k: m[k] for k in ('id', 'label', 'kind', 'resolution')}
             profile = profiles.get(m['id'])
             if profile:
@@ -157,13 +191,17 @@ def graph(source='', since='', until=''):
             edges[(identity, m['id'])] = dict(source=identity, target=m['id'], relation='mentions',
                                              evidence=m['evidence'], method=m['method'])
         for kind, value in [('sources', entry['source']), ('daily', entry['date'][:10])]:
-            if value:
+            if value and kind + ':' + value in selected_targets:
                 target = kind + ':' + value
                 nodes[target] = dict(id=target, label=value, kind=kind)
                 edges[(identity, target)] = dict(source=identity, target=target,
                     relation='from-source' if kind == 'sources' else 'occurred-on', evidence=value, method='corpus-metadata')
-    return dict(nodes=list(nodes.values()), edges=list(edges.values()),
-                enriched=sum(e['enriched'] for e in rows), entries=len(rows))
+    bounded_edges = list(edges.values())[:limit * 4]
+    total_nodes = len(candidates) + len({t for e in candidates for t in targets(e) if t in allowed})
+    return dict(nodes=list(nodes.values()), edges=bounded_edges,
+                enriched=sum(e['enriched'] for e in rows), entries=len(rows),
+                matching_entries=len(candidates), total_nodes=total_nodes, limit=limit, sources=available_sources,
+                truncated=total_nodes > len(nodes) or len(edges) > len(bounded_edges))
 
 
 def entity_index(source='', since='', until=''):

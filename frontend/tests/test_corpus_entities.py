@@ -174,3 +174,132 @@ def test_merges_preserve_profiles_for_undo(corpus):
     assert len(store.profiles()) == 2
     store.undo(decision)
     assert {e['id'] for e in entities.entity_index()} == {'a', 'b'}
+
+
+def test_graph_server_budget_and_search(corpus):
+    corpus[:] = [entry(str(i), text='org/repo#' + str(i), date='2026-09-01') for i in range(500)]
+    corpus[-1]['title'] = 'Unique older project'
+    result = entities.graph(limit=30)
+    assert len(result['nodes']) <= 30 and len(result['edges']) <= 120
+    assert result['truncated'] and result['matching_entries'] == 500
+    ids = {n['id'] for n in result['nodes']}
+    assert all(e['source'] in ids and e['target'] in ids for e in result['edges'])
+    found = entities.graph(limit=30, query='Unique older project')
+    assert found['matching_entries'] == 1
+    assert any(n['label'] == 'Unique older project' for n in found['nodes'])
+    shared = entities.graph(limit=30, shared=True)
+    assert not any(n['kind'] == 'objects' for n in shared['nodes'])
+
+
+def test_graph_limit_validation(corpus, authenticated_client):
+    assert authenticated_client.get('/api/hfl/entities/graph?limit=1001').status_code == 422
+    response = authenticated_client.get('/api/hfl/entities/graph?limit=2&query=Project')
+    assert response.status_code == 200
+    assert len(response.json()['nodes']) <= 2
+
+
+def test_graph_multiple_sources(corpus, authenticated_client):
+    corpus.extend([entry('two', source='meetings'), entry('three', source='email')])
+    result = authenticated_client.get('/api/hfl/entities/graph?sources=notes&sources=email').json()
+    assert result['entries'] == 2
+    assert set(result['sources']) == {'notes', 'meetings', 'email'}
+    assert {n['source'] for n in result['nodes'] if n['kind'] == 'entries'} == {'notes', 'email'}
+
+
+def test_graph_accepts_dense_thousand(corpus, authenticated_client):
+    response = authenticated_client.get('/api/hfl/entities/graph?limit=1000')
+    assert response.status_code == 200
+    assert response.json()['limit'] == 1000
+    assert authenticated_client.get('/api/hfl/entities/graph').json()['limit'] == 100
+
+
+def test_entry_dialog_sanitization_and_access(corpus, authenticated_client, monkeypatch):
+    monkeypatch.setattr("modules.hfl_corpus.entities_api._entry_references", lambda item: [])
+    from main import app
+    corpus[0]['text'] = '**Bold** <script>alert(1)</script> [bad](javascript:alert(1))'
+    with TestClient(app) as client:
+        assert client.get('/api/hfl/entities/entry/one').status_code == 401
+    response = authenticated_client.get('/api/hfl/entities/entry/one')
+    assert response.status_code == 200
+    assert '<strong>Bold</strong>' in response.json()['html']
+    assert '<script' not in response.json()['html'] and 'href="javascript:' not in response.json()['html']
+    corpus.clear()
+    assert authenticated_client.get('/api/hfl/entities/entry/one').status_code == 404
+
+
+def test_entry_dialog_document_fields(corpus, authenticated_client, monkeypatch):
+    from services.safe_paths import ReferenceLink
+    monkeypatch.setattr('modules.hfl_corpus.entities_api._entry_references', lambda item: [
+        ReferenceLink(source='https://example.test/story', label='Story reference',
+                      kind='external', href='https://example.test/story')])
+    corpus[0]['text'] = '2026-09-01 10:00:00\nSource: notes\nMachine: desktop\nEntry ID: one\nMoment: A moment\nWhat happened: A story\nWhy it stayed: A reason\nTags: #work\nReferences:\n- https://example.test/story'
+    response = authenticated_client.get('/api/hfl/entities/entry/one')
+    assert response.status_code == 200
+    html = response.json()['html']
+    assert '<strong>Machine:</strong>' in html
+    assert '<strong>What happened:</strong>' in html
+    assert 'corpus-tag-pill' in html
+    assert 'href="https://example.test/story"' in html
+
+
+def test_entry_locator_reads_only_current_document(corpus, authenticated_client, monkeypatch):
+    from types import SimpleNamespace
+    from modules.hfl_corpus.entity_source import entry_locator
+    from modules.hfl_corpus import entities_api
+    token = entry_locator(corpus[0])
+    item = SimpleNamespace(anchor='one', header='2026-09-01 10:00', moment='A moment',
+        text='2026-09-01 10:00\nEntry ID: one\nWhat happened: Current story', source='notes', tags=(), secret=False)
+    document = SimpleNamespace(entries=[item])
+    calls=[]
+    monkeypatch.setattr(entities_api, '_entry_document', lambda path: (calls.append(path) or document, []))
+    monkeypatch.setattr(entities, 'current_entries', lambda: (_ for _ in ()).throw(AssertionError('Full corpus read')))
+    response = authenticated_client.get('/api/hfl/entities/entry/one', params={'locator':token})
+    assert response.status_code == 200
+    assert calls == ['day.md']
+    assert '<h2' in response.json()['html']
+    assert 'Current story' in response.json()['html']
+    assert authenticated_client.get('/api/hfl/entities/entry/two', params={'locator':token}).status_code == 400
+    assert authenticated_client.get('/api/hfl/entities/entry/one', params={'locator':token+'x'}).status_code == 400
+    item.secret=True
+    assert authenticated_client.get('/api/hfl/entities/entry/one', params={'locator':token}).status_code == 404
+    item.secret=False
+    document.entries=[]
+    assert authenticated_client.get('/api/hfl/entities/entry/one', params={'locator':token}).status_code == 404
+
+
+def test_enrichment_propagates_batches_entities_sources_and_dates(corpus, monkeypatch):
+    from types import SimpleNamespace
+    from workflows.hfl.entity_events import request_enrichment, dispatch_pending
+    from workflows.knowledge.tasks.connected_hfl import refresh_corpus_entities as task
+    from core.apps.sprout.app.celery import SPROUT
+    corpus[:] = [entry(str(i), text='Uses React', source='notes', date='2026-09-01') for i in range(9)]
+    monkeypatch.setenv('HARQIS_ENTITIES_QUEUE', 'test-entities')
+    monkeypatch.setattr(SPROUT, 'send_task', lambda *a, **kw: (_ for _ in ()).throw(ConnectionError()))
+    assert request_enrichment()['state'] == 'pending'
+    sent=[]
+    monkeypatch.setattr(SPROUT, 'send_task', lambda *a, **kw: sent.append(kw) or SimpleNamespace(id='queued'))
+    assert dispatch_pending()['state'] == 'queued'
+    assert sent[0]['queue'] == 'test-entities'
+    batches=[]
+    def extract(rows):
+        batches.append(len(rows))
+        return {e['id']: [entities.mention(e, 'tools', e['text'].split()[-1], e['text'], 'model-extracted')] for e in rows}
+    monkeypatch.setattr(entities, 'extract_batch', extract)
+    children=[]
+    monkeypatch.setattr(task, 'apply_async', lambda **kw: children.append(kw) or SimpleNamespace(id='child'))
+    assert task.run(**sent[0]['kwargs'])['processed'] == 8
+    assert children[0]['queue'] == 'test-entities'
+    assert task.run(**children[0]['kwargs'])['pending'] == 0
+    assert batches == [8, 1]
+    assert get_store().state('job')['state'] == 'complete'
+    with get_store().connection() as db:
+        assert db.execute('SELECT COUNT(*) FROM pending').fetchone()[0] == 0
+    graph = entities.graph(limit=100)
+    assert {n['kind'] for n in graph['nodes']} == {'entries','tools','sources','daily'}
+    assert {e['relation'] for e in graph['edges']} == {'mentions','from-source','occurred-on'}
+    corpus[0].update(text='Uses Python', source='meetings', date='2026-09-02')
+    request_enrichment('0')
+    task.run(**sent[-1]['kwargs'])
+    updated = entities.graph(source='meetings', since='2026-09-02')
+    assert {n['label'] for n in updated['nodes']} == {'Project update','Python','meetings','2026-09-02'}
+    assert len(updated['edges']) == 3

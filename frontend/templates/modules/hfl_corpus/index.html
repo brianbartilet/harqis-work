@@ -176,11 +176,16 @@
   @media (min-width: 1200px) {
     .activity-panel { --activity-cell:14px; --activity-gap:4px; }
   }
+  .corpus-navigation-actions{grid-column:1 / -1;grid-row:4;display:flex;align-items:stretch;gap:.5rem;margin-top:.5rem}
+  .corpus-navigation-actions .corpus-create-entry,.corpus-header-link{display:inline-flex;align-items:center;justify-content:center;min-height:2.75rem;padding:.5rem 1rem;border-radius:.5rem;font-size:.875rem;font-weight:600;line-height:1.25rem;white-space:nowrap;margin-top:0;width:auto}
+  .corpus-header-link{background:#2563eb;color:#fff;box-shadow:0 10px 15px -3px #17255466;text-decoration:none}
+  .corpus-header-link:hover{background:#3b82f6}.corpus-header-link:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
+  @media(max-width:639px){.corpus-navigation-actions>*{flex:1}.corpus-navigation-actions .corpus-create-entry,.corpus-header-link{padding:.5rem .65rem}}
+  @media(min-width:640px){.corpus-navigation-actions{margin-top:0}.corpus-header-actions{flex-wrap:wrap;justify-content:flex-end}.corpus-page-header{min-width:0}}
 </style>
 {% endblock %}
 
 {% block content %}
-{% if corpus_entities_enabled %}<a href="/hfl-corpus/graph" class="inline-block text-cyan-300 px-6 py-3">Graph →</a><a href="/hfl-corpus/entities" class="inline-block text-cyan-300 px-6 py-3">Entities →</a>{% endif %}
 <main data-corpus-index class="mx-auto flex h-auto max-w-7xl flex-col overflow-x-clip py-5 pl-4 pr-5 sm:px-6 md:h-[calc(100dvh-3.5rem)] md:overflow-y-auto md:overscroll-contain lg:h-[calc(100vh-3.5rem)] lg:overflow-hidden lg:px-8">
   <div class="corpus-header-shell mb-4 shrink-0">
     <div class="corpus-page-header page-header">
@@ -201,10 +206,15 @@
     {% else %}
     <button type="button" data-secrets-setup aria-haspopup="dialog" class="corpus-secrets-control inline-flex shrink-0 items-center rounded-lg bg-slate-900 text-sm font-semibold text-slate-300 ring-1 ring-slate-700">Secrets</button>
     {% endif %}
+    <div class="corpus-navigation-actions">
     <button type="button" data-create-entry-open
             class="corpus-create-entry min-h-11 w-full shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 sm:min-h-0 sm:w-auto">
       Create entry
     </button>
+    {% if corpus_entities_enabled %}
+    <a href="/hfl-corpus/graph" class="corpus-header-link">Graph</a>
+    {% endif %}
+    </div>
     </div>
   </div>
 

@@ -49,19 +49,28 @@
     const fields = {}, profile = entity.profile || {};
     for (const [key, title, multiline, value] of [
       ['name', 'Display name', false, profile.name || entity.label],
-      ['categories', 'Categories (one per line)', true, (profile.categories || []).join('\n')],
-      ['emails', 'Email addresses (one per line)', true, (profile.emails || []).join('\n')],
-      ['phones', 'Phone numbers (one per line)', true, (profile.phones || []).join('\n')],
+      ['categories', 'Categories', true, (profile.categories || []).join('\n')],
+      ['emails', 'Email addresses', true, (profile.emails || []).join('\n')],
+      ['phones', 'Phone numbers', true, (profile.phones || []).join('\n')],
       ['notes', 'Notes', true, profile.notes || '']
     ]) {
       const label = el('label', title), input = el(multiline ? 'textarea' : 'input');
-      input.name = key; input.value = value; input.maxLength = key === 'notes' ? 10000 : key === 'name' ? 120 : 4000;
+      input.name = key; input.value = value; input.defaultValue = value;
+      if (multiline) input.rows = key === 'notes' ? 4 : 2;
+      input.placeholder = {categories: 'One category per line', emails: 'One email address per line', phones: 'One phone number per line', notes: 'Add context, reminders or useful details…'}[key] || '';
+      fields[key] = input;
+      if (['emails', 'phones'].includes(key) && !['people', 'companies'].includes(entity.kind) && !(profile.emails?.length || profile.phones?.length)) continue; input.maxLength = key === 'notes' ? 10000 : key === 'name' ? 120 : 4000;
       if (key === 'name') input.required = true;
       if (key === 'notes') label.className = 'profile-wide';
       fields[key] = input; label.append(input); grid.append(label);
     }
     const button = el('button', 'Save profile'), feedback = el('span'); feedback.className = 'profile-feedback'; feedback.setAttribute('role', 'status');
-    form.append(grid, button, feedback, el('p', 'Your edits survive enrichment. Contact details are not automatically merged or overwritten.'));
+    const actions = el('div'); actions.className = 'profile-actions';
+    const cancel = el('button', 'Cancel'); cancel.type = 'button'; cancel.className = 'profile-cancel';
+    cancel.onclick = () => { form.reset(); feedback.textContent = ''; details.open = false; };
+    button.className = 'profile-save'; actions.append(button, cancel, feedback);
+    const hint = el('p', 'Saved details are kept when activity is refreshed.'); hint.className = 'profile-hint';
+    form.append(grid, actions, hint);
     form.onsubmit = async event => {
       event.preventDefault(); button.disabled = true; feedback.textContent = 'Saving…';
       try {
@@ -130,8 +139,22 @@
     }
     finally { setLoading(false); }
   }
+  function showJob(data, action = 'status') {
+    $('job').textContent = JSON.stringify(data, null, 2);
+    const summary = $('job-summary'); summary.replaceChildren();
+    const job = data.job || (action === 'backfill' ? data : {});
+    const state = job.state || (action === 'export' ? 'Export response received' : 'No active job');
+    const heading = el('p', state.charAt(0).toUpperCase() + state.slice(1)); heading.className = 'job-state'; summary.append(heading);
+    if (job.error) summary.append(el('p', job.error === 'RemoteCorpusError' ? 'The activity source could not be read. Check progress again after the source is available.' : 'Processing reported an error. Open technical details for more information.'));
+    if (state === 'retrying') summary.append(el('p', 'The background worker is retrying this request.'));
+    if (data.enrichment) {
+      const e = data.enrichment;
+      summary.append(el('p', `Last batch: ${e.processed ?? 0} processed · ${e.pending ?? 0} pending · ${e.removed ?? 0} removed.`));
+    }
+    if (action === 'export') summary.append(el('p', 'Open technical details to review the export result.'));
+  }
   async function status() {
-    const data = await api('/status'); $('job').textContent = JSON.stringify({job: data.job, enrichment: data.enrichment}, null, 2); $('decisions').replaceChildren();
+    const data = await api('/status'); showJob({job: data.job, enrichment: data.enrichment}); $('decisions').replaceChildren();
     data.decisions.forEach(d => { const row = el('p', d.reason + ' · ' + (d.active ? 'active' : 'undone')); if (d.active) { const button = el('button', 'Undo'); button.onclick = () => run(async () => { await api('/decisions/' + d.id + '/undo', {}); await load(); await status(); }); row.append(button); } $('decisions').append(row); });
   }
   async function run(fn) { try { await fn(); } catch (e) { $('entity-status').textContent = e.message; } }
@@ -142,8 +165,8 @@
   $('load-more').onclick = () => run(async () => { loadLimit += 100; await load(); });
   $('previous').onclick = () => { page--; render(); }; $('next').onclick = () => { page++; render(); };
   $('status-refresh').onclick = () => run(status);
-  $('backfill').onclick = () => run(async () => { $('job').textContent = JSON.stringify(await api('/backfill', {}), null, 2); });
-  $('export').onclick = () => run(async () => { $('job').textContent = JSON.stringify(await api('/export', {}), null, 2); });
+  $('backfill').onclick = () => run(async () => { showJob(await api('/backfill', {}), 'backfill'); });
+  $('export').onclick = () => run(async () => { showJob(await api('/export', {}), 'export'); });
   $('merge-form').onsubmit = e => { e.preventDefault(); run(async () => { await api('/merge', {alias: $('alias').value, canonical: $('canonical').value, reason: $('reason').value}); await load(); await status(); }); };
   run(async () => { await load(); await status(); });
 })();
