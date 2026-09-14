@@ -223,6 +223,7 @@ async def hfl_api_documents(
     page: int = 1,
     page_size: int = 20,
     compact: bool = False,
+    include_entries: bool = False,
     source: str = "",
     include_secrets: bool = False,
     secret_tags: str = "",
@@ -286,7 +287,7 @@ async def hfl_api_documents(
             else [
                 _document_payload(
                     document,
-                    include_entries=bool(q or selected_source),
+                    include_entries=include_entries or bool(q or selected_source),
                 )
                 for document in results
             ]

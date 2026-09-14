@@ -63,4 +63,6 @@ def update_document_text(
             os.replace(temporary, path)
         finally:
             temporary.unlink(missing_ok=True)
+    from workflows.hfl.entity_events import notify_change
+    notify_change()
     return path

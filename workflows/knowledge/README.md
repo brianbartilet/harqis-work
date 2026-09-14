@@ -1,5 +1,10 @@
 # Knowledge / RAG workflow — "Knowledge Accumulator and Radar"
 
+The [Activity Corpus entities feature](../../docs/info/CONNECTED-KNOWLEDGE-PREVIEW.md)
+extends corpus graph navigation with evidence, timelines and derived metadata.
+Its bounded Celery task reacts to canonical changes and manual backfill. It does
+not add a second capture or chat product.
+
 Local Retrieval-Augmented-Generation pipeline. Ingests source corpora
 (Confluence, Notion, Jira, GitHub, Google Drive) into a single sqlite-vec store
 and, on top of plain Q&A, surfaces **relations and inferences across sources** —

@@ -1,6 +1,10 @@
 """
 Beat schedule for the knowledge / RAG workflow.
 
+Corpus entity enrichment reacts to canonical writes and manual backfill.
+workflows.knowledge.tasks.connected_hfl.refresh_corpus_entities uses
+HARQIS_ENTITIES_QUEUE. Existing HFL outbox recovery owns pending retries; no new Beat entry.
+
 Cost guard: source ingestors can fan out across SaaS systems and embedding
 credits. The exported `WORKFLOW_KNOWLEDGE` therefore includes only bounded
 scheduled work by default, with live behavior controlled by env vars:
