@@ -27,7 +27,8 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
   const defaultLabelKinds = new Set(['sources', 'people', 'tools', 'companies']);
   let data = {nodes:[],edges:[]}, nodes = [], edges = [], selected = null, enabled = new Set();
   let exampleMode=new URLSearchParams(location.search).get('example')==='1';
-  let requestVersion=0, requestController=null;
+  let requestVersion=0, requestController=null, backgroundController=null, appliedParams=null, graphSignature='', lastInteraction=0;
+  const signature=value=>JSON.stringify(value,(key,item)=>key==='locator'?undefined:item);
   const selectedSources=new Set();
   let loading=false, graphData={nodes:[],links:[]}, graphApi=null, active=null, focusId=null;
   const host=$('canvas'), root=createRoot(host);
@@ -78,14 +79,14 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
   }
   function zoom(factor){if(graphApi)graphApi.zoom(graphApi.zoom()*factor,duration);}
   function Graph({data,activeId,selectedId}) {
-    const ref=useRef(),needsFit=useRef(true),labelBoxes=useRef([]);
+    const ref=useRef(),needsFit=useRef(!data.background),labelBoxes=useRef([]);
     const [size,setSize]=useState({width:host.clientWidth,height:host.clientHeight});
     useEffect(()=>{
       const observer=new ResizeObserver(()=>{setSize({width:host.clientWidth,height:host.clientHeight});needsFit.current=true;});
       observer.observe(host);return()=>observer.disconnect();
     },[]);
     useEffect(()=>{
-      graphApi=ref.current;needsFit.current=true;
+      graphApi=ref.current;needsFit.current=!data.background;
       ref.current.d3Force('charge').strength(-230);
       ref.current.d3Force('link').distance(105);
       ref.current.d3Force('collide',forceCollide(n=>n.radius+30).iterations(2));
@@ -151,12 +152,13 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
       onNodeHover={node=>{host.style.cursor=node?'pointer':'grab';highlight(node?.id||selected);}}
       onNodeClick={node=>select(node.id)} onBackgroundClick={()=>select(null)}
       onNodeDrag={node=>{
+        if(data.background){data.background=false;draw();}
         // Neighbors must be free to follow, including ones moved in an earlier drag.
         const neighbors=connected(node.id);
         data.nodes.forEach(other=>{if(neighbors.has(other.id)){delete other.fx;delete other.fy;}});
       }}
       onNodeDragEnd={node=>{node.fx=node.x;node.fy=node.y;ref.current.d3ReheatSimulation();scheduleSave();}}
-      warmupTicks={reducedMotion?150:80} cooldownTicks={reducedMotion?0:100}
+      warmupTicks={data.background?0:reducedMotion?150:80} cooldownTicks={data.background?0:reducedMotion?0:100}
       onEngineStop={()=>{if(needsFit.current){needsFit.current=false;fit();}scheduleSave();}}
     />;
   }
@@ -241,7 +243,8 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
     $('list-title').textContent=(n?'Linked nodes':'Sources')+' · '+items.length;
     nodeList(items);
   }
-  function render() {
+  function render(preserveLayout=false) {
+    const previousNodes=new Map(graphData.nodes.map(node=>[node.id,node]));
     $('legend').querySelectorAll('button[data-kind]').forEach(button=>button.setAttribute('aria-pressed',String(enabled.has(button.dataset.kind))));
     $('types').querySelectorAll('input[data-kind]').forEach(input=>{input.checked=enabled.has(input.dataset.kind);});
     const degrees=new Map();data.edges.forEach(e=>{degrees.set(e.source,(degrees.get(e.source)||0)+1);degrees.set(e.target,(degrees.get(e.target)||0)+1);});
@@ -281,17 +284,27 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
     }
     const key=viewKey(),saved=savedViews[key];
     if(saved?.positions)nodes.forEach(n=>{const position=saved.positions[n.id];if(position&&Number.isFinite(position.x)&&Number.isFinite(position.y)){n.x=position.x;n.y=position.y;if(position.pinned){n.fx=n.x;n.fy=n.y;}else{delete n.fx;delete n.fy;}}});
-    graphData={nodes,viewKey:key,links:edges.map(e=>({source:e.source,target:e.target}))};
+    if(preserveLayout){
+      nodes.forEach((node,index)=>{
+        const previous=previousNodes.get(node.id);
+        if(previous){node.x=previous.x;node.y=previous.y;node.vx=0;node.vy=0;if(previous.fx!=null){node.fx=previous.fx;node.fy=previous.fy;}else{delete node.fx;delete node.fy;}}
+        else {const edge=edges.find(edge=>edge.source===node.id||edge.target===node.id),neighbor=edge&&previousNodes.get(edge.source===node.id?edge.target:edge.source);node.x=(neighbor?.x||0)+60*Math.cos(index*2.4);node.y=(neighbor?.y||0)+60*Math.sin(index*2.4);}
+      });
+    }
+    graphData={nodes,background:preserveLayout,viewKey:key,links:edges.map(e=>({source:e.source,target:e.target}))};
     $('map-count').textContent=nodes.length+' nodes · '+edges.length+' links';
     showInfo('status',nodes.length+' / '+(data.total_nodes ?? data.nodes.length)+' nodes · '+edges.length+' connections'+(limited||data.truncated?' · '+$('density').selectedOptions[0].text.split(' · ')[0]+'; search or increase detail to explore more.':'')+(!nodes.length?' · No matching nodes. Clear your search or change the filters.':''),!nodes.length);
     select(byId.has(selected)?selected:null);
   }
-  function configureData(next) {
-    data=next;selected=null;focusId=null;
-    enabled=new Set(data.nodes.map(n=>n.kind));$('types').replaceChildren();
+  function configureData(next,preserveLayout=false) {
+    const previousKinds=new Set(data.nodes.map(node=>node.kind));
+    data=next;
+    if(!preserveLayout){selected=null;focusId=null;enabled=new Set(data.nodes.map(n=>n.kind));}
+    else {data.nodes.forEach(node=>{if(!previousKinds.has(node.kind))enabled.add(node.kind);});if(focusId&&!data.nodes.some(node=>node.id===focusId))focusId=null;}
+    const availableKinds=new Set(data.nodes.map(node=>node.kind));$('types').replaceChildren();
     $('legend').replaceChildren();
     const legendLabels={sources:'sources',entries:'entries',daily:'dates',people:'people',companies:'companies',tools:'tools',topics:'topics'};
-    const legendKinds=[...Object.keys(legendLabels).filter(kind=>enabled.has(kind)),...[...enabled].filter(kind=>!legendLabels[kind]).sort()];
+    const legendKinds=[...Object.keys(legendLabels).filter(kind=>availableKinds.has(kind)),...[...availableKinds].filter(kind=>!legendLabels[kind]).sort()];
     legendKinds.forEach(kind=>{
       const item=document.createElement('li'),button=document.createElement('button'),dot=document.createElement('span');
       dot.className='kg-dot';dot.style.background=color(kind);dot.setAttribute('aria-hidden','true');
@@ -299,8 +312,8 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
       button.onclick=()=>{saveView();enabled.has(kind)?enabled.delete(kind):enabled.add(kind);render();};
       button.append(dot,document.createTextNode(legendLabels[kind]||kind.replaceAll('_',' ').toLowerCase()));item.append(button);$('legend').append(item);
     });
-    [...enabled].sort().forEach(kind=>{const label=document.createElement('label'),input=document.createElement('input'),dot=document.createElement('span');input.type='checkbox';input.dataset.kind=kind;input.checked=true;input.onchange=()=>{input.checked?enabled.add(kind):enabled.delete(kind);render();};dot.className='kg-dot';dot.style.background=color(kind);label.append(input,dot,document.createTextNode(kind.replaceAll('_',' ')));$('types').append(label);});
-    render();
+    [...availableKinds].sort().forEach(kind=>{const label=document.createElement('label'),input=document.createElement('input'),dot=document.createElement('span');input.type='checkbox';input.dataset.kind=kind;input.checked=true;input.onchange=()=>{input.checked?enabled.add(kind):enabled.delete(kind);render();};dot.className='kg-dot';dot.style.background=color(kind);label.append(input,dot,document.createTextNode(kind.replaceAll('_',' ')));$('types').append(label);});
+    render(preserveLayout);
   }
   function showMode() {
     $('example-note').hidden=!exampleMode;
@@ -322,6 +335,7 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
     $('source-caption').textContent=selectedSources.size?selectedSources.size+' sources selected':'All sources';
   }
   async function load() {
+    backgroundController?.abort();
     savePreferences();
     saveView();
     requestController?.abort(); const version=++requestVersion;
@@ -333,9 +347,37 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
       const response=await fetch('/api/hfl/entities/graph?'+params,{cache:'no-store',signal:requestController.signal});
       if(!response.ok)throw Error(response.status===401?'Sign in to view your knowledge graph.':'Graph could not load. Use Refresh to try again.');
       const next=await response.json();
-      if(!exampleMode&&version===requestVersion){sourceOptions(next.sources||[]);configureData(next);}
+      if(!exampleMode&&version===requestVersion){appliedParams=params.toString();graphSignature=signature(next);sourceOptions(next.sources||[]);configureData(next);}
     } catch(error){if(!exampleMode&&version===requestVersion&&error.name!=='AbortError')showInfo('status',error.message,true);} finally{if(version===requestVersion){setLoading(false);}}
   }
+  // Poll only the applied query, without a loading overlay or interrupting interaction.
+  const busy=()=>document.hidden||loading||exampleMode||$('filter-drawer').open||$('entry-dialog').open||document.activeElement===$('search')||Date.now()-lastInteraction<2000;
+  host.addEventListener('pointermove',()=>{lastInteraction=Date.now();});
+  host.addEventListener('pointerdown',()=>{lastInteraction=Date.now();});
+  host.addEventListener('wheel',()=>{lastInteraction=Date.now();},{passive:true});
+  async function refreshInBackground(){
+    if(busy()||backgroundController||!appliedParams)return;
+    const controller=new AbortController(),version=requestVersion,key=viewKey();backgroundController=controller;
+    try{
+      const response=await fetch('/api/hfl/entities/graph?'+appliedParams,{cache:'no-store',signal:controller.signal});
+      if(!response.ok)throw Error(response.status===401?'Sign in again to resume automatic updates.':'Automatic update unavailable; retrying in five minutes.');
+      const next=await response.json();
+      if(version!==requestVersion||key!==viewKey()||busy())return;
+      const nextSignature=signature(next);
+      if(nextSignature!==graphSignature){
+        saveView();const snapshot=savedViews[graphData.viewKey];
+        const previousKinds=new Set(data.nodes.map(node=>node.kind));
+        next.nodes.forEach(node=>{if(!previousKinds.has(node.kind))enabled.add(node.kind);});
+        if(snapshot)savedViews[viewKey()]=snapshot;
+        sourceOptions(next.sources||[]);configureData(next,true);graphSignature=nextSignature;
+        showInfo('view-status','Graph updated with the latest activity.');
+      }
+    }catch(error){if(error.name!=='AbortError'&&version===requestVersion)showInfo('view-status',error.message);}
+    finally{if(backgroundController===controller)backgroundController=null;}
+  }
+  setInterval(refreshInBackground,300000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshInBackground();});
+  window.addEventListener('pagehide',()=>{backgroundController?.abort();});
   let searchTimer;$('search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>exampleMode?render():load(),300);};
   $('filter').onclick=()=>{$('filter-drawer').close();if(!exampleMode)load();};$('group').onchange=()=>{savePreferences();render();};
   $('density').onchange=()=>exampleMode?render():load();$('shared').onchange=()=>exampleMode?render():load();$('in').onclick=()=>zoom(1.3);$('out').onclick=()=>zoom(1/1.3);$('fit').onclick=fit;$('reload').onclick=load;
