@@ -290,14 +290,14 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
     data=next;selected=null;focusId=null;
     enabled=new Set(data.nodes.map(n=>n.kind));$('types').replaceChildren();
     $('legend').replaceChildren();
-    const legendLabels={sources:'Sources',entries:'Entries',daily:'Dates',people:'People',companies:'Companies',tools:'Tools',topics:'Topics'};
+    const legendLabels={sources:'sources',entries:'entries',daily:'dates',people:'people',companies:'companies',tools:'tools',topics:'topics'};
     const legendKinds=[...Object.keys(legendLabels).filter(kind=>enabled.has(kind)),...[...enabled].filter(kind=>!legendLabels[kind]).sort()];
     legendKinds.forEach(kind=>{
       const item=document.createElement('li'),button=document.createElement('button'),dot=document.createElement('span');
       dot.className='kg-dot';dot.style.background=color(kind);dot.setAttribute('aria-hidden','true');
-      button.type='button';button.dataset.kind=kind;button.title='Show or hide '+(legendLabels[kind]||kind.replaceAll('_',' '));
+      button.type='button';button.dataset.kind=kind;button.title='Show or hide '+(legendLabels[kind]||kind.replaceAll('_',' ').toLowerCase());
       button.onclick=()=>{saveView();enabled.has(kind)?enabled.delete(kind):enabled.add(kind);render();};
-      button.append(dot,document.createTextNode(legendLabels[kind]||kind.replaceAll('_',' ')));item.append(button);$('legend').append(item);
+      button.append(dot,document.createTextNode(legendLabels[kind]||kind.replaceAll('_',' ').toLowerCase()));item.append(button);$('legend').append(item);
     });
     [...enabled].sort().forEach(kind=>{const label=document.createElement('label'),input=document.createElement('input'),dot=document.createElement('span');input.type='checkbox';input.dataset.kind=kind;input.checked=true;input.onchange=()=>{input.checked?enabled.add(kind):enabled.delete(kind);render();};dot.className='kg-dot';dot.style.background=color(kind);label.append(input,dot,document.createTextNode(kind.replaceAll('_',' ')));$('types').append(label);});
     render();
