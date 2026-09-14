@@ -98,8 +98,8 @@
   .memory-dialog-select-shell { position:relative; display:block; }
   .memory-dialog-select { appearance:none; padding-right:2.5rem; }
   .memory-dialog-select-caret { position:absolute; top:50%; right:.8rem; width:.8rem; height:.8rem; color:#67e8f9; pointer-events:none; transform:translateY(-50%); }
-  .memory-palette { display:flex; flex-wrap:wrap; gap:.5rem; }
-  .memory-color { width:1.75rem; height:1.75rem; border-radius:999px; background:var(--pin-color); box-shadow:inset 0 0 0 1px rgba(255,255,255,.3); }
+  .memory-palette { display:flex; flex-wrap:nowrap; gap:.5rem; min-width:0; overflow-x:auto; padding:.3rem .3rem .85rem; scrollbar-width:thin; scrollbar-color:#475569 transparent; }
+  .memory-color { flex:0 0 1.75rem; width:1.75rem; height:1.75rem; border-radius:999px; background:var(--pin-color); box-shadow:inset 0 0 0 1px rgba(255,255,255,.3); }
   .memory-color[aria-pressed="true"] { outline:2px solid white; outline-offset:2px; }
   .memory-dialog [hidden] { display:none !important; }
   [data-memory-range-save] { border:1px solid #fbbf24; background:#f59e0b; color:#020617; box-shadow:0 0 0 1px rgba(251,191,36,.12),0 4px 14px rgba(245,158,11,.18); }
@@ -354,7 +354,7 @@
         <div class="grid gap-3 rounded-lg border border-slate-800 bg-slate-950/55 p-3" data-memory-category-editor hidden>
           <label class="memory-dialog-field"><span class="memory-dialog-label">Category name</span><input class="memory-dialog-input" maxlength="60" data-memory-category-name placeholder="Family, school, turning points…"></label>
           <div data-prompt-editor="category"><div class="flex items-center justify-between mb-2"><div class="memory-instructions-heading"><span class="memory-dialog-label">Agent guidance</span><details class="memory-instructions-help"><summary aria-label="About category agent guidance">i</summary><div class="memory-instructions-help-content">Describe shared guidance for future agents working with this category: preferred sources, tone, constraints, and output format. For example: use reliable sources, cite links, and keep summaries concise. Supports Markdown headings, lists, and code blocks; use Edit to write and Preview to check formatting. Agent work combines this guidance with each pin’s instructions when you request a run. Saving guidance does not start execution.</div></details></div><button type="button" class="text-xs text-cyan-300" data-prompt-toggle aria-expanded="false">Edit</button></div><textarea aria-label="Agent guidance" class="memory-dialog-input min-h-24 resize-y" maxlength="20000" data-prompt-input hidden></textarea><div class="memory-prompt-preview markdown-body" data-prompt-preview></div><p class="mt-1 text-xs text-slate-500">Shared guidance for this category. Stored only; nothing runs when you save.</p></div>
-          <div><span class="memory-dialog-label">Color</span><div class="memory-palette" data-memory-palette></div></div>
+          <div class="min-w-0"><span class="memory-dialog-label">Color</span><div class="memory-palette" data-memory-palette role="group" aria-label="Category colors"></div><p class="mt-1 text-xs text-slate-400">Scroll right for muted colors. Use Tab to move between swatches.</p></div>
           <button type="button" class="justify-self-start rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-cyan-200 hover:bg-slate-800" data-category-history aria-haspopup="dialog" hidden>Agent history</button>
           <div class="flex gap-2"><button type="button" class="rounded-lg bg-cyan-700 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-600" data-memory-category-save>Save category</button><button type="button" class="rounded-lg px-3 py-2 text-xs text-amber-300 hover:bg-slate-800" data-memory-category-delete hidden>Archive category</button></div>
         </div>
@@ -938,7 +938,11 @@
         button.style.setProperty('--pin-color', color);
         button.setAttribute('aria-label', `Use ${color}`);
         button.setAttribute('aria-pressed', String(color === selectedColor));
-        button.addEventListener('click', () => { selectedColor = color; renderPalette(); });
+        button.title = color;
+        button.addEventListener('click', () => {
+          selectedColor = color;
+          memoryRefs.palette.querySelectorAll('button').forEach(swatch => swatch.setAttribute('aria-pressed', String(swatch === button)));
+        });
         memoryRefs.palette.append(button);
       });
     };

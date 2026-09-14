@@ -49,7 +49,7 @@
 :is(#followup-editor, [data-memory-dialog]) > form { max-height:calc(100dvh - 3rem - 2px); overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#475569 transparent; }
 /* Chromium needs native scrollbar styling reset before hiding its arrow buttons. */
 @supports selector(::-webkit-scrollbar) {
-  :is(.agenda-dialog, [data-memory-dialog], [data-create-entry-dialog], [data-entry-review-dialog]) :is(form, textarea, [data-entry-form-body], [data-entry-preview]) { scrollbar-width:auto; scrollbar-color:auto; }
+  :is(.agenda-dialog, [data-memory-dialog], [data-create-entry-dialog], [data-entry-review-dialog]) :is(form, textarea, [data-entry-form-body], [data-entry-preview], .memory-palette) { scrollbar-width:auto; scrollbar-color:auto; }
   :is(.agenda-dialog, [data-memory-dialog], [data-create-entry-dialog], [data-entry-review-dialog]) ::-webkit-scrollbar { width:6px; height:6px; }
   :is(.agenda-dialog, [data-memory-dialog], [data-create-entry-dialog], [data-entry-review-dialog]) ::-webkit-scrollbar-track { background:transparent; }
   :is(.agenda-dialog, [data-memory-dialog], [data-create-entry-dialog], [data-entry-review-dialog]) ::-webkit-scrollbar-thumb { background:#475569; border-radius:999px; }

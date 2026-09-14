@@ -1694,7 +1694,7 @@ def test_memory_pin_categories_share_colors_and_exceed_palette_size(tmp_path):
     from modules.hfl_corpus.memory_pins import MemoryPinStore, PIN_COLORS
 
     store = MemoryPinStore(tmp_path / "memory-pins.db")
-    for index in range(13):
+    for index in range(len(PIN_COLORS) + 1):
         store.save_category(
             category_id=None,
             name=f"Category {index + 1}",
@@ -1702,12 +1702,15 @@ def test_memory_pin_categories_share_colors_and_exceed_palette_size(tmp_path):
         )
 
     snapshot = store.snapshot()
-    assert len(snapshot["categories"]) == 13
+    assert len(snapshot["categories"]) == len(PIN_COLORS) + 1
     assert {category["color"] for category in snapshot["categories"]} == {
         PIN_COLORS[0]
     }
-    assert len(snapshot["palette"]) == 12
-    assert snapshot["palette"][-4:] == ["#e5e7eb", "#9ca3af", "#64748b", "#475569"]
+    assert len(snapshot["palette"]) == 28
+    assert snapshot["palette"][8:12] == ["#e5e7eb", "#9ca3af", "#64748b", "#475569"]
+    for index, color in enumerate(PIN_COLORS[12:]):
+        store.save_category(category_id=None, name=f"Muted {index}", color=color)
+    assert {category["color"] for category in store.snapshot()["categories"]} >= set(PIN_COLORS[12:])
 
 
 def test_memory_pin_store_migrates_legacy_unique_colors_without_data_loss(tmp_path):
