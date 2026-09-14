@@ -938,7 +938,6 @@
         button.style.setProperty('--pin-color', color);
         button.setAttribute('aria-label', `Use ${color}`);
         button.setAttribute('aria-pressed', String(color === selectedColor));
-        button.title = color;
         button.addEventListener('click', () => {
           selectedColor = color;
           memoryRefs.palette.querySelectorAll('button').forEach(swatch => swatch.setAttribute('aria-pressed', String(swatch === button)));
