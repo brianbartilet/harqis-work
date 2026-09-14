@@ -70,14 +70,15 @@
     if(item.creation_mode==='automatic'){const badge=node('span','Automatic','action-event');badge.title=item.automatic_basis||'Created from a high-confidence idea after review';meta.append(badge);}
     if(item.review_date)meta.append(node('span','Review '+item.review_date));if(item.due_date)meta.append(node('span','Complete by '+item.due_date));
     if(item.events){
-      const labels={source:'Source',planned:'Planned','previous-plan':'Earlier plan',open:'Opened',active:'Active',waiting:'In Progress',in_progress:'In Progress',done:'Completed',dismissed:'Dismissed'};
+      const labels={source:'Source',planned:'Planned'};
       const seen=new Set();
       item.events.forEach(event=>{
+        if (!['source','planned'].includes(event.kind)) return;
         const key=event.date+':'+event.kind;if(seen.has(key))return;seen.add(key);
         const date=new Date(event.date+'T12:00:00');
         const short=Number.isNaN(date.getTime())?event.date:new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short'}).format(date);
         const pill=node('span',(labels[event.kind]||event.kind)+' · '+short,'action-event');
-        pill.title=(event.kind==='source'?'Original HFL entry':event.kind==='planned'?'Scheduled review or completion':event.kind==='previous-plan'?'Previously scheduled date':'Recorded status: '+event.kind)+' · '+event.date;
+        pill.title=(event.kind==='source'?'Original HFL entry':'Scheduled review or completion')+' · '+event.date;
         meta.append(pill);
       });
     }
@@ -199,7 +200,7 @@
     const suggestions=data.suggestions.filter(item=>item.status==='suggested');
     if(!suggestions.length&&!['queued','running'].includes(state))list.append(node('p',state==='complete'?'No new suggestions from this review.':'No suggestions yet.','timeline-empty-message'));
     suggestions.forEach(item=>{
-      const el=node('article',null,'agenda-card');
+      const el=node('article',null,'agenda-card agenda-idea-card');
       el.append(node('p',(item.category==='missed_commitments' ? 'Possibly missed' : item.category.replaceAll('_',' '))+' · '+item.confidence+' confidence'+((item.analysis_status||'uncertain')==='uncertain' ? ' · Uncertain' : ''),'agenda-eyebrow'),node('h3',item.title),node('p',item.recommendation||item.expected_outcome));
       const details=node('details');details.append(node('summary','Evidence & completion check'),node('p',item.observation||''),node('p',item.resolution_check));
       if(item.automatic_review?.reason)details.append(node('p','Automatic action review: '+item.automatic_review.reason));

@@ -80,6 +80,64 @@ def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_clie
         browser.close()
 
 
+@pytest.mark.parametrize('width', [390, 1100])
+def test_document_creates_multiple_actions_without_navigation(agenda, authenticated_client, monkeypatch, tmp_path, width):
+    from urllib.parse import urlparse
+    from modules.hfl_corpus import corpus, router
+    playwright = pytest.importorskip('playwright.sync_api')
+    document_path = tmp_path / '2026-09-14.md'
+    document_path.write_text(
+        '## 2026-09-14 09:00\nMoment: First entry\nEntry ID: hfl-first\n\n'
+        '## 2026-09-14 10:00\nMoment: Second entry\nEntry ID: hfl-second\n', encoding='utf-8')
+    monkeypatch.setattr(corpus, 'resolve_corpus_root', lambda: tmp_path)
+    monkeypatch.setattr(router, 'corpus_index', corpus.CorpusIndex(ttl_seconds=0))
+    with playwright.sync_playwright() as driver:
+        browser = driver.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page(viewport={'width': width, 'height': 900})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+
+        def route(request_route):
+            request = request_route.request
+            url = urlparse(request.url)
+            if url.hostname != 'document.test':
+                request_route.abort()
+                return
+            response = authenticated_client.request(
+                request.method, url.path + ('?' + url.query if url.query else ''),
+                content=request.post_data,
+                headers={key: value for key, value in request.headers.items()
+                         if key.lower() in {'content-type', 'x-csrf-token'}},
+            )
+            request_route.fulfill(status=response.status_code, body=response.content,
+                                  headers={'content-type': response.headers.get('content-type', 'text/html')})
+
+        page.route('**/*', route)
+        url = 'https://document.test/hfl-corpus/document/2026-09-14.md'
+        page.goto(url)
+        for index, title in enumerate(('First entry', 'Second entry')):
+            page.locator('.corpus-followup-action').nth(index).click()
+            form = page.locator('#followup-form')
+            playwright.expect(form.locator('[name="title"]')).to_have_value(title)
+            assert form.locator('[name="expected_outcome"]').input_value() == ''
+            form.locator('[name="expected_outcome"]').fill('Record a useful result')
+            form.locator('[type="submit"]').click()
+            playwright.expect(page.locator('#followup-editor')).to_be_hidden()
+            assert page.url == url
+            confirmation = page.locator('.corpus-action-toast')
+            playwright.expect(confirmation).to_be_visible()
+            playwright.expect(confirmation).to_contain_text('View it in the Activity Corpus.')
+            assert confirmation.evaluate('(el) => el.previousElementSibling.classList.contains("corpus-entry-header")')
+            assert page.locator('dialog[open]').count() == 0
+            confirmation.get_by_role('button', name='Dismiss action confirmation').click()
+            playwright.expect(confirmation).to_be_hidden()
+            playwright.expect(page.locator('.corpus-followup-action').nth(index)).to_be_focused()
+            assert page.locator('.corpus-action-feedback').count() == 0
+        assert {item['source']['entry_id'] for item in agenda.list()} == {'hfl-first', 'hfl-second'}
+        assert not errors
+        browser.close()
+
+
 def test_lifecycle_persists_completion_and_reopen_history(agenda, authenticated_client):
     created = authenticated_client.post("/hfl-corpus/timeline/items", json=payload()).json()["item"]
     completed = authenticated_client.patch(f"/hfl-corpus/timeline/items/{created['id']}", json={"version": 1, "status": "done", "completion_note": "Export verified."})

@@ -62,15 +62,24 @@
       await api('/items', {method: 'POST', body: JSON.stringify({
         ...Object.fromEntries(new FormData(form)), source, request_id: requestId,
       })});
-      const header = trigger.closest('.corpus-entry-header');
-      let feedback = header.querySelector('.corpus-action-feedback');
-      if (!feedback) {
-        feedback = document.createElement('span');
-        feedback.className = 'corpus-action-feedback'; feedback.setAttribute('role', 'status');
-        header.append(feedback);
-      }
-      feedback.textContent = 'Action added. View it later in Activity Corpus.';
       dialog.close();
+      const entryTrigger = trigger;
+      const header = entryTrigger.closest('.corpus-entry-header');
+      if (header.nextElementSibling?.classList.contains('corpus-action-toast')) header.nextElementSibling.remove();
+      const toast = document.createElement('div');
+      toast.className = 'corpus-action-toast';
+      const message = document.createElement('span');
+      message.setAttribute('role', 'status');
+      message.textContent = 'Action added. View it in the Activity Corpus.';
+      const dismiss = document.createElement('button');
+      dismiss.type = 'button'; dismiss.textContent = '×';
+      dismiss.setAttribute('aria-label', 'Dismiss action confirmation');
+      dismiss.addEventListener('click', () => {
+        toast.remove();
+        entryTrigger.focus({preventScroll: true});
+      });
+      toast.append(message, dismiss);
+      header.after(toast);
     } catch (err) { showError(err.message); }
     finally { busy = false; save.disabled = false; save.textContent = 'Save'; }
   });

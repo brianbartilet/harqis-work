@@ -220,6 +220,15 @@ async def hfl_secrets_unlock(request: Request, payload: SecretPinRequest):
     return response
 
 
+def _pill_rendered_tags(rendered: Markup) -> Markup:
+    """Decorate plain tag metadata in the document's sanitized HTML only."""
+    def replace_tags(match: re.Match) -> str:
+        tags = re.sub(r"(?<!\S)#[^\s#,]+", lambda tag: f'<span class="corpus-tag-pill">{tag.group(0)}</span>', match.group(1))
+        return f'<p class="corpus-entry-tags"><strong>Tags:</strong>{tags}</p>'
+
+    return Markup(re.sub(r"<p><strong>Tags:</strong>([^<]*)</p>", replace_tags, str(rendered)))
+
+
 def _display_entry_header(header: str) -> str:
     """Format timestamp-only headings for display, preserving source wall time."""
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?", header):
@@ -228,7 +237,7 @@ def _display_entry_header(header: str) -> str:
         when = datetime.fromisoformat(header.replace("Z", "+00:00"))
     except ValueError:
         return header
-    label = when.strftime("%a %b %d %Y %I:%M %p")
+    label = when.strftime("%b %d %Y %I:%M %p")
     if when.tzinfo is not None:
         label += " " + when.tzname()
     return label
@@ -1286,6 +1295,7 @@ async def hfl_document(
             render_markdown(format_hfl_markdown(document.text, references)), document
         )
     )
+    rendered = _pill_rendered_tags(rendered)
     filtered = filter_documents((document,), protected_tags)
     display_document = document if authorized and (show_secrets or reveal) else (
         filtered[0] if filtered else replace(document, entries=(), tags=(), tag_counts=())

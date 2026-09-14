@@ -1637,7 +1637,7 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert ">Edit category</button>" in response.text
     assert "Create or edit a category" not in response.text
     assert "Select a day to recall or create a memory" not in response.text
-    assert '.activity-day[data-pinned="true"] { border-color:var(--pin-color); box-shadow:inset 0 0 0 1px var(--pin-color); }' in response.text
+    assert '.activity-day[data-pinned="true"] { border-color:var(--pin-color); box-shadow:none; }' in response.text
     assert '.activity-day[data-pinned="true"]::after' not in response.text
     pinned_style = response.text.split('.activity-day[data-pinned="true"] {', 1)[1].split('}', 1)[0]
     assert "background:" not in pinned_style
@@ -2681,9 +2681,9 @@ def test_plain_text_search_shows_clickable_matching_entry_previews(
 
 
 @pytest.mark.parametrize("source, expected", [
-    ("2026-09-14 00:04:52.466062", "Mon Sep 14 2026 12:04 AM"),
-    ("2026-09-13 23:44:52.466062", "Sun Sep 13 2026 11:44 PM"),
-    ("2026-09-14T12:04:00+08:00", "Mon Sep 14 2026 12:04 PM UTC+08:00"),
+    ("2026-09-14 00:04:52.466062", "Sep 14 2026 12:04 AM"),
+    ("2026-09-13 23:44:52.466062", "Sep 13 2026 11:44 PM"),
+    ("2026-09-14T12:04:00+08:00", "Sep 14 2026 12:04 PM UTC+08:00"),
     ("2026-02-30 12:00", "2026-02-30 12:00"),
     ("A normal heading", "A normal heading"),
     ("2026-09-14", "2026-09-14"),
@@ -2692,6 +2692,17 @@ def test_entry_heading_display_date(source, expected):
     from modules.hfl_corpus.router import _display_entry_header
 
     assert _display_entry_header(source) == expected
+
+
+def test_document_tag_pills_preserve_other_content():
+    from modules.hfl_corpus.router import _pill_rendered_tags
+
+    rendered = render_markdown('**Tags:** #location #movement-only #owntracks #no-stays\n\nOrdinary #text\n\n`Tags: #code`')
+    result = str(_pill_rendered_tags(rendered))
+    assert result.count('class="corpus-tag-pill"') == 4
+    assert '<span class="corpus-tag-pill">#movement-only</span>' in result
+    assert '<p>Ordinary #text</p>' in result
+    assert '<code>Tags: #code</code>' in result
 
 
 def test_document_formats_dates_without_changing_source(authenticated_client, monkeypatch):
@@ -2709,7 +2720,7 @@ def test_document_formats_dates_without_changing_source(authenticated_client, mo
     response = authenticated_client.get("/hfl-corpus/document/2026-09-14.md")
 
     assert response.status_code == 200
-    assert 'id="original-entry-anchor" class="scroll-mt-40">Mon Sep 14 2026 12:04 AM</h2>' in response.text
+    assert 'id="original-entry-anchor" class="scroll-mt-40">Sep 14 2026 12:04 AM</h2>' in response.text
     from bs4 import BeautifulSoup
     page = BeautifulSoup(response.text, "html.parser")
     heading = page.find(id="original-entry-anchor")
