@@ -1,6 +1,6 @@
 (() => {
   const $ = id => document.getElementById(id);
-  let items = [], page = 0, loadLimit = 100, total = 0;
+  let items = [], page = 0, loadLimit = 100, total = 0, hasLoaded = false;
   const pageSize = 25;
   const selectedKinds = new Set(), selectedCategories = new Set(), selectedSources = new Set();
   const kinds = {people: 'People', companies: 'Companies', tools: 'Tools', topics: 'Topics', objects: 'Referenced objects'};
@@ -103,6 +103,10 @@
   }
   function setLoading(loading) {
     $('entity-loading').hidden = !loading;
+    $('entity-results').hidden = loading || !hasLoaded;
+    $('result-actions').hidden = loading || !hasLoaded;
+    $('load-scope').hidden = loading || !hasLoaded;
+    if (loading) $('entity-status').textContent = '';
     $('entity-list').setAttribute('aria-busy', String(loading));
     $('entity-filters').disabled = loading;
     $('entity-filters').inert = loading;
@@ -120,6 +124,7 @@
       const data = await api('?limit=' + loadLimit);
       items = data.entities; total = data.total ?? items.length;
       facets(); render();
+      hasLoaded = true;
       $('load-more').hidden = items.length >= total;
       $('load-scope').textContent = items.length < total ? 'Search and filters apply to loaded entities. Load more to include additional records.' : '';
     }

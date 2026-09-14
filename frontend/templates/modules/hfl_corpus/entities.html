@@ -13,6 +13,7 @@
 .entity-shell .directory-header nav{gap:12px;flex-wrap:wrap}.entity-shell .directory-header nav a{display:inline-flex;align-items:center;justify-content:center;background:#2563eb;color:#fff;padding:12px 16px;border-radius:8px;font-size:14px;font-weight:600;line-height:20px;text-decoration:none;box-shadow:0 10px 15px -3px #17255466}.entity-shell .directory-header nav a:hover{background:#3b82f6}
 #load-more[hidden]{display:none}
 .entity-shell .entity-card>summary{display:flex;align-items:center;flex-wrap:wrap;gap:10px 18px}.entity-shell .entity-detail-row{margin-top:0}.entity-shell label,.type-cloud legend,.filter-label{font-size:15px;font-weight:600}.entity-shell #load-more{margin:12px 0 24px;padding:12px 20px;border-radius:8px;font-weight:600}.entity-shell #load-scope{margin-top:12px;line-height:1.6}
+#result-actions{display:flex;align-items:center;gap:12px;flex-shrink:0}.entity-shell #result-actions button{margin:0;padding:10px 16px;min-height:44px;border:1px solid #465d79;border-radius:8px;background:#172b43;color:#dbe5ef;font-size:14px;font-weight:600;white-space:nowrap}.entity-shell #result-actions button:hover{background:#223c58;text-decoration:none}#entity-results[hidden],#result-actions[hidden],#load-scope[hidden]{display:none}@media(max-width:650px){.results-toolbar{flex-wrap:wrap}#result-actions{gap:8px}.entity-shell #result-actions button{padding:10px 12px}}
 </style>{% endblock %}
 
 {% block content %}
@@ -39,12 +40,13 @@
 </div>
 
 </fieldset>
-<div class="results-toolbar"><p id="entity-status" role="status" class="text-slate-400">Loading current corpus…</p><button id="clear-filters" type="button" disabled>Clear filters</button></div>
-<p id="load-scope" class="text-slate-400 text-sm"></p><button id="load-more" type="button" hidden>Load more entities</button>
+<div class="results-toolbar"><p id="entity-status" role="status" class="text-slate-400"></p><div id="result-actions" hidden><button id="clear-filters" type="button" disabled>Clear filters</button><button id="load-more" type="button" hidden>Load more entities</button></div></div>
+<p id="load-scope" class="text-slate-400 text-sm" hidden></p>
 <div id="entity-loading" role="status"><span class="loading-spinner" aria-hidden="true"></span><span>Loading entities from your activity…</span></div>
 
 
 
+<section id="entity-results" hidden>
 <details class="my-6 border border-slate-700 rounded p-4"><summary>Processing and optional export</summary>
 
 <p class="my-3 text-slate-400">Historical enrichment runs in bounded background batches. Explicit references are available even before extraction finishes.</p>
@@ -71,9 +73,10 @@
 
 <button class="border rounded p-2">Record reversible merge</button></form><div id="decisions" class="my-4"></div></details>
 
+</section>
 </main>
 
-<script src="/static/js/corpus-entities.js?v=directory-20260914-3" defer></script>
+<script src="/static/js/corpus-entities.js?v=directory-20260914-4" defer></script>
 
 {% endblock %}
 
