@@ -48,6 +48,13 @@ def test_saved_views_live_updates_and_full_graph(authenticated_client, monkeypat
                 return page
 
             page = open_page()
+            assert page.locator('#kg-views-panel').is_hidden()
+            page.click('#kg-open-views')
+            assert page.locator('#kg-saved-views').is_visible()
+            assert page.locator('#kg-open-views').get_attribute('aria-expanded') == 'true'
+            page.keyboard.press('Escape')
+            assert page.locator('#kg-views-panel').is_hidden()
+            assert page.locator('#kg-open-views').evaluate('(el) => el === document.activeElement')
             page.select_option('#kg-density', '0')
             started = time.monotonic()
             page.wait_for_function("document.querySelector('#kg-status').textContent.includes('5977 / 5977')")
@@ -57,6 +64,7 @@ def test_saved_views_live_updates_and_full_graph(authenticated_client, monkeypat
             page.click('#kg-legend button[data-kind="daily"]')
             page.click('#kg-in')
             page.once('dialog', lambda dialog: dialog.accept('Complete activity'))
+            page.click('#kg-open-views')
             page.click('#kg-save-as')
             page.wait_for_function("document.querySelector('#kg-dirty').textContent==='Saved'")
             first = authenticated_client.get('/api/hfl/graph-views').json()['views'][0]
@@ -88,6 +96,7 @@ def test_saved_views_live_updates_and_full_graph(authenticated_client, monkeypat
             assert params['rolling'] == ['30']
             from datetime import date
             assert (date.fromisoformat(params['until'][0]) - date.fromisoformat(params['since'][0])).days == 29
+            second.click('#kg-open-views')
             second.click('#kg-save')
             second.wait_for_function("document.querySelector('#kg-dirty').textContent==='Saved'")
             saved = authenticated_client.get('/api/hfl/graph-views').json()['views'][0]
@@ -95,6 +104,16 @@ def test_saved_views_live_updates_and_full_graph(authenticated_client, monkeypat
             screenshot = tmp_path / 'graph-saved-views.png'
             second.screenshot(path=str(screenshot), full_page=True)
             print(f'Graph screenshot: {screenshot}')
+            second.click('#kg-open-views')
+            assert second.locator('#kg-views-panel').is_hidden()
+            second.screenshot(path=str(tmp_path / 'graph-views-closed.png'), full_page=True)
+            second.set_viewport_size({'width': 390, 'height': 844})
+            second.click('#kg-open-views')
+            panel = second.locator('#kg-views-panel').bounding_box()
+            assert panel['x'] >= 0 and panel['x'] + panel['width'] <= 390
+            second.screenshot(path=str(tmp_path / 'graph-views-mobile.png'), full_page=True)
+            second.click('#kg-search')
+            assert second.locator('#kg-views-panel').is_hidden()
             assert not errors, errors
         finally:
             browser.close()

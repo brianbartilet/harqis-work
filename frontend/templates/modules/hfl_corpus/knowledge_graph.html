@@ -1,17 +1,10 @@
 {% extends "base.html" %}
 {% block title %}HARQIS — Activity Graph{% endblock %}
-{% block head %}<link rel="stylesheet" href="/static/css/knowledge-graph.css?v=28">{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/knowledge-graph.css?v=29">{% endblock %}
 {% block content %}
 <main class="kg-shell" data-view-owner="{{ user }}">
   <header><a href="/hfl-corpus">← Activity Corpus</a><div class="kg-heading-row"><h1>Activity Graph</h1><a class="kg-entities-button" href="/hfl-corpus/entities">Entities</a></div>
     <p>Explore corpus entries through their sources, dates, and evidenced entity mentions.</p></header>
-  <div class="kg-toolbar kg-saved-toolbar">
-    <label>Saved view<select id="kg-saved-views"><option value="">Unsaved view</option></select></label>
-    <button id="kg-save" type="button">Save</button><button id="kg-save-as" type="button">Save as new</button>
-    <button id="kg-rename" type="button">Rename</button><button id="kg-delete" type="button">Delete</button>
-    <button id="kg-import" type="button" hidden>Import browser view</button>
-    <span id="kg-dirty" role="status"></span><span id="kg-live" role="status">Connecting…</span>
-  </div>
   <div class="kg-toolbar kg-main-toolbar">
     <label>Find a node<input id="kg-search" type="search" placeholder="Search entries or entities" autocomplete="off"></label>
     <div class="kg-detail-control"><select id="kg-density" aria-label="Graph detail"><option value="100">Overview</option><option value="500">Expanded</option><option value="1000">Dense</option><option value="0">All matching nodes</option></select><details class="kg-detail-help"><summary aria-label="About graph detail">i</summary><p>Overview: up to 100 nodes.<br>Expanded: up to 500 nodes.<br>Dense: up to 1,000 nodes.<br>All: every matching node and connection.<br>A node is an entry, entity, source or date. Filters may return fewer nodes.</p></details></div>
@@ -21,6 +14,19 @@
     </div>
     <div class="kg-toolbar-actions">
     <button id="kg-open-filters" type="button" aria-haspopup="dialog" aria-controls="kg-filter-drawer" aria-expanded="false">Filter</button>
+    <div class="kg-views-menu" id="kg-views-menu">
+      <button id="kg-open-views" type="button" aria-controls="kg-views-panel" aria-expanded="false">Views<span class="kg-menu-caret" aria-hidden="true"></span></button>
+      <div id="kg-views-panel" class="kg-saved-toolbar" role="region" aria-label="Saved views" hidden>
+        <label for="kg-saved-views">Saved view</label>
+        <select id="kg-saved-views"><option value="">Unsaved view</option></select>
+        <div class="kg-view-actions">
+          <button id="kg-save" type="button">Save</button><button id="kg-save-as" type="button">Save as new</button>
+          <button id="kg-rename" type="button">Rename</button><button id="kg-delete" type="button">Delete</button>
+        </div>
+        <button id="kg-import" type="button" hidden>Import browser view</button>
+        <span id="kg-dirty" role="status"></span><span id="kg-live" role="status">Connecting…</span>
+      </div>
+    </div>
     <button id="kg-reset" type="button">Reset</button><button id="kg-reload" type="button">Refresh</button>
     </div>
   </div>
@@ -58,5 +64,5 @@
   <p id="kg-entry-meta"></p><div id="kg-entry-body" class="markdown-body" role="region" aria-label="Entry content"></div>
 </dialog>
 </main>
-<script src="/static/js/knowledge-graph.js?v=32" defer></script>
+<script src="/static/js/knowledge-graph.js?v=33" defer></script>
 {% endblock %}

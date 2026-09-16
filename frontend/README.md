@@ -446,7 +446,8 @@ coverage, then recent entries and connected nodes, filling unused capacity.
 Counts distinguish matching nodes, the detail limit, and local view filters.
 Shared connections, dates, sources and search still apply in All mode.
 
-Use Save or Save as new to store a named view; Rename and Delete manage it.
+Open Views beside Filter to select a saved view, Save or Save as new, Rename,
+Delete, or import browser settings. The menu overlays the graph to save space.
 Views include filters, fixed or rolling dates, detail, grouping, visible node
 types, focus, positions, pins, zoom and pan. They live in the owner profile
 SQLite database through `/api/hfl/graph-views`, accessible to authenticated owner
