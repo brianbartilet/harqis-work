@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}HARQIS — Activity Graph{% endblock %}
-{% block head %}<link rel="stylesheet" href="/static/css/knowledge-graph.css?v=29">{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/knowledge-graph.css?v=30">{% endblock %}
 {% block content %}
 <main class="kg-shell" data-view-owner="{{ user }}">
   <header><a href="/hfl-corpus">← Activity Corpus</a><div class="kg-heading-row"><h1>Activity Graph</h1><a class="kg-entities-button" href="/hfl-corpus/entities">Entities</a></div>
@@ -31,6 +31,7 @@
     </div>
   </div>
   <p id="kg-example-note" hidden>Fictional example · Explore three projects connected by shared people and tools. Select a node to inspect or focus its connections.</p>
+  <div id="kg-save-feedback" role="status" aria-live="polite" aria-atomic="true" hidden><span class="kg-save-spinner" aria-hidden="true"></span><span id="kg-save-feedback-text"></span></div>
   <dialog id="kg-filter-drawer" class="kg-additional kg-filter-drawer" aria-labelledby="kg-filter-title">
   <div class="kg-drawer-heading"><h2 id="kg-filter-title">Filters</h2><button id="kg-close-filters" type="button" aria-label="Close filters">×</button></div>
   <div class="kg-toolbar kg-filter-grid">
@@ -64,5 +65,5 @@
   <p id="kg-entry-meta"></p><div id="kg-entry-body" class="markdown-body" role="region" aria-label="Entry content"></div>
 </dialog>
 </main>
-<script src="/static/js/knowledge-graph.js?v=33" defer></script>
+<script src="/static/js/knowledge-graph.js?v=34" defer></script>
 {% endblock %}

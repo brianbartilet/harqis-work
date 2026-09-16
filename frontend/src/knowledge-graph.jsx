@@ -97,13 +97,28 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
     let name=currentView?.name;
     if(asNew||!name||renameOnly){name=window.prompt('View name',name||'My activity');if(!name?.trim())return;}
     viewOperation=true;
+    const actionButton=$(renameOnly?'rename':asNew?'save-as':'save');
+    function feedback(state,message){
+      $('save-feedback').hidden=false;$('save-feedback').dataset.state=state;
+      $('save-feedback-text').textContent=message;
+    }
+    feedback('saving',renameOnly?'Renaming view…':'Saving view…');
+    actionButton.setAttribute('aria-busy','true');
+    for(const id of ['save','save-as','rename','delete','import','saved-views'])$(id).disabled=true;
     try{
+      // Paint feedback before serializing a large graph layout.
+      await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
       const state=renameOnly?currentView.state:stateSnapshot(),id=asNew?null:currentView?.id,savingVersion=editVersion;
       const result=await viewRequest(viewUrl+(id?'/'+id:''),id?'PUT':'POST',{name:name.trim(),state,revision:id?currentView.revision:0});
       currentView=result;namedViews=namedViews.filter(item=>item.id!==result.id);namedViews.push(result);viewOptions();
       if(!renameOnly&&savingVersion===editVersion){dirty=false;$('dirty').textContent='Saved';}else if(!dirty)$('dirty').textContent='Renamed';
-    }catch(error){$('dirty').textContent=error.message;}
-    finally{viewOperation=false;}
+      feedback('success',(renameOnly?'View renamed: ':'View saved: ')+result.name+(dirty?' · Newer changes are not saved.':''));
+    }catch(error){$('dirty').textContent=error.message;feedback('error','View not saved. '+error.message);}
+    finally{
+      viewOperation=false;actionButton.removeAttribute('aria-busy');
+      for(const id of ['save','save-as','import','saved-views'])$(id).disabled=false;
+      viewOptions();
+    }
   }
   async function initializeViews(){
     try{

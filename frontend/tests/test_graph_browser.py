@@ -65,8 +65,28 @@ def test_saved_views_live_updates_and_full_graph(authenticated_client, monkeypat
             page.click('#kg-in')
             page.once('dialog', lambda dialog: dialog.accept('Complete activity'))
             page.click('#kg-open-views')
+            page.evaluate("""() => {
+                const original = window.fetch;
+                window.fetch = async (url, options) => {
+                    if (url === '/api/hfl/graph-views' && options?.method === 'POST') {
+                        await new Promise(resolve => window.releaseViewSave = resolve);
+                    }
+                    return original(url, options);
+                };
+            }""")
             page.click('#kg-save-as')
+            page.wait_for_selector('#kg-save-feedback[data-state="saving"] .kg-save-spinner')
+            assert page.locator('#kg-save').is_disabled()
+            assert page.locator('#kg-save-as').is_disabled()
+            assert page.locator('#kg-saved-views').is_disabled()
+            page.click('#kg-open-views')
+            assert page.locator('#kg-save-feedback').is_visible()
+            page.screenshot(path=str(tmp_path / 'graph-saving.png'), full_page=True)
+            page.evaluate('window.releaseViewSave()')
             page.wait_for_function("document.querySelector('#kg-dirty').textContent==='Saved'")
+            assert page.locator('#kg-save-feedback').get_attribute('data-state') == 'success'
+            assert 'Complete activity' in page.locator('#kg-save-feedback').inner_text()
+            assert page.locator('#kg-save').is_enabled()
             first = authenticated_client.get('/api/hfl/graph-views').json()['views'][0]
             assert first['state']['density'] == '0'
             assert 'daily' not in first['state']['enabled']
@@ -101,6 +121,17 @@ def test_saved_views_live_updates_and_full_graph(authenticated_client, monkeypat
             second.wait_for_function("document.querySelector('#kg-dirty').textContent==='Saved'")
             saved = authenticated_client.get('/api/hfl/graph-views').json()['views'][0]
             assert saved['state']['rolling'] == 30
+            # A rejected write must stop the spinner and allow a retry.
+            second.route('**/api/hfl/graph-views/*', lambda route: route.fulfill(
+                status=503, content_type='application/json', body='{"detail":"Please retry."}'))
+            second.click('#kg-save')
+            second.wait_for_selector('#kg-save-feedback[data-state="error"]')
+            assert 'View not saved.' in second.locator('#kg-save-feedback').inner_text()
+            assert second.locator('.kg-save-spinner').is_hidden()
+            assert second.locator('#kg-save').is_enabled()
+            second.unroute('**/api/hfl/graph-views/*')
+            second.click('#kg-save')
+            second.wait_for_selector('#kg-save-feedback[data-state="success"]')
             screenshot = tmp_path / 'graph-saved-views.png'
             second.screenshot(path=str(screenshot), full_page=True)
             print(f'Graph screenshot: {screenshot}')
