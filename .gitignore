@@ -41,6 +41,7 @@ venv
 /logs/*
 !/logs/.gitignore
 /screenshots/*
+/outputs/*
 !/screenshots/.gitignore
 /results/*
 !/results/.gitignore

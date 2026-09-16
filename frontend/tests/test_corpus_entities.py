@@ -213,6 +213,60 @@ def test_graph_accepts_dense_thousand(corpus, authenticated_client):
     assert authenticated_client.get('/api/hfl/entities/graph').json()['limit'] == 100
 
 
+def test_all_graph_and_sparse_budget_with_old_sources(corpus, authenticated_client):
+    corpus[:] = [entry(str(i), source='notes') for i in range(1200)]
+    corpus.append(entry('old', source='archive', date='2001-01-01'))
+    limited = entities.graph(limit=100)
+    assert len(limited['nodes']) == 100
+    assert {n['label'] for n in limited['nodes'] if n['kind'] == 'sources'} == {'notes', 'archive'}
+    assert limited['omitted_sources'] == 0
+    complete = authenticated_client.get('/api/hfl/entities/graph?limit=0').json()
+    assert len(complete['nodes']) == complete['total_nodes'] == 1205
+    assert len(complete['edges']) == 2402
+    assert not complete['truncated']
+    filtered = entities.graph(source='archive', limit=0)
+    assert filtered['matching_entries'] == 1
+    assert len(filtered['nodes']) == 3
+
+
+def test_source_coverage_reports_overflow(corpus):
+    corpus[:] = [entry(str(i), source='source'+str(i)) for i in range(20)]
+    result = entities.graph(limit=10)
+    assert len(result['nodes']) == 10
+    assert result['omitted_sources'] == 15
+
+
+def test_saved_graph_views_persistence_conflicts_and_access(authenticated_client):
+    from modules.hfl_corpus import graph_views
+    from main import app
+    with graph_views.connection() as db:
+        db.execute('DELETE FROM graph_views')
+        db.execute('DELETE FROM graph_view_last')
+    url = '/api/hfl/graph-views'
+    payload = {'name': 'All recent', 'state': {'density': '0', 'rolling': 30,
+        'enabled': ['entries', 'sources'], 'layout': {'positions': {'entry:one': {'x': 2, 'y': 3, 'pinned': True}},
+        'center': {'x': 5, 'y': 6}, 'zoom': 2}}}
+    with TestClient(app) as anonymous:
+        assert anonymous.get(url).status_code == 401
+        assert anonymous.post(url, json=payload).status_code == 401
+    first = authenticated_client.post(url, json=payload)
+    assert first.status_code == 200
+    first = first.json()
+    identity = first['id']
+    listing = authenticated_client.get(url).json()
+    assert listing['last_used'] == identity
+    assert listing['views'][0]['state']['layout']['positions']['entry:one']['pinned']
+    updated = authenticated_client.put(url+'/'+identity, json={**payload, 'name': 'Renamed', 'revision': 1}).json()
+    assert updated['revision'] == 2
+    assert authenticated_client.put(url+'/'+identity, json={**payload, 'revision': 1}).status_code == 409
+    assert authenticated_client.delete(url+'/'+identity+'?revision=1').status_code == 409
+    assert authenticated_client.post(url+'/'+identity+'/select').status_code == 200
+    assert authenticated_client.delete(url+'/'+identity+'?revision=2').status_code == 200
+    assert authenticated_client.get(url).json() == {'views': [], 'last_used': None}
+    assert authenticated_client.post(url+'/'+identity+'/select').status_code == 404
+    assert authenticated_client.post(url, json={**payload, 'state': {'density': '99999'}}).status_code == 422
+
+
 def test_entry_dialog_sanitization_and_access(corpus, authenticated_client, monkeypatch):
     monkeypatch.setattr("modules.hfl_corpus.entities_api._entry_references", lambda item: [])
     from main import app

@@ -163,14 +163,36 @@ def graph(source='', since='', until='', limit=100, query='', shared=False):
     candidates = sorted((e for e in rows if matches(e)), key=lambda e: (e['date'], e['id']), reverse=True)
     allowed = {t for t, count in degrees.items() if not shared or count > 1}
     selected_entries, selected_targets = set(), set()
-    limit = max(1, min(int(limit), 1000))
-    # Reserve entry slots, then fill with their shared neighbors.
+    limit = max(0, min(int(limit), 1000))  # Zero explicitly requests all matching nodes.
     available_targets = {t for e in candidates for t in targets(e) if t in allowed}
-    entry_budget = len(candidates) if len(candidates) + len(available_targets) <= limit else max(1, limit // 2)
-    for entry in candidates[:entry_budget]:
-        selected_entries.add(entry['id'])
-    local = Counter(t for e in candidates if e['id'] in selected_entries for t in targets(e) if t in allowed)
-    selected_targets.update(sorted(local, key=lambda t: (-local[t], t))[:limit-len(selected_entries)])
+    total_nodes = len(candidates) + len(available_targets)
+    budget = limit or total_nodes
+    if total_nodes <= budget:
+        selected_entries = {e['id'] for e in candidates}
+        selected_targets = available_targets
+    else:
+        # Give each eligible source an entry and source orb before filling by recency.
+        for entry in candidates:
+            source_id = 'sources:' + entry['source']
+            if source_id in available_targets and source_id not in selected_targets:
+                if len(selected_entries) + len(selected_targets) + 2 <= budget:
+                    selected_entries.add(entry['id'])
+                    selected_targets.add(source_id)
+        entry_budget = max(len(selected_entries), budget // 2)
+        for entry in candidates:
+            if len(selected_entries) >= entry_budget:
+                break
+            selected_entries.add(entry['id'])
+        local = Counter(t for e in candidates if e['id'] in selected_entries for t in targets(e) if t in allowed)
+        for target in sorted(local, key=lambda t: (-local[t], t)):
+            if len(selected_entries) + len(selected_targets) >= budget:
+                break
+            selected_targets.add(target)
+        # Sparse neighborhoods must not leave unused capacity.
+        for entry in candidates:
+            if len(selected_entries) + len(selected_targets) >= budget:
+                break
+            selected_entries.add(entry['id'])
     nodes, edges = {}, {}
     for entry in candidates:
         if entry['id'] not in selected_entries:
@@ -196,11 +218,12 @@ def graph(source='', since='', until='', limit=100, query='', shared=False):
                 nodes[target] = dict(id=target, label=value, kind=kind)
                 edges[(identity, target)] = dict(source=identity, target=target,
                     relation='from-source' if kind == 'sources' else 'occurred-on', evidence=value, method='corpus-metadata')
-    bounded_edges = list(edges.values())[:limit * 4]
+    bounded_edges = list(edges.values()) if not limit else list(edges.values())[:limit * 4]
     total_nodes = len(candidates) + len({t for e in candidates for t in targets(e) if t in allowed})
     return dict(nodes=list(nodes.values()), edges=bounded_edges,
                 enriched=sum(e['enriched'] for e in rows), entries=len(rows),
                 matching_entries=len(candidates), total_nodes=total_nodes, limit=limit, sources=available_sources,
+                omitted_sources=len({t for t in available_targets if t.startswith('sources:')} - selected_targets),
                 truncated=total_nodes > len(nodes) or len(edges) > len(bounded_edges))
 
 

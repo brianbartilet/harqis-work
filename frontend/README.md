@@ -437,6 +437,34 @@ happened`, `Why it stayed`, `Possible use`, `Tags`, and `References`) are separa
 paragraphs with bold labels. Indented reference items are normalized into a
 Markdown list; source corpus files are never rewritten.
 
+### Activity Graph views
+
+`/hfl-corpus/graph` supports Overview (100 nodes), Expanded (500), Dense
+(1,000), and All matching nodes. All mode uses `limit=0` on the graph API and
+includes every matching node and connection. Capped views prioritize source
+coverage, then recent entries and connected nodes, filling unused capacity.
+Counts distinguish matching nodes, the detail limit, and local view filters.
+Shared connections, dates, sources and search still apply in All mode.
+
+Use Save or Save as new to store a named view; Rename and Delete manage it.
+Views include filters, fixed or rolling dates, detail, grouping, visible node
+types, focus, positions, pins, zoom and pan. They live in the owner profile
+SQLite database through `/api/hfl/graph-views`, accessible to authenticated owner
+sessions across browsers using that backend. The last selected saved view opens
+on return. Changes require explicit Save; revision conflicts return HTTP 409.
+An optional Import browser view button copies legacy browser settings into an
+unsaved view without deleting the browser data.
+
+Visible, idle graphs check the applied query approximately every three seconds
+after the preceding request completes. The current corpus reader has no remote
+push feed, so updates use adaptive polling, slowing to at most a 60-second gap
+after expensive reads or failures. Hidden tabs and active interactions defer
+updates. Returning to the tab checks again. New and removed nodes preserve the
+surviving layout and viewport without rewriting the saved view. Rolling windows
+use the browser's local calendar dates. A stale indicator accompanies failures.
+Full graphs can take several seconds to lay out; smaller presets remain useful
+for quick navigation. The neighbor list shows up to 200 items at a time.
+
 ### References and downloads
 
 HTTPS references open directly in the browser and are never proxied. Plain

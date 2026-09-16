@@ -9,8 +9,41 @@ from auth import get_current_user
 from web import templates, page_context, require_user
 from modules.hfl_corpus import entities
 from workflows.hfl.entity_store import get_store
+from modules.hfl_corpus import graph_views
 
 router = APIRouter()
+
+
+@router.get('/api/hfl/graph-views')
+async def saved_graph_views(request: Request):
+    authorize(request)
+    return await run_in_threadpool(graph_views.listing)
+
+
+@router.post('/api/hfl/graph-views')
+async def create_graph_view(request: Request, payload: graph_views.ViewWrite):
+    authorize(request)
+    return await run_in_threadpool(graph_views.save, payload)
+
+
+@router.put('/api/hfl/graph-views/{identity}')
+async def update_graph_view(request: Request, identity: str, payload: graph_views.ViewWrite):
+    authorize(request)
+    return await run_in_threadpool(graph_views.save, payload, identity)
+
+
+@router.post('/api/hfl/graph-views/{identity}/select')
+async def select_graph_view(request: Request, identity: str):
+    authorize(request)
+    await run_in_threadpool(graph_views.select, identity)
+    return {'selected': identity}
+
+
+@router.delete('/api/hfl/graph-views/{identity}')
+async def delete_graph_view(request: Request, identity: str, revision: int = Query(ge=1)):
+    authorize(request)
+    await run_in_threadpool(graph_views.delete, identity, revision)
+    return {'deleted': identity}
 
 
 def authorize(request):
@@ -37,7 +70,7 @@ async def page(request: Request):
 
 @router.get('/api/hfl/entities/graph')
 async def graph(request: Request, source: str = '', since: str = '', until: str = '',
-                limit: int = Query(default=100, ge=1, le=1000),
+                limit: int = Query(default=100, ge=0, le=1000),
                 query: str = Query(default='', max_length=200), shared: bool = False,
                 sources: list[str] = Query(default=[])):
     authorize(request)
@@ -46,7 +79,7 @@ async def graph(request: Request, source: str = '', since: str = '', until: str 
 
 @router.get('/api/hfl/entities')
 async def index(request: Request, source: str = '', since: str = '', until: str = '',
-                limit: int | None = Query(default=None, ge=1, le=10000)):
+                limit: int | None = Query(default=None, ge=0, le=10000)):
     authorize(request)
     rows = await run_in_threadpool(entities.entity_index, source, since, until)
     rows.sort(key=lambda e: (e['label'].casefold(), e['id']))

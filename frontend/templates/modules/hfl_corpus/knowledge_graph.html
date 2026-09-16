@@ -1,16 +1,23 @@
 {% extends "base.html" %}
 {% block title %}HARQIS — Activity Graph{% endblock %}
-{% block head %}<link rel="stylesheet" href="/static/css/knowledge-graph.css?v=27">{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/knowledge-graph.css?v=28">{% endblock %}
 {% block content %}
 <main class="kg-shell" data-view-owner="{{ user }}">
   <header><a href="/hfl-corpus">← Activity Corpus</a><div class="kg-heading-row"><h1>Activity Graph</h1><a class="kg-entities-button" href="/hfl-corpus/entities">Entities</a></div>
     <p>Explore corpus entries through their sources, dates, and evidenced entity mentions.</p></header>
+  <div class="kg-toolbar kg-saved-toolbar">
+    <label>Saved view<select id="kg-saved-views"><option value="">Unsaved view</option></select></label>
+    <button id="kg-save" type="button">Save</button><button id="kg-save-as" type="button">Save as new</button>
+    <button id="kg-rename" type="button">Rename</button><button id="kg-delete" type="button">Delete</button>
+    <button id="kg-import" type="button" hidden>Import browser view</button>
+    <span id="kg-dirty" role="status"></span><span id="kg-live" role="status">Connecting…</span>
+  </div>
   <div class="kg-toolbar kg-main-toolbar">
     <label>Find a node<input id="kg-search" type="search" placeholder="Search entries or entities" autocomplete="off"></label>
-    <div class="kg-detail-control"><select id="kg-density" aria-label="Graph detail"><option value="100">Overview</option><option value="500">Expanded</option><option value="1000">Dense</option></select><details class="kg-detail-help"><summary aria-label="About graph detail">i</summary><p>Overview: up to 100 nodes.<br>Expanded: up to 500 nodes.<br>Dense: up to 1,000 nodes.<br>A node is an entry, entity, source or date. Filters may return fewer nodes.</p></details></div>
+    <div class="kg-detail-control"><select id="kg-density" aria-label="Graph detail"><option value="100">Overview</option><option value="500">Expanded</option><option value="1000">Dense</option><option value="0">All matching nodes</option></select><details class="kg-detail-help"><summary aria-label="About graph detail">i</summary><p>Overview: up to 100 nodes.<br>Expanded: up to 500 nodes.<br>Dense: up to 1,000 nodes.<br>All: every matching node and connection.<br>A node is an entry, entity, source or date. Filters may return fewer nodes.</p></details></div>
     <div id="kg-info" class="kg-inline-info" tabindex="0" aria-label="Graph information">
       <span id="kg-status">Loading your graph…</span>
-      <span id="kg-view-status" hidden>Layout saves automatically in this browser.</span>
+      <span id="kg-view-status" hidden>Save a named view to restore it on any browser.</span>
     </div>
     <div class="kg-toolbar-actions">
     <button id="kg-open-filters" type="button" aria-haspopup="dialog" aria-controls="kg-filter-drawer" aria-expanded="false">Filter</button>
@@ -22,6 +29,7 @@
   <div class="kg-drawer-heading"><h2 id="kg-filter-title">Filters</h2><button id="kg-close-filters" type="button" aria-label="Close filters">×</button></div>
   <div class="kg-toolbar kg-filter-grid">
     <div class="kg-source-field"><span>Sources</span><details id="kg-source-menu"><summary id="kg-source-caption">All sources</summary><div id="kg-source-options"></div></details></div>
+    <label>Date range<select id="kg-rolling"><option value="0">Fixed dates</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last 365 days</option></select></label>
     <label class="kg-density">From<input id="kg-since" type="date"></label><label class="kg-density">To<input id="kg-until" type="date"></label>
     <label class="kg-density">Group by<select id="kg-group"><option value="relationships">Connections</option><option value="source">Source</option><option value="date">Month</option></select></label>
   </div>
@@ -50,5 +58,5 @@
   <p id="kg-entry-meta"></p><div id="kg-entry-body" class="markdown-body" role="region" aria-label="Entry content"></div>
 </dialog>
 </main>
-<script src="/static/js/knowledge-graph.js?v=31" defer></script>
+<script src="/static/js/knowledge-graph.js?v=32" defer></script>
 {% endblock %}
