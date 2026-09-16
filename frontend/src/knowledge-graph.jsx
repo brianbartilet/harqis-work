@@ -1,3 +1,4 @@
+import {placeLabels} from './graph-labels.mjs';
 import {exampleGraph} from './knowledge-graph-example.js';
 import React, {useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
@@ -175,21 +176,22 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
   }
   function scheduleSave(){if(!restoring){clearTimeout(saveTimer);saveTimer=setTimeout(saveView,500);}}
   window.addEventListener('pagehide',saveView);
-  function fit(){
+  const validViewport=view=>view&&Number.isFinite(view.zoom)&&view.zoom>0&&Number.isFinite(view.center?.x)&&Number.isFinite(view.center?.y);
+  function fit(animated=true){
     if(!graphApi||!graphData.nodes.length||graphData.nodes.some(n=>!Number.isFinite(n.x)||!Number.isFinite(n.y)))return;
     const bounds=graphApi.getGraphBbox();
-    if(bounds&&[...bounds.x,...bounds.y].every(Number.isFinite))graphApi.zoomToFit(duration,70);
+    if(bounds&&[...bounds.x,...bounds.y].every(Number.isFinite))graphApi.zoomToFit(animated?duration:0,70);
   }
   function zoom(factor){markDirty();if(graphApi)graphApi.zoom(graphApi.zoom()*factor,duration);}
   function Graph({data,activeId,selectedId}) {
-    const ref=useRef(),needsFit=useRef(!data.background),labelBoxes=useRef([]);
+    const ref=useRef(),needsFit=useRef(!data.background&&!data.viewport);
     const [size,setSize]=useState({width:host.clientWidth,height:host.clientHeight});
     useEffect(()=>{
-      const observer=new ResizeObserver(()=>{setSize({width:host.clientWidth,height:host.clientHeight});needsFit.current=true;});
+      const observer=new ResizeObserver(()=>{setSize({width:host.clientWidth,height:host.clientHeight});});
       observer.observe(host);return()=>observer.disconnect();
     },[]);
     useEffect(()=>{
-      graphApi=ref.current;needsFit.current=!data.background;
+      graphApi=ref.current;needsFit.current=!data.background&&!data.viewport;
       ref.current.d3Force('charge').strength(-230);
       ref.current.d3Force('link').distance(105);
       ref.current.d3Force('collide',forceCollide(n=>n.radius+30).iterations(2));
@@ -199,11 +201,11 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
     },[data]);
     useEffect(()=>{
       const timer=setTimeout(()=>{
-        const saved=savedViews[data.viewKey];
-        if(saved&&Number.isFinite(saved.zoom)&&saved.zoom>0&&Number.isFinite(saved.center?.x)&&Number.isFinite(saved.center?.y)){
+        const saved=data.viewport;
+        if(saved){
           restoring=true;needsFit.current=false;ref.current.zoom(saved.zoom,0);ref.current.centerAt(saved.center.x,saved.center.y,0);restoring=false;
           showInfo('view-status','Saved layout restored.');
-        } else fit();
+        }
       },100);return()=>clearTimeout(timer);
     },[size,data]);
     const near=connected(activeId);
@@ -226,25 +228,32 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
         ctx.font=`600 ${14/globalScale}px ${uiFont}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#10263c';ctx.fillText(mark,node.x,node.y);ctx.textAlign='left';
       }
       if(emphasis){ctx.beginPath();ctx.arc(node.x,node.y,radius+5/globalScale,0,2*Math.PI);ctx.strokeStyle=ink+'aa';ctx.lineWidth=1/globalScale;ctx.stroke();}
-      const defaultLabel = !activeId && defaultLabelKinds.has(node.kind);
-      if(defaultLabel||emphasis||(!activeId&&node.labelRank<(data.nodes.length<=35?35:9))||activeId&&near.has(node.id)&&near.size<16||globalScale>2.5&&visible){
-        const fontSize=(emphasis?13:data.nodes.length<=35?12:11)/globalScale;ctx.font=`500 ${fontSize}px ${uiFont}`;
-        const label=node.label.length>34?node.label.slice(0,32)+'…':node.label;
-        const x=node.x+radius+9/globalScale,y=node.y,w=ctx.measureText(label).width;
-        const box={x:x-6/globalScale,y:y-12/globalScale,w:w+12/globalScale,h:24/globalScale};
-        const overlaps=labelBoxes.current.some(b=>box.x<b.x+b.w&&box.x+box.w>b.x&&box.y<b.y+b.h&&box.y+box.h>b.y);
-        if(defaultLabel||!overlaps||emphasis){
-        labelBoxes.current.push(box);
-        ctx.fillStyle=emphasis?'#142a42f5':'#0a1728dd';ctx.beginPath();ctx.roundRect(x-5/globalScale,y-11/globalScale,w+10/globalScale,22/globalScale,5/globalScale);ctx.fill();
-        ctx.strokeStyle=ink+(emphasis?'90':'30');ctx.lineWidth=.6/globalScale;ctx.stroke();
-        ctx.textBaseline='middle';ctx.fillStyle=emphasis?'#ffffff':'#d9e9fa';ctx.fillText(label,x,y);
-        }
-      }
       ctx.restore();
     }
     return <ForceGraph2D ref={ref} width={size.width} height={size.height}
       graphData={data} enableNodeDrag={!touchViewport} enablePanInteraction={true} enableZoomInteraction={true} backgroundColor="rgba(0,0,0,0)" nodeLabel={()=>''}
-      onRenderFramePre={()=>{labelBoxes.current=[];}}
+      onRenderFramePost={(ctx,scale)=>{
+        if(!ref.current||!Number.isFinite(scale)||scale<=0)return;
+        const origin=ref.current.screen2GraphCoords(0,0);
+        const candidates=data.nodes.filter(n=>!activeId||n.id===activeId||n.id===selectedId||near.has(n.id)).map(n=>({
+          id:n.id,label:n.label,kind:n.kind,x:(n.x-origin.x)*scale,y:(n.y-origin.y)*scale,
+          radius:n.radius,degree:n.visibleDegree,preferred:defaultLabelKinds.has(n.kind),
+          pinned:n.fx!=null&&n.fy!=null,emphasis:n.id===activeId||n.id===selectedId
+        }));
+        ctx.save();
+        const labels=placeLabels(candidates,{width:size.width,height:size.height,zoom:scale},(text,font)=>{
+          ctx.font=`500 ${font}px ${uiFont}`;return ctx.measureText(text).width;
+        });
+        for(const box of labels){
+          const x=origin.x+box.x/scale,y=origin.y+box.y/scale,ink=color(box.node.kind);
+          ctx.fillStyle=box.node.emphasis?'#142a42f5':'#0a1728ee';ctx.beginPath();
+          ctx.roundRect(x,y,box.w/scale,box.h/scale,5/scale);ctx.fill();
+          ctx.strokeStyle=ink+(box.node.emphasis?'90':'30');ctx.lineWidth=.6/scale;ctx.stroke();
+          ctx.font=`500 ${(box.node.emphasis?13:11)/scale}px ${uiFont}`;ctx.textAlign='left';ctx.textBaseline='middle';
+          ctx.fillStyle=box.node.emphasis?'#ffffff':'#d9e9fa';ctx.fillText(box.text,x+6/scale,y+12/scale);
+        }
+        ctx.restore();
+      }}
       nodeCanvasObject={paintNode}
       nodePointerAreaPaint={(node,paint,ctx)=>{ctx.fillStyle=paint;ctx.beginPath();ctx.arc(node.x,node.y,(node.radius+4)/(ref.current?.zoom()||1),0,2*Math.PI);ctx.fill();}}
       linkColor={link=>color(link.target.kind)+(activeId?(isLinked(link)?'df':'07'):(data.nodes.length<=35?'70':'32'))}
@@ -262,7 +271,7 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
       }}
       onNodeDragEnd={node=>{markDirty();node.fx=node.x;node.fy=node.y;ref.current.d3ReheatSimulation();scheduleSave();}}
       warmupTicks={data.background||data.restored?0:data.nodes.length>1000?15:reducedMotion?150:80} cooldownTicks={data.background||data.restored?0:reducedMotion?0:data.nodes.length>1000?40:100}
-      onEngineStop={()=>{if(needsFit.current){needsFit.current=false;fit();}scheduleSave();}}
+      onEngineStop={()=>{if(needsFit.current&&!data.viewport&&!data.background){needsFit.current=false;fit(false);}scheduleSave();}}
     />;
   }
   function draw(){root.render(<Graph data={graphData} activeId={active} selectedId={selected}/>);}
@@ -375,7 +384,6 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
     const byId=new Map(nodes.map(n=>[n.id,n]));
     edges=data.edges.filter(e=>byId.has(e.source)&&byId.has(e.target)).map(e=>({...e,a:byId.get(e.source),b:byId.get(e.target)}));
     nodes.forEach(n=>n.visibleDegree=0);edges.forEach(e=>{e.a.visibleDegree++;e.b.visibleDegree++;});
-    [...nodes].sort((a,b)=>b.visibleDegree-a.visibleDegree).forEach((n,i)=>n.labelRank=i);
     nodes.forEach(n=>{const smallGraph=nodes.length<=35;n.radius=n.kind==='entries'?(smallGraph?7:4.5):(smallGraph?16:Math.min(11,4+Math.sqrt(n.visibleDegree)));});
     // Separate neighborhoods around real, highly connected entity anchors.
     const anchors=[...nodes].filter(n=>n.kind!=='entries').sort((a,b)=>b.visibleDegree-a.visibleDegree).slice(0,4);
@@ -396,7 +404,7 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
         else {const edge=edges.find(edge=>edge.source===node.id||edge.target===node.id),neighbor=edge&&previousNodes.get(edge.source===node.id?edge.target:edge.source);node.x=(neighbor?.x||0)+60*Math.cos(index*2.4);node.y=(neighbor?.y||0)+60*Math.sin(index*2.4);}
       });
     }
-    graphData={nodes,background:preserveLayout,restored:!!saved?.positions,viewKey:key,links:edges.map(e=>({source:e.source,target:e.target}))};
+    graphData={nodes,background:preserveLayout,restored:!!saved?.positions,viewport:validViewport(saved)?{zoom:saved.zoom,center:{...saved.center}}:null,viewKey:key,links:edges.map(e=>({source:e.source,target:e.target}))};
     $('map-count').textContent=nodes.length+' nodes · '+edges.length+' links';
     showInfo('status',nodes.length+' / '+(data.total_nodes ?? data.nodes.length)+' matching nodes · '+Math.max(0,(data.total_nodes??data.nodes.length)-data.nodes.length)+' outside detail limit · '+(data.nodes.length-nodes.length)+' hidden by view filters · '+edges.length+' connections'+(data.omitted_sources?' · '+data.omitted_sources+' sources outside limit':'')+(limited||data.truncated?' · '+$('density').selectedOptions[0].text.split(' · ')[0]+'; search or increase detail to explore more.':'')+(!nodes.length?' · No matching nodes. Clear your search or change the filters.':''),!nodes.length);
     select(byId.has(selected)?selected:null);

@@ -93,6 +93,18 @@ def test_saved_views_live_updates_and_full_graph(authenticated_client, monkeypat
             assert len(first['state']['layout']['positions']) == 5976
             page.context.close()
             second = open_page()
+            # Wait past the old automatic-fit animation, then check the actual canvas viewport.
+            second.wait_for_timeout(1200)
+            def assert_saved_viewport():
+                viewport = second.locator('#kg-canvas canvas').first.evaluate('''canvas => {
+                    const {k,x,y} = canvas.__zoom;
+                    return {zoom:k, x:(canvas.clientWidth/2-x)/k, y:(canvas.clientHeight/2-y)/k};
+                }''')
+                layout = first['state']['layout']
+                assert viewport['zoom'] == pytest.approx(layout['zoom'], rel=1e-5)
+                assert viewport['x'] == pytest.approx(layout['center']['x'], abs=0.1)
+                assert viewport['y'] == pytest.approx(layout['center']['y'], abs=0.1)
+            assert_saved_viewport()
             second.wait_for_function("document.querySelector('#kg-saved-views').selectedOptions[0].textContent==='Complete activity'")
             assert second.input_value('#kg-density') == '0'
             assert second.locator('#kg-legend button[data-kind="daily"]').get_attribute('aria-pressed') == 'false'
@@ -105,6 +117,7 @@ def test_saved_views_live_updates_and_full_graph(authenticated_client, monkeypat
             rows.pop()
             second.wait_for_function("document.querySelector('#kg-status').textContent.includes('5976 / 5977')", timeout=30000)
             assert authenticated_client.get('/api/hfl/graph-views').json()['views'][0] == first
+            assert_saved_viewport()
             assert second.locator('#kg-dirty').inner_text() == ''
             second.click('#kg-open-filters')
             second.select_option('#kg-rolling', '30')
