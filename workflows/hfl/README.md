@@ -43,6 +43,33 @@ this scaffold closes.
 
 ---
 
+## Capture backlog recovery
+
+Desktop analysis processes up to **200 pending files** per nightly run with a
+**seven-day** lookback (previously 40 files / one day). This is a bounded spending
+limit, not an unlimited drain guarantee. Shared corpus-reference and media-state
+deduplication happens before quota selection and model calls. Terminal semantic
+skips stay completed; abandoned claims remain retryable. Sustained volume above
+200/day can still accumulate or age out and needs an explicit dated recovery.
+
+`monitor_pending_captures` runs daily at **06:30 in the configured Celery timezone**
+on `hfl`. It counts eligible desktop and Android captures separately over 14 days,
+excluding completed artifacts and active claims. Per-source thresholds are
+inclusive: **25 warning / 100 critical**. Threshold breaches send a content-free
+Telegram alert through the existing source-health integration; healthy runs are
+silent. Missing inbox/corpus storage and notification failures raise instead of
+reporting a healthy result. Task results include counts, oldest pending timestamp,
+window, and accepted Telegram message IDs. `notify=False` is a read-only counting
+mode when calling the underlying `_monitor_pending_captures` helper directly.
+
+Agent-session retries now filter completed checkpoints **before** applying the
+500-event budget, preventing completed files from hiding later pending records.
+A persistence replay clears its inherited acknowledgement before writing, so
+failed persistence leaves a retryable artifact. This does not repair missing
+capture hooks, forward-delivery acknowledgement, or events older than the retry
+window. See the [dated recovery runbook](../../docs/info/HFL-CAPTURE-RECOVERY.md)
+for these boundaries and the September 15–16 recovery plan.
+
 ## Tasks
 
 | Task | What it does | Express target | Schedule (when active) |
