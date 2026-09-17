@@ -281,6 +281,7 @@ def distill_agent_session_event(
 
 def collect_agent_session_events(
     *, since: date, until: date, limit: int = 500, processed_only: bool = False,
+    pending_only: bool = False,
 ) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     root = audit_root() / "events"
@@ -295,6 +296,8 @@ def collect_agent_session_events(
                 continue
             ingest = item.get("ingest") if isinstance(item.get("ingest"), dict) else {}
             if processed_only and ingest.get("delivery") not in {"persisted", "forwarded", "outbox"}:
+                continue
+            if pending_only and ingest.get("entry_id"):
                 continue
             item["artifact_path"] = str(path)
             events.append(item)
@@ -333,6 +336,9 @@ def process_agent_session_event(
         "result_status": distilled["result_status"],
         "source_artifact": source_artifact,
     })
+    # A replay's inherited checkpoint does not acknowledge this write attempt.
+    # Leave a retryable artifact if persistence raises or the worker stops.
+    event["ingest"] = {}
     _atomic_json(path, event)
     when = datetime.fromisoformat(event["timestamp"]).replace(tzinfo=None)
     tags = tuple(dict.fromkeys([
@@ -377,8 +383,12 @@ def ingest_agent_session_events(
     window_days: int = 2, max_events: int = 500,
 ) -> dict[str, Any]:
     until = datetime.now().date()
-    events = collect_agent_session_events(since=until - timedelta(days=max(0, window_days - 1)), until=until, limit=max_events)
-    pending = [event for event in events if not event.get("ingest", {}).get("entry_id")]
+    # Apply the retry budget after checkpoint filtering, not before it.
+    events = collect_agent_session_events(
+        since=until - timedelta(days=max(0, window_days - 1)), until=until,
+        limit=max_events, pending_only=True,
+    )
+    pending = events
     if not pending:
         return {"skipped": "no pending events", "entries_written": 0}
     if not is_canonical_machine():

@@ -7,6 +7,7 @@ unit-tested; these cover the EXIF / OwnTracks geo-resolution layered on top
 """
 
 from datetime import datetime
+from inspect import unwrap
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -757,3 +758,31 @@ def test__explicit_semantic_skip_is_terminal(tmp_path, monkeypatch):
     assert result["entries_written"] == 0
     assert result["skipped"] == 1
     assert _acquire_media_claim(corpus, media) is None
+
+
+def test_desktop_default_drains_99_captures_and_replay_spends_nothing(tmp_path, monkeypatch):
+    from workflows.hfl.tasks.analyze_desktop_capture import analyze_desktop_capture
+
+    inbox, _, _ = _configure_targeted_model_test(
+        tmp_path, monkeypatch,
+        '{"skip": true, "moment": "", "what_happened": "", '
+        '"why_it_stayed": "", "possible_use": "", "tags": []}',
+    )
+    for index in range(99):
+        media = (inbox / "windows-work-all-daily-dumps-2026-09-16"
+                 / str(index) / "sc-desktop-check_monitor1.png")
+        media.parent.mkdir(parents=True)
+        media.write_bytes(b"png")
+
+    run = unwrap(cast(Any, analyze_desktop_capture).run)
+    first = run()
+    assert first["scanned"] == 99
+    assert first["images"] == 99
+
+    monkeypatch.setattr(
+        f"{_MOD}.get_anthropic_config",
+        lambda _: pytest.fail("replay must not initialize the model"),
+    )
+    second = run()
+    assert second["skipped"] == "already ingested"
+    assert second["duplicates"] == 99

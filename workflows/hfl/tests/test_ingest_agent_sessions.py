@@ -4,8 +4,11 @@ import json
 import re
 import sys
 from datetime import date
+from inspect import unwrap
 from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -376,7 +379,7 @@ def test_collect_empty_and_rollup_noop(monkeypatch, tmp_path):
     assert audit.collect_agent_session_events(
         since=date(2026, 7, 22), until=date(2026, 7, 22)
     ) == []
-    result = audit.rollup_agent_sessions(day="2026-07-22")
+    result = unwrap(cast(Any, audit.rollup_agent_sessions).run)(day="2026-07-22")
     assert result["entries_written"] == 0
     assert result["skipped"] == "no agent session events"
 
@@ -399,6 +402,80 @@ def test_collect_ignores_appledouble_and_non_utf8_artifacts(monkeypatch, tmp_pat
     )
 
     assert [event["event_id"] for event in events] == ["agent-one"]
+
+
+@pytest.mark.parametrize("canonical", [True, False])
+def test_retry_limit_counts_pending_not_completed_events(monkeypatch, tmp_path, canonical):
+    monkeypatch.setattr(audit, "audit_root", lambda: tmp_path)
+    monkeypatch.setattr(audit, "is_canonical_machine", lambda: canonical)
+    today = audit.datetime.now().date()
+    day_dir = tmp_path / "events" / today.isoformat()
+    day_dir.mkdir(parents=True)
+    for event_id, ingest in (
+        ("a-completed", {"entry_id": "already-written", "delivery": "persisted"}),
+        ("b-pending", {}),
+        ("c-pending", {}),
+    ):
+        (day_dir / f"{event_id}.json").write_text(json.dumps({
+            "event_id": event_id,
+            "timestamp": f"{today.isoformat()}T12:00:00+08:00",
+            "ingest": ingest,
+        }), encoding="utf-8")
+    handled = []
+
+    def process(event, **_kwargs):
+        handled.append(event["event_id"])
+        return {"entries_written": 1}
+
+    def forward(_task, *, kwargs, **_options):
+        handled.append(kwargs["payload"]["event_id"])
+        return SimpleNamespace(id="task-id")
+
+    monkeypatch.setattr(audit, "process_agent_session_event", process)
+    monkeypatch.setattr(audit.SPROUT, "send_task", forward)
+    # Bypass task logging: this test must not update live task health records.
+    result = unwrap(cast(Any, audit.ingest_agent_session_events).run)(
+        window_days=1, max_events=1,
+    )
+
+    assert handled == ["b-pending"]
+    assert result["entries_written"] == (1 if canonical else 0)
+    if not canonical:
+        assert result["forwarded"] == 1
+
+
+def test_failed_replay_clears_inherited_success_checkpoint(monkeypatch, tmp_path):
+    monkeypatch.setattr(audit, "audit_root", lambda: tmp_path)
+    payload = {
+        "surface": "hermes",
+        "session_id": "recovery-session",
+        "prompt_id": "recovery-prompt",
+        "timestamp": "2026-09-16T12:00:00+08:00",
+        "original_prompt": "Fix the parser",
+        "assistant_outcome": "Fixed the parser and tested it.",
+        "ingest": {"entry_id": "stale-entry", "delivery": "persisted"},
+    }
+
+    def fail_persistence(*_args, **_kwargs):
+        raise RuntimeError("simulated interruption")
+
+    monkeypatch.setattr(audit, "submit_hfl_entry", fail_persistence)
+    with pytest.raises(RuntimeError, match="simulated interruption"):
+        audit.process_agent_session_event(payload, synthesize=False)
+
+    retained = audit.collect_agent_session_events(
+        since=date(2026, 9, 16), until=date(2026, 9, 16)
+    )
+    assert len(retained) == 1
+    assert retained[0]["ingest"] == {}
+    assert payload["ingest"]["entry_id"] == "stale-entry"
+
+    monkeypatch.setattr(audit, "submit_hfl_entry", lambda *_args, **_kwargs: {
+        "entry_id": "recovered-entry", "delivery": "persisted",
+    })
+    result = audit.process_agent_session_event(retained[0], synthesize=False)
+    checkpoint = json.loads(Path(result["artifact"]).read_text(encoding="utf-8"))
+    assert checkpoint["ingest"]["entry_id"] == "recovered-entry"
 
 
 @pytest.mark.skip(reason="Manual only - live hooks, broker, Anthropic, corpus, and Elasticsearch")

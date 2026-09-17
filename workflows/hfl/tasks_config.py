@@ -103,15 +103,15 @@ WORKFLOW_HFL = {
         },
     },
 
-    # Daily desktop capture vision pass — workstation screenshots/videos only.
+    # Bounded vision spend, with overlapping recovery for prior capped runs.
     'run-job--analyze_desktop_capture': {
         'task': 'workflows.hfl.tasks.analyze_desktop_capture.analyze_desktop_capture',
         'schedule': crontab(hour=22, minute=0),
         'kwargs': {
             'cfg_id__anthropic': 'ANTHROPIC',
             'model': 'claude-haiku-4-5-20251001',
-            'window_days': 1,
-            'max_files': 40,
+            'window_days': 7,
+            'max_files': 200,
             'frames_per_video': 4,
         },
         'options': {
@@ -124,6 +124,21 @@ WORKFLOW_HFL = {
             'express_target': 'file:hfl_corpus+es:hfl-entries',
             'review_artifact': 'es_log+file',
             'hfl_signal': True,
+        },
+    },
+
+    # Independent of vision success: alert even when the analyzer never ran.
+    'run-job--monitor_pending_captures': {
+        'task': 'workflows.hfl.tasks.monitor_pending_captures.monitor_pending_captures',
+        'schedule': crontab(hour='6', minute='30'),
+        'kwargs': {'window_days': 14, 'warning_threshold': 25, 'critical_threshold': 100},
+        'options': {'queue': WorkflowQueue.HFL, 'expires': 60 * 60 * 12},
+        'manifesto': {
+            'code_role': 'capture+express',
+            'para_bucket': 'area',
+            'express_target': 'telegram+es_log',
+            'review_artifact': 'es_log',
+            'hfl_signal': False,
         },
     },
 

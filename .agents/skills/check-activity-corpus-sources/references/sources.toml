@@ -322,6 +322,19 @@ auto_retry = false
 backfill = "manual"
 
 [[sources]]
+key = "pending-captures"
+kind = "operation"
+monitor_mode = "scheduled"
+task = "workflows.hfl.tasks.monitor_pending_captures.monitor_pending_captures"
+entry_sources = []
+schedule = "daily 06:30 via Celery Beat"
+task_max_age_hours = 36
+expects_entry = false
+allow_empty = true
+auto_retry = false
+backfill = "none"
+
+[[sources]]
 key = "activity-corpus-source-health"
 kind = "operation"
 monitor_mode = "self"
