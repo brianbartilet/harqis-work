@@ -22,11 +22,16 @@ def payload(**extra):
 
 
 @pytest.mark.parametrize('width', [390, 1100])
-def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_client, monkeypatch, width):
+def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_client, monkeypatch, tmp_path, width):
     from urllib.parse import urlparse
     import modules.hfl_corpus.router as corpus
     playwright = pytest.importorskip('playwright.sync_api')
-    monkeypatch.setattr(corpus.corpus_index, 'documents', lambda: ())
+    from modules.hfl_corpus import corpus as index_module
+    for offset in (-1, 0):
+        day = (date.today() + timedelta(days=offset)).isoformat()
+        (tmp_path / f'{day}.md').write_text(f'## {day} 09:00\nMoment: Test activity\nSource: notes\n', encoding='utf-8')
+    monkeypatch.setattr(index_module, 'resolve_corpus_root', lambda: tmp_path)
+    monkeypatch.setattr(corpus, 'corpus_index', index_module.CorpusIndex())
     with playwright.sync_playwright() as driver:
         browser = driver.chromium.launch(channel='chrome', headless=True)
         page = browser.new_page(viewport={'width': width, 'height': 1000})
@@ -52,6 +57,18 @@ def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_clie
         for offset in (-1, 0, 1):
             selected = (date.today() + timedelta(days=offset)).isoformat()
             page.locator(f'[data-activity-day="{selected}"]').click()
+            playwright.expect(page.locator('[data-activity-menu-actions]')).to_have_attribute('aria-expanded', 'true')
+            playwright.expect(page.locator('[data-day-actions]')).to_be_visible()
+            playwright.expect(page.locator('[data-activity-menu-matches]')).to_have_attribute('aria-expanded', 'false')
+            if offset <= 0:
+                page.locator('[data-activity-menu-matches]').click()
+                playwright.expect(page.locator('[data-activity-menu-matches]')).to_have_attribute('aria-expanded', 'true')
+            else:
+                page.locator('[data-activity-menu-actions]').click()
+            page.keyboard.press('Escape')
+            page.locator(f'[data-activity-day="{selected}"]').click()
+            playwright.expect(page.locator('[data-activity-menu-actions]')).to_have_attribute('aria-expanded', 'true')
+            playwright.expect(page.locator('[data-activity-menu-matches]')).to_have_attribute('aria-expanded', 'false')
             buttons = page.locator('.activity-day-quick-actions').locator('button, a')
             assert buttons.all_text_contents() == ['Create entry', 'Create action', 'Pin dates', 'Show document']
             boxes = [buttons.nth(index).bounding_box() for index in range(4)]
@@ -764,7 +781,7 @@ def test_unified_actions_matrix_editor_and_empty_message(agenda, authenticated_c
         page.route('**/*', route)
         page.goto('https://timeline.test/hfl-corpus')
         page.locator(f'[data-activity-day="{today}"]').click()
-        page.locator('[data-activity-menu-actions]').click()
+        playwright.expect(page.locator('[data-activity-menu-actions]')).to_have_attribute('aria-expanded', 'true')
         cards = page.locator('#agenda-items .agenda-card')
         playwright.expect(cards).to_have_count(3)
         assert cards.locator('h3').all_text_contents() == ['Prevention','Interruption','Completed work']

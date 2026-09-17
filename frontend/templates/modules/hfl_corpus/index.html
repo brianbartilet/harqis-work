@@ -1418,7 +1418,7 @@
       ideasToggle.disabled = isFuture;
       ideasToggle.setAttribute('aria-disabled', String(isFuture));
       ideasToggle.classList.toggle('activity-day-menu-disabled', isFuture);
-      if (isFuture) selectDaySection('actions');
+      selectDaySection('actions');
       const hasDocument = !isFuture && Boolean(documentUrl);
       const canShowMatches = !isFuture && Boolean(matchesUrl && (hasDocument || count > 0));
       createEntry.disabled = isFuture;
@@ -1435,7 +1435,6 @@
       menu.hidden = false;
       menu.scrollTop = 0;
       positionDayMenu(button);
-      if (canShowMatches) matchingEntries.click();
       (isFuture ? pinDates : createEntry).focus();
     };
 
