@@ -91,7 +91,7 @@
       const p = e.profile || {}, searchable = [e.label, kinds[e.kind] || e.kind, ...e.categories, ...(p.emails || []), ...(p.phones || []), ...(p.references || []), p.notes || ''].join(' ').toLowerCase();
       return q.split(/\s+/).every(word => searchable.includes(word)) && (!selectedKinds.size || selectedKinds.has(e.kind)) && (!selectedCategories.size || [...selectedCategories].some(category => category === '__none__' ? !e.categories.length : e.categories.includes(category))) && (!selectedSources.size || e.entries.some(x => selectedSources.has(x.source))) && (!contact || (contact === 'contact' ? p.emails?.length || p.phones?.length : contact === 'curated' ? e.profile : !e.profile));
     });
-    filtered.sort((a, b) => $('sort').value === 'activity' ? b.entries.length - a.entries.length || a.label.localeCompare(b.label) : $('sort').value === 'recent' ? (b.entries[0]?.date || '').localeCompare(a.entries[0]?.date || '') || a.label.localeCompare(b.label) : a.label.localeCompare(b.label));
+    filtered.sort((a, b) => $('sort').value === 'activity' ? b.entries.length - a.entries.length || a.label.localeCompare(b.label) : $('sort').value === 'recent' ? (b.entries[0]?.date || '').localeCompare(a.entries[0]?.date || '') || a.label.localeCompare(b.label) : $('sort').value === 'name-desc' ? b.label.localeCompare(a.label) : a.label.localeCompare(b.label));
     matchingItems = filtered;
     const selectionKind = items.find(e => selectedEntities.has(e.id))?.kind;
     $('selection-count').textContent = `${selectedEntities.size} selected${selectionKind ? ' · ' + kinds[selectionKind] : ''}`;
