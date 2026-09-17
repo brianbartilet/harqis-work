@@ -16,7 +16,7 @@
   const initialParams=new URLSearchParams(location.search);
   if(initialParams.get('date_from'))startInput.value=initialParams.get('date_from');
   if(initialParams.get('date_to'))endInput.value=initialParams.get('date_to');
-  let closed = false, editing = null, source = null, requestId = '', today = '', busy = false, sequence = 0;
+  let editing = null, source = null, requestId = '', today = '', busy = false, sequence = 0;
   const node = (tag, text, className) => { const el = document.createElement(tag); if (text != null) el.textContent = text; if (className) el.className = className; return el; };
   const error = (id, message = '') => { const el = document.getElementById(id); el.textContent = message; el.hidden = !message; };
   async function api(path, options = {}) {
@@ -31,7 +31,7 @@
     suggestionId = null; editing = item; source = item?.source || null; requestId = crypto.randomUUID();
     form.reset();
     attachments.reset(item?.id);
-    for (const name of ['title', 'expected_outcome', 'notes', 'prompt', 'review_date', 'due_date', 'completion_note']) form.elements[name].value = item?.[name] || '';
+    for (const name of ['title', 'expected_outcome', 'notes', 'prompt', 'review_date', 'due_date', 'completion_note', 'matrix', 'matrix_confidence', 'matrix_reason']) form.elements[name].value = item?.[name] || '';
     form.elements.status.value = desiredStatus || item?.status || 'open';
     document.getElementById('followup-state-label').hidden = !item;
     document.getElementById('followup-editor-title').textContent = item ? (desiredStatus === 'done' ? 'Complete actionable' : 'Edit actionable') : 'New actionable';
@@ -52,7 +52,7 @@
   async function showHistory(item) {
     const ticket = ++historySequence;
     const list=document.getElementById('followup-history-items');list.replaceChildren(node('p','Loading history…'));historyDialog.showModal();
-    try { const data=await api('/'+item.id+'/history'); if(ticket !== historySequence)return; list.replaceChildren(); data.history.forEach(row => {const el=node('section',null,'agenda-history-row');el.dataset.changedAt=row.changed_at;el.append(node('h3','Revision '+row.item.version+' · '+statusLabel(row.item.status)),node('p',new Date(row.changed_at).toLocaleString('en-SG',{timeZone:'Asia/Singapore'})+' SGT'),node('p',row.item.title),node('p','Expected outcome: '+row.item.expected_outcome),node('p','Review: '+(row.item.review_date||'Unscheduled')+' · Complete by: '+(row.item.due_date||'None')));if(row.item.prompt)el.append(node('h4','Prompt'),node('pre',row.item.prompt,'action-prompt'));if(row.item.notes)el.append(node('p',row.item.notes));if(row.item.completion_note)el.append(node('p','Outcome: '+row.item.completion_note));list.append(el);}); }
+    try { const data=await api('/'+item.id+'/history'); if(ticket !== historySequence)return; list.replaceChildren(); data.history.forEach(row => {const el=node('section',null,'agenda-history-row');el.dataset.changedAt=row.changed_at;el.append(node('h3','Revision '+row.item.version+' · '+statusLabel(row.item.status)),node('p',new Date(row.changed_at).toLocaleString('en-SG',{timeZone:'Asia/Singapore'})+' SGT'),node('p',row.item.title),node('p','Expected outcome: '+row.item.expected_outcome),node('p','Review: '+(row.item.review_date||'Unscheduled')+' · Complete by: '+(row.item.due_date||'None')));el.append(node('p','Matrix: '+(row.item.matrix||'Unclassified')+(row.item.matrix_confidence?' · '+row.item.matrix_confidence+' confidence':'')));if(row.item.matrix_reason)el.append(node('p',row.item.matrix_reason));if(row.item.prompt)el.append(node('h4','Prompt'),node('pre',row.item.prompt,'action-prompt'));if(row.item.notes)el.append(node('p',row.item.notes));if(row.item.completion_note)el.append(node('p','Outcome: '+row.item.completion_note));list.append(el);}); }
     catch(e){list.replaceChildren(node('p',e.message,'agenda-error'));}
     try {
       const events = await window.hflAgentBridge.events('actionable',item.id);
@@ -66,9 +66,11 @@
   }
   const statusLabel = value => ({in_progress:'In Progress',waiting:'In Progress'}[value] || value[0].toUpperCase()+value.slice(1));
   window.addEventListener('hfl:agent-updated',()=>load());
+  const priority = item => [({done:1,dismissed:2}[item.status]||0),({Q1:0,Q2:1,Q3:2,Q4:3}[item.matrix]??4),[item.due_date,item.review_date].filter(Boolean).sort()[0]||'9999',item.due_date||'9999',item.created_at||'',item.id].join('|');
   function card(item) {
     const el=node('article',null,'agenda-card');el.dataset.overdue=String(item.overdue);el.dataset.followupId=item.id;
     const meta=node('div',null,'agenda-card-meta');const status=node('span',statusLabel(item.status),'action-status');status.dataset.status=item.status;meta.append(status);
+    const matrix=node('span',item.matrix ? item.matrix+(item.matrix_confidence ? ' · '+item.matrix_confidence+' confidence' : '') : 'Matrix unclassified','action-matrix');matrix.title=item.matrix_reason||'Put first things first';meta.append(matrix);
     if(item.creation_mode==='automatic'){const badge=node('span','Automatic','action-event');badge.title=item.automatic_basis||'Created from a high-confidence idea after review';meta.append(badge);}
     if(item.review_date)meta.append(node('span','Review '+item.review_date));if(item.due_date)meta.append(node('span','Complete by '+item.due_date));
     if(item.events){
@@ -102,15 +104,17 @@
   async function load() {
     const ticket=++sequence;error('agenda-error');
     try {
-      const [data, periodData, markers] = await Promise.all([api('?closed='+closed), timelineApi('/period?'+new URLSearchParams({start:startInput.value,end:endInput.value})), timelineApi('/markers')]);
+      const [data, periodData, markers] = await Promise.all([api('?include_closed=true'), timelineApi('/period?'+new URLSearchParams({start:startInput.value,end:endInput.value})), timelineApi('/markers')]);
       if(ticket!==sequence)return;today=data.today;
       markerDays=markers.days;reconcilePeriodMarkers(periodData.items);paintMarkers();paintActionsIndicator(periodData.items);renderSuggestions(periodData);
-      if(!document.getElementById('timeline-all').checked) {data.items=periodData.items.filter(item=>['done','dismissed'].includes(item.status)===closed).map(item=>({...item,group:'This period'}));data.total=data.items.length;}
+      if(!document.getElementById('timeline-all').checked) {data.items=periodData.items;data.total=data.items.length;}
       const list=document.getElementById('agenda-items');
       const expanded=new Set(Array.from(list.querySelectorAll('details[open]')).map(el=>el.closest('[data-followup-id]').dataset.followupId));
       list.replaceChildren();const groups=new Map();
+      data.items.sort((a,b)=>priority(a).localeCompare(priority(b)));
+      data.items=data.items.map(item=>({...item,group:item.status==='done'?'Completed':item.status==='dismissed'?'Dismissed':'To do'}));
       data.items.forEach(item=>{if(!groups.has(item.group)){const section=node('section',null,'agenda-group');section.dataset.group=item.group;const cards=node('div');section.append(node('h2',item.group),cards);list.append(section);groups.set(item.group,cards);}const el=card(item);if(expanded.has(item.id))el.querySelector('details')?.setAttribute('open','');groups.get(item.group).append(el);});
-      document.getElementById('agenda-status').textContent=(data.total>data.items.length ? 'Showing '+data.items.length+' of '+data.total : data.total)+' '+(closed?'completed or dismissed':'open')+' follow-up'+(data.total===1?'':'s')+' · '+today+' SGT';
+      document.getElementById('agenda-status').textContent=(data.total>data.items.length ? 'Showing '+data.items.length+' of '+data.total : data.total)+' actionable'+(data.total===1?'':'s')+' · '+today+' SGT';
       const actionsPanel=document.getElementById('timeline-actions');
       const isEmpty=!data.items.length;
       actionsPanel.querySelector('.agenda-toolbar').hidden=!periodData.items.length;
@@ -121,9 +125,9 @@
         const hasIdeas=periodData.suggestions.some(item=>item.status==='suggested');
         const future=startInput.value>today;
         const running=['queued','running'].includes(periodData.run?.state);
-        empty.append(node('h2',closed&&periodData.items.length?'Nothing completed yet.':'No actions yet.'),node('p',closed&&periodData.items.length?'Completed and dismissed actions will appear here.':hasIdeas?'Choose an idea and make it actionable, or explore this period for more.':future?'Select today or a past day to explore its activity for ideas.':'Explore this period’s activity for ideas, then make one actionable.','agenda-description'));
+        empty.append(node('h2','No actions yet.'),node('p',future?'Select today or a past day to explore its activity for ideas.':'Explore this period’s activity for ideas, then make one actionable.','agenda-description'));
         const showIdeas=()=>{const toggle=document.querySelector('[data-activity-menu-ideas]');if(toggle?.getAttribute('aria-expanded')!=='true')toggle?.click();};
-        if(!closed||!periodData.items.length){
+        {
           if(hasIdeas)empty.append(button('View ideas',showIdeas));
           if(!future){const explore=button(running?'View analysis':'Explore ideas',()=>{showIdeas();if(!running)document.getElementById('timeline-explore').click();});explore.classList.add('agenda-empty-explore');empty.append(explore);}
         }
@@ -188,6 +192,7 @@
     const state=data.run?.state;
     const future=endInput.value>today;
     document.getElementById('timeline-explore').disabled=future||['queued','running'].includes(state);
+    document.getElementById('agenda-explore').disabled=document.getElementById('timeline-explore').disabled;
     const result=data.run?.result||{};
     if(future)analysisStatus('idle','Planned period','Explore becomes available after activity is recorded.');
     else if(['queued','running'].includes(state))analysisStatus(state,state==='queued'?'Waiting to explore…':'Reviewing activity…','Checking entries and related evidence.');
@@ -204,11 +209,12 @@
     suggestions.forEach(item=>{
       const el=node('article',null,'agenda-card agenda-idea-card');
       el.append(node('p',(item.category==='missed_commitments' ? 'Possibly missed' : item.category.replaceAll('_',' '))+' · '+item.confidence+' confidence'+((item.analysis_status||'uncertain')==='uncertain' ? ' · Uncertain' : ''),'agenda-eyebrow'),node('h3',item.title),node('p',item.recommendation||item.expected_outcome));
+      if(item.matrix)el.append(node('p',item.matrix+' · '+(item.matrix_confidence||'unassessed')+' matrix confidence'+(item.matrix_reason?' — '+item.matrix_reason:''),'agenda-description'));
       const details=node('details');details.append(node('summary','Evidence & completion check'),node('p',item.observation||''),node('p',item.resolution_check));
       if(item.automatic_review?.reason)details.append(node('p','Automatic action review: '+item.automatic_review.reason));
       item.evidence.forEach(ref=>{const a=node('a',ref.date+' · '+ref.title);a.href=evidenceUrl(ref);a.target='_blank';a.rel='noopener';const p=node('p');p.append(a);details.append(p);});el.append(details);
       const actions=node('div',null,'agenda-card-actions');
-      actions.append(button('Make actionable',()=>{openEditor();suggestionId=item.id;source=item.source;showEvidence();form.elements.title.value=item.title.slice(0,200);form.elements.expected_outcome.value=item.expected_outcome;}),button('Dismiss',async e=>{e.currentTarget.disabled=true;try{await timelineApi('/suggestions/'+item.id+'/dismiss',{method:'POST'});await load();}catch(err){error('agenda-error',err.message);e.currentTarget.disabled=false;}}));
+      actions.append(button('Make actionable',()=>{openEditor();suggestionId=item.id;source=item.source;showEvidence();form.elements.title.value=item.title.slice(0,200);form.elements.expected_outcome.value=item.expected_outcome;for(const key of ['matrix','matrix_confidence','matrix_reason'])form.elements[key].value=item[key]||'';}),button('Dismiss',async e=>{e.currentTarget.disabled=true;try{await timelineApi('/suggestions/'+item.id+'/dismiss',{method:'POST'});await load();}catch(err){error('agenda-error',err.message);e.currentTarget.disabled=false;}}));
       el.append(actions);list.append(el);
     });
     const pending=data.receipts.filter(receipt=>receipt.state==='pending'&&data.items.some(item=>item.id===receipt.followup_id));
@@ -228,7 +234,7 @@
     form.elements.due_date.value = event.detail?.date || '';
   });
   document.getElementById('agenda-refresh').addEventListener('click',load);
-  document.querySelectorAll('[data-agenda-closed]').forEach(b=>b.addEventListener('click',()=>{closed=b.dataset.agendaClosed==='true';document.querySelectorAll('[data-agenda-closed]').forEach(v=>v.setAttribute('aria-pressed',String(v===b)));load();}));
+  document.getElementById('agenda-explore').addEventListener('click',()=>{const toggle=document.querySelector('[data-activity-menu-ideas]');if(toggle?.getAttribute('aria-expanded')!=='true')toggle?.click();document.getElementById('timeline-explore').click();});
   document.querySelectorAll('[data-agenda-close]').forEach(b=>b.addEventListener('click',()=>{if(!busy)editor.close();}));
   editor.addEventListener('cancel',e=>{if(busy)e.preventDefault();});
   document.getElementById('followup-history-close').addEventListener('click',()=>historyDialog.close());

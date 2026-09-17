@@ -109,3 +109,11 @@ from the heatmap and pin selection. **Archived categories** in the category dial
 lets you inspect history and restore the category. New events/pins require an active
 category; existing retry receipts remain accessible. Archived names stay reserved.
 Schema additions run automatically when the pin store opens.
+
+## Actionable priority matrix
+
+The day/period Actions view shows unfinished, completed, and dismissed actions together. Unfinished actions come first, ordered Q1, Q2, Q3, Q4, then unclassified; dates break ties. Completed and dismissed actions follow. The prominent **Explore ideas** button starts the existing period analysis. An empty list keeps the “No actions yet” guidance.
+
+The editor places **Matrix** beside Status, with keyboard-accessible help, editable high/medium/low classification confidence, and a reason. Following Habit 3 in the manifesto, Q1 means urgent and important, Q2 important but not urgent, Q3 urgent but not important, and Q4 neither. Protect Q2 investment before Q3 interruptions. Existing actions remain unclassified until assessed; no database rewrite is required. The JSON payload and revision history retain `matrix`, `matrix_confidence`, and `matrix_reason`.
+
+Idea analysis supplies classification separately from confidence in the recommendation. Manual adoption and automatic creation carry that classification into the action. Hermes receives the Matrix, dates, prompt and supporting instructions, can rank tasks when requested, and returns an evidence-based classification with confidence. Results update the current actionable through the existing acceptance policy and optimistic revision checks. Classification does not authorize unrelated work. Scheduled eligible actions are queued in Matrix order; running tasks are not preempted. The list API retains `closed` filtering and adds `include_closed=true` for the combined view.

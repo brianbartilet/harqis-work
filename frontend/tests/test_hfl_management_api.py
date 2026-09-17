@@ -310,3 +310,15 @@ def test_attachment_service_and_mcp_transport(management, monkeypatch, tmp_path)
     assert output.read_bytes() == source.read_bytes()
     assert is_write_tool('download_hfl_corpus_attachment')
     assert invoke('delete_hfl_corpus_attachment', **args, attachment_id=rows[0]['id'])['attachments'] == []
+
+
+def test_management_agents_can_create_and_reprioritize_actions(management):
+    client, store = management
+    response = client.post('/api/hfl/actions', json=action(matrix='Q2', matrix_confidence='medium', matrix_reason='Long-term owner goal'))
+    assert response.status_code == 201
+    item = response.json()['item']
+    assert item['matrix'] == 'Q2' and item['agent_enabled'] is False
+    response = client.patch('/api/hfl/actions/'+item['id'], json={'version':1, 'matrix':'Q1', 'matrix_confidence':'high', 'matrix_reason':'Owner supplied a deadline'})
+    assert response.status_code == 200
+    assert response.json()['item']['matrix'] == 'Q1'
+    assert client.patch('/api/hfl/actions/'+item['id'], json={'version':2,'matrix':'Q5'}).status_code == 422

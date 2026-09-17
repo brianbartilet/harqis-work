@@ -129,6 +129,9 @@ def parse_result(output):
         raise ValueError('Invalid Hermes evidence.')
     if result['state'] == 'succeeded' and not evidence:
         raise ValueError('Successful results require evidence.')
+    if any(key in result for key in ('matrix', 'matrix_confidence', 'matrix_reason')):
+        from workflows.hfl.timeline_store import validate_matrix
+        validate_matrix(result)
     return result
 
 

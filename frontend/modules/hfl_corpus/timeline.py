@@ -17,7 +17,7 @@ from auth import get_current_user
 from fastapi.routing import APIRoute
 from config import get_settings
 from workflows.hfl.timeline import period, explore_period, write_completion
-from workflows.hfl.timeline_store import FollowUpConflict, FollowUpStore, store_path
+from workflows.hfl.timeline_store import FollowUpConflict, FollowUpStore, store_path, priority_key
 
 
 class TimelineRoute(APIRoute):
@@ -107,19 +107,19 @@ async def followup_evidence(request: Request, path: str, entry_id: str):
 
 
 @router.get("/items")
-async def followup_list(request: Request, closed: bool = False, offset: int = 0):
+async def followup_list(request: Request, closed: bool = False, offset: int = 0, include_closed: bool = False):
     owner(request)
     today = datetime.now(ZoneInfo("Asia/Singapore")).date().isoformat()
-    items = store().list(closed=closed)
+    canonical = store()
+    items = (canonical.list() + canonical.list(closed=True)) if include_closed else canonical.list(closed=closed)
     for item in items:
+        is_closed = item['status'] in {'done', 'dismissed'}
         due, review = item["due_date"], item["review_date"]
-        item["overdue"] = bool(due and due < today and not closed)
-        item["group"] = "Completed" if item["status"] == "done" else "Dismissed" if closed else (
+        item["overdue"] = bool(due and due < today and not is_closed)
+        item["group"] = "Completed" if item["status"] == "done" else "Dismissed" if is_closed else (
             "Overdue" if item["overdue"] else "Today" if (due and due == today) or (review and review <= today) else
             "Upcoming" if due or review else "Unscheduled")
-    order = {"Overdue": 0, "Today": 1, "Upcoming": 2, "Unscheduled": 3, "Completed": 4, "Dismissed": 5}
-    if not closed:
-        items.sort(key=lambda item: (order[item["group"]], min(filter(None, [item["due_date"], item["review_date"]]), default="9999"), item["created_at"]))
+    items.sort(key=priority_key)
     if offset < 0:
         raise HTTPException(422, 'Offset cannot be negative.')
     return {"items": items[offset:offset + 500], "total": len(items), "today": today, "timezone": "Asia/Singapore"}
@@ -140,6 +140,8 @@ async def followup_create(request: Request):
         if suggestion['status'] == 'dismissed':
             raise HTTPException(409, 'This suggestion was dismissed.')
         raw['source'] = suggestion['source']
+        for field in ('matrix', 'matrix_confidence', 'matrix_reason'):
+            raw.setdefault(field, suggestion.get(field, ''))
         raw['request_id'] = str(uuid.uuid5(uuid.NAMESPACE_URL, sid))
     source = raw.pop("source", None)
     if source is not None:
@@ -251,6 +253,7 @@ async def timeline_period(request: Request, start: str, end: str):
         events = [event for event in item_events(item, canonical) if start <= event['date'] <= end]
         if events:
             items.append({**item, 'events': events})
+    items.sort(key=priority_key)
     return {'suggestions': canonical.suggestions(start, end), 'items': items, 'run': canonical.run_for(start, end), 'receipts': canonical.receipts()}
 
 

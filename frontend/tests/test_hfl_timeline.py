@@ -22,11 +22,16 @@ def payload(**extra):
 
 
 @pytest.mark.parametrize('width', [390, 1100])
-def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_client, monkeypatch, width):
+def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_client, monkeypatch, tmp_path, width):
     from urllib.parse import urlparse
     import modules.hfl_corpus.router as corpus
     playwright = pytest.importorskip('playwright.sync_api')
-    monkeypatch.setattr(corpus.corpus_index, 'documents', lambda: ())
+    from modules.hfl_corpus import corpus as index_module
+    for offset in (-1, 0):
+        day = (date.today() + timedelta(days=offset)).isoformat()
+        (tmp_path / f'{day}.md').write_text(f'## {day} 09:00\nMoment: Test activity\nSource: notes\n', encoding='utf-8')
+    monkeypatch.setattr(index_module, 'resolve_corpus_root', lambda: tmp_path)
+    monkeypatch.setattr(corpus, 'corpus_index', index_module.CorpusIndex())
     with playwright.sync_playwright() as driver:
         browser = driver.chromium.launch(channel='chrome', headless=True)
         page = browser.new_page(viewport={'width': width, 'height': 1000})
@@ -52,6 +57,18 @@ def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_clie
         for offset in (-1, 0, 1):
             selected = (date.today() + timedelta(days=offset)).isoformat()
             page.locator(f'[data-activity-day="{selected}"]').click()
+            playwright.expect(page.locator('[data-activity-menu-actions]')).to_have_attribute('aria-expanded', 'true')
+            playwright.expect(page.locator('[data-day-actions]')).to_be_visible()
+            playwright.expect(page.locator('[data-activity-menu-matches]')).to_have_attribute('aria-expanded', 'false')
+            if offset <= 0:
+                page.locator('[data-activity-menu-matches]').click()
+                playwright.expect(page.locator('[data-activity-menu-matches]')).to_have_attribute('aria-expanded', 'true')
+            else:
+                page.locator('[data-activity-menu-actions]').click()
+            page.keyboard.press('Escape')
+            page.locator(f'[data-activity-day="{selected}"]').click()
+            playwright.expect(page.locator('[data-activity-menu-actions]')).to_have_attribute('aria-expanded', 'true')
+            playwright.expect(page.locator('[data-activity-menu-matches]')).to_have_attribute('aria-expanded', 'false')
             buttons = page.locator('.activity-day-quick-actions').locator('button, a')
             assert buttons.all_text_contents() == ['Create entry', 'Create action', 'Pin dates', 'Show document']
             boxes = [buttons.nth(index).bounding_box() for index in range(4)]
@@ -69,11 +86,17 @@ def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_clie
                 assert agenda.list() == []
             else:
                 form.locator('[name="expected_outcome"]').fill('Record the result')
+                form.locator('[name="matrix"]').select_option('Q2')
+                form.locator('[name="matrix_confidence"]').select_option('medium')
+                form.locator('.matrix-help summary').click()
+                playwright.expect(form.locator('#matrix-help')).to_be_visible()
                 form.locator('[type="submit"]').click()
                 playwright.expect(page.locator('#followup-editor')).to_be_hidden()
         saved = agenda.list()
         assert len(saved) == 1
         assert saved[0]['title'] == 'Manual action'
+        assert saved[0]['matrix'] == 'Q2'
+        assert saved[0]['matrix_confidence'] == 'medium'
         assert saved[0]['review_date'] == ''
         assert saved[0]['due_date'] == selected
         assert not saved[0]['source']
@@ -693,3 +716,118 @@ def test_duplicate_candidates_in_one_batch_create_only_one_action(agenda):
     result=create_automatic_actions('2026-09-09','2026-09-09',agenda,[],review=review)
     assert result['created']==result['duplicates']==1
     assert len(agenda.list())==1
+
+
+def test_matrix_roundtrip_validation_history_and_combined_order(agenda, authenticated_client):
+    url = '/hfl-corpus/timeline/items'
+    for matrix in ['Q3', 'Q2', 'Q1', 'Q4', '']:
+        response = authenticated_client.post(url, json=payload(matrix=matrix, matrix_confidence='high' if matrix else '', matrix_reason='Owner goals' if matrix else ''))
+        assert response.status_code == 201
+    done = agenda.list()[0]
+    agenda.update(done['id'], {'version': 1, 'status': 'done'}, actor='owner')
+    items = authenticated_client.get(url+'?include_closed=true').json()['items']
+    assert [item['matrix'] for item in items] == ['Q1', 'Q2', 'Q3', 'Q4', '']
+    assert items[-1]['status'] == 'done'
+    assert not items[-1]['overdue']
+    item = items[0]
+    changed = authenticated_client.patch(url+'/'+item['id'], json={'version':1, 'matrix':'Q2', 'matrix_confidence':'low', 'matrix_reason':'Deadline removed'})
+    assert changed.status_code == 200
+    assert agenda.get(item['id'])['matrix_confidence'] == 'low'
+    assert agenda.history(item['id'])[1]['item']['matrix'] == 'Q1'
+    assert authenticated_client.patch(url+'/'+item['id'], json={'version':1,'matrix':'Q4'}).status_code == 409
+    for fields in [{'matrix':'Q5'}, {'matrix':[]}, {'matrix':'Q2','matrix_confidence':'certain'}, {'matrix_confidence':'high'}, {'matrix':'Q1','matrix_reason':300}]:
+        assert authenticated_client.post(url, json=payload(**fields)).status_code == 400
+
+
+def test_matrix_survives_analysis_and_automatic_creation(agenda):
+    from workflows.hfl.timeline import explore_period
+    finding = {**suggestion(), 'confidence':'high', 'evidence':['N1'], 'latest_evidence':['N1'], 'status':'uncertain', 'severity':'low',
+               'matrix':'Q2', 'matrix_confidence':'medium', 'matrix_reason':'Prevention with no deadline'}
+    result = explore_period('2026-09-09','2026-09-09',store=agenda,
+        collect=lambda *a: ([{'entry_id':'hfl-priority','path':'2026-09-09.md','when':'2026-09-09T12:00:00+08:00','moment':'Planning','what_happened':'Plan prevention','source':'notes'}], {}), related=lambda *a: [],
+        analyze=lambda *a,**kw: {'findings':[finding]},
+        auto_review=lambda candidates,*a: [create_decision(item) for item in candidates])
+    assert result['state'] == 'complete'
+    item = agenda.list()[0]
+    assert (item['matrix'], item['matrix_confidence'], item['matrix_reason']) == ('Q2','medium','Prevention with no deadline')
+
+
+@pytest.mark.parametrize('width', [390, 1100])
+def test_unified_actions_matrix_editor_and_empty_message(agenda, authenticated_client, monkeypatch, tmp_path, width):
+    from urllib.parse import urlparse
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from modules.hfl_corpus import router
+    playwright = pytest.importorskip('playwright.sync_api')
+    monkeypatch.setattr(router.corpus_index, 'documents', lambda: ())
+    today = datetime.now(ZoneInfo('Asia/Singapore')).date().isoformat()
+    for title, matrix in [('Interruption', 'Q3'), ('Prevention', 'Q2'), ('Completed work', 'Q1')]:
+        item = agenda.create(payload(title=title, matrix=matrix, matrix_confidence='medium', due_date=today), actor='owner')[0]
+        if title == 'Completed work':
+            agenda.update(item['id'], {'version':1, 'status':'done'}, actor='owner')
+    with playwright.sync_playwright() as driver:
+        browser = driver.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page(viewport={'width':width, 'height':1000})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        def route(request_route):
+            request = request_route.request
+            url = urlparse(request.url)
+            if url.hostname != 'timeline.test':
+                request_route.abort(); return
+            response = authenticated_client.request(request.method, url.path+('?' + url.query if url.query else ''), content=request.post_data,
+                headers={key:value for key,value in request.headers.items() if key.lower() in {'content-type','x-csrf-token'}})
+            request_route.fulfill(status=response.status_code, body=response.content, headers={'content-type':response.headers.get('content-type','text/html')})
+        page.route('**/*', route)
+        page.goto('https://timeline.test/hfl-corpus')
+        page.locator(f'[data-activity-day="{today}"]').click()
+        playwright.expect(page.locator('[data-activity-menu-actions]')).to_have_attribute('aria-expanded', 'true')
+        cards = page.locator('#agenda-items .agenda-card')
+        playwright.expect(cards).to_have_count(3)
+        assert cards.locator('h3').all_text_contents() == ['Prevention','Interruption','Completed work']
+        assert page.locator('[data-agenda-closed]').count() == 0
+        playwright.expect(page.locator('#agenda-explore')).to_be_visible()
+        cards.first.get_by_role('button', name='Edit', exact=True).click()
+        form = page.locator('#followup-form')
+        playwright.expect(form.locator('[name="matrix"]')).to_have_value('Q2')
+        playwright.expect(form.locator('[name="matrix_confidence"]')).to_have_value('medium')
+        status_box = form.locator('[name="status"]').bounding_box()
+        matrix_box = form.locator('[name="matrix"]').bounding_box()
+        if width > 600:
+            assert abs(status_box['y'] - matrix_box['y']) < 2
+            assert matrix_box['x'] > status_box['x']
+        form.locator('.matrix-help summary').click()
+        page.screenshot(path=str(tmp_path / f'editor-{width}.png'))
+        form.locator('[name="matrix"]').select_option('Q1')
+        form.locator('[name="matrix_confidence"]').select_option('high')
+        form.locator('[name="matrix_reason"]').fill('Important deadline confirmed')
+        form.locator('[type="submit"]').click()
+        playwright.expect(page.locator('#followup-editor')).to_be_hidden()
+        playwright.expect(cards.first.locator('.action-matrix')).to_contain_text('Q1 · high confidence')
+        page.screenshot(path=str(tmp_path / f'actions-{width}.png'))
+        page.locator('[data-activity-menu-actions]').click()
+        page.locator('[data-activity-day-menu-close]').click() if page.locator('[data-activity-day-menu-close]').count() else page.keyboard.press('Escape')
+        empty_day = (datetime.now(ZoneInfo('Asia/Singapore')).date() - timedelta(days=10)).isoformat()
+        page.locator(f'[data-activity-day="{empty_day}"]').click()
+        if page.locator('[data-activity-menu-actions]').get_attribute('aria-expanded') != 'true':
+            page.locator('[data-activity-menu-actions]').click()
+        playwright.expect(page.locator('#agenda-items')).to_contain_text('No actions yet.')
+        playwright.expect(page.locator('#agenda-items')).to_contain_text('Explore this period’s activity for ideas, then make one actionable.')
+        playwright.expect(page.locator('#agenda-items').get_by_role('button', name='Explore ideas')).to_be_visible()
+        assert not errors
+        browser.close()
+
+
+def test_manual_idea_adoption_preserves_matrix(agenda, authenticated_client, monkeypatch):
+    from modules.hfl_corpus import timeline
+    idea = {**suggestion(), 'matrix':'Q2', 'matrix_confidence':'low', 'matrix_reason':'Goals need clarification'}
+    run = agenda.claim_period('2026-09-09','2026-09-09')
+    agenda.save_suggestions('2026-09-09','2026-09-09',run,[idea],{})
+    saved = agenda.suggestions('2026-09-09','2026-09-09')[0]
+    async def evidence(*args):
+        return SimpleNamespace(moment='Research', header='2026-09-09')
+    monkeypatch.setattr(timeline,'evidence',evidence)
+    response = authenticated_client.post('/hfl-corpus/timeline/items', json=payload(suggestion_id=saved['id']))
+    assert response.status_code == 201
+    assert response.json()['item']['matrix'] == 'Q2'
+    assert response.json()['item']['matrix_confidence'] == 'low'

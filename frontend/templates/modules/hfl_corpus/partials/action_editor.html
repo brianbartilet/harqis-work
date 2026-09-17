@@ -6,7 +6,14 @@
       <label>Actionable<input name="title" required maxlength="200" placeholder="Check Essential Space sync feasibility"></label>
       <label>Expected outcome<textarea name="expected_outcome" required maxlength="3000" rows="3" placeholder="What would a useful, completed result look like?"></textarea></label>
       <div class="agenda-form-dates"><label>Review on<input name="review_date" type="date"><small>Revisit this action or check progress. Adds a heatmap marker; no notification.</small></label><label>Complete by<input name="due_date" type="date"><small>When the outcome needs to be ready.</small></label></div>
-      <label id="followup-state-label">Status<select name="status"><option value="open">Open</option><option value="active">Active</option><option value="in_progress">In Progress</option><option value="incomplete">Incomplete</option><option value="done">Done</option><option value="dismissed">Dismissed</option></select></label>
+      <div class="agenda-form-dates">
+        <label id="followup-state-label">Status<select name="status"><option value="open">Open</option><option value="active">Active</option><option value="in_progress">In Progress</option><option value="incomplete">Incomplete</option><option value="done">Done</option><option value="dismissed">Dismissed</option></select></label>
+        <div><label>Matrix<select name="matrix" aria-describedby="matrix-help"><option value="">Unclassified</option><option value="Q1">Q1 · Urgent &amp; important</option><option value="Q2">Q2 · Important, not urgent</option><option value="Q3">Q3 · Urgent, not important</option><option value="Q4">Q4 · Neither</option></select></label>
+          <details class="matrix-help"><summary aria-label="Explain the priority matrix">ⓘ Put first things first</summary><p id="matrix-help">Q1: address important deadlines or crises. Q2: schedule important work that builds lasting value. Q3: delegate or limit less important interruptions. Q4: reduce or eliminate low-value work. Protect Q2 time; urgency alone does not mean importance.</p></details>
+        </div>
+      </div>
+      <label>Matrix confidence<select name="matrix_confidence"><option value="">Unassessed</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
+      <label>Matrix reason<textarea name="matrix_reason" rows="2" maxlength="3000" placeholder="Why is this important or time-sensitive?"></textarea><small>Agents assess the quadrant and confidence from your instructions and evidence. You can edit both.</small></label>
       <label>Prompt<textarea name="prompt" rows="5" maxlength="20000" placeholder="Write instructions for an LLM. Plain text or Markdown is supported."></textarea><small>Saved instructions for later use. Nothing runs when you save.</small></label>
       {% include "modules/hfl_corpus/partials/input_attachments.html" %}
       <label>Notes<textarea name="notes" rows="2" maxlength="6000" placeholder="Useful context or the next step"></textarea></label>
@@ -17,6 +24,15 @@
   </form>
 </dialog>
 <script src="{{ static_asset('js/hfl-input-attachments.js') }}"></script>
+<script>
+  document.querySelector('#followup-form [name="matrix"]').addEventListener('change', event => {
+    if (!event.target.value) {
+      const form = event.target.form;
+      form.elements.matrix_confidence.value = '';
+      form.elements.matrix_reason.value = '';
+    }
+  });
+</script>
 <style>
   .agent-inputs { padding:1rem; border:1px solid #334155; border-radius:.65rem; background:rgba(15,23,42,.45); font-size:.8rem; }
   .agent-inputs label,.agent-inputs small { display:block; }

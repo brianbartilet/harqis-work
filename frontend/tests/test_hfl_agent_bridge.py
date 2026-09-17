@@ -683,3 +683,43 @@ def test_continue_rejects_changed_source_and_invalid_reply(bridge, authenticated
     response = authenticated_client.post(path, headers=owner_headers(), json={'request_key': str(uuid4()), 'reply': 'Continue'})
     assert response.status_code == 409
     assert len(store.list()) == 1
+
+
+def test_agent_matrix_context_and_result_are_persisted(bridge, authenticated_client):
+    module, store, actions = bridge
+    item = create_action(actions)
+    item = actions.update(item['id'], {'version':1, 'matrix':'Q3', 'matrix_confidence':'low', 'due_date':'2026-09-20'}, actor='owner')
+    run = start(authenticated_client, item, auto=True)
+    assert run['snapshot']['source']['matrix'] == 'Q3'
+    assert run['snapshot']['source']['due_date'] == '2026-09-20'
+    event(authenticated_client, run, 'plan', {'summary':'Assess goals and timing'})
+    assert event(authenticated_client, run, 'succeeded', {**RESULT, 'matrix':'Q5'}, key='invalid-matrix').status_code == 400
+    result = {**RESULT, 'matrix':'Q2', 'matrix_confidence':'high', 'matrix_reason':'Owner instructions establish long-term importance.'}
+    assert event(authenticated_client, run, 'succeeded', result).status_code == 200
+    saved = actions.get(item['id'])
+    assert saved['status'] == 'done'
+    assert saved['matrix'] == 'Q2' and saved['matrix_confidence'] == 'high'
+    assert actions.history(item['id'])[0]['item']['matrix_reason'] == result['matrix_reason']
+
+
+def test_sweep_queues_important_actions_before_less_important_urgency(bridge):
+    module, store, actions = bridge
+    for matrix in ('Q3', 'Q2', 'Q1', 'Q4'):
+        item = create_action(actions)
+        actions.update(item['id'], {'version':1, 'matrix':matrix}, actor='owner')
+    runs = module.sweep()['runs']
+    assert [store.get(run)['snapshot']['source']['matrix'] for run in runs] == ['Q1','Q2','Q3','Q4']
+
+
+def test_agent_classification_cannot_overwrite_concurrent_owner_edit(bridge, authenticated_client):
+    module, store, actions = bridge
+    item = create_action(actions)
+    run = start(authenticated_client, item, auto=True)
+    current = actions.get(item['id'])
+    edited = actions.update(item['id'], {'version':current['version'], 'matrix':'Q4', 'matrix_confidence':'high'}, actor='owner')
+    event(authenticated_client, run, 'plan', {'summary':'Review task'})
+    response = event(authenticated_client, run, 'succeeded', {**RESULT, 'matrix':'Q1', 'matrix_confidence':'medium', 'matrix_reason':'Agent assessment'})
+    assert response.status_code == 200
+    assert response.json()['state'] == 'review'
+    assert actions.get(item['id'])['matrix'] == 'Q4'
+    assert actions.get(item['id'])['version'] == edited['version']

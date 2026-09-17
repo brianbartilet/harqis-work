@@ -21,7 +21,30 @@ def store_path():
 
 
 STATES = {"open", "active", "in_progress", "incomplete", "done", "dismissed"}
-FIELDS = {"title", "expected_outcome", "notes", "prompt", "review_date", "due_date", "status", "completion_note", "agent_enabled"}
+FIELDS = {"title", "expected_outcome", "notes", "prompt", "review_date", "due_date", "status", "completion_note", "agent_enabled", "matrix", "matrix_confidence", "matrix_reason"}
+
+
+def validate_matrix(payload):
+    matrix = payload.get('matrix', '')
+    confidence = payload.get('matrix_confidence', '')
+    reason = payload.get('matrix_reason', '')
+    if not isinstance(matrix, str) or matrix not in {'', 'Q1', 'Q2', 'Q3', 'Q4'}:
+        raise ValueError('Matrix must be Q1, Q2, Q3, Q4 or unclassified.')
+    if not isinstance(confidence, str) or confidence not in {'', 'high', 'medium', 'low'}:
+        raise ValueError('Matrix confidence must be high, medium, low or unassessed.')
+    if not isinstance(reason, str) or len(reason) > 3000:
+        raise ValueError('Matrix reason must be text of at most 3000 characters.')
+    if not matrix and (confidence or reason.strip()):
+        raise ValueError('Choose a Matrix quadrant before adding confidence or a reason.')
+    return {'matrix': matrix, 'matrix_confidence': confidence, 'matrix_reason': reason.strip()}
+
+
+def priority_key(item):
+    """Keep important work ahead of less important urgency; closed work comes last."""
+    closed = {'done': 1, 'dismissed': 2}.get(item['status'], 0)
+    return (closed, {'Q1': 0, 'Q2': 1, 'Q3': 2, 'Q4': 3}.get(item.get('matrix'), 4),
+            min(filter(None, (item.get('due_date'), item.get('review_date'))), default='9999'),
+            item.get('due_date') or '9999', item.get('created_at', ''), item['id'])
 
 
 class FollowUpConflict(ValueError):
@@ -85,6 +108,7 @@ class FollowUpStore:
     @staticmethod
     def validate(payload):
         result = dict(payload)
+        result.update(validate_matrix(result))
         if type(result.get("agent_enabled", True)) is not bool:
             raise ValueError("agent_enabled must be a boolean.")
         for key, limit in {"title": 200, "expected_outcome": 3000, "notes": 6000, "prompt": 20000, "completion_note": 3000}.items():
@@ -319,6 +343,7 @@ class FollowUpStore:
                     continue
                 raw={'title':candidate['title'][:200],'expected_outcome':candidate['expected_outcome'][:3000],
                      'review_date':today.isoformat(),'due_date':'','status':'open'}
+                raw.update(validate_matrix(candidate))
                 item=self.validate(raw)
                 now=isoformat()
                 item.update(id='followup-'+uuid.uuid4().hex,version=1,created_at=now,updated_at=now,completed_at='',

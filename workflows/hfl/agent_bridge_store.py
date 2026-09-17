@@ -184,6 +184,9 @@ class AgentBridgeStore:
         if not isinstance(payload.get('model', ''), str) or len(payload.get('model', '')) > 200:
             raise ValueError('Model attribution must be text of at most 200 characters.')
         summary = payload.get('summary', '')
+        if any(key in payload for key in ('matrix', 'matrix_confidence', 'matrix_reason')):
+            from workflows.hfl.timeline_store import validate_matrix
+            validate_matrix(payload)
         if not isinstance(summary, str) or len(summary) > 100000 or (kind != 'heartbeat' and not summary.strip()):
             raise ValueError('An event summary is required (up to 100,000 characters).')
         evidence = payload.get('evidence', [])

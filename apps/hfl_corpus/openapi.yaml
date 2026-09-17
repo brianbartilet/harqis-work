@@ -1326,6 +1326,27 @@ components:
       title: ActionSource
     CreateAction:
       properties:
+        matrix:
+          type: string
+          enum:
+          - ''
+          - Q1
+          - Q2
+          - Q3
+          - Q4
+          default: ''
+        matrix_confidence:
+          type: string
+          enum:
+          - ''
+          - high
+          - medium
+          - low
+          default: ''
+        matrix_reason:
+          type: string
+          maxLength: 3000
+          default: ''
         request_id:
           type: string
           format: uuid
@@ -1431,6 +1452,33 @@ components:
       title: SaveCategory
     UpdateAction:
       properties:
+        matrix:
+          anyOf:
+          - type: string
+            enum:
+            - ''
+            - Q1
+            - Q2
+            - Q3
+            - Q4
+          - type: 'null'
+          default: null
+        matrix_confidence:
+          anyOf:
+          - type: string
+            enum:
+            - ''
+            - high
+            - medium
+            - low
+          - type: 'null'
+          default: null
+        matrix_reason:
+          anyOf:
+          - type: string
+            maxLength: 3000
+          - type: 'null'
+          default: null
         version:
           type: integer
           minimum: 1.0

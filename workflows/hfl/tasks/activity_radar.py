@@ -219,7 +219,7 @@ def synthesize_findings(
 
 def validate_findings(
     data: dict[str, Any], valid_ids: set[str],
-    *, lookup: dict[str, dict[str, Any]] | None = None,
+    *, lookup: dict[str, dict[str, Any]] | None = None, include_matrix: bool = False,
 ) -> list[dict[str, Any]]:
     findings = []
     for raw in data.get("findings", []):
@@ -275,6 +275,12 @@ def validate_findings(
             "latest_evidence": latest_evidence,
             "resolution_check": resolution_check,
         }
+        if include_matrix:
+            from workflows.hfl.timeline_store import validate_matrix
+            try:
+                finding.update(validate_matrix(raw))
+            except ValueError:
+                finding.update(validate_matrix({}))
         canonical = json.dumps({k: finding[k] for k in ("category", "title", "evidence")}, sort_keys=True)
         finding["fingerprint"] = hashlib.sha256(canonical.encode()).hexdigest()[:16]
         finding["evidence_signature"] = hashlib.sha256("|".join(evidence).encode()).hexdigest()[:12]
