@@ -168,7 +168,7 @@ def explore_period(start, end, *, run_id=None, store=None, collect=collect_perio
         for offset in range(0,len(rows),40):
             batch = rows[offset:offset+40]
             compact, lookup = _evidence_rows(batch,history)
-            findings = validate_findings(analyze(compact,start=start,end=end),set(lookup),lookup=lookup)
+            findings = validate_findings(analyze(compact,start=start,end=end),set(lookup),lookup=lookup,include_matrix=True)
             for finding in findings[:8]:
                 ids = finding["evidence"]
                 primary_ids = [eid for eid in ids if eid.startswith("N")]

@@ -179,3 +179,12 @@ def test_continuation_restores_verified_files_and_preserves_operation_scope(tmp_
         artifact['name'] = '../escape.md'
         with pytest.raises(ValueError, match='filename'):
             runner.restore_prior_artifacts(SimpleNamespace(client=client), run)
+
+
+def test_matrix_result_validation():
+    result = {'plan':'Prioritize important work', 'summary':'Plan ready', 'evidence':['actionable:1'], 'state':'succeeded', 'complete':True,
+              'matrix':'Q2', 'matrix_confidence':'medium', 'matrix_reason':'Durable improvement without a deadline'}
+    assert runner.parse_result(json.dumps(result)) == result
+    for fields in [{'matrix':'Q9'}, {'matrix_confidence':'certain'}, {'matrix_reason':[]}]:
+        with pytest.raises(ValueError):
+            runner.parse_result(json.dumps({**result, **fields}))

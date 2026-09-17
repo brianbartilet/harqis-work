@@ -85,3 +85,18 @@ fulfilled. Include actual output, sources and limitations in summary. A successf
 complete result marks the action Done; failed, blocked or partial work marks it
 Incomplete. Never invent evidence or claim actions that did not occur. Evidence
 may include the source_key when the task is based entirely on supplied context.
+
+For actionables, apply Habit 3, Put First Things First (docs/MANIFESTO.md).
+Use the owner's prompt and instructions, expected outcome, due/review dates and
+evidence to classify priority: Q1 urgent and important; Q2 important, not urgent;
+Q3 urgent, not important; Q4 neither. Protect Q2 work ahead of Q3 interruptions.
+When asked to prioritize multiple tasks, present a ranked plan with quadrants,
+confidence and reasons; respect explicit owner ordering and dependencies. Do not
+execute unrelated tasks just because they rank highly. Retain an owner-assigned
+quadrant unless instructions or new evidence justify a change; explain any change.
+Include matrix (Q1/Q2/Q3/Q4), matrix_confidence (high/medium/low), and matrix_reason
+(a concise evidence-based rationale, at most 3000 characters) in your result JSON.
+Assess the task's importance/urgency independently of completion status. When
+context is insufficient, use low confidence and explain what is unknown; never
+invent a deadline. These fields update only this actionable under the same revision
+and result-acceptance checks as its status. Pin tasks may omit the Matrix fields.

@@ -28,7 +28,7 @@ from modules.hfl_corpus.secrets import is_secret_entry, normalize_secret_tags
 from modules.profile.store import get_profile_store
 from modules.hfl_shares.security import verify_csrf_token
 from workflows.hfl.agent_bridge_store import AgentBridgeStore, BridgeConflict, digest, now
-from workflows.hfl.timeline_store import FollowUpConflict
+from workflows.hfl.timeline_store import FollowUpConflict, priority_key, validate_matrix
 
 
 POLICY = 'prompt-execution-v3'
@@ -54,7 +54,7 @@ def action_call(method, suffix, payload=None):
         return response.json()
     store = timeline.store()
     if suffix == '' or suffix.startswith('?'):
-        items = store.list()
+        items = sorted(store.list(), key=priority_key)
         offset = int(suffix.split('offset=')[-1]) if 'offset=' in suffix else 0
         return {'items': items[offset:offset + 500], 'total': len(items)}
     if suffix.endswith('/history'):
@@ -70,7 +70,7 @@ def source_snapshot(kind, source_id):
         item = action_call('GET', '/' + source_id)['item']
         if item['status'] in {'done', 'dismissed'}:
             raise BridgeConflict('Closed actionables cannot be executed.')
-        source = {key: item.get(key, '') for key in ('id', 'title', 'prompt', 'expected_outcome', 'notes', 'version', 'status', 'source')}
+        source = {key: item.get(key, '') for key in ('id', 'title', 'prompt', 'expected_outcome', 'notes', 'version', 'status', 'source', 'matrix', 'matrix_confidence', 'matrix_reason', 'review_date', 'due_date')}
         guidance = ''
     elif kind == 'pin':
         pins = get_memory_pin_store().snapshot()
@@ -202,7 +202,7 @@ def sweep():
                 offset += len(page['items'])
                 if offset >= page['total'] or not page['items']:
                     break
-            for item in items:
+            for item in sorted(items, key=priority_key):
                 if item['status'] == 'open' and item.get('agent_enabled', True) and item.get('prompt', '').strip():
                     try:
                         run = enqueue('actionable', item['id'], f"actionable:{item['id']}:revision:{item['version']}", 'hermes-schedule')
@@ -280,6 +280,8 @@ def apply_action(run, status):
         return
     version = run['expected_version'] or run['snapshot']['source']['version']
     payload = {'version': version, 'status': status, '_agent_actor': actor}
+    if status in {'done', 'incomplete'} and run.get('result', {}).get('matrix'):
+        payload.update(validate_matrix(run['result']))
     if status == 'done':
         payload['completion_note'] = (run['result']['summary'] + '\n\nAgent run: ' + run['id'])[:3000]
     item = action_call('PATCH', '/' + source_id, payload)['item']

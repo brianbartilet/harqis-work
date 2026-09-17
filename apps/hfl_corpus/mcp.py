@@ -80,6 +80,7 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         request_id: str, title: str, expected_outcome: str,
         review_date: str = "", due_date: str = "", prompt: str = "",
         notes: str = "", source: Optional[dict] = None,
+        matrix: str = "", matrix_confidence: str = "", matrix_reason: str = "",
     ) -> dict:
         """Create an action (writes remote state), with scheduled agent execution disabled.
 
@@ -92,10 +93,14 @@ def register_hfl_corpus_tools(mcp: FastMCP):
             prompt: Optional Markdown instructions, at most 20,000 characters.
             notes: Optional notes, at most 6,000 characters.
             source: Optional object containing corpus-relative path and stable entry_id.
+            matrix: Q1 urgent/important, Q2 important/not urgent, Q3 urgent/not important, Q4 neither; empty if unclassified.
+            matrix_confidence: high, medium, low, or empty if unassessed.
+            matrix_reason: Evidence-based classification rationale, at most 3,000 characters.
         """
         return _management("create_action", request_id=request_id, title=title,
                            expected_outcome=expected_outcome, review_date=review_date,
-                           due_date=due_date, prompt=prompt, notes=notes, source=source)
+                           due_date=due_date, prompt=prompt, notes=notes, source=source,
+                           matrix=matrix, matrix_confidence=matrix_confidence, matrix_reason=matrix_reason)
 
     @mcp.tool()
     def list_hfl_corpus_actions(closed: bool = False, offset: int = 0) -> dict:
@@ -124,7 +129,8 @@ def register_hfl_corpus_tools(mcp: FastMCP):
             action_id: ID returned by create or list actions.
             version: Latest version; a stale version returns 409. Read before retrying.
             changes: Fields to edit: title, expected_outcome, review_date, due_date,
-                prompt, notes, status, completion_note. Empty strings clear optional text/dates.
+                prompt, notes, status, completion_note, matrix, matrix_confidence, matrix_reason.
+                Matrix: Q1/Q2/Q3/Q4; confidence: high/medium/low. Empty strings clear optional fields.
                 Status: open, active, in_progress, incomplete, done, dismissed.
                 Completion keeps the existing HFL receipt behavior. Cannot enable agents.
         """

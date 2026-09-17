@@ -81,6 +81,9 @@ class CreateAction(Command):
     prompt: str = Field(default="", max_length=20000)
     notes: str = Field(default="", max_length=6000)
     source: ActionSource | None = None
+    matrix: Literal['', 'Q1', 'Q2', 'Q3', 'Q4'] = ''
+    matrix_confidence: Literal['', 'high', 'medium', 'low'] = ''
+    matrix_reason: str = Field(default='', max_length=3000)
 
 
 class UpdateAction(Command):
@@ -93,6 +96,9 @@ class UpdateAction(Command):
     notes: str | None = Field(default=None, max_length=6000)
     status: Literal["open", "active", "in_progress", "incomplete", "done", "dismissed"] | None = None
     completion_note: str | None = Field(default=None, max_length=3000)
+    matrix: Literal['', 'Q1', 'Q2', 'Q3', 'Q4'] | None = None
+    matrix_confidence: Literal['', 'high', 'medium', 'low'] | None = None
+    matrix_reason: str | None = Field(default=None, max_length=3000)
 
 
 class SaveCategory(Command):

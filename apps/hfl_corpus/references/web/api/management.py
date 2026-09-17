@@ -52,12 +52,14 @@ class ApiServiceHflCorpusManagement(BaseApiServiceHflCorpus):
 
     def create_action(self, request_id: str, title: str, expected_outcome: str,
                       review_date: str = "", due_date: str = "", prompt: str = "",
-                      notes: str = "", source: dict | None = None) -> dict:
+                      notes: str = "", source: dict | None = None,
+                      matrix: str = "", matrix_confidence: str = "", matrix_reason: str = "") -> dict:
         """Create intent without scheduled agent execution; reuse request_id on retry."""
         return self._command("post", "actions", payload={
             "request_id": request_id, "title": title, "expected_outcome": expected_outcome,
             "review_date": review_date, "due_date": due_date, "prompt": prompt,
             "notes": notes, "source": source,
+            "matrix": matrix, "matrix_confidence": matrix_confidence, "matrix_reason": matrix_reason,
         })
 
     def list_actions(self, closed: bool = False, offset: int = 0) -> dict:
