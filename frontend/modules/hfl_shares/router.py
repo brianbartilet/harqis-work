@@ -686,6 +686,22 @@ async def delete_configuration(request: Request, configuration_id: str):
     return RedirectResponse("/sharing", status_code=303)
 
 
+def _build_preview_snapshot(
+    request: Request,
+    configuration: ShareConfiguration,
+    disabled_reference_ids: tuple[str, ...],
+) -> ScopeSnapshot:
+    """Keep corpus loading and reference resolution off the request event loop."""
+    return build_snapshot(
+        configuration,
+        _sharing_documents(
+            configuration.sources, include_secrets=configuration.include_secrets
+        ),
+        disabled_reference_ids=disabled_reference_ids,
+        **_secret_snapshot_options(request, configuration),
+    )
+
+
 async def _preview_response(
     request: Request,
     user: str,
@@ -708,13 +724,11 @@ async def _preview_response(
             existing=existing,
             preview=fragment,
         )
-        preview = build_snapshot(
+        preview = await asyncio.to_thread(
+            _build_preview_snapshot,
+            request,
             configuration,
-            _sharing_documents(
-                configuration.sources, include_secrets=configuration.include_secrets
-            ),
-            disabled_reference_ids=_disabled_references(form),
-            **_secret_snapshot_options(request, configuration),
+            _disabled_references(form),
         )
         answer = ""
         if with_agent:
