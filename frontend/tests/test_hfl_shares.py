@@ -341,6 +341,51 @@ def test_share_corpus_uses_automatic_preview_and_blocking_long_actions(
     assert 'data-progress-next="Asking the agent…"' in preview.text
 
 
+@pytest.mark.parametrize("path", [
+    "/sharing/preview",
+    "/sharing/preview?fragment=true",
+    "/sharing/preview/chat",
+])
+@pytest.mark.parametrize("slow_stage", ["_sharing_documents", "build_snapshot"])
+def test_preview_keeps_corpus_navigation_responsive(
+    authenticated_client, sharing_corpus, monkeypatch, path, slow_stage
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    from modules.hfl_shares import router
+
+    started = Event()
+    release = Event()
+    original = getattr(router, slow_stage)
+
+    def slow_work(*args, **kwargs):
+        started.set()
+        assert release.wait(10), "Preview work was not released"
+        return original(*args, **kwargs)
+
+    async def answer(*args, **kwargs):
+        return "Test preview answer"
+
+    monkeypatch.setattr(router, slow_stage, slow_work)
+    monkeypatch.setattr(router, "answer_question", answer)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        preview = pool.submit(authenticated_client.post, path, data=_form(question="Trip?"))
+        try:
+            assert started.wait(5), "Preview work did not start"
+            navigation = pool.submit(authenticated_client.get, "/hfl-corpus?activity_year=2026")
+            response = navigation.result(timeout=3)
+            assert response.status_code == 200
+            assert sharing_corpus.name in response.text
+            assert not preview.done()
+        finally:
+            release.set()
+        result = preview.result(timeout=5)
+        assert result.status_code == 200
+        assert "Planned the Japan trip" in result.text
+        if path.endswith("/chat"):
+            assert "Test preview answer" in result.text
+
+
 def test_oversized_draft_preview_question_is_rejected_before_snapshot_work(
     authenticated_client, monkeypatch, sharing_corpus
 ):
