@@ -207,5 +207,6 @@
 }
 
 .agenda .agenda-explore{background:#0e7490;border-color:#22d3ee;color:#ecfeff;padding:.7rem 1.15rem;font-weight:700;box-shadow:0 0 0 1px #0891b233}
-.agenda .agenda-explore:hover{background:#155e75}.agenda .agenda-explore:focus-visible,.matrix-help summary:focus-visible{outline:2px solid #67e8f9;outline-offset:3px}
+.agenda .agenda-explore:hover:not(:disabled){background:#155e75}.agenda .agenda-explore:focus-visible,.matrix-help summary:focus-visible{outline:2px solid #67e8f9;outline-offset:3px}
+.agenda button[data-unavailable="true"]:disabled{cursor:not-allowed}
 .agenda-toolbar{padding-bottom:.75rem}.matrix-help{margin-top:.5rem;font-size:.75rem;color:#94a3b8}.matrix-help summary{cursor:pointer;color:#67e8f9}.matrix-help p{line-height:1.6;margin:.5rem 0}.action-matrix{color:#a5f3fc}

@@ -193,6 +193,11 @@
     const future=endInput.value>today;
     document.getElementById('timeline-explore').disabled=future||['queued','running'].includes(state);
     document.getElementById('agenda-explore').disabled=document.getElementById('timeline-explore').disabled;
+    for (const id of ['timeline-explore', 'agenda-explore']) {
+      const explore = document.getElementById(id);
+      explore.dataset.unavailable = String(future);
+      explore.title = future ? 'Explore ideas is available for today and past dates.' : '';
+    }
     const result=data.run?.result||{};
     if(future)analysisStatus('idle','Planned period','Explore becomes available after activity is recorded.');
     else if(['queued','running'].includes(state))analysisStatus(state,state==='queued'?'Waiting to explore…':'Reviewing activity…','Checking entries and related evidence.');
