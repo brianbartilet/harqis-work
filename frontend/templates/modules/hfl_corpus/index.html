@@ -152,7 +152,7 @@
     .corpus-header-actions { display:flex; gap:.5rem; }
     .corpus-secrets-control { min-height:2.75rem; margin-right:0; padding:.5rem; }
     .corpus-create-entry { margin-top:0; }
-    .activity-layout { display:grid; grid-template-columns:4.75rem minmax(0,1fr) 11rem; align-items:start; gap:1rem; }
+    .activity-layout { display:grid; grid-template-columns:4.75rem minmax(0,1fr) 13rem; align-items:start; gap:1rem; }
     .activity-pin-controls { display:flex; flex-direction:column; align-self:stretch; min-height:0; contain:size; }
     .activity-pin-list { flex:1; height:auto; min-height:0; }
     .activity-year-controls { display:block; }
@@ -170,7 +170,7 @@
     }
   }
   @media (min-width: 1100px) {
-    .activity-layout { grid-template-columns:4.75rem minmax(0,1fr) 11rem; }
+    .activity-layout { grid-template-columns:4.75rem minmax(0,1fr) 13rem; }
     .activity-panel { --activity-cell:13px; --activity-gap:3px; }
   }
   @media (min-width: 1200px) {
@@ -848,7 +848,7 @@
     const formatPinnedEnd = range => {
       const value = new Date(`${range.end_date}T12:00:00`);
       const day = String(value.getDate()).padStart(2, '0');
-      const month = value.toLocaleDateString('en-GB', {month:'short'}).toUpperCase();
+      const month = value.toLocaleDateString('en-GB', {month:'short'}).slice(0, 3).toUpperCase();
       return `ENDS ${day} ${month} ${value.getFullYear()}`;
     };
     const categoryFor = id => memoryState.categories.find(category => category.id === Number(id));
@@ -1046,6 +1046,10 @@
         day.setAttribute('aria-label', label);
         day.title = label;
       });
+      const expandedCategories = new Set(
+        [...pinList.querySelectorAll('details[open]')].map(details => details.dataset.categoryId)
+      );
+      const pinScrollTop = pinList.scrollTop;
       pinList.replaceChildren();
       const pinnedRanges = memoryState.ranges;
       if (!pinnedRanges.length) {
@@ -1075,6 +1079,8 @@
         if (!categoryRanges.length) return;
         const details = document.createElement('details');
         details.className = 'activity-category';
+        details.dataset.categoryId = String(category.id);
+        details.open = expandedCategories.has(String(category.id));
         const summary = document.createElement('summary');
         summary.className = 'activity-category-button cursor-pointer list-none';
         const dot = document.createElement('span');
@@ -1101,7 +1107,7 @@
           label.className = 'activity-range-label';
           label.textContent = range.title || 'Untitled pin';
           button.append(label);
-          button.title = formatPinnedEnd(range);
+          button.title = `${label.textContent} ${formatPinnedEnd(range)}`;
           button.addEventListener('click', () => scrollToDate(midpoint(range)));
           button.addEventListener('click', () => window.dispatchEvent(new CustomEvent('hfl:timeline-period',{detail:{start:range.start_date,end:range.end_date}})));
           const editRange = document.createElement('button');
@@ -1120,6 +1126,7 @@
         details.append(summary, rangeList);
         pinList.append(details);
       });
+      pinList.scrollTop = pinScrollTop;
     };
     const previewRange = end => {
       const low = pinStart < end ? pinStart : end;

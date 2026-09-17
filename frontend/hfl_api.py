@@ -13,6 +13,8 @@ from config import get_settings
 from modules.hfl_corpus.api import router as hfl_corpus_api_router
 from modules.hfl_corpus.corpus import corpus_index
 from modules.hfl_corpus.remote import close_remote_http_client
+from modules.hfl_corpus.entities_api import router as entities_router
+from modules.hfl_corpus.entity_merge_api import router as entity_merge_router
 
 
 @asynccontextmanager
@@ -42,6 +44,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(hfl_corpus_api_router)
+# Expose the same authenticated commands to agents without mounting browser pages.
+for entity_route in entities_router.routes:
+    if getattr(entity_route, 'path', '').startswith('/api/hfl/entities'):
+        app.router.routes.append(entity_route)
+app.include_router(entity_merge_router)
 
 
 @app.get("/health", tags=["operations"], summary="Service health")

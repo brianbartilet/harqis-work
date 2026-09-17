@@ -22,9 +22,19 @@ class MergePreview(BaseModel):
     evidence: str = Field(default='', max_length=10000)
 
 
+class MergeFields(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    categories: list[str] = Field(default_factory=list)
+    emails: list[str] = Field(default_factory=list)
+    phones: list[str] = Field(default_factory=list)
+    references: list[str] = Field(default_factory=list)
+    notes: str = ''
+
+
 class MergeSubmit(MergePreview):
     request_id: UUID
     preview_token: str
+    profile: MergeFields | None = None
 
 
 class Unmerge(BaseModel):
@@ -47,7 +57,7 @@ def unique(values):
     return list(dict.fromkeys(v.strip() for v in values if v and v.strip()))
 
 
-def build_preview(payload):
+def build_preview(payload, current=None):
     ids = list(dict.fromkeys(payload.entity_ids))
     name = payload.name.strip()
     if len(ids) < 2 or not name or entities.is_link(name):
@@ -55,7 +65,7 @@ def build_preview(payload):
     store = get_store()
     with store.connection() as db:
         version = merges.revision(db)
-    available = {e['id']: e for e in entities.entity_index()}
+    available = {e['id']: e for e in (entities.entity_index() if current is None else current)}
     if any(identity not in available for identity in ids):
         raise ValueError('A selected entity is unavailable or has changed; refresh the directory')
     selected = [available[identity] for identity in ids]
@@ -94,7 +104,7 @@ async def preview(request: Request, payload: MergePreview):
 @router.post('/merges')
 async def submit(request: Request, payload: MergeSubmit, background_tasks: BackgroundTasks):
     actor = owner(request)
-    fingerprint = digest({'action': 'merge', **payload.model_dump(exclude={'request_id', 'preview_token'})})
+    fingerprint = digest({'action': 'merge', **payload.model_dump(exclude={'request_id', 'preview_token'}, exclude_none=True)})
     existing = await call(merges.operation, str(payload.request_id), fingerprint)
     if existing:
         background_tasks.add_task(merges.flush_audits)
@@ -106,6 +116,11 @@ async def submit(request: Request, payload: MergeSubmit, background_tasks: Backg
     result = await call(build_preview, payload)
     if digest(result) != expected:
         raise HTTPException(409, 'Selection, fields or entity data changed; review a fresh preview')
+    if payload.profile is not None:
+        from modules.hfl_corpus.entities_api import Profile, validated_profile
+        result['profile'] = validated_profile(Profile(**{
+            **result['profile'], **payload.profile.model_dump(exclude_unset=True),
+        }))
     result = await call(merges.commit_merge, result, str(payload.request_id), fingerprint, actor)
     background_tasks.add_task(merges.flush_audits)
     return result
@@ -138,3 +153,25 @@ async def operation_status(request: Request, request_id: UUID):
 async def history(request: Request, identity: str):
     owner(request)
     return {'events': await run_in_threadpool(merges.history, identity)}
+
+
+@router.get('/matching')
+async def matching_status(request: Request):
+    owner(request)
+    from workflows.hfl.entity_matching import status
+    return await run_in_threadpool(status)
+
+
+@router.post('/matching/scan')
+async def matching_scan(request: Request):
+    owner(request)
+    from workflows.hfl.entity_matching import request_scan
+    return await run_in_threadpool(request_scan)
+
+
+@router.post('/matching/suggestions/{identity}/dismiss')
+async def dismiss_match(request: Request, identity: str):
+    owner(request)
+    from workflows.hfl.entity_matching import dismiss
+    await call(dismiss, identity)
+    return {'dismissed':identity}

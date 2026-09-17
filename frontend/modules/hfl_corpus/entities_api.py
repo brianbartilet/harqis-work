@@ -47,8 +47,16 @@ async def delete_graph_view(request: Request, identity: str, revision: int = Que
 
 
 def authorize(request):
-    if not get_current_user(request):
-        raise HTTPException(401, 'Sign in to view corpus relationships')
+    user = get_current_user(request)
+    if user:
+        return user
+    from fastapi.security import HTTPAuthorizationCredentials
+    from modules.hfl_corpus.api import _authorize
+    scheme, _, token = request.headers.get('authorization', '').partition(' ')
+    if not token:
+        raise HTTPException(401, 'Sign in or supply an owner bearer token')
+    _authorize(HTTPAuthorizationCredentials(scheme=scheme, credentials=token))
+    return 'owner-api'
 
 
 @router.get('/knowledge')
@@ -79,24 +87,27 @@ async def graph(request: Request, source: str = '', since: str = '', until: str 
 
 @router.get('/api/hfl/entities')
 async def index(request: Request, source: str = '', since: str = '', until: str = '',
-                limit: int | None = Query(default=None, ge=0, le=10000)):
+                limit: int | None = Query(default=None, ge=0, le=10000),
+                q: str = '', kind: str = '', offset: int = Query(default=0, ge=0)):
     authorize(request)
     rows = await run_in_threadpool(entities.entity_index, source, since, until)
     rows.sort(key=lambda e: (e['label'].casefold(), e['id']))
-    return {'entities': rows[:limit] if limit else rows, 'total': len(rows)}
+    counts = {k: sum(e['kind'] == k for e in rows) for k in entities.KINDS}
+    rows = [e for e in rows if (not kind or e['kind'] == kind) and
+            all(word in str([e['label'], e.get('categories'), e.get('profile')]).casefold() for word in q.casefold().split())]
+    return {'entities': rows[offset:offset + limit] if limit else rows[offset:], 'total': len(rows), 'counts': counts}
 
 
 class Profile(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    categories: list[str] = Field(default_factory=list, max_length=20)
-    emails: list[str] = Field(default_factory=list, max_length=20)
-    phones: list[str] = Field(default_factory=list, max_length=20)
-    notes: str = Field(default='', max_length=10000)
+    categories: list[str] = Field(default_factory=list)
+    emails: list[str] = Field(default_factory=list)
+    phones: list[str] = Field(default_factory=list)
+    references: list[str] = Field(default_factory=list)
+    notes: str = ''
 
 
-@router.post('/api/hfl/entities/profile/{identity}')
-async def save_profile(request: Request, identity: str, payload: Profile):
-    authorize(request)
+def validated_profile(payload: Profile):
     data = payload.model_dump()
     data['name'] = data['name'].strip()
     if not data['name'] or entities.is_link(data['name']):
@@ -106,14 +117,37 @@ async def save_profile(request: Request, identity: str, payload: Profile):
         if any(len(v) > 200 for v in data[field]):
             raise HTTPException(400, 'Contact details and categories must be at most 200 characters each')
     import re
+    from urllib.parse import urlsplit
+    data['references'] = list(dict.fromkeys(v.strip() for v in data['references'] if v.strip()))
+    for reference in data['references']:
+        try:
+            parsed = urlsplit(reference)
+            valid = ((parsed.scheme in {'http', 'https'} and bool(parsed.hostname))
+                     or (parsed.scheme == 'file' and bool(parsed.path))
+                     or reference.startswith(('/', '\\\\'))
+                     or bool(re.match(r'^[A-Za-z]:[\\/]', reference)))
+        except ValueError:
+            valid = False
+        if not valid or len(reference) > 2048 or any(ord(c) < 32 for c in reference):
+            raise HTTPException(400, 'References must be HTTP(S) links, file:// links or absolute file paths, at most 2048 characters each')
     if any(not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', v) for v in data['emails']):
         raise HTTPException(400, 'Enter valid email addresses, one per line')
     if any(not re.fullmatch(r'[+()0-9 .xX#-]{3,80}', v) or sum(c.isdigit() for c in v) < 3 for v in data['phones']):
         raise HTTPException(400, 'Enter phone numbers, one per line')
+    return data
+
+
+@router.post('/api/hfl/entities/profile/{identity}')
+async def save_profile(request: Request, identity: str, payload: Profile):
+    actor = authorize(request)
+    data = validated_profile(payload)
     available = {e['id']: e for e in await run_in_threadpool(entities.entity_index)}
     if identity not in available:
         raise HTTPException(404, 'Entity unavailable')
-    get_store().save_profile(identity, available[identity]['kind'], data)
+    try:
+        await run_in_threadpool(get_store().save_profile, identity, available[identity]['kind'], data, actor)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
     return {'profile': get_store().profiles()[identity]}
 
 
@@ -170,7 +204,8 @@ async def entry_preview(request: Request, entry_id: str, locator: str = ''):
             if identity and identity.group(1) != entry_id:
                 raise HTTPException(404, 'Entry unavailable')
             occurred = entry_occurrence_date(entry)
-            item = dict(title=entry.moment, text=entry.text, date=occurred.isoformat() if occurred else '', source=entry.source)
+            item = dict(title=entry.moment, text=entry.text, date=occurred.isoformat() if occurred else '', source=entry.source,
+                        path=location['path'])
         else:
             rows = await run_in_threadpool(entities.current_entries)
             item = next((e for e in rows if e['id'] == entry_id), None)
@@ -181,7 +216,14 @@ async def entry_preview(request: Request, entry_id: str, locator: str = ''):
         raise HTTPException(502, 'Entry could not load') from exc
     html = await run_in_threadpool(
         lambda: _pill_rendered_tags(render_markdown(format_hfl_markdown('## '+item['text'], references))))
-    return {'title': item['title'], 'date': item['date'], 'source': item['source'], 'html': str(html)}
+    from urllib.parse import urlencode
+    from modules.hfl_corpus.timeline import ENTRY_ID
+    identity = ENTRY_ID.search(item['text'])
+    action_url = '/hfl-corpus?' + urlencode({
+        'source_path': item['path'], 'source_entry': identity.group(1),
+    }) if identity else ''
+    return {'title': item['title'], 'date': item['date'], 'source': item['source'],
+            'html': str(html), 'action_url': action_url}
 
 
 @router.get('/hfl-corpus/entities/entry/{entry_id}')
@@ -235,8 +277,11 @@ async def merge(request: Request, payload: Merge):
 
 @router.post('/api/hfl/entities/decisions/{decision_id}/undo')
 async def undo(request: Request, decision_id: int):
-    authorize(request)
-    get_store().undo(decision_id)
+    actor = authorize(request)
+    try:
+        await run_in_threadpool(get_store().undo, decision_id, actor)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
     return {'undone': decision_id}
 
 
@@ -255,3 +300,7 @@ async def export(request: Request):
                 row['entities'].setdefault(m['kind'], []).append(m['label'] + ' -- ' + m['id'][-8:])
         return export_vault(rows, Path(path))
     return await run_in_threadpool(run)
+
+
+from modules.hfl_corpus.entity_merge_api import router as entity_merge_router
+router.include_router(entity_merge_router)

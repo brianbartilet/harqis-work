@@ -24,6 +24,8 @@ def refresh_corpus_entities(self, entry_id='*', revision=None, use_model=True):
                     db.execute('UPDATE pending SET queued_at=? WHERE id=?', (time.time(), entry_id))
             store.state('job', {'state': 'running', 'id': self.request.id})
             result = enrich(entry_id=None if entry_id == '*' else entry_id, use_model=use_model)
+            from workflows.hfl.entity_matching import dispatch_pending
+            dispatch_pending()
             if result['pending'] and result['processed']:
                 child = self.apply_async(kwargs=dict(entry_id=entry_id, revision=revision, use_model=use_model),
                                         queue=os.environ.get('HARQIS_ENTITIES_QUEUE', 'hfl'), countdown=2)
@@ -38,4 +40,27 @@ def refresh_corpus_entities(self, entry_id='*', revision=None, use_model=True):
     except Exception as exc:
         store.state('job', {'state': 'retrying' if self.request.retries < 4 else 'failed',
                             'error': type(exc).__name__, 'id': self.request.id})
+        raise self.retry(exc=exc, countdown=min(300, 15 * 2 ** self.request.retries))
+
+
+@SPROUT.task(bind=True, acks_late=True, reject_on_worker_lost=True, max_retries=4)
+def match_corpus_entities(self, job_id):
+    frontend = str(Path(__file__).resolve().parents[3] / 'frontend')
+    if frontend not in sys.path:
+        sys.path.insert(0, frontend)
+    from workflows.hfl.entity_matching import enabled, process_batch
+    from workflows.hfl.entity_store import get_store
+    if not enabled():
+        return {'state':'disabled'}
+    store = get_store()
+    try:
+        with FileLock(str(store.path) + '.matching.lock', timeout=0):
+            result = process_batch(job_id)
+            if result['pending']:
+                self.apply_async(kwargs={'job_id':job_id}, queue=os.environ.get('HARQIS_ENTITIES_QUEUE','hfl'), countdown=2)
+            return result
+    except Exception as exc:
+        with store.connection() as db:
+            db.execute('UPDATE entity_match_jobs SET error=?,state=CASE WHEN ? THEN ? ELSE state END WHERE id=?',
+                       (type(exc).__name__, self.request.retries >= 4, 'failed', job_id))
         raise self.retry(exc=exc, countdown=min(300, 15 * 2 ** self.request.retries))

@@ -482,6 +482,11 @@ def submit_hfl_entry(
 
 
 def flush_outbox(*, limit: int = 100) -> dict[str, int]:
+    from workflows.hfl.entity_merges import flush_audits
+    try:
+        flush_audits()
+    except Exception:
+        pass  # The entity audit outbox retains events until delivery can resume.
     from workflows.hfl.entity_events import dispatch_pending
     try:
         dispatch_pending()

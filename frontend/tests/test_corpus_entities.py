@@ -143,7 +143,8 @@ def test_profile_survives_rebuild_and_source_removal(corpus, authenticated_clien
     store = get_store()
     m = entities.mention(corpus[0], 'people', 'Alex', 'Alex', 'model-extracted')
     store.save('one', entities.entry_hash(corpus[0]), [m])
-    payload = dict(name='Alex Tan', categories=['Friends', 'Friends'], emails=['alex@example.com'], phones=['+65 8123 4567'], notes='Met at a workshop')
+    payload = dict(name='Alex Tan', categories=['Friends', 'Friends'], emails=['alex@example.com'], phones=['+65 8123 4567'], notes='Met at a workshop',
+                   references=['https://example.com/alex', 'C:\\Notes\\Alex.md', 'file:///notes/alex.pdf'])
     response = authenticated_client.post('/api/hfl/entities/profile/' + m['id'], json=payload)
     assert response.status_code == 200
     assert response.json()['profile']['categories'] == ['Friends']
@@ -153,6 +154,7 @@ def test_profile_survives_rebuild_and_source_removal(corpus, authenticated_clien
     entity = entities.entity_index()[0]
     assert entity['entries'] == [] and entity['profile']['notes'] == payload['notes']
     assert entity['profile']['emails'] == payload['emails']
+    assert entity['profile']['references'] == payload['references']
     assert entities.entity_index(source='notes') == []
 
 
@@ -163,6 +165,28 @@ def test_profile_validation_and_owner_boundary(corpus, authenticated_client):
     assert authenticated_client.post('/api/hfl/entities/profile/entity:missing', json={'name': 'Alex'}).status_code == 404
     for payload in [{'name': 'https://example.com'}, {'name': 'Alex', 'emails': ['invalid']}, {'name': 'Alex', 'phones': ['abc']}]:
         assert authenticated_client.post('/api/hfl/entities/profile/entity:missing', json=payload).status_code == 400
+
+
+@pytest.mark.parametrize('kind', ['people', 'companies', 'tools', 'topics', 'objects'])
+def test_profile_references_for_every_type(corpus, authenticated_client, monkeypatch, kind):
+    monkeypatch.setattr(entities, 'entity_index', lambda: [dict(id='reference-test', kind=kind)])
+    url = '/api/hfl/entities/profile/reference-test'
+    references = ['https://example.com', 'https://social.example/@alex', '/notes/readme.md',
+                  'file:///C:/notes/test.pdf', 'C:\\notes\\test.pdf', '\\\\server\\share\\test.pdf']
+    response = authenticated_client.post(url, json={'name': 'Example', 'references': references + [' https://example.com ']})
+    assert response.status_code == 200
+    assert response.json()['profile']['references'] == references
+    for value in ['javascript:alert(1)', 'data:text/html,test', 'https://', 'https://[broken', 'https://example.com/\nunsafe', 'x' * 2049]:
+        assert authenticated_client.post(url, json={'name': 'Example', 'references': [value]}).status_code == 400
+
+
+def test_directory_returns_all_entities_by_default(authenticated_client, monkeypatch):
+    rows = [dict(id=str(i), label=f'Entity {i:04}', kind='topics') for i in range(1203)]
+    monkeypatch.setattr(entities, 'entity_index', lambda *args: rows.copy())
+    data = authenticated_client.get('/api/hfl/entities').json()
+    assert data['total'] == len(data['entities']) == 1203
+    limited = authenticated_client.get('/api/hfl/entities?limit=100').json()
+    assert limited['total'] == 1203 and len(limited['entities']) == 100
 
 
 def test_merges_preserve_profiles_for_undo(corpus):
@@ -319,6 +343,29 @@ def test_entry_locator_reads_only_current_document(corpus, authenticated_client,
     item.secret=False
     document.entries=[]
     assert authenticated_client.get('/api/hfl/entities/entry/one', params={'locator':token}).status_code == 404
+
+
+@pytest.mark.parametrize('use_locator', [False, True])
+def test_entry_action_links_to_original_evidence(corpus, authenticated_client, monkeypatch, use_locator):
+    from types import SimpleNamespace
+    from urllib.parse import urlparse, parse_qs
+    from modules.hfl_corpus import entities_api
+    from modules.hfl_corpus.entity_source import entry_locator
+    row = corpus[0]
+    row.update(id='hfl-action-test', path='2026/entry & notes.md',
+               text='2026-09-01 10:00\nEntry ID: hfl-action-test\nWhat happened: Follow up')
+    item = SimpleNamespace(anchor=row['anchor'], header='2026-09-01 10:00',
+                           moment=row['title'], text=row['text'], source='notes', tags=(), secret=False)
+    monkeypatch.setattr(entities_api, '_entry_document', lambda path: (SimpleNamespace(entries=[item]), []))
+    monkeypatch.setattr(entities_api, '_entry_references', lambda item: [])
+    params = {'locator': entry_locator(row)} if use_locator else {}
+    response = authenticated_client.get('/api/hfl/entities/entry/hfl-action-test', params=params)
+    assert response.status_code == 200
+    url = urlparse(response.json()['action_url'])
+    assert url.path == '/hfl-corpus'
+    assert parse_qs(url.query) == {'source_path': [row['path']], 'source_entry': [row['id']]}
+    row['text'] = item.text = '2026-09-01 10:00\nWhat happened: Legacy entry'
+    assert authenticated_client.get('/api/hfl/entities/entry/hfl-action-test', params=params).json()['action_url'] == ''
 
 
 def test_enrichment_propagates_batches_entities_sources_and_dates(corpus, monkeypatch):

@@ -116,6 +116,12 @@
 
 .kg-legend h3{margin:0;color:#cbd5e1;font-size:12px;font-weight:600;padding:2px 0}
 #kg-entry-body>h2:first-child{font-size:18px;font-weight:600;color:#e2e8f0;margin:0 0 18px;padding-bottom:12px;border-bottom:1px solid #334155}
+#kg-entry-body .corpus-entry-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin:0 0 18px;padding-bottom:12px;border-bottom:1px solid #334155}
+#kg-entry-body .corpus-entry-header h2{font-size:18px;font-weight:600;color:#e2e8f0;margin:0;padding:0;border:0}
+#kg-entry-body .corpus-followup-action{display:inline-flex;align-items:center;justify-content:center;min-height:44px;box-sizing:border-box;padding:6px 12px;border:1px solid #155e75;border-radius:8px;background:#082f49;color:#7dd3fc;font:600 12px/1.5 system-ui;text-decoration:none;white-space:nowrap}
+#kg-entry-body .corpus-followup-action:hover{background:#0c4a6e;border-color:#38bdf8}
+#kg-entry-body .corpus-followup-action:focus-visible{outline:2px solid #7dd3fc;outline-offset:3px}
+#kg-entry-body .corpus-action-toast{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 16px;padding:8px 12px;border:1px solid #155e75;border-radius:8px;background:#082f4980;color:#a5f3fc;font-size:13px}
 #kg-entry-body .corpus-reference-list{list-style:none;padding:0;margin:8px 0}
 #kg-entry-body .corpus-reference-list>li{list-style:none;padding:0;margin:0 0 8px}
 #kg-entry-body .corpus-reference-preview{grid-template-columns:72px minmax(0,1fr)}

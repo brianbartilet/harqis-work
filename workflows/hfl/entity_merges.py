@@ -44,6 +44,10 @@ def commit_merge(preview, request_id, fingerprint, actor):
             return previous
         if revision(db) != preview['revision']:
             raise ValueError('Entities changed; review a fresh merge preview')
+        if preview.get('automatic'):
+            from workflows.hfl.entity_matching import blocked
+            if blocked(db, [m['id'] for m in preview['members']]):
+                raise ValueError('A previous unmerge or dismissal blocks automatic matching')
         identity = 'merged-' + uuid.uuid4().hex
         members = preview['members']
         db.execute('INSERT INTO entity_merges(id,kind,name,members) VALUES (?,?,?,?)',
@@ -56,6 +60,7 @@ def commit_merge(preview, request_id, fingerprint, actor):
             'name': preview['name'], 'kind': preview['kind'], 'members': members,
             'profile': preview['profile'], 'evidence': preview['evidence'],
             'unique_entries': preview['unique_entries'],
+            'automatic': preview.get('automatic'),
         })
         result = dict(entity_id=identity, event_id=event_id, state='complete', action='merged')
         db.execute('INSERT INTO entity_operations VALUES (?,?,?)', (request_id, fingerprint, json.dumps(result)))
@@ -76,6 +81,8 @@ def unmerge(identity, request_id, fingerprint, actor, evidence=''):
         row = db.execute('SELECT data FROM profiles WHERE id=?', (identity,)).fetchone()
         profile = json.loads(row[0]) if row else {}
         members = json.loads(group['members'])
+        from workflows.hfl.entity_matching import block_members
+        block_members(db, [m['id'] for m in members], 'unmerged')
         event_id = record_event(db, identity, 'unmerged', actor, {
             'name': profile.get('name', group['name']), 'kind': group['kind'],
             'members': members, 'profile': profile, 'evidence': evidence,
@@ -112,7 +119,8 @@ def flush_audits(limit=20):
         entry = HflEntry(when=datetime.fromisoformat(row['created']),
             moment=f"Entities {row['action']}: {data['name']}",
             what_happened=f"Actor: {row['actor']}\nResult: {data['name']} ({row['entity_id']})\n"
-                          f"Event: {row['id']}\nEntities:\n{members}\nDecision evidence: {data.get('evidence') or 'Not supplied'}",
+                          f"Event: {row['id']}\nEntities:\n{members}\nDecision evidence: {data.get('evidence') or 'Not supplied'}"
+                          + (f"\nAutomatic matching: {json.dumps(data['automatic'], ensure_ascii=False)}" if data.get('automatic') else ''),
             why_it_stayed='Reversible entity identity decision; original evidence and profiles retained.',
             possible_use='audit-log', tags=('entities-audit', row['action']),
             entry_id='hfl-entities-audit-' + row['id'])

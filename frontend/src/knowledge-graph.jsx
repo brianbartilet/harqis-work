@@ -23,6 +23,7 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
   $('info').addEventListener('mouseleave',()=>{infoPaused=false;});
   $('info').addEventListener('focus',()=>{infoPaused=true;});
   $('info').addEventListener('blur',()=>{infoPaused=false;});
+  const kindLabel = kind => kind === 'companies' ? 'organizations' : kind.replaceAll('_', ' ');
   const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3'};
   const color = kind => palette[kind] || '#e9c96c';
   const defaultLabelKinds = new Set(['sources', 'people', 'tools', 'companies']);
@@ -285,7 +286,7 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
     $('list').replaceChildren();
     items.sort((a,b)=>Number(b.kind==='sources')-Number(a.kind==='sources') || b.visibleDegree-a.visibleDegree || a.label.localeCompare(b.label)).slice(0,200).forEach(n => {
       const button=document.createElement('button'),dot=document.createElement('span'),name=document.createElement('span'),meta=document.createElement('small');
-      dot.className='kg-dot';dot.style.background=color(n.kind);name.textContent=n.label;meta.textContent=n.visibleDegree+' links';button.title=n.label+' · '+n.kind;
+      dot.className='kg-dot';dot.style.background=color(n.kind);name.textContent=n.label;meta.textContent=n.visibleDegree+' links';button.title=n.label+' · '+kindLabel(n.kind);
       if(selected){const link=edges.find(e=>(e.source===selected&&e.target===n.id)||(e.target===selected&&e.source===n.id));if(link){const evidence=document.createElement('small');evidence.textContent=(link.relation||'linked')+' · '+(link.evidence||'');evidence.style.cssText='grid-column:2 / 4;white-space:normal;font-size:11px';button.append(evidence);button.title=link.evidence||n.label;}}
       button.prepend(dot,name,meta);button.onclick=()=>select(n.id);$('list').append(button);
     });
@@ -305,6 +306,14 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
       // HTML is rendered and sanitized by the existing server Markdown service.
       $('entry-body').innerHTML=item.html;
       const article=$('entry-body'), fieldLabel=node=>node.matches('p')&&node.firstElementChild?.tagName==='STRONG'?node.firstElementChild.textContent.trim().toLowerCase():'';
+      const heading=article.querySelector('h2');
+      if(item.action_url&&heading){
+        const header=document.createElement('div'),action=document.createElement('a');
+        header.className='corpus-entry-header';
+        action.className='corpus-followup-action';action.href=item.action_url;action.textContent='Make actionable ↗';
+        action.setAttribute('aria-label','Create a follow-up from this HFL entry');
+        heading.before(header);header.append(heading,action);
+      }
       const metadata=document.createElement('div');metadata.className='kg-entry-metadata';
       for(const paragraph of Array.from(article.children)) {
         if(['source:','machine:','entry id:'].includes(fieldLabel(paragraph))){
@@ -344,9 +353,9 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
     highlight(id);
     $('detail').replaceChildren();$('detail').classList.toggle('kg-detail-empty',!n);
     const heading=document.createElement('h2'),description=document.createElement('p');
-    const eyebrow=document.createElement('span');eyebrow.className='kg-eyebrow';eyebrow.textContent=n?n.kind.replaceAll('_',' '):'Your knowledge, connected';$('detail').append(eyebrow);
+    const eyebrow=document.createElement('span');eyebrow.className='kg-eyebrow';eyebrow.textContent=n?kindLabel(n.kind):'Your knowledge, connected';$('detail').append(eyebrow);
     heading.textContent=n?n.label:'';
-    description.textContent=n?[n.kind,n.date,n.source,near.size+' visible connections'].filter(Boolean).join(' · '):'Select a source to explore its linked entries and entities.';
+    description.textContent=n?[kindLabel(n.kind),n.date,n.source,near.size+' visible connections'].filter(Boolean).join(' · '):'Select a source to explore its linked entries and entities.';
     if(n)$('detail').append(heading);$('detail').append(description);
     if(n?.href&&n.kind==='entries') {const button=document.createElement('button');button.textContent='Open entry';button.className='kg-open-entry';button.onclick=()=>openEntry(n.id.replace(/^entry:/,''),n.locator);$('detail').append(button);}
     if(n){const focus=document.createElement('button');focus.textContent='Focus on this connection';focus.className='kg-focus-button';focus.onclick=()=>{focusId=n.id;markDirty();render();};$('detail').append(focus);}
@@ -384,7 +393,7 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
     const byId=new Map(nodes.map(n=>[n.id,n]));
     edges=data.edges.filter(e=>byId.has(e.source)&&byId.has(e.target)).map(e=>({...e,a:byId.get(e.source),b:byId.get(e.target)}));
     nodes.forEach(n=>n.visibleDegree=0);edges.forEach(e=>{e.a.visibleDegree++;e.b.visibleDegree++;});
-    nodes.forEach(n=>{const smallGraph=nodes.length<=35;n.radius=n.kind==='entries'?(smallGraph?7:4.5):(smallGraph?16:Math.min(11,4+Math.sqrt(n.visibleDegree)));});
+    nodes.forEach(n=>{const smallGraph=nodes.length<=35;n.radius=n.kind==='entries'?(smallGraph?7:4.5):(smallGraph?10:4)+4*Math.log2(1+n.visibleDegree);});
     // Separate neighborhoods around real, highly connected entity anchors.
     const anchors=[...nodes].filter(n=>n.kind!=='entries').sort((a,b)=>b.visibleDegree-a.visibleDegree).slice(0,4);
     const adjacency=new Map();edges.forEach(e=>{for(const [a,b] of [[e.source,e.target],[e.target,e.source]]){if(!adjacency.has(a))adjacency.set(a,[]);adjacency.get(a).push(b);}});
@@ -419,7 +428,7 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
     if(selected&&!data.nodes.some(node=>node.id===selected))selected=null;
     const availableKinds=new Set(data.nodes.map(node=>node.kind));$('types').replaceChildren();
     $('legend').replaceChildren();
-    const legendLabels={sources:'sources',entries:'entries',daily:'dates',people:'people',companies:'companies',tools:'tools',topics:'topics'};
+    const legendLabels={sources:'sources',entries:'entries',daily:'dates',people:'people',companies:'organizations',tools:'tools',topics:'topics'};
     const legendKinds=[...Object.keys(legendLabels).filter(kind=>availableKinds.has(kind)),...[...availableKinds].filter(kind=>!legendLabels[kind]).sort()];
     legendKinds.forEach(kind=>{
       const item=document.createElement('li'),button=document.createElement('button'),dot=document.createElement('span');
@@ -428,7 +437,7 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
       button.onclick=()=>{saveView();enabled.has(kind)?enabled.delete(kind):enabled.add(kind);markDirty();render();};
       button.append(dot,document.createTextNode(legendLabels[kind]||kind.replaceAll('_',' ').toLowerCase()));item.append(button);$('legend').append(item);
     });
-    [...availableKinds].sort().forEach(kind=>{const label=document.createElement('label'),input=document.createElement('input'),dot=document.createElement('span');input.type='checkbox';input.dataset.kind=kind;input.checked=true;input.onchange=()=>{input.checked?enabled.add(kind):enabled.delete(kind);markDirty();render();};dot.className='kg-dot';dot.style.background=color(kind);label.append(input,dot,document.createTextNode(kind.replaceAll('_',' ')));$('types').append(label);});
+    [...availableKinds].sort().forEach(kind=>{const label=document.createElement('label'),input=document.createElement('input'),dot=document.createElement('span');input.type='checkbox';input.dataset.kind=kind;input.checked=true;input.onchange=()=>{input.checked?enabled.add(kind):enabled.delete(kind);markDirty();render();};dot.className='kg-dot';dot.style.background=color(kind);label.append(input,dot,document.createTextNode(kindLabel(kind)));$('types').append(label);});
     render(preserveLayout);
   }
   function showMode() {

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}HARQIS — Corpus entities{% endblock %}
+{% block title %}HARQIS — Activity Corpus Entities{% endblock %}
 
 {% block head %}<style>
 
@@ -19,18 +19,20 @@
 .processing-actions{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0}.entity-shell .processing-actions button{min-height:44px;padding:10px 14px;font-size:14px}.job-summary{font-size:14px;line-height:1.6}.job-summary p{margin:8px 0}.job-summary .job-state{font-weight:600;color:#d5e6ff}.entity-shell .job-details{padding:12px;margin:16px 0 0;background:#101c30;border-color:#334d70}.entity-shell .job-details summary{font-size:12px;color:#aebfd2}.entity-shell #job{font-size:12px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;max-height:260px;overflow:auto}@media(max-width:650px){.processing-actions{display:grid;grid-template-columns:1fr;gap:10px}.entity-shell .processing-actions button{width:100%;text-align:center}.entity-shell .entity-maintenance{padding:16px}.entity-shell .entity-maintenance>summary{line-height:1.5}.job-summary{font-size:13px}}
 /* Activity Corpus typography and filter palette. */
 .entity-shell{font-family:inherit;color:#cbd5e1}.entity-shell h1{font-family:inherit;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-.015em;color:#fff}.entity-shell>p{font-size:14px;line-height:24px;color:#94a3b8}.entity-shell h2{font-size:18px;font-weight:600;line-height:1.5}.entity-shell button,.entity-shell input,.entity-shell select,.entity-shell textarea{font-family:inherit}.entity-shell label,.entity-shell .filter-label,.entity-shell .type-cloud legend{font-size:12px;font-weight:400;color:#94a3b8}.entity-shell input,.entity-shell select,.entity-shell textarea{background:#020617;border:1px solid #334155;border-radius:8px;color:#cbd5e1;font-size:14px;font-weight:400;line-height:1.5}.entity-shell input::placeholder,.entity-shell textarea::placeholder{color:#64748b}.entity-shell .directory-filters select{font-size:12px}.entity-shell .multi-filter,.entity-shell .checkbox-options{background:#020617;border-color:#334155}.entity-shell .multi-filter>summary{font-size:12px;font-weight:400;color:#cbd5e1}.entity-shell label:has(>select)::after,.entity-shell .multi-filter>summary::after{border-color:#67e8f9}.entity-shell :focus-visible{outline:2px solid #3b82f6;outline-offset:2px}.entity-shell .pill{font-size:12px;font-weight:400;background:#17255480;color:#93c5fd;border-color:transparent}.entity-shell button.pill[aria-pressed="true"]{background:#052e1670;color:#a7f3d0;border-color:#04785799}.entity-shell .entity-title-row{font-size:14px;font-weight:600;line-height:1.5}.entity-shell .entity-detail-row,.entity-shell .entity-detail-row .pill,.entity-shell .entity-meta,.entity-shell .results-toolbar{font-size:12px}.entity-shell .entity-detail-row .pill{background:#17255480;color:#93c5fd;border-color:transparent}.entity-shell .entity-maintenance>summary{font-size:12px}.entity-shell .profile-fields input,.entity-shell .profile-fields textarea{background:#020617}.entity-shell .profile-editor,.entity-shell .job-details{background:#0f172a}.entity-shell .processing-actions button{font-size:12px;font-weight:600}.entity-shell .job-summary,.entity-shell .profile-hint{font-family:inherit;font-size:12px;line-height:1.5}@media(min-width:640px){.entity-shell h1{font-size:30px;line-height:36px}}@media(max-width:650px){.entity-shell input,.entity-shell select,.entity-shell .multi-filter>summary{min-height:44px;box-sizing:border-box}}
+.entity-shell .entity-select{width:18px;height:18px;min-height:18px;margin:0;accent-color:#38bdf8;flex-shrink:0}.entity-selection{border:1px solid #334155;background:#0f172a;border-radius:12px;padding:18px;margin-top:24px}.entity-selection p{font-size:12px;color:#94a3b8;margin:8px 0}.selection-buttons{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.entity-shell #merge-selected,.entity-shell #merge-confirm{background:#2563eb;border-color:#3b82f6}.entity-merge-dialog{box-sizing:border-box;width:min(720px,calc(100vw - 32px));max-height:88dvh;overflow:auto;border:1px solid #475569;border-radius:14px;background:#0f172a;color:#cbd5e1;padding:24px}.entity-merge-dialog::backdrop{background:#020617c9}.entity-merge-dialog header{display:flex;align-items:center;justify-content:space-between;gap:12px}.entity-merge-dialog h2{margin:0}.entity-merge-dialog label{margin:18px 0}.entity-merge-dialog p{font-size:14px;line-height:1.6;margin:12px 0}.entity-merge-dialog footer{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}.entity-merge-dialog pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;background:#020617;padding:12px;border-radius:8px;max-height:240px;overflow:auto}.entity-merge-dialog ul{padding-left:20px;list-style:disc;max-height:160px;overflow:auto;font-size:13px}#merge-wait{display:flex;align-items:center;gap:12px;margin-top:16px}#merge-wait[hidden],#merge-preview-content[hidden],#merge-name-label[hidden],#merge-review[hidden]{display:none}.entity-audit{font-size:12px}.entity-audit pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto}.entity-shell #selection-feedback{color:#7dd3fc}.entity-shell .merge-card-actions{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}
+.entity-merge-dialog .merged-details-review{margin-top:28px;padding:24px 16px 8px;border-top:1px solid #334155}.entity-merge-dialog .merged-details-review h2{margin:0 0 14px}.entity-merge-dialog .merged-details-review>p{margin:0 0 24px;line-height:1.7}.entity-merge-dialog .merged-details-review label{margin:0 0 20px}.entity-merge-dialog .merged-details-review label:last-child{margin-bottom:0}@media(max-width:650px){.entity-merge-dialog .merged-details-review{padding:20px 8px 8px}}
 </style>{% endblock %}
 
 {% block content %}
 
 <main class="entity-shell">
 
-<header class="directory-header"><h1>Actuvity Corpus Entities</h1><nav aria-label="Related views"><a href="/hfl-corpus">Activity Corpus</a><a href="/hfl-corpus/graph">Activity Graph</a></nav></header>
+<header class="directory-header"><h1>Activity Corpus Entities</h1><nav aria-label="Related views"><a href="/hfl-corpus">Activity Corpus</a><a href="/hfl-corpus/graph">Activity Graph</a></nav></header>
 
-<p class="text-slate-400">People, organizations, tools and topics from your activity. Keep contact details and notes alongside their evidence. Web links stay in source entries.</p>
+<p class="text-slate-400">People, organizations, tools, topics and referenced objects from your activity. Open an entity to review its evidence or edit its profile. Add references for websites, social media and files to any entity. Local file paths are displayed for copying.</p>
 
 <fieldset id="entity-filters" disabled inert aria-busy="true">
-<label class="block my-4">Find an entity<input id="entity-query" class="block w-full p-3 bg-slate-900 border border-slate-600 rounded" type="search" placeholder="Search names, emails, phone numbers, categories or notes"></label>
+<label class="block my-4">Find an entity<input id="entity-query" class="block w-full p-3 bg-slate-900 border border-slate-600 rounded" type="search" placeholder="Search all names, emails, phone numbers, categories, references or notes"></label>
 
 <fieldset class="type-cloud"><legend>Entity types</legend><div id="filter-kind" class="pill-cloud" aria-label="Filter entity types"></div></fieldset>
 <div class="directory-filters">
@@ -45,9 +47,9 @@
 </div>
 
 </fieldset>
-<div class="results-toolbar"><p id="entity-status" role="status" class="text-slate-400"></p><div id="result-actions" hidden><button id="clear-filters" type="button" disabled>Clear filters</button><button id="load-more" type="button" hidden>Load more entities</button></div></div>
+<div class="results-toolbar"><p id="entity-status" role="status" class="text-slate-400"></p><div id="result-actions" hidden><button id="clear-filters" type="button" disabled>Clear filters</button><button id="reload-entities" type="button">Refresh entities</button></div></div>
 <p id="load-scope" class="text-slate-400 text-sm" hidden></p>
-<div id="entity-loading" role="status"><span class="loading-spinner" aria-hidden="true"></span><span>Loading entities from your activity…</span></div>
+<div id="entity-loading" role="status"><span class="loading-spinner" aria-hidden="true"></span><span>Loading the full entity directory from your activity…</span></div>
 
 
 
@@ -55,6 +57,11 @@
 <details class="entity-maintenance"><summary>Processing and optional export</summary>
 
 <p class="my-3 text-slate-400">Historical enrichment runs in bounded background batches. Explicit references are available even before extraction finishes.</p>
+<ol class="my-3 space-y-2 text-slate-400 list-decimal pl-5">
+<li><strong>Enrich corpus history</strong> queues extraction of people, organizations (including companies, nonprofits and public institutions), tools and topics from activity evidence. It needs the configured background worker; queued or pending means processing has not finished. Saved profiles are preserved.</li>
+<li><strong>Check progress</strong> shows the job state and last batch counts. Once processing finishes, use <strong>Refresh entities</strong> to load the updated directory.</li>
+<li><strong>Export Obsidian vault</strong> writes activity notes, daily indexes and entity links to the server’s configured vault folder. It is a one-way export, not a browser download or a backup of edited profiles. Set <code>HARQIS_OBSIDIAN_VAULT</code> on the server first. Locally edited notes are reported as conflicts instead of overwritten; review the export result in Technical details.</li>
+</ol>
 
 <div class="processing-actions">
 <button id="backfill" class="border rounded p-2">Enrich corpus history</button>
@@ -67,24 +74,36 @@
 <div id="job-summary" class="job-summary" role="status"></div>
 <details class="job-details"><summary>Technical details</summary><pre id="job" class="whitespace-pre-wrap my-3"></pre></details></details>
 
-<details class="entity-maintenance"><summary>Resolve an uncertain identity</summary>
-
-<p class="my-3 text-slate-400">Explicit object IDs join automatically. Only merge uncertain names when their evidence establishes the same identity. Decisions can be undone.</p>
-
-<form id="merge-form" class="space-y-3"><label class="block">Alias<select id="alias" class="block w-full bg-slate-900 p-2"></select></label>
-
-<label class="block">Canonical identity<select id="canonical" class="block w-full bg-slate-900 p-2"></select></label>
-
-<label class="block">Evidence for the decision<input id="reason" required minlength="5" maxlength="1000" class="block w-full bg-slate-900 p-2"></label>
-
-<button class="border rounded p-2">Record reversible merge</button></form><div id="decisions" class="my-4"></div></details>
+<div class="entity-selection" role="region" aria-label="Merge entities">
+  <div><strong id="selection-count" role="status">0 selected</strong><p>Select entities of one type to combine their profiles and connections. Selections stay across pages and filters.</p></div>
+  <div class="selection-buttons"><button id="select-page" type="button">Select this page</button><button id="select-matching" type="button">Select all matching</button><button id="clear-selection" type="button">Clear selection</button><button id="merge-selected" type="button" disabled>Merge selected</button></div>
+  <p id="selection-feedback" role="status"></p>
+</div>
+<details class="entity-maintenance" id="matching-panel"><summary>Automatic matching and review suggestions</summary>
+  <p class="my-3 text-slate-400">Newly enriched entities are checked for same-type identity matches. Strong, corroborated matches merge automatically; uncertain matches appear here. Edited names and profiles are preserved. Unmerged or dismissed matches are excluded from automatic remerging.</p>
+  <div class="processing-actions"><button id="matching-scan" type="button">Scan existing entities once / resume</button><button id="matching-refresh" type="button">Refresh matching progress</button></div>
+  <p id="matching-status" role="status" aria-live="polite">Loading matching status…</p>
+  <div id="matching-suggestions"></div>
+</details>
 
 <div id="entity-list" class="space-y-4" aria-busy="true"></div><nav class="pagination" aria-label="Directory pages"><button id="previous">Previous</button><span id="page-number"></span><button id="next">Next</button></nav>
 
 </section>
+<dialog id="entity-merge-dialog" class="entity-merge-dialog" aria-labelledby="entity-merge-title">
+<form id="entity-merge-form">
+  <header><h2 id="entity-merge-title">Merge entities</h2><button id="merge-close" type="button" aria-label="Close merge dialog">×</button></header>
+  <p id="merge-description"></p>
+  <label id="merge-name-label">New entity name<input id="merge-name" maxlength="120" required></label>
+  <label>Decision evidence (optional)<textarea id="merge-evidence" maxlength="10000" rows="3" placeholder="Why these entities belong together"></textarea></label>
+  <div id="merge-preview-content" hidden></div>
+  <p id="merge-feedback" role="status" aria-live="polite"></p>
+  <div id="merge-wait" role="status" hidden><span class="loading-spinner" aria-hidden="true"></span><span id="merge-wait-text">Preparing…</span></div>
+  <footer><button id="merge-review" type="button">Review merge</button><button id="merge-confirm" type="submit" disabled>Confirm merge</button></footer>
+</form>
+</dialog>
 </main>
 
-<script src="/static/js/corpus-entities.js?v=directory-20260914-6" defer></script>
+<script src="{{ static_asset('js/corpus-entities.js') }}" defer></script>
 
 {% endblock %}
 

@@ -21,6 +21,8 @@ def request_enrichment(entry_id='*'):
 def dispatch_pending():
     if not os.environ.get('HARQIS_ENTITIES_DB'):
         return {'state': 'disabled'}
+    from workflows.hfl.entity_matching import dispatch_pending as dispatch_matches
+    dispatch_matches()
     from core.apps.sprout.app.celery import SPROUT
     store = get_store()
     with store.connection() as db:

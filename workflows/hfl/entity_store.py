@@ -29,7 +29,24 @@ class EntityStore:
                 CREATE TABLE IF NOT EXISTS profiles(id TEXT PRIMARY KEY, kind TEXT NOT NULL,
                     data TEXT NOT NULL, updated TEXT DEFAULT CURRENT_TIMESTAMP);
                 CREATE TABLE IF NOT EXISTS state(key TEXT PRIMARY KEY, value TEXT);
+                CREATE TABLE IF NOT EXISTS entity_merges(id TEXT PRIMARY KEY, kind TEXT NOT NULL,
+                    name TEXT NOT NULL, members TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1);
+                CREATE TABLE IF NOT EXISTS entity_operations(request_id TEXT PRIMARY KEY,
+                    fingerprint TEXT NOT NULL, result TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS entity_match_jobs(id TEXT PRIMARY KEY, mode TEXT NOT NULL,
+                    seeds TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', queued_at REAL DEFAULT 0,
+                    error TEXT NOT NULL DEFAULT '', created TEXT DEFAULT CURRENT_TIMESTAMP);
+                CREATE TABLE IF NOT EXISTS entity_match_pairs(id TEXT PRIMARY KEY, job_id TEXT NOT NULL,
+                    left_id TEXT NOT NULL, right_id TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending',
+                    data TEXT NOT NULL DEFAULT '{}');
+                CREATE TABLE IF NOT EXISTS entity_match_blocks(left_id TEXT NOT NULL, right_id TEXT NOT NULL,
+                    reason TEXT NOT NULL, PRIMARY KEY(left_id,right_id));
+                CREATE TABLE IF NOT EXISTS entity_audit(id TEXT PRIMARY KEY, entity_id TEXT NOT NULL,
+                    action TEXT NOT NULL, actor TEXT NOT NULL, created TEXT NOT NULL, data TEXT NOT NULL,
+                    delivery TEXT NOT NULL DEFAULT 'pending', error TEXT NOT NULL DEFAULT '');
             ''')
+            if 'merge_id' not in {r[1] for r in db.execute('PRAGMA table_info(decisions)')}:
+                db.execute('ALTER TABLE decisions ADD COLUMN merge_id TEXT')
             if 'queued_at' not in {r[1] for r in db.execute('PRAGMA table_info(pending)')}:
                 db.execute('ALTER TABLE pending ADD COLUMN queued_at REAL DEFAULT 0')
 
@@ -51,10 +68,16 @@ class EntityStore:
             return {r['id']: {**dict(r), 'mentions': json.loads(r['mentions'])}
                     for r in db.execute('SELECT * FROM enrichment')}
 
-    def save(self, identity, content_hash, mentions, version=VERSION):
+    def save(self, identity, content_hash, mentions, version=VERSION, match=False):
         with self.connection() as db:
             db.execute('INSERT OR REPLACE INTO enrichment VALUES (?,?,?,?)',
                        (identity, content_hash, version, json.dumps(mentions)))
+            if match and mentions:
+                from workflows.hfl.entity_matching import enabled
+                if enabled():
+                    job_id = 'enrichment-' + digest([identity, content_hash, version])
+                    db.execute('INSERT OR IGNORE INTO entity_match_jobs(id,mode,seeds) VALUES (?,?,?)',
+                               (job_id, 'enrichment', json.dumps(sorted({m['id'] for m in mentions}))))
 
     def prune(self, current_ids):
         with self.connection() as db:
@@ -84,8 +107,25 @@ class EntityStore:
                              (alias, canonical, reason))
             return row.lastrowid
 
-    def undo(self, decision_id):
+    def undo(self, decision_id, actor='owner'):
         with self.connection() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT * FROM decisions WHERE id=?', (decision_id,)).fetchone()
+            if row and row['merge_id']:
+                raise ValueError('Use Unmerge on the merged entity to reverse the complete group')
+            if row and self.resolve(row['canonical']) != row['canonical']:
+                raise ValueError('Unmerge the outer grouping first')
+            if row and row['active']:
+                from workflows.hfl.entity_merges import record_event
+                from workflows.hfl.entity_matching import block_members
+                block_members(db, [row['alias'],row['canonical']], 'unmerged')
+                profiles = {r['id']: json.loads(r['data']) for r in db.execute('SELECT id,data FROM profiles')}
+                record_event(db, row['canonical'], 'unmerged', actor, {
+                    'name': profiles.get(row['canonical'], {}).get('name', row['canonical']),
+                    'members': [{'id': identity, 'label': profiles.get(identity, {}).get('name', identity)}
+                                for identity in (row['alias'], row['canonical'])],
+                    'evidence': row['reason'], 'legacy_decision_id': decision_id,
+                })
             db.execute('UPDATE decisions SET active=0 WHERE id=?', (decision_id,))
 
     def profiles(self):
@@ -94,9 +134,22 @@ class EntityStore:
                               'updated': r['updated']}
                     for r in db.execute('SELECT * FROM profiles')}
 
-    def save_profile(self, identity, kind, data):
+    def save_profile(self, identity, kind, data, actor='owner'):
         # Curated data is never pruned or overwritten by enrichment.
         with self.connection() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if db.execute('SELECT 1 FROM decisions WHERE alias=? AND active=1', (identity,)).fetchone():
+                raise ValueError('Entity was merged; refresh before editing its profile')
+            group = db.execute('SELECT * FROM entity_merges WHERE id=?', (identity,)).fetchone()
+            if group and not group['active']:
+                raise ValueError('Entity was unmerged; refresh before editing its profile')
+            if group:
+                from workflows.hfl.entity_merges import record_event
+                old = db.execute('SELECT data FROM profiles WHERE id=?', (identity,)).fetchone()
+                record_event(db, identity, 'profile-edited', actor, {
+                    'name': data['name'], 'members': json.loads(group['members']),
+                    'before': json.loads(old[0]) if old else None, 'profile': data,
+                }, deliver=False)
             db.execute("INSERT INTO profiles(id,kind,data) VALUES (?,?,?) ON CONFLICT(id) "
                        "DO UPDATE SET data=excluded.data, updated=CURRENT_TIMESTAMP",
                        (identity, kind, json.dumps(data)))

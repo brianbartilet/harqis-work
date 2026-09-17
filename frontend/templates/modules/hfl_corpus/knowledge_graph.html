@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}HARQIS — Activity Graph{% endblock %}
-{% block head %}<link rel="stylesheet" href="/static/css/knowledge-graph.css?v=30">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ static_asset('css/knowledge-graph.css') }}">{% endblock %}
 {% block content %}
 <main class="kg-shell" data-view-owner="{{ user }}">
   <header><a href="/hfl-corpus">← Activity Corpus</a><div class="kg-heading-row"><h1>Activity Graph</h1><a class="kg-entities-button" href="/hfl-corpus/entities">Entities</a></div>
@@ -65,5 +65,7 @@
   <p id="kg-entry-meta"></p><div id="kg-entry-body" class="markdown-body" role="region" aria-label="Entry content"></div>
 </dialog>
 </main>
-<script src="/static/js/knowledge-graph.js?v=36" defer></script>
+{% include "modules/hfl_corpus/partials/action_editor.html" %}
+<script src="{{ static_asset('js/hfl-document-actions.js') }}" defer></script>
+<script src="{{ static_asset('js/knowledge-graph.js') }}" defer></script>
 {% endblock %}
