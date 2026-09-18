@@ -150,7 +150,9 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
   $('rolling').onchange=syncDates;
   document.querySelector('.kg-shell').addEventListener('change',event=>{if(event.target.closest('.kg-main-toolbar,.kg-filter-drawer'))markDirty();});
   $('search').addEventListener('input',markDirty);
-  window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
+  // Navigation discards local edits. Back/forward cache restores must also
+  // reload the last saved view instead of reviving an unsaved graph.
+  window.addEventListener('pageshow',event=>{if(event.persisted)window.location.reload();});
   function restorePreferences() {
     try {
       const value=JSON.parse(localStorage.getItem(preferencesKey)||'null');if(!value)return;

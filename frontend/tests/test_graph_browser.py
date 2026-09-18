@@ -108,6 +108,22 @@ def test_saved_views_live_updates_and_full_graph(authenticated_client, monkeypat
             second.wait_for_function("document.querySelector('#kg-saved-views').selectedOptions[0].textContent==='Complete activity'")
             assert second.input_value('#kg-density') == '0'
             assert second.locator('#kg-legend button[data-kind="daily"]').get_attribute('aria-pressed') == 'false'
+            # Leaving with local edits must not prompt or overwrite the saved profile.
+            dialogs = []
+            def accept_unexpected_dialog(dialog):
+                dialogs.append(dialog.type)
+                dialog.accept()
+            second.on('dialog', accept_unexpected_dialog)
+            second.click('#kg-legend button[data-kind="daily"]')
+            assert second.locator('#kg-dirty').inner_text() == 'Unsaved changes'
+            second.goto('about:blank')
+            second.go_back()
+            second.wait_for_selector('#kg-workspace:not([inert])')
+            second.wait_for_function("document.querySelector('#kg-saved-views').selectedOptions[0].textContent==='Complete activity'")
+            assert dialogs == []
+            assert second.locator('#kg-dirty').inner_text() == ''
+            assert second.locator('#kg-legend button[data-kind="daily"]').get_attribute('aria-pressed') == 'false'
+            assert authenticated_client.get('/api/hfl/graph-views').json()['views'][0] == first
             # Keep the original tab idle; check additions and removals in the restored view.
             rows.append({**rows[0], 'id': 'new', 'title': 'New backend activity', 'anchor': 'new'})
             started = time.monotonic()
