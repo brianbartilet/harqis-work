@@ -12,6 +12,17 @@
   let current = views.find(view => view.id === form.elements.workspace.value);
   let operation = '', busy = false;
   const sources = [...form.querySelectorAll('[data-source-option]')];
+  const sourcesDropdown = $('[data-workspace-sources]');
+  document.addEventListener('click', event => {
+    if (!sourcesDropdown.contains(event.target)) sourcesDropdown.open = false;
+  });
+  sourcesDropdown.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && sourcesDropdown.open) {
+      event.preventDefault();
+      sourcesDropdown.open = false;
+      sourcesDropdown.querySelector('summary').focus();
+    }
+  });
   function syncSources() {
     const values = sources.filter(input => input.checked).map(input => input.value);
     form.elements.source.value = values.join(',');

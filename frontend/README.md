@@ -580,6 +580,9 @@ guidance is in
 | POST | `/git-forks/test` | Run a fork regression suite in an isolated worktree. |
 | POST | `/git-forks/deploy` | Deploy a fork branch locally from an isolated worktree. |
 | GET | `/hfl-corpus` | Corpus tree and filtered search. |
+| GET/POST | `/hfl-corpus/workspace-views` | List or create owner workspace filter profiles. Writes require the page CSRF token. |
+| PUT/DELETE | `/hfl-corpus/workspace-views/{id}` | Update or remove a workspace with its current revision. |
+| POST | `/hfl-corpus/workspace-views/{id}/select` | Remember the selected workspace. |
 | POST | `/hfl-corpus/entries/preview` | Validate and render a manual entry preview. |
 | POST | `/hfl-corpus/entries` | Persist a manual entry locally or through the canonical host. |
 | POST | `/hfl-corpus/entries/upload` | Persist a multipart manual entry and its attachments. |
@@ -597,6 +600,16 @@ guidance is in
 | GET/POST | `/share/email/{token}` | Cloudflare Access-protected email OTP redemption. |
 | GET/POST | `/share/session[...]` | Signed guest-session browsing, Q&A, logout, and enabled references. |
 | GET | `/health` | Process health response. |
+
+Activity Corpus **Workspace views**, beside Graph, saves sources, tags/search text,
+date type/range, sort order, and page size in the owner profile database. Sources
+use OR matching (`source=git,notes`); the existing tag and text rules still apply.
+Fixed dates and rolling last 7/30/90 days are supported, including today. A plain
+visit to `/hfl-corpus` restores the last saved workspace from page 1; explicit
+query parameters take precedence, and `?reset=1` opens the default view. Saving is
+explicit, navigation does not prompt about unsaved filter changes, and Secrets
+access is never stored in a workspace. Graph profiles remain independent. Deploy
+the updated canonical API as well as the frontend for remote multisource search.
 
 ## Configuration
 

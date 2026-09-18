@@ -345,6 +345,13 @@ class RemoteCorpusClient:
                 for source in payload.get("sources") or ()
                 if valid_source_filter_value(str(source))
             ]
+            requested_source = params.get("source", "")
+            if "," in requested_source and normalize_source(
+                str(payload.get("selected_source") or ""), sources
+            ) != normalize_source(requested_source, sources):
+                raise RemoteCorpusError(
+                    "Canonical corpus does not support the selected sources. Update the corpus host and retry."
+                )
             return {
                 "documents": documents,
                 "tree": tree,

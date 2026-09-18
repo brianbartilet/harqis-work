@@ -2011,13 +2011,13 @@ def test_corpus_search_uses_compact_date_controls(authenticated_client, monkeypa
 
     assert response.status_code == 200
     assert 'name="source"' in response.text
-    assert '<option value="">All</option>' in response.text
+    assert 'data-sources-clear>All sources</button>' in response.text
     source_select = response.text.split('name="source"', 1)[1].split(
         "</select>",
         1,
     )[0]
     assert 'value="browsing"' in source_select
-    assert ">browsing</option>" in source_select
+    assert ">browsing</span>" in source_select
     assert 'name="date_field"' in response.text
     assert 'name="date_from"' in response.text
     assert 'name="date_to"' in response.text
@@ -2028,7 +2028,7 @@ def test_corpus_search_uses_compact_date_controls(authenticated_client, monkeypa
         'name="date_field"'
     )
     assert response.text.index('name="date_field"') < response.text.index(tags_section)
-    assert response.text.index(">Search</button>") < response.text.index(tags_section)
+    assert response.text.index('data-search-label>Search</span>') < response.text.index(tags_section)
     assert response.text.index(">Reset</a>") < response.text.index(tags_section)
     assert "#debugging" in response.text
     assert "bg-blue-950/50" in response.text
@@ -2076,7 +2076,7 @@ def test_corpus_source_filter_preserves_selection_across_index_controls(
     all_sources = authenticated_client.get("/hfl-corpus?source=retired-source")
     assert "manual.md" in all_sources.text
     assert "browsing.md" in all_sources.text
-    assert '<option value="">All</option>' in all_sources.text
+    assert 'data-sources-clear>All sources</button>' in all_sources.text
 
 
 def test_search_and_reset_actions_are_grouped_with_the_text_input(
@@ -2094,9 +2094,9 @@ def test_search_and_reset_actions_are_grouped_with_the_text_input(
 
     group = response.text.split("data-search-input-actions", 1)[1].split("</div>", 1)[0]
     assert 'id="q"' in group
-    assert ">Search</button>" in group
+    assert 'data-search-label>Search</span>' in group
     assert ">Reset</a>" in group
-    assert group.index('id="q"') < group.index(">Search</button>") < group.index(">Reset</a>")
+    assert group.index('id="q"') < group.index('data-search-label>Search</span>') < group.index(">Reset</a>")
 
 
 def test_corpus_search_explains_combined_search_and_supports_tag_cloud_toggles(

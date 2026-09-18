@@ -13,17 +13,19 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, Query
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
     JSONResponse,
+    RedirectResponse,
     Response,
     StreamingResponse,
 )
 from markupsafe import Markup
 from pydantic import BaseModel, ValidationError
 
+from modules.hfl_corpus import workspace_views
 from config import get_settings
 from modules.hfl_corpus.corpus import (
     CorpusPage,
@@ -87,6 +89,46 @@ from web import page_context, require_user, templates
 router = APIRouter(prefix="/hfl-corpus")
 _H2 = re.compile(r"<h2(?:\s+[^>]*)?>(.*?)</h2>", re.DOTALL)
 _log = logging.getLogger(__name__)
+
+
+def _workspace_authorize(request, *, write=False):
+    user, redirect = require_user(request)
+    if redirect:
+        raise HTTPException(401, 'Authentication required')
+    if write and not verify_csrf_token(request.headers.get('x-csrf-token', ''), user):
+        raise HTTPException(403, 'Invalid form token. Reload the page.')
+
+
+@router.get('/workspace-views')
+async def workspace_listing(request: Request):
+    _workspace_authorize(request)
+    return await asyncio.to_thread(workspace_views.listing)
+
+
+@router.post('/workspace-views')
+async def workspace_create(request: Request, payload: workspace_views.WorkspaceWrite):
+    _workspace_authorize(request, write=True)
+    return await asyncio.to_thread(workspace_views.save, payload)
+
+
+@router.put('/workspace-views/{identity}')
+async def workspace_update(request: Request, identity: str, payload: workspace_views.WorkspaceWrite):
+    _workspace_authorize(request, write=True)
+    return await asyncio.to_thread(workspace_views.save, payload, identity)
+
+
+@router.post('/workspace-views/{identity}/select')
+async def workspace_select(request: Request, identity: str):
+    _workspace_authorize(request, write=True)
+    await asyncio.to_thread(workspace_views.select, identity)
+    return {'selected': identity}
+
+
+@router.delete('/workspace-views/{identity}')
+async def workspace_delete(request: Request, identity: str, revision: int = Query(ge=1)):
+    _workspace_authorize(request, write=True)
+    await asyncio.to_thread(workspace_views.delete, identity, revision)
+    return {'deleted': identity}
 
 
 def _add_calendar_years(value: date, years: int) -> date:
@@ -540,8 +582,14 @@ def _index_url(
     page_size: int = 20,
     show_secrets: bool = False,
     activity_year: int = 0,
+    rolling: int = 0,
+    workspace: str = "",
 ) -> str:
     params = {}
+    if rolling:
+        params["rolling"] = rolling
+    if workspace:
+        params["workspace"] = workspace
     if query:
         params["q"] = query
     if date_field != "created":
@@ -658,10 +706,21 @@ async def hfl_corpus_page(
     source: str = "",
     show_secrets: bool = False,
     activity_year: int = 0,
+    rolling: int = 0,
+    workspace: str = "",
 ):
     user, redirect = require_user(request)
     if redirect:
         return redirect
+    saved_workspaces = await asyncio.to_thread(workspace_views.listing)
+    if not request.query_params and saved_workspaces['last_used']:
+        last = next((view for view in saved_workspaces['views'] if view['id'] == saved_workspaces['last_used']), None)
+        if last:
+            return RedirectResponse('/hfl-corpus?' + urlencode({**last['state'], 'workspace': last['id']}), status_code=303)
+    rolling = rolling if rolling in {7, 30, 90} else 0
+    if rolling:
+        date_to = date.today().isoformat()
+        date_from = (date.today() - timedelta(days=rolling - 1)).isoformat()
     if date_field not in {"created", "updated", "entry"}:
         date_field = "created"
     if sort not in {"asc", "desc"}:
@@ -813,6 +872,8 @@ async def hfl_corpus_page(
         page_size=result_page.page_size,
         show_secrets=include_secrets,
         activity_year=selected_timeline_year,
+        rolling=rolling,
+        workspace=workspace,
     )
     tag_options = []
     for tag, count in tag_cloud:
@@ -840,6 +901,8 @@ async def hfl_corpus_page(
                 page_size=result_page.page_size,
                 show_secrets=include_secrets,
                 activity_year=selected_timeline_year,
+                rolling=rolling,
+                workspace=workspace,
             ),
         })
     page_url_values = {
@@ -852,6 +915,8 @@ async def hfl_corpus_page(
         "page_size": result_page.page_size,
         "show_secrets": include_secrets,
         "activity_year": selected_timeline_year,
+        "rolling": rolling,
+        "workspace": workspace,
     }
     previous_page_url = _index_url(
         **page_url_values, page=result_page.page - 1
@@ -898,6 +963,8 @@ async def hfl_corpus_page(
             date_to=date_to,
             source=selected_source,
             source_options=source_options,
+            selected_sources=selected_source.split(",") if selected_source else [],
+            saved_workspaces=saved_workspaces,
             entry_source_options=entry_source_options,
             sort_order=sort,
             sort_toggle_url=sort_toggle_url,
@@ -911,6 +978,8 @@ async def hfl_corpus_page(
             secrets_authorized=authorized,
             show_secrets=include_secrets,
             activity_year=selected_timeline_year,
+            rolling=rolling,
+            workspace=workspace,
             activity_years=tuple(reversed(timeline_years)),
             activity_heatmap=heatmap,
             activity_timeline_years=timeline_years,

@@ -94,11 +94,14 @@ class CorpusDocument:
     ) -> tuple[CorpusEntry, ...]:
         needles = _tag_needles(selected_tags)
         text_needle = (phrase or "").strip().casefold()
-        source_needle = (source or "").strip().casefold()
+        source_needles = {
+            item.strip().casefold()
+            for item in (source or "").split(",") if item.strip()
+        }
         if (
             not needles
             and not text_needle
-            and not source_needle
+            and not source_needles
             and occurrence_from is None
             and occurrence_to is None
         ):
@@ -113,8 +116,8 @@ class CorpusDocument:
             if text_needle and text_needle not in entry.text.casefold():
                 continue
             if (
-                source_needle
-                and entry.source.strip().casefold() != source_needle
+                source_needles
+                and entry.source.strip().casefold() not in source_needles
             ):
                 continue
             if occurrence_from is not None or occurrence_to is not None:
@@ -867,12 +870,9 @@ def common_sources(documents: tuple[CorpusDocument, ...]) -> list[str]:
 
 
 def normalize_source(value: str, sources: list[str] | tuple[str, ...]) -> str:
-    """Return the canonical available source name, or All as an empty value."""
-    needle = (value or "").strip().casefold()
-    return next(
-        (source for source in sources if source.casefold() == needle),
-        "",
-    )
+    """Return comma-separated canonical sources, or All as an empty value."""
+    needles = {part.strip().casefold() for part in (value or "").split(",") if part.strip()}
+    return ",".join(source for source in sources if source.casefold() in needles)
 
 
 def parse_search_query(query: str) -> tuple[tuple[str, ...], str]:
