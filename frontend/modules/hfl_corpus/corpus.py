@@ -269,6 +269,21 @@ def _field_blocks(body: str) -> dict[str, str]:
     }
 
 
+def _entry_source(body: str) -> str:
+    """Read the single-line source from entry metadata, never from narrative."""
+    for raw in body.splitlines():
+        field = _HFL_FIELD.match(raw)
+        if not field:
+            continue
+        name = field.group(1).casefold()
+        if name == "source":
+            source = field.group(2).strip()
+            return source if valid_source_filter_value(source) else ""
+        if name not in {"machine", "entry id"}:
+            break
+    return ""
+
+
 def _entry_preview(value: str) -> str:
     lines = [line.strip() for line in (value or "").splitlines()]
     outcome = next(
@@ -309,7 +324,7 @@ def parse_entries(text: str) -> tuple[CorpusEntry, ...]:
                 moment=moment,
                 what_happened=what_happened or moment,
                 tags=tags,
-                source=fields.get("source", "").strip(),
+                source=_entry_source(body),
                 text=f"{header}\n{body}",
             )
         )

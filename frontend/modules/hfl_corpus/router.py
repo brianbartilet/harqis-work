@@ -41,6 +41,7 @@ from modules.hfl_corpus.corpus import (
     resolve_corpus_root,
     search_documents,
     shallow_tree,
+    valid_source_filter_value,
 )
 from services.markdown import render_markdown
 from modules.hfl_corpus.remote import RemoteCorpusClient, RemoteCorpusError
@@ -392,7 +393,7 @@ def _document_source_options(document) -> tuple[dict[str, Any], ...]:
     sources: dict[str, dict[str, Any]] = {}
     for entry in document.entries:
         source = entry.source.strip()
-        if not source:
+        if not valid_source_filter_value(source):
             continue
         option = sources.setdefault(
             source.casefold(),

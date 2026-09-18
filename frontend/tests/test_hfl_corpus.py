@@ -1174,6 +1174,38 @@ def test_common_sources_are_distinct_trimmed_and_alphabetical():
     assert common_sources(documents) == ["Browsing", "manual-entry"]
 
 
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ("Source: git\nExecution state: complete\nMoment: Shipped", "git"),
+        ("Source: entities-audit\nMoment: Audit\nWhat happened: Report\n"
+         "Source: Sep 17 radar — bulk upload shipped\nMore output", "entities-audit"),
+        ("Moment: Legacy\nWhat happened: Quoted report\nSource: git", ""),
+        ("Source: Sep 17 radar — bulk upload shipped\nMoment: Report", ""),
+        ("Source:\nExecution state: complete\nMoment: Report", ""),
+        ("Machine: desktop\nEntry ID: hfl-example\nSource: manual-entry\n"
+         "Moment: Note", "manual-entry"),
+    ],
+)
+def test_entry_source_comes_only_from_single_line_metadata(body, expected):
+    entry, = corpus_module.parse_entries(f"## 2026-09-17 08:00\n{body}\n")
+    assert entry.source == expected
+    assert body in entry.text
+
+
+def test_document_source_options_reject_narrative_from_remote_entries():
+    from modules.hfl_corpus.router import _document_source_options
+
+    valid = _document("valid.md", source="git").entries[0]
+    invalid = replace(valid, anchor="invalid", source="Sep 17 radar — shipped")
+    multiline = replace(valid, anchor="multiline", source="git\nExecution state: complete")
+    document = _document("sources.md", entries=(valid, invalid, multiline))
+
+    assert _document_source_options(document) == (
+        {"source": "git", "count": 1, "anchors": (valid.anchor,)},
+    )
+
+
 def test_source_filter_requires_query_and_source_on_the_same_entry():
     browsing = CorpusEntry(
         anchor="browse",
