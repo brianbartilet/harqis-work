@@ -1,0 +1,31 @@
+<details class="workspace-menu" data-workspace-menu>
+  <summary class="corpus-header-link">Workspace views <span aria-hidden="true">⌄</span></summary>
+  <div class="workspace-menu-panel">
+    <label for="workspace-selection">Saved workspaces</label>
+    <select id="workspace-selection" data-workspace-selection aria-label="Saved workspaces">
+      <option value="">Choose a workspace</option>
+      {% for view in saved_workspaces.views %}<option value="{{ view.id }}" {% if view.id == workspace %}selected{% endif %}>{{ view.name }}</option>{% endfor %}
+    </select>
+    <div class="workspace-menu-actions">
+      <button type="button" data-workspace-action="save">Save</button>
+      <button type="button" data-workspace-action="new">Save as new</button>
+      <button type="button" data-workspace-action="edit">Edit / rename</button>
+      <button type="button" data-workspace-action="remove">Remove</button>
+    </div>
+    <p data-workspace-status role="status" aria-live="polite">Save filters to return to this workspace.</p>
+  </div>
+</details>
+<dialog data-workspace-dialog class="workspace-dialog" aria-labelledby="workspace-dialog-title">
+  <form data-workspace-name-form>
+    <h2 id="workspace-dialog-title">Save workspace</h2>
+    <label for="workspace-name">Name</label>
+    <input id="workspace-name" name="name" maxlength="100" required autocomplete="off">
+    <p data-workspace-dialog-hint>Sources, tags, search text, dates and result settings will be saved.</p>
+    <p data-workspace-dialog-error role="alert"></p>
+    <div class="workspace-menu-actions">
+      <button type="button" data-workspace-cancel>Cancel</button>
+      <button type="submit" data-workspace-confirm>Save</button>
+    </div>
+  </form>
+</dialog>
+<script type="application/json" data-workspace-data>{{ saved_workspaces | tojson }}</script>
