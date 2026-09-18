@@ -264,7 +264,7 @@ preserved. If upload fails, retry in the open editor using the saved record.
 The API/MCP surface also supports upload/list/download/detach operations; see
 [Activity Corpus attachment routes](../../apps/hfl_corpus/README.md#supporting-files-and-authenticated-links).
 
-Inputs allow 10 files per task, 50 MB per file and 200 MB total. Each run records
+Inputs allow 50 files per task, 500 MB per file and 25,000 MB total. Each run records
 immutable metadata (original name, local filename, SHA-256 and size). Workers
 download those specific files into a separate `inputs/` directory and verify
 integrity before starting Hermes. `input_directory` and `source.attachments`

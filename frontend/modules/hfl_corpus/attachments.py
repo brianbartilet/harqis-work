@@ -9,9 +9,9 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-MAX_FILES = 10
-MAX_FILE_BYTES = 50 * 1024 * 1024
-MAX_TOTAL_BYTES = 200 * 1024 * 1024
+MAX_FILES = 50
+MAX_FILE_BYTES = 500 * 1024 * 1024
+MAX_TOTAL_BYTES = MAX_FILES * MAX_FILE_BYTES
 
 
 class AttachmentStore:
@@ -54,7 +54,7 @@ class AttachmentStore:
 
     async def upload(self, source, files):
         if not files or len(files) > MAX_FILES:
-            raise HTTPException(422, 'Choose 1–10 attachments.')
+            raise HTTPException(422, 'Choose 1–50 attachments.')
         staged = []
         total = 0
         try:
@@ -72,7 +72,7 @@ class AttachmentStore:
                         manifest['size'] += len(chunk)
                         total += len(chunk)
                         if manifest['size'] > MAX_FILE_BYTES or total > MAX_TOTAL_BYTES:
-                            raise HTTPException(413, 'Attachments allow 50 MB per file and 200 MB total.')
+                            raise HTTPException(413, 'Attachments allow 500 MB per file and 25,000 MB total.')
                         digest.update(chunk)
                         target.write(chunk)
                 manifest['digest'] = digest.hexdigest()
@@ -88,7 +88,7 @@ class AttachmentStore:
                         unique.append((path, manifest))
                         identities.add(identity)
                 if len(existing) + len(unique) > MAX_FILES or sum(m['size'] for m in existing) + sum(m['size'] for _, m in unique) > MAX_TOTAL_BYTES:
-                    raise HTTPException(413, 'A task allows 10 attachments and 200 MB total.')
+                    raise HTTPException(413, 'A task allows 50 attachments and 25,000 MB total.')
                 for path, manifest in unique:
                     destination = self.root / manifest['digest']
                     if destination.is_symlink():

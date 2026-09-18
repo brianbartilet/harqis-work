@@ -20,9 +20,9 @@ from services.markdown import render_markdown
 
 _REFERENCE_BULLET = re.compile(r"^\s*[-*•]\s+")
 _UNSAFE_FILENAME = re.compile(r'[\x00-\x1f<>:"/\\|?*]+')
-MAX_UPLOAD_FILES = 10
-MAX_UPLOAD_FILE_BYTES = 50 * 1024 * 1024
-MAX_UPLOAD_TOTAL_BYTES = 200 * 1024 * 1024
+MAX_UPLOAD_FILES = 50
+MAX_UPLOAD_FILE_BYTES = 500 * 1024 * 1024
+MAX_UPLOAD_TOTAL_BYTES = MAX_UPLOAD_FILES * MAX_UPLOAD_FILE_BYTES
 _UPLOAD_CHUNK_BYTES = 1024 * 1024
 
 
@@ -261,11 +261,11 @@ async def persist_manual_entry_with_uploads(
                     total_bytes += len(chunk)
                     if file_bytes > MAX_UPLOAD_FILE_BYTES:
                         raise ValueError(
-                            f"{name} exceeds the 50 MB per-file upload limit."
+                            f"{name} exceeds the 500 MB per-file upload limit."
                         )
                     if total_bytes > MAX_UPLOAD_TOTAL_BYTES:
                         raise ValueError(
-                            "The selected files exceed the 200 MB combined upload limit."
+                            "The selected files exceed the 25,000 MB combined upload limit."
                         )
                     handle.write(chunk)
                 handle.flush()

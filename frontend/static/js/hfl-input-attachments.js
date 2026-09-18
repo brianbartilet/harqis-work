@@ -40,8 +40,8 @@ window.HflInputAttachments = class {
     if (this.loading) throw new Error('Attachments are still loading. Try Save again shortly.');
     if (this.failure) throw new Error(this.failure + ' Reopen the editor to reload attachments.');
     const files = [...this.saved.filter(file => !this.removed.has(file.id)), ...this.pending];
-    if (files.length > 10 || files.some(file => file.size > 50 * 1024 * 1024) || files.reduce((sum, file) => sum + file.size, 0) > 200 * 1024 * 1024)
-      throw new Error('Use up to 10 attachments, 50 MB each and 200 MB total.');
+    if (files.length > 50 || files.some(file => file.size > 500 * 1024 * 1024) || files.reduce((sum, file) => sum + file.size, 0) > 50 * 500 * 1024 * 1024)
+      throw new Error('Use up to 50 attachments, 500 MB each and 25,000 MB total.');
   }
   render() {
     this.list.replaceChildren();

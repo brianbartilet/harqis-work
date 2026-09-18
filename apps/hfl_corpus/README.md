@@ -234,7 +234,7 @@ DELETE /api/hfl/{resource}/{source_id}/attachments/{attachment_id}
 ```
 
 POST uses multipart form data with repeated `files` parts. The task limit is
-10 attached files, 50 MB each, and 200 MB combined. Uploads are atomic as a batch;
+50 attached files, 500 MB each, and 25,000 MB combined. Uploads are atomic as a batch;
 oversized batches return `413`. Identical filename/content retries return the
 existing attachment instead of duplicating it. List, upload, and detach return
 `{attachments: [...]}` with `id`, original `name`, worker-local `filename`,
@@ -281,7 +281,7 @@ they mutate the canonical corpus.
 - FastAPI generates the live schema at `/openapi.json`; `openapi.yaml` is the
   checked-in portable contract.
 - `HFL_CORPUS_API_URL` is the server root, without `/api/hfl`.
-- Uploads allow at most 10 files and have server-enforced size limits.
+- Uploads allow at most 50 files and have server-enforced size limits.
 - Markdown remains authoritative; Elasticsearch is an additive, best-effort
   projection that can be reconciled later.
 - Reference download tools write caller-selected local paths.

@@ -20,10 +20,10 @@ class ApiServiceHflCorpusManagement(BaseApiServiceHflCorpus):
         """Upload task inputs. Identical names/content are deduplicated on retry."""
         endpoint = self._attachment_endpoint(resource, source_id)
         paths = [Path(value).expanduser().resolve() for value in file_paths]
-        if not 1 <= len(paths) <= 10 or any(not p.is_file() or p.stat().st_size > 50 * 1024 * 1024 for p in paths):
-            raise ValueError('Choose 1–10 regular files, at most 50 MB each.')
-        if sum(p.stat().st_size for p in paths) > 200 * 1024 * 1024:
-            raise ValueError('Attachments exceed 200 MB total.')
+        if not 1 <= len(paths) <= 50 or any(not p.is_file() or p.stat().st_size > 500 * 1024 * 1024 for p in paths):
+            raise ValueError('Choose 1–50 regular files, at most 500 MB each.')
+        if sum(p.stat().st_size for p in paths) > 50 * 500 * 1024 * 1024:
+            raise ValueError('Attachments exceed 25,000 MB total.')
         with ExitStack() as stack:
             files = [('files', (p.name, stack.enter_context(p.open('rb')), 'application/octet-stream')) for p in paths]
             return self._raw_request('POST', endpoint, files=files).json()

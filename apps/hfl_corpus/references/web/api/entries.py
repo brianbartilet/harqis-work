@@ -120,7 +120,7 @@ class ApiServiceHflCorpusEntries(BaseApiServiceHflCorpus):
         references: str = "",
         include_location: bool = True,
     ) -> dict:
-        """Persist an entry and upload up to ten local attachment files."""
+        """Persist an entry and upload up to 50 local attachment files."""
         paths = [Path(value).expanduser().resolve() for value in file_paths]
         missing = [str(path) for path in paths if not path.is_file()]
         if missing:

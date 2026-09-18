@@ -36,6 +36,19 @@ class BaseApiServiceHflCorpus(BaseFixtureServiceRest):
         headers = dict(kwargs.pop("headers", {}))
         headers.setdefault("Authorization", f"Bearer {self.api_token}")
         timeout = kwargs.pop("timeout", self.client.timeout)
+        files = kwargs.pop("files", None)
+        if files:
+            # Requests' files= encoder reads entire batches into RAM. Keep file
+            # handles streaming for both task inputs and manual entry uploads.
+            from requests_toolbelt.multipart.encoder import MultipartEncoder
+
+            data = kwargs.pop("data", None) or {}
+            fields = list(data.items()) if isinstance(data, dict) else list(data)
+            fields.extend(files.items() if isinstance(files, dict) else files)
+            encoder = MultipartEncoder(fields=fields)
+            headers = {key: value for key, value in headers.items() if key.lower() != "content-type"}
+            headers["Content-Type"] = encoder.content_type
+            kwargs["data"] = encoder
         response = requests.request(
             method,
             f"{self.client.base_url}/{path.lstrip('/')}",
