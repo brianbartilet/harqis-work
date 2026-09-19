@@ -60,6 +60,7 @@ def test_manual_save_locks_until_navigation_and_recovers_errors(save_page, width
     page, pw = save_page
     page.set_viewport_size({'width':width, 'height':900})
     page.goto('http://save.test/hfl-corpus?reset=1')
+    page.locator('.corpus-create-menu > summary').click()
     page.locator('[data-create-entry-open]').click()
     form = page.locator('[data-create-entry-form]')
     form.locator('[name="moment"]').fill('Keep my entry')

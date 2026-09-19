@@ -208,13 +208,16 @@
     <button type="button" data-secrets-setup aria-haspopup="dialog" class="corpus-secrets-control inline-flex shrink-0 items-center rounded-lg bg-slate-900 text-sm font-semibold text-slate-300 ring-1 ring-slate-700">Secrets</button>
     {% endif %}
     <div class="corpus-navigation-actions">
-    <button type="button" data-create-entry-open
-            class="corpus-create-entry min-h-11 w-full shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 sm:min-h-0 sm:w-auto">
-      Create entry
-    </button>
-    <button type="button" data-create-action-open class="corpus-header-link" aria-haspopup="dialog" aria-controls="followup-editor">Create actionable</button>
+    <details class="corpus-create-menu"><summary class="corpus-header-link">Create<svg class="tools-caret" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div>
+      <button type="button" data-create-entry-open class="corpus-tool-item" aria-haspopup="dialog">Create entry</button>
+      <button type="button" data-create-action-open class="corpus-tool-item" aria-haspopup="dialog" aria-controls="followup-editor">Create actionable</button>
+    </div></details>
     {% if corpus_entities_enabled %}
-    <a href="/hfl-corpus/graph" class="corpus-header-link">Graph</a>
+    <details class="corpus-tools"><summary class="corpus-header-link">Explore<svg class="tools-caret" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div>
+      <a href="/hfl-corpus/graph" class="corpus-tool-item">Graph</a>
+      <button type="button" data-followups-open class="corpus-tool-item" aria-haspopup="dialog" aria-controls="followups-board">Actionables</button>
+    </div></details>
+    {% include "modules/hfl_corpus/partials/followups_board.html" %}
     {% endif %}
     {% include "modules/hfl_corpus/partials/workspace_views.html" %}
     </div>
@@ -244,7 +247,7 @@
       <div class="flex items-center gap-2" data-activity-header-actions>
         {% set active_view = saved_workspaces.views | selectattr('id', 'equalto', workspace) | first %}
         <div class="activity-view-context" role="status" aria-live="polite">
-          <span class="activity-view-caption" title="{{ active_view.name if active_view else 'All activity' }}" data-active-view-caption><span data-view-prefix>Current View:</span> <strong data-active-view-name>{{ active_view.name if active_view else 'All activity' }}</strong></span>
+          <span class="activity-view-caption" title="{{ active_view.name if active_view else 'All activity' }}" data-active-view-caption><strong data-active-view-name>{{ active_view.name if active_view else 'All activity' }}</strong></span>
           <span class="activity-dynamic-badge" data-dynamic-badge>Dynamic OFF</span>
           <span class="activity-view-modified" data-active-view-modified data-state="{{ 'saved' if active_view else 'default' }}">{{ 'Saved' if active_view else 'Default' }}</span>
         </div>
@@ -845,6 +848,7 @@
     let selectedColor = memoryState.palette[0];
     let wireDays = () => {};
     const yearLoads = new Map();
+
 
     const memoryRefs = {
       title: memoryDialog.querySelector('[data-memory-dialog-title]'),

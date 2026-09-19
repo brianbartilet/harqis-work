@@ -656,6 +656,19 @@ def dated_document_paths(
     return paths
 
 
+def matching_entry_total(documents, *, query="", source="", date_field="created", date_from="", date_to=""):
+    """Count all matching entries, including undated entries, before pagination.
+
+    Documents must already be filtered by document dates and workspace scope.
+    """
+    tags, text = parse_search_query(query)
+    start = parse_date(date_from) if date_field == "entry" else None
+    end = parse_date(date_to) if date_field == "entry" else None
+    if not (tags or text or source or start or end):
+        return sum(document.entry_count for document in documents)
+    return sum(len(document.matching_entries(tags, text, source, start, end)) for document in documents)
+
+
 def activity_counts(
     documents: tuple[CorpusDocument, ...],
     *,

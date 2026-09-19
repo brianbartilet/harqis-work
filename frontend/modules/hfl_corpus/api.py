@@ -19,6 +19,7 @@ from config import get_settings
 from modules.hfl_corpus.view_scope import filter_scope, request_scope
 from modules.hfl_corpus.corpus import (
     CorpusDocument,
+    matching_entry_total,
     activity_calendar_years,
     activity_counts,
     activity_counts_between,
@@ -295,6 +296,8 @@ async def hfl_api_documents(
             ]
         ),
         "total_results": result_page.total_results,
+        "total_entries": matching_entry_total(results, query=q, source=selected_source,
+                                              date_field=date_field, date_from=date_from, date_to=date_to),
         "page": result_page.page,
         "page_size": result_page.page_size,
         "total_pages": result_page.total_pages,

@@ -133,12 +133,19 @@
       const data = await api(path);
       if (ticket !== generation) return;
       cadence.value = data.subscription.cadence;
-      runButton.disabled = data.runs.some(run => ['queued','running','review','accepting'].includes(run.state));
+      runButton.disabled = ['done','dismissed'].includes(data.action_status) || data.runs.some(run => ['queued','running','review','accepting'].includes(run.state));
       runs.replaceChildren();
-      if (!data.runs.length) {
+      const outcomes=data.outcomes || [];
+      if(data.outcomes_error){error.textContent=data.outcomes_error;error.hidden=false;}
+      if (!data.runs.length && !outcomes.length && !data.events.length && !data.outcomes_error) {
         const empty = element('section'); empty.className = 'agent-results-empty';
         empty.append(element('h3', 'No results yet'), element('p', 'Run the saved prompt to get started. Output, sources and files will appear here.'));
         runs.append(empty);
+      }
+      for(const outcome of outcomes){
+        const card=element('section');card.className='agenda-history-row agent-result-card';
+        card.append(element('h3','Saved action outcome'),element('small',new Date(outcome.created_at).toLocaleString('en-SG',{timeZone:'Asia/Singapore'})+' SGT · Revision '+outcome.version),outputCard(outcome));
+        runs.append(card);
       }
       for (const run of data.runs) {
         const card = element('section'); card.className = 'agenda-history-row agent-result-card';

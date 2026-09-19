@@ -262,3 +262,4 @@
   .view-visualizer .visualizer-detail { flex:none; max-height:25dvh; overflow:auto; scrollbar-width:none; }
 }
 @media(max-width:800px) { .visualizer-toolbar h2 { white-space:normal; } }
+.activity-view-caption [data-active-view-name] { display:inline-block; border:1px solid #334155; border-radius:.3rem; padding:.12rem .35rem; font-weight:500; }

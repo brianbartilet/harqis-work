@@ -86,9 +86,9 @@ def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_clie
                 assert agenda.list() == []
             else:
                 form.locator('[name="expected_outcome"]').fill('Record the result')
+                form.locator('.action-triage > summary').click()
                 form.locator('[name="matrix"]').select_option('Q2')
                 form.locator('[name="matrix_confidence"]').select_option('medium')
-                form.locator('.matrix-help summary').click()
                 playwright.expect(form.locator('#matrix-help')).to_be_visible()
                 form.locator('[type="submit"]').click()
                 playwright.expect(page.locator('#followup-editor')).to_be_hidden()
@@ -139,7 +139,7 @@ def test_document_creates_multiple_actions_without_navigation(agenda, authentica
         url = 'https://document.test/hfl-corpus/document/2026-09-14.md'
         page.goto(url)
         for index, title in enumerate(('First entry', 'Second entry')):
-            page.locator('.corpus-followup-action').nth(index).click()
+            page.locator('a.corpus-followup-action').nth(index).click()
             form = page.locator('#followup-form')
             playwright.expect(form.locator('[name="title"]')).to_have_value(title)
             assert form.locator('[name="expected_outcome"]').input_value() == ''
@@ -154,7 +154,7 @@ def test_document_creates_multiple_actions_without_navigation(agenda, authentica
             assert page.locator('dialog[open]').count() == 0
             confirmation.get_by_role('button', name='Dismiss action confirmation').click()
             playwright.expect(confirmation).to_be_hidden()
-            playwright.expect(page.locator('.corpus-followup-action').nth(index)).to_be_focused()
+            playwright.expect(page.locator('a.corpus-followup-action').nth(index)).to_be_focused()
             assert page.locator('.corpus-action-feedback').count() == 0
         assert {item['source']['entry_id'] for item in agenda.list()} == {'hfl-first', 'hfl-second'}
         assert not errors
@@ -791,12 +791,12 @@ def test_unified_actions_matrix_editor_and_empty_message(agenda, authenticated_c
         form = page.locator('#followup-form')
         playwright.expect(form.locator('[name="matrix"]')).to_have_value('Q2')
         playwright.expect(form.locator('[name="matrix_confidence"]')).to_have_value('medium')
-        status_box = form.locator('[name="status"]').bounding_box()
+        form.locator('.action-triage > summary').click()
+        confidence_box = form.locator('[name="matrix_confidence"]').bounding_box()
         matrix_box = form.locator('[name="matrix"]').bounding_box()
         if width > 600:
-            assert abs(status_box['y'] - matrix_box['y']) < 2
-            assert matrix_box['x'] > status_box['x']
-        form.locator('.matrix-help summary').click()
+            assert abs(confidence_box['y'] - matrix_box['y']) < 2
+            assert confidence_box['x'] > matrix_box['x']
         page.screenshot(path=str(tmp_path / f'editor-{width}.png'))
         form.locator('[name="matrix"]').select_option('Q1')
         form.locator('[name="matrix_confidence"]').select_option('high')
@@ -831,3 +831,128 @@ def test_manual_idea_adoption_preserves_matrix(agenda, authenticated_client, mon
     assert response.status_code == 201
     assert response.json()['item']['matrix'] == 'Q2'
     assert response.json()['item']['matrix_confidence'] == 'low'
+
+
+def test_followups_scope_filters_list_period_and_heatmap(agenda, authenticated_client, monkeypatch):
+    import json
+    from datetime import datetime, timezone
+    from modules.hfl_corpus import router as corpus
+    from modules.hfl_corpus.corpus import CorpusEntry
+    stamp = datetime(2026, 9, 18, tzinfo=timezone.utc)
+    entries = tuple(CorpusEntry(anchor=key, header='2026-09-18', moment=key,
+        what_happened='Evidence', tags=('work',), source=source,
+        text=f'Entry ID: hfl-{key}\nUseful evidence') for key, source in [('mail','email'),('note','notes')])
+    document = SimpleNamespace(entries=entries, created_at=stamp, updated_at=stamp)
+    monkeypatch.setattr(corpus, '_uses_remote_corpus', lambda: False)
+    monkeypatch.setattr(corpus.corpus_index, 'get', lambda _: document)
+    records = [agenda.create(payload(review_date='', due_date='2026-09-18'), actor='test',
+        source={'path':'2026-09-18.md','entry_id':f'hfl-{key}','date':'2026-09-18'})[0] for key in ['mail','note']]
+    manual = agenda.create(payload(review_date='', due_date='2026-09-18'), actor='test')[0]
+    scope = json.dumps({'any':[{'source':'email'},{'source':'manual-entry'}]})
+    params = {'scope':scope, 'q':'#work', 'date_field':'entry', 'date_from':'2026-09-18','date_to':'2026-09-18'}
+    listing = authenticated_client.get('/hfl-corpus/timeline/items',params=params).json()
+    assert [item['id'] for item in listing['items']] == [records[0]['id']]
+    assert listing['items'][0]['sources'] == ['email']
+    period = authenticated_client.get('/hfl-corpus/timeline/period',params={**params,'start':'2026-09-18','end':'2026-09-18'}).json()
+    assert [item['id'] for item in period['items']] == [records[0]['id']]
+    markers = authenticated_client.get('/hfl-corpus/timeline/markers',params=params).json()
+    assert markers['days']['2026-09-18']['planned'] == [records[0]['id']]
+    manual_list = authenticated_client.get('/hfl-corpus/timeline/items',params={'source':'manual-entry'}).json()['items']
+    assert [item['id'] for item in manual_list] == [manual['id']]
+    assert manual_list[0]['evidence_available'] is False
+    assert authenticated_client.get('/hfl-corpus/timeline/items',params={'rolling':'bad'}).status_code == 422
+
+
+def test_board_dismissal_cutoff_uses_transition_not_last_edit(agenda, authenticated_client, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    import workflows.hfl.timeline_store as storage
+    old = (datetime.now(timezone.utc)-timedelta(days=20)).isoformat()
+    monkeypatch.setattr(storage,'isoformat',lambda:old)
+    item = agenda.create(payload(),actor='test')[0]
+    item = agenda.update(item['id'],{'version':item['version'],'status':'dismissed'},actor='test')
+    monkeypatch.setattr(storage,'isoformat',lambda:datetime.now(timezone.utc).isoformat())
+    item = agenda.update(item['id'],{'version':item['version'],'title':'Edited recently'},actor='test')
+    url='/hfl-corpus/timeline/items'
+    assert authenticated_client.get(url,params={'include_closed':'true','recent_dismissed':'true'}).json()['items'] == []
+    assert len(authenticated_client.get(url,params={'include_closed':'true'}).json()['items']) == 1
+    item = agenda.update(item['id'],{'version':item['version'],'status':'open'},actor='test')
+    agenda.update(item['id'],{'version':item['version'],'status':'dismissed'},actor='test')
+    assert len(authenticated_client.get(url,params={'include_closed':'true','recent_dismissed':'true'}).json()['items']) == 1
+
+
+@pytest.mark.parametrize('width', [390, 1440])
+def test_followups_board_filter_drag_refresh_and_editor(agenda, authenticated_client, monkeypatch, tmp_path, width):
+    from urllib.parse import urlparse
+    from modules.hfl_corpus import corpus, router
+    playwright = pytest.importorskip('playwright.sync_api')
+    (tmp_path/'2026-09-18.md').write_text('## 2026-09-18 09:00\nMoment: Activity\nSource: notes\n',encoding='utf-8')
+    monkeypatch.setattr(corpus,'resolve_corpus_root',lambda:tmp_path)
+    monkeypatch.setattr(router,'corpus_index',corpus.CorpusIndex())
+    item=agenda.create(payload(title='Follow-up browser check'),actor='test')[0]
+    with playwright.sync_playwright() as driver:
+        browser=driver.chromium.launch(channel='chrome',headless=True)
+        page=browser.new_page(viewport={'width':width,'height':1000})
+        errors=[]
+        page.on('pageerror',lambda error:errors.append(str(error)))
+        def route(request_route):
+            request=request_route.request
+            url=urlparse(request.url)
+            if url.hostname!='followups.test':
+                request_route.abort();return
+            response=authenticated_client.request(request.method,url.path+('?' + url.query if url.query else ''),content=request.post_data,
+                headers={key:value for key,value in request.headers.items() if key.lower() in {'content-type','x-csrf-token'}})
+            request_route.fulfill(status=response.status_code,body=response.content,headers={'content-type':response.headers.get('content-type','text/html')})
+        page.route('**/*',route)
+        page.goto('https://followups.test/hfl-corpus?source=notes')
+        page.locator('.corpus-tools > summary').click()
+        assert page.locator('.corpus-tools .tools-caret').is_visible()
+        assert page.locator('[data-followups-open]').evaluate("el => getComputedStyle(el).backgroundColor") == 'rgba(0, 0, 0, 0)'
+        page.locator('summary[aria-label="Profile menu"]').click()
+        assert not page.locator('.corpus-tools').evaluate('el => el.open')
+        assert page.locator('nav[aria-label="Profile menu"]').evaluate("el => {const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));}")
+        page.locator('summary[aria-label="Profile menu"]').click()
+        page.locator('.corpus-tools > summary').click()
+        page.locator('[data-followups-open]').click()
+        board=page.locator('#followups-board')
+        playwright.expect(board.locator('[data-board-status]')).to_contain_text('0 actions')
+        board.locator('[data-board-all]').click()
+        playwright.expect(board.locator('[data-board-status]')).to_contain_text('1 action')
+        card=board.locator('[data-followup-id]')
+        playwright.expect(card.locator('.action-source')).to_have_text('manual-entry')
+        playwright.expect(card.locator('.action-evidence-link')).to_have_count(0)
+        assert card.locator('details[open]').count()==0
+        if width < 600:
+            card.get_by_role('button', name='Edit', exact=True).click()
+            page.locator('#followup-form [name=status]').select_option('active')
+            page.locator('#followup-form [type=submit]').click()
+        else:
+            card.drag_to(board.locator('[data-status=active].followups-lane'),source_position={'x':20,'y':12})
+        playwright.expect(board.locator('[data-status=active].followups-lane [data-followup-id]')).to_have_count(1)
+        updated=agenda.get(item['id'])
+        assert updated['status']=='active'
+        agenda.update(item['id'],{'version':updated['version'],'status':'in_progress'},actor='agent:test')
+        playwright.expect(board.locator('[data-status=in_progress].followups-lane [data-followup-id]')).to_have_count(1,timeout=12000)
+        board.get_by_role('button',name='Edit',exact=True).click()
+        playwright.expect(page.locator('#followup-editor')).to_be_visible()
+        page.locator('#followup-editor [data-agenda-close]').first.click()
+        playwright.expect(board).to_be_visible()
+        result_button=board.locator('.action-results-button')
+        assert result_button.bounding_box()['width'] >= board.locator('.agenda-card-actions').bounding_box()['width']-2
+        if width==1440:
+            page.screenshot(path=str(tmp_path/'followups-board.png'))
+            context_box=board.locator('[data-board-context]').bounding_box()
+            toggle_box=board.locator('[data-board-all]').bounding_box()
+            assert abs((context_box['y']+context_box['height']/2)-(toggle_box['y']+toggle_box['height']/2)) < 3
+        current=agenda.get(item['id'])
+        agenda.update(item['id'],{'version':current['version'],'status':'done','completion_note':'## Saved report\n\n| Release | Bugs |\n| --- | --- |\n| R1 | **12** |'},actor='agent:external')
+        result_button.click()
+        results=page.locator('.agent-bridge-dialog')
+        playwright.expect(results.locator('.markdown-body table')).to_have_count(1)
+        playwright.expect(results).to_contain_text('Saved action outcome')
+        playwright.expect(results.get_by_role('button',name='Run now')).to_be_disabled()
+        results.get_by_role('button',name='Close agent results').click()
+        board.get_by_role('button',name='History',exact=True).click()
+        playwright.expect(page.locator('#followup-history .markdown-body table')).to_have_count(1)
+        page.locator('#followup-history-close').click()
+        assert not errors
+        browser.close()

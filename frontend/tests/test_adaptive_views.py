@@ -12,6 +12,49 @@ from modules.hfl_corpus.view_scope import ViewScope, filter_scope
 from modules.hfl_shares.security import make_csrf_token
 
 
+def test_memory_count_includes_all_years_and_undated_entries(authenticated_client, workspace_corpus, monkeypatch):
+    from urllib.parse import urlencode
+    import modules.hfl_corpus.router as routes
+    current = date.today().year
+    old = replace(workspace_corpus, relative_path=f'{current-1}-01-01.md',
+                  entries=(workspace_corpus.entries[0],), entry_count=1)
+    undated = replace(workspace_corpus, relative_path='undated.md',
+                      entries=(replace(workspace_corpus.entries[0], header='Undated'),), entry_count=1)
+    monkeypatch.setattr(routes.corpus_index, 'documents', lambda: (workspace_corpus, old, undated))
+    scope = json.dumps({'any': [{'source': 'git,notes'}]})
+    url = '/hfl-corpus?' + urlencode({'scope': scope, 'activity_year': current})
+    response = authenticated_client.get(url)
+    assert '4 entries</h2>' in response.text
+    api = authenticated_client.get('/api/hfl/documents', params={'scope': scope, 'compact': 'true', 'page_size': 20},
+                                   headers={'Authorization': 'Bearer frontend-test-hfl-api-token'})
+    assert api.json()['total_entries'] == 4
+    playwright = pytest.importorskip('playwright.sync_api')
+    with playwright.sync_playwright() as engine:
+        options = {'headless': True}
+        if not Path(engine.chromium.executable_path).exists():
+            options['channel'] = 'msedge'
+        browser = engine.chromium.launch(**options)
+        try:
+            page = browser.new_page(viewport={'width': 1440, 'height': 900}, reduced_motion='reduce')
+            def route_request(route):
+                req = route.request
+                result = authenticated_client.request(req.method, req.url.replace('http://localhost', ''),
+                                                      follow_redirects=True)
+                route.fulfill(status=result.status_code, body=result.content,
+                              headers={k: v for k, v in result.headers.items()
+                                       if k.lower() not in {'content-encoding', 'content-length'}})
+            page.route('http://localhost/**', route_request)
+            page.goto('http://localhost' + url)
+            title = page.locator('#activity-title')
+            playwright.expect(title).to_have_text('4 entries')
+            for year in [current-1, current-2, current]:
+                page.locator(f'[data-activity-year-option="{year}"]').click()
+                playwright.expect(page.locator('[data-activity-year]')).to_have_value(str(year))
+                playwright.expect(title).to_have_text('4 entries')
+        finally:
+            browser.close()
+
+
 def make_views(client):
     headers = {'X-CSRF-Token':make_csrf_token('frontend-test-user')}
     first = client.post('/hfl-corpus/workspace-views', headers=headers, json={'name':'Work','state':{'source':'git','q':'#work'}}).json()
@@ -154,11 +197,16 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             page.route('http://localhost/**',route_request)
             page.goto('http://localhost/hfl-corpus?reset=1')
             if width < 640:
-                entry = page.locator('.corpus-create-entry').bounding_box()
-                action = page.locator('[data-create-action-open]').bounding_box()
+                create = page.locator('.corpus-create-menu > summary').bounding_box()
+                explore = page.locator('.corpus-tools > summary').bounding_box()
                 views = page.locator('[data-workspace-menu] > summary').bounding_box()
-                assert abs(entry['y'] - action['y']) < 2
-                assert views['y'] >= action['y'] + action['height']
+                assert abs(explore['y'] - views['y']) < 2
+                assert abs(explore['width'] - views['width']) < 2
+                assert abs(create['x'] - explore['x']) < 2
+                assert abs(create['x']+create['width'] - views['x']-views['width']) < 2
+                assert views['y'] >= create['y'] + create['height']
+            page.screenshot(path=str(tmp_path/f'header-menus-{width}.png'))
+            page.locator('.corpus-create-menu > summary').click()
             page.locator('[data-create-action-open]').click()
             assert not errors, errors
             playwright.expect(page.locator('#followup-editor')).to_be_visible()
@@ -175,6 +223,7 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             page.screenshot(path=str(tmp_path/f'action-triage-{width}.png'),full_page=True)
             page.keyboard.press('Escape')
             playwright.expect(page.locator('#followup-editor')).not_to_be_visible()
+            page.locator('.corpus-create-menu > summary').click()
             page.locator('[data-create-action-open]').click()
             assert not triage.evaluate('(el) => el.open')
             page.keyboard.press('Escape')
@@ -322,6 +371,10 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             assert page.locator('[data-workspace-action="save"]').is_enabled()
             assert page.locator('[data-workspace-save-hint]').is_hidden()
             assert '1 matching entries' in page.locator('[data-corpus-results]').inner_text()
+            page.locator('.corpus-tools > summary').click()
+            page.locator('[data-followups-open]').click()
+            playwright.expect(page.locator('#followups-board')).to_be_visible()
+            playwright.expect(page.locator('[data-board-context]')).to_contain_text('Work')
             page.wait_for_function("document.querySelector('[data-activity-body]').classList.contains('workspace-arrive')")
             # A schedule gap loads all activity without disabling Dynamic mode.
             scheduled[:] = []
@@ -331,6 +384,9 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             assert '3 entries' in page.locator('[data-corpus-results]').inner_text()
             assert json.loads(parse_qs(urlparse(page.url).query)['scope'][0])['any'] == []
             assert authenticated_client.get('/hfl-corpus/workspace-views').json()['preferences']['dynamic'] is True
+            playwright.expect(page.locator('#followups-board')).to_be_visible()
+            playwright.expect(page.locator('[data-board-context]')).to_contain_text('All activity')
+            page.locator('[data-board-close]').click()
             page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
             page.locator('[data-view-picker] > summary').click()
             page.locator('[data-view-all]').click()

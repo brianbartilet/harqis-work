@@ -3,6 +3,19 @@
   const menu = document.querySelector('[data-workspace-menu]');
   if (!form || !menu) return;
   const $ = selector => document.querySelector(selector);
+  const createMenu = document.querySelector('.corpus-create-menu');
+  if (createMenu) {
+    const headerMenus = [...document.querySelectorAll('.corpus-navigation-actions > details')];
+    headerMenus.forEach(dropdown => dropdown.addEventListener('toggle', () => {
+      if (dropdown.open) headerMenus.forEach(other => { if (other !== dropdown) other.open = false; });
+    }));
+    createMenu.addEventListener('click', event => {
+      if (event.target.closest('[data-create-entry-open], [data-create-action-open]')) createMenu.open = false;
+    });
+    document.addEventListener('click', event => { if (!createMenu.contains(event.target)) createMenu.open = false; });
+    createMenu.addEventListener('keydown', event => { if (event.key === 'Escape') { createMenu.open = false; createMenu.querySelector('summary').focus(); } });
+  }
+
   $('[data-dismiss-corpus-error]')?.addEventListener('click', () => {
     $('[data-corpus-load-error]').hidden = true;
     menu.querySelector('summary').focus();
@@ -133,7 +146,6 @@
     name.style.borderLeft = applied.length === 1 ? `3px solid ${applied[0].color}` : '';
     name.style.paddingLeft = applied.length === 1 ? '.35rem' : '';
     name.textContent = applied.length > 1 ? applied.map(view => view.name).join(' + ') : applied[0]?.name || current?.name || 'All activity';
-    $('[data-view-prefix]').textContent = applied.length > 1 ? 'Current Views:' : 'Current View:';
     const caption = $('[data-active-view-caption]');
     caption.dataset.expandable = 'false';
     caption.tabIndex = -1;
@@ -452,6 +464,7 @@
       if (!automatic) form.dispatchEvent(new CustomEvent('corpus:view-search'));
       try { sessionStorage.setItem('corpus:view-transition', JSON.stringify({automatic, scroll})); } catch (_) {}
       clearInterval(dynamicTimer);
+      window.dispatchEvent(new Event('hfl:view-replacing'));
       disposed = true;
       history.pushState(null, '', url);
       document.open(); document.write(html); document.close();
@@ -485,7 +498,7 @@
     $('#view-loading-detail').textContent = 'Applying selected views…'; viewLoading.showModal();
     try {
       const latest = await request(); preferences = latest.preferences;
-      if (ids.some(id => !latest.views.some(view => view.id === id))) throw Error('A selected view was removed. Reopen Views and try again.');
+      if (ids.some(id => !latest.views.some(view => view.id === id))) throw Error('A selected view was removed. Reopen Workspaces and try again.');
       const data = await savePreferences({manual:ids, dynamic:false});
       await loadCombined(data, ids, false, false, ids.length === 1 ? viewUrl(data.views.find(view => view.id === ids[0])) : null);
     } catch (error) { endViewLoading(); status.textContent = error.message; menu.open = true; }
@@ -523,7 +536,7 @@
   };
   let pollInFlight = false;
   async function checkDynamic() {
-    if (!dynamicOn || transitioning || busy || pollInFlight || document.hidden || document.querySelector('dialog[open]') || menu.open) return;
+    if (!dynamicOn || transitioning || busy || pollInFlight || document.hidden || document.querySelector('#followups-board[data-busy=true]') || document.querySelector('dialog[open]:not(#followups-board)') || menu.open) return;
     const modified = $('[data-active-view-modified]').dataset.state === 'modified' || JSON.stringify(snapshot()) !== initialFilterState;
     if (modified) {
       const notice = $('[data-adaptive-status]');

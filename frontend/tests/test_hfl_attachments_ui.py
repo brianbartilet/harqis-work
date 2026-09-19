@@ -104,3 +104,31 @@ def test_editors_save_multiple_attachments_without_running_early(authenticated_c
         assert not errors
         assert not [call for call in calls if call[2] >= 400]
         browser.close()
+
+
+def test_saved_and_pending_attachment_preview_dialog():
+    playwright = pytest.importorskip('playwright.sync_api')
+    from web import templates
+    markup=templates.env.get_template('modules/hfl_corpus/partials/input_attachments.html').render(memory_csrf='test')
+    with playwright.sync_playwright() as driver:
+        browser=driver.chromium.launch(channel='chrome',headless=True)
+        page=browser.new_page()
+        def route(request_route):
+            if 'view=true' in request_route.request.url:
+                request_route.fulfill(status=200,content_type='text/plain',body='Previewed document text')
+            else:
+                request_route.fulfill(status=200,content_type='application/json',body='{"attachments":[{"id":"saved","name":"brief.txt","size":23}]}')
+        page.route('https://inputs.test/**',route)
+        page.set_content('<base href="https://inputs.test/">'+markup)
+        page.add_script_tag(path=str(Path(__file__).resolve().parents[1]/'static/js/hfl-input-attachments.js'))
+        page.evaluate("window.editor=new HflInputAttachments(document.querySelector('[data-input-editor]'),'actionable');editor.reset('test')")
+        page.get_by_role('button',name='Preview brief.txt').click()
+        preview=page.locator('.agent-input-preview')
+        playwright.expect(preview.locator('pre')).to_have_text('Previewed document text')
+        preview.get_by_role('button',name='Close',exact=True).click()
+        page.locator('[data-input-files]').set_input_files({'name':'pending.txt','mimeType':'text/plain','buffer':b'Pending text'})
+        page.get_by_role('button',name='Preview pending.txt').click()
+        playwright.expect(preview.locator('pre')).to_have_text('Pending text')
+        preview.get_by_role('button',name='Close',exact=True).click()
+        playwright.expect(page.locator('.agent-input-preview')).to_have_count(0)
+        browser.close()

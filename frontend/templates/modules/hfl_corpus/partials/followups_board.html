@@ -1,11 +1,11 @@
 <dialog id="followups-board" class="agenda-dialog followups-board" aria-labelledby="followups-title">
-  <header class="agenda-dialog-header"><h2 id="followups-title">Follow-ups</h2><button type="button" data-board-close aria-label="Close Follow-ups">Close</button></header>
+  <header class="agenda-dialog-header"><h2 id="followups-title">Actionables follow-ups</h2><button type="button" data-board-close aria-label="Close Actionables follow-ups">Close</button></header>
   <div class="followups-toolbar">
-    <p data-board-context></p>
-    <label><input type="checkbox" data-board-all> All activity <span class="agenda-description">(this board only)</span></label>
+    <button type="button" data-board-all role="switch" aria-checked="false" title="Show all activity in this board">All activity<span class="board-switch-track" aria-hidden="true"></span></button>
     <button type="button" data-board-create>Create actionable</button>
     <button type="button" data-board-refresh>Refresh</button>
     <p data-board-status role="status" aria-live="polite"></p>
+    <p data-board-context></p>
     <p data-board-error class="agenda-error" role="alert" hidden></p>
   </div>
   <div class="followups-lanes" data-board-lanes></div>

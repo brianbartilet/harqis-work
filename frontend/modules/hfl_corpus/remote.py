@@ -15,6 +15,7 @@ from starlette.datastructures import UploadFile
 from config import get_settings
 from modules.hfl_corpus.corpus import (
     CorpusDocument,
+    matching_entry_total,
     CorpusEntry,
     build_tree,
     normalize_source,
@@ -337,6 +338,17 @@ class RemoteCorpusClient:
                 has_previous = bool(payload["has_previous"])
                 has_next = bool(payload["has_next"])
             activity = payload.get("activity") or {}
+            total_entries = payload.get("total_entries")
+            if total_entries is None:
+                # Older hosts lack the aggregate. Request all matching entries;
+                # compact results and heatmap counts omit pages or undated entries.
+                complete = payload if "page" not in payload else self._get(
+                    "/documents", params={**params, "compact": "false", "include_entries": "true"}).json()
+                total_entries = matching_entry_total(
+                    tuple(_document(item) for item in complete["results"]),
+                    query=params.get("q", ""), source=params.get("source", ""),
+                    date_field=params.get("date_field", "created"),
+                    date_from=params.get("date_from", ""), date_to=params.get("date_to", ""))
             activity_year = int(
                 activity.get("year")
                 or params.get("activity_year")
@@ -359,6 +371,7 @@ class RemoteCorpusClient:
                 "tree": tree,
                 "results": results,
                 "total_results": int(payload["total_results"]),
+                "total_entries": int(total_entries),
                 "page": page,
                 "page_size": page_size,
                 "total_pages": total_pages,

@@ -1487,7 +1487,7 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
         "</div>\n  </div>", 1
     )[0]
     assert "corpus-secrets-control" in corpus_header
-    assert "corpus-create-entry" in corpus_header
+    assert "corpus-create-menu" in corpus_header
     assert ".corpus-page-header,.corpus-header-actions { display:contents; }" in response.text
     assert 'data-activity-toggle aria-expanded="true"' in response.text
     assert "data-activity-body" in response.text
@@ -3711,9 +3711,9 @@ def test_create_entry_launcher_and_discard_actions_stack_on_mobile(
         "data-entry-discard-dialog", 1
     )[1].split("</dialog>", 1)[0]
 
-    assert "min-h-11" in launcher
-    assert "w-full" in launcher
-    assert "sm:w-auto" in launcher
+    assert 'class="corpus-tool-item"' in launcher
+    assert 'aria-haspopup="dialog"' in launcher
+    assert 'class="corpus-create-menu"' in response.text
     assert "w-[min(28rem,calc(100%-2rem))]" in discard_dialog
     assert "flex flex-col" in discard_dialog
     assert "sm:flex-row" in discard_dialog

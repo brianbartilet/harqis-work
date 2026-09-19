@@ -34,7 +34,10 @@ class TimelineRoute(APIRoute):
                             response = await client.request(request.method, target, params=request.query_params, content=await request.body(), headers={'Authorization': 'Bearer '+settings.hfl_corpus_api_token, 'Content-Type': 'application/json'})
                         if response.status_code == 303:
                             return RedirectResponse(response.headers['location'], status_code=303)
-                        return JSONResponse(response.json(), status_code=response.status_code)
+                        data = response.json()
+                        if response.is_success and request.url.path.endswith('/history'):
+                            data = render_history(data)
+                        return JSONResponse(data, status_code=response.status_code)
                     except (httpx.HTTPError, ValueError):
                         raise HTTPException(502, 'The canonical timeline is unavailable.') from None
             return await handler(request)
@@ -42,6 +45,15 @@ class TimelineRoute(APIRoute):
 
 
 router = APIRouter(prefix="/timeline", route_class=TimelineRoute)
+
+
+def render_history(data):
+    from services.markdown import render_markdown
+    for row in data.get('history', []):
+        row['item']['completion_note_html'] = str(render_markdown(row['item'].get('completion_note', '')))
+    return data
+
+
 ENTRY_ID = re.compile(r"(?im)^\s*(?:\*\*)?Entry ID:(?:\*\*)?\s*(hfl-[a-zA-Z0-9_-]+)\s*$")
 
 
@@ -107,11 +119,13 @@ async def followup_evidence(request: Request, path: str, entry_id: str):
 
 
 @router.get("/items")
-async def followup_list(request: Request, closed: bool = False, offset: int = 0, include_closed: bool = False):
+async def followup_list(request: Request, closed: bool = False, offset: int = 0, include_closed: bool = False, recent_dismissed: bool = False):
     owner(request)
     today = datetime.now(ZoneInfo("Asia/Singapore")).date().isoformat()
     canonical = store()
     items = (canonical.list() + canonical.list(closed=True)) if include_closed else canonical.list(closed=closed)
+    from modules.hfl_corpus.action_scope import filter_actions
+    items = await filter_actions(request, items, canonical, recent_dismissed=recent_dismissed)
     for item in items:
         is_closed = item['status'] in {'done', 'dismissed'}
         due, review = item["due_date"], item["review_date"]
@@ -193,7 +207,7 @@ async def followup_get(request: Request, followup_id: str):
 async def followup_history(request: Request, followup_id: str):
     owner(request)
     try:
-        return {"history": store().history(followup_id)}
+        return render_history({"history": store().history(followup_id)})
     except KeyError:
         raise HTTPException(404, "Follow-up not found.") from None
 
@@ -221,7 +235,8 @@ async def markers(request: Request):
     canonical = store()
     days = {}
     day_statuses = {}
-    for item in canonical.list() + canonical.list(closed=True):
+    from modules.hfl_corpus.action_scope import filter_actions
+    for item in await filter_actions(request, canonical.list() + canonical.list(closed=True), canonical):
         for event in item_events(item, canonical):
             day = days.setdefault(event['date'], {'planned': [], 'actions': []})
             # Source and status-history days expose these actions too. Use their
@@ -249,7 +264,8 @@ async def timeline_period(request: Request, start: str, end: str):
         raise HTTPException(400, 'Choose a valid period of 1–31 days.') from None
     canonical = store()
     items = []
-    for item in canonical.list() + canonical.list(closed=True):
+    from modules.hfl_corpus.action_scope import filter_actions
+    for item in await filter_actions(request, canonical.list() + canonical.list(closed=True), canonical):
         events = [event for event in item_events(item, canonical) if start <= event['date'] <= end]
         if events:
             items.append({**item, 'events': events})

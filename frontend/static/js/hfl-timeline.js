@@ -20,10 +20,16 @@
   const node = (tag, text, className) => { const el = document.createElement(tag); if (text != null) el.textContent = text; if (className) el.className = className; return el; };
   const error = (id, message = '') => { const el = document.getElementById(id); el.textContent = message; el.hidden = !message; };
   async function api(path, options = {}) {
-    const response = await fetch('/hfl-corpus/timeline/items' + path, { ...options, headers: { 'Content-Type': 'application/json', ...options.headers } });
+    const response = await fetch('/hfl-corpus/timeline/items' + (path.startsWith('?') ? scoped(path) : path), { ...options, headers: { 'Content-Type': 'application/json', ...options.headers } });
     let data; try { data = await response.json(); } catch (_) { throw new Error('The server returned an unreadable response. Try again.'); }
     if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Could not save this follow-up. Check the fields and try again.');
     return data;
+  }
+  function scoped(path) {
+    const url = new URL('/hfl-corpus/timeline'+path, location.origin);
+    const current = new URLSearchParams(location.search);
+    for (const key of ['scope','q','source','date_field','date_from','date_to','rolling']) if(current.has(key))url.searchParams.set(key,current.get(key));
+    return path.split('?')[0]+'?'+url.searchParams;
   }
   function evidenceUrl(value) { return '/hfl-corpus/timeline/evidence?' + new URLSearchParams({path: value.path, entry_id: value.entry_id}); }
   function stateFields() { document.getElementById('followup-completion-label').hidden = form.elements.status.value !== 'done'; }
@@ -46,14 +52,14 @@
   function button(label, fn) { const b = node('button', label); b.type='button'; b.addEventListener('click',fn); return b; }
   async function patch(item, changes, trigger) {
     trigger.disabled = true; error('agenda-error');
-    try { await api('/'+item.id, {method:'PATCH',body:JSON.stringify({version:item.version,...changes})}); await load(); }
-    catch (e) { error('agenda-error',e.message); } finally {trigger.disabled=false;}
+    try { await api('/'+item.id, {method:'PATCH',body:JSON.stringify({version:item.version,...changes})}); await load(); window.dispatchEvent(new Event('hfl:actions-updated')); }
+    catch (e) { error('agenda-error',e.message); window.dispatchEvent(new CustomEvent('hfl:action-error',{detail:e.message})); } finally {trigger.disabled=false;}
   }
   let historySequence = 0;
   async function showHistory(item) {
     const ticket = ++historySequence;
     const list=document.getElementById('followup-history-items');list.replaceChildren(node('p','Loading history…'));historyDialog.showModal();
-    try { const data=await api('/'+item.id+'/history'); if(ticket !== historySequence)return; list.replaceChildren(); data.history.forEach(row => {const el=node('section',null,'agenda-history-row');el.dataset.changedAt=row.changed_at;el.append(node('h3','Revision '+row.item.version+' · '+statusLabel(row.item.status)),node('p',new Date(row.changed_at).toLocaleString('en-SG',{timeZone:'Asia/Singapore'})+' SGT'),node('p',row.item.title),node('p','Expected outcome: '+row.item.expected_outcome),node('p','Review: '+(row.item.review_date||'Unscheduled')+' · Complete by: '+(row.item.due_date||'None')));el.append(node('p','Matrix: '+(row.item.matrix||'Unclassified')+(row.item.matrix_confidence?' · '+row.item.matrix_confidence+' confidence':'')));if(row.item.matrix_reason)el.append(node('p',row.item.matrix_reason));if(row.item.prompt)el.append(node('h4','Prompt'),node('pre',row.item.prompt,'action-prompt'));if(row.item.notes)el.append(node('p',row.item.notes));if(row.item.completion_note)el.append(node('p','Outcome: '+row.item.completion_note));list.append(el);}); }
+    try { const data=await api('/'+item.id+'/history'); if(ticket !== historySequence)return; list.replaceChildren(); data.history.forEach(row => {const el=node('section',null,'agenda-history-row');el.dataset.changedAt=row.changed_at;el.append(node('h3','Revision '+row.item.version+' · '+statusLabel(row.item.status)),node('p',new Date(row.changed_at).toLocaleString('en-SG',{timeZone:'Asia/Singapore'})+' SGT'),node('p',row.item.title),node('p','Expected outcome: '+row.item.expected_outcome),node('p','Review: '+(row.item.review_date||'Unscheduled')+' · Complete by: '+(row.item.due_date||'None')));el.append(node('p','Matrix: '+(row.item.matrix||'Unclassified')+(row.item.matrix_confidence?' · '+row.item.matrix_confidence+' confidence':'')));if(row.item.matrix_reason)el.append(node('p',row.item.matrix_reason));if(row.item.prompt)el.append(node('h4','Prompt'),node('pre',row.item.prompt,'action-prompt'));if(row.item.notes)el.append(node('p',row.item.notes));if(row.item.completion_note){const output=node('div',null,'markdown-body');if(row.item.completion_note_html)output.innerHTML=row.item.completion_note_html;else output.textContent=row.item.completion_note;el.append(node('h4','Outcome'),output);}list.append(el);}); }
     catch(e){list.replaceChildren(node('p',e.message,'agenda-error'));}
     try {
       const events = await window.hflAgentBridge.events('actionable',item.id);
@@ -87,10 +93,12 @@
         meta.append(pill);
       });
     }
-    el.append(meta,node('h3',item.title),node('p',item.expected_outcome,'agenda-card-outcome'));
+    for(const sourceName of item.sources || [])meta.append(node('span',sourceName,'action-source'));
+    el.append(meta,node('h3',item.title));
+    const outcome=node('details');outcome.append(node('summary','Expected outcome'),node('p',item.expected_outcome,'agenda-card-outcome'));el.append(outcome);
     if(item.prompt){const details=node('details');details.append(node('summary','Prompt'),node('pre',item.prompt,'action-prompt'));el.append(details);}
     if(item.notes || item.completion_note){const details=node('details');details.append(node('summary','Notes & outcome'));if(item.notes)details.append(node('p',item.notes));if(item.completion_note)details.append(node('p','Outcome: '+item.completion_note));el.append(details);}
-    if(item.source){const evidence=node('div',null,'action-evidence-link');const a=node('a','Open HFL evidence ↗');a.href=evidenceUrl(item.source);a.target='_blank';a.rel='noopener';evidence.append(a);el.append(evidence);}
+    if(item.source){const evidence=node('div',null,'action-evidence-link');const available=item.evidence_available!==false;const a=node(available?'a':'span','Open HFL evidence ↗');if(available){a.href=evidenceUrl(item.source);a.target='_blank';a.rel='noopener';}else{a.setAttribute('aria-disabled','true');a.title='No linked evidence entry is available';}evidence.append(a);el.append(evidence);}
     const actions=node('div',null,'agenda-card-actions action-controls');
     actions.append(button('Edit',()=>openEditor(item)));
     if(!['done','dismissed'].includes(item.status)){
@@ -110,11 +118,11 @@
       markerDays=markers.days;reconcilePeriodMarkers(periodData.items);paintMarkers();paintActionsIndicator(periodData.items);renderSuggestions(periodData);
       if(!document.getElementById('timeline-all').checked) {data.items=periodData.items;data.total=data.items.length;}
       const list=document.getElementById('agenda-items');
-      const expanded=new Set(Array.from(list.querySelectorAll('details[open]')).map(el=>el.closest('[data-followup-id]').dataset.followupId));
+      const expanded=new Set(Array.from(list.querySelectorAll('details[open]')).map(el=>el.closest('[data-followup-id]').dataset.followupId+':'+el.querySelector('summary').textContent));
       list.replaceChildren();const groups=new Map();
       data.items.sort((a,b)=>priority(a).localeCompare(priority(b)));
       data.items=data.items.map(item=>({...item,group:item.status==='done'?'Completed':item.status==='dismissed'?'Dismissed':'To do'}));
-      data.items.forEach(item=>{if(!groups.has(item.group)){const section=node('section',null,'agenda-group');section.dataset.group=item.group;const cards=node('div');section.append(node('h2',item.group),cards);list.append(section);groups.set(item.group,cards);}const el=card(item);if(expanded.has(item.id))el.querySelector('details')?.setAttribute('open','');groups.get(item.group).append(el);});
+      data.items.forEach(item=>{if(!groups.has(item.group)){const section=node('section',null,'agenda-group');section.dataset.group=item.group;const cards=node('div');section.append(node('h2',item.group),cards);list.append(section);groups.set(item.group,cards);}const el=card(item);el.querySelectorAll('details').forEach(details=>details.open=expanded.has(item.id+':'+details.querySelector('summary').textContent));groups.get(item.group).append(el);});
       document.getElementById('agenda-status').textContent=(data.total>data.items.length ? 'Showing '+data.items.length+' of '+data.total : data.total)+' actionable'+(data.total===1?'':'s')+' · '+today+' SGT';
       const actionsPanel=document.getElementById('timeline-actions');
       const isEmpty=!data.items.length;
@@ -138,7 +146,7 @@
     } catch(e){if(ticket===sequence){error('agenda-error',e.message);document.querySelector('#timeline-actions .agenda-toolbar').hidden=false;document.getElementById('agenda-status').hidden=false;document.getElementById('agenda-status').textContent='Could not load the agenda. Use Refresh to retry.';}}
   }
   async function timelineApi(path, options={}) {
-    const response=await fetch('/hfl-corpus/timeline'+path,{...options,headers:{'Content-Type':'application/json'}});
+    const response=await fetch('/hfl-corpus/timeline'+(['/markers','/period'].includes(path.split('?')[0])?scoped(path):path),{...options,headers:{'Content-Type':'application/json'}});
     const data=await response.json();if(!response.ok)throw new Error(data.detail||'Timeline unavailable.');return data;
   }
   function actionDotStatus(statuses) {
@@ -264,11 +272,12 @@
         await attachments.save(editing.id);
         editing = (await api('/'+editing.id,{method:'PATCH',body:JSON.stringify({version:editing.version,prompt})})).item;
       }
-      editor.close();await load();
+      editor.close();await load();window.dispatchEvent(new Event('hfl:actions-updated'));
     }
     catch(err){error('followup-save-error',err.message);}
     finally{attachments.root.inert=false;busy=false;save.disabled=false;save.textContent='Save';}
   });
+  window.hflActions = {card, openEditor, load};
   timelineApi('/markers').then(data=>{markerDays=data.days;paintMarkers();}).catch(()=>{});
   window.addEventListener('hfl:timeline-close',()=>{clearTimeout(pollTimer);++sequence;});
   const params=new URLSearchParams(location.search);

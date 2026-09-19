@@ -723,3 +723,46 @@ def test_agent_classification_cannot_overwrite_concurrent_owner_edit(bridge, aut
     assert response.json()['state'] == 'review'
     assert actions.get(item['id'])['matrix'] == 'Q4'
     assert actions.get(item['id'])['version'] == edited['version']
+
+
+def test_saved_canonical_outcome_appears_without_local_run(bridge, authenticated_client):
+    module, store, actions = bridge
+    item = create_action(actions)
+    summary = '## Report\n\n| Month | Total |\n| --- | --- |\n| Sep | **12** |\n\n<script>alert(1)</script>'
+    item = actions.update(item['id'], {'version':item['version'],'status':'done','completion_note':summary}, actor='agent:external')
+    actions.update(item['id'], {'version':item['version'],'notes':'Unrelated edit'}, actor='owner')
+    result = authenticated_client.get(f"/hfl-corpus/agent-bridge/sources/actionable/{item['id']}").json()
+    assert result['runs'] == []
+    assert result['action_status'] == 'done'
+    assert len(result['outcomes']) == 1
+    assert '<table>' in result['outcomes'][0]['output_html']
+    assert '<strong>12</strong>' in result['outcomes'][0]['output_html']
+    assert '<script>' not in result['outcomes'][0]['output_html']
+    history = authenticated_client.get(f"/hfl-corpus/timeline/items/{item['id']}/history").json()
+    assert '<table>' in history['history'][0]['item']['completion_note_html']
+
+
+def test_attachment_previews_are_passive_and_support_word(bridge, authenticated_client):
+    import io
+    import zipfile
+    module, _, _ = bridge
+    result=module.input_preview(b'# Heading\n\n<script>bad()</script>', 'brief.md')
+    assert b'<h1' in result.body and b'<script>' not in result.body
+    assert 'sandbox' in result.headers['content-security-policy']
+    assert module.input_preview(b'plain <b>text</b>', 'notes.txt').media_type == 'text/plain'
+    doc=io.BytesIO()
+    with zipfile.ZipFile(doc,'w') as zipped:
+        zipped.writestr('word/document.xml','<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Word preview</w:t></w:r></w:p></w:document>')
+    assert module.input_preview(doc.getvalue(),'report.docx').body == b'Word preview'
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as failure:
+        module.input_preview(b'<svg onload="alert(1)"></svg>','unsafe.svg')
+    assert failure.value.status_code == 415
+    item = create_action(bridge[2])
+    path = f"/hfl-corpus/agent-bridge/inputs/actionable/{item['id']}"
+    uploaded = authenticated_client.post(path, headers=owner_headers(), files=[('files',('brief.md',b'# Preview report','text/markdown'))])
+    assert uploaded.status_code == 200
+    attachment = uploaded.json()['attachments'][0]
+    viewed = authenticated_client.get(path+'/'+attachment['id']+'?view=true')
+    assert viewed.status_code == 200
+    assert '<h1' in viewed.text and 'Preview report' in viewed.text

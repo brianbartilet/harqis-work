@@ -381,15 +381,57 @@ def input_manifest(kind, source_id):
     return {'attachments': store.list(source)}
 
 
-def input_download(kind, source_id, attachment_id):
+def input_preview(content, name):
+    """Preview passive formats without executing uploaded HTML or SVG."""
+    suffix = Path(name).suffix.lower()
+    headers = {'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+               'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'"}
+    media = {'.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.webp':'image/webp', '.gif':'image/gif',
+             '.pdf':'application/pdf', '.mp4':'video/mp4', '.webm':'video/webm', '.mp3':'audio/mpeg', '.wav':'audio/wav', '.ogg':'audio/ogg'}
+    if suffix in media:
+        return Response(content, media_type=media[suffix], headers=headers)
+    if suffix in {'.txt','.csv','.tsv','.json','.log','.md','.markdown'}:
+        if len(content) > 2 * 1024 * 1024:
+            raise HTTPException(413, 'This document is too large to preview. Download it instead.')
+        text = content.decode('utf-8', errors='replace')
+        if suffix in {'.md', '.markdown'}:
+            return HTMLResponse(str(render_markdown(text)), headers=headers)
+        return Response(text, media_type='text/plain', headers=headers)
+    if suffix == '.docx':
+        from io import BytesIO
+        from zipfile import ZipFile, BadZipFile
+        from xml.etree import ElementTree
+        try:
+            with ZipFile(BytesIO(content)) as document:
+                info = document.getinfo('word/document.xml')
+                if info.file_size > 4 * 1024 * 1024:
+                    raise HTTPException(413, 'This document is too large to preview. Download it instead.')
+                root = ElementTree.fromstring(document.read(info))
+            namespace = {'w':'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+            text = '\n\n'.join(''.join(p.itertext()) for p in root.findall('.//w:p', namespace))
+            return Response(text, media_type='text/plain', headers=headers)
+        except (BadZipFile, KeyError, ElementTree.ParseError):
+            raise HTTPException(422, 'This document could not be previewed. Download it instead.') from None
+    raise HTTPException(415, 'Preview is unavailable for this file type. Download it instead.')
+
+
+def input_download(kind, source_id, attachment_id, view=False):
     from modules.hfl_corpus.attachments import source_store
     if remote_inputs(kind):
+        if view:
+            manifest = next((file for file in input_manifest(kind, source_id)['attachments'] if file['id'] == attachment_id), None)
+            if not manifest:
+                raise HTTPException(404, 'Attachment not found.')
         response = input_remote('GET', source_id, attachment_id)
+        if view:
+            return input_preview(response.content, manifest['name'])
         return Response(response.content, media_type='application/octet-stream', headers={
             'Content-Disposition': response.headers.get('Content-Disposition', 'attachment'),
             'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
     store, source = source_store(kind, source_id)
     manifest = store.get(source, attachment_id)
+    if view:
+        return input_preview(store.path(manifest).read_bytes(), manifest['name'])
     return FileResponse(store.path(manifest), filename=manifest['name'], media_type='application/octet-stream',
                         headers={'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
 
@@ -415,8 +457,8 @@ async def owner_upload_inputs(kind: str, source_id: str, files: list[UploadFile]
 
 
 @owner_router.get('/inputs/{kind}/{source_id}/{attachment_id}')
-def owner_download_input(kind: str, source_id: str, attachment_id: str):
-    return input_download(kind, source_id, attachment_id)
+def owner_download_input(kind: str, source_id: str, attachment_id: str, view: bool = False):
+    return input_download(kind, source_id, attachment_id, view=view)
 
 
 @owner_router.delete('/inputs/{kind}/{source_id}/{attachment_id}')
@@ -534,7 +576,25 @@ def source_view(kind: str, source_id: str):
         run['result']['output_html'] = str(render_markdown(run['result'].get('summary', '')))
     for event in events:
         event['payload']['output_html'] = str(render_markdown(event['payload'].get('summary', '')))
+    outcomes, outcomes_error, action_status = [], '', None
+    if kind == 'actionable':
+        try:
+            rows = action_call('GET', '/' + source_id + '/history')['history']
+            if rows:
+                action_status = max(rows, key=lambda row: row['item']['version'])['item']['status']
+            seen = {run['result'].get('summary', '').strip() for run in runs}
+            for row in sorted(rows, key=lambda row: row['item']['version'], reverse=True):
+                summary = row['item'].get('completion_note', '').strip()
+                if not summary or summary in seen or any('Agent run: ' + run['id'] in summary for run in runs):
+                    continue
+                seen.add(summary)
+                outcomes.append({'summary': summary, 'output_html': str(render_markdown(summary)),
+                                 'created_at': row['changed_at'], 'actor': row.get('actor', ''),
+                                 'version': row['item']['version']})
+        except (KeyError, httpx.HTTPError):
+            outcomes_error = 'Saved action outcomes could not be loaded. Retry shortly.'
     return {'runs': runs, 'events': events,
+            'outcomes': outcomes, 'outcomes_error': outcomes_error, 'action_status': action_status,
             'subscription': next((sub for sub in store.subscriptions() if sub['source_key'] == key), {'cadence': 'daily' if kind == 'actionable' or any(str(p['id']) == source_id and p.get('agent_enabled') for p in get_memory_pin_store().snapshot()['ranges']) else 'off', 'auto_complete': True})}
 
 

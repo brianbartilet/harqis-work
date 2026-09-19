@@ -5,6 +5,7 @@
   const actions = window.hflActions;
   const $ = selector => dialog.querySelector(selector);
   const lanes = $('[data-board-lanes]'), all = $('[data-board-all]');
+  Object.defineProperty(all,'checked',{get(){return this.getAttribute('aria-checked')==='true';},set(value){this.setAttribute('aria-checked',String(!!value));}});
   const status = $('[data-board-status]'), error = $('[data-board-error]');
   const states = ['open','active','in_progress','incomplete','done','dismissed'];
   const label = value => value === 'in_progress' ? 'In Progress' : value[0].toUpperCase()+value.slice(1);
@@ -87,7 +88,11 @@
   $('[data-board-close]').onclick=()=>dialog.close();
   $('[data-board-create]').onclick=()=>actions.openEditor();
   $('[data-board-refresh]').onclick=()=>refresh(true);
-  all.onchange=()=>refresh(true);
+  all.onclick=()=>{all.checked=!all.checked;refresh(true);};
+  const toolsMenu=document.querySelector('.corpus-tools');
+  toolsMenu.addEventListener('toggle',()=>{if(toolsMenu.open){const profile=document.querySelector('summary[aria-label="Profile menu"]')?.parentElement;if(profile)profile.open=false;}});
+  document.addEventListener('click',event=>{if(!toolsMenu.contains(event.target))toolsMenu.open=false;},{signal:listeners.signal});
+  toolsMenu.addEventListener('keydown',event=>{if(event.key==='Escape'){toolsMenu.open=false;toolsMenu.querySelector('summary').focus();}});
   dialog.addEventListener('close',()=>{++sequence;pending=false;clearInterval(timer);});
   window.addEventListener('hfl:actions-updated',()=>refresh(true),{signal:listeners.signal});
   window.addEventListener('hfl:agent-updated',()=>refresh(),{signal:listeners.signal});

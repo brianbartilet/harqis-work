@@ -2,6 +2,7 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from fastapi import HTTPException
 
 from modules.hfl_corpus.view_scope import predicate, request_scope, resolved
 from modules.hfl_corpus.workspace_views import WorkspaceState
@@ -13,10 +14,13 @@ async def filter_actions(request, items, canonical, *, recent_dismissed=False):
 
     scope = request_scope(request)
     values = {key: value for key, value in request.query_params.items() if key in WorkspaceState.model_fields}
-    for key in ('rolling', 'page_size'):
-        if key in values:
-            values[key] = int(values[key])
-    state = WorkspaceState.model_validate(values)
+    try:
+        for key in ('rolling', 'page_size'):
+            if key in values:
+                values[key] = int(values[key])
+        state = WorkspaceState.model_validate(values)
+    except ValueError:
+        raise HTTPException(422, 'Invalid action view filters.') from None
     clauses = [predicate(resolved(value)) for value in scope.any]
     narrowing = predicate(resolved(scope.all if scope.any else state))
     filtered = bool(scope.any or state.q or state.source or state.date_from or state.date_to or state.rolling)
@@ -40,11 +44,14 @@ async def filter_actions(request, items, canonical, *, recent_dismissed=False):
             path = source['path']
             if path not in documents:
                 if corpus._uses_remote_corpus():
-                    documents[path], _ = await asyncio.to_thread(
-                        corpus.RemoteCorpusClient.from_settings().document, path,
-                        include_secrets=False, secret_tags=protected)
+                    try:
+                        documents[path], _ = await asyncio.to_thread(
+                            corpus.RemoteCorpusClient.from_settings().document, path,
+                            include_secrets=False, secret_tags=protected)
+                    except corpus.RemoteCorpusError:
+                        raise HTTPException(502, 'Action evidence could not be loaded. Retry shortly.') from None
                 else:
-                    documents[path] = corpus.corpus_index.get(path)
+                    documents[path] = await asyncio.to_thread(corpus.corpus_index.get, path)
             document = documents[path]
             entry = next((entry for entry in document.entries if entry_guid(entry) == source['entry_id']), None) if document else None
             if entry and corpus.is_secret_entry(entry, protected):

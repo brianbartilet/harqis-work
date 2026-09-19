@@ -30,6 +30,7 @@ from modules.hfl_corpus.view_scope import filter_scope, request_scope
 from config import get_settings
 from modules.hfl_corpus.corpus import (
     CorpusPage,
+    matching_entry_total,
     activity_calendar_years,
     activity_counts,
     activity_day_entries,
@@ -807,6 +808,7 @@ async def hfl_corpus_page(
             results = remote["results"]
             total_results = remote["total_results"]
             document_count = remote["document_count"]
+            total_entries = remote["total_entries"]
             tag_cloud = remote["tag_cloud"]
             source_options = remote.get("sources", [])
             selected_source = remote.get("selected_source", "")
@@ -826,6 +828,7 @@ async def hfl_corpus_page(
             results = ()
             total_results = 0
             document_count = 0
+            total_entries = 0
             tag_cloud = []
             source_options = []
             selected_source = ""
@@ -877,6 +880,8 @@ async def hfl_corpus_page(
             source=selected_source,
         )
         result_page = paginate_documents(all_results, page=page, page_size=page_size)
+        total_entries = matching_entry_total(all_results, query=q, source=selected_source,
+                                             date_field=date_field, date_from=date_from, date_to=date_to)
         results = result_page.items
         total_results = result_page.total_results
         document_count = len(documents)
@@ -1025,7 +1030,7 @@ async def hfl_corpus_page(
                 "source": selected_source,
                 "show_secrets": include_secrets,
             },
-            activity_timeline_total=sum(timeline_counts.values()),
+            activity_timeline_total=total_entries,
             activity_has_birthdate=memory_birthdate is not None,
             memory_pins=memory_pins,
             memory_csrf=make_csrf_token(user),

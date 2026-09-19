@@ -2,8 +2,8 @@
 
 Approved feature specification, 2026-09-20.
 
-Tools → Follow-ups opens a six-lane board: Open, Active, In Progress,
-Incomplete, Done, and Dismissed. Tools → Graph retains the graph entry point.
+Explore → Follow-ups opens a six-lane board: Open, Active, In Progress,
+Incomplete, Done, and Dismissed. Explore → Graph retains the graph entry point.
 
 ## Context and filtering
 
@@ -17,7 +17,7 @@ Unlinked manual actions have source `manual-entry`. Their own created/updated
 timestamps support those date filters; entry-date and tag constraints exclude them
 when they cannot match. Text search uses their title and expected outcome.
 
-The board shows applied views and Dynamic ON/OFF. Its All activity checkbox
+The board shows applied views and Dynamic ON/OFF. Its All activity toggle
 bypasses view filters only within the board. Access restrictions still apply.
 Historical panels retain old dismissals; the board shows only actions whose latest
 transition into Dismissed was within the preceding 14 days. Editing a dismissed
@@ -26,8 +26,8 @@ action does not restart that period. Other lanes have no extra age cutoff.
 ## Interaction and refresh
 
 Cards reuse the Actions panel's controls, source and triage pills, and due dates.
-Expected outcome and Prompt are collapsed by default. Unavailable evidence links
-are disabled. Create actionable opens the shared editor.
+Expected outcome and Prompt are collapsed by default. Unlinked manual cards omit the evidence link. Linked cards with unavailable evidence
+show a disabled link. Create actionable opens the shared editor.
 
 Drag a card to change status, or use Edit to select a status with the keyboard.
 Writes use the action version to reject concurrent overwrites. A failed move leaves
@@ -50,3 +50,24 @@ Regression coverage lives in `frontend/tests/test_hfl_timeline.py` and
 markers and period results, dismissal transitions, optimistic concurrency,
 workspace behavior, desktop/mobile board controls, drag-and-drop, and background
 status refresh.
+
+## Display and result recovery
+
+The board uses a compact toolbar and cards, full-width Results controls, and the
+heatmap status colors: yellow for Open/Active, blue for In Progress, red for
+Incomplete, green for Done, and grey for Dismissed. Explore uses a neutral dropdown
+with a caret; the global Profile menu remains above page controls.
+
+Results also reads saved completion notes from canonical action history. These
+are labeled **Saved action outcome**, rendered as sanitized Markdown, and deduplicated
+against local execution reports. This makes existing outcomes visible on frontends
+that do not own the original execution store; it does not recreate missing run
+metadata or recover output that was never saved to the action. History renders
+completion notes with the same sanitizer.
+
+Supporting-file Preview opens a nested dialog for images, audio/video, PDF, text,
+and Markdown. Saved Word documents receive a text preview. Unsupported formats
+retain their download link, and pending Word documents must be saved first.
+
+The header groups Create entry and Create actionable under Create. On mobile,
+Create spans the first row; Explore and Workspaces share the second row equally.
