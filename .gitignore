@@ -33,6 +33,7 @@ fork-fleet.local.toml
 venv
 
 # ── Runtime state (PID files, logs, screenshots, ad-hoc data) ────────────────
+/.tmp/
 *pid.*
 .run/*.pid
 *.log*
