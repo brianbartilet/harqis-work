@@ -51,13 +51,66 @@
       sourcesDropdown.querySelector('summary').focus();
     }
   });
+  const inheritedFilters = new Map();
+  const editedFilters = new Set();
+  form.addEventListener('formdata', event => {
+    inheritedFilters.forEach((entry, key) => {
+      if (key === 'date_field' && ['date_from','date_to','rolling'].some(field => editedFilters.has(field))) return;
+      if (!editedFilters.has(key) && String(form.elements[key].value) === entry.display) event.formData.set(key, entry.original);
+    });
+  });
+  form.addEventListener('input', event => {
+    const key = event.target.matches('[data-source-option]') ? 'source' : event.target.name;
+    if (key) editedFilters.add(key);
+  }, true);
+  function inheritViewFilters() {
+    if (!aggregateScope.any.length) return;
+    const selectedViews = views.filter(view => activeIds.includes(view.id));
+    const states = aggregateScope.any.map((state, index) => ({...state,
+      rolling:selectedViews.length === aggregateScope.any.length ? selectedViews[index].state.rolling || 0 : state.rolling || 0,
+    }));
+    const defaults = {q:'', source:'', date_field:'created', rolling:'0', date_from:'', date_to:''};
+    const extraDates = form.elements.date_from.value || form.elements.date_to.value || Number(form.elements.rolling.value);
+    for (const [key, fallback] of Object.entries(defaults)) {
+      const control = form.elements[key], original = control.value;
+      if (original !== fallback || (extraDates && ['date_field','rolling','date_from','date_to'].includes(key))) continue;
+      const values = [...new Set(states.map(state => String(state[key] ?? fallback)))];
+      let display = values.length === 1 ? values[0] : fallback;
+      if (key === 'source') {
+        display = values.some(value => !value) ? '' : [...new Set(values.flatMap(value => value.split(',').filter(Boolean)))].sort().join(',');
+        display.split(',').filter(Boolean).forEach(value => {
+          if (sources.some(input => input.value === value)) return;
+          const label = document.createElement('label'), input = document.createElement('input');
+          input.type = 'checkbox'; input.dataset.sourceOption = ''; input.value = value;
+          input.addEventListener('change', syncSources); sources.push(input);
+          label.append(input, document.createTextNode(value)); sourcesDropdown.querySelector('.workspace-source-options').append(label);
+        });
+        sources.forEach(input => input.checked = display.split(',').includes(input.value));
+        $('[data-sources-clear]').textContent = 'Use view sources';
+      } else if (values.length > 1 && control.tagName === 'SELECT') {
+        const option = new Option('Varies by view', fallback); option.dataset.inheritedOption = '';
+        control.prepend(option);
+      } else if (values.length > 1) {
+        if (key === 'q') control.placeholder = 'Search within selected views';
+        const hint = document.createElement('span'); hint.className = 'workspace-inherited-hint';
+        hint.textContent = key === 'q' ? 'Search and tags vary by view' : 'Varies by view';
+        hint.title = values.map(value => value || 'Any').join(' / ');
+        control.parentElement.insertAdjacentElement(key === 'q' ? 'afterend' : 'beforeend', hint);
+        control.addEventListener('input', () => { hint.hidden = true; });
+      }
+      control.value = display;
+      inheritedFilters.set(key, {original, display});
+    }
+    dates(); syncSources();
+    if (inheritedFilters.has('source')) inheritedFilters.get('source').display = form.elements.source.value;
+  }
   function syncSources() {
     const values = sources.filter(input => input.checked).map(input => input.value);
     form.elements.source.value = values.join(',');
-    $('[data-source-caption]').textContent = values.length ? `${values.length} selected` : 'All sources';
+    $('[data-source-caption]').textContent = values.length ? `${values.length} selected${inheritedFilters.has('source') && !editedFilters.has('source') ? ' from views' : ''}` : 'All sources';
   }
   sources.forEach(input => input.addEventListener('change', syncSources));
-  $('[data-sources-clear]').onclick = () => { sources.forEach(input => input.checked = false); syncSources(); updateViewContext(); };
+  $('[data-sources-clear]').onclick = () => { const values = inheritedFilters.get('source')?.display.split(',') || []; sources.forEach(input => input.checked = values.includes(input.value)); editedFilters.delete('source'); syncSources(); updateViewContext(); };
   function dates() {
     const rolling = Number(form.elements.rolling.value);
     for (const key of ['date_from', 'date_to']) form.elements[key].disabled = !!rolling;
@@ -101,6 +154,11 @@
   form.addEventListener('input', updateViewContext);
   form.addEventListener('change', updateViewContext);
   function options() {
+    const selected = views.find(view => view.id === activeIds[0]);
+    const resetUrl = dynamicOn || activeIds.length > 1
+      ? combinedUrl(viewData, activeIds, dynamicOn)
+      : selected ? viewUrl(selected) : '/hfl-corpus?reset=1';
+    document.querySelectorAll('[data-workspace-reset]').forEach(link => { link.href = resetUrl; });
     updateViewContext();
     updateDynamicAvailability();
     pendingIds = [...activeIds]; pickerChanged = false;
@@ -605,5 +663,6 @@
     }
     document.body.append(transfer); transfer.submit();
   });
+  inheritViewFilters();
   options();
 })();

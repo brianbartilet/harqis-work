@@ -197,6 +197,20 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             page.wait_for_function("document.querySelector('[data-active-view-name]').textContent.includes('Work') && document.querySelector('[data-active-view-name]').textContent.includes('Personal')")
             assert '2 matching entries' in page.locator('[data-corpus-results]').inner_text()
             assert page.locator('[data-dynamic-badge]').inner_text()=='Dynamic OFF'
+            assert page.locator('[data-source-option][value="git"]').is_checked()
+            assert page.locator('[data-source-option][value="browsing"]').is_checked()
+            assert page.locator('[data-source-caption]').inner_text() == '2 selected from views'
+            assert page.locator('#q').get_attribute('placeholder') == 'Search within selected views'
+            page.locator('[data-corpus-search]').click()
+            page.wait_for_load_state()
+            assert '2 matching entries' in page.locator('[data-corpus-results]').inner_text()
+            assert json.loads(parse_qs(urlparse(page.url).query)['scope'][0])['all']['source'] == ''
+            page.locator('#q').fill('temporary narrowing')
+            page.locator('[data-workspace-reset]').first.click()
+            playwright.expect(page.locator('#q')).to_have_value('')
+            playwright.expect(page.locator('[data-active-view-name]')).to_contain_text('Work')
+            playwright.expect(page.locator('[data-active-view-name]')).to_contain_text('Personal')
+            assert '2 matching entries' in page.locator('[data-corpus-results]').inner_text()
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.locator('[data-workspace-menu] > summary').click()
             assert page.locator('[data-workspace-action="save"]').is_disabled()
@@ -294,13 +308,13 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             page.locator('[data-workspace-help-open]').click()
             scheduled[:] = [first['id']]
             page.evaluate("window.dispatchEvent(new Event('focus'))")
-            assert 'Personal' in page.locator('[data-active-view-name]').inner_text()
+            playwright.expect(page.locator('[data-active-view-name]')).to_contain_text('Personal')
             page.locator('#workspace-help [data-workspace-help-close]').last.click()
             page.locator('[data-workspace-menu]').evaluate('(el) => el.open = false')
             failed[0] = True
             page.evaluate("window.dispatchEvent(new Event('focus'))")
             page.wait_for_function("document.querySelector('[data-adaptive-status]').textContent.includes('retry')")
-            assert 'Personal' in page.locator('[data-active-view-name]').inner_text()
+            playwright.expect(page.locator('[data-active-view-name]')).to_contain_text('Personal')
             assert '2 matching entries' in page.locator('[data-corpus-results]').inner_text()
             failed[0] = False
             page.locator('[data-adaptive-status] button').click()

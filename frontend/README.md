@@ -620,8 +620,9 @@ Views and the last selected view are stored in the server's owner profile
 database. A plain visit to `/hfl-corpus` restores that view from page 1, including
 after a new login or from another browser using the same server. Separate local
 and remote servers do not automatically synchronize their view databases.
-Explicit query parameters take precedence. **Reset** (`?reset=1`) opens the
-default view without deleting saved views or forgetting the last selection.
+Explicit query parameters take precedence. **Reset** clears additional search
+filters and restores the currently selected view or combination, retaining Dynamic
+mode when enabled. With no selected views it shows All activity.
 Removing the selected view clears that selection. Unsaved changes require
 **Save** and are discarded on navigation without a prompt. Secrets access is
 never stored in a view. Graph profiles remain independent.
@@ -631,7 +632,9 @@ never stored in a view. Graph profiles remain independent.
 Use the **Focus on** checkbox dropdown to choose up to 30 views. Closing the list applies the selection automatically. **All activity** clears saved-view filtering.
 Each view retains its own source/tag/text/date rules. An entry matching any view
 appears once in document results, matching-entry navigation, and Memory Signal
-counts. Inspect each view’s rules in **Edit Views**; the search controls
+counts. Search controls show inherited sources and shared filter values; differing
+values are marked as varying by view. Unchanged inherited values preserve each
+view’s original rules. Inspect each view’s rules in **Edit Views**; the search controls
 further narrow the union. **Save** and **Remove** are disabled when multiple views
 are selected. **Edit Views** lets you choose one view to edit without changing
 the others. Removing a single selected view requires Yes/Cancel confirmation.

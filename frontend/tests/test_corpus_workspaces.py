@@ -246,6 +246,12 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             assert page.locator('[data-mobile-results-toggle]').is_checked()
             assert '2 matching entries' in page.locator('[data-corpus-results]').inner_text()
             page.locator('[data-workspace-menu] > summary').click()
+            page.locator('[data-workspace-menu]').evaluate('(el) => el.open = false')
+            page.locator('#q').fill('temporary narrowing')
+            page.locator('[data-workspace-reset]').first.click()
+            playwright.expect(page.locator('#q')).to_have_value('#work planning')
+            assert page.locator('[data-active-view-name]').inner_text() == 'Work sources'
+            page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
             page.locator('[data-workspace-action="edit"]').click()
             page.locator('#workspace-name').fill('Renamed workspace')
             page.locator('[data-workspace-confirm]').click()

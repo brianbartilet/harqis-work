@@ -13,6 +13,7 @@
 .workspace-dialog::backdrop { background:#020617cc; }
 .workspace-dialog h2 { font-size:1.1rem; font-weight:600; margin-bottom:1rem; }
 .workspace-source-field { min-width:0; }
+.workspace-inherited-hint { display:block; margin-top:.35rem; color:#94a3b8; font-size:.7rem; line-height:1.4; }
 .workspace-sources { position:relative; margin-top:.375rem; color:#cbd5e1; font-size:.75rem; }
 .workspace-sources summary { display:flex; justify-content:space-between; gap:.5rem; cursor:pointer; border:1px solid #334155; border-radius:.5rem; background:#020617; padding:.5rem .65rem; list-style:none; }
 .workspace-source-options { position:absolute; top:100%; left:0; z-index:30; min-width:100%; width:17rem; max-width:calc(100vw - 4rem); max-height:15rem; overflow:auto; background:#020617; border:1px solid #475569; border-radius:.5rem; padding:.4rem; box-shadow:0 12px 24px #0008; }
