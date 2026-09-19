@@ -55,6 +55,8 @@ from modules.hfl_corpus.entry_create import (
 )
 from modules.hfl_corpus.document_edit import (
     DocumentConflictError,
+    EntryActionRequest,
+    apply_entry_action,
     UpdateDocumentRequest,
     update_document_text,
 )
@@ -310,7 +312,15 @@ def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
                       'aria-label="Create a follow-up from this HFL entry">Make actionable ↗</a>')
         header = _display_entry_header(match.group(1))
         heading = f'<h2 id="{html.escape(entry.anchor, quote=True)}" class="scroll-mt-40">{header}</h2>'
-        return f'<div class="corpus-entry-header">{heading}{action}</div>'
+        edit = (f'<button type="button" class="corpus-followup-action" '
+                f'data-entry-edit="{html.escape(entry.anchor, quote=True)}" '
+                'aria-label="Edit this entry in the document">Edit entry</button>')
+        for operation, label in [('archive', 'Archive entry'), ('secret', 'Add to secret')]:
+            if operation == 'secret' and is_secret_entry(entry, protected_tags):
+                continue
+            edit += (f'<button type="button" class="corpus-followup-action" '
+                     f'data-entry-action="{operation}" data-entry-anchor="{html.escape(entry.anchor, quote=True)}">{label}</button>')
+        return f'<div class="corpus-entry-header">{heading}<div class="corpus-entry-actions">{edit}{action}</div></div>'
 
     return Markup(_H2.sub(replace, str(rendered)))
 
@@ -1399,6 +1409,35 @@ async def hfl_document(
             show_secrets=bool(show_secrets and authorized),
         ),
     )
+
+
+@router.post('/entry-action/{relative_path:path}')
+async def hfl_entry_action(request: Request, relative_path: str, payload: EntryActionRequest):
+    _workspace_authorize(request, write=True)
+    profile = get_profile_store().get()
+    tags = normalize_secret_tags(profile.secret_tags)
+    try:
+        if _uses_remote_corpus():
+            document = (await asyncio.to_thread(
+                RemoteCorpusClient.from_settings().document,
+                relative_path, include_secrets=True, secret_tags=tags,
+            ))[0]
+        else:
+            document = corpus_index.get(relative_path)
+        if not document:
+            raise HTTPException(404, 'Corpus document not found')
+        if document_has_secrets(document, tags) and not secrets_unlocked(request, profile):
+            raise HTTPException(403, 'Unlock secrets before editing this document.')
+        if document.updated_at.isoformat() != payload.expected_updated_at:
+            raise HTTPException(409, 'The document changed. Reload it before changing this entry.')
+        text = apply_entry_action(document, payload.anchor, payload.action, tags)
+    except RemoteCorpusError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return await hfl_document_update(request, relative_path, UpdateDocumentRequest(
+        text=text, expected_updated_at=payload.expected_updated_at,
+    ))
 
 
 @router.post("/document/{relative_path:path}")

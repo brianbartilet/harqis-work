@@ -4453,3 +4453,106 @@ def test_memory_pin_prompt_fields_and_preview(authenticated_client):
     assert 'onerror' not in html and 'javascript:' not in html
     assert post(action='preview_prompt',prompt='x'*20001).status_code==422
     assert authenticated_client.post('/hfl-corpus/memory-pins',json={'csrf':'bad','action':'preview_prompt','prompt':'text'}).status_code==403
+
+
+@pytest.mark.parametrize("width", [390, 1440])
+def test_edit_entry_opens_source_at_selected_entry(authenticated_client, monkeypatch, width):
+    import modules.hfl_corpus.router as routes
+    playwright = pytest.importorskip("playwright.sync_api")
+    text = "## Repeated heading\nEntry ID: hfl-first\nWhat happened: " + ("Long wrapped narrative. " * 300) + "\n\n## Repeated heading\nEntry ID: hfl-second\nWhat happened: Target entry\n"
+    document = _document("edit.md", text=text, entries=corpus_module.parse_entries(text), entry_count=2)
+    monkeypatch.setattr(routes.corpus_index, "get", lambda path: document)
+    with playwright.sync_playwright() as engine:
+        options = {"headless": True}
+        if not Path(engine.chromium.executable_path).exists():
+            options["channel"] = "msedge"
+        browser = engine.chromium.launch(**options)
+        try:
+            page = browser.new_page(viewport={"width": width, "height": 844})
+            actions = []
+            def route(request_route):
+                url = request_route.request.url
+                if not url.startswith("http://entry.test/"):
+                    request_route.abort()
+                    return
+                if "/entry-action/" in url:
+                    actions.append(request_route.request.post_data_json)
+                    assert request_route.request.headers.get("x-csrf-token")
+                    request_route.fulfill(status=200, content_type="application/json", body='{"updated":true}')
+                    return
+                response = authenticated_client.get(url.replace("http://entry.test", ""))
+                request_route.fulfill(status=response.status_code, body=response.content,
+                                      headers={"content-type": response.headers.get("content-type", "text/html")})
+            page.route("**/*", route)
+            page.goto("http://entry.test/hfl-corpus/document/edit.md")
+            page.locator("[data-entry-edit]").nth(1).click()
+            editor = page.locator("[data-document-edit-text]")
+            assert editor.is_visible()
+            assert editor.input_value() == text
+            assert editor.evaluate("e => e.selectionStart") == text.rindex("## Repeated heading")
+            assert editor.evaluate("e => e.scrollTop") > 0
+            assert editor.bounding_box()["y"] < 844
+            page.locator("[data-document-edit-discard]").click()
+            assert page.locator("[data-document-rendered]").is_visible()
+            with page.expect_navigation():
+                page.locator('[data-entry-action="secret"]').nth(1).click()
+            assert actions[-1]["action"] == "secret"
+            assert actions[-1]["anchor"] == document.entries[1].anchor
+            page.once("dialog", lambda dialog: dialog.dismiss())
+            page.locator('[data-entry-action="archive"]').nth(1).click()
+            assert len(actions) == 1
+            page.once("dialog", lambda dialog: dialog.accept())
+            with page.expect_navigation():
+                page.locator('[data-entry-action="archive"]').nth(1).click()
+            assert actions[-1]["action"] == "archive"
+            assert actions[-1]["anchor"] == document.entries[1].anchor
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        finally:
+            browser.close()
+
+
+@pytest.mark.parametrize("action", ["archive", "secret"])
+def test_entry_action_updates_only_target_block(authenticated_client, monkeypatch, tmp_path, action):
+    import modules.hfl_corpus.router as routes
+    from modules.hfl_shares.security import make_csrf_token
+    from modules.profile.models import OwnerProfile
+    from workflows.hfl import entity_events
+
+    text = "# Day\n\n## Same heading\nEntry ID: first\nTags: #work\nWhat happened: First\n\n## Same heading\nEntry ID: second\nTags: #notes\nWhat happened: Second\n"
+    path = tmp_path / "entries.md"
+    path.write_text(text, encoding="utf-8")
+    document = _document("entries.md", text=text, entries=corpus_module.parse_entries(text), entry_count=2)
+    document = replace(document, path=path, updated_at=datetime.fromtimestamp(path.stat().st_mtime))
+    monkeypatch.setattr(routes.corpus_index, "get", lambda name: document)
+    monkeypatch.setattr(routes.corpus_index, "documents", lambda **kwargs: ())
+    monkeypatch.setattr(routes, "resolve_corpus_root", lambda: tmp_path)
+    monkeypatch.setattr(routes, "get_profile_store", lambda: SimpleNamespace(get=lambda: OwnerProfile(secret_tags="#private,#personal")))
+    monkeypatch.setattr(entity_events, "notify_change", lambda: None)
+    headers = {"X-CSRF-Token": make_csrf_token("frontend-test-user")}
+    payload = {"action": action, "anchor": document.entries[1].anchor, "expected_updated_at": document.updated_at.isoformat()}
+    url = "/hfl-corpus/entry-action/entries.md"
+    assert authenticated_client.post(url, json=payload).status_code == 403
+    assert authenticated_client.post(url, json={**payload, "expected_updated_at": "stale"}, headers=headers).status_code == 409
+    assert path.read_text(encoding="utf-8") == text
+    response = authenticated_client.post(url, json=payload, headers=headers)
+    assert response.status_code == 200, response.text
+    updated = path.read_text(encoding="utf-8")
+    assert updated.startswith(text[:text.rindex("## Same heading")])
+    if action == "archive":
+        assert "Entry ID: second" not in updated
+    else:
+        entries = corpus_module.parse_entries(updated)
+        assert set(entries[1].tags) == {"notes", "secrets", "private", "personal"}
+        assert entries[0].tags == ("work",)
+        assert "What happened: Second" in updated
+
+
+def test_entry_action_adds_missing_tag_line_and_rejects_missing_entry():
+    from modules.hfl_corpus.document_edit import apply_entry_action
+    document = _document("entry.md", text="## Entry\nWhat happened: Keep this\n")
+    anchor = corpus_module.parse_entries(document.text)[0].anchor
+    updated = apply_entry_action(document, anchor, "secret", ("secrets",))
+    assert corpus_module.parse_entries(updated)[0].tags == ("secrets",)
+    assert "What happened: Keep this" in updated
+    with pytest.raises(ValueError, match="Entry not found"):
+        apply_entry_action(document, "missing", "archive")

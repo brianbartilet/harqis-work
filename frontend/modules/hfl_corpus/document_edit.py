@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import tempfile
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 from filelock import BaseFileLock, FileLock
 from pydantic import BaseModel, Field
@@ -15,6 +17,45 @@ from pydantic import BaseModel, Field
 class UpdateDocumentRequest(BaseModel):
     text: str = Field(max_length=5_000_000)
     expected_updated_at: str | None = None
+
+
+class EntryActionRequest(BaseModel):
+    anchor: str = Field(min_length=1, max_length=200)
+    action: Literal['archive', 'secret']
+    expected_updated_at: str = Field(min_length=1, max_length=100)
+
+
+def apply_entry_action(document, anchor: str, action: str, secret_tags=()) -> str:
+    """Modify only the selected Markdown block; never delete an indexed record."""
+    from modules.hfl_corpus.corpus import _HEADER, parse_entries
+
+    entries = parse_entries(document.text)
+    index = next((i for i, entry in enumerate(entries) if entry.anchor == anchor), None)
+    if index is None:
+        raise ValueError('Entry not found. Reload the document and try again.')
+    headings = list(_HEADER.finditer(document.text))
+    start = headings[index].start()
+    end = headings[index + 1].start() if index + 1 < len(headings) else len(document.text)
+    block = document.text[start:end]
+    if action == 'archive':
+        block = ''
+    elif action == 'secret':
+        missing = [tag for tag in secret_tags if tag not in entries[index].tags]
+        if missing:
+            suffix = ' '.join('#' + tag for tag in missing)
+            tags = re.search(r'^Tags:[^\r\n]*', block, re.MULTILINE | re.IGNORECASE)
+            if tags:
+                block = block[:tags.end()] + ' ' + suffix + block[tags.end():]
+            else:
+                # Insert metadata immediately after the heading, before narrative fields.
+                offset = block.find('\n') + 1
+                if not offset:
+                    block += '\n'
+                    offset = len(block)
+                block = block[:offset] + 'Tags: ' + suffix + '\n' + block[offset:]
+    else:
+        raise ValueError('Unsupported entry action.')
+    return document.text[:start] + block + document.text[end:]
 
 
 class DocumentConflictError(ValueError):

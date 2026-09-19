@@ -16,6 +16,8 @@
   .markdown-body .corpus-entry-story-label { margin-bottom:.5rem; }
   .markdown-body .corpus-entry-story-label + .corpus-entry-story { margin-top:.5rem; }
   .corpus-tag-pill { display:inline-flex; max-width:100%; padding:.2rem .55rem; border-radius:999px; background:rgba(23,37,84,.5); color:#93c5fd; font-size:.75rem; line-height:1.5; overflow-wrap:anywhere; }
+  .corpus-entry-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:.5rem; }
+  @media (max-width:639px) { .corpus-entry-header { grid-template-columns:minmax(0,1fr); } .corpus-entry-actions { justify-content:flex-start; } }
   .corpus-entry-header:first-child { margin-top:0; }
   .markdown-body .corpus-entry-header h2 { margin:0; padding:0; border:0; overflow-wrap:anywhere; }
   .markdown-body .corpus-followup-action { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; min-height:44px; font:600 .75rem/1.5 system-ui; white-space:nowrap; color:#7dd3fc; background:#082f49; border:1px solid #155e75; border-radius:.5rem; padding:.4rem .7rem; text-decoration:none; }
@@ -189,6 +191,7 @@
     </div>
   </section>
 
+  <p data-entry-action-status role="status" hidden class="mb-3 text-sm text-sky-200"></p>
   <article data-document-rendered class="markdown-body rounded-xl bg-slate-900/70 p-5 ring-1 ring-slate-800 sm:p-8">{{ rendered }}</article>
   <div id="document-end" class="scroll-mt-40" aria-hidden="true"></div>
 
@@ -196,6 +199,46 @@
   <script defer src="{{ static_asset('js/hfl-document-actions.js') }}"></script>
   {% include "modules/hfl_corpus/partials/secrets_pin_dialog.html" %}
   <script>
+    (() => {
+      const buttons = [...document.querySelectorAll('[data-entry-action]')];
+      const status = document.querySelector('[data-entry-action-status]');
+      let busy = false;
+      for (const button of buttons) button.addEventListener('click', async () => {
+        if (busy) return;
+        const action = button.dataset.entryAction;
+        if (action === 'archive' && !confirm('Archive this entry? It will be removed from this document. Its existing Elasticsearch record will be kept.')) return;
+        busy = true;
+        buttons.forEach(item => { item.disabled = true; });
+        const label = button.textContent;
+        button.textContent = action === 'archive' ? 'Archiving…' : 'Adding to secret…';
+        status.hidden = true;
+        try {
+          const send = () => fetch(window.location.pathname.replace('/document/', '/entry-action/'), {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRF-Token': {{ memory_csrf | tojson }}},
+            body: JSON.stringify({action, anchor: button.dataset.entryAnchor,
+              expected_updated_at: {{ document.updated_at.isoformat() | tojson }}}),
+          });
+          let response = await send();
+          let result = await response.json();
+          if (response.status === 403 && result.detail === 'Unlock secrets before editing this document.') {
+            if (!await window.requestHflSecretsUnlock()) return;
+            response = await send();
+            result = await response.json();
+          }
+          if (!response.ok) throw new Error(result.detail || 'The entry could not be updated.');
+          window.location.reload();
+        } catch (error) {
+          status.textContent = error.message;
+          status.hidden = false;
+          status.scrollIntoView({block:'center'});
+        } finally {
+          busy = false;
+          button.textContent = label;
+          buttons.forEach(item => { item.disabled = false; });
+        }
+      });
+    })();
     (() => {
       const article = document.querySelector('[data-document-rendered]');
       if (!article) return;
@@ -273,16 +316,46 @@
         error.hidden = !message;
       };
       const unlock = () => window.requestHflSecretsUnlock();
-      open.addEventListener('click', async () => {
+      const editEntry = async (anchor = '') => {
         if ({{ 'true' if document_has_secrets and not secrets_authorized else 'false' }}) {
           if (!await unlock()) return;
           const url = new URL(window.location.href);
           url.searchParams.set('show_secrets', 'true');
+          if (anchor) url.searchParams.set('edit_entry', anchor);
           window.location.assign(url);
           return;
         }
         setEditing(true);
+        if (!anchor) return;
+        const index = Number(/^hfl-entry-(\d+)-/.exec(anchor)?.[1]) - 1;
+        const heading = [...textarea.value.matchAll(/^##\s+(.+?)\s*$/gm)][index];
+        if (!heading) return;
+        textarea.setSelectionRange(heading.index, heading.index);
+        // Measure wrapped source lines using the textarea's actual typography.
+        const mirror = document.createElement('div');
+        const style = getComputedStyle(textarea);
+        for (const key of ['font', 'lineHeight', 'letterSpacing', 'padding', 'boxSizing', 'wordBreak', 'overflowWrap', 'tabSize']) mirror.style[key] = style[key];
+        Object.assign(mirror.style, {position:'absolute', visibility:'hidden', whiteSpace:'pre-wrap', width:textarea.clientWidth + 'px'});
+        mirror.textContent = textarea.value.slice(0, heading.index);
+        const caret = document.createElement('span');
+        caret.textContent = '|';
+        mirror.append(caret);
+        document.body.append(mirror);
+        textarea.scrollTop = Math.max(0, caret.getBoundingClientRect().top - mirror.getBoundingClientRect().top - textarea.clientHeight / 3);
+        mirror.remove();
+        history.replaceState(null, '', '#' + anchor);
+      };
+      open.addEventListener('click', () => editEntry());
+      document.querySelectorAll('[data-entry-edit]').forEach(button => {
+        button.addEventListener('click', () => editEntry(button.dataset.entryEdit));
       });
+      const pendingEdit = new URL(window.location.href).searchParams.get('edit_entry');
+      if (pendingEdit) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('edit_entry');
+        history.replaceState(null, '', url);
+        editEntry(pendingEdit);
+      }
       document.querySelectorAll('[data-secret-reveal]').forEach(button => {
         button.addEventListener('click', async () => {
           if ({{ 'true' if not secrets_authorized else 'false' }} && !await unlock()) return;
