@@ -36,7 +36,7 @@ HFL_HERMES_CAPTURE_SINCE='<launch timestamp with offset>' \
 
 Create a small local `.sh` wrapper with that same environment and command (without
 `--dry-run`). Schedule it through Hermes `cronjob`: `no_agent=true`, every five
-minutes, `script=<absolute wrapper>`, with an explicit configured Telegram delivery
+minutes, `script=<wrapper filename relative to ~/.hermes/scripts/>`, with an explicit configured Telegram delivery
 for each count-only receipt. Never rely on CLI-origin delivery for notifications.
 No Hermes or existing worker restart is required. Only one collector job is needed.
 
