@@ -381,8 +381,9 @@ The canonical host stores attachments under the configured dumps inbox:
 ```
 
 The resulting absolute paths are appended to manually entered references.
-Uploads accept any file type, with limits of 50 MB per file, 200 MB combined,
-and ten files per entry. Files are staged before commit, existing files are
+Uploads accept any file type, with limits of 500 MB per file, 25,000 MB combined,
+and 50 files per entry. Size limits use 1 MB = 1,048,576 bytes, matching the
+existing upload convention. Files are staged before commit, existing files are
 never overwritten, and a failed save removes newly committed attachments.
 Re-uploading files for a duplicate manual entry merges the new paths into the
 existing entry rather than adding another entry block.

@@ -37,7 +37,7 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         Args:
             resource: actions or pins.
             source_id: Existing action or pin ID.
-            file_paths: Local file paths, 10 per task, 50 MB each, 200 MB total.
+            file_paths: Local file paths, 50 per task, 500 MB each, 25,000 MB total.
                 Identical names/content are deduplicated on retry. Schedule only after upload succeeds.
         """
         return _management('upload_attachments', resource=resource, source_id=source_id, file_paths=file_paths)

@@ -4076,7 +4076,7 @@ def test_manual_upload_limit_failure_leaves_no_files_or_entry(
     )
 
     assert response.status_code == 400
-    assert "50 MB per-file upload limit" in response.json()["detail"]
+    assert "500 MB per-file upload limit" in response.json()["detail"]
     assert not (corpus_dir / "2026-07-19.md").exists()
     assert not any((inbox_dir / "uploads").rglob("large.bin"))
 

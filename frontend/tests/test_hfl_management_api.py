@@ -263,6 +263,32 @@ def test_input_attachments_upload_retry_detach_and_isolation(management, resourc
         assert client.request(method, path).status_code == 401
 
 
+@pytest.mark.parametrize('resource', ['actions', 'pins'])
+def test_fifty_attachments_allowed_but_fifty_first_rejected(management, resource):
+    client, _ = management
+    if resource == 'actions':
+        item = client.post('/api/hfl/actions', json=action()).json()['item']
+    else:
+        item = client.post('/api/hfl/pins', json={'category_id': category(client)['id'],
+            'start_date': date.today().isoformat(), 'end_date': date.today().isoformat(), 'title': 'Pin'}).json()['pin']
+    url = f"/api/hfl/{resource}/{item['id']}/attachments"
+    files = [('files', (f'file-{i}.txt', b'x')) for i in range(50)]
+    assert client.post(url, files=files + [('files', ('extra.txt', b'x'))]).status_code == 422
+    response = client.post(url, files=files)
+    assert response.status_code == 200, response.text
+    assert len(response.json()['attachments']) == 50
+    assert len(client.post(url, files=files).json()['attachments']) == 50
+    assert client.post(url, files=[('files', ('extra.txt', b'x'))]).status_code == 413
+    assert len(client.get(url).json()['attachments']) == 50
+
+
+def test_attachment_policy_matches_manual_entry_limits():
+    from modules.hfl_corpus import attachments, entry_create
+    assert attachments.MAX_FILES == entry_create.MAX_UPLOAD_FILES == 50
+    assert attachments.MAX_FILE_BYTES == entry_create.MAX_UPLOAD_FILE_BYTES == 500 * 1024 * 1024
+    assert attachments.MAX_TOTAL_BYTES == entry_create.MAX_UPLOAD_TOTAL_BYTES == 50 * 500 * 1024 * 1024
+
+
 def test_attachment_limits_are_atomic_and_filenames_are_safe(management, monkeypatch):
     from modules.hfl_corpus import attachments
     client, actions = management
