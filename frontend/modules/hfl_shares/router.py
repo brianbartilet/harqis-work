@@ -335,6 +335,8 @@ def _configuration_from_form(
         tags=parse_csv(
             ",".join(str(item) for item in form.getlist("tags"))
         ),
+        date_field=str(form.get("date_field") or "entry"),
+        corpus_scope=str(form.get("corpus_scope") or ""),
         date_from=str(form.get("date_from") or "").strip(),
         date_to=str(form.get("date_to") or "").strip(),
         topic=str(form.get("topic") or "").strip(),
@@ -555,6 +557,7 @@ def _owner_context_sync(
         all_sources_value=ALL_SOURCES,
         default_expires_at=default_expires_at,
         configuration=configuration,
+        corpus_scope_clauses=json.loads(configuration.corpus_scope).get("any", []) if configuration and configuration.corpus_scope else [],
         preview=preview,
         preview_answer=preview_answer,
         preview_question=preview_question,
@@ -786,6 +789,84 @@ async def _preview_response(
             preview_question=question,
         ),
     )
+
+
+
+
+@owner_router.post('/from-corpus', response_class=HTMLResponse)
+async def recipe_from_corpus(request: Request, mode: str = 'recipe'):
+    """Preview or open an unsaved recipe from explicit owner filter controls."""
+    from modules.hfl_corpus.workspace_views import WorkspaceState, listing
+    from modules.hfl_corpus.corpus import parse_search_query
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    form = await request.form(max_fields=_OWNER_SHARE_FORM_MAX_FIELDS)
+    _require_csrf(form, user)
+    if mode not in {'recipe', 'preview'}:
+        raise HTTPException(400, 'Invalid handoff operation.')
+    try:
+        raw = str(form.get('state') or '{}')
+        if len(raw) > 30_000:
+            raise ValueError('Too many filters. Reduce the selection and retry.')
+        state = WorkspaceState.model_validate_json(raw)
+        now = datetime.now().astimezone()
+        start, end = state.date_from, state.date_to
+        if state.rolling:
+            end = now.date().isoformat()
+            start = (now.date() - timedelta(days=state.rolling - 1)).isoformat()
+        view = next((v for v in (await asyncio.to_thread(listing))['views']
+                     if v['id'] == str(form.get('workspace') or '')), None)
+        name = view['name'] if view else 'Activity view'
+        tags, _ = parse_search_query(state.q)
+        sources = tuple(filter(None, state.source.split(','))) or (ALL_SOURCES,)
+        provenance = (
+            f"This was generated from Activity Corpus on {now.isoformat(timespec='seconds')} ({now.tzname()}).\n"
+            f"View: {name}. Current filter controls were used, including unsaved changes.\n"
+            f"Activity sources: {', '.join(sources)}. Tags: {', '.join(tags) or 'All'}.\n"
+            f"Dates ({state.date_field}): {start or 'Any'} to {end or 'Any'}"
+            + (f"; resolved from last {state.rolling} days." if state.rolling else '.')
+        )
+        from modules.hfl_corpus.view_scope import parse_scope, resolved
+        aggregate = parse_scope(str(form.get('scope') or ''))
+        if aggregate.any:
+            # Freeze all ranges and omit only free text, retaining each view's tags.
+            aggregate.all = state
+            for clause in [*aggregate.any, aggregate.all]:
+                clause.q = ' '.join('#'+tag for tag in parse_search_query(clause.q)[0])
+                values = resolved(clause, now.date())
+                clause.date_from, clause.date_to, clause.rolling = values['date_from'], values['date_to'], 0
+            ids = str(form.get('views') or '').split(',')
+            names = [v['name'] for v in (await asyncio.to_thread(listing))['views'] if v['id'] in ids]
+            name = ' + '.join(names) or 'Combined views'
+            provenance += '\nCombined views: ' + name + '. Each view retains its source, tag, and date rules; duplicate entries appear once.'
+            sources, tags, start, end = (ALL_SOURCES,), (), '', ''
+        configuration = ShareConfiguration(
+            corpus_scope=aggregate.model_dump_json() if aggregate.any else '',
+            id='', name=f'{name} — {now.date()}'[:120], recipient='there',
+            sources=sources, tags=tags, date_field=state.date_field,
+            date_from=start, date_to=end, context_prompt=provenance,
+            references_enabled=True, ttl_seconds=86_400,
+            device_limit=min(get_settings().hfl_share_default_device_limit, hfl_share_concurrent_session_cap()),
+            disabled_reference_ids=_disabled_references(form),
+        )
+        preview = None
+        if mode != 'recipe':
+            preview = await asyncio.to_thread(_build_preview_snapshot, request, configuration, configuration.disabled_reference_ids)
+        if mode == 'recipe':
+            context = await _owner_context(request, user, configuration=configuration)
+            context['corpus_draft'] = True
+            return templates.TemplateResponse(request, 'modules/hfl_shares/index.html', context)
+        return templates.TemplateResponse(request, 'modules/hfl_shares/_preview.html', {
+            'preview': preview, 'hide_preview_agent': True, 'preview_error': '',
+        })
+    except (ValueError, TypeError, AgentUnavailable) as exc:
+        if mode == 'recipe':
+            return templates.TemplateResponse(request, 'modules/hfl_shares/index.html',
+                await _owner_context(request, user, error=str(exc)), status_code=422)
+        return templates.TemplateResponse(request, 'modules/hfl_shares/_preview.html', {
+            'preview': None, 'preview_error': str(exc),
+        }, status_code=422)
 
 
 @owner_router.post("/preview", response_class=HTMLResponse)

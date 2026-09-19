@@ -1492,9 +1492,8 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert 'data-activity-toggle aria-expanded="true"' in response.text
     assert "data-activity-body" in response.text
     assert 'data-activity-year aria-label="Activity year"' in response.text
-    activity_header_actions = response.text.split(
-        "data-activity-header-actions", 1
-    )[1].split("</div>", 1)[0]
+    from bs4 import BeautifulSoup
+    activity_header_actions = str(BeautifulSoup(response.text, "html.parser").select_one('[data-activity-header-actions]'))
     assert 'data-activity-year aria-label="Activity year"' not in activity_header_actions
     assert "data-activity-toggle" in activity_header_actions
     assert 'data-activity-year-list role="listbox"' in response.text
@@ -1519,7 +1518,7 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert 'class="activity-year-select corpus-select block"' in response.text
     assert response.text.count('class="corpus-select mt-1.5 block w-full') == 2
     assert "background-position:right .85rem center" in response.text
-    assert "grid-template-columns:4.75rem minmax(0,1fr) 11rem" in response.text
+    assert "grid-template-columns:4.75rem minmax(0,1fr) 13rem" in response.text
     assert '<option value="2026" selected>2026</option>' in response.text
     assert '<option value="2025"' in response.text
     assert 200 < response.text.count('data-activity-day="') <= 366
@@ -1588,7 +1587,7 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "const canShowMatches = !isFuture" in response.text
     assert "showDocument.setAttribute('aria-disabled', String(!hasDocument))" in response.text
     assert "matchingEntries.disabled = !canShowMatches" in response.text
-    assert "if (canShowMatches) matchingEntries.click()" in response.text
+    assert "selectDaySection('actions')" in response.text
     assert "resetMatchingEntries()" in response.text
     assert "matchingContent.dataset.loaded === 'true'" in response.text
     assert "window.htmx?.process(matchingContent)" in response.text

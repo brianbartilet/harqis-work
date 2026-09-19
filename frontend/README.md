@@ -602,15 +602,121 @@ guidance is in
 | GET/POST | `/share/session[...]` | Signed guest-session browsing, Q&A, logout, and enabled references. |
 | GET | `/health` | Process health response. |
 
-Activity Corpus **Workspace views**, beside Graph, saves sources, tags/search text,
-date type/range, sort order, and page size in the owner profile database. Sources
-use OR matching (`source=git,notes`); the existing tag and text rules still apply.
-Fixed dates and rolling last 7/30/90 days are supported, including today. A plain
-visit to `/hfl-corpus` restores the last saved workspace from page 1; explicit
-query parameters take precedence, and `?reset=1` opens the default view. Saving is
-explicit, navigation does not prompt about unsaved filter changes, and Secrets
-access is never stored in a workspace. Graph profiles remain independent. Deploy
-the updated canonical API as well as the frontend for remote multisource search.
+### Activity Corpus focus views
+
+**Views**, beside Graph, opens the **Focus on** selector. A view combines sources,
+tags/search text, date type and range, sort order, and page size to focus on a
+particular aspect of your activity: work, learning, relationships, or a project.
+Use the information button beside **Focus on** for in-page guidance.
+
+Choose filters, click **Search** to review the results, then choose **New** and
+name the view. **Save** updates the selected view with the current filters;
+**Edit** changes its name, filters, and weekly schedule; **Remove** deletes the saved view without changing entries.
+Sources use OR matching (`source=git,notes`), combined with the existing tag and
+text matching rules. Fixed dates and rolling last 7/30/90 days are supported,
+including today. Rolling dates are recalculated when the view is opened.
+
+Views and the last selected view are stored in the server's owner profile
+database. A plain visit to `/hfl-corpus` restores that view from page 1, including
+after a new login or from another browser using the same server. Separate local
+and remote servers do not automatically synchronize their view databases.
+Explicit query parameters take precedence. **Reset** (`?reset=1`) opens the
+default view without deleting saved views or forgetting the last selection.
+Removing the selected view clears that selection. Unsaved changes require
+**Save** and are discarded on navigation without a prompt. Secrets access is
+never stored in a view. Graph profiles remain independent.
+
+#### Combined views and Dynamic mode
+
+Use **Select multiple views** to choose up to 30 views and apply them together.
+Each view retains its own source/tag/text/date rules. An entry matching any view
+appears once in document results, matching-entry navigation, and Memory Signal
+counts. **Active view filters** explains the applied rules; the search controls
+further narrow the union. Edit/Save explicitly selects one view when working
+with a combination. The other saved views are unchanged.
+
+In **Edit View → Assign schedules**, choose weekdays and add one or more time blocks.
+End times are exclusive; an end before the start continues into the next day.
+Overlapping blocks combine all active views. The shared schedule timezone is
+configured in **Select multiple views**, initially `Asia/Singapore`; it follows
+named-zone daylight-saving rules rather than the browser's local timezone.
+
+**Dynamic mode** starts off. Add at least one time block before enabling it; the Views menu explains this requirement when no schedules exist. Its setting and manual selection persist in the
+owner profile database. When enabled, active scheduled views replace the manual
+selection; gaps use the manual selection. Turning it off restores the manual
+selection. Choosing views manually turns it off. Explicit filter links retain
+their own scope; ordinary landing-page visits restore persisted preferences.
+
+The open page checks the schedule every 15 seconds and when focus returns.
+No Celery task or external scheduler runs this feature. Updates wait while a
+dialog or the Views menu is open, or filters are modified. Clear additional
+filters to resume. A transition shows loading feedback, keeps the old results
+on failure with Retry, preserves scroll position for automatic changes, and
+fades the updated heatmap unless reduced motion is requested.
+
+The Memory Signal header identifies the current view(s), Dynamic on/off, and
+Saved/Modified state. Expand a shortened name such as `Work +2` to inspect the
+active filter summaries. Combined results use a shared sort and page size.
+
+#### Example: reflect with four quadrants
+
+The urgency-and-importance matrix in [Habit 3 of The 7 Habits of Highly Effective
+People](https://www.franklincovey.com/courses/the-7-habits/habit-3/) can help frame
+an activity review. The tags below are suggestions for your own entries:
+
+| Quadrant | Activity review example | Suggested tag |
+|---|---|---|
+| Q1: urgent and important | Pressing deadlines or incidents | `#Q1` |
+| Q2: important, not urgent | Planning, learning, relationships | `#Q2` |
+| Q3: urgent, not important | Interruptions away from your priorities | `#Q3` |
+| Q4: neither urgent nor important | Low-value distractions | `#Q4` |
+
+Tag entries yourself, then combine a quadrant tag with sources and a date range
+and save the result as a view. For example, filter `#Q2` with your notes source
+and **Last 30 days** to review longer-term investments. These examples do not
+create presets, classify entries automatically, or filter by action-matrix data.
+
+#### Tailor a corpus for sharing
+
+Saved views provide control over which activity you review, helping you decide
+what is relevant to a particular audience. Below the view controls,
+**Generate share recipe** opens Share Corpus with an unsaved draft, and **Sharing preview**
+opens the sharing preview in a responsive dialog without leaving Activity Corpus.
+
+Both use the current controls, including unsaved changes: activity sources, tags,
+dates, and date type. Search text, sort order, and page size are not transferred.
+Single-view handoffs retain Sharing's existing exact-tag matching. Combined
+view handoffs preserve the per-view tag matching rules and source/date pairing;
+free-text search is omitted from every clause. Use the preview to check the
+resulting scope. Created and Updated filter document timestamps; Entry date
+filters entry headings. Existing recipes continue to use Entry date. Rolling
+ranges become fixed dates; preview and its handoff reuse the resolved range.
+
+The preview includes scope statistics, up to 250 listed entries, and reference
+selection. Agent testing remains available on the Share Corpus page. Reference exclusions
+carry into the draft. Changing filter controls invalidates the earlier preview's
+reference choices. Secrets are excluded by default, even if unlocked in Activity
+Corpus. Broad-scope and size-limit warnings use the existing sharing rules.
+
+The generated draft suggests a name and records provenance in **Background for
+HARQIS**: “This was generated from Activity Corpus on [DATE]”, the timestamp and
+timezone, view name if available, and transferred filters. This is recipe context,
+not a separately saved corpus audit entry. Recipient remains blank, and access,
+expiry, and other recipe fields use the normal new-recipe defaults. Review the
+scope, enter the recipient, and explicitly save the recipe or generate a link.
+The handoff itself neither saves a recipe nor grants anyone access.
+
+For combined views, both **Sharing preview** and **Generate share recipe** retain
+the union of the applied view scopes, plus additional tag/source/date filters.
+Previewing does not flatten sources and tags into a broader cross-product.
+The draft displays the combined rules and preserves them through editing,
+saving, previewing, and link generation. The preview captures the current
+resolved date ranges; changing schedule blocks cannot change an open preview
+or an already generated recipe. References remain individually selectable.
+
+Deploy the updated canonical API as well as the frontend for remote multisource
+search and combined-view scopes. Older canonical hosts fail explicitly instead
+of returning a broader scope.
 
 ## Configuration
 

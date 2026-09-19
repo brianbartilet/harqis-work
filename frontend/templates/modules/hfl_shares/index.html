@@ -182,11 +182,16 @@
       </div>
       <form id="social-recipe-form" method="post" data-social-form>
         <input type="hidden" name="csrf" value="{{ csrf }}">
+        {% if cfg and cfg.corpus_scope %}
+        <input type="hidden" name="corpus_scope" value="{{ cfg.corpus_scope }}">
+        <details class="message"><summary>Combined Activity Views scope</summary><p>This recipe keeps each view’s source, tag, and date rules. The controls below further narrow that scope.</p>
+        {% for clause in corpus_scope_clauses %}<p>{{ clause.source or 'All sources' }} · {{ clause.q or 'All tags' }} · {{ clause.date_field }}: {{ clause.date_from or 'Any' }}–{{ clause.date_to or 'Any' }}</p>{% endfor %}</details>
+        {% endif %}
         <input type="hidden" name="configuration_id" value="{{ cfg.id if cfg else '' }}">
         {% if cfg %}{% for reference_id in cfg.disabled_reference_ids %}<input type="hidden" name="disabled_reference_ids" value="{{ reference_id }}" data-disabled-reference>{% endfor %}{% endif %}
         <div class="two">
           <div class="field"><label for="name">Configuration name</label><input class="control" id="name" name="name" required value="{{ cfg.name if cfg else '' }}" placeholder="Work context"></div>
-          <div class="field"><label for="recipient">Recipient</label><input class="control" id="recipient" name="recipient" required maxlength="20" value="{{ cfg.recipient if cfg else '' }}" placeholder="Who is this for?"></div>
+          <div class="field"><label for="recipient">Recipient</label><input class="control" id="recipient" name="recipient" required maxlength="20" value="{{ cfg.recipient if cfg and not corpus_draft else '' }}" placeholder="Who is this for?"></div>
         </div>
         <div class="field"><label for="auth-mode">Verification mode</label>
             <div class="select-wrap">
@@ -273,6 +278,13 @@
                 <span class="help-icon" tabindex="0" role="img" aria-label="Entries must contain every word in this phrase." title="Entries must contain every word in this phrase.">?</span>
               </label>
               <textarea class="control" id="topic" name="topic" rows="3" data-preview-filter>{{ cfg.topic if cfg else '' }}</textarea>
+            </div>
+            <div class="field"><label for="share-date-field">Date type</label>
+              <select class="control" id="share-date-field" name="date_field" data-preview-filter>
+                {% for value, label in [('entry', 'Entry date'), ('created', 'Created'), ('updated', 'Updated')] %}
+                <option value="{{ value }}" {% if (cfg.date_field if cfg else 'entry') == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
             </div>
             <div class="two">
               <div class="field"><label for="date-from">From date</label><input class="control [color-scheme:dark]" id="date-from" type="date" name="date_from" value="{{ cfg.date_from if cfg else '' }}" data-preview-filter onclick="if (this.showPicker) this.showPicker()"></div>

@@ -16,6 +16,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import ValidationError
 
 from config import get_settings
+from modules.hfl_corpus.view_scope import filter_scope, request_scope
 from modules.hfl_corpus.corpus import (
     CorpusDocument,
     activity_calendar_years,
@@ -241,7 +242,7 @@ async def hfl_api_documents(
         include_secrets=include_secrets,
         secret_tags=protected_tags,
     )
-    documents = view.documents
+    documents = filter_scope(view.documents, request_scope(request))
     sources = view.sources
     selected_source = normalize_source(source, sources)
     calendar_years = activity_calendar_years()
@@ -268,17 +269,18 @@ async def hfl_api_documents(
     result_page = paginate_documents(results, page=page, page_size=page_size)
     selected_tags, text_query = parse_search_query(q)
     payload = {
+        "scope_supported": True,
         "results": (
             [
                 _document_payload(
                     document,
-                    matching_entry_count=len(
+                    matching_entry_count=document.matching_entry_count if document.matching_entry_count is not None else len(
                         document.matching_entries(
                             selected_tags,
                             text_query,
                             selected_source,
                         )
-                    ) if q or selected_source else 0,
+                    ) if q or selected_source or request.query_params.get("scope") else 0,
                     include_tag_entry_anchors=True,
                 )
                 for document in result_page.items
@@ -373,17 +375,21 @@ async def hfl_api_matches(
     visible_document = document if include_secrets else filter_document(
         document, protected_tags
     )
-    if selected_tags or text_query or selected_source:
-        entries = visible_document.matching_entries(
+    scoped = filter_scope((visible_document,), request_scope(request))
+    if not scoped:
+        entries = ()
+    elif selected_tags or text_query or selected_source:
+        entries = scoped[0].matching_entries(
             selected_tags,
             text_query,
             selected_source,
         )
     else:
-        entries = visible_document.entries
+        entries = scoped[0].entries
     normalized_offset = max(0, offset)
     normalized_limit = min(max(1, limit), 20)
     return {
+        "scope_supported": True,
         "entries": [
             asdict(entry)
             for entry in entries[
@@ -415,7 +421,7 @@ async def hfl_api_day_matches(
     )
     selected_source = normalize_source(source, view.sources)
     matches = activity_day_entries(
-        view.documents,
+        filter_scope(view.documents, request_scope(request)),
         activity_day=activity_day,
         query=q,
         source=selected_source,
@@ -423,6 +429,7 @@ async def hfl_api_day_matches(
     normalized_offset = max(0, offset)
     normalized_limit = min(max(1, limit), 20)
     return {
+        "scope_supported": True,
         "matches": [
             {"relative_path": relative_path, "entry": asdict(entry)}
             for relative_path, entry in matches[

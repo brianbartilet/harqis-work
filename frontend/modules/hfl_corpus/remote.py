@@ -307,6 +307,8 @@ class RemoteCorpusClient:
             payload = self._get(
                 "/documents", params={**params, "compact": "true"}
             ).json()
+            if params.get("scope") and not payload.get("scope_supported"):
+                raise RemoteCorpusError("Update the canonical corpus host to support combined views.")
             documents = tuple(
                 _document(item) for item in payload.get("documents") or ()
             )
@@ -455,6 +457,7 @@ class RemoteCorpusClient:
         *,
         query: str,
         source: str = "",
+        scope: str = "",
         offset: int = 0,
         limit: int = 20,
         include_secrets: bool = False,
@@ -467,12 +470,15 @@ class RemoteCorpusClient:
                 params={
                     "q": query,
                     "source": source,
+                    "scope": scope,
                     "offset": offset,
                     "limit": limit,
                     "include_secrets": str(include_secrets).lower(),
                     "secret_tags": ",".join(secret_tags),
                 },
             ).json()
+            if scope and not payload.get("scope_supported"):
+                raise RemoteCorpusError("Update the corpus host to support combined view matches.")
             return {
                 "entries": tuple(_entry(item) for item in payload["entries"]),
                 "total": int(payload["total"]),
@@ -490,6 +496,7 @@ class RemoteCorpusClient:
         *,
         query: str,
         source: str = "",
+        scope: str = "",
         offset: int = 0,
         limit: int = 20,
         include_secrets: bool = False,
@@ -501,12 +508,15 @@ class RemoteCorpusClient:
                 params={
                     "q": query,
                     "source": source,
+                    "scope": scope,
                     "offset": offset,
                     "limit": limit,
                     "include_secrets": str(include_secrets).lower(),
                     "secret_tags": ",".join(secret_tags),
                 },
             ).json()
+            if scope and not payload.get("scope_supported"):
+                raise RemoteCorpusError("Update the corpus host to support combined view matches.")
             return {
                 "matches": tuple(
                     (str(item["relative_path"]), _entry(item["entry"]))

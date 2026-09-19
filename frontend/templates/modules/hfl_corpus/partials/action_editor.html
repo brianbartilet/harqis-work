@@ -5,17 +5,28 @@
       <p id="followup-evidence" class="agenda-evidence" hidden></p>
       <label>Actionable<input name="title" required maxlength="200" placeholder="Check Essential Space sync feasibility"></label>
       <label>Expected outcome<textarea name="expected_outcome" required maxlength="3000" rows="3" placeholder="What would a useful, completed result look like?"></textarea></label>
-      <div class="agenda-form-dates"><label>Review on<input name="review_date" type="date"><small>Revisit this action or check progress. Adds a heatmap marker; no notification.</small></label><label>Complete by<input name="due_date" type="date"><small>When the outcome needs to be ready.</small></label></div>
-      <div class="agenda-form-dates">
-        <label id="followup-state-label">Status<select name="status"><option value="open">Open</option><option value="active">Active</option><option value="in_progress">In Progress</option><option value="incomplete">Incomplete</option><option value="done">Done</option><option value="dismissed">Dismissed</option></select></label>
-        <div><label>Matrix<select name="matrix" aria-describedby="matrix-help"><option value="">Unclassified</option><option value="Q1">Q1 · Urgent &amp; important</option><option value="Q2">Q2 · Important, not urgent</option><option value="Q3">Q3 · Urgent, not important</option><option value="Q4">Q4 · Neither</option></select></label>
-          <details class="matrix-help"><summary aria-label="Explain the priority matrix">ⓘ Put first things first</summary><p id="matrix-help">Q1: address important deadlines or crises. Q2: schedule important work that builds lasting value. Q3: delegate or limit less important interruptions. Q4: reduce or eliminate low-value work. Protect Q2 time; urgency alone does not mean importance.</p></details>
-        </div>
-      </div>
-      <label>Matrix confidence<select name="matrix_confidence"><option value="">Unassessed</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
-      <label>Matrix reason<textarea name="matrix_reason" rows="2" maxlength="3000" placeholder="Why is this important or time-sensitive?"></textarea><small>Agents assess the quadrant and confidence from your instructions and evidence. You can edit both.</small></label>
       <label>Prompt<textarea name="prompt" rows="5" maxlength="20000" placeholder="Write instructions for an LLM. Plain text or Markdown is supported."></textarea><small>Saved instructions for later use. Nothing runs when you save.</small></label>
+      <div class="agenda-form-dates"><label>Review on<input name="review_date" type="date"><small>Revisit this action or check progress. Adds a heatmap marker; no notification.</small></label><label>Complete by<input name="due_date" type="date"><small>When the outcome needs to be ready.</small></label></div>
+      <label id="followup-state-label">Status<select name="status"><option value="open">Open</option><option value="active">Active</option><option value="in_progress">In Progress</option><option value="incomplete">Incomplete</option><option value="done">Done</option><option value="dismissed">Dismissed</option></select></label>
       {% include "modules/hfl_corpus/partials/input_attachments.html" %}
+      <details class="action-triage">
+        <summary>Triage and prioritization</summary>
+        <div class="action-triage-body">
+          <p id="matrix-help">Use urgency and importance to choose a quadrant. Prioritize important work; urgency alone does not mean importance.</p>
+          <div class="action-triage-fields">
+            <label>Matrix<select name="matrix" aria-describedby="matrix-help"><option value="">Unclassified</option><option value="Q1">Q1 · Urgent &amp; important</option><option value="Q2">Q2 · Important, not urgent</option><option value="Q3">Q3 · Urgent, not important</option><option value="Q4">Q4 · Neither</option></select></label>
+            <label>Matrix confidence<select name="matrix_confidence" aria-describedby="matrix-confidence-help"><option value="">Unassessed</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
+          </div>
+          <ul class="action-quadrant-guide">
+            <li><strong>Q1 · Do</strong><span>Important deadlines or crises.</span></li>
+            <li><strong>Q2 · Plan</strong><span>Important work with lasting value.</span></li>
+            <li><strong>Q3 · Delegate</strong><span>Limit less important interruptions.</span></li>
+            <li><strong>Q4 · Reduce</strong><span>Minimize low-value activities.</span></li>
+          </ul>
+          <p id="matrix-confidence-help">Confidence reflects how well the evidence supports the quadrant. Agents can assess it; you can edit it.</p>
+          <label>Matrix reason<textarea name="matrix_reason" rows="2" maxlength="3000" placeholder="Why is this important or time-sensitive?"></textarea></label>
+        </div>
+      </details>
       <label>Notes<textarea name="notes" rows="2" maxlength="6000" placeholder="Useful context or the next step"></textarea></label>
       <label id="followup-completion-label">Completion note<textarea name="completion_note" rows="2" maxlength="3000" placeholder="What happened? What was the result?"></textarea></label>
       <p id="followup-save-error" class="agenda-error" role="alert" hidden></p>
@@ -34,6 +45,24 @@
   });
 </script>
 <style>
+  #followup-editor .action-triage { margin:0 0 1.25rem; border:1px solid #334155; border-radius:.65rem; padding:.75rem; }
+  #followup-editor .action-triage > summary { cursor:pointer; color:#e2e8f0; font-size:.85rem; font-weight:600; padding:.25rem 0; }
+  #followup-editor .action-triage > summary:focus-visible { outline:2px solid #7dd3fc; outline-offset:3px; }
+  .action-triage-body { padding-top:.75rem; }
+  .action-triage-body > p { margin:0 0 .85rem; font-size:.75rem; color:#94a3b8; line-height:1.6; }
+  .action-triage-fields { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:.75rem; }
+  .action-triage-fields > label { min-width:0; }
+  .action-quadrant-guide { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.65rem; padding:0; margin:0 0 1rem; list-style:none; font-size:.75rem; line-height:1.5; }
+  .action-quadrant-guide strong,.action-quadrant-guide span { display:block; }
+  .action-quadrant-guide strong { color:#bae6fd; margin-bottom:.2rem; }
+  .action-quadrant-guide span { color:#94a3b8; }
+  #followup-editor select { appearance:none; padding-right:2rem; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2367e8f9' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m2.5 4.5 3.5 3 3.5-3'/%3E%3C/svg%3E"); background-position:right .7rem center; background-repeat:no-repeat; background-size:.8rem; text-overflow:ellipsis; }
+  @supports selector(::-webkit-scrollbar) {
+    #followup-editor > form { scrollbar-width:auto; scrollbar-color:auto; }
+    #followup-editor > form::-webkit-scrollbar { width:6px; }
+    #followup-editor > form::-webkit-scrollbar-thumb { background:#475569; border-radius:999px; }
+    #followup-editor > form::-webkit-scrollbar-button { display:none; width:0; height:0; }
+  }
   .agent-inputs { padding:1rem; border:1px solid #334155; border-radius:.65rem; background:rgba(15,23,42,.45); font-size:.8rem; }
   .agent-inputs label,.agent-inputs small { display:block; }
   .agent-inputs small { margin:.5rem 0; color:#94a3b8; line-height:1.5; }

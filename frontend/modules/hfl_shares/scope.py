@@ -150,6 +150,9 @@ def build_snapshot(
     allow_secrets: bool = False,
     secret_tags: tuple[str, ...] = (),
 ) -> ScopeSnapshot:
+    if configuration.corpus_scope:
+        from modules.hfl_corpus.view_scope import filter_scope, parse_scope
+        documents = filter_scope(documents, parse_scope(configuration.corpus_scope))
     all_sources = ALL_SOURCES in configuration.sources
     protected_tags = secret_tags or normalize_secret_tags("")
     sources = {
@@ -210,9 +213,10 @@ def build_snapshot(
             if tags and not tags.issubset({tag.casefold() for tag in entry.tags}):
                 continue
             when = _entry_date(entry.header)
-            if start and (not when or when < start):
+            filter_date = when if configuration.date_field == "entry" else getattr(document, configuration.date_field + "_at").date()
+            if start and (not filter_date or filter_date < start):
                 continue
-            if end and (not when or when > end):
+            if end and (not filter_date or filter_date > end):
                 continue
             sanitized_text = _sanitize_entry_text(entry.text)
             searchable = sanitized_text.casefold()
@@ -291,6 +295,8 @@ def build_snapshot(
         ),
         filters={
             "tags": list(configuration.tags),
+            "date_field": configuration.date_field,
+            "corpus_scope": configuration.corpus_scope,
             "date_from": configuration.date_from,
             "date_to": configuration.date_to,
             "topic": configuration.topic,

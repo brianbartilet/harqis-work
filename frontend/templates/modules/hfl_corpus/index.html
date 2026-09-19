@@ -181,7 +181,7 @@
   .corpus-navigation-actions .corpus-create-entry,.corpus-header-link{display:inline-flex;align-items:center;justify-content:center;min-height:2.75rem;padding:.5rem 1rem;border-radius:.5rem;font-size:.875rem;font-weight:600;line-height:1.25rem;white-space:nowrap;margin-top:0;width:auto}
   .corpus-header-link{background:#2563eb;color:#fff;box-shadow:0 10px 15px -3px #17255466;text-decoration:none}
   .corpus-header-link:hover{background:#3b82f6}.corpus-header-link:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
-  @media(max-width:639px){.corpus-navigation-actions>*{flex:1}.corpus-navigation-actions .corpus-create-entry,.corpus-header-link{padding:.5rem .65rem}}
+  @media(max-width:639px){.corpus-header-shell .corpus-navigation-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.corpus-navigation-actions>*{min-width:0;grid-column:auto;grid-row:auto}.corpus-navigation-actions .workspace-menu{grid-column:2;grid-row:2}.corpus-navigation-actions .workspace-menu>summary{width:100%}.corpus-navigation-actions .workspace-menu-panel{width:18rem;max-width:calc(100vw - 2rem)}.corpus-navigation-actions .corpus-create-entry,.corpus-header-link{padding:.5rem .65rem}}
   @media(min-width:640px){.corpus-navigation-actions{margin-top:0}.corpus-header-actions{flex-wrap:wrap;justify-content:flex-end}.corpus-page-header{min-width:0}}
 </style>
 {% endblock %}
@@ -212,6 +212,7 @@
             class="corpus-create-entry min-h-11 w-full shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 sm:min-h-0 sm:w-auto">
       Create entry
     </button>
+    <button type="button" data-create-action-open class="corpus-header-link" aria-haspopup="dialog" aria-controls="followup-editor">Create actionable</button>
     {% if corpus_entities_enabled %}
     <a href="/hfl-corpus/graph" class="corpus-header-link">Graph</a>
     {% endif %}
@@ -227,7 +228,8 @@
   {% endif %}
 
   {% if remote_error %}
-  <div class="mb-4 shrink-0 rounded-xl border border-rose-800/70 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">
+  <div data-corpus-load-error role="alert" class="mb-4 shrink-0 rounded-xl border border-rose-800/70 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">
+    <button type="button" class="corpus-error-dismiss" data-dismiss-corpus-error aria-label="Dismiss corpus error">×</button>
     <p class="font-semibold">Canonical corpus unavailable</p>
     <p class="mt-1 text-xs text-rose-300/80">{{ remote_error }}</p>
   </div>
@@ -240,6 +242,12 @@
         <h2 id="activity-title" class="mt-0.5 text-sm font-semibold text-white">{{ activity_timeline_total }} {{ 'entry' if activity_timeline_total == 1 else 'entries' }}</h2>
       </div>
       <div class="flex items-center gap-2" data-activity-header-actions>
+        {% set active_view = saved_workspaces.views | selectattr('id', 'equalto', workspace) | first %}
+        <div class="activity-view-context" role="status" aria-live="polite">
+          <span class="activity-view-caption" title="{{ active_view.name if active_view else 'All activity' }}" data-active-view-caption><span data-view-prefix>Current View:</span> <strong data-active-view-name>{{ active_view.name if active_view else 'All activity' }}</strong></span>
+          <span class="activity-dynamic-badge" data-dynamic-badge>Dynamic off</span>
+          <span class="activity-view-modified" data-active-view-modified data-state="{{ 'saved' if active_view else 'default' }}">{{ 'Saved' if active_view else 'Default' }}</span>
+        </div>
         <button type="button" data-activity-toggle aria-expanded="true" aria-controls="activity-heatmap-body" aria-label="Hide activity heat map"
                 class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-cyan-300 ring-1 ring-slate-700 transition hover:bg-slate-800 hover:text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
           <svg class="activity-toggle-chevron h-4 w-4" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 12.5 5-5 5 5"/></svg>
@@ -286,7 +294,7 @@
                 <span class="activity-month" aria-hidden="true">{{ week.month }}</span>
                 {% for day in week.days %}
                   {% if day.in_year %}
-                  <button type="button" class="activity-day" data-activity-day="{{ day.date }}" data-level="{{ day.level }}" data-today="{{ 'true' if day.is_today else 'false' }}" data-future="{{ 'true' if day.is_future else 'false' }}" data-selected="{{ 'true' if day.selected else 'false' }}" data-count="{{ day.count }}" data-document-url="{% if day.document_path and not day.is_future %}{{ url_for('hfl_document', relative_path=day.document_path) }}{% endif %}" data-matches-url="{{ url_for('hfl_day_matches', activity_day=day.date) }}?q={{ query | urlencode }}&source={{ source | urlencode }}{% if show_secrets %}&show_secrets=true{% endif %}" aria-label="{{ day.label }}{% if day.is_future %} · Future date{% endif %}" aria-pressed="{{ 'true' if day.selected else 'false' }}" aria-haspopup="menu" aria-expanded="false" title="{{ day.label }}{% if day.is_future %} · Future date{% endif %}"></button>
+                  <button type="button" class="activity-day" data-activity-day="{{ day.date }}" data-level="{{ day.level }}" data-today="{{ 'true' if day.is_today else 'false' }}" data-future="{{ 'true' if day.is_future else 'false' }}" data-selected="{{ 'true' if day.selected else 'false' }}" data-count="{{ day.count }}" data-document-url="{% if day.document_path and not day.is_future %}{{ url_for('hfl_document', relative_path=day.document_path) }}{% endif %}" data-matches-url="{{ url_for('hfl_day_matches', activity_day=day.date) }}?q={{ query | urlencode }}&source={{ source | urlencode }}&scope={{ scope | default('') | urlencode }}{% if show_secrets %}&show_secrets=true{% endif %}" aria-label="{{ day.label }}{% if day.is_future %} · Future date{% endif %}" aria-pressed="{{ 'true' if day.selected else 'false' }}" aria-haspopup="menu" aria-expanded="false" title="{{ day.label }}{% if day.is_future %} · Future date{% endif %}"></button>
                   {% else %}<span class="activity-day-blank" aria-hidden="true"></span>{% endif %}
                 {% endfor %}
                 <span class="activity-week-number" aria-hidden="true">{% if week.show_week %}{{ '%02d' | format(week.week) }}{% endif %}</span>
@@ -392,9 +400,11 @@
   <script type="application/json" data-memory-csrf>{{ memory_csrf | tojson }}</script>
   <script type="application/json" data-activity-timeline>{{ activity_timeline | tojson }}</script>
 
+  <details class="workspace-scope-summary" data-scope-summary hidden><summary>Active view filters</summary><div data-scope-details></div><button type="button" data-clear-narrowing>Clear additional filters</button></details>
   <form id="corpus-search-form" method="get" action="/hfl-corpus" data-index-search-panel
         class="sticky top-0 z-20 shrink-0 rounded-2xl border border-blue-800/70 bg-slate-900/95 p-4 shadow-xl shadow-black/30 backdrop-blur">
     {% if show_secrets %}<input type="hidden" name="show_secrets" value="true">{% endif %}
+    {% if scope %}<input type="hidden" name="scope" value="{{ scope }}"><input type="hidden" name="views" value="{{ active_view_ids | join(',') }}"><input type="hidden" name="dynamic" value="{{ 1 if dynamic_view else 0 }}">{% endif %}
     <input type="hidden" name="workspace" value="{{ workspace }}">
     <input type="hidden" name="activity_year" value="{{ activity_year }}">
     <div class="grid gap-3 corpus-filter-grid lg:items-end">
@@ -568,9 +578,9 @@
               </div>
             </div>
 
-            {% if (selected_tags or text_query or source) and matching_count %}
+            {% if (selected_tags or text_query or source or scope) and matching_count %}
             <details class="mt-3 rounded-lg bg-slate-950/70 ring-1 ring-blue-900/70">
-              <summary hx-get="{{ url_for('hfl_matches', relative_path=document.relative_path) }}?q={{ query | urlencode }}&source={{ source | urlencode }}{% if show_secrets %}&show_secrets=true{% endif %}"
+              <summary hx-get="{{ url_for('hfl_matches', relative_path=document.relative_path) }}?q={{ query | urlencode }}&source={{ source | urlencode }}&scope={{ scope | default('') | urlencode }}{% if show_secrets %}&show_secrets=true{% endif %}"
                        hx-trigger="click once" hx-target="next .matching-entry-results"
                        class="cursor-pointer px-3 py-2 text-xs font-medium text-emerald-300">{{ matching_count }} matching entries</summary>
               <div class="matching-entry-results border-t border-blue-900/70 p-3 text-xs text-slate-500">Loading matching entries…</div>
@@ -729,7 +739,7 @@
     </div>
     <div data-entry-preview class="markdown-body min-h-0 flex-1 overflow-y-auto overscroll-contain bg-slate-900/70 px-4 py-4 text-sm text-slate-300 sm:m-6 sm:mt-4 sm:max-h-[55dvh] sm:rounded-xl sm:border sm:border-slate-800 sm:p-4"></div>
     <div data-entry-upload-progress hidden
-         class="mx-4 mb-4 rounded-xl border border-sky-800/70 bg-sky-950/40 p-4 sm:mx-6">
+         class="mx-4 mt-4 mb-4 shrink-0 rounded-xl border border-sky-800/70 bg-sky-950/40 p-4 sm:mx-6">
       <div class="flex items-center justify-between gap-3 text-sm">
         <span data-entry-upload-status class="text-sky-200">Preparing upload…</span>
         <span data-entry-upload-percent class="font-mono text-sky-300">0%</span>
@@ -1283,6 +1293,7 @@
           const path = timelineData.documents?.[iso] || '';
           button.dataset.documentUrl = path ? `/hfl-corpus/document/${path.split('/').map(encodeURIComponent).join('/')}` : '';
           const matches = new URL(`/hfl-corpus/day-matches/${iso}`, window.location.origin);
+          matches.searchParams.set('scope', timelineData.scope || '');
           matches.searchParams.set('q', timelineData.query || '');
           matches.searchParams.set('source', timelineData.source || '');
           if (timelineData.show_secrets) matches.searchParams.set('show_secrets', 'true');
@@ -1334,6 +1345,7 @@
       segment.dataset.activityLoading = 'true';
       delete segment.dataset.activityLoadFailed;
       const endpoint = new URL(`/hfl-corpus/activity-year/${selectedYear}`, window.location.origin);
+      endpoint.searchParams.set('scope', timelineData.scope || '');
       endpoint.searchParams.set('q', timelineData.query || '');
       endpoint.searchParams.set('source', timelineData.source || '');
       if (timelineData.show_secrets) endpoint.searchParams.set('show_secrets', 'true');
@@ -1884,6 +1896,10 @@
   const markResultsForFocus = () => writeState(stateKeys.focusResults, true);
   const searchForm = document.querySelector('[data-index-search-panel]');
   searchForm?.addEventListener('submit', markResultsForFocus);
+  searchForm?.addEventListener('corpus:view-search', () => {
+    writeState(stateKeys.results, true);
+    markResultsForFocus();
+  });
   document.querySelectorAll('a[data-focus-results]').forEach(control => {
     control.addEventListener('click', markResultsForFocus);
   });
@@ -1899,7 +1915,7 @@
         window.requestAnimationFrame(() => {
           const firstResult = document.querySelector('[data-corpus-result]');
           const target = resultsToggle?.checked
-            ? firstResult
+            ? firstResult || document.querySelector('[data-corpus-results]')
             : document.querySelector('[data-corpus-results]');
           target?.scrollIntoView({
             behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
@@ -1939,6 +1955,16 @@
   let pendingFiles = [];
   let enrichmentCache = null;
   let returnActivityDate = '';
+  let savingEntry = false;
+  const backButton = reviewDialog.querySelector('[data-entry-review-back]');
+  const setSavingEntry = value => {
+    savingEntry = value;
+    confirmButton.disabled = value;
+    backButton.disabled = value;
+    reviewButton.disabled = value;
+    reviewDialog.setAttribute('aria-busy', String(value));
+    confirmButton.textContent = value ? 'Saving…' : 'Confirm save';
+  };
 
   const localDateAndTime = selectedDate => {
     const now = new Date();
@@ -1961,6 +1987,7 @@
   const showError = (message) => {
     errorBox.textContent = message;
     errorBox.hidden = !message;
+    if (message) errorBox.scrollIntoView({block: 'center'});
   };
   const responseMessage = (body, fallback) => {
     if (typeof body?.detail === 'string') return body.detail;
@@ -2026,6 +2053,7 @@
     }, 120);
   };
   const openCreate = (selectedDate = '') => {
+    if (savingEntry) return;
     form.reset();
     moreDetails.open = false;
     localDateAndTime(selectedDate);
@@ -2041,11 +2069,13 @@
     form.elements.moment.focus();
   };
   const returnToForm = () => {
+    if (savingEntry) return;
     if (reviewDialog.open) reviewDialog.close();
     if (discardDialog.open) discardDialog.close();
     createDialog.showModal();
   };
   const requestCancel = () => {
+    if (savingEntry) return;
     if (!isDirty()) {
       createDialog.close();
       return;
@@ -2103,6 +2133,7 @@
 
   form.addEventListener('submit', async event => {
     event.preventDefault();
+    if (savingEntry || reviewButton.disabled) return;
     if (!form.checkValidity()) {
       const invalid = form.querySelector(':invalid');
       revealField(invalid);
@@ -2155,8 +2186,13 @@
   });
 
   confirmButton.addEventListener('click', async () => {
-    if (!pendingPayload) return;
-    confirmButton.disabled = true;
+    if (!pendingPayload || savingEntry) return;
+    setSavingEntry(true);
+    previewPanel.hidden = true;
+    progressPanel.hidden = false;
+    progressStatus.textContent = 'Saving entry…';
+    progressPercent.textContent = '';
+    progressBar.style.width = '100%';
     try {
       let body;
       if (pendingFiles.length) {
@@ -2209,15 +2245,17 @@
         successUrl.searchParams.set('date_from', savedActivityDate);
         successUrl.searchParams.set('date_to', savedActivityDate);
       }
+      pendingPayload = null;
+      pendingFiles = [];
+      progressStatus.textContent = 'Saved. Returning to Activity Corpus…';
       window.location.assign(successUrl);
     } catch (error) {
+      setSavingEntry(false);
       reviewDialog.close();
       progressPanel.hidden = true;
       previewPanel.hidden = false;
       createDialog.showModal();
       showError(error.message || 'The entry could not be saved.');
-    } finally {
-      confirmButton.disabled = false;
     }
   });
 })();

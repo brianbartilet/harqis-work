@@ -1,5 +1,4 @@
 """Entry-level union of view filters, shared by corpus and sharing."""
-import json
 from collections import Counter
 from dataclasses import replace
 from datetime import date, timedelta
@@ -30,28 +29,37 @@ def resolved(state, today=None):
     return values
 
 
-def matches(document, entry, state):
+def predicate(state):
+    """Compile tag/source/date filters once, rather than once per entry."""
     tags, phrase = parse_search_query(state.get('q', ''))
-    if not all(any(needle in tag.casefold() for tag in entry.tags) for needle in tags):
-        return False
-    if phrase and phrase not in entry.text.casefold():
-        return False
     sources = {s.strip().casefold() for s in state.get('source', '').split(',') if s.strip()}
-    if sources and entry.source.strip().casefold() not in sources:
-        return False
-    when = entry_occurrence_date(entry) if state.get('date_field') == 'entry' else getattr(document, state.get('date_field', 'created')+'_at').date()
-    start, end = state.get('date_from'), state.get('date_to')
-    return not ((start and (when is None or when < date.fromisoformat(start))) or (end and (when is None or when > date.fromisoformat(end))))
+    start = date.fromisoformat(state['date_from']) if state.get('date_from') else None
+    end = date.fromisoformat(state['date_to']) if state.get('date_to') else None
+    field = state.get('date_field', 'created')
+
+    def matches(document, entry):
+        if sources and entry.source.strip().casefold() not in sources:
+            return False
+        if not all(any(needle in tag.casefold() for tag in entry.tags) for needle in tags):
+            return False
+        if phrase and phrase not in entry.text.casefold():
+            return False
+        if start or end:
+            when = entry_occurrence_date(entry) if field == 'entry' else getattr(document, field+'_at').date()
+            if when is None or (start and when < start) or (end and when > end):
+                return False
+        return True
+    return matches
 
 
 def filter_scope(documents, scope):
     if not scope.any:
         return documents
-    clauses = [resolved(s) for s in scope.any]
-    narrowing = resolved(scope.all)
+    clauses = [predicate(resolved(s)) for s in scope.any]
+    narrowing = predicate(resolved(scope.all))
     result = []
     for document in documents:
-        entries = tuple(entry for entry in document.entries if matches(document, entry, narrowing) and any(matches(document, entry, clause) for clause in clauses))
+        entries = tuple(entry for entry in document.entries if narrowing(document, entry) and any(clause(document, entry) for clause in clauses))
         if entries:
             tags = Counter(tag for entry in entries for tag in entry.tags)
             result.append(replace(document, entries=entries, entry_count=len(entries), matching_entry_count=len(entries),

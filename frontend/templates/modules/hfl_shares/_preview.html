@@ -48,8 +48,10 @@
     {% endfor %}
     {% if preview.entries|length > 250 %}<p class="mt-3 text-xs text-amber-300">Preview list shows the first 250 entries. The generated share will retain the complete matching snapshot within the size limit.</p>{% endif %}
   </div>
+  {% if not hide_preview_agent %}
   <div class="field mt-4"><label for="question">Test this preview with the owner-only agent</label><input class="control" id="question" name="question" value="{{ preview_question }}" placeholder="What are the main open items?" required data-test-question></div>
   {% if suggested_prompts %}<p class="text-xs text-slate-500">Suggestions: {{ suggested_prompts|join(' · ') }}</p>{% endif %}
   {% if preview_answer %}<div class="markdown-body mt-3 rounded-lg bg-slate-900 p-3 text-sm text-slate-200">{{ preview_answer }}</div>{% endif %}
+  {% endif %}
 </section>
 {% endif %}

@@ -184,6 +184,7 @@
       <p class="text-xs text-slate-500">Changes replace this corpus file on save.</p>
     </div>
     <p data-document-edit-error hidden role="alert" class="mb-3 rounded-lg border border-rose-800/70 bg-rose-950/50 px-3 py-2 text-sm text-rose-200"></p>
+    <p data-document-save-status hidden role="status" aria-live="polite" class="mb-3 text-sm text-sky-300">Saving document…</p>
     <textarea data-document-edit-text data-document-source="{{ document_text_encoded }}" aria-label="Markdown document source" spellcheck="false"></textarea>
     <div class="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
       <button type="button" data-document-edit-discard class="rounded-lg bg-slate-800 px-4 py-2 text-sm text-slate-300 ring-1 ring-slate-700 hover:text-white">Discard</button>
@@ -296,7 +297,8 @@
       const bytes = Uint8Array.from(atob(encoded), character => character.charCodeAt(0));
       textarea.value = new TextDecoder().decode(bytes);
       textarea.removeAttribute('data-document-source');
-      const original = textarea.value;
+      let original = textarea.value;
+      const saveStatus = document.querySelector('[data-document-save-status]');
       const setEditing = editing => {
         editor.hidden = !editing;
         rendered.hidden = editing;
@@ -373,7 +375,13 @@
         open.focus();
       });
       save.addEventListener('click', async () => {
+        if (save.disabled) return;
         save.disabled = true;
+        discard.disabled = true;
+        textarea.readOnly = true;
+        editor.setAttribute('aria-busy', 'true');
+        saveStatus.hidden = false;
+        saveStatus.scrollIntoView({block: 'nearest'});
         const label = save.textContent;
         save.textContent = 'Saving…';
         showError('');
@@ -385,10 +393,17 @@
           });
           const body = await response.json();
           if (!response.ok) throw new Error(body.detail || 'The document could not be saved.');
+          original = textarea.value;
+          saveStatus.textContent = 'Saved. Reloading document…';
           window.location.reload();
         } catch (failure) {
           showError(failure.message || 'The document could not be saved.');
           save.disabled = false;
+          discard.disabled = false;
+          textarea.readOnly = false;
+          editor.removeAttribute('aria-busy');
+          saveStatus.hidden = true;
+          error?.scrollIntoView({block: 'center'});
           save.textContent = label;
         }
       });

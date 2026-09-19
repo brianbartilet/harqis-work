@@ -30,6 +30,7 @@
   function openEditor(item = null, desiredStatus = '') {
     suggestionId = null; editing = item; source = item?.source || null; requestId = crypto.randomUUID();
     form.reset();
+    form.querySelector('.action-triage').open = false;
     attachments.reset(item?.id);
     for (const name of ['title', 'expected_outcome', 'notes', 'prompt', 'review_date', 'due_date', 'completion_note', 'matrix', 'matrix_confidence', 'matrix_reason']) form.elements[name].value = item?.[name] || '';
     form.elements.status.value = desiredStatus || item?.status || 'open';
@@ -234,6 +235,9 @@
     try{await timelineApi('/explore',{method:'POST',body:JSON.stringify({start:startInput.value,end:endInput.value})});await load();}catch(err){error('agenda-error',err.message);analysisStatus('failed','Could not start review','Try Explore again.');b.disabled=false;}
   });
   document.getElementById('followup-new')?.addEventListener('click',()=>openEditor());
+  document.querySelector('[data-create-action-open]')?.addEventListener('click', () => {
+    window.dispatchEvent(new CustomEvent('hfl:create-action'));
+  });
   window.addEventListener('hfl:create-action',event=>{
     openEditor();
     form.elements.due_date.value = event.detail?.date || '';

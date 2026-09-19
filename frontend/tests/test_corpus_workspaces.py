@@ -21,10 +21,14 @@ def workspace_corpus(monkeypatch):
         workspace_views.schema(db)
         db.execute('DELETE FROM corpus_workspace_views')
         db.execute('DELETE FROM corpus_workspace_last')
+        db.execute('DELETE FROM corpus_view_preferences')
+        db.execute('DELETE FROM corpus_view_schedules')
     yield document
     with workspace_views.connection() as db:
         db.execute('DELETE FROM corpus_workspace_views')
         db.execute('DELETE FROM corpus_workspace_last')
+        db.execute('DELETE FROM corpus_view_preferences')
+        db.execute('DELETE FROM corpus_view_schedules')
 
 
 def test_multiple_sources_combine_with_tags_and_text(workspace_corpus):
@@ -62,7 +66,9 @@ def test_workspace_api_restore_conflicts_and_security(authenticated_client, work
     assert updated.status_code == 200
     assert client.delete(url+'?revision=1', headers=headers).status_code == 409
     assert client.delete(url+'?revision=2', headers=headers).status_code == 200
-    assert client.get('/hfl-corpus/workspace-views').json() == {'views': [], 'last_used': None}
+    empty = client.get('/hfl-corpus/workspace-views').json()
+    assert empty['views'] == [] and empty['last_used'] is None
+    assert empty['preferences']['dynamic'] is False and empty['active'] == []
     assert client.get('/hfl-corpus', follow_redirects=False).status_code == 200
 
 
@@ -140,6 +146,12 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             view = authenticated_client.get('/hfl-corpus/workspace-views').json()['views'][0]
             assert view['state']['source'] == 'git,notes'
             assert view['state']['rolling'] == 7
+            assert page.locator('[data-active-view-name]').inner_text() == 'Work sources'
+            assert page.locator('[data-active-view-modified]').inner_text() == 'Saved'
+            page.locator('#q').fill('#work changed')
+            assert page.locator('[data-active-view-modified]').inner_text() == 'Modified'
+            page.locator('#q').fill('#work')
+            assert page.locator('[data-active-view-modified]').inner_text() == 'Saved'
             for width, height in [(390, 844), (320, 740), (1440, 1000)]:
                 page.set_viewport_size({'width': width, 'height': height})
                 page.evaluate("window.scrollTo(0,0); document.querySelector('[data-corpus-index]').scrollTop=0")
@@ -148,6 +160,27 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
                 assert panel['x'] >= 0 and panel['x'] + panel['width'] <= width
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
                 page.screenshot(path=str(tmp_path / f'workspace-{width}.png'), full_page=True)
+                assert page.locator('[data-workspace-menu] summary').inner_text() == 'Views'
+                page.get_by_role('button', name='About saved views').click()
+                help_dialog = page.locator('#workspace-help')
+                assert help_dialog.is_visible()
+                assert help_dialog.locator('.workspace-quadrants section').count() == 4
+                assert 'Preview and share activity' in help_dialog.inner_text()
+                assert '#Q1' not in help_dialog.inner_text() and '#Q2' not in help_dialog.inner_text()
+                footer = help_dialog.get_by_role('button', name='Got it', exact=True).bounding_box()
+                bounds = help_dialog.bounding_box()
+                assert abs(footer['x'] + footer['width']/2 - bounds['x'] - bounds['width']/2) < 2
+                box = help_dialog.bounding_box()
+                assert box['x'] >= 0 and box['x'] + box['width'] <= width
+                assert box['y'] >= 0 and box['y'] + box['height'] <= height
+                page.screenshot(path=str(tmp_path / f'focus-help-{width}.png'), full_page=True)
+                page.keyboard.press('Escape')
+                assert not help_dialog.is_visible()
+                assert page.get_by_role('button', name='About saved views').evaluate('(el) => el === document.activeElement')
+                page.get_by_role('button', name='About saved views').click()
+                page.get_by_role('button', name='Got it', exact=True).click()
+                assert not help_dialog.is_visible()
+
                 page.locator('[data-workspace-menu]').evaluate('(el) => el.open = false')
                 page.locator('[data-workspace-sources]').evaluate('(el) => el.open = true')
                 source_panel = page.locator('.workspace-source-options').bounding_box()
@@ -170,8 +203,42 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             page.locator('#workspace-name').fill('Personal')
             page.locator('[data-workspace-confirm]').click()
             page.wait_for_function("document.querySelector('[data-workspace-status]').textContent==='Saved: Personal'")
+            page.evaluate("""() => {
+                const fetchOriginal = window.fetch;
+                window.fetch = (...args) => String(args[0]).endsWith('/select')
+                    ? new Promise(resolve => { window.failViewLoad = () => resolve(new Response(JSON.stringify({detail:'Please retry loading this view.'}), {status:503})); })
+                    : fetchOriginal(...args);
+                window.restoreViewFetch = () => { window.fetch = fetchOriginal; };
+            }""")
             page.select_option('[data-workspace-selection]', view['id'])
-            page.wait_for_function("document.querySelector('#q').value==='#work planning'")
+            playwright.expect(page.locator('[data-view-loading]')).to_be_visible()
+            assert 'Work sources' in page.locator('#view-loading-title').inner_text()
+            page.wait_for_function('typeof window.failViewLoad === "function"')
+            page.evaluate('window.failViewLoad()')
+            playwright.expect(page.locator('[data-view-loading]')).not_to_be_visible()
+            assert page.locator('[data-workspace-selection]').is_enabled()
+            assert 'Please retry' in page.locator('[data-workspace-status]').inner_text()
+            page.evaluate("""() => {
+                window.restoreViewFetch();
+                document.getElementById('corpus-search-form').addEventListener('corpus:view-search', () => sessionStorage.setItem('viewLoadingOnExit', String(document.querySelector('[data-view-loading]').open)));
+                sessionStorage.setItem('hfl-corpus:results-expanded', 'false');
+            }""")
+            page.evaluate("""(() => {
+                const original = Element.prototype.scrollIntoView;
+                Element.prototype.scrollIntoView = function(...args) {
+                    if (this.matches('[data-corpus-result], [data-corpus-results]')) {
+                        sessionStorage.setItem('viewResultsFocused', 'true');
+                    }
+                    return original.apply(this, args);
+                };
+            })();""")
+            page.select_option('[data-workspace-selection]', view['id'])
+            playwright.expect(page.locator('#q')).to_have_value('#work planning')
+            assert page.evaluate("sessionStorage.getItem('viewLoadingOnExit')") == 'true'
+            assert not page.locator('[data-view-loading]').is_visible()
+            page.wait_for_function("sessionStorage.getItem('viewResultsFocused') === 'true'")
+            assert page.locator('[data-mobile-results-toggle]').is_checked()
+            assert '2 matching entries' in page.locator('[data-corpus-results]').inner_text()
             page.locator('[data-workspace-menu] summary').click()
             page.locator('[data-workspace-action="edit"]').click()
             page.locator('#workspace-name').fill('Renamed workspace')
@@ -188,3 +255,25 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             print(f'Workspace screenshots: {tmp_path}')
         finally:
             browser.close()
+
+
+def test_last_selected_view_survives_new_login(authenticated_client, workspace_corpus):
+    from auth import create_session_token
+    client = authenticated_client
+    headers = {'X-CSRF-Token': make_csrf_token('frontend-test-user')}
+    first = client.post('/hfl-corpus/workspace-views', headers=headers,
+                        json={'name': 'Learning', 'state': {'q': '#work', 'source': 'notes', 'rolling': 30}}).json()
+    client.post('/hfl-corpus/workspace-views', headers=headers,
+                json={'name': 'Other', 'state': {'q': '#personal'}})
+    assert client.post('/hfl-corpus/workspace-views/' + first['id'] + '/select', headers=headers).status_code == 200
+    client.cookies.clear()
+    assert client.get('/hfl-corpus/workspace-views').status_code == 401
+    client.cookies.set('session', create_session_token('frontend-test-user'))
+    restored = client.get('/hfl-corpus', follow_redirects=False)
+    assert restored.status_code == 303
+    params = parse_qs(urlparse(restored.headers['location']).query)
+    assert params['workspace'] == [first['id']]
+    assert params['q'] == ['#work'] and params['source'] == ['notes'] and params['rolling'] == ['30']
+    assert client.get('/hfl-corpus?q=explicit', follow_redirects=False).status_code == 200
+    assert client.get('/hfl-corpus?reset=1', follow_redirects=False).status_code == 200
+    assert client.get('/hfl-corpus/workspace-views').json()['last_used'] == first['id']

@@ -26,6 +26,7 @@ from markupsafe import Markup
 from pydantic import BaseModel, ValidationError
 
 from modules.hfl_corpus import workspace_views
+from modules.hfl_corpus.view_scope import filter_scope, request_scope
 from config import get_settings
 from modules.hfl_corpus.corpus import (
     CorpusPage,
@@ -105,6 +106,12 @@ def _workspace_authorize(request, *, write=False):
 async def workspace_listing(request: Request):
     _workspace_authorize(request)
     return await asyncio.to_thread(workspace_views.listing)
+
+
+@router.put('/view-preferences')
+async def view_preferences_update(request: Request, payload: workspace_views.ViewPreferences):
+    _workspace_authorize(request, write=True)
+    return await asyncio.to_thread(workspace_views.save_preferences, payload)
 
 
 @router.post('/workspace-views')
@@ -314,8 +321,8 @@ def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
         heading = f'<h2 id="{html.escape(entry.anchor, quote=True)}" class="scroll-mt-40">{header}</h2>'
         edit = (f'<button type="button" class="corpus-followup-action" '
                 f'data-entry-edit="{html.escape(entry.anchor, quote=True)}" '
-                'aria-label="Edit this entry in the document">Edit entry</button>')
-        for operation, label in [('archive', 'Archive entry'), ('secret', 'Make secret')]:
+                'aria-label="Edit this entry in the document">Edit</button>')
+        for operation, label in [('archive', 'Archive'), ('secret', 'Make secret')]:
             if operation == 'secret' and is_secret_entry(entry, protected_tags):
                 continue
             edit += (f'<button type="button" class="corpus-followup-action" '
@@ -361,6 +368,7 @@ async def hfl_activity_year(
                 RemoteCorpusClient.from_settings().index,
                 params={
                     "q": q,
+                    "scope": request.query_params.get("scope", ""),
                     "source": source,
                     "page": "1",
                     "page_size": "1",
@@ -381,7 +389,7 @@ async def hfl_activity_year(
             )
             selected_source = normalize_source(source, view.sources)
             counts = activity_counts(
-                view.documents,
+                filter_scope(view.documents, request_scope(request)),
                 year=activity_year,
                 query=q,
                 source=selected_source,
@@ -594,8 +602,11 @@ def _index_url(
     activity_year: int = 0,
     rolling: int = 0,
     workspace: str = "",
+    scope: str = "", views: str = "", dynamic: str = "0",
 ) -> str:
     params = {}
+    if scope:
+        params.update(scope=scope, views=views, dynamic=dynamic)
     if rolling:
         params["rolling"] = rolling
     if workspace:
@@ -723,6 +734,8 @@ async def hfl_corpus_page(
     if redirect:
         return redirect
     saved_workspaces = await asyncio.to_thread(workspace_views.listing)
+    if not request.query_params and (saved_workspaces['preferences']['revision'] or saved_workspaces['preferences']['dynamic']):
+        return RedirectResponse(workspace_views.selection_url(saved_workspaces, dynamic=saved_workspaces['preferences']['dynamic']), status_code=303)
     if not request.query_params and saved_workspaces['last_used']:
         last = next((view for view in saved_workspaces['views'] if view['id'] == saved_workspaces['last_used']), None)
         if last:
@@ -775,6 +788,7 @@ async def hfl_corpus_page(
                 RemoteCorpusClient.from_settings().index,
                 params={
                     "q": q,
+                    "scope": request.query_params.get("scope", ""),
                     "date_field": date_field,
                     "date_from": date_from,
                     "date_to": date_to,
@@ -832,7 +846,7 @@ async def hfl_corpus_page(
             secret_tags=protected_tags,
         )
         tag_cloud = view.tag_cloud
-        documents = view.documents
+        documents = filter_scope(view.documents, request_scope(request))
         source_options = view.sources
         selected_source = normalize_source(source, source_options)
         calendar_years = activity_calendar_years()
@@ -884,6 +898,7 @@ async def hfl_corpus_page(
         activity_year=selected_timeline_year,
         rolling=rolling,
         workspace=workspace,
+        **{key: request.query_params.get(key, "") for key in ("scope", "views", "dynamic")},
     )
     tag_options = []
     for tag, count in tag_cloud:
@@ -913,6 +928,7 @@ async def hfl_corpus_page(
                 activity_year=selected_timeline_year,
                 rolling=rolling,
                 workspace=workspace,
+                **{key: request.query_params.get(key, "") for key in ("scope", "views", "dynamic")},
             ),
         })
     page_url_values = {
@@ -928,6 +944,7 @@ async def hfl_corpus_page(
         "rolling": rolling,
         "workspace": workspace,
     }
+    page_url_values.update({key: request.query_params.get(key, "") for key in ("scope", "views", "dynamic")})
     previous_page_url = _index_url(
         **page_url_values, page=result_page.page - 1
     )
@@ -975,6 +992,9 @@ async def hfl_corpus_page(
             source_options=source_options,
             selected_sources=selected_source.split(",") if selected_source else [],
             saved_workspaces=saved_workspaces,
+            scope=request.query_params.get("scope", ""),
+            active_view_ids=request.query_params.get("views", workspace).split(","),
+            dynamic_view=request.query_params.get("dynamic") == "1",
             entry_source_options=entry_source_options,
             sort_order=sort,
             sort_toggle_url=sort_toggle_url,
@@ -1001,6 +1021,7 @@ async def hfl_corpus_page(
                 "documents": timeline_paths,
                 "selected_day": selected_activity_day.isoformat() if selected_activity_day else "",
                 "query": q,
+                "scope": request.query_params.get("scope", ""),
                 "source": selected_source,
                 "show_secrets": include_secrets,
             },
@@ -1170,6 +1191,7 @@ async def hfl_day_matches(
                 activity_day,
                 query=q,
                 source=source,
+                scope=request.query_params.get("scope", ""),
                 offset=offset,
                 limit=limit,
                 include_secrets=include_secrets,
@@ -1189,7 +1211,7 @@ async def hfl_day_matches(
         )
         selected_source = normalize_source(source, view.sources)
         all_matches = activity_day_entries(
-            view.documents,
+            filter_scope(view.documents, request_scope(request)),
             activity_day=activity_day,
             query=q,
             source=selected_source,
@@ -1212,6 +1234,7 @@ async def hfl_day_matches(
             "limit": normalized_limit,
             "query": q,
             "source": source,
+            "scope": request.query_params.get("scope", ""),
             "selected_tag": selected_tags[0] if len(selected_tags) == 1 else "",
             "show_secrets": include_secrets,
         },
@@ -1245,6 +1268,7 @@ async def hfl_matches(
                 relative_path,
                 query=q,
                 source=source,
+                scope=request.query_params.get("scope", ""),
                 offset=offset,
                 limit=limit,
                 include_secrets=include_secrets,
@@ -1271,6 +1295,7 @@ async def hfl_matches(
         visible_documents = (document,) if include_secrets else filter_documents(
             (document,), protected_tags
         )
+        visible_documents = filter_scope(visible_documents, request_scope(request))
         if not visible_documents:
             matching_entries = ()
         elif selected_tags or text_query or selected_source:
@@ -1299,6 +1324,7 @@ async def hfl_matches(
             "limit": normalized_limit,
             "query": q,
             "source": source,
+            "scope": request.query_params.get("scope", ""),
             "selected_tag": selected_tags[0] if len(selected_tags) == 1 else "",
             "show_secrets": include_secrets,
         },

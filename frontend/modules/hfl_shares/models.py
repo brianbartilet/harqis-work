@@ -50,8 +50,15 @@ class ShareConfiguration:
     single_use: bool = True
     created_at: str = ""
     updated_at: str = ""
+    date_field: str = "entry"
+    corpus_scope: str = ""
 
     def __post_init__(self) -> None:
+        if self.corpus_scope:
+            from modules.hfl_corpus.view_scope import parse_scope
+            parse_scope(self.corpus_scope)
+        if self.date_field not in {"entry", "created", "updated"}:
+            raise ValueError("Invalid date type.")
         if not self.name.strip():
             raise ValueError("Configuration name is required.")
         if len(self.name) > 120:
