@@ -7,7 +7,8 @@
     $('[data-corpus-load-error]').hidden = true;
     menu.querySelector('summary').focus();
   });
-  const select = $('[data-workspace-selection]');
+  const picker = $('[data-view-picker]');
+  let pendingIds = [], pickerChanged = false;
   const status = $('[data-workspace-status]');
   const dialog = $('[data-workspace-dialog]');
   const help = document.getElementById('workspace-help');
@@ -76,14 +77,16 @@
     const name = $('[data-active-view-name]');
     if (!name) return;
     const applied = views.filter(view => activeIds.includes(view.id));
-    name.textContent = applied.length > 1 ? `${applied[0].name} +${applied.length-1}` : applied[0]?.name || current?.name || 'All activity';
+    name.style.borderLeft = applied.length === 1 ? `3px solid ${applied[0].color}` : '';
+    name.style.paddingLeft = applied.length === 1 ? '.35rem' : '';
+    name.textContent = applied.length > 1 ? applied.map(view => view.name).join(' + ') : applied[0]?.name || current?.name || 'All activity';
     $('[data-view-prefix]').textContent = applied.length > 1 ? 'Current Views:' : 'Current View:';
     const caption = $('[data-active-view-caption]');
     caption.dataset.expandable = String(applied.length > 1);
     caption.tabIndex = applied.length > 1 ? 0 : -1;
     caption.onclick = () => { if (applied.length > 1) { const summary = $('[data-scope-summary]'); summary.open = !summary.open; } };
     caption.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); caption.click(); } };
-    $('[data-dynamic-badge]').textContent = dynamicOn ? 'Dynamic on' : 'Dynamic off';
+    $('[data-dynamic-badge]').textContent = dynamicOn ? 'Dynamic ON' : 'Dynamic OFF';
     $('[data-dynamic-badge]').dataset.on = String(dynamicOn);
     $('[data-active-view-caption]').title = applied.map(view => view.name).join(' + ') || name.textContent;
     const normalized = state => JSON.stringify([
@@ -102,12 +105,20 @@
   function options() {
     updateViewContext();
     updateDynamicAvailability();
-    select.replaceChildren(new Option('Choose a view', ''));
-    views.forEach(view => select.add(new Option(view.name, view.id)));
-    if (aggregateScope.any.length) {
-      select.add(new Option(activeIds.length > 1 ? `${activeIds.length} views combined` : views.find(view => activeIds.includes(view.id))?.name || 'Applied view', '__combined'));
-      select.value = '__combined';
-    } else select.value = current?.id || '';
+    pendingIds = [...activeIds]; pickerChanged = false;
+    const choices = $('[data-view-choices]'); choices.replaceChildren();
+    views.forEach(view => {
+      const label = document.createElement('label'), input = document.createElement('input');
+      input.type = 'checkbox'; input.value = view.id; input.checked = pendingIds.includes(view.id); input.disabled = busy;
+      const dot = document.createElement('span'); dot.className = 'view-color-dot'; dot.style.backgroundColor = view.color;
+      label.append(input, dot, document.createTextNode(view.name)); choices.append(label);
+      input.onchange = () => {
+        pendingIds = [...choices.querySelectorAll('input:checked')].map(el => el.value);
+        pickerChanged = pendingIds.slice().sort().join(',') !== activeIds.slice().sort().join(',');
+        pickerCaption();
+      };
+    });
+    pickerCaption();
     menu.querySelector('[data-workspace-action="edit"]').disabled = (!current && !activeIds.length) || busy;
     menu.querySelector('[data-workspace-action="remove"]').disabled = (!current && !activeIds.length) || busy;
   }
@@ -138,33 +149,9 @@
     $('[data-corpus-results]')?.removeAttribute('aria-busy');
   }
   window.addEventListener('pageshow', endViewLoading);
-  select.onchange = async () => {
-    const id = select.value;
-    if (!id || id === '__combined' || busy) return;
-    const selectedName = select.selectedOptions[0]?.textContent || 'view';
-    setBusy(true); status.textContent = `Loading ${selectedName}…`;
-    $('#view-loading-title').textContent = `Loading ${selectedName}…`;
-    $('#view-loading-detail').textContent = 'Preparing your filters…';
-    $('[data-corpus-results]')?.setAttribute('aria-busy', 'true');
-    viewLoading.showModal();
-    $('#view-loading-title').focus();
-    viewLoadingTimer = setTimeout(() => {
-      $('#view-loading-detail').textContent = 'Still loading activity. Larger views can take a little longer.';
-    }, 8000);
-    try {
-      const latest = await request();
-      const view = latest.views.find(item => item.id === id);
-      if (!view) throw Error('View was removed. Reload the page.');
-      await request('/' + id + '/select', 'POST');
-      if (preferences.revision || preferences.dynamic) await savePreferences({manual:[id], dynamic:false});
-      $('#view-loading-detail').textContent = 'Searching documents with this view’s filters…';
-      await loadCombined(latest, [id], false, false, viewUrl(view));
-      if (!disposed) setBusy(false);
-    } catch (error) { endViewLoading(); status.textContent = error.message; setBusy(false); menu.open = true; select.focus(); }
-  };
   function openDialog(action) {
     operation = action;
-    const editing = action === 'edit' || action === 'remove' || (['save','new'].includes(action) && aggregateScope.any.length);
+    const editing = action === 'new' || action === 'edit' || action === 'remove' || (['save','new'].includes(action) && aggregateScope.any.length);
     $('[data-view-edit-options]').hidden = !editing;
     $('[data-view-edit-options]').querySelectorAll('details').forEach(details => details.hidden = action === 'remove');
     editTarget = action === 'new' && editing ? {state:snapshot(), schedule:[]} : editing ? current || views.find(view => activeIds.includes(view.id)) : null;
@@ -203,7 +190,7 @@
       }
       const existing = action === 'new' ? null : editTarget || current;
       const view = await request(existing ? '/' + existing.id : '', existing ? 'PUT' : 'POST', {
-        name, state:editTarget ? readViewEditor() : snapshot(), schedule:editTarget ? readSchedule() : undefined, revision:existing?.revision || 0,
+        name, color:editTarget ? $('[data-view-colors]').dataset.selected : undefined, state:editTarget ? readViewEditor() : snapshot(), schedule:editTarget ? readSchedule() : undefined, revision:existing?.revision || 0,
       });
       viewData = await request(); preferences = viewData.preferences;
       if (action === 'new') { dynamicOn = false; $('[data-dynamic-toggle]').checked = false; }
@@ -262,9 +249,18 @@
 
   function fillViewEditor(view) {
     if (!view) return;
-    $('[data-schedule-timezone]').textContent = `Times use ${preferences.timezone}. Change the timezone in Select multiple views.`;
+    $('[data-schedule-timezone]').textContent = `Times use ${preferences.timezone}. Change it in Profile settings.`;
     document.querySelectorAll('[data-edit-filter]').forEach(input => input.value = view.state[input.dataset.editFilter] ?? '');
     fillEditorSources(view.state.source || '');
+    const palette = $('[data-view-colors]'); palette.replaceChildren();
+    palette.dataset.selected = view.color || viewData.palette[views.length % viewData.palette.length];
+    viewData.palette.forEach(color => {
+      const button = document.createElement('button'); button.type = 'button';
+      button.className = 'view-color-swatch'; button.style.backgroundColor = color;
+      button.setAttribute('aria-label', `Color ${color}`); button.setAttribute('aria-pressed', String(palette.dataset.selected === color));
+      button.onclick = () => { palette.dataset.selected = color; palette.querySelectorAll('button').forEach(item => item.setAttribute('aria-pressed', String(item === button))); };
+      palette.append(button);
+    });
     $('[data-schedule-blocks]').replaceChildren();
     (view.schedule || []).forEach(addBlock);
   }
@@ -388,32 +384,49 @@
       menu.open = true;
     } finally { clearTimeout(timeout); clearTimeout(slow); transitioning = false; }
   }
-  const multiDialog = $('[data-multi-dialog]');
-  $('[data-select-views]').onclick = async () => {
+  document.addEventListener('corpus:edit-scheduled-view', async event => {
     try {
       viewData = await request(); views = viewData.views; preferences = viewData.preferences;
-      const list = $('[data-multi-options]'); list.replaceChildren();
-      views.forEach(view => {
-        const label = document.createElement('label'), input = document.createElement('input');
-        input.type = 'checkbox'; input.value = view.id; input.checked = activeIds.includes(view.id);
-        label.append(input, view.name); list.append(label);
-      });
-      $('[data-multi-form]').elements.timezone.value = preferences.timezone;
-      $('[data-multi-error]').textContent = ''; menu.open = false; multiDialog.showModal();
-    } catch (error) { status.textContent = error.message; }
-  };
-  $('[data-multi-close]').onclick = () => multiDialog.close();
-  multiDialog.addEventListener('close', () => { menu.open = true; $('[data-select-views]').focus(); });
-  $('[data-multi-form]').onsubmit = async event => {
-    event.preventDefault();
-    const submit = event.currentTarget.querySelector('[type="submit"]'); submit.disabled = true;
+      const target = views.find(view => view.id === event.detail);
+      if (!target) throw Error('This view was removed. Refresh the schedule.');
+      openDialog('edit'); editTarget = target;
+      $('[data-edit-target]').value = target.id; fillViewEditor(target); nameForm.elements.name.value = target.name;
+    } catch (error) { status.textContent = error.message; menu.open = true; }
+  });
+  function pickerCaption() {
+    const names = views.filter(view => pendingIds.includes(view.id)).map(view => view.name);
+    $('[data-view-picker-caption]').textContent = names.join(' + ') || 'All activity';
+    $('[data-view-all]').setAttribute('aria-pressed', String(!pendingIds.length));
+  }
+  async function applyPicker() {
+    if (!pickerChanged || busy || transitioning) return;
+    const ids = [...pendingIds]; pickerChanged = false; busy = true;
+    $('#view-loading-title').textContent = `Loading ${views.filter(view => ids.includes(view.id)).map(view => view.name).join(' + ') || 'All activity'}�`;
+    $('#view-loading-detail').textContent = 'Applying selected views�'; viewLoading.showModal();
     try {
-      const manual = [...$('[data-multi-options]').querySelectorAll('input:checked')].map(input => input.value);
-      const data = await savePreferences({manual, dynamic:false, timezone:event.currentTarget.elements.timezone.value.trim()});
-      multiDialog.close(); await loadCombined(data, manual, false);
-    } catch (error) { $('[data-multi-error]').textContent = error.message; }
-    finally { submit.disabled = false; }
+      const latest = await request(); preferences = latest.preferences;
+      if (ids.some(id => !latest.views.some(view => view.id === id))) throw Error('A selected view was removed. Reopen Views and try again.');
+      const data = await savePreferences({manual:ids, dynamic:false});
+      await loadCombined(data, ids, false, false, ids.length === 1 ? viewUrl(data.views.find(view => view.id === ids[0])) : null);
+    } catch (error) { endViewLoading(); status.textContent = error.message; menu.open = true; }
+    finally { if (!disposed) { busy = false; options(); } }
+  }
+  picker.addEventListener('toggle', () => { if (!picker.open) applyPicker(); });
+  menu.addEventListener('toggle', () => { if (!menu.open) picker.open = false; });
+  $('[data-view-all]').onclick = () => {
+    if (busy) return;
+    pendingIds = []; pickerChanged = activeIds.length > 0 || dynamicOn || JSON.stringify(snapshot()) !== JSON.stringify({q:'',source:'',date_field:'created',date_from:'',date_to:'',sort:'desc',rolling:0,page_size:20});
+    $('[data-view-choices]').querySelectorAll('input').forEach(input => input.checked = false);
+    pickerCaption(); picker.open = false;
   };
+  document.addEventListener('click', event => {
+    if (!picker.open || picker.contains(event.target)) return;
+    if (pickerChanged) { event.preventDefault(); event.stopImmediatePropagation(); }
+    picker.open = false;
+  }, true);
+  picker.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && picker.open) { event.preventDefault(); event.stopPropagation(); picker.open = false; picker.querySelector('summary').focus(); }
+  });
   const dynamicToggle = $('[data-dynamic-toggle]'); dynamicToggle.checked = dynamicOn;
   dynamicToggle.onchange = async () => {
     dynamicToggle.disabled = true;

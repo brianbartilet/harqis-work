@@ -138,7 +138,7 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             page.wait_for_load_state()
             assert page.evaluate("sessionStorage.getItem('search-feedback')") == 'Searching…'
             assert '2 matching entries' in page.locator('[data-corpus-results]').inner_text()
-            page.locator('[data-workspace-menu] summary').click()
+            page.locator('[data-workspace-menu] > summary').click()
             page.locator('[data-workspace-action="new"]').click()
             page.locator('#workspace-name').fill('Work sources')
             page.locator('[data-workspace-confirm]').click()
@@ -160,7 +160,7 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
                 assert panel['x'] >= 0 and panel['x'] + panel['width'] <= width
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
                 page.screenshot(path=str(tmp_path / f'workspace-{width}.png'), full_page=True)
-                assert page.locator('[data-workspace-menu] summary').inner_text() == 'Views'
+                assert page.locator('[data-workspace-menu] > summary').inner_text() == 'Views'
                 page.get_by_role('button', name='About saved views').click()
                 help_dialog = page.locator('#workspace-help')
                 assert help_dialog.is_visible()
@@ -194,7 +194,7 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             assert page.locator('#q').input_value() == '#work'
             assert page.locator('[name="rolling"]').input_value() == '7'
             page.locator('#q').fill('#work planning')
-            page.locator('[data-workspace-menu] summary').click()
+            page.locator('[data-workspace-menu] > summary').click()
             page.locator('[data-workspace-action="save"]').click()
             page.wait_for_function("document.querySelector('[data-workspace-status]').textContent==='Saved: Work sources'")
             assert authenticated_client.get('/hfl-corpus/workspace-views').json()['views'][0]['state']['q'] == '#work planning'
@@ -205,18 +205,21 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             page.wait_for_function("document.querySelector('[data-workspace-status]').textContent==='Saved: Personal'")
             page.evaluate("""() => {
                 const fetchOriginal = window.fetch;
-                window.fetch = (...args) => String(args[0]).endsWith('/select')
+                window.fetch = (...args) => String(args[0]).endsWith('/view-preferences')
                     ? new Promise(resolve => { window.failViewLoad = () => resolve(new Response(JSON.stringify({detail:'Please retry loading this view.'}), {status:503})); })
                     : fetchOriginal(...args);
                 window.restoreViewFetch = () => { window.fetch = fetchOriginal; };
             }""")
-            page.select_option('[data-workspace-selection]', view['id'])
+            page.locator('[data-view-picker] > summary').click()
+            [item.uncheck() for item in page.locator('[data-view-choices] input').all()]
+            page.locator('[data-view-choices] input[value="'+view['id']+'"]').check()
+            page.locator('[data-view-picker] > summary').click()
             playwright.expect(page.locator('[data-view-loading]')).to_be_visible()
             assert 'Work sources' in page.locator('#view-loading-title').inner_text()
             page.wait_for_function('typeof window.failViewLoad === "function"')
             page.evaluate('window.failViewLoad()')
             playwright.expect(page.locator('[data-view-loading]')).not_to_be_visible()
-            assert page.locator('[data-workspace-selection]').is_enabled()
+            assert page.locator('[data-view-picker] > summary').is_enabled()
             assert 'Please retry' in page.locator('[data-workspace-status]').inner_text()
             page.evaluate("""() => {
                 window.restoreViewFetch();
@@ -232,14 +235,17 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
                     return original.apply(this, args);
                 };
             })();""")
-            page.select_option('[data-workspace-selection]', view['id'])
+            page.locator('[data-view-picker] > summary').click()
+            [item.uncheck() for item in page.locator('[data-view-choices] input').all()]
+            page.locator('[data-view-choices] input[value="'+view['id']+'"]').check()
+            page.locator('[data-view-picker] > summary').click()
             playwright.expect(page.locator('#q')).to_have_value('#work planning')
             assert page.evaluate("sessionStorage.getItem('viewLoadingOnExit')") == 'true'
             assert not page.locator('[data-view-loading]').is_visible()
             page.wait_for_function("sessionStorage.getItem('viewResultsFocused') === 'true'")
             assert page.locator('[data-mobile-results-toggle]').is_checked()
             assert '2 matching entries' in page.locator('[data-corpus-results]').inner_text()
-            page.locator('[data-workspace-menu] summary').click()
+            page.locator('[data-workspace-menu] > summary').click()
             page.locator('[data-workspace-action="edit"]').click()
             page.locator('#workspace-name').fill('Renamed workspace')
             page.locator('[data-workspace-confirm]').click()

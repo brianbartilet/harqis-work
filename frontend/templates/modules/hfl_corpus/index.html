@@ -245,7 +245,7 @@
         {% set active_view = saved_workspaces.views | selectattr('id', 'equalto', workspace) | first %}
         <div class="activity-view-context" role="status" aria-live="polite">
           <span class="activity-view-caption" title="{{ active_view.name if active_view else 'All activity' }}" data-active-view-caption><span data-view-prefix>Current View:</span> <strong data-active-view-name>{{ active_view.name if active_view else 'All activity' }}</strong></span>
-          <span class="activity-dynamic-badge" data-dynamic-badge>Dynamic off</span>
+          <span class="activity-dynamic-badge" data-dynamic-badge>Dynamic OFF</span>
           <span class="activity-view-modified" data-active-view-modified data-state="{{ 'saved' if active_view else 'default' }}">{{ 'Saved' if active_view else 'Default' }}</span>
         </div>
         <button type="button" data-activity-toggle aria-expanded="true" aria-controls="activity-heatmap-body" aria-label="Hide activity heat map"
@@ -2294,4 +2294,5 @@
 })();
 </script>
 <script defer src="{{ static_asset('js/corpus-workspaces.js') }}"></script>
+<script defer src="{{ static_asset('js/view-visualizer.js') }}"></script>
 {% endblock %}

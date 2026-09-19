@@ -2,15 +2,18 @@
   <summary class="corpus-header-link workspace-select">Views</summary>
   <div class="workspace-menu-panel">
     <div class="workspace-label-row">
-      <label for="workspace-selection">Focus on</label>
+      <span class="workspace-focus-label">Focus on</span>
       <button type="button" data-workspace-help-open class="workspace-help-button" aria-label="About saved views" aria-haspopup="dialog" aria-controls="workspace-help"><span aria-hidden="true">ⓘ</span></button>
     </div>
-    <select id="workspace-selection" class="workspace-select" data-workspace-selection aria-label="Focus on">
-      <option value="">Choose a view</option>
-      {% for view in saved_workspaces.views %}<option value="{{ view.id }}" {% if view.id == workspace %}selected{% endif %}>{{ view.name }}</option>{% endfor %}
-    </select>
-    <button type="button" class="workspace-multi-button" data-select-views>Select multiple views</button>
-    <label class="workspace-dynamic-toggle"><span>Dynamic mode</span><input type="checkbox" role="switch" aria-describedby="dynamic-schedule-hint" data-dynamic-toggle></label>
+    <details class="workspace-view-picker" data-view-picker>
+      <summary id="workspace-selection" class="workspace-select" aria-label="Focus on"><span data-view-picker-caption>All activity</span></summary>
+      <div class="workspace-view-options">
+        <button type="button" data-view-all>All activity</button>
+        <div data-view-choices></div>
+        <p>Selections apply when you close this list.</p>
+      </div>
+    </details>
+    <div class="workspace-dynamic-row"><span>Dynamic mode</span><button type="button" data-visualize-open aria-haspopup="dialog" aria-controls="view-visualizer">Visualize</button><label class="workspace-dynamic-toggle"><span class="sr-only">Dynamic mode</span><input type="checkbox" role="switch" aria-describedby="dynamic-schedule-hint" data-dynamic-toggle></label></div>
     <p id="dynamic-schedule-hint" class="workspace-adaptive-status" data-dynamic-hint hidden>Add a time block in Edit View → Assign schedules to enable Dynamic mode.</p>
     <p class="workspace-adaptive-status" data-adaptive-status role="status"></p>
     <div class="workspace-menu-actions">
@@ -34,7 +37,7 @@
     <input id="workspace-name" name="name" maxlength="100" required autocomplete="off">
     <div data-view-edit-options hidden>
       <details open data-assigned-schedules><summary>Assign schedules</summary>
-        <p data-schedule-timezone></p>
+        <p data-schedule-timezone></p><span class="view-color-label">View color</span><div data-view-colors class="view-color-palette" role="group" aria-label="View colors"></div>
         <p>Overlapping blocks combine views. An end time before the start continues into the next day.</p>
         <div data-schedule-blocks></div>
         <button type="button" data-add-block>Add time block</button>
@@ -70,7 +73,7 @@
   <p>Combine sources, tags, search text, and dates to focus on work, learning, or another part of your activity.</p>
   <p>Apply filters with <strong>Search</strong>. Choose <strong>New</strong> to save a view, <strong>Save</strong> to update it, or <strong>Edit Views</strong> to change its name, filters, or schedules.</p>
   <h3>Combine and schedule views</h3>
-    <p>Use <strong>Select multiple views</strong> to combine activity without duplicates. In <strong>Edit Views</strong>, add weekly time blocks. <strong>Dynamic mode</strong> follows those blocks; gaps use your manual selection. Manual selection turns it off.</p>
+    <p>Use <strong>Focus on</strong> to combine activity without duplicates. In <strong>Edit Views</strong>, add weekly time blocks. <strong>Dynamic mode</strong> follows those blocks; gaps show all entries. Manual selection turns it off.</p>
   <h3>Example: the Eisenhower matrix</h3>
   <p>Group activity by urgency and importance using the Eisenhower matrix. Habit 3, “Put first things first,” in The 7 Habits of Highly Effective People uses the same four quadrants:</p>
   <div class="workspace-quadrants">
@@ -110,13 +113,18 @@
 </dialog>
 <script type="application/json" data-workspace-data>{{ saved_workspaces | tojson }}</script>
 
-<dialog class="workspace-dialog workspace-multi-dialog" data-multi-dialog aria-labelledby="multi-view-title">
-  <form data-multi-form>
-    <h2 id="multi-view-title">Combine views</h2>
-    <p>Include entries matching any selected view. Duplicates appear once.</p>
-    <div data-multi-options></div>
-    <label>Schedule timezone<input name="timezone" value="Asia/Singapore" required maxlength="100" placeholder="Asia/Singapore"></label>
-    <p data-multi-error role="alert"></p>
-    <div class="workspace-menu-actions"><button type="button" data-multi-close>Cancel</button><button type="submit">Apply selection</button></div>
-  </form>
+
+
+<dialog id="view-visualizer" class="workspace-dialog view-visualizer" aria-labelledby="view-visualizer-title">
+  <div class="visualizer-toolbar">
+    <h2 id="view-visualizer-title" tabindex="-1">Dynamic activity view schedule</h2>
+    <p data-visualize-zone class="visualizer-clock"></p>
+    <p data-visualize-status class="visualizer-mode" role="status"></p>
+    <details class="visualizer-help"><summary aria-label="About the weekly schedule">ⓘ</summary><p>Unscheduled periods show all entries in Dynamic mode. Overlapping views combine. Shorter blocks sit above longer ones; identical periods share the column. Select a block to inspect its filters.</p></details>
+    <button type="button" data-visualize-close class="workspace-help-button" aria-label="Close weekly schedule">×</button>
+  </div>
+  <button type="button" data-visualize-retry hidden>Retry</button>
+  <p data-visualize-empty hidden>No time blocks yet. Add one in Edit Views → Assign schedules.</p>
+  <div class="visualizer-scroll" tabindex="0" role="region" aria-label="Weekly schedule, scroll to see all days and times"><div data-visualize-grid class="visualizer-grid"></div></div>
+  <section data-visualize-detail class="visualizer-detail" hidden aria-label="Selected schedule block" tabindex="-1"></section>
 </dialog>

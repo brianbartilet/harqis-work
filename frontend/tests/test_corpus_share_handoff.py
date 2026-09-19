@@ -88,7 +88,7 @@ def test_handoff_browser(authenticated_client, handoff_corpus, width, tmp_path):
             page.route('**/*', route)
             page.goto('http://handoff.test/hfl-corpus?reset=1')
             page.locator('#q').fill('#work ignored words')
-            page.locator('[data-workspace-menu] summary').click()
+            page.locator('[data-workspace-menu] > summary').click()
             page.locator('[data-corpus-share-preview]').click()
             dialog = page.locator('[data-corpus-share-dialog]')
             playwright.expect(dialog.locator('[data-preview-ready]')).to_be_visible()

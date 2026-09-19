@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import re
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dataclasses import replace
 from datetime import date, datetime, timezone
 from typing import Any
@@ -19,6 +20,7 @@ _LIMITS = {
     "last_name": 80,
     "nickname": 50,
     "birthdate": 10,
+    "timezone": 100,
     "location": 120,
     "phone": 32,
     "bio": 500,
@@ -59,7 +61,12 @@ def _valid_https_url(value: str) -> bool:
 
 def profile_from_form(form: Any, saved: OwnerProfile) -> tuple[OwnerProfile, dict[str, str]]:
     values = {field: _clean(form, field) for field in _LIMITS}
+    values['timezone'] = _clean(form, 'timezone') if 'timezone' in form else saved.timezone
     errors: dict[str, str] = {}
+    try:
+        ZoneInfo(values['timezone'])
+    except (ValueError, ZoneInfoNotFoundError):
+        errors['timezone'] = 'Choose a valid timezone, such as Asia/Singapore.'
     for field, limit in _LIMITS.items():
         if len(values[field]) > limit:
             errors[field] = f"Use {limit} characters or fewer."

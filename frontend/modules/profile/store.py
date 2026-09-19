@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import sqlite3
+import json
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from functools import lru_cache
 from pathlib import Path
 
@@ -49,6 +51,21 @@ class ProfileStore:
                         f"ALTER TABLE owner_profile ADD COLUMN {name} TEXT NOT NULL DEFAULT ''"
                     )
 
+            if "timezone" not in columns:
+                connection.execute("ALTER TABLE owner_profile ADD COLUMN timezone TEXT NOT NULL DEFAULT 'Asia/Singapore'")
+                connection.execute("UPDATE owner_profile SET timezone=?", (self._legacy_timezone(connection),))
+
+    @staticmethod
+    def _legacy_timezone(connection):
+        exists = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='corpus_view_preferences'").fetchone()
+        row = connection.execute("SELECT payload FROM corpus_view_preferences WHERE singleton=1").fetchone() if exists else None
+        try:
+            value = json.loads(row[0]).get('timezone', 'Asia/Singapore') if row else 'Asia/Singapore'
+            ZoneInfo(value)
+            return value
+        except (ValueError, TypeError, ZoneInfoNotFoundError):
+            return 'Asia/Singapore'
+
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
@@ -60,7 +77,8 @@ class ProfileStore:
                 "SELECT * FROM owner_profile WHERE id=1"
             ).fetchone()
         if not row:
-            return OwnerProfile()
+            with self._connect() as connection:
+                return OwnerProfile(timezone=self._legacy_timezone(connection))
         return OwnerProfile(
             **{
                 field: row[field]

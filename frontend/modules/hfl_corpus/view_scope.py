@@ -74,6 +74,10 @@ def request_scope(request):
         scope = parse_scope(request.query_params.get('scope', ''))
         if scope.any:
             overrides = {key: value for key, value in request.query_params.items() if key in WorkspaceState.model_fields}
+            # Query strings carry text; numeric Literal fields require integers.
+            for key in ('page_size', 'rolling'):
+                if key in overrides:
+                    overrides[key] = int(overrides[key])
             scope.all = WorkspaceState.model_validate({**scope.all.model_dump(), **overrides})
         return scope
     except ValueError as exc:

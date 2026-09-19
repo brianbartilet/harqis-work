@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from modules.hfl_corpus.graph_views import connection
+from modules.profile.store import get_profile_store
+from modules.hfl_corpus.memory_pins import PIN_COLORS
 from modules.hfl_corpus.corpus import valid_source_filter_value
 
 
@@ -77,6 +79,15 @@ class ViewPreferences(BaseModel):
 
 
 class WorkspaceWrite(BaseModel):
+    color: str | None = None
+
+    @field_validator('color')
+    @classmethod
+    def valid_color(cls, value):
+        if value is not None and value not in PIN_COLORS:
+            raise ValueError('Choose a color from the Memory Signal palette.')
+        return value
+
     name: str = Field(min_length=1, max_length=100, pattern=r'\S')
     state: WorkspaceState
     schedule: list[TimeBlock] | None = Field(default=None, max_length=50)
@@ -87,6 +98,11 @@ def schema(db):
     db.execute('CREATE TABLE IF NOT EXISTS corpus_view_preferences (singleton INTEGER PRIMARY KEY CHECK(singleton=1), payload TEXT NOT NULL)')
     db.execute('CREATE TABLE IF NOT EXISTS corpus_view_schedules (view_id TEXT PRIMARY KEY, payload TEXT NOT NULL)')
     db.execute('CREATE TABLE IF NOT EXISTS corpus_workspace_views (id TEXT PRIMARY KEY, name TEXT NOT NULL, state TEXT NOT NULL, revision INTEGER NOT NULL)')
+    columns = {row[1] for row in db.execute('PRAGMA table_info(corpus_workspace_views)')}
+    if 'color' not in columns:
+        db.execute("ALTER TABLE corpus_workspace_views ADD COLUMN color TEXT NOT NULL DEFAULT '#3b82f6'")
+        for index, row in enumerate(db.execute('SELECT id FROM corpus_workspace_views ORDER BY id').fetchall()):
+            db.execute('UPDATE corpus_workspace_views SET color=? WHERE id=?', (PIN_COLORS[index % len(PIN_COLORS)], row[0]))
     db.execute('CREATE TABLE IF NOT EXISTS corpus_workspace_last (singleton INTEGER PRIMARY KEY CHECK(singleton=1), view_id TEXT)')
 
 
@@ -95,6 +111,7 @@ def decode(row):
 
 
 def listing():
+    profile_timezone = get_profile_store().get().timezone
     with connection() as db:
         schema(db)
         last = db.execute('SELECT view_id FROM corpus_workspace_last WHERE singleton=1').fetchone()
@@ -104,9 +121,10 @@ def listing():
             view['schedule'] = schedules.get(view['id'], [])
         stored = db.execute('SELECT payload FROM corpus_view_preferences WHERE singleton=1').fetchone()
         prefs = json.loads(stored[0]) if stored else ViewPreferences(manual=[last[0]] if last and last[0] else []).model_dump()
+        prefs['timezone'] = profile_timezone
         prefs['manual'] = [identity for identity in prefs['manual'] if any(v['id'] == identity for v in views)]
         active = active_views(views, prefs)
-        return {'views': views, 'last_used': last[0] if last else None, 'preferences': prefs, 'active': active, 'today': datetime.now(ZoneInfo(prefs['timezone'])).date().isoformat()}
+        return {'palette': list(PIN_COLORS), 'views': views, 'last_used': last[0] if last else None, 'preferences': prefs, 'active': active, 'today': datetime.now(ZoneInfo(prefs['timezone'])).date().isoformat()}
 
 
 def save(payload, identity=None):
@@ -123,7 +141,10 @@ def save(payload, identity=None):
                 raise HTTPException(409, 'View changed or was removed in another browser. Reload or save as new.')
         else:
             identity = uuid4().hex
-            db.execute('INSERT INTO corpus_workspace_views VALUES (?,?,?,1)', (identity, payload.name.strip(), encoded))
+            color = payload.color or PIN_COLORS[db.execute('SELECT COUNT(*) FROM corpus_workspace_views').fetchone()[0] % len(PIN_COLORS)]
+            db.execute('INSERT INTO corpus_workspace_views (id,name,state,revision,color) VALUES (?,?,?,1,?)', (identity, payload.name.strip(), encoded, color))
+        if payload.color is not None:
+            db.execute('UPDATE corpus_workspace_views SET color=? WHERE id=?', (payload.color, identity))
         db.execute('INSERT INTO corpus_workspace_last VALUES (1,?) ON CONFLICT(singleton) DO UPDATE SET view_id=excluded.view_id', (identity,))
         if creating:
             row = db.execute('SELECT payload FROM corpus_view_preferences WHERE singleton=1').fetchone()
@@ -169,10 +190,11 @@ def active_views(views, preferences, now=None):
             if current:
                 active.append(view['id'])
                 break
-    return active or preferences['manual']
+    return active
 
 
 def save_preferences(payload):
+    profile_timezone = get_profile_store().get().timezone
     with connection() as db:
         schema(db)
         db.execute('BEGIN IMMEDIATE')
@@ -186,6 +208,7 @@ def save_preferences(payload):
         if payload.dynamic and not any(json.loads(row[0]) for row in db.execute('SELECT s.payload FROM corpus_view_schedules s JOIN corpus_workspace_views v ON v.id=s.view_id')):
             raise HTTPException(422, 'Add a time block in Edit View → Assign schedules before enabling Dynamic mode.')
         values = payload.model_dump()
+        values['timezone'] = profile_timezone
         values['manual'] = list(dict.fromkeys(values['manual']))
         values['revision'] = revision + 1
         db.execute('INSERT INTO corpus_view_preferences VALUES (1,?) ON CONFLICT(singleton) DO UPDATE SET payload=excluded.payload', (json.dumps(values),))

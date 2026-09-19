@@ -48,7 +48,8 @@ def test_profile_requires_authentication_and_header_uses_fallback(
     assert response.status_code == 302
     assert page.status_code == 200
     assert "Profile settings" in page.text
-    assert 'href="/profile" aria-label="Profile"' in page.text
+    from bs4 import BeautifulSoup
+    assert BeautifulSoup(page.text, "html.parser").select_one('a[href="/profile"]') is not None
     assert '<span aria-hidden="true">P</span>' in page.text
     assert "Country-level inference" in page.text
     assert "new Intl.Locale" in page.text
@@ -184,3 +185,40 @@ def test_profile_rejects_future_birthdate(authenticated_client):
 
     assert response.status_code == 422
     assert "Birthdate cannot be in the future." in response.text
+
+
+def test_profile_timezone_drives_views_and_rejects_invalid_values(authenticated_client):
+    from modules.hfl_corpus import workspace_views
+    client = authenticated_client
+    response = client.post('/profile', data=_profile_form(timezone='America/New_York'), follow_redirects=False)
+    assert response.status_code == 303
+    assert get_profile_store().get().timezone == 'America/New_York'
+    assert workspace_views.listing()['preferences']['timezone'] == 'America/New_York'
+    # An older tab cannot replace the profile timezone through view preferences.
+    payload = workspace_views.ViewPreferences(timezone='Asia/Tokyo')
+    assert workspace_views.save_preferences(payload)['preferences']['timezone'] == 'America/New_York'
+    invalid = client.post('/profile', data=_profile_form(timezone='Invalid/Zone'))
+    assert invalid.status_code == 422
+    assert 'Choose a valid timezone' in invalid.text
+    assert get_profile_store().get().timezone == 'America/New_York'
+    # Older callers omitting the new field retain the saved setting.
+    client.post('/profile', data=_profile_form())
+    assert get_profile_store().get().timezone == 'America/New_York'
+    page = client.get('/hfl-corpus?reset=1')
+    assert 'name="timezone"' not in page.text
+
+
+def test_profile_timezone_migrates_existing_schedule_setting(tmp_path):
+    import sqlite3
+    import json
+    from modules.profile.store import ProfileStore, _SCHEMA
+    path = tmp_path / 'legacy-profile.db'
+    with sqlite3.connect(path) as db:
+        db.executescript(_SCHEMA)
+        db.execute("INSERT INTO owner_profile(id,nickname) VALUES (1,'Owner')")
+        db.execute('CREATE TABLE corpus_view_preferences (singleton INTEGER PRIMARY KEY, payload TEXT)')
+        db.execute('INSERT INTO corpus_view_preferences VALUES (1,?)', (json.dumps({'timezone':'Europe/London'}),))
+    store = ProfileStore(path)
+    assert store.get().timezone == 'Europe/London'
+    assert store.get().nickname == 'Owner'
+    assert ProfileStore(path).get().timezone == 'Europe/London'

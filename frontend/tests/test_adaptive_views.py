@@ -68,11 +68,11 @@ def test_schedule_boundaries_overlap_and_timezone():
              {'id':'early','schedule':[{'days':[1],'start':'01:00','end':'03:00'}]}]
     # Monday night continues into Tuesday, times are Singapore local.
     def active(utc): return workspace_views.active_views(views,prefs,datetime.fromisoformat(utc))
-    assert active('2026-09-21T13:59:00+00:00') == ['fallback']
+    assert active('2026-09-21T13:59:00+00:00') == []
     assert active('2026-09-21T14:00:00+00:00') == ['night']
     assert active('2026-09-21T17:00:00+00:00') == ['night','early']
     assert active('2026-09-21T18:00:00+00:00') == ['early']
-    assert active('2026-09-21T19:00:00+00:00') == ['fallback']
+    assert active('2026-09-21T19:00:00+00:00') == []
     prefs['dynamic'] = False
     assert active('2026-09-21T17:00:00+00:00') == ['fallback']
     prefs.update(dynamic=True, timezone='America/New_York')
@@ -179,18 +179,26 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             assert not triage.evaluate('(el) => el.open')
             page.keyboard.press('Escape')
 
-            page.locator('[data-workspace-menu] summary').click()
+            page.locator('[data-workspace-menu] > summary').click()
             assert page.locator('[data-dynamic-toggle]').is_disabled()
             assert 'Add a time block' in page.locator('[data-dynamic-hint]').inner_text()
             assert page.locator('[data-dynamic-toggle]').get_attribute('role') == 'switch'
-            page.locator('[data-select-views]').click()
-            for view in [first,second]: page.locator('[data-multi-options] input[value="'+view['id']+'"]').check()
-            page.locator('[data-multi-form] button[type="submit"]').click()
-            page.wait_for_function("document.querySelector('[data-active-view-name]').textContent.includes('+1')")
+            page.locator('[data-view-picker] > summary').click()
+            for view in [first,second]: page.locator('[data-view-choices] input[value="'+view['id']+'"]').check()
+            assert page.locator('[data-active-view-name]').inner_text() == 'All activity'
+            assert page.locator('[data-view-all] input, [data-view-all] .view-color-dot').count() == 0
+            page.screenshot(path=str(tmp_path/f'view-picker-{width}.png'),full_page=True)
+            if width == 320:
+                page.keyboard.press('Escape')
+            elif width == 390:
+                page.locator('.workspace-focus-label').click()
+            else:
+                page.locator('[data-view-picker] > summary').click()
+            page.wait_for_function("document.querySelector('[data-active-view-name]').textContent.includes('Work') && document.querySelector('[data-active-view-name]').textContent.includes('Personal')")
             assert '2 matching entries' in page.locator('[data-corpus-results]').inner_text()
-            assert page.locator('[data-dynamic-badge]').inner_text()=='Dynamic off'
+            assert page.locator('[data-dynamic-badge]').inner_text()=='Dynamic OFF'
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-            page.locator('[data-workspace-menu] summary').click()
+            page.locator('[data-workspace-menu] > summary').click()
             page.locator('[data-corpus-share-preview]').click()
             preview = page.locator('[data-corpus-share-dialog]')
             playwright.expect(preview.locator('[data-preview-ready]')).to_be_visible()
@@ -218,6 +226,7 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             assert page.locator('[data-edit-sources]').get_attribute('open') is None
             page.locator('[data-applied-filters] > summary').click()
 
+            page.locator('[data-view-colors] button').nth(5).click()
             page.locator('[data-add-block]').click()
             assert page.locator('.workspace-day-options input:checked').count()==5
             page.screenshot(path=str(tmp_path/f'adaptive-edit-{width}.png'),full_page=True)
@@ -227,8 +236,53 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             assert next(v for v in updated['views'] if v['id']==first['id'])['schedule'][0]['start']=='09:00'
             page.wait_for_function("() => JSON.parse(document.querySelector('[data-workspace-data]').textContent).views.some(v => v.name === 'Work' && v.schedule.length === 1) && document.querySelector('[data-dynamic-toggle]').onchange !== null")
             page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
+            # Another view overlaps Monday and crosses the Sunday/Monday boundary.
+            overlap = authenticated_client.put('/hfl-corpus/workspace-views/'+second['id'], headers=headers,
+                json={'name':second['name'], 'state':second['state'], 'revision':second['revision'],
+                      'schedule':[{'days':[0], 'start':'10:00','end':'11:00'}, {'days':[6], 'start':'22:00','end':'02:00'}, {'days':[1], 'start':'09:00','end':'17:00'}]})
+            assert overlap.status_code == 200
+            page.locator('[data-visualize-open]').click()
+            calendar = page.locator('#view-visualizer')
+            playwright.expect(calendar.locator('.visualizer-block')).to_have_count(9)
+            assert 'Dynamic OFF' in calendar.locator('[data-visualize-status]').inner_text()
+            assert 'Asia/Singapore' in calendar.locator('[data-visualize-zone]').inner_text()
+            assert calendar.locator('.visualizer-day-heading').first.inner_text().startswith('Mon')
+            assert calendar.locator('.visualizer-now').count() == 1
+            assert calendar.evaluate('(el) => el.scrollWidth <= el.clientWidth')
+            monday = calendar.locator('.visualizer-day').first
+            overlapping = monday.locator('.visualizer-block').filter(has_text='10:00–11:00')
+            work = monday.locator('.visualizer-block').filter(has_text='Work')
+            assert overlapping.bounding_box()['x'] > work.bounding_box()['x']
+            assert overlapping.evaluate('(el) => Number(el.style.zIndex)') > work.evaluate('(el) => Number(el.style.zIndex)')
+            label = work.locator('.visualizer-block-label').bounding_box()
+            assert 0 <= label['y'] - work.bounding_box()['y'] <= 10
+            tuesday = calendar.locator('.visualizer-day').nth(1)
+            peers = tuesday.locator('.visualizer-block')
+            assert peers.count() == 2
+            first_box, second_box = peers.nth(0).bounding_box(), peers.nth(1).bounding_box()
+            assert abs(first_box['width'] - second_box['width']) < 2
+            assert first_box['x'] + first_box['width'] <= second_box['x']
+            assert second_box['x'] + second_box['width'] <= tuesday.bounding_box()['x'] + tuesday.bounding_box()['width']
+            if width >= 1000:
+                toolbar = calendar.locator('.visualizer-toolbar')
+                assert toolbar.bounding_box()['height'] < 70
+            calendar.locator('.visualizer-scroll').evaluate('(el) => el.scrollTop = 8 * 48')
+
+            assert monday.locator('.visualizer-block').filter(has_text='22:00–02:00').count() == 1
+            assert calendar.locator('.visualizer-day').last.locator('.visualizer-block').filter(has_text='22:00–02:00').count() == 1
+            page.screenshot(path=str(tmp_path/f'visualizer-week-{width}.png'),full_page=True)
+            work.click()
+            assert 'git' in calendar.locator('[data-visualize-detail]').inner_text()
+            assert '#work' in calendar.locator('[data-visualize-detail]').inner_text()
+            page.screenshot(path=str(tmp_path/f'visualizer-{width}.png'),full_page=True)
+            calendar.get_by_role('button', name='Edit view', exact=True).click()
+            playwright.expect(page.locator('[data-workspace-dialog]')).to_be_visible()
+            assert page.locator('#workspace-name').input_value() == 'Work'
+            assert page.locator('[data-view-colors] button').nth(5).get_attribute('aria-pressed') == 'true'
+            page.locator('[data-workspace-cancel]').click()
+            page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
             page.locator('[data-dynamic-toggle]').check()
-            page.wait_for_function("document.querySelector('[data-dynamic-badge]').textContent==='Dynamic on'")
+            page.wait_for_function("document.querySelector('[data-dynamic-badge]').textContent==='Dynamic ON'")
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.screenshot(path=str(tmp_path/f'adaptive-{width}.png'),full_page=True)
             # Block transition during dialogs, then preserve the loaded results on error.
@@ -236,19 +290,26 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             page.locator('[data-workspace-help-open]').click()
             scheduled[:] = [first['id']]
             page.evaluate("window.dispatchEvent(new Event('focus'))")
-            assert '+1' in page.locator('[data-active-view-name]').inner_text()
+            assert 'Personal' in page.locator('[data-active-view-name]').inner_text()
             page.locator('#workspace-help [data-workspace-help-close]').last.click()
             page.locator('[data-workspace-menu]').evaluate('(el) => el.open = false')
             failed[0] = True
             page.evaluate("window.dispatchEvent(new Event('focus'))")
             page.wait_for_function("document.querySelector('[data-adaptive-status]').textContent.includes('retry')")
-            assert '+1' in page.locator('[data-active-view-name]').inner_text()
+            assert 'Personal' in page.locator('[data-active-view-name]').inner_text()
             assert '2 matching entries' in page.locator('[data-corpus-results]').inner_text()
             failed[0] = False
             page.locator('[data-adaptive-status] button').click()
             page.wait_for_function("document.querySelector('[data-active-view-name]').textContent==='Work'")
             assert '1 matching entries' in page.locator('[data-corpus-results]').inner_text()
             page.wait_for_function("document.querySelector('[data-activity-body]').classList.contains('workspace-arrive')")
+            page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
+            page.locator('[data-view-picker] > summary').click()
+            page.locator('[data-view-all]').click()
+            page.wait_for_function("document.querySelector('[data-active-view-name]').textContent === 'All activity'")
+            assert json.loads(parse_qs(urlparse(page.url).query)['scope'][0])['any'] == []
+            prefs = authenticated_client.get('/hfl-corpus/workspace-views').json()['preferences']
+            assert prefs['manual'] == [] and prefs['dynamic'] is False
             import modules.hfl_corpus.router as corpus_routes
             from modules.hfl_corpus.remote import RemoteCorpusClient, RemoteCorpusError
             from types import SimpleNamespace
@@ -262,3 +323,54 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             playwright.expect(page.locator('[data-corpus-load-error]')).not_to_be_visible()
             assert not errors,errors
         finally: browser.close()
+
+
+def test_view_colors_and_unscheduled_all_entries(authenticated_client, workspace_corpus):
+    from modules.hfl_corpus.memory_pins import PIN_COLORS
+    client = authenticated_client
+    headers, first, second = make_views(client)
+    assert first['color'] in PIN_COLORS
+    assert first['color'] != second['color']
+    response = client.put('/hfl-corpus/workspace-views/'+first['id'], headers=headers,
+        json={'name':first['name'], 'state':first['state'], 'revision':first['revision'], 'color':PIN_COLORS[-1]})
+    assert response.status_code == 200
+    saved = response.json()
+    assert saved['color'] == PIN_COLORS[-1]
+    invalid = client.put('/hfl-corpus/workspace-views/'+first['id'], headers=headers,
+        json={'name':first['name'], 'state':first['state'], 'revision':saved['revision'], 'color':'red'})
+    assert invalid.status_code == 422
+    kept = client.put('/hfl-corpus/workspace-views/'+first['id'], headers=headers,
+        json={'name':first['name'], 'state':first['state'], 'revision':saved['revision']}).json()
+    assert kept['color'] == PIN_COLORS[-1]
+    snapshot = workspace_views.listing()
+    assert snapshot['palette'] == list(PIN_COLORS)
+    url = workspace_views.selection_url(snapshot, identities=[], dynamic=True)
+    assert len(filter_scope((workspace_corpus,), ViewScope.model_validate_json(parse_qs(urlparse(url).query)['scope'][0]))[0].entries) == 3
+
+
+def test_view_color_migration_preserves_existing_views(authenticated_client):
+    from modules.hfl_corpus.graph_views import connection
+    from modules.hfl_corpus.memory_pins import PIN_COLORS
+    with connection() as db:
+        db.execute('DROP TABLE IF EXISTS corpus_workspace_views')
+        db.execute('CREATE TABLE corpus_workspace_views (id TEXT PRIMARY KEY, name TEXT, state TEXT, revision INTEGER)')
+        db.execute('INSERT INTO corpus_workspace_views VALUES (?,?,?,?)', ('old','Existing','{}',4))
+    first = workspace_views.listing()['views'][0]
+    assert first['id'] == 'old' and first['revision'] == 4
+    assert first['color'] in PIN_COLORS
+    assert workspace_views.listing()['views'][0]['color'] == first['color']
+
+
+@pytest.mark.parametrize('page_size', [20,50,100])
+def test_scope_accepts_numeric_query_parameters(authenticated_client, workspace_corpus, page_size):
+    scope = json.dumps({'any':[{'source':'git'}]})
+    response = authenticated_client.get('/api/hfl/documents',
+        params={'scope':scope, 'page_size':str(page_size), 'rolling':'7', 'compact':'true'},
+        headers={'Authorization':'Bearer frontend-test-hfl-api-token'})
+    assert response.status_code == 200, response.text
+    assert response.json()['page_size'] == page_size
+    assert response.json()['results'][0]['matching_entry_count'] == 1
+    page = authenticated_client.get('/hfl-corpus', params={'scope':scope, 'page_size':str(page_size), 'rolling':'7'})
+    assert page.status_code == 200
+    invalid = authenticated_client.get('/hfl-corpus', params={'scope':scope, 'page_size':'21'})
+    assert invalid.status_code == 422

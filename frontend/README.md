@@ -628,7 +628,7 @@ never stored in a view. Graph profiles remain independent.
 
 #### Combined views and Dynamic mode
 
-Use **Select multiple views** to choose up to 30 views and apply them together.
+Use the **Focus on** checkbox dropdown to choose up to 30 views. Closing the list applies the selection automatically. **All activity** clears saved-view filtering.
 Each view retains its own source/tag/text/date rules. An entry matching any view
 appears once in document results, matching-entry navigation, and Memory Signal
 counts. **Active view filters** explains the applied rules; the search controls
@@ -638,12 +638,12 @@ with a combination. The other saved views are unchanged.
 In **Edit View → Assign schedules**, choose weekdays and add one or more time blocks.
 End times are exclusive; an end before the start continues into the next day.
 Overlapping blocks combine all active views. The shared schedule timezone is
-configured in **Select multiple views**, initially `Asia/Singapore`; it follows
+configured in **Profile → Timezone**, initially `Asia/Singapore` (existing schedule settings are preserved); Views read it automatically. It follows
 named-zone daylight-saving rules rather than the browser's local timezone.
 
 **Dynamic mode** starts off. Add at least one time block before enabling it; the Views menu explains this requirement when no schedules exist. Its setting and manual selection persist in the
 owner profile database. When enabled, active scheduled views replace the manual
-selection; gaps use the manual selection. Turning it off restores the manual
+selection; gaps show all entries (subject to normal secret-access restrictions). Turning it off restores the manual
 selection. Choosing views manually turns it off. Explicit filter links retain
 their own scope; ordinary landing-page visits restore persisted preferences.
 
@@ -654,9 +654,23 @@ filters to resume. A transition shows loading feedback, keeps the old results
 on failure with Retry, preserves scroll position for automatic changes, and
 fades the updated heatmap unless reduced motion is requested.
 
-The Memory Signal header identifies the current view(s), Dynamic on/off, and
-Saved/Modified state. Expand a shortened name such as `Work +2` to inspect the
+The Memory Signal header identifies the current view(s), Dynamic ON/OFF, and
+Saved/Modified state. Select the combined view names to inspect the
 active filter summaries. Combined results use a shared sort and page size.
+
+#### Weekly schedule visualizer
+
+Choose **Visualize** beside Dynamic mode to preview all saved schedules for the
+current Monday–Sunday week in the Profile timezone. Today and the current time
+are highlighted. Shorter overlapping blocks sit above longer blocks; identical periods share equal columns. Overnight blocks span days.
+The preview works with Dynamic mode OFF and does not change your active selection.
+Unscheduled periods show all entries when Dynamic mode is ON.
+
+Select a block to inspect its full period, sources, search/tags, and date filters,
+or choose **Edit view**. Blocks are read-only. Mobile users can scroll the week
+horizontally. There are no previous/next-week controls for these recurring schedules.
+Choose a persistent view color under **Assign schedules** using the pinned-date
+palette; existing views receive colors automatically. Status pill colors remain unchanged.
 
 #### Example: reflect with four quadrants
 

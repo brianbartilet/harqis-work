@@ -25,6 +25,7 @@ class OwnerProfile:
     secret_pin_hash: str = ""
     secret_tags: str = ""
     updated_at: str = ""
+    timezone: str = "Asia/Singapore"
 
     @property
     def display_name(self) -> str:

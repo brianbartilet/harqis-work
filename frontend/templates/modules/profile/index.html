@@ -101,6 +101,15 @@
           </div>
         </section>
 
+        <section class="profile-fieldset" role="group" aria-labelledby="profile-timezone-title">
+          <header class="profile-section-header"><h2 class="profile-section-title" id="profile-timezone-title">Timezone</h2></header>
+          <label class="profile-label" for="timezone">Schedule timezone</label>
+          <input class="profile-input" id="timezone" name="timezone" list="profile-timezones" value="{{ profile.timezone }}" maxlength="100" required aria-describedby="profile-timezone-help{% if errors.timezone %} timezone-error{% endif %}" {% if errors.timezone %}aria-invalid="true"{% endif %}>
+          <datalist id="profile-timezones">{% for zone in timezones %}<option value="{{ zone }}">{% endfor %}</datalist>
+          <p id="profile-timezone-help" class="profile-hint mt-2">Activity Corpus view schedules use this timezone automatically, including daylight-saving changes.</p>
+          {% if errors.timezone %}<p id="timezone-error" class="profile-error">{{ errors.timezone }}</p>{% endif %}
+        </section>
+
         <section class="profile-fieldset" role="group" aria-labelledby="profile-avatar-title">
           <header class="profile-section-header">
             <h2 class="profile-section-title" id="profile-avatar-title">Avatar</h2>
