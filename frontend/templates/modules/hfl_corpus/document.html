@@ -210,7 +210,7 @@
         busy = true;
         buttons.forEach(item => { item.disabled = true; });
         const label = button.textContent;
-        button.textContent = action === 'archive' ? 'Archiving…' : 'Adding to secret…';
+        button.textContent = action === 'archive' ? 'Archiving…' : 'Making secret…';
         status.hidden = true;
         try {
           const send = () => fetch(window.location.pathname.replace('/document/', '/entry-action/'), {

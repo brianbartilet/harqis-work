@@ -315,7 +315,7 @@ def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
         edit = (f'<button type="button" class="corpus-followup-action" '
                 f'data-entry-edit="{html.escape(entry.anchor, quote=True)}" '
                 'aria-label="Edit this entry in the document">Edit entry</button>')
-        for operation, label in [('archive', 'Archive entry'), ('secret', 'Add to secret')]:
+        for operation, label in [('archive', 'Archive entry'), ('secret', 'Make secret')]:
             if operation == 'secret' and is_secret_entry(entry, protected_tags):
                 continue
             edit += (f'<button type="button" class="corpus-followup-action" '
