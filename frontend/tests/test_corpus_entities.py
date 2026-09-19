@@ -365,7 +365,11 @@ def test_entry_action_links_to_original_evidence(corpus, authenticated_client, m
     assert url.path == '/hfl-corpus'
     assert parse_qs(url.query) == {'source_path': [row['path']], 'source_entry': [row['id']]}
     row['text'] = item.text = '2026-09-01 10:00\nWhat happened: Legacy entry'
-    assert authenticated_client.get('/api/hfl/entities/entry/hfl-action-test', params=params).json()['action_url'] == ''
+    legacy_url = authenticated_client.get('/api/hfl/entities/entry/hfl-action-test', params=params).json()['action_url']
+    legacy_id = parse_qs(urlparse(legacy_url).query)['source_entry'][0]
+    from modules.hfl_corpus.timeline import entry_evidence_id
+    assert legacy_id == entry_evidence_id(item.text)
+    assert legacy_id.startswith('hfl-legacy-evidence-')
 
 
 def test_enrichment_propagates_batches_entities_sources_and_dates(corpus, monkeypatch):

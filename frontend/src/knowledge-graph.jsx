@@ -3,7 +3,8 @@ import {exampleGraph} from './knowledge-graph-example.js';
 import React, {useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import ForceGraph2D from 'react-force-graph-2d';
-import {forceCollide, forceX, forceY} from 'd3-force-3d';
+import {configureDragForces, releaseDragNeighbors, settleDragNodes} from './graph-drag.mjs';
+import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffset, phaseFor} from './graph-presets.mjs';
 // Bundled locally. Graph data is fetched only from the authenticated HARQIS API.
 (() => {
   'use strict';
@@ -27,9 +28,10 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
   const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3'};
   const color = kind => palette[kind] || '#e9c96c';
   const defaultLabelKinds = new Set(['sources', 'people', 'tools', 'companies']);
-  let data = {nodes:[],edges:[]}, nodes = [], edges = [], selected = null, enabled = new Set();
+  let data = {nodes:[],edges:[]}, nodes = [], edges = [], selected = null, enabled = new Set(['entries','sources','daily','people','companies','tools','topics','objects']);
   let exampleMode=new URLSearchParams(location.search).get('example')==='1';
   let requestVersion=0, requestController=null, backgroundController=null, appliedParams=null, graphSignature='', lastInteraction=0;
+  const activePointers=new Set();
   const signature=value=>JSON.stringify(value,(key,item)=>key==='locator'?undefined:item);
   const selectedSources=new Set();
   let loading=false, graphData={nodes:[],links:[]}, graphApi=null, active=null, focusId=null;
@@ -39,24 +41,39 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
   const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const endpointId=value=>typeof value==='object'?value.id:value;
   const duration=reducedMotion?0:500;
-  const storageKey='harqis.graph-view.v1:' + document.querySelector('[data-view-owner]').dataset.viewOwner;
-  let savedViews={},saveTimer,restoring=false;
-  const preferencesKey=storageKey + ':preferences';
-  let namedViews=[],currentView=null,pendingState=null,dirty=false,viewOperation=false,editVersion=0;
-  function markDirty(){if(!restoring){editVersion++;dirty=true;$('dirty').textContent='Unsaved changes';}}
-  function savePreferences(){markDirty();}
-  const viewUrl='/api/hfl/graph-views';
-  async function viewRequest(url,method='GET',body){
-    const response=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,cache:'no-store'});
-    if(!response.ok){const value=await response.json().catch(()=>({}));throw Error(typeof value.detail==='string'?value.detail:'Saved views unavailable. Please retry.');}
-    return response.json();
+  let preset='sources', animationMode='off', motionTime=0, transition=null, motionSettling=false;
+  const animationKey='hfl:graph:animation:'+document.querySelector('.kg-shell').dataset.viewOwner;
+  const detailKey='hfl:graph:detail:'+document.querySelector('.kg-shell').dataset.viewOwner;
+  function saveDetail(){try {localStorage.setItem(detailKey,$('density').value);} catch {}}
+  try {
+    const detail=localStorage.getItem(detailKey);
+    if(['100','500','1000','0'].includes(detail))$('density').value=detail;
+  } catch {}
+  function savedAnimation(){
+    try {const mode=localStorage.getItem(animationKey);return !reducedMotion&&['off','breathing','ripple','drift'].includes(mode)?mode:'off';}
+    catch {return 'off';}
   }
-  function viewOptions(){
-    $('saved-views').replaceChildren(new Option('Unsaved view',''));
-    namedViews.forEach(view=>$('saved-views').add(new Option(view.name,view.id)));
-    $('saved-views').value=currentView?.id||'';
-    $('rename').disabled=$('delete').disabled=!currentView;
+  let layoutTargets=new Map(), lastMotionFrame=0, lastClock=0;
+  let layoutSeed=Math.random();
+  let draggedNode=null, dragNodes=new Set();
+  function followDrag(node){
+    const starting=draggedNode!==node;
+    if(starting&&transition){
+      transition=null;
+      for(const n of nodes)layoutTargets.set(n.id,{...layoutTargets.get(n.id),x:n.x,y:n.y});
+    }
+    draggedNode=node;
+    if(starting){releaseDragNeighbors(node,nodes,edges,dragNodes);configureDragForces(graphApi,true);draw();}
+    lastInteraction=Date.now();
   }
+  function finishDrag(){
+    if(draggedNode||!dragNodes.size)return;
+    settleDragNodes(dragNodes,layoutTargets,(node,target)=>motionOffset(animationMode,target,motionTime,node.phase,preset==='timeline'&&target.anchor));
+    lastMotionFrame=performance.now();
+    dragNodes.clear();
+    draw();
+  }
+  const viewKey=()=>JSON.stringify([preset,[...enabled].sort(),focusId]);
   function syncDates(){for(const id of ['since','until'])$(id).disabled=$('rolling').value!=='0';}
   function applyRollingDates(params){
     const days=Number(params.get('rolling'));if(!days)return;
@@ -66,151 +83,93 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
   }
   function requestParams(){
     const params=new URLSearchParams({since:$('since').value,until:$('until').value,rolling:$('rolling').value,limit:$('density').value,query:$('search').value,shared:String($('shared').checked)});
+    const context=window.activityModals?.context();if(context)params.set('context',context);
     selectedSources.forEach(source=>params.append('sources',source));applyRollingDates(params);return params;
   }
-  function stateSnapshot(){
-    saveView();const layout=savedViews[graphData.viewKey]||{};
-    return {density:$('density').value,query:$('search').value,sources:[...selectedSources],since:$('since').value,until:$('until').value,
-      rolling:Number($('rolling').value),shared:$('shared').checked,group:$('group').value,enabled:[...enabled],focus:focusId,
-      layout:{positions:layout.positions||{},center:layout.center||{},zoom:layout.zoom||1}};
-  }
-  function applyState(state){
-    for(const id of ['density','since','until','group','rolling'])$(id).value=String(state[id]??(id==='rolling'?0:''));
-    $('search').value=state.query||'';$('shared').checked=state.shared;
-    selectedSources.clear();state.sources.forEach(value=>selectedSources.add(value));syncDates();sourceOptions(data.sources||[]);
-    pendingState=state;enabled=new Set(state.enabled);focusId=state.focus;dirty=false;$('dirty').textContent='';
-  }
-  function discardEdits(){return !dirty||window.confirm('Discard unsaved changes to this view?');}
-  async function switchView(id,initial=false){
-    if(viewOperation&&!initial){viewOptions();return;}
-    if(!initial&&!discardEdits()){viewOptions();return;}
-    backgroundController?.abort();requestController?.abort();requestVersion++;viewOperation=true;
-    try{
-      const result=await viewRequest(viewUrl);namedViews=result.views;
-      const view=namedViews.find(item=>item.id===id);
-      if(view){await viewRequest(viewUrl+'/'+view.id+'/select','POST');currentView=view;applyState(view.state);}
-      else {currentView=null;applyState({density:'100',query:'',sources:[],since:'',until:'',rolling:0,shared:true,group:'relationships',enabled:['entries','sources','daily','people','companies','tools','topics','objects'],focus:null,layout:{}});}
-      viewOptions();await load();
-    }catch(error){$('dirty').textContent=error.message;viewOptions();}
-    finally{viewOperation=false;}
-  }
-  async function persistView(asNew=false,renameOnly=false){
-    if(loading||viewOperation)return;
-    let name=currentView?.name;
-    if(asNew||!name||renameOnly){name=window.prompt('View name',name||'My activity');if(!name?.trim())return;}
-    viewOperation=true;
-    const actionButton=$(renameOnly?'rename':asNew?'save-as':'save');
-    function feedback(state,message){
-      $('save-feedback').hidden=false;$('save-feedback').dataset.state=state;
-      $('save-feedback-text').textContent=message;
-    }
-    feedback('saving',renameOnly?'Renaming view…':'Saving view…');
-    actionButton.setAttribute('aria-busy','true');
-    for(const id of ['save','save-as','rename','delete','import','saved-views'])$(id).disabled=true;
-    try{
-      // Paint feedback before serializing a large graph layout.
-      await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
-      const state=renameOnly?currentView.state:stateSnapshot(),id=asNew?null:currentView?.id,savingVersion=editVersion;
-      const result=await viewRequest(viewUrl+(id?'/'+id:''),id?'PUT':'POST',{name:name.trim(),state,revision:id?currentView.revision:0});
-      currentView=result;namedViews=namedViews.filter(item=>item.id!==result.id);namedViews.push(result);viewOptions();
-      if(!renameOnly&&savingVersion===editVersion){dirty=false;$('dirty').textContent='Saved';}else if(!dirty)$('dirty').textContent='Renamed';
-      feedback('success',(renameOnly?'View renamed: ':'View saved: ')+result.name+(dirty?' · Newer changes are not saved.':''));
-    }catch(error){$('dirty').textContent=error.message;feedback('error','View not saved. '+error.message);}
-    finally{
-      viewOperation=false;actionButton.removeAttribute('aria-busy');
-      for(const id of ['save','save-as','import','saved-views'])$(id).disabled=false;
-      viewOptions();
-    }
-  }
-  async function initializeViews(){
-    try{
-      const result=await viewRequest(viewUrl);namedViews=result.views;viewOptions();
-      try{$('import').hidden=!localStorage.getItem(preferencesKey);}catch{}
-      if(result.last_used)await switchView(result.last_used,true);else await load();
-    }catch(error){$('dirty').textContent=error.message;await load();}
-  }
-  $('saved-views').onchange=()=>switchView($('saved-views').value);
-  $('save').onclick=()=>persistView();$('save-as').onclick=()=>persistView(true);$('rename').onclick=()=>persistView(false,true);
-  $('delete').onclick=async()=>{
-    if(!currentView||viewOperation||!window.confirm('Delete this saved view?'))return;
-    viewOperation=true;
-    try{await viewRequest(viewUrl+'/'+currentView.id+'?revision='+currentView.revision,'DELETE');dirty=false;await switchView('',true);}
-    catch(error){$('dirty').textContent=error.message;}finally{viewOperation=false;}
-  };
-  $('import').onclick=async()=>{
-    if(!discardEdits())return;restorePreferences();$('rolling').value='0';syncDates();
-    try{
-      const legacy=JSON.parse(localStorage.getItem(storageKey)||'{}');
-      const prefix=[exampleMode,$('search').value,$('density').value,[...selectedSources].sort(),$('since').value,$('until').value,$('shared').checked,$('group').value];
-      const match=Object.entries(legacy).sort((a,b)=>(b[1].time||0)-(a[1].time||0)).find(([key])=>JSON.stringify(JSON.parse(key).slice(0,8))===JSON.stringify(prefix));
-      if(match){const key=JSON.parse(match[0]);pendingState={enabled:key[8],focus:key[9],layout:match[1]};}
-    }catch{}
-    currentView=null;viewOptions();await load();markDirty();$('import').hidden=true;
-  };
   $('rolling').onchange=syncDates;
-  document.querySelector('.kg-shell').addEventListener('change',event=>{if(event.target.closest('.kg-main-toolbar,.kg-filter-drawer'))markDirty();});
-  $('search').addEventListener('input',markDirty);
-  // Navigation discards local edits. Back/forward cache restores must also
-  // reload the last saved view instead of reviving an unsaved graph.
   window.addEventListener('pageshow',event=>{if(event.persisted)window.location.reload();});
-  function restorePreferences() {
-    try {
-      const value=JSON.parse(localStorage.getItem(preferencesKey)||'null');if(!value)return;
-      const density=({'120':'100','300':'500','800':'1000'})[value.density]||value.density;
-      if(['100','500','1000','0'].includes(density))$('density').value=density;
-      if(typeof value.query==='string')$('search').value=value.query.slice(0,200);
-      if(Array.isArray(value.sources))value.sources.filter(s=>typeof s==='string').forEach(s=>selectedSources.add(s));
-      for(const field of ['since','until'])if(typeof value[field]==='string')$(field).value=value[field];
-      if(typeof value.shared==='boolean')$('shared').checked=value.shared;
-      if(['relationships','source','date'].includes(value.group))$('group').value=value.group;
-    }catch{}
-  }
-  const viewKey=()=>JSON.stringify([exampleMode,$('search').value,$('density').value,[...selectedSources].sort(),$('rolling').value,$('since').value,$('until').value,$('shared').checked,$('group').value,[...enabled].sort(),focusId]);
-  function saveView() {
-    clearTimeout(saveTimer);
-    if(loading||restoring||!graphApi||!graphData.nodes.length||!graphData.viewKey)return;
-    const positions={};
-    graphData.nodes.forEach(n=>{if(Number.isFinite(n.x)&&Number.isFinite(n.y))positions[n.id]={x:n.x,y:n.y,pinned:n.fx!=null&&n.fy!=null};});
-    const center=graphApi.screen2GraphCoords(host.clientWidth/2,host.clientHeight/2);
-    savedViews[graphData.viewKey]={positions,center,zoom:graphApi.zoom(),time:Date.now()};
-    const keys=Object.keys(savedViews).sort((a,b)=>savedViews[b].time-savedViews[a].time);
-    keys.slice(10).forEach(key=>delete savedViews[key]);
-
-  }
-  function scheduleSave(){if(!restoring){clearTimeout(saveTimer);saveTimer=setTimeout(saveView,500);}}
-  window.addEventListener('pagehide',saveView);
-  const validViewport=view=>view&&Number.isFinite(view.zoom)&&view.zoom>0&&Number.isFinite(view.center?.x)&&Number.isFinite(view.center?.y);
   function fit(animated=true){
     if(!graphApi||!graphData.nodes.length||graphData.nodes.some(n=>!Number.isFinite(n.x)||!Number.isFinite(n.y)))return;
     const bounds=graphApi.getGraphBbox();
     if(bounds&&[...bounds.x,...bounds.y].every(Number.isFinite))graphApi.zoomToFit(animated?duration:0,70);
   }
-  function zoom(factor){markDirty();if(graphApi)graphApi.zoom(graphApi.zoom()*factor,duration);}
+  function zoom(factor){lastInteraction=Date.now();if(graphApi)graphApi.zoom(graphApi.zoom()*factor,duration);}
+  function fitTargets(animated=true,current=false){
+    if(!graphApi||!layoutTargets.size)return;
+    let left=Infinity,right=-Infinity,top=Infinity,bottom=-Infinity;
+    const positions=current?new Map(nodes.map(n=>[n.id,{x:n.x,y:n.y}])):layoutTargets;
+    const points=presetFitPoints(nodes,positions,preset);
+    for(const p of points){left=Math.min(left,p.x);right=Math.max(right,p.x);top=Math.min(top,p.y);bottom=Math.max(bottom,p.y);}
+    const scale=Math.max(.02,Math.min(4,(host.clientWidth-100)/Math.max(100,right-left),(host.clientHeight-100)/Math.max(100,bottom-top)));
+    graphApi.zoom(scale,animated&&!reducedMotion?1000:0);
+    graphApi.centerAt((left+right)/2,(top+bottom)/2,animated&&!reducedMotion?1000:0);
+  }
+  function updatePresetMenu(notice=''){
+    host.dataset.preset=preset;
+    document.querySelectorAll('[data-preset]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.preset===preset)));
+    $('view-status').textContent=PRESETS[preset]+' preset';
+    $('preset-notice').hidden=!notice;$('preset-notice').textContent=notice;
+  }
+  function choosePreset(next){
+    draggedNode=null;dragNodes.clear();
+    layoutSeed=Math.random();
+    randomizePresetNodes(nodes,layoutSeed);
+    if(graphApi)configureDragForces(graphApi);
+    const layout=presetLayout(nodes,edges,next,layoutSeed);preset=layout.preset;layoutTargets=layout.positions;
+    selected=null;active=null;transition={elapsed:0,from:new Map(nodes.map(n=>[n.id,{x:n.x,y:n.y}]))};
+    nodes.forEach(n=>{n.manual=false;});motionTime=0;
+    updatePresetMenu(layout.notice);setViewsOpen(false,true);select(null);
+    fitTargets();
+  }
+  function setAnimation(mode,persist=true){
+    animationMode=mode;motionSettling=true;
+    const label=mode[0].toUpperCase()+mode.slice(1);
+    $('animation-pill').textContent=label;
+    $('animation-pill').dataset.mode=mode;
+    if(persist)try {localStorage.setItem(animationKey,mode);} catch {}
+    document.querySelectorAll('[data-animation]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.animation===mode)));
+    host.dataset.animation=mode;
+  }
+  function motionPaused(){return document.hidden||loading||selected!==null||activePointers.size>0||Date.now()-lastInteraction<250||
+    !!document.querySelector('dialog[open]:not(#activity-standalone)')||!$('views-panel').hidden||!$('animation-panel').hidden;}
+  function animate(now){
+    requestAnimationFrame(animate);
+    const delta=Math.min(100,now-(lastClock||now));lastClock=now;
+    const paused=motionPaused(),state=paused?'Paused':animationMode==='off'?'Motion is off':PRESETS[preset]+' · '+animationMode;
+    if($('animation-status').textContent!==state)$('animation-status').textContent=state;
+    host.dataset.motion=paused?'paused':animationMode;
+    if(paused||draggedNode||dragNodes.size||!graphApi||(!transition&&animationMode==='off'&&!motionSettling)){lastMotionFrame=now;return;}
+    motionTime+=delta;if(transition)transition.elapsed+=delta;
+    if(now-lastMotionFrame<(nodes.length>1000?1000/15:1000/30))return;
+    const elapsed=Math.min(100,now-lastMotionFrame);lastMotionFrame=now;
+    const progress=transition?(reducedMotion?1:Math.min(1,transition.elapsed/1000)):1,ease=progress*progress*(3-2*progress);
+    let unsettled=false;
+    for(const n of nodes){
+      if(n.manual)continue;
+      const target=layoutTargets.get(n.id);if(!target)continue;
+      const offset=motionOffset(animationMode,target,motionTime,n.phase,preset==='timeline'&&target.anchor);
+      const from=transition?.from.get(n.id)||target;
+      const x=from.x+(target.x-from.x)*ease+offset.x,y=from.y+(target.y-from.y)*ease+offset.y;
+      const blend=transition||reducedMotion?1:1-Math.exp(-elapsed/120);
+      n.x+=(x-n.x)*blend;n.y+=(y-n.y)*blend;n.fx=n.x;n.fy=n.y;
+      if(Math.abs(x-n.x)+Math.abs(y-n.y)>.05)unsettled=true;
+    }
+    if(progress===1)transition=null;
+    motionSettling=unsettled;
+    graphApi.d3ReheatSimulation();
+  }
   function Graph({data,activeId,selectedId}) {
-    const ref=useRef(),needsFit=useRef(!data.background&&!data.viewport);
+    const ref=useRef();
     const [size,setSize]=useState({width:host.clientWidth,height:host.clientHeight});
     useEffect(()=>{
-      const observer=new ResizeObserver(()=>{setSize({width:host.clientWidth,height:host.clientHeight});});
+      const observer=new ResizeObserver(()=>setSize({width:host.clientWidth,height:host.clientHeight}));
       observer.observe(host);return()=>observer.disconnect();
     },[]);
     useEffect(()=>{
-      graphApi=ref.current;needsFit.current=!data.background&&!data.viewport;
-      ref.current.d3Force('charge').strength(-230);
-      ref.current.d3Force('link').distance(105);
-      ref.current.d3Force('collide',forceCollide(n=>n.radius+30).iterations(2));
-      ref.current.d3Force('x',forceX(n=>n.clusterX||0).strength(.065));
-      ref.current.d3Force('y',forceY(n=>n.clusterY||0).strength(.065));
-      ref.current.d3ReheatSimulation();
+      graphApi=ref.current;
+      configureDragForces(graphApi);
+      if(data.fitOnce){data.fitOnce=false;requestAnimationFrame(()=>fitTargets(false));}
     },[data]);
-    useEffect(()=>{
-      const timer=setTimeout(()=>{
-        const saved=data.viewport;
-        if(saved){
-          restoring=true;needsFit.current=false;ref.current.zoom(saved.zoom,0);ref.current.centerAt(saved.center.x,saved.center.y,0);restoring=false;
-          showInfo('view-status','Saved layout restored.');
-        }
-      },100);return()=>clearTimeout(timer);
-    },[size,data]);
     const near=connected(activeId);
     const isLinked=link=>activeId&&(endpointId(link.source)===activeId||endpointId(link.target)===activeId);
     function paintNode(node,ctx,globalScale){
@@ -219,6 +178,11 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
       const radius=node.radius/globalScale;
       const ink=color(node.kind),emphasis=node.id===activeId||node.id===selectedId;
       ctx.save();ctx.globalAlpha=visible?1:.075;
+      // Thousands of per-entry gradients dominate mobile drawing time. Keep
+      // detailed lighting for hubs and selected nodes, and compact activity dots.
+      if(data.nodes.length>1000&&node.kind==='entries'&&!emphasis){
+        ctx.fillStyle=ink;ctx.beginPath();ctx.arc(node.x,node.y,radius,0,2*Math.PI);ctx.fill();ctx.restore();return;
+      }
       const glow=ctx.createRadialGradient(node.x,node.y,0,node.x,node.y,(emphasis?30:18)/globalScale);
       glow.addColorStop(0,ink+(emphasis?'75':'35'));glow.addColorStop(1,ink+'00');
       ctx.fillStyle=glow;ctx.beginPath();ctx.arc(node.x,node.y,(emphasis?30:18)/globalScale,0,2*Math.PI);ctx.fill();
@@ -240,8 +204,8 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
         const origin=ref.current.screen2GraphCoords(0,0);
         const candidates=data.nodes.filter(n=>!activeId||n.id===activeId||n.id===selectedId||near.has(n.id)).map(n=>({
           id:n.id,label:n.label,kind:n.kind,x:(n.x-origin.x)*scale,y:(n.y-origin.y)*scale,
-          radius:n.radius,degree:n.visibleDegree,preferred:defaultLabelKinds.has(n.kind),
-          pinned:n.fx!=null&&n.fy!=null,emphasis:n.id===activeId||n.id===selectedId
+          radius:n.radius,degree:n.visibleDegree,preferred:n.kind===(preset==='timeline'?'daily':preset)||defaultLabelKinds.has(n.kind),
+          pinned:!!n.manual,emphasis:n.id===activeId||n.id===selectedId
         }));
         ctx.save();
         const labels=placeLabels(candidates,{width:size.width,height:size.height,zoom:scale},(text,font)=>{
@@ -261,20 +225,17 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
       nodePointerAreaPaint={(node,paint,ctx)=>{ctx.fillStyle=paint;ctx.beginPath();ctx.arc(node.x,node.y,(node.radius+4)/(ref.current?.zoom()||1),0,2*Math.PI);ctx.fill();}}
       linkColor={link=>color(link.target.kind)+(activeId?(isLinked(link)?'df':'07'):(data.nodes.length<=35?'70':'32'))}
       linkWidth={link=>isLinked(link)?2:data.nodes.length<=35?1.1:.65} linkCurvature={.16}
-      linkDirectionalParticles={link=>!reducedMotion&&isLinked(link)?2:0}
+      linkDirectionalParticles={0}
       linkDirectionalParticleWidth={2} linkDirectionalParticleSpeed={.004}
-      onZoom={()=>{needsFit.current=false;if(Date.now()-lastInteraction<500)markDirty();scheduleSave();}}
-      onNodeHover={node=>{host.style.cursor=node?'pointer':'grab';highlight(node?.id||selected);}}
+      onZoom={()=>{if(activePointers.size)lastInteraction=Date.now();}}
+      onNodeHover={node=>{host.style.cursor=node?'pointer':'grab';if(!touchViewport)highlight(node?.id||selected);}}
       onNodeClick={node=>select(node.id)} onBackgroundClick={()=>select(null)}
-      onNodeDrag={node=>{
-        if(data.background||data.restored){data.background=false;data.restored=false;draw();}
-        // Neighbors must be free to follow, including ones moved in an earlier drag.
-        const neighbors=connected(node.id);
-        data.nodes.forEach(other=>{if(neighbors.has(other.id)){delete other.fx;delete other.fy;}});
-      }}
-      onNodeDragEnd={node=>{markDirty();node.fx=node.x;node.fy=node.y;ref.current.d3ReheatSimulation();scheduleSave();}}
-      warmupTicks={data.background||data.restored?0:data.nodes.length>1000?15:reducedMotion?150:80} cooldownTicks={data.background||data.restored?0:reducedMotion?0:data.nodes.length>1000?40:100}
-      onEngineStop={()=>{if(needsFit.current&&!data.viewport&&!data.background){needsFit.current=false;fit(false);}scheduleSave();}}
+      onNodeDrag={followDrag}
+      onNodeDragEnd={node=>{draggedNode=null;node.manual=true;layoutTargets.set(node.id,{x:node.x,y:node.y,anchor:false});node.fx=node.x;node.fy=node.y;draw();graphApi.d3ReheatSimulation();}}
+      warmupTicks={0} cooldownTicks={reducedMotion||(!draggedNode&&!dragNodes.size)?0:Infinity}
+      d3AlphaMin={.001}
+      onEngineStop={finishDrag}
+
     />;
   }
   function draw(){root.render(<Graph data={graphData} activeId={active} selectedId={selected}/>);}
@@ -357,18 +318,20 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
     const heading=document.createElement('h2'),description=document.createElement('p');
     const eyebrow=document.createElement('span');eyebrow.className='kg-eyebrow';eyebrow.textContent=n?kindLabel(n.kind):'Your knowledge, connected';$('detail').append(eyebrow);
     heading.textContent=n?n.label:'';
-    description.textContent=n?[kindLabel(n.kind),n.date,n.source,near.size+' visible connections'].filter(Boolean).join(' · '):'Select a source to explore its linked entries and entities.';
+    description.textContent=n?[kindLabel(n.kind),n.date,n.source,near.size+' visible connections'].filter(Boolean).join(' · '):'Select an orb to explore its linked entries and entities.';
     if(n)$('detail').append(heading);$('detail').append(description);
     if(n?.href&&n.kind==='entries') {const button=document.createElement('button');button.textContent='Open entry';button.className='kg-open-entry';button.onclick=()=>openEntry(n.id.replace(/^entry:/,''),n.locator);$('detail').append(button);}
-    if(n){const focus=document.createElement('button');focus.textContent='Focus on this connection';focus.className='kg-focus-button';focus.onclick=()=>{focusId=n.id;markDirty();render();};$('detail').append(focus);}
-    if(focusId){const back=document.createElement('button');back.textContent='Back to overview';back.onclick=()=>{focusId=null;markDirty();render();};$('detail').append(back);}
-    if(n){const clear=document.createElement('button');clear.textContent='Show sources';clear.onclick=()=>select(null);$('detail').append(clear);}
-    const items=n?nodes.filter(node=>near.has(node.id)):nodes.filter(node=>node.kind==='sources');
-    $('list-title').textContent=(n?'Linked nodes':'Sources')+' · '+items.length;
+    if(n){const focus=document.createElement('button');focus.textContent='Focus on this connection';focus.className='kg-focus-button';focus.onclick=()=>{focusId=n.id;render();};$('detail').append(focus);}
+    if(focusId){const back=document.createElement('button');back.textContent='Back to overview';back.onclick=()=>{focusId=null;render();};$('detail').append(back);}
+    if(n){const clear=document.createElement('button');clear.textContent='Clear selection';clear.onclick=()=>select(null);$('detail').append(clear);}
+    const items=n?nodes.filter(node=>near.has(node.id)):nodes.filter(node=>node.kind===(preset==='timeline'?'daily':preset));
+    $('list-title').textContent=(n?'Linked nodes':PRESETS[preset])+' · '+items.length;
     nodeList(items);
   }
   function render(preserveLayout=false) {
+    draggedNode=null;dragNodes.clear();
     const previousNodes=new Map(graphData.nodes.map(node=>[node.id,node]));
+    const previousTargets=layoutTargets;
     $('legend').querySelectorAll('button[data-kind]').forEach(button=>button.setAttribute('aria-pressed',String(enabled.has(button.dataset.kind))));
     $('types').querySelectorAll('input[data-kind]').forEach(input=>{input.checked=enabled.has(input.dataset.kind);});
     const degrees=new Map();data.edges.forEach(e=>{degrees.set(e.source,(degrees.get(e.source)||0)+1);degrees.set(e.target,(degrees.get(e.target)||0)+1);});
@@ -396,36 +359,31 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
     edges=data.edges.filter(e=>byId.has(e.source)&&byId.has(e.target)).map(e=>({...e,a:byId.get(e.source),b:byId.get(e.target)}));
     nodes.forEach(n=>n.visibleDegree=0);edges.forEach(e=>{e.a.visibleDegree++;e.b.visibleDegree++;});
     nodes.forEach(n=>{const smallGraph=nodes.length<=35;n.radius=n.kind==='entries'?(smallGraph?7:4.5):(smallGraph?10:4)+4*Math.log2(1+n.visibleDegree);});
-    // Separate neighborhoods around real, highly connected entity anchors.
-    const anchors=[...nodes].filter(n=>n.kind!=='entries').sort((a,b)=>b.visibleDegree-a.visibleDegree).slice(0,4);
-    const adjacency=new Map();edges.forEach(e=>{for(const [a,b] of [[e.source,e.target],[e.target,e.source]]){if(!adjacency.has(a))adjacency.set(a,[]);adjacency.get(a).push(b);}});
-    nodes.forEach(n=>{const adjacent=adjacency.get(n.id)||[];const anchor=anchors.find(a=>a.id===n.id||adjacent.includes(a.id));const index=anchors.indexOf(anchor);n.clusterX=index<0?0:Math.cos(index*Math.PI/2)*220;n.clusterY=index<0?0:Math.sin(index*Math.PI/2)*160;});
-    const grouping=$('group').value;
-    if(grouping!=='relationships'){
-      const groupOf=n=>grouping==='source'?n.source:(n.date||'').slice(0,7);
-      const groups=[...new Set(nodes.filter(n=>n.kind==='entries').map(groupOf).filter(Boolean))].sort();
-      nodes.forEach(n=>{let value=groupOf(n);if(!value){const neighbor=edges.find(e=>e.target===n.id);value=neighbor?groupOf(neighbor.a):'';}const i=groups.indexOf(value);n.clusterX=i<0?0:Math.cos(i*2*Math.PI/Math.max(1,groups.length))*350;n.clusterY=i<0?0:Math.sin(i*2*Math.PI/Math.max(1,groups.length))*250;});
+    const anchors=nodes.filter(n=>n.kind!=='entries').sort((a,b)=>b.visibleDegree-a.visibleDegree).slice(0,4);
+    const adjacency=new Map(nodes.map(n=>[n.id,new Set()]));
+    for(const e of edges){adjacency.get(e.source).add(e.target);adjacency.get(e.target).add(e.source);}
+    for(const n of nodes){
+      const index=anchors.findIndex(a=>a.id===n.id||adjacency.get(n.id).has(a.id));
+      n.clusterX=index<0?0:Math.cos(index*Math.PI/2)*220;
+      n.clusterY=index<0?0:Math.sin(index*Math.PI/2)*160;
     }
-    const key=viewKey(),saved=savedViews[key];
-    if(saved?.positions)nodes.forEach(n=>{const position=saved.positions[n.id];if(position&&Number.isFinite(position.x)&&Number.isFinite(position.y)){n.x=position.x;n.y=position.y;if(position.pinned){n.fx=n.x;n.fy=n.y;}else{delete n.fx;delete n.fy;}}});
-    if(preserveLayout){
-      nodes.forEach((node,index)=>{
-        const previous=previousNodes.get(node.id);
-        if(previous){node.x=previous.x;node.y=previous.y;node.vx=0;node.vy=0;if(previous.fx!=null){node.fx=previous.fx;node.fy=previous.fy;}else{delete node.fx;delete node.fy;}}
-        else {const edge=edges.find(edge=>edge.source===node.id||edge.target===node.id),neighbor=edge&&previousNodes.get(edge.source===node.id?edge.target:edge.source);node.x=(neighbor?.x||0)+60*Math.cos(index*2.4);node.y=(neighbor?.y||0)+60*Math.sin(index*2.4);}
-      });
-    }
-    graphData={nodes,background:preserveLayout,restored:!!saved?.positions,viewport:validViewport(saved)?{zoom:saved.zoom,center:{...saved.center}}:null,viewKey:key,links:edges.map(e=>({source:e.source,target:e.target}))};
+    if(!preserveLayout){layoutSeed=Math.random();randomizePresetNodes(nodes,layoutSeed);}
+    const layout=presetLayout(nodes,edges,preset,layoutSeed);preset=layout.preset;layoutTargets=layout.positions;
+    nodes.forEach(node=>{
+      const previous=previousNodes.get(node.id),target=layoutTargets.get(node.id);
+      if(preserveLayout&&previous){Object.assign(node,{x:previous.x,y:previous.y,manual:previous.manual});layoutTargets.set(node.id,previousTargets.get(node.id)||{x:node.x,y:node.y});}
+      else {node.x=target.x;node.y=target.y;}
+      node.fx=node.x;node.fy=node.y;node.phase=phaseFor(node.id);
+    });
+    transition=null;if(!preserveLayout)motionTime=0;
+    graphData={nodes,fitOnce:!preserveLayout,links:edges.map(e=>({source:e.source,target:e.target}))};
+    updatePresetMenu(layout.notice);
     $('map-count').textContent=nodes.length+' nodes · '+edges.length+' links';
     showInfo('status',nodes.length+' / '+(data.total_nodes ?? data.nodes.length)+' matching nodes · '+Math.max(0,(data.total_nodes??data.nodes.length)-data.nodes.length)+' outside detail limit · '+(data.nodes.length-nodes.length)+' hidden by view filters · '+edges.length+' connections'+(data.omitted_sources?' · '+data.omitted_sources+' sources outside limit':'')+(limited||data.truncated?' · '+$('density').selectedOptions[0].text.split(' · ')[0]+'; search or increase detail to explore more.':'')+(!nodes.length?' · No matching nodes. Clear your search or change the filters.':''),!nodes.length);
     select(byId.has(selected)?selected:null);
   }
   function configureData(next,preserveLayout=false) {
     data=next;
-    if(pendingState){
-      enabled=new Set(pendingState.enabled);focusId=pendingState.focus;selected=null;
-      savedViews[viewKey()]=pendingState.layout;pendingState=null;
-    } else if(!enabled.size&&!currentView&&!graphData.viewKey){enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects']);}
     if(focusId&&!data.nodes.some(node=>node.id===focusId))focusId=null;
     if(selected&&!data.nodes.some(node=>node.id===selected))selected=null;
     const availableKinds=new Set(data.nodes.map(node=>node.kind));$('types').replaceChildren();
@@ -436,10 +394,10 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
       const item=document.createElement('li'),button=document.createElement('button'),dot=document.createElement('span');
       dot.className='kg-dot';dot.style.background=color(kind);dot.setAttribute('aria-hidden','true');
       button.type='button';button.dataset.kind=kind;button.title='Show or hide '+(legendLabels[kind]||kind.replaceAll('_',' ').toLowerCase());
-      button.onclick=()=>{saveView();enabled.has(kind)?enabled.delete(kind):enabled.add(kind);markDirty();render();};
+      button.onclick=()=>{enabled.has(kind)?enabled.delete(kind):enabled.add(kind);render();};
       button.append(dot,document.createTextNode(legendLabels[kind]||kind.replaceAll('_',' ').toLowerCase()));item.append(button);$('legend').append(item);
     });
-    [...availableKinds].sort().forEach(kind=>{const label=document.createElement('label'),input=document.createElement('input'),dot=document.createElement('span');input.type='checkbox';input.dataset.kind=kind;input.checked=true;input.onchange=()=>{input.checked?enabled.add(kind):enabled.delete(kind);markDirty();render();};dot.className='kg-dot';dot.style.background=color(kind);label.append(input,dot,document.createTextNode(kindLabel(kind)));$('types').append(label);});
+    [...availableKinds].sort().forEach(kind=>{const label=document.createElement('label'),input=document.createElement('input'),dot=document.createElement('span');input.type='checkbox';input.dataset.kind=kind;input.checked=true;input.onchange=()=>{input.checked?enabled.add(kind):enabled.delete(kind);render();};dot.className='kg-dot';dot.style.background=color(kind);label.append(input,dot,document.createTextNode(kindLabel(kind)));$('types').append(label);});
     render(preserveLayout);
   }
   function showMode() {
@@ -462,8 +420,9 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
     $('source-caption').textContent=selectedSources.size?selectedSources.size+' sources selected':'All sources';
   }
   async function load() {
+    delete $('info').dataset.error;
     backgroundController?.abort();
-    saveView();
+
     requestController?.abort(); const version=++requestVersion;
     if(exampleMode){setLoading(false);configureData(exampleGraph());return;}
     requestController=new AbortController(); setLoading(true);showInfo('status','Loading your graph…',true);
@@ -473,12 +432,16 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
       if(!response.ok)throw Error(response.status===401?'Sign in to view your knowledge graph.':'Graph could not load. Use Refresh to try again.');
       const next=await response.json();
       if(!exampleMode&&version===requestVersion){appliedParams=params.toString();graphSignature=signature(next);sourceOptions(next.sources||[]);configureData(next);}
-    } catch(error){if(!exampleMode&&version===requestVersion&&error.name!=='AbortError')showInfo('status',error.message,true);} finally{if(version===requestVersion){setLoading(false);}}
+    } catch(error){if(!exampleMode&&version===requestVersion&&error.name!=='AbortError'){$('info').dataset.error='true';showInfo('status',error.message,true);}} finally{if(version===requestVersion){setLoading(false);}}
   }
   // Poll only the applied query, without a loading overlay or interrupting interaction.
-  const busy=()=>document.hidden||loading||exampleMode||viewOperation||!$('views-panel').hidden||$('filter-drawer').open||$('entry-dialog').open||document.activeElement===$('search')||Date.now()-lastInteraction<500;
-  host.addEventListener('pointermove',event=>{if(event.buttons)lastInteraction=Date.now();});
-  host.addEventListener('pointerdown',()=>{lastInteraction=Date.now();});
+  const busy=()=>document.hidden||!!transition||dragNodes.size>0||activePointers.size>0||document.querySelector('.activity-modal[open]:not(#activity-standalone)')||loading||exampleMode||!$('views-panel').hidden||!$('animation-panel').hidden||$('filter-drawer').open||$('entry-dialog').open||document.activeElement===$('search')||Date.now()-lastInteraction<500;
+  host.addEventListener('pointermove',event=>{if(event.buttons||activePointers.size)lastInteraction=Date.now();});
+  host.addEventListener('pointerdown',event=>{activePointers.add(event.pointerId);lastInteraction=Date.now();},{capture:true});
+  for(const name of ['pointerup','pointercancel'])window.addEventListener(name,event=>{
+    if(activePointers.delete(event.pointerId))lastInteraction=Date.now();
+  },{capture:true});
+  window.addEventListener('blur',()=>activePointers.clear());
   host.addEventListener('wheel',()=>{lastInteraction=Date.now();},{passive:true});
   let refreshDelay=3000,nextRefresh=0;
   async function refreshInBackground(){
@@ -493,8 +456,6 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
       if(version!==requestVersion||key!==viewKey()||busy())return;
       const nextSignature=signature(next);
       if(nextSignature!==graphSignature){
-        saveView();const snapshot=savedViews[graphData.viewKey];
-        if(snapshot)savedViews[viewKey()]=snapshot;
         sourceOptions(next.sources||[]);configureData(next,true);graphSignature=nextSignature;
         $('live').textContent='Live · updated '+new Date().toLocaleTimeString();
       }
@@ -507,16 +468,32 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
   document.addEventListener('visibilitychange',()=>{if(!document.hidden){nextRefresh=0;refreshInBackground();}});
   window.addEventListener('pagehide',()=>{backgroundController?.abort();});
   let searchTimer;$('search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>exampleMode?render():load(),300);};
-  $('filter').onclick=()=>{$('filter-drawer').close();if(!exampleMode)load();};$('group').onchange=()=>{savePreferences();render();};
-  $('density').onchange=()=>exampleMode?render():load();$('shared').onchange=()=>exampleMode?render():load();$('in').onclick=()=>zoom(1.3);$('out').onclick=()=>zoom(1/1.3);$('fit').onclick=()=>{markDirty();fit();};$('reload').onclick=load;
-  $('reset').onclick=()=>{clearTimeout(saveTimer);delete savedViews[graphData.viewKey];graphData.viewKey=null;markDirty();
-    $('search').value='';$('density').value='100';$('rolling').value='0';$('since').value='';$('until').value='';selectedSources.clear();sourceOptions(data.sources||[]);syncDates();$('shared').checked=true;enabled=new Set(data.nodes.map(n=>n.kind));$('types').querySelectorAll('input').forEach(el=>el.checked=true);selected=null;focusId=null;exampleMode?render():load();};
+  $('filter').onclick=()=>{$('filter-drawer').close();if(!exampleMode)load();};
+  $('density').onchange=()=>{saveDetail();exampleMode?render():load();};$('shared').onchange=()=>exampleMode?render():load();$('in').onclick=()=>zoom(1.3);$('out').onclick=()=>zoom(1/1.3);$('fit').onclick=()=>{preset==='sources'?fit():fitTargets(true,true);};$('reload').onclick=load;
+  $('reset').onclick=()=>{
+    window.activityModals?.reset();preset='sources';setAnimation('off');
+    $('search').value='';$('density').value='100';$('rolling').value='0';$('since').value='';$('until').value='';
+    saveDetail();
+    selectedSources.clear();sourceOptions(data.sources||[]);syncDates();$('shared').checked=false;
+    enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects']);selected=null;focusId=null;exampleMode?render():load();
+  };
+
 
   function setViewsOpen(open,restoreFocus=false){
     $('views-panel').hidden=!open;$('open-views').setAttribute('aria-expanded',String(open));
     if(restoreFocus)$('open-views').focus();
   }
-  $('open-views').onclick=()=>setViewsOpen($('views-panel').hidden);
+  $('open-views').onclick=()=>{setAnimationOpen(false);setViewsOpen($('views-panel').hidden);};
+  document.querySelectorAll('[data-preset]').forEach(button=>button.onclick=()=>choosePreset(button.dataset.preset));
+  function setAnimationOpen(open,restoreFocus=false){
+    $('animation-panel').hidden=!open;$('open-animation').setAttribute('aria-expanded',String(open));
+    if(restoreFocus)$('open-animation').focus();
+  }
+  $('open-animation').onclick=()=>{setViewsOpen(false);setAnimationOpen($('animation-panel').hidden);};
+  document.querySelectorAll('[data-animation]').forEach(button=>button.onclick=()=>{setAnimation(button.dataset.animation);setAnimationOpen(false,true);});
+  document.addEventListener('click',event=>{if(!$('animation-menu').contains(event.target))setAnimationOpen(false);});
+  $('animation-menu').addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('animation-panel').hidden){event.preventDefault();event.stopPropagation();setAnimationOpen(false,true);}});
+  $('animation-menu').addEventListener('focusout',event=>{if(event.relatedTarget&&!$('animation-menu').contains(event.relatedTarget))setAnimationOpen(false);});
   document.addEventListener('click',event=>{if(!$('views-menu').contains(event.target))setViewsOpen(false);});
   $('views-menu').addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('views-panel').hidden){event.preventDefault();event.stopPropagation();setViewsOpen(false,true);}});
   $('views-menu').addEventListener('focusout',event=>{if(event.relatedTarget&&!$('views-menu').contains(event.relatedTarget))setViewsOpen(false);});
@@ -527,6 +504,14 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
   document.addEventListener('click',e=>{if(!$('source-menu').contains(e.target))$('source-menu').open=false;});
   document.addEventListener('keydown',e=>{if(e.key==='Escape')$('source-menu').open=false;});
   sourceOptions([]);
+  window.addEventListener('hfl:activity-scope',()=>{focusId=null;selected=null;load();});
+  $('entities').onclick=()=>{
+    const params=new URLSearchParams(appliedParams||requestParams());
+    const context=params.get('context')||'';params.delete('context');
+    window.activityModals.open('entities',context,params.toString());
+  };
   showMode();
-  initializeViews();
+  setAnimation(savedAnimation(),false);
+  requestAnimationFrame(animate);
+  load();
 })();

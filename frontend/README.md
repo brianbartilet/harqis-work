@@ -440,6 +440,14 @@ Markdown list; source corpus files are never rewritten.
 
 ### Activity Graph views
 
+Graph opens from Activity Corpus in a fullscreen, closable modal. It inherits
+the active workspace union and applied corpus search, tags, sources, and dates.
+Filters inside the modal remain local. Reset returns to the inherited context;
+All activity temporarily removes that context. The toolbar's Entities button
+opens a second modal scoped to the graph's applied activity filters, with its
+own All activity switch. Closing Entities preserves the graph position and
+filters; closing Graph preserves the corpus page. Direct URLs remain supported.
+
 `/hfl-corpus/graph` supports Overview (100 nodes), Expanded (500), Dense
 (1,000), and All matching nodes. All mode uses `limit=0` on the graph API and
 includes every matching node and connection. Capped views prioritize source
@@ -447,22 +455,32 @@ coverage, then recent entries and connected nodes, filling unused capacity.
 Counts distinguish matching nodes, the detail limit, and local view filters.
 Shared connections, dates, sources and search still apply in All mode.
 
-Open Views beside Filter to select a saved view, Save or Save as new, Rename,
-Delete, or import browser settings. The menu overlays the graph to save space.
-Views include filters, fixed or rolling dates, detail, grouping, visible node
-types, focus, positions, pins, zoom and pan. They live in the owner profile
-SQLite database through `/api/hfl/graph-views`, accessible to authenticated owner
-sessions across browsers using that backend. The last selected saved view opens
-on return. Changes require explicit Save; revision conflicts return HTTP 409.
-An optional Import browser view button copies legacy browser settings into an
-unsaved view without deleting the browser data.
+Views now contains five calculated **Presets**: Sources (the default on each
+open), Timeline (oldest dates on the left; initial zoom and Fit frame the latest 30 available days), People, Tools, and Companies.
+Sources surround activity; the entity presets bring highly connected target
+orbs toward the center. Missing target types fall back to Sources with a notice.
+Switching presets moves existing nodes into place over approximately one second
+and fits once, without re-fetching graph data. Shared connections only starts
+off. Existing saved-view records remain intact but the UI no longer reads or
+writes saved positions, and the old Group by control has been removed.
+
+The **Animation** dropdown offers Off (initial default), Breathing, Ripple, and Drift.
+A colored pill shows the selected mode, which is remembered per owner in this browser
+across modal openings and refreshes. Reset returns the preference to Off.
+Motion stays bounded around the preset positions; Timeline date anchors stay
+fixed. Node selection pauses motion until cleared. Touch gestures, dragging,
+drawers, nested Entities, and hidden tabs also pause it. Reduced-motion users
+get immediate preset changes and must explicitly enable ambient motion.
+Motion updates are capped at 30 per second, or 15 above 1,000 nodes; actual frame
+rates depend on graph size and device. Mobile uses a full-width animation menu.
+Manual node positions last only until the next preset is applied.
 
 Visible, idle graphs check the applied query approximately every three seconds
 after the preceding request completes. The current corpus reader has no remote
 push feed, so updates use adaptive polling, slowing to at most a 60-second gap
 after expensive reads or failures. Hidden tabs and active interactions defer
 updates. Returning to the tab checks again. New and removed nodes preserve the
-surviving layout and viewport without rewriting the saved view. Rolling windows
+surviving layout and viewport. Rolling windows
 use the browser's local calendar dates. A stale indicator accompanies failures.
 Full graphs can take several seconds to lay out; smaller presets remain useful
 for quick navigation. The neighbor list shows up to 200 items at a time.

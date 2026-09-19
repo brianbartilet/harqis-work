@@ -217,19 +217,24 @@ def test_review_dates_do_not_become_overdue_deadlines(agenda, authenticated_clie
     assert items[1]["overdue"] is False
 
 
-def test_evidence_is_resolved_by_guid_after_reorder_and_rechecks_protection(agenda, authenticated_client, monkeypatch):
+@pytest.mark.parametrize('legacy', [False, True])
+def test_evidence_is_resolved_by_guid_after_reorder_and_rechecks_protection(agenda, authenticated_client, monkeypatch, legacy):
     from modules.hfl_corpus import router as corpus
     from modules.hfl_corpus.corpus import CorpusEntry
     entry = CorpusEntry(anchor="hfl-entry-1-old", header="2026-09-09", moment="Research", what_happened="Evidence", tags=(), text="Entry ID: hfl-test-evidence\nMoment: Research")
+    if legacy:
+        entry = replace(entry, text="Moment: Research\nWhat happened: Evidence")
+    from modules.hfl_corpus.timeline import entry_evidence_id
+    evidence_id = entry_evidence_id(entry.text)
     document = SimpleNamespace(entries=(entry,))
     monkeypatch.setattr(corpus, "_uses_remote_corpus", lambda: False)
     monkeypatch.setattr(corpus.corpus_index, "get", lambda _: document)
-    source = {"path": "2026-09-09.md", "entry_id": "hfl-test-evidence"}
+    source = {"path": "2026-09-09.md", "entry_id": evidence_id}
     response = authenticated_client.post("/hfl-corpus/timeline/items", json=payload(source=source))
     assert response.status_code == 201
     assert response.json()["item"]["source"]["title"] == "Research"
     document.entries = (replace(entry, anchor="hfl-entry-9-new"),)
-    url = "/hfl-corpus/timeline/evidence?path=2026-09-09.md&entry_id=hfl-test-evidence"
+    url = "/hfl-corpus/timeline/evidence?path=2026-09-09.md&entry_id=" + evidence_id
     response = authenticated_client.get(url, follow_redirects=False)
     assert response.status_code == 303
     assert response.headers["location"].endswith("#hfl-entry-9-new")

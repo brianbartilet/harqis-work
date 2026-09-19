@@ -13,8 +13,9 @@ from workflows.hfl.entity_store import VERSION, digest, get_store
 KINDS = {'people', 'companies', 'tools', 'topics', 'objects'}
 
 
-def current_entries():
-    entries, _ = collect_entries(get_store(), 'all')
+def current_entries(context=''):
+    from modules.hfl_corpus.entity_context import context_predicate
+    entries, _ = collect_entries(get_store(), 'all', entry_filter=context_predicate(context))
     return entries
 
 
@@ -108,9 +109,9 @@ def enrich(*, entry_id=None, use_model=True, batch_size=8):
     return result
 
 
-def projection(source='', since='', until=''):
+def projection(source='', since='', until='', context=''):
     store = get_store()
-    entries = current_entries()
+    entries = current_entries(context) if context else current_entries()
     cache = store.records()
     decisions = [d for d in store.decisions() if d['active']]
     aliases = {d['alias']: d['canonical'] for d in decisions}
@@ -141,8 +142,8 @@ def projection(source='', since='', until=''):
     return rows
 
 
-def graph(source='', since='', until='', limit=100, query='', shared=False):
-    rows = projection('', since, until)
+def graph(source='', since='', until='', limit=100, query='', shared=False, context=''):
+    rows = projection('', since, until, context) if context else projection('', since, until)
     available_sources = sorted({e['source'] for e in rows if e['source']})
     selected_sources = {source} if isinstance(source, str) and source else set(source or [])
     if selected_sources:
@@ -231,9 +232,19 @@ def graph(source='', since='', until='', limit=100, query='', shared=False):
                 truncated=total_nodes > len(nodes) or len(edges) > len(bounded_edges))
 
 
-def entity_index(source='', since='', until=''):
+def entity_index(source='', since='', until='', context='', graph_query='', graph_sources=None):
     groups = {}
-    for entry in projection(source, since, until):
+    rows = projection(source, since, until, context) if context else projection(source, since, until)
+    profiles = get_store().profiles()
+    query = graph_query.strip().casefold()
+    for entry in rows:
+        if graph_sources and entry['source'] not in graph_sources:
+            continue
+        if query and not (query in entry['title'].casefold() or query in entry['source'].casefold()
+                          or query in entry['date'].casefold() or any(
+                              query in profiles.get(m['id'], {}).get('name', m['label']).casefold()
+                              for m in entry['mentions'])):
+            continue
         for m in entry['mentions']:
             entity = groups.setdefault(m['id'], {**m, 'entries': []})
             existing = next((e for e in entity['entries'] if e['id'] == entry['id']), None)
@@ -255,7 +266,7 @@ def entity_index(source='', since='', until=''):
     for identity, profile in profiles.items():
         if identity in aliases:
             continue  # Alias profiles survive undo; contact details are never silently combined.
-        if identity not in groups and not (source or since or until):
+        if identity not in groups and not (source or since or until or context or query or graph_sources):
             groups[identity] = dict(id=identity, label=profile['name'], kind=profile['kind'],
                                     resolution='curated', entries=[])
     for identity, group in groups.items():

@@ -10,7 +10,7 @@ from modules.hfl_corpus.workspace_views import WorkspaceState
 
 async def filter_actions(request, items, canonical, *, recent_dismissed=False):
     from modules.hfl_corpus import router as corpus
-    from modules.hfl_corpus.timeline import entry_guid
+    from modules.hfl_corpus.timeline import entry_evidence_id
 
     scope = request_scope(request)
     values = {key: value for key, value in request.query_params.items() if key in WorkspaceState.model_fields}
@@ -53,7 +53,7 @@ async def filter_actions(request, items, canonical, *, recent_dismissed=False):
                 else:
                     documents[path] = await asyncio.to_thread(corpus.corpus_index.get, path)
             document = documents[path]
-            entry = next((entry for entry in document.entries if entry_guid(entry) == source['entry_id']), None) if document else None
+            entry = next((entry for entry in document.entries if entry_evidence_id(entry.text) == source['entry_id']), None) if document else None
             if entry and corpus.is_secret_entry(entry, protected):
                 continue
             item['sources'] = [entry.source] if entry else []

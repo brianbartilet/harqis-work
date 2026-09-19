@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Activity{% endblock %}</title>
+  <link rel="stylesheet" href="{{ static_asset('css/app.min.css') }}">
+  <link rel="stylesheet" href="{{ static_asset('css/activity-modals.css') }}">
+  {% block head %}{% endblock %}
+</head><body class="activity-modal-page bg-slate-950 text-slate-100">
+{% if request.query_params.get('embed') != '1' %}<dialog id="activity-standalone" class="activity-modal activity-modal-page">{% endif %}
+{% block content %}{% endblock %}
+{% if request.query_params.get('embed') != '1' %}</dialog><script>document.getElementById('activity-standalone').showModal();</script>{% endif %}
+<script src="{{ static_asset('js/activity-modals.js') }}"></script>
+</body></html>

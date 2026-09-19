@@ -125,7 +125,7 @@ def evidence_context(snapshot):
             if not ref:
                 return {'entries': [], 'coverage': {'reason': 'No linked corpus entry.'}}
             document = remote.document(ref['path'], include_secrets=False, secret_tags=tags)[0] if remote else corpus_index.get(ref['path'])
-            selected = [(ref['path'], entry) for entry in (document.entries if document else ()) if timeline.entry_guid(entry) == ref.get('entry_id')]
+            selected = [(ref['path'], entry) for entry in (document.entries if document else ()) if timeline.entry_evidence_id(entry.text) == ref.get('entry_id')]
         else:
             end = min(date.fromisoformat(source['end_date']), date.fromisoformat(snapshot['occurrence_date']) if snapshot.get('occurrence_date') else datetime.now(ZoneInfo('Asia/Singapore')).date())
             start = max(date.fromisoformat(source['start_date']), end - timedelta(days=6))
@@ -137,7 +137,7 @@ def evidence_context(snapshot):
                 selected.extend((path, entry) for path, entry in rows if not is_secret_entry(entry, tags))
                 day -= timedelta(days=1)
             coverage['truncated'] = coverage['truncated'] or len(selected) >= 20
-        entries = [{'path': path, 'entry_id': timeline.entry_guid(entry), 'text': entry.text[:2000]} for path, entry in selected[:20] if not is_secret_entry(entry, tags)]
+        entries = [{'path': path, 'entry_id': timeline.entry_evidence_id(entry.text), 'text': entry.text[:2000]} for path, entry in selected[:20] if not is_secret_entry(entry, tags)]
         return {'entries': entries, 'coverage': coverage}
     except (RemoteCorpusError, httpx.HTTPError, KeyError, ValueError):
         return {'entries': [], 'coverage': {'unavailable': True, 'reason': 'Corpus recall could not complete; do not assume there is no evidence.'}}

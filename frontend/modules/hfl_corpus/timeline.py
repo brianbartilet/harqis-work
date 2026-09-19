@@ -62,6 +62,16 @@ def entry_guid(entry):
     return match.group(1) if match else ""
 
 
+def entry_evidence_id(text):
+    """Resolve legacy evidence by content, without changing the corpus or graph IDs."""
+    import hashlib
+    match = ENTRY_ID.search(text)
+    if match:
+        return match.group(1)
+    normalized = text.replace('\r\n', '\n').strip()
+    return 'hfl-legacy-evidence-' + hashlib.sha256(normalized.encode('utf-8')).hexdigest()
+
+
 def store():
     return FollowUpStore(store_path())
 
@@ -89,7 +99,7 @@ async def evidence(path, guid):
         document = corpus.corpus_index.get(path)
     if document:
         for entry in document.entries:
-            if entry_guid(entry) == guid and not corpus.is_secret_entry(entry, tags):
+            if entry_evidence_id(entry.text) == guid and not corpus.is_secret_entry(entry, tags):
                 return entry
     raise HTTPException(404, "The evidence entry is unavailable or protected.")
 

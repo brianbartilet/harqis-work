@@ -80,17 +80,18 @@ async def page(request: Request):
 async def graph(request: Request, source: str = '', since: str = '', until: str = '',
                 limit: int = Query(default=100, ge=0, le=1000),
                 query: str = Query(default='', max_length=200), shared: bool = False,
-                sources: list[str] = Query(default=[])):
+                sources: list[str] = Query(default=[]), context: str = ''):
     authorize(request)
-    return await run_in_threadpool(entities.graph, sources or source, since, until, limit, query, shared)
+    return await run_in_threadpool(entities.graph, sources or source, since, until, limit, query, shared, context)
 
 
 @router.get('/api/hfl/entities')
 async def index(request: Request, source: str = '', since: str = '', until: str = '',
                 limit: int | None = Query(default=None, ge=0, le=10000),
-                q: str = '', kind: str = '', offset: int = Query(default=0, ge=0)):
+                q: str = '', kind: str = '', offset: int = Query(default=0, ge=0),
+                context: str = '', graph_query: str = '', sources: list[str] = Query(default=[])):
     authorize(request)
-    rows = await run_in_threadpool(entities.entity_index, source, since, until)
+    rows = await run_in_threadpool(entities.entity_index, source, since, until, context, graph_query, sources)
     rows.sort(key=lambda e: (e['label'].casefold(), e['id']))
     counts = {k: sum(e['kind'] == k for e in rows) for k in entities.KINDS}
     rows = [e for e in rows if (not kind or e['kind'] == kind) and
@@ -217,11 +218,10 @@ async def entry_preview(request: Request, entry_id: str, locator: str = ''):
     html = await run_in_threadpool(
         lambda: _pill_rendered_tags(render_markdown(format_hfl_markdown('## '+item['text'], references))))
     from urllib.parse import urlencode
-    from modules.hfl_corpus.timeline import ENTRY_ID
-    identity = ENTRY_ID.search(item['text'])
+    from modules.hfl_corpus.timeline import entry_evidence_id
     action_url = '/hfl-corpus?' + urlencode({
-        'source_path': item['path'], 'source_entry': identity.group(1),
-    }) if identity else ''
+        'source_path': item['path'], 'source_entry': entry_evidence_id(item['text']),
+    })
     return {'title': item['title'], 'date': item['date'], 'source': item['source'],
             'html': str(html), 'action_url': action_url}
 

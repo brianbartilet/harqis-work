@@ -11,7 +11,7 @@ from modules.hfl_corpus.remote import RemoteCorpusClient
 from modules.hfl_corpus.secrets import is_secret_entry, normalize_secret_tags
 from modules.profile.store import get_profile_store
 
-def collect_entries(store, month: str = 'latest') -> tuple[list[dict], str]:
+def collect_entries(store, month: str = 'latest', *, entry_filter=None) -> tuple[list[dict], str]:
     """Collect before mutation; source errors propagate without withdrawing existing data."""
     from workflows.knowledge.entities import extract_entities
     settings = get_settings()
@@ -58,6 +58,9 @@ def collect_entries(store, month: str = 'latest') -> tuple[list[dict], str]:
                 raise ValueError('Conflicting duplicate identity; review source entries before indexing')
             continue
         seen[identity] = entry.text
+        # Resolve legacy identities against the complete corpus before narrowing.
+        if entry_filter and not entry_filter(document, entry):
+            continue
         entities = {}
         result.append(dict(id=identity, title=entry.moment, text=entry.text,
                            date=occurred.isoformat(), source=entry.source,

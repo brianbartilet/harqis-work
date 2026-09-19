@@ -299,7 +299,9 @@ async def add_security_headers(request: Request, call_next):
             response.status_code,
             duration_ms,
         )
-    response.headers["X-Frame-Options"]        = "DENY"
+    # These owner-only views are embedded by the corpus's fullscreen dialogs.
+    activity_frame = request.url.path in {'/hfl-corpus/graph', '/hfl-corpus/entities'}
+    response.headers["X-Frame-Options"] = "SAMEORIGIN" if activity_frame else "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"]        = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"]     = "geolocation=(), microphone=(), camera=()"

@@ -1,6 +1,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   let items = [], page = 0, total = 0, hasLoaded = false;
+  let loadVersion = 0;
   const pageSize = 50;
   const selectedEntities = new Set();
   let matchingItems = [], mergeBusy = false, mergePreview = null, mergeTarget = null, mergeRequest = '', submittedPayload = null;
@@ -160,7 +161,7 @@
         }
         card.append(editor(e), el('h2', 'Supporting activity'));
         if (!e.entries.length) card.append(el('p', 'No current supporting entries. Your saved profile remains available.'));
-        for (const entry of e.entries) { const row = el('div'), link = el('a', entry.date.slice(0, 10) + ' · ' + entry.title); link.href = entry.href; const meta = el('p', entry.source + ' · ' + entry.method); meta.className = 'entity-meta'; row.append(link, meta, el('blockquote', entry.evidence)); card.append(row); }
+        for (const entry of e.entries) { const row = el('div'), link = el('a', entry.date.slice(0, 10) + ' · ' + entry.title); link.href = entry.href; link.target = '_blank'; link.rel = 'noopener noreferrer'; const meta = el('p', entry.source + ' · ' + entry.method); meta.className = 'entity-meta'; row.append(link, meta, el('blockquote', entry.evidence)); card.append(row); }
       });
       $('entity-list').append(card);
     }
@@ -168,7 +169,8 @@
   function setLoading(loading) {
     $('entity-loading').hidden = !loading;
     $('entity-results').hidden = loading || !hasLoaded;
-    $('result-actions').hidden = loading || !hasLoaded;
+    // Refresh remains available after an initial failure as well as later failures.
+    $('result-actions').hidden = loading;
     $('load-scope').hidden = loading || !hasLoaded;
     if (loading) $('entity-status').textContent = '';
     $('entity-list').setAttribute('aria-busy', String(loading));
@@ -183,17 +185,27 @@
     }
   }
   async function load() {
+    const version = ++loadVersion;
     setLoading(true);
     try {
-      const data = await api();
+      const params = new URLSearchParams();
+      const context = window.activityModals?.context();
+      if(context) params.set('context',context);
+      if(!window.activityModals?.isAll()) {
+        const graph = new URLSearchParams(new URLSearchParams(location.search).get('graph_filters') || '');
+        for(const key of ['since','until','sources']) for(const value of graph.getAll(key)) if(value) params.append(key,value);
+        if(graph.get('query')) params.set('graph_query',graph.get('query'));
+      }
+      const data = await api(params.size ? '?' + params : '');
+      if(version !== loadVersion) return;
       items = data.entities; total = data.total ?? items.length;
       const available = new Set(items.map(e => e.id));
       for (const id of selectedEntities) if (!available.has(id)) selectedEntities.delete(id);
       facets(); render();
       hasLoaded = true;
-      $('load-scope').textContent = 'Search and filters cover the full directory. Type counts show all entities; results display 50 per page.';
+      $('load-scope').textContent = 'Search and filters cover the current activity scope; results display 50 per page.';
     }
-    finally { setLoading(false); }
+    finally { if(version === loadVersion) setLoading(false); }
   }
   function showJob(data, action = 'status') {
     $('job').textContent = JSON.stringify(data, null, 2);
@@ -334,5 +346,6 @@
     } catch (err) { $('merge-feedback').textContent = err.message; }
     finally { waiting(false); }
   };
+  window.addEventListener('hfl:activity-scope',()=>run(load));
   run(async () => { await load(); await status(); await matchingStatus(); });
 })();
