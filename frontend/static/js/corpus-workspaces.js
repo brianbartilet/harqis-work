@@ -82,10 +82,8 @@
     name.textContent = applied.length > 1 ? applied.map(view => view.name).join(' + ') : applied[0]?.name || current?.name || 'All activity';
     $('[data-view-prefix]').textContent = applied.length > 1 ? 'Current Views:' : 'Current View:';
     const caption = $('[data-active-view-caption]');
-    caption.dataset.expandable = String(applied.length > 1);
-    caption.tabIndex = applied.length > 1 ? 0 : -1;
-    caption.onclick = () => { if (applied.length > 1) { const summary = $('[data-scope-summary]'); summary.open = !summary.open; } };
-    caption.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); caption.click(); } };
+    caption.dataset.expandable = 'false';
+    caption.tabIndex = -1;
     $('[data-dynamic-badge]').textContent = dynamicOn ? 'Dynamic ON' : 'Dynamic OFF';
     $('[data-dynamic-badge]').dataset.on = String(dynamicOn);
     $('[data-active-view-caption]').title = applied.map(view => view.name).join(' + ') || name.textContent;
@@ -122,7 +120,7 @@
     menu.querySelector('[data-workspace-action="save"]').disabled = activeIds.length > 1 || busy;
     $('[data-workspace-save-hint]').hidden = activeIds.length <= 1;
     menu.querySelector('[data-workspace-action="edit"]').disabled = (!current && !activeIds.length) || busy;
-    menu.querySelector('[data-workspace-action="remove"]').disabled = (!current && !activeIds.length) || busy;
+    menu.querySelector('[data-workspace-action="remove"]').disabled = activeIds.length !== 1 || busy;
   }
   function setBusy(value) {
     busy = value;
@@ -153,6 +151,25 @@
   window.addEventListener('pageshow', endViewLoading);
   function openDialog(action) {
     operation = action;
+    if (action === 'remove') {
+      editTarget = views.find(view => view.id === activeIds[0]);
+      if (activeIds.length !== 1 || !editTarget) return;
+      $('[data-view-edit-options]').hidden = true;
+      $('[data-edit-target-field]').hidden = true;
+      $('label[for="workspace-name"]').hidden = true;
+      nameForm.elements.name.hidden = true;
+      nameForm.elements.name.disabled = true;
+      document.getElementById('workspace-dialog-title').textContent = `Remove "${editTarget.name}"?`;
+      $('[data-workspace-dialog-hint]').textContent = 'This removes only this saved view. Your corpus entries are unchanged.';
+      $('[data-workspace-dialog-error]').textContent = '';
+      $('[data-workspace-confirm]').textContent = 'Yes';
+      menu.open = false;
+      dialog.showModal();
+      $('[data-workspace-cancel]').focus();
+      return;
+    }
+    $('label[for="workspace-name"]').hidden = false;
+    nameForm.elements.name.hidden = false;
     const editing = action === 'new' || action === 'edit' || action === 'remove' || (['save','new'].includes(action) && aggregateScope.any.length);
     $('[data-view-edit-options]').hidden = !editing;
     $('[data-view-edit-options]').querySelectorAll('details').forEach(details => details.hidden = action === 'remove');
@@ -179,6 +196,7 @@
   }
   async function persist(action, name) {
     if (action === 'save' && activeIds.length > 1) return;
+    if (action === 'remove' && (activeIds.length !== 1 || editTarget?.id !== activeIds[0])) return;
     setBusy(true); status.textContent = action === 'remove' ? 'Removing…' : 'Saving…';
     try {
       if (action === 'remove') {
@@ -445,21 +463,19 @@
     } catch (error) { status.textContent = error.message; }
     finally { dynamicToggle.checked = dynamicOn; if (!disposed) updateDynamicAvailability(); }
   };
-  if (aggregateScope.any.length) {
-    $('[data-scope-summary]').hidden = false;
-    const applied = views.filter(view => activeIds.includes(view.id));
-    aggregateScope.any.forEach((state, index) => {
-      const p = document.createElement('p');
-      p.textContent = `${applied[index]?.name || 'View'}: ${state.source || 'All sources'} · ${state.q || 'All tags/text'} · ${state.date_field}: ${state.date_from || 'Any'}–${state.date_to || 'Any'}`;
-      $('[data-scope-details]').append(p);
-    });
-  }
-  $('[data-clear-narrowing]').onclick = () => loadCombined(viewData, activeIds, dynamicOn);
   let pollInFlight = false;
   async function checkDynamic() {
     if (!dynamicOn || transitioning || busy || pollInFlight || document.hidden || document.querySelector('dialog[open]') || menu.open) return;
     const modified = $('[data-active-view-modified]').dataset.state === 'modified' || JSON.stringify(snapshot()) !== initialFilterState;
-    if (modified) { $('[data-adaptive-status]').textContent = 'Dynamic paused while filters are modified. Clear additional filters to resume.'; return; }
+    if (modified) {
+      const notice = $('[data-adaptive-status]');
+      notice.textContent = 'Dynamic paused while filters are modified. ';
+      const resume = document.createElement('button');
+      resume.type = 'button'; resume.textContent = 'Clear additional filters to resume';
+      resume.onclick = () => loadCombined(viewData, activeIds, dynamicOn);
+      notice.append(resume);
+      return;
+    }
     pollInFlight = true;
     try {
       const data = await request();

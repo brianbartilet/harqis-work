@@ -631,9 +631,10 @@ never stored in a view. Graph profiles remain independent.
 Use the **Focus on** checkbox dropdown to choose up to 30 views. Closing the list applies the selection automatically. **All activity** clears saved-view filtering.
 Each view retains its own source/tag/text/date rules. An entry matching any view
 appears once in document results, matching-entry navigation, and Memory Signal
-counts. **Active view filters** explains the applied rules; the search controls
-further narrow the union. Edit/Save explicitly selects one view when working
-with a combination. The other saved views are unchanged.
+counts. Inspect each view’s rules in **Edit Views**; the search controls
+further narrow the union. **Save** and **Remove** are disabled when multiple views
+are selected. **Edit Views** lets you choose one view to edit without changing
+the others. Removing a single selected view requires Yes/Cancel confirmation.
 
 In **Edit View → Assign schedules**, choose weekdays and add one or more time blocks.
 End times are exclusive; an end before the start continues into the next day.
@@ -655,8 +656,7 @@ on failure with Retry, preserves scroll position for automatic changes, and
 fades the updated heatmap unless reduced motion is requested.
 
 The Memory Signal header identifies the current view(s), Dynamic ON/OFF, and
-Saved/Modified state. Select the combined view names to inspect the
-active filter summaries. Combined results use a shared sort and page size.
+Saved/Modified state. The combined view names identify every applied view. Combined results use a shared sort and page size.
 
 #### Weekly schedule visualizer
 

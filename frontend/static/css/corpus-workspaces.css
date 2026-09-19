@@ -102,6 +102,15 @@
 .workspace-loading .workspace-spinner { width:1.6rem; height:1.6rem; margin:0 0 1rem; border-color:#334155; border-top-color:#38bdf8; }
 .workspace-loading h2 { overflow-wrap:anywhere; margin-bottom:.6rem; }
 .workspace-loading p { color:#94a3b8; font-size:.875rem; }
+[data-corpus-share-content][aria-busy="true"]::before {
+  content:""; display:block; height:4px; margin:0 0 1rem; border-radius:999px;
+  background:linear-gradient(90deg,#1e293b 0%,#1e293b 35%,#38bdf8 50%,#1e293b 65%,#1e293b 100%);
+  background-size:250% 100%; animation:share-preview-progress 1.4s ease-in-out infinite;
+}
+@keyframes share-preview-progress { from { background-position:100% 0; } to { background-position:0% 0; } }
+@media(prefers-reduced-motion:reduce) {
+  [data-corpus-share-content][aria-busy="true"]::before { animation:none; background-size:100% 100%; }
+}
 
 /* Keep the Views dropdown compact without resizing other dialogs. */
 .workspace-menu-panel select.workspace-select { height:40px; min-height:40px; margin:.375rem 0; }
@@ -131,8 +140,6 @@
 .workspace-time-block [data-remove-block],.workspace-dialog [data-add-block] { margin-top:.75rem; padding:.5rem .85rem; border:1px solid #475569; border-radius:.5rem; background:#1e293b; color:#cbd5e1; font-size:.8rem; cursor:pointer; }
 .workspace-time-block [data-remove-block]:hover,.workspace-dialog [data-add-block]:hover { background:#334155; color:#f1f5f9; }
 .workspace-time-block [data-remove-block]:focus-visible,.workspace-dialog [data-add-block]:focus-visible { outline:2px solid #7dd3fc; outline-offset:2px; }
-.workspace-scope-summary { margin:.5rem 0; padding:.75rem; border:1px solid #334155; border-radius:.75rem; color:#cbd5e1; font-size:.8rem; }
-.workspace-scope-summary p { margin:.5rem 0; overflow-wrap:anywhere; }
 .activity-dynamic-badge { white-space:nowrap; font-size:.65rem; color:#94a3b8; }
 .activity-dynamic-badge[data-on="true"] { color:#67e8f9; }
 .activity-view-caption[data-expandable="true"] { cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px; }
@@ -248,7 +255,7 @@
 .visualizer-scroll::-webkit-scrollbar { width:0; height:6px; }
 .visualizer-scroll::-webkit-scrollbar-thumb { background:#475569; border-radius:3px; }
 @media(min-width:801px) {
-  .view-visualizer[open] { display:flex; flex-direction:column; height:96dvh; overflow:hidden; }
+  .view-visualizer[open] { display:flex; flex-direction:column; width:calc(80vw - 1.6rem); max-width:calc(80vw - 1.6rem); height:76.8dvh; max-height:76.8dvh; overflow:hidden; }
   .view-visualizer .visualizer-toolbar { flex:none; position:relative; top:0; }
   .view-visualizer .visualizer-scroll { flex:1; min-height:0; max-height:none; }
   .view-visualizer .visualizer-detail { flex:none; max-height:25dvh; overflow:auto; scrollbar-width:none; }

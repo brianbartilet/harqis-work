@@ -200,6 +200,7 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.locator('[data-workspace-menu] > summary').click()
             assert page.locator('[data-workspace-action="save"]').is_disabled()
+            assert page.locator('[data-workspace-action="remove"]').is_disabled()
             assert page.locator('[data-workspace-action="new"]').is_enabled()
             assert page.locator('[data-workspace-save-hint]').inner_text() == 'Select one view to save changes.'
             page.locator('[data-corpus-share-preview]').click()
@@ -308,9 +309,18 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             assert page.locator('[data-workspace-save-hint]').is_hidden()
             assert '1 matching entries' in page.locator('[data-corpus-results]').inner_text()
             page.wait_for_function("document.querySelector('[data-activity-body]').classList.contains('workspace-arrive')")
+            # A schedule gap loads all activity without disabling Dynamic mode.
+            scheduled[:] = []
+            page.evaluate("window.dispatchEvent(new Event('focus'))")
+            page.wait_for_function("document.querySelector('[data-active-view-name]').textContent === 'All activity'")
+            assert page.locator('[data-dynamic-badge]').inner_text() == 'Dynamic ON'
+            assert '3 entries' in page.locator('[data-corpus-results]').inner_text()
+            assert json.loads(parse_qs(urlparse(page.url).query)['scope'][0])['any'] == []
+            assert authenticated_client.get('/hfl-corpus/workspace-views').json()['preferences']['dynamic'] is True
             page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
             page.locator('[data-view-picker] > summary').click()
             page.locator('[data-view-all]').click()
+            page.wait_for_function("document.querySelector('[data-dynamic-badge]').textContent === 'Dynamic OFF'")
             page.wait_for_function("document.querySelector('[data-active-view-name]').textContent === 'All activity'")
             assert json.loads(parse_qs(urlparse(page.url).query)['scope'][0])['any'] == []
             prefs = authenticated_client.get('/hfl-corpus/workspace-views').json()['preferences']

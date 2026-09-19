@@ -400,7 +400,6 @@
   <script type="application/json" data-memory-csrf>{{ memory_csrf | tojson }}</script>
   <script type="application/json" data-activity-timeline>{{ activity_timeline | tojson }}</script>
 
-  <details class="workspace-scope-summary" data-scope-summary hidden><summary>Active view filters</summary><div data-scope-details></div><button type="button" data-clear-narrowing>Clear additional filters</button></details>
   <form id="corpus-search-form" method="get" action="/hfl-corpus" data-index-search-panel
         class="sticky top-0 z-20 shrink-0 rounded-2xl border border-blue-800/70 bg-slate-900/95 p-4 shadow-xl shadow-black/30 backdrop-blur">
     {% if show_secrets %}<input type="hidden" name="show_secrets" value="true">{% endif %}

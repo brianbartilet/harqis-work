@@ -251,6 +251,14 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             page.locator('[data-workspace-confirm]').click()
             page.wait_for_function("document.querySelector('[data-workspace-status]').textContent==='Saved: Renamed workspace'")
             page.locator('[data-workspace-action="remove"]').click()
+            assert page.locator('#workspace-dialog-title').inner_text() == 'Remove "Renamed workspace"?'
+            assert page.locator('[data-edit-target-field]').is_hidden()
+            assert page.locator('#workspace-name').is_hidden()
+            assert page.locator('[data-workspace-confirm]').inner_text() == 'Yes'
+            page.locator('[data-workspace-cancel]').click()
+            assert len(authenticated_client.get('/hfl-corpus/workspace-views').json()['views']) == 2
+            page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
+            page.locator('[data-workspace-action="remove"]').click()
             page.locator('[data-workspace-confirm]').click()
             page.wait_for_url('**/hfl-corpus?reset=1')
             assert page.locator('#q').input_value() == ''

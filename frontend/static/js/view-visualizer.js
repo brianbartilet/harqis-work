@@ -122,5 +122,15 @@
   }
   trigger.onclick = () => { document.querySelector('[data-workspace-menu]').open=false; dialog.showModal(); find('#view-visualizer-title').focus(); load(); };
   retry.onclick=load; find('[data-visualize-close]').onclick=() => dialog.close();
+  let backdropPress = false;
+  const outsideDialog = event => {
+    const box = dialog.getBoundingClientRect();
+    return event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
+  };
+  dialog.addEventListener('pointerdown', event => { backdropPress = event.target === dialog && outsideDialog(event); });
+  dialog.addEventListener('click', event => {
+    if (backdropPress && event.target === dialog && outsideDialog(event)) dialog.close();
+    backdropPress = false;
+  });
   dialog.addEventListener('close', () => { clearInterval(timer); document.querySelector('[data-workspace-menu]').open=true; trigger.focus(); });
 })();
