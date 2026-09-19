@@ -119,6 +119,8 @@
       };
     });
     pickerCaption();
+    menu.querySelector('[data-workspace-action="save"]').disabled = activeIds.length > 1 || busy;
+    $('[data-workspace-save-hint]').hidden = activeIds.length <= 1;
     menu.querySelector('[data-workspace-action="edit"]').disabled = (!current && !activeIds.length) || busy;
     menu.querySelector('[data-workspace-action="remove"]').disabled = (!current && !activeIds.length) || busy;
   }
@@ -176,6 +178,7 @@
     if (action !== 'remove') nameForm.elements.name.focus();
   }
   async function persist(action, name) {
+    if (action === 'save' && activeIds.length > 1) return;
     setBusy(true); status.textContent = action === 'remove' ? 'Removing…' : 'Saving…';
     try {
       if (action === 'remove') {
@@ -213,6 +216,7 @@
   menu.querySelectorAll('[data-workspace-action]').forEach(button => button.onclick = () => {
     if (busy) return;
     const action = button.dataset.workspaceAction;
+    if (action === 'save' && activeIds.length > 1) return;
     if (action === 'save' && current && !aggregateScope.any.length) { editTarget = null; persist(action, current.name); }
     else openDialog(action);
   });

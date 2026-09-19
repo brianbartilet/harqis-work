@@ -199,6 +199,9 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             assert page.locator('[data-dynamic-badge]').inner_text()=='Dynamic OFF'
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.locator('[data-workspace-menu] > summary').click()
+            assert page.locator('[data-workspace-action="save"]').is_disabled()
+            assert page.locator('[data-workspace-action="new"]').is_enabled()
+            assert page.locator('[data-workspace-save-hint]').inner_text() == 'Select one view to save changes.'
             page.locator('[data-corpus-share-preview]').click()
             preview = page.locator('[data-corpus-share-dialog]')
             playwright.expect(preview.locator('[data-preview-ready]')).to_be_visible()
@@ -301,6 +304,8 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             failed[0] = False
             page.locator('[data-adaptive-status] button').click()
             page.wait_for_function("document.querySelector('[data-active-view-name]').textContent==='Work'")
+            assert page.locator('[data-workspace-action="save"]').is_enabled()
+            assert page.locator('[data-workspace-save-hint]').is_hidden()
             assert '1 matching entries' in page.locator('[data-corpus-results]').inner_text()
             page.wait_for_function("document.querySelector('[data-activity-body]').classList.contains('workspace-arrive')")
             page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
