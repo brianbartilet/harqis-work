@@ -78,11 +78,11 @@ test('successive connections damp movement and local drag preserves existing lin
   configureDragForces({d3Force:(...args)=>sim.force(...args)},true);
   assert.equal(sim.force('link').distance()(edges[0]),400);
   assert.equal(sim.force('center'),undefined);
-  for(const n of nodes)n.vx=n.vy=8;
+  for(const n of nodes)n.vx=n.vy=100;
   const damp=dragDamping();damp.initialize(nodes);damp();
-  assert.ok(Math.abs(Math.hypot(nodes[1].vx,nodes[1].vy)-4)<1e-8);
-  assert.ok(Math.abs(Math.hypot(nodes[2].vx,nodes[2].vy)-2)<1e-8);
-  assert.ok(Math.abs(Math.hypot(nodes[3].vx,nodes[3].vy)-1)<1e-8);
+  assert.ok(Math.abs(Math.hypot(nodes[1].vx,nodes[1].vy)-24)<1e-8);
+  assert.ok(Math.abs(Math.hypot(nodes[2].vx,nodes[2].vy)-12)<1e-8);
+  assert.ok(Math.abs(Math.hypot(nodes[3].vx,nodes[3].vy)-6)<1e-8);
   for(const n of nodes)n.vx=n.vy=0;
   sim.alpha(1).tick(30);
   assert.ok(Math.abs(nodes[3].x-1200)<20,'distant node does not collapse toward old layout centers');
@@ -106,10 +106,35 @@ test('dense preset drag keeps every affected orb within its movement budget',()=
       const step=Math.hypot(n.x-before[n.index].x,n.y-before[n.index].y);
       const travel=Math.hypot(n.x-n.dragOrigin.x,n.y-n.dragOrigin.y);
       maxStep=Math.max(maxStep,step);maxTravel=Math.max(maxTravel,travel);
-      assert.ok(step<=4*n.dragWeight+.001,'no instantaneous outward jump');
-      assert.ok(travel<=120*n.dragWeight+.001,'propagation remains local');
+      assert.ok(step<=24*n.dragWeight+.001,'no instantaneous outward jump');
+      assert.ok(travel<=(Math.hypot(150,80)+120)*n.dragWeight+.001,'propagation remains local');
     }
   }
   console.log(`Dense drag: largest step ${maxStep.toFixed(2)}, largest displacement ${maxTravel.toFixed(2)}`);
+  sim.stop();
+});
+
+
+test('long parent drags carry children prominently, attenuate by hop, and reverse smoothly',()=>{
+  const nodes=Array.from({length:5},(_,i)=>({id:String(i),x:i*100,y:0,fx:i*100,fy:0,radius:7}));
+  const edges=nodes.slice(1,4).map((n,i)=>({source:String(i),target:n.id}));
+  const sim=forceSimulation(nodes).stop().velocityDecay(.2).force('charge',forceManyBody()).force('link',forceLink(edges).id(n=>n.id));
+  const released=new Set();releaseDragNeighbors(nodes[0],nodes,edges,released);
+  configureDragForces({d3Force:(...args)=>sim.force(...args)},true);
+  nodes[0].x=nodes[0].fx=1000;nodes[0].y=nodes[0].fy=300;
+  sim.alpha(1).tick(120);
+  const moves=nodes.slice(1,4).map(n=>Math.hypot(n.x-n.dragOrigin.x,n.y-n.dragOrigin.y));
+  assert.ok(moves[0]>750,'direct children follow most of a long drag, beyond the old leash');
+  assert.ok(moves[1]>300&&moves[1]<moves[0]*.7,'shared hubs follow less');
+  assert.ok(moves[2]<moves[1]*.7,'distant propagation fades');
+  assert.equal(nodes[4].x,400,'disconnected nodes remain stationary');
+  nodes[0].x=nodes[0].fx=-800;nodes[0].y=nodes[0].fy=-300;
+  for(let i=0;i<150;i++){
+    const before=nodes.map(n=>({x:n.x,y:n.y}));sim.alpha(.5).tick();
+    for(const n of released)assert.ok(Math.hypot(n.x-before[n.index].x,n.y-before[n.index].y)<=24*n.dragWeight+.001,'no jump on reversal');
+  }
+  assert.ok(nodes[1].x<-400,'children follow in the new direction');
+  sim.alpha(1).tick(300);
+  assert.ok(Math.hypot(nodes[1].vx,nodes[1].vy)<.1,'motion settles without jitter');
   sim.stop();
 });

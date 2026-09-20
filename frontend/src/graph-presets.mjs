@@ -24,7 +24,7 @@ export function randomizePresetNodes(nodes,seed){
     const distance=radius*Math.sqrt(scatter(node.id,seed+'|initial-radius'));
     node.x=node.fx=distance*Math.cos(angle);node.y=node.fy=distance*Math.sin(angle);
     node.vx=node.vy=0;node.manual=false;
-    delete node.dragOrigin;delete node.dragWeight;
+    delete node.dragOrigin;delete node.dragWeight;delete node.dragParent;delete node.dragParentOrigin;
   }
 }
 
@@ -37,25 +37,24 @@ export function presetLayout(nodes, edges, requested='sources', seed=0) {
     preset='sources';anchors=nodes.filter(n=>n.kind==='sources');
   }
   anchors.sort(preset==='timeline' ? (a,b)=>a.id.localeCompare(b.id) : preset==='sources'
-    ? (a,b)=>a.label.localeCompare(b.label)||a.id.localeCompare(b.id)
+    ? (a,b)=>(b.radius||0)-(a.radius||0)||(b.visibleDegree||0)-(a.visibleDegree||0)||a.id.localeCompare(b.id)
     : (a,b)=>(b.visibleDegree||0)-(a.visibleDegree||0)||a.id.localeCompare(b.id));
   const adjacency=new Map(nodes.map(n=>[n.id,[]])), owners=new Map(), queue=[];
   for(const edge of edges){const a=endpoint(edge.source),b=endpoint(edge.target);if(adjacency.has(a)&&adjacency.has(b)){adjacency.get(a).push(b);adjacency.get(b).push(a);}}
   anchors.forEach((n,i)=>{owners.set(n.id,i);queue.push(n.id);});
   for(let i=0;i<queue.length;i++)for(const next of adjacency.get(queue[i]))if(!owners.has(next)){owners.set(next,owners.get(queue[i]));queue.push(next);}
-  const clustered=['people','tools','companies'].includes(preset);
+  const clustered=['sources','people','tools','companies'].includes(preset);
   const cell=2*Math.max(12,...anchors.map(n=>n.radius||12))+12;
   const positions=new Map(), radius=Math.max(240,Math.sqrt(nodes.length)*25,anchors.length*16,clustered?Math.sqrt(anchors.length)*cell*1.8:0);
   const occupied=new Map();
   anchors.forEach((n,i)=>{
-    const angle=-Math.PI/2+i*2*Math.PI/Math.max(1,anchors.length);
     if(preset==='timeline')positions.set(n.id,{x:(i-(anchors.length-1)/2)*180,y:0,anchor:true});
-    else if(preset==='sources')positions.set(n.id,{x:radius*Math.cos(angle),y:radius*.8*Math.sin(angle),anchor:true});
     else {
       let x=0,y=0,attempt=0;
       if(i)for(;attempt<256;attempt++){
         const angle=scatter(n.id,seed+'|cluster-angle|'+attempt)*Math.PI*2;
-        const r=radius*.4*Math.sqrt(scatter(n.id,seed+'|cluster-radius|'+attempt));
+        const spread=preset==='sources' ? .12+.28*Math.sqrt(i/Math.max(1,anchors.length-1)) : .4;
+        const r=radius*spread*Math.sqrt(scatter(n.id,seed+'|cluster-radius|'+attempt));
         x=r*Math.cos(angle);y=r*Math.sin(angle);
         const cx=Math.floor(x/cell),cy=Math.floor(y/cell);
         let clear=true;
@@ -72,10 +71,11 @@ export function presetLayout(nodes, edges, requested='sources', seed=0) {
   });
   if(['people','tools','companies'].includes(preset)){
     const sources=nodes.filter(n=>n.kind==='sources').sort((a,b)=>a.label.localeCompare(b.label)||a.id.localeCompare(b.id));
-    const outerRadius=Math.max(radius*1.3,radius+80,sources.length*18);
+    const outerRadius=Math.max(radius*.65,sources.length*18);
     sources.forEach((n,i)=>{
-      const angle=-Math.PI/2+i*2*Math.PI/sources.length;
-      positions.set(n.id,{x:outerRadius*Math.cos(angle),y:outerRadius*Math.sin(angle),anchor:false});
+      const angle=(i+.65*(scatter(n.id,seed+'|source-angle')-.5))*2*Math.PI/sources.length+scatter('sources',seed)*2*Math.PI;
+      const r=outerRadius*(1+.22*scatter(n.id,seed+'|source-radius'));
+      positions.set(n.id,{x:r*Math.cos(angle),y:r*Math.sin(angle),anchor:false});
     });
   }
   if(preset==='timeline'&&anchors.length){
@@ -115,7 +115,7 @@ export function presetLayout(nodes, edges, requested='sources', seed=0) {
 
 export function presetFitPoints(nodes,positions,preset) {
   if(preset==='timeline')return timelineFitPoints(nodes,positions);
-  if(['people','tools','companies'].includes(preset)){
+  if(['sources','people','tools','companies'].includes(preset)){
     const cluster=nodes.filter(n=>n.kind===preset&&positions.has(n.id)).map(n=>positions.get(n.id));
     if(cluster.length)return cluster;
   }
@@ -127,7 +127,7 @@ export function timelineFitPoints(nodes, positions) {
     point:positions.get(n.id),time:Date.parse(n.id.replace(/^daily:/,''))
   })).filter(n=>Number.isFinite(n.time));
   if(!dates.length)return [...positions.values()];
-  const latest=Math.max(...dates.map(n=>n.time)),start=latest-29*86400000;
+  const latest=Math.max(...dates.map(n=>n.time)),start=latest-13*86400000;
   // Frame the date axis and nearby branches; older activity remains pannable.
   return dates.filter(n=>n.time>=start).flatMap(({point})=>[
     {x:point.x-60,y:-150},{x:point.x+60,y:150}

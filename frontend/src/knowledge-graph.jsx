@@ -1,3 +1,4 @@
+import {readGraphState} from './graph-state.mjs';
 import {placeLabels} from './graph-labels.mjs';
 import {exampleGraph} from './knowledge-graph-example.js';
 import React, {useEffect, useRef, useState} from 'react';
@@ -56,14 +57,33 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   let layoutTargets=new Map(), lastMotionFrame=0, lastClock=0;
   let layoutSeed=Math.random();
   let draggedNode=null, dragNodes=new Set();
-  function followDrag(node){
+  const stateKey='hfl:graph:state:v1:'+JSON.stringify([document.querySelector('.kg-shell').dataset.viewOwner,new URLSearchParams(location.search).get('context')||'',exampleMode]);
+  let pendingState=null,stateReady=false,stateTimer;
+  try {pendingState=readGraphState(localStorage,stateKey);} catch {}
+  function saveGraphState(){
+    if(!stateReady||loading||!graphApi)return;
+    const filters=Object.fromEntries(['search','density','rolling','since','until'].map(id=>[id,$(id).value]));
+    filters.shared=$('shared').checked;
+    const positions=Object.fromEntries(nodes.slice(0,10000).map(n=>[n.id,{...(layoutTargets.get(n.id)||{x:n.x,y:n.y}),manual:!!n.manual}]));
+    const center=graphApi.screen2GraphCoords(host.clientWidth/2,host.clientHeight/2);
+    try {localStorage.setItem(stateKey,JSON.stringify({version:1,filters,enabled:[...enabled],sources:[...selectedSources],preset,animationMode,layoutSeed,selected,focusId,all:window.activityModals?.isAll(),positions,viewport:{...center,zoom:graphApi.zoom()}}));}
+    catch { $('live').textContent='View could not be saved in this browser.'; }
+  }
+  function scheduleStateSave(){clearTimeout(stateTimer);stateTimer=setTimeout(saveGraphState,500);}
+  document.addEventListener('click',scheduleStateSave);
+  document.addEventListener('input',scheduleStateSave);
+  document.addEventListener('change',scheduleStateSave);
+  window.addEventListener('pagehide',saveGraphState);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)saveGraphState();});
+
+  function followDrag(node,delta={x:0,y:0}){
     const starting=draggedNode!==node;
     if(starting&&transition){
       transition=null;
       for(const n of nodes)layoutTargets.set(n.id,{...layoutTargets.get(n.id),x:n.x,y:n.y});
     }
     draggedNode=node;
-    if(starting){releaseDragNeighbors(node,nodes,edges,dragNodes);configureDragForces(graphApi,true);draw();}
+    if(starting){releaseDragNeighbors(node,nodes,edges,dragNodes,{x:node.x-delta.x,y:node.y-delta.y});configureDragForces(graphApi,true);draw();}
     lastInteraction=Date.now();
   }
   function finishDrag(){
@@ -71,7 +91,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     settleDragNodes(dragNodes,layoutTargets,(node,target)=>motionOffset(animationMode,target,motionTime,node.phase,preset==='timeline'&&target.anchor));
     lastMotionFrame=performance.now();
     dragNodes.clear();
-    draw();
+    draw();scheduleStateSave();
   }
   const viewKey=()=>JSON.stringify([preset,[...enabled].sort(),focusId]);
   function syncDates(){for(const id of ['since','until'])$(id).disabled=$('rolling').value!=='0';}
@@ -168,7 +188,9 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     useEffect(()=>{
       graphApi=ref.current;
       configureDragForces(graphApi);
-      if(data.fitOnce){data.fitOnce=false;requestAnimationFrame(()=>fitTargets(false));}
+      if(data.viewport){const v=data.viewport;data.viewport=null;graphApi.zoom(v.zoom,0);graphApi.centerAt(v.x,v.y,0);}
+      else if(data.fitOnce){data.fitOnce=false;requestAnimationFrame(()=>fitTargets(false));}
+      stateReady=true;scheduleStateSave();
     },[data]);
     const near=connected(activeId);
     const isLinked=link=>activeId&&(endpointId(link.source)===activeId||endpointId(link.target)===activeId);
@@ -227,12 +249,13 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       linkWidth={link=>isLinked(link)?2:data.nodes.length<=35?1.1:.65} linkCurvature={.16}
       linkDirectionalParticles={0}
       linkDirectionalParticleWidth={2} linkDirectionalParticleSpeed={.004}
-      onZoom={()=>{if(activePointers.size)lastInteraction=Date.now();}}
+      onZoom={()=>{if(activePointers.size)lastInteraction=Date.now();scheduleStateSave();}}
       onNodeHover={node=>{host.style.cursor=node?'pointer':'grab';if(!touchViewport)highlight(node?.id||selected);}}
       onNodeClick={node=>select(node.id)} onBackgroundClick={()=>select(null)}
       onNodeDrag={followDrag}
       onNodeDragEnd={node=>{draggedNode=null;node.manual=true;layoutTargets.set(node.id,{x:node.x,y:node.y,anchor:false});node.fx=node.x;node.fy=node.y;draw();graphApi.d3ReheatSimulation();}}
       warmupTicks={0} cooldownTicks={reducedMotion||(!draggedNode&&!dragNodes.size)?0:Infinity}
+      d3VelocityDecay={dragNodes.size?.2:.4}
       d3AlphaMin={.001}
       onEngineStop={finishDrag}
 
@@ -367,16 +390,20 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       n.clusterX=index<0?0:Math.cos(index*Math.PI/2)*220;
       n.clusterY=index<0?0:Math.sin(index*Math.PI/2)*160;
     }
-    if(!preserveLayout){layoutSeed=Math.random();randomizePresetNodes(nodes,layoutSeed);}
+    if(!preserveLayout){if(!pendingState)layoutSeed=Math.random();randomizePresetNodes(nodes,layoutSeed);}
     const layout=presetLayout(nodes,edges,preset,layoutSeed);preset=layout.preset;layoutTargets=layout.positions;
     nodes.forEach(node=>{
       const previous=previousNodes.get(node.id),target=layoutTargets.get(node.id);
       if(preserveLayout&&previous){Object.assign(node,{x:previous.x,y:previous.y,manual:previous.manual});layoutTargets.set(node.id,previousTargets.get(node.id)||{x:node.x,y:node.y});}
       else {node.x=target.x;node.y=target.y;}
+      const saved=pendingState?.positions?.[node.id];
+      if(saved){node.x=saved.x;node.y=saved.y;node.manual=!!saved.manual;layoutTargets.set(node.id,{...target,x:saved.x,y:saved.y});}
       node.fx=node.x;node.fy=node.y;node.phase=phaseFor(node.id);
     });
     transition=null;if(!preserveLayout)motionTime=0;
-    graphData={nodes,fitOnce:!preserveLayout,links:edges.map(e=>({source:e.source,target:e.target}))};
+    const restoredViewport=nodes.some(n=>pendingState?.positions?.[n.id])?pendingState?.viewport:null;
+    pendingState=null;
+    graphData={nodes,viewport:restoredViewport,fitOnce:!preserveLayout,links:edges.map(e=>({source:e.source,target:e.target}))};
     updatePresetMenu(layout.notice);
     $('map-count').textContent=nodes.length+' nodes · '+edges.length+' links';
     showInfo('status',nodes.length+' / '+(data.total_nodes ?? data.nodes.length)+' matching nodes · '+Math.max(0,(data.total_nodes??data.nodes.length)-data.nodes.length)+' outside detail limit · '+(data.nodes.length-nodes.length)+' hidden by view filters · '+edges.length+' connections'+(data.omitted_sources?' · '+data.omitted_sources+' sources outside limit':'')+(limited||data.truncated?' · '+$('density').selectedOptions[0].text.split(' · ')[0]+'; search or increase detail to explore more.':'')+(!nodes.length?' · No matching nodes. Clear your search or change the filters.':''),!nodes.length);
@@ -469,8 +496,9 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   window.addEventListener('pagehide',()=>{backgroundController?.abort();});
   let searchTimer;$('search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>exampleMode?render():load(),300);};
   $('filter').onclick=()=>{$('filter-drawer').close();if(!exampleMode)load();};
-  $('density').onchange=()=>{saveDetail();exampleMode?render():load();};$('shared').onchange=()=>exampleMode?render():load();$('in').onclick=()=>zoom(1.3);$('out').onclick=()=>zoom(1/1.3);$('fit').onclick=()=>{preset==='sources'?fit():fitTargets(true,true);};$('reload').onclick=load;
+  $('density').onchange=()=>{saveDetail();exampleMode?render():load();};$('shared').onchange=()=>exampleMode?render():load();$('in').onclick=()=>zoom(1.3);$('out').onclick=()=>zoom(1/1.3);$('fit').onclick=()=>fitTargets(true,true);$('reload').onclick=load;
   $('reset').onclick=()=>{
+    pendingState=null;try {localStorage.removeItem(stateKey);} catch {}
     window.activityModals?.reset();preset='sources';setAnimation('off');
     $('search').value='';$('density').value='100';$('rolling').value='0';$('since').value='';$('until').value='';
     saveDetail();
@@ -510,8 +538,21 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     const context=params.get('context')||'';params.delete('context');
     window.activityModals.open('entities',context,params.toString());
   };
+  if(pendingState){
+    for(const id of ['search','density','rolling','since','until']){
+      const value=pendingState.filters[id];
+      if(typeof value==='string'&&($(id).tagName!=='SELECT'||[...$(id).options].some(o=>o.value===value)))$(id).value=value;
+    }
+    $('shared').checked=pendingState.filters.shared===true;
+    enabled=new Set(pendingState.enabled);pendingState.sources.forEach(s=>selectedSources.add(s));
+    if(PRESETS[pendingState.preset])preset=pendingState.preset;
+    if(Number.isFinite(pendingState.layoutSeed))layoutSeed=pendingState.layoutSeed;
+    selected=typeof pendingState.selected==='string'?pendingState.selected:null;
+    focusId=typeof pendingState.focusId==='string'?pendingState.focusId:null;
+    window.activityModals?.setAll(pendingState.all);syncDates();sourceOptions([]);
+  }
   showMode();
-  setAnimation(savedAnimation(),false);
+  setAnimation(!reducedMotion&&['off','breathing','ripple','drift'].includes(pendingState?.animationMode)?pendingState.animationMode:savedAnimation(),false);
   requestAnimationFrame(animate);
   load();
 })();

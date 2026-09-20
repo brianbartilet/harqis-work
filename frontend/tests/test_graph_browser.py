@@ -99,6 +99,33 @@ def test_presets_motion_and_large_graph(authenticated_client, monkeypatch, tmp_p
             page.click('#kg-reset');page.wait_for_selector('#kg-workspace:not([inert])')
             page.reload();page.wait_for_selector('#kg-workspace:not([inert])')
             assert page.locator('#kg-density').input_value()=='100'
+            page.click('#kg-open-views');page.click('[data-preset="people"]')
+            page.wait_for_timeout(1100)
+            page.click('#kg-open-filters')
+            page.select_option('#kg-rolling','30')
+            page.check('#kg-shared')
+            page.click('#kg-source-menu summary')
+            page.get_by_label('notes',exact=True).check()
+            page.click('#kg-filter')
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            page.click('[data-activity-all]')
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            page.click('#kg-in');page.wait_for_timeout(1100)
+            state_script="JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('hfl:graph:state:v1:'))))"
+            before=page.evaluate(state_script)
+            assert before['preset']=='people' and before['all']
+            page.reload();page.wait_for_selector('#kg-workspace:not([inert])')
+            page.wait_for_timeout(800)
+            after=page.evaluate(state_script)
+            assert page.locator('#kg-canvas').get_attribute('data-preset')=='people'
+            assert page.locator('#kg-rolling').input_value()=='30'
+            assert page.locator('#kg-shared').is_checked()
+            assert page.locator('[data-activity-all]').get_attribute('aria-checked')=='true'
+            assert after['sources']==['notes']
+            assert after['positions']==before['positions']
+            assert after['viewport']['zoom']==pytest.approx(before['viewport']['zoom'])
+            assert after['viewport']['x']==pytest.approx(before['viewport']['x'],abs=.01)
+            assert after['viewport']['y']==pytest.approx(before['viewport']['y'],abs=.01)
             assert not any('/graph-views' in r for r in requests)
             assert not errors,errors
         finally: browser.close()

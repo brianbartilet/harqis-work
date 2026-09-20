@@ -37,6 +37,7 @@
     return dialog;
   }
   window.activityModals = {open, context:()=>all ? '' : inherited, isAll:()=>all,
+    setAll:value=>{all=value===true;updateScope();},
     reset:()=>{all=false;updateScope();}};
   document.querySelector('[data-activity-close]')?.addEventListener('click',close);
   document.getElementById('activity-standalone')?.addEventListener('cancel',event=>{event.preventDefault();close();});

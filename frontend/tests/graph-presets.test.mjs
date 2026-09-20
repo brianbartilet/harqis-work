@@ -57,17 +57,17 @@ for(const preset of ['people','tools','companies'])test(preset+' frames its orb 
 
 test('preset framing handles absent clusters and keeps source and timeline framing',()=>{
   const positions=presetLayout(nodes,edges,'sources').positions;
-  assert.deepEqual(presetFitPoints(nodes,positions,'sources'),[...positions.values()]);
+  assert.deepEqual(presetFitPoints(nodes,positions,'sources'),nodes.filter(n=>n.kind==='sources').map(n=>positions.get(n.id)));
   assert.deepEqual(presetFitPoints(nodes.filter(n=>n.kind!=='people'),positions,'people'),[...positions.values()]);
   assert.deepEqual(presetFitPoints([],new Map(),'people'),[]);
   const timeline=presetLayout(nodes,edges,'timeline').positions;
   assert.deepEqual(presetFitPoints(nodes,timeline,'timeline'),timelineFitPoints(nodes,timeline));
 });
-test('source ring encloses connected activity and layouts are input-order independent',()=>{
-  const a=presetLayout(nodes,edges,'sources'),b=presetLayout([...nodes].reverse(),edges,'sources');
-  for(const n of nodes)assert.deepEqual(a.positions.get(n.id),b.positions.get(n.id));
-  const r=Math.hypot(a.positions.get('sources0').x,a.positions.get('sources0').y);
-  for(const n of nodes.filter(n=>n.kind==='entries'))assert.ok(Math.hypot(a.positions.get(n.id).x,a.positions.get(n.id).y)<r);
+test('sources cluster centrally with the largest source at the center',()=>{
+  const sample=nodes.map(n=>({...n,radius:n.id==='sources1'?40:12}));
+  const a=presetLayout(sample,edges,'sources'),b=presetLayout([...sample].reverse(),edges,'sources');
+  for(const n of sample)assert.deepEqual(a.positions.get(n.id),b.positions.get(n.id));
+  assert.equal(Math.hypot(a.positions.get('sources1').x,a.positions.get('sources1').y),0);
 });
 for(const kind of ['people','tools','companies'])test(kind+' centers the most connected target',()=>{
   const p=presetLayout(nodes,edges,kind).positions;
@@ -88,7 +88,7 @@ test('new layout seeds scatter final orb positions but preserve the central hub 
     const repeat=presetLayout([...nodes].reverse(),edges,preset,1).positions;
     for(const n of nodes){
       assert.deepEqual(a.get(n.id),repeat.get(n.id));
-      if(n.kind==='sources'||(preset==='timeline'&&n.kind==='daily')||Math.hypot(a.get(n.id).x,a.get(n.id).y)===0)assert.deepEqual(a.get(n.id),b.get(n.id));
+      if((preset==='timeline'&&['daily','sources'].includes(n.kind))||Math.hypot(a.get(n.id).x,a.get(n.id).y)===0)assert.deepEqual(a.get(n.id),b.get(n.id));
       else assert.notDeepEqual(a.get(n.id),b.get(n.id));
       if(n.kind==='entries')assert.notDeepEqual(a.get(n.id),b.get(n.id));
     }
@@ -127,23 +127,21 @@ test('timeline separates sources even with one date and handles a single source'
   assert.equal(single.x,0);assert.equal(single.y,-125);
 });
 
-for(const kind of ['people','tools','companies'])test(kind+' places sources evenly on an outer circle',()=>{
-  const sample=[...nodes,...Array.from({length:4},(_,i)=>({id:'outer'+i,kind:'sources',label:'Outer '+i})),{id:'unlinked',kind:'entries',label:'Unlinked'}];
-  const p=presetLayout(sample,edges,kind).positions;
-  const reversed=presetLayout([...sample].reverse(),edges,kind).positions;
-  const sources=sample.filter(n=>n.kind==='sources').sort((a,b)=>a.label.localeCompare(b.label)||a.id.localeCompare(b.id));
-  const radius=Math.hypot(p.get(sources[0].id).x,p.get(sources[0].id).y);
-  for(const [i,n] of sources.entries()){
-    const point=p.get(n.id),next=p.get(sources[(i+1)%sources.length].id);
-    assert.ok(Math.abs(Math.hypot(point.x,point.y)-radius)<1e-8);
-    assert.ok(Math.abs(Math.hypot(point.x-next.x,point.y-next.y)-2*radius*Math.sin(Math.PI/sources.length))<1e-8);
-  }
-  for(const n of sample){
+for(const kind of ['people','tools','companies'])test(kind+' randomizes sources in a nearer peripheral band',()=>{
+  const sample=[...nodes,...Array.from({length:4},(_,i)=>({id:'outer'+i,kind:'sources',label:'Outer '+i}))];
+  const p=presetLayout(sample,edges,kind,1).positions;
+  const reversed=presetLayout([...sample].reverse(),edges,kind,1).positions;
+  const next=presetLayout(sample,edges,kind,2).positions;
+  const radii=sample.filter(n=>n.kind==='sources').map(n=>{
     assert.deepEqual(p.get(n.id),reversed.get(n.id));
-    if(n.kind!=='sources')assert.ok(Math.hypot(p.get(n.id).x,p.get(n.id).y)<radius);
-  }
-  assert.equal(Math.hypot(p.get(kind+'0').x,p.get(kind+'0').y),0);
+    assert.notDeepEqual(p.get(n.id),next.get(n.id));
+    return Math.hypot(p.get(n.id).x,p.get(n.id).y);
+  });
+  assert.ok(new Set(radii).size>1);
+  assert.ok(Math.min(...radii)>Math.hypot(p.get(kind+'1').x,p.get(kind+'1').y));
+  assert.ok(Math.max(...radii)<Math.sqrt(sample.length)*25);
 });
+
 test('motion is bounded, deterministic and never moves fixed timeline anchors',()=>{
   for(const mode of ['off','breathing','ripple','drift'])for(let t=0;t<48000;t+=100){
     const offset=motionOffset(mode,{x:100,y:50},t,phaseFor('one'));
@@ -160,12 +158,12 @@ test('6000-node layout stays within a bounded computation budget',()=>{
   assert.ok(elapsed<2000);
 });
 
-test('timeline fits the latest available 30 days without removing older dates',()=>{
-  const dates=['2020-01-01','2026-08-21','2026-08-22','2026-09-20'].map(date=>({id:'daily:'+date,kind:'daily',label:date}));
+test('timeline fits the latest available 14 days without removing older dates',()=>{
+  const dates=['2020-01-01','2026-09-06','2026-09-07','2026-09-20'].map(date=>({id:'daily:'+date,kind:'daily',label:date}));
   const positions=presetLayout(dates,[],'timeline').positions;
   const points=timelineFitPoints(dates,positions);
   assert.equal(positions.size,4);
   assert.equal(points.length,4);
-  assert.equal(Math.min(...points.map(p=>p.x)),positions.get('daily:2026-08-22').x-60);
+  assert.equal(Math.min(...points.map(p=>p.x)),positions.get('daily:2026-09-07').x-60);
   assert.equal(Math.max(...points.map(p=>p.x)),positions.get('daily:2026-09-20').x+60);
 });
