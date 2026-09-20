@@ -167,3 +167,21 @@ test('timeline fits the latest available 14 days without removing older dates',(
   assert.equal(Math.min(...points.map(p=>p.x)),positions.get('daily:2026-09-07').x-60);
   assert.equal(Math.max(...points.map(p=>p.x)),positions.get('daily:2026-09-20').x+60);
 });
+
+
+test('Sources reserves its center for all source orbs regardless of activity count',()=>{
+  const sources=Array.from({length:24},(_,i)=>({id:'s'+i,kind:'sources',label:'Source '+i,radius:12+i*2}));
+  const others=Array.from({length:2900},(_,i)=>({id:'e'+i,kind:i%2?'entries':'tools',label:'Other '+i,radius:8}));
+  for(const seed of [1,2,3]){
+    const sparse=presetLayout(sources,[],'sources',seed).positions;
+    const dense=presetLayout([...sources,...others],[],'sources',seed).positions;
+    for(const n of sources)assert.deepEqual(dense.get(n.id),sparse.get(n.id),'activity count must not expand the source cluster');
+    const edge=Math.max(...sources.map(n=>Math.hypot(dense.get(n.id).x,dense.get(n.id).y)+n.radius));
+    for(const n of others)assert.ok(Math.hypot(dense.get(n.id).x,dense.get(n.id).y)-n.radius>=edge+99,'other types stay outside');
+    for(let i=0;i<sources.length;i++)for(let j=i+1;j<sources.length;j++){
+      const a=dense.get(sources[i].id),b=dense.get(sources[j].id);
+      assert.ok(Math.hypot(a.x-b.x,a.y-b.y)>=sources[i].radius+sources[j].radius+12);
+    }
+    assert.equal(presetFitPoints([...sources,...others],dense,'sources').length,sources.length);
+  }
+});

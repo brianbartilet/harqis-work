@@ -46,6 +46,8 @@ export function presetLayout(nodes, edges, requested='sources', seed=0) {
   const clustered=['sources','people','tools','companies'].includes(preset);
   const cell=2*Math.max(12,...anchors.map(n=>n.radius||12))+12;
   const positions=new Map(), radius=Math.max(240,Math.sqrt(nodes.length)*25,anchors.length*16,clustered?Math.sqrt(anchors.length)*cell*1.8:0);
+  // Source cluster size depends on source orbs, not thousands of activity nodes.
+  const sourceRadius=Math.max(120,Math.sqrt(anchors.reduce((sum,n)=>sum+((n.radius||12)+12)**2,0))*1.8);
   const occupied=new Map();
   anchors.forEach((n,i)=>{
     if(preset==='timeline')positions.set(n.id,{x:(i-(anchors.length-1)/2)*180,y:0,anchor:true});
@@ -53,8 +55,8 @@ export function presetLayout(nodes, edges, requested='sources', seed=0) {
       let x=0,y=0,attempt=0;
       if(i)for(;attempt<256;attempt++){
         const angle=scatter(n.id,seed+'|cluster-angle|'+attempt)*Math.PI*2;
-        const spread=preset==='sources' ? .12+.28*Math.sqrt(i/Math.max(1,anchors.length-1)) : .4;
-        const r=radius*spread*Math.sqrt(scatter(n.id,seed+'|cluster-radius|'+attempt));
+        const spread=preset==='sources' ? .35+.65*Math.sqrt(i/Math.max(1,anchors.length-1)) : .4;
+        const r=(preset==='sources'?sourceRadius:radius)*spread*Math.sqrt(scatter(n.id,seed+'|cluster-radius|'+attempt));
         x=r*Math.cos(angle);y=r*Math.sin(angle);
         const cx=Math.floor(x/cell),cy=Math.floor(y/cell);
         let clear=true;
@@ -96,6 +98,9 @@ export function presetLayout(nodes, edges, requested='sources', seed=0) {
       x:sources.length===1?x:-span/2+i*span/(sources.length-1),y:i%2?125:-125,anchor:false
     }));
   }
+  const sourceExtent=preset==='sources'?Math.max(0,...anchors.map(n=>{
+    const p=positions.get(n.id);return Math.hypot(p.x,p.y)+(n.radius||12);
+  })):0;
   const groups=new Map();
   for(const n of [...nodes].sort((a,b)=>a.id.localeCompare(b.id)))if(!positions.has(n.id)){
     const owner=owners.get(n.id)??-1;if(!groups.has(owner))groups.set(owner,[]);groups.get(owner).push(n);
@@ -103,7 +108,14 @@ export function presetLayout(nodes, edges, requested='sources', seed=0) {
   for(const [owner,group] of groups)group.forEach((n,i)=>{
     const angular=scatter(n.id,seed+'|angle'),radial=scatter(n.id,seed+'|radius');
     let x,y;
-    if(preset==='timeline'&&owner>=0){const anchor=positions.get(anchors[owner].id);x=anchor.x+(angular-.5)*130;y=(scatter(n.id,seed+'|side')<.5?-1:1)*(45+Math.sqrt(radial)*Math.max(100,Math.sqrt(group.length)*28));}
+    if(preset==='sources'&&anchors.length){
+      // Keep all other kinds outside the source cluster, including disconnected nodes.
+      const inner=sourceExtent+(n.radius||12)+100;
+      const outer=Math.max(radius,inner+Math.sqrt(nodes.length)*18);
+      const r=Math.sqrt(inner*inner+radial*(outer*outer-inner*inner));
+      const angle=angular*Math.PI*2;x=r*Math.cos(angle);y=r*Math.sin(angle);
+    }
+    else if(preset==='timeline'&&owner>=0){const anchor=positions.get(anchors[owner].id);x=anchor.x+(angular-.5)*130;y=(scatter(n.id,seed+'|side')<.5?-1:1)*(45+Math.sqrt(radial)*Math.max(100,Math.sqrt(group.length)*28));}
     else if(!anchors.length||owner<0){const fraction=Math.max(.01,radial);const r=radius*(preset==='sources'?.72*Math.sqrt(fraction):anchors.length?1.04+radial*.16:Math.sqrt(fraction));const angle=angular*2*Math.PI;x=r*Math.cos(angle);y=r*.8*Math.sin(angle);}
     else {const angle=angular*2*Math.PI;
       const fraction=Math.max(.01,radial);

@@ -138,3 +138,29 @@ test('long parent drags carry children prominently, attenuate by hop, and revers
   assert.ok(Math.hypot(nodes[1].vx,nodes[1].vy)<.1,'motion settles without jitter');
   sim.stop();
 });
+
+
+test('children converge toward the parent and collisions bend their paths at the current zoom',()=>{
+  const parent={id:'parent',x:0,y:0,fx:0,fy:0,radius:24};
+  const children=Array.from({length:16},(_,i)=>({id:'c'+i,x:300+(i%4)*16,y:-120+Math.floor(i/4)*16,radius:8}));
+  const nodes=[parent,...children];for(const n of children){n.fx=n.x;n.fy=n.y;}
+  const edges=children.map(n=>({source:parent.id,target:n.id}));
+  const sim=forceSimulation(nodes).stop().velocityDecay(.2).force('charge',forceManyBody()).force('link',forceLink(edges).id(n=>n.id));
+  releaseDragNeighbors(parent,nodes,edges,new Set());
+  configureDragForces({d3Force:(...args)=>sim.force(...args),zoom:()=>.5},true);
+  parent.x=parent.fx=900;parent.y=parent.fy=250;
+  const starts=children.map(n=>({x:n.x,y:n.y}));sim.alpha(1).tick(12);
+  const middle=children.map(n=>({x:n.x,y:n.y}));sim.tick(228);
+  assert.ok(children.every(n=>Math.hypot(n.x-parent.x,n.y-parent.y)<260),'children gather around the parent instead of retaining the original offset');
+  let curved=0,minGap=Infinity;
+  for(let i=0;i<children.length;i++){
+    const a=starts[i],b=middle[i],c=children[i];
+    const cross=Math.abs((b.x-a.x)*(c.y-b.y)-(b.y-a.y)*(c.x-b.x));
+    if(cross>1000)curved++;
+    for(let j=i+1;j<children.length;j++)minGap=Math.min(minGap,Math.hypot(c.x-children[j].x,c.y-children[j].y));
+  }
+  assert.ok(curved>=8,'collision response visibly changes trajectories');
+  assert.ok(minGap>32,'visible orbs remain separated at half zoom');
+  console.log(`Converging children: ${curved}/16 curved trajectories; minimum gap ${minGap.toFixed(1)}`);
+  sim.stop();
+});

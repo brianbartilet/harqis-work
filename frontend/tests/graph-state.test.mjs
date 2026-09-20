@@ -14,3 +14,14 @@ test('restoration rejects invalid coordinates and retains valid positions',()=>{
   assert.equal(result.viewport,null);
   assert.deepEqual(result.enabled,['people']);
 });
+
+
+test('old Sources geometry is regenerated without discarding settings or other presets',()=>{
+  const state={version:1,preset:'sources',filters:{search:'notes'},enabled:['sources'],sources:['notes'],positions:{s:{x:40,y:20}},viewport:{x:20,y:10,zoom:2}};
+  const read=value=>readGraphState({getItem:()=>JSON.stringify(value)},'view');
+  const migrated=read(state);
+  assert.deepEqual(migrated.positions,{});assert.equal(migrated.viewport,null);
+  assert.deepEqual(migrated.filters,state.filters);assert.deepEqual(migrated.sources,state.sources);
+  assert.deepEqual(read({...state,preset:'people'}).positions,state.positions);
+  assert.deepEqual(read({...state,layoutRevision:2}).positions,state.positions);
+});

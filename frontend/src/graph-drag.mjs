@@ -8,7 +8,11 @@ export function configureDragForces(graph,localDrag=false) {
   linkForce.strength(localDrag?.06:originalLinkStrength.get(linkForce));
   graph.d3Force('charge').strength(localDrag?0:-230);
   graph.d3Force('link').distance(localDrag?link=>Math.max(30,Math.hypot(link.source.x-link.target.x,link.source.y-link.target.y)):105);
-  graph.d3Force('collide',forceCollide(n=>n.radius+(localDrag?4:30)).iterations(2));
+  // Apply attraction before collisions, and the speed limiter after collisions.
+  graph.d3Force('collide',null);graph.d3Force('drag-damping',null);
+  graph.d3Force('drag-follow',localDrag?dragFollow(Math.max(.02,graph.zoom?.()||1)):null);
+  const scale=localDrag?Math.max(.02,graph.zoom?.()||1):1;
+  graph.d3Force('collide',forceCollide(n=>(n.radius+(localDrag?12:30))/scale).iterations(localDrag?3:2));
   graph.d3Force('x',localDrag?null:forceX(n=>n.clusterX||0).strength(.065));
   graph.d3Force('y',localDrag?null:forceY(n=>n.clusterY||0).strength(.065));
   if(localDrag){
@@ -21,6 +25,32 @@ export function configureDragForces(graph,localDrag=false) {
   }
 }
 
+
+// Nearby children orbit a spring's rest distance from the actual parent.
+// Their bearing is free to change, so collisions can deflect their path.
+export function dragFollow(scale=1){
+  let nodes=[];
+  const force=()=>{for(const n of nodes){
+    if(!n.dragOrigin||!n.dragParent)continue;
+    const parent=n.dragParent,origin=n.dragParentOrigin,weight=n.dragWeight??1;
+    const parentX=parent.fx??parent.x,parentY=parent.fy??parent.y;
+    const px=parentX-origin.x,py=parentY-origin.y;
+    if(weight===1){
+      const initial=Math.hypot(n.dragOrigin.x-origin.x,n.dragOrigin.y-origin.y);
+      const progress=1-Math.exp(-Math.hypot(px,py)/100);
+      const rest=initial+(Math.min(initial,Math.max(105,((parent.radius||12)+(n.radius||7)+30)/scale))-initial)*progress;
+      const dx=parentX-n.x,dy=parentY-n.y,distance=Math.hypot(dx,dy)||1;
+      const pull=(distance-rest)/distance*.10;
+      n.vx+=dx*pull;n.vy+=dy*pull;
+    }else{
+      // Weak support for the rest of the connected graph avoids rigid shared hubs.
+      n.vx+=(n.dragOrigin.x+px*.9*weight-n.x)*.06;
+      n.vy+=(n.dragOrigin.y+py*.9*weight-n.y)*.06;
+    }
+  }};
+  force.initialize=value=>{nodes=value;};return force;
+}
+
 export function dragDamping(){
   let nodes=[];
   const force=()=>{for(const n of nodes){
@@ -29,13 +59,8 @@ export function dragDamping(){
     const parent=n.dragParent,origin=n.dragParentOrigin;
     const px=parent&&origin?(parent.fx??parent.x)-origin.x:0;
     const py=parent&&origin?(parent.fy??parent.y)-origin.y:0;
-    // The resting position travels with the parent: no fixed 120-unit leash.
-    // Springs and collision response allow lag, overshoot and independent motion.
-    const targetX=n.dragOrigin.x+px*.9*weight,targetY=n.dragOrigin.y+py*.9*weight;
-    n.vx=n.vx*.94+(targetX-n.x)*.22;
-    n.vy=n.vy*.94+(targetY-n.y)*.22;
     const dx=n.x+n.vx-n.dragOrigin.x,dy=n.y+n.vy-n.dragOrigin.y;
-    const distance=Math.hypot(dx,dy),reach=(Math.hypot(px,py)+120)*weight;
+    const distance=Math.hypot(dx,dy),reach=(Math.hypot(px,py)+120+(weight===1?Math.hypot(n.dragOrigin.x-origin.x,n.dragOrigin.y-origin.y)*(1-Math.exp(-Math.hypot(px,py)/100)):0))*weight;
     if(distance>reach){
       n.vx=n.dragOrigin.x+dx/distance*reach-n.x;
       n.vy=n.dragOrigin.y+dy/distance*reach-n.y;

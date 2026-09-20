@@ -7,6 +7,8 @@ export function readGraphState(storage,key){
     s.positions=Object.fromEntries(Object.entries(s.positions||{}).filter(([id,p])=>point(p)).slice(0,10000));
     if(!point(s.viewport)||!Number.isFinite(s.viewport.zoom)||s.viewport.zoom<=0||s.viewport.zoom>1000)s.viewport=null;
     s.enabled=s.enabled.filter(v=>typeof v==='string');s.sources=s.sources.filter(v=>typeof v==='string');
+    // Regenerate old Sources geometry once while retaining settings and filters.
+    if(s.preset==='sources'&&s.layoutRevision!==2){s.positions={};s.viewport=null;}
     return s;
   } catch {return null;}
 }
