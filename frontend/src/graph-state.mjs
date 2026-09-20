@@ -9,7 +9,7 @@ export function readGraphState(storage,key){
     s.enabled=s.enabled.filter(v=>typeof v==='string');s.sources=s.sources.filter(v=>typeof v==='string');
     // Regenerate old Sources geometry once while retaining settings and filters.
     if(s.preset==='sources'&&!(s.layoutRevision>=2)){s.positions={};s.viewport=null;}
-    if(s.preset==='timeline'&&!(s.layoutRevision>=3)){s.positions={};s.viewport=null;}
+    if(s.preset==='timeline'&&!(s.layoutRevision>=4)){s.positions={};s.viewport=null;}
     return s;
   } catch {return null;}
 }

@@ -84,12 +84,27 @@ export function presetLayout(nodes, edges, requested='timeline', seed=0) {
     });
   }
   if(preset==='timeline'&&anchors.length){
-    // Reuse the central source arrangement in the open half of the timeline.
-    const sources=nodes.filter(n=>n.kind==='sources');
-    const cluster=presetLayout(sources,[],'sources',seed).positions;
-    const extent=Math.max(1,...sources.map(n=>{const p=cluster.get(n.id);return Math.hypot(p.x,p.y)+(n.radius||12);}));
-    const scale=Math.min(1,350/extent),latestX=positions.get(anchors.at(-1).id).x;
-    for(const n of sources){const p=cluster.get(n.id);positions.set(n.id,{x:latestX+650+p.x*scale,y:p.y*scale,anchor:false});}
+    // Only visibly large hubs leave their date clouds (31 links at normal sizing).
+    const span=Math.max(1260,positions.get(anchors.at(-1).id).x-positions.get(anchors[0].id).x);
+    const middle=(positions.get(anchors[0].id).x+positions.get(anchors.at(-1).id).x)/2;
+    const scale=Math.max(1,span/1400),clusters=[];
+    for(const kind of ['sources','people','companies','tools']){
+      const hubs=nodes.filter(n=>n.kind===kind&&(n.radius||0)>=24);
+      if(!hubs.length)continue;
+      // Source packing places the largest orb first, regardless of entity kind.
+      const packed=presetLayout(hubs.map(n=>({...n,kind:'sources'})),[],'sources',seed).positions;
+      const extent=Math.max(...hubs.map(n=>{const p=packed.get(n.id);return Math.hypot(p.x,p.y)+(n.radius||12);}))*scale;
+      clusters.push({kind,hubs,packed,extent});
+    }
+    const extent=Math.max(0,...clusters.map(c=>c.extent));
+    const vertical=Math.max(span*.24,extent*2+200,600);
+    const right=middle+Math.max(span*.32,extent*2+200);
+    const centers={sources:{x:middle,y:-vertical},tools:{x:middle,y:vertical},
+      people:{x:right,y:-vertical*1.65},companies:{x:right,y:-vertical*.6}};
+    for(const {kind,hubs,packed} of clusters)for(const n of hubs){
+      const p=packed.get(n.id),center=centers[kind];
+      positions.set(n.id,{x:center.x+p.x*scale,y:center.y+p.y*scale,anchor:false});
+    }
   }
 
   const sourceExtent=preset==='sources'?Math.max(0,...anchors.map(n=>{
@@ -134,10 +149,9 @@ export function timelineFitPoints(nodes, positions) {
   })).filter(n=>Number.isFinite(n.time));
   if(!dates.length)return [...positions.values()];
   const latest=dates.reduce((a,b)=>a.time>b.time?a:b);
-  // Six intervals plus the newest day occupy the left half; the right half
-  // frames the Sources cluster. Symmetric bounds keep the latest date centered.
-  const halfWidth=6*180+60;
-  return [{x:latest.point.x-halfWidth,y:latest.point.y-320},{x:latest.point.x+halfWidth,y:latest.point.y+320}];
+  // Frame seven calendar days across the viewport; hub clusters are revealed
+  // by zooming out, rather than reducing the initial timeline detail.
+  return [{x:latest.point.x-6*180-60,y:latest.point.y-220},{x:latest.point.x+60,y:latest.point.y+220}];
 }
 
 export function motionOffset(mode, point, time, phase, fixed=false) {

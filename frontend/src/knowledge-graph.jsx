@@ -66,7 +66,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     filters.shared=$('shared').checked;
     const positions=Object.fromEntries(nodes.slice(0,10000).map(n=>[n.id,{...(layoutTargets.get(n.id)||{x:n.x,y:n.y}),manual:!!n.manual}]));
     const center=graphApi.screen2GraphCoords(host.clientWidth/2,host.clientHeight/2);
-    try {localStorage.setItem(stateKey,JSON.stringify({version:1,layoutRevision:3,filters,enabled:[...enabled],sources:[...selectedSources],preset,animationMode,layoutSeed,selected,focusId,all:window.activityModals?.isAll(),positions,viewport:{...center,zoom:graphApi.zoom()}}));}
+    try {localStorage.setItem(stateKey,JSON.stringify({version:1,layoutRevision:4,filters,enabled:[...enabled],sources:[...selectedSources],preset,animationMode,layoutSeed,selected,focusId,all:window.activityModals?.isAll(),positions,viewport:{...center,zoom:graphApi.zoom()}}));}
     catch { $('live').textContent='View could not be saved in this browser.'; }
   }
   function scheduleStateSave(){clearTimeout(stateTimer);stateTimer=setTimeout(saveGraphState,500);}
