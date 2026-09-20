@@ -17,12 +17,8 @@ Tasks:
   - ingest_echomtg_inventory_activity: daily — diffs the complete EchoMTG
                             collection against its last successful snapshot.
   - summarize_hfl_week   : weekly rollup of the past 7 days of entries (Haiku).
-  - retrieve_hfl_corpus  : retrieval API + weekly digest. Beat fires Sundays
-                           at 20:00 with email_to=$HARQIS_OWNER_EMAIL to
-                           mail the past 7 days' raw entries (closes the
-                           capture→ingest→retrieve loop). MCP / .delay()
-                           callers can still invoke it with email_to=None for
-                           pure programmatic recall.
+  - retrieve_hfl_corpus  : on-demand retrieval API; weekly email digest disabled.
+                           Pass email_to=None for programmatic recall without mail.
   - ingest_*             : scheduled source-specific capture and distillation.
   - flush_hfl_outbox     : every five minutes on hfl_broadcast; retries durable
                            envelopes from every participating worker.
@@ -301,34 +297,32 @@ WORKFLOW_HFL = {
         },
     },
 
-    # Retrieval — weekly Sunday digest at 20:00 local, one hour before
-    # summarize_hfl_week. Mails the past 7 days of raw HFL entries to the
-    # operator so the capture → ingest → retrieve → notify loop closes
-    # automatically. MCP / .delay() callers can still hit this task with
-    # email_to=None for pure programmatic recall (no mail). expires=23h so a
-    # missed Sunday slot is dropped before the next week's tick lines up.
-    'run-job--retrieve_hfl_corpus': {
-        'task': 'workflows.hfl.tasks.retrieve.retrieve_hfl_corpus',
-        'schedule': crontab(day_of_week='sun', hour=20, minute=0),
-        'kwargs': {
-            'query': '',
-            'k': 50,
-            'since': '-7d',
-            'email_to': os.environ.get('HARQIS_OWNER_EMAIL', 'owner@example.com'),
-            'cfg_id__gmail': 'GOOGLE_GMAIL_SEND',
-        },
-        'options': {
-            'queue': WorkflowQueue.HFL,
-            'expires': 60 * 60 * 23,
-        },
-        'manifesto': {
-            'code_role': 'distill+express',
-            'para_bucket': 'area',
-            'express_target': 'es_log+email',
-            'review_artifact': 'es_log',
-            'hfl_signal': True,
-        },
-    },
+    # Weekly retrieval email digest disabled at owner request. Keep this
+    # schedule as a manual re-enable reference; on-demand retrieval remains
+    # available (email_to=None means no mail). Uncomment to restore Sunday
+    # 20:00 local delivery to HARQIS_OWNER_EMAIL via GOOGLE_GMAIL_SEND.
+    # 'run-job--retrieve_hfl_corpus': {
+    #     'task': 'workflows.hfl.tasks.retrieve.retrieve_hfl_corpus',
+    #     'schedule': crontab(day_of_week='sun', hour=20, minute=0),
+    #     'kwargs': {
+    #         'query': '',
+    #         'k': 50,
+    #         'since': '-7d',
+    #         'email_to': os.environ.get('HARQIS_OWNER_EMAIL', 'owner@example.com'),
+    #         'cfg_id__gmail': 'GOOGLE_GMAIL_SEND',
+    #     },
+    #     'options': {
+    #         'queue': WorkflowQueue.HFL,
+    #         'expires': 60 * 60 * 23,
+    #     },
+    #     'manifesto': {
+    #         'code_role': 'distill+express',
+    #         'para_bucket': 'area',
+    #         'express_target': 'es_log+email',
+    #         'review_artifact': 'es_log',
+    #         'hfl_signal': True,
+    #     },
+    # },
 
     # Daily browsing digest — 23:00 local, same slot as the other ingest
     # sources. Reads the Chrome + Edge `History` SQLite DBs on the local

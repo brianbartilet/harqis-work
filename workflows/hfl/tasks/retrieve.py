@@ -13,8 +13,9 @@ Optional Gmail digest
 ---------------------
 Pass ``email_to=<addr>`` (and optionally ``cfg_id__gmail``) to also mail the
 rendered hits to that address — closes the capture → ingest → retrieve loop
-for the weekly Sunday-evening digest scheduled in ``tasks_config.py``. MCP
-callers leave ``email_to=None`` so live recall queries don't trigger mail.
+for an on-demand digest. The former weekly Sunday-evening Beat schedule is
+disabled in ``tasks_config.py``. MCP callers leave ``email_to=None`` so live
+recall queries don't trigger mail.
 """
 
 from __future__ import annotations
