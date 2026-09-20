@@ -28,7 +28,7 @@ export function randomizePresetNodes(nodes,seed){
   }
 }
 
-export function presetLayout(nodes, edges, requested='sources', seed=0) {
+export function presetLayout(nodes, edges, requested='timeline', seed=0) {
   let preset=PRESETS[requested]?requested:'sources';
   let anchors=nodes.filter(n=>n.kind===(preset==='timeline'?'daily':preset));
   let notice='';
@@ -50,7 +50,10 @@ export function presetLayout(nodes, edges, requested='sources', seed=0) {
   const sourceRadius=Math.max(120,Math.sqrt(anchors.reduce((sum,n)=>sum+((n.radius||12)+12)**2,0))*1.8);
   const occupied=new Map();
   anchors.forEach((n,i)=>{
-    if(preset==='timeline')positions.set(n.id,{x:(i-(anchors.length-1)/2)*180,y:0,anchor:true});
+    if(preset==='timeline'){
+      const latest=Date.parse(anchors.at(-1).id.replace(/^daily:/,'')),date=Date.parse(n.id.replace(/^daily:/,''));
+      positions.set(n.id,{x:Number.isFinite(date)&&Number.isFinite(latest)?(date-latest)/86400000*180:(i-anchors.length+1)*180,y:0,anchor:true});
+    }
     else {
       let x=0,y=0,attempt=0;
       if(i)for(;attempt<256;attempt++){
@@ -81,23 +84,14 @@ export function presetLayout(nodes, edges, requested='sources', seed=0) {
     });
   }
   if(preset==='timeline'&&anchors.length){
-    // Order sources by their linked activity, then give each a clear slot along
-    // the date axis instead of letting shared sources collect at the first day.
-    const dateX=new Map(anchors.map(n=>[n.id,positions.get(n.id).x]));
-    const entryX=new Map();
-    for(const n of nodes)if(n.kind==='entries'){
-      const dates=adjacency.get(n.id).filter(id=>dateX.has(id));
-      if(dates.length)entryX.set(n.id,dates.reduce((sum,id)=>sum+dateX.get(id),0)/dates.length);
-    }
-    const sources=nodes.filter(n=>n.kind==='sources').map(n=>{
-      const dates=adjacency.get(n.id).filter(id=>entryX.has(id)||dateX.has(id));
-      return {node:n,x:dates.length?dates.reduce((sum,id)=>sum+(entryX.get(id)??dateX.get(id)),0)/dates.length:0};
-    }).sort((a,b)=>a.x-b.x||a.node.label.localeCompare(b.node.label)||a.node.id.localeCompare(b.node.id));
-    const span=Math.max((anchors.length-1)*180,(sources.length-1)*90);
-    sources.forEach(({node,x},i)=>positions.set(node.id,{
-      x:sources.length===1?x:-span/2+i*span/(sources.length-1),y:i%2?125:-125,anchor:false
-    }));
+    // Reuse the central source arrangement in the open half of the timeline.
+    const sources=nodes.filter(n=>n.kind==='sources');
+    const cluster=presetLayout(sources,[],'sources',seed).positions;
+    const extent=Math.max(1,...sources.map(n=>{const p=cluster.get(n.id);return Math.hypot(p.x,p.y)+(n.radius||12);}));
+    const scale=Math.min(1,350/extent),latestX=positions.get(anchors.at(-1).id).x;
+    for(const n of sources){const p=cluster.get(n.id);positions.set(n.id,{x:latestX+650+p.x*scale,y:p.y*scale,anchor:false});}
   }
+
   const sourceExtent=preset==='sources'?Math.max(0,...anchors.map(n=>{
     const p=positions.get(n.id);return Math.hypot(p.x,p.y)+(n.radius||12);
   })):0;
@@ -139,11 +133,11 @@ export function timelineFitPoints(nodes, positions) {
     point:positions.get(n.id),time:Date.parse(n.id.replace(/^daily:/,''))
   })).filter(n=>Number.isFinite(n.time));
   if(!dates.length)return [...positions.values()];
-  const latest=Math.max(...dates.map(n=>n.time)),start=latest-13*86400000;
-  // Frame the date axis and nearby branches; older activity remains pannable.
-  return dates.filter(n=>n.time>=start).flatMap(({point})=>[
-    {x:point.x-60,y:-150},{x:point.x+60,y:150}
-  ]);
+  const latest=dates.reduce((a,b)=>a.time>b.time?a:b);
+  // Six intervals plus the newest day occupy the left half; the right half
+  // frames the Sources cluster. Symmetric bounds keep the latest date centered.
+  const halfWidth=6*180+60;
+  return [{x:latest.point.x-halfWidth,y:latest.point.y-320},{x:latest.point.x+halfWidth,y:latest.point.y+320}];
 }
 
 export function motionOffset(mode, point, time, phase, fixed=false) {

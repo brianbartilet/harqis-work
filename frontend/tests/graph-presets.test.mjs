@@ -88,7 +88,7 @@ test('new layout seeds scatter final orb positions but preserve the central hub 
     const repeat=presetLayout([...nodes].reverse(),edges,preset,1).positions;
     for(const n of nodes){
       assert.deepEqual(a.get(n.id),repeat.get(n.id));
-      if((preset==='timeline'&&['daily','sources'].includes(n.kind))||Math.hypot(a.get(n.id).x,a.get(n.id).y)===0)assert.deepEqual(a.get(n.id),b.get(n.id));
+      if((preset==='timeline'&&(n.kind==='daily'||n.id==='sources0'))||Math.hypot(a.get(n.id).x,a.get(n.id).y)===0)assert.deepEqual(a.get(n.id),b.get(n.id));
       else assert.notDeepEqual(a.get(n.id),b.get(n.id));
       if(n.kind==='entries')assert.notDeepEqual(a.get(n.id),b.get(n.id));
     }
@@ -108,23 +108,15 @@ test('timeline note clouds stay near their dates without repeated columns or row
   assert.ok(xs.size>entries.length*.9);assert.ok(ys.size>entries.length*.9);
 });
 
-test('timeline spreads sources chronologically along the axis, above and below it',()=>{
-  const p=presetLayout(nodes,edges,'timeline').positions;
-  // sources1 is linked to September 1; sources0 is linked to September 20.
-  assert.equal(p.get('sources1').x,p.get('daily:2026-09-01').x);
-  assert.equal(p.get('sources0').x,p.get('daily:2026-09-20').x);
-  assert.equal(p.get('sources1').y,-125);assert.equal(p.get('sources0').y,125);
-  const reversed=presetLayout([...nodes].reverse(),[...edges].reverse(),'timeline').positions;
-  for(const n of nodes.filter(n=>n.kind==='sources'))assert.deepEqual(p.get(n.id),reversed.get(n.id));
-});
-
-test('timeline separates sources even with one date and handles a single source',()=>{
-  const day=nodes[0],sources=Array.from({length:6},(_,i)=>({id:'source'+i,kind:'sources',label:'Source '+i}));
-  const p=presetLayout([day,...sources],[],'timeline').positions;
-  const xs=sources.map(n=>p.get(n.id).x);
-  for(let i=1;i<xs.length;i++)assert.ok(xs[i]-xs[i-1]>=90);
-  const single=presetLayout([day,sources[0]],[],'timeline').positions.get('source0');
-  assert.equal(single.x,0);assert.equal(single.y,-125);
+test('timeline centers the latest day and clusters sources on its right',()=>{
+  const p=presetLayout(nodes,edges,'timeline',1).positions;
+  const newest=p.get('daily:2026-09-20');assert.equal(newest.x,0);
+  assert.equal(p.get('daily:2026-09-01').x,-19*180);
+  for(const n of nodes.filter(n=>n.kind==='sources'))assert.ok(p.get(n.id).x>newest.x+250);
+  assert.deepEqual(p.get('sources0'),{x:650,y:0,anchor:false});
+  assert.equal(presetLayout(nodes,edges).preset,'timeline');
+  const single=presetLayout([nodes[0],nodes.find(n=>n.id==='sources0')],[],'timeline').positions;
+  assert.equal(single.get('sources0').x,650);
 });
 
 for(const kind of ['people','tools','companies'])test(kind+' randomizes sources in a nearer peripheral band',()=>{
@@ -158,14 +150,15 @@ test('6000-node layout stays within a bounded computation budget',()=>{
   assert.ok(elapsed<2000);
 });
 
-test('timeline fits the latest available 14 days without removing older dates',()=>{
-  const dates=['2020-01-01','2026-09-06','2026-09-07','2026-09-20'].map(date=>({id:'daily:'+date,kind:'daily',label:date}));
+test('timeline fits seven calendar days with the latest date at the viewport center',()=>{
+  const dates=['2020-01-01','2026-09-13','2026-09-14','2026-09-20'].map(date=>({id:'daily:'+date,kind:'daily',label:date}));
   const positions=presetLayout(dates,[],'timeline').positions;
   const points=timelineFitPoints(dates,positions);
+  const left=Math.min(...points.map(p=>p.x)),right=Math.max(...points.map(p=>p.x));
+  assert.equal((left+right)/2,positions.get('daily:2026-09-20').x);
+  assert.ok(positions.get('daily:2026-09-14').x>=left);
+  assert.ok(positions.get('daily:2026-09-13').x<left);
   assert.equal(positions.size,4);
-  assert.equal(points.length,4);
-  assert.equal(Math.min(...points.map(p=>p.x)),positions.get('daily:2026-09-07').x-60);
-  assert.equal(Math.max(...points.map(p=>p.x)),positions.get('daily:2026-09-20').x+60);
 });
 
 

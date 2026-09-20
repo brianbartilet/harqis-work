@@ -25,3 +25,12 @@ test('old Sources geometry is regenerated without discarding settings or other p
   assert.deepEqual(read({...state,preset:'people'}).positions,state.positions);
   assert.deepEqual(read({...state,layoutRevision:2}).positions,state.positions);
 });
+
+
+test('timeline layout upgrade retains filters and migrates only old geometry',()=>{
+  const s={version:1,preset:'timeline',filters:{rolling:'90'},enabled:['daily','sources'],sources:[],positions:{d:{x:50,y:0}},viewport:{x:5,y:0,zoom:1},layoutRevision:2};
+  const read=v=>readGraphState({getItem:()=>JSON.stringify(v)},'view');
+  assert.deepEqual(read(s).positions,{});assert.equal(read(s).viewport,null);
+  assert.deepEqual(read(s).filters,s.filters);
+  assert.deepEqual(read({...s,layoutRevision:3}).positions,s.positions);
+});

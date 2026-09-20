@@ -42,7 +42,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const endpointId=value=>typeof value==='object'?value.id:value;
   const duration=reducedMotion?0:500;
-  let preset='sources', animationMode='off', motionTime=0, transition=null, motionSettling=false;
+  let preset='timeline', animationMode='off', motionTime=0, transition=null, motionSettling=false;
   const animationKey='hfl:graph:animation:'+document.querySelector('.kg-shell').dataset.viewOwner;
   const detailKey='hfl:graph:detail:'+document.querySelector('.kg-shell').dataset.viewOwner;
   function saveDetail(){try {localStorage.setItem(detailKey,$('density').value);} catch {}}
@@ -66,7 +66,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     filters.shared=$('shared').checked;
     const positions=Object.fromEntries(nodes.slice(0,10000).map(n=>[n.id,{...(layoutTargets.get(n.id)||{x:n.x,y:n.y}),manual:!!n.manual}]));
     const center=graphApi.screen2GraphCoords(host.clientWidth/2,host.clientHeight/2);
-    try {localStorage.setItem(stateKey,JSON.stringify({version:1,layoutRevision:2,filters,enabled:[...enabled],sources:[...selectedSources],preset,animationMode,layoutSeed,selected,focusId,all:window.activityModals?.isAll(),positions,viewport:{...center,zoom:graphApi.zoom()}}));}
+    try {localStorage.setItem(stateKey,JSON.stringify({version:1,layoutRevision:3,filters,enabled:[...enabled],sources:[...selectedSources],preset,animationMode,layoutSeed,selected,focusId,all:window.activityModals?.isAll(),positions,viewport:{...center,zoom:graphApi.zoom()}}));}
     catch { $('live').textContent='View could not be saved in this browser.'; }
   }
   function scheduleStateSave(){clearTimeout(stateTimer);stateTimer=setTimeout(saveGraphState,500);}
@@ -499,7 +499,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   $('density').onchange=()=>{saveDetail();exampleMode?render():load();};$('shared').onchange=()=>exampleMode?render():load();$('in').onclick=()=>zoom(1.3);$('out').onclick=()=>zoom(1/1.3);$('fit').onclick=()=>fitTargets(true,true);$('reload').onclick=load;
   $('reset').onclick=()=>{
     pendingState=null;try {localStorage.removeItem(stateKey);} catch {}
-    window.activityModals?.reset();preset='sources';setAnimation('off');
+    window.activityModals?.reset();preset='timeline';setAnimation('off');
     $('search').value='';$('density').value='100';$('rolling').value='0';$('since').value='';$('until').value='';
     saveDetail();
     selectedSources.clear();sourceOptions(data.sources||[]);syncDates();$('shared').checked=false;

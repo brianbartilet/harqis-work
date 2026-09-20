@@ -35,7 +35,7 @@ def test_presets_motion_and_large_graph(authenticated_client, monkeypatch, tmp_p
             started=time.monotonic();page.goto('http://graph.test/hfl-corpus/graph')
             page.wait_for_selector('#kg-workspace:not([inert])')
             print(f'Overview usable ({mobile=}): {time.monotonic()-started:.2f}s')
-            assert page.locator('#kg-canvas').get_attribute('data-preset')=='sources'
+            assert page.locator('#kg-canvas').get_attribute('data-preset')=='timeline'
             assert not page.locator('#kg-shared').is_checked()
             assert page.locator('#kg-save').count()==0 and page.locator('#kg-group').count()==0
             for preset in ['timeline','people','tools','companies','sources']:
@@ -226,3 +226,60 @@ def test_drag_keeps_neighbors_moving_after_pointer_stops(authenticated_client, m
             assert canvas.evaluate('(el)=>el.toDataURL()')==final
         finally:
             browser.close()
+
+
+@pytest.mark.parametrize('mobile', [False, True])
+def test_filter_drawer_persists_all_controls(authenticated_client, monkeypatch, mobile):
+    playwright = pytest.importorskip('playwright.sync_api')
+    from modules.hfl_corpus import entities
+    sample=[dict(id=kind,kind=kind,label=kind) for kind in ['sources','entries','people','tools','companies','daily','objects','topics']]
+    monkeypatch.setattr(entities,'graph',lambda *args:dict(nodes=sample,edges=[],total_nodes=len(sample),sources=['notes','desktop']))
+    with playwright.sync_playwright() as engine:
+        options={'headless':True}
+        if not Path(engine.chromium.executable_path).exists(): options['channel']='msedge'
+        browser=engine.chromium.launch(**options)
+        try:
+            page=browser.new_page(viewport={'width':390 if mobile else 1440,'height':1000},has_touch=mobile,is_mobile=mobile)
+            requests=[];errors=[]
+            page.on('pageerror',lambda error:errors.append(str(error)))
+            def route_request(route):
+                r=route.request
+                if '/entities/graph?' in r.url:requests.append(r.url)
+                response=authenticated_client.get(r.url.replace('http://graph.test',''))
+                route.fulfill(status=response.status_code,body=response.content,headers={k:v for k,v in response.headers.items() if k.lower() not in {'content-encoding','content-length'}})
+            page.route('http://graph.test/**',route_request)
+            page.goto('http://graph.test/hfl-corpus/graph')
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            page.click('#kg-open-filters')
+            page.select_option('#kg-rolling','90')
+            page.check('#kg-shared')
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            page.click('#kg-source-menu summary')
+            page.get_by_label('notes',exact=True).check()
+            page.locator('#kg-types label').filter(has=page.locator('input[data-kind="tools"]')).click()
+            page.click('#kg-filter')
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            page.reload();page.wait_for_selector('#kg-workspace:not([inert])')
+            page.click('#kg-open-filters')
+            assert page.locator('#kg-rolling').input_value()=='90'
+            assert page.locator('#kg-since').is_disabled() and page.locator('#kg-until').is_disabled()
+            assert page.locator('#kg-shared').is_checked()
+            assert not page.locator('#kg-types input[data-kind="tools"]').is_checked()
+            assert page.locator('#kg-types input[data-kind="people"]').is_checked()
+            assert 'rolling=90' in requests[-1] and 'sources=notes' in requests[-1] and 'shared=true' in requests[-1]
+            page.click('#kg-source-menu summary')
+            assert page.get_by_label('notes',exact=True).is_checked()
+            assert not page.get_by_label('desktop',exact=True).is_checked()
+            page.select_option('#kg-rolling','0')
+            page.fill('#kg-since','2026-09-01');page.fill('#kg-until','2026-09-15')
+            page.click('#kg-filter');page.wait_for_selector('#kg-workspace:not([inert])')
+            page.reload();page.wait_for_selector('#kg-workspace:not([inert])')
+            page.click('#kg-open-filters')
+            assert page.locator('#kg-rolling').input_value()=='0'
+            assert page.locator('#kg-since').input_value()=='2026-09-01'
+            assert page.locator('#kg-until').input_value()=='2026-09-15'
+            assert page.locator('#kg-since').is_enabled()
+            assert 'since=2026-09-01' in requests[-1] and 'until=2026-09-15' in requests[-1]
+            assert not page.locator('#kg-types input[data-kind="tools"]').is_checked()
+            assert not errors,errors
+        finally:browser.close()
