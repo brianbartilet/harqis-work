@@ -318,6 +318,8 @@ def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
             action = (f'<a class="corpus-followup-action" href="/hfl-corpus?{html.escape(query, quote=True)}" '
                       f'aria-describedby="{html.escape(entry.anchor, quote=True)}" '
                       'aria-label="Create a follow-up from this HFL entry">Make actionable ↗</a>')
+            action += (f'<a data-create-idea-source href="/hfl-corpus?{html.escape(query, quote=True)}" '
+                       'class="corpus-idea-action">Add idea</a>')
         header = _display_entry_header(match.group(1))
         heading = f'<h2 id="{html.escape(entry.anchor, quote=True)}" class="scroll-mt-40">{header}</h2>'
         edit = (f'<button type="button" class="corpus-followup-action" '
@@ -1650,3 +1652,5 @@ async def hfl_remote_reference_thumbnail(request: Request, token: str):
 
 from modules.hfl_corpus.timeline import router as timeline_router
 router.include_router(timeline_router)
+from modules.hfl_corpus.ideas_api import router as ideas_router
+router.include_router(ideas_router, prefix='/timeline')

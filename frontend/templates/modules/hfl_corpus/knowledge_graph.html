@@ -1,9 +1,12 @@
 {% extends "modules/hfl_corpus/modal_base.html" %}
-{% block title %}HARQIS — Activity Graph{% endblock %}
+{% block title %}HARQIS — {{ 'Ideas' if request.url.path.endswith('/ideas') else 'Activity Graph' }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ static_asset('css/hfl-timeline.css') }}"><link rel="stylesheet" href="{{ static_asset('css/knowledge-graph.css') }}">{% endblock %}
 {% block content %}
-<main class="kg-shell" data-view-owner="{{ user }}">
-  <header class="activity-modal-heading"><h1>Activity Graph</h1><button type="button" data-activity-close>Close</button></header>
+<main class="kg-shell" data-view-owner="{{ user }}" data-ideas-workspace="{{ 'true' if request.url.path.endswith('/ideas') else 'false' }}">
+  <header class="activity-modal-heading"><h1>{{ 'Ideas · Mind maps' if request.url.path.endswith('/ideas') else 'Activity Graph' }}</h1><button type="button" data-activity-close>Close</button></header>
+  {% if request.url.path.endswith('/ideas') %}
+  <div id="idea-map-tools" class="idea-map-tools" aria-label="Mind maps"></div>
+  {% endif %}
   <div class="kg-toolbar kg-main-toolbar">
     <label>Find a node<input id="kg-search" type="search" placeholder="Search entries or entities" autocomplete="off"></label>
     <div class="kg-detail-control"><select id="kg-density" aria-label="Graph detail"><option value="100">Overview</option><option value="500">Expanded</option><option value="1000">Dense</option><option value="0">All matching nodes</option></select><details class="kg-detail-help"><summary aria-label="About graph detail">i</summary><p>Overview: up to 100 nodes.<br>Expanded: up to 500 nodes.<br>Dense: up to 1,000 nodes.<br>All: every matching node and connection.<br>A node is an entry, entity, source or date. Filters may return fewer nodes.</p></details></div>
@@ -38,6 +41,9 @@
           <button type="button" data-preset="people" aria-pressed="false">People</button>
           <button type="button" data-preset="tools" aria-pressed="false">Tools</button>
           <button type="button" data-preset="companies" aria-pressed="false">Companies</button>
+          {% if request.url.path.endswith('/ideas') %}
+          <button type="button" data-preset="mindmap" aria-pressed="false">Mind map</button>
+          {% endif %}
         </div>
       </div>
     </div>

@@ -285,14 +285,10 @@ async def timeline_period(request: Request, start: str, end: str):
 
 @router.post('/suggestions/{sid}/dismiss')
 async def dismiss_suggestion(request: Request, sid: str):
-    owner(request)
-    try:
-        item = store().suggestion(sid)
-    except KeyError:
-        raise HTTPException(404, 'Suggestion not found.') from None
-    if item['status'] == 'adopted':
-        raise HTTPException(409, 'Update the adopted action instead.')
-    store().mark_suggestion(sid, 'dismissed')
+    actor = owner(request)
+    from modules.hfl_corpus.ideas_api import require_idea, call, store as ideas_store
+    item = require_idea(sid)
+    call(ideas_store().save_idea, {'version': item['version'], 'status': 'dismissed'}, actor, sid)
     return {'status': 'dismissed'}
 
 

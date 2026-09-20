@@ -162,6 +162,9 @@
     <div class="min-w-0">
       <p class="text-xs uppercase tracking-[0.22em] text-blue-400">Corpus document</p>
       <h1 class="mt-2 truncate text-xl font-semibold text-white">{{ document.name }}</h1>
+      {% if document.name[:10]|length == 10 and document.name[4:5] == '-' and document.name[7:8] == '-' %}
+      <button type="button" class="corpus-idea-action" data-document-idea-date="{{ document.name[:10] }}">Add idea for this date</button>
+      {% endif %}
       <p class="mt-1 text-xs text-slate-500">Updated {{ document.updated_at.strftime('%a %b %d %Y %I:%M %p') }}</p>
     </div>
     <div class="shrink-0 pt-1 text-right text-xs">

@@ -10,6 +10,17 @@ const edges=nodes.filter(n=>n.kind==='entries').flatMap((n,i)=>[
   {source:n.id,target:'sources'+i%2},{source:n.id,target:'people'+i%2},
   {source:n.id,target:'tools'+i%2},{source:n.id,target:'companies'+i%2},
   {source:n.id,target:'daily:2026-09-'+(i%2?'01':'20')}]);
+
+test('mind maps preserve branches, cycles and isolated nodes without source anchors',()=>{
+  const members=['root','a','b','cycle1','cycle2','alone'].map(id=>({id,kind:'ideas'}));
+  const links=[['root','a'],['root','b'],['cycle1','cycle2'],['cycle2','cycle1']].map(([source,target])=>({source,target}));
+  const layout=presetLayout(members,links,'mindmap');
+  assert.equal(layout.preset,'mindmap');assert.equal(layout.notice,'');assert.equal(layout.positions.size,members.length);
+  for(const point of layout.positions.values())assert.ok(Number.isFinite(point.x)&&Number.isFinite(point.y));
+  assert.ok(layout.positions.get('a').x>layout.positions.get('root').x);
+  assert.notEqual(layout.positions.get('a').y,layout.positions.get('b').y);
+  assert.equal(new Set([...layout.positions.values()].map(p=>`${p.x},${p.y}`)).size,members.length);
+});
 test('timeline preserves ascending dates on a straight horizontal axis',()=>{
   const p=presetLayout(nodes,edges,'timeline').positions;
   assert.equal(p.size,nodes.length);assert.equal(p.get('daily:2026-09-01').y,0);

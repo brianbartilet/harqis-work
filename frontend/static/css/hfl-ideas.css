@@ -1,0 +1,101 @@
+.idea-dialog { width:min(760px,94vw); max-height:90dvh; overflow:auto; border:1px solid #334155; border-radius:16px; background:#0c1728; color:#e2e8f0; padding:24px; }
+.idea-dialog::backdrop { background:#020617bb; }
+.idea-dialog h2 { font-size:1.3rem; font-weight:650; margin-bottom:16px; }
+.idea-dialog label { display:block; font-size:.85rem; margin:12px 0; color:#adc1d6; }
+.idea-dialog input:not([type=checkbox]),.idea-dialog textarea,.idea-dialog select,.idea-map-tools input,.idea-map-tools select,.idea-checklist input:not([type=checkbox]) { display:block; width:100%; color:#e2e8f0; background:#101e33; border:1px solid #40516a; border-radius:6px; padding:8px; margin-top:5px; }
+.idea-dialog textarea { min-height:90px; }
+.idea-dialog button,.idea-map-tools button,.idea-checklist button { border:1px solid #475569; border-radius:6px; padding:6px 10px; margin:4px; background:#16263e; color:#dbeafe; cursor:pointer; }
+.idea-dialog button:disabled { opacity:.5; cursor:wait; }
+.idea-dialog button[type=submit] { background:#2563eb; }
+.idea-dialog footer { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+.idea-checklist { margin:14px 0; padding:12px; border:1px solid #334155; border-radius:9px; }
+.idea-checklist progress { width:100%; height:5px; accent-color:#22d3ee; }
+.idea-checklist p { color:#94a3b8; font-size:.75rem; margin:6px 0; }
+.idea-check-row { display:flex; gap:5px; align-items:center; margin:6px 0; }
+.idea-check-row input[type=checkbox] { width:18px; flex-shrink:0; accent-color:#22d3ee; }
+.idea-check-row input:not([type=checkbox]) { min-width:60px; flex:1; }
+.idea-check-row button { font-size:.75rem; margin:0; padding:4px; }
+.idea-map-tools { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 16px; border-bottom:1px solid #334155; }
+.idea-map-tools select { width:auto; max-width:240px; }
+.idea-map-tools label { font-size:.8rem; color:#94a3b8; }
+.idea-map-status { color:#94a3b8; font-size:.8rem; }
+.idea-error { color:#fda4af; white-space:pre-wrap; margin:12px 0; }
+.idea-choices { max-height:340px; overflow:auto; }
+.idea-choices button { display:block; width:calc(100% - 8px); text-align:left; }
+.idea-proposal { border:1px solid #334155; border-radius:8px; padding:12px; margin:12px 0; }
+.idea-proposal p { white-space:pre-wrap; }
+.idea-inspector-status { color:#7dd3fc; text-transform:capitalize; }
+.idea-add-menu { position:relative; margin-top:12px; }
+.kg-shell #kg-detail .idea-add-toggle { position:relative; width:100%; margin:0; padding:10px 32px; min-height:40px; text-align:center; background:#2563eb; border:1px solid #3b82f6; border-radius:6px; color:#fff; font:inherit; font-size:.75rem; font-weight:600; cursor:pointer; }
+.idea-add-toggle::after { content:''; position:absolute; right:14px; top:15px; width:6px; height:6px; border:solid currentColor; border-width:0 1.5px 1.5px 0; transform:rotate(45deg); }
+.idea-add-toggle[aria-expanded=true]::after { top:18px; transform:rotate(225deg); }
+.idea-add-options { position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:30; display:grid; padding:.5rem; background:#0f172a; border:1px solid #334155; border-radius:.65rem; box-shadow:0 12px 24px #0008; }
+.idea-add-options[hidden] { display:none; }
+.kg-shell #kg-detail .idea-add-options button { width:100%; margin:0; padding:.55rem .65rem; border:0; border-radius:.35rem; background:transparent; color:#e2e8f0; font:inherit; font-size:.8rem; text-align:left; cursor:pointer; }
+.kg-shell #kg-detail .idea-add-options button:hover, .kg-shell #kg-detail .idea-add-options button:focus-visible { background:#1e293b; outline:1px solid #475569; }
+.corpus-idea-action { display:inline-flex; padding:.45rem .7rem; border:1px solid #475569; border-radius:.4rem; font-size:.75rem; color:#fde68a; }
+@media(max-width:560px) { .idea-dialog { padding:14px; } .idea-check-row { flex-wrap:wrap; } .idea-map-tools { gap:3px; } }
+.idea-dialog.agenda-dialog { width:min(620px,calc(100% - 24px)); padding:0; background:#0b1221; font-family:inherit; }
+.idea-dialog .agenda-dialog-header { margin:0; font-size:1.1rem; }
+.idea-dialog .agenda-dialog-footer { margin:0; }
+.idea-dialog .agenda-form-body label { font-size:.68rem; font-weight:650; color:#94a3b8; }
+.idea-dialog .agenda-form-body :is(input,textarea,select) { font-family:inherit; font-size:.85rem; font-weight:400; background:#020617; border-color:#334155; padding:.65rem .75rem; border-radius:.5rem; }
+.idea-dialog button { font-family:inherit; font-size:.85rem; margin:0; }
+.idea-dialog [hidden], .agenda-dialog [hidden] { display:none!important; }
+.idea-dialog input[type=file] { display:none!important; }
+.object-form-section + .object-form-section { border-top:1px solid #1e293b; margin-top:1.25rem; padding-top:1.25rem; }
+.object-form-section > h3,.object-section-heading { color:#7dd3fc; font-size:.75rem; font-weight:650; margin:0 0 1rem; }
+.object-section-heading ~ .object-section-heading { border-top:1px solid #1e293b; padding-top:1.25rem; margin-top:1.25rem; }
+.idea-checklist :is(.checklist-cover-toggle), .checklist-card-cover label { display:flex!important; align-items:center; gap:.6rem; }
+.agenda-form-body input[type=checkbox] { display:inline-block; width:16px; height:16px; flex:0 0 16px; padding:0; margin:0; accent-color:#3b82f6; }
+.idea-check-row { flex-wrap:wrap; gap:.5rem; }
+.idea-check-row input[type=text] { flex:1 1 180px; margin:0; }
+.idea-check-row button { font-size:.72rem; padding:.4rem .5rem; }
+.idea-check-row.dragging { opacity:.6; outline:1px dashed #38bdf8; }
+.markdown-inline-preview { min-height:80px; padding:.75rem; margin:.4rem 0; border:1px solid #334155; border-radius:.5rem; color:#e2e8f0; font-size:.85rem; font-weight:400; cursor:text; overflow-wrap:anywhere; }
+.checklist-card-cover { border-top:1px solid #334155; padding-top:.6rem; margin-top:.8rem; font-size:.8rem; }
+.checklist-card-cover label { margin:.5rem 0; line-height:1.5; }
+.checklist-card-cover input { flex:0 0 16px; width:16px; accent-color:#3b82f6; }
+.idea-dialog .action-triage { border:1px solid #334155; padding:.75rem; border-radius:.65rem; margin-bottom:1rem; }
+.idea-dialog .action-triage > summary { cursor:pointer; font-size:.85rem; font-weight:600; }
+.idea-dialog .idea-error:not(:empty) { margin:0 1.25rem 1rem; }
+
+.idea-dialog .agenda-dialog-header h2 { margin:0; font-size:1.1rem; font-weight:600; }
+.idea-checklist-header { display:flex; align-items:center; gap:.5rem; }
+.idea-checklist-header input { flex:1; min-width:0; }
+.idea-checklist-header button { flex-shrink:0; }
+.idea-checklist .checklist-add-item { display:block; width:auto; margin:.75rem 0 0; text-align:center; }
+.idea-checklists-heading { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+.idea-checklists-heading > h3 { color:#7dd3fc; font-size:.75rem; font-weight:650; margin:0; }
+.idea-checklists-heading button { white-space:nowrap; }
+.object-checklists-section { border-top:1px solid #1e293b; margin:1.25rem 0; padding-top:1.25rem; }
+.idea-checklist { padding:0; border:0; margin:1rem 0 1.5rem; }
+.idea-checklist-header input:not([type=checkbox]), .idea-dialog .agenda-form-body .idea-checklist-header input { background:transparent; border-color:transparent; font-weight:600; margin:0; padding:.4rem 0; }
+.idea-checklist-header input:focus { border-color:#475569; }
+.checklist-progress { display:flex; align-items:center; gap:.75rem; margin:.65rem 0; }
+.checklist-progress span { min-width:2rem; font-size:.7rem; color:#94a3b8; }
+.checklist-progress progress { appearance:none; flex:1; min-width:0; height:6px; border:0; border-radius:99px; overflow:hidden; background:#263244; }
+.checklist-progress progress::-webkit-progress-bar { background:#263244; border-radius:99px; }
+.checklist-progress progress::-webkit-progress-value { background:#38bdf8; border-radius:99px; }
+.checklist-progress progress::-moz-progress-bar { background:#38bdf8; border-radius:99px; }
+.idea-check-row { position:relative; flex-wrap:nowrap; min-height:40px; padding:2px 6px; margin:2px 0; border-radius:6px; cursor:grab; touch-action:pan-x; }
+.idea-check-row:hover, .idea-check-row:focus-within { background:#1e293b; }
+.idea-check-row input[type=text], .idea-dialog .agenda-form-body .idea-check-row input[type=text] { flex:1; min-width:0; background:transparent; border-color:transparent; padding:.4rem; cursor:grab; }
+.idea-check-row input[type=text]:focus { cursor:text; background:#020617; border-color:#475569; }
+.idea-check-row.is-complete input[type=text] { text-decoration:line-through; color:#94a3b8; }
+.checklist-item-actions { display:flex; gap:2px; opacity:0; pointer-events:none; }
+.idea-check-row:hover .checklist-item-actions, .idea-check-row:focus-within .checklist-item-actions { opacity:1; pointer-events:auto; }
+.checklist-item-actions button { display:grid; place-items:center; width:28px; height:28px; padding:5px; border:0; border-radius:50%; background:transparent; }
+.checklist-item-actions button:hover { background:#334155; }
+.checklist-item-actions svg, .idea-checklist-header button svg { display:block; width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+@media (hover:none) { .checklist-item-actions { opacity:1; pointer-events:auto; } }
+/* Match the original actionable editor: scroll the form inside the rounded shell. */
+.idea-dialog.agenda-dialog { overflow:hidden; padding:.5rem 0; }
+.idea-dialog > form { max-height:calc(90dvh - 1rem - 2px); overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#475569 transparent; }
+@supports selector(::-webkit-scrollbar) {
+  .idea-dialog > form { scrollbar-width:auto; scrollbar-color:auto; }
+  .idea-dialog > form::-webkit-scrollbar { width:6px; height:6px; }
+  .idea-dialog > form::-webkit-scrollbar-track { background:transparent; }
+  .idea-dialog > form::-webkit-scrollbar-thumb { background:#475569; border-radius:999px; }
+  .idea-dialog > form::-webkit-scrollbar-button { display:none; width:0; height:0; }
+}

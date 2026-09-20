@@ -66,11 +66,15 @@ def action_call(method, suffix, payload=None):
 
 
 def source_snapshot(kind, source_id):
+    if kind == 'mindmap':
+        from modules.hfl_corpus.ideas_brainstorm import snapshot
+        return snapshot(source_id)
     if kind == 'actionable':
         item = action_call('GET', '/' + source_id)['item']
         if item['status'] in {'done', 'dismissed'}:
             raise BridgeConflict('Closed actionables cannot be executed.')
         source = {key: item.get(key, '') for key in ('id', 'title', 'prompt', 'expected_outcome', 'notes', 'version', 'status', 'source', 'matrix', 'matrix_confidence', 'matrix_reason', 'review_date', 'due_date')}
+        source.update({key: item[key] for key in ('description', 'body', 'checklists') if item.get(key)})
         guidance = ''
     elif kind == 'pin':
         pins = get_memory_pin_store().snapshot()
@@ -101,7 +105,7 @@ def source_snapshot(kind, source_id):
 
 def enqueue(kind, source_id, request_key, actor, auto_complete=True):
     snapshot = source_snapshot(kind, source_id)
-    snapshot['auto_complete'] = auto_complete
+    snapshot['auto_complete'] = False if kind == 'mindmap' else auto_complete
     snapshot['context'] = evidence_context(snapshot)
     store = bridge_store()
     if kind == 'actionable':
@@ -114,6 +118,8 @@ def enqueue(kind, source_id, request_key, actor, auto_complete=True):
 
 def evidence_context(snapshot):
     """Bound recall to the linked entry or at most seven recent days / 20 entries."""
+    if snapshot['kind'] == 'mindmap':
+        return {'nodes': snapshot['source']['members'], 'coverage': {'reason': 'Selected permitted map members only.'}}
     tags = normalize_secret_tags(get_profile_store().get().secret_tags)
     remote = RemoteCorpusClient.from_settings() if get_settings().hfl_corpus_api_url else None
     selected = []
@@ -353,12 +359,14 @@ worker_router = APIRouter(prefix='/api/hfl-agent', dependencies=[Depends(worker_
 
 
 def remote_inputs(kind):
-    return kind == 'actionable' and get_settings().hfl_corpus_api_url and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') != '1'
+    return kind in {'actionable', 'idea'} and get_settings().hfl_corpus_api_url and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') != '1'
 
 
-def input_remote(method, source_id, attachment_id='', **kwargs):
+def input_remote(method, source_id, attachment_id='', kind='actionable', **kwargs):
     settings = get_settings()
     path = '/api/hfl/actions/' + quote(str(source_id), safe='') + '/attachments'
+    if kind == 'idea':
+        path = '/api/hfl/timeline/ideas/objects/' + quote(str(source_id), safe='') + '/attachments'
     if attachment_id:
         path += '/' + quote(attachment_id, safe='')
     try:
@@ -375,7 +383,7 @@ def input_remote(method, source_id, attachment_id='', **kwargs):
 def input_manifest(kind, source_id):
     from modules.hfl_corpus.attachments import source_store, require_source
     if remote_inputs(kind):
-        return input_remote('GET', source_id).json()
+        return input_remote('GET', source_id, kind=kind).json()
     require_source(kind, source_id)
     store, source = source_store(kind, source_id)
     return {'attachments': store.list(source)}
@@ -422,12 +430,15 @@ def input_download(kind, source_id, attachment_id, view=False):
             manifest = next((file for file in input_manifest(kind, source_id)['attachments'] if file['id'] == attachment_id), None)
             if not manifest:
                 raise HTTPException(404, 'Attachment not found.')
-        response = input_remote('GET', source_id, attachment_id)
+        response = input_remote('GET', source_id, attachment_id, kind=kind)
         if view:
             return input_preview(response.content, manifest['name'])
         return Response(response.content, media_type='application/octet-stream', headers={
             'Content-Disposition': response.headers.get('Content-Disposition', 'attachment'),
             'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
+    if kind == 'idea':
+        from modules.hfl_corpus.attachments import require_source
+        require_source(kind, source_id)
     store, source = source_store(kind, source_id)
     manifest = store.get(source, attachment_id)
     if view:
@@ -446,7 +457,7 @@ async def owner_upload_inputs(kind: str, source_id: str, files: list[UploadFile]
     from modules.hfl_corpus.attachments import source_store, require_source
     if remote_inputs(kind):
         try:
-            return (await asyncio.to_thread(input_remote, 'POST', source_id,
+            return (await asyncio.to_thread(input_remote, 'POST', source_id, kind=kind,
                     files=[('files', (f.filename, f.file, 'application/octet-stream')) for f in files])).json()
         finally:
             for upload in files:
@@ -465,7 +476,7 @@ def owner_download_input(kind: str, source_id: str, attachment_id: str, view: bo
 def owner_detach_input(kind: str, source_id: str, attachment_id: str):
     from modules.hfl_corpus.attachments import source_store, require_source
     if remote_inputs(kind):
-        return input_remote('DELETE', source_id, attachment_id).json()
+        return input_remote('DELETE', source_id, attachment_id, kind=kind).json()
     require_source(kind, source_id)
     store, source = source_store(kind, source_id)
     store.detach(source, attachment_id)
@@ -566,7 +577,7 @@ def checked(operation, *args, **kwargs):
 
 @owner_router.get('/sources/{kind}/{source_id}')
 def source_view(kind: str, source_id: str):
-    if kind not in {'actionable', 'pin'}:
+    if kind not in {'actionable', 'pin', 'mindmap'}:
         raise HTTPException(400, 'Unknown source kind.')
     key = f'{kind}:{source_id}'
     store = bridge_store()
@@ -616,6 +627,27 @@ def run_now(kind: str, source_id: str, payload: dict, user=Depends(owner_auth)):
     if type(auto) is not bool:
         raise HTTPException(400, 'Invalid completion policy.')
     return checked(enqueue, kind, source_id, payload.get('request_key'), user, auto)
+
+
+@owner_router.post('/mindmaps/{identity}/accept-proposal')
+def accept_map_proposal(identity: str, payload: dict, user=Depends(owner_auth)):
+    import uuid
+    from modules.hfl_corpus.ideas_api import save_proposal
+    run = checked(bridge_store().get, payload.get('run_id'))
+    index = payload.get('index')
+    proposals = run['result'].get('ideas', [])
+    if run['source_key'] != 'mindmap:' + identity or run['state'] not in {'review', 'succeeded'} or type(index) is not int or not 0 <= index < len(proposals):
+        raise HTTPException(409, 'Choose an idea from a reviewable run for this map.')
+    raw = {'item': payload.get('item'), 'parents': proposals[index].get('parents', []),
+           'request_id': str(uuid.uuid5(uuid.NAMESPACE_URL, 'brainstorm:' + run['id'] + ':' + str(index)))}
+    settings = get_settings()
+    if settings.hfl_corpus_api_url and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') != '1':
+        response = httpx.post(settings.hfl_corpus_api_url.rstrip('/') + '/api/hfl/timeline/ideas/maps/' + identity + '/accept-proposal',
+                              json=raw, headers={'Authorization': 'Bearer ' + settings.hfl_corpus_api_token}, timeout=45)
+        if response.is_error:
+            raise HTTPException(response.status_code, response.json().get('detail', 'Could not save this proposal.'))
+        return response.json()
+    return save_proposal(identity, raw, user)
 
 
 @owner_router.post('/runs/{run_id}/{decision}')
@@ -730,6 +762,21 @@ def claim(run_id: str, agent=Depends(worker_auth)):
 
 @worker_router.post('/runs/{run_id}/events')
 def report(run_id: str, payload: dict, background_tasks: BackgroundTasks, agent=Depends(worker_auth)):
+    if payload.get('kind') == 'succeeded':
+        current = checked(bridge_store().get, run_id)
+        if current['snapshot']['kind'] == 'mindmap':
+            proposals = (payload.get('payload') or {}).get('ideas')
+            members = {n['id'] for n in current['snapshot']['source']['members']}
+            if not isinstance(proposals, list) or not 1 <= len(proposals) <= 12:
+                raise HTTPException(422, 'Return 1–12 structured brainstorming ideas.')
+            from workflows.hfl.ideas_store import content_fields
+            for idea in proposals:
+                if not isinstance(idea, dict) or not isinstance(idea.get('title'), str) or not idea['title'].strip() or len(idea['title']) > 200:
+                    raise HTTPException(422, 'Each proposed idea needs a bounded title.')
+                checked(content_fields, idea)
+                parents = idea.get('parents', [])
+                if not isinstance(parents, list) or len(parents) > 5 or any(not isinstance(p, str) or p not in members for p in parents):
+                    raise HTTPException(422, 'Use only supplied map member IDs as parents.')
     run = checked(bridge_store().report, run_id, agent, payload.get('lease_token'), payload.get('event_key'), payload.get('kind'), payload.get('payload'))
     if run['state'] == 'review' and run['snapshot']['auto_complete']:
         try:

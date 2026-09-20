@@ -70,7 +70,7 @@ def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_clie
             playwright.expect(page.locator('[data-activity-menu-actions]')).to_have_attribute('aria-expanded', 'true')
             playwright.expect(page.locator('[data-activity-menu-matches]')).to_have_attribute('aria-expanded', 'false')
             buttons = page.locator('.activity-day-quick-actions').locator('button, a')
-            assert buttons.all_text_contents() == ['Create entry', 'Create action', 'Pin dates', 'Show document']
+            assert buttons.all_text_contents() == ['Create entry', 'Create action', 'Create idea', 'Pin dates', 'Show document']
             boxes = [buttons.nth(index).bounding_box() for index in range(4)]
             assert boxes[0]['y'] == boxes[1]['y'] < boxes[2]['y'] == boxes[3]['y']
             page.locator('[data-activity-menu-create-action]').click()
@@ -85,8 +85,9 @@ def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_clie
                 page.locator('#followup-editor [data-agenda-close]').first.click()
                 assert agenda.list() == []
             else:
+                form.locator('.action-details > summary').click()
                 form.locator('[name="expected_outcome"]').fill('Record the result')
-                form.locator('.action-triage > summary').click()
+                form.locator('.action-triage:not(.action-details) > summary').click()
                 form.locator('[name="matrix"]').select_option('Q2')
                 form.locator('[name="matrix_confidence"]').select_option('medium')
                 playwright.expect(form.locator('#matrix-help')).to_be_visible()
@@ -143,6 +144,9 @@ def test_document_creates_multiple_actions_without_navigation(agenda, authentica
             form = page.locator('#followup-form')
             playwright.expect(form.locator('[name="title"]')).to_have_value(title)
             assert form.locator('[name="expected_outcome"]').input_value() == ''
+            playwright.expect(form.locator('.action-details')).not_to_have_attribute('open', '')
+            form.locator('[type="submit"]').click()
+            playwright.expect(form.locator('.action-details')).to_have_attribute('open', '')
             form.locator('[name="expected_outcome"]').fill('Record a useful result')
             form.locator('[type="submit"]').click()
             playwright.expect(page.locator('#followup-editor')).to_be_hidden()
@@ -796,7 +800,7 @@ def test_unified_actions_matrix_editor_and_empty_message(agenda, authenticated_c
         form = page.locator('#followup-form')
         playwright.expect(form.locator('[name="matrix"]')).to_have_value('Q2')
         playwright.expect(form.locator('[name="matrix_confidence"]')).to_have_value('medium')
-        form.locator('.action-triage > summary').click()
+        form.locator('.action-triage:not(.action-details) > summary').click()
         confidence_box = form.locator('[name="matrix_confidence"]').bounding_box()
         matrix_box = form.locator('[name="matrix"]').bounding_box()
         if width > 600:

@@ -80,6 +80,9 @@ class CreateAction(Command):
     due_date: str = ""
     prompt: str = Field(default="", max_length=20000)
     notes: str = Field(default="", max_length=6000)
+    description: str = Field(default='', max_length=3000)
+    body: str = Field(default='', max_length=50000)
+    checklists: list[dict] = Field(default_factory=list, max_length=20)
     source: ActionSource | None = None
     matrix: Literal['', 'Q1', 'Q2', 'Q3', 'Q4'] = ''
     matrix_confidence: Literal['', 'high', 'medium', 'low'] = ''
@@ -94,6 +97,9 @@ class UpdateAction(Command):
     due_date: str | None = None
     prompt: str | None = Field(default=None, max_length=20000)
     notes: str | None = Field(default=None, max_length=6000)
+    description: str | None = Field(default=None, max_length=3000)
+    body: str | None = Field(default=None, max_length=50000)
+    checklists: list[dict] | None = Field(default=None, max_length=20)
     status: Literal["open", "active", "in_progress", "incomplete", "done", "dismissed"] | None = None
     completion_note: str | None = Field(default=None, max_length=3000)
     matrix: Literal['', 'Q1', 'Q2', 'Q3', 'Q4'] | None = None
