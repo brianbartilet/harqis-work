@@ -25,6 +25,13 @@
 .idea-proposal { border:1px solid #334155; border-radius:8px; padding:12px; margin:12px 0; }
 .idea-proposal p { white-space:pre-wrap; }
 .idea-inspector-status { color:#7dd3fc; text-transform:capitalize; }
+.idea-inspector-status-row{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-top:12px}
+.idea-status-pill{display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;background:#334155;color:#e2e8f0;font-size:11px;font-weight:600;line-height:1.5}
+.idea-status-pill[data-status=board-draft]{background:#302747;color:#ddd6fe}
+.idea-status-pill:is([data-status=adopted],[data-status=active],[data-status=in-progress]){background:#164e63;color:#a5f3fc}
+.idea-status-pill:is([data-status=done],[data-status=completed],[data-status=achieved]){background:#14532d;color:#bbf7d0}
+.idea-status-pill:is([data-status=paused],[data-status=blocked]){background:#713f12;color:#fde68a}
+.idea-status-pill:is([data-status=dismissed],[data-status=dropped],[data-status=cancelled],[data-status=failed]){background:#4c2533;color:#fecdd3}
 .idea-add-menu { position:relative; margin-top:12px; }
 .kg-shell #kg-detail .idea-add-toggle { position:relative; width:100%; margin:0; padding:10px 32px; min-height:40px; text-align:center; background:#2563eb; border:1px solid #3b82f6; border-radius:6px; color:#fff; font:inherit; font-size:.75rem; font-weight:600; cursor:pointer; }
 .idea-add-toggle::after { content:''; position:absolute; right:14px; top:15px; width:6px; height:6px; border:solid currentColor; border-width:0 1.5px 1.5px 0; transform:rotate(45deg); }
@@ -238,8 +245,17 @@
 .board-agent-dialog .board-agent-primary{background:#0c4a6e;border-color:#38bdf8;color:#e0f2fe;font-weight:600}
 .board-agent-output>.board-agent-cancel{display:block;margin-top:16px}
 .idea-copy-files-note{margin:16px 0 20px;line-height:1.6}
-.kg-boards .board-guide-trigger{width:100%;min-height:38px;margin:8px 0 4px;background:transparent;color:#adc1d6;border:1px solid #334155;text-align:center}
+.kg-boards .board-guide-trigger{width:100%;background:transparent;color:#adc1d6;border:1px solid #334155;text-align:center}
 .kg-boards .board-guide-trigger:hover{background:#17263a;color:#e2e8f0}
+.board-toolbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:8px}
+.kg-boards .board-toolbar :is(.board-explore,.idea-add-toggle,.board-guide-trigger){min-height:40px;margin:0;border-radius:8px;padding:9px 10px;font-size:12px;font-weight:600;line-height:20px}
+.kg-boards .board-toolbar .board-explore{grid-column:1 / -1;background:#17263a;border-color:#40516a;color:#dbeafe;text-align:center}
+.kg-boards .board-toolbar .board-explore[aria-pressed=true]{background:#163247;border-color:#42718a;color:#e0f2fe}
+.kg-boards .board-toolbar .board-explore:hover{background:#20364e}
+.kg-boards .board-toolbar .idea-add-toggle{padding-right:28px}
+.board-toolbar .board-add-menu{min-width:0}
+.board-toolbar .idea-add-options{min-width:160px}
+.board-toolbar button:focus-visible{outline:2px solid #67e8f9;outline-offset:2px}
 .board-guide.idea-dialog{width:min(760px,calc(100% - 24px))}
 .board-guide .agenda-form-body{font-size:.85rem;line-height:1.65;color:#cbd5e1}
 .board-guide .board-guide-intro{font-size:.95rem;color:#e2e8f0;margin:0 0 24px}

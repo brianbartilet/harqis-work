@@ -12,13 +12,13 @@ def board_payload(**changes):
 
 def test_board_orb_sizes_validate_and_survive_promotion(ideas, authenticated_client):
     client = authenticated_client
-    board = client.post(BASE+'/maps', json=board_payload(node_sizes={'draft:seed':10})).json()['item']
+    board = client.post(BASE+'/maps', json=board_payload(node_sizes={'draft:seed':20})).json()['item']
     uri = BASE+'/maps/'+board['id']
-    for invalid in [0, 11, True, 2.5, '5']:
+    for invalid in [0, 21, True, 2.5, '5']:
         assert client.patch(uri, json={'version':1,'node_sizes':{'draft:seed':invalid}}).status_code == 422
     promoted = client.post(uri+'/promote', json={'version':1,'draft_id':'draft:seed'}).json()
     restored = client.get(uri).json()['item']
-    assert restored['node_sizes'] == {'idea:'+promoted['idea_id']:10}
+    assert restored['node_sizes'] == {'idea:'+promoted['idea_id']:20}
     removed = client.patch(uri, json={'version':restored['version'],'members':[],'root':'','positions':{}})
     assert removed.status_code == 200, removed.text
     assert removed.json()['item']['node_sizes'] == {}
@@ -36,6 +36,11 @@ def test_board_free_drag_and_orb_sizes_browser(ideas, authenticated_client, widt
     with sync_playwright() as driver:
         browser = driver.chromium.launch(channel='chrome', headless=True)
         page = browser.new_page(viewport={'width':width,'height':1000})
+        page.add_init_script('''const paintText=CanvasRenderingContext2D.prototype.fillText;
+            CanvasRenderingContext2D.prototype.fillText=function(text,x,y,...rest){
+                if(String(text).startsWith('Create a thought'))window.boardTitlePosition={x,y};
+                return paintText.call(this,text,x,y,...rest);
+            };''')
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
         def route(intercept):
@@ -65,28 +70,26 @@ def test_board_free_drag_and_orb_sizes_browser(ideas, authenticated_client, widt
         assert after['draft:seed'] != before['draft:seed']
         point = screen_point('draft:seed')
         page.mouse.click(point['x'],point['y'])
-        actions = page.get_by_role('button', name='Actions', exact=True)
-        actions.click()
         menu = page.get_by_role('menu', name='Orb actions')
         expect(menu).to_be_visible()
-        expect(menu.get_by_role('menuitem', name='Edit thought', exact=True)).to_be_focused()
+        menu.get_by_role('menuitem', name='Edit thought', exact=True).focus()
         expect(page.locator('#kg-detail > button')).to_have_count(0)
         page.keyboard.press('End')
         expect(menu.get_by_role('menuitem', name='Clear selection', exact=True)).to_be_focused()
         page.screenshot(path=str(tmp_path / ('board-actions-'+str(width)+'.png')))
         page.keyboard.press('Escape')
         expect(menu).to_have_count(0)
-        expect(actions).to_be_focused()
-        actions.click()
+        point = screen_point('draft:seed')
+        page.mouse.click(point['x'],point['y'])
         menu.get_by_role('menuitem', name='Edit thought', exact=True).click()
         expect(page.get_by_role('dialog', name='Edit thought', exact=True)).to_be_visible()
         page.keyboard.press('Escape')
         increase = page.get_by_role('button', name='Increase orb size')
-        for _ in range(7): increase.click()
+        for _ in range(17): increase.click()
         expect(increase).to_be_disabled()
-        expect(page.locator('.kg-orb-size output')).to_have_text('10/10')
+        expect(page.locator('.kg-orb-size output')).to_have_count(0)
         page.evaluate('window.HflIdeas.maps.flush()')
-        assert ideas.map(board['id'])['node_sizes']['draft:seed'] == 10
+        assert ideas.map(board['id'])['node_sizes']['draft:seed'] == 20
         page.screenshot(path=str(tmp_path / ('board-orbs-'+str(width)+'.png')))
         page.reload()
         expect(page.locator('#kg-map-count')).to_have_text('2 nodes · 1 links')
@@ -94,11 +97,25 @@ def test_board_free_drag_and_orb_sizes_browser(ideas, authenticated_client, widt
         assert page.evaluate('window.HflIdeas.maps.getPositions()') == after
         point = screen_point('draft:seed')
         page.mouse.click(point['x'],point['y'])
-        expect(page.locator('.kg-orb-size output')).to_have_text('10/10')
+        expect(page.locator('.kg-orb-size output')).to_have_count(0)
         decrease = page.get_by_role('button', name='Decrease orb size')
-        for _ in range(9): decrease.click()
+        for _ in range(19): decrease.click()
         expect(decrease).to_be_disabled()
-        expect(page.locator('.kg-orb-size output')).to_have_text('1/10')
+        expect(page.locator('.kg-orb-size output')).to_have_count(0)
+        page.get_by_role('menuitem', name='Clear selection', exact=True).click()
+        resting = page.evaluate('window.HflIdeas.maps.getPositions()')
+        for mode in ['breathing', 'ripple', 'drift']:
+            page.locator('#kg-open-animation').click()
+            page.locator('[data-animation="'+mode+'"]').click()
+            expect(page.locator('#kg-canvas')).to_have_attribute('data-motion', mode)
+            position = page.evaluate('window.boardTitlePosition')
+            page.wait_for_function('p => Math.hypot(window.boardTitlePosition.x-p.x,window.boardTitlePosition.y-p.y) > .02', arg=position)
+            assert page.evaluate('window.HflIdeas.maps.getPositions()') == resting
+        page.evaluate('window.HflIdeas.maps.saveLayout().then(() => window.HflIdeas.maps.flush())')
+        assert ideas.map(board['id'])['positions'] == resting
+        page.locator('#kg-open-animation').click()
+        page.locator('[data-animation=off]').click()
+        expect(page.locator('#kg-canvas')).to_have_attribute('data-motion', 'off')
         assert not errors, errors
         browser.close()
 

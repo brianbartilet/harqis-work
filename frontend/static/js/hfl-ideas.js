@@ -59,8 +59,8 @@ window.HflObjectDescription = (item = {}) => {
         <h3 id="board-guide-connections">Build the connections</h3>
         <ul class="board-guide-list">
           <li><strong>Bring in context.</strong> Use Attach existing for entries, ideas, actions, goals, or entities such as people, topics, and tools. Each orb is a node; attaching it alone does not connect it to every other node.</li>
-          <li><strong>Link what belongs together.</strong> Select an orb and open Actions → Connect on this board. These connections stay on the board. Use Actions → Board connections to promote a connection between shared objects into the Activity Graph.</li>
-          <li><strong>Arrange your thinking.</strong> Drag an orb to place it independently; its connections stay attached. Titles wrap in full. Hover over or select an orb for +/− controls, with ten saved size levels to express how concrete it feels. Select an orb to open its Actions menu for editing, promotion, and more.</li>
+          <li><strong>Link what belongs together.</strong> Select an orb and choose Connect on this board from its action panel. These connections stay on the board. Use Board connections to promote a connection between shared objects into the Activity Graph.</li>
+          <li><strong>Arrange your thinking.</strong> Drag an orb to place it independently; its connections stay attached. Titles wrap in full. Hover over or select an orb for +/− controls, with twenty saved size levels to express how concrete it feels. Selecting an orb opens its action panel for editing, promotion, and more.</li>
           <li><strong>Explore with an agent.</strong> Ask agent proposes ideas and connections. Review and accept suggestions to save them.</li>
           <li><strong>Review the outcome.</strong> Track milestones in the goal editor. Completed actions do not automatically achieve a goal; assess its success criteria and update its status.</li>
         </ul>
@@ -421,7 +421,13 @@ window.HflObjectDescription = (item = {}) => {
     if (node.kind === 'goals') root.append(el('p', node.success_criteria || 'Add success criteria to define achievement.'), button('Edit Goal / milestones', () => editGoal(node.object_id)));
     if (maps.current) root.append(button('Add thought', () => editThought(null, node.id)), button('Connect on this board', () => connectThought(node)), button('Use as starting point', async () => { try { await maps.persist({root: node.id}); changed(); } catch (error) { maps.status.textContent = error.message; } }));
     else root.append(button('Start board from this', () => maps.edit(null, node)));
-    if (node.status) root.append(el('p', 'Status: ' + node.status.replaceAll('_', ' '), 'idea-inspector-status'));
+    if (node.status) {
+      const status = String(node.status).toLowerCase().replaceAll('_', ' ').replaceAll('-', ' ');
+      const row = el('p', undefined, 'idea-inspector-status idea-inspector-status-row');
+      const pill = el('span', status.replace(/\b\w/g, letter => letter.toUpperCase()), 'idea-status-pill');
+      pill.dataset.status = status.replaceAll(' ', '-');
+      row.append(el('span', 'Status'), pill);root.append(row);
+    }
     if (node.kind === 'ideas') root.append(button('Edit idea / checklists', () => editIdea(node.object_id)), button('Make actionable', () => convert(node.object_id)));
     if (node.kind === 'actions') root.append(button('Edit actionable / status', async () => { try { const {item} = await request('/hfl-corpus/timeline/items/' + node.object_id); openEditor('actionable', item); } catch (error) { const d = dialog('Action unavailable'); d.error.textContent = error.message; } }));
     if (!maps.current && ['entries', 'daily', 'topics', 'tools', 'ideas', 'actions', 'goals'].includes(node.kind)) {
@@ -502,12 +508,13 @@ window.HflObjectDescription = (item = {}) => {
       if (!this.root) return;
       const caption=document.getElementById('kg-map-title');if(caption)caption.textContent=this.current?.name||'EXPLORE ACTIVITY CONSTELLATION';
       this.root.replaceChildren(); document.querySelector('.kg-shell')?.classList.toggle('has-board', !!this.current); document.getElementById('kg-search').placeholder = this.current ? 'Search this board' : 'Search entries or entities';
-      const all = button('Explore Activity Graph', () => this.selectBoard(null)); all.className='board-explore';all.setAttribute('aria-pressed', String(!this.current)); this.root.append(all);
+      const toolbar=el('div',undefined,'board-toolbar');toolbar.setAttribute('role','group');toolbar.setAttribute('aria-label','Board navigation and tools');this.root.append(toolbar);
+      const all = button('Explore Activity Graph', () => this.selectBoard(null)); all.className='board-explore';all.setAttribute('aria-pressed', String(!this.current)); toolbar.append(all);
       const addMenu=el('div',undefined,'idea-add-menu board-add-menu'),addOptions=el('div',undefined,'idea-add-options');addOptions.hidden=true;addOptions.id='board-add-options';
       const addToggle=button('Add',()=>{addOptions.hidden=!addOptions.hidden;addToggle.setAttribute('aria-expanded',String(!addOptions.hidden));});addToggle.className='idea-add-toggle';addToggle.setAttribute('aria-expanded','false');addToggle.setAttribute('aria-controls',addOptions.id);
       const closeAdd=()=>{addOptions.hidden=true;addToggle.setAttribute('aria-expanded','false');};
-      addOptions.append(button('Board',()=>{closeAdd();this.edit();}),button('Goal',()=>{closeAdd();editGoal();}));addMenu.append(addToggle,addOptions);addMenu.onkeydown=event=>{if(event.key==='Escape'){closeAdd();addToggle.focus();}};this.root.append(addMenu);
-      const guide=button('Board guide',openBoardGuide);guide.className='board-guide-trigger';guide.setAttribute('aria-haspopup','dialog');this.root.append(guide);
+      addOptions.append(button('Board',()=>{closeAdd();this.edit();}),button('Goal',()=>{closeAdd();editGoal();}));addMenu.append(addToggle,addOptions);addMenu.onkeydown=event=>{if(event.key==='Escape'){closeAdd();addToggle.focus();}};toolbar.append(addMenu);
+      const guide=button('Board guide',openBoardGuide);guide.className='board-guide-trigger';guide.setAttribute('aria-haspopup','dialog');toolbar.append(guide);
       this.root.append(this.objectList('boards'),this.objectList('goals'));
       if (!this.current) { this.root.append(this.status); return; }
       const board = this.current, section = el('section', undefined, 'board-controls');section.style.setProperty('--board-color',board.color||this.palette[0]||'#f59e0b'); section.append(el('h2', board.name), el('p', board.purpose, 'board-purpose'));

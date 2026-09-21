@@ -155,7 +155,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     document.querySelectorAll('[data-animation]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.animation===mode)));
     host.dataset.animation=mode;
   }
-  function motionPaused(){return !!window.HflIdeas?.maps.current||document.hidden||loading||selected!==null||activePointers.size>0||Date.now()-lastInteraction<250||
+  function motionPaused(){return document.hidden||loading||selected!==null||activePointers.size>0||Date.now()-lastInteraction<250||
     !!document.querySelector('dialog[open]:not(#activity-standalone)')||!$('views-panel').hidden||!$('animation-panel').hidden;}
   function animate(now){
     requestAnimationFrame(animate);
@@ -170,7 +170,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     const progress=transition?(reducedMotion?1:Math.min(1,transition.elapsed/1000)):1,ease=progress*progress*(3-2*progress);
     let unsettled=false;
     for(const n of nodes){
-      if(n.manual)continue;
+      if(n.manual&&!window.HflIdeas?.maps.current)continue;
       const target=layoutTargets.get(n.id);if(!target)continue;
       const offset=motionOffset(animationMode,target,motionTime,n.phase,preset==='timeline'&&target.anchor);
       const from=transition?.from.get(n.id)||target;
@@ -185,37 +185,27 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   }
   function Graph({data,activeId,selectedId}) {
     const ref=useRef();
-    const sizeTools=useRef(),hoverTimer=useRef();
+    const sizeTools=useRef(),actionTools=useRef(),hoverTimer=useRef();
     const [hoverId,setHoverId]=useState(null);
-    const [actionsOpen,setActionsOpen]=useState(false);
     const board=window.HflIdeas?.maps.current;
-    const sizeNode=board?data.nodes.find(n=>n.id===(actionsOpen?selectedId:hoverId||selectedId)):null;
+    const sizeNode=board?data.nodes.find(n=>n.id===(hoverId||selectedId)):null;
+    const actionNode=board?data.nodes.find(n=>n.id===selectedId):null;
     const sizeLevel=sizeNode?(board.node_sizes?.[sizeNode.id]||3):3;
     useEffect(()=>()=>clearTimeout(hoverTimer.current),[]);
-    useEffect(()=>setActionsOpen(false),[selectedId,board?.id]);
-    useEffect(()=>{setHoverId(null);setActionsOpen(false);},[data]);
-    useEffect(()=>{
-      if(!actionsOpen)return;
-      const close=event=>{if(!sizeTools.current?.contains(event.target))setActionsOpen(false);};
-      document.addEventListener('pointerdown',close);
-      sizeTools.current?.querySelector('[role=menuitem]')?.focus();
-      return()=>document.removeEventListener('pointerdown',close);
-    },[actionsOpen]);
+    useEffect(()=>setHoverId(null),[data]);
     function menuKeys(event){
-      if(!event.target.closest('.kg-orb-actions-toggle,.kg-orb-actions-menu'))return;
       if(event.key==='Escape'){
-        event.preventDefault();event.stopPropagation();setActionsOpen(false);sizeTools.current?.querySelector('.kg-orb-actions-toggle')?.focus();
+        event.preventDefault();event.stopPropagation();select(null);host.focus();
       }else if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){
         event.preventDefault();event.stopPropagation();
-        const items=[...sizeTools.current.querySelectorAll('[role=menuitem]')],index=items.indexOf(document.activeElement);
-        if(!actionsOpen){setActionsOpen(true);return;}
+        const items=[...actionTools.current.querySelectorAll('[role=menuitem]')],index=items.indexOf(document.activeElement);
         const next=event.key==='Home'?0:event.key==='End'?items.length-1:(index+(event.key==='ArrowUp'?-1:1)+items.length)%items.length;
         items[next]?.focus();
       }
     }
     function resizeOrb(delta){
       if(!sizeNode)return;
-      const level=Math.max(1,Math.min(10,sizeLevel+delta));
+      const level=Math.max(1,Math.min(20,sizeLevel+delta));
       sizeNode.radius=8+level*3;
       window.HflIdeas.maps.persist({node_sizes:{...board.node_sizes,[sizeNode.id]:level}});
       draw();
@@ -266,10 +256,14 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
         const origin=ref.current.screen2GraphCoords(0,0);
         if(sizeNode&&sizeTools.current){
           const point=ref.current.graph2ScreenCoords(sizeNode.x,sizeNode.y);
-          const toolsWidth=sizeTools.current.offsetWidth,panel=sizeTools.current.querySelector('.kg-orb-actions-menu');
-          const panelHeight=panel?.offsetHeight||0;
-          sizeTools.current.style.left=Math.max(4,Math.min(size.width-Math.max(toolsWidth,panel?250:0)-4,point.x-toolsWidth/2))+'px';
-          sizeTools.current.style.top=Math.max(4,Math.min(size.height-52-panelHeight,point.y-sizeNode.radius-46))+'px';
+          sizeTools.current.style.left=Math.max(4,Math.min(size.width-44,point.x-sizeNode.radius-50))+'px';
+          sizeTools.current.style.top=Math.max(4,Math.min(size.height-80,point.y-38))+'px';
+        }
+        if(actionNode&&actionTools.current){
+          const point=ref.current.graph2ScreenCoords(actionNode.x,actionNode.y),panel=actionTools.current;
+          const right=point.x+actionNode.radius+14,left=point.x-actionNode.radius-58-panel.offsetWidth;
+          panel.style.left=Math.max(4,Math.min(size.width-panel.offsetWidth-4,right+panel.offsetWidth<=size.width-4?right:left>=4?left:right))+'px';
+          panel.style.top=Math.max(4,Math.min(size.height-panel.offsetHeight-4,point.y-30))+'px';
         }
         const candidates=data.nodes.filter(n=>board||!activeId||n.id===activeId||n.id===selectedId||near.has(n.id)).map(n=>({
           id:n.id,label:n.label,kind:n.kind,x:(n.x-origin.x)*scale,y:(n.y-origin.y)*scale,
@@ -311,19 +305,18 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
 
     />{sizeNode&&<div ref={sizeTools} className="kg-orb-size" role="group" aria-label={'Orb controls for '+sizeNode.label}
       onPointerEnter={()=>clearTimeout(hoverTimer.current)} onPointerLeave={()=>{hoverTimer.current=setTimeout(()=>setHoverId(null),250);}}
-      onPointerDown={event=>event.stopPropagation()} onClick={event=>event.stopPropagation()} onKeyDown={menuKeys}
-      onBlur={event=>{if(event.relatedTarget&&!event.currentTarget.contains(event.relatedTarget))setActionsOpen(false);}}>
-      <button type="button" aria-label="Decrease orb size" disabled={sizeLevel===1} onClick={()=>resizeOrb(-1)}>−</button>
-      <output aria-live="polite" title="Concreteness · size level">{sizeLevel}/10</output>
-      <button type="button" aria-label="Increase orb size" disabled={sizeLevel===10} onClick={()=>resizeOrb(1)}>+</button>
-      {sizeNode.id===selectedId&&nodeActions.length>0&&<button type="button" className="kg-orb-actions-toggle" aria-haspopup="menu" aria-expanded={actionsOpen} aria-controls="kg-orb-actions-menu" onClick={()=>setActionsOpen(!actionsOpen)}>Actions <span aria-hidden="true">⌄</span></button>}
-      {actionsOpen&&<div id="kg-orb-actions-menu" className="kg-orb-actions-menu" role="menu" aria-label="Orb actions" style={{maxHeight:Math.max(100,Math.min(410,size.height-60))}}>
+      onPointerDown={event=>event.stopPropagation()} onClick={event=>event.stopPropagation()}>
+      <button type="button" aria-label="Increase orb size" title="Increase orb size" disabled={sizeLevel===20} onClick={()=>resizeOrb(1)}><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg></button>
+      <button type="button" aria-label="Decrease orb size" title="Decrease orb size" disabled={sizeLevel===1} onClick={()=>resizeOrb(-1)}><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M4 10h12"/></svg></button>
+    </div>}
+      {actionNode&&nodeActions.length>0&&<div ref={actionTools} id="kg-orb-actions-menu" className="kg-orb-actions-menu" role="menu" aria-label="Orb actions" style={{maxHeight:Math.max(100,Math.min(440,size.height-8))}}
+        onPointerDown={event=>event.stopPropagation()} onClick={event=>event.stopPropagation()} onKeyDown={menuKeys}>
         {['Edit & develop','Add & connect','Board','View'].map(group=>{
           const actions=nodeActions.filter(action=>action.group===group);
-          return actions.length>0&&<div role="group" aria-label={group} key={group}><span className="kg-orb-menu-heading" aria-hidden="true">{group}</span>{actions.map(action=><button type="button" role="menuitem" tabIndex={-1} key={action.label} className={action.label==='Remove from board'?'kg-orb-remove':''} onClick={()=>{setActionsOpen(false);sizeTools.current?.querySelector('.kg-orb-actions-toggle')?.focus();action.button.click();}}>{action.label}</button>)}</div>;
+          return actions.length>0&&<div role="group" aria-label={group} key={group}><span className="kg-orb-menu-heading" aria-hidden="true">{group}</span>{actions.map(action=><button type="button" role="menuitem" key={action.label} className={action.label==='Remove from board'?'kg-orb-remove':''} onClick={()=>action.button.click()}>{action.label}</button>)}</div>;
         })}
       </div>}
-    </div>}</>;
+    </>;
   }
   function draw(){root.render(<Graph data={graphData} activeId={active} selectedId={selected}/>);}
   function highlight(id){active=id;draw();}
@@ -404,9 +397,9 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     highlight(id);
     $('detail').replaceChildren();$('detail').classList.toggle('kg-detail-empty',!n);
     const heading=document.createElement('h2'),description=document.createElement('p');
-    const eyebrow=document.createElement('span');eyebrow.className='kg-eyebrow';eyebrow.textContent=n?kindLabel(n.kind):'Your knowledge, connected';$('detail').append(eyebrow);
+    const eyebrow=document.createElement('span');eyebrow.className='kg-eyebrow';eyebrow.textContent=n?kindLabel(n.kind):window.HflIdeas?.maps.current?'Your next big idea starts here':'Your knowledge, connected';$('detail').append(eyebrow);
     heading.textContent=n?n.label:'';
-    description.textContent=n?[kindLabel(n.kind),n.date,n.source,near.size+' visible connections'].filter(Boolean).join(' · '):'Select an orb to explore its linked entries and entities.';
+    description.textContent=n?[kindLabel(n.kind),n.date,n.source,near.size+' visible connections'].filter(Boolean).join(' · '):window.HflIdeas?.maps.current?'Select an orb to build on a thought, connect ideas, or take the next step.':'Select an orb to explore its linked entries and entities.';
     if(n)$('detail').append(heading);$('detail').append(description);
     if(n?.href&&n.kind==='entries') {const button=document.createElement('button');button.textContent='Open entry';button.className='kg-open-entry';button.onclick=()=>openEntry(n.id.replace(/^entry:/,''),n.locator);$('detail').append(button);}
     if(!exampleMode)window.HflIdeas?.inspect(n,$('detail'),data.edges);
@@ -687,7 +680,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   setAnimation(!reducedMotion&&['off','breathing','ripple','drift'].includes(pendingState?.animationMode)?pendingState.animationMode:savedAnimation(),false);
   requestAnimationFrame(animate);
   if(window.HflIdeas){
-    window.HflIdeas.maps.getPositions=()=>Object.fromEntries(nodes.map(n=>[n.id,{x:n.x,y:n.y}]));
+    window.HflIdeas.maps.getPositions=()=>Object.fromEntries(nodes.map(n=>{
+      const point=window.HflIdeas.maps.current?(layoutTargets.get(n.id)||n):n;
+      return [n.id,{x:point.x,y:point.y}];
+    }));
     window.addEventListener('hfl:ideas-updated',event=>{if(event.detail?.boardSwitch){pendingState=null;selected=null;enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards']);}if(event.detail?.selectId)selected=event.detail.selectId;
       if(event.detail?.refreshShared){load(true);return;}
       if(event.detail?.boardLocal&&!event.detail?.boardSwitch){

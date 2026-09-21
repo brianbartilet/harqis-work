@@ -66,7 +66,7 @@ def test_graph_entities_modal_context(authenticated_client, monkeypatch, tmp_pat
                     assert after['y'] - initial['y'] == pytest.approx(30, abs=4)
                     assert after['k'] == pytest.approx(initial['k'])
                     graph.locator('#kg-open-views').click()
-                    graph.locator('[data-preset="timeline"]').click()
+                    graph.locator('button[data-preset="timeline"]').click()
                     page.wait_for_timeout(1200)
                     page.wait_for_timeout(200)
                     cdp.send('Input.dispatchTouchEvent', {'type':'touchStart','touchPoints':[{'x':x,'y':y}]})
@@ -100,11 +100,20 @@ def test_graph_entities_modal_context(authenticated_client, monkeypatch, tmp_pat
                 graph.locator('#kg-entities').click()
                 directory = graph.frame_locator('iframe[title="Activity Corpus Entities"]')
                 directory.locator('#entity-results:not([hidden])').wait_for()
+                drawer = graph.locator('.activity-entities-drawer')
+                bounds = drawer.bounding_box()
+                assert bounds['width'] == pytest.approx(width * .3 if width > 760 else width - 14, abs=20)
+                assert graph.locator('.activity-modal-loading').count() == 0
+                assert directory.locator('html').evaluate('el => el.scrollWidth <= innerWidth')
+                toggle = directory.locator('.activity-scope-controls').bounding_box()
+                intro = directory.locator('.entity-intro').bounding_box()
+                assert intro['y'] - (toggle['y'] + toggle['height']) >= 15
+                page.screenshot(path=str(tmp_path / f'entities-drawer-{width}.png'))
                 assert directory.locator('.entity-card').count() == 1
                 directory.get_by_role('switch',name='All activity').click()
                 directory.locator('#entity-results:not([hidden])').wait_for()
                 assert directory.get_by_role('switch',name='All activity').get_attribute('aria-checked') == 'true'
-                directory.get_by_role('button',name='Close',exact=True).click()
+                directory.get_by_role('button',name='Close entities',exact=True).click()
                 graph.locator('.activity-modal').wait_for(state='detached')
                 assert graph.locator('#kg-search').input_value() == 'Project'
                 graph.get_by_role('switch',name='All activity').click()

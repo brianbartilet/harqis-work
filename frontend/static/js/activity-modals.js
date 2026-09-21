@@ -18,16 +18,12 @@
     else location.assign('/hfl-corpus' + (inherited ? '?' + inherited : ''));
   }
   function open(kind, context, extra = '', navigation = '') {
-    const dialog = document.createElement('dialog'); dialog.className = 'activity-modal';
+    const dialog = document.createElement('dialog'); dialog.className = 'activity-modal' + (kind === 'entities' ? ' activity-entities-drawer' : '');
     dialog.setAttribute('aria-label', kind === 'graph' ? 'Activity Graph' : 'Activity Corpus Entities');
-    const loading = document.createElement('div'); loading.className = kind === 'graph' ? 'activity-modal-pending-close' : 'activity-modal-loading';
-    // The graph document owns its loading state. Keep only an escape control
+    const loading = document.createElement('div'); loading.className = 'activity-modal-pending-close';
+    // Each document owns its loading state. Keep only an escape control
     // while its HTML arrives, without covering its own progress indicator.
-    if(kind !== 'graph'){
-      const status = document.createElement('span'); status.setAttribute('role','status'); status.textContent = 'Loading Entities…';
-      loading.append(status);
-    }
-    const button = document.createElement('button'); button.textContent = 'Close'; button.onclick = () => dialog.close();
+    const button = document.createElement('button'); button.textContent = kind === 'entities' ? '×' : 'Close'; button.setAttribute('aria-label',kind === 'entities' ? 'Close entities' : 'Close'); button.onclick = () => dialog.close();
     loading.append(button);
     const frame = document.createElement('iframe'); frame.title = dialog.getAttribute('aria-label');
     dialog.addEventListener('cancel',async event=>{
@@ -45,7 +41,7 @@
     const listener = event => {
       if(event.origin !== location.origin || event.source !== frame.contentWindow)return;
       if(event.data?.type === 'hfl:activity-close') dialog.close();
-      if(kind === 'graph' && event.data?.type === 'hfl:activity-ready') loading.hidden = true;
+      if(event.data?.type === 'hfl:activity-ready') loading.hidden = true;
     };
     window.addEventListener('message',listener);
     dialog.addEventListener('close',()=>{window.removeEventListener('message',listener);dialog.remove();});

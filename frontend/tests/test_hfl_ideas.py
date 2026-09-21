@@ -342,10 +342,8 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         expect(page.locator('#kg-map-count')).to_contain_text('1 nodes')
         assert ideas.ideas() == []
         page.locator('#kg-list button').filter(has_text='Reading room').click()
-        page.get_by_role('button', name='Actions', exact=True).click()
         page.get_by_role('menuitem', name='Promote to shared Idea', exact=True).click()
-        expect(page.locator('#kg-detail .idea-inspector-status').last).to_contain_text('suggested')
-        page.get_by_role('button', name='Actions', exact=True).click()
+        expect(page.locator('#kg-detail .idea-status-pill')).to_have_text('Suggested')
         page.get_by_role('menuitem', name='Edit idea / checklists', exact=True).click()
         modal.get_by_label('Idea', exact=True).fill('Warm lighting')
         description = '# Lighting\n## Requirements\n- Use **warm** light.\n- Compare bulbs\n    - Check brightness\n\n1. Choose a lamp\n2. Install the bulb'
@@ -368,7 +366,6 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         modal.locator('input[type=file]').set_input_files({'name':'lighting.txt','mimeType':'text/plain','buffer':b'Warm light reference'})
         modal.get_by_role('button', name='Save', exact=True).click()
         expect(modal).to_have_count(0)
-        page.get_by_role('button', name='Actions', exact=True).click()
         page.get_by_role('menuitem', name='Make actionable', exact=True).click()
         expect(modal.get_by_role('checkbox', name='Complete Compare bulbs')).not_to_be_checked()
         expect(modal.get_by_text('lighting.txt', exact=True)).to_be_visible()

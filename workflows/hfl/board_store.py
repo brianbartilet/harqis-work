@@ -54,10 +54,10 @@ def validate_board(item):
         raise ValueError('The primary goal must belong to the board.')
     sizes = item.setdefault('node_sizes', {})
     if not isinstance(sizes, dict) or len(sizes) > 10500 or any(
-        not isinstance(key, str) or type(value) is not int or not 1 <= value <= 10
+        not isinstance(key, str) or type(value) is not int or not 1 <= value <= 20
         for key, value in sizes.items()
     ):
-        raise ValueError('Orb sizes must be whole numbers from 1 to 10.')
+        raise ValueError('Orb sizes must be whole numbers from 1 to 20.')
     item['node_sizes'] = {key: value for key, value in sizes.items() if key in ids}
     return ids
 

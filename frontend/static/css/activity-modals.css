@@ -1,5 +1,8 @@
 .activity-modal{position:fixed;inset:6px;margin:0;width:calc(100% - 12px);height:calc(100dvh - 12px);max-width:none;max-height:none;padding:0;border:1px solid #334155;border-radius:14px;background:#0b1322;color:#dbe5ef;overflow:hidden}
 .activity-modal::backdrop{background:#020617cc}.activity-modal iframe{display:block;width:100%;height:100%;border:0}
+.activity-modal.activity-entities-drawer{inset:8px 8px 8px auto;width:clamp(420px,30vw,640px);max-width:calc(100% - 16px);height:calc(100dvh - 16px);border-radius:12px;box-shadow:-12px 0 40px #02061766}
+.activity-entities-drawer .activity-modal-pending-close button{width:36px;height:36px;padding:0;font-size:22px;line-height:1}
+@media(max-width:760px){.activity-modal.activity-entities-drawer{inset:0;width:100%;max-width:100%;height:100dvh;border-radius:0}}
 .activity-modal-loading{position:absolute;inset:0;background:#0b1322;display:flex;align-items:center;justify-content:center;gap:24px;z-index:1}.activity-modal-loading[hidden]{display:none}
 .activity-modal-pending-close{position:absolute;top:10px;right:14px;z-index:1}.activity-modal-pending-close[hidden]{display:none}
 .activity-modal-page{margin:0;background:#0b1322;color:#dbe5ef;font-family:"Segoe UI",sans-serif}

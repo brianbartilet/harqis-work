@@ -1,6 +1,7 @@
 {% extends "modules/hfl_corpus/modal_base.html" %}
 
 {% block title %}HARQIS — Activity Corpus Entities{% endblock %}
+{% block modal_class %}activity-entities-drawer{% endblock %}
 
 {% block head %}<style>
 
@@ -27,16 +28,32 @@
 .entity-shell .directory-filters .multi-filter>summary{display:flex;align-items:center;height:42px;min-height:42px;box-sizing:border-box;line-height:18px}
 .entity-shell .directory-filters .multi-filter>summary::after{top:50%;transform:translateY(-70%) rotate(45deg)}
 .entity-shell .directory-filters .multi-filter[open]>summary::after{top:50%;transform:translateY(-30%) rotate(225deg)}
+.entity-shell .activity-scope-controls{margin:20px 0 16px;gap:10px}
+.entity-shell .entity-intro{margin:0 0 20px;line-height:1.65;font-size:13px}
+.entity-shell .directory-filters,.entity-shell .profile-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+.entity-shell .activity-modal-heading button[data-activity-close]{display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;padding:0;font-size:22px;line-height:1}
+.entity-shell .results-toolbar{align-items:flex-start;flex-wrap:wrap}
+.entity-shell #entity-loading{padding:28px 8px;font-size:13px;line-height:1.6}
+.entity-shell .loading-spinner{flex-shrink:0}
+html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-color:#475569 #0b1322}
+@supports selector(::-webkit-scrollbar){
+  html,.entity-shell *,.activity-entities-drawer{scrollbar-width:auto;scrollbar-color:auto}
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:#0b1322}
+  ::-webkit-scrollbar-thumb{background:#475569;border-radius:8px}
+  ::-webkit-scrollbar-button:single-button,::-webkit-scrollbar-button{display:none;width:0;height:0}
+}
+@media(max-width:360px){.entity-shell .directory-filters,.entity-shell .profile-fields{grid-template-columns:1fr}}
 </style>{% endblock %}
 
 {% block content %}
 
 <main class="entity-shell">
 
-<header class="activity-modal-heading"><h1>Activity Corpus Entities</h1><button type="button" data-activity-close>Close</button></header>
+<header class="activity-modal-heading"><h1>Activity Corpus Entities</h1><button type="button" data-activity-close aria-label="Close entities" title="Close entities">×</button></header>
 <div class="activity-scope-controls"><button type="button" data-activity-all role="switch" aria-checked="false">All activity<span class="activity-switch-track" aria-hidden="true"></span></button><span data-activity-context class="activity-context"></span></div>
 
-<p class="text-slate-400">People, organizations, tools, topics and referenced objects from your activity. Open an entity to review its evidence or edit its profile. Add references for websites, social media and files to any entity. Local file paths are displayed for copying.</p>
+<p class="text-slate-400 entity-intro">People, organizations, tools, topics and referenced objects from your activity. Open an entity to review its evidence or edit its profile. Add references for websites, social media and files to any entity. Local file paths are displayed for copying.</p>
 
 <fieldset id="entity-filters" disabled inert aria-busy="true">
 <label class="block my-4">Find an entity<input id="entity-query" class="block w-full p-3 bg-slate-900 border border-slate-600 rounded" type="search" placeholder="Search all names, emails, phone numbers, categories, references or notes"></label>
