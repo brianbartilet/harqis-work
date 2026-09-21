@@ -847,6 +847,12 @@
     if (!scroll || !previousYearCoachmark || !nextYearCoachmark || !year || !toggle || !body || !menu || !menuDate || !createEntry || !pinDates || !showDocument || !matchingEntries || !matchingPanel || !matchingContent || !memoryDialog || !memoryForm || !pinList) return;
     const activityController = new AbortController();
     panel.activityAbortController = activityController;
+    const menuHeader = menu.querySelector('.activity-day-menu-header');
+    const menuHeaderObserver = new ResizeObserver(() => {
+      menu.style.setProperty('--day-menu-header-height', `${menuHeader.getBoundingClientRect().height}px`);
+    });
+    menuHeaderObserver.observe(menuHeader);
+    activityController.signal.addEventListener('abort', () => menuHeaderObserver.disconnect(), {once:true});
     let menuTrigger = null;
     let matchingAbortController = null;
     let memoryState = JSON.parse(document.querySelector('[data-memory-pins]')?.textContent || '{"categories":[],"ranges":[],"palette":[]}');

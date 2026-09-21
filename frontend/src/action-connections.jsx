@@ -8,6 +8,7 @@ const colors = {actions:'#fb8ca6', ideas:'#f9ca74', drafts:'#c4b5fd', boards:'#9
 const kindName = kind => ({actions:'Action', ideas:'Idea', drafts:'Thought', boards:'Board',
   goals:'Goal', entries:'Entry', daily:'Date', companies:'Organization'}[kind] || kind);
 const identity = node => typeof node === 'object' ? node.id : node;
+const statusLabel = status => status.replace(/[_-]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 const tooltip = text => {const span = document.createElement('span'); span.textContent = text; return span;};
 let activeDialog;
 
@@ -123,7 +124,7 @@ function Preview({item}) {
       </div>
       <aside className="connections-details" aria-label="Read-only orb details">
         {selected ? <><p className="connections-kind">{kindName(selected.kind)}</p><h3>{selected.label}</h3>
-          {selected.status && <p>Status: {selected.status}</p>}{selected.date && <p>{selected.date}</p>}
+          {selected.status && <div className="agenda-card-meta"><span className="action-status connections-status" data-status={selected.status} aria-label={'Status: ' + statusLabel(selected.status)}>{statusLabel(selected.status)}</span></div>}{selected.date && <p>{selected.date}</p>}
           {selected.boards.length > 0 && <div><h4>{selected.kind === 'drafts' ? 'Originating board' : 'Appears on boards'}</h4><ul>{selected.boards.map(b => <li key={b.id}>{b.name}</li>)}</ul></div>}
           {(selected.body || selected.description) && <div className="connections-body markdown-body" dangerouslySetInnerHTML={{__html:selected.body_html}}/>}
           {selected.checklists?.map((list, index) => <div key={list.id || index}><h4>{list.title || 'Checklist'}</h4><ul>{list.items.map((entry, i) => <li key={entry.id || i}>{entry.done ? '☑' : '☐'} {entry.text}</li>)}</ul></div>)}

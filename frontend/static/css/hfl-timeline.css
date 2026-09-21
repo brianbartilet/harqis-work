@@ -30,6 +30,7 @@
 [data-day-ideas][hidden], [data-day-actions][hidden] { display:none !important; }
 .activity-day-menu { scrollbar-gutter:stable; }
 .activity-day-menu-header { position:sticky; top:-.45rem; z-index:3; padding:.45rem 0; background:#020617; }
+.activity-day-menu :is([data-activity-menu-ideas], [data-activity-menu-actions])[aria-expanded="true"] { position:sticky; top:calc(var(--day-menu-header-height, 0px) - .45rem); z-index:2; background:#020617; }
 /* Keep form scrollbars inside the rounded dialog shell. */
 /* Entry forms share the action and pinned-date field typography and accents. */
 :is([data-create-entry-dialog], [data-entry-review-dialog]) { background:#07101f; border-color:#334155; }
@@ -118,6 +119,7 @@
 .connections-details h3 { font-size:.95rem; font-weight:600; color:#f8fafc; margin:.35rem 0 .65rem; }
 .connections-details h4 { color:#cbd5e1; font-weight:600; margin:.9rem 0 .35rem; }
 .connections-kind { color:#c4b5fd; }
+.connections-details .connections-status { display:inline-flex; align-items:center; border-radius:999px; padding:.2rem .6rem; font-weight:600; }
 .connections-body { margin-top:.7rem; color:#cbd5e1; }
 .connections-relations li { margin:.65rem 0; }
 .connections-relations small { display:block; color:#94a3b8; }

@@ -178,11 +178,23 @@ def test_connections_preview_both_cards_and_throwaway_lifecycle(ideas, authentic
         day.evaluate("el => { el.style.maxHeight = '260px'; el.scrollTop = el.scrollHeight; }")
         header = day.locator('.activity-day-menu-header').bounding_box()
         assert abs(header['y'] - day.bounding_box()['y']) < 2
+        actions_header = day.locator('[data-activity-menu-actions]').bounding_box()
+        assert abs(actions_header['y'] - header['y'] - header['height']) < 2
         for control in ('[data-activity-menu-date]', '.activity-day-quick-actions'):
             box = day.locator(control).bounding_box()
             assert box['y'] >= header['y']
             assert box['y'] + box['height'] <= header['y'] + header['height']
         day.evaluate("el => { el.style.maxHeight = ''; el.scrollTop = 0; }")
+        day.locator('[data-activity-menu-ideas]').click()
+        day.locator('[data-day-ideas]').evaluate("el => el.style.minHeight = '800px'")
+        day.evaluate("el => { el.style.maxHeight = '260px'; el.scrollTop = 400; }")
+        header = day.locator('.activity-day-menu-header').bounding_box()
+        ideas_header = day.locator('[data-activity-menu-ideas]').bounding_box()
+        assert abs(ideas_header['y'] - header['y'] - header['height']) < 2
+        day.locator('[data-activity-menu-ideas]').click()
+        day.locator('[data-day-ideas]').evaluate("el => el.style.minHeight = ''")
+        day.evaluate("el => { el.style.maxHeight = ''; el.scrollTop = 0; }")
+        day.locator('[data-activity-menu-actions]').click()
         trigger = day.get_by_role('button', name='Connections', exact=True)
         trigger.click()
         assert day.locator('[data-followup-id="' + isolated['id'] + '"] .action-connections-button').count() == 0
@@ -192,6 +204,8 @@ def test_connections_preview_both_cards_and_throwaway_lifecycle(ideas, authentic
         page.evaluate('window.releaseConnections()')
         playwright.expect(preview.locator('canvas')).to_be_visible()
         loaded_box = preview.bounding_box()
+        playwright.expect(preview.locator('.connections-status')).to_have_text('Open')
+        playwright.expect(preview.locator('.connections-status')).to_have_attribute('aria-label', 'Status: Open')
         for dimension in ('x', 'y', 'width', 'height'):
             assert abs(loaded_box[dimension] - loading_box[dimension]) < 2
         assert preview.locator('select').count() == 0
