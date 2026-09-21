@@ -208,9 +208,10 @@
     <button type="button" data-secrets-setup aria-haspopup="dialog" class="corpus-secrets-control inline-flex shrink-0 items-center rounded-lg bg-slate-900 text-sm font-semibold text-slate-300 ring-1 ring-slate-700">Secrets</button>
     {% endif %}
     <div class="corpus-navigation-actions">
-    <details class="corpus-create-menu"><summary class="corpus-header-link">Create<svg class="tools-caret" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div>
-      <button type="button" data-create-entry-open class="corpus-tool-item" aria-haspopup="dialog">Create entry</button>
-      <button type="button" data-create-action-open class="corpus-tool-item" aria-haspopup="dialog" aria-controls="followup-editor">Create actionable</button>
+    <details class="corpus-create-menu"><summary class="corpus-header-link">Log<svg class="tools-caret" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div>
+      <button type="button" data-create-entry-open class="corpus-tool-item" aria-haspopup="dialog">Activity</button>
+      <button type="button" data-create-action-open class="corpus-tool-item" aria-haspopup="dialog" aria-controls="followup-editor">Actionable</button>
+      <button type="button" class="corpus-tool-item" onclick="window.dispatchEvent(new CustomEvent('hfl:create-idea'))">Idea</button>
     </div></details>
     {% if corpus_entities_enabled %}
     <details class="corpus-tools"><summary class="corpus-header-link">Explore<svg class="tools-caret" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div>
@@ -324,6 +325,7 @@
       <div class="activity-day-quick-actions">
       <button type="button" class="activity-day-menu-action text-slate-200" data-activity-menu-create role="menuitem">Create entry</button>
       <button type="button" class="activity-day-menu-action text-cyan-200" data-activity-menu-create-action role="menuitem">Create action</button>
+      <button type="button" class="activity-day-menu-action text-cyan-200" data-activity-menu-create-idea role="menuitem">Create idea</button>
       <button type="button" class="activity-day-menu-action text-amber-200" data-activity-menu-pin role="menuitem">Pin dates</button>
       <a class="activity-day-menu-action text-cyan-200" data-activity-menu-document role="menuitem">Show document</a>
       </div>
@@ -1535,6 +1537,11 @@
       const selectedDate = menuTrigger?.dataset.activityDay;
       closeDayMenu();
       window.dispatchEvent(new CustomEvent('hfl:create-action', {detail: {date: selectedDate}}));
+    });
+    menu.querySelector('[data-activity-menu-create-idea]').addEventListener('click', () => {
+      const selectedDate = menuTrigger?.dataset.activityDay;
+      closeDayMenu();
+      window.dispatchEvent(new CustomEvent('hfl:create-idea', {detail: {date: selectedDate}}));
     });
     pinDates.addEventListener('click', () => {
       pinStart = menuTrigger?.dataset.activityDay || '';

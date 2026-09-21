@@ -622,6 +622,8 @@ async def hfl_api_reference_thumbnail(request: Request, token: str):
 
 from modules.hfl_corpus.timeline import router as timeline_router
 router.include_router(timeline_router)
+from modules.hfl_corpus.ideas_api import router as ideas_router
+router.include_router(ideas_router, prefix='/timeline')
 
 from modules.hfl_corpus.management_api import router as management_router
 router.include_router(management_router)

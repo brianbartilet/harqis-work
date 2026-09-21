@@ -52,6 +52,19 @@ class AttachmentStore:
         with self.connect() as db:
             db.execute('UPDATE input_attachments SET detached=1 WHERE source=? AND id=?', (source, attachment_id))
 
+    def clone(self, source, target, identities, db):
+        """Copy ownership within the conversion transaction; bytes stay immutable."""
+        if not isinstance(identities, list) or len(identities) > MAX_FILES or len(set(identities)) != len(identities):
+            raise ValueError('Choose up to 50 distinct attachments.')
+        for identity in identities:
+            row = db.execute('SELECT manifest FROM input_attachments WHERE source=? AND id=? AND detached=0', (source, identity)).fetchone()
+            if not row:
+                raise HTTPException(409, 'An idea attachment changed. Reload before converting.')
+            manifest = json.loads(row['manifest'])
+            self.path(manifest)
+            manifest['id'] = uuid.uuid4().hex
+            db.execute('INSERT INTO input_attachments(id,source,manifest) VALUES (?,?,?)', (manifest['id'], target, json.dumps(manifest)))
+
     async def upload(self, source, files):
         if not files or len(files) > MAX_FILES:
             raise HTTPException(422, 'Choose 1–50 attachments.')
@@ -107,7 +120,7 @@ class AttachmentStore:
 def source_store(kind, source_id):
     from modules.hfl_corpus import timeline
     from modules.hfl_corpus.memory_pins import get_memory_pin_store
-    if kind == 'actionable':
+    if kind in {'actionable', 'idea'}:
         database = timeline.store().path
     elif kind == 'pin':
         database = get_memory_pin_store().path
@@ -119,7 +132,14 @@ def source_store(kind, source_id):
 def require_source(kind, source_id):
     from modules.hfl_corpus import timeline
     from modules.hfl_corpus.memory_pins import get_memory_pin_store
-    if kind == 'actionable':
+    if kind == 'idea':
+        from modules.hfl_corpus.ideas_api import require_idea
+        try:
+            require_idea(source_id)
+            return
+        except KeyError:
+            pass
+    elif kind == 'actionable':
         try:
             timeline.store().get(source_id)
             return

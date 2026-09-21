@@ -66,14 +66,16 @@ async def legacy(request: Request):
 
 
 @router.get('/hfl-corpus/graph')
+@router.get('/hfl-corpus/ideas')
 @router.get('/hfl-corpus/entities')
 async def page(request: Request):
     user, redirect = require_user(request)
     if redirect:
         return redirect
-    template = 'knowledge_graph.html' if request.url.path.endswith('/graph') else 'entities.html'
+    template = 'knowledge_graph.html' if request.url.path.endswith(('/graph', '/ideas')) else 'entities.html'
+    from modules.hfl_shares.security import make_csrf_token
     return templates.TemplateResponse(request, 'modules/hfl_corpus/' + template,
-                                      page_context(request, user, 'hfl_corpus'))
+                                      page_context(request, user, 'hfl_corpus', memory_csrf=make_csrf_token(user)))
 
 
 @router.get('/api/hfl/entities/graph')

@@ -38,6 +38,7 @@
           <button type="button" data-preset="people" aria-pressed="false">People</button>
           <button type="button" data-preset="tools" aria-pressed="false">Tools</button>
           <button type="button" data-preset="companies" aria-pressed="false">Companies</button>
+
         </div>
       </div>
     </div>
@@ -64,6 +65,7 @@
   <div class="kg-stage" id="kg-stage" aria-busy="true">
   <div id="kg-loading" role="status"><span class="kg-spinner" aria-hidden="true"></span><strong>Loading Activity Graph</strong><span>Reading activity and preparing connections…</span></div>
   <div class="kg-workspace" id="kg-workspace" inert>
+    <aside class="kg-boards" aria-label="Saved boards"><details open><summary>Boards</summary><div id="idea-map-tools"></div></details></aside>
     <section class="kg-map" aria-label="Interactive knowledge graph">
       <div id="kg-canvas" aria-label="Interactive force graph. Select nodes with the list below or beside the graph."></div>
       <div class="kg-zoom"><button id="kg-in" aria-label="Zoom in">+</button><button id="kg-out" aria-label="Zoom out">−</button><button id="kg-fit">Fit</button></div>

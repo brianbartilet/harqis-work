@@ -143,6 +143,16 @@ def projection(source='', since='', until='', context=''):
 
 
 def graph(source='', since='', until='', limit=100, query='', shared=False, context=''):
+    from modules.hfl_corpus.ideas_api import canonical_snapshot
+    from modules.hfl_corpus.ideas_graph import extend
+    snapshot = canonical_snapshot()
+    if not any(snapshot[k] for k in ('ideas', 'actions', 'topics', 'links')):
+        return _corpus_graph(source, since, until, limit, query, shared, context)
+    base = _corpus_graph(source, since, until, 0, '', False, context)
+    return extend(base, snapshot, since=since, until=until, query=query, sources=source, context=context, shared=shared, limit=limit)
+
+
+def _corpus_graph(source='', since='', until='', limit=100, query='', shared=False, context=''):
     rows = projection('', since, until, context) if context else projection('', since, until)
     available_sources = sorted({e['source'] for e in rows if e['source']})
     selected_sources = {source} if isinstance(source, str) and source else set(source or [])

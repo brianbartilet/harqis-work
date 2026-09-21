@@ -47,7 +47,7 @@
       anchor.target = '_blank'; anchor.rel = 'noopener'; evidence.append(anchor);
       form.elements.title.value = (data.title || '').slice(0, 200);
       save.disabled = false;
-      form.elements.expected_outcome.focus({preventScroll: true});
+      form.elements.body.focus({preventScroll: true});
     } catch (err) {
       if (ticket === sequence && dialog.open) { evidence.hidden = true; showError(err.message); }
     }
@@ -65,6 +65,7 @@
       attachments.validate();
       attachments.root.inert = true;
       const values = Object.fromEntries(new FormData(form));
+      values.checklists = window.hflActionChecklists?.value || [];
       const prompt = values.prompt, changed = attachments.changed;
       if (changed) values.prompt = '';
       const payload = savedAction ? {...values, version: savedAction.version} : {...values, source, request_id: requestId};

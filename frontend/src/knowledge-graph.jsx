@@ -26,10 +26,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   $('info').addEventListener('focus',()=>{infoPaused=true;});
   $('info').addEventListener('blur',()=>{infoPaused=false;});
   const kindLabel = kind => kind === 'companies' ? 'organizations' : kind.replaceAll('_', ' ');
-  const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3'};
+  const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3', ideas:'#f9ca74', actions:'#fb8ca6', goals:'#a7f3d0', drafts:'#c4b5fd'};
   const color = kind => palette[kind] || '#e9c96c';
   const defaultLabelKinds = new Set(['sources', 'people', 'tools', 'companies']);
-  let data = {nodes:[],edges:[]}, nodes = [], edges = [], selected = null, enabled = new Set(['entries','sources','daily','people','companies','tools','topics','objects']);
+  let data = {nodes:[],edges:[]}, nodes = [], edges = [], selected = null, enabled = new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts']);
   let exampleMode=new URLSearchParams(location.search).get('example')==='1';
   let requestVersion=0, requestController=null, backgroundController=null, appliedParams=null, graphSignature='', lastInteraction=0;
   const activePointers=new Set();
@@ -60,8 +60,9 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   const stateKey='hfl:graph:state:v1:'+JSON.stringify([document.querySelector('.kg-shell').dataset.viewOwner,new URLSearchParams(location.search).get('context')||'',exampleMode]);
   let pendingState=null,stateReady=false,stateTimer;
   try {pendingState=readGraphState(localStorage,stateKey);} catch {}
+  if(pendingState?.preset==='mindmap')pendingState={...pendingState,preset:'timeline',positions:{},viewport:null,selected:null,focusId:null};
   function saveGraphState(){
-    if(!stateReady||loading||!graphApi)return;
+    if(!stateReady||loading||!graphApi||window.HflIdeas?.maps.current)return;
     const filters=Object.fromEntries(['search','density','rolling','since','until'].map(id=>[id,$(id).value]));
     filters.shared=$('shared').checked;
     const positions=Object.fromEntries(nodes.slice(0,10000).map(n=>[n.id,{...(layoutTargets.get(n.id)||{x:n.x,y:n.y}),manual:!!n.manual}]));
@@ -104,6 +105,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   function requestParams(){
     const params=new URLSearchParams({since:$('since').value,until:$('until').value,rolling:$('rolling').value,limit:$('density').value,query:$('search').value,shared:String($('shared').checked)});
     const context=window.activityModals?.context();if(context)params.set('context',context);
+    if(window.HflIdeas?.maps.current)return new URLSearchParams({limit:'0'});
     selectedSources.forEach(source=>params.append('sources',source));applyRollingDates(params);return params;
   }
   $('rolling').onchange=syncDates;
@@ -120,7 +122,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     const positions=current?new Map(nodes.map(n=>[n.id,{x:n.x,y:n.y}])):layoutTargets;
     const points=presetFitPoints(nodes,positions,preset);
     for(const p of points){left=Math.min(left,p.x);right=Math.max(right,p.x);top=Math.min(top,p.y);bottom=Math.max(bottom,p.y);}
-    const scale=Math.max(.02,Math.min(4,(host.clientWidth-100)/Math.max(100,right-left),(host.clientHeight-100)/Math.max(100,bottom-top)));
+    const scale=Math.max(.02,Math.min(preset==='mindmap'?1.3:4,(host.clientWidth-100)/Math.max(100,right-left),(host.clientHeight-100)/Math.max(100,bottom-top)));
     graphApi.zoom(scale,animated&&!reducedMotion?1000:0);
     graphApi.centerAt((left+right)/2,(top+bottom)/2,animated&&!reducedMotion?1000:0);
   }
@@ -199,7 +201,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       const visible=!activeId||node.id===activeId||near.has(node.id);
       const radius=node.radius/globalScale;
       const ink=color(node.kind),emphasis=node.id===activeId||node.id===selectedId;
-      ctx.save();ctx.globalAlpha=visible?1:.075;
+      ctx.save();ctx.globalAlpha=visible?(node.status==='dismissed'?.35:1):.075;
       // Thousands of per-entry gradients dominate mobile drawing time. Keep
       // detailed lighting for hubs and selected nodes, and compact activity dots.
       if(data.nodes.length>1000&&node.kind==='entries'&&!emphasis){
@@ -246,7 +248,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       nodeCanvasObject={paintNode}
       nodePointerAreaPaint={(node,paint,ctx)=>{ctx.fillStyle=paint;ctx.beginPath();ctx.arc(node.x,node.y,(node.radius+4)/(ref.current?.zoom()||1),0,2*Math.PI);ctx.fill();}}
       linkColor={link=>color(link.target.kind)+(activeId?(isLinked(link)?'df':'07'):(data.nodes.length<=35?'70':'32'))}
+      linkDirectionalArrowLength={link=>['ideas','actions','goals','drafts'].includes(link.source.kind)||['ideas','actions','goals','drafts'].includes(link.target.kind)?4:0}
+      linkDirectionalArrowRelPos={0.8}
       linkWidth={link=>isLinked(link)?2:data.nodes.length<=35?1.1:.65} linkCurvature={.16}
+      linkLineDash={link=>link.local?[4,3]:null}
       linkDirectionalParticles={0}
       linkDirectionalParticleWidth={2} linkDirectionalParticleSpeed={.004}
       onZoom={()=>{if(activePointers.size)lastInteraction=Date.now();scheduleStateSave();}}
@@ -344,11 +349,12 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     description.textContent=n?[kindLabel(n.kind),n.date,n.source,near.size+' visible connections'].filter(Boolean).join(' · '):'Select an orb to explore its linked entries and entities.';
     if(n)$('detail').append(heading);$('detail').append(description);
     if(n?.href&&n.kind==='entries') {const button=document.createElement('button');button.textContent='Open entry';button.className='kg-open-entry';button.onclick=()=>openEntry(n.id.replace(/^entry:/,''),n.locator);$('detail').append(button);}
+    if(!exampleMode)window.HflIdeas?.inspect(n,$('detail'),data.edges);
     if(n){const focus=document.createElement('button');focus.textContent='Focus on this connection';focus.className='kg-focus-button';focus.onclick=()=>{focusId=n.id;render();};$('detail').append(focus);}
     if(focusId){const back=document.createElement('button');back.textContent='Back to overview';back.onclick=()=>{focusId=null;render();};$('detail').append(back);}
     if(n){const clear=document.createElement('button');clear.textContent='Clear selection';clear.onclick=()=>select(null);$('detail').append(clear);}
-    const items=n?nodes.filter(node=>near.has(node.id)):nodes.filter(node=>node.kind===(preset==='timeline'?'daily':preset));
-    $('list-title').textContent=(n?'Linked nodes':PRESETS[preset])+' · '+items.length;
+    const items=n?nodes.filter(node=>near.has(node.id)):preset==='mindmap'?nodes:nodes.filter(node=>node.kind===(preset==='timeline'?'daily':preset));
+    $('list-title').textContent=(n?'Linked nodes':preset==='mindmap'?'Board members':PRESETS[preset])+' · '+items.length;
     nodeList(items);
   }
   function render(preserveLayout=false) {
@@ -359,10 +365,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     $('types').querySelectorAll('input[data-kind]').forEach(input=>{input.checked=enabled.has(input.dataset.kind);});
     const degrees=new Map();data.edges.forEach(e=>{degrees.set(e.source,(degrees.get(e.source)||0)+1);degrees.set(e.target,(degrees.get(e.target)||0)+1);});
     let filtered=data.nodes.filter(n=>enabled.has(n.kind)&&(!exampleMode||!$('shared').checked||n.kind==='entries'||degrees.get(n.id)>1));
-    const query=exampleMode?$('search').value.trim().toLocaleLowerCase():'';
+    const query=exampleMode||window.HflIdeas?.maps.current?$('search').value.trim().toLocaleLowerCase():'';
     if(query){const matches=new Set(filtered.filter(n=>n.label.toLocaleLowerCase().includes(query)).map(n=>n.id)),near=new Set(matches);data.edges.forEach(e=>{if(matches.has(e.source))near.add(e.target);if(matches.has(e.target))near.add(e.source);});filtered=filtered.filter(n=>near.has(n.id));}
     if(focusId){const keep=new Set([focusId]);data.edges.forEach(e=>{if(e.source===focusId)keep.add(e.target);if(e.target===focusId)keep.add(e.source);});filtered=filtered.filter(n=>keep.has(n.id));}
-    const budget=Number($('density').value)||Infinity,limited=filtered.length>budget;
+    const budget=window.HflIdeas?.maps.current?Infinity:(Number($('density').value)||Infinity),limited=filtered.length>budget;
     const ranked=filtered.slice().sort((a,b)=>(degrees.get(b.id)||0)-(degrees.get(a.id)||0));
     // Reserve space for both sides of the bipartite graph so hubs retain their entries.
     let chosen=ranked;
@@ -391,26 +397,43 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       n.clusterY=index<0?0:Math.sin(index*Math.PI/2)*160;
     }
     if(!preserveLayout){if(!pendingState)layoutSeed=Math.random();randomizePresetNodes(nodes,layoutSeed);}
-    const layout=presetLayout(nodes,edges,preset,layoutSeed);preset=layout.preset;layoutTargets=layout.positions;
+    const layout=presetLayout(nodes,edges,window.HflIdeas?.maps.current?'mindmap':preset,layoutSeed,window.HflIdeas?.maps.current?.root);preset=layout.preset;layoutTargets=layout.positions;
+    const boardPositions=window.HflIdeas?.maps.pendingPositions;
+    if(window.HflIdeas?.maps.current&&boardPositions&&Object.keys(boardPositions).length){
+      const occupied=new Map(),cell=p=>[Math.floor(p.x/85),Math.floor(p.y/85)];
+      const occupy=p=>{const key=cell(p).join(',');if(!occupied.has(key))occupied.set(key,[]);occupied.get(key).push({...p});};
+      const overlaps=p=>{const [x,y]=cell(p);for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)if((occupied.get([x+dx,y+dy].join(','))||[]).some(q=>Math.hypot(p.x-q.x,p.y-q.y)<85))return true;return false;};
+      Object.values(boardPositions).forEach(occupy);
+      for(const node of nodes){
+        if(boardPositions[node.id])continue;
+        const target=layoutTargets.get(node.id);
+        while(overlaps(target))target.y+=110;
+        occupy(target);
+      }
+    }
     nodes.forEach(node=>{
       const previous=previousNodes.get(node.id),target=layoutTargets.get(node.id);
       if(preserveLayout&&previous){Object.assign(node,{x:previous.x,y:previous.y,manual:previous.manual});layoutTargets.set(node.id,previousTargets.get(node.id)||{x:node.x,y:node.y});}
       else {node.x=target.x;node.y=target.y;}
-      const saved=pendingState?.positions?.[node.id];
+      const saved=window.HflIdeas?.maps.pendingPositions?.[node.id]||(!window.HflIdeas?.maps.current&&pendingState?.positions?.[node.id]);
       if(saved){node.x=saved.x;node.y=saved.y;node.manual=!!saved.manual;layoutTargets.set(node.id,{...target,x:saved.x,y:saved.y});}
       node.fx=node.x;node.fy=node.y;node.phase=phaseFor(node.id);
     });
     transition=null;if(!preserveLayout)motionTime=0;
     const restoredViewport=nodes.some(n=>pendingState?.positions?.[n.id])?pendingState?.viewport:null;
     pendingState=null;
-    graphData={nodes,viewport:restoredViewport,fitOnce:!preserveLayout,links:edges.map(e=>({source:e.source,target:e.target}))};
+    if(window.HflIdeas)window.HflIdeas.maps.pendingPositions=null;
+    graphData={nodes,viewport:restoredViewport,fitOnce:!preserveLayout,links:edges.map(e=>({source:e.source,target:e.target,local:!!e.local}))};
     updatePresetMenu(layout.notice);
     $('map-count').textContent=nodes.length+' nodes · '+edges.length+' links';
     showInfo('status',nodes.length+' / '+(data.total_nodes ?? data.nodes.length)+' matching nodes · '+Math.max(0,(data.total_nodes??data.nodes.length)-data.nodes.length)+' outside detail limit · '+(data.nodes.length-nodes.length)+' hidden by view filters · '+edges.length+' connections'+(data.omitted_sources?' · '+data.omitted_sources+' sources outside limit':'')+(limited||data.truncated?' · '+$('density').selectedOptions[0].text.split(' · ')[0]+'; search or increase detail to explore more.':'')+(!nodes.length?' · No matching nodes. Clear your search or change the filters.':''),!nodes.length);
     select(byId.has(selected)?selected:null);
   }
   function configureData(next,preserveLayout=false) {
+    const map=window.HflIdeas?.maps.current;
+    if(map){const members=new Set(map.members);const drafts=(map.drafts||[]).map(d=>({id:d.id,label:d.title,body:d.body,kind:'drafts',status:'board draft'}));next={...next,nodes:[...next.nodes.filter(n=>members.has(n.id)),...drafts],edges:[...next.edges.filter(e=>members.has(e.source)&&members.has(e.target)),...(map.edges||[]).map(e=>({...e,local:true,method:'board',evidence:'Board-only connection'}))]};next.total_nodes=next.nodes.length;next.truncated=false;}
     data=next;
+    if(window.HflIdeas)window.HflIdeas.maps.nodeLabels=Object.fromEntries(next.nodes.map(n=>[n.id,n.label]));
     if(focusId&&!data.nodes.some(node=>node.id===focusId))focusId=null;
     if(selected&&!data.nodes.some(node=>node.id===selected))selected=null;
     const availableKinds=new Set(data.nodes.map(node=>node.kind));$('types').replaceChildren();
@@ -462,7 +485,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     } catch(error){if(!exampleMode&&version===requestVersion&&error.name!=='AbortError'){$('info').dataset.error='true';showInfo('status',error.message,true);}} finally{if(version===requestVersion){setLoading(false);}}
   }
   // Poll only the applied query, without a loading overlay or interrupting interaction.
-  const busy=()=>document.hidden||!!transition||dragNodes.size>0||activePointers.size>0||document.querySelector('.activity-modal[open]:not(#activity-standalone)')||loading||exampleMode||!$('views-panel').hidden||!$('animation-panel').hidden||$('filter-drawer').open||$('entry-dialog').open||document.activeElement===$('search')||Date.now()-lastInteraction<500;
+  const busy=()=>document.hidden||!!transition||dragNodes.size>0||activePointers.size>0||document.querySelector('.activity-modal[open]:not(#activity-standalone)')||loading||exampleMode||!$('views-panel').hidden||!$('animation-panel').hidden||$('filter-drawer').open||$('entry-dialog').open||document.querySelector('.idea-dialog[open]')||document.activeElement===$('search')||Date.now()-lastInteraction<500;
   host.addEventListener('pointermove',event=>{if(event.buttons||activePointers.size)lastInteraction=Date.now();});
   host.addEventListener('pointerdown',event=>{activePointers.add(event.pointerId);lastInteraction=Date.now();},{capture:true});
   for(const name of ['pointerup','pointercancel'])window.addEventListener(name,event=>{
@@ -496,14 +519,14 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   window.addEventListener('pagehide',()=>{backgroundController?.abort();});
   let searchTimer;$('search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>exampleMode?render():load(),300);};
   $('filter').onclick=()=>{$('filter-drawer').close();if(!exampleMode)load();};
-  $('density').onchange=()=>{saveDetail();exampleMode?render():load();};$('shared').onchange=()=>exampleMode?render():load();$('in').onclick=()=>zoom(1.3);$('out').onclick=()=>zoom(1/1.3);$('fit').onclick=()=>fitTargets(true,true);$('reload').onclick=load;
+  $('density').onchange=()=>{saveDetail();exampleMode?render():load();};$('shared').onchange=()=>exampleMode?render():load();$('in').onclick=()=>zoom(1.3);$('out').onclick=()=>zoom(1/1.3);$('fit').onclick=()=>fitTargets(true,true);$('reload').onclick=async()=>{try{await window.HflIdeas?.maps.reload();await load();}catch(error){showInfo('status',error.message,true);}};
   $('reset').onclick=()=>{
     pendingState=null;try {localStorage.removeItem(stateKey);} catch {}
     window.activityModals?.reset();preset='timeline';setAnimation('off');
     $('search').value='';$('density').value='100';$('rolling').value='0';$('since').value='';$('until').value='';
     saveDetail();
     selectedSources.clear();sourceOptions(data.sources||[]);syncDates();$('shared').checked=false;
-    enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects']);selected=null;focusId=null;exampleMode?render():load();
+    enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts']);selected=null;focusId=null;exampleMode?render():load();
   };
 
 
@@ -544,7 +567,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       if(typeof value==='string'&&($(id).tagName!=='SELECT'||[...$(id).options].some(o=>o.value===value)))$(id).value=value;
     }
     $('shared').checked=pendingState.filters.shared===true;
-    enabled=new Set(pendingState.enabled);pendingState.sources.forEach(s=>selectedSources.add(s));
+    enabled=new Set([...pendingState.enabled,'ideas','actions','goals','drafts']);pendingState.sources.forEach(s=>selectedSources.add(s));
     if(PRESETS[pendingState.preset])preset=pendingState.preset;
     if(Number.isFinite(pendingState.layoutSeed))layoutSeed=pendingState.layoutSeed;
     selected=typeof pendingState.selected==='string'?pendingState.selected:null;
@@ -554,5 +577,9 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   showMode();
   setAnimation(!reducedMotion&&['off','breathing','ripple','drift'].includes(pendingState?.animationMode)?pendingState.animationMode:savedAnimation(),false);
   requestAnimationFrame(animate);
-  load();
+  if(window.HflIdeas){
+    window.HflIdeas.maps.getPositions=()=>Object.fromEntries(nodes.map(n=>[n.id,{x:n.x,y:n.y}]));
+    window.addEventListener('hfl:ideas-updated',event=>{if(event.detail?.boardSwitch){pendingState=null;selected=null;enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts']);}if(event.detail?.selectId)selected=event.detail.selectId;focusId=null;if(!window.HflIdeas.maps.current&&preset==='mindmap')preset='timeline';load();});
+    window.HflIdeas.maps.init(document.getElementById('idea-map-tools')).then(load);
+  }else load();
 })();

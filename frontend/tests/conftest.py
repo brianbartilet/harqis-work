@@ -58,6 +58,13 @@ def _require_test_profile_path(path):
 
 
 @pytest.fixture(autouse=True)
+def _isolated_intent_store(monkeypatch, tmp_path):
+    # Graph reads now include persisted ideas/actions; never open live intent data.
+    monkeypatch.setenv('HFL_TIMELINE_STORE_PATH', str(tmp_path / 'intents.sqlite3'))
+    monkeypatch.setenv('HARQIS_ENTITIES_DB', str(tmp_path / 'entities.sqlite3'))
+
+
+@pytest.fixture(autouse=True)
 def _empty_owner_profile():
     from modules.hfl_corpus.memory_pins import get_memory_pin_store
     from modules.profile.store import get_profile_store

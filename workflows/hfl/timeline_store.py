@@ -21,7 +21,7 @@ def store_path():
 
 
 STATES = {"open", "active", "in_progress", "incomplete", "done", "dismissed"}
-FIELDS = {"title", "expected_outcome", "notes", "prompt", "review_date", "due_date", "status", "completion_note", "agent_enabled", "matrix", "matrix_confidence", "matrix_reason"}
+FIELDS = {"title", "expected_outcome", "notes", "prompt", "review_date", "due_date", "status", "completion_note", "agent_enabled", "matrix", "matrix_confidence", "matrix_reason", "description", "body", "checklists"}
 
 
 def validate_matrix(payload):
@@ -93,6 +93,9 @@ class FollowUpStore:
                     PRIMARY KEY(followup_id,version)
                 );
             """)
+            from workflows.hfl.object_content import migrate_content
+            migrate_content(db, 'followups')
+            migrate_content(db, 'timeline_suggestions')
             # Rename current values without rewriting immutable history snapshots.
             for row in db.execute("SELECT id,payload FROM followups WHERE status='waiting'").fetchall():
                 item = json.loads(row['payload'])
@@ -108,6 +111,8 @@ class FollowUpStore:
     @staticmethod
     def validate(payload):
         result = dict(payload)
+        from workflows.hfl.object_content import content_fields
+        result.update(content_fields(result))
         result.update(validate_matrix(result))
         if type(result.get("agent_enabled", True)) is not bool:
             raise ValueError("agent_enabled must be a boolean.")
@@ -134,7 +139,7 @@ class FollowUpStore:
             result[key] = value
         return result
 
-    def create(self, raw, *, actor, source=None, suggestion_id=None):
+    def create(self, raw, *, actor, source=None, suggestion_id=None, connection=None):
         unknown = set(raw) - FIELDS - {"request_id"}
         if unknown:
             raise ValueError("Unsupported follow-up fields.")
@@ -145,8 +150,10 @@ class FollowUpStore:
         now = isoformat()
         item.update(id=f"followup-{uuid.uuid4().hex}", version=1, created_at=now,
                     updated_at=now, completed_at="", source=source, timezone="Asia/Singapore")
-        with self.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
+        from contextlib import nullcontext
+        with (nullcontext(connection) if connection is not None else self.connect()) as db:
+            if connection is None:
+                db.execute("BEGIN IMMEDIATE")
             if suggestion_id:
                 suggestion = db.execute("SELECT * FROM timeline_suggestions WHERE id=?", (suggestion_id,)).fetchone()
                 if not suggestion or suggestion['status'] == 'dismissed':
@@ -159,7 +166,9 @@ class FollowUpStore:
             if previous:
                 existing = json.loads(previous["payload"])
                 original = json.loads(db.execute("SELECT payload FROM followup_history WHERE followup_id=? AND version=1", (existing["id"],)).fetchone()["payload"])
-                if any(original.get(k, True if k == "agent_enabled" else "") != item.get(k, True if k == "agent_enabled" else "") for k in FIELDS) or original.get("source") != source:
+                from workflows.hfl.object_content import content_fields
+                original.update(content_fields(original))
+                if any(original.get(k, True if k == "agent_enabled" else [] if k == 'checklists' else "") != item.get(k, True if k == "agent_enabled" else [] if k == 'checklists' else "") for k in FIELDS) or original.get("source") != source:
                     raise FollowUpConflict("This creation request was already used. Reload before creating another follow-up.")
                 return existing, True
             encoded = json.dumps(item)
@@ -256,7 +265,9 @@ class FollowUpStore:
             for item in suggestions:
                 identity = json.dumps([item["category"], item["title"].strip().casefold(), sorted(ref["entry_id"] for ref in item["evidence"])])
                 sid = "suggestion-" + hashlib.sha256(identity.encode()).hexdigest()[:24]
-                item = {**item, "id": sid, "analysis_status": item.get("status", "uncertain")}
+                previous = db.execute('SELECT payload,updated_at FROM timeline_suggestions WHERE id=?', (sid,)).fetchone()
+                created_at = json.loads(previous['payload']).get('created_at', previous['updated_at']) if previous else isoformat()
+                item = {**item, "id": sid, "created_at": created_at, "analysis_status": item.get("status", "uncertain")}
                 db.execute("INSERT INTO timeline_suggestions(id,status,payload,updated_at) VALUES (?,'suggested',?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at", (sid,json.dumps(item),isoformat()))
                 db.execute("INSERT OR IGNORE INTO timeline_suggestion_periods VALUES (?,?,?)", (sid,start,end))
             db.execute("UPDATE timeline_runs SET state=?,payload=?,updated_at=? WHERE period_key=? AND run_id=?", (state,json.dumps(result),isoformat(),f"{start}:{end}",run_id))
@@ -265,14 +276,16 @@ class FollowUpStore:
     def suggestions(self, start, end, *, include_dismissed=False):
         with self.connect() as db:
             rows = db.execute("SELECT DISTINCT s.* FROM timeline_suggestions s JOIN timeline_suggestion_periods p ON s.id=p.suggestion_id WHERE p.start_date<=? AND p.end_date>=? ORDER BY s.updated_at DESC", (end,start)).fetchall()
-        return [{**json.loads(row["payload"]), "status":row["status"],"followup_id":row["followup_id"]} for row in rows if include_dismissed or row["status"] != "dismissed"]
+        from workflows.hfl.ideas_store import IdeasStore, local_day
+        identities = {row['id'] for row in rows}
+        ideas = IdeasStore(self).ideas()
+        return [item for item in ideas if (item['id'] in identities or (item.get('origin') == 'manual' and
+                any(start <= day <= end for day in {item.get('source_date', ''), (item.get('source') or {}).get('date', ''), local_day(item['created_at'])} if day)))
+                and (include_dismissed or item['status'] != 'dismissed')]
 
     def suggestion(self, sid):
-        with self.connect() as db:
-            row = db.execute("SELECT * FROM timeline_suggestions WHERE id=?", (sid,)).fetchone()
-        if not row:
-            raise KeyError(sid)
-        return {**json.loads(row["payload"]),"status":row["status"],"followup_id":row["followup_id"]}
+        from workflows.hfl.ideas_store import IdeasStore
+        return IdeasStore(self).idea(sid)
 
     def mark_suggestion(self, sid, status, followup_id=""):
         if status not in {"dismissed","adopted"}:
