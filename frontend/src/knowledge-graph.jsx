@@ -59,6 +59,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     catch {return 'off';}
   }
   let layoutTargets=new Map(), lastMotionFrame=0, lastClock=0;
+  let renderedBoardId=null, boardLayoutPositions={};
   let layoutSeed=Math.random();
   let draggedNode=null, dragNodes=new Set();
   const stateKey='hfl:graph:state:v1:'+JSON.stringify([document.querySelector('.kg-shell').dataset.viewOwner,new URLSearchParams(location.search).get('context')||'',exampleMode]);
@@ -546,6 +547,13 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   }
   function render(preserveLayout=false) {
     draggedNode=null;dragNodes.clear();
+    const board=window.HflIdeas?.maps.current;
+    const sameBoard=!!board&&renderedBoardId===board.id;
+    if(!sameBoard)boardLayoutPositions={};
+    renderedBoardId=board?.id||null;
+    // Search and filters change visibility, never the board's geometry or camera.
+    if(sameBoard)preserveLayout=true;
+    const boardPositions=board?{...boardLayoutPositions,...board.positions,...window.HflIdeas.maps.pendingPositions}:null;
     const previousNodes=new Map(graphData.nodes.map(node=>[node.id,node]));
     const previousTargets=layoutTargets;
     $('legend').querySelectorAll('button[data-kind]').forEach(button=>button.setAttribute('aria-pressed',String(enabled.has(button.dataset.kind))));
@@ -588,7 +596,6 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     }
     if(!preserveLayout){if(!pendingState)layoutSeed=Math.random();randomizePresetNodes(nodes,layoutSeed);}
     const layout=presetLayout(nodes,edges,window.HflIdeas?.maps.current?'mindmap':preset,layoutSeed,window.HflIdeas?.maps.current?.root);preset=layout.preset;layoutTargets=layout.positions;
-    const boardPositions=window.HflIdeas?.maps.pendingPositions;
     if(window.HflIdeas?.maps.current&&boardPositions&&Object.keys(boardPositions).length){
       const occupied=new Map(),cell=p=>[Math.floor(p.x/85),Math.floor(p.y/85)];
       const occupy=p=>{const key=cell(p).join(',');if(!occupied.has(key))occupied.set(key,[]);occupied.get(key).push({...p});};
@@ -616,9 +623,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       const previous=previousNodes.get(node.id),target=layoutTargets.get(node.id);
       if(preserveLayout&&previous){Object.assign(node,{x:previous.x,y:previous.y,manual:previous.manual});layoutTargets.set(node.id,previousTargets.get(node.id)||{x:node.x,y:node.y});}
       else {node.x=target.x;node.y=target.y;}
-      const saved=window.HflIdeas?.maps.pendingPositions?.[node.id]||(!window.HflIdeas?.maps.current&&pendingState?.positions?.[node.id]);
+      const saved=boardPositions?.[node.id]||(!board&&pendingState?.positions?.[node.id]);
       if(saved){node.x=saved.x;node.y=saved.y;node.manual=!!saved.manual;layoutTargets.set(node.id,{...target,x:saved.x,y:saved.y});}
       node.fx=node.x;node.fy=node.y;node.phase=phaseFor(node.id);
+      if(board)boardLayoutPositions[node.id]={x:node.x,y:node.y};
     });
     transition=null;if(!preserveLayout)motionTime=0;
     // Timeline opens on the latest week, even if an earlier session was panned

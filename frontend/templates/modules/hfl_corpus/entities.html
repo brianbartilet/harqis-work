@@ -99,6 +99,11 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 
 
 <section id="entity-results" hidden>
+<div class="entity-selection" role="region" aria-label="Merge entities">
+  <div><strong id="selection-count" role="status">0 selected</strong><p>Select entities of one type to combine their profiles and connections. Selections stay across pages and filters.</p></div>
+  <div class="selection-buttons"><button id="select-page" type="button">Select this page</button><button id="select-matching" type="button">Select all matching</button><button id="clear-selection" type="button">Clear selection</button><button id="merge-selected" type="button" disabled>Merge selected</button></div>
+  <p id="selection-feedback" role="status"></p>
+</div>
 <details class="entity-maintenance"><summary>Processing and optional export</summary>
 
 <p class="my-3 text-slate-400">Historical enrichment runs in bounded background batches. Explicit references are available even before extraction finishes.</p>
@@ -119,11 +124,6 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 <div id="job-summary" class="job-summary" role="status"></div>
 <details class="job-details"><summary>Technical details</summary><pre id="job" class="whitespace-pre-wrap my-3"></pre></details></details>
 
-<div class="entity-selection" role="region" aria-label="Merge entities">
-  <div><strong id="selection-count" role="status">0 selected</strong><p>Select entities of one type to combine their profiles and connections. Selections stay across pages and filters.</p></div>
-  <div class="selection-buttons"><button id="select-page" type="button">Select this page</button><button id="select-matching" type="button">Select all matching</button><button id="clear-selection" type="button">Clear selection</button><button id="merge-selected" type="button" disabled>Merge selected</button></div>
-  <p id="selection-feedback" role="status"></p>
-</div>
 <details class="entity-maintenance" id="matching-panel"><summary>Automatic matching and review suggestions</summary>
   <p class="my-3 text-slate-400">Newly enriched entities are checked for same-type identity matches. Strong, corroborated matches merge automatically; uncertain matches appear here. Edited names and profiles are preserved. Unmerged or dismissed matches are excluded from automatic remerging.</p>
   <div class="processing-actions"><button id="matching-scan" type="button">Scan existing entities once / resume</button><button id="matching-refresh" type="button">Refresh matching progress</button></div>

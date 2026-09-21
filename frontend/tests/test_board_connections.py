@@ -61,6 +61,45 @@ def test_connection_validation_and_board_conflict(ideas, authenticated_client):
 
 
 @pytest.mark.parametrize('width', [390, 1280])
+def test_board_search_preserves_saved_layout(ideas, authenticated_client, width):
+    from urllib.parse import urlparse
+    from playwright.sync_api import sync_playwright, expect
+    positions = {'draft:a': dict(x=-210, y=75), 'draft:b': dict(x=180, y=-95)}
+    board = ideas.save_map(board_payload(root='draft:a', drafts=[dict(id='draft:a', title='Alpha'), dict(id='draft:b', title='Beta')], positions=positions))
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch(channel='chrome', headless=True)
+        try:
+            page = browser.new_page(viewport=dict(width=width, height=1000))
+            errors = []
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            def route(intercept):
+                req = intercept.request
+                url = urlparse(req.url)
+                response = authenticated_client.request(req.method, url.path + ('?' + url.query if url.query else ''), content=req.post_data_buffer, headers={'content-type':'application/json'})
+                intercept.fulfill(status=response.status_code, body=response.content, headers={'content-type':response.headers.get('content-type','text/html')})
+            page.route('**/*', route)
+            page.goto('https://boards.test/hfl-corpus/ideas?board='+board['id'])
+            count = page.locator('#kg-map-count')
+            expect(count).to_have_text('2 nodes · 0 links')
+            page.wait_for_function("document.querySelector('#kg-canvas canvas')?.__zoom?.k > 0")
+            geometry = '() => ({positions:window.HflIdeas.maps.getPositions(),camera:{...document.querySelector("#kg-canvas canvas").__zoom}})'
+            original = page.evaluate(geometry)
+            assert original['positions'] == positions
+            search = page.locator('#kg-search')
+            for query, expected in [('Alpha', 1), ('no matching orb', 0), ('', 2), ('Beta', 1), ('', 2)]:
+                search.fill(query)
+                expect(count).to_have_text(f'{expected} nodes · 0 links')
+                current = page.evaluate(geometry)
+                assert current['camera'] == original['camera']
+                assert all(p == positions[identity] for identity, p in current['positions'].items())
+            assert page.evaluate(geometry)['positions'] == positions
+            assert ideas.map(board['id'])['positions'] == positions
+            assert not errors
+        finally:
+            browser.close()
+
+
+@pytest.mark.parametrize('width', [390, 1280])
 def test_connection_controls_browser(ideas, authenticated_client, width, tmp_path):
     from urllib.parse import urlparse
     from playwright.sync_api import sync_playwright, expect
