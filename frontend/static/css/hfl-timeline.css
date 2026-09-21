@@ -120,6 +120,11 @@
 .connections-details h4 { color:#cbd5e1; font-weight:600; margin:.9rem 0 .35rem; }
 .connections-kind { color:#c4b5fd; }
 .connections-details .connections-status { display:inline-flex; align-items:center; border-radius:999px; padding:.2rem .6rem; font-weight:600; }
+.followups-lane .followups-drag-placeholder { opacity:.35; border:1px dashed #67e8f9; }
+.followups-lane .agenda-card:focus-visible { outline:2px solid #67e8f9; outline-offset:2px; }
+.followups-lane .action-drag-handle { float:right; position:relative; z-index:1; cursor:grab; touch-action:none; padding:.25rem .55rem; min-height:32px; color:#94a3b8; background:transparent; border:1px solid #334155; }
+.followups-lane .action-drag-handle:active { cursor:grabbing; }
+.followups-lane .sortable-fallback { pointer-events:none; opacity:.85; }
 .connections-body { margin-top:.7rem; color:#cbd5e1; }
 .connections-relations li { margin:.65rem 0; }
 .connections-relations small { display:block; color:#94a3b8; }

@@ -933,6 +933,19 @@ def test_followups_board_filter_drag_refresh_and_editor(agenda, authenticated_cl
         page.locator('.corpus-tools > summary').click()
         page.locator('[data-followups-open]').click()
         board=page.locator('#followups-board')
+        def drag_card(card, target, *, top=False):
+            handle=card.locator('.action-drag-handle')
+            handle.scroll_into_view_if_needed()
+            start=handle.bounding_box()
+            target.scroll_into_view_if_needed()
+            end=target.bounding_box()
+            page.mouse.move(start['x']+start['width']/2,start['y']+start['height']/2)
+            page.mouse.down()
+            page.mouse.move(start['x']+start['width']/2+8,start['y']+start['height']/2,steps=3)
+            page.wait_for_timeout(80)
+            page.mouse.move(end['x']+end['width']/2,end['y']+(12 if top else end['height']/2),steps=15)
+            page.wait_for_timeout(350)
+            page.mouse.up()
         playwright.expect(board.locator('[data-board-status]')).to_contain_text('0 actions')
         board.locator('[data-board-all]').click()
         playwright.expect(board.locator('[data-board-status]')).to_contain_text('1 action')
@@ -945,7 +958,7 @@ def test_followups_board_filter_drag_refresh_and_editor(agenda, authenticated_cl
             page.locator('#followup-form [name=status]').select_option('active')
             page.locator('#followup-form [type=submit]').click()
         else:
-            card.drag_to(board.locator('[data-status=active].followups-lane'),source_position={'x':20,'y':12})
+            drag_card(card,board.locator('[data-status=active].followups-lane'))
         playwright.expect(board.locator('[data-status=active].followups-lane [data-followup-id]')).to_have_count(1)
         updated=agenda.get(item['id'])
         assert updated['status']=='active'
@@ -973,5 +986,49 @@ def test_followups_board_filter_drag_refresh_and_editor(agenda, authenticated_cl
         board.get_by_role('button',name='History',exact=True).click()
         playwright.expect(page.locator('#followup-history .markdown-body table')).to_have_count(1)
         page.locator('#followup-history-close').click()
+        first = agenda.create(payload(title='First ordered card', checklists=[{'id':'long-list','title':'Checklist','cover':True,
+            'items':[{'id':str(index),'text':f'Task {index + 1}','done':False} for index in range(12)]}]),actor='test')[0]
+        second = agenda.create(payload(title='Second ordered card'),actor='test')[0]
+        board.locator('[data-board-refresh]').click()
+        lane = board.locator('.followups-lane[data-status=open]')
+        playwright.expect(lane.locator('[data-followup-id]')).to_have_count(2)
+        first_card = lane.locator(f'[data-followup-id="{first["id"]}"]')
+        second_card = lane.locator(f'[data-followup-id="{second["id"]}"]')
+        playwright.expect(first_card.locator('.checklist-card-cover input')).to_have_count(12)
+        playwright.expect(first_card.get_by_role('button',name='See full list')).to_have_count(0)
+        if width == 1440:
+            drag_card(second_card,first_card,top=True)
+        else:
+            second_card.focus()
+            second_card.press('Alt+ArrowUp')
+        playwright.expect(lane.locator('[data-followup-id]').first).to_have_attribute('data-followup-id',second['id'])
+        playwright.expect(board.locator('[data-board-status]')).to_contain_text('3 actions')
+        assert agenda.board_order()[second['id']] < agenda.board_order()[first['id']]
+        board.locator('[data-board-refresh]').click()
+        playwright.expect(lane.locator('[data-followup-id]').first).to_have_attribute('data-followup-id',second['id'])
+        # A new page must recover the server order, not a DOM/local-storage order.
+        page.reload()
+        page.locator('.corpus-tools > summary').click()
+        page.locator('[data-followups-open]').click()
+        board.locator('[data-board-all]').click()
+        playwright.expect(lane.locator('[data-followup-id]').first).to_have_attribute('data-followup-id',second['id'])
         assert not errors
         browser.close()
+
+
+def test_board_order_preserves_filtered_cards_and_rejects_stale_moves(agenda, authenticated_client):
+    rows = [agenda.create(payload(title=title),actor='test')[0] for title in ['A','Hidden','B']]
+    url='/hfl-corpus/timeline/items/order'
+    order=lambda values: {'status':'open','items':[{'id':item['id'],'version':item['version']} for item in values]}
+    response=authenticated_client.put(url,json=order([rows[2],rows[0]]))
+    assert response.status_code==200,response.text
+    positions=agenda.board_order()
+    assert [positions[row['id']] for row in rows]==[2,1,0]
+    assert all(agenda.get(row['id'])['version']==1 for row in rows)
+    assert all(len(agenda.history(row['id']))==1 for row in rows)
+    listed=authenticated_client.get('/hfl-corpus/timeline/items').json()['items']
+    assert all(item['board_position']==positions[item['id']] for item in listed)
+    agenda.update(rows[0]['id'],{'version':1,'status':'active'},actor='test')
+    assert authenticated_client.put(url,json=order(rows)).status_code==409
+    assert agenda.board_order()==positions
+    assert authenticated_client.put(url,json=order([rows[2],rows[2]])).status_code==400

@@ -11,7 +11,12 @@
   const label = value => value === 'in_progress' ? 'In Progress' : value[0].toUpperCase()+value.slice(1);
   const listeners = new AbortController();
   let sequence = 0, pending = false, moving = false, dragging = null, disposed = false;
-  let items = new Map(), rendered = '', timer;
+  let items = new Map(), rendered = '', timer, sorters = [];
+  let pointerHeld = false, savingCards = 0;
+  lanes.addEventListener('pointerdown',()=>{pointerHeld=true;},{signal:listeners.signal});
+  window.addEventListener('pointerup',()=>{pointerHeld=false;},{signal:listeners.signal});
+  window.addEventListener('pointercancel',()=>{pointerHeld=false;},{signal:listeners.signal});
+  window.addEventListener('hfl:action-saving',event=>{savingCards+=event.detail.saving?1:-1;},{signal:listeners.signal});
   const node = (tag, text, className) => {const el=document.createElement(tag);if(text!=null)el.textContent=text;if(className)el.className=className;return el;};
   function context() {
     const caption = document.querySelector('[data-active-view-name]')?.textContent || 'All activity';
@@ -33,29 +38,57 @@
     const scroll=new Map([...lanes.children].map(el=>[el.dataset.status,el.scrollTop]));
     const focused=document.activeElement;
     const focusId=focused?.closest('[data-followup-id]')?.dataset.followupId, focusText=focused?.textContent;
+    const oldItems=items, oldCards=new Map([...lanes.querySelectorAll('[data-followup-id]')].map(el=>[el.dataset.followupId,el]));
     items=new Map(rows.map(item=>[item.id,item]));
+    sorters.forEach(sorter=>sorter.destroy());sorters=[];
     lanes.replaceChildren();
     for(const state of states){
       const section=node('section',null,'followups-lane');section.dataset.status=state;section.setAttribute('aria-label',label(state));
-      const matching=rows.filter(item=>item.status===state);
+      const matching=rows.filter(item=>item.status===state).sort((a,b)=>(a.board_position??2147483647)-(b.board_position??2147483647));
       section.append(node('h3',label(state)+' · '+matching.length));
-      section.addEventListener('dragover',event=>{if(dragging&&!moving){event.preventDefault();event.dataTransfer.dropEffect='move';}});
-      section.addEventListener('drop',event=>{event.preventDefault();const id=dragging;dragging=null;if(id)move(id,state);});
       for(const item of matching){
-        const card=actions.card(item);card.draggable=true;
-        card.addEventListener('dragstart',event=>{if(event.target.closest('button,a,input,summary')){event.preventDefault();return;}dragging=item.id;dialog.dataset.busy='true';event.dataTransfer.setData('text/plain',item.id);event.dataTransfer.effectAllowed='move';});
-        card.addEventListener('dragend',()=>{dragging=null;if(!moving)delete dialog.dataset.busy;});
+        if(oldCards.has(item.id)&&JSON.stringify(oldItems.get(item.id))===JSON.stringify(item)){
+          section.append(oldCards.get(item.id));continue;
+        }
+        const card=actions.card(item);card.tabIndex=0;
+        const grip=node('button','⠿','action-drag-handle');grip.type='button';grip.setAttribute('aria-label','Move '+item.title);grip.title='Drag to move card; Alt+Up/Down to reorder';card.prepend(grip);
+        card.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
+        card.title='Drag to reorder or change status. Alt+Up/Down reorders within this column.';
+        card.addEventListener('keydown',event=>{
+          if(![card,grip].includes(event.target)||!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key)||moving)return;
+          event.preventDefault();
+          const lane=card.parentElement, cards=[...lane.querySelectorAll('[data-followup-id]')], index=cards.indexOf(card), next=index+(event.key==='ArrowUp'?-1:1);
+          if(next<0||next>=cards.length)return;
+          lane.insertBefore(card,next<index?cards[next]:cards[next].nextSibling);
+          move(item.id,state,[...lane.querySelectorAll('[data-followup-id]')].map(el=>el.dataset.followupId));
+        });
         card.querySelectorAll('details').forEach(el=>el.open=expanded.has(item.id+':'+el.querySelector('summary').textContent));
         section.append(card);
       }
       if(!matching.length)section.append(node('p','No actions','agenda-description'));
       lanes.append(section);section.scrollTop=scroll.get(state)||0;
+      sorters.push(new Sortable(section,{
+        group:'hfl-actions',draggable:'.agenda-card',filter:'button:not(.action-drag-handle),a,input,summary,textarea,select,label',preventOnFilter:false,
+        forceFallback:true,fallbackOnBody:false,fallbackTolerance:4,
+        animation:150,delay:180,delayOnTouchOnly:true,touchStartThreshold:5,ghostClass:'followups-drag-placeholder',
+        onMove:()=>!savingCards&&!moving,
+        onStart:event=>{dragging=event.item.dataset.followupId;dialog.dataset.busy='true';},
+        onEnd:event=>{
+          const id=event.item.dataset.followupId;dragging=null;pointerHeld=false;
+          if(event.from===event.to&&event.oldIndex===event.newIndex){delete dialog.dataset.busy;return;}
+          move(id,event.to.dataset.status,[...event.to.querySelectorAll('[data-followup-id]')].map(el=>el.dataset.followupId));
+        }
+      }));
     }
-    if(focusId)[...lanes.querySelectorAll('[data-followup-id]')].find(el=>el.dataset.followupId===focusId)?.querySelectorAll('button,summary,a').forEach(el=>{if(el.textContent===focusText)el.focus({preventScroll:true});});
+    if(focusId){
+      const card=[...lanes.querySelectorAll('[data-followup-id]')].find(el=>el.dataset.followupId===focusId);
+      if(focused?.matches('[data-followup-id]'))card?.focus({preventScroll:true});
+      else card?.querySelectorAll('button,summary,a').forEach(el=>{if(el.textContent===focusText)el.focus({preventScroll:true});});
+    }
     rendered=signature;
   }
   async function refresh(force=false) {
-    if(!dialog.open || disposed || moving || dragging || (pending&&!force))return;
+    if(!dialog.open || disposed || moving || dragging || pointerHeld || savingCards || (pending&&!force))return;
     const ticket=++sequence;pending=true;context();status.textContent='Refreshing follow-ups…';lanes.setAttribute('aria-busy','true');
     try{
       const params=all.checked?new URLSearchParams():new URLSearchParams(location.search);
@@ -68,20 +101,23 @@
         rows.push(...data.items);total=data.total;
         if(!data.items.length)break;
       }while(rows.length<total);
-      if(dragging||moving)return;
+      if(dragging||moving||pointerHeld||savingCards)return;
       render(rows);error.hidden=true;status.textContent=rows.length+' action'+(rows.length===1?'':'s')+' · Updates every 5 seconds';
     }catch(e){if(ticket===sequence){error.textContent=e.message;error.hidden=false;status.textContent='Could not refresh. Displayed actions may be out of date. Use Refresh to retry.';}}
     finally{if(ticket===sequence){pending=false;lanes.removeAttribute('aria-busy');}}
   }
-  async function move(id,state){
-    const item=items.get(id);if(!item||item.status===state||moving)return;
-    moving=true;dialog.dataset.busy='true';++sequence;pending=false;lanes.inert=true;status.textContent='Saving status…';
-    let failure='';
-    try{await request('/'+id,{method:'PATCH',body:JSON.stringify({version:item.version,status:state})});}
-    catch(e){failure=e.message;}
+  async function move(id,state,order){
+    const item=items.get(id);if(!item||moving)return;
+    moving=true;dialog.dataset.busy='true';++sequence;pending=false;lanes.inert=true;status.textContent='Saving card order…';
+    let failure='',statusSaved=false;
+    try{
+      if(item.status!==state){const data=await request('/'+id,{method:'PATCH',body:JSON.stringify({version:item.version,status:state})});items.set(id,data.item);statusSaved=true;}
+      await request('/order',{method:'PUT',body:JSON.stringify({status:state,items:order.map(identity=>({id:identity,version:items.get(identity).version}))})});
+    }
+    catch(e){failure=e.message+(statusSaved?' Status changed, but the card order was not saved.':' The move was not saved.');}
     finally{moving=false;delete dialog.dataset.busy;lanes.inert=false;}
-    await refresh(true);actions.load();
-    if(failure){error.textContent=failure+' The board has been reloaded; the move was not saved.';error.hidden=false;}
+    rendered='';await refresh(true);actions.load();
+    if(failure){error.textContent=failure+' The board has been reloaded.';error.hidden=false;}
   }
   function open(){dialog.showModal();context();refresh(true);clearInterval(timer);timer=setInterval(()=>{if(!document.hidden&&!document.querySelector('dialog[open]:not(#followups-board)')){refresh();actions.load();}},5000);}
   document.querySelector('[data-followups-open]').onclick=()=>{document.querySelector('.corpus-tools').open=false;open();};
@@ -99,7 +135,7 @@
   window.addEventListener('hfl:action-error',async event=>{if(dialog.open){await refresh(true);error.textContent=event.detail;error.hidden=false;}},{signal:listeners.signal});
   window.addEventListener('hfl:view-replacing',()=>{
     try{if(dialog.open)sessionStorage.setItem('hfl:followups-restore',JSON.stringify({all:all.checked}));}catch(_){}
-    disposed=true;++sequence;clearInterval(timer);listeners.abort();
+    disposed=true;++sequence;clearInterval(timer);listeners.abort();sorters.forEach(sorter=>sorter.destroy());
   },{signal:listeners.signal});
   try{const restore=JSON.parse(sessionStorage.getItem('hfl:followups-restore')||'null');sessionStorage.removeItem('hfl:followups-restore');if(restore){all.checked=restore.all;requestAnimationFrame(open);}}catch(_){}
 })();

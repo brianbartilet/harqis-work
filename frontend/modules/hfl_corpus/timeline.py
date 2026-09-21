@@ -136,7 +136,9 @@ async def followup_list(request: Request, closed: bool = False, offset: int = 0,
     items = (canonical.list() + canonical.list(closed=True)) if include_closed else canonical.list(closed=closed)
     from modules.hfl_corpus.action_scope import filter_actions
     items = await filter_actions(request, items, canonical, recent_dismissed=recent_dismissed)
+    positions = canonical.board_order()
     for item in items:
+        item['board_position'] = positions.get(item['id'], 2147483647)
         is_closed = item['status'] in {'done', 'dismissed'}
         due, review = item["due_date"], item["review_date"]
         item["overdue"] = bool(due and due < today and not is_closed)
@@ -147,6 +149,19 @@ async def followup_list(request: Request, closed: bool = False, offset: int = 0,
     if offset < 0:
         raise HTTPException(422, 'Offset cannot be negative.')
     return {"items": items[offset:offset + 500], "total": len(items), "today": today, "timezone": "Asia/Singapore"}
+
+
+@router.put('/items/order')
+async def followup_board_order(request: Request):
+    owner(request)
+    raw = await body(request)
+    try:
+        store().reorder_board(raw.get('status'), raw.get('items'))
+    except FollowUpConflict as exc:
+        raise HTTPException(409, str(exc)) from None
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(400, str(exc)) from None
+    return {'saved': True}
 
 
 @router.post("/items")

@@ -76,13 +76,17 @@
   const statusLabel = value => ({in_progress:'In Progress',waiting:'In Progress'}[value] || value[0].toUpperCase()+value.slice(1));
   window.addEventListener('hfl:agent-updated',()=>load());
   const priority = item => [({done:1,dismissed:2}[item.status]||0),({Q1:0,Q2:1,Q3:2,Q4:3}[item.matrix]??4),[item.due_date,item.review_date].filter(Boolean).sort()[0]||'9999',item.due_date||'9999',item.created_at||'',item.id].join('|');
-  let connectionAvailability;
+  let connectionAvailability, lastConnectedActionIds;
   function connectedActionIds() {
     // All cards rendered together share one read; the next refresh checks again.
     if (!connectionAvailability) {
       connectionAvailability = fetch('/hfl-corpus/timeline/ideas/connection-availability', {cache:'no-store'})
         .then(response => { if (!response.ok) throw Error('Connections unavailable'); return response.json(); })
-        .then(data => new Set(data.action_ids))
+        .then(data => {
+          lastConnectedActionIds = new Set(data.action_ids);
+          document.querySelectorAll('.agenda-card').forEach(card=>card.updateConnections?.(lastConnectedActionIds));
+          return lastConnectedActionIds;
+        })
         .finally(() => { connectionAvailability = null; });
     }
     return connectionAvailability;
@@ -108,7 +112,14 @@
     }
     for(const sourceName of item.sources || [])meta.append(node('span',sourceName,'action-source'));
     el.append(meta,node('h3',item.title));
-    window.HflChecklistCover?.(el, item, async checklists => { await api('/'+item.id, {method:'PATCH',body:JSON.stringify({version:item.version,checklists})}); await load(); window.dispatchEvent(new Event('hfl:actions-updated')); }, () => openEditor(item));
+    window.HflChecklistCover?.(el, item, async checklists => {
+      window.dispatchEvent(new CustomEvent('hfl:action-saving',{detail:{saving:true}}));
+      try { await api('/'+item.id, {method:'PATCH',body:JSON.stringify({version:item.version,checklists})}); await load(); }
+      finally {
+        window.dispatchEvent(new CustomEvent('hfl:action-saving',{detail:{saving:false}}));
+        window.dispatchEvent(new Event('hfl:actions-updated'));
+      }
+    }, () => openEditor(item));
     const outcome=node('details');outcome.append(node('summary','Expected outcome'),node('p',item.expected_outcome,'agenda-card-outcome'));el.append(outcome);
     if(item.prompt){const details=node('details');details.append(node('summary','Prompt'),node('pre',item.prompt,'action-prompt'));el.append(details);}
     if(item.notes || item.completion_note){const details=node('details');details.append(node('summary','Notes & outcome'));if(item.notes)details.append(node('p',item.notes));if(item.completion_note)details.append(node('p','Outcome: '+item.completion_note));el.append(details);}
@@ -127,9 +138,12 @@
     views.append(resultsButton);
     const connections = button('Connections', () => window.HflActionConnections.open(item, connections));
     connections.className = 'action-connections-button';
-    connectedActionIds().then(ids => {
-      if (ids.has(item.id)) views.append(connections);
-    }).catch(() => { /* A later card refresh retries availability. */ });
+    el.updateConnections = ids => {
+      if (ids.has(item.id)) {if(connections.parentElement!==views)views.append(connections);}
+      else connections.remove();
+    };
+    if (lastConnectedActionIds) el.updateConnections(lastConnectedActionIds);
+    connectedActionIds().then(el.updateConnections).catch(() => { /* Keep the last known state; a later refresh retries. */ });
     el.append(actions);return el;
   }
   async function load() {

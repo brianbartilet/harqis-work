@@ -73,6 +73,9 @@ class FollowUpStore:
                     payload TEXT NOT NULL,
                     PRIMARY KEY (followup_id, version)
                 );
+                CREATE TABLE IF NOT EXISTS followup_board_order (
+                    id TEXT PRIMARY KEY REFERENCES followups(id), position INTEGER NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS timeline_runs (
                     period_key TEXT PRIMARY KEY, start_date TEXT NOT NULL, end_date TEXT NOT NULL,
                     state TEXT NOT NULL, lease_until TEXT NOT NULL, run_id TEXT NOT NULL,
@@ -220,6 +223,32 @@ class FollowUpStore:
         with self.connect() as db:
             rows = db.execute("SELECT payload, actor, changed_at FROM followup_history WHERE followup_id=? ORDER BY version DESC", (followup_id,)).fetchall()
         return [{"item": json.loads(row["payload"]), "actor": row["actor"], "changed_at": row["changed_at"]} for row in rows]
+
+    def board_order(self):
+        with self.connect() as db:
+            return {row['id']: row['position'] for row in db.execute('SELECT * FROM followup_board_order')}
+
+    def reorder_board(self, state, entries):
+        if state not in STATES or not isinstance(entries, list) or not entries:
+            raise ValueError('Choose a status and card order.')
+        if any(not isinstance(entry, dict) or set(entry) != {'id', 'version'}
+               or not isinstance(entry['id'], str) or type(entry['version']) is not int for entry in entries):
+            raise ValueError('Each card needs its ID and current version.')
+        identities = [entry['id'] for entry in entries]
+        if len(set(identities)) != len(identities):
+            raise ValueError('Card IDs must be unique.')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            rows = [json.loads(row['payload']) for row in db.execute('SELECT payload FROM followups WHERE status=?', (state,))]
+            available = {row['id']: row for row in rows}
+            if any(entry['id'] not in available or available[entry['id']]['version'] != entry['version'] for entry in entries):
+                raise FollowUpConflict('Cards changed. Reload before reordering.')
+            positions = {row['id']: row['position'] for row in db.execute('SELECT * FROM followup_board_order')}
+            rows.sort(key=lambda row: (positions.get(row['id'], 2147483647), priority_key(row)))
+            # Reorder visible slots only; filtered-out cards retain their positions.
+            selected, replacement = set(identities), iter(identities)
+            ordered = [next(replacement) if row['id'] in selected else row['id'] for row in rows]
+            db.executemany('INSERT OR REPLACE INTO followup_board_order VALUES (?,?)', [(identity, index) for index, identity in enumerate(ordered)])
 
     def claim_period(self, start, end, *, force=False):
         key = f"{start}:{end}"

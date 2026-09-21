@@ -278,3 +278,77 @@ def test_connections_preview_both_cards_and_throwaway_lifecycle(ideas, authentic
         assert not errors
         assert ideas.snapshot() == before
         browser.close()
+
+
+@pytest.mark.parametrize('touch', [False, True])
+def test_board_drag_and_checklist_refresh_keep_connections(ideas, authenticated_client, monkeypatch, touch):
+    from modules.hfl_corpus import router
+    playwright = pytest.importorskip('playwright.sync_api')
+    monkeypatch.setattr(router.corpus_index, 'documents', lambda: ())
+    action, _, _ = seed(ideas)
+    action = ideas.followups.update(action['id'], {'version':action['version'], 'checklists':[
+        {'id':'list', 'title':'Checklist', 'cover':True, 'items':[{'id':'item','text':'Keep the button visible','done':False}]}]}, actor='test')
+    other = ideas.followups.create({'request_id':str(uuid4()),'title':'Other card','expected_outcome':'Reorder'},actor='test')[0]
+    with playwright.sync_playwright() as driver:
+        browser = driver.chromium.launch(channel='chrome',headless=True)
+        page = browser.new_page(viewport={'width':390 if touch else 1100,'height':1000},has_touch=touch)
+        errors=[]
+        page.on('pageerror',lambda error:errors.append(str(error)))
+        def route(intercept):
+            request=intercept.request; url=urlparse(request.url)
+            if url.hostname!='connections.test': intercept.abort(); return
+            result=authenticated_client.request(request.method,url.path+('?' + url.query if url.query else ''),content=request.post_data,
+                headers={k:v for k,v in request.headers.items() if k.lower() in {'content-type','x-csrf-token'}})
+            intercept.fulfill(status=result.status_code,body=result.content,headers={'content-type':result.headers.get('content-type','text/html')})
+        page.route('**/*',route)
+        page.add_init_script("""const fetchOriginal=window.fetch; window.availabilityWaiters=[];
+          window.fetch=async (...args)=>{
+            if(window.pauseAvailability && String(args[0]).endsWith('/connection-availability'))
+              await new Promise(resolve=>window.availabilityWaiters.push(resolve));
+            return fetchOriginal(...args);
+          };""")
+        page.goto('https://connections.test/hfl-corpus')
+        page.locator('.corpus-tools > summary').click(); page.locator('[data-followups-open]').click()
+        board=page.locator('#followups-board'); lane=board.locator('.followups-lane[data-status=open]')
+        card=lane.locator(f'[data-followup-id="{action["id"]}"]')
+        other_card=lane.locator(f'[data-followup-id="{other["id"]}"]')
+        playwright.expect(card.locator('.action-connections-button')).to_be_visible()
+        page.evaluate("""id=>{
+          window.pauseAvailability=true; window.connectionGaps=0;
+          window.untouchedCard=document.querySelector('#followups-board [data-followup-id="'+id+'"]');
+          new MutationObserver(()=>{
+            if(!document.querySelector('#followups-board .action-connections-button'))window.connectionGaps++;
+          }).observe(document.querySelector('#followups-board'),{childList:true,subtree:true});
+        }""",other['id'])
+        card.locator('.checklist-card-cover input').check()
+        page.wait_for_function("window.availabilityWaiters.length > 0")
+        playwright.expect(card.locator('.checklist-card-cover input')).to_be_checked()
+        # Include the board's five-second polling cycle with availability unresolved.
+        page.wait_for_timeout(5200)
+        assert page.evaluate('window.connectionGaps')==0
+        assert other_card.evaluate('el=>el===window.untouchedCard')
+        assert ideas.followups.get(action['id'])['checklists'][0]['items'][0]['done']
+        page.evaluate('window.pauseAvailability=false; window.availabilityWaiters.forEach(resolve=>resolve())')
+        handle=other_card.locator('.action-drag-handle'); handle.scroll_into_view_if_needed()
+        start=handle.bounding_box(); end=card.bounding_box()
+        x=start['x']+start['width']/2; y=start['y']+start['height']/2
+        target_x=end['x']+end['width']/2; target_y=end['y']+15
+        if touch:
+            session=page.context.new_cdp_session(page)
+            session.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x,'y':y}]})
+            page.wait_for_timeout(250)
+            for step in range(1,16):
+                session.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':x+(target_x-x)*step/15,'y':y+(target_y-y)*step/15}]})
+                page.wait_for_timeout(25)
+            page.wait_for_timeout(350)
+            session.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
+        else:
+            page.mouse.move(x,y); page.mouse.down(); page.mouse.move(x+8,y,steps=3)
+            page.wait_for_timeout(80)
+            page.mouse.move(target_x,target_y,steps=15); page.wait_for_timeout(350); page.mouse.up()
+        playwright.expect(lane.locator('[data-followup-id]').first).to_have_attribute('data-followup-id',other['id'])
+        playwright.expect(board.locator('[data-board-status]')).to_contain_text('Updates every 5 seconds')
+        positions=ideas.followups.board_order()
+        assert positions[other['id']]<positions[action['id']]
+        assert not errors
+        browser.close()

@@ -104,13 +104,12 @@ window.HflChecklistCover = function(root, item, save, open) {
   for (const list of (item.checklists || []).filter(list => list.cover)) {
     const section = document.createElement('section'); section.className = 'checklist-card-cover';
     const heading = document.createElement('p'); heading.textContent = `${list.title} · ${list.items.filter(i => i.done).length}/${list.items.length}`; section.append(heading);
-    for (const task of list.items.slice(0, 5)) {
+    for (const task of list.items) {
       const label = document.createElement('label'), check = document.createElement('input'); check.type = 'checkbox'; check.checked = task.done;
       check.onchange = async () => { section.inert = true; const lists = structuredClone(item.checklists); lists.find(l => l.id === list.id).items.find(i => i.id === task.id).done = check.checked;
         try { await save(lists); } catch (error) { check.checked = task.done; const message = document.createElement('p'); message.setAttribute('role', 'alert'); message.textContent = error.message; section.append(message); } finally { section.inert = false; }
       }; label.append(check, document.createTextNode(task.text)); section.append(label);
     }
-    if (list.items.length > 5) { const button = document.createElement('button'); button.type = 'button'; button.textContent = 'See full list'; button.onclick = open; section.append(button); }
     root.append(section);
   }
 };
