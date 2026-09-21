@@ -32,6 +32,7 @@ class IdeasStore(BoardStoreMixin):
                 CREATE TABLE IF NOT EXISTS goal_history (id TEXT NOT NULL, version INTEGER NOT NULL, actor TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(id,version));
                 CREATE TABLE IF NOT EXISTS board_promotions (board_id TEXT NOT NULL, draft_id TEXT NOT NULL, idea_id TEXT NOT NULL, PRIMARY KEY(board_id,draft_id));
                 CREATE TABLE IF NOT EXISTS board_memories (event_id TEXT PRIMARY KEY, entry_id TEXT NOT NULL, object_id TEXT NOT NULL, board_id TEXT NOT NULL, day TEXT NOT NULL, payload TEXT NOT NULL, staged INTEGER NOT NULL DEFAULT 0);
+                CREATE TABLE IF NOT EXISTS board_order (id TEXT PRIMARY KEY, position INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS idea_maps (id TEXT PRIMARY KEY, version INTEGER NOT NULL, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS idea_item_actions (idea_id TEXT NOT NULL, checklist_id TEXT NOT NULL, item_id TEXT NOT NULL, action_id TEXT NOT NULL, PRIMARY KEY(idea_id,checklist_id,item_id,action_id));
                 CREATE TABLE IF NOT EXISTS idea_conversions (request_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL);
@@ -139,7 +140,7 @@ class IdeasStore(BoardStoreMixin):
 
     def maps(self):
         with self.followups.connect() as db:
-            return [normalize_board(json.loads(row['payload'])) for row in db.execute('SELECT * FROM idea_maps ORDER BY rowid')]
+            return [normalize_board(json.loads(row['payload'])) for row in db.execute('SELECT m.* FROM idea_maps m LEFT JOIN board_order o ON o.id=m.id ORDER BY COALESCE(o.position,2147483647),m.rowid')]
 
     def map(self, identity):
         with self.followups.connect() as db:
@@ -148,8 +149,18 @@ class IdeasStore(BoardStoreMixin):
             raise KeyError(identity)
         return normalize_board(json.loads(row['payload']))
 
+    def reorder_boards(self, identities):
+        if not isinstance(identities, list) or any(not isinstance(i, str) for i in identities) or len(set(identities)) != len(identities):
+            raise ValueError('Choose a valid board order.')
+        with self.followups.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if set(identities) != {r['id'] for r in db.execute('SELECT id FROM idea_maps')}:
+                raise FollowUpConflict('Boards changed. Reload before reordering.')
+            db.execute('DELETE FROM board_order')
+            db.executemany('INSERT INTO board_order VALUES (?,?)', [(identity, index) for index, identity in enumerate(identities)])
+
     def save_map(self, raw, identity=None):
-        if set(raw) - {'name', 'members', 'positions', 'version', 'request_id', 'prompt', 'purpose', 'root', 'goal_id', 'drafts', 'edges', 'board_date'}:
+        if set(raw) - {'name', 'members', 'positions', 'version', 'request_id', 'prompt', 'purpose', 'root', 'goal_id', 'drafts', 'edges', 'board_date', 'color'}:
             raise ValueError('Unsupported mind-map fields.')
         previous = self.map(identity) if identity else {}
         item = {**previous, **raw}

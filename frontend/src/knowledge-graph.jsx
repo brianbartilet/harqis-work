@@ -439,7 +439,9 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     const restoredViewport=preset!=='timeline'&&nodes.some(n=>pendingState?.positions?.[n.id])?pendingState?.viewport:null;
     pendingState=null;
     if(window.HflIdeas)window.HflIdeas.maps.pendingPositions=null;
-    graphData={nodes,viewport:restoredViewport,fitOnce:!preserveLayout,links:edges.map(e=>({source:e.source,target:e.target,local:!!e.local}))};
+    // Supply endpoints from this render directly. Static board updates use zero
+    // simulation ticks, so links must not wait for d3 to resolve string IDs.
+    graphData={nodes,viewport:restoredViewport,fitOnce:!preserveLayout,links:edges.map(e=>({source:byId.get(e.source),target:byId.get(e.target),local:!!e.local}))};
     updatePresetMenu(layout.notice);
     $('map-count').textContent=nodes.length+' nodes · '+edges.length+' links';
     showInfo('status',nodes.length+' / '+(data.total_nodes ?? data.nodes.length)+' matching nodes · '+Math.max(0,(data.total_nodes??data.nodes.length)-data.nodes.length)+' outside detail limit · '+(data.nodes.length-nodes.length)+' hidden by view filters · '+edges.length+' connections'+(data.omitted_sources?' · '+data.omitted_sources+' sources outside limit':'')+(limited||data.truncated?' · '+$('density').selectedOptions[0].text.split(' · ')[0]+'; search or increase detail to explore more.':'')+(!nodes.length?' · No matching nodes. Clear your search or change the filters.':''),!nodes.length);

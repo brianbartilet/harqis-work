@@ -1,22 +1,30 @@
 # Graph, boards, and Goals
 
 Open Activity Corpus → Explore → Graph. The existing graph canvas, filters,
-presets, and inspector now share one workspace with saved boards in a collapsible
-sidebar. **All activity** returns to exploration. `/hfl-corpus/ideas` and old
+presets, and inspector now share one workspace with saved boards in a persistent
+sidebar. **Explore activity graph** returns to exploration. Only the saved-board
+list collapses; **Add board**, **Add goal**, and active-board controls stay available. `/hfl-corpus/ideas` and old
 `?map=<id>` links remain compatible; new board selections use `?board=<id>`.
 
 ## Boards
 
 A board has a name, required purpose, starting object, optional primary Goal,
 chosen shared objects, draft thoughts, local connections, agent instructions,
-and saved positions. Start from a graph node or **New board**. A question or
+and saved positions. Start from a graph node or **Add board**. A question or
 idea is sufficient: a Goal is optional. Thoughts, connections, and drag layouts
 update immediately and save in the background. **Save now** flushes pending edits;
 the status distinguishes **Saving**, **Saved**, and **Unsaved**. A failed save
 keeps edits in the open tab with **Retry save**. Conflicts never silently overwrite
 another revision; **Resolve unsaved changes** lets you copy pending edits before
 explicitly discarding them and reloading the saved board. Wait for **Saved** before
-closing the workspace. **Save layout** is also available explicitly.
+closing the workspace. **Save layout** captures current node positions and queues autosave; dragging
+already captures positions automatically. **Save now** sends all pending content
+and layout changes immediately.
+
+Choose a board color from the shared Memory Signal pin palette at creation or in
+**Settings**. The card indicator and active-board panel use that color. Drag board
+cards to reorder them, or focus a card and use Alt + Up/Down. Order is saved on
+the server independently of board content revisions.
 
 New boards have creation/update timestamps and an editable **Board date** (today
 by default). The Activity Graph shows a board node linked to that date and its

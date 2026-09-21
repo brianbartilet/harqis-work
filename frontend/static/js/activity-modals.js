@@ -20,10 +20,15 @@
   function open(kind, context, extra = '', navigation = '') {
     const dialog = document.createElement('dialog'); dialog.className = 'activity-modal';
     dialog.setAttribute('aria-label', kind === 'graph' ? 'Activity Graph' : 'Activity Corpus Entities');
-    const loading = document.createElement('div'); loading.className = 'activity-modal-loading';
-    const status = document.createElement('span'); status.setAttribute('role','status'); status.textContent = 'Loading ' + (kind === 'graph' ? 'Activity Graph…' : 'Entities…');
+    const loading = document.createElement('div'); loading.className = kind === 'graph' ? 'activity-modal-pending-close' : 'activity-modal-loading';
+    // The graph document owns its loading state. Keep only an escape control
+    // while its HTML arrives, without covering its own progress indicator.
+    if(kind !== 'graph'){
+      const status = document.createElement('span'); status.setAttribute('role','status'); status.textContent = 'Loading Entities…';
+      loading.append(status);
+    }
     const button = document.createElement('button'); button.textContent = 'Close'; button.onclick = () => dialog.close();
-    loading.append(status, button);
+    loading.append(button);
     const frame = document.createElement('iframe'); frame.title = dialog.getAttribute('aria-label');
     dialog.addEventListener('cancel',async event=>{
       event.preventDefault();
@@ -38,7 +43,9 @@
     frame.src = url;
     frame.onload = () => { loading.hidden = true; frame.contentWindow.focus(); };
     const listener = event => {
-      if(event.origin === location.origin && event.source === frame.contentWindow && event.data?.type === 'hfl:activity-close') dialog.close();
+      if(event.origin !== location.origin || event.source !== frame.contentWindow)return;
+      if(event.data?.type === 'hfl:activity-close') dialog.close();
+      if(kind === 'graph' && event.data?.type === 'hfl:activity-ready') loading.hidden = true;
     };
     window.addEventListener('message',listener);
     dialog.addEventListener('close',()=>{window.removeEventListener('message',listener);dialog.remove();});
@@ -66,4 +73,5 @@
     open(url.pathname.endsWith('/graph')?'graph':'entities',navigation?'':(document.querySelector('#corpus-search-form') ? location.search.slice(1) : window.activityModals.context()),'',navigation?url.search:'');
   });
   updateScope();
+  if(embedded)parent.postMessage({type:'hfl:activity-ready'},location.origin);
 })();

@@ -224,7 +224,7 @@ window.HflObjectDescription = (item = {}) => {
     } catch (error) { d.error.textContent = error.message; }
   }
   async function editGoal(identity = null) {
-    const d = dialog(identity ? 'Edit Goal' : 'New Goal');
+    const d = dialog(identity ? 'Edit Goal' : 'Add goal');
     const loading = el('p', identity ? 'Loading Goal…' : '', 'board-hint'); loading.setAttribute('role', 'status'); d.body.append(loading);
     try {
       let item = identity ? (await api('/goals/' + identity)).item : {};
@@ -275,7 +275,7 @@ window.HflObjectDescription = (item = {}) => {
         const timeout = setTimeout(() => controller.abort(), 45000);
         linkStatus.replaceChildren(document.createTextNode('Loading optional Idea and Action links…'));
         try {
-          const data = await request('/api/hfl/entities/graph?limit=0', {signal:controller.signal});
+          const data = await request(base+'/goal-options', {signal:controller.signal});
           if (!d.node.open) return;
           graph.nodes = data.nodes;
           choices(links, ['ideas','actions'], [...links.selectedOptions].map(o => o.value)); links.disabled = false;
@@ -346,7 +346,7 @@ window.HflObjectDescription = (item = {}) => {
   }
   const maps = {
     current: null, loaded: [], pendingPositions: null, getPositions: () => ({}),
-    queues:new Map(),nodes:new Map(),sharedEdges:new Map(),goals:[],
+    queues:new Map(),nodes:new Map(),sharedEdges:new Map(),goals:[],palette:[],listOpen:true,ordering:false,
     cacheNode(node){this.nodes.set(node.id,node);},
     queue(board=this.current){
       if(!board)return null;
@@ -368,9 +368,9 @@ window.HflObjectDescription = (item = {}) => {
     },
     async init(root) {
       if (!root) return;
-      this.root = root; if (matchMedia('(max-width:760px)').matches) root.closest('details').open = false;
+      this.root = root;
       this.status = el('p', '', 'idea-map-status'); this.status.setAttribute('role', 'status');
-      try { const data = await api('/boards'); this.goals=data.goals; this.loaded = data.maps; const params = new URL(location.href).searchParams; this.current = this.loaded.find(m => m.id === (params.get('board') || params.get('map'))) || null; this.pendingPositions = this.current?.positions || {}; this.render(); }
+      try { const data = await api('/boards'); this.goals=data.goals; this.palette=data.palette; this.loaded = data.maps; const params = new URL(location.href).searchParams; this.current = this.loaded.find(m => m.id === (params.get('board') || params.get('map'))) || null; this.pendingPositions = this.current?.positions || {}; this.render(); }
       catch (error) { root.append(this.status); this.status.textContent = error.message; }
     },
     async selectBoard(board) {
@@ -387,17 +387,40 @@ window.HflObjectDescription = (item = {}) => {
     render() {
       if (!this.root) return;
       this.root.replaceChildren(); document.querySelector('.kg-shell')?.classList.toggle('has-board', !!this.current); document.getElementById('kg-search').placeholder = this.current ? 'Search this board' : 'Search entries or entities';
-      const all = button('All activity', () => this.selectBoard(null)); all.setAttribute('aria-pressed', String(!this.current)); this.root.append(all);
+      const all = button('Explore activity graph', () => this.selectBoard(null)); all.className='board-explore';all.setAttribute('aria-pressed', String(!this.current)); this.root.append(all);
+      this.root.append(button('Add board',()=>this.edit()),button('Add goal',()=>editGoal()));
+      const details=el('details'),summary=el('summary','Boards');details.open=this.listOpen;details.ontoggle=()=>{this.listOpen=details.open;};details.append(summary);
       const list = el('nav', undefined, 'board-list'); list.setAttribute('aria-label', 'Saved boards');
-      for (const board of this.loaded) { const item = button(board.name, () => this.selectBoard(board)); item.setAttribute('aria-current', String(board.id === this.current?.id)); list.append(item); }
-      this.root.append(list, button('New board', () => this.edit()), button('New Goal', () => editGoal()), this.status);
-      if (!this.loaded.length) this.root.append(el('p', 'Start a board with a question, idea, or goal.', 'board-hint'));
+      for (const board of this.loaded) {
+        const item = button(board.name, () => this.selectBoard(board));item.dataset.boardId=board.id;
+        item.style.setProperty('--board-color',board.color||this.palette[0]||'#f59e0b');item.setAttribute('aria-current', String(board.id === this.current?.id));
+        item.draggable=!this.ordering;item.title='Drag to reorder · Alt + Arrow keys to move';
+        item.ondragstart=event=>{event.dataTransfer.setData('text/board-id',board.id);event.dataTransfer.effectAllowed='move';};
+        item.ondragover=event=>{if([...event.dataTransfer.types].includes('text/board-id')){event.preventDefault();item.classList.add('drag-over');}};
+        item.ondragleave=()=>item.classList.remove('drag-over');
+        item.ondrop=event=>{event.preventDefault();item.classList.remove('drag-over');this.reorder(event.dataTransfer.getData('text/board-id'),board.id);};
+        item.onkeydown=event=>{if(event.altKey&&['ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();const at=this.loaded.indexOf(board),other=this.loaded[at+(event.key==='ArrowUp'?-1:1)];if(other)this.reorder(board.id,other.id);}};
+        list.append(item);
+      }
+      details.append(list);this.root.append(details,this.status);
+      if (!this.loaded.length) list.append(el('p', 'Start a board with a question, idea, or goal.', 'board-hint'));
       if (!this.current) return;
-      const board = this.current, section = el('section', undefined, 'board-controls'); section.append(el('h2', board.name), el('p', board.purpose, 'board-purpose'));
-      section.append(button('Add thought', () => editThought()), button('Attach existing', () => chooseMapMembers()), button('Board settings', () => this.edit(board)), button('Save now',()=>this.saveNow()), button('Save layout', () => this.saveLayout()), button('Ask agent', () => this.brainstorm()), button('Delete board', () => this.remove()));
+      const board = this.current, section = el('section', undefined, 'board-controls');section.style.setProperty('--board-color',board.color||this.palette[0]||'#f59e0b'); section.append(el('h2', board.name), el('p', board.purpose, 'board-purpose'));
+      const save=button('Save now',()=>this.saveNow());save.className='board-save-now';save.title='Save all pending board edits now';
+      const layout=button('Save layout',()=>this.saveLayout());layout.title='Capture current node positions for autosave';
+      const remove=button('Delete',()=>this.remove());remove.className='board-delete';
+      section.append(button('Add thought', () => editThought()), button('Attach existing', () => chooseMapMembers()),button('Ask agent', () => this.brainstorm()),save,layout,button('Settings', () => this.edit(board)),remove);
       const pending=this.queues.get(board.id);
       if(pending?.error)section.append(button('Retry save',()=>this.saveNow()),button('Resolve unsaved changes',()=>this.resolveSave()));
       this.root.append(section);
+    },
+    async reorder(source,target){
+      if(this.ordering||source===target)return;
+      const before=[...this.loaded],from=before.findIndex(b=>b.id===source),to=before.findIndex(b=>b.id===target);if(from<0||to<0)return;
+      const next=[...before];next.splice(to,0,next.splice(from,1)[0]);this.loaded=next;this.ordering=true;this.render();
+      try{await api('/boards/order','PUT',{ids:next.map(b=>b.id)});this.status.textContent='Board order saved';}
+      catch(error){const rank=new Map(before.map((b,i)=>[b.id,i]));this.loaded.sort((a,b)=>(rank.get(a.id)??Infinity)-(rank.get(b.id)??Infinity));this.status.textContent=error.message;}
+      finally{this.ordering=false;const status=this.status.textContent;this.render();this.status.textContent=status;this.root.querySelector('[data-board-id="'+source+'"]')?.focus();}
     },
     async reload(){
       if(!this.root)return;
@@ -418,8 +441,12 @@ window.HflObjectDescription = (item = {}) => {
       const remove = button('Delete board', async () => { remove.disabled = true; try { await this.flush(); await api('/maps/' + board.id, 'DELETE', {version:this.current.version});this.queues.delete(board.id);this.loaded=this.loaded.filter(b=>b.id!==board.id);this.current=null;this.selectBoard(null); d.node.close(); } catch (error) { d.error.textContent = error.message; remove.disabled = false; } }); d.footer.append(remove);
     },
     async edit(current = null, seed = null) {
-      const d = dialog(current ? 'Board settings' : 'New board');
+      const d = dialog(current ? 'Settings' : 'Add board');
       const name = field(d.body, 'name', 'Board name', current?.name || seed?.label, 'text', true, 100);
+      let color=current?.color||this.palette[this.loaded.length%this.palette.length]||'#f59e0b';
+      const palette=el('fieldset',undefined,'board-palette');palette.append(el('legend','Board color'));
+      for(const value of this.palette){const swatch=button('',()=>{color=value;for(const option of palette.querySelectorAll('button'))option.setAttribute('aria-pressed',String(option.dataset.color===color));});swatch.dataset.color=value;swatch.style.background=value;swatch.setAttribute('aria-label','Color '+value);swatch.setAttribute('aria-pressed',String(value===color));palette.append(swatch);}d.body.append(palette);
+
       const purpose = field(d.body, 'purpose', 'What are you exploring or trying to achieve?', current?.purpose || seed?.label, 'textarea', true, 3000);
       const starting = current || seed ? null : field(d.body, 'seed', 'Starting thought (optional)', '', 'text', false, 200);
       const goal = selectField(d.body, 'goal_id', 'Primary Goal (optional)', [['', 'No primary Goal']], '');
@@ -436,7 +463,7 @@ window.HflObjectDescription = (item = {}) => {
         const members = [...new Set([...(current?.members || []), ...(seed ? [seed.id] : []), ...(goal.value ? ['goal:' + goal.value] : [])])];
         const root = current?.root || seed?.id || (goal.value ? 'goal:' + goal.value : draftId);
         const drafts = current?.drafts || (root === draftId ? [{id: draftId, title: starting?.value.trim() || name.value, body: purpose.value}] : []);
-        const {item} = await api('/maps' + (current ? '/' + current.id : ''), current ? 'PATCH' : 'POST', {name: name.value, purpose: purpose.value, board_date:boardDate.value, root, goal_id: goal.value, members, drafts, prompt: prompt.value || 'Develop this board toward its purpose. Propose alternatives, assumptions to test, and concrete next steps.', ...(current ? {version: current.version} : {request_id: key, positions: {}})});
+        const {item} = await api('/maps' + (current ? '/' + current.id : ''), current ? 'PATCH' : 'POST', {name: name.value, color, purpose: purpose.value, board_date:boardDate.value, root, goal_id: goal.value, members, drafts, prompt: prompt.value || 'Develop this board toward its purpose. Propose alternatives, assumptions to test, and concrete next steps.', ...(current ? {version: current.version} : {request_id: key, positions: {}})});
         this.queues.delete(item.id);this.loaded=[...this.loaded.filter(m=>m.id!==item.id),item];if(seed)this.cacheNode(seed);const selectedGoal=this.goals.find(g=>g.id===goal.value);if(selectedGoal)this.cacheNode({...selectedGoal,id:'goal:'+selectedGoal.id,object_id:selectedGoal.id,label:selectedGoal.title,kind:'goals'});this.selectBoard(item); d.node.close(); if (agent?.value === 'agent') this.brainstorm();
       } catch (error) { d.error.textContent = error.message; } finally { save.disabled = false; } };
     },

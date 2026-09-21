@@ -307,7 +307,7 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         def route(intercept):
             request = intercept.request
             url = urlparse(request.url)
-            if hold_graph and url.path == '/api/hfl/entities/graph':
+            if hold_graph and (url.path == '/api/hfl/entities/graph' or url.path.endswith('/goal-options')):
                 pending_graph.append(intercept)
                 return
             if url.hostname != 'ideas.test':
@@ -320,7 +320,7 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         page.goto('https://ideas.test/hfl-corpus/ideas')
         if width < 760:
             page.locator('.kg-boards summary').click()
-        page.get_by_role('button', name='New board', exact=True).click()
+        page.get_by_role('button', name='Add board', exact=True).click()
         modal = page.locator('.idea-dialog')
         modal.get_by_label('Board name').fill('Reading room')
         modal.get_by_label('What are you exploring or trying to achieve?').fill('Design a comfortable place to read')
@@ -352,7 +352,7 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         assert len(ideas.followups.list()) == 1
         expect(page.locator('#kg-map-count')).to_contain_text('2 nodes')
         hold_graph = True
-        page.get_by_role('button', name='New Goal', exact=True).click()
+        page.get_by_role('button', name='Add goal', exact=True).click()
         expect(modal.get_by_label('Goal', exact=True)).to_be_visible(timeout=1000)
         expect(modal.get_by_role('button', name='Save Goal', exact=True)).to_be_enabled()
         expect(modal.get_by_text('Loading optional Idea and Action links…')).to_be_visible()
@@ -384,7 +384,7 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         expect(page.locator('.board-list button[aria-current=true]')).to_have_text('Reading room')
         page.screenshot(path=str(tmp_path / ('boards-' + str(width) + '.png')), full_page=True)
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
-        page.locator('#idea-map-tools').get_by_role('button', name='All activity', exact=True).click()
+        page.locator('#idea-map-tools').get_by_role('button', name='Explore activity graph', exact=True).click()
         expect(page.locator('.board-controls')).to_have_count(0)
         assert page.evaluate('window.HflIdeas.maps.current') is None
         assert not any(n['kind'] == 'drafts' for n in authenticated_client.get('/api/hfl/entities/graph?limit=0').json()['nodes'])

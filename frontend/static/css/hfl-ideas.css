@@ -117,7 +117,15 @@
 
 .kg-shell.has-board :is(.kg-detail-control,#kg-open-filters,#kg-views-menu,[data-activity-all]){display:none}
 .kg-boards{max-height:100%;box-sizing:border-box}
-@media(min-width:1101px){.kg-workspace:has(.kg-boards details:not([open])){grid-template-columns:96px minmax(0,1fr) 280px}}
+
 @media(min-width:761px) and (max-width:1100px){.activity-modal-page .kg-workspace:has(.kg-boards){grid-template-rows:minmax(200px,1fr) minmax(100px,28%)}}
 @media(max-width:760px){.activity-modal-page .kg-workspace:has(.kg-boards){grid-template-rows:auto minmax(200px,1fr) minmax(120px,28%)}.kg-boards{max-height:240px}.kg-boards summary{padding-bottom:4px}}
 @media(max-width:760px){.kg-shell.has-board .kg-toolbar-actions{display:flex;flex-wrap:wrap;width:100%;gap:6px}.kg-shell.has-board .kg-toolbar-actions>*{flex:1;min-width:65px}.kg-shell.has-board .kg-toolbar-actions>.kg-animation-menu{flex:2}.kg-shell.has-board .kg-main-toolbar{display:flex;flex-wrap:wrap}.kg-shell.has-board .kg-toolbar-actions button{width:100%}}
+
+.kg-boards .board-explore{border-color:#38bdf8;background:#0c4a6e;color:#e0f2fe;font-weight:700;padding:12px}
+.board-list button{position:relative;padding-right:20px;border-right:5px solid var(--board-color);cursor:grab}
+.kg-boards .board-list button[aria-current=true]{border-color:var(--board-color);background:color-mix(in srgb,var(--board-color) 15%,#122034);color:#e2e8f0}
+.board-list button:active{cursor:grabbing}.board-list button.drag-over{outline:2px dashed var(--board-color);outline-offset:-2px}
+.kg-boards .board-controls{margin-top:8px;padding:12px;border:1px solid var(--board-color);border-radius:10px;background:color-mix(in srgb,var(--board-color) 9%,#0c1728)}
+.kg-boards .board-save-now{border-color:var(--board-color);background:color-mix(in srgb,var(--board-color) 25%,#122034);font-weight:700}
+.kg-boards .board-delete{color:#fda4af}.board-palette{display:flex;flex-wrap:wrap;gap:8px;border:0;padding:8px 0}.board-palette button{width:30px;height:30px;min-height:30px;border:2px solid transparent;border-radius:50%}.board-palette button[aria-pressed=true]{outline:2px solid #e2e8f0;outline-offset:2px}

@@ -10,6 +10,103 @@ def board_payload(**changes):
             'root': 'draft:seed', 'drafts': [{'id': 'draft:seed', 'title': 'Packing', 'body': 'Try batching'}], **changes}
 
 
+def test_board_colors_and_order_persist_without_revising_contents(ideas, authenticated_client):
+    from workflows.hfl.ideas_store import IdeasStore
+    client = authenticated_client
+    palette = client.get(BASE + '/boards').json()['palette']
+    first = client.post(BASE + '/maps', json=board_payload(color=palette[4])).json()['item']
+    second = client.post(BASE + '/maps', json=board_payload()).json()['item']
+    assert first['color'] == palette[4]
+    assert client.patch(BASE+'/maps/'+first['id'], json={'version':1, 'color':'invalid'}).status_code == 422
+    assert client.put(BASE+'/boards/order', json={'ids':[second['id'], first['id']]}).status_code == 200
+    restored = IdeasStore(ideas.followups).maps()
+    assert [b['id'] for b in restored] == [second['id'], first['id']]
+    assert all(b['version'] == 1 for b in restored)
+    assert client.put(BASE+'/boards/order', json={'ids':[second['id']]}).status_code == 409
+    assert client.put(BASE+'/boards/order', json={'ids':[second['id'],second['id']]}).status_code == 422
+
+
+def test_manual_goal_options_and_linked_save_skip_graph_and_corpus(ideas, authenticated_client, monkeypatch):
+    from modules.hfl_corpus import ideas_api, entities
+    idea = ideas.save_idea(payload(), 'owner')
+    def unavailable(*a, **kw):
+        raise AssertionError('Manual goal links must not build the corpus graph')
+    monkeypatch.setattr(ideas_api, 'catalogue', unavailable)
+    monkeypatch.setattr(entities, 'current_entries', unavailable)
+    response = authenticated_client.get(BASE+'/goal-options')
+    assert response.status_code == 200
+    assert any(n['id']=='idea:'+idea['id'] for n in response.json()['nodes'])
+    # Unrelated generated/protected ideas must not force a corpus scan on save.
+    ideas.save_idea(payload(source={'entry_id':'hidden','path':'private.md'}), 'owner')
+    response = authenticated_client.post(BASE+'/goals', json={
+        'request_id':str(uuid4()),'title':'Outcome','linked_objects':['idea:'+idea['id']]})
+    assert response.status_code == 200, response.text
+
+
+def test_goal_options_do_not_expose_protected_source_objects(ideas, authenticated_client):
+    hidden = ideas.save_idea(payload(source={'entry_id':'hidden','path':'private.md'}), 'owner')
+    assert authenticated_client.get(BASE+'/goal-options').json()['nodes'] == []
+    assert authenticated_client.post(BASE+'/goals', json={
+        'request_id':str(uuid4()),'title':'Outcome','linked_objects':['idea:'+hidden['id']]}).status_code == 404
+
+
+def test_board_sidebar_order_collapse_and_saved_lines_browser(ideas, authenticated_client, tmp_path):
+    from urllib.parse import urlparse
+    from playwright.sync_api import sync_playwright, expect
+    first = ideas.save_map(board_payload(name='First board', color='#8b5cf6',
+        drafts=[{'id':'draft:seed','title':'Packing'}, {'id':'draft:next','title':'Second thought'}],
+        edges=[{'source':'draft:seed','target':'draft:next','relation':'supports'}]))
+    second = ideas.save_map(board_payload(name='Second board'))
+    with sync_playwright() as engine:
+        browser = engine.chromium.launch(channel='chrome', headless=True)
+        try:
+            page = browser.new_page(viewport={'width':1440,'height':1000})
+            page.add_init_script('''const stroke=CanvasRenderingContext2D.prototype.stroke;
+                window.boardLineStrokes=0;
+                CanvasRenderingContext2D.prototype.stroke=function(...args){
+                  if(this.getLineDash().join(',')==='4,3')window.boardLineStrokes++;
+                  return stroke.apply(this,args);
+                };''')
+            def respond(route):
+                r=route.request;url=urlparse(r.url)
+                response=authenticated_client.request(r.method,url.path+('?' + url.query if url.query else ''),
+                    content=r.post_data_buffer,headers={'content-type':'application/json'})
+                route.fulfill(status=response.status_code,body=response.content,
+                    headers={'content-type':response.headers.get('content-type','text/html')})
+            page.route('https://sidebar.test/**',respond)
+            page.goto('https://sidebar.test/hfl-corpus/graph?board='+first['id'])
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            sidebar=page.locator('.kg-boards')
+            expect(sidebar.get_by_role('button',name='Explore activity graph')).to_be_visible()
+            assert sidebar.locator('.board-controls button').all_text_contents()==[
+                'Add thought','Attach existing','Ask agent','Save now','Save layout','Settings','Delete']
+            width=sidebar.bounding_box()['width']
+            sidebar.locator('summary').click()
+            expect(sidebar.locator('.board-list')).not_to_be_visible()
+            expect(sidebar.get_by_role('button',name='Settings',exact=True)).to_be_visible()
+            assert sidebar.bounding_box()['width']==width
+            sidebar.locator('summary').click()
+            sidebar.locator('[data-board-id="'+second['id']+'"]').drag_to(sidebar.locator('[data-board-id="'+first['id']+'"]'))
+            expect(sidebar.locator('.idea-map-status')).to_have_text('Board order saved')
+            assert [b['id'] for b in ideas.maps()]==[second['id'],first['id']]
+            page.wait_for_function('window.boardLineStrokes>0')
+            page.evaluate('window.boardLineStrokes=0')
+            sidebar.get_by_role('button',name='Add thought',exact=True).click()
+            page.get_by_label('Thought',exact=True).fill('After save')
+            page.get_by_role('button',name='Save thought',exact=True).click()
+            sidebar.get_by_role('button',name='Save now',exact=True).click()
+            expect(sidebar.locator('.idea-map-status')).to_have_text('Saved')
+            page.wait_for_function('window.boardLineStrokes>0')
+            expect(page.locator('#kg-map-count')).to_contain_text('2 links')
+            page.screenshot(path=str(tmp_path/'board-sidebar.png'))
+            page.reload()
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            expect(page.locator('#kg-map-count')).to_contain_text('2 links')
+            assert sidebar.locator('.board-list button').first.inner_text()=='Second board'
+        finally:
+            browser.close()
+
+
 def test_board_metadata_and_draft_graph_do_not_scan_corpus(ideas, authenticated_client, monkeypatch):
     from modules.hfl_corpus import ideas_api
     def unavailable():
@@ -89,7 +186,7 @@ def test_board_edits_work_while_save_is_slow_and_retry(ideas, authenticated_clie
             page.wait_for_selector('#kg-workspace:not([inert])')
             if width < 760: page.locator('.kg-boards summary').click()
             count = len(graph_requests)
-            page.get_by_role('button',name='New board',exact=True).click()
+            page.get_by_role('button',name='Add board',exact=True).click()
             dialog = page.locator('.idea-dialog')
             dialog.get_by_label('Board name').fill('Quick board')
             dialog.get_by_label('What are you exploring or trying to achieve?').fill('Plan without waiting')

@@ -102,7 +102,43 @@ def boards(request: Request):
     """Board metadata and Goals never require a corpus scan."""
     timeline.owner(request)
     canonical = store()
-    return {'maps': canonical.maps(), 'goals': canonical.goals()}
+    from workflows.hfl.colors import PIN_COLORS
+    return {'maps': canonical.maps(), 'goals': canonical.goals(), 'palette': list(PIN_COLORS)}
+
+
+@router.put('/boards/order')
+async def reorder_boards(request: Request):
+    timeline.owner(request)
+    raw = await timeline.body(request)
+    await run_in_threadpool(call, store().reorder_boards, raw.get('ids'))
+    return {'saved': True}
+
+
+def goal_choices(identities=None):
+    # Resolve only intent records; manual objects need no corpus/entity scan.
+    from modules.hfl_corpus.entities import current_entries
+    canonical = store()
+    data = {'ideas': canonical.ideas(), 'actions': canonical.followups.list() + canonical.followups.list(closed=True)}
+    if identities is not None:
+        data = {kind: [item for item in data[kind] if prefix + item['id'] in identities]
+                for kind, prefix in [('ideas', 'idea:'), ('actions', 'action:')]}
+    def references(item):
+        return [ref for ref in [item.get('source'), *item.get('evidence', [])]
+                if isinstance(ref, dict) and ref.get('entry_id')]
+    needs_corpus = any(item.get('source') or references(item) for items in data.values() for item in items)
+    permitted = {(e['path'], key) for e in current_entries()
+                 for key in (e['id'], timeline.entry_evidence_id(e['text']))} if needs_corpus else set()
+    return {prefix + item['id']: {'id': prefix + item['id'], 'kind': kind, 'label': item['title']}
+            for kind, prefix in [('ideas', 'idea:'), ('actions', 'action:')]
+            for item in data[kind]
+            if not item.get('source') or (item['source'].get('path'), item['source'].get('entry_id')) in permitted
+            if all((ref.get('path'), ref['entry_id']) in permitted for ref in references(item))}
+
+
+@router.get('/goal-options')
+def goal_options(request: Request):
+    timeline.owner(request)
+    return {'nodes': list(goal_choices().values())}
 
 
 @router.get('/maps/{identity}')
@@ -272,9 +308,13 @@ def save_goal_values(raw, actor, identity=None):
     links = raw.get('linked_objects', [])
     if not isinstance(links, list):
         raise HTTPException(422, 'Invalid Goal links.')
+    requested = list(links)
+    for milestone in raw.get('milestones', []) if isinstance(raw.get('milestones', []), list) else []:
+        if isinstance(milestone, dict) and isinstance(milestone.get('actions', []), list):
+            requested.extend(milestone.get('actions', []))
     for link in links:
         if available is None:
-            available = catalogue()
+            available = goal_choices(requested)
         if check_node(link, available)['kind'] not in {'ideas', 'actions'}:
             raise HTTPException(422, 'Link Goals to Ideas or Actions.')
     for milestone in raw.get('milestones', []) if isinstance(raw.get('milestones', []), list) else []:
@@ -285,7 +325,7 @@ def save_goal_values(raw, actor, identity=None):
             raise HTTPException(422, 'Invalid milestone actions.')
         for action in actions:
             if available is None:
-                available = catalogue()
+                available = goal_choices(requested)
             node = check_node(action, available)
             if node['kind'] != 'actions':
                 raise HTTPException(422, 'Milestones link to actions.')

@@ -2,6 +2,7 @@
 import json
 import uuid
 from datetime import date
+from workflows.hfl.colors import PIN_COLORS
 
 from workflows.hfl.timeline_store import FollowUpConflict, isoformat
 
@@ -15,10 +16,13 @@ def text(value, label, limit, required=False):
 def normalize_board(item):
     """Read old maps additively, preserving their IDs and revisions."""
     return {'purpose': item['name'], 'root': '', 'goal_id': '', 'drafts': [], 'edges': [],
-            'created_at': '', 'updated_at': '', 'board_date': '', **item}
+            'created_at': '', 'updated_at': '', 'board_date': '', 'color': PIN_COLORS[0], **item}
 
 
 def validate_board(item):
+    item.setdefault('color', PIN_COLORS[0])
+    if item['color'] not in PIN_COLORS:
+        raise ValueError('Choose a color from the Memory Signal palette.')
     item['purpose'] = text(item.get('purpose', item['name']), 'board purpose', 3000, True)
     drafts = item.setdefault('drafts', [])
     edges = item.setdefault('edges', [])
@@ -83,10 +87,11 @@ class BoardStoreMixin:
             return [json.loads(row['payload']) for row in db.execute('SELECT payload FROM intent_goals ORDER BY rowid')]
 
     def goal(self, identity):
-        result = next((g for g in self.goals() if g['id'] == identity), None)
-        if result is None:
+        with self.followups.connect() as db:
+            row = db.execute('SELECT payload FROM intent_goals WHERE id=?', (identity,)).fetchone()
+        if row is None:
             raise KeyError(identity)
-        return result
+        return json.loads(row['payload'])
 
     def save_goal(self, raw, actor, identity=None):
         allowed = {'title', 'body', 'success_criteria', 'status', 'target_date', 'progress_notes', 'milestones', 'linked_objects', 'version', 'request_id'}
