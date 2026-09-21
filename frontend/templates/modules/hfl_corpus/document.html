@@ -20,13 +20,13 @@
   @media (max-width:639px) { .corpus-entry-header { grid-template-columns:minmax(0,1fr); } .corpus-entry-actions { justify-content:flex-start; } }
   .corpus-entry-header:first-child { margin-top:0; }
   .markdown-body .corpus-entry-header h2 { margin:0; padding:0; border:0; overflow-wrap:anywhere; }
-  .markdown-body :is(.corpus-followup-action,.corpus-idea-action) { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; min-height:44px; font:600 .75rem/1.5 system-ui; white-space:nowrap; color:#7dd3fc; background:#082f49; border:1px solid #155e75; border-radius:.5rem; padding:.4rem .7rem; text-decoration:none; }
-  .markdown-body :is(.corpus-followup-action,.corpus-idea-action):hover { background:#0c4a6e; border-color:#38bdf8; }
-  :is(.corpus-followup-action,.corpus-idea-action):focus-visible { outline:2px solid #7dd3fc; outline-offset:3px; }
+  .markdown-body :is(.corpus-followup-action,.corpus-idea-action,.corpus-connections-action) { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; min-height:44px; font:600 .75rem/1.5 system-ui; white-space:nowrap; color:#cbd5e1; background:rgba(148,163,184,.07); border:1px solid rgba(148,163,184,.2); border-radius:.5rem; padding:.4rem .7rem; text-decoration:none; }
+  .markdown-body :is(.corpus-followup-action,.corpus-idea-action,.corpus-connections-action):hover { background:rgba(148,163,184,.12); border-color:rgba(148,163,184,.35); }
+  :is(.corpus-followup-action,.corpus-idea-action,.corpus-connections-action):focus-visible { outline:2px solid #7dd3fc; outline-offset:3px; }
   @media (max-width:639px) {
     .markdown-body .corpus-entry-header h2 { font-size:1rem; line-height:1.4; }
     .corpus-entry-header { gap:.5rem; margin-top:2.5rem; }
-    .markdown-body :is(.corpus-followup-action,.corpus-idea-action) { padding:.4rem .5rem; font-size:.7rem; }
+    .markdown-body :is(.corpus-followup-action,.corpus-idea-action,.corpus-connections-action) { padding:.4rem .5rem; font-size:.7rem; }
   }
   .corpus-reference-preview {
     display: grid;
@@ -198,6 +198,7 @@
 
   {% include "modules/hfl_corpus/partials/action_editor.html" %}
   <script defer src="{{ static_asset('js/hfl-document-actions.js') }}"></script>
+  <script defer src="{{ static_asset('js/action-connections.js') }}"></script>
   {% include "modules/hfl_corpus/partials/secrets_pin_dialog.html" %}
   <script>
     (() => {

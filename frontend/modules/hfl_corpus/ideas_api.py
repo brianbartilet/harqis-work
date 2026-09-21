@@ -107,11 +107,22 @@ def connection_availability(request: Request):
 
 @router.get('/actions/{identity}/connections')
 def action_connections(request: Request, identity: str):
+    return object_connections(request, identity, kind='action')
+
+
+@router.get('/dates/{identity}/connections')
+def date_connections(request: Request, identity: str):
+    from datetime import date
+    identity = call(date.fromisoformat, identity).isoformat()
+    return object_connections(request, identity, kind='daily')
+
+
+def object_connections(request: Request, identity: str, *, kind: str):
     timeline.owner(request)
     from modules.hfl_corpus.entities import graph
     from modules.hfl_corpus.action_connections import project
     from services.markdown import render_markdown
-    data = project(identity, graph(limit=0), store().maps())
+    data = project(identity, graph(limit=0), store().maps(), kind=kind)
     for node in data['nodes']:
         node['body_html'] = str(render_markdown(node.get('body') or node.get('description') or ''))
     return data

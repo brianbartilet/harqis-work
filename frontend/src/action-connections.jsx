@@ -23,9 +23,10 @@ function Preview({item}) {
     setData(null); setError(''); setSelected(null); fitted.current = false;
     (async () => {
       try {
-        const response = await fetch('/hfl-corpus/timeline/ideas/actions/' + encodeURIComponent(item.id) + '/connections',
+        const collection = item.kind === 'daily' ? 'dates' : 'actions';
+        const response = await fetch('/hfl-corpus/timeline/ideas/' + collection + '/' + encodeURIComponent(item.id) + '/connections',
           {cache:'no-store', signal:controller.signal});
-        if (!response.ok) throw Error(response.status === 404 ? 'This action is unavailable or protected.' : 'Connections could not load. Please try again.');
+        if (!response.ok) throw Error(response.status === 404 ? 'This object is unavailable or protected.' : 'Connections could not load. Please try again.');
         const result = await response.json();
         for (const node of result.nodes) {
           const degree = result.edges.filter(edge => edge.source === node.id || edge.target === node.id).length;
@@ -39,7 +40,7 @@ function Preview({item}) {
       } finally {clearTimeout(timeout);}
     })();
     return () => {live = false; clearTimeout(timeout); controller.abort();};
-  }, [item.id, attempt]);
+  }, [item.id, item.kind, attempt]);
   useEffect(() => {
     if (!host.current) return;
     const observer = new ResizeObserver(([entry]) => setSize({width:entry.contentRect.width, height:entry.contentRect.height}));
@@ -54,7 +55,7 @@ function Preview({item}) {
   const label = id => data.nodes.find(n => n.id === identity(id))?.label || identity(id);
   return <>
     <div className="connections-layout">
-      <div className="connections-canvas" ref={host} aria-label="Action connections graph" tabIndex={0}
+      <div className="connections-canvas" ref={host} aria-label={item.kind === 'daily' ? 'Date connections graph' : 'Action connections graph'} tabIndex={0}
         onKeyDown={event => {
           if (!['ArrowRight', 'ArrowLeft'].includes(event.key)) return;
           event.preventDefault();
@@ -150,3 +151,9 @@ window.HflActionConnections = {open(item, trigger) {
   dialog.addEventListener('close', () => {root.unmount(); dialog.remove(); if (activeDialog === dialog) activeDialog = null; if (trigger?.isConnected) trigger.focus();}, {once:true});
   dialog.showModal(); root.render(<Preview item={item}/>);
 }};
+
+document.addEventListener('click', event => {
+  const trigger = event.target.closest('[data-date-connections]');
+  if (!trigger) return;
+  window.HflActionConnections.open({id:trigger.dataset.dateConnections, kind:'daily', title:trigger.dataset.dateConnections}, trigger);
+});

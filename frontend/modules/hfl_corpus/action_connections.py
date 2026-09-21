@@ -2,11 +2,11 @@
 from fastapi import HTTPException
 
 
-def project(action_id, shared, boards):
-    root = 'action:' + action_id
+def project(action_id, shared, boards, *, kind='action'):
+    root = kind + ':' + action_id
     nodes = {n['id']: {**n, 'boards': []} for n in shared['nodes']}
     if root not in nodes:
-        raise HTTPException(404, 'Action unavailable or protected.')
+        raise HTTPException(404, 'Object unavailable or protected.')
     edges = [{**e, 'scope': 'shared'} for e in shared['edges']]
     for board in boards:
         provenance = {'id': board['id'], 'name': board['name']}

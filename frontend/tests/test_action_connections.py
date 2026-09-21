@@ -75,6 +75,53 @@ def test_projection_empty_protected_neighbors_and_direct_depth():
 
 
 @pytest.mark.parametrize('width', [390, 1100])
+def test_document_date_connections(ideas, authenticated_client, monkeypatch, width):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from test_hfl_corpus import _document
+    from modules.hfl_corpus import router, corpus
+    playwright = pytest.importorskip('playwright.sync_api')
+    action, _, _ = seed(ideas)
+    day = datetime.now(ZoneInfo('Asia/Singapore')).date().isoformat()
+    content = f'## {day} 23:49\nEntry ID: hfl-date-test\nWhat happened: Date connections\n'
+    document = _document(day + '.md', text=content, entries=corpus.parse_entries(content), entry_count=1)
+    monkeypatch.setattr(router.corpus_index, 'get', lambda path: document)
+    monkeypatch.setattr(router.corpus_index, 'documents', lambda: ())
+    before = ideas.snapshot()
+    response = authenticated_client.get(BASE + '/dates/' + day + '/connections')
+    assert response.status_code == 200
+    assert response.json()['root'] == 'daily:' + day
+    assert 'action:' + action['id'] in {n['id'] for n in response.json()['nodes']}
+    assert authenticated_client.get(BASE + '/dates/1900-01-01/connections').status_code == 404
+    assert authenticated_client.get(BASE + '/dates/invalid/connections').status_code == 422
+    with playwright.sync_playwright() as driver:
+        browser = driver.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page(viewport={'width': width, 'height': 900})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        def route(intercept):
+            url = urlparse(intercept.request.url)
+            if url.hostname != 'connections.test':
+                intercept.abort(); return
+            result = authenticated_client.get(url.path + ('?' + url.query if url.query else ''))
+            intercept.fulfill(status=result.status_code, body=result.content,
+                              headers={'content-type': result.headers.get('content-type', 'text/html')})
+        page.route('**/*', route)
+        page.goto('https://connections.test/hfl-corpus/document/' + day + '.md')
+        trigger = page.get_by_role('button', name='Connections', exact=True)
+        trigger.click()
+        preview = page.locator('.action-connections-dialog')
+        playwright.expect(preview.get_by_label('Date connections graph', exact=True).locator('canvas')).to_be_visible()
+        playwright.expect(preview.locator('.connections-details > h3')).to_have_text(day)
+        preview.get_by_role('button', name='Close connections').click()
+        playwright.expect(trigger).to_be_focused()
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        assert not errors
+        browser.close()
+    assert ideas.snapshot() == before
+
+
+@pytest.mark.parametrize('width', [390, 1100])
 def test_connections_preview_both_cards_and_throwaway_lifecycle(ideas, authenticated_client, monkeypatch, tmp_path, width):
     from datetime import datetime
     from zoneinfo import ZoneInfo
@@ -122,6 +169,20 @@ def test_connections_preview_both_cards_and_throwaway_lifecycle(ideas, authentic
         today = datetime.now(ZoneInfo('Asia/Singapore')).date().isoformat()
         page.locator(f'[data-activity-day="{today}"]').click()
         day = page.locator('[data-activity-day-menu]')
+        day_card = day.locator('[data-followup-id="' + action['id'] + '"]')
+        day_results = day_card.locator('.action-results-button').bounding_box()
+        day_connections = day_card.locator('.action-connections-button').bounding_box()
+        assert abs(day_results['width'] - day_card.locator('.action-view-controls').bounding_box()['width']) < 2
+        assert abs(day_results['width'] - day_connections['width']) < 2
+        assert day_connections['y'] >= day_results['y'] + day_results['height']
+        day.evaluate("el => { el.style.maxHeight = '260px'; el.scrollTop = el.scrollHeight; }")
+        header = day.locator('.activity-day-menu-header').bounding_box()
+        assert abs(header['y'] - day.bounding_box()['y']) < 2
+        for control in ('[data-activity-menu-date]', '.activity-day-quick-actions'):
+            box = day.locator(control).bounding_box()
+            assert box['y'] >= header['y']
+            assert box['y'] + box['height'] <= header['y'] + header['height']
+        day.evaluate("el => { el.style.maxHeight = ''; el.scrollTop = 0; }")
         trigger = day.get_by_role('button', name='Connections', exact=True)
         trigger.click()
         assert day.locator('[data-followup-id="' + isolated['id'] + '"] .action-connections-button').count() == 0
@@ -174,7 +235,8 @@ def test_connections_preview_both_cards_and_throwaway_lifecycle(ideas, authentic
         result_box = connected_card.get_by_role('button', name='Results', exact=True).bounding_box()
         connection_box = connected_card.get_by_role('button', name='Connections', exact=True).bounding_box()
         assert abs(result_box['width'] - connection_box['width']) < 2
-        assert abs(result_box['y'] - connection_box['y']) < 2
+        assert connection_box['y'] >= result_box['y'] + result_box['height']
+        assert abs(result_box['width'] - connected_card.locator('.action-view-controls').bounding_box()['width']) < 2
         management_boxes = [button.bounding_box() for button in connected_card.locator('.action-management-controls button').all()]
         assert max(box['width'] for box in management_boxes) - min(box['width'] for box in management_boxes) < 2
         assert all(box['y'] + box['height'] <= result_box['y'] for box in management_boxes)

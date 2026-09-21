@@ -29,6 +29,7 @@
 
 [data-day-ideas][hidden], [data-day-actions][hidden] { display:none !important; }
 .activity-day-menu { scrollbar-gutter:stable; }
+.activity-day-menu-header { position:sticky; top:-.45rem; z-index:3; padding:.45rem 0; background:#020617; }
 /* Keep form scrollbars inside the rounded dialog shell. */
 /* Entry forms share the action and pinned-date field typography and accents. */
 :is([data-create-entry-dialog], [data-entry-review-dialog]) { background:#07101f; border-color:#334155; }
@@ -270,7 +271,8 @@
 
 /* Stable rows across open, completed, and unconnected action cards. */
 .agenda-card-actions.action-controls { display:grid; grid-template-columns:minmax(0,1fr); gap:.4rem; }
-.action-management-controls,.action-view-controls { display:flex; gap:.35rem; min-width:0; }
+.action-management-controls { display:flex; gap:.35rem; min-width:0; }
+.action-view-controls { display:grid; grid-template-columns:minmax(0,1fr); gap:.35rem; min-width:0; }
 .agenda-card-actions.action-controls :is(.action-management-controls,.action-view-controls) > button { flex:1 1 0; width:auto; min-width:0; min-height:36px; margin:0; padding:.4rem .25rem; white-space:nowrap; }
 /* Reserve the same body size for loading, errors, empty, and graph states. */
 .connections-content { height:400px; display:flex; flex-direction:column; }
