@@ -100,7 +100,7 @@ def hermes_command():
     return [str(interpreter), '-c', HERMES_PROGRAM], home
 
 
-def parse_result(output):
+def parse_result(output, *, board_planning=False):
     decoder = json.JSONDecoder()
     candidates = []
     for position, character in enumerate(output):
@@ -115,6 +115,18 @@ def parse_result(output):
     if len(candidates) != 1:
         raise ValueError('Hermes did not return one structured execution result.')
     result = candidates[0]
+    if board_planning:
+        # Older board prompts did not specify these field types. Preserve their
+        # valid proposals while converting the observed structured variants.
+        plan = result.get('plan')
+        if isinstance(plan, list) and 0 < len(plan) <= 30 and all(isinstance(step, str) and step.strip() for step in plan):
+            result['plan'] = '\n'.join('- ' + step for step in plan)
+        evidence = result.get('evidence')
+        if isinstance(evidence, list):
+            result['evidence'] = [
+                next((ref[key] for key in ('id', 'ref', 'reference')
+                      if isinstance(ref.get(key), str) and ref[key].strip()), ref)
+                if isinstance(ref, dict) else ref for ref in evidence]
     if result['state'] not in {'succeeded', 'failed', 'awaiting_input'} or type(result['complete']) is not bool:
         raise ValueError('Invalid Hermes outcome.')
     if result.get('blocked_reason') not in (None, 'input', 'integration'):
@@ -275,7 +287,12 @@ def run_hermes(run, heartbeat, *, timeout=1200):
             if len(text) > 250000:
                 raise ValueError('Hermes output exceeded the execution limit.')
             text = redact_credentials(text, environment)
-            result = parse_result(text)
+            try:
+                result = parse_result(text, board_planning=run['snapshot'].get('kind') == 'mindmap')
+            except ValueError:
+                diagnostics = spool_root() / ('hermes-' + run.get('id', 'check') + '.log')
+                diagnostics.write_text(text, encoding='utf-8')
+                raise
             metadata = next((line.removeprefix('HFL_BRIDGE_RUNTIME=') for line in reversed(text.splitlines()) if line.startswith('HFL_BRIDGE_RUNTIME=')), '{}')
             runtime = json.loads(metadata)
             result['model'] = str(runtime.get('model') or 'provider default')[:200]

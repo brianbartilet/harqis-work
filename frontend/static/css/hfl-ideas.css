@@ -200,6 +200,12 @@
 /* Keep attach results and pagination stable through loading and short pages. */
 .idea-attach-dialog .idea-picker-status{margin:8px 0 12px;font-size:.8rem;min-height:24px}
 .idea-attach-dialog .idea-choices{height:clamp(140px,40dvh,340px);max-height:none;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#475569 transparent;padding:3px 6px 3px 3px}
+@supports selector(::-webkit-scrollbar){
+  .idea-attach-dialog .idea-choices{scrollbar-width:auto;scrollbar-color:auto}
+  .idea-attach-dialog .idea-choices::-webkit-scrollbar{width:6px;background:transparent}
+  .idea-attach-dialog .idea-choices::-webkit-scrollbar-thumb{background:#475569;border-radius:999px}
+  .idea-attach-dialog .idea-choices::-webkit-scrollbar-button{display:none;width:0;height:0}
+}
 .idea-attach-dialog .idea-picker-pages{margin-top:16px;height:40px;min-height:40px;align-items:center}
 .idea-attach-dialog .idea-attach-choice{display:flex;align-items:center;gap:12px;width:100%;margin:0 0 6px;padding:10px 12px;text-align:left;min-height:40px}
 .idea-attach-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -207,3 +213,13 @@
 .idea-attach-dot{width:9px;height:9px;border-radius:50%;flex:0 0 9px;box-shadow:0 0 6px #ffffff20}
 .idea-picker-loading{display:flex;align-items:center;justify-content:center;gap:10px;height:100%;color:#94a3b8;font-size:.8rem}
 .kg-boards :is(.board-explore,.board-add-menu>.idea-add-toggle,.board-controls>button){box-sizing:border-box;min-height:44px;line-height:20px;padding-block:11px}
+.board-agent-context{font-size:.85rem;font-weight:600;color:#cbd5e1;margin:0 0 8px;overflow-wrap:anywhere}
+.board-agent-status{padding:16px;margin:20px 0;background:#122034;border:1px solid #334155;border-radius:10px}
+.board-agent-status-heading{display:flex;align-items:center;gap:10px}
+.board-agent-state{display:inline-block;padding:4px 10px;border-radius:999px;background:#164e63;color:#a5f3fc;font-size:.75rem;font-weight:600}
+.board-agent-status[data-state=failed] .board-agent-state{background:#4c2533;color:#fecdd3}
+.board-agent-status .board-hint{margin:10px 0 0}
+.board-agent-summary{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.85rem;line-height:1.6;margin:0 0 16px}
+.board-agent-output>button{margin:8px 8px 8px 0;min-height:38px}
+.board-agent-dialog .board-agent-primary{background:#0c4a6e;border-color:#38bdf8;color:#e0f2fe;font-weight:600}
+.board-agent-output>.board-agent-cancel{display:block;margin-top:16px}

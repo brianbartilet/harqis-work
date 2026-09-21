@@ -317,7 +317,7 @@ def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
             query = urlencode({"source_path": document.relative_path, "source_entry": guid})
             action = (f'<a class="corpus-followup-action" href="/hfl-corpus?{html.escape(query, quote=True)}" '
                       f'aria-describedby="{html.escape(entry.anchor, quote=True)}" '
-                      'aria-label="Create a follow-up from this HFL entry">Make actionable ↗</a>')
+                      'aria-label="Add Actionable from this HFL entry">Add Actionable</a>')
             action += (f'<a data-create-idea-source href="/hfl-corpus?{html.escape(query, quote=True)}" '
                        'class="corpus-idea-action">Add idea</a>')
         header = _display_entry_header(match.group(1))

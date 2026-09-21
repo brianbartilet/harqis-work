@@ -25,6 +25,23 @@ def test_parse_result_accepts_cli_session_footer_but_rejects_ambiguous_results()
         runner.parse_result(json.dumps({**result, 'complete': 'yes'}))
 
 
+def test_board_result_normalizes_plan_steps_and_evidence_objects():
+    result = {'plan': ['Inspect board', 'Propose branches'], 'summary': 'Seven proposals',
+              'state': 'succeeded', 'complete': True,
+              'evidence': [{'reference': 'mindmap:map-1', 'detail': 'Board purpose'},
+                           {'id': 'draft:1', 'relevance': 'Starting thought'}, {'ref': 'goal:1'}],
+              'ideas': [{'title': 'Define scope', 'parents': ['draft:1']}]}
+    parsed = runner.parse_result(json.dumps(result), board_planning=True)
+    assert parsed['plan'] == '- Inspect board\n- Propose branches'
+    assert parsed['evidence'] == ['mindmap:map-1', 'draft:1', 'goal:1']
+    assert parsed['ideas'] == result['ideas']
+    with pytest.raises(ValueError):
+        runner.parse_result(json.dumps(result))
+    for fields in ({'plan': ['Good', 42]}, {'evidence': [{'detail': 'No reference'}]}, {'evidence': []}):
+        with pytest.raises(ValueError):
+            runner.parse_result(json.dumps({**result, **fields}), board_planning=True)
+
+
 def test_worker_restores_verified_inputs_separately_from_outputs(tmp_path, monkeypatch):
     import hashlib
     import httpx

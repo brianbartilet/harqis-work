@@ -125,7 +125,7 @@ def test_board_sidebar_order_collapse_and_saved_lines_browser(ideas, authenticat
             picker=editor.locator('.goal-link-picker').first
             picker.locator('summary').click()
             picker.get_by_role('searchbox').fill('Supporting board idea')
-            picker.get_by_role('checkbox',name='Supporting board idea Idea',exact=True).check()
+            picker.get_by_role('checkbox',name='Supporting board idea idea',exact=True).check()
             expect(picker.locator('.goal-link-count')).to_have_text('1 selected')
             editor.get_by_role('button',name='Add milestone',exact=True).click()
             editor.get_by_label('Milestone',exact=True).fill('Verify outcome')
@@ -532,6 +532,48 @@ def test_attach_picker_loading_retry_and_paging_browser(ideas, authenticated_cli
             assert close.evaluate('(n)=>getComputedStyle(n).padding') == '0px'
             page.screenshot(path=str(tmp_path/'attach-picker.png'))
             close.click(); expect(dialog).to_have_count(0)
+        finally:
+            browser.close()
+
+
+def test_board_agent_status_and_retry_browser(ideas, authenticated_client, tmp_path):
+    from urllib.parse import urlparse
+    from playwright.sync_api import sync_playwright, expect
+    board=ideas.save_map(board_payload())
+    run={'id':'test-run','state':'queued','result':{}}
+    with sync_playwright() as engine:
+        browser=engine.chromium.launch(channel='chrome',headless=True)
+        try:
+            page=browser.new_page(viewport={'width':1200,'height':900})
+            def respond(route):
+                r=route.request;url=urlparse(r.url)
+                if '/agent-bridge/' in url.path:
+                    if url.path.endswith('/continue'):
+                        run.update(state='queued',result={})
+                    route.fulfill(json={'runs':[run]})
+                    return
+                response=authenticated_client.request(r.method,url.path+('?' + url.query if url.query else ''),content=r.post_data_buffer,headers={'content-type':'application/json'})
+                route.fulfill(status=response.status_code,body=response.content,headers={'content-type':response.headers.get('content-type','text/html')})
+            page.route('https://agent-board.test/**',respond)
+            page.goto('https://agent-board.test/hfl-corpus/graph?board='+board['id'])
+            page.get_by_role('button',name='Ask agent',exact=True).click()
+            dialog=page.locator('.board-agent-dialog')
+            expect(dialog.get_by_role('heading',name='Agent board planning',exact=True)).to_be_visible()
+            expect(dialog.get_by_role('status')).to_contain_text('Queued')
+            expect(dialog.locator('.idea-picker-spinner')).to_be_visible()
+            expect(dialog.get_by_role('button',name='Request suggestions')).not_to_be_visible()
+            expect(dialog.get_by_role('button',name='Cancel run')).to_be_visible()
+            page.screenshot(path=str(tmp_path/'board-agent-queued.png'))
+            run.update(state='running')
+            expect(dialog.get_by_role('status')).to_contain_text('Running',timeout=10000)
+            run.update(state='failed',result={'summary':'The response format could not be read.'})
+            expect(dialog.get_by_role('status')).to_contain_text('Could not finish',timeout=10000)
+            expect(dialog.locator('.idea-picker-spinner')).to_have_count(0)
+            reply=dialog.get_by_label('Retry instructions (optional)')
+            reply.fill('Keep the plan concise')
+            page.screenshot(path=str(tmp_path/'board-agent-failed.png'))
+            dialog.get_by_role('button',name='Retry suggestions').click()
+            expect(dialog.get_by_role('status')).to_contain_text('Queued')
         finally:
             browser.close()
 

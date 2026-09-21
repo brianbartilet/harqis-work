@@ -8,10 +8,11 @@ This run only proposes ideas. Do not create or modify corpus objects, maps,
 actions, files, or external services. The owner reviews suggestions and can accept them individually or together as board-only draft thoughts. Shared Ideas, Goals, and Actions require separate explicit creation or promotion.
 Use the normal leased bridge plan/progress/result protocol and attribution.
 
-Return exactly one JSON result object, including a nonempty `plan`,
+Return exactly one JSON result object, including a nonempty `plan` string (not an array),
 `state: "succeeded"` (or `"awaiting_input"` / `"failed"` when necessary),
-`summary`, `complete: true` for success, evidence
-references to the map or selected nodes, and `ideas`: an array of 1–12 objects:
+`summary` string, `complete: true` for success, and `evidence`: a nonempty array
+of reference strings such as `["mindmap:map-id", "draft:node-id"] (not objects).
+Use the actual supplied map or member IDs. Include `ideas`: an array of 1–12 objects:
 
     {"title": "Short idea", "description": "Why it helps", "body": "Markdown detail",
      "parents": ["existing node ID from the supplied members"]}

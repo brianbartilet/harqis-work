@@ -267,7 +267,7 @@ window.HflObjectDescription = (item = {}) => {
     const root = el('details', undefined, 'goal-link-picker'), summary = el('summary');
     const heading = el('span', title), count = el('span', '0 selected', 'goal-link-count'); summary.append(heading, count);
     const panel = el('div', undefined, 'goal-link-panel');
-    const search = field(panel, '', 'Search ' + title.toLowerCase(), '', 'search');
+    const search = field(panel, '', 'Search', '', 'search');
     const list = el('div', undefined, 'goal-link-options'); panel.append(list); root.append(summary, panel); parent.append(root);
     let selected = new Set(), options = [], disabled = true;
     const updateCount = () => { count.textContent = selected.size + ' selected'; };
@@ -276,7 +276,7 @@ window.HflObjectDescription = (item = {}) => {
       const matches = options.filter(n => (n.label + ' ' + n.kind).toLowerCase().includes(search.value.toLowerCase().trim()));
       for (const n of matches) {
         const label = el('label', undefined, 'goal-link-option'), check = el('input'); check.type = 'checkbox'; check.checked = selected.has(n.id); check.disabled = disabled;
-        const text = el('span', n.label, 'goal-link-title'), type = el('small', n.kind === 'ideas' ? 'Idea' : n.kind === 'actions' ? 'Action' : 'Existing link', 'goal-link-type');
+        const text = el('span', n.label, 'goal-link-title'), type = el('small', n.kind === 'ideas' ? 'idea' : n.kind === 'actions' ? 'action' : 'existing link', 'goal-link-type');
         const dot=el('span',undefined,'idea-attach-dot');dot.style.background=window.HflGraphAppearance?.color(n.kind)||(n.kind==='ideas'?'#f9ca74':n.kind==='actions'?'#fb8ca6':'#94a3b8');dot.setAttribute('aria-hidden','true');type.append(dot);
         type.dataset.kind=n.kind;label.title=n.label;label.append(check, text, type); list.append(label);
         check.onchange = () => { if(check.checked)selected.add(n.id);else selected.delete(n.id);updateCount(); };
@@ -464,14 +464,14 @@ window.HflObjectDescription = (item = {}) => {
       const addToggle=button('Add',()=>{addOptions.hidden=!addOptions.hidden;addToggle.setAttribute('aria-expanded',String(!addOptions.hidden));});addToggle.className='idea-add-toggle';addToggle.setAttribute('aria-expanded','false');addToggle.setAttribute('aria-controls',addOptions.id);
       const closeAdd=()=>{addOptions.hidden=true;addToggle.setAttribute('aria-expanded','false');};
       addOptions.append(button('Board',()=>{closeAdd();this.edit();}),button('Goal',()=>{closeAdd();editGoal();}));addMenu.append(addToggle,addOptions);addMenu.onkeydown=event=>{if(event.key==='Escape'){closeAdd();addToggle.focus();}};this.root.append(addMenu);
-      this.root.append(this.objectList('boards'),this.objectList('goals'),this.status);
-      if (!this.current) return;
+      this.root.append(this.objectList('boards'),this.objectList('goals'));
+      if (!this.current) { this.root.append(this.status); return; }
       const board = this.current, section = el('section', undefined, 'board-controls');section.style.setProperty('--board-color',board.color||this.palette[0]||'#f59e0b'); section.append(el('h2', board.name), el('p', board.purpose, 'board-purpose'));
       const save=button('Save now',()=>this.saveNow());save.className='board-save-now';save.title='Save all pending board edits now';
       const layout=button('Save layout',()=>this.saveLayout());layout.title='Capture current node positions for autosave';
       const remove=button('Delete',()=>this.remove());remove.className='board-delete';
       const ask=button('Ask agent',()=>this.brainstorm());ask.className='board-ask-agent';
-      section.append(button('Add thought', () => editThought()), button('Attach existing', () => chooseMapMembers()),ask,save,layout,button('Settings', () => this.edit(board)),remove);
+      section.append(this.status,button('Add thought', () => editThought()), button('Attach existing', () => chooseMapMembers()),ask,save,layout,button('Settings', () => this.edit(board)),remove);
       const pending=this.queues.get(board.id);
       if(pending?.error)section.append(button('Retry save',()=>this.saveNow()),button('Resolve unsaved changes',()=>this.resolveSave()));
       this.root.append(section);
@@ -588,17 +588,31 @@ window.HflObjectDescription = (item = {}) => {
     async brainstorm() {
       if (!this.current) { this.status.textContent = 'Create or select a board first.'; return; }
       try{await this.flush();}catch(error){this.status.textContent=error.message;return;}
-      const map = this.current; const d = dialog('Agent board planning · ' + map.name);
-      d.body.append(el('p', 'The agent proposes ideas and connections for your review. Accept individual suggestions to save them.'));
-      const output = el('div'), status = el('p'); d.body.append(status, output); let timer, busy = false;
+      const map = this.current; const d = dialog('Agent board planning');d.node.classList.add('board-agent-dialog');
+      d.body.append(el('p', map.name, 'board-agent-context'),el('p', 'Review suggested ideas and connections before adding them to your board.', 'board-hint'));
+      const output = el('div',undefined,'board-agent-output'), status = el('div',undefined,'board-agent-status');status.setAttribute('role','status');status.setAttribute('aria-live','polite');d.body.append(status, output); let timer, busy = false, pending = false, rendered = '';
+      const perform = async (control, task) => {
+        if(pending)return;pending=true;control.disabled=true;control.setAttribute('aria-busy','true');d.error.textContent='';
+        try{await task();rendered='';}catch(error){d.error.textContent=error.message;}
+        finally{pending=false;control.disabled=false;control.removeAttribute('aria-busy');await refresh();}
+      };
       const sourceUrl = '/hfl-corpus/agent-bridge/sources/mindmap/' + map.id;
       const refresh = async () => {
-        if (!d.node.open || busy || d.node.querySelector('textarea:focus') || document.querySelectorAll('.idea-dialog[open]').length > 1) return; busy = true;
+        if (!d.node.open || busy || pending || d.node.querySelector('textarea:focus') || document.querySelectorAll('.idea-dialog[open]').length > 1) return; busy = true;
         try {
-          const data = await request(sourceUrl); const run = data.runs[0]; output.replaceChildren();
-          status.textContent = run ? 'Agent status: ' + run.state : 'No brainstorming run yet. Save instructions in board settings, then request suggestions.';
+          const data = await request(sourceUrl);if(!d.node.open)return;const run = data.runs[0];
+          const signature=JSON.stringify(run||null);if(signature===rendered)return;rendered=signature;
+          const draft=output.querySelector('textarea')?.value||'';output.replaceChildren();status.replaceChildren();
+          const state=run?.state||'ready',labels={ready:'Ready to plan',queued:'Queued',running:'Running',awaiting_input:'Needs your input',review:'Ready for review',failed:'Could not finish',succeeded:'Completed',cancelled:'Cancelled'};
+          status.dataset.state=state;const heading=el('div',undefined,'board-agent-status-heading');
+          if(['queued','running'].includes(state)){const spinner=el('span','','idea-picker-spinner');spinner.setAttribute('aria-hidden','true');heading.append(spinner);}
+          heading.append(el('span',labels[state]||statusLabel(state),'board-agent-state'));status.append(heading);
+          const hints={ready:'Request suggestions using the instructions in board settings.',queued:'Waiting for an agent worker. You can close this dialog and return later.',running:'The agent is reviewing your board and preparing suggestions.',awaiting_input:'Answer the question below to continue this run.',review:'Choose which suggestions to add to your board.',failed:'The run stopped before suggestions were ready. Retry below, with optional instructions.'};
+          if(hints[state])status.append(el('p',hints[state],'board-hint'));
+          requestSuggestions.hidden=['queued','running','awaiting_input','review','accepting'].includes(state);requestSuggestions.disabled=false;
+          requestSuggestions.textContent=state==='failed'?'Start new run':'Request suggestions';requestSuggestions.classList.toggle('board-agent-primary',state!=='failed');
           if (run) {
-            output.append(el('p', run.result.summary || 'Queued work will start when an agent worker is available.'));
+            if(run.result?.summary&&!['queued','running'].includes(state))output.append(el('p',run.result.summary,'board-agent-summary'));
             if (run.state === 'review') {
               const proposals = run.result.ideas || [];
               if (proposals.length) output.append(button('Accept all as board drafts', async () => {
@@ -624,13 +638,16 @@ window.HflObjectDescription = (item = {}) => {
               output.append(button('Finish review', async () => { try { await request('/hfl-corpus/agent-bridge/runs/' + run.id + '/accept', {method: 'POST', body: '{}'}); await refresh(); } catch (error) { d.error.textContent = error.message; } }));
             }
             if (['awaiting_input', 'failed'].includes(run.state)) {
-              const reply = field(output, '', 'Reply / retry instructions', '', 'textarea'); output.append(button('Continue', async () => { try { await request('/hfl-corpus/agent-bridge/runs/' + run.id + '/continue', {method: 'POST', body: JSON.stringify({reply: reply.value})}); await refresh(); } catch (error) { d.error.textContent = error.message; } }));
+              if(run.result?.question)output.append(el('p',run.result.question,'board-agent-summary'));
+              const reply = field(output, '', state==='failed'?'Retry instructions (optional)':'Your reply', draft, 'textarea');
+              const retry=button(state==='failed'?'Retry suggestions':'Continue',()=>perform(retry,()=>request('/hfl-corpus/agent-bridge/runs/' + run.id + '/continue', {method:'POST',body:JSON.stringify({reply:reply.value})})));retry.className='board-agent-primary';output.append(retry);
             }
-            if (['queued','running','awaiting_input','review'].includes(run.state)) output.append(button('Cancel run', async () => { try { await request('/hfl-corpus/agent-bridge/runs/' + run.id + '/cancel', {method: 'POST', body: '{}'}); await refresh(); } catch (error) { d.error.textContent = error.message; } }));
+            if (['queued','running','awaiting_input','review'].includes(run.state)){const cancel=button('Cancel run',()=>perform(cancel,()=>request('/hfl-corpus/agent-bridge/runs/'+run.id+'/cancel',{method:'POST',body:'{}'})));cancel.className='board-agent-cancel';output.append(cancel);}
           }
         } catch (error) { d.error.textContent = error.message; } finally { busy = false; }
       };
-      const key = crypto.randomUUID(); d.footer.append(button('Request suggestions', async () => { try { await request(sourceUrl + '/run', {method: 'POST', body: JSON.stringify({request_key: key, auto_complete: false})}); await refresh(); } catch (error) { d.error.textContent = error.message; } }));
+      let key = crypto.randomUUID();const requestSuggestions=button('Request suggestions',()=>perform(requestSuggestions,async()=>{await request(sourceUrl+'/run',{method:'POST',body:JSON.stringify({request_key:key,auto_complete:false})});key=crypto.randomUUID();}));requestSuggestions.className='board-agent-primary';requestSuggestions.disabled=true;d.footer.append(requestSuggestions);
+      status.textContent='Loading agent status…';
       await refresh(); timer = setInterval(refresh, 5000); d.node.addEventListener('close', () => clearInterval(timer));
     }
   };
