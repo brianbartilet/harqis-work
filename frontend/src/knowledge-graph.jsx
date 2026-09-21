@@ -26,7 +26,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   $('info').addEventListener('mouseleave',()=>{infoPaused=false;});
   $('info').addEventListener('focus',()=>{infoPaused=true;});
   $('info').addEventListener('blur',()=>{infoPaused=false;});
-  const kindLabel = kind => kind === 'companies' ? 'organizations' : kind.replaceAll('_', ' ');
+  const kindLabel = kind => ({companies:'organizations', drafts:'thoughts'}[kind] || kind.replaceAll('_', ' '));
   const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3', ideas:'#f9ca74', actions:'#fb8ca6', goals:'#a7f3d0', drafts:'#c4b5fd', boards:'#93c5fd'};
   const color = kind => palette[kind] || '#e9c96c';
   window.HflGraphAppearance = {color, kindLabel};
@@ -479,7 +479,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       if(item.action_url&&heading){
         const header=document.createElement('div'),action=document.createElement('a');
         header.className='corpus-entry-header';
-        action.className='corpus-followup-action';action.href=item.action_url;action.textContent='Make actionable ↗';
+        action.className='corpus-followup-action';action.href=item.action_url;action.textContent='Create action ↗';
         action.setAttribute('aria-label','Create a follow-up from this HFL entry');
         heading.before(header);header.append(heading,action);
       }
@@ -536,7 +536,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       // Reuse the inspector's commands so board permissions and workflows stay identical.
       nodeActions=[...$('detail').querySelectorAll(':scope > button')].map(button=>{
         const label=button.textContent;
-        const group=/^(Edit|Promote|Make actionable)/.test(label)?'Edit & develop':/^(Create|Add|Connect)/.test(label)?'Add & connect':/^(Remove|Use as|Board connections)/.test(label)?'Board':'View';
+        const group=/^(Edit|Promote|Create action)/.test(label)?'Edit & develop':/^(Create|Add|Connect)/.test(label)?'Add & connect':/^(Remove|Use as|Board connections)/.test(label)?'Board':'View';
         button.remove();return {label,group,button};
       });
       draw();
@@ -663,9 +663,9 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     legendKinds.forEach(kind=>{
       const item=document.createElement('li'),button=document.createElement('button'),dot=document.createElement('span');
       dot.className='kg-dot';dot.style.background=color(kind);dot.setAttribute('aria-hidden','true');
-      button.type='button';button.dataset.kind=kind;button.title='Show or hide '+(legendLabels[kind]||kind.replaceAll('_',' ').toLowerCase());
+      button.type='button';button.dataset.kind=kind;button.title='Show or hide '+(legendLabels[kind]||kindLabel(kind).toLowerCase());
       button.onclick=()=>{enabled.has(kind)?enabled.delete(kind):enabled.add(kind);render();};
-      button.append(dot,document.createTextNode(legendLabels[kind]||kind.replaceAll('_',' ').toLowerCase()));item.append(button);$('legend').append(item);
+      button.append(dot,document.createTextNode(legendLabels[kind]||kindLabel(kind).toLowerCase()));item.append(button);$('legend').append(item);
     });
     [...availableKinds].sort().forEach(kind=>{const label=document.createElement('label'),input=document.createElement('input'),dot=document.createElement('span');input.type='checkbox';input.dataset.kind=kind;input.checked=true;input.onchange=()=>{input.checked?enabled.add(kind):enabled.delete(kind);render();};dot.className='kg-dot';dot.style.background=color(kind);label.append(input,dot,document.createTextNode(kindLabel(kind)));$('types').append(label);});
     render(preserveLayout);

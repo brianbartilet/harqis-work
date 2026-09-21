@@ -70,9 +70,14 @@ def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_clie
             playwright.expect(page.locator('[data-activity-menu-actions]')).to_have_attribute('aria-expanded', 'true')
             playwright.expect(page.locator('[data-activity-menu-matches]')).to_have_attribute('aria-expanded', 'false')
             buttons = page.locator('.activity-day-quick-actions').locator('button, a')
-            assert buttons.all_text_contents() == ['Create entry', 'Create action', 'Create idea', 'Pin dates', 'Show document']
-            boxes = [buttons.nth(index).bounding_box() for index in range(4)]
-            assert boxes[0]['y'] == boxes[1]['y'] < boxes[2]['y'] == boxes[3]['y']
+            assert buttons.all_text_contents() == ['Entry', 'Action', 'Idea', 'Pin dates', 'Show document']
+            create = page.locator('.activity-day-create > summary')
+            create.click()
+            playwright.expect(page.locator('[data-activity-menu-create-action]')).to_be_visible()
+            page.keyboard.press('Escape')
+            playwright.expect(page.locator('[data-activity-day-menu]')).to_be_visible()
+            playwright.expect(page.locator('[data-activity-menu-create-action]')).to_be_hidden()
+            create.click()
             page.locator('[data-activity-menu-create-action]').click()
             playwright.expect(page.locator('#followup-editor')).to_be_visible()
             playwright.expect(page.locator('[data-activity-day-menu]')).to_be_hidden()
@@ -813,6 +818,11 @@ def test_unified_actions_matrix_editor_and_empty_message(agenda, authenticated_c
         form.locator('[type="submit"]').click()
         playwright.expect(page.locator('#followup-editor')).to_be_hidden()
         playwright.expect(cards.first.locator('.action-matrix')).to_contain_text('Q1 · high confidence')
+        menu_box = page.locator('[data-activity-day-menu]').bounding_box()
+        header_box = page.locator('body > header').bounding_box()
+        assert menu_box['y'] >= header_box['y'] + header_box['height']
+        assert menu_box['y'] + menu_box['height'] <= page.viewport_size['height']
+        assert menu_box['height'] <= 640
         page.screenshot(path=str(tmp_path / f'actions-{width}.png'))
         page.locator('[data-activity-menu-actions]').click()
         page.locator('[data-activity-day-menu-close]').click() if page.locator('[data-activity-day-menu-close]').count() else page.keyboard.press('Escape')
@@ -821,7 +831,7 @@ def test_unified_actions_matrix_editor_and_empty_message(agenda, authenticated_c
         if page.locator('[data-activity-menu-actions]').get_attribute('aria-expanded') != 'true':
             page.locator('[data-activity-menu-actions]').click()
         playwright.expect(page.locator('#agenda-items')).to_contain_text('No actions yet.')
-        playwright.expect(page.locator('#agenda-items')).to_contain_text('Explore this period’s activity for ideas, then make one actionable.')
+        playwright.expect(page.locator('#agenda-items')).to_contain_text('Explore this period’s activity for ideas, then create an action.')
         playwright.expect(page.locator('#agenda-items').get_by_role('button', name='Explore ideas')).to_be_visible()
         assert not errors
         browser.close()

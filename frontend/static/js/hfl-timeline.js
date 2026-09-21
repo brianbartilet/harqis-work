@@ -43,7 +43,7 @@
     window.hflActionChecklists?.set(item?.checklists);
     form.elements.status.value = desiredStatus || item?.status || 'open';
     document.getElementById('followup-state-label').hidden = !item;
-    document.getElementById('followup-editor-title').textContent = item ? (desiredStatus === 'done' ? 'Complete actionable' : 'Edit actionable') : 'New actionable';
+    document.getElementById('followup-editor-title').textContent = item ? (desiredStatus === 'done' ? 'Complete action' : 'Edit action') : 'New action';
     showEvidence(); stateFields(); error('followup-save-error'); editor.showModal();
     form.elements.title.focus({preventScroll:true});
   }
@@ -111,6 +111,9 @@
     const resultsButton = button('Results',()=>window.hflAgentBridge.open('actionable',item.id,item.title));
     resultsButton.className = 'action-results-button';
     actions.append(resultsButton);
+    const connections = button('Connections', () => window.HflActionConnections.open(item, connections));
+    connections.className = 'action-connections-button';
+    actions.append(connections);
     el.append(actions);return el;
   }
   async function load() {
@@ -126,7 +129,7 @@
       data.items.sort((a,b)=>priority(a).localeCompare(priority(b)));
       data.items=data.items.map(item=>({...item,group:item.status==='done'?'Completed':item.status==='dismissed'?'Dismissed':'To do'}));
       data.items.forEach(item=>{if(!groups.has(item.group)){const section=node('section',null,'agenda-group');section.dataset.group=item.group;const cards=node('div');section.append(node('h2',item.group),cards);list.append(section);groups.set(item.group,cards);}const el=card(item);el.querySelectorAll('details').forEach(details=>details.open=expanded.has(item.id+':'+details.querySelector('summary').textContent));groups.get(item.group).append(el);});
-      document.getElementById('agenda-status').textContent=(data.total>data.items.length ? 'Showing '+data.items.length+' of '+data.total : data.total)+' actionable'+(data.total===1?'':'s')+' · '+today+' SGT';
+      document.getElementById('agenda-status').textContent=(data.total>data.items.length ? 'Showing '+data.items.length+' of '+data.total : data.total)+' action'+(data.total===1?'':'s')+' · '+today+' SGT';
       const actionsPanel=document.getElementById('timeline-actions');
       const isEmpty=!data.items.length;
       actionsPanel.querySelector('.agenda-toolbar').hidden=!periodData.items.length;
@@ -137,7 +140,7 @@
         const hasIdeas=periodData.suggestions.some(item=>item.status==='suggested');
         const future=startInput.value>today;
         const running=['queued','running'].includes(periodData.run?.state);
-        empty.append(node('h2','No actions yet.'),node('p',future?'Select today or a past day to explore its activity for ideas.':'Explore this period’s activity for ideas, then make one actionable.','agenda-description'));
+        empty.append(node('h2','No actions yet.'),node('p',future?'Select today or a past day to explore its activity for ideas.':'Explore this period’s activity for ideas, then create an action.','agenda-description'));
         const showIdeas=()=>{const toggle=document.querySelector('[data-activity-menu-ideas]');if(toggle?.getAttribute('aria-expanded')!=='true')toggle?.click();};
         {
           if(hasIdeas)empty.append(button('View ideas',showIdeas));
@@ -232,7 +235,7 @@
       (item.evidence||[]).forEach(ref=>{const a=node('a',ref.date+' · '+ref.title);a.href=evidenceUrl(ref);a.target='_blank';a.rel='noopener';const p=node('p');p.append(a);details.append(p);});el.append(details);
       const actions=node('div',null,'agenda-card-actions');
       window.HflChecklistCover?.(el, item, async checklists => { await window.HflIdeas.api('/objects/'+item.id, 'PATCH', {version:item.version,checklists}); await load(); window.dispatchEvent(new Event('hfl:ideas-updated')); }, () => window.HflIdeas.editIdea(item.id));
-      actions.append(button('Make actionable',()=>window.HflIdeas.convert(item.id)),button('Edit idea',()=>window.HflIdeas.editIdea(item.id)),button('Dismiss',async e=>{e.currentTarget.disabled=true;try{await timelineApi('/suggestions/'+item.id+'/dismiss',{method:'POST'});await load();}catch(err){error('agenda-error',err.message);e.currentTarget.disabled=false;}}));
+      actions.append(button('Create action',()=>window.HflIdeas.convert(item.id)),button('Edit idea',()=>window.HflIdeas.editIdea(item.id)),button('Dismiss',async e=>{e.currentTarget.disabled=true;try{await timelineApi('/suggestions/'+item.id+'/dismiss',{method:'POST'});await load();}catch(err){error('agenda-error',err.message);e.currentTarget.disabled=false;}}));
       el.append(actions);list.append(el);
     });
     const pending=data.receipts.filter(receipt=>receipt.state==='pending'&&data.items.some(item=>item.id===receipt.followup_id));

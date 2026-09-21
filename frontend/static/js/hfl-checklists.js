@@ -19,7 +19,7 @@ window.HflChecklists = class {
   updateConversion() {
     for (const button of this.root.querySelectorAll('[data-convert-item]')) {
       button.disabled = this.options.canConvert ? !this.options.canConvert() : false;
-      button.title = button.disabled ? 'Save the idea before making an item actionable.' : 'Make actionable';
+      button.title = button.disabled ? 'Save the idea before creating an action from an item.' : 'Create action';
     }
   }
   render() {
@@ -77,10 +77,10 @@ window.HflChecklists = class {
         actions.append(this.iconButton('delete', () => { list.items.splice(i, 1); this.render(); }, 'Remove item'));
         row.append(check, text, actions);
         if (this.options.convert) {
-          const convert = this.iconButton('convert', () => { if (!this.options.canConvert || this.options.canConvert()) this.options.convert(list.id, item.id); }, 'Make actionable');
+          const convert = this.iconButton('convert', () => { if (!this.options.canConvert || this.options.canConvert()) this.options.convert(list.id, item.id); }, 'Create action');
           convert.dataset.convertItem = item.id; actions.prepend(convert);
         }
-        for (const link of (this.options.links || []).filter(link => link.checklist_id === list.id && link.item_id === item.id)) actions.append(this.iconButton('open', () => this.options.openAction(link.action_id), 'Open actionable'));
+        for (const link of (this.options.links || []).filter(link => link.checklist_id === list.id && link.item_id === item.id)) actions.append(this.iconButton('open', () => this.options.openAction(link.action_id), 'Open action'));
         box.append(row);
       }
       const add = this.button('Add item', () => this.addItem(list));

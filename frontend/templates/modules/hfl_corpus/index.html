@@ -208,15 +208,15 @@
     <button type="button" data-secrets-setup aria-haspopup="dialog" class="corpus-secrets-control inline-flex shrink-0 items-center rounded-lg bg-slate-900 text-sm font-semibold text-slate-300 ring-1 ring-slate-700">Secrets</button>
     {% endif %}
     <div class="corpus-navigation-actions">
-    <details class="corpus-create-menu"><summary class="corpus-header-link">Log<svg class="tools-caret" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div>
+    <details class="corpus-create-menu"><summary class="corpus-header-link">Create<svg class="tools-caret" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div>
       <button type="button" data-create-entry-open class="corpus-tool-item" aria-haspopup="dialog">Activity</button>
-      <button type="button" data-create-action-open class="corpus-tool-item" aria-haspopup="dialog" aria-controls="followup-editor">Actionable</button>
+      <button type="button" data-create-action-open class="corpus-tool-item" aria-haspopup="dialog" aria-controls="followup-editor">Action</button>
       <button type="button" class="corpus-tool-item" onclick="window.dispatchEvent(new CustomEvent('hfl:create-idea'))">Idea</button>
     </div></details>
     {% if corpus_entities_enabled %}
-    <details class="corpus-tools"><summary class="corpus-header-link">Explore<svg class="tools-caret" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div>
-      <a href="/hfl-corpus/graph" class="corpus-tool-item">Graph</a>
-      <button type="button" data-followups-open class="corpus-tool-item" aria-haspopup="dialog" aria-controls="followups-board">Actionables</button>
+    <details class="corpus-tools"><summary class="corpus-header-link">View<svg class="tools-caret" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div>
+      <a href="/hfl-corpus/graph" class="corpus-tool-item">Activity Graph</a>
+      <button type="button" data-followups-open class="corpus-tool-item" aria-haspopup="dialog" aria-controls="followups-board">Actions Board</button>
     </div></details>
     {% include "modules/hfl_corpus/partials/followups_board.html" %}
     {% endif %}
@@ -323,9 +323,14 @@
     <div class="activity-day-menu" data-activity-day-menu data-matches-expanded="false" role="menu" aria-label="Day actions" hidden>
       <p class="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[.14em] text-cyan-400" data-activity-menu-date></p>
       <div class="activity-day-quick-actions">
-      <button type="button" class="activity-day-menu-action text-slate-200" data-activity-menu-create role="menuitem">Create entry</button>
-      <button type="button" class="activity-day-menu-action text-cyan-200" data-activity-menu-create-action role="menuitem">Create action</button>
-      <button type="button" class="activity-day-menu-action text-cyan-200" data-activity-menu-create-idea role="menuitem">Create idea</button>
+      <details class="activity-day-create">
+        <summary class="activity-day-menu-action">Create<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+        <div class="activity-day-create-options">
+          <button type="button" class="activity-day-menu-action" data-activity-menu-create>Entry</button>
+          <button type="button" class="activity-day-menu-action" data-activity-menu-create-action>Action</button>
+          <button type="button" class="activity-day-menu-action" data-activity-menu-create-idea>Idea</button>
+        </div>
+      </details>
       <button type="button" class="activity-day-menu-action text-amber-200" data-activity-menu-pin role="menuitem">Pin dates</button>
       <a class="activity-day-menu-action text-cyan-200" data-activity-menu-document role="menuitem">Show document</a>
       </div>
@@ -1076,8 +1081,8 @@
         day.setAttribute('aria-label', label);
         day.title = label;
       });
-      const expandedCategories = new Set(
-        [...pinList.querySelectorAll('details[open]')].map(details => details.dataset.categoryId)
+      const collapsedCategories = new Set(
+        [...pinList.querySelectorAll('details:not([open])')].map(details => details.dataset.categoryId)
       );
       const pinScrollTop = pinList.scrollTop;
       pinList.replaceChildren();
@@ -1110,7 +1115,7 @@
         const details = document.createElement('details');
         details.className = 'activity-category';
         details.dataset.categoryId = String(category.id);
-        details.open = expandedCategories.has(String(category.id));
+        details.open = !collapsedCategories.has(String(category.id));
         const summary = document.createElement('summary');
         summary.className = 'activity-category-button cursor-pointer list-none';
         const dot = document.createElement('span');
@@ -1388,6 +1393,7 @@
     const closeDayMenu = (restoreFocus = false) => {
       if (menu.hidden) return;
       menu.hidden = true;
+      menu.querySelector('.activity-day-create').open = false;
       window.dispatchEvent(new Event('hfl:timeline-close'));
       menuTrigger?.setAttribute('aria-expanded', 'false');
       if (restoreFocus) menuTrigger?.focus();
@@ -1404,6 +1410,8 @@
       menu.dataset.matchesExpanded = 'false';
     };
     const positionDayMenu = button => {
+      const safeTop = Math.max(8, (document.querySelector('body > header')?.getBoundingClientRect().bottom || 0) + 8);
+      menu.style.setProperty('--day-menu-top', `${safeTop}px`);
       if (window.matchMedia('(max-width: 639px)').matches) {
         menu.style.removeProperty('left');
         menu.style.removeProperty('top');
@@ -1417,10 +1425,22 @@
       const below = rect.bottom + 8;
       const top = below + menu.offsetHeight <= window.innerHeight - 8
         ? below
-        : Math.max(8, rect.top - menu.offsetHeight - 8);
+        : Math.max(safeTop, rect.top - menu.offsetHeight - 8);
       menu.style.left = `${left}px`;
-      menu.style.top = `${top}px`;
+      menu.style.top = `${Math.max(safeTop, Math.min(top, window.innerHeight - menu.offsetHeight - 8))}px`;
     };
+    const dayCreate = menu.querySelector('.activity-day-create');
+    dayCreate.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && dayCreate.open) {
+        event.preventDefault(); event.stopPropagation(); dayCreate.open = false; dayCreate.querySelector('summary').focus();
+      }
+    });
+    menu.addEventListener('click', event => {
+      if (!event.target.closest('.activity-day-create > summary')) dayCreate.open = false;
+    });
+    dayCreate.addEventListener('focusout', event => {
+      if (event.relatedTarget && !dayCreate.contains(event.relatedTarget)) dayCreate.open = false;
+    });
     const selectDaySection = selected => {
       if (selected === 'ideas' && menu.querySelector('[data-activity-menu-ideas]').disabled) selected = 'actions';
       for (const name of ['matches','ideas','actions']) {
@@ -1439,6 +1459,7 @@
     window.addEventListener('hfl:day-section', event => selectDaySection(event.detail.section), {signal: activityController.signal});
     window.addEventListener('hfl:timeline-rendered', () => { if (!menu.hidden && menuTrigger) positionDayMenu(menuTrigger); }, {signal: activityController.signal});
     const openDayMenu = button => {
+      menu.scrollTop = 0;
       selectDaySection(null);
       window.dispatchEvent(new CustomEvent('hfl:timeline-period',{detail:{start:button.dataset.activityDay,end:button.dataset.activityDay}}));
       menuTrigger?.setAttribute('aria-expanded', 'false');
@@ -1723,13 +1744,13 @@
       }
     });
     document.addEventListener('pointerdown', event => {
-      if (document.querySelector('#followup-editor[open], #followup-history[open]')) return;
+      if (document.querySelector('#followup-editor[open], #followup-history[open], .action-connections-dialog[open]')) return;
       if (menu.hidden || menu.contains(event.target) || event.target === menuTrigger) return;
       closeDayMenu();
     }, {signal: activityController.signal});
     document.addEventListener('keydown', event => {
       if (event.key !== 'Escape') return;
-      if (document.querySelector('#followup-editor[open], #followup-history[open]')) return;
+      if (document.querySelector('#followup-editor[open], #followup-history[open], .action-connections-dialog[open]')) return;
       if (pinStart) {
         pinStart = '';
         clearPreview();

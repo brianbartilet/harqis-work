@@ -366,7 +366,7 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         modal.locator('input[type=file]').set_input_files({'name':'lighting.txt','mimeType':'text/plain','buffer':b'Warm light reference'})
         modal.get_by_role('button', name='Save', exact=True).click()
         expect(modal).to_have_count(0)
-        page.get_by_role('menuitem', name='Make actionable', exact=True).click()
+        page.get_by_role('menuitem', name='Create action', exact=True).click()
         expect(modal.get_by_role('checkbox', name='Complete Compare bulbs')).not_to_be_checked()
         expect(modal.get_by_text('lighting.txt', exact=True)).to_be_visible()
         modal.locator('.action-details > summary').click()

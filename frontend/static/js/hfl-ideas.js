@@ -50,10 +50,10 @@ window.HflObjectDescription = (item = {}) => {
         <h3 id="board-guide-flow">From a spark to a next step</h3>
         <ol class="board-guide-flow">
           <li><strong>Thought</strong><span>A rough note on this board.</span><small>Promote to shared Idea</small></li>
-          <li><strong>Idea</strong><span>A reusable possibility to develop, with notes and checklists.</span><small>Make actionable</small></li>
-          <li><strong>Actionable</strong><span>A concrete task with instructions, files, and progress to track.</span><small>Run separately when ready</small></li>
+          <li><strong>Idea</strong><span>A reusable possibility to develop, with notes and checklists.</span><small>Create action</small></li>
+          <li><strong>Action</strong><span>A concrete task with instructions, files, and progress to track.</span><small>Run separately when ready</small></li>
         </ol>
-        <p>Promotion replaces the thought with a shared idea and keeps its board connections. Conversion creates an independent actionable linked to the idea as <strong>develops into</strong>. Saving instructions does not run an agent.</p>
+        <p>Promotion replaces the thought with a shared idea and keeps its board connections. Conversion creates an independent action linked to the idea as <strong>develops into</strong>. Saving instructions does not run an agent.</p>
       </section>
       <section aria-labelledby="board-guide-connections">
         <h3 id="board-guide-connections">Build the connections</h3>
@@ -69,7 +69,7 @@ window.HflObjectDescription = (item = {}) => {
         <h3 id="board-guide-destinations">Where your work goes</h3>
         <dl class="board-guide-routes">
           <div><dt>This board</dt><dd>Thoughts, layout, membership, and board-only connections stay here. Edits autosave; Save now flushes pending changes.</dd></div>
-          <div><dt>Activity Graph</dt><dd>Shared ideas, actionables, goals, and shared connections are available beyond this board. Actionables also appear in your action list.</dd></div>
+          <div><dt>Activity Graph</dt><dd>Shared ideas, actions, goals, and shared connections are available beyond this board. Actions also appear in your action list.</dd></div>
           <div><dt>HFL history</dt><dd>Creating or changing thoughts and goals queues an HFL memory entry with a link back. It appears after background delivery; moving nodes does not create an entry.</dd></div>
         </dl>
       </section>`;
@@ -109,7 +109,8 @@ window.HflObjectDescription = (item = {}) => {
     return request('/hfl-corpus/timeline/source?' + new URLSearchParams({path: params.get('source_path'), entry_id: params.get('source_entry')}));
   }
   async function openEditor(kind, item = {}, parent = null, conversion = null) {
-    const d = dialog(conversion ? 'Create actionable from idea' : item.id ? 'Edit ' + kind : 'New ' + kind);
+    const label = kind === 'actionable' ? 'action' : kind;
+    const d = dialog(conversion ? 'Create action from idea' : item.id ? 'Edit ' + label : 'New ' + label);
     let current = item.id ? item : null, source = item.source || null, files, checklists, save;
     const requestId = crypto.randomUUID(), editingBoard = maps.current?.id;
     try {
@@ -139,7 +140,7 @@ window.HflObjectDescription = (item = {}) => {
         field(details, 'title', 'Idea', item.title, 'text', true, 200);
         field(details, 'body', 'Markdown description', window.HflObjectDescription(item), 'textarea', false, 60000);
         const attachments = el('div'); attachments.dataset.objectAttachments = ''; details.append(attachments);
-        if (current) selectField(details, 'status', 'Status', [['suggested', 'Available / restored'], ['adopted', 'Has actionables'], ['dismissed', 'Dismissed']], item.status);
+        if (current) selectField(details, 'status', 'Status', [['suggested', 'Available / restored'], ['adopted', 'Has actions'], ['dismissed', 'Dismissed']], item.status);
         const checklistSection = section('Checklists');
         const checklistHeader = el('div', undefined, 'idea-checklists-heading');
         checklistToolbar = el('div');
@@ -416,7 +417,7 @@ window.HflObjectDescription = (item = {}) => {
         catch (error) { maps.status.textContent = error.message; }
       }));
     }
-    if(node.kind==='drafts')root.append(button('Create linked Idea',()=>openEditor('idea',{title:node.label,body:node.body},node)),button('Create linked Actionable',()=>openEditor('actionable',{title:node.label,body:node.body},node)));
+    if(node.kind==='drafts')root.append(button('Create linked Idea',()=>openEditor('idea',{title:node.label,body:node.body},node)),button('Create linked Action',()=>openEditor('actionable',{title:node.label,body:node.body},node)));
     if(node.kind==='boards')root.append(button('Open board',async()=>{try{await maps.selectBoard((await api('/maps/'+node.object_id)).item);}catch(error){maps.status.textContent=error.message;}}));
     if (node.kind === 'goals') root.append(el('p', node.success_criteria || 'Add success criteria to define achievement.'), button('Edit Goal / milestones', () => editGoal(node.object_id)));
     if (maps.current) root.append(button('Add thought', () => editThought(null, node.id)), button('Connect on this board', () => connectThought(node)), button('Use as starting point', async () => { try { await maps.persist({root: node.id}); changed(); } catch (error) { maps.status.textContent = error.message; } }));
@@ -428,15 +429,15 @@ window.HflObjectDescription = (item = {}) => {
       pill.dataset.status = status.replaceAll(' ', '-');
       row.append(el('span', 'Status'), pill);root.append(row);
     }
-    if (node.kind === 'ideas') root.append(button('Edit idea / checklists', () => editIdea(node.object_id)), button('Make actionable', () => convert(node.object_id)));
-    if (node.kind === 'actions') root.append(button('Edit actionable / status', async () => { try { const {item} = await request('/hfl-corpus/timeline/items/' + node.object_id); openEditor('actionable', item); } catch (error) { const d = dialog('Action unavailable'); d.error.textContent = error.message; } }));
+    if (node.kind === 'ideas') root.append(button('Edit idea / checklists', () => editIdea(node.object_id)), button('Create action', () => convert(node.object_id)));
+    if (node.kind === 'actions') root.append(button('Edit action / status', async () => { try { const {item} = await request('/hfl-corpus/timeline/items/' + node.object_id); openEditor('actionable', item); } catch (error) { const d = dialog('Action unavailable'); d.error.textContent = error.message; } }));
     if (!maps.current && ['entries', 'daily', 'topics', 'tools', 'ideas', 'actions', 'goals'].includes(node.kind)) {
       const menu = el('div', undefined, 'idea-add-menu'), panel = el('div', undefined, 'idea-add-options');
       panel.id = 'idea-add-' + crypto.randomUUID(); panel.hidden = true; panel.setAttribute('role', 'menu'); panel.setAttribute('aria-label', 'Add object');
       const toggle = button('Add', () => setOpen(panel.hidden)); toggle.className = 'idea-add-toggle';
       toggle.setAttribute('aria-label', 'Add object'); toggle.setAttribute('aria-haspopup', 'menu'); toggle.setAttribute('aria-controls', panel.id); toggle.setAttribute('aria-expanded', 'false');
       const setOpen = open => { panel.hidden = !open; toggle.setAttribute('aria-expanded', String(open)); if (open) panel.firstElementChild.focus(); };
-      for (const [value, label] of [['idea', 'Idea'], ['actionable', 'Actionable'], ['topic', 'Topic']]) {
+      for (const [value, label] of [['idea', 'Idea'], ['actionable', 'Action'], ['topic', 'Topic']]) {
         const option = button(label, () => { setOpen(false); toggle.focus(); if (value === 'topic') newTopic(node); else openEditor(value, {}, node); });
         option.setAttribute('role', 'menuitem'); option.tabIndex = -1; panel.append(option);
       }

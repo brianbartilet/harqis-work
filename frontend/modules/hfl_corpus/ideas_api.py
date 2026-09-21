@@ -97,6 +97,14 @@ def snapshot(request: Request):
     return permitted_snapshot()
 
 
+@router.get('/actions/{identity}/connections')
+def action_connections(request: Request, identity: str):
+    timeline.owner(request)
+    from modules.hfl_corpus.entities import graph
+    from modules.hfl_corpus.action_connections import project
+    return project(identity, graph(limit=0), store().maps())
+
+
 @router.get('/boards')
 def boards(request: Request):
     """Board metadata and Goals never require a corpus scan."""
