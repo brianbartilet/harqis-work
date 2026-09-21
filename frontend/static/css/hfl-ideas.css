@@ -252,7 +252,8 @@
 .kg-boards .board-toolbar .board-explore{grid-column:1 / -1;background:#17263a;border-color:#40516a;color:#dbeafe;text-align:center}
 .kg-boards .board-toolbar .board-explore[aria-pressed=true]{background:#163247;border-color:#42718a;color:#e0f2fe}
 .kg-boards .board-toolbar .board-explore:hover{background:#20364e}
-.kg-boards .board-toolbar .idea-add-toggle{padding-right:28px}
+.kg-boards .board-toolbar .idea-add-toggle{padding-right:28px;background:transparent;color:#adc1d6;border-color:#334155}
+.kg-boards .board-toolbar .idea-add-toggle:hover{background:#17263a;color:#e2e8f0}
 .board-toolbar .board-add-menu{min-width:0}
 .board-toolbar .idea-add-options{min-width:160px}
 .board-toolbar button:focus-visible{outline:2px solid #67e8f9;outline-offset:2px}

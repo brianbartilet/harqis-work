@@ -334,6 +334,7 @@
       </details>
       <button type="button" class="activity-day-menu-action text-amber-200" data-activity-menu-pin role="menuitem">Pin dates</button>
       <a class="activity-day-menu-action text-cyan-200" data-activity-menu-document role="menuitem">Show document</a>
+      <button type="button" class="activity-day-menu-action" data-date-connections role="menuitem">Connections</button>
       </div>
       </div>
       <button type="button" class="activity-day-menu-action justify-between text-cyan-200" data-activity-menu-matches role="menuitem" aria-expanded="false">
@@ -1475,6 +1476,7 @@
       menuTrigger = button;
       button.setAttribute('aria-expanded', 'true');
       const selectedDate = new Date(`${button.dataset.activityDay}T12:00:00`);
+      menu.querySelector('[data-date-connections]').dataset.dateConnections = button.dataset.activityDay;
       const count = Number(button.dataset.count || 0);
       menuDate.textContent = `${selectedDate.toLocaleDateString(undefined, {
         weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',

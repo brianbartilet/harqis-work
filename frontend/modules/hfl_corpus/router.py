@@ -303,7 +303,6 @@ def _display_entry_header(header: str) -> str:
 def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
     from urllib.parse import urlencode
     from modules.hfl_corpus.timeline import entry_guid
-    from modules.hfl_corpus.corpus import _dated_document_date, entry_occurrence_date
 
     entries = iter(document.entries)
     protected_tags = normalize_secret_tags(get_profile_store().get().secret_tags)
@@ -322,10 +321,6 @@ def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
             action += (f'<a data-create-idea-source href="/hfl-corpus?{html.escape(query, quote=True)}" '
                        'class="corpus-idea-action">Add idea</a>')
         header = _display_entry_header(match.group(1))
-        day = _dated_document_date(document) or entry_occurrence_date(entry)
-        if day and not is_secret_entry(entry, protected_tags):
-            action += (f'<button type="button" class="corpus-connections-action" '
-                       f'data-date-connections="{day.isoformat()}">Connections</button>')
         heading = f'<h2 id="{html.escape(entry.anchor, quote=True)}" class="scroll-mt-40">{header}</h2>'
         edit = (f'<button type="button" class="corpus-followup-action" '
                 f'data-entry-edit="{html.escape(entry.anchor, quote=True)}" '

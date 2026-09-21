@@ -75,7 +75,7 @@ def test_projection_empty_protected_neighbors_and_direct_depth():
 
 
 @pytest.mark.parametrize('width', [390, 1100])
-def test_document_date_connections(ideas, authenticated_client, monkeypatch, width):
+def test_heatmap_date_connections(ideas, authenticated_client, monkeypatch, width):
     from datetime import datetime
     from zoneinfo import ZoneInfo
     from test_hfl_corpus import _document
@@ -108,7 +108,19 @@ def test_document_date_connections(ideas, authenticated_client, monkeypatch, wid
                               headers={'content-type': result.headers.get('content-type', 'text/html')})
         page.route('**/*', route)
         page.goto('https://connections.test/hfl-corpus/document/' + day + '.md')
-        trigger = page.get_by_role('button', name='Connections', exact=True)
+        assert page.locator('[data-date-connections]').count() == 0
+        page.goto('https://connections.test/hfl-corpus')
+        page.locator(f'[data-activity-day="{day}"]').click()
+        trigger = page.locator('[data-date-connections]')
+        controls = page.locator('.activity-day-quick-actions')
+        create, pin, show, connections = controls.evaluate("""el =>
+            ['summary', '[data-activity-menu-pin]', '[data-activity-menu-document]', '[data-date-connections]']
+              .map(selector => el.querySelector(selector).getBoundingClientRect().toJSON())
+        """)
+        assert abs(create['y'] - pin['y']) < 2
+        assert abs(show['y'] - connections['y']) < 2
+        assert show['y'] >= create['y'] + create['height']
+        assert abs(create['width'] - connections['width']) < 2
         trigger.click()
         preview = page.locator('.action-connections-dialog')
         playwright.expect(preview.get_by_label('Date connections graph', exact=True).locator('canvas')).to_be_visible()
@@ -195,7 +207,7 @@ def test_connections_preview_both_cards_and_throwaway_lifecycle(ideas, authentic
         day.locator('[data-day-ideas]').evaluate("el => el.style.minHeight = ''")
         day.evaluate("el => { el.style.maxHeight = ''; el.scrollTop = 0; }")
         day.locator('[data-activity-menu-actions]').click()
-        trigger = day.get_by_role('button', name='Connections', exact=True)
+        trigger = day_card.get_by_role('button', name='Connections', exact=True)
         trigger.click()
         assert day.locator('[data-followup-id="' + isolated['id'] + '"] .action-connections-button').count() == 0
         preview = page.locator('.action-connections-dialog')

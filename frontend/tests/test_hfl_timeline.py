@@ -70,7 +70,7 @@ def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_clie
             playwright.expect(page.locator('[data-activity-menu-actions]')).to_have_attribute('aria-expanded', 'true')
             playwright.expect(page.locator('[data-activity-menu-matches]')).to_have_attribute('aria-expanded', 'false')
             buttons = page.locator('.activity-day-quick-actions').locator('button, a')
-            assert buttons.all_text_contents() == ['Entry', 'Action', 'Idea', 'Pin dates', 'Show document']
+            assert buttons.all_text_contents() == ['Entry', 'Action', 'Idea', 'Pin dates', 'Show document', 'Connections']
             create = page.locator('.activity-day-create > summary')
             create.click()
             playwright.expect(page.locator('[data-activity-menu-create-action]')).to_be_visible()
