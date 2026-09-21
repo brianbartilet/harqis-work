@@ -37,6 +37,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   const signature=value=>JSON.stringify(value,(key,item)=>key==='locator'?undefined:item);
   const selectedSources=new Set();
   let loading=false, graphData={nodes:[],links:[]}, graphApi=null, active=null, focusId=null;
+  let nodeActions=[];
   const host=$('canvas'), root=createRoot(host);
   const touchViewport=window.matchMedia('(pointer: coarse)').matches;
   const uiFont=getComputedStyle(host).fontFamily;
@@ -85,6 +86,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       for(const n of nodes)layoutTargets.set(n.id,{...layoutTargets.get(n.id),x:n.x,y:n.y});
     }
     draggedNode=node;
+    if(window.HflIdeas?.maps.current){node.manual=true;node.fx=node.x;node.fy=node.y;lastInteraction=Date.now();return;}
     if(starting){releaseDragNeighbors(node,nodes,edges,dragNodes,{x:node.x-delta.x,y:node.y-delta.y});configureDragForces(graphApi,true);draw();}
     lastInteraction=Date.now();
   }
@@ -153,7 +155,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     document.querySelectorAll('[data-animation]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.animation===mode)));
     host.dataset.animation=mode;
   }
-  function motionPaused(){return document.hidden||loading||selected!==null||activePointers.size>0||Date.now()-lastInteraction<250||
+  function motionPaused(){return !!window.HflIdeas?.maps.current||document.hidden||loading||selected!==null||activePointers.size>0||Date.now()-lastInteraction<250||
     !!document.querySelector('dialog[open]:not(#activity-standalone)')||!$('views-panel').hidden||!$('animation-panel').hidden;}
   function animate(now){
     requestAnimationFrame(animate);
@@ -183,6 +185,41 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   }
   function Graph({data,activeId,selectedId}) {
     const ref=useRef();
+    const sizeTools=useRef(),hoverTimer=useRef();
+    const [hoverId,setHoverId]=useState(null);
+    const [actionsOpen,setActionsOpen]=useState(false);
+    const board=window.HflIdeas?.maps.current;
+    const sizeNode=board?data.nodes.find(n=>n.id===(actionsOpen?selectedId:hoverId||selectedId)):null;
+    const sizeLevel=sizeNode?(board.node_sizes?.[sizeNode.id]||3):3;
+    useEffect(()=>()=>clearTimeout(hoverTimer.current),[]);
+    useEffect(()=>setActionsOpen(false),[selectedId,board?.id]);
+    useEffect(()=>{setHoverId(null);setActionsOpen(false);},[data]);
+    useEffect(()=>{
+      if(!actionsOpen)return;
+      const close=event=>{if(!sizeTools.current?.contains(event.target))setActionsOpen(false);};
+      document.addEventListener('pointerdown',close);
+      sizeTools.current?.querySelector('[role=menuitem]')?.focus();
+      return()=>document.removeEventListener('pointerdown',close);
+    },[actionsOpen]);
+    function menuKeys(event){
+      if(!event.target.closest('.kg-orb-actions-toggle,.kg-orb-actions-menu'))return;
+      if(event.key==='Escape'){
+        event.preventDefault();event.stopPropagation();setActionsOpen(false);sizeTools.current?.querySelector('.kg-orb-actions-toggle')?.focus();
+      }else if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){
+        event.preventDefault();event.stopPropagation();
+        const items=[...sizeTools.current.querySelectorAll('[role=menuitem]')],index=items.indexOf(document.activeElement);
+        if(!actionsOpen){setActionsOpen(true);return;}
+        const next=event.key==='Home'?0:event.key==='End'?items.length-1:(index+(event.key==='ArrowUp'?-1:1)+items.length)%items.length;
+        items[next]?.focus();
+      }
+    }
+    function resizeOrb(delta){
+      if(!sizeNode)return;
+      const level=Math.max(1,Math.min(10,sizeLevel+delta));
+      sizeNode.radius=8+level*3;
+      window.HflIdeas.maps.persist({node_sizes:{...board.node_sizes,[sizeNode.id]:level}});
+      draw();
+    }
     const [size,setSize]=useState({width:host.clientWidth,height:host.clientHeight});
     useEffect(()=>{
       const observer=new ResizeObserver(()=>setSize({width:host.clientWidth,height:host.clientHeight}));
@@ -222,18 +259,25 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       if(emphasis){ctx.beginPath();ctx.arc(node.x,node.y,radius+5/globalScale,0,2*Math.PI);ctx.strokeStyle=ink+'aa';ctx.lineWidth=1/globalScale;ctx.stroke();}
       ctx.restore();
     }
-    return <ForceGraph2D ref={ref} width={size.width} height={size.height}
-      graphData={data} enableNodeDrag={!touchViewport} enablePanInteraction={true} enableZoomInteraction={true} backgroundColor="rgba(0,0,0,0)" nodeLabel={()=>''}
+    return <><ForceGraph2D ref={ref} width={size.width} height={size.height}
+      graphData={data} enableNodeDrag={!!board||!touchViewport} enablePanInteraction={true} enableZoomInteraction={true} backgroundColor="rgba(0,0,0,0)" nodeLabel={()=>''}
       onRenderFramePost={(ctx,scale)=>{
         if(!ref.current||!Number.isFinite(scale)||scale<=0)return;
         const origin=ref.current.screen2GraphCoords(0,0);
-        const candidates=data.nodes.filter(n=>!activeId||n.id===activeId||n.id===selectedId||near.has(n.id)).map(n=>({
+        if(sizeNode&&sizeTools.current){
+          const point=ref.current.graph2ScreenCoords(sizeNode.x,sizeNode.y);
+          const toolsWidth=sizeTools.current.offsetWidth,panel=sizeTools.current.querySelector('.kg-orb-actions-menu');
+          const panelHeight=panel?.offsetHeight||0;
+          sizeTools.current.style.left=Math.max(4,Math.min(size.width-Math.max(toolsWidth,panel?250:0)-4,point.x-toolsWidth/2))+'px';
+          sizeTools.current.style.top=Math.max(4,Math.min(size.height-52-panelHeight,point.y-sizeNode.radius-46))+'px';
+        }
+        const candidates=data.nodes.filter(n=>board||!activeId||n.id===activeId||n.id===selectedId||near.has(n.id)).map(n=>({
           id:n.id,label:n.label,kind:n.kind,x:(n.x-origin.x)*scale,y:(n.y-origin.y)*scale,
           radius:n.radius,degree:n.visibleDegree,preferred:n.kind===(preset==='timeline'?'daily':preset)||defaultLabelKinds.has(n.kind),
           pinned:!!n.manual,emphasis:n.id===activeId||n.id===selectedId
         }));
         ctx.save();
-        const labels=placeLabels(candidates,{width:size.width,height:size.height,zoom:scale},(text,font)=>{
+        const labels=placeLabels(candidates,{width:size.width,height:size.height,zoom:scale,fullTitles:!!board},(text,font)=>{
           ctx.font=`500 ${font}px ${uiFont}`;return ctx.measureText(text).width;
         });
         for(const box of labels){
@@ -242,7 +286,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
           ctx.roundRect(x,y,box.w/scale,box.h/scale,5/scale);ctx.fill();
           ctx.strokeStyle=ink+(box.node.emphasis?'90':'30');ctx.lineWidth=.6/scale;ctx.stroke();
           ctx.font=`500 ${(box.node.emphasis?13:11)/scale}px ${uiFont}`;ctx.textAlign='left';ctx.textBaseline='middle';
-          ctx.fillStyle=box.node.emphasis?'#ffffff':'#d9e9fa';ctx.fillText(box.text,x+6/scale,y+12/scale);
+          ctx.fillStyle=box.node.emphasis?'#ffffff':'#d9e9fa';box.lines.forEach((line,index)=>ctx.fillText(line,x+6/scale,y+(12+index*16)/scale));
         }
         ctx.restore();
       }}
@@ -256,16 +300,30 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       linkDirectionalParticles={0}
       linkDirectionalParticleWidth={2} linkDirectionalParticleSpeed={.004}
       onZoom={()=>{if(activePointers.size)lastInteraction=Date.now();scheduleStateSave();}}
-      onNodeHover={node=>{host.style.cursor=node?'pointer':'grab';if(!touchViewport)highlight(node?.id||selected);}}
+      onNodeHover={node=>{host.style.cursor=node?'pointer':'grab';clearTimeout(hoverTimer.current);if(node)setHoverId(node.id);else hoverTimer.current=setTimeout(()=>setHoverId(null),250);if(!touchViewport)highlight(node?.id||selected);}}
       onNodeClick={node=>select(node.id)} onBackgroundClick={()=>select(null)}
       onNodeDrag={followDrag}
-      onNodeDragEnd={node=>{draggedNode=null;node.manual=true;layoutTargets.set(node.id,{x:node.x,y:node.y,anchor:false});node.fx=node.x;node.fy=node.y;draw();graphApi.d3ReheatSimulation();}}
+      onNodeDragEnd={node=>{draggedNode=null;node.manual=true;layoutTargets.set(node.id,{x:node.x,y:node.y,anchor:false});node.fx=node.x;node.fy=node.y;draw();if(window.HflIdeas?.maps.current)window.HflIdeas.maps.saveLayout();else graphApi.d3ReheatSimulation();}}
       warmupTicks={0} cooldownTicks={reducedMotion||(!draggedNode&&!dragNodes.size)?0:Infinity}
       d3VelocityDecay={dragNodes.size?.2:.4}
       d3AlphaMin={.001}
       onEngineStop={finishDrag}
 
-    />;
+    />{sizeNode&&<div ref={sizeTools} className="kg-orb-size" role="group" aria-label={'Orb controls for '+sizeNode.label}
+      onPointerEnter={()=>clearTimeout(hoverTimer.current)} onPointerLeave={()=>{hoverTimer.current=setTimeout(()=>setHoverId(null),250);}}
+      onPointerDown={event=>event.stopPropagation()} onClick={event=>event.stopPropagation()} onKeyDown={menuKeys}
+      onBlur={event=>{if(event.relatedTarget&&!event.currentTarget.contains(event.relatedTarget))setActionsOpen(false);}}>
+      <button type="button" aria-label="Decrease orb size" disabled={sizeLevel===1} onClick={()=>resizeOrb(-1)}>−</button>
+      <output aria-live="polite" title="Concreteness · size level">{sizeLevel}/10</output>
+      <button type="button" aria-label="Increase orb size" disabled={sizeLevel===10} onClick={()=>resizeOrb(1)}>+</button>
+      {sizeNode.id===selectedId&&nodeActions.length>0&&<button type="button" className="kg-orb-actions-toggle" aria-haspopup="menu" aria-expanded={actionsOpen} aria-controls="kg-orb-actions-menu" onClick={()=>setActionsOpen(!actionsOpen)}>Actions <span aria-hidden="true">⌄</span></button>}
+      {actionsOpen&&<div id="kg-orb-actions-menu" className="kg-orb-actions-menu" role="menu" aria-label="Orb actions" style={{maxHeight:Math.max(100,Math.min(410,size.height-60))}}>
+        {['Edit & develop','Add & connect','Board','View'].map(group=>{
+          const actions=nodeActions.filter(action=>action.group===group);
+          return actions.length>0&&<div role="group" aria-label={group} key={group}><span className="kg-orb-menu-heading" aria-hidden="true">{group}</span>{actions.map(action=><button type="button" role="menuitem" tabIndex={-1} key={action.label} className={action.label==='Remove from board'?'kg-orb-remove':''} onClick={()=>{setActionsOpen(false);sizeTools.current?.querySelector('.kg-orb-actions-toggle')?.focus();action.button.click();}}>{action.label}</button>)}</div>;
+        })}
+      </div>}
+    </div>}</>;
   }
   function draw(){root.render(<Graph data={graphData} activeId={active} selectedId={selected}/>);}
   function highlight(id){active=id;draw();}
@@ -341,6 +399,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   $('entry-dialog').addEventListener('close',()=>{entryController?.abort();$('entry-body').replaceChildren();});
   $('entry-dialog').addEventListener('click',event=>{const b=$('entry-dialog').getBoundingClientRect();if(event.target===$('entry-dialog')&&(event.clientX<b.left||event.clientX>b.right||event.clientY<b.top||event.clientY>b.bottom))$('entry-dialog').close();});
   function select(id) {
+    nodeActions=[];
     selected=id;const n=nodes.find(n=>n.id===id),near=connected(id);
     highlight(id);
     $('detail').replaceChildren();$('detail').classList.toggle('kg-detail-empty',!n);
@@ -354,6 +413,15 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     if(n){const focus=document.createElement('button');focus.textContent='Focus on this connection';focus.className='kg-focus-button';focus.onclick=()=>{focusId=n.id;render();};$('detail').append(focus);}
     if(focusId){const back=document.createElement('button');back.textContent='Back to overview';back.onclick=()=>{focusId=null;render();};$('detail').append(back);}
     if(n){const clear=document.createElement('button');clear.textContent='Clear selection';clear.onclick=()=>select(null);$('detail').append(clear);}
+    if(n&&window.HflIdeas?.maps.current){
+      // Reuse the inspector's commands so board permissions and workflows stay identical.
+      nodeActions=[...$('detail').querySelectorAll(':scope > button')].map(button=>{
+        const label=button.textContent;
+        const group=/^(Edit|Promote|Make actionable)/.test(label)?'Edit & develop':/^(Create|Add|Connect)/.test(label)?'Add & connect':/^(Remove|Use as|Board connections)/.test(label)?'Board':'View';
+        button.remove();return {label,group,button};
+      });
+      draw();
+    }
     const items=n?nodes.filter(node=>near.has(node.id)):preset==='mindmap'?nodes:nodes.filter(node=>node.kind===(preset==='timeline'?'daily':preset));
     $('list-title').textContent=(n?'Linked nodes':preset==='mindmap'?'Board members':PRESETS[preset])+' · '+items.length;
     nodeList(items);
@@ -391,7 +459,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     const byId=new Map(nodes.map(n=>[n.id,n]));
     edges=data.edges.filter(e=>byId.has(e.source)&&byId.has(e.target)).map(e=>({...e,a:byId.get(e.source),b:byId.get(e.target)}));
     nodes.forEach(n=>n.visibleDegree=0);edges.forEach(e=>{e.a.visibleDegree++;e.b.visibleDegree++;});
-    nodes.forEach(n=>{const smallGraph=nodes.length<=35;n.radius=n.kind==='entries'?(smallGraph?7:4.5):(smallGraph?10:4)+4*Math.log2(1+n.visibleDegree);});
+    nodes.forEach(n=>{const board=window.HflIdeas?.maps.current,smallGraph=nodes.length<=35;n.radius=board?8+3*(board.node_sizes?.[n.id]||3):n.kind==='entries'?(smallGraph?7:4.5):(smallGraph?10:4)+4*Math.log2(1+n.visibleDegree);});
     const anchors=nodes.filter(n=>n.kind!=='entries').sort((a,b)=>b.visibleDegree-a.visibleDegree).slice(0,4);
     const adjacency=new Map(nodes.map(n=>[n.id,new Set()]));
     for(const e of edges){adjacency.get(e.source).add(e.target);adjacency.get(e.target).add(e.source);}

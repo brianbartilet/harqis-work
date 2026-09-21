@@ -59,7 +59,8 @@ window.HflObjectDescription = (item = {}) => {
         <h3 id="board-guide-connections">Build the connections</h3>
         <ul class="board-guide-list">
           <li><strong>Bring in context.</strong> Use Attach existing for entries, ideas, actions, goals, or entities such as people, topics, and tools. Each orb is a node; attaching it alone does not connect it to every other node.</li>
-          <li><strong>Link what belongs together.</strong> Select a node and use Connect on this board. These connections stay on the board. Promote a shared connection between shared objects to reuse it in the Activity Graph.</li>
+          <li><strong>Link what belongs together.</strong> Select an orb and open Actions → Connect on this board. These connections stay on the board. Use Actions → Board connections to promote a connection between shared objects into the Activity Graph.</li>
+          <li><strong>Arrange your thinking.</strong> Drag an orb to place it independently; its connections stay attached. Titles wrap in full. Hover over or select an orb for +/− controls, with ten saved size levels to express how concrete it feels. Select an orb to open its Actions menu for editing, promotion, and more.</li>
           <li><strong>Explore with an agent.</strong> Ask agent proposes ideas and connections. Review and accept suggestions to save them.</li>
           <li><strong>Review the outcome.</strong> Track milestones in the goal editor. Completed actions do not automatically achieve a goal; assess its success criteria and update its status.</li>
         </ul>

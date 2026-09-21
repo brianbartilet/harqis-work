@@ -10,6 +10,99 @@ def board_payload(**changes):
             'root': 'draft:seed', 'drafts': [{'id': 'draft:seed', 'title': 'Packing', 'body': 'Try batching'}], **changes}
 
 
+def test_board_orb_sizes_validate_and_survive_promotion(ideas, authenticated_client):
+    client = authenticated_client
+    board = client.post(BASE+'/maps', json=board_payload(node_sizes={'draft:seed':10})).json()['item']
+    uri = BASE+'/maps/'+board['id']
+    for invalid in [0, 11, True, 2.5, '5']:
+        assert client.patch(uri, json={'version':1,'node_sizes':{'draft:seed':invalid}}).status_code == 422
+    promoted = client.post(uri+'/promote', json={'version':1,'draft_id':'draft:seed'}).json()
+    restored = client.get(uri).json()['item']
+    assert restored['node_sizes'] == {'idea:'+promoted['idea_id']:10}
+    removed = client.patch(uri, json={'version':restored['version'],'members':[],'root':'','positions':{}})
+    assert removed.status_code == 200, removed.text
+    assert removed.json()['item']['node_sizes'] == {}
+
+
+@pytest.mark.parametrize('width', [390, 1280])
+def test_board_free_drag_and_orb_sizes_browser(ideas, authenticated_client, width, tmp_path):
+    from urllib.parse import urlparse
+    from playwright.sync_api import sync_playwright, expect
+    board = ideas.save_map(board_payload(
+        drafts=[{'id':'draft:seed','title':'Create a thought to brainstorm and refine, promote as idea','body':''},
+                {'id':'draft:next','title':'Keep this thought in place','body':''}],
+        edges=[{'source':'draft:seed','target':'draft:next','relation':'related-to'}],
+        positions={'draft:seed':{'x':-100,'y':0},'draft:next':{'x':100,'y':0}}))
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page(viewport={'width':width,'height':1000})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        def route(intercept):
+            req = intercept.request
+            url = urlparse(req.url)
+            response = authenticated_client.request(req.method, url.path+('?' + url.query if url.query else ''),
+                content=req.post_data_buffer, headers={'content-type':'application/json'})
+            intercept.fulfill(status=response.status_code, body=response.content,
+                headers={'content-type':response.headers.get('content-type','text/html')})
+        page.route('**/*', route)
+        page.goto('https://boards.test/hfl-corpus/ideas?board='+board['id'])
+        expect(page.locator('#kg-map-count')).to_have_text('2 nodes · 1 links')
+        canvas = page.locator('#kg-canvas canvas').first
+        page.wait_for_function("document.querySelector('#kg-canvas canvas')?.__zoom?.k > 0")
+        before = page.evaluate('window.HflIdeas.maps.getPositions()')
+        def screen_point(identity):
+            return canvas.evaluate('''(el,id) => {const p=window.HflIdeas.maps.getPositions()[id],z=el.__zoom,b=el.getBoundingClientRect();return {x:b.x+z.x+p.x*z.k,y:b.y+z.y+p.y*z.k};}''', identity)
+        point = screen_point('draft:seed')
+        page.mouse.move(point['x'],point['y'])
+        expect(page.get_by_role('button', name='Increase orb size')).to_be_visible()
+        page.mouse.down()
+        page.mouse.move(point['x']+25,point['y']+65,steps=12)
+        page.mouse.up()
+        page.evaluate('window.HflIdeas.maps.flush()')
+        after = page.evaluate('window.HflIdeas.maps.getPositions()')
+        assert after['draft:next'] == before['draft:next']
+        assert after['draft:seed'] != before['draft:seed']
+        point = screen_point('draft:seed')
+        page.mouse.click(point['x'],point['y'])
+        actions = page.get_by_role('button', name='Actions', exact=True)
+        actions.click()
+        menu = page.get_by_role('menu', name='Orb actions')
+        expect(menu).to_be_visible()
+        expect(menu.get_by_role('menuitem', name='Edit thought', exact=True)).to_be_focused()
+        expect(page.locator('#kg-detail > button')).to_have_count(0)
+        page.keyboard.press('End')
+        expect(menu.get_by_role('menuitem', name='Clear selection', exact=True)).to_be_focused()
+        page.screenshot(path=str(tmp_path / ('board-actions-'+str(width)+'.png')))
+        page.keyboard.press('Escape')
+        expect(menu).to_have_count(0)
+        expect(actions).to_be_focused()
+        actions.click()
+        menu.get_by_role('menuitem', name='Edit thought', exact=True).click()
+        expect(page.get_by_role('dialog', name='Edit thought', exact=True)).to_be_visible()
+        page.keyboard.press('Escape')
+        increase = page.get_by_role('button', name='Increase orb size')
+        for _ in range(7): increase.click()
+        expect(increase).to_be_disabled()
+        expect(page.locator('.kg-orb-size output')).to_have_text('10/10')
+        page.evaluate('window.HflIdeas.maps.flush()')
+        assert ideas.map(board['id'])['node_sizes']['draft:seed'] == 10
+        page.screenshot(path=str(tmp_path / ('board-orbs-'+str(width)+'.png')))
+        page.reload()
+        expect(page.locator('#kg-map-count')).to_have_text('2 nodes · 1 links')
+        page.wait_for_function('window.HflIdeas?.maps?.getPositions && Object.keys(window.HflIdeas.maps.getPositions()).length === 2')
+        assert page.evaluate('window.HflIdeas.maps.getPositions()') == after
+        point = screen_point('draft:seed')
+        page.mouse.click(point['x'],point['y'])
+        expect(page.locator('.kg-orb-size output')).to_have_text('10/10')
+        decrease = page.get_by_role('button', name='Decrease orb size')
+        for _ in range(9): decrease.click()
+        expect(decrease).to_be_disabled()
+        expect(page.locator('.kg-orb-size output')).to_have_text('1/10')
+        assert not errors, errors
+        browser.close()
+
+
 def test_board_colors_and_order_persist_without_revising_contents(ideas, authenticated_client):
     from workflows.hfl.ideas_store import IdeasStore
     client = authenticated_client

@@ -161,7 +161,7 @@ class IdeasStore(BoardStoreMixin):
             db.executemany('INSERT INTO board_order VALUES (?,?)', [(identity, index) for index, identity in enumerate(identities)])
 
     def save_map(self, raw, identity=None):
-        if set(raw) - {'name', 'members', 'positions', 'version', 'request_id', 'prompt', 'purpose', 'root', 'goal_id', 'drafts', 'edges', 'board_date', 'color'}:
+        if set(raw) - {'name', 'members', 'positions', 'node_sizes', 'version', 'request_id', 'prompt', 'purpose', 'root', 'goal_id', 'drafts', 'edges', 'board_date', 'color'}:
             raise ValueError('Unsupported mind-map fields.')
         previous = self.map(identity) if identity else {}
         item = {**previous, **raw}

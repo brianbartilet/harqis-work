@@ -16,7 +16,7 @@ def text(value, label, limit, required=False):
 def normalize_board(item):
     """Read old maps additively, preserving their IDs and revisions."""
     return {'purpose': item['name'], 'root': '', 'goal_id': '', 'drafts': [], 'edges': [],
-            'created_at': '', 'updated_at': '', 'board_date': '', 'color': PIN_COLORS[0], **item}
+            'created_at': '', 'updated_at': '', 'board_date': '', 'color': PIN_COLORS[0], 'node_sizes': {}, **item}
 
 
 def validate_board(item):
@@ -52,6 +52,13 @@ def validate_board(item):
     goal = item.get('goal_id', '')
     if not isinstance(goal, str) or (goal and 'goal:' + goal not in ids):
         raise ValueError('The primary goal must belong to the board.')
+    sizes = item.setdefault('node_sizes', {})
+    if not isinstance(sizes, dict) or len(sizes) > 10500 or any(
+        not isinstance(key, str) or type(value) is not int or not 1 <= value <= 10
+        for key, value in sizes.items()
+    ):
+        raise ValueError('Orb sizes must be whole numbers from 1 to 10.')
+    item['node_sizes'] = {key: value for key, value in sizes.items() if key in ids}
     return ids
 
 
@@ -205,6 +212,8 @@ class BoardStoreMixin:
                 board['root'] = shared_node
             if draft_id in board.get('positions', {}):
                 board['positions'][shared_node] = board['positions'].pop(draft_id)
+            if draft_id in board['node_sizes']:
+                board['node_sizes'][shared_node] = board['node_sizes'].pop(draft_id)
             for edge in board['edges']:
                 for end in ('source', 'target'):
                     if edge[end] == draft_id:
