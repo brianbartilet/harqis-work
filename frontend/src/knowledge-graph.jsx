@@ -1,5 +1,6 @@
 import {readGraphState} from './graph-state.mjs';
 import {placeLabels} from './graph-labels.mjs';
+import {boardCurvature} from './graph-curves.mjs';
 import {exampleGraph} from './knowledge-graph-example.js';
 import React, {useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
@@ -187,7 +188,8 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   function Graph({data,activeId,selectedId}) {
     const ref=useRef();
     const sizeTools=useRef(),actionTools=useRef(),connectorTools=useRef(),connectionTools=useRef(),hoverTimer=useRef(),gesture=useRef();
-    const [hoverId,setHoverId]=useState(null);
+    const [hoverId,setHoverId]=useState(null),[controlsFocused,setControlsFocused]=useState(false);
+    const sizeAnchor=useRef(null);
     const board=window.HflIdeas?.maps.current;
     const sizeNode=board?data.nodes.find(n=>n.id===(hoverId||selectedId)):null;
     const actionNode=board?data.nodes.find(n=>n.id===selectedId):null;
@@ -198,16 +200,17 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     const editable=connection&&(connection.local||connection.manual);
     const lineLevel=connection?(board.edge_widths?.[edgeKey(connection)]||2):2;
     const sizeLevel=sizeNode?(board.node_sizes?.[sizeNode.id]||3):3;
+    useEffect(()=>{if(!sizeNode||connectFrom||connection)setControlsFocused(false);},[sizeNode,connectFrom,connection]);
     useEffect(()=>()=>clearTimeout(hoverTimer.current),[]);
-    useEffect(()=>setHoverId(null),[data]);
+    useEffect(()=>setHoverId(null),[board?.id]);
     useEffect(()=>{setChosenEdge(null);setConnectFrom(null);setPreview(null);setConnectionMessage('');},[board?.id]);
     useEffect(()=>{if(selectedId)setChosenEdge(null);},[selectedId]);
     useEffect(()=>{
-      connectionInteraction=!!(connectFrom||connection||connectionBusy);
+      connectionInteraction=!!(hoverId||controlsFocused||connectFrom||connection||connectionBusy);
       const cancel=event=>{if(event.key==='Escape'){setConnectFrom(null);setPreview(null);setChosenEdge(null);setConnectionMessage('');}};
       document.addEventListener('keydown',cancel);
       return()=>{connectionInteraction=false;document.removeEventListener('keydown',cancel);};
-    },[connectFrom,connection,connectionBusy]);
+    },[hoverId,controlsFocused,connectFrom,connection,connectionBusy]);
     const cleanEdge=edge=>({source:endpointId(edge.source),target:endpointId(edge.target),relation:edge.relation||'related-to',direction:edge.direction||'forward'});
     async function connectionCommand(operation,replacement,extra={}){
       if(connectionBusy)return;
@@ -251,7 +254,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
         if(!parallelGroups.has(key))parallelGroups.set(key,[]);
         parallelGroups.get(key).push(link);
       }
-      for(const group of parallelGroups.values())group.forEach((link,index)=>curveOffsets.set(link,group.length<2?0:.16*(index-(group.length-1)/2)*(endpointId(link.source)<endpointId(link.target)?1:-1)));
+      for(const group of parallelGroups.values())group.sort((a,b)=>edgeKey(a).localeCompare(edgeKey(b))||Number(!!a.local)-Number(!!b.local)).forEach((link,index)=>curveOffsets.set(link,index-(group.length-1)/2));
     }
     function paintArrows(link,ctx){
       if(!board&&link.direction!=='both')return;
@@ -334,11 +337,13 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
         const origin=ref.current.screen2GraphCoords(0,0);
         if(sizeNode&&sizeTools.current){
           const point=ref.current.graph2ScreenCoords(sizeNode.x,sizeNode.y);
+          if(sizeAnchor.current?.id!==sizeNode.id)sizeAnchor.current={id:sizeNode.id,radius:sizeNode.radius};
+          const anchorRadius=sizeAnchor.current.radius;
           const toolsWidth=sizeTools.current.offsetWidth,toolsHeight=sizeTools.current.offsetHeight;
-          sizeTools.current.style.left=Math.max(4,Math.min(size.width-toolsWidth-4,point.x-sizeNode.radius-toolsWidth-24))+'px';
-          const toolsTop=point.x-sizeNode.radius-toolsWidth-24<4?point.y-sizeNode.radius-toolsHeight-24:point.y-toolsHeight/2;
+          sizeTools.current.style.left=Math.max(4,Math.min(size.width-toolsWidth-4,point.x-anchorRadius-toolsWidth-24))+'px';
+          const toolsTop=point.x-anchorRadius-toolsWidth-24<4?point.y-anchorRadius-toolsHeight-24:point.y-toolsHeight/2;
           sizeTools.current.style.top=Math.max(4,Math.min(size.height-toolsHeight-4,toolsTop))+'px';
-        }
+        }else sizeAnchor.current=null;
         if(actionNode&&actionTools.current){
           const point=ref.current.graph2ScreenCoords(actionNode.x,actionNode.y),panel=actionTools.current;
           const right=point.x+actionNode.radius+28,left=point.x-actionNode.radius-58-panel.offsetWidth;
@@ -364,7 +369,8 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
           pinned:!!n.manual,emphasis:n.id===activeId||n.id===selectedId
         }));
         ctx.save();
-        const labels=placeLabels(candidates,{width:size.width,height:size.height,zoom:scale,fullTitles:!!board},(text,font)=>{
+        const obstacles=[sizeTools,actionTools,connectionTools].map(tool=>tool.current).filter(Boolean).map(el=>({x:el.offsetLeft,y:el.offsetTop,w:el.offsetWidth,h:el.offsetHeight}));
+        const labels=placeLabels(candidates,{width:size.width,height:size.height,zoom:scale,fullTitles:!!board,obstacles},(text,font)=>{
           ctx.font=`500 ${font}px ${uiFont}`;return ctx.measureText(text).width;
         });
         for(const box of labels){
@@ -372,7 +378,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
           ctx.fillStyle=box.node.emphasis?'#142a42f5':'#0a1728ee';ctx.beginPath();
           ctx.roundRect(x,y,box.w/scale,box.h/scale,5/scale);ctx.fill();
           ctx.strokeStyle=ink+(box.node.emphasis?'90':'30');ctx.lineWidth=.6/scale;ctx.stroke();
-          ctx.font=`500 ${(box.node.emphasis?13:11)/scale}px ${uiFont}`;ctx.textAlign='left';ctx.textBaseline='middle';
+          ctx.font=`500 ${box.font/scale}px ${uiFont}`;ctx.textAlign='left';ctx.textBaseline='middle';
           ctx.fillStyle=box.node.emphasis?'#ffffff':'#d9e9fa';box.lines.forEach((line,index)=>ctx.fillText(line,x+6/scale,y+(12+index*16)/scale));
         }
         ctx.restore();
@@ -382,7 +388,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       linkColor={link=>color(board?link.source.kind:link.target.kind)+(connection===link?'ff':activeId?(isLinked(link)?'df':'07'):(data.nodes.length<=35?'70':'32'))}
       linkDirectionalArrowLength={link=>board||link.direction==='none'?0:link.manual?4:['ideas','actions','goals','drafts','boards'].includes(link.source.kind)||['ideas','actions','goals','drafts','boards'].includes(link.target.kind)?4:0}
       linkDirectionalArrowRelPos={0.8}
-      linkWidth={link=>board?([.7,1,1.4,1.9,2.5][(board.edge_widths?.[edgeKey(link)]||2)-1]+(connection===link?.4:0)):isLinked(link)?2:data.nodes.length<=35?1.1:.65} linkCurvature={link=>board?(curveOffsets.get(link)||0):.16}
+      linkWidth={link=>board?([.7,1,1.4,1.9,2.5][(board.edge_widths?.[edgeKey(link)]||2)-1]+(connection===link?.4:0)):isLinked(link)?2:data.nodes.length<=35?1.1:.65} linkCurvature={link=>board?boardCurvature(link,ref.current?.zoom()||1,curveOffsets.get(link)||0):.16}
       linkCanvasObjectMode={()=>'after'} linkCanvasObject={paintArrows} linkHoverPrecision={8}
       onLinkClick={link=>{if(!board||connectFrom||connectionBusy)return;select(null);setChosenEdge((link.local?'local:':'shared:')+edgeKey(link));setConnectionMessage('');}}
       linkLineDash={link=>link.local?[4,3]:null}
@@ -399,6 +405,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       onEngineStop={finishDrag}
 
     />{sizeNode&&!connectFrom&&!connection&&<div ref={sizeTools} className="kg-orb-size" role="group" aria-label={'Orb controls for '+sizeNode.label}
+      onFocus={()=>setControlsFocused(true)} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))setControlsFocused(false);}}
       onPointerEnter={()=>clearTimeout(hoverTimer.current)} onPointerLeave={()=>{hoverTimer.current=setTimeout(()=>setHoverId(null),250);}}
       onPointerDown={event=>event.stopPropagation()} onClick={event=>event.stopPropagation()}>
       <button type="button" aria-label="Increase orb size" title="Increase orb size" disabled={sizeLevel===20} onClick={()=>resizeOrb(1)}><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg></button>
@@ -417,7 +424,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
             {[...new Set(['related-to','supports','alternative','depends-on',connection.relation].filter(Boolean))].map(value=><option key={value} value={value}>{value.replaceAll('-',' ')}</option>)}
           </select></label>
           <label>Arrows<select aria-label="Connection arrows" disabled={connectionBusy} value={connection.direction||'forward'} onChange={event=>connectionCommand('update',{...cleanEdge(connection),direction:event.target.value})}>
-            <option value="forward">One-way</option><option value="both">Bidirectional</option><option value="none">No arrow</option>
+            <option value="forward">one-way</option><option value="both">bidirectional</option><option value="none">no arrow</option>
           </select></label>
           <button type="button" disabled={connectionBusy} onClick={()=>connectionCommand('update',{...cleanEdge(connection),source:connection.target.id,target:connection.source.id})}>Reverse direction</button>
           <div className="kg-line-size" role="group" aria-label="Line thickness on this board"><span>Line thickness</span><button type="button" aria-label="Decrease line thickness" disabled={connectionBusy||lineLevel===1} onClick={()=>connectionCommand('width',null,{width:lineLevel-1})}><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M4 10h12"/></svg></button><button type="button" aria-label="Increase line thickness" disabled={connectionBusy||lineLevel===5} onClick={()=>connectionCommand('width',null,{width:lineLevel+1})}><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg></button></div>

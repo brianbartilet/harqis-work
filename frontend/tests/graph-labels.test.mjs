@@ -34,3 +34,15 @@ test('offscreen labels are culled and edge selections remain visible',()=>{
   assert.equal(labels.length,1);assert.equal(labels[0].node.id,'selected');
   assert.ok(labels[0].x+labels[0].w<=800&&labels[0].y+labels[0].h<=600);
 });
+
+test('crowded board titles stay clear of each other and orb controls',()=>{
+  const obstacles=[{x:220,y:160,w:40,h:80}];
+  const nodes=Array.from({length:12},(_,i)=>({...node('board orb '+i,i),emphasis:i===0}));
+  const labels=placeLabels(nodes,{...viewport,fullTitles:true,obstacles},measure);
+  assert.equal(labels[0].node.id,'board orb 0');
+  assert.equal(labels[0].font,14);
+  assert.ok(labels.length<nodes.length);
+  for(let i=0;i<labels.length;i++)for(const b of [...labels.slice(i+1),...obstacles]){
+    const a=labels[i];assert.ok(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y);
+  }
+});
