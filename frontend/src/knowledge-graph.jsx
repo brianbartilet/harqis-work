@@ -26,10 +26,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   $('info').addEventListener('focus',()=>{infoPaused=true;});
   $('info').addEventListener('blur',()=>{infoPaused=false;});
   const kindLabel = kind => kind === 'companies' ? 'organizations' : kind.replaceAll('_', ' ');
-  const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3', ideas:'#f9ca74', actions:'#fb8ca6', goals:'#a7f3d0', drafts:'#c4b5fd'};
+  const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3', ideas:'#f9ca74', actions:'#fb8ca6', goals:'#a7f3d0', drafts:'#c4b5fd', boards:'#93c5fd'};
   const color = kind => palette[kind] || '#e9c96c';
   const defaultLabelKinds = new Set(['sources', 'people', 'tools', 'companies']);
-  let data = {nodes:[],edges:[]}, nodes = [], edges = [], selected = null, enabled = new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts']);
+  let data = {nodes:[],edges:[]}, nodes = [], edges = [], selected = null, enabled = new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards']);
   let exampleMode=new URLSearchParams(location.search).get('example')==='1';
   let requestVersion=0, requestController=null, backgroundController=null, appliedParams=null, graphSignature='', lastInteraction=0;
   const activePointers=new Set();
@@ -92,7 +92,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     settleDragNodes(dragNodes,layoutTargets,(node,target)=>motionOffset(animationMode,target,motionTime,node.phase,preset==='timeline'&&target.anchor));
     lastMotionFrame=performance.now();
     dragNodes.clear();
-    draw();scheduleStateSave();
+    draw();scheduleStateSave();if(window.HflIdeas?.maps.current)window.HflIdeas.maps.saveLayout();
   }
   const viewKey=()=>JSON.stringify([preset,[...enabled].sort(),focusId]);
   function syncDates(){for(const id of ['since','until'])$(id).disabled=$('rolling').value!=='0';}
@@ -105,7 +105,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   function requestParams(){
     const params=new URLSearchParams({since:$('since').value,until:$('until').value,rolling:$('rolling').value,limit:$('density').value,query:$('search').value,shared:String($('shared').checked)});
     const context=window.activityModals?.context();if(context)params.set('context',context);
-    if(window.HflIdeas?.maps.current)return new URLSearchParams({limit:'0'});
+    if(window.HflIdeas?.maps.current||new URL(location.href).searchParams.has('select'))return new URLSearchParams({limit:'0'});
     selectedSources.forEach(source=>params.append('sources',source));applyRollingDates(params);return params;
   }
   $('rolling').onchange=syncDates;
@@ -248,7 +248,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       nodeCanvasObject={paintNode}
       nodePointerAreaPaint={(node,paint,ctx)=>{ctx.fillStyle=paint;ctx.beginPath();ctx.arc(node.x,node.y,(node.radius+4)/(ref.current?.zoom()||1),0,2*Math.PI);ctx.fill();}}
       linkColor={link=>color(link.target.kind)+(activeId?(isLinked(link)?'df':'07'):(data.nodes.length<=35?'70':'32'))}
-      linkDirectionalArrowLength={link=>['ideas','actions','goals','drafts'].includes(link.source.kind)||['ideas','actions','goals','drafts'].includes(link.target.kind)?4:0}
+      linkDirectionalArrowLength={link=>['ideas','actions','goals','drafts','boards'].includes(link.source.kind)||['ideas','actions','goals','drafts','boards'].includes(link.target.kind)?4:0}
       linkDirectionalArrowRelPos={0.8}
       linkWidth={link=>isLinked(link)?2:data.nodes.length<=35?1.1:.65} linkCurvature={.16}
       linkLineDash={link=>link.local?[4,3]:null}
@@ -383,6 +383,9 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       data.edges.forEach(e=>{if(ids.has(e.source)&&ids.has(e.target)){linked.add(e.source);linked.add(e.target);}});
       if(linked.size)chosen=chosen.filter(n=>linked.has(n.id));
     }
+    // Explicit navigation/selection must survive the detail budget.
+    const selectedNode=filtered.find(n=>n.id===selected);
+    if(selectedNode&&!chosen.some(n=>n.id===selected))chosen=[...chosen.slice(0,Math.max(0,budget-1)),selectedNode];
     nodes=chosen.map((n,index)=>({...n,index,degree:degrees.get(n.id)||0}));
     const byId=new Map(nodes.map(n=>[n.id,n]));
     edges=data.edges.filter(e=>byId.has(e.source)&&byId.has(e.target)).map(e=>({...e,a:byId.get(e.source),b:byId.get(e.target)}));
@@ -407,6 +410,17 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       for(const node of nodes){
         if(boardPositions[node.id])continue;
         const target=layoutTargets.get(node.id);
+        // Growing a board must not move its camera or place the new object
+        // beyond the visible canvas. Find a free slot near the selected node.
+        if(graphApi){
+          const a=graphApi.screen2GraphCoords(45,45),b=graphApi.screen2GraphCoords(host.clientWidth-45,host.clientHeight-45);
+          if(target.x<a.x||target.x>b.x||target.y<a.y||target.y>b.y||overlaps(target)){
+            const origin=boardPositions[selected]||target,candidates=[],step=Math.max(100,(b.x-a.x)/30,(b.y-a.y)/30);
+            for(let x=a.x;x<=b.x;x+=step)for(let y=a.y;y<=b.y;y+=step)candidates.push({x,y});
+            candidates.sort((p,q)=>Math.hypot(p.x-origin.x,p.y-origin.y)-Math.hypot(q.x-origin.x,q.y-origin.y));
+            const free=candidates.find(p=>!overlaps(p));if(free)Object.assign(target,free);
+          }
+        }
         while(overlaps(target))target.y+=110;
         occupy(target);
       }
@@ -420,7 +434,9 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       node.fx=node.x;node.fy=node.y;node.phase=phaseFor(node.id);
     });
     transition=null;if(!preserveLayout)motionTime=0;
-    const restoredViewport=nodes.some(n=>pendingState?.positions?.[n.id])?pendingState?.viewport:null;
+    // Timeline opens on the latest week, even if an earlier session was panned
+    // away from the date row. Keep saved filters and node positions intact.
+    const restoredViewport=preset!=='timeline'&&nodes.some(n=>pendingState?.positions?.[n.id])?pendingState?.viewport:null;
     pendingState=null;
     if(window.HflIdeas)window.HflIdeas.maps.pendingPositions=null;
     graphData={nodes,viewport:restoredViewport,fitOnce:!preserveLayout,links:edges.map(e=>({source:e.source,target:e.target,local:!!e.local}))};
@@ -430,9 +446,16 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     select(byId.has(selected)?selected:null);
   }
   function configureData(next,preserveLayout=false) {
+    for(const node of next.nodes)if(node.kind!=='drafts')window.HflIdeas?.maps.cacheNode(node);
+    for(const edge of next.edges)if(!edge.local)window.HflIdeas?.maps.sharedEdges.set(JSON.stringify([edge.source,edge.target,edge.relation]),edge);
     const map=window.HflIdeas?.maps.current;
     if(map){const members=new Set(map.members);const drafts=(map.drafts||[]).map(d=>({id:d.id,label:d.title,body:d.body,kind:'drafts',status:'board draft'}));next={...next,nodes:[...next.nodes.filter(n=>members.has(n.id)),...drafts],edges:[...next.edges.filter(e=>members.has(e.source)&&members.has(e.target)),...(map.edges||[]).map(e=>({...e,local:true,method:'board',evidence:'Board-only connection'}))]};next.total_nodes=next.nodes.length;next.truncated=false;}
     data=next;
+    const requestedSelection=new URL(location.href).searchParams.get('select');
+    if(requestedSelection&&next.nodes.some(n=>n.id===requestedSelection)){
+      selected=requestedSelection;focusId=null;$('search').value='';enabled.add(next.nodes.find(n=>n.id===selected).kind);
+      const url=new URL(location.href);url.searchParams.delete('select');history.replaceState(null,'',url);
+    }
     if(window.HflIdeas)window.HflIdeas.maps.nodeLabels=Object.fromEntries(next.nodes.map(n=>[n.id,n.label]));
     if(focusId&&!data.nodes.some(node=>node.id===focusId))focusId=null;
     if(selected&&!data.nodes.some(node=>node.id===selected))selected=null;
@@ -469,12 +492,27 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     }
     $('source-caption').textContent=selectedSources.size?selectedSources.size+' sources selected':'All sources';
   }
-  async function load() {
+  async function load(force=false) {
     delete $('info').dataset.error;
     backgroundController?.abort();
 
     requestController?.abort(); const version=++requestVersion;
     if(exampleMode){setLoading(false);configureData(exampleGraph());return;}
+    const board=window.HflIdeas?.maps.current;
+    if(board){
+      appliedParams=null;
+      try{
+        let shared={nodes:board.members.map(id=>window.HflIdeas.maps.nodes.get(id)).filter(Boolean),edges:[...window.HflIdeas.maps.sharedEdges.values()],sources:[]};
+        if(force===true||shared.nodes.length!==board.members.length){
+          shared=await window.HflIdeas.api('/maps/'+board.id+'/graph');
+          if(version!==requestVersion||window.HflIdeas.maps.current?.id!==board.id)return;
+          board.members.forEach(id=>window.HflIdeas.maps.nodes.delete(id));
+          for(const [key,edge] of window.HflIdeas.maps.sharedEdges)if(board.members.includes(edge.source)&&board.members.includes(edge.target))window.HflIdeas.maps.sharedEdges.delete(key);
+        }
+        configureData(shared);setLoading(false);
+      }catch(error){setLoading(false);showInfo('status',error.message,true);}
+      return;
+    }
     requestController=new AbortController(); setLoading(true);showInfo('status','Loading your graph…',true);
     try {
       const params=requestParams();
@@ -495,7 +533,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   host.addEventListener('wheel',()=>{lastInteraction=Date.now();},{passive:true});
   let refreshDelay=3000,nextRefresh=0;
   async function refreshInBackground(){
-    if(busy()||backgroundController||!appliedParams||Date.now()<nextRefresh)return;
+    if(window.HflIdeas?.maps.current||busy()||backgroundController||!appliedParams||Date.now()<nextRefresh)return;
     const started=Date.now(),controller=new AbortController(),version=requestVersion,key=viewKey();backgroundController=controller;
     const timeout=setTimeout(()=>controller.abort('timeout'),45000);
     try{
@@ -519,14 +557,14 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   window.addEventListener('pagehide',()=>{backgroundController?.abort();});
   let searchTimer;$('search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>exampleMode?render():load(),300);};
   $('filter').onclick=()=>{$('filter-drawer').close();if(!exampleMode)load();};
-  $('density').onchange=()=>{saveDetail();exampleMode?render():load();};$('shared').onchange=()=>exampleMode?render():load();$('in').onclick=()=>zoom(1.3);$('out').onclick=()=>zoom(1/1.3);$('fit').onclick=()=>fitTargets(true,true);$('reload').onclick=async()=>{try{await window.HflIdeas?.maps.reload();await load();}catch(error){showInfo('status',error.message,true);}};
+  $('density').onchange=()=>{saveDetail();exampleMode?render():load();};$('shared').onchange=()=>exampleMode?render():load();$('in').onclick=()=>zoom(1.3);$('out').onclick=()=>zoom(1/1.3);$('fit').onclick=()=>fitTargets(true,true);$('reload').onclick=async()=>{try{await window.HflIdeas?.maps.reload();await load(true);}catch(error){showInfo('status',error.message,true);}};
   $('reset').onclick=()=>{
     pendingState=null;try {localStorage.removeItem(stateKey);} catch {}
     window.activityModals?.reset();preset='timeline';setAnimation('off');
     $('search').value='';$('density').value='100';$('rolling').value='0';$('since').value='';$('until').value='';
     saveDetail();
     selectedSources.clear();sourceOptions(data.sources||[]);syncDates();$('shared').checked=false;
-    enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts']);selected=null;focusId=null;exampleMode?render():load();
+    enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards']);selected=null;focusId=null;exampleMode?render():load();
   };
 
 
@@ -567,7 +605,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       if(typeof value==='string'&&($(id).tagName!=='SELECT'||[...$(id).options].some(o=>o.value===value)))$(id).value=value;
     }
     $('shared').checked=pendingState.filters.shared===true;
-    enabled=new Set([...pendingState.enabled,'ideas','actions','goals','drafts']);pendingState.sources.forEach(s=>selectedSources.add(s));
+    enabled=new Set([...pendingState.enabled,'ideas','actions','goals','drafts','boards']);pendingState.sources.forEach(s=>selectedSources.add(s));
     if(PRESETS[pendingState.preset])preset=pendingState.preset;
     if(Number.isFinite(pendingState.layoutSeed))layoutSeed=pendingState.layoutSeed;
     selected=typeof pendingState.selected==='string'?pendingState.selected:null;
@@ -579,7 +617,13 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   requestAnimationFrame(animate);
   if(window.HflIdeas){
     window.HflIdeas.maps.getPositions=()=>Object.fromEntries(nodes.map(n=>[n.id,{x:n.x,y:n.y}]));
-    window.addEventListener('hfl:ideas-updated',event=>{if(event.detail?.boardSwitch){pendingState=null;selected=null;enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts']);}if(event.detail?.selectId)selected=event.detail.selectId;focusId=null;if(!window.HflIdeas.maps.current&&preset==='mindmap')preset='timeline';load();});
+    window.addEventListener('hfl:ideas-updated',event=>{if(event.detail?.boardSwitch){pendingState=null;selected=null;enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards']);}if(event.detail?.selectId)selected=event.detail.selectId;
+      if(event.detail?.boardLocal&&!event.detail?.boardSwitch){
+        const board=window.HflIdeas.maps.current;
+        configureData({nodes:board.members.map(id=>window.HflIdeas.maps.nodes.get(id)).filter(Boolean),edges:[...window.HflIdeas.maps.sharedEdges.values()],sources:[]},true);
+        return;
+      }
+      focusId=null;if(!window.HflIdeas.maps.current&&preset==='mindmap')preset='timeline';load();});
     window.HflIdeas.maps.init(document.getElementById('idea-map-tools')).then(load);
   }else load();
 })();

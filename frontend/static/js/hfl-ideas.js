@@ -16,14 +16,14 @@ window.HflObjectDescription = (item = {}) => {
   const el = (tag, text, cls) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (cls) node.className = cls; return node; };
   const token = () => document.querySelector('[data-input-editor]')?.dataset.csrf || '';
   async function request(url, options = {}) {
-    const response = await fetch(url, {...options, headers: {'Content-Type': 'application/json', 'X-CSRF-Token': token(), ...options.headers}});
+    const response = await fetch(url, {...options, signal:options.signal || AbortSignal.timeout(45000), headers: {'Content-Type': 'application/json', 'X-CSRF-Token': token(), ...options.headers}});
     let data; try { data = await response.json(); } catch { throw Error('The service could not respond. Retry shortly.'); }
     if (!response.ok) throw Error(typeof data.detail === 'string' ? data.detail : 'Could not save. Check the fields and retry.');
     return data;
   }
   const api = (path, method = 'GET', data) => request(base + path, {method, ...(data === undefined ? {} : {body: JSON.stringify(data)})});
   const button = (text, action) => { const b = el('button', text); b.type = 'button'; b.onclick = action; return b; };
-  const changed = (selectId = null, boardSwitch = false) => { window.dispatchEvent(new CustomEvent('hfl:ideas-updated', {detail:{selectId,boardSwitch}})); window.dispatchEvent(new Event('hfl:actions-updated')); };
+  const changed = (selectId = null, boardSwitch = false) => { window.dispatchEvent(new CustomEvent('hfl:ideas-updated', {detail:{selectId,boardSwitch,boardLocal:!!maps.current}})); if(!maps.current)window.dispatchEvent(new Event('hfl:actions-updated')); };
   function dialog(title) {
     const node = el('dialog', undefined, 'idea-dialog agenda-dialog'); const form = el('form');
     const heading = el('h2', title); const header = el('header', undefined, 'agenda-dialog-header'); header.append(heading); heading.id = 'idea-title-' + crypto.randomUUID(); node.setAttribute('aria-labelledby', heading.id);
@@ -39,7 +39,7 @@ window.HflObjectDescription = (item = {}) => {
     input.name = name; input.value = value || ''; input.required = required; input.maxLength = max; label.append(input); root.append(label); return input;
   }
   function selectField(root, name, title, values, value) {
-    const label = el('label', title), select = el('select'); select.name = name;
+    const label = el('label', title), select = el('select'); select.name = name; select.setAttribute('aria-label', title);
     for (const [key, text] of values) { const option = el('option', text); option.value = key; select.append(option); }
     select.value = value; label.append(select); root.append(label); return select;
   }
@@ -70,7 +70,7 @@ window.HflObjectDescription = (item = {}) => {
   async function openEditor(kind, item = {}, parent = null, conversion = null) {
     const d = dialog(conversion ? 'Create actionable from idea' : item.id ? 'Edit ' + kind : 'New ' + kind);
     let current = item.id ? item : null, source = item.source || null, files, checklists, save;
-    const requestId = crypto.randomUUID();
+    const requestId = crypto.randomUUID(), editingBoard = maps.current?.id;
     try {
       if (!source) source = await sourceFor(parent);
       if (!d.node.open) return;
@@ -149,8 +149,14 @@ window.HflObjectDescription = (item = {}) => {
             current = (await request('/hfl-corpus/timeline/items/' + current.id, {method: 'PATCH', body: JSON.stringify({version: current.version, prompt})})).item;
           }
           const nodeId = (kind === 'idea' ? 'idea:' : 'action:') + current.id;
-          if (parent) await api('/links', 'POST', {source: parent.id, target: nodeId, relation: parent.kind === 'daily' ? 'source-date' : 'related-to'});
-          await maps.addMembers([nodeId, ...(parent ? [parent.id] : [])]);
+          maps.cacheNode({...current,id:nodeId,object_id:current.id,label:current.title,kind:kind === 'idea' ? 'ideas' : 'actions'});
+          if(parent?.kind==='drafts') {
+            if(maps.current?.id!==editingBoard)throw Error('Return to the original board to finish linking this saved object.');
+            await maps.persist({members:[...new Set([...maps.current.members,nodeId])],edges:[...maps.current.edges.filter(e=>!(e.source===parent.id&&e.target===nodeId)),{source:parent.id,target:nodeId,relation:'related-to'}]});
+          } else {
+            if(parent)await api('/links','POST',{source:parent.id,target:nodeId,relation:parent.kind==='daily'?'source-date':'related-to'});
+            await maps.addMembers([nodeId,...(parent?[parent.id]:[])]);
+          }
           d.node.close(); changed();
         } catch (error) { d.error.textContent = error.message + (current ? ' The object is saved; retry to finish remaining changes.' : ''); }
         finally { save.disabled = false; d.body.inert = false; }
@@ -173,7 +179,7 @@ window.HflObjectDescription = (item = {}) => {
         list.replaceChildren();
         graph.nodes.filter(n => !maps.current.members.includes(n.id) && n.label.toLowerCase().includes(search.value.toLowerCase())).slice(0, 100).forEach(n => {
           list.append(button(n.label + ' · ' + n.kind, async () => {
-            try { await maps.addMembers([n.id]); d.node.close(); changed(); }
+            try { maps.cacheNode(n); await maps.addMembers([n.id]); d.node.close(); changed(); }
             catch (error) { d.error.textContent = error.message; }
           }));
         });
@@ -195,24 +201,25 @@ window.HflObjectDescription = (item = {}) => {
     const id = identity || 'draft:' + crypto.randomUUID();
     const save = el('button', 'Save thought'); save.type = 'submit'; d.footer.append(save);
     d.form.onsubmit = async event => { event.preventDefault(); save.disabled = true; try {
-      if (maps.current?.id !== board.id || maps.current.version !== board.version) throw Error('The board changed. Reopen this thought before saving.');
-      const edge = parent || board.root;
-      await maps.persist({drafts: [...board.drafts.filter(t => t.id !== id), {id, title: title.value, body: body.value}], edges: [...board.edges, ...(!existing && edge && edge !== id ? [{source: edge, target: id, relation: 'related-to'}] : [])], root: board.root || id}); d.node.close(); changed();
+      if(maps.current?.id!==board.id)throw Error('Return to this board before saving.');
+      const live=maps.current;
+      if(existing&&JSON.stringify(live.drafts.find(t=>t.id===id))!==JSON.stringify(existing))throw Error('This thought changed. Reopen it before saving.');
+      const edge = parent || live.root;
+      await maps.persist({drafts: [...live.drafts.filter(t => t.id !== id), {id, title: title.value, body: body.value}], edges: [...live.edges, ...(!existing && edge && edge !== id ? [{source: edge, target: id, relation: 'related-to'}] : [])], root: live.root || id}); d.node.close(); changed();
     } catch (error) { d.error.textContent = error.message; } finally { save.disabled = false; } };
   }
   async function connectThought(node) {
     const board = maps.current, d = dialog('Connect on this board');
     try {
-      const graph = await request('/api/hfl/entities/graph?limit=0');
-      const choices = [...graph.nodes.filter(n => board.members.includes(n.id)), ...board.drafts.map(t => ({id: t.id, label: t.title}))].filter(n => n.id !== node.id);
+      const choices = [...board.members.map(id=>({id,label:maps.nodes.get(id)?.label||id})), ...board.drafts.map(t => ({id: t.id, label: t.title}))].filter(n => n.id !== node.id);
       const target = selectField(d.body, 'target', 'Connect to', choices.map(n => [n.id, n.label]), choices[0]?.id || '');
       const relation = selectField(d.body, 'relation', 'Relationship', [['related-to','Related to'],['supports','Supports'],['alternative','Alternative'],['depends-on','Depends on']], 'related-to');
       d.body.append(el('p', 'This connection stays on this board.'));
       const save = el('button', 'Save connection'); save.type = 'submit'; save.disabled = !choices.length; d.footer.append(save);
       d.form.onsubmit = async event => { event.preventDefault(); save.disabled = true; try {
-        if (maps.current?.id !== board.id || maps.current.version !== board.version) throw Error('The board changed. Reopen the connection editor.');
+        if(maps.current?.id!==board.id)throw Error('Return to this board before saving.');
         const edge = {source: node.id, target: target.value, relation: relation.value};
-        await maps.persist({edges: [...board.edges.filter(e => !(e.source === edge.source && e.target === edge.target && e.relation === edge.relation)), edge]}); d.node.close(); changed();
+        await maps.persist({edges: [...maps.current.edges.filter(e => !(e.source === edge.source && e.target === edge.target && e.relation === edge.relation)), edge]}); d.node.close(); changed();
       } catch (error) { d.error.textContent = error.message; } finally { save.disabled = false; } };
     } catch (error) { d.error.textContent = error.message; }
   }
@@ -259,6 +266,7 @@ window.HflObjectDescription = (item = {}) => {
         const values = {title: title.value, body: body.value, success_criteria: criteria.value, status: status.value, target_date: date.value, progress_notes: notes.value, milestones: rows.map(r => ({id:r.id,title:r.title.value,status:r.status.value,target_date:r.date.value,actions:[...r.actions.selectedOptions].map(o=>o.value)})), ...(item.id ? {version:item.version} : {request_id:key})};
         values.linked_objects = [...links.selectedOptions].map(o => o.value);
         item = (await api('/goals' + (item.id ? '/' + item.id : ''), item.id ? 'PATCH' : 'POST', values)).item;
+        maps.goals=[...maps.goals.filter(g=>g.id!==item.id),item];maps.cacheNode({...item,id:'goal:'+item.id,object_id:item.id,label:item.title,kind:'goals'});
         if (maps.current) await maps.addMembers(['goal:' + item.id]); d.node.close(); changed();
       } catch (error) { d.error.textContent = error.message; } finally { save.disabled = false; } };
       let controller;
@@ -283,12 +291,19 @@ window.HflObjectDescription = (item = {}) => {
   }
   function inspect(node, root, edges) {
     if (!node) return;
+    if(['drafts','goals'].includes(node.kind)){
+      const key=node.kind==='drafts'?maps.current.id+'/'+node.id:node.id;
+      const memory=el('a','View memory history','idea-inspector-status');
+      memory.href='/hfl-corpus?'+new URLSearchParams({q:key});memory.target='_blank';memory.rel='noopener';root.append(memory);
+    }
     if (node.kind === 'drafts') {
-      root.append(el('p', 'This thought and its connections belong only to this board.'), button('Edit thought', () => editThought(node.id)), button('Promote to shared Idea', async () => {
-        try { const result = await api('/maps/' + maps.current.id + '/promote', 'POST', {draft_id: node.id, version: maps.current.version}); await maps.reload(); changed('idea:' + result.idea_id); }
+      root.append(el('p', 'This thought belongs to this board. Saved content changes are recorded in HFL memory.'), button('Edit thought', () => editThought(node.id)), button('Promote to shared Idea', async () => {
+        try { await maps.flush(); const result = await api('/maps/' + maps.current.id + '/promote', 'POST', {draft_id: node.id, version: maps.current.version}); await maps.reload(); const {item}=await api('/objects/'+result.idea_id); maps.cacheNode({...item,id:'idea:'+item.id,object_id:item.id,label:item.title,kind:'ideas'}); changed('idea:' + result.idea_id); }
         catch (error) { maps.status.textContent = error.message; }
       }));
     }
+    if(node.kind==='drafts')root.append(button('Create linked Idea',()=>openEditor('idea',{title:node.label,body:node.body},node)),button('Create linked Actionable',()=>openEditor('actionable',{title:node.label,body:node.body},node)));
+    if(node.kind==='boards')root.append(button('Open board',async()=>{try{await maps.selectBoard((await api('/maps/'+node.object_id)).item);}catch(error){maps.status.textContent=error.message;}}));
     if (node.kind === 'goals') root.append(el('p', node.success_criteria || 'Add success criteria to define achievement.'), button('Edit Goal / milestones', () => editGoal(node.object_id)));
     if (maps.current) root.append(button('Add thought', () => editThought(null, node.id)), button('Connect on this board', () => connectThought(node)), button('Use as starting point', async () => { try { await maps.persist({root: node.id}); changed(); } catch (error) { maps.status.textContent = error.message; } }));
     else root.append(button('Start board from this', () => maps.edit(null, node)));
@@ -321,24 +336,46 @@ window.HflObjectDescription = (item = {}) => {
     const local = edges.filter(e => e.local && (e.source === node.id || e.target === node.id));
     if (local.length) root.append(button('Board connections', () => {
       const d = dialog('Board connections');
-      for (const edge of local) { const row = el('p', edge.relation + ' · ' + (maps.nodeLabels?.[edge.source === node.id ? edge.target : edge.source] || (edge.source === node.id ? edge.target : edge.source))); row.append(button('Remove connection', async () => { try { await maps.persist({edges: maps.current.edges.filter(e => !(e.source === edge.source && e.target === edge.target && e.relation === edge.relation))}); row.remove(); changed(); } catch (error) { d.error.textContent = error.message; } })); if (!edge.source.startsWith('draft:') && !edge.target.startsWith('draft:')) row.append(button('Promote shared connection', async () => { try { await api('/maps/' + maps.current.id + '/promote-link', 'POST', {version:maps.current.version,edge:{source:edge.source,target:edge.target,relation:edge.relation}}); await maps.reload(); row.remove(); changed(); } catch (error) { d.error.textContent = error.message; } })); d.body.append(row); }
+      for (const edge of local) { const row = el('p', edge.relation + ' · ' + (maps.nodeLabels?.[edge.source === node.id ? edge.target : edge.source] || (edge.source === node.id ? edge.target : edge.source))); row.append(button('Remove connection', async () => { try { await maps.persist({edges: maps.current.edges.filter(e => !(e.source === edge.source && e.target === edge.target && e.relation === edge.relation))}); row.remove(); changed(); } catch (error) { d.error.textContent = error.message; } })); if (!edge.source.startsWith('draft:') && !edge.target.startsWith('draft:')) row.append(button('Promote shared connection', async () => { try { await maps.flush(); await api('/maps/' + maps.current.id + '/promote-link', 'POST', {version:maps.current.version,edge:{source:edge.source,target:edge.target,relation:edge.relation}}); maps.sharedEdges.set(JSON.stringify([edge.source,edge.target,edge.relation]),{source:edge.source,target:edge.target,relation:edge.relation,manual:true}); await maps.reload(); row.remove(); changed(); } catch (error) { d.error.textContent = error.message; } })); d.body.append(row); }
     }));
     const links = edges.filter(e => e.manual && (e.source === node.id || e.target === node.id));
     if (links.length) root.append(button('Manage links', () => {
       const d = dialog('Connections');
-      for (const link of links) { const row = el('p', (link.source === node.id ? link.target : link.source) + ' · ' + link.relation); row.append(button('Unlink', async () => { try { await api('/links', 'DELETE', {source: link.source, target: link.target, relation: link.relation}); row.remove(); changed(); } catch (error) { d.error.textContent = error.message; } })); d.body.append(row); }
+      for (const link of links) { const row = el('p', (link.source === node.id ? link.target : link.source) + ' · ' + link.relation); row.append(button('Unlink', async () => { try { await api('/links', 'DELETE', {source: link.source, target: link.target, relation: link.relation});maps.sharedEdges.delete(JSON.stringify([link.source,link.target,link.relation])); row.remove(); changed(); } catch (error) { d.error.textContent = error.message; } })); d.body.append(row); }
     }));
   }
   const maps = {
     current: null, loaded: [], pendingPositions: null, getPositions: () => ({}),
+    queues:new Map(),nodes:new Map(),sharedEdges:new Map(),goals:[],
+    cacheNode(node){this.nodes.set(node.id,node);},
+    queue(board=this.current){
+      if(!board)return null;
+      if(!this.queues.has(board.id))this.queues.set(board.id,new HflBoardSaveQueue(board,
+        async fields=>(await api('/maps/'+board.id,'PATCH',fields)).item,
+        async ()=>(await api('/maps/'+board.id)).item,
+        (item,status)=>{this.loaded=this.loaded.map(b=>b.id===item.id?item:b);if(this.current?.id===item.id){this.current=item;this.render();this.status.textContent=status;}}));
+      return this.queues.get(board.id);
+    },
+    async flush(){return this.queue()?.flush();},
+    async saveNow(){try{await this.flush();}catch(error){this.status.textContent=error.message+' · Unsaved edits retained.';}},
+    resolveSave(){
+      const q=this.queue(),d=dialog('Resolve unsaved changes');
+      d.body.append(el('p','Your unsaved changes are retained below. Copy them before choosing to discard them and reload the saved board.'));
+      const backup=field(d.body,'backup','Unsaved changes',JSON.stringify(q.pending,null,2),'textarea');backup.readOnly=true;
+      d.footer.append(button('Discard pending changes and reload',async()=>{try{
+        const {item}=await api('/maps/'+q.value.id);clearTimeout(q.timer);this.queues.delete(item.id);this.current=item;this.loaded=this.loaded.map(b=>b.id===item.id?item:b);this.pendingPositions=item.positions;this.render();d.node.close();changed(null,true);
+      }catch(error){d.error.textContent=error.message;}}));
+    },
     async init(root) {
       if (!root) return;
       this.root = root; if (matchMedia('(max-width:760px)').matches) root.closest('details').open = false;
       this.status = el('p', '', 'idea-map-status'); this.status.setAttribute('role', 'status');
-      try { const data = await api('/snapshot'); this.loaded = data.maps; const params = new URL(location.href).searchParams; this.current = this.loaded.find(m => m.id === (params.get('board') || params.get('map'))) || null; this.pendingPositions = this.current?.positions || {}; this.render(); }
+      try { const data = await api('/boards'); this.goals=data.goals; this.loaded = data.maps; const params = new URL(location.href).searchParams; this.current = this.loaded.find(m => m.id === (params.get('board') || params.get('map'))) || null; this.pendingPositions = this.current?.positions || {}; this.render(); }
       catch (error) { root.append(this.status); this.status.textContent = error.message; }
     },
-    selectBoard(board) {
+    async selectBoard(board) {
+      if(this.current&&this.current.id!==board?.id){try{await this.flush();}catch(error){this.status.textContent=error.message+' · Save this board before switching.';return;}}
+      board=board?(this.queues.get(board.id)?.value||board):null;
       const search = document.getElementById('kg-search');
       if (!this.current && board) this.activityQuery = search.value;
       search.value = board ? '' : (this.activityQuery || '');
@@ -357,14 +394,18 @@ window.HflObjectDescription = (item = {}) => {
       if (!this.loaded.length) this.root.append(el('p', 'Start a board with a question, idea, or goal.', 'board-hint'));
       if (!this.current) return;
       const board = this.current, section = el('section', undefined, 'board-controls'); section.append(el('h2', board.name), el('p', board.purpose, 'board-purpose'));
-      section.append(button('Add thought', () => editThought()), button('Attach existing', () => chooseMapMembers()), button('Board settings', () => this.edit(board)), button('Save layout', () => this.saveLayout()), button('Ask agent', () => this.brainstorm()), button('Delete board', () => this.remove()));
+      section.append(button('Add thought', () => editThought()), button('Attach existing', () => chooseMapMembers()), button('Board settings', () => this.edit(board)), button('Save now',()=>this.saveNow()), button('Save layout', () => this.saveLayout()), button('Ask agent', () => this.brainstorm()), button('Delete board', () => this.remove()));
+      const pending=this.queues.get(board.id);
+      if(pending?.error)section.append(button('Retry save',()=>this.saveNow()),button('Resolve unsaved changes',()=>this.resolveSave()));
       this.root.append(section);
     },
-    async reload() { if (!this.root) return; const id = this.current?.id; const data = await api('/snapshot'); this.loaded = data.maps; this.current = this.loaded.find(m => m.id === id) || null; this.pendingPositions = this.current?.positions || {}; this.render(); },
-    async persist(fields) {
-      if (!this.current) return;
-      const {item} = await api('/maps/' + this.current.id, 'PATCH', {...fields, version: this.current.version}); this.current = item; this.loaded = this.loaded.map(m => m.id === item.id ? item : m); this.render(); this.status.textContent = 'Board saved';
+    async reload(){
+      if(!this.root)return;
+      if(!this.current){const data=await api('/boards');this.loaded=data.maps;this.goals=data.goals;this.render();return;}
+      await this.flush();const {item}=await api('/maps/'+this.current.id);
+      this.queues.delete(item.id);this.current=item;this.loaded=this.loaded.map(b=>b.id===item.id?item:b);this.render();
     },
+    async persist(fields){if(this.current){this.queue().edit({positions:{...this.current.positions,...this.getPositions()},...fields});this.pendingPositions=this.current.positions;}},
     async addMembers(ids) { if (this.current) { await this.persist({members: [...new Set([...this.current.members, ...ids])], positions: {...this.current.positions, ...this.getPositions()}}); this.pendingPositions = this.current.positions; } },
     async removeMember(id) {
       try { const board = this.current, positions = {...board.positions}; delete positions[id];
@@ -374,7 +415,7 @@ window.HflObjectDescription = (item = {}) => {
     async saveLayout() { if (!this.current) return; try { await this.persist({positions: {...this.current.positions, ...this.getPositions()}}); } catch (error) { this.status.textContent = error.message; } },
     remove() {
       const board = this.current, d = dialog('Delete board'); d.body.append(el('p', 'Delete “' + board.name + '” and its draft thoughts? Shared Goals, Ideas, and Actions will remain.'));
-      const remove = button('Delete board', async () => { remove.disabled = true; try { await api('/maps/' + board.id, 'DELETE', {version: board.version}); await this.reload(); this.selectBoard(null); d.node.close(); } catch (error) { d.error.textContent = error.message; remove.disabled = false; } }); d.footer.append(remove);
+      const remove = button('Delete board', async () => { remove.disabled = true; try { await this.flush(); await api('/maps/' + board.id, 'DELETE', {version:this.current.version});this.queues.delete(board.id);this.loaded=this.loaded.filter(b=>b.id!==board.id);this.current=null;this.selectBoard(null); d.node.close(); } catch (error) { d.error.textContent = error.message; remove.disabled = false; } }); d.footer.append(remove);
     },
     async edit(current = null, seed = null) {
       const d = dialog(current ? 'Board settings' : 'New board');
@@ -382,20 +423,26 @@ window.HflObjectDescription = (item = {}) => {
       const purpose = field(d.body, 'purpose', 'What are you exploring or trying to achieve?', current?.purpose || seed?.label, 'textarea', true, 3000);
       const starting = current || seed ? null : field(d.body, 'seed', 'Starting thought (optional)', '', 'text', false, 200);
       const goal = selectField(d.body, 'goal_id', 'Primary Goal (optional)', [['', 'No primary Goal']], '');
-      try { const data = await api('/snapshot'); for (const g of data.goals || []) { const option = el('option', g.title); option.value = g.id; goal.append(option); } goal.value = current?.goal_id || (seed?.kind === 'goals' ? seed.object_id : ''); } catch (error) { d.error.textContent = error.message; }
+      for(const g of this.goals){const option=el('option',g.title);option.value=g.id;goal.append(option);}
+      goal.value=current?.goal_id||(seed?.kind==='goals'?seed.object_id:'');
+      const now=new Date(),today=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,10);
+      const boardDate=field(d.body,'board_date','Board date',current?.board_date||today,'date',true);
+      if(current)d.body.append(el('p','Created: '+(current.created_at||'Unknown (legacy board)')+' · Updated: '+(current.updated_at||'Unknown'),'board-hint'));
       const prompt = field(d.body, 'prompt', 'Agent instructions (optional)', current?.prompt, 'textarea', false, 20000);
       const agent = current ? null : selectField(d.body, 'agent', 'Start with', [['manual','My own thoughts'],['agent','An agent-generated draft board']], 'manual');
       const save = el('button', 'Save board'); save.type = 'submit'; d.footer.append(save); const key = crypto.randomUUID(), draftId = 'draft:' + crypto.randomUUID();
       d.form.onsubmit = async event => { event.preventDefault(); save.disabled = true; try {
+        if(current){await this.flush();current=this.current;}
         const members = [...new Set([...(current?.members || []), ...(seed ? [seed.id] : []), ...(goal.value ? ['goal:' + goal.value] : [])])];
         const root = current?.root || seed?.id || (goal.value ? 'goal:' + goal.value : draftId);
         const drafts = current?.drafts || (root === draftId ? [{id: draftId, title: starting?.value.trim() || name.value, body: purpose.value}] : []);
-        const {item} = await api('/maps' + (current ? '/' + current.id : ''), current ? 'PATCH' : 'POST', {name: name.value, purpose: purpose.value, root, goal_id: goal.value, members, drafts, prompt: prompt.value || 'Develop this board toward its purpose. Propose alternatives, assumptions to test, and concrete next steps.', ...(current ? {version: current.version} : {request_id: key, positions: {}})});
-        this.loaded = [...this.loaded.filter(m => m.id !== item.id), item]; this.selectBoard(item); d.node.close(); if (agent?.value === 'agent') this.brainstorm();
+        const {item} = await api('/maps' + (current ? '/' + current.id : ''), current ? 'PATCH' : 'POST', {name: name.value, purpose: purpose.value, board_date:boardDate.value, root, goal_id: goal.value, members, drafts, prompt: prompt.value || 'Develop this board toward its purpose. Propose alternatives, assumptions to test, and concrete next steps.', ...(current ? {version: current.version} : {request_id: key, positions: {}})});
+        this.queues.delete(item.id);this.loaded=[...this.loaded.filter(m=>m.id!==item.id),item];if(seed)this.cacheNode(seed);const selectedGoal=this.goals.find(g=>g.id===goal.value);if(selectedGoal)this.cacheNode({...selectedGoal,id:'goal:'+selectedGoal.id,object_id:selectedGoal.id,label:selectedGoal.title,kind:'goals'});this.selectBoard(item); d.node.close(); if (agent?.value === 'agent') this.brainstorm();
       } catch (error) { d.error.textContent = error.message; } finally { save.disabled = false; } };
     },
     async brainstorm() {
       if (!this.current) { this.status.textContent = 'Create or select a board first.'; return; }
+      try{await this.flush();}catch(error){this.status.textContent=error.message;return;}
       const map = this.current; const d = dialog('Agent board planning · ' + map.name);
       d.body.append(el('p', 'The agent proposes ideas and connections for your review. Accept individual suggestions to save them.'));
       const output = el('div'), status = el('p'); d.body.append(status, output); let timer, busy = false;
@@ -426,7 +473,7 @@ window.HflObjectDescription = (item = {}) => {
                 row.append(button('Review / add thought', async () => {
                   const review = dialog('Review suggested thought'); const title = field(review.body, 'title', 'Title', idea.title, 'text', true, 200), body = field(review.body, 'body', 'Markdown description', window.HflObjectDescription(idea), 'textarea', false, 60000);
                   const accept = el('button', 'Add to board'); accept.type = 'submit'; review.footer.append(accept);
-                  review.form.onsubmit = async event => { event.preventDefault(); accept.disabled = true; try { await request('/hfl-corpus/agent-bridge/mindmaps/' + map.id + '/accept-proposal', {method: 'POST', body: JSON.stringify({run_id: run.id, index, item: {title: title.value, description: '', body: body.value}})}); const latest = await api('/snapshot'); this.loaded = latest.maps; this.current = latest.maps.find(m => m.id === map.id); this.render(); review.node.close(); row.remove(); changed(); } catch (error) { review.error.textContent = error.message; } finally { accept.disabled = false; } };
+                  review.form.onsubmit = async event => { event.preventDefault(); accept.disabled = true; try { await request('/hfl-corpus/agent-bridge/mindmaps/' + map.id + '/accept-proposal', {method: 'POST', body: JSON.stringify({run_id: run.id, index, item: {title: title.value, description: '', body: body.value}})}); await this.reload(); review.node.close(); row.remove(); changed(); } catch (error) { review.error.textContent = error.message; } finally { accept.disabled = false; } };
                 })); output.append(row);
               });
               output.append(button('Finish review', async () => { try { await request('/hfl-corpus/agent-bridge/runs/' + run.id + '/accept', {method: 'POST', body: '{}'}); await refresh(); } catch (error) { d.error.textContent = error.message; } }));
@@ -442,6 +489,7 @@ window.HflObjectDescription = (item = {}) => {
       await refresh(); timer = setInterval(refresh, 5000); d.node.addEventListener('close', () => clearInterval(timer));
     }
   };
+  window.addEventListener('beforeunload',event=>{if([...maps.queues.values()].some(q=>q.dirty)){event.preventDefault();event.returnValue='';}});
   window.HflIdeas = {openAction, openEditor, editIdea, convert, inspect, maps, api};
   document.addEventListener('click', async event => {
     document.querySelectorAll('.idea-add-menu').forEach(menu => {

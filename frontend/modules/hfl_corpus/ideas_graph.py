@@ -12,6 +12,21 @@ def extend(base, snapshot, *, since='', until='', query='', sources=None, contex
     goal_links = [dict(source=target, target='goal:' + goal['id'], relation='supports')
                   for goal in snapshot.get('goals', [])
                   for target in set(goal.get('linked_objects', []) + [a for m in goal.get('milestones', []) for a in m.get('actions', [])])]
+    boards = [{**b, 'title': b['name'], 'body': b.get('purpose', ''), 'status': 'board',
+               'source_date': b.get('board_date', '')} for b in snapshot.get('maps', [])]
+    snapshot = {**snapshot, 'boards': boards}
+    for memory in snapshot.get('memories', []):
+        entry_id = memory.get('graph_entry_id', '')
+        if entry_id not in corpus_ids:
+            continue
+        # Drafts remain board-local; their recall entries connect to their owning board.
+        target = 'board:' + memory['board_id'] if memory['board_id'] else memory['object_id']
+        goal_links.extend([dict(source=target, target=entry_id, relation='memory-entry'),
+                           dict(source=target, target='daily:' + memory['day'], relation='memory-date')])
+    goal_links += [dict(source='board:' + b['id'], target=target, relation=relation)
+                   for b in boards for target, relation in
+                   [*([('daily:' + b['board_date'], 'board-date')] if b.get('board_date') else []),
+                    *([('goal:' + b['goal_id'], 'supports')] if b.get('goal_id') else [])]]
     for edge in [*snapshot['links'], *goal_links]:
         adjacent.setdefault(edge['source'], set()).add(edge['target'])
         adjacent.setdefault(edge['target'], set()).add(edge['source'])
@@ -33,7 +48,7 @@ def extend(base, snapshot, *, since='', until='', query='', sources=None, contex
                 queue.append(neighbor)
     for topic in snapshot['topics']:
         nodes.setdefault(topic['id'], dict(id=topic['id'], label=topic['label'], kind='topics'))
-    for collection, prefix, kind in [('ideas', 'idea:', 'ideas'), ('actions', 'action:', 'actions'), ('goals', 'goal:', 'goals')]:
+    for collection, prefix, kind in [('ideas', 'idea:', 'ideas'), ('actions', 'action:', 'actions'), ('goals', 'goal:', 'goals'), ('boards', 'board:', 'boards')]:
         for item in snapshot.get(collection, []):
             source = item.get('source') or {}
             source_entry = item.get('graph_source_id') or 'entry:' + source.get('entry_id', '')
@@ -43,6 +58,8 @@ def extend(base, snapshot, *, since='', until='', query='', sources=None, contex
                 continue
             created = local_day(item['created_at']) if item.get('created_at') else ''
             dates = {d for d in [created, source.get('date', '')[:10], item.get('source_date', '')] if d}
+            if collection == 'boards':
+                dates = {item.get('board_date') or created} - {''}
             dates.update(ref.get('date', '')[:10] for ref in item.get('evidence', []) if isinstance(ref, dict) and ref.get('date'))
             linked_dates = linked_days.get(prefix + item['id'], set())
             if (since or until) and not any((not since or d >= since) and (not until or d <= until) for d in dates | linked_dates):
@@ -52,9 +69,16 @@ def extend(base, snapshot, *, since='', until='', query='', sources=None, contex
                                    description=item.get('description', ''), body=item.get('body', ''), checklists=item.get('checklists', []), version=item.get('version', 0))
             if collection == 'goals':
                 nodes[identity]['success_criteria'] = item.get('success_criteria', '')
+            if collection == 'boards':
+                nodes[identity].update(date=item.get('board_date') or created,
+                                       created_at=item.get('created_at', ''), updated_at=item.get('updated_at', ''),
+                                       board_date=item.get('board_date', ''))
             for day in dates:
                 target = 'daily:' + day
                 nodes.setdefault(target, dict(id=target, label=day, kind='daily'))
+                if collection == 'boards':
+                    edges.append(dict(source=identity, target=target, relation='board-date', method='intent-metadata', evidence=day))
+                    continue
                 if day == created:
                     edges.append(dict(source=identity, target=target, relation='created-on', method='intent-metadata', evidence=day))
                 if day != created or day == source.get('date', '')[:10] or day == item.get('source_date'):

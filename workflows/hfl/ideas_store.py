@@ -6,7 +6,7 @@ generation refresh cannot overwrite them. Maps own membership, never objects.
 import json
 import math
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from zoneinfo import ZoneInfo
 
 from workflows.hfl.timeline_store import FollowUpConflict, isoformat
@@ -31,6 +31,7 @@ class IdeasStore(BoardStoreMixin):
                 CREATE TABLE IF NOT EXISTS intent_goals (id TEXT PRIMARY KEY, version INTEGER NOT NULL, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS goal_history (id TEXT NOT NULL, version INTEGER NOT NULL, actor TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(id,version));
                 CREATE TABLE IF NOT EXISTS board_promotions (board_id TEXT NOT NULL, draft_id TEXT NOT NULL, idea_id TEXT NOT NULL, PRIMARY KEY(board_id,draft_id));
+                CREATE TABLE IF NOT EXISTS board_memories (event_id TEXT PRIMARY KEY, entry_id TEXT NOT NULL, object_id TEXT NOT NULL, board_id TEXT NOT NULL, day TEXT NOT NULL, payload TEXT NOT NULL, staged INTEGER NOT NULL DEFAULT 0);
                 CREATE TABLE IF NOT EXISTS idea_maps (id TEXT PRIMARY KEY, version INTEGER NOT NULL, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS idea_item_actions (idea_id TEXT NOT NULL, checklist_id TEXT NOT NULL, item_id TEXT NOT NULL, action_id TEXT NOT NULL, PRIMARY KEY(idea_id,checklist_id,item_id,action_id));
                 CREATE TABLE IF NOT EXISTS idea_conversions (request_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL);
@@ -141,16 +142,24 @@ class IdeasStore(BoardStoreMixin):
             return [normalize_board(json.loads(row['payload'])) for row in db.execute('SELECT * FROM idea_maps ORDER BY rowid')]
 
     def map(self, identity):
-        result = next((m for m in self.maps() if m['id'] == identity), None)
-        if result is None:
+        with self.followups.connect() as db:
+            row = db.execute('SELECT payload FROM idea_maps WHERE id=?', (identity,)).fetchone()
+        if row is None:
             raise KeyError(identity)
-        return result
+        return normalize_board(json.loads(row['payload']))
 
     def save_map(self, raw, identity=None):
-        if set(raw) - {'name', 'members', 'positions', 'version', 'request_id', 'prompt', 'purpose', 'root', 'goal_id', 'drafts', 'edges'}:
+        if set(raw) - {'name', 'members', 'positions', 'version', 'request_id', 'prompt', 'purpose', 'root', 'goal_id', 'drafts', 'edges', 'board_date'}:
             raise ValueError('Unsupported mind-map fields.')
         previous = self.map(identity) if identity else {}
         item = {**previous, **raw}
+        now = isoformat()
+        item['created_at'] = previous.get('created_at', '') if previous else now
+        item['updated_at'] = now
+        item['board_date'] = item.get('board_date') or local_day(item['created_at'] or now)
+        if not isinstance(item['board_date'], str) or len(item['board_date']) != 10:
+            raise ValueError('Use a valid board date.')
+        date.fromisoformat(item['board_date'])
         if not isinstance(item.get('name'), str) or not item['name'].strip() or len(item['name']) > 100:
             raise ValueError('A map needs a name of at most 100 characters.')
         members = item.get('members', [])
@@ -180,12 +189,18 @@ class IdeasStore(BoardStoreMixin):
                     raise FollowUpConflict('This board creation request was already used.')
                 return existing
             db.execute('INSERT INTO idea_maps VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,payload=excluded.payload', (item['id'], item['version'], json.dumps(item)))
+            from workflows.hfl.board_memory import record_memory
+            old_drafts = {d['id']: d for d in previous.get('drafts', [])}
+            for draft in item['drafts']:
+                record_memory(db, draft, old_drafts.get(draft['id'], {}), kind='thought',
+                              revision=item['version'], timestamp=now, board=item)
         return normalize_board(item)
 
     def snapshot(self):
         with self.followups.connect() as db:
             topics = [dict(row) for row in db.execute('SELECT * FROM idea_topics')]
-        return {'ideas': self.ideas(), 'actions': self.followups.list() + self.followups.list(closed=True), 'topics': topics, 'links': self.links(), 'maps': self.maps(), 'goals': self.goals()}
+            memories = [dict(row) for row in db.execute('SELECT entry_id,object_id,board_id,day FROM board_memories')]
+        return {'ideas': self.ideas(), 'actions': self.followups.list() + self.followups.list(closed=True), 'topics': topics, 'links': self.links(), 'maps': self.maps(), 'goals': self.goals(), 'memories': memories}
 
 
 def local_day(timestamp):

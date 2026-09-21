@@ -14,7 +14,8 @@ def text(value, label, limit, required=False):
 
 def normalize_board(item):
     """Read old maps additively, preserving their IDs and revisions."""
-    return {'purpose': item['name'], 'root': '', 'goal_id': '', 'drafts': [], 'edges': [], **item}
+    return {'purpose': item['name'], 'root': '', 'goal_id': '', 'drafts': [], 'edges': [],
+            'created_at': '', 'updated_at': '', 'board_date': '', **item}
 
 
 def validate_board(item):
@@ -73,6 +74,7 @@ class BoardStoreMixin:
             db.execute('INSERT OR IGNORE INTO idea_links VALUES (?,?,?,?)', (*values, isoformat()))
             board['edges'].remove(edge)
             board['version'] += 1
+            board['updated_at'] = isoformat()
             db.execute('UPDATE idea_maps SET version=?,payload=? WHERE id=?', (board['version'], json.dumps(board), identity))
         return board
 
@@ -140,6 +142,8 @@ class BoardStoreMixin:
             encoded = json.dumps(item)
             db.execute('INSERT INTO intent_goals VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,payload=excluded.payload', (identity, item['version'], encoded))
             db.execute('INSERT INTO goal_history VALUES (?,?,?,?)', (identity, item['version'], str(actor), encoded))
+            from workflows.hfl.board_memory import record_memory
+            record_memory(db, item, previous, kind='goal', revision=item['version'], timestamp=item['updated_at'])
         return item
 
     def delete_board(self, identity, version):
@@ -188,5 +192,6 @@ class BoardStoreMixin:
                     if edge[end] == draft_id:
                         edge[end] = shared_node
             board['version'] += 1
+            board['updated_at'] = isoformat()
             db.execute('UPDATE idea_maps SET version=?,payload=? WHERE id=?', (board['version'], json.dumps(board), identity))
         return {'board': board, 'idea_id': shared_id}

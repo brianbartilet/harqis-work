@@ -11,11 +11,13 @@
     scopeButton?.setAttribute('aria-checked', String(all));
     if (scopeText) scopeText.textContent = all || !inherited ? 'All activity' : 'Following workspace and activity filters';
   }
-  function close() {
+  async function close() {
+    try { await window.HflIdeas?.maps.flush(); }
+    catch (error) { window.HflIdeas.maps.status.textContent='Not closed: '+error.message+' · Unsaved edits retained.'; return; }
     if (embedded) parent.postMessage({type:'hfl:activity-close'}, location.origin);
     else location.assign('/hfl-corpus' + (inherited ? '?' + inherited : ''));
   }
-  function open(kind, context, extra = '') {
+  function open(kind, context, extra = '', navigation = '') {
     const dialog = document.createElement('dialog'); dialog.className = 'activity-modal';
     dialog.setAttribute('aria-label', kind === 'graph' ? 'Activity Graph' : 'Activity Corpus Entities');
     const loading = document.createElement('div'); loading.className = 'activity-modal-loading';
@@ -23,9 +25,16 @@
     const button = document.createElement('button'); button.textContent = 'Close'; button.onclick = () => dialog.close();
     loading.append(status, button);
     const frame = document.createElement('iframe'); frame.title = dialog.getAttribute('aria-label');
+    dialog.addEventListener('cancel',async event=>{
+      event.preventDefault();
+      try { await frame.contentWindow.HflIdeas?.maps.flush(); dialog.close(); }
+      catch(error){const maps=frame.contentWindow.HflIdeas?.maps;if(maps?.status)maps.status.textContent='Not closed: '+error.message+' · Unsaved edits retained.';}
+    });
     const url = new URL('/hfl-corpus/' + kind, location.origin);
     url.searchParams.set('embed','1'); if(context) url.searchParams.set('context',context);
     if(extra) url.searchParams.set('graph_filters',extra);
+    const destination=new URLSearchParams(navigation);
+    for(const key of ['board','select'])if(destination.has(key))url.searchParams.set(key,destination.get(key));
     frame.src = url;
     frame.onload = () => { loading.hidden = true; frame.contentWindow.focus(); };
     const listener = event => {
@@ -53,7 +62,8 @@
     if(link.id === 'kg-entities') return; // Graph supplies its applied filters.
     event.preventDefault();
     document.querySelector('.corpus-tools')?.removeAttribute('open');
-    open(url.pathname.endsWith('/graph')?'graph':'entities',document.querySelector('#corpus-search-form') ? location.search.slice(1) : window.activityModals.context());
+    const navigation=url.searchParams.has('board')||url.searchParams.has('select');
+    open(url.pathname.endsWith('/graph')?'graph':'entities',navigation?'':(document.querySelector('#corpus-search-form') ? location.search.slice(1) : window.activityModals.context()),'',navigation?url.search:'');
   });
   updateScope();
 })();

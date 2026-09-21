@@ -482,6 +482,12 @@ def submit_hfl_entry(
 
 
 def flush_outbox(*, limit: int = 100) -> dict[str, int]:
+    from workflows.hfl.board_memory import stage_pending_memories
+    try:
+        stage_pending_memories(limit=limit)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception('Board memories remain pending for the next outbox replay')
     from workflows.hfl.entity_merges import flush_audits
     try:
         flush_audits()

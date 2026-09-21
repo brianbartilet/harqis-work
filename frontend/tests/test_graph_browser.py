@@ -3,6 +3,57 @@ from pathlib import Path
 import time
 import pytest
 
+
+@pytest.mark.parametrize('width,height', [(1907, 907), (1440, 1000), (390, 844)])
+def test_timeline_centered_on_load_and_resize(authenticated_client, monkeypatch, width, height):
+    from datetime import date, timedelta
+    playwright = pytest.importorskip('playwright.sync_api')
+    from modules.hfl_corpus import entities
+    dates = [dict(id='daily:' + str(date(2026, 6, 25) + timedelta(days=i)),
+                  kind='daily', label=str(date(2026, 6, 25) + timedelta(days=i))) for i in range(85)]
+    monkeypatch.setattr(entities, 'graph', lambda *args: dict(nodes=dates, edges=[], total_nodes=85, sources=[]))
+    with playwright.sync_playwright() as engine:
+        options = {'headless': True}
+        if not Path(engine.chromium.executable_path).exists(): options['channel'] = 'msedge'
+        browser = engine.chromium.launch(**options)
+        try:
+            page = browser.new_page(viewport={'width': width, 'height': height})
+            def route_request(route):
+                r = route.request
+                response = authenticated_client.request(r.method, r.url.replace('http://graph.test', ''), content=r.post_data)
+                route.fulfill(status=response.status_code, body=response.content,
+                              headers={k:v for k,v in response.headers.items() if k.lower() not in {'content-encoding','content-length'}})
+            page.route('http://graph.test/**', route_request)
+            page.goto('http://graph.test/hfl-corpus/graph')
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            for phase in ['load', 'reload', 'resize']:
+                if phase == 'reload':
+                    # A previously panned viewport must not push the Timeline offscreen on load.
+                    page.evaluate('''() => {
+                        const key=Object.keys(localStorage).find(k=>k.startsWith('hfl:graph:state:v1:'));
+                        const state=JSON.parse(localStorage.getItem(key));
+                        state.viewport.y=-400;
+                        window.name=JSON.stringify({key,state});
+                    }''')
+                    page.add_init_script('''if (window.name) {
+                        const {key,state}=JSON.parse(window.name);
+                        localStorage.setItem(key,JSON.stringify(state));window.name='';
+                    }''')
+                    page.reload()
+                if phase == 'resize': page.set_viewport_size({'width': width, 'height': height - 100})
+                page.wait_for_selector('#kg-workspace:not([inert])')
+                page.wait_for_timeout(1200)
+                geometry = page.evaluate('''() => {
+                    const host=document.querySelector('#kg-canvas'), canvas=host.querySelector('canvas');
+                    const rect=host.getBoundingClientRect(), stage=document.querySelector('.kg-map').getBoundingClientRect();
+                    const state=JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('hfl:graph:state:v1:'))));
+                    return {height:rect.height, stageHeight:stage.height, bottom:rect.bottom, windowHeight:innerHeight, y:canvas.__zoom.y, state};
+                }''')
+                assert geometry['bottom'] <= geometry['windowHeight'] + 1, (phase, geometry)
+                assert geometry['y'] == pytest.approx(geometry['height'] / 2, abs=3), (phase, geometry)
+        finally:
+            browser.close()
+
 @pytest.mark.parametrize('mobile', [False, True])
 def test_presets_motion_and_large_graph(authenticated_client, monkeypatch, tmp_path, mobile):
     playwright = pytest.importorskip('playwright.sync_api')

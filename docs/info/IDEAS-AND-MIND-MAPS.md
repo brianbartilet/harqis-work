@@ -10,7 +10,19 @@ sidebar. **All activity** returns to exploration. `/hfl-corpus/ideas` and old
 A board has a name, required purpose, starting object, optional primary Goal,
 chosen shared objects, draft thoughts, local connections, agent instructions,
 and saved positions. Start from a graph node or **New board**. A question or
-idea is sufficient: a Goal is optional. Choose **Save layout** after arranging.
+idea is sufficient: a Goal is optional. Thoughts, connections, and drag layouts
+update immediately and save in the background. **Save now** flushes pending edits;
+the status distinguishes **Saving**, **Saved**, and **Unsaved**. A failed save
+keeps edits in the open tab with **Retry save**. Conflicts never silently overwrite
+another revision; **Resolve unsaved changes** lets you copy pending edits before
+explicitly discarding them and reloading the saved board. Wait for **Saved** before
+closing the workspace. **Save layout** is also available explicitly.
+
+New boards have creation/update timestamps and an editable **Board date** (today
+by default). The Activity Graph shows a board node linked to that date and its
+optional primary Goal. **Open board** enters its workspace. Legacy boards retain
+unknown creation timestamps; set their Board date in settings to place them on
+the timeline. Board-only drafts never appear as shared graph nodes.
 
 **Add thought** creates a board-only draft. **Attach existing** references shared
 context without copying it. **Connect on this board** creates a tentative
@@ -18,6 +30,15 @@ relationship that stays local. **Promote to shared Idea** atomically creates an
 Idea and replaces the draft reference, root, layout, and local connections.
 Connections remain local after thought promotion. Dashed lines identify local connections. Once both endpoints are shared, **Board connections → Promote shared connection** explicitly publishes a relationship to the graph. Use the existing Idea editor and
 **Make actionable** to develop a promoted thought into committed work.
+Alternatively, **Create linked Idea** or **Create linked Actionable** on a thought
+opens the existing editor, retaining the thought and adding the saved object
+with a board-local connection. Creating an Actionable does not execute it.
+
+Board lists and Goal choices use a dedicated metadata endpoint. Board edits use
+cached member data and update the canvas without a full graph reload or viewport
+reset. Attaching existing objects and initially loading uncached shared members
+still perform permission-checked server reads. **Refresh** revalidates shared
+members against the server.
 
 Removing a member or deleting a board never deletes shared objects. Deleting a
 board deletes its local drafts. Shared object edits apply everywhere. Existing
@@ -142,6 +163,30 @@ New boards can start with an agent-generated draft: enter the purpose, choose
 that option, then request suggestions in the review dialog. The agent can support
 personal decisions, feature design, or developing ideas into actions. Saving a
 board alone does not run an agent. Accepted proposals remain drafts until promoted.
+
+### Thought and Goal memory
+
+Creating a thought or Goal, or changing its saved content, records a new immutable
+HFL entry under **manual-entry**. Updates preserve earlier snapshots rather than
+overwriting them. Thoughts capture title/body changes; Goals also capture status,
+success criteria, target date, progress, milestones, and linked-object changes.
+Unchanged saves, layout changes, connections, and delivery retries do not add entries.
+Accepted agent thoughts use the same path; unaccepted proposals are not captured.
+Existing objects are not backfilled merely by loading them.
+
+Memory events commit atomically with the object in the intent database. The existing
+Celery `flush_hfl_outbox` job (every five minutes) transfers them to the durable HFL
+outbox for canonical daily Markdown and search indexing. Delivery failures retry;
+board editing never waits for the broker, indexing, or corpus refresh. Runtime and
+schedule ownership stay with that existing Celery job; no new schedule is added.
+
+Entries use the save time in Asia/Singapore, independently of the board date or
+Goal target date. Each contains a snapshot, stable object/revision reference, and
+a link back to the thought's board or Goal. **View memory history** opens the
+corpus search for that object's stable memory key. Goal and board graph nodes link
+to their permitted memory entries and event dates after indexing. Draft nodes
+remain board-local, but their saved text is searchable in HFL. Deleting an object
+does not erase its historical memories; its old navigation link may no longer resolve.
 
 Validation: targeted Ideas/boards/Goals, agent bridge, timeline and graph API tests,
 plus browser coverage at mobile and desktop sizes and graph layout tests.

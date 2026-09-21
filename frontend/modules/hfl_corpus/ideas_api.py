@@ -51,6 +51,9 @@ def permitted_snapshot():
     # The same permitted corpus projection gates graph and brainstorming context.
     entries = current_entries()
     graph_ids = {(e['path'], key): 'entry:' + e['id'] for e in entries for key in (e['id'], timeline.entry_evidence_id(e['text']))}
+    memory_ids = {timeline.entry_evidence_id(e['text']): 'entry:' + e['id'] for e in entries}
+    data['memories'] = [{**m, 'graph_entry_id': memory_ids[m['entry_id']]}
+                        for m in data.get('memories', []) if m['entry_id'] in memory_ids]
     def reference_key(ref):
         return (ref.get('path'), ref.get('entry_id'))
     for kind in ('ideas', 'actions'):
@@ -92,6 +95,37 @@ def check_node(identity, available=None):
 def snapshot(request: Request):
     timeline.owner(request)
     return permitted_snapshot()
+
+
+@router.get('/boards')
+def boards(request: Request):
+    """Board metadata and Goals never require a corpus scan."""
+    timeline.owner(request)
+    canonical = store()
+    return {'maps': canonical.maps(), 'goals': canonical.goals()}
+
+
+@router.get('/maps/{identity}')
+def get_board(request: Request, identity: str):
+    timeline.owner(request)
+    return {'item': call(store().map, identity)}
+
+
+@router.get('/maps/{identity}/graph')
+def board_graph(request: Request, identity: str):
+    timeline.owner(request)
+    board = call(store().map, identity)
+    if not board['members']:
+        return {'nodes': [], 'edges': [], 'sources': []}
+    # Permission checks remain authoritative for shared objects. Draft-only
+    # boards bypass corpus loading entirely; editing uses the browser cache.
+    from modules.hfl_corpus.entities import graph
+    shared = graph(limit=0)
+    available = {n['id']: n for n in shared['nodes']}
+    members = set(board['members'])
+    return {'nodes': [available[i] for i in members if i in available],
+            'edges': [e for e in shared['edges'] if e['source'] in members and e['target'] in members
+                      and e['source'] in available and e['target'] in available], 'sources': []}
 
 
 @router.post('/render')

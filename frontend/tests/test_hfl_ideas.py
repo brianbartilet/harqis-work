@@ -376,6 +376,7 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
             const points=Object.values(window.HflIdeas.maps.getPositions());
             return points.every((a,i)=>points.slice(i+1).every(b=>Math.hypot(a.x-b.x,a.y-b.y)>=85));
         }''')
+        expect(page.locator('.idea-map-status')).to_have_text('Saved')
         page.reload()
         expect(page.locator('#kg-map-count')).to_contain_text('4 nodes')
         if width < 760:

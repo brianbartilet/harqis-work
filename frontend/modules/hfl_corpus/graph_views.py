@@ -33,7 +33,7 @@ class ViewState(BaseModel):
     rolling: int = Field(default=0, ge=0, le=36500)
     shared: bool = True
     group: Literal['relationships', 'source', 'date'] = 'relationships'
-    enabled: list[Literal['entries', 'sources', 'daily', 'people', 'companies', 'tools', 'topics', 'objects', 'ideas', 'actions', 'goals']] = Field(default_factory=list)
+    enabled: list[Literal['entries', 'sources', 'daily', 'people', 'companies', 'tools', 'topics', 'objects', 'ideas', 'actions', 'goals', 'boards']] = Field(default_factory=list)
     focus: str | None = None
     layout: Layout = Field(default_factory=Layout)
 

@@ -211,6 +211,7 @@ def test_submit_retains_outbox_when_broker_is_unavailable(tmp_path, monkeypatch)
 
 
 def test_flush_forwards_and_removes_outbox_after_broker_acceptance(tmp_path, monkeypatch):
+    monkeypatch.setenv('HFL_TIMELINE_STORE_PATH', str(tmp_path / 'unused.sqlite3'))
     monkeypatch.setattr(persistence, "outbox_dir", lambda: tmp_path)
     monkeypatch.setattr(persistence, "is_canonical_machine", lambda machine=None: False)
     envelope = persistence.make_envelope(
