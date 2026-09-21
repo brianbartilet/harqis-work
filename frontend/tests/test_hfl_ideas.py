@@ -320,7 +320,8 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         page.goto('https://ideas.test/hfl-corpus/ideas')
         if width < 760:
             page.locator('.kg-boards [data-section=boards] > summary').click()
-        page.get_by_role('button', name='Add Board', exact=True).click()
+        page.locator('.board-add-menu').get_by_role('button', name='Add', exact=True).click()
+        page.locator('.board-add-menu').get_by_role('button', name='Board', exact=True).click()
         modal = page.locator('.idea-dialog')
         modal.get_by_label('Board name').fill('Reading room')
         modal.get_by_label('What are you exploring or trying to achieve?').fill('Design a comfortable place to read')
@@ -352,7 +353,8 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         assert len(ideas.followups.list()) == 1
         expect(page.locator('#kg-map-count')).to_contain_text('2 nodes')
         hold_graph = True
-        page.get_by_role('button', name='Add Goal', exact=True).click()
+        page.locator('.board-add-menu').get_by_role('button', name='Add', exact=True).click()
+        page.locator('.board-add-menu').get_by_role('button', name='Goal', exact=True).click()
         expect(modal.get_by_label('Goal', exact=True)).to_be_visible(timeout=1000)
         expect(modal.get_by_role('button', name='Save Goal', exact=True)).to_be_enabled()
         expect(modal.get_by_text('Loading optional Idea and Action links…')).to_be_visible()

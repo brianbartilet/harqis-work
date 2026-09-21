@@ -173,6 +173,7 @@ window.HflObjectDescription = (item = {}) => {
   async function chooseMapMembers() {
     const boardId = maps.current?.id; if (!boardId) return;
     const d = dialog('Attach existing context');
+    d.node.classList.add('idea-attach-dialog');
     const search = field(d.body, '', 'Search', '', 'search'), list = el('div', undefined, 'idea-choices');
     const status = el('div', '', 'idea-picker-status'), pages = el('div', undefined, 'idea-picker-pages');
     status.setAttribute('role', 'status'); d.body.append(status, list, pages);
@@ -182,7 +183,8 @@ window.HflObjectDescription = (item = {}) => {
     d.node.addEventListener('close', cancel);
     const loading = () => {
       list.replaceChildren(); pages.replaceChildren(); d.error.textContent = '';
-      status.replaceChildren(el('span', '', 'idea-picker-spinner'), el('span', 'Loading items…'));
+      status.textContent = 'Loading items…';
+      const progress = el('div', undefined, 'idea-picker-loading');progress.append(el('span', '', 'idea-picker-spinner'),el('span', 'Loading context…'));progress.setAttribute('aria-hidden','true');list.append(progress);
       list.setAttribute('aria-busy', 'true');
     };
     async function load() {
@@ -191,20 +193,26 @@ window.HflObjectDescription = (item = {}) => {
         const data = await request(base + '/maps/' + boardId + '/attach-options?' + new URLSearchParams({query:search.value.trim(),offset}),
           {signal:AbortSignal.any([controller.signal, AbortSignal.timeout(45000)])});
         if (current !== generation || !d.node.open) return;
+        list.replaceChildren();list.scrollTop=0;
         status.textContent = data.total ? 'Most recently updated · ' + (offset + 1) + '–' + Math.min(offset + 50, data.total) + ' of ' + data.total : '';
         data.nodes.filter(n => !maps.current?.members.includes(n.id)).forEach(n => {
-          list.append(button(n.label + ' · ' + n.kind, async () => {
+          const kind = window.HflGraphAppearance?.kindLabel(n.kind) || n.kind.replaceAll('_', ' ');
+          const choice = button('', async () => {
             try {
               if (maps.current?.id !== boardId) throw Error('Return to this board before attaching.');
               maps.cacheNode(n); await maps.addMembers([n.id]); d.node.close(); changed();
             } catch (error) { d.error.textContent = error.message; }
-          }));
+          });
+          choice.className='idea-attach-choice';choice.title=n.label;choice.setAttribute('aria-label',n.label+' · '+kind);
+          const label=el('span',n.label,'idea-attach-title'),entity=el('span',kind,'idea-attach-entity'),dot=el('span',undefined,'idea-attach-dot');
+          dot.style.background=window.HflGraphAppearance?.color(n.kind)||'#e9c96c';dot.setAttribute('aria-hidden','true');entity.append(dot);choice.append(label,entity);list.append(choice);
         });
         if (!list.children.length) list.append(el('p', 'No matching objects available to attach.'));
         if (offset) pages.append(button('Previous', () => { offset = Math.max(0, offset - 50); load(); }));
         if (data.has_more) pages.append(button('Next', () => { offset += 50; load(); }));
       } catch (error) {
         if (current !== generation || !d.node.open) return;
+        list.replaceChildren();
         status.textContent = ''; d.error.textContent = error.name === 'TimeoutError' ? 'Loading took too long. Please retry.' : error.message;
         pages.append(button('Retry', load));
       } finally { if (current === generation) list.setAttribute('aria-busy', 'false'); }
@@ -248,11 +256,40 @@ window.HflObjectDescription = (item = {}) => {
       } catch (error) { d.error.textContent = error.message; } finally { save.disabled = false; } };
     } catch (error) { d.error.textContent = error.message; }
   }
-  function colorField(parent,label,initial){
+  function colorField(parent,label,initial,hideLabel=false){
     let selected=initial||maps.palette[0]||'#f59e0b';
-    const palette=el('fieldset',undefined,'board-palette');palette.append(el('legend',label));
+    const palette=el('fieldset',undefined,'board-palette');const legend=el('legend',label);if(hideLabel)legend.className='goal-visually-hidden';palette.append(legend);
     for(const value of maps.palette){const swatch=button('',()=>{selected=value;for(const option of palette.querySelectorAll('button'))option.setAttribute('aria-pressed',String(option.dataset.color===selected));});swatch.dataset.color=value;swatch.style.background=value;swatch.setAttribute('aria-label','Color '+value);swatch.setAttribute('aria-pressed',String(value===selected));palette.append(swatch);}
     parent.append(palette);return ()=>selected;
+  }
+  const statusLabel = value => value.charAt(0).toUpperCase() + value.slice(1);
+  function linkPicker(parent, title) {
+    const root = el('details', undefined, 'goal-link-picker'), summary = el('summary');
+    const heading = el('span', title), count = el('span', '0 selected', 'goal-link-count'); summary.append(heading, count);
+    const panel = el('div', undefined, 'goal-link-panel');
+    const search = field(panel, '', 'Search ' + title.toLowerCase(), '', 'search');
+    const list = el('div', undefined, 'goal-link-options'); panel.append(list); root.append(summary, panel); parent.append(root);
+    let selected = new Set(), options = [], disabled = true;
+    const updateCount = () => { count.textContent = selected.size + ' selected'; };
+    const render = () => {
+      list.replaceChildren();
+      const matches = options.filter(n => (n.label + ' ' + n.kind).toLowerCase().includes(search.value.toLowerCase().trim()));
+      for (const n of matches) {
+        const label = el('label', undefined, 'goal-link-option'), check = el('input'); check.type = 'checkbox'; check.checked = selected.has(n.id); check.disabled = disabled;
+        const text = el('span', n.label), type = el('small', n.kind === 'ideas' ? 'Idea' : n.kind === 'actions' ? 'Action' : 'Existing link');
+        text.append(type); label.append(check, text); list.append(label);
+        check.onchange = () => { if(check.checked)selected.add(n.id);else selected.delete(n.id);updateCount(); };
+      }
+      if (!matches.length) list.append(el('p', disabled ? 'Loading available links…' : options.length ? 'No matching items.' : 'No saved items available to link.', 'board-hint'));
+    };
+    search.oninput = render;
+    root.addEventListener('keydown', event => { if(event.key === 'Escape'){event.preventDefault();event.stopPropagation();root.open=false;summary.focus();} });
+    return {
+      get selectedOptions(){return [...selected].map(value => ({value}));},
+      get disabled(){return disabled;},
+      set disabled(value){disabled=value;render();},
+      setOptions(nodes, ids){options=nodes;selected=new Set(ids);updateCount();render();}
+    };
   }
   async function editGoal(identity = null) {
     const d = dialog(identity ? 'Edit Goal' : 'Add Goal');
@@ -265,19 +302,18 @@ window.HflObjectDescription = (item = {}) => {
       const choices = (select, kinds, selected) => {
         const available = graph.nodes.filter(n => kinds.includes(n.kind));
         const known = new Set(available.map(n => n.id));
-        select.replaceChildren();
-        for (const n of [...available, ...selected.filter(id => !known.has(id)).map(id => ({id, label: 'Existing link (details unavailable)'}))]) {
-          const option = el('option', n.label); option.value = n.id; option.selected = selected.includes(n.id); select.append(option);
-        }
+        select.setOptions([...available, ...selected.filter(id => !known.has(id)).map(id => ({id, kind:'existing', label: 'Existing link (details unavailable)'}))], selected);
       };
       const title = field(d.body, 'title', 'Goal', item.title, 'text', true, 200);
-      const getColor=colorField(d.body,'Goal color',item.color||maps.palette[maps.goals.length%maps.palette.length]);
       const body = field(d.body, 'body', 'Description', item.body, 'textarea', false, 60000);
       const criteria = field(d.body, 'criteria', 'Success criteria', item.success_criteria, 'textarea', false, 6000);
-      const status = selectField(d.body, 'status', 'Status', ['proposed','active','paused','achieved','dropped'].map(s => [s,s]), item.status || 'proposed');
-      const date = field(d.body, 'target_date', 'Target date', item.target_date, 'date');
+      const metadata = el('div', undefined, 'goal-form-row'); d.body.append(metadata);
+      const status = selectField(metadata, 'status', 'Status', ['proposed','active','paused','achieved','dropped'].map(s => [s,statusLabel(s)]), item.status || 'proposed');
+      const date = field(metadata, 'target_date', 'Target date', item.target_date, 'date');
+      const getColor=colorField(d.body,'Goal color',item.color||maps.palette[maps.goals.length%maps.palette.length],true);
       const notes = field(d.body, 'progress_notes', 'Progress notes', item.progress_notes, 'textarea', false, 20000);
-      const links = selectField(d.body, '', 'Supporting Ideas and Actions', graph.nodes.filter(n => ['ideas','actions'].includes(n.kind)).map(n => [n.id,n.label]), ''); links.multiple = true;
+      d.body.append(el('p', 'Link saved Ideas that support this outcome and Actions that help achieve it. Available items are shared across boards; search by title or type and select any number.', 'board-hint'));
+      const links = linkPicker(d.body, 'Supporting Ideas and Actions');
       choices(links, ['ideas','actions'], item.linked_objects || []); links.disabled = true;
       const linkStatus = el('p', 'Loading optional Idea and Action links…', 'board-hint'); linkStatus.setAttribute('role', 'status'); d.body.append(linkStatus);
       const milestones = el('section', undefined, 'goal-milestones'); milestones.append(el('h3', 'Milestones')); d.body.append(milestones);
@@ -285,14 +321,16 @@ window.HflObjectDescription = (item = {}) => {
       const add = (m = {}) => {
         const section = el('section', undefined, 'goal-milestone'); const row = {id: m.id || crypto.randomUUID(), section};
         row.title = field(section, '', 'Milestone', m.title, 'text', true, 300);
-        row.status = selectField(section, '', 'Milestone status', ['planned','active','achieved','dropped'].map(s => [s,s]), m.status || 'planned');
-        row.date = field(section, '', 'Milestone target date', m.target_date, 'date');
-        row.actions = selectField(section, '', 'Linked Actions', graph.nodes.filter(n => n.kind === 'actions').map(n => [n.id, n.label]), ''); row.actions.multiple = true;
+        const metadata = el('div', undefined, 'goal-form-row'); section.append(metadata);
+        row.status = selectField(metadata, '', 'Milestone status', ['planned','active','achieved','dropped'].map(s => [s,statusLabel(s)]), m.status || 'planned');
+        row.date = field(metadata, '', 'Milestone target date', m.target_date, 'date');
+        row.actions = linkPicker(section, 'Linked Actions');
         choices(row.actions, ['actions'], m.actions || []); row.actions.disabled = links.disabled;
         section.append(button('Remove milestone', () => { rows.splice(rows.indexOf(row), 1); section.remove(); })); rows.push(row); milestones.append(section);
       };
       for (const milestone of item.milestones || []) add(milestone);
-      d.body.append(button('Add milestone', () => add()), el('p', 'Completing Actions does not automatically achieve this Goal. Assess the success criteria when updating its status.'));
+      const milestoneToolbar = el('div', undefined, 'goal-milestone-toolbar');milestoneToolbar.append(button('Add milestone', () => add()));
+      d.body.append(milestoneToolbar, el('p', 'Completing Actions does not automatically achieve this Goal. Assess the success criteria when updating its status.', 'board-hint'));
       const save = el('button', 'Save Goal'); save.type = 'submit'; d.footer.append(save); const key = crypto.randomUUID();
       d.form.onsubmit = async event => { event.preventDefault(); save.disabled = true; try {
         const values = {title: title.value, color:getColor(), body: body.value, success_criteria: criteria.value, status: status.value, target_date: date.value, progress_notes: notes.value, milestones: rows.map(r => ({id:r.id,title:r.title.value,status:r.status.value,target_date:r.date.value,actions:[...r.actions.selectedOptions].map(o=>o.value)})), ...(item.id ? {version:item.version} : {request_id:key})};
@@ -312,7 +350,7 @@ window.HflObjectDescription = (item = {}) => {
           graph.nodes = data.nodes;
           choices(links, ['ideas','actions'], [...links.selectedOptions].map(o => o.value)); links.disabled = false;
           for (const row of rows) { choices(row.actions, ['actions'], [...row.actions.selectedOptions].map(o => o.value)); row.actions.disabled = false; }
-          linkStatus.textContent = 'Optional links ready.';
+          linkStatus.textContent = graph.nodes.filter(n => ['ideas','actions'].includes(n.kind)).length + ' saved Ideas and Actions available. Only items you can access are listed.';
         } catch (error) {
           if (d.node.open) linkStatus.replaceChildren(document.createTextNode('Optional links could not load. You can still save this Goal. Existing links are preserved. '), button('Retry loading links', loadLinks));
         } finally { clearTimeout(timeout); }
@@ -421,14 +459,18 @@ window.HflObjectDescription = (item = {}) => {
       const caption=document.getElementById('kg-map-title');if(caption)caption.textContent=this.current?.name||'EXPLORE ACTIVITY CONSTELLATION';
       this.root.replaceChildren(); document.querySelector('.kg-shell')?.classList.toggle('has-board', !!this.current); document.getElementById('kg-search').placeholder = this.current ? 'Search this board' : 'Search entries or entities';
       const all = button('Explore Activity Graph', () => this.selectBoard(null)); all.className='board-explore';all.setAttribute('aria-pressed', String(!this.current)); this.root.append(all);
-      this.root.append(button('Add Board',()=>this.edit()),button('Add Goal',()=>editGoal()));
+      const addMenu=el('div',undefined,'idea-add-menu board-add-menu'),addOptions=el('div',undefined,'idea-add-options');addOptions.hidden=true;addOptions.id='board-add-options';
+      const addToggle=button('Add',()=>{addOptions.hidden=!addOptions.hidden;addToggle.setAttribute('aria-expanded',String(!addOptions.hidden));});addToggle.className='idea-add-toggle';addToggle.setAttribute('aria-expanded','false');addToggle.setAttribute('aria-controls',addOptions.id);
+      const closeAdd=()=>{addOptions.hidden=true;addToggle.setAttribute('aria-expanded','false');};
+      addOptions.append(button('Board',()=>{closeAdd();this.edit();}),button('Goal',()=>{closeAdd();editGoal();}));addMenu.append(addToggle,addOptions);addMenu.onkeydown=event=>{if(event.key==='Escape'){closeAdd();addToggle.focus();}};this.root.append(addMenu);
       this.root.append(this.objectList('boards'),this.objectList('goals'),this.status);
       if (!this.current) return;
       const board = this.current, section = el('section', undefined, 'board-controls');section.style.setProperty('--board-color',board.color||this.palette[0]||'#f59e0b'); section.append(el('h2', board.name), el('p', board.purpose, 'board-purpose'));
       const save=button('Save now',()=>this.saveNow());save.className='board-save-now';save.title='Save all pending board edits now';
       const layout=button('Save layout',()=>this.saveLayout());layout.title='Capture current node positions for autosave';
       const remove=button('Delete',()=>this.remove());remove.className='board-delete';
-      section.append(button('Add thought', () => editThought()), button('Attach existing', () => chooseMapMembers()),button('Ask agent', () => this.brainstorm()),save,layout,button('Settings', () => this.edit(board)),remove);
+      const ask=button('Ask agent',()=>this.brainstorm());ask.className='board-ask-agent';
+      section.append(button('Add thought', () => editThought()), button('Attach existing', () => chooseMapMembers()),ask,save,layout,button('Settings', () => this.edit(board)),remove);
       const pending=this.queues.get(board.id);
       if(pending?.error)section.append(button('Retry save',()=>this.saveNow()),button('Resolve unsaved changes',()=>this.resolveSave()));
       this.root.append(section);
@@ -440,6 +482,13 @@ window.HflObjectDescription = (item = {}) => {
       for(const object of items){
         const item=button(goals?object.title:object.name,()=>goals?editGoal(object.id):this.selectBoard(object));
         item.dataset[goals?'goalId':'boardId']=object.id;item.style.setProperty('--board-color',object.color||this.palette[0]||'#f59e0b');
+        if(goals){
+          item.className='goal-card';item.replaceChildren(el('span',object.title,'goal-card-title'));item.setAttribute('aria-label',object.title);
+          const milestones=object.milestones||[],completed=milestones.filter(m=>m.status==='achieved').length,status=object.status||'proposed';
+          const meta=el('span',undefined,'goal-card-meta'),pill=el('span',statusLabel(status),'goal-status-pill');pill.dataset.status=status;
+          meta.append(pill,el('span',completed+'/'+milestones.length+' completed','goal-card-count'));item.append(meta);
+          const progress=el('progress');progress.max=milestones.length||1;progress.value=completed;progress.setAttribute('aria-label',completed+' of '+milestones.length+' milestones completed');item.append(progress);
+        }
         if(!goals)item.setAttribute('aria-current',String(object.id===this.current?.id));
         item.draggable=!this.ordering;item.title='Drag to reorder · Alt + Arrow keys to move';
         const type='text/'+kind+'-id';

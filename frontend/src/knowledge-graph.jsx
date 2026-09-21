@@ -28,6 +28,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   const kindLabel = kind => kind === 'companies' ? 'organizations' : kind.replaceAll('_', ' ');
   const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3', ideas:'#f9ca74', actions:'#fb8ca6', goals:'#a7f3d0', drafts:'#c4b5fd', boards:'#93c5fd'};
   const color = kind => palette[kind] || '#e9c96c';
+  window.HflGraphAppearance = {color, kindLabel};
   const defaultLabelKinds = new Set(['sources', 'people', 'tools', 'companies']);
   let data = {nodes:[],edges:[]}, nodes = [], edges = [], selected = null, enabled = new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards']);
   let exampleMode=new URLSearchParams(location.search).get('example')==='1';

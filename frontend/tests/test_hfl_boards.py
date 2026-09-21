@@ -77,6 +77,7 @@ def test_board_sidebar_order_collapse_and_saved_lines_browser(ideas, authenticat
     second = ideas.save_map(board_payload(name='Second board'))
     goal1=ideas.save_goal({'request_id':str(uuid4()),'title':'First goal','color':'#8b5cf6'},'owner')
     goal2=ideas.save_goal({'request_id':str(uuid4()),'title':'Second goal','color':'#14b8a6'},'owner')
+    supporting=ideas.save_idea(payload(title='Supporting board idea'), 'owner')
     with sync_playwright() as engine:
         browser = engine.chromium.launch(channel='chrome', headless=True)
         try:
@@ -114,14 +115,27 @@ def test_board_sidebar_order_collapse_and_saved_lines_browser(ideas, authenticat
             assert [g['id'] for g in ideas.goals()]==[goal2['id'],goal1['id']]
             sidebar.locator('[data-goal-id="'+goal1['id']+'"]').click()
             editor=page.locator('.idea-dialog')
+            expect(sidebar.locator('[data-goal-id="'+goal1['id']+'"] .goal-card-count')).to_have_text('0/0 completed')
+            picker=editor.locator('.goal-link-picker').first
+            picker.locator('summary').click()
+            picker.get_by_role('searchbox').fill('Supporting board idea')
+            picker.get_by_role('checkbox',name='Supporting board idea Idea',exact=True).check()
+            expect(picker.locator('.goal-link-count')).to_have_text('1 selected')
+            editor.get_by_role('button',name='Add milestone',exact=True).click()
+            editor.get_by_label('Milestone',exact=True).fill('Verify outcome')
+            editor.get_by_label('Milestone status',exact=True).select_option(label='Achieved')
+            editor.get_by_label('Status',exact=True).select_option(label='Active')
+            page.screenshot(path=str(tmp_path/'goal-editor.png'))
             editor.get_by_role('button',name='Color #f43f5e',exact=True).click()
             editor.get_by_role('button',name='Save Goal',exact=True).click()
             expect(editor).to_have_count(0)
             assert ideas.goal(goal1['id'])['color']=='#f43f5e'
+            assert ideas.goal(goal1['id'])['linked_objects']==['idea:'+supporting['id']]
+            expect(sidebar.locator('[data-goal-id="'+goal1['id']+'"] .goal-card-count')).to_have_text('1/1 completed')
             assert ideas.map(first['id'])['members']==[]
             sidebar.locator('[data-section=goals] > summary').click()
             expect(sidebar.locator('[data-section=goals] nav')).not_to_be_visible()
-            expect(sidebar.get_by_role('button',name='Add Goal',exact=True)).to_be_visible()
+            expect(sidebar.get_by_role('button',name='Add',exact=True)).to_be_visible()
             sidebar.locator('[data-section=goals] > summary').click()
             page.wait_for_function('window.boardLineStrokes>0')
             page.evaluate('window.boardLineStrokes=0')
@@ -137,7 +151,7 @@ def test_board_sidebar_order_collapse_and_saved_lines_browser(ideas, authenticat
             page.wait_for_selector('#kg-workspace:not([inert])')
             expect(page.locator('#kg-map-count')).to_contain_text('2 links')
             assert sidebar.locator('[data-section=boards] .board-list button').first.inner_text()=='Second board'
-            assert sidebar.locator('[data-section=goals] .board-list button').first.inner_text()=='Second goal'
+            assert sidebar.locator('[data-section=goals] .goal-card-title').first.inner_text()=='Second goal'
             assert sidebar.locator('[data-goal-id="'+goal1['id']+'"]').evaluate('(el)=>getComputedStyle(el).borderLeftColor')=='rgb(244, 63, 94)'
         finally:
             browser.close()
@@ -222,7 +236,8 @@ def test_board_edits_work_while_save_is_slow_and_retry(ideas, authenticated_clie
             page.wait_for_selector('#kg-workspace:not([inert])')
             if width < 760: page.locator('.kg-boards [data-section=boards] > summary').click()
             count = len(graph_requests)
-            page.get_by_role('button',name='Add Board',exact=True).click()
+            page.locator('.board-add-menu').get_by_role('button',name='Add',exact=True).click()
+            page.locator('.board-add-menu').get_by_role('button',name='Board',exact=True).click()
             dialog = page.locator('.idea-dialog')
             dialog.get_by_label('Board name').fill('Quick board')
             dialog.get_by_label('What are you exploring or trying to achieve?').fill('Plan without waiting')
@@ -481,11 +496,18 @@ def test_attach_picker_loading_retry_and_paging_browser(ideas, authenticated_cli
             page.wait_for_timeout(100)
             pending.pop().fulfill(json={'nodes':[{'id':'daily:2026-09-01','kind':'daily','label':'September'}], 'total':51,'has_more':True})
             expect(dialog.get_by_role('button',name='September · daily')).to_be_visible()
+            height=dialog.bounding_box()['height']
+            expect(dialog.locator('.idea-attach-entity')).to_have_text('daily')
+            assert dialog.locator('.idea-attach-dot').evaluate('(n)=>getComputedStyle(n).backgroundColor')=='rgb(149, 167, 195)'
+            page.screenshot(path=str(tmp_path/'attach-picker-loaded.png'))
             dialog.get_by_role('button',name='Next',exact=True).click()
+            expect(dialog.locator('.idea-picker-loading')).to_be_visible()
+            assert dialog.bounding_box()['height']==height
             page.wait_for_timeout(100)
             route=pending.pop(); assert 'offset=50' in route.request.url
             route.fulfill(json={'nodes':[], 'total':51,'has_more':False})
             expect(dialog.get_by_role('button',name='Previous',exact=True)).to_be_visible()
+            assert dialog.bounding_box()['height']==height
             dialog.get_by_label('Search',exact=True).fill('missing')
             page.wait_for_timeout(350)
             route=pending.pop(); assert 'offset=0' in route.request.url and 'query=missing' in route.request.url
