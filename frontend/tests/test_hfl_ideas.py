@@ -318,6 +318,18 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
             intercept.fulfill(status=response.status_code, body=response.content, headers={'content-type': response.headers.get('content-type', 'text/html')})
         page.route('**/*', route)
         page.goto('https://ideas.test/hfl-corpus/ideas')
+        guide_button = page.get_by_role('button', name='Board guide', exact=True)
+        guide_button.click()
+        guide = page.get_by_role('dialog', name='Board guide', exact=True)
+        expect(guide).to_be_visible()
+        expect(guide.get_by_role('heading', name='Where your work goes')).to_be_visible()
+        expect(guide.locator('.board-guide-flow > li')).to_have_count(3)
+        assert guide.evaluate('e => e.scrollWidth <= e.clientWidth + 1')
+        guide.locator('.agenda-form-body').evaluate('e => e.scrollTop = 0')
+        page.screenshot(path=str(tmp_path / ('board-guide-' + str(width) + '.png')))
+        page.keyboard.press('Escape')
+        expect(guide).to_have_count(0)
+        expect(guide_button).to_be_focused()
         if width < 760:
             page.locator('.kg-boards [data-section=boards] > summary').click()
         page.locator('.board-add-menu').get_by_role('button', name='Add', exact=True).click()
@@ -334,7 +346,18 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         page.get_by_role('button', name='Edit idea / checklists', exact=True).wait_for()
         page.get_by_role('button', name='Edit idea / checklists', exact=True).click()
         modal.get_by_label('Idea', exact=True).fill('Warm lighting')
-        modal.get_by_label('Markdown description', exact=True).fill('## Lighting\nUse **warm** light.')
+        description = '# Lighting\n## Requirements\n- Use **warm** light.\n- Compare bulbs\n    - Check brightness\n\n1. Choose a lamp\n2. Install the bulb'
+        modal.get_by_label('Markdown description', exact=True).fill(description)
+        modal.get_by_label('Markdown description', exact=True).press('Tab')
+        preview = modal.locator('.markdown-inline-preview')
+        expect(preview).to_be_visible()
+        expect(preview.locator('ul').first).to_have_css('list-style-type', 'disc')
+        expect(preview.locator('ul ul')).to_have_css('list-style-type', 'circle')
+        expect(preview.locator('ol')).to_have_css('list-style-type', 'decimal')
+        expect(preview.locator('li').first).to_have_css('display', 'list-item')
+        assert preview.locator('h1').evaluate('e => parseFloat(getComputedStyle(e).fontSize)') > preview.locator('h2').evaluate('e => parseFloat(getComputedStyle(e).fontSize)')
+        preview.click()
+        expect(modal.locator('textarea[name=body]')).to_have_value(description)
         modal.get_by_role('button', name='Add checklist', exact=True).click()
         modal.get_by_role('button', name='Add item', exact=True).click()
         modal.get_by_label('Checklist item', exact=True).fill('Compare bulbs')
@@ -352,6 +375,13 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         expect(modal).to_have_count(0)
         assert len(ideas.followups.list()) == 1
         expect(page.locator('#kg-map-count')).to_contain_text('2 nodes')
+        source_id = 'idea:' + ideas.ideas()[0]['id']
+        action_id = 'action:' + ideas.followups.list()[0]['id']
+        assert any(link['source'] == source_id and link['target'] == action_id and link['relation'] == 'develops-into' for link in ideas.links())
+        page.wait_for_function('''([source, target]) => [...window.HflIdeas.maps.sharedEdges.values()].some(
+            edge => edge.source === source && edge.target === target && edge.relation === 'develops-into'
+        )''', arg=[source_id, action_id])
+        expect(page.locator('#kg-map-count')).to_contain_text('1 links')
         hold_graph = True
         page.locator('.board-add-menu').get_by_role('button', name='Add', exact=True).click()
         page.locator('.board-add-menu').get_by_role('button', name='Goal', exact=True).click()
@@ -381,9 +411,12 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         expect(page.locator('.idea-map-status')).to_have_text('Saved')
         page.reload()
         expect(page.locator('#kg-map-count')).to_contain_text('4 nodes')
+        page.wait_for_function('''([source, target]) => [...window.HflIdeas.maps.sharedEdges.values()].some(
+            edge => edge.source === source && edge.target === target && edge.relation === 'develops-into'
+        )''', arg=[source_id, action_id])
         if width < 760:
             page.locator('.kg-boards [data-section=boards] > summary').click()
-        expect(page.locator('.board-list button[aria-current=true]')).to_have_text('Reading room')
+        expect(page.locator('.board-list button[aria-current=true]')).to_have_attribute('aria-label', 'Reading room')
         page.screenshot(path=str(tmp_path / ('boards-' + str(width) + '.png')), full_page=True)
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
         page.locator('#idea-map-tools').get_by_role('button', name='Explore Activity Graph', exact=True).click()

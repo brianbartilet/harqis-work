@@ -53,6 +53,20 @@
 .idea-check-row button { font-size:.72rem; padding:.4rem .5rem; }
 .idea-check-row.dragging { opacity:.6; outline:1px dashed #38bdf8; }
 .markdown-inline-preview { min-height:80px; padding:.75rem; margin:.4rem 0; border:1px solid #334155; border-radius:.5rem; color:#e2e8f0; font-size:.85rem; font-weight:400; cursor:text; overflow-wrap:anywhere; }
+.markdown-inline-preview.markdown-body { line-height:1.6; }
+.markdown-inline-preview.markdown-body :is(h1,h2,h3,h4,h5,h6) { color:#f8fafc; font-weight:650; line-height:1.3; margin:1rem 0 .5rem; border:0; padding:0; }
+.markdown-inline-preview.markdown-body h1 { font-size:1.3rem; }
+.markdown-inline-preview.markdown-body h2 { font-size:1.1rem; }
+.markdown-inline-preview.markdown-body :is(h3,h4,h5,h6) { font-size:.95rem; }
+.markdown-inline-preview.markdown-body :is(p,ul,ol,blockquote,pre) { margin:.65rem 0; }
+.markdown-inline-preview.markdown-body :is(ul,ol) { padding-left:1.5rem; list-style-position:outside; }
+.markdown-inline-preview.markdown-body ul { list-style-type:disc; }
+.markdown-inline-preview.markdown-body ol { list-style-type:decimal; }
+.markdown-inline-preview.markdown-body ul ul { list-style-type:circle; }
+.markdown-inline-preview.markdown-body li { display:list-item; margin:.2rem 0; }
+.markdown-inline-preview.markdown-body li > :is(ul,ol,p) { margin:.25rem 0; }
+.markdown-inline-preview.markdown-body > :first-child { margin-top:0; }
+.markdown-inline-preview.markdown-body > :last-child { margin-bottom:0; }
 .checklist-card-cover { border-top:1px solid #334155; padding-top:.6rem; margin-top:.8rem; font-size:.8rem; }
 .checklist-card-cover label { margin:.5rem 0; line-height:1.5; }
 .checklist-card-cover input { flex:0 0 16px; width:16px; accent-color:#3b82f6; }
@@ -223,3 +237,30 @@
 .board-agent-output>button{margin:8px 8px 8px 0;min-height:38px}
 .board-agent-dialog .board-agent-primary{background:#0c4a6e;border-color:#38bdf8;color:#e0f2fe;font-weight:600}
 .board-agent-output>.board-agent-cancel{display:block;margin-top:16px}
+.idea-copy-files-note{margin:16px 0 20px;line-height:1.6}
+.kg-boards .board-guide-trigger{width:100%;min-height:38px;margin:8px 0 4px;background:transparent;color:#adc1d6;border:1px solid #334155;text-align:center}
+.kg-boards .board-guide-trigger:hover{background:#17263a;color:#e2e8f0}
+.board-guide.idea-dialog{width:min(760px,calc(100% - 24px))}
+.board-guide .agenda-form-body{font-size:.85rem;line-height:1.65;color:#cbd5e1}
+.board-guide .board-guide-intro{font-size:.95rem;color:#e2e8f0;margin:0 0 24px}
+.board-guide section+section{border-top:1px solid #26364b;margin-top:24px;padding-top:24px}
+.board-guide h3{font-size:.95rem;font-weight:650;color:#e2e8f0;margin:0 0 14px}
+.board-guide :is(dl,ol,ul,p){margin:0}
+.board-guide-definitions{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.board-guide dt{color:#7dd3fc;font-weight:600;margin-bottom:5px}
+.board-guide dd{margin:0}
+.board-guide .board-guide-flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;list-style:none;padding:0;margin:0 0 16px}
+.board-guide-flow li{position:relative;padding:14px;background:#17263a;border:1px solid #334155;border-radius:10px}
+.board-guide-flow li+li::before{content:'→';position:absolute;left:-19px;top:15px;color:#94a3b8}
+.board-guide-flow :is(strong,span,small){display:block}
+.board-guide-flow strong{color:#c4b5fd;margin-bottom:6px}
+.board-guide-flow li:nth-child(2) strong{color:#fcd478}
+.board-guide-flow li:nth-child(3) strong{color:#fda4af}
+.board-guide-flow small{font-size:.7rem;color:#94a3b8;margin-top:12px}
+.board-guide .board-guide-list{list-style:disc;padding-left:20px}
+.board-guide-list li+li{margin-top:12px}
+.board-guide-routes>div{display:grid;grid-template-columns:120px minmax(0,1fr);gap:16px;padding:12px 0}
+.board-guide-routes>div+div{border-top:1px solid #1e293b}
+.board-guide-routes>div:first-child{padding-top:0}
+.board-guide-routes>div:last-child{padding-bottom:0}
+@media(max-width:560px){.board-guide-definitions{grid-template-columns:1fr}.board-guide .board-guide-flow{grid-template-columns:1fr;gap:24px}.board-guide-flow li+li::before{content:'↓';left:18px;top:-25px}.board-guide-routes>div{grid-template-columns:1fr;gap:0}}

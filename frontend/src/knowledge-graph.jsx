@@ -621,6 +621,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   if(window.HflIdeas){
     window.HflIdeas.maps.getPositions=()=>Object.fromEntries(nodes.map(n=>[n.id,{x:n.x,y:n.y}]));
     window.addEventListener('hfl:ideas-updated',event=>{if(event.detail?.boardSwitch){pendingState=null;selected=null;enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards']);}if(event.detail?.selectId)selected=event.detail.selectId;
+      if(event.detail?.refreshShared){load(true);return;}
       if(event.detail?.boardLocal&&!event.detail?.boardSwitch){
         const board=window.HflIdeas.maps.current;
         configureData({nodes:board.members.map(id=>window.HflIdeas.maps.nodes.get(id)).filter(Boolean),edges:[...window.HflIdeas.maps.sharedEdges.values()],sources:[]},true);

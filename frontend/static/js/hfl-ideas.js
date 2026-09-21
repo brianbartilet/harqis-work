@@ -23,7 +23,7 @@ window.HflObjectDescription = (item = {}) => {
   }
   const api = (path, method = 'GET', data) => request(base + path, {method, ...(data === undefined ? {} : {body: JSON.stringify(data)})});
   const button = (text, action) => { const b = el('button', text); b.type = 'button'; b.onclick = action; return b; };
-  const changed = (selectId = null, boardSwitch = false) => { window.dispatchEvent(new CustomEvent('hfl:ideas-updated', {detail:{selectId,boardSwitch,boardLocal:!!maps.current}})); if(!maps.current)window.dispatchEvent(new Event('hfl:actions-updated')); };
+  const changed = (selectId = null, boardSwitch = false, refreshShared = false) => { window.dispatchEvent(new CustomEvent('hfl:ideas-updated', {detail:{selectId,boardSwitch,refreshShared,boardLocal:!!maps.current}})); if(!maps.current)window.dispatchEvent(new Event('hfl:actions-updated')); };
   function dialog(title) {
     const node = el('dialog', undefined, 'idea-dialog agenda-dialog'); const form = el('form');
     const heading = el('h2', title); const header = el('header', undefined, 'agenda-dialog-header'); header.append(heading); heading.id = 'idea-title-' + crypto.randomUUID(); node.setAttribute('aria-labelledby', heading.id);
@@ -32,6 +32,46 @@ window.HflObjectDescription = (item = {}) => {
     node.addEventListener('cancel', event => { if (body.inert) event.preventDefault(); });
     node.addEventListener('close', () => node.remove()); node.showModal();
     return {node, form, body, error, footer};
+  }
+  function openBoardGuide() {
+    const d = dialog('Board guide');
+    d.node.classList.add('board-guide');
+    d.node.querySelector('.agenda-dialog-header button').setAttribute('aria-label', 'Close board guide');
+    d.body.innerHTML = `
+      <p class="board-guide-intro">A place to connect what you know, explore possibilities, and decide what to do next.</p>
+      <section aria-labelledby="board-guide-basics">
+        <h3 id="board-guide-basics">Your workspace and your outcome</h3>
+        <dl class="board-guide-definitions">
+          <div><dt>Board</dt><dd>A saved workspace around a question or project. It holds thoughts, attached objects, connections, and their layout. Attaching an existing object reuses it across boards.</dd></div>
+          <div><dt>Goal</dt><dd>The outcome you want, with success criteria, status, a target date, and milestones. Associate a board with a goal in Settings; link supporting ideas and actions in the goal editor.</dd></div>
+        </dl>
+      </section>
+      <section aria-labelledby="board-guide-flow">
+        <h3 id="board-guide-flow">From a spark to a next step</h3>
+        <ol class="board-guide-flow">
+          <li><strong>Thought</strong><span>A rough note on this board.</span><small>Promote to shared Idea</small></li>
+          <li><strong>Idea</strong><span>A reusable possibility to develop, with notes and checklists.</span><small>Make actionable</small></li>
+          <li><strong>Actionable</strong><span>A concrete task with instructions, files, and progress to track.</span><small>Run separately when ready</small></li>
+        </ol>
+        <p>Promotion replaces the thought with a shared idea and keeps its board connections. Conversion creates an independent actionable linked to the idea as <strong>develops into</strong>. Saving instructions does not run an agent.</p>
+      </section>
+      <section aria-labelledby="board-guide-connections">
+        <h3 id="board-guide-connections">Build the connections</h3>
+        <ul class="board-guide-list">
+          <li><strong>Bring in context.</strong> Use Attach existing for entries, ideas, actions, goals, or entities such as people, topics, and tools. Each orb is a node; attaching it alone does not connect it to every other node.</li>
+          <li><strong>Link what belongs together.</strong> Select a node and use Connect on this board. These connections stay on the board. Promote a shared connection between shared objects to reuse it in the Activity Graph.</li>
+          <li><strong>Explore with an agent.</strong> Ask agent proposes ideas and connections. Review and accept suggestions to save them.</li>
+          <li><strong>Review the outcome.</strong> Track milestones in the goal editor. Completed actions do not automatically achieve a goal; assess its success criteria and update its status.</li>
+        </ul>
+      </section>
+      <section aria-labelledby="board-guide-destinations">
+        <h3 id="board-guide-destinations">Where your work goes</h3>
+        <dl class="board-guide-routes">
+          <div><dt>This board</dt><dd>Thoughts, layout, membership, and board-only connections stay here. Edits autosave; Save now flushes pending changes.</dd></div>
+          <div><dt>Activity Graph</dt><dd>Shared ideas, actionables, goals, and shared connections are available beyond this board. Actionables also appear in your action list.</dd></div>
+          <div><dt>HFL history</dt><dd>Creating or changing thoughts and goals queues an HFL memory entry with a link back. It appears after background delivery; moving nodes does not create an entry.</dd></div>
+        </dl>
+      </section>`;
   }
   function field(root, name, title, value = '', type = 'text', required = false, max = 50000) {
     const label = el('label', title), input = el(type === 'textarea' ? 'textarea' : 'input');
@@ -117,7 +157,7 @@ window.HflObjectDescription = (item = {}) => {
       const attachmentsSection = d.body.querySelector('[data-object-attachments]');
       const copiedFiles = [];
       if (conversion) {
-        attachmentsSection.append(el('p', 'Copy supporting files. Changes to this action will remain independent of the idea.'));
+        attachmentsSection.append(el('p', 'Copy supporting files. Changes to this action will remain independent of the idea.', 'idea-copy-files-note'));
         for (const file of conversion.attachments) {
           const label = el('label'), check = el('input'); check.type = 'checkbox'; check.checked = true; copiedFiles.push({check, id: file.id}); label.append(check, document.createTextNode(' ' + file.name)); attachmentsSection.append(label);
         }
@@ -157,7 +197,9 @@ window.HflObjectDescription = (item = {}) => {
             if(parent)await api('/links','POST',{source:parent.id,target:nodeId,relation:parent.kind==='daily'?'source-date':'related-to'});
             await maps.addMembers([nodeId,...(parent?[parent.id]:[])]);
           }
-          d.node.close(); changed();
+          // Conversion also creates shared relationships and updates the source idea.
+          if (conversion) await maps.flush();
+          d.node.close(); changed(null, false, !!conversion);
         } catch (error) { d.error.textContent = error.message + (current ? ' The object is saved; retry to finish remaining changes.' : ''); }
         finally { save.disabled = false; d.body.inert = false; }
       };
@@ -464,6 +506,7 @@ window.HflObjectDescription = (item = {}) => {
       const addToggle=button('Add',()=>{addOptions.hidden=!addOptions.hidden;addToggle.setAttribute('aria-expanded',String(!addOptions.hidden));});addToggle.className='idea-add-toggle';addToggle.setAttribute('aria-expanded','false');addToggle.setAttribute('aria-controls',addOptions.id);
       const closeAdd=()=>{addOptions.hidden=true;addToggle.setAttribute('aria-expanded','false');};
       addOptions.append(button('Board',()=>{closeAdd();this.edit();}),button('Goal',()=>{closeAdd();editGoal();}));addMenu.append(addToggle,addOptions);addMenu.onkeydown=event=>{if(event.key==='Escape'){closeAdd();addToggle.focus();}};this.root.append(addMenu);
+      const guide=button('Board guide',openBoardGuide);guide.className='board-guide-trigger';guide.setAttribute('aria-haspopup','dialog');this.root.append(guide);
       this.root.append(this.objectList('boards'),this.objectList('goals'));
       if (!this.current) { this.root.append(this.status); return; }
       const board = this.current, section = el('section', undefined, 'board-controls');section.style.setProperty('--board-color',board.color||this.palette[0]||'#f59e0b'); section.append(el('h2', board.name), el('p', board.purpose, 'board-purpose'));
