@@ -2,6 +2,7 @@
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 import time
+import json
 
 import pytest
 
@@ -35,9 +36,21 @@ def test_graph_entities_modal_context(authenticated_client, monkeypatch, tmp_pat
                     <link rel="stylesheet" href="/static/css/activity-modals.css">
                     <script src="/static/js/activity-modals.js"></script></body></html>''')
                     return
+                if urlparse(request.url).path == '/api/hfl/entities/matching':
+                    route.fulfill(content_type='application/json', body=json.dumps(dict(enabled=True,
+                        jobs=[dict(mode='history', state='complete', counts=dict(merged=2, suggested=1))],
+                        suggestions_total=1, suggestions=[dict(id='example', data=dict(names=['React', 'React JS'],
+                            decision=dict(reason='Matching framework names.', facts=[dict(left_quote='React launch', right_quote='React JS launch', explanation='Same framework.')])))])))
+                    return
                 response = authenticated_client.request(request.method, request.url.replace('http://modal.test',''),
                     content=request.post_data, headers={'content-type':request.headers.get('content-type','application/json')})
-                route.fulfill(status=response.status_code, body=response.content,
+                body = response.content
+                if urlparse(request.url).path == '/api/hfl/entities' and response.status_code == 200:
+                    payload = response.json()
+                    for entity in payload.get('entities', []):
+                        for entry in entity.get('entries', []): entry['source'] = ''
+                    body = json.dumps(payload).encode()
+                route.fulfill(status=response.status_code, body=body,
                     headers={k:v for k,v in response.headers.items() if k.lower() not in {'content-encoding','content-length'}})
             page.route('http://modal.test/**', route_request)
             page.goto('http://modal.test/modal-host?source=notes&q=%23project')
@@ -102,12 +115,26 @@ def test_graph_entities_modal_context(authenticated_client, monkeypatch, tmp_pat
                 directory.locator('#entity-results:not([hidden])').wait_for()
                 drawer = graph.locator('.activity-entities-drawer')
                 bounds = drawer.bounding_box()
-                assert bounds['width'] == pytest.approx(width * .3 if width > 760 else width - 14, abs=20)
+                assert bounds['width'] == pytest.approx(width * .4 if width > 760 else width - 14, abs=20)
                 assert graph.locator('.activity-modal-loading').count() == 0
                 assert directory.locator('html').evaluate('el => el.scrollWidth <= innerWidth')
                 toggle = directory.locator('.activity-scope-controls').bounding_box()
                 intro = directory.locator('.entity-intro').bounding_box()
                 assert intro['y'] - (toggle['y'] + toggle['height']) >= 15
+                assert directory.locator('[data-activity-context]').count() == 0
+                assert directory.locator('.entity-kind').inner_text() == 'tools'
+                status_bounds = directory.locator('#entity-status').bounding_box()
+                actions_bounds = directory.locator('#result-actions').bounding_box()
+                assert actions_bounds['y'] >= status_bounds['y'] + status_bounds['height']
+                directory.locator('#source-caption').click()
+                directory.get_by_role('checkbox', name='Unspecified source', exact=True).check()
+                assert directory.locator('.entity-card').count() == 1
+                directory.locator('#source-caption').click()
+                directory.locator('#clear-filters').click()
+                directory.locator('#matching-panel > summary').click()
+                directory.locator('.matching-suggestion > summary').click()
+                assert directory.locator('.matching-evidence blockquote').count() == 2
+                assert directory.locator('#matching-status > p').inner_text() == 'No matching jobs active · Awaiting review: 1'
                 page.screenshot(path=str(tmp_path / f'entities-drawer-{width}.png'))
                 assert directory.locator('.entity-card').count() == 1
                 directory.get_by_role('switch',name='All activity').click()

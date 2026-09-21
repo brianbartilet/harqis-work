@@ -378,7 +378,7 @@ def test_board_edits_work_while_save_is_slow_and_retry(ideas, authenticated_clie
             assert pending, 'Expected a background save to be held'
             page.locator('#kg-list button').filter(has_text='Second thought').click()
             viewport = page.locator('#kg-canvas canvas').first.evaluate('(el)=>({...el.__zoom})')
-            page.get_by_role('button',name='Connect on this board',exact=True).click()
+            page.get_by_role('menuitem',name='Connect on this board',exact=True).click()
             expect(dialog.get_by_label('Connect to')).to_be_visible(timeout=1000)
             dialog.get_by_label('Relationship',exact=True).select_option('supports')
             dialog.get_by_role('button',name='Save connection',exact=True).click()
@@ -394,7 +394,7 @@ def test_board_edits_work_while_save_is_slow_and_retry(ideas, authenticated_clie
             assert len(ideas.maps()[0]['drafts']) == 2
             assert len(ideas.maps()[0]['edges']) == 2
             for kind in ['Idea', 'Actionable']:
-                page.get_by_role('button',name='Create linked '+kind,exact=True).click()
+                page.get_by_role('menuitem',name='Create linked '+kind,exact=True).click()
                 dialog.locator('[name=title]').fill('Linked '+kind)
                 if kind == 'Actionable':
                     dialog.locator('.action-details > summary').click()
@@ -414,7 +414,7 @@ def test_board_edits_work_while_save_is_slow_and_retry(ideas, authenticated_clie
             assert not errors, errors
             page.screenshot(path=str(tmp_path / f'board-autosave-{width}.png'))
             hold = True
-            page.get_by_role('button',name='Edit thought',exact=True).click()
+            page.get_by_role('menuitem',name='Edit thought',exact=True).click()
             dialog.get_by_label('Thought',exact=True).fill('Saved before closing')
             dialog.get_by_role('button',name='Save thought',exact=True).click()
             page.locator('[data-activity-close]').click()

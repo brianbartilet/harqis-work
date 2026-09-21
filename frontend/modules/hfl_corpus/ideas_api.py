@@ -318,6 +318,13 @@ async def promote_connection(request: Request, identity: str):
     return {'item': call(store().promote_connection, identity, edge, raw.get('version'))}
 
 
+@router.post('/maps/{identity}/connections')
+async def edit_board_connection(request: Request, identity: str):
+    timeline.owner(request)
+    raw = await timeline.body(request)
+    return {'item': await run_in_threadpool(call, store().edit_connection, identity, raw)}
+
+
 @router.post('/goals')
 @router.patch('/goals/{identity}')
 async def save_goal(request: Request, identity: str | None = None):

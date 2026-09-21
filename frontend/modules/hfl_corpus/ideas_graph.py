@@ -96,7 +96,7 @@ def extend(base, snapshot, *, since='', until='', query='', sources=None, contex
             if identity.startswith('daily:') and other in nodes:
                 nodes.setdefault(identity, dict(id=identity, label=identity[6:], kind='daily'))
         derived = edge in goal_links
-        edges.append({**edge, 'manual': not derived, 'evidence': '', 'method': 'goal' if derived else 'owner'})
+        edges.append({**edge, 'manual': not derived and edge['relation'] not in {'develops-into', 'source-date', 'context'}, 'evidence': '', 'method': 'goal' if derived else 'owner'})
     if context or sources or since or until:
         connected = {identity for edge in edges if edge['source'] in nodes and edge['target'] in nodes for identity in (edge['source'], edge['target'])}
         manual_topics = {topic['id'] for topic in snapshot['topics']} - corpus_ids

@@ -3,6 +3,7 @@ import json
 import uuid
 from datetime import date
 from workflows.hfl.colors import PIN_COLORS
+from workflows.hfl.board_connections import ConnectionStoreMixin, validate_connection, connection_key
 
 from workflows.hfl.timeline_store import FollowUpConflict, isoformat
 
@@ -16,7 +17,7 @@ def text(value, label, limit, required=False):
 def normalize_board(item):
     """Read old maps additively, preserving their IDs and revisions."""
     return {'purpose': item['name'], 'root': '', 'goal_id': '', 'drafts': [], 'edges': [],
-            'created_at': '', 'updated_at': '', 'board_date': '', 'color': PIN_COLORS[0], 'node_sizes': {}, **item}
+            'created_at': '', 'updated_at': '', 'board_date': '', 'color': PIN_COLORS[0], 'node_sizes': {}, 'edge_widths': {}, **item}
 
 
 def validate_board(item):
@@ -40,8 +41,14 @@ def validate_board(item):
         text(draft.get('body', ''), 'thought description', 60000)
     if not isinstance(edges, list) or len(edges) > 2000:
         raise ValueError('Invalid board connections.')
+    seen = set()
     for edge in edges:
-        if not isinstance(edge, dict) or set(edge) - {'source', 'target', 'relation'}:
+        validate_connection(edge)
+        key = connection_key(edge)
+        if key in seen:
+            raise ValueError('This connection already exists.')
+        seen.add(key)
+        if not isinstance(edge, dict) or set(edge) - {'source', 'target', 'relation', 'direction'}:
             raise ValueError('Invalid board connection.')
         if any(not isinstance(edge.get(k), str) for k in ('source', 'target')) or edge.get('source') not in ids or edge.get('target') not in ids or edge['source'] == edge['target']:
             raise ValueError('Connect two different members of this board.')
@@ -59,10 +66,21 @@ def validate_board(item):
     ):
         raise ValueError('Orb sizes must be whole numbers from 1 to 20.')
     item['node_sizes'] = {key: value for key, value in sizes.items() if key in ids}
+    widths = item.setdefault('edge_widths', {})
+    if not isinstance(widths, dict) or len(widths) > 12000:
+        raise ValueError('Invalid connection sizes.')
+    for key, value in widths.items():
+        try:
+            source, target, relation = json.loads(key)
+        except (ValueError, TypeError):
+            raise ValueError('Invalid connection size key.') from None
+        if not all(isinstance(v, str) for v in (source, target, relation)) or type(value) is not int or not 1 <= value <= 5:
+            raise ValueError('Connection sizes must be whole numbers from 1 to 5.')
+    item['edge_widths'] = {k: v for k, v in widths.items() if all(i in ids for i in json.loads(k)[:2])}
     return ids
 
 
-class BoardStoreMixin:
+class BoardStoreMixin(ConnectionStoreMixin):
     def promoted_idea(self, identity, draft_id):
         with self.followups.connect() as db:
             row = db.execute('SELECT idea_id FROM board_promotions WHERE board_id=? AND draft_id=?', (identity, draft_id)).fetchone()
@@ -76,6 +94,7 @@ class BoardStoreMixin:
                 raise KeyError(identity)
             board = normalize_board(json.loads(row['payload']))
             values = (edge['source'], edge['target'], edge.get('relation', 'related-to'))
+            edge = next((e for e in board['edges'] if connection_key(e) == connection_key(edge)), edge)
             if edge not in board['edges']:
                 if db.execute('SELECT 1 FROM idea_links WHERE source=? AND target=? AND relation=?', values).fetchone():
                     return board
@@ -83,6 +102,7 @@ class BoardStoreMixin:
             if board['version'] != version:
                 raise FollowUpConflict('The board changed. Reload before promoting.')
             db.execute('INSERT OR IGNORE INTO idea_links VALUES (?,?,?,?)', (*values, isoformat()))
+            db.execute('INSERT OR IGNORE INTO idea_link_metadata VALUES (?,?,?,?,?)', (*values, edge.get('direction', 'forward'), str(uuid.uuid4())))
             board['edges'].remove(edge)
             board['version'] += 1
             board['updated_at'] = isoformat()
@@ -214,6 +234,7 @@ class BoardStoreMixin:
                 board['positions'][shared_node] = board['positions'].pop(draft_id)
             if draft_id in board['node_sizes']:
                 board['node_sizes'][shared_node] = board['node_sizes'].pop(draft_id)
+            board['edge_widths'] = {json.dumps([shared_node if v == draft_id else v for v in json.loads(k)], separators=(',', ':')): v for k, v in board['edge_widths'].items()}
             for edge in board['edges']:
                 for end in ('source', 'target'):
                     if edge[end] == draft_id:

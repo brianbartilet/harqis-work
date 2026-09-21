@@ -7,6 +7,8 @@
   let matchingItems = [], mergeBusy = false, mergePreview = null, mergeTarget = null, mergeRequest = '', submittedPayload = null;
   const selectedKinds = new Set(), selectedCategories = new Set(), selectedSources = new Set();
   const kinds = {people: 'People', companies: 'Organizations', tools: 'Tools', topics: 'Topics', objects: 'Referenced objects'};
+  const kindColors = {people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', objects:'#e9c96c'};
+  const sourceValue = entry => String(entry.source || '').trim();
   function pill(text) { const p = el('span', text); p.className = 'pill'; return p; }
   function refreshFilters() {
     $('filter-kind').replaceChildren();
@@ -42,7 +44,7 @@
   }
   function facets() {
     checks('filter-category', [['__none__', 'Uncategorized'], ...[...new Set(items.flatMap(e => e.categories))].sort().map(v => [v, v])], selectedCategories);
-    checks('filter-source', [...new Set(items.flatMap(e => e.entries.map(x => x.source)))].sort().map(v => [v, v]), selectedSources);
+    checks('filter-source', [...new Set(items.flatMap(e => e.entries.map(sourceValue)))].sort().map(v => [v, v || 'Unspecified source']), selectedSources);
     refreshFilters();
   }
   function editor(entity) {
@@ -90,7 +92,7 @@
     const q = $('entity-query').value.trim().toLowerCase(), contact = $('filter-contact').value;
     const filtered = items.filter(e => {
       const p = e.profile || {}, searchable = [e.label, kinds[e.kind] || e.kind, ...e.categories, ...(p.emails || []), ...(p.phones || []), ...(p.references || []), p.notes || ''].join(' ').toLowerCase();
-      return q.split(/\s+/).every(word => searchable.includes(word)) && (!selectedKinds.size || selectedKinds.has(e.kind)) && (!selectedCategories.size || [...selectedCategories].some(category => category === '__none__' ? !e.categories.length : e.categories.includes(category))) && (!selectedSources.size || e.entries.some(x => selectedSources.has(x.source))) && (!contact || (contact === 'contact' ? p.emails?.length || p.phones?.length : contact === 'curated' ? e.profile : !e.profile));
+      return q.split(/\s+/).every(word => searchable.includes(word)) && (!selectedKinds.size || selectedKinds.has(e.kind)) && (!selectedCategories.size || [...selectedCategories].some(category => category === '__none__' ? !e.categories.length : e.categories.includes(category))) && (!selectedSources.size || e.entries.some(x => selectedSources.has(sourceValue(x)))) && (!contact || (contact === 'contact' ? p.emails?.length || p.phones?.length : contact === 'curated' ? e.profile : !e.profile));
     });
     filtered.sort((a, b) => $('sort').value === 'activity' ? b.entries.length - a.entries.length || a.label.localeCompare(b.label) : $('sort').value === 'recent' ? (b.entries[0]?.date || '').localeCompare(a.entries[0]?.date || '') || a.label.localeCompare(b.label) : $('sort').value === 'name-desc' ? b.label.localeCompare(a.label) : a.label.localeCompare(b.label));
     matchingItems = filtered;
@@ -111,7 +113,9 @@
       checkbox.addEventListener('click', event => event.stopPropagation());
       checkbox.onchange = () => { checkbox.checked ? selectedEntities.add(e.id) : selectedEntities.delete(e.id); render(); };
       summary.append(checkbox);
-      title.append(el('span', e.label), pill(kinds[e.kind] || e.kind));
+      const kindPill = pill((kinds[e.kind] || e.kind).toLowerCase());
+      kindPill.classList.add('entity-kind'); kindPill.style.setProperty('--entity-color', kindColors[e.kind] || '#95a7c3');
+      title.append(el('span', e.label), kindPill);
       const meta = el('span'); meta.className = 'entity-detail-row';
       const count = el('span', `${e.entries.length} ${e.entries.length === 1 ? 'entry' : 'entries'}`); count.className = 'entity-count';
       meta.append(count, pill(e.resolution.replaceAll('-', ' ')));
@@ -229,15 +233,36 @@
     clearTimeout(matchingTimer);
     const data = await api('/matching');
     const running = data.jobs.some(job => ['pending','running'].includes(job.state));
-    $('matching-status').textContent = !data.enabled ? 'Automatic matching is disabled.' : data.jobs.length ? data.jobs.map(job => {
-      const counts = job.counts || {};
-      return `${job.mode === 'history' ? 'Existing entities' : 'New enrichment'}: ${job.state} · ${counts.merged || 0} merged · ${counts.suggested || 0} for review · ${counts.pending || 0} pending${job.error ? ' · ' + job.error : ''}`;
-    }).join('\n') : 'Ready. Future enrichment will trigger matching; start the one-time scan to check existing entities.';
+    const status = $('matching-status'); status.replaceChildren();
+    if (!data.enabled) status.append(el('p', 'Automatic matching is disabled.'));
+    else if (!data.jobs.length) status.append(el('p', 'Ready. New enrichment will trigger matching. Scan existing entities to check earlier activity.'));
+    else {
+      const active = data.jobs.filter(job => ['pending','running'].includes(job.state)).length;
+      status.append(el('p', `${active ? active + ' matching jobs active' : 'No matching jobs active'} · Awaiting review: ${data.suggestions_total ?? data.suggestions.length}`));
+      const history = el('details'); history.append(el('summary', `Recent matching jobs (${data.jobs.length})`));
+      const jobs = el('div'); jobs.className = 'matching-jobs';
+      for (const job of data.jobs) {
+        const counts = job.counts || {}, row = el('div'); row.className = 'matching-job';
+        row.append(el('strong', `${job.mode === 'history' ? 'Existing entities' : 'New enrichment'} · ${job.state}`), el('p', `${counts.merged || 0} merged · ${counts.suggested || 0} for review · ${counts.pending || 0} pending`));
+        if (job.error) row.append(el('p', job.error));
+        jobs.append(row);
+      }
+      history.append(jobs); status.append(history);
+    }
     $('matching-suggestions').replaceChildren();
     for (const suggestion of data.suggestions) {
-      const row = el('details'); row.append(el('summary', (suggestion.data.names || []).join(' ↔ ')));
+      const row = el('details'); row.className = 'matching-suggestion'; row.append(el('summary', (suggestion.data.names || []).join(' ↔ ')));
       row.append(el('p', suggestion.data.decision?.reason || suggestion.data.review_reason || 'Review supporting evidence before merging.'));
-      const evidence = el('pre', JSON.stringify(suggestion.data.decision?.facts || [], null, 2)); evidence.style.whiteSpace = 'pre-wrap'; row.append(evidence);
+      for (const fact of suggestion.data.decision?.facts || []) {
+        const evidence = el('div'); evidence.className = 'matching-evidence';
+        if (typeof fact === 'string') evidence.append(el('p', fact));
+        else if (fact && typeof fact === 'object') {
+          for (const [key, value] of Object.entries(fact)) {
+            evidence.append(el('strong', key === 'left_quote' ? suggestion.data.names?.[0] || 'First entity' : key === 'right_quote' ? suggestion.data.names?.[1] || 'Second entity' : key.replaceAll('_', ' ')), el(key.endsWith('quote') ? 'blockquote' : 'p', typeof value === 'string' ? value : JSON.stringify(value)));
+          }
+        }
+        row.append(evidence);
+      }
       const review = el('button', 'Review suggested merge'), dismiss = el('button', 'Keep separate');
       review.type = dismiss.type = 'button';
       review.onclick = () => {
@@ -247,7 +272,8 @@
         $('merge-evidence').value = suggestion.data.decision?.reason || '';
       };
       dismiss.onclick = async () => { dismiss.disabled = true; dismiss.textContent = 'Saving…'; try { await api('/matching/suggestions/' + suggestion.id + '/dismiss', {}); await matchingStatus(); } catch (err) { $('matching-status').textContent = err.message; dismiss.disabled = false; dismiss.textContent = 'Keep separate'; } };
-      row.append(review, dismiss); $('matching-suggestions').append(row);
+      const actions = el('div'); actions.className = 'matching-actions'; actions.append(review, dismiss);
+      row.append(actions); $('matching-suggestions').append(row);
     }
     if (!data.suggestions.length) $('matching-suggestions').append(el('p', 'No uncertain matches awaiting review.'));
     if (data.suggestions_total > data.suggestions.length) $('matching-suggestions').prepend(el('p', `Showing ${data.suggestions.length} of ${data.suggestions_total} suggestions. Review or dismiss these to see more.`));

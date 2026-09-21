@@ -44,6 +44,27 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
   ::-webkit-scrollbar-button:single-button,::-webkit-scrollbar-button{display:none;width:0;height:0}
 }
 @media(max-width:360px){.entity-shell .directory-filters,.entity-shell .profile-fields{grid-template-columns:1fr}}
+
+.entity-shell .results-toolbar{flex-direction:column;align-items:flex-start;gap:14px}
+.entity-shell #result-actions{flex-wrap:wrap;justify-content:flex-start}
+.entity-shell .checkbox-options{box-sizing:border-box;width:100%;max-width:100%}
+.entity-shell .profile-fields{align-items:start;gap:20px;margin:24px 0}
+.entity-shell .profile-fields label{min-width:0;line-height:1.5}
+.entity-shell .profile-fields input,.entity-shell .profile-fields textarea{box-sizing:border-box;width:100%;margin-top:8px}
+.entity-shell .profile-editor>summary,.entity-shell .entity-audit>summary{line-height:1.6}
+.entity-shell .entity-kind{color:var(--entity-color,#95a7c3);background:color-mix(in srgb,var(--entity-color,#95a7c3) 12%,transparent);border-color:color-mix(in srgb,var(--entity-color,#95a7c3) 25%,transparent);white-space:nowrap}
+.entity-kind::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
+.entity-shell #matching-status{font-size:12px;line-height:1.7;margin:20px 0}
+.entity-shell .matching-jobs{max-height:220px;overflow:auto}
+.entity-shell .matching-job{padding:10px 0;border-bottom:1px solid #334155}
+.entity-shell .matching-job:last-child{border:0}
+.entity-shell .matching-job p{margin:4px 0;color:#94a3b8}
+.entity-shell .matching-suggestion>p{margin:16px 0;line-height:1.7;font-size:13px}
+.entity-shell .matching-evidence{padding:12px;border:1px solid #334155;border-radius:8px;margin:12px 0;background:#0b1322;font-size:12px;line-height:1.7}
+.entity-shell .matching-evidence blockquote{margin:8px 0 16px;padding:8px 12px}
+.entity-shell .matching-evidence p{margin:8px 0}
+.entity-shell .matching-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid #334155}
+@media(max-width:460px){.entity-shell .profile-fields{grid-template-columns:1fr}}
 </style>{% endblock %}
 
 {% block content %}
@@ -51,7 +72,7 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 <main class="entity-shell">
 
 <header class="activity-modal-heading"><h1>Activity Corpus Entities</h1><button type="button" data-activity-close aria-label="Close entities" title="Close entities">×</button></header>
-<div class="activity-scope-controls"><button type="button" data-activity-all role="switch" aria-checked="false">All activity<span class="activity-switch-track" aria-hidden="true"></span></button><span data-activity-context class="activity-context"></span></div>
+<div class="activity-scope-controls"><button type="button" data-activity-all role="switch" aria-checked="false">All activity<span class="activity-switch-track" aria-hidden="true"></span></button></div>
 
 <p class="text-slate-400 entity-intro">People, organizations, tools, topics and referenced objects from your activity. Open an entity to review its evidence or edit its profile. Add references for websites, social media and files to any entity. Local file paths are displayed for copying.</p>
 
@@ -106,7 +127,7 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 <details class="entity-maintenance" id="matching-panel"><summary>Automatic matching and review suggestions</summary>
   <p class="my-3 text-slate-400">Newly enriched entities are checked for same-type identity matches. Strong, corroborated matches merge automatically; uncertain matches appear here. Edited names and profiles are preserved. Unmerged or dismissed matches are excluded from automatic remerging.</p>
   <div class="processing-actions"><button id="matching-scan" type="button">Scan existing entities once / resume</button><button id="matching-refresh" type="button">Refresh matching progress</button></div>
-  <p id="matching-status" role="status" aria-live="polite">Loading matching status…</p>
+  <div id="matching-status" role="status" aria-live="polite">Loading matching status…</div>
   <div id="matching-suggestions"></div>
 </details>
 

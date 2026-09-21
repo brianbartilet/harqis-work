@@ -28,6 +28,10 @@ class IdeasStore(BoardStoreMixin):
                 CREATE TABLE IF NOT EXISTS idea_history (id TEXT NOT NULL, version INTEGER NOT NULL, actor TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(id,version));
                 CREATE TABLE IF NOT EXISTS idea_topics (id TEXT PRIMARY KEY, label TEXT NOT NULL, created_at TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS idea_links (source TEXT NOT NULL, target TEXT NOT NULL, relation TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(source,target,relation));
+                CREATE TABLE IF NOT EXISTS idea_link_metadata (source TEXT NOT NULL, target TEXT NOT NULL, relation TEXT NOT NULL, direction TEXT NOT NULL, revision TEXT NOT NULL, PRIMARY KEY(source,target,relation));
+                CREATE TRIGGER IF NOT EXISTS idea_link_metadata_cleanup AFTER DELETE ON idea_links BEGIN
+                    DELETE FROM idea_link_metadata WHERE source=OLD.source AND target=OLD.target AND relation=OLD.relation;
+                END;
                 CREATE TABLE IF NOT EXISTS intent_goals (id TEXT PRIMARY KEY, version INTEGER NOT NULL, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS goal_history (id TEXT NOT NULL, version INTEGER NOT NULL, actor TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(id,version));
                 CREATE TABLE IF NOT EXISTS board_promotions (board_id TEXT NOT NULL, draft_id TEXT NOT NULL, idea_id TEXT NOT NULL, PRIMARY KEY(board_id,draft_id));
@@ -128,7 +132,7 @@ class IdeasStore(BoardStoreMixin):
 
     def links(self):
         with self.followups.connect() as db:
-            return [dict(row) for row in db.execute('SELECT * FROM idea_links')]
+            return [dict(row) for row in db.execute("SELECT l.*, COALESCE(m.direction, 'forward') AS direction, COALESCE(m.revision, l.created_at) AS revision FROM idea_links l LEFT JOIN idea_link_metadata m USING(source,target,relation)")]
 
     def link(self, source, target, relation='related-to', remove=False):
         if source == target or relation not in {'related-to', 'develops-into', 'source-date', 'context', 'supports', 'depends-on', 'alternative'}:
@@ -136,6 +140,7 @@ class IdeasStore(BoardStoreMixin):
         with self.followups.connect() as db:
             if remove:
                 db.execute('DELETE FROM idea_links WHERE source=? AND target=? AND relation=?', (source, target, relation))
+                db.execute('DELETE FROM idea_link_metadata WHERE source=? AND target=? AND relation=?', (source, target, relation))
             else:
                 db.execute('INSERT OR IGNORE INTO idea_links VALUES (?,?,?,?)', (source, target, relation, isoformat()))
 
@@ -161,7 +166,7 @@ class IdeasStore(BoardStoreMixin):
             db.executemany('INSERT INTO board_order VALUES (?,?)', [(identity, index) for index, identity in enumerate(identities)])
 
     def save_map(self, raw, identity=None):
-        if set(raw) - {'name', 'members', 'positions', 'node_sizes', 'version', 'request_id', 'prompt', 'purpose', 'root', 'goal_id', 'drafts', 'edges', 'board_date', 'color'}:
+        if set(raw) - {'name', 'members', 'positions', 'node_sizes', 'edge_widths', 'version', 'request_id', 'prompt', 'purpose', 'root', 'goal_id', 'drafts', 'edges', 'board_date', 'color'}:
             raise ValueError('Unsupported mind-map fields.')
         previous = self.map(identity) if identity else {}
         item = {**previous, **raw}

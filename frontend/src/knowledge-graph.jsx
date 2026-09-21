@@ -42,6 +42,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   const touchViewport=window.matchMedia('(pointer: coarse)').matches;
   const uiFont=getComputedStyle(host).fontFamily;
   const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let connectionInteraction=false;
   const endpointId=value=>typeof value==='object'?value.id:value;
   const duration=reducedMotion?0:500;
   let preset='timeline', animationMode='off', motionTime=0, transition=null, motionSettling=false;
@@ -155,7 +156,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     document.querySelectorAll('[data-animation]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.animation===mode)));
     host.dataset.animation=mode;
   }
-  function motionPaused(){return document.hidden||loading||selected!==null||activePointers.size>0||Date.now()-lastInteraction<250||
+  function motionPaused(){return connectionInteraction||document.hidden||loading||selected!==null||activePointers.size>0||Date.now()-lastInteraction<250||
     !!document.querySelector('dialog[open]:not(#activity-standalone)')||!$('views-panel').hidden||!$('animation-panel').hidden;}
   function animate(now){
     requestAnimationFrame(animate);
@@ -185,14 +186,91 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   }
   function Graph({data,activeId,selectedId}) {
     const ref=useRef();
-    const sizeTools=useRef(),actionTools=useRef(),hoverTimer=useRef();
+    const sizeTools=useRef(),actionTools=useRef(),connectorTools=useRef(),connectionTools=useRef(),hoverTimer=useRef(),gesture=useRef();
     const [hoverId,setHoverId]=useState(null);
     const board=window.HflIdeas?.maps.current;
     const sizeNode=board?data.nodes.find(n=>n.id===(hoverId||selectedId)):null;
     const actionNode=board?data.nodes.find(n=>n.id===selectedId):null;
+    const edgeKey=link=>JSON.stringify([endpointId(link.source),endpointId(link.target),link.relation||'related-to']);
+    const [chosenEdge,setChosenEdge]=useState(null),[connectFrom,setConnectFrom]=useState(null),[preview,setPreview]=useState(null),[connectionBusy,setConnectionBusy]=useState(false),[connectionMessage,setConnectionMessage]=useState('');
+    const connection=board?data.links.find(e=>(e.local?'local:':'shared:')+edgeKey(e)===chosenEdge):null;
+    const connectorNode=board?data.nodes.find(n=>n.id===(connectFrom||hoverId||selectedId)):null;
+    const editable=connection&&(connection.local||connection.manual);
+    const lineLevel=connection?(board.edge_widths?.[edgeKey(connection)]||2):2;
     const sizeLevel=sizeNode?(board.node_sizes?.[sizeNode.id]||3):3;
     useEffect(()=>()=>clearTimeout(hoverTimer.current),[]);
     useEffect(()=>setHoverId(null),[data]);
+    useEffect(()=>{setChosenEdge(null);setConnectFrom(null);setPreview(null);setConnectionMessage('');},[board?.id]);
+    useEffect(()=>{if(selectedId)setChosenEdge(null);},[selectedId]);
+    useEffect(()=>{
+      connectionInteraction=!!(connectFrom||connection||connectionBusy);
+      const cancel=event=>{if(event.key==='Escape'){setConnectFrom(null);setPreview(null);setChosenEdge(null);setConnectionMessage('');}};
+      document.addEventListener('keydown',cancel);
+      return()=>{connectionInteraction=false;document.removeEventListener('keydown',cancel);};
+    },[connectFrom,connection,connectionBusy]);
+    const cleanEdge=edge=>({source:endpointId(edge.source),target:endpointId(edge.target),relation:edge.relation||'related-to',direction:edge.direction||'forward'});
+    async function connectionCommand(operation,replacement,extra={}){
+      if(connectionBusy)return;
+      setConnectionBusy(true);setConnectionMessage('Saving…');
+      try{
+        const edge=operation==='create'?replacement:cleanEdge(connection);
+        await window.HflIdeas.maps.connectionCommand({operation,scope:operation==='create'||connection.local?'local':'shared',edge,replacement:replacement||edge,revision:connection?.revision,...extra});
+        if(operation==='remove')setChosenEdge(null);
+        else setChosenEdge((operation==='create'||connection.local?'local:':'shared:')+edgeKey(replacement||edge));
+        setConnectFrom(null);setPreview(null);setConnectionMessage('Saved');
+      }catch(error){setConnectionMessage(error.message+' Refresh connections before retrying if the board changed.');}
+      finally{setConnectionBusy(false);}
+    }
+    function finishConnection(target){
+      if(!connectFrom||connectionBusy)return;
+      if(target.id===connectFrom){setConnectionMessage('Choose a different orb.');return;}
+      connectionCommand('create',{source:connectFrom,target:target.id,relation:'related-to',direction:'forward'});
+    }
+    function startConnector(event,node){
+      event.preventDefault();event.stopPropagation();
+      if(connectionBusy)return;
+      clearTimeout(hoverTimer.current);setConnectFrom(node.id);setChosenEdge(null);setConnectionMessage('Drag to another orb, or select it. Escape cancels.');
+      gesture.current={x:event.clientX,y:event.clientY};event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    function moveConnector(event){
+      if(!gesture.current)return;
+      const bounds=host.getBoundingClientRect();setPreview({x:event.clientX-bounds.left,y:event.clientY-bounds.top});
+    }
+    function endConnector(event){
+      event.stopPropagation();
+      const start=gesture.current;gesture.current=null;
+      if(!start||Math.hypot(event.clientX-start.x,event.clientY-start.y)<6)return;
+      const bounds=host.getBoundingClientRect(),x=event.clientX-bounds.left,y=event.clientY-bounds.top;
+      const target=data.nodes.find(node=>{const p=ref.current.graph2ScreenCoords(node.x,node.y);return Math.hypot(p.x-x,p.y-y)<=node.radius+12;});
+      if(target)finishConnection(target);else{setConnectFrom(null);setPreview(null);setConnectionMessage('Connection cancelled.');}
+    }
+    const curveOffsets=new Map(),parallelGroups=new Map();
+    if(board){
+      for(const link of data.links){
+        const key=JSON.stringify([endpointId(link.source),endpointId(link.target)].sort());
+        if(!parallelGroups.has(key))parallelGroups.set(key,[]);
+        parallelGroups.get(key).push(link);
+      }
+      for(const group of parallelGroups.values())group.forEach((link,index)=>curveOffsets.set(link,group.length<2?0:.16*(index-(group.length-1)/2)*(endpointId(link.source)<endpointId(link.target)?1:-1)));
+    }
+    function paintArrows(link,ctx){
+      if(!board&&link.direction!=='both')return;
+      const mode=link.direction||'forward';if(mode==='none')return;
+      const a=link.source,b=link.target,zoom=ref.current?.zoom()||1;
+      if(!Number.isFinite(a.x)||!Number.isFinite(b.x))return;
+      const angle=Math.atan2(b.y-a.y,b.x-a.x),length=Math.hypot(b.x-a.x,b.y-a.y);
+      if(length<(a.radius+b.radius+20)/zoom)return;
+      ctx.save();ctx.fillStyle=color(board?a.kind:b.kind);ctx.globalAlpha=.85;
+      for(const reverse of !board?[true]:mode==='both'?[false,true]:[false]){
+        const distance=(reverse?a.radius:b.radius)+9,t=reverse?distance/(zoom*length):1-distance/(zoom*length);
+        const cp=link.__controlPoints;
+        const x=cp?.length===2?(1-t)**2*a.x+2*(1-t)*t*cp[0]+t*t*b.x:a.x+(b.x-a.x)*t;
+        const y=cp?.length===2?(1-t)**2*a.y+2*(1-t)*t*cp[1]+t*t*b.y:a.y+(b.y-a.y)*t;
+        const tangent=cp?.length===2?Math.atan2((1-t)*(cp[1]-a.y)+t*(b.y-cp[1]),(1-t)*(cp[0]-a.x)+t*(b.x-cp[0])):angle;
+        ctx.save();ctx.translate(x,y);ctx.rotate(tangent+(reverse?Math.PI:0));ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(-6/zoom,-3/zoom);ctx.lineTo(-6/zoom,3/zoom);ctx.closePath();ctx.fill();ctx.restore();
+      }
+      ctx.restore();
+    }
     function menuKeys(event){
       if(event.key==='Escape'){
         event.preventDefault();event.stopPropagation();select(null);host.focus();
@@ -250,20 +328,35 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       ctx.restore();
     }
     return <><ForceGraph2D ref={ref} width={size.width} height={size.height}
-      graphData={data} enableNodeDrag={!!board||!touchViewport} enablePanInteraction={true} enableZoomInteraction={true} backgroundColor="rgba(0,0,0,0)" nodeLabel={()=>''}
+      graphData={data} enableNodeDrag={!connectFrom&&!connectionBusy&&(!!board||!touchViewport)} enablePanInteraction={!connectFrom&&!connectionBusy} enableZoomInteraction={!connectFrom&&!connectionBusy} backgroundColor="rgba(0,0,0,0)" nodeLabel={()=>''}
       onRenderFramePost={(ctx,scale)=>{
         if(!ref.current||!Number.isFinite(scale)||scale<=0)return;
         const origin=ref.current.screen2GraphCoords(0,0);
         if(sizeNode&&sizeTools.current){
           const point=ref.current.graph2ScreenCoords(sizeNode.x,sizeNode.y);
-          sizeTools.current.style.left=Math.max(4,Math.min(size.width-44,point.x-sizeNode.radius-50))+'px';
-          sizeTools.current.style.top=Math.max(4,Math.min(size.height-80,point.y-38))+'px';
+          const toolsWidth=sizeTools.current.offsetWidth,toolsHeight=sizeTools.current.offsetHeight;
+          sizeTools.current.style.left=Math.max(4,Math.min(size.width-toolsWidth-4,point.x-sizeNode.radius-toolsWidth-24))+'px';
+          const toolsTop=point.x-sizeNode.radius-toolsWidth-24<4?point.y-sizeNode.radius-toolsHeight-24:point.y-toolsHeight/2;
+          sizeTools.current.style.top=Math.max(4,Math.min(size.height-toolsHeight-4,toolsTop))+'px';
         }
         if(actionNode&&actionTools.current){
           const point=ref.current.graph2ScreenCoords(actionNode.x,actionNode.y),panel=actionTools.current;
-          const right=point.x+actionNode.radius+14,left=point.x-actionNode.radius-58-panel.offsetWidth;
+          const right=point.x+actionNode.radius+28,left=point.x-actionNode.radius-58-panel.offsetWidth;
           panel.style.left=Math.max(4,Math.min(size.width-panel.offsetWidth-4,right+panel.offsetWidth<=size.width-4?right:left>=4?left:right))+'px';
           panel.style.top=Math.max(4,Math.min(size.height-panel.offsetHeight-4,point.y-30))+'px';
+        }
+        if(connectorNode&&connectorTools.current){
+          const p=ref.current.graph2ScreenCoords(connectorNode.x,connectorNode.y);
+          connectorTools.current.style.left=p.x+'px';connectorTools.current.style.top=p.y+'px';
+        }
+        if(connection&&connectionTools.current){
+          const a=ref.current.graph2ScreenCoords(connection.source.x,connection.source.y),b=ref.current.graph2ScreenCoords(connection.target.x,connection.target.y),panel=connectionTools.current;
+          panel.style.left=Math.max(4,Math.min(size.width-panel.offsetWidth-4,(a.x+b.x)/2+12))+'px';
+          panel.style.top=Math.max(4,Math.min(size.height-panel.offsetHeight-4,(a.y+b.y)/2))+'px';
+        }
+        if(connectFrom&&preview&&connectorNode){
+          const target=ref.current.screen2GraphCoords(preview.x,preview.y);
+          ctx.save();ctx.strokeStyle=color(connectorNode.kind);ctx.lineWidth=1.5/scale;ctx.setLineDash([4/scale,4/scale]);ctx.beginPath();ctx.moveTo(connectorNode.x,connectorNode.y);ctx.lineTo(target.x,target.y);ctx.stroke();ctx.restore();
         }
         const candidates=data.nodes.filter(n=>board||!activeId||n.id===activeId||n.id===selectedId||near.has(n.id)).map(n=>({
           id:n.id,label:n.label,kind:n.kind,x:(n.x-origin.x)*scale,y:(n.y-origin.y)*scale,
@@ -286,16 +379,18 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       }}
       nodeCanvasObject={paintNode}
       nodePointerAreaPaint={(node,paint,ctx)=>{ctx.fillStyle=paint;ctx.beginPath();ctx.arc(node.x,node.y,(node.radius+4)/(ref.current?.zoom()||1),0,2*Math.PI);ctx.fill();}}
-      linkColor={link=>color(link.target.kind)+(activeId?(isLinked(link)?'df':'07'):(data.nodes.length<=35?'70':'32'))}
-      linkDirectionalArrowLength={link=>['ideas','actions','goals','drafts','boards'].includes(link.source.kind)||['ideas','actions','goals','drafts','boards'].includes(link.target.kind)?4:0}
+      linkColor={link=>color(board?link.source.kind:link.target.kind)+(connection===link?'ff':activeId?(isLinked(link)?'df':'07'):(data.nodes.length<=35?'70':'32'))}
+      linkDirectionalArrowLength={link=>board||link.direction==='none'?0:link.manual?4:['ideas','actions','goals','drafts','boards'].includes(link.source.kind)||['ideas','actions','goals','drafts','boards'].includes(link.target.kind)?4:0}
       linkDirectionalArrowRelPos={0.8}
-      linkWidth={link=>isLinked(link)?2:data.nodes.length<=35?1.1:.65} linkCurvature={.16}
+      linkWidth={link=>board?([.7,1,1.4,1.9,2.5][(board.edge_widths?.[edgeKey(link)]||2)-1]+(connection===link?.4:0)):isLinked(link)?2:data.nodes.length<=35?1.1:.65} linkCurvature={link=>board?(curveOffsets.get(link)||0):.16}
+      linkCanvasObjectMode={()=>'after'} linkCanvasObject={paintArrows} linkHoverPrecision={8}
+      onLinkClick={link=>{if(!board||connectFrom||connectionBusy)return;select(null);setChosenEdge((link.local?'local:':'shared:')+edgeKey(link));setConnectionMessage('');}}
       linkLineDash={link=>link.local?[4,3]:null}
       linkDirectionalParticles={0}
       linkDirectionalParticleWidth={2} linkDirectionalParticleSpeed={.004}
       onZoom={()=>{if(activePointers.size)lastInteraction=Date.now();scheduleStateSave();}}
       onNodeHover={node=>{host.style.cursor=node?'pointer':'grab';clearTimeout(hoverTimer.current);if(node)setHoverId(node.id);else hoverTimer.current=setTimeout(()=>setHoverId(null),250);if(!touchViewport)highlight(node?.id||selected);}}
-      onNodeClick={node=>select(node.id)} onBackgroundClick={()=>select(null)}
+      onNodeClick={node=>{if(connectFrom)finishConnection(node);else{setChosenEdge(null);setConnectionMessage('');select(node.id);}}} onBackgroundClick={()=>{if(!connectionBusy){select(null);setChosenEdge(null);setConnectFrom(null);setPreview(null);setConnectionMessage('');}}}
       onNodeDrag={followDrag}
       onNodeDragEnd={node=>{draggedNode=null;node.manual=true;layoutTargets.set(node.id,{x:node.x,y:node.y,anchor:false});node.fx=node.x;node.fy=node.y;draw();if(window.HflIdeas?.maps.current)window.HflIdeas.maps.saveLayout();else graphApi.d3ReheatSimulation();}}
       warmupTicks={0} cooldownTicks={reducedMotion||(!draggedNode&&!dragNodes.size)?0:Infinity}
@@ -303,13 +398,36 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       d3AlphaMin={.001}
       onEngineStop={finishDrag}
 
-    />{sizeNode&&<div ref={sizeTools} className="kg-orb-size" role="group" aria-label={'Orb controls for '+sizeNode.label}
+    />{sizeNode&&!connectFrom&&!connection&&<div ref={sizeTools} className="kg-orb-size" role="group" aria-label={'Orb controls for '+sizeNode.label}
       onPointerEnter={()=>clearTimeout(hoverTimer.current)} onPointerLeave={()=>{hoverTimer.current=setTimeout(()=>setHoverId(null),250);}}
       onPointerDown={event=>event.stopPropagation()} onClick={event=>event.stopPropagation()}>
       <button type="button" aria-label="Increase orb size" title="Increase orb size" disabled={sizeLevel===20} onClick={()=>resizeOrb(1)}><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg></button>
       <button type="button" aria-label="Decrease orb size" title="Decrease orb size" disabled={sizeLevel===1} onClick={()=>resizeOrb(-1)}><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M4 10h12"/></svg></button>
     </div>}
-      {actionNode&&nodeActions.length>0&&<div ref={actionTools} id="kg-orb-actions-menu" className="kg-orb-actions-menu" role="menu" aria-label="Orb actions" style={{maxHeight:Math.max(100,Math.min(440,size.height-8))}}
+      {connectorNode&&!connection&&<div ref={connectorTools} className="kg-connectors" role="group" aria-label={'Connect from '+connectorNode.label} onPointerEnter={()=>clearTimeout(hoverTimer.current)} onPointerLeave={()=>{if(!connectFrom)hoverTimer.current=setTimeout(()=>setHoverId(null),250);}}>
+        {['North','East','South','West'].map((side,index)=><button key={side} type="button" className="kg-connector" aria-label={side+' connector for '+connectorNode.label} title="Connect to another orb" disabled={connectionBusy} style={{left:Math.sin(index*Math.PI/2)*(connectorNode.radius+9),top:-Math.cos(index*Math.PI/2)*(connectorNode.radius+9),'--connector-color':color(connectorNode.kind)}}
+          onPointerDown={event=>startConnector(event,connectorNode)} onPointerMove={moveConnector} onPointerUp={endConnector} onPointerCancel={()=>{gesture.current=null;setConnectFrom(null);setPreview(null);}} onClick={event=>{event.stopPropagation();if(event.detail===0){setConnectFrom(connectorNode.id);setConnectionMessage('Select another orb to connect. Escape cancels.');}}}/>)}
+      </div>}
+      {connection&&<div ref={connectionTools} className="kg-orb-actions-menu kg-connection-menu" role="region" aria-label="Connection actions" style={{maxHeight:size.height-12}} onPointerDown={event=>event.stopPropagation()} onClick={event=>event.stopPropagation()}>
+        <strong>{connection.local?'Board-only connection':connection.manual?'Shared connection':'Derived connection'}</strong>
+        <p>{connection.source.label} {connection.direction==='both'?'↔':connection.direction==='none'?'—':'→'} {connection.target.label}</p>
+        {!editable?<p>Automatically derived · read-only</p>:<>
+          {connection.manual&&<p>Relationship changes apply everywhere this connection appears.</p>}
+          <label>Relationship<select aria-label="Connection relationship" disabled={connectionBusy} value={connection.relation||'related-to'} onChange={event=>connectionCommand('update',{...cleanEdge(connection),relation:event.target.value})}>
+            {[...new Set(['related-to','supports','alternative','depends-on',connection.relation].filter(Boolean))].map(value=><option key={value} value={value}>{value.replaceAll('-',' ')}</option>)}
+          </select></label>
+          <label>Arrows<select aria-label="Connection arrows" disabled={connectionBusy} value={connection.direction||'forward'} onChange={event=>connectionCommand('update',{...cleanEdge(connection),direction:event.target.value})}>
+            <option value="forward">One-way</option><option value="both">Bidirectional</option><option value="none">No arrow</option>
+          </select></label>
+          <button type="button" disabled={connectionBusy} onClick={()=>connectionCommand('update',{...cleanEdge(connection),source:connection.target.id,target:connection.source.id})}>Reverse direction</button>
+          <div className="kg-line-size" role="group" aria-label="Line thickness on this board"><span>Line thickness</span><button type="button" aria-label="Decrease line thickness" disabled={connectionBusy||lineLevel===1} onClick={()=>connectionCommand('width',null,{width:lineLevel-1})}><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M4 10h12"/></svg></button><button type="button" aria-label="Increase line thickness" disabled={connectionBusy||lineLevel===5} onClick={()=>connectionCommand('width',null,{width:lineLevel+1})}><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg></button></div>
+          <button type="button" className="kg-orb-remove" disabled={connectionBusy} onClick={()=>connectionCommand('remove')}>Remove connection</button>
+          {connection.local&&![connection.source.id,connection.target.id].some(id=>id.startsWith('draft:'))&&<button type="button" disabled={connectionBusy} onClick={async()=>{setConnectionBusy(true);try{await window.HflIdeas.maps.promoteConnection(cleanEdge(connection));setChosenEdge(null);setConnectionMessage('Shared connection saved');}catch(error){setConnectionMessage(error.message);}finally{setConnectionBusy(false);}}}>Share with Activity Graph</button>}
+        </>}
+        <button type="button" disabled={connectionBusy} onClick={()=>{setChosenEdge(null);setConnectionMessage('');}}>Close</button>
+      </div>}
+      {board&&connectionMessage&&<div className="kg-connection-feedback" role="status">{connectionMessage}{!connectionBusy&&connectionMessage!=='Saved'&&!connectFrom&&<button type="button" onClick={async()=>{try{await window.HflIdeas.maps.refreshConnections();setChosenEdge(null);setConnectionMessage('Connections refreshed.');}catch(error){setConnectionMessage(error.message);}}}>Refresh connections</button>}</div>}
+      {actionNode&&!connectFrom&&!connection&&nodeActions.length>0&&<div ref={actionTools} id="kg-orb-actions-menu" className="kg-orb-actions-menu" role="menu" aria-label="Orb actions" style={{maxHeight:Math.max(100,Math.min(440,size.height-8))}}
         onPointerDown={event=>event.stopPropagation()} onClick={event=>event.stopPropagation()} onKeyDown={menuKeys}>
         {['Edit & develop','Add & connect','Board','View'].map(group=>{
           const actions=nodeActions.filter(action=>action.group===group);
@@ -503,7 +621,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     if(window.HflIdeas)window.HflIdeas.maps.pendingPositions=null;
     // Supply endpoints from this render directly. Static board updates use zero
     // simulation ticks, so links must not wait for d3 to resolve string IDs.
-    graphData={nodes,viewport:restoredViewport,fitOnce:!preserveLayout,links:edges.map(e=>({source:byId.get(e.source),target:byId.get(e.target),local:!!e.local}))};
+    graphData={nodes,viewport:restoredViewport,fitOnce:!preserveLayout,links:edges.map(e=>({...e,source:byId.get(e.source),target:byId.get(e.target),local:!!e.local}))};
     updatePresetMenu(layout.notice);
     $('map-count').textContent=nodes.length+' nodes · '+edges.length+' links';
     showInfo('status',nodes.length+' / '+(data.total_nodes ?? data.nodes.length)+' matching nodes · '+Math.max(0,(data.total_nodes??data.nodes.length)-data.nodes.length)+' outside detail limit · '+(data.nodes.length-nodes.length)+' hidden by view filters · '+edges.length+' connections'+(data.omitted_sources?' · '+data.omitted_sources+' sources outside limit':'')+(limited||data.truncated?' · '+$('density').selectedOptions[0].text.split(' · ')[0]+'; search or increase detail to explore more.':'')+(!nodes.length?' · No matching nodes. Clear your search or change the filters.':''),!nodes.length);
@@ -573,7 +691,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
           board.members.forEach(id=>window.HflIdeas.maps.nodes.delete(id));
           for(const [key,edge] of window.HflIdeas.maps.sharedEdges)if(board.members.includes(edge.source)&&board.members.includes(edge.target))window.HflIdeas.maps.sharedEdges.delete(key);
         }
-        configureData(shared);setLoading(false);
+        configureData(shared,force===true);setLoading(false);
       }catch(error){setLoading(false);showInfo('status',error.message,true);}
       return;
     }

@@ -59,7 +59,7 @@ window.HflObjectDescription = (item = {}) => {
         <h3 id="board-guide-connections">Build the connections</h3>
         <ul class="board-guide-list">
           <li><strong>Bring in context.</strong> Use Attach existing for entries, ideas, actions, goals, or entities such as people, topics, and tools. Each orb is a node; attaching it alone does not connect it to every other node.</li>
-          <li><strong>Link what belongs together.</strong> Select an orb and choose Connect on this board from its action panel. These connections stay on the board. Use Board connections to promote a connection between shared objects into the Activity Graph.</li>
+          <li><strong>Link what belongs together.</strong> Select an orb and choose Connect on this board from its action panel. You can also drag from one of the four dots around an orb to another orb, or tap a dot then the destination. New connections stay on this board. Select a line to change its relationship, reverse direction, choose one-way, bidirectional, or no arrows, adjust five subtle thickness levels, or remove it. Thickness is saved only on this board. Shared relationship changes apply everywhere; derived connections are read-only. Use Share with Activity Graph in the line menu or Board connections to promote a connection between shared objects into the Activity Graph.</li>
           <li><strong>Arrange your thinking.</strong> Drag an orb to place it independently; its connections stay attached. Titles wrap in full. Hover over or select an orb for +/− controls, with twenty saved size levels to express how concrete it feels. Selecting an orb opens its action panel for editing, promotion, and more.</li>
           <li><strong>Explore with an agent.</strong> Ask agent proposes ideas and connections. Review and accept suggestions to save them.</li>
           <li><strong>Review the outcome.</strong> Track milestones in the goal editor. Completed actions do not automatically achieve a goal; assess its success criteria and update its status.</li>
@@ -575,6 +575,30 @@ window.HflObjectDescription = (item = {}) => {
       await this.flush();const {item}=await api('/maps/'+this.current.id);
       this.queues.delete(item.id);this.current=item;this.loaded=this.loaded.map(b=>b.id===item.id?item:b);this.render();
     },
+    async promoteConnection(edge){
+      await this.flush();
+      const {item}=await api('/maps/'+this.current.id+'/promote-link','POST',{version:this.current.version,edge:{source:edge.source,target:edge.target,relation:edge.relation}});
+      this.queues.delete(item.id);this.current=item;this.loaded=this.loaded.map(b=>b.id===item.id?item:b);this.render();changed(null,false,true);
+    },
+    async connectionCommand(command){
+      if(!this.current)throw Error('Open a board first.');
+      const id=this.current.id;
+      await this.flush();
+      const queue=this.queue();
+      queue.paused=true;
+      try{
+        const {item}=await api('/maps/'+id+'/connections','POST',{...command,version:queue.value.version});
+        queue.value={...item,...queue.pending};
+        this.loaded=this.loaded.map(b=>b.id===id?queue.value:b);
+        if(this.current?.id===id){this.current=queue.value;this.render();this.status.textContent='Saved';}
+        if(command.scope==='shared'&&command.operation!=='width'){
+          this.sharedEdges.delete(JSON.stringify([command.edge.source,command.edge.target,command.edge.relation]));
+        }
+        changed(null,false,command.scope==='shared');
+        return item;
+      }finally{queue.resume();}
+    },
+    async refreshConnections(){await this.reload();changed(null,false,true);},
     async persist(fields){if(this.current){this.queue().edit({positions:{...this.current.positions,...this.getPositions()},...fields});this.pendingPositions=this.current.positions;}},
     async addMembers(ids) { if (this.current) { await this.persist({members: [...new Set([...this.current.members, ...ids])], positions: {...this.current.positions, ...this.getPositions()}}); this.pendingPositions = this.current.positions; } },
     async removeMember(id) {
