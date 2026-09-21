@@ -109,17 +109,15 @@
 .action-connections-dialog .agenda-dialog-header { gap:.75rem; }
 .action-connections-dialog h2 { min-width:0; overflow-wrap:anywhere; font-size:1rem; }
 .action-connections-dialog .agenda-dialog-header button { flex-shrink:0; }
-.connections-tools { display:flex; align-items:center; gap:.4rem; padding:.65rem 1rem; border-bottom:1px solid #243448; }
-.connections-tools span { margin-right:auto; color:#94a3b8; font-size:.72rem; }
+.connections-tools { position:absolute; z-index:2; top:.6rem; right:.6rem; display:flex; gap:.3rem; padding:.25rem; border:1px solid #334155; border-radius:.6rem; background:#0b1728e8; }
 .connections-tools button { padding:.3rem .6rem; }
 .connections-layout { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(220px,1fr); }
-.connections-canvas { min-width:0; height:360px; overflow:hidden; }
+.connections-canvas { position:relative; min-width:0; height:360px; overflow:hidden; }
 .connections-details { min-width:0; height:360px; overflow:auto; padding:1rem; border-left:1px solid #243448; font-size:.8rem; overflow-wrap:anywhere; }
-.connections-details select { display:block; width:100%; margin:.4rem 0 1rem; background:#0f172a; color:#e2e8f0; border:1px solid #475569; border-radius:.4rem; padding:.4rem; }
 .connections-details h3 { font-size:.95rem; font-weight:600; color:#f8fafc; margin:.35rem 0 .65rem; }
 .connections-details h4 { color:#cbd5e1; font-weight:600; margin:.9rem 0 .35rem; }
 .connections-kind { color:#c4b5fd; }
-.connections-body { white-space:pre-wrap; margin-top:.7rem; color:#cbd5e1; }
+.connections-body { margin-top:.7rem; color:#cbd5e1; }
 .connections-relations li { margin:.65rem 0; }
 .connections-relations small { display:block; color:#94a3b8; }
 .connections-footnote { padding:.65rem 1rem; font-size:.72rem; color:#94a3b8; border-top:1px solid #243448; }
@@ -264,3 +262,28 @@
 @media(max-width:639px){.corpus-navigation-actions .corpus-create-menu{grid-column:1 / -1;grid-row:1}.corpus-navigation-actions .corpus-tools{grid-column:1;grid-row:2}.corpus-navigation-actions :is(.corpus-create-menu,.corpus-tools)>summary{width:100%;box-sizing:border-box}.corpus-navigation-actions .corpus-create-menu>div{width:100%;box-sizing:border-box}}
 
 .followups-lane .agenda-card-actions :is(.action-results-button,.action-connections-button) { flex:1 1 calc(50% - .3rem); width:auto; padding:.5rem .3rem; margin-top:.15rem; }
+
+.connections-body :is(pre,table) { max-width:100%; overflow:auto; }
+.connections-body ul { list-style:disc; padding-left:1.25rem; }
+.connections-body ol { list-style:decimal; padding-left:1.25rem; }
+.connections-body :is(h1,h2,h3) { font-size:1rem; margin:.8rem 0 .4rem; font-weight:600; }
+
+/* Stable rows across open, completed, and unconnected action cards. */
+.agenda-card-actions.action-controls { display:grid; grid-template-columns:minmax(0,1fr); gap:.4rem; }
+.action-management-controls,.action-view-controls { display:flex; gap:.35rem; min-width:0; }
+.agenda-card-actions.action-controls :is(.action-management-controls,.action-view-controls) > button { flex:1 1 0; width:auto; min-width:0; min-height:36px; margin:0; padding:.4rem .25rem; white-space:nowrap; }
+/* Reserve the same body size for loading, errors, empty, and graph states. */
+.connections-content { height:400px; display:flex; flex-direction:column; }
+.connections-content > .connections-layout { flex:1; min-height:0; }
+.connections-content :is(.connections-canvas,.connections-details) { height:100%; min-height:0; }
+.connections-content > .connections-state { flex:1; margin:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+.connections-content > .connections-footnote { flex-shrink:0; margin:0; }
+@media(max-width:639px) {
+  .connections-content { height:520px; }
+  .connections-content > .connections-layout { grid-template-rows:260px minmax(0,1fr); }
+}
+
+.followups-toolbar :is([data-board-create],[data-board-refresh]) { min-height:38px; box-sizing:border-box; padding:10px 13px; border-radius:8px; font-size:12px; line-height:16px; }
+.followups-toolbar [data-board-create] { background:#2563eb; border-color:#3b82f6; color:#fff; font-weight:600; }
+.followups-toolbar [data-board-create]:hover { background:#3b82f6; }
+.followups-toolbar [data-board-create]:focus-visible { outline:2px solid #93c5fd; outline-offset:3px; }

@@ -76,6 +76,17 @@
   const statusLabel = value => ({in_progress:'In Progress',waiting:'In Progress'}[value] || value[0].toUpperCase()+value.slice(1));
   window.addEventListener('hfl:agent-updated',()=>load());
   const priority = item => [({done:1,dismissed:2}[item.status]||0),({Q1:0,Q2:1,Q3:2,Q4:3}[item.matrix]??4),[item.due_date,item.review_date].filter(Boolean).sort()[0]||'9999',item.due_date||'9999',item.created_at||'',item.id].join('|');
+  let connectionAvailability;
+  function connectedActionIds() {
+    // All cards rendered together share one read; the next refresh checks again.
+    if (!connectionAvailability) {
+      connectionAvailability = fetch('/hfl-corpus/timeline/ideas/connection-availability', {cache:'no-store'})
+        .then(response => { if (!response.ok) throw Error('Connections unavailable'); return response.json(); })
+        .then(data => new Set(data.action_ids))
+        .finally(() => { connectionAvailability = null; });
+    }
+    return connectionAvailability;
+  }
   function card(item) {
     const el=node('article',null,'agenda-card');el.dataset.overdue=String(item.overdue);el.dataset.followupId=item.id;
     const meta=node('div',null,'agenda-card-meta');const status=node('span',statusLabel(item.status),'action-status');status.dataset.status=item.status;meta.append(status);
@@ -103,17 +114,22 @@
     if(item.notes || item.completion_note){const details=node('details');details.append(node('summary','Notes & outcome'));if(item.notes)details.append(node('p',item.notes));if(item.completion_note)details.append(node('p','Outcome: '+item.completion_note));el.append(details);}
     if(item.source){const evidence=node('div',null,'action-evidence-link');const available=item.evidence_available!==false;const a=node(available?'a':'span','Open HFL evidence ↗');if(available){a.href=evidenceUrl(item.source);a.target='_blank';a.rel='noopener';}else{a.setAttribute('aria-disabled','true');a.title='No linked evidence entry is available';}evidence.append(a);el.append(evidence);}
     const actions=node('div',null,'agenda-card-actions action-controls');
-    actions.append(button('Edit',()=>openEditor(item)));
+    const management=node('div',null,'action-management-controls');
+    const views=node('div',null,'action-view-controls');
+    actions.append(management,views);
+    management.append(button('Edit',()=>openEditor(item)));
     if(!['done','dismissed'].includes(item.status)){
-      actions.append(button('Dismiss',e=>patch(item,{status:'dismissed'},e.currentTarget)),button('Done',e=>patch(item,{status:'done'},e.currentTarget)));
-    } if(item.status !== 'open') actions.append(button('Reopen',e=>patch(item,{status:'open'},e.currentTarget)));
-    actions.append(button('History',()=>showHistory(item)));
+      management.append(button('Dismiss',e=>patch(item,{status:'dismissed'},e.currentTarget)),button('Done',e=>patch(item,{status:'done'},e.currentTarget)));
+    } if(item.status !== 'open') management.append(button('Reopen',e=>patch(item,{status:'open'},e.currentTarget)));
+    management.append(button('History',()=>showHistory(item)));
     const resultsButton = button('Results',()=>window.hflAgentBridge.open('actionable',item.id,item.title));
     resultsButton.className = 'action-results-button';
-    actions.append(resultsButton);
+    views.append(resultsButton);
     const connections = button('Connections', () => window.HflActionConnections.open(item, connections));
     connections.className = 'action-connections-button';
-    actions.append(connections);
+    connectedActionIds().then(ids => {
+      if (ids.has(item.id)) views.append(connections);
+    }).catch(() => { /* A later card refresh retries availability. */ });
     el.append(actions);return el;
   }
   async function load() {

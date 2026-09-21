@@ -97,12 +97,24 @@ def snapshot(request: Request):
     return permitted_snapshot()
 
 
+@router.get('/connection-availability')
+def connection_availability(request: Request):
+    timeline.owner(request)
+    from modules.hfl_corpus.entities import graph
+    from modules.hfl_corpus.action_connections import connected_actions
+    return {'action_ids': connected_actions(graph(limit=0), store().maps())}
+
+
 @router.get('/actions/{identity}/connections')
 def action_connections(request: Request, identity: str):
     timeline.owner(request)
     from modules.hfl_corpus.entities import graph
     from modules.hfl_corpus.action_connections import project
-    return project(identity, graph(limit=0), store().maps())
+    from services.markdown import render_markdown
+    data = project(identity, graph(limit=0), store().maps())
+    for node in data['nodes']:
+        node['body_html'] = str(render_markdown(node.get('body') or node.get('description') or ''))
+    return data
 
 
 @router.get('/boards')

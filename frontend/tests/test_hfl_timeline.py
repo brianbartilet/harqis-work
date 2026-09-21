@@ -773,7 +773,7 @@ def test_unified_actions_matrix_editor_and_empty_message(agenda, authenticated_c
     from zoneinfo import ZoneInfo
     from modules.hfl_corpus import router
     playwright = pytest.importorskip('playwright.sync_api')
-    monkeypatch.setattr(router.corpus_index, 'documents', lambda: ())
+    monkeypatch.setattr(router.corpus_index, 'documents', lambda **kwargs: ())
     today = datetime.now(ZoneInfo('Asia/Singapore')).date().isoformat()
     for title, matrix in [('Interruption', 'Q3'), ('Prevention', 'Q2'), ('Completed work', 'Q1')]:
         item = agenda.create(payload(title=title, matrix=matrix, matrix_confidence='medium', due_date=today), actor='owner')[0]

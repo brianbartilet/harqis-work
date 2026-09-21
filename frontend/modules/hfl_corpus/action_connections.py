@@ -40,3 +40,22 @@ def project(action_id, shared, boards):
             neighbors.update((edge['source'], edge['target']))
     return {'root': root, 'nodes': [n for identity, n in nodes.items() if identity in neighbors],
             'edges': [e for e in valid if e['source'] in neighbors and e['target'] in neighbors]}
+
+
+def connected_actions(shared, boards):
+    """Return visible actions with at least one shared or board-local edge."""
+    nodes = {node['id'] for node in shared['nodes']}
+    dates = {node['id'] for node in shared['nodes'] if node.get('kind') == 'daily'}
+    connected = set()
+    for edge in shared['edges']:
+        endpoints = {edge['source'], edge['target']}
+        if endpoints <= nodes and not endpoints & dates:
+            connected.update(endpoints)
+    for board in boards:
+        members = set(board['members']) & nodes
+        drafts = {draft['id'] for draft in board.get('drafts', [])}
+        for edge in board.get('edges', []):
+            endpoints = {edge['source'], edge['target']}
+            if endpoints <= members | drafts:
+                connected.update(endpoints & members)
+    return sorted(identity.removeprefix('action:') for identity in connected if identity.startswith('action:'))
