@@ -107,15 +107,21 @@ def test_board_sidebar_order_collapse_and_saved_lines_browser(ideas, authenticat
             expect(sidebar.get_by_role('button',name='Settings',exact=True)).to_be_visible()
             assert sidebar.bounding_box()['width']==width
             sidebar.locator('[data-section=boards] > summary').click()
-            sidebar.locator('[data-board-id="'+second['id']+'"]').drag_to(sidebar.locator('[data-board-id="'+first['id']+'"]'))
-            expect(sidebar.locator('.idea-map-status')).to_have_text('Board order saved')
+            expect(sidebar.locator('[data-section=goals] .board-list')).not_to_be_visible()
+            button_sizes=sidebar.locator('.board-explore,.board-add-menu>.idea-add-toggle,.board-controls>button').evaluate_all('(buttons)=>buttons.map(b=>({width:b.getBoundingClientRect().width,height:b.getBoundingClientRect().height}))')
+            with page.expect_response(lambda r: r.url.endswith('/boards/order') and r.request.method=='PUT'):
+                sidebar.locator('[data-board-id="'+second['id']+'"]').drag_to(sidebar.locator('[data-board-id="'+first['id']+'"]'))
+            expect(sidebar.locator('.idea-map-status')).to_be_empty()
             assert [b['id'] for b in ideas.maps()]==[second['id'],first['id']]
-            sidebar.locator('[data-goal-id="'+goal2['id']+'"]').drag_to(sidebar.locator('[data-goal-id="'+goal1['id']+'"]'))
-            expect(sidebar.locator('.idea-map-status')).to_have_text('Goal order saved')
+            sidebar.locator('[data-section=goals] > summary').click()
+            assert sidebar.locator('.board-explore,.board-add-menu>.idea-add-toggle,.board-controls>button').evaluate_all('(buttons)=>buttons.map(b=>({width:b.getBoundingClientRect().width,height:b.getBoundingClientRect().height}))')==button_sizes
+            with page.expect_response(lambda r: r.url.endswith('/goals/order') and r.request.method=='PUT'):
+                sidebar.locator('[data-goal-id="'+goal2['id']+'"]').drag_to(sidebar.locator('[data-goal-id="'+goal1['id']+'"]'))
+            expect(sidebar.locator('.idea-map-status')).to_be_empty()
             assert [g['id'] for g in ideas.goals()]==[goal2['id'],goal1['id']]
             sidebar.locator('[data-goal-id="'+goal1['id']+'"]').click()
             editor=page.locator('.idea-dialog')
-            expect(sidebar.locator('[data-goal-id="'+goal1['id']+'"] .goal-card-count')).to_have_text('0/0 completed')
+            expect(sidebar.locator('[data-goal-id="'+goal1['id']+'"] .goal-card-count')).to_have_text('0/0 milestones')
             picker=editor.locator('.goal-link-picker').first
             picker.locator('summary').click()
             picker.get_by_role('searchbox').fill('Supporting board idea')
@@ -127,11 +133,13 @@ def test_board_sidebar_order_collapse_and_saved_lines_browser(ideas, authenticat
             editor.get_by_label('Status',exact=True).select_option(label='Active')
             page.screenshot(path=str(tmp_path/'goal-editor.png'))
             editor.get_by_role('button',name='Color #f43f5e',exact=True).click()
+            page.evaluate('window.HflIdeas.maps.goalsOpen=false')
             editor.get_by_role('button',name='Save Goal',exact=True).click()
             expect(editor).to_have_count(0)
+            expect(sidebar.locator('[data-section=goals] .board-list')).to_be_visible()
             assert ideas.goal(goal1['id'])['color']=='#f43f5e'
             assert ideas.goal(goal1['id'])['linked_objects']==['idea:'+supporting['id']]
-            expect(sidebar.locator('[data-goal-id="'+goal1['id']+'"] .goal-card-count')).to_have_text('1/1 completed')
+            expect(sidebar.locator('[data-goal-id="'+goal1['id']+'"] .goal-card-count')).to_have_text('1/1 milestones')
             assert ideas.map(first['id'])['members']==[]
             sidebar.locator('[data-section=goals] > summary').click()
             expect(sidebar.locator('[data-section=goals] nav')).not_to_be_visible()
@@ -149,8 +157,15 @@ def test_board_sidebar_order_collapse_and_saved_lines_browser(ideas, authenticat
             page.screenshot(path=str(tmp_path/'board-sidebar.png'))
             page.reload()
             page.wait_for_selector('#kg-workspace:not([inert])')
+            expect(sidebar.locator('[data-section=goals] .board-list')).not_to_be_visible()
+            sidebar.locator('[data-section=goals] > summary').click()
             expect(page.locator('#kg-map-count')).to_contain_text('2 links')
-            assert sidebar.locator('[data-section=boards] .board-list button').first.inner_text()=='Second board'
+            assert sidebar.locator('[data-section=boards] .goal-card-title').first.inner_text()=='Second board'
+            board_card=sidebar.locator('[data-board-id="'+first['id']+'"]')
+            expect(board_card.locator('.goal-status-pill')).to_have_text('Selected')
+            expect(board_card.locator('.goal-card-count')).to_have_text('3 nodes')
+            expect(sidebar.locator('[data-board-id="'+second['id']+'"] .goal-status-pill')).to_have_text('Saved')
+            assert board_card.bounding_box()['height']==sidebar.locator('[data-goal-id="'+goal1['id']+'"]').bounding_box()['height']
             assert sidebar.locator('[data-section=goals] .goal-card-title').first.inner_text()=='Second goal'
             assert sidebar.locator('[data-goal-id="'+goal1['id']+'"]').evaluate('(el)=>getComputedStyle(el).borderLeftColor')=='rgb(244, 63, 94)'
         finally:

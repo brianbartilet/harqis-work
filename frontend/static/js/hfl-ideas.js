@@ -276,8 +276,9 @@ window.HflObjectDescription = (item = {}) => {
       const matches = options.filter(n => (n.label + ' ' + n.kind).toLowerCase().includes(search.value.toLowerCase().trim()));
       for (const n of matches) {
         const label = el('label', undefined, 'goal-link-option'), check = el('input'); check.type = 'checkbox'; check.checked = selected.has(n.id); check.disabled = disabled;
-        const text = el('span', n.label), type = el('small', n.kind === 'ideas' ? 'Idea' : n.kind === 'actions' ? 'Action' : 'Existing link');
-        text.append(type); label.append(check, text); list.append(label);
+        const text = el('span', n.label, 'goal-link-title'), type = el('small', n.kind === 'ideas' ? 'Idea' : n.kind === 'actions' ? 'Action' : 'Existing link', 'goal-link-type');
+        const dot=el('span',undefined,'idea-attach-dot');dot.style.background=window.HflGraphAppearance?.color(n.kind)||(n.kind==='ideas'?'#f9ca74':n.kind==='actions'?'#fb8ca6':'#94a3b8');dot.setAttribute('aria-hidden','true');type.append(dot);
+        type.dataset.kind=n.kind;label.title=n.label;label.append(check, text, type); list.append(label);
         check.onchange = () => { if(check.checked)selected.add(n.id);else selected.delete(n.id);updateCount(); };
       }
       if (!matches.length) list.append(el('p', disabled ? 'Loading available links…' : options.length ? 'No matching items.' : 'No saved items available to link.', 'board-hint'));
@@ -336,7 +337,7 @@ window.HflObjectDescription = (item = {}) => {
         const values = {title: title.value, color:getColor(), body: body.value, success_criteria: criteria.value, status: status.value, target_date: date.value, progress_notes: notes.value, milestones: rows.map(r => ({id:r.id,title:r.title.value,status:r.status.value,target_date:r.date.value,actions:[...r.actions.selectedOptions].map(o=>o.value)})), ...(item.id ? {version:item.version} : {request_id:key})};
         values.linked_objects = [...links.selectedOptions].map(o => o.value);
         item = (await api('/goals' + (item.id ? '/' + item.id : ''), item.id ? 'PATCH' : 'POST', values)).item;
-        maps.goals=maps.goals.some(g=>g.id===item.id)?maps.goals.map(g=>g.id===item.id?item:g):[...maps.goals,item];maps.render();maps.cacheNode({...item,id:'goal:'+item.id,object_id:item.id,label:item.title,kind:'goals'});
+        maps.goals=maps.goals.some(g=>g.id===item.id)?maps.goals.map(g=>g.id===item.id?item:g):[...maps.goals,item];maps.goalsOpen=true;maps.render();maps.cacheNode({...item,id:'goal:'+item.id,object_id:item.id,label:item.title,kind:'goals'});
         if (maps.current && !identity) await maps.addMembers(['goal:' + item.id]); d.node.close(); changed();
       } catch (error) { d.error.textContent = error.message; } finally { save.disabled = false; } };
       let controller;
@@ -416,7 +417,7 @@ window.HflObjectDescription = (item = {}) => {
   }
   const maps = {
     current: null, loaded: [], pendingPositions: null, getPositions: () => ({}),
-    queues:new Map(),nodes:new Map(),sharedEdges:new Map(),goals:[],palette:[],listOpen:true,goalsOpen:true,ordering:false,
+    queues:new Map(),nodes:new Map(),sharedEdges:new Map(),goals:[],palette:[],listOpen:true,goalsOpen:false,ordering:false,
     cacheNode(node){this.nodes.set(node.id,node);},
     queue(board=this.current){
       if(!board)return null;
@@ -486,10 +487,17 @@ window.HflObjectDescription = (item = {}) => {
           item.className='goal-card';item.replaceChildren(el('span',object.title,'goal-card-title'));item.setAttribute('aria-label',object.title);
           const milestones=object.milestones||[],completed=milestones.filter(m=>m.status==='achieved').length,status=object.status||'proposed';
           const meta=el('span',undefined,'goal-card-meta'),pill=el('span',statusLabel(status),'goal-status-pill');pill.dataset.status=status;
-          meta.append(pill,el('span',completed+'/'+milestones.length+' completed','goal-card-count'));item.append(meta);
+          meta.append(pill,el('span',completed+'/'+milestones.length+' milestones','goal-card-count'));item.append(meta);
           const progress=el('progress');progress.max=milestones.length||1;progress.value=completed;progress.setAttribute('aria-label',completed+' of '+milestones.length+' milestones completed');item.append(progress);
         }
-        if(!goals)item.setAttribute('aria-current',String(object.id===this.current?.id));
+        if(!goals){
+          const selected=object.id===this.current?.id;
+          item.className='goal-card board-card';item.setAttribute('aria-current',String(selected));item.setAttribute('aria-label',object.name);
+          item.replaceChildren(el('span',object.name,'goal-card-title'));
+          const meta=el('span',undefined,'goal-card-meta'),pill=el('span',selected?'Selected':'Saved','goal-status-pill');pill.dataset.status=selected?'active':'saved';
+          const count=new Set([...(object.members||[]),...(object.drafts||[]).map(d=>d.id)]).size;
+          meta.append(pill,el('span',count+' '+(count===1?'node':'nodes'),'goal-card-count'));item.append(meta);
+        }
         item.draggable=!this.ordering;item.title='Drag to reorder · Alt + Arrow keys to move';
         const type='text/'+kind+'-id';
         item.ondragstart=event=>{event.dataTransfer.setData(type,object.id);event.dataTransfer.effectAllowed='move';};
@@ -506,7 +514,7 @@ window.HflObjectDescription = (item = {}) => {
       if(this.ordering||source===target)return;
       const key=kind==='goals'?'goals':'loaded',before=[...this[key]],from=before.findIndex(b=>b.id===source),to=before.findIndex(b=>b.id===target);if(from<0||to<0)return;
       const next=[...before];next.splice(to,0,next.splice(from,1)[0]);this[key]=next;this.ordering=true;this.render();
-      try{await api('/'+kind+'/order','PUT',{ids:next.map(b=>b.id)});this.status.textContent=(kind==='goals'?'Goal':'Board')+' order saved';}
+      try{await api('/'+kind+'/order','PUT',{ids:next.map(b=>b.id)});}
       catch(error){const rank=new Map(before.map((b,i)=>[b.id,i]));this[key].sort((a,b)=>(rank.get(a.id)??Infinity)-(rank.get(b.id)??Infinity));this.status.textContent=error.message;}
       finally{this.ordering=false;const status=this.status.textContent;this.render();this.status.textContent=status;this.root.querySelector('[data-'+(kind==='goals'?'goal':'board')+'-id="'+source+'"]')?.focus();}
     },
