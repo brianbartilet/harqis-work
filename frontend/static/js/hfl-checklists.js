@@ -42,7 +42,7 @@ window.HflChecklists = class {
         const row = document.createElement('div'); row.className = 'idea-check-row'; row.dataset.itemId = item.id;
         const check = document.createElement('input'); check.type = 'checkbox'; check.checked = item.done; check.setAttribute('aria-label', 'Complete ' + item.text);
         check.onchange = () => { item.done = check.checked; this.render(); };
-        const text = document.createElement('input'); text.type = 'text'; text.value = item.text; text.required = true; text.maxLength = 2000; text.setAttribute('aria-label', 'Checklist item'); text.oninput = () => { item.text = text.value; };
+        const text = document.createElement('input'); text.type = 'text'; text.value = item.text; text.required = true; text.maxLength = 2000; text.setAttribute('aria-label', 'Checklist item'); text.oninput = () => { item.text = text.value; check.setAttribute('aria-label', 'Complete ' + item.text); };
         text.onkeydown = event => {
           if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229) return;
           event.preventDefault(); event.stopPropagation();

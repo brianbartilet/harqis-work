@@ -27,6 +27,16 @@ test('timeline preserves ascending dates on a straight horizontal axis',()=>{
   assert.ok(p.get('daily:2026-09-20').x>p.get('daily:2026-09-01').x);
 });
 
+test('a chosen board root stays centered even with incoming edges and cycles',()=>{
+  const members=['seed','parent','child','alone'].map(id=>({id,kind:'drafts'}));
+  const links=[{source:'parent',target:'seed'},{source:'seed',target:'child'},{source:'child',target:'seed'}];
+  const {positions}=presetLayout(members,links,'mindmap',0,'seed');
+  assert.equal(positions.get('seed').x,0);
+  assert.equal(positions.get('seed').y,0);
+  assert.ok(positions.get('child').x>0);
+  assert.equal(positions.size,4);
+});
+
 test('dense selected orb clusters have randomized final positions and clear spacing',()=>{
   const sample=Array.from({length:80},(_,i)=>({id:'person'+i,kind:'people',label:'Person '+i,radius:12+i%15,visibleDegree:80-i}));
   for(const seed of [1,2,3,4,5]){

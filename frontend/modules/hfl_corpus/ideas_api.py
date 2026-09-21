@@ -7,6 +7,7 @@ import uuid
 import httpx
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 
 from modules.hfl_corpus import timeline
 from workflows.hfl.ideas_store import IdeasStore
@@ -172,11 +173,89 @@ async def save_map(request: Request, identity: str | None = None):
     previous = call(store().map, identity) if identity else {}
     if 'members' in raw and (not isinstance(raw['members'], list) or len(raw['members']) > 10000):
         raise HTTPException(422, 'Choose a valid membership list.')
-    available = catalogue()
+    available = None
     for member in raw.get('members', []):
         if member not in previous.get('members', []):
+            if isinstance(member, str) and member.startswith('goal:'):
+                await run_in_threadpool(call, store().goal, member[5:])
+                continue
+            if available is None:
+                available = await run_in_threadpool(catalogue)
             check_node(member, available)
     return {'item': call(store().save_map, raw, identity)}
+
+
+@router.delete('/maps/{identity}')
+async def delete_board(request: Request, identity: str):
+    timeline.owner(request)
+    raw = await timeline.body(request)
+    call(store().delete_board, identity, raw.get('version'))
+    return {'deleted': True}
+
+
+@router.post('/maps/{identity}/promote')
+async def promote(request: Request, identity: str):
+    actor = timeline.owner(request)
+    raw = await timeline.body(request)
+    if not isinstance(raw.get('draft_id'), str):
+        raise HTTPException(422, 'Choose a draft thought.')
+    return call(store().promote_draft, identity, raw['draft_id'], raw.get('version'), actor)
+
+
+@router.get('/goals/{identity}')
+def get_goal(request: Request, identity: str):
+    timeline.owner(request)
+    return {'item': call(store().goal, identity)}
+
+
+@router.post('/maps/{identity}/promote-link')
+async def promote_connection(request: Request, identity: str):
+    timeline.owner(request)
+    raw = await timeline.body(request)
+    edge = raw.get('edge')
+    if not isinstance(edge, dict) or set(edge) - {'source', 'target', 'relation'}:
+        raise HTTPException(422, 'Choose a board connection.')
+    relation = edge.get('relation', 'related-to')
+    if not isinstance(relation, str) or relation not in {'related-to', 'supports', 'alternative', 'depends-on'}:
+        raise HTTPException(422, 'Choose a supported relationship.')
+    available = catalogue()
+    check_node(edge.get('source'), available)
+    check_node(edge.get('target'), available)
+    return {'item': call(store().promote_connection, identity, edge, raw.get('version'))}
+
+
+@router.post('/goals')
+@router.patch('/goals/{identity}')
+async def save_goal(request: Request, identity: str | None = None):
+    actor = timeline.owner(request)
+    raw = await timeline.body(request)
+    return await run_in_threadpool(save_goal_values, raw, actor, identity)
+
+
+def save_goal_values(raw, actor, identity=None):
+    """Only linked references need corpus validation; never block the event loop."""
+    available = None
+    links = raw.get('linked_objects', [])
+    if not isinstance(links, list):
+        raise HTTPException(422, 'Invalid Goal links.')
+    for link in links:
+        if available is None:
+            available = catalogue()
+        if check_node(link, available)['kind'] not in {'ideas', 'actions'}:
+            raise HTTPException(422, 'Link Goals to Ideas or Actions.')
+    for milestone in raw.get('milestones', []) if isinstance(raw.get('milestones', []), list) else []:
+        if not isinstance(milestone, dict):
+            raise HTTPException(422, 'Invalid milestone.')
+        actions = milestone.get('actions', [])
+        if not isinstance(actions, list):
+            raise HTTPException(422, 'Invalid milestone actions.')
+        for action in actions:
+            if available is None:
+                available = catalogue()
+            node = check_node(action, available)
+            if node['kind'] != 'actions':
+                raise HTTPException(422, 'Milestones link to actions.')
+    return {'item': call(store().save_goal, raw, actor, identity)}
 
 
 @router.get('/objects/{identity}/conversion')
@@ -300,26 +379,32 @@ def detach(request: Request, identity: str, attachment_id: str):
 
 def save_proposal(identity, raw, actor):
     canonical = store()
-    mindmap = call(canonical.map, identity)
+    board = call(canonical.map, identity)
     parents = raw.get('parents', [])
+    local_ids = {d['id'] for d in board['drafts']}
     available = catalogue()
-    if not isinstance(parents, list) or len(parents) > 5:
+    if not isinstance(parents, list) or len(parents) > 5 or any(not isinstance(p, str) for p in parents):
         raise HTTPException(422, 'A proposal can have up to five parents.')
     for parent in parents:
-        check_node(parent, available)
-        if parent not in mindmap['members']:
-            raise HTTPException(409, 'A proposal parent was removed from the map.')
+        if parent not in local_ids:
+            check_node(parent, available)
+        if parent not in board['members'] and parent not in local_ids:
+            raise HTTPException(409, 'A proposal parent was removed from the board.')
     values = raw.get('item', {})
     if not isinstance(values, dict) or set(values) - {'title', 'description', 'body'}:
-        raise HTTPException(422, 'Invalid proposed idea.')
-    item = call(canonical.save_idea, {**values, 'request_id': raw.get('request_id')}, actor)
-    node = 'idea:' + item['id']
-    for parent in parents:
-        canonical.link(parent, node)
-    # On a retry, the stable proposal ID reuses the idea and completes membership.
-    mindmap = canonical.map(identity)
-    call(canonical.save_map, {'version': mindmap['version'], 'members': list(dict.fromkeys([*mindmap['members'], node]))}, identity)
-    return {'item': item}
+        raise HTTPException(422, 'Invalid proposed thought.')
+    node = 'draft:' + call(lambda: str(uuid.UUID(raw.get('request_id', ''))))
+    existing = next((d for d in board['drafts'] if d['id'] == node), None)
+    if existing:
+        return {'item': existing}
+    promoted = 'idea:idea-' + str(uuid.uuid5(uuid.NAMESPACE_URL, identity + ':' + node))
+    if promoted in board['members'] or canonical.promoted_idea(identity, node):
+        return {'item': {'id': promoted, 'title': values.get('title', '')}}
+    from workflows.hfl.object_content import consolidated_description
+    draft = {'id': node, 'title': values.get('title'), 'body': consolidated_description(values)}
+    call(canonical.save_map, {'version': board['version'], 'drafts': [*board['drafts'], draft],
+                             'edges': [*board['edges'], *[{'source': p, 'target': node, 'relation': 'related-to'} for p in parents]]}, identity)
+    return {'item': draft}
 
 
 @router.post('/maps/{identity}/accept-proposal')

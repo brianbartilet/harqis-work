@@ -28,12 +28,12 @@ export function randomizePresetNodes(nodes,seed){
   }
 }
 
-export function presetLayout(nodes, edges, requested='timeline', seed=0) {
+export function presetLayout(nodes, edges, requested='timeline', seed=0, rootId=null) {
   if(requested==='mindmap') {
     const outgoing=new Map(nodes.map(n=>[n.id,[]])), incoming=new Map(nodes.map(n=>[n.id,0]));
     for(const edge of edges){const a=endpoint(edge.source),b=endpoint(edge.target);if(outgoing.has(a)&&outgoing.has(b)){outgoing.get(a).push(b);incoming.set(b,incoming.get(b)+1);}}
     const ordered=nodes.slice().sort((a,b)=>a.id.localeCompare(b.id)), depths=new Map();
-    const queue=ordered.filter(n=>incoming.get(n.id)===0).map(n=>n.id);
+    const queue=rootId&&outgoing.has(rootId)?[rootId]:ordered.filter(n=>incoming.get(n.id)===0).map(n=>n.id);
     queue.forEach(id=>depths.set(id,0));
     const visit=()=>{for(let i=0;i<queue.length;i++)for(const next of outgoing.get(queue[i]))if(!depths.has(next)){depths.set(next,depths.get(queue[i])+1);queue.push(next);}};
     visit();
@@ -42,6 +42,7 @@ export function presetLayout(nodes, edges, requested='timeline', seed=0) {
     const columns=new Map();for(const node of ordered){const depth=depths.get(node.id);if(!columns.has(depth))columns.set(depth,[]);columns.get(depth).push(node);}
     const positions=new Map(), center=Math.max(0,...columns.keys())*130;
     for(const [depth,column] of columns)column.forEach((node,i)=>positions.set(node.id,{x:depth*260-center,y:(i-(column.length-1)/2)*110,anchor:depth===0}));
+    if(rootId&&positions.has(rootId)){const origin={...positions.get(rootId)};for(const point of positions.values()){point.x-=origin.x;point.y-=origin.y;}}
     return {preset:'mindmap',positions,notice:''};
   }
   let preset=PRESETS[requested]?requested:'sources';

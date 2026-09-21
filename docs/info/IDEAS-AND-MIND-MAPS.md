@@ -1,21 +1,38 @@
-# Ideas and mind maps
+# Graph, boards, and Goals
 
-Open Activity Corpus → Explore → Ideas to create named mind maps. Each map
-saves its own membership, brainstorming instructions, and node positions.
-Objects are shared: editing an idea updates it in every map containing it.
-Removing a member only changes that map. Use **Save layout** after arranging it.
-Mind-map controls and saved map selection belong exclusively to Explore → Ideas.
-The Activity Graph shows ideas/actions and their Add and status controls,
-without the mind-map toolbar or membership filtering. The two pages keep separate
-layout state.
+Open Activity Corpus → Explore → Graph. The existing graph canvas, filters,
+presets, and inspector now share one workspace with saved boards in a collapsible
+sidebar. **All activity** returns to exploration. `/hfl-corpus/ideas` and old
+`?map=<id>` links remain compatible; new board selections use `?board=<id>`.
 
-Ideas can also be created from the Create menu, a date's quick actions, an
-entry in a date document, or an entry/date/topic/tool/idea/action graph node.
-The inspector's **Add** menu creates a new idea, actionable, or topic connected
-to the selected node. **Manage links** removes manual relationships. The Add menu
-does not offer an existing-object Link picker. Named maps can still add existing
-objects as members without creating connections.
-Named maps offer **Expand branches** to add connected objects to their membership.
+## Boards
+
+A board has a name, required purpose, starting object, optional primary Goal,
+chosen shared objects, draft thoughts, local connections, agent instructions,
+and saved positions. Start from a graph node or **New board**. A question or
+idea is sufficient: a Goal is optional. Choose **Save layout** after arranging.
+
+**Add thought** creates a board-only draft. **Attach existing** references shared
+context without copying it. **Connect on this board** creates a tentative
+relationship that stays local. **Promote to shared Idea** atomically creates an
+Idea and replaces the draft reference, root, layout, and local connections.
+Connections remain local after thought promotion. Dashed lines identify local connections. Once both endpoints are shared, **Board connections → Promote shared connection** explicitly publishes a relationship to the graph. Use the existing Idea editor and
+**Make actionable** to develop a promoted thought into committed work.
+
+Removing a member or deleting a board never deletes shared objects. Deleting a
+board deletes its local drafts. Shared object edits apply everywhere. Existing
+maps retain IDs, layouts, members, and prompts; purpose defaults to their name.
+The old Ideas navigation and map toolbar are replaced by the board sidebar.
+
+## Goals
+
+Goals are shared graph objects with a title, description, success criteria,
+status (proposed, active, paused, achieved, dropped), optional target date,
+progress notes, supporting Ideas/Actions, and embedded milestones. Each milestone
+has a stable ID, title, status, optional date, and links to Actions. Milestones
+are intermediate outcomes, not duplicate task checklists. Achievement is explicit:
+completed milestones or Actions never automatically mark a Goal achieved.
+A Goal can be referenced by multiple boards and optionally serve as their root.
 
 Ideas and actions have one Markdown description, supporting
 files, and named interactive checklists. Checklist items can be edited, checked,
@@ -78,20 +95,20 @@ from generated content, so a refresh cannot overwrite them.
 ## Persistence and APIs
 
 The canonical `HFL_TIMELINE_STORE_PATH` database contains idea edit/history,
-manual-topic, relationship, and mind-map tables alongside existing follow-ups
+manual-topic, relationship, board, Goal, and Goal-history tables alongside existing follow-ups
 and generated suggestions. These tables are initialized additively. Remote
 frontends forward commands to the canonical host; they do not create local twins.
 
 Owner endpoints live under `/hfl-corpus/timeline/ideas`; bearer-authenticated
 canonical equivalents use `/api/hfl/timeline/ideas`. They cover `objects`,
 `objects/{id}/conversion`, `objects/{id}/convert`, `topics`, `links`, `maps`,
-`snapshot`, and source-scoped attachments. Updates require the current version.
+`snapshot`, `goals`, `maps/{id}/promote`, board deletion, and source-scoped attachments. Updates require the current version.
 Content access and node linking are checked against the permitted corpus
 projection. The existing action APIs accept description, body, and checklists.
 
 ## Automation Runtime Decision
 
-**Classification:** hybrid (existing bridge; no new workflow or schedule).
+**Classification:** agent (existing bridge; no new workflow or schedule).
 
 **Confidence:** high.
 
@@ -99,7 +116,7 @@ projection. The existing action APIs accept description, body, and checklists.
 canonical API performs validated, retryable persistence only after owner review.
 
 **Execution owner:** the existing leased agent bridge runs brainstorming; owner
-API handlers save accepted ideas, relationships, and map membership.
+API handlers save accepted board-only thoughts and local relationships.
 
 **Schedule owner:** manual. Saving an object or map never queues brainstorming.
 
@@ -115,8 +132,16 @@ prompt hash and context snapshot; worker leases; run/request IDs; review-only
 completion; validated parent IDs; deterministic per-proposal creation IDs.
 
 **Review artifact:** bridge plan/progress/result history and the brainstorming
-dialog. Review individual proposals before adding them; **Finish review** closes
+dialog. Review proposals individually or accept a complete set as draft thoughts; **Finish review** closes
 the run. Agent availability is required for execution. Queued/failed/awaiting-input
 states remain visible and can be cancelled or continued.
 
 **Open questions:** none.
+
+New boards can start with an agent-generated draft: enter the purpose, choose
+that option, then request suggestions in the review dialog. The agent can support
+personal decisions, feature design, or developing ideas into actions. Saving a
+board alone does not run an agent. Accepted proposals remain drafts until promoted.
+
+Validation: targeted Ideas/boards/Goals, agent bridge, timeline and graph API tests,
+plus browser coverage at mobile and desktop sizes and graph layout tests.

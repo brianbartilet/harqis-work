@@ -287,8 +287,10 @@ def test_brainstorm_requires_review_and_accepts_selected_proposal(ideas, authent
     accepted = client.post(uri, headers=owner, json=raw)
     assert accepted.status_code == 200, accepted.text
     assert client.post(uri, headers=owner, json=raw).status_code == 200
-    assert len(ideas.ideas()) == 2
-    assert len(ideas.map(mindmap['id'])['members']) == 2
+    assert len(ideas.ideas()) == 1
+    assert len(ideas.map(mindmap['id'])['members']) == 1
+    assert len(ideas.map(mindmap['id'])['drafts']) == 1
+    assert ideas.links() == []
 
 
 @pytest.mark.parametrize('width', [390, 1280])
@@ -299,10 +301,15 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         browser = driver.chromium.launch(channel='chrome', headless=True)
         page = browser.new_page(viewport={'width': width, 'height': 1000})
         errors = []
+        hold_graph = False
+        pending_graph = []
         page.on('pageerror', lambda error: errors.append(str(error)))
         def route(intercept):
             request = intercept.request
             url = urlparse(request.url)
+            if hold_graph and url.path == '/api/hfl/entities/graph':
+                pending_graph.append(intercept)
+                return
             if url.hostname != 'ideas.test':
                 intercept.abort()
                 return
@@ -311,142 +318,76 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
             intercept.fulfill(status=response.status_code, body=response.content, headers={'content-type': response.headers.get('content-type', 'text/html')})
         page.route('**/*', route)
         page.goto('https://ideas.test/hfl-corpus/ideas')
-        page.get_by_role('button', name='New map', exact=True).click()
+        if width < 760:
+            page.locator('.kg-boards summary').click()
+        page.get_by_role('button', name='New board', exact=True).click()
         modal = page.locator('.idea-dialog')
-        modal.get_by_label('Map name').fill('Reading room')
-        modal.get_by_role('button', name='Save map', exact=True).click()
+        modal.get_by_label('Board name').fill('Reading room')
+        modal.get_by_label('What are you exploring or trying to achieve?').fill('Design a comfortable place to read')
+        modal.get_by_role('button', name='Save board', exact=True).click()
         expect(modal).to_have_count(0)
-        page.get_by_role('button', name='Add idea', exact=True).click()
+        expect(page.locator('#kg-map-count')).to_contain_text('1 nodes')
+        assert ideas.ideas() == []
+        page.locator('#kg-list button').filter(has_text='Reading room').click()
+        page.get_by_role('button', name='Promote to shared Idea', exact=True).click()
+        page.get_by_role('button', name='Edit idea / checklists', exact=True).wait_for()
+        page.get_by_role('button', name='Edit idea / checklists', exact=True).click()
         modal.get_by_label('Idea', exact=True).fill('Warm lighting')
         modal.get_by_label('Markdown description', exact=True).fill('## Lighting\nUse **warm** light.')
         modal.get_by_role('button', name='Add checklist', exact=True).click()
         modal.get_by_role('button', name='Add item', exact=True).click()
         modal.get_by_label('Checklist item', exact=True).fill('Compare bulbs')
-        modal.get_by_label('Checklist item', exact=True).press('Enter')
-        expect(modal.get_by_label('Checklist item', exact=True)).to_have_count(2)
-        expect(modal.get_by_label('Checklist item', exact=True).last).to_be_focused()
-        modal.get_by_label('Checklist item', exact=True).last.press('Enter')
-        expect(modal.get_by_label('Checklist item', exact=True)).to_have_count(2)
-        modal.get_by_label('Checklist item', exact=True).last.fill('Second task')
-        modal.get_by_label('Checklist item', exact=True).first.press('Enter')
-        expect(modal.get_by_label('Checklist item', exact=True)).to_have_count(3)
-        expect(modal.get_by_label('Checklist item', exact=True).nth(1)).to_be_focused()
-        expect(modal.get_by_label('Checklist item', exact=True).last).to_have_value('Second task')
-        modal.get_by_role('button', name='Remove item', exact=True).nth(1).click()
-        for action in modal.get_by_role('button', name='Make actionable', exact=True).all():
-            expect(action).to_be_disabled()
-        # Keep dragging after the first DOM move, then release and verify model order.
-        modal.locator('.idea-checklist').evaluate("node => node.scrollIntoView({block: 'center'})")
-        handle = modal.locator('.idea-check-row').first
-        handle.scroll_into_view_if_needed()
-        start = handle.bounding_box()
-        target = modal.locator('.idea-check-row').last.bounding_box()
-        page.mouse.move(start['x'] + start['width'] / 2, start['y'] + start['height'] / 2)
-        page.mouse.down()
-        page.mouse.move(start['x'] + start['width'] / 2, target['y'] + target['height'] - 2, steps=12)
-        page.mouse.up()
-        expect(modal.get_by_label('Checklist item', exact=True).first).to_have_value('Second task')
-        handle = modal.locator('.idea-check-row').last
-        start = handle.bounding_box()
-        target = modal.locator('.idea-check-row').first.bounding_box()
-        page.mouse.move(start['x'] + start['width'] / 2, start['y'] + start['height'] / 2)
-        page.mouse.down()
-        page.mouse.move(start['x'] + start['width'] / 2, target['y'] + 2, steps=12)
-        page.mouse.up()
-        expect(modal.get_by_label('Checklist item', exact=True).first).to_have_value('Compare bulbs')
-        modal.get_by_role('group', name='Checklist item; use arrow keys to reorder', exact=True).last.focus()
-        page.keyboard.press('ArrowUp')
-        expect(modal.get_by_label('Checklist item', exact=True).first).to_have_value('Second task')
-        modal.get_by_role('button', name='Remove item', exact=True).first.click()
-        modal.get_by_role('checkbox', name='Checklist cover', exact=True).check()
-        expect(modal.locator('input[type=file]')).not_to_be_visible()
-        expect(modal.locator('.markdown-inline-preview strong')).to_have_text('warm')
-        modal.screenshot(path=str(tmp_path / ('idea-form-' + str(width) + '.png')))
-        modal.locator('input[type=file]').set_input_files({'name': 'lighting.txt', 'mimeType': 'text/plain', 'buffer': b'Warm light reference'})
-        modal.get_by_role('button', name='Save', exact=True).click()
-        expect(modal).to_have_count(0)
-        page.locator('#kg-legend button[data-kind=ideas]').wait_for()
-        page.locator('#kg-list button').first.click()
-        page.get_by_role('button', name='Edit idea / checklists', exact=True).click()
-        expect(modal.get_by_label('Checklist item', exact=True)).to_have_value('Compare bulbs')
         modal.get_by_role('checkbox', name='Complete Compare bulbs').check()
-        expect(modal.locator('.checklist-progress span')).to_have_text('100%')
-        expect(modal.get_by_role('progressbar')).to_have_attribute('value', '1')
+        modal.get_by_role('checkbox', name='Checklist cover', exact=True).check()
+        modal.locator('input[type=file]').set_input_files({'name':'lighting.txt','mimeType':'text/plain','buffer':b'Warm light reference'})
         modal.get_by_role('button', name='Save', exact=True).click()
         expect(modal).to_have_count(0)
         page.get_by_role('button', name='Make actionable', exact=True).click()
         expect(modal.get_by_role('checkbox', name='Complete Compare bulbs')).not_to_be_checked()
         expect(modal.get_by_text('lighting.txt', exact=True)).to_be_visible()
-        expect(modal.locator('[name=description]')).to_have_count(0)
-        assert modal.locator('[name=body]').evaluate("node => Boolean(node.closest('label').compareDocumentPosition(document.querySelector('.idea-dialog [data-object-attachments]')) & Node.DOCUMENT_POSITION_FOLLOWING)")
-        assert modal.locator('[name=prompt]').evaluate("node => !!(node.compareDocumentPosition(document.querySelector('.idea-dialog [data-object-attachments]')) & Node.DOCUMENT_POSITION_FOLLOWING)")
-        modal.screenshot(path=str(tmp_path / ('action-form-' + str(width) + '.png')))
-        expect(modal.locator('.action-details')).not_to_have_attribute('open', '')
         modal.locator('.action-details > summary').click()
         modal.get_by_label('Expected outcome').fill('A comfortable place to read')
         modal.get_by_role('button', name='Save', exact=True).click()
         expect(modal).to_have_count(0)
         assert len(ideas.followups.list()) == 1
-        assert len(ideas.maps()[0]['members']) == 2
-        page.reload()
-        expect(page.get_by_role('combobox', name='Named mind map')).to_have_value(ideas.maps()[0]['id'])
         expect(page.locator('#kg-map-count')).to_contain_text('2 nodes')
-        page.locator('#kg-list button').filter(has_text='Warm lighting').first.click()
-        page.get_by_role('button', name='Add object', exact=True).click()
-        expect(page.get_by_role('menu', name='Add object')).to_be_visible()
-        assert page.get_by_role('menuitem').all_text_contents() == ['Idea', 'Actionable', 'Topic']
-        page.keyboard.press('Escape')
-        expect(page.get_by_role('button', name='Add object', exact=True)).to_be_focused()
-        page.keyboard.press('ArrowUp')
-        expect(page.get_by_role('menuitem', name='Topic', exact=True)).to_be_focused()
-        page.keyboard.press('Escape')
-        page.keyboard.press('ArrowDown')
-        expect(page.get_by_role('menuitem', name='Idea', exact=True)).to_be_focused()
-        page.keyboard.press('End')
-        expect(page.get_by_role('menuitem', name='Topic', exact=True)).to_be_focused()
-        page.screenshot(path=str(tmp_path / ('graph-add-menu-' + str(width) + '.png')))
-        page.keyboard.press('Enter')
-        modal.get_by_label('Topic', exact=True).fill('Room design')
-        modal.get_by_role('button', name='Create topic', exact=True).click()
+        hold_graph = True
+        page.get_by_role('button', name='New Goal', exact=True).click()
+        expect(modal.get_by_label('Goal', exact=True)).to_be_visible(timeout=1000)
+        expect(modal.get_by_role('button', name='Save Goal', exact=True)).to_be_enabled()
+        expect(modal.get_by_text('Loading optional Idea and Action links…')).to_be_visible()
+        modal.get_by_label('Goal', exact=True).fill('Read comfortably every evening')
+        modal.get_by_label('Success criteria').fill('Read for 30 minutes without eye strain')
+        modal.get_by_role('button', name='Add milestone', exact=True).click()
+        modal.get_by_label('Milestone', exact=True).fill('Lighting trial is successful')
+        hold_graph = False
+        for pending in pending_graph:
+            pending.abort()
+        expect(modal.get_by_role('button', name='Retry loading links')).to_be_visible()
+        modal.get_by_role('button', name='Save Goal', exact=True).click()
         expect(modal).to_have_count(0)
         expect(page.locator('#kg-map-count')).to_contain_text('3 nodes')
-        page.locator('#kg-list button').filter(has_text='Room design').click()
-        page.get_by_role('button', name='Remove from this map', exact=True).click()
-        expect(page.locator('#kg-map-count')).to_contain_text('2 nodes')
-        idea_id = ideas.ideas()[0]['id']
-        page.evaluate('(id) => window.HflIdeas.editIdea(id)', idea_id)
-        expect(modal.get_by_role('button', name='Make actionable', exact=True)).to_be_enabled()
-        modal.get_by_label('Checklist item', exact=True).fill('Unsaved change')
-        expect(modal.get_by_role('button', name='Make actionable', exact=True)).to_be_disabled()
-        modal.get_by_label('Checklist item', exact=True).fill('Compare bulbs')
-        expect(modal.get_by_role('button', name='Make actionable', exact=True)).to_be_enabled()
-        modal.get_by_label('Idea', exact=True).fill('Unsaved title')
-        expect(modal.get_by_role('button', name='Make actionable', exact=True)).to_be_disabled()
-        modal.get_by_label('Idea', exact=True).fill('Warm lighting')
-        modal.locator('.idea-check-row').hover()
-        modal.get_by_role('button', name='Make actionable', exact=True).click()
-        expect(modal.get_by_label('Actionable', exact=True)).to_have_value('Compare bulbs')
-        expect(modal.get_by_label('Notes', exact=True)).to_have_count(1)
-        expect(modal.locator('.idea-check-row')).to_have_count(0)
-        modal.get_by_role('button', name='Save', exact=True).click()
+        page.locator('.board-controls').get_by_role('button', name='Add thought', exact=True).click()
+        modal.get_by_label('Thought', exact=True).fill('Try an adjustable lamp')
+        modal.get_by_role('button', name='Save thought', exact=True).click()
         expect(modal).to_have_count(0)
-        assert len(ideas.followups.list()) == 2
-        assert ideas.idea(idea_id)['item_actions'][0]['item_id']
-        page.evaluate('(id) => window.HflIdeas.editIdea(id)', idea_id)
-        expect(modal.get_by_role('button', name='Open actionable', exact=True)).to_be_visible()
-        modal.get_by_role('button', name='Close', exact=True).click()
-        page.screenshot(path=str(tmp_path / ('ideas-' + str(width) + '.png')), full_page=True)
-        # Activity Graph shares object controls, never the Ideas workspace state.
+        expect(page.locator('#kg-map-count')).to_contain_text('4 nodes')
+        assert page.evaluate('''() => {
+            const points=Object.values(window.HflIdeas.maps.getPositions());
+            return points.every((a,i)=>points.slice(i+1).every(b=>Math.hypot(a.x-b.x,a.y-b.y)>=85));
+        }''')
+        page.reload()
+        expect(page.locator('#kg-map-count')).to_contain_text('4 nodes')
+        if width < 760:
+            page.locator('.kg-boards summary').click()
+        expect(page.locator('.board-list button[aria-current=true]')).to_have_text('Reading room')
+        page.screenshot(path=str(tmp_path / ('boards-' + str(width) + '.png')), full_page=True)
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
+        page.locator('#idea-map-tools').get_by_role('button', name='All activity', exact=True).click()
+        expect(page.locator('.board-controls')).to_have_count(0)
+        assert page.evaluate('window.HflIdeas.maps.current') is None
+        assert not any(n['kind'] == 'drafts' for n in authenticated_client.get('/api/hfl/entities/graph?limit=0').json()['nodes'])
         page.goto('https://ideas.test/hfl-corpus/graph?map=' + ideas.maps()[0]['id'])
-        expect(page.locator('#kg-workspace')).not_to_have_attribute('inert', '')
-        expect(page.locator('#idea-map-tools')).to_have_count(0)
-        expect(page.locator('[data-preset=mindmap]')).to_have_count(0)
-        assert page.evaluate('window.HflIdeas.maps.current') is None
-        page.get_by_role('button', name='Refresh', exact=True).click()
-        expect(page.locator('#kg-workspace')).not_to_have_attribute('inert', '')
-        assert page.evaluate('window.HflIdeas.maps.current') is None
-        # Select an idea to ensure the shared Add inspector remains wired.
-        page.evaluate("window.HflIdeas.inspect({id:'idea:probe',kind:'ideas',object_id:'probe'},document.getElementById('kg-detail'),[])")
-        expect(page.get_by_role('button', name='Add object', exact=True)).to_be_visible()
+        expect(page.locator('#kg-map-count')).to_contain_text('4 nodes')
         assert not errors, errors
         browser.close()

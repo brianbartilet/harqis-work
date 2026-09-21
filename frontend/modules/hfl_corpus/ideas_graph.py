@@ -9,14 +9,17 @@ def extend(base, snapshot, *, since='', until='', query='', sources=None, contex
     sources = {sources} if isinstance(sources, str) and sources else set(sources or [])
     # Follow explicit chains from scoped corpus anchors, including idea → idea.
     adjacent, linked_days = {}, {}
-    for edge in snapshot['links']:
+    goal_links = [dict(source=target, target='goal:' + goal['id'], relation='supports')
+                  for goal in snapshot.get('goals', [])
+                  for target in set(goal.get('linked_objects', []) + [a for m in goal.get('milestones', []) for a in m.get('actions', [])])]
+    for edge in [*snapshot['links'], *goal_links]:
         adjacent.setdefault(edge['source'], set()).add(edge['target'])
         adjacent.setdefault(edge['target'], set()).add(edge['source'])
         for a, b in [(edge['source'], edge['target']), (edge['target'], edge['source'])]:
             if b.startswith('daily:'):
                 linked_days.setdefault(a, set()).add(b[6:])
     for collection, prefix in [('ideas', 'idea:'), ('actions', 'action:')]:
-        for item in snapshot[collection]:
+        for item in snapshot.get(collection, []):
             source = item.get('source') or {}
             if source.get('entry_id'):
                 a, b = prefix + item['id'], item.get('graph_source_id') or 'entry:' + source['entry_id']
@@ -30,8 +33,8 @@ def extend(base, snapshot, *, since='', until='', query='', sources=None, contex
                 queue.append(neighbor)
     for topic in snapshot['topics']:
         nodes.setdefault(topic['id'], dict(id=topic['id'], label=topic['label'], kind='topics'))
-    for collection, prefix, kind in [('ideas', 'idea:', 'ideas'), ('actions', 'action:', 'actions')]:
-        for item in snapshot[collection]:
+    for collection, prefix, kind in [('ideas', 'idea:', 'ideas'), ('actions', 'action:', 'actions'), ('goals', 'goal:', 'goals')]:
+        for item in snapshot.get(collection, []):
             source = item.get('source') or {}
             source_entry = item.get('graph_source_id') or 'entry:' + source.get('entry_id', '')
             if context and prefix + item['id'] not in reachable:
@@ -47,6 +50,8 @@ def extend(base, snapshot, *, since='', until='', query='', sources=None, contex
             identity = prefix + item['id']
             nodes[identity] = dict(id=identity, object_id=item['id'], label=item['title'], kind=kind, status=item['status'], date=created,
                                    description=item.get('description', ''), body=item.get('body', ''), checklists=item.get('checklists', []), version=item.get('version', 0))
+            if collection == 'goals':
+                nodes[identity]['success_criteria'] = item.get('success_criteria', '')
             for day in dates:
                 target = 'daily:' + day
                 nodes.setdefault(target, dict(id=target, label=day, kind='daily'))
@@ -61,12 +66,13 @@ def extend(base, snapshot, *, since='', until='', query='', sources=None, contex
                     edges.append(dict(source=identity, target=evidence_id, relation='evidence', evidence='', method='intent-metadata'))
             if collection == 'ideas' and item.get('followup_id'):
                 edges.append(dict(source=identity, target='action:' + item['followup_id'], relation='develops-into', evidence='', method='intent-metadata'))
-    for edge in snapshot['links']:
+    for edge in [*snapshot['links'], *goal_links]:
         for identity in (edge['source'], edge['target']):
             other = edge['target'] if identity == edge['source'] else edge['source']
             if identity.startswith('daily:') and other in nodes:
                 nodes.setdefault(identity, dict(id=identity, label=identity[6:], kind='daily'))
-        edges.append({**edge, 'manual': True, 'evidence': '', 'method': 'owner'})
+        derived = edge in goal_links
+        edges.append({**edge, 'manual': not derived, 'evidence': '', 'method': 'goal' if derived else 'owner'})
     if context or sources or since or until:
         connected = {identity for edge in edges if edge['source'] in nodes and edge['target'] in nodes for identity in (edge['source'], edge['target'])}
         manual_topics = {topic['id'] for topic in snapshot['topics']} - corpus_ids
