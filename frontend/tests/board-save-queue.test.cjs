@@ -2,6 +2,21 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const Queue=require('../static/js/hfl-board-state.js');
 const board={id:'map-test',version:1,name:'Test',drafts:[],edges:[]};
+test('deletion skips unsent edits and retains them for retry on failure',async()=>{
+  let calls=0;
+  const q=new Queue(board,async fields=>{calls++;return {...board,...fields,version:2};},null,()=>{},10000);
+  q.edit({name:'Unsent'});
+  const latest=await q.prepareDelete();await q.flush();
+  assert.equal(calls,0);assert.equal(latest.version,1);assert.equal(q.pending.name,'Unsent');
+  q.resume();await q.flush();assert.equal(calls,1);assert.equal(q.value.name,'Unsent');
+});
+test('deletion waits for an in-flight save without draining newer edits',async()=>{
+  let release;const calls=[];
+  const q=new Queue(board,async fields=>{calls.push(fields);await new Promise(r=>release=r);return {...board,...fields,version:2};},null,()=>{},10000);
+  q.edit({name:'Sent'});const saving=q.flush();q.edit({name:'Unsent'});
+  const deleting=q.prepareDelete();release();const latest=await deleting;await saving;
+  assert.equal(calls.length,1);assert.equal(latest.version,2);assert.equal(q.pending.name,'Unsent');
+});
 test('edits during an in-flight save are serialized against the acknowledged version',async()=>{
   let release;const calls=[];
   const q=new Queue(board,async fields=>{calls.push(fields);if(calls.length===1)await new Promise(r=>release=r);return {...board,...fields,version:fields.version+1};},null,()=>{},10000);

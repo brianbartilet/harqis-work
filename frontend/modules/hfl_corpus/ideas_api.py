@@ -45,11 +45,11 @@ def canonical_snapshot():
     return permitted_snapshot()
 
 
-def permitted_snapshot():
+def permitted_snapshot(entries=None):
     from modules.hfl_corpus.entities import current_entries
     data = store().snapshot()
     # The same permitted corpus projection gates graph and brainstorming context.
-    entries = current_entries()
+    entries = current_entries() if entries is None else entries
     graph_ids = {(e['path'], key): 'entry:' + e['id'] for e in entries for key in (e['id'], timeline.entry_evidence_id(e['text']))}
     memory_ids = {timeline.entry_evidence_id(e['text']): 'entry:' + e['id'] for e in entries}
     data['memories'] = [{**m, 'graph_entry_id': memory_ids[m['entry_id']]}
@@ -114,6 +114,14 @@ async def reorder_boards(request: Request):
     return {'saved': True}
 
 
+@router.put('/goals/order')
+async def reorder_goals(request: Request):
+    timeline.owner(request)
+    raw = await timeline.body(request)
+    await run_in_threadpool(call, store().reorder_goals, raw.get('ids'))
+    return {'saved': True}
+
+
 def goal_choices(identities=None):
     # Resolve only intent records; manual objects need no corpus/entity scan.
     from modules.hfl_corpus.entities import current_entries
@@ -162,6 +170,21 @@ def board_graph(request: Request, identity: str):
     return {'nodes': [available[i] for i in members if i in available],
             'edges': [e for e in shared['edges'] if e['source'] in members and e['target'] in members
                       and e['source'] in available and e['target'] in available], 'sources': []}
+
+
+@router.get('/maps/{identity}/attach-options')
+def attach_options(request: Request, identity: str, query: str = '', offset: int = 0):
+    timeline.owner(request)
+    board = call(store().map, identity)
+    if offset < 0 or len(query) > 500:
+        raise HTTPException(422, 'Invalid search or page.')
+    from modules.hfl_corpus.board_choices import catalogue as attachment_catalogue
+    excluded = set(board['members']) | {'board:' + identity}
+    matching = [n for n in attachment_catalogue().values() if n['id'] not in excluded
+                and query.casefold() in (n['label'] + ' ' + n['kind']).casefold()]
+    matching.sort(key=lambda n: (n['updated_at'], n['id']), reverse=True)
+    return {'nodes': matching[offset:offset + 50], 'total': len(matching),
+            'has_more': offset + 50 < len(matching)}
 
 
 @router.post('/render')
@@ -250,7 +273,8 @@ async def save_map(request: Request, identity: str | None = None):
                 await run_in_threadpool(call, store().goal, member[5:])
                 continue
             if available is None:
-                available = await run_in_threadpool(catalogue)
+                from modules.hfl_corpus.board_choices import catalogue as attachment_catalogue
+                available = await run_in_threadpool(attachment_catalogue)
             check_node(member, available)
     return {'item': call(store().save_map, raw, identity)}
 
@@ -259,7 +283,7 @@ async def save_map(request: Request, identity: str | None = None):
 async def delete_board(request: Request, identity: str):
     timeline.owner(request)
     raw = await timeline.body(request)
-    call(store().delete_board, identity, raw.get('version'))
+    await run_in_threadpool(call, store().delete_board, identity, raw.get('version'))
     return {'deleted': True}
 
 

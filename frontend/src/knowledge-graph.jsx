@@ -499,7 +499,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     backgroundController?.abort();
 
     requestController?.abort(); const version=++requestVersion;
-    if(exampleMode){setLoading(false);configureData(exampleGraph());return;}
+    if(exampleMode){setLoading(false);configureData(exampleGraph());window.HflIdeas?.maps.finishDeletionTransition();return;}
     const board=window.HflIdeas?.maps.current;
     if(board){
       appliedParams=null;
@@ -522,7 +522,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       if(!response.ok)throw Error(response.status===401?'Sign in to view your knowledge graph.':'Graph could not load. Use Refresh to try again.');
       const next=await response.json();
       if(!exampleMode&&version===requestVersion){appliedParams=params.toString();graphSignature=signature(next);sourceOptions(next.sources||[]);configureData(next);}
-    } catch(error){if(!exampleMode&&version===requestVersion&&error.name!=='AbortError'){$('info').dataset.error='true';showInfo('status',error.message,true);}} finally{if(version===requestVersion){setLoading(false);}}
+    } catch(error){if(!exampleMode&&version===requestVersion&&error.name!=='AbortError'){$('info').dataset.error='true';showInfo('status',error.message,true);}} finally{if(version===requestVersion){setLoading(false);window.HflIdeas?.maps.finishDeletionTransition(!!$('info').dataset.error);}}
   }
   // Poll only the applied query, without a loading overlay or interrupting interaction.
   const busy=()=>document.hidden||!!transition||dragNodes.size>0||activePointers.size>0||document.querySelector('.activity-modal[open]:not(#activity-standalone)')||loading||exampleMode||!$('views-panel').hidden||!$('animation-panel').hidden||$('filter-drawer').open||$('entry-dialog').open||document.querySelector('.idea-dialog[open]')||document.activeElement===$('search')||Date.now()-lastInteraction<500;

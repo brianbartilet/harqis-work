@@ -90,6 +90,14 @@
 .checklist-item-actions svg, .idea-checklist-header button svg { display:block; width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
 @media (hover:none) { .checklist-item-actions { opacity:1; pointer-events:auto; } }
 /* Match the original actionable editor: scroll the form inside the rounded shell. */
+.idea-dialog .agenda-dialog-header > button[aria-label="Close editor"]{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;min-height:32px;flex:0 0 32px;padding:0;margin:0;line-height:1}
+.idea-picker-status{display:flex;align-items:center;gap:8px;color:#94a3b8;min-height:24px;margin-top:12px}
+.idea-picker-pages{display:flex;justify-content:space-between;gap:8px}
+.idea-map-status:has(.idea-picker-spinner){display:flex;align-items:center;gap:8px}
+.idea-map-status .idea-picker-spinner{flex-shrink:0}
+.idea-picker-spinner{width:16px;height:16px;border:2px solid #334155;border-top-color:#67e8f9;border-radius:50%;animation:idea-picker-spin .8s linear infinite}
+@keyframes idea-picker-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.idea-picker-spinner{animation:none}}
 .idea-dialog.agenda-dialog { overflow:hidden; padding:.5rem 0; }
 .idea-dialog > form { max-height:calc(90dvh - 1rem - 2px); overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#475569 transparent; }
 @supports selector(::-webkit-scrollbar) {
@@ -123,9 +131,9 @@
 @media(max-width:760px){.kg-shell.has-board .kg-toolbar-actions{display:flex;flex-wrap:wrap;width:100%;gap:6px}.kg-shell.has-board .kg-toolbar-actions>*{flex:1;min-width:65px}.kg-shell.has-board .kg-toolbar-actions>.kg-animation-menu{flex:2}.kg-shell.has-board .kg-main-toolbar{display:flex;flex-wrap:wrap}.kg-shell.has-board .kg-toolbar-actions button{width:100%}}
 
 .kg-boards .board-explore{border-color:#38bdf8;background:#0c4a6e;color:#e0f2fe;font-weight:700;padding:12px}
-.board-list button{position:relative;padding-right:20px;border-right:5px solid var(--board-color);cursor:grab}
-.kg-boards .board-list button[aria-current=true]{border-color:var(--board-color);background:color-mix(in srgb,var(--board-color) 15%,#122034);color:#e2e8f0}
+.board-list button{position:relative;padding-left:16px;border-left:5px solid var(--board-color);cursor:grab}
+.kg-boards .board-list button[aria-current=true]{border-color:var(--board-color);background:#122034;color:#e2e8f0}
 .board-list button:active{cursor:grabbing}.board-list button.drag-over{outline:2px dashed var(--board-color);outline-offset:-2px}
-.kg-boards .board-controls{margin-top:8px;padding:12px;border:1px solid var(--board-color);border-radius:10px;background:color-mix(in srgb,var(--board-color) 9%,#0c1728)}
-.kg-boards .board-save-now{border-color:var(--board-color);background:color-mix(in srgb,var(--board-color) 25%,#122034);font-weight:700}
+.kg-boards .board-controls{margin-top:8px;padding:12px;border:1px solid var(--board-color);border-radius:10px;background:#0c1728}
+.kg-boards .board-save-now{border-color:var(--board-color);background:#122034;font-weight:700}
 .kg-boards .board-delete{color:#fda4af}.board-palette{display:flex;flex-wrap:wrap;gap:8px;border:0;padding:8px 0}.board-palette button{width:30px;height:30px;min-height:30px;border:2px solid transparent;border-radius:50%}.board-palette button[aria-pressed=true]{outline:2px solid #e2e8f0;outline-offset:2px}

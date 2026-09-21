@@ -84,21 +84,34 @@ class BoardStoreMixin:
 
     def goals(self):
         with self.followups.connect() as db:
-            return [json.loads(row['payload']) for row in db.execute('SELECT payload FROM intent_goals ORDER BY rowid')]
+            return [{'color': PIN_COLORS[0], **json.loads(row['payload'])} for row in db.execute('SELECT g.payload FROM intent_goals g LEFT JOIN goal_order o ON o.id=g.id ORDER BY COALESCE(o.position,2147483647),g.rowid')]
 
     def goal(self, identity):
         with self.followups.connect() as db:
             row = db.execute('SELECT payload FROM intent_goals WHERE id=?', (identity,)).fetchone()
         if row is None:
             raise KeyError(identity)
-        return json.loads(row['payload'])
+        return {'color': PIN_COLORS[0], **json.loads(row['payload'])}
+
+    def reorder_goals(self, identities):
+        if not isinstance(identities, list) or any(not isinstance(i, str) for i in identities) or len(set(identities)) != len(identities):
+            raise ValueError('Choose a valid Goal order.')
+        with self.followups.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if set(identities) != {r['id'] for r in db.execute('SELECT id FROM intent_goals')}:
+                raise FollowUpConflict('Goals changed. Reload before reordering.')
+            db.execute('DELETE FROM goal_order')
+            db.executemany('INSERT INTO goal_order VALUES (?,?)', [(identity, index) for index, identity in enumerate(identities)])
 
     def save_goal(self, raw, actor, identity=None):
-        allowed = {'title', 'body', 'success_criteria', 'status', 'target_date', 'progress_notes', 'milestones', 'linked_objects', 'version', 'request_id'}
+        allowed = {'title', 'body', 'success_criteria', 'status', 'target_date', 'progress_notes', 'milestones', 'linked_objects', 'version', 'request_id', 'color'}
         if set(raw) - allowed:
             raise ValueError('Unsupported goal fields.')
         previous = self.goal(identity) if identity else {}
         item = {**previous, **raw}
+        item.setdefault('color', PIN_COLORS[0])
+        if item['color'] not in PIN_COLORS:
+            raise ValueError('Choose a color from the Memory Signal palette.')
         for key, limit in [('title', 200), ('body', 60000), ('success_criteria', 6000), ('progress_notes', 20000)]:
             item[key] = text(item.get(key, ''), key.replace('_', ' '), limit, key == 'title')
         item.setdefault('status', 'proposed')

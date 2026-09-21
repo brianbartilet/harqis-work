@@ -2,15 +2,15 @@
 
 Open Activity Corpus → Explore → Graph. The existing graph canvas, filters,
 presets, and inspector now share one workspace with saved boards in a persistent
-sidebar. **Explore activity graph** returns to exploration. Only the saved-board
-list collapses; **Add board**, **Add goal**, and active-board controls stay available. `/hfl-corpus/ideas` and old
+sidebar. **Explore Activity Graph** returns to exploration. Only the saved-board
+list collapses; **Add Board**, **Add Goal**, and active-board controls stay available. `/hfl-corpus/ideas` and old
 `?map=<id>` links remain compatible; new board selections use `?board=<id>`.
 
 ## Boards
 
 A board has a name, required purpose, starting object, optional primary Goal,
 chosen shared objects, draft thoughts, local connections, agent instructions,
-and saved positions. Start from a graph node or **Add board**. A question or
+and saved positions. Start from a graph node or **Add Board**. A question or
 idea is sufficient: a Goal is optional. Thoughts, connections, and drag layouts
 update immediately and save in the background. **Save now** flushes pending edits;
 the status distinguishes **Saving**, **Saved**, and **Unsaved**. A failed save
@@ -24,7 +24,11 @@ and layout changes immediately.
 Choose a board color from the shared Memory Signal pin palette at creation or in
 **Settings**. The card indicator and active-board panel use that color. Drag board
 cards to reorder them, or focus a card and use Alt + Up/Down. Order is saved on
-the server independently of board content revisions.
+the server independently of board content revisions. Color indicators sit on the
+left of each card. A separate collapsible **Goals** list uses the same palette
+and drag/Alt + Up/Down ordering. Click a Goal to edit it and its color; editing
+an existing Goal does not attach it to the active board. Colors and ordering
+are presentation settings and do not produce HFL memory entries.
 
 New boards have creation/update timestamps and an editable **Board date** (today
 by default). The Activity Graph shows a board node linked to that date and its
@@ -48,9 +52,19 @@ reset. Attaching existing objects and initially loading uncached shared members
 still perform permission-checked server reads. **Refresh** revalidates shared
 members against the server.
 
+The Attach existing picker searches on the server and shows 50 objects per page,
+excluding current members. Results sort by latest update, using the latest
+supporting entry date when an entity has no newer profile update. Loading has a
+spinner and failed requests can be retried. The picker and attachment validation
+reuse a permission-filtered catalogue without constructing the full corpus graph;
+each request still reads the permitted corpus to keep access checks current.
+
 Removing a member or deleting a board never deletes shared objects. Deleting a
-board deletes its local drafts. Shared object edits apply everywhere. Existing
-maps retain IDs, layouts, members, and prompts; purpose defaults to their name.
+board deletes its local drafts. Shared object edits apply everywhere.
+Deletion waits only for an in-flight save, skips unsent edits, and shows progress
+through the return to All activity. A failed deletion retains the board and its
+pending edits so the owner can retry.
+Existing maps retain IDs, layouts, members, and prompts; purpose defaults to their name.
 The old Ideas navigation and map toolbar are replaced by the board sidebar.
 
 ## Goals

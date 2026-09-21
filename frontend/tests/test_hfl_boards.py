@@ -26,6 +26,24 @@ def test_board_colors_and_order_persist_without_revising_contents(ideas, authent
     assert client.put(BASE+'/boards/order', json={'ids':[second['id'],second['id']]}).status_code == 422
 
 
+def test_goal_colors_and_order_persist_without_memory_noise(ideas, authenticated_client):
+    from workflows.hfl.ideas_store import IdeasStore
+    client=authenticated_client
+    first=client.post(BASE+'/goals',json={'request_id':str(uuid4()),'title':'First','color':'#8b5cf6'}).json()['item']
+    second=client.post(BASE+'/goals',json={'request_id':str(uuid4()),'title':'Second'}).json()['item']
+    assert client.put(BASE+'/goals/order',json={'ids':[second['id'],first['id']]}).status_code==200
+    restored=IdeasStore(ideas.followups).goals()
+    assert [g['id'] for g in restored]==[second['id'],first['id']]
+    assert restored[1]['color']=='#8b5cf6'
+    assert all(g['version']==1 for g in restored)
+    assert client.patch(BASE+'/goals/'+first['id'],json={'version':1,'color':'#14b8a6'}).status_code==200
+    assert client.patch(BASE+'/goals/'+first['id'],json={'version':2,'color':'bad'}).status_code==422
+    assert client.put(BASE+'/goals/order',json={'ids':[first['id']]}).status_code==409
+    assert client.put(BASE+'/goals/order',json={'ids':[first['id'],first['id']]}).status_code==422
+    with ideas.followups.connect() as db:
+        assert db.execute('SELECT COUNT(*) FROM board_memories').fetchone()[0]==2
+
+
 def test_manual_goal_options_and_linked_save_skip_graph_and_corpus(ideas, authenticated_client, monkeypatch):
     from modules.hfl_corpus import ideas_api, entities
     idea = ideas.save_idea(payload(), 'owner')
@@ -57,6 +75,8 @@ def test_board_sidebar_order_collapse_and_saved_lines_browser(ideas, authenticat
         drafts=[{'id':'draft:seed','title':'Packing'}, {'id':'draft:next','title':'Second thought'}],
         edges=[{'source':'draft:seed','target':'draft:next','relation':'supports'}]))
     second = ideas.save_map(board_payload(name='Second board'))
+    goal1=ideas.save_goal({'request_id':str(uuid4()),'title':'First goal','color':'#8b5cf6'},'owner')
+    goal2=ideas.save_goal({'request_id':str(uuid4()),'title':'Second goal','color':'#14b8a6'},'owner')
     with sync_playwright() as engine:
         browser = engine.chromium.launch(channel='chrome', headless=True)
         try:
@@ -77,18 +97,32 @@ def test_board_sidebar_order_collapse_and_saved_lines_browser(ideas, authenticat
             page.goto('https://sidebar.test/hfl-corpus/graph?board='+first['id'])
             page.wait_for_selector('#kg-workspace:not([inert])')
             sidebar=page.locator('.kg-boards')
-            expect(sidebar.get_by_role('button',name='Explore activity graph')).to_be_visible()
+            expect(sidebar.get_by_role('button',name='Explore Activity Graph')).to_be_visible()
             assert sidebar.locator('.board-controls button').all_text_contents()==[
                 'Add thought','Attach existing','Ask agent','Save now','Save layout','Settings','Delete']
             width=sidebar.bounding_box()['width']
-            sidebar.locator('summary').click()
-            expect(sidebar.locator('.board-list')).not_to_be_visible()
+            sidebar.locator('[data-section=boards] > summary').click()
+            expect(sidebar.locator('[data-section=boards] .board-list')).not_to_be_visible()
             expect(sidebar.get_by_role('button',name='Settings',exact=True)).to_be_visible()
             assert sidebar.bounding_box()['width']==width
-            sidebar.locator('summary').click()
+            sidebar.locator('[data-section=boards] > summary').click()
             sidebar.locator('[data-board-id="'+second['id']+'"]').drag_to(sidebar.locator('[data-board-id="'+first['id']+'"]'))
             expect(sidebar.locator('.idea-map-status')).to_have_text('Board order saved')
             assert [b['id'] for b in ideas.maps()]==[second['id'],first['id']]
+            sidebar.locator('[data-goal-id="'+goal2['id']+'"]').drag_to(sidebar.locator('[data-goal-id="'+goal1['id']+'"]'))
+            expect(sidebar.locator('.idea-map-status')).to_have_text('Goal order saved')
+            assert [g['id'] for g in ideas.goals()]==[goal2['id'],goal1['id']]
+            sidebar.locator('[data-goal-id="'+goal1['id']+'"]').click()
+            editor=page.locator('.idea-dialog')
+            editor.get_by_role('button',name='Color #f43f5e',exact=True).click()
+            editor.get_by_role('button',name='Save Goal',exact=True).click()
+            expect(editor).to_have_count(0)
+            assert ideas.goal(goal1['id'])['color']=='#f43f5e'
+            assert ideas.map(first['id'])['members']==[]
+            sidebar.locator('[data-section=goals] > summary').click()
+            expect(sidebar.locator('[data-section=goals] nav')).not_to_be_visible()
+            expect(sidebar.get_by_role('button',name='Add Goal',exact=True)).to_be_visible()
+            sidebar.locator('[data-section=goals] > summary').click()
             page.wait_for_function('window.boardLineStrokes>0')
             page.evaluate('window.boardLineStrokes=0')
             sidebar.get_by_role('button',name='Add thought',exact=True).click()
@@ -102,7 +136,9 @@ def test_board_sidebar_order_collapse_and_saved_lines_browser(ideas, authenticat
             page.reload()
             page.wait_for_selector('#kg-workspace:not([inert])')
             expect(page.locator('#kg-map-count')).to_contain_text('2 links')
-            assert sidebar.locator('.board-list button').first.inner_text()=='Second board'
+            assert sidebar.locator('[data-section=boards] .board-list button').first.inner_text()=='Second board'
+            assert sidebar.locator('[data-section=goals] .board-list button').first.inner_text()=='Second goal'
+            assert sidebar.locator('[data-goal-id="'+goal1['id']+'"]').evaluate('(el)=>getComputedStyle(el).borderLeftColor')=='rgb(244, 63, 94)'
         finally:
             browser.close()
 
@@ -184,9 +220,9 @@ def test_board_edits_work_while_save_is_slow_and_retry(ideas, authenticated_clie
         try:
             page.goto('https://boards.test/hfl-corpus/graph')
             page.wait_for_selector('#kg-workspace:not([inert])')
-            if width < 760: page.locator('.kg-boards summary').click()
+            if width < 760: page.locator('.kg-boards [data-section=boards] > summary').click()
             count = len(graph_requests)
-            page.get_by_role('button',name='Add board',exact=True).click()
+            page.get_by_role('button',name='Add Board',exact=True).click()
             dialog = page.locator('.idea-dialog')
             dialog.get_by_label('Board name').fill('Quick board')
             dialog.get_by_label('What are you exploring or trying to achieve?').fill('Plan without waiting')
@@ -380,3 +416,163 @@ def test_goal_milestones_and_shared_graph_links(ideas, authenticated_client):
     assert client.patch(uri,json={'version':1,'status':'active'}).status_code == 200
     assert client.patch(uri,json={'version':1,'status':'achieved'}).status_code == 409
     assert client.post(BASE + '/goals',json={**raw,'request_id':str(uuid4()),'linked_objects':['idea:missing']}).status_code == 404
+
+
+def test_attach_choices_paging_permissions_and_saved_members(ideas, authenticated_client, monkeypatch):
+    from modules.hfl_corpus import entities, ideas_api
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Attachment must not build the full graph or fetch remote snapshot')
+    monkeypatch.setattr(entities, 'graph', forbidden)
+    monkeypatch.setattr(ideas_api, 'canonical_snapshot', forbidden)
+    for index in range(55):
+        ideas.save_idea(payload(title=f'Choice {index:02}'), 'owner')
+    hidden = ideas.save_idea(payload(title='Private', source={'entry_id':'hidden','path':'private.md'}), 'owner')
+    board = ideas.save_map(board_payload())
+    url = BASE + '/maps/' + board['id']
+    first = authenticated_client.get(url+'/attach-options').json()
+    second = authenticated_client.get(url+'/attach-options?offset=50').json()
+    assert len(first['nodes']) == 50 and first['has_more']
+    assert not second['has_more']
+    assert not {n['id'] for n in first['nodes']} & {n['id'] for n in second['nodes']}
+    all_nodes = first['nodes'] + second['nodes']
+    assert 'idea:'+hidden['id'] not in {n['id'] for n in all_nodes}
+    assert all_nodes == sorted(all_nodes, key=lambda n:(n['updated_at'],n['id']), reverse=True)
+    selected = first['nodes'][0]['id']
+    response = authenticated_client.patch(url,json={'version':1,'members':[selected]})
+    assert response.status_code == 200, response.text
+    reopened = authenticated_client.get(url+'/attach-options').json()
+    assert selected not in {n['id'] for n in reopened['nodes']}
+    assert reopened['total'] == first['total'] - 1
+    matches = authenticated_client.get(url+'/attach-options?query=Choice%2002').json()
+    assert [n['label'] for n in matches['nodes']] == ['Choice 02']
+    assert authenticated_client.patch(url,json={'version':2,'members':[selected,'idea:'+hidden['id']]}).status_code == 404
+    assert authenticated_client.get(url+'/attach-options?offset=-1').status_code == 422
+
+
+def test_attach_picker_loading_retry_and_paging_browser(ideas, authenticated_client, tmp_path):
+    from urllib.parse import urlparse
+    from playwright.sync_api import sync_playwright, expect
+    board = ideas.save_map(board_payload())
+    with sync_playwright() as engine:
+        browser = engine.chromium.launch(channel='chrome', headless=True)
+        try:
+            page = browser.new_page(viewport={'width':1200,'height':900})
+            pending = []
+            def respond(route):
+                r=route.request; url=urlparse(r.url)
+                if url.path.endswith('/attach-options'):
+                    pending.append(route)
+                    return
+                response=authenticated_client.request(r.method,url.path+('?' + url.query if url.query else ''),
+                    content=r.post_data_buffer,headers={'content-type':'application/json'})
+                route.fulfill(status=response.status_code,body=response.content,
+                    headers={'content-type':response.headers.get('content-type','text/html')})
+            page.route('https://attach.test/**',respond)
+            page.goto('https://attach.test/hfl-corpus/graph?board='+board['id'])
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            page.get_by_role('button',name='Attach existing',exact=True).click()
+            dialog=page.locator('.idea-dialog')
+            expect(dialog.get_by_role('status')).to_have_text('Loading items…')
+            expect(dialog.locator('.idea-picker-spinner')).to_be_visible()
+            page.wait_for_timeout(100)
+            pending.pop().fulfill(status=502,content_type='text/html',body='Unavailable')
+            expect(dialog.get_by_role('button',name='Retry',exact=True)).to_be_visible()
+            dialog.get_by_role('button',name='Retry',exact=True).click()
+            page.wait_for_timeout(100)
+            pending.pop().fulfill(json={'nodes':[{'id':'daily:2026-09-01','kind':'daily','label':'September'}], 'total':51,'has_more':True})
+            expect(dialog.get_by_role('button',name='September · daily')).to_be_visible()
+            dialog.get_by_role('button',name='Next',exact=True).click()
+            page.wait_for_timeout(100)
+            route=pending.pop(); assert 'offset=50' in route.request.url
+            route.fulfill(json={'nodes':[], 'total':51,'has_more':False})
+            expect(dialog.get_by_role('button',name='Previous',exact=True)).to_be_visible()
+            dialog.get_by_label('Search',exact=True).fill('missing')
+            page.wait_for_timeout(350)
+            route=pending.pop(); assert 'offset=0' in route.request.url and 'query=missing' in route.request.url
+            route.fulfill(json={'nodes':[], 'total':0,'has_more':False})
+            expect(dialog.get_by_text('No matching objects available to attach.')).to_be_visible()
+            close=dialog.get_by_role('button',name='Close editor',exact=True)
+            assert close.evaluate('(n)=>getComputedStyle(n).padding') == '0px'
+            page.screenshot(path=str(tmp_path/'attach-picker.png'))
+            close.click(); expect(dialog).to_have_count(0)
+        finally:
+            browser.close()
+
+
+def test_attach_entities_use_profile_updates_and_single_permitted_projection(ideas, authenticated_client, monkeypatch):
+    from modules.hfl_corpus import entities
+    from workflows.hfl.entity_store import get_store
+    entity_store = get_store()
+    entity_store.save_profile('people:recent', 'people', {'name':'Renamed person'})
+    with entity_store.connection() as db:
+        db.execute("UPDATE profiles SET updated='2026-09-21 12:00:00'")
+    rows = [dict(id='visible',title='Entry',path='public.md',anchor='entry',text='Entry ID: visible',
+                 source='manual-entry',date='2026-09-01',tags=[],mentions=[
+                     dict(id='people:recent',label='Old name',kind='people'),
+                     dict(id='tools:older',label='Older tool',kind='tools')])]
+    calls = []
+    def project():
+        calls.append(True)
+        return rows
+    monkeypatch.setattr(entities, 'projection', project)
+    monkeypatch.setattr(entities, 'current_entries', lambda: pytest.fail('Must reuse permitted projection'))
+    board = ideas.save_map(board_payload())
+    response = authenticated_client.get(BASE+'/maps/'+board['id']+'/attach-options')
+    assert response.status_code == 200, response.text
+    nodes = response.json()['nodes']
+    assert len(calls) == 1
+    person = next(n for n in nodes if n['id']=='people:recent')
+    tool = next(n for n in nodes if n['id']=='tools:older')
+    assert person['label'] == 'Renamed person'
+    assert person['updated_at'] > tool['updated_at']
+    assert nodes.index(person) < nodes.index(tool)
+
+
+def test_delete_board_feedback_failure_and_activity_transition_browser(ideas, authenticated_client):
+    from urllib.parse import urlparse
+    from playwright.sync_api import sync_playwright, expect
+    board = ideas.save_map(board_payload())
+    with sync_playwright() as engine:
+        browser = engine.chromium.launch(channel='chrome', headless=True)
+        try:
+            page = browser.new_page(viewport={'width':1200,'height':900})
+            deletes, graphs = [], []
+            def respond(route):
+                r=route.request;url=urlparse(r.url)
+                if r.method == 'DELETE':
+                    deletes.append(route);return
+                if url.path == '/api/hfl/entities/graph':
+                    graphs.append(route);return
+                response=authenticated_client.request(r.method,url.path+('?' + url.query if url.query else ''),
+                    content=r.post_data_buffer,headers={'content-type':'application/json'})
+                route.fulfill(status=response.status_code,body=response.content,
+                    headers={'content-type':response.headers.get('content-type','text/html')})
+            page.route('https://delete.test/**',respond)
+            page.goto('https://delete.test/hfl-corpus/graph?board='+board['id'])
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            page.get_by_role('button',name='Delete',exact=True).click()
+            dialog=page.locator('.idea-dialog')
+            dialog.get_by_role('button',name='Delete board',exact=True).click()
+            expect(dialog.get_by_role('status')).to_have_text('Deleting board…')
+            expect(dialog.get_by_role('button',name='Close editor')).to_be_disabled()
+            page.wait_for_timeout(100)
+            deletes.pop().fulfill(status=503,json={'detail':'Try again'})
+            expect(dialog.get_by_role('alert')).to_contain_text('Your board and pending edits are retained.')
+            assert ideas.map(board['id'])['id'] == board['id']
+            dialog.get_by_role('button',name='Delete board',exact=True).click()
+            page.wait_for_timeout(100)
+            route=deletes.pop()
+            response=authenticated_client.request('DELETE',BASE+'/maps/'+board['id'],json=route.request.post_data_json)
+            assert response.status_code == 200
+            route.fulfill(status=response.status_code,json=response.json())
+            expect(dialog).to_have_count(0)
+            status=page.locator('.idea-map-status')
+            expect(status).to_have_text('Board deleted · Loading All activity…')
+            expect(page.locator('[data-board-id="'+board['id']+'"]')).to_have_count(0)
+            assert 'board=' not in page.url
+            page.wait_for_timeout(100)
+            graphs.pop().fulfill(json={'nodes':[],'edges':[],'sources':[]})
+            expect(status).to_have_text('Board deleted · All activity')
+            expect(page.locator('#kg-workspace')).not_to_have_attribute('inert','')
+        finally:
+            browser.close()

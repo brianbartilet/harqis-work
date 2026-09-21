@@ -171,21 +171,46 @@ window.HflObjectDescription = (item = {}) => {
     catch (error) { d.error.textContent = error.message; }
   }
   async function chooseMapMembers() {
+    const boardId = maps.current?.id; if (!boardId) return;
     const d = dialog('Attach existing context');
-    const search = field(d.body, '', 'Search', '', 'search'), list = el('div', undefined, 'idea-choices'); d.body.append(list);
-    try {
-      const graph = await request('/api/hfl/entities/graph?limit=0');
-      const render = () => {
-        list.replaceChildren();
-        graph.nodes.filter(n => !maps.current.members.includes(n.id) && n.label.toLowerCase().includes(search.value.toLowerCase())).slice(0, 100).forEach(n => {
+    const search = field(d.body, '', 'Search', '', 'search'), list = el('div', undefined, 'idea-choices');
+    const status = el('div', '', 'idea-picker-status'), pages = el('div', undefined, 'idea-picker-pages');
+    status.setAttribute('role', 'status'); d.body.append(status, list, pages);
+    d.form.onsubmit = event => event.preventDefault();
+    let offset = 0, timer, controller, generation = 0;
+    const cancel = () => { generation++; controller?.abort(); clearTimeout(timer); };
+    d.node.addEventListener('close', cancel);
+    const loading = () => {
+      list.replaceChildren(); pages.replaceChildren(); d.error.textContent = '';
+      status.replaceChildren(el('span', '', 'idea-picker-spinner'), el('span', 'Loading items…'));
+      list.setAttribute('aria-busy', 'true');
+    };
+    async function load() {
+      cancel(); const current = generation; controller = new AbortController(); loading();
+      try {
+        const data = await request(base + '/maps/' + boardId + '/attach-options?' + new URLSearchParams({query:search.value.trim(),offset}),
+          {signal:AbortSignal.any([controller.signal, AbortSignal.timeout(45000)])});
+        if (current !== generation || !d.node.open) return;
+        status.textContent = data.total ? 'Most recently updated · ' + (offset + 1) + '–' + Math.min(offset + 50, data.total) + ' of ' + data.total : '';
+        data.nodes.filter(n => !maps.current?.members.includes(n.id)).forEach(n => {
           list.append(button(n.label + ' · ' + n.kind, async () => {
-            try { maps.cacheNode(n); await maps.addMembers([n.id]); d.node.close(); changed(); }
-            catch (error) { d.error.textContent = error.message; }
+            try {
+              if (maps.current?.id !== boardId) throw Error('Return to this board before attaching.');
+              maps.cacheNode(n); await maps.addMembers([n.id]); d.node.close(); changed();
+            } catch (error) { d.error.textContent = error.message; }
           }));
         });
-        if (!list.children.length) list.append(el('p', 'No matching objects.'));
-      }; search.oninput = render; render();
-    } catch (error) { d.error.textContent = error.message; }
+        if (!list.children.length) list.append(el('p', 'No matching objects available to attach.'));
+        if (offset) pages.append(button('Previous', () => { offset = Math.max(0, offset - 50); load(); }));
+        if (data.has_more) pages.append(button('Next', () => { offset += 50; load(); }));
+      } catch (error) {
+        if (current !== generation || !d.node.open) return;
+        status.textContent = ''; d.error.textContent = error.name === 'TimeoutError' ? 'Loading took too long. Please retry.' : error.message;
+        pages.append(button('Retry', load));
+      } finally { if (current === generation) list.setAttribute('aria-busy', 'false'); }
+    }
+    search.oninput = () => { cancel(); offset = 0; loading(); timer = setTimeout(load, 250); };
+    await load();
   }
   function newTopic(parent) {
     const d = dialog('New topic'); const name = field(d.body, 'label', 'Topic', '', 'text', true, 120);
@@ -223,8 +248,14 @@ window.HflObjectDescription = (item = {}) => {
       } catch (error) { d.error.textContent = error.message; } finally { save.disabled = false; } };
     } catch (error) { d.error.textContent = error.message; }
   }
+  function colorField(parent,label,initial){
+    let selected=initial||maps.palette[0]||'#f59e0b';
+    const palette=el('fieldset',undefined,'board-palette');palette.append(el('legend',label));
+    for(const value of maps.palette){const swatch=button('',()=>{selected=value;for(const option of palette.querySelectorAll('button'))option.setAttribute('aria-pressed',String(option.dataset.color===selected));});swatch.dataset.color=value;swatch.style.background=value;swatch.setAttribute('aria-label','Color '+value);swatch.setAttribute('aria-pressed',String(value===selected));palette.append(swatch);}
+    parent.append(palette);return ()=>selected;
+  }
   async function editGoal(identity = null) {
-    const d = dialog(identity ? 'Edit Goal' : 'Add goal');
+    const d = dialog(identity ? 'Edit Goal' : 'Add Goal');
     const loading = el('p', identity ? 'Loading Goal…' : '', 'board-hint'); loading.setAttribute('role', 'status'); d.body.append(loading);
     try {
       let item = identity ? (await api('/goals/' + identity)).item : {};
@@ -240,6 +271,7 @@ window.HflObjectDescription = (item = {}) => {
         }
       };
       const title = field(d.body, 'title', 'Goal', item.title, 'text', true, 200);
+      const getColor=colorField(d.body,'Goal color',item.color||maps.palette[maps.goals.length%maps.palette.length]);
       const body = field(d.body, 'body', 'Description', item.body, 'textarea', false, 60000);
       const criteria = field(d.body, 'criteria', 'Success criteria', item.success_criteria, 'textarea', false, 6000);
       const status = selectField(d.body, 'status', 'Status', ['proposed','active','paused','achieved','dropped'].map(s => [s,s]), item.status || 'proposed');
@@ -263,11 +295,11 @@ window.HflObjectDescription = (item = {}) => {
       d.body.append(button('Add milestone', () => add()), el('p', 'Completing Actions does not automatically achieve this Goal. Assess the success criteria when updating its status.'));
       const save = el('button', 'Save Goal'); save.type = 'submit'; d.footer.append(save); const key = crypto.randomUUID();
       d.form.onsubmit = async event => { event.preventDefault(); save.disabled = true; try {
-        const values = {title: title.value, body: body.value, success_criteria: criteria.value, status: status.value, target_date: date.value, progress_notes: notes.value, milestones: rows.map(r => ({id:r.id,title:r.title.value,status:r.status.value,target_date:r.date.value,actions:[...r.actions.selectedOptions].map(o=>o.value)})), ...(item.id ? {version:item.version} : {request_id:key})};
+        const values = {title: title.value, color:getColor(), body: body.value, success_criteria: criteria.value, status: status.value, target_date: date.value, progress_notes: notes.value, milestones: rows.map(r => ({id:r.id,title:r.title.value,status:r.status.value,target_date:r.date.value,actions:[...r.actions.selectedOptions].map(o=>o.value)})), ...(item.id ? {version:item.version} : {request_id:key})};
         values.linked_objects = [...links.selectedOptions].map(o => o.value);
         item = (await api('/goals' + (item.id ? '/' + item.id : ''), item.id ? 'PATCH' : 'POST', values)).item;
-        maps.goals=[...maps.goals.filter(g=>g.id!==item.id),item];maps.cacheNode({...item,id:'goal:'+item.id,object_id:item.id,label:item.title,kind:'goals'});
-        if (maps.current) await maps.addMembers(['goal:' + item.id]); d.node.close(); changed();
+        maps.goals=maps.goals.some(g=>g.id===item.id)?maps.goals.map(g=>g.id===item.id?item:g):[...maps.goals,item];maps.render();maps.cacheNode({...item,id:'goal:'+item.id,object_id:item.id,label:item.title,kind:'goals'});
+        if (maps.current && !identity) await maps.addMembers(['goal:' + item.id]); d.node.close(); changed();
       } catch (error) { d.error.textContent = error.message; } finally { save.disabled = false; } };
       let controller;
       const loadLinks = async () => {
@@ -346,7 +378,7 @@ window.HflObjectDescription = (item = {}) => {
   }
   const maps = {
     current: null, loaded: [], pendingPositions: null, getPositions: () => ({}),
-    queues:new Map(),nodes:new Map(),sharedEdges:new Map(),goals:[],palette:[],listOpen:true,ordering:false,
+    queues:new Map(),nodes:new Map(),sharedEdges:new Map(),goals:[],palette:[],listOpen:true,goalsOpen:true,ordering:false,
     cacheNode(node){this.nodes.set(node.id,node);},
     queue(board=this.current){
       if(!board)return null;
@@ -386,24 +418,11 @@ window.HflObjectDescription = (item = {}) => {
     },
     render() {
       if (!this.root) return;
+      const caption=document.getElementById('kg-map-title');if(caption)caption.textContent=this.current?.name||'EXPLORE ACTIVITY CONSTELLATION';
       this.root.replaceChildren(); document.querySelector('.kg-shell')?.classList.toggle('has-board', !!this.current); document.getElementById('kg-search').placeholder = this.current ? 'Search this board' : 'Search entries or entities';
-      const all = button('Explore activity graph', () => this.selectBoard(null)); all.className='board-explore';all.setAttribute('aria-pressed', String(!this.current)); this.root.append(all);
-      this.root.append(button('Add board',()=>this.edit()),button('Add goal',()=>editGoal()));
-      const details=el('details'),summary=el('summary','Boards');details.open=this.listOpen;details.ontoggle=()=>{this.listOpen=details.open;};details.append(summary);
-      const list = el('nav', undefined, 'board-list'); list.setAttribute('aria-label', 'Saved boards');
-      for (const board of this.loaded) {
-        const item = button(board.name, () => this.selectBoard(board));item.dataset.boardId=board.id;
-        item.style.setProperty('--board-color',board.color||this.palette[0]||'#f59e0b');item.setAttribute('aria-current', String(board.id === this.current?.id));
-        item.draggable=!this.ordering;item.title='Drag to reorder · Alt + Arrow keys to move';
-        item.ondragstart=event=>{event.dataTransfer.setData('text/board-id',board.id);event.dataTransfer.effectAllowed='move';};
-        item.ondragover=event=>{if([...event.dataTransfer.types].includes('text/board-id')){event.preventDefault();item.classList.add('drag-over');}};
-        item.ondragleave=()=>item.classList.remove('drag-over');
-        item.ondrop=event=>{event.preventDefault();item.classList.remove('drag-over');this.reorder(event.dataTransfer.getData('text/board-id'),board.id);};
-        item.onkeydown=event=>{if(event.altKey&&['ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();const at=this.loaded.indexOf(board),other=this.loaded[at+(event.key==='ArrowUp'?-1:1)];if(other)this.reorder(board.id,other.id);}};
-        list.append(item);
-      }
-      details.append(list);this.root.append(details,this.status);
-      if (!this.loaded.length) list.append(el('p', 'Start a board with a question, idea, or goal.', 'board-hint'));
+      const all = button('Explore Activity Graph', () => this.selectBoard(null)); all.className='board-explore';all.setAttribute('aria-pressed', String(!this.current)); this.root.append(all);
+      this.root.append(button('Add Board',()=>this.edit()),button('Add Goal',()=>editGoal()));
+      this.root.append(this.objectList('boards'),this.objectList('goals'),this.status);
       if (!this.current) return;
       const board = this.current, section = el('section', undefined, 'board-controls');section.style.setProperty('--board-color',board.color||this.palette[0]||'#f59e0b'); section.append(el('h2', board.name), el('p', board.purpose, 'board-purpose'));
       const save=button('Save now',()=>this.saveNow());save.className='board-save-now';save.title='Save all pending board edits now';
@@ -414,13 +433,33 @@ window.HflObjectDescription = (item = {}) => {
       if(pending?.error)section.append(button('Retry save',()=>this.saveNow()),button('Resolve unsaved changes',()=>this.resolveSave()));
       this.root.append(section);
     },
-    async reorder(source,target){
+    objectList(kind){
+      const goals=kind==='goals',items=goals?this.goals:this.loaded,openKey=goals?'goalsOpen':'listOpen';
+      const details=el('details'),summary=el('summary',goals?'Goals':'Boards');details.dataset.section=kind;details.open=this[openKey];details.ontoggle=()=>{this[openKey]=details.open;};details.append(summary);
+      const list=el('nav',undefined,'board-list');list.setAttribute('aria-label',goals?'Saved goals':'Saved boards');
+      for(const object of items){
+        const item=button(goals?object.title:object.name,()=>goals?editGoal(object.id):this.selectBoard(object));
+        item.dataset[goals?'goalId':'boardId']=object.id;item.style.setProperty('--board-color',object.color||this.palette[0]||'#f59e0b');
+        if(!goals)item.setAttribute('aria-current',String(object.id===this.current?.id));
+        item.draggable=!this.ordering;item.title='Drag to reorder · Alt + Arrow keys to move';
+        const type='text/'+kind+'-id';
+        item.ondragstart=event=>{event.dataTransfer.setData(type,object.id);event.dataTransfer.effectAllowed='move';};
+        item.ondragover=event=>{if([...event.dataTransfer.types].includes(type)){event.preventDefault();item.classList.add('drag-over');}};
+        item.ondragleave=()=>item.classList.remove('drag-over');
+        item.ondrop=event=>{event.preventDefault();item.classList.remove('drag-over');this.reorder(event.dataTransfer.getData(type),object.id,kind);};
+        item.onkeydown=event=>{if(event.altKey&&['ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();const at=items.indexOf(object),other=items[at+(event.key==='ArrowUp'?-1:1)];if(other)this.reorder(object.id,other.id,kind);}};
+        list.append(item);
+      }
+      if(!items.length)list.append(el('p',goals?'Add a goal to define an outcome.':'Start a board with a question, idea, or goal.','board-hint'));
+      details.append(list);return details;
+    },
+    async reorder(source,target,kind='boards'){
       if(this.ordering||source===target)return;
-      const before=[...this.loaded],from=before.findIndex(b=>b.id===source),to=before.findIndex(b=>b.id===target);if(from<0||to<0)return;
-      const next=[...before];next.splice(to,0,next.splice(from,1)[0]);this.loaded=next;this.ordering=true;this.render();
-      try{await api('/boards/order','PUT',{ids:next.map(b=>b.id)});this.status.textContent='Board order saved';}
-      catch(error){const rank=new Map(before.map((b,i)=>[b.id,i]));this.loaded.sort((a,b)=>(rank.get(a.id)??Infinity)-(rank.get(b.id)??Infinity));this.status.textContent=error.message;}
-      finally{this.ordering=false;const status=this.status.textContent;this.render();this.status.textContent=status;this.root.querySelector('[data-board-id="'+source+'"]')?.focus();}
+      const key=kind==='goals'?'goals':'loaded',before=[...this[key]],from=before.findIndex(b=>b.id===source),to=before.findIndex(b=>b.id===target);if(from<0||to<0)return;
+      const next=[...before];next.splice(to,0,next.splice(from,1)[0]);this[key]=next;this.ordering=true;this.render();
+      try{await api('/'+kind+'/order','PUT',{ids:next.map(b=>b.id)});this.status.textContent=(kind==='goals'?'Goal':'Board')+' order saved';}
+      catch(error){const rank=new Map(before.map((b,i)=>[b.id,i]));this[key].sort((a,b)=>(rank.get(a.id)??Infinity)-(rank.get(b.id)??Infinity));this.status.textContent=error.message;}
+      finally{this.ordering=false;const status=this.status.textContent;this.render();this.status.textContent=status;this.root.querySelector('[data-'+(kind==='goals'?'goal':'board')+'-id="'+source+'"]')?.focus();}
     },
     async reload(){
       if(!this.root)return;
@@ -438,15 +477,37 @@ window.HflObjectDescription = (item = {}) => {
     async saveLayout() { if (!this.current) return; try { await this.persist({positions: {...this.current.positions, ...this.getPositions()}}); } catch (error) { this.status.textContent = error.message; } },
     remove() {
       const board = this.current, d = dialog('Delete board'); d.body.append(el('p', 'Delete “' + board.name + '” and its draft thoughts? Shared Goals, Ideas, and Actions will remain.'));
-      const remove = button('Delete board', async () => { remove.disabled = true; try { await this.flush(); await api('/maps/' + board.id, 'DELETE', {version:this.current.version});this.queues.delete(board.id);this.loaded=this.loaded.filter(b=>b.id!==board.id);this.current=null;this.selectBoard(null); d.node.close(); } catch (error) { d.error.textContent = error.message; remove.disabled = false; } }); d.footer.append(remove);
+      const progress=el('div','','idea-picker-status');progress.setAttribute('role','status');d.body.append(progress);
+      const remove = button('Delete board', async () => {
+        if(remove.disabled)return;
+        remove.disabled=true;d.body.inert=true;d.error.textContent='';
+        const closeButtons=[...d.node.querySelectorAll('button')];closeButtons.forEach(b=>b.disabled=true);
+        progress.replaceChildren(el('span','','idea-picker-spinner'),el('span','Deleting board…'));
+        const queue=this.queue(board);
+        try {
+          const latest=await queue.prepareDelete();
+          await api('/maps/'+board.id,'DELETE',{version:latest.version});
+          this.queues.delete(board.id);this.loaded=this.loaded.filter(b=>b.id!==board.id);
+          const nodeId='board:'+board.id;this.nodes.delete(nodeId);
+          for(const [key,edge] of this.sharedEdges)if(edge.source===nodeId||edge.target===nodeId)this.sharedEdges.delete(key);
+          this.current=null;this.deletionTransition=true;
+          this.status.replaceChildren(el('span','','idea-picker-spinner'),el('span','Board deleted · Loading All activity…'));
+          await this.selectBoard(null);d.node.close();
+        } catch (error) {
+          queue.resume();progress.replaceChildren();d.error.textContent=error.message+' Your board and pending edits are retained.';
+          d.body.inert=false;closeButtons.forEach(b=>b.disabled=false);
+        }
+      }); d.footer.append(remove);
+    },
+    finishDeletionTransition(error=false){
+      if(!this.deletionTransition)return;
+      this.deletionTransition=false;
+      this.status.textContent=error?'Board deleted. All activity could not load · Use Refresh to retry.':'Board deleted · All activity';
     },
     async edit(current = null, seed = null) {
-      const d = dialog(current ? 'Settings' : 'Add board');
+      const d = dialog(current ? 'Settings' : 'Add Board');
       const name = field(d.body, 'name', 'Board name', current?.name || seed?.label, 'text', true, 100);
-      let color=current?.color||this.palette[this.loaded.length%this.palette.length]||'#f59e0b';
-      const palette=el('fieldset',undefined,'board-palette');palette.append(el('legend','Board color'));
-      for(const value of this.palette){const swatch=button('',()=>{color=value;for(const option of palette.querySelectorAll('button'))option.setAttribute('aria-pressed',String(option.dataset.color===color));});swatch.dataset.color=value;swatch.style.background=value;swatch.setAttribute('aria-label','Color '+value);swatch.setAttribute('aria-pressed',String(value===color));palette.append(swatch);}d.body.append(palette);
-
+      const getColor=colorField(d.body,'Board color',current?.color||this.palette[this.loaded.length%this.palette.length]);
       const purpose = field(d.body, 'purpose', 'What are you exploring or trying to achieve?', current?.purpose || seed?.label, 'textarea', true, 3000);
       const starting = current || seed ? null : field(d.body, 'seed', 'Starting thought (optional)', '', 'text', false, 200);
       const goal = selectField(d.body, 'goal_id', 'Primary Goal (optional)', [['', 'No primary Goal']], '');
@@ -463,7 +524,7 @@ window.HflObjectDescription = (item = {}) => {
         const members = [...new Set([...(current?.members || []), ...(seed ? [seed.id] : []), ...(goal.value ? ['goal:' + goal.value] : [])])];
         const root = current?.root || seed?.id || (goal.value ? 'goal:' + goal.value : draftId);
         const drafts = current?.drafts || (root === draftId ? [{id: draftId, title: starting?.value.trim() || name.value, body: purpose.value}] : []);
-        const {item} = await api('/maps' + (current ? '/' + current.id : ''), current ? 'PATCH' : 'POST', {name: name.value, color, purpose: purpose.value, board_date:boardDate.value, root, goal_id: goal.value, members, drafts, prompt: prompt.value || 'Develop this board toward its purpose. Propose alternatives, assumptions to test, and concrete next steps.', ...(current ? {version: current.version} : {request_id: key, positions: {}})});
+        const {item} = await api('/maps' + (current ? '/' + current.id : ''), current ? 'PATCH' : 'POST', {name: name.value, color:getColor(), purpose: purpose.value, board_date:boardDate.value, root, goal_id: goal.value, members, drafts, prompt: prompt.value || 'Develop this board toward its purpose. Propose alternatives, assumptions to test, and concrete next steps.', ...(current ? {version: current.version} : {request_id: key, positions: {}})});
         this.queues.delete(item.id);this.loaded=[...this.loaded.filter(m=>m.id!==item.id),item];if(seed)this.cacheNode(seed);const selectedGoal=this.goals.find(g=>g.id===goal.value);if(selectedGoal)this.cacheNode({...selectedGoal,id:'goal:'+selectedGoal.id,object_id:selectedGoal.id,label:selectedGoal.title,kind:'goals'});this.selectBoard(item); d.node.close(); if (agent?.value === 'agent') this.brainstorm();
       } catch (error) { d.error.textContent = error.message; } finally { save.disabled = false; } };
     },

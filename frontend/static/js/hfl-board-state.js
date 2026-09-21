@@ -10,18 +10,19 @@ class HflBoardSaveQueue {
     this.value = {...this.value, ...fields};
     this.notify(this.value, this.error ? 'Unsaved · Retry save' : 'Saving…');
     clearTimeout(this.timer);
-    if (!this.error) this.timer = setTimeout(() => this.flush().catch(() => {}), this.delay);
+    if (!this.error && !this.paused) this.timer = setTimeout(() => this.flush().catch(() => {}), this.delay);
     return this.value;
   }
   async flush() {
     clearTimeout(this.timer);
+    if (this.paused) return this.value;
     if (this.running) { await this.running; return this.flush(); }
     if (!Object.keys(this.pending).length) return this.value;
     this.running = this.drain();
     try { return await this.running; } finally { this.running = null; if(!Object.keys(this.pending).length)clearTimeout(this.timer); }
   }
   async drain() {
-    while (Object.keys(this.pending).length) {
+    while (!this.paused && Object.keys(this.pending).length) {
       const fields = this.pending, version = this.value.version; this.pending = {};
       this.notify(this.value, 'Saving…');
       try {
@@ -47,6 +48,18 @@ class HflBoardSaveQueue {
       }
     }
     return this.value;
+  }
+  async prepareDelete() {
+    this.paused = true;
+    clearTimeout(this.timer);
+    // Finish only the request already sent; don't save edits being deleted.
+    if (this.running) await this.running;
+    return this.value;
+  }
+  resume() {
+    this.paused = false;
+    if (!this.error && Object.keys(this.pending).length)
+      this.timer = setTimeout(() => this.flush().catch(() => {}), this.delay);
   }
 }
 if (typeof module !== 'undefined') module.exports = HflBoardSaveQueue;

@@ -32,6 +32,7 @@ class IdeasStore(BoardStoreMixin):
                 CREATE TABLE IF NOT EXISTS goal_history (id TEXT NOT NULL, version INTEGER NOT NULL, actor TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(id,version));
                 CREATE TABLE IF NOT EXISTS board_promotions (board_id TEXT NOT NULL, draft_id TEXT NOT NULL, idea_id TEXT NOT NULL, PRIMARY KEY(board_id,draft_id));
                 CREATE TABLE IF NOT EXISTS board_memories (event_id TEXT PRIMARY KEY, entry_id TEXT NOT NULL, object_id TEXT NOT NULL, board_id TEXT NOT NULL, day TEXT NOT NULL, payload TEXT NOT NULL, staged INTEGER NOT NULL DEFAULT 0);
+                CREATE TABLE IF NOT EXISTS goal_order (id TEXT PRIMARY KEY, position INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS board_order (id TEXT PRIMARY KEY, position INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS idea_maps (id TEXT PRIMARY KEY, version INTEGER NOT NULL, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS idea_item_actions (idea_id TEXT NOT NULL, checklist_id TEXT NOT NULL, item_id TEXT NOT NULL, action_id TEXT NOT NULL, PRIMARY KEY(idea_id,checklist_id,item_id,action_id));
