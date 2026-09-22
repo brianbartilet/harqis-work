@@ -65,6 +65,24 @@ window.HflObjectDescription = (item = {}) => {
           <li><strong>Review the outcome.</strong> Track milestones in the goal editor. Completed actions do not automatically achieve a goal; assess its success criteria and update its status.</li>
         </ul>
       </section>
+      <section aria-labelledby="board-guide-graph-logic">
+        <h3 id="board-guide-graph-logic">How Activity Graph connections are determined</h3>
+        <ul class="board-guide-list">
+          <li><strong>Entries connect to their date and source.</strong> Each included entry automatically links to the date recorded on it and its ingestion source. A date can therefore have many entry connections, even when only a few are visible.</li>
+          <li><strong>Entities connect through mentions.</strong> People, organizations, tools, topics, and referenced objects connect to entries that mention them. Extracted mentions must be supported by the entry text; entries awaiting extraction may have fewer entity connections.</li>
+          <li><strong>A shared date is not a direct entity relationship.</strong> A topic mentioned in an entry connects through that entry: date &larr; entry &rarr; topic. It does not automatically gain a direct connection to the date or to every other topic mentioned that day.</li>
+          <li><strong>Ideas and actions carry context.</strong> They can connect to creation, source, and evidence dates, their source or evidence entries, and each other through relationships such as develops into. Goal support, board dates, and explicitly shared connections add further relationships.</li>
+        </ul>
+      </section>
+      <section aria-labelledby="board-guide-graph-visibility">
+        <h3 id="board-guide-graph-visibility">Why a date may show fewer connections</h3>
+        <p>The Activity Graph shows a selected view of your corpus. A line is visible only when both connected nodes are included. The visible connection count is not the total number of entries logged that day.</p>
+        <ul class="board-guide-list">
+          <li><strong>Detail limits count every kind of node.</strong> Overview includes up to 100 nodes, Expanded up to 500, and Dense up to 1,000. Entries, entities, dates, sources, ideas, actions, goals, and boards share that allowance. A date can remain visible while some of its entries fall outside the limit; views containing ideas and actions prioritize recent nodes.</li>
+          <li><strong>Filters narrow the view.</strong> Search, date range, sources, hidden node types, Shared connections only, and focusing on one node can hide nodes and their lines. A saved board shows its attached objects and connections between them.</li>
+          <li><strong>Explore a complete day.</strong> Open the Activity Graph, choose All matching nodes, set From and To to that day, enable Entries and Dates, and clear search, source restrictions, and node focus. Turn off Shared connections only. All matching nodes removes the detail limit but still respects your filters and access permissions.</li>
+        </ul>
+      </section>
       <section aria-labelledby="board-guide-destinations">
         <h3 id="board-guide-destinations">Where your work goes</h3>
         <dl class="board-guide-routes">
