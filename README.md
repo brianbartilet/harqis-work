@@ -279,18 +279,18 @@ Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and 
 
 | Workflow | Status | Celery task entry points | Description |
 |----------|--------|-------|-------------|
-| `hud` | Active | 23 | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins, host fallbacks, and manual compatibility tasks |
+| `hud` | Active | 24 | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins, host fallbacks, and manual compatibility tasks |
 | `purchases` | Active | 8 | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
 | `desktop` | Active | 8 | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
-| `hfl` | Active | 21 | Homework-for-Life capture/ingest → canonical Activity Corpus + Elasticsearch, including granular note changes, durable outbox replay, and an evidence-grounded activity watchdog |
+| `hfl` | Active | 37 | Homework-for-Life capture/ingest → canonical Activity Corpus + Elasticsearch, including granular note changes, durable outbox replay, and an evidence-grounded activity watchdog |
 | `git_forks` | Active | 1 | Weekly hybrid discovery and drift analysis for harqis-work forks, with one HFL entry per fork instance plus a fleet summary |
 | `notes` | Active | 2 | Repository-backed note sync: editing-machine push → canonical host fast-forward pull; HFL performs the downstream ingest |
-| `knowledge` | Guarded active | 9 | Multi-source RAG ingest, cited answers, cross-link reports, and on-demand topic mapping/scanning |
+| `knowledge` | Guarded active | 11 | Multi-source RAG ingest, cited answers, cross-link reports, and on-demand topic mapping/scanning |
 | `dumps` | Active | 3 | Daily dump collection — fanout per-node ship + harqis-server pull (Android/Termux) → analysis |
 | `social` | Active | 1 | Monthly LinkedIn post — git history → Claude → LinkedIn draft + Gmail notification |
 | `tcg` | Manual | 6 | Pokedex proxy-printing pipeline (MPC) — manual/pytest-triggered, ships an empty Beat dict |
 | `testing` | Hybrid | 2 | Hermes/manual-dispatched test farm generation plus Celery Beat report delivery |
-| `second_brain` | Hybrid | 1 | Context-aware advisory feed with deterministic overrides, optional Hermes interpretation, and web/Telegram/Rainmeter/CLI adapters |
+| `second_brain` | Hybrid | 2 | Context-aware advisory feed with deterministic overrides, optional Hermes interpretation, and web/Telegram/Rainmeter/CLI adapters |
 | `workers` | Active | 1 | Worker-pool fanout — each worker reports its own location to the `harqis-worker-locations` ES index |
 | `mobile` | On-demand | 14 | Android SDK/AVD/device/scrcpy Celery controls; also includes a standalone Termux screen logger |
 | `finance` | Manual | 1 | Parse bank-statement PDFs and import categorized transactions into YNAB |
@@ -339,7 +339,7 @@ CONFIG_DICTIONARY = (
     | WORKFLOW_KNOWLEDGE | WORKFLOW_DUMPS | WORKFLOW_HFL | WORKFLOW_NOTES
     | WORKFLOW_WORKERS
     | WORKFLOW_TESTING | WORKFLOW_TCG
-    | WORKFLOW_GIT_FORKS
+    | WORKFLOW_GIT_FORKS | WORKFLOW_SECOND_BRAIN
 )
 SPROUT.conf.beat_schedule = _celery_safe_schedule(CONFIG_DICTIONARY)
 ```
@@ -371,11 +371,11 @@ HARQIS drives a live desktop heads-up display using [Rainmeter](https://www.rain
 
 | Category | Calendar event name | Widgets that surface |
 |---|---|---|
-| `PINNED` | (always visible — no event needed) | Calendar Info, Desktop Logs, HUD Profiles, Agents Core, Failed Jobs, Hermes Radar |
+| `PINNED` | (always visible — no event needed) | Calendar Info, Desktop Logs, HUD Profiles, Agents Core, Failed Jobs, Hermes Radar, Second Brain |
 | `WORK` | `"Career \| Work"` | Jira Board |
-| `FINANCE` | `"Finance \| Investing \| Business"` | OANDA Account, PC Daily Sales, Budgeting Info, API Costs |
+| `FINANCE` | `"Finance \| Investing \| Business"` | OANDA Account, PC Daily Sales, API Costs |
 | `PLAY` | `"Mischief \| Misdirection \| Play"` | TCG Orders, TCG Sell Cart |
-| `ORGANIZE` | `"Organization \| Everyman Skills"` | Mouse Bindings (also `WORK`) |
+| `ORGANIZE` | `"Organization \| Everyman Skills"` | Budgeting Info, PC Daily Sales, API Costs, Mouse Bindings (also `WORK`) |
 | `DEACTIVATED` | — | Never auto-shows; manual trigger only |
 
 Widgets are wired to categories in each task's `@init_meter(..., schedule_categories=[ScheduleCategory.<X>])` decorator. A widget can list multiple categories (e.g. `Mouse Bindings` is both `ORGANIZE` and `WORK`) so it surfaces during any matching block.
@@ -385,19 +385,20 @@ Widgets are wired to categories in each task's `@init_meter(..., schedule_catego
 | Panel | Visibility | Data source | Update frequency |
 |-------|-----------|-------------|------------------|
 | **Calendar Info** | Always | Google Calendar — today's events and upcoming schedule | Every 15 min |
-| **Desktop Logs** | Always | Claude Haiku — AI summary of captured activity screenshots | Every 5 min |
+| **Desktop Logs** | Always | Claude Haiku — AI summary of captured activity screenshots | Hourly at :05 |
 | **HUD Profiles** | Always | Rainmeter / iCUE — active HUD profile selector and load/save | Daily at midnight |
 | **Agents Core** | Always | n8n + ElevenLabs — chat agent and voice assistant launcher | Daily at midnight |
 | **Failed Jobs Today** | Always | Celery — tasks that errored since midnight | Every 15 min |
 | **OANDA Account** | Finance block | OANDA — forex account NAV and open trades | Every 15 min (Mon–Fri) |
-| **PC Daily Sales** | Finance block | AppSheet `INVOICE` table — gross daily sales grouped by month, last 60 days, scrollable | Every 4 hours |
-| **Budgeting Info** | Finance block | YNAB — budget balances in PHP and SGD with overspend warnings | Every 4 hours |
-| **API Costs** | Finance block | Anthropic admin usage API (OpenAI / Gemini stubbed) — trailing 3-month LLM spend grouped per month → service → model | Every 2 hours |
+| **PC Daily Sales** | Finance + Organize blocks | AppSheet `INVOICE` table — gross daily sales grouped by month, last 60 days, scrollable | Every 2 hours |
+| **Budgeting Info** | Organize block | YNAB — budget balances in PHP and SGD with overspend warnings | Every hour |
+| **API Costs** | Finance + Organize blocks | Anthropic admin usage API (OpenAI / Gemini stubbed) — trailing 3-month LLM spend grouped per month → service → model | Every 30 min |
 | **Jira Board** | Work block | Jira Software — In-Review / In-Progress / Ready / In-Analysis tickets | Weekdays every hour |
-| **Hermes Radar** | Always | Sanitized Hermes Telegram pushes from the last 8h (maximum 10) above the established Claude Haiku productivity synthesis. The host exports an atomic shared JSON snapshot; Windows never opens Hermes state or polls Telegram. The Rainmeter folder/task IDs remain `DAILYRADAR` / `show_daily_radar` for compatibility. | Push snapshot every 15 min; HUD refresh at :05/:20/:35/:50; synthesis at 08:00, 12:00, 16:00, 20:00 |
+| **Hermes Radar** | Always | Sanitized Hermes Telegram pushes from the last 8h (maximum 10) above the established Claude Haiku productivity synthesis. The host exports an atomic shared JSON snapshot; Windows never opens Hermes state or polls Telegram. The Rainmeter folder/task IDs remain `DAILYRADAR` / `show_daily_radar` for compatibility. | Push snapshot hourly at :00; HUD refresh hourly at :05; synthesis at 08:00, 12:00, 16:00, 20:00 |
+| **Second Brain** | Always when enabled | Canonical redacted advisory feed | Dispatched by reconciliation (every 15 min) when Rainmeter delivery is enabled |
 | **Mouse Bindings** | Organize + Work | iCUE Corsair Scimitar — active macro bindings for the foreground app | Every 60 sec |
 | **TCG Orders** | Play block | TCG Marketplace — open and pending orders with card art | Every hour |
-| **TCG Sell Cart** | Play block | TCG Marketplace — match listings to active want-to-buy bids | Sundays at midnight |
+| **TCG Sell Cart** | Play block | TCG Marketplace — match listings to active want-to-buy bids | Fri–Sun at 01:00, 08:00, 12:00, 20:00 |
 
 ---
 
@@ -446,7 +447,7 @@ harqis-work/
 │   ├── airtable/                   # Airtable bases, tables, records (CRUD)
 │   ├── alpha_vantage/              # Stock/FX/news/fundamentals/technicals/crypto/commodities
 │   ├── android_emulator/           # Android AVDs + device control (ADB, scrcpy)
-│   ├── anthropic/                  # Anthropic Claude API
+│   ├── antropic/                   # Anthropic Claude API
 │   ├── apify/                      # Web scraping actors + social-media trends aggregation
 │   ├── appsheet/                   # AppSheet tables — find/add/edit/delete rows
 │   ├── browser/                    # HTTP fetching and web scraping
@@ -479,6 +480,7 @@ harqis-work/
 │   ├── reddit/                     # Reddit API
 │   ├── scryfall/                   # MTG card database
 │   ├── spotify/                    # Spotify listening history (recently-played, top tracks/artists)
+│   ├── sqlite_vec/                 # Local persistent vector store and KNN search
 │   ├── stripe/                     # Stripe payments — balance, charges, customers, invoices, subscriptions
 │   ├── tcg_mp/                     # TCG Marketplace
 │   ├── telegram/                   # Telegram Bot
@@ -492,6 +494,7 @@ harqis-work/
 │   ├── desktop/                    # Git pulls, window mgmt, file sync
 │   ├── dumps/                      # Daily dump collection (Android/Termux → harqis-server)
 │   ├── finance/                    # Manual PDF-to-YNAB transaction import
+│   ├── git_forks/                  # Fork fleet discovery and drift analysis
 │   ├── hfl/                        # Homework-for-Life capture/ingest/express pipeline
 │   ├── hud/                        # Desktop HUD, fallback, and compatibility tasks
 │   ├── knowledge/                  # RAG / knowledge-base ingest and query workflows
@@ -499,6 +502,7 @@ harqis-work/
 │   ├── mobile/                     # Android screen capture plus emulator/device controls
 │   ├── n8n/                        # n8n utility helpers
 │   ├── purchases/                  # TCG card resale pipeline
+│   ├── second_brain/               # Context-aware advisory feed and delivery
 │   ├── social/                     # Monthly LinkedIn posting
 │   ├── tcg/                        # Pokedex proxy-printing pipeline (MPC)
 │   ├── testing/                    # Test farm (Gherkin scenario generation)
@@ -595,7 +599,7 @@ The three driving principles:
                              ▼
    ┌──────────────────────────────────────────────────────────┐
    │                   MCP Server  (mcp/)                     │
-   │   392 tools across 42 modules — OANDA, YNAB, Gmail,      │
+   │   Tools from 43 catalog modules — OANDA, YNAB, Gmail,    │
    │    Telegram, Discord, Trello, Jira, Scryfall, TCG …      │
    └──────┬──────────────────────────────────┬────────────────┘
           │ reads / writes                   │ triggers
@@ -622,7 +626,7 @@ The three driving principles:
 | Component | Where | What it does |
 |---|---|---|
 | **Hermes agent** | `~/.hermes/` (local per-machine) | Agent runtime: persistent memory, distilled lessons, plans, and cron jobs (agent / `no_agent` modes) — see [`docs/info/HERMES.md`](docs/info/HERMES.md) |
-| **MCP server** | `mcp/server.py` | Exposes all 40 app integrations (plus knowledge & memory-recall tools) as callable tools over the Model Context Protocol |
+| **MCP server** | `mcp/server.py` | Registers tools from 41 app integrations plus knowledge & memory recall via `tools/catalog.py`; the live surface depends on `MCP_ENABLED_APPS` and successful module registration |
 | **Celery Beat** | `workflows/config.py` | Runs all scheduled automation — HUD updates, MTG resale pipeline, desktop sync |
 | **RabbitMQ + Redis** | Docker stack | Celery broker and result backend |
 | **Frontend** | `frontend/main.py` | Web dashboard — manually trigger any task, inspect run history |
@@ -754,6 +758,7 @@ OPENAI_API_KEY=
 OPENAI_ASSISTANT_ID=
 OPENAI_ASSISTANT_DESKTOP=
 OPENAI_ASSISTANT_REPORTER=
+GEMINI_API_KEY=
 GROK_API_KEY=
 PERPLEXITY_API_KEY=
 
@@ -768,11 +773,16 @@ TRELLO_API_KEY=
 TRELLO_API_TOKEN=
 JIRA_DOMAIN=                      # e.g. yourcompany.atlassian.net
 JIRA_EMAIL=
+JIRA_USER=
 JIRA_API_TOKEN=
+CONFLUENCE_DOMAIN=
+CONFLUENCE_EMAIL=
+CONFLUENCE_API_TOKEN=
 NOTION_API_TOKEN=
 AIRTABLE_API_TOKEN=               # personal access token (pat...)
 APPSHEET_APPLICATION_ACCESS_KEY=  # per-app key — Manage → Integrations in your AppSheet app
 APPSHEET_DEFAULT_APP_ID=          # default AppSheet app id (overridable per call)
+APPSHEET_DEFAULT_TABLE=           # default table (overridable per call)
 
 # Kanban orchestrator
 KANBAN_BOARD_ID=                  # Trello board id or Jira project key
@@ -814,6 +824,7 @@ ALPHA_VANTAGE_API_KEY=
 OANDA_BEARER_TOKEN=
 OANDA_MT4_ACCOUNT_ID=
 STRIPE_API_KEY=                    # secret key — sk_live_... or sk_test_...
+MOO_PWD_MD5=                      # configured Moo stub credential
 YNAB_ACCESS_TOKEN=
 YNAB_BUDGET_PHP=
 YNAB_BUDGET_SGD=
@@ -848,6 +859,7 @@ SPOTIFY_REFRESH_TOKEN=           # OAuth2 refresh token (minted once — see app
 # ── Cloud / infrastructure ────────────────────────────────────────────────────
 ORGO_API_KEY=
 GOOGLE_APPS_API_KEY=              # shared Google/YouTube readiness signal
+GOOGLE_SHEET_HARQIS_ID=            # HARQIS Google Sheet id
 OWN_TRACKS_HOST=                  # default: localhost
 OWN_TRACKS_PORT=                  # default: 8083
 OWN_TRACKS_USERNAME=
@@ -857,9 +869,14 @@ OWN_TRACKS_DEFAULT_DEVICE=
 
 # ── Voice capture (Plaud) ─────────────────────────────────────────────────────
 PLAUD_TOKEN=                      # cloud API bearer token (preferred)
+PLAUD_EMAIL=                      # optional cloud login
+PLAUD_PASSWORD=
 PLAUD_EXPORT_DIR=                 # local export folder (fallback)
 PLAUD_ARCHIVE_HOST=               # archive host (default: harqis-ones-mac-mini)
 PLAUD_ARCHIVE_PATH=               # remote archive dir (unset → archive skipped)
+
+# ── Android SDK ──────────────────────────────────────────────────────────────
+ANDROID_SDK_ROOT=                 # Android SDK root for emulator/device tools
 
 # ── Desktop capture / Rainmeter (Windows) ─────────────────────────────────────
 ACTIONS_LOG_PATH=                 # absolute path
