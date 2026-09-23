@@ -18,6 +18,14 @@ jobs:
     - name: Build Docker Image
       run: docker build --no-cache -t harqis-work .
 
+    - name: Check Frontend MCP Coverage
+      run: docker run --rm harqis-work python -m tools.frontend_coverage --check
+
+    - name: Test Frontend MCP Contracts
+      run: |
+        docker run --rm -e APP_CONFIG_FILE=apps_config.yaml harqis-work \
+          python -m pytest frontend/tests/test_mcp_coverage.py frontend/tests/test_hfl_api_server.py -q
+
     - name: Run Tests
       run: |
         docker run --rm -e APP_CONFIG_FILE=apps_config.yaml harqis-work \

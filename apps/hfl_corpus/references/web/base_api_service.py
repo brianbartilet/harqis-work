@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
+import tempfile
 from typing import Any
 
 import requests
@@ -55,18 +57,34 @@ class BaseApiServiceHflCorpus(BaseFixtureServiceRest):
             headers=headers,
             timeout=timeout,
             verify=self.client.verify,
+            allow_redirects=kwargs.pop('allow_redirects', False),
             **kwargs,
         )
         response.raise_for_status()
         return response
 
     def _download(self, endpoint: str, destination: str | Path) -> dict[str, Any]:
-        response = self._raw_request("GET", endpoint)
         target = Path(destination).expanduser().resolve()
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(response.content)
+        temporary = None
+        size = 0
+        try:
+            with self._raw_request("GET", endpoint, stream=True) as response:
+                if response.is_redirect:
+                    raise ValueError('Unexpected file redirect; check the configured API origin.')
+                with tempfile.NamedTemporaryFile(dir=target.parent, prefix='.hfl-download-', delete=False) as output:
+                    temporary = Path(output.name)
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        output.write(chunk)
+                        size += len(chunk)
+                content_type = response.headers.get('content-type', '')
+            os.replace(temporary, target)
+            temporary = None
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
         return {
             "path": str(target),
-            "bytes_written": len(response.content),
-            "content_type": response.headers.get("content-type", ""),
+            "bytes_written": size,
+            "content_type": content_type,
         }

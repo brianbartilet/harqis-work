@@ -46,6 +46,11 @@ kanban_num_agents = 4
 hfl_api = true
 hfl_agent = true
 
+[harqis-server.env_vars]
+# Public deployment default; machine-local overrides still take precedence.
+# hfl_corpus is the canonical frontend API adapter; memory is the recall adapter.
+MCP_ENABLED_APPS = "memory,hfl_corpus,knowledge,sqlite_vec,trello,google_apps,google_drive,github,git,jira,own_tracks,plaud,tcg_mp,scryfall,echo_mtg,spotify,youtube,telegram,perplexity"
+
 # ── Windows work box: DEFAULT + HUD, no Kanban here ──────────────────────────
 [windows-work]
 role = "host"

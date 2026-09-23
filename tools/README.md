@@ -38,6 +38,12 @@ imported callables, so discovery is cheap and side-effect free. The CLI, standal
 MCP server, and Kanban MCP bridge all consume this catalog. App implementations and
 MCP tool names remain in `apps/<app>/mcp.py`.
 
+Frontend route coverage is tracked in `frontend/mcp_coverage.json`.
+`python -m tools.frontend_coverage --check` checks it without importing apps or
+loading credentials. New canonical `/api/hfl` routes require a dedicated tool;
+other frontend routes require a reviewed mapping or exclusion. See the
+[coverage report](../docs/info/FRONTEND_MCP_COVERAGE.md).
+
 Adding a catalog entry exposes an app through all three surfaces. Use
 `/create-new-mcp <app>` to audit the service layer, create its compatible MCP adapter,
 and register the app in this shared catalog.

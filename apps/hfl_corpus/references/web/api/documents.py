@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Optional
 
@@ -26,6 +27,10 @@ class ApiServiceHflCorpusDocuments(BaseApiServiceHflCorpus):
         source: str = "",
         include_secrets: bool = False,
         secret_tags: str = "",
+        include_entries: bool = False,
+        activity_year: int = 0,
+        activity_from_year: int = 0,
+        scope: dict | None = None,
     ) -> dict:
         """Search and paginate corpus documents."""
         self.request.get().add_uri_parameter("documents").add_query_strings(
@@ -40,6 +45,10 @@ class ApiServiceHflCorpusDocuments(BaseApiServiceHflCorpus):
             source=source,
             include_secrets=str(include_secrets).lower(),
             secret_tags=secret_tags,
+            include_entries=str(include_entries).lower(),
+            activity_year=activity_year,
+            activity_from_year=activity_from_year,
+            scope=json.dumps(scope, separators=(',', ':')) if scope is not None else '',
         )
         return self.client.execute_request(self.request.build())
 
@@ -68,6 +77,7 @@ class ApiServiceHflCorpusDocuments(BaseApiServiceHflCorpus):
         limit: int = 20,
         include_secrets: bool = False,
         secret_tags: str = "",
+        scope: dict | None = None,
     ) -> dict:
         """Return matching entries within one corpus document."""
         self.request.get() \
@@ -80,6 +90,7 @@ class ApiServiceHflCorpusDocuments(BaseApiServiceHflCorpus):
                 limit=limit,
                 include_secrets=str(include_secrets).lower(),
                 secret_tags=secret_tags,
+                scope=json.dumps(scope, separators=(',', ':')) if scope is not None else '',
             )
         return self.client.execute_request(self.request.build())
 

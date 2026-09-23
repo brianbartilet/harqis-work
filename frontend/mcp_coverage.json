@@ -1,0 +1,2330 @@
+{
+  "version": 1,
+  "scope": "frontend.main decorated routes; static assets excluded",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/debug/config",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/login",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "POST",
+      "path": "/login",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/logout",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/dashboard",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/open-path",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/home",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/manifesto",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/workflows",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "POST",
+      "path": "/tasks/{workflow}/{task_key}/trigger",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/tasks/status/{task_id}",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/applications",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "POST",
+      "path": "/applications/refresh",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/applications/{app_key}",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/applications/{app_key}/docs/{doc_path:path}",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "POST",
+      "path": "/applications/{app_key}/tests",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/applications/test-runs/{run_id}",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "POST",
+      "path": "/applications/test-runs/{run_id}/cancel",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entries",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_entry"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entries/preview",
+      "status": "covered",
+      "tools": [
+        "preview_hfl_corpus_entry"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entries/upload",
+      "status": "covered",
+      "tools": [
+        "upload_hfl_corpus_entry"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/documents",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_documents"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/tree",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_tree"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/matches/{relative_path:path}",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_matches"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/day-matches/{activity_day}",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_day_matches"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.calendar.ApiServiceHflCorpusCalendar.list_day_matches"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/document/{relative_path:path}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_document"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/document/{relative_path:path}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_document"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/reference/{token}",
+      "status": "covered",
+      "tools": [
+        "download_hfl_corpus_reference"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/reference/{token}/preview",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_reference_preview"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/reference/{token}/media",
+      "status": "covered",
+      "tools": [
+        "download_hfl_corpus_reference_media"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/reference/{token}/thumbnail",
+      "status": "covered",
+      "tools": [
+        "download_hfl_corpus_reference_thumbnail"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/source",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_timeline_source"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.get_timeline_source"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/evidence",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_timeline_evidence"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.get_timeline_evidence"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/items",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_timeline_items"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.list_timeline_items"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/hfl/timeline/items/order",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_timeline_order"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.update_timeline_order"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/items",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_timeline_item"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.create_timeline_item"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/hfl/timeline/items/{followup_id}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_timeline_item"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.update_timeline_item"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/items/{followup_id}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_timeline_item"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.get_timeline_item"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/items/{followup_id}/history",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_timeline_history"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.get_timeline_history"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/markers",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_timeline_markers"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.get_timeline_markers"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/period",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_timeline_period"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.get_timeline_period"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/suggestions/{sid}/dismiss",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_timeline_suggestion_dismiss"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.update_timeline_suggestion_dismiss"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/explore",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_timeline_exploration"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.create_timeline_exploration"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/snapshot",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_ideas_snapshot"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.get_ideas_snapshot"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/connection-availability",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_connection_availability"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.get_connection_availability"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/actions/{identity}/connections",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_action_connections"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.get_action_connections"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/dates/{identity}/connections",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_date_connections"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.get_date_connections"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/boards",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_boards"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.list_boards"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/hfl/timeline/ideas/boards/order",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_board_order"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.update_board_order"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/hfl/timeline/ideas/goals/order",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_goal_order"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.update_goal_order"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/goal-options",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_goal_options"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.get_goal_options"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/maps/{identity}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_map"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.get_map"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/maps/{identity}/graph",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_map_graph"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.get_map_graph"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/maps/{identity}/attach-options",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_map_attach_options"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.list_map_attach_options"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/render",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_rendered_markdown"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.get_rendered_markdown"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/objects/{identity}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_idea"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.get_idea"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/objects",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_idea"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.create_idea"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/hfl/timeline/ideas/objects/{identity}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_idea"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.update_idea"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/topics",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_topic"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.create_topic"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/links",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_link"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.create_link"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/hfl/timeline/ideas/links",
+      "status": "covered",
+      "tools": [
+        "delete_hfl_corpus_link"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.delete_link"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/maps",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_map"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.create_map"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/hfl/timeline/ideas/maps/{identity}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_map"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.update_map"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/hfl/timeline/ideas/maps/{identity}",
+      "status": "covered",
+      "tools": [
+        "delete_hfl_corpus_map"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.delete_map"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/maps/{identity}/promote",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_map_promotion"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.create_map_promotion"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/goals/{identity}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_goal"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.get_goal"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/maps/{identity}/promote-link",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_map_link_promotion"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.create_map_link_promotion"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/maps/{identity}/connections",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_map_connection"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.update_map_connection"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/goals",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_goal"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.create_goal"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/hfl/timeline/ideas/goals/{identity}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_goal"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.update_goal"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/objects/{identity}/conversion",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_idea_conversion"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.get_idea_conversion"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/objects/{identity}/convert",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_idea_conversion"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.create_idea_conversion"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/objects/{identity}/attachments",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_idea_attachments"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.list_idea_attachments"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/objects/{identity}/attachments/{attachment_id}",
+      "status": "covered",
+      "tools": [
+        "download_hfl_corpus_idea_attachment"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.download_idea_attachment"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/objects/{identity}/attachments",
+      "status": "covered",
+      "tools": [
+        "upload_hfl_corpus_idea_attachments"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.upload_idea_attachments"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/hfl/timeline/ideas/objects/{identity}/attachments/{attachment_id}",
+      "status": "covered",
+      "tools": [
+        "delete_hfl_corpus_idea_attachment"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.delete_idea_attachment"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/maps/{identity}/accept-proposal",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_map_proposal"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.create_map_proposal"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/{resource}/{source_id}/attachments",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_attachments"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/{resource}/{source_id}/attachments",
+      "status": "covered",
+      "tools": [
+        "upload_hfl_corpus_attachments"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/{resource}/{source_id}/attachments/{attachment_id}",
+      "status": "covered",
+      "tools": [
+        "download_hfl_corpus_attachment"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/hfl/{resource}/{source_id}/attachments/{attachment_id}",
+      "status": "covered",
+      "tools": [
+        "delete_hfl_corpus_attachment"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/actions",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_actions"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/actions",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_action"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/actions/{action_id}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_action"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/hfl/actions/{action_id}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_action"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/actions/{action_id}/history",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_action_history"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/categories",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_categories"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/categories",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_category"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/categories/{category_id}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_category"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/hfl/categories/{category_id}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_category"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/categories/{category_id}/archive",
+      "status": "covered",
+      "tools": [
+        "archive_hfl_corpus_category"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/pins",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_pins"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/pins",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_pin"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/pins/{pin_id}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_pin"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/hfl/pins/{pin_id}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_pin"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/hfl/pins/{pin_id}",
+      "status": "covered",
+      "tools": [
+        "delete_hfl_corpus_pin"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/graph-views",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_graph_views"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.graph_views.ApiServiceHflCorpusGraphViews.list_graph_views"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/graph-views",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_graph_view"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.graph_views.ApiServiceHflCorpusGraphViews.create_graph_view"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/hfl/graph-views/{identity}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_graph_view"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.graph_views.ApiServiceHflCorpusGraphViews.update_graph_view"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/graph-views/{identity}/select",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_graph_view_selection"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.graph_views.ApiServiceHflCorpusGraphViews.update_graph_view_selection"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/hfl/graph-views/{identity}",
+      "status": "covered",
+      "tools": [
+        "delete_hfl_corpus_graph_view"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.graph_views.ApiServiceHflCorpusGraphViews.delete_graph_view"
+    },
+    {
+      "method": "GET",
+      "path": "/knowledge",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/knowledge/graph",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/graph",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/ideas",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/entities",
+      "status": "alias",
+      "tools": [
+        "list_hfl_corpus_entities"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/entities/graph",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_entity_graph"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.get_entity_graph"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/entities",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_entities"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.list_entities"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/profile/{identity}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_profile"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_profile"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/entities/entry/{entry_id}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_entity_entry"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.get_entity_entry"
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/entities/entry/{entry_id}",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_entity_entry"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/entities/status",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_entity_status"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.get_entity_status"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/backfill",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_entity_backfill"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.create_entity_backfill"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/merge",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_entity_legacy_merge"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.create_entity_legacy_merge"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/decisions/{decision_id}/undo",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_legacy_undo"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_legacy_undo"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/export",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_entity_export"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.create_entity_export"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/merge-preview",
+      "status": "covered",
+      "tools": [
+        "analyze_hfl_corpus_entity_selection"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.analyze_entity_selection"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/merges",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_entity_merge"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.create_entity_merge"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/merges/{identity}/unmerge",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_unmerge"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_unmerge"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/entities/operations/{request_id}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_entity_operation"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.get_entity_operation"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/entities/audit/{identity}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_entity_audit"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.get_entity_audit"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/entities/matching",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_entity_matching"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.get_entity_matching"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/matching/scan",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_entity_matching_scan"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.create_entity_matching_scan"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/matching/suggestions/{identity}/dismiss",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_matching_dismiss"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_matching_dismiss"
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/workspace-views",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "PUT",
+      "path": "/hfl-corpus/view-preferences",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/workspace-views",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "PUT",
+      "path": "/hfl-corpus/workspace-views/{identity}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/workspace-views/{identity}/select",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "DELETE",
+      "path": "/hfl-corpus/workspace-views/{identity}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/memory-pins",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/secrets/unlock",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/activity-year/{activity_year}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/entries/preview",
+      "status": "alias",
+      "tools": [
+        "preview_hfl_corpus_entry"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/entries",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_entry"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/entries/upload",
+      "status": "alias",
+      "tools": [
+        "upload_hfl_corpus_entry"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/tree",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_tree"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/day-matches/{activity_day}",
+      "status": "alias",
+      "tools": [
+        "list_hfl_corpus_day_matches"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/matches/{relative_path:path}",
+      "status": "alias",
+      "tools": [
+        "list_hfl_corpus_matches"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/document/{relative_path:path}",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_document"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/entry-action/{relative_path:path}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/document/{relative_path:path}",
+      "status": "alias",
+      "tools": [
+        "update_hfl_corpus_document"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/references/{token}/download",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/references/{token}/preview",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/references/{token}/media",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/references/{token}/thumbnail",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/remote-references/{token}/download",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/remote-references/{token}/preview",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/remote-references/{token}/media",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/remote-references/{token}/thumbnail",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/source",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_timeline_source"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/evidence",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_timeline_evidence"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/items",
+      "status": "alias",
+      "tools": [
+        "list_hfl_corpus_timeline_items"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "PUT",
+      "path": "/hfl-corpus/timeline/items/order",
+      "status": "alias",
+      "tools": [
+        "update_hfl_corpus_timeline_order"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/items",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_timeline_item"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "PATCH",
+      "path": "/hfl-corpus/timeline/items/{followup_id}",
+      "status": "alias",
+      "tools": [
+        "update_hfl_corpus_timeline_item"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/items/{followup_id}",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_timeline_item"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/items/{followup_id}/history",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_timeline_history"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/markers",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_timeline_markers"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/period",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_timeline_period"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/suggestions/{sid}/dismiss",
+      "status": "alias",
+      "tools": [
+        "update_hfl_corpus_timeline_suggestion_dismiss"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/explore",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_timeline_exploration"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/snapshot",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_ideas_snapshot"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/connection-availability",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_connection_availability"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/actions/{identity}/connections",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_action_connections"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/dates/{identity}/connections",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_date_connections"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/boards",
+      "status": "alias",
+      "tools": [
+        "list_hfl_corpus_boards"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "PUT",
+      "path": "/hfl-corpus/timeline/ideas/boards/order",
+      "status": "alias",
+      "tools": [
+        "update_hfl_corpus_board_order"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "PUT",
+      "path": "/hfl-corpus/timeline/ideas/goals/order",
+      "status": "alias",
+      "tools": [
+        "update_hfl_corpus_goal_order"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/goal-options",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_goal_options"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/maps/{identity}",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_map"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/maps/{identity}/graph",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_map_graph"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/maps/{identity}/attach-options",
+      "status": "alias",
+      "tools": [
+        "list_hfl_corpus_map_attach_options"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/render",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_rendered_markdown"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/objects/{identity}",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_idea"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/objects",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_idea"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "PATCH",
+      "path": "/hfl-corpus/timeline/ideas/objects/{identity}",
+      "status": "alias",
+      "tools": [
+        "update_hfl_corpus_idea"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/topics",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_topic"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/links",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_link"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "DELETE",
+      "path": "/hfl-corpus/timeline/ideas/links",
+      "status": "alias",
+      "tools": [
+        "delete_hfl_corpus_link"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/maps",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_map"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "PATCH",
+      "path": "/hfl-corpus/timeline/ideas/maps/{identity}",
+      "status": "alias",
+      "tools": [
+        "update_hfl_corpus_map"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "DELETE",
+      "path": "/hfl-corpus/timeline/ideas/maps/{identity}",
+      "status": "alias",
+      "tools": [
+        "delete_hfl_corpus_map"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/maps/{identity}/promote",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_map_promotion"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/goals/{identity}",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_goal"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/maps/{identity}/promote-link",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_map_link_promotion"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/maps/{identity}/connections",
+      "status": "alias",
+      "tools": [
+        "update_hfl_corpus_map_connection"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/goals",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_goal"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "PATCH",
+      "path": "/hfl-corpus/timeline/ideas/goals/{identity}",
+      "status": "alias",
+      "tools": [
+        "update_hfl_corpus_goal"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/objects/{identity}/conversion",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_idea_conversion"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/objects/{identity}/convert",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_idea_conversion"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/objects/{identity}/attachments",
+      "status": "alias",
+      "tools": [
+        "list_hfl_corpus_idea_attachments"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/objects/{identity}/attachments/{attachment_id}",
+      "status": "alias",
+      "tools": [
+        "download_hfl_corpus_idea_attachment"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/objects/{identity}/attachments",
+      "status": "alias",
+      "tools": [
+        "upload_hfl_corpus_idea_attachments"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "DELETE",
+      "path": "/hfl-corpus/timeline/ideas/objects/{identity}/attachments/{attachment_id}",
+      "status": "alias",
+      "tools": [
+        "delete_hfl_corpus_idea_attachment"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/maps/{identity}/accept-proposal",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_map_proposal"
+      ],
+      "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/agent-bridge/inputs/{kind}/{source_id}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/agent-bridge/inputs/{kind}/{source_id}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/agent-bridge/inputs/{kind}/{source_id}/{attachment_id}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "DELETE",
+      "path": "/hfl-corpus/agent-bridge/inputs/{kind}/{source_id}/{attachment_id}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/agent-bridge/artifacts/{run_id}/{name}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/agent-bridge/sources/{kind}/{source_id}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/agent-bridge/sources/{kind}/{source_id}/configure",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/agent-bridge/sources/{kind}/{source_id}/run",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/agent-bridge/mindmaps/{identity}/accept-proposal",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/agent-bridge/runs/{run_id}/{decision}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl-agent/runs/{run_id}/inputs/{attachment_id}",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl-agent/runs/{run_id}/artifacts/{name}",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl-agent/runs/{run_id}/prior-artifacts/{name}",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl-agent/queue",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl-agent/settings",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl-agent/sweep",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl-agent/deliver",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl-agent/runs/{run_id}/claim",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl-agent/runs/{run_id}/events",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "GET",
+      "path": "/sharing/filter-options",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/sharing",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/sharing/generated-shares",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "POST",
+      "path": "/sharing/configurations",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/sharing/configurations/{configuration_id}/delete",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/sharing/from-corpus",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/sharing/preview",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/sharing/preview/chat",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/sharing/generate",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/sharing/shares/{share_id}/revoke",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/sharing/shares/{share_id}/preview",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "POST",
+      "path": "/sharing/configurations/{configuration_id}/instant",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/sharing/shares/{share_id}/preview/manifesto",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "POST",
+      "path": "/sharing/shares/{share_id}/preview/chat",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/sharing/requests/{request_id}/approve",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/sharing/shares/{share_id}/preview/references/{reference_id}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/sharing/shares/{share_id}/preview/references/{reference_id}/preview",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/sharing/shares/{share_id}/preview/references/{reference_id}/media",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/sharing/shares/{share_id}/preview/references/{reference_id}/thumbnail",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/share/access/{token}",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "GET",
+      "path": "/share/email/{token}",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "POST",
+      "path": "/share/access/{token}/redeem",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "POST",
+      "path": "/share/email/{token}/redeem",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "GET",
+      "path": "/share/pending",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "GET",
+      "path": "/share/session",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "GET",
+      "path": "/share/session/manifesto",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "POST",
+      "path": "/share/session/chat",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "GET",
+      "path": "/share/session/references/{reference_id}",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "GET",
+      "path": "/share/session/references/{reference_id}/preview",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "GET",
+      "path": "/share/session/references/{reference_id}/media",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "GET",
+      "path": "/share/session/references/{reference_id}/thumbnail",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "POST",
+      "path": "/share/session/logout",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "GET",
+      "path": "/share/unavailable",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "GET",
+      "path": "/git-forks",
+      "status": "service",
+      "tools": [
+        "fork_fleet_latest"
+      ],
+      "reason": "Existing Git MCP tool calls the same business service on the MCP host."
+    },
+    {
+      "method": "POST",
+      "path": "/git-forks/scan",
+      "status": "service",
+      "tools": [
+        "fork_fleet_scan",
+        "fork_fleet_write_hfl_scan"
+      ],
+      "reason": "Existing Git MCP tool calls the same business service on the MCP host."
+    },
+    {
+      "method": "POST",
+      "path": "/git-forks/sync",
+      "status": "service",
+      "tools": [
+        "fork_fleet_sync"
+      ],
+      "reason": "Existing Git MCP tool calls the same business service on the MCP host."
+    },
+    {
+      "method": "POST",
+      "path": "/git-forks/test",
+      "status": "service",
+      "tools": [
+        "fork_fleet_test"
+      ],
+      "reason": "Existing Git MCP tool calls the same business service on the MCP host."
+    },
+    {
+      "method": "POST",
+      "path": "/git-forks/deploy",
+      "status": "service",
+      "tools": [
+        "fork_fleet_deploy"
+      ],
+      "reason": "Existing Git MCP tool calls the same business service on the MCP host."
+    },
+    {
+      "method": "GET",
+      "path": "/profile",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "POST",
+      "path": "/profile",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/settings",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "POST",
+      "path": "/settings",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/second-brain",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/second-brain/feed-fragment",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/second-brain/api/feed",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/second-brain/api/events",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/second-brain/mode",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/second-brain/mode/auto",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/second-brain/refresh",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/second-brain/settings",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/second-brain/automatic",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/second-brain/selection",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/second-brain/delivery/{client}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/second-brain/categories",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/second-brain/categories/{mode_id}/archive",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/second-brain/agent-settings",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/second-brain/chat",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/second-brain/api/commands",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    }
+  ]
+}

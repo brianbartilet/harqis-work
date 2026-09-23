@@ -46,8 +46,11 @@ app = FastAPI(
 app.include_router(hfl_corpus_api_router)
 # Expose the same authenticated commands to agents without mounting browser pages.
 for entity_route in entities_router.routes:
-    if getattr(entity_route, 'path', '').startswith('/api/hfl/entities'):
+    if (getattr(entity_route, 'path', '').startswith('/api/hfl/')
+            and getattr(getattr(entity_route, 'endpoint', None), '__module__', '')
+            == 'modules.hfl_corpus.entities_api'):
         app.router.routes.append(entity_route)
+# Include nested merge commands once, on both eager and lazy FastAPI routers.
 app.include_router(entity_merge_router)
 
 

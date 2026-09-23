@@ -75,17 +75,17 @@ def _stdout_to_stderr():
 # first application import onward.  The runtime transport captures the real
 # stdout before the same protection is applied to tool execution below.
 with _stdout_to_stderr():
-    from dotenv import load_dotenv
-
     _repo_root = Path(__file__).resolve().parent.parent
-    load_dotenv(_repo_root / ".env" / "apps.env")
-
-    # Ensure the production config file is used regardless of ENV setting
-    os.environ.setdefault("APP_CONFIG_FILE", "apps_config.yaml")
-
     # Allow `python mcp/server.py` to resolve `apps.*` imports without PYTHONPATH
     if str(_repo_root) not in sys.path:
         sys.path.insert(0, str(_repo_root))
+
+    # Direct client launches need the same per-machine URLs, app filter and
+    # credentials as launch.py. In particular remote corpus URLs must be loaded
+    # before apps_config resolves its environment placeholders.
+    from scripts.launch import setup_mcp_env
+
+    setup_mcp_env()
 
     import anyio
     from mcp.server.fastmcp import FastMCP

@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import anyio
+import pytest
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -14,12 +15,14 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SERVER_PATH = REPO_ROOT / "mcp" / "server.py"
 
 
-def test_stdio_server_keeps_non_json_output_off_stdout(caplog):
+@pytest.mark.parametrize('entrypoint', ['direct', 'launcher'])
+def test_stdio_server_keeps_non_json_output_off_stdout(caplog, entrypoint):
     async def exercise_server() -> None:
         with anyio.fail_after(30):
             params = StdioServerParameters(
                 command=sys.executable,
-                args=[str(SERVER_PATH)],
+                args=([str(SERVER_PATH)] if entrypoint == 'direct'
+                      else [str(REPO_ROOT / 'scripts' / 'launch.py'), 'mcp']),
                 env={
                     **os.environ,
                     "MCP_ENABLED_APPS": "trello",

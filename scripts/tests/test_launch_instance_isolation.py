@@ -3,6 +3,7 @@ from __future__ import annotations
 import glob
 import importlib.util
 import shelve
+import tomllib
 from pathlib import Path
 
 
@@ -59,3 +60,36 @@ def test_setup_env_adds_repo_to_live_python_import_path(monkeypatch):
 
     assert str(launch.REPO_ROOT) in launch.sys.path
     assert str(launch.SCRIPTS_DIR) in launch.sys.path
+
+
+def test_mcp_bootstrap_loads_machine_api_url_and_app_filter(monkeypatch):
+    launch = load_launch_module()
+    monkeypatch.setattr(launch.os, 'environ', {})
+    monkeypatch.setattr(launch, 'load_env_file', lambda: {
+        'HFL_CORPUS_API_URL': 'http://127.0.0.1:8082',
+        'MCP_ENABLED_APPS': 'trello',
+    })
+    monkeypatch.setattr(launch, '_machine_env_vars', lambda: {
+        'HFL_CORPUS_API_URL': 'http://canonical.test:8082',
+        'MCP_ENABLED_APPS': 'memory,hfl_corpus',
+    })
+    launch.setup_mcp_env()
+    assert launch.os.environ['HFL_CORPUS_API_URL'] == 'http://canonical.test:8082'
+    assert launch.os.environ['MCP_ENABLED_APPS'] == 'memory,hfl_corpus'
+
+
+def test_mcp_bootstrap_preserves_explicit_client_filter(monkeypatch):
+    launch = load_launch_module()
+    monkeypatch.setattr(launch.os, 'environ', {'MCP_ENABLED_APPS': 'hfl_corpus'})
+    monkeypatch.setattr(launch, 'load_env_file', lambda: {})
+    monkeypatch.setattr(launch, '_machine_env_vars', lambda: {'MCP_ENABLED_APPS': 'trello'})
+    launch.setup_mcp_env()
+    assert launch.os.environ['MCP_ENABLED_APPS'] == 'hfl_corpus'
+
+
+def test_server_deployment_defaults_enable_canonical_hfl_adapter():
+    root = Path(__file__).resolve().parents[2]
+    config = tomllib.loads((root / 'machines.toml').read_text(encoding='utf-8'))
+    enabled = config['harqis-server']['env_vars']['MCP_ENABLED_APPS'].split(',')
+    assert 'hfl_corpus' in enabled
+    assert 'memory' in enabled
