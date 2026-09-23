@@ -16,9 +16,16 @@
   const initialParams=new URLSearchParams(location.search);
   if(initialParams.get('date_from'))startInput.value=initialParams.get('date_from');
   if(initialParams.get('date_to'))endInput.value=initialParams.get('date_to');
+  let editorState;
   let editing = null, source = null, requestId = '', today = '', busy = false, sequence = 0;
   const node = (tag, text, className) => { const el = document.createElement(tag); if (text != null) el.textContent = text; if (className) el.className = className; return el; };
-  const error = (id, message = '') => { const el = document.getElementById(id); el.textContent = message; el.hidden = !message; };
+  const error = (id, message = '') => {
+    const el = document.getElementById(id); el.textContent = message; el.hidden = !message;
+    if(id==='agenda-error' && document.querySelector('[data-actions-page]')) {
+      const boardError=document.querySelector('[data-board-error]');
+      if(boardError){boardError.textContent=message;boardError.hidden=!message;}
+    }
+  };
   async function api(path, options = {}) {
     const response = await fetch('/hfl-corpus/timeline/items' + (path.startsWith('?') ? scoped(path) : path), { ...options, headers: { 'Content-Type': 'application/json', ...options.headers } });
     let data; try { data = await response.json(); } catch (_) { throw new Error('The server returned an unreadable response. Try again.'); }
@@ -40,11 +47,21 @@
     attachments.reset(item?.id);
     for (const name of ['title', 'body', 'expected_outcome', 'notes', 'prompt', 'review_date', 'due_date', 'completion_note', 'matrix', 'matrix_confidence', 'matrix_reason']) form.elements[name].value = item?.[name] || '';
     form.elements.body.value = window.HflObjectDescription(item || {});
-    window.hflActionChecklists?.set(item?.checklists);
+    window.hflActionChecklists?.set(window.HflAgentInstructions(item?.checklists));
     form.elements.status.value = desiredStatus || item?.status || 'open';
     document.getElementById('followup-state-label').hidden = !item;
     document.getElementById('followup-editor-title').textContent = item ? (desiredStatus === 'done' ? 'Complete action' : 'Edit action') : 'New action';
     showEvidence(); stateFields(); error('followup-save-error'); editor.showModal();
+    editorState = window.HflBindEditor(editor, form, {
+      snapshot: () => JSON.stringify({fields:Object.fromEntries(new FormData(form)),checklists:window.hflActionChecklists.value,files:attachments.pending.map(f=>[f.name,f.size,f.lastModified]),removed:[...attachments.removed]}),
+      exists: () => !!editing, valid: () => form.checkValidity(),
+      lock: value => { busy=value; attachments.root.inert=value; form.querySelector('[type=submit]').disabled=value; },
+      save: saveEditor,
+    });
+    window.hflActionChecklists.options.addToBoard = async (list, task) => { try { await editorState.flush(); await window.HflIdeas.addToBoard('actionable',editing,list,task); } catch(e) { error('followup-save-error',e.message); } };
+    window.hflActionChecklists.render();
+    form.querySelector('[type=submit]').textContent = item ? 'Save now' : 'Create';
+    if(item)window.HflEditorLocation('actionable',item.id);
     form.elements.title.focus({preventScroll:true});
   }
   function showEvidence() {
@@ -76,21 +93,6 @@
   const statusLabel = value => ({in_progress:'In Progress',waiting:'In Progress'}[value] || value[0].toUpperCase()+value.slice(1));
   window.addEventListener('hfl:agent-updated',()=>load());
   const priority = item => [({done:1,dismissed:2}[item.status]||0),({Q1:0,Q2:1,Q3:2,Q4:3}[item.matrix]??4),[item.due_date,item.review_date].filter(Boolean).sort()[0]||'9999',item.due_date||'9999',item.created_at||'',item.id].join('|');
-  let connectionAvailability, lastConnectedActionIds;
-  function connectedActionIds() {
-    // All cards rendered together share one read; the next refresh checks again.
-    if (!connectionAvailability) {
-      connectionAvailability = fetch('/hfl-corpus/timeline/ideas/connection-availability', {cache:'no-store'})
-        .then(response => { if (!response.ok) throw Error('Connections unavailable'); return response.json(); })
-        .then(data => {
-          lastConnectedActionIds = new Set(data.action_ids);
-          document.querySelectorAll('.agenda-card').forEach(card=>card.updateConnections?.(lastConnectedActionIds));
-          return lastConnectedActionIds;
-        })
-        .finally(() => { connectionAvailability = null; });
-    }
-    return connectionAvailability;
-  }
   function card(item) {
     const el=node('article',null,'agenda-card');el.dataset.overdue=String(item.overdue);el.dataset.followupId=item.id;
     const meta=node('div',null,'agenda-card-meta');const status=node('span',statusLabel(item.status),'action-status');status.dataset.status=item.status;meta.append(status);
@@ -133,17 +135,12 @@
       management.append(button('Dismiss',e=>patch(item,{status:'dismissed'},e.currentTarget)),button('Done',e=>patch(item,{status:'done'},e.currentTarget)));
     } if(item.status !== 'open') management.append(button('Reopen',e=>patch(item,{status:'open'},e.currentTarget)));
     management.append(button('History',()=>showHistory(item)));
-    const resultsButton = button('Results',()=>window.hflAgentBridge.open('actionable',item.id,item.title));
+    const resultsButton = button('Agents',()=>window.hflAgentBridge.open('actionable',item.id,item.title));
     resultsButton.className = 'action-results-button';
     views.append(resultsButton);
     const connections = button('Connections', () => window.HflActionConnections.open(item, connections));
     connections.className = 'action-connections-button';
-    el.updateConnections = ids => {
-      if (ids.has(item.id)) {if(connections.parentElement!==views)views.append(connections);}
-      else connections.remove();
-    };
-    if (lastConnectedActionIds) el.updateConnections(lastConnectedActionIds);
-    connectedActionIds().then(el.updateConnections).catch(() => { /* Keep the last known state; a later refresh retries. */ });
+    views.append(connections);
     el.append(actions);return el;
   }
   async function load() {
@@ -265,7 +262,7 @@
       (item.evidence||[]).forEach(ref=>{const a=node('a',ref.date+' · '+ref.title);a.href=evidenceUrl(ref);a.target='_blank';a.rel='noopener';const p=node('p');p.append(a);details.append(p);});el.append(details);
       const actions=node('div',null,'agenda-card-actions');
       window.HflChecklistCover?.(el, item, async checklists => { await window.HflIdeas.api('/objects/'+item.id, 'PATCH', {version:item.version,checklists}); await load(); window.dispatchEvent(new Event('hfl:ideas-updated')); }, () => window.HflIdeas.editIdea(item.id));
-      actions.append(button('Create action',()=>window.HflIdeas.convert(item.id)),button('Edit idea',()=>window.HflIdeas.editIdea(item.id)),button('Dismiss',async e=>{e.currentTarget.disabled=true;try{await timelineApi('/suggestions/'+item.id+'/dismiss',{method:'POST'});await load();}catch(err){error('agenda-error',err.message);e.currentTarget.disabled=false;}}));
+      actions.append(button('Add to board',()=>window.HflIdeas.addToBoard('idea',item)),button('Create action',()=>window.HflIdeas.convert(item.id)),button('Edit idea',()=>window.HflIdeas.editIdea(item.id)),button('Dismiss',async e=>{e.currentTarget.disabled=true;try{await timelineApi('/suggestions/'+item.id+'/dismiss',{method:'POST'});await load();}catch(err){error('agenda-error',err.message);e.currentTarget.disabled=false;}}));
       el.append(actions);list.append(el);
     });
     const pending=data.receipts.filter(receipt=>receipt.state==='pending'&&data.items.some(item=>item.id===receipt.followup_id));
@@ -290,20 +287,19 @@
   });
   document.getElementById('agenda-refresh').addEventListener('click',load);
   document.getElementById('agenda-explore').addEventListener('click',()=>{const toggle=document.querySelector('[data-activity-menu-ideas]');if(toggle?.getAttribute('aria-expanded')!=='true')toggle?.click();document.getElementById('timeline-explore').click();});
-  document.querySelectorAll('[data-agenda-close]').forEach(b=>b.addEventListener('click',()=>{if(!busy)editor.close();}));
+  document.querySelectorAll('[data-agenda-close]').forEach(b=>b.addEventListener('click',()=>editor.close()));
   editor.addEventListener('cancel',e=>{if(busy)e.preventDefault();});
   document.getElementById('followup-history-close').addEventListener('click',()=>historyDialog.close());
   form.elements.status.addEventListener('change',stateFields);
-  form.addEventListener('submit',async e=>{
-    e.preventDefault();if(busy)return;busy=true;error('followup-save-error');
-    const save=form.querySelector('[type=submit]');save.disabled=true;save.textContent='Saving…';
+  async function saveEditor() {
+    error('followup-save-error');
     const payload=Object.fromEntries(new FormData(form));
     payload.description = '';
     payload.checklists=window.hflActionChecklists?.value||[];
     if(editing)payload.version=editing.version;else{payload.request_id=requestId;payload.source=source;if(suggestionId)payload.suggestion_id=suggestionId;}
-    try {
+
       attachments.validate();
-      attachments.root.inert = true;
+
       const prompt = payload.prompt, changed = attachments.changed;
       if (changed) payload.prompt = '';
       const saved = await api(editing?'/'+editing.id:'',{method:editing?'PATCH':'POST',body:JSON.stringify(payload)});
@@ -312,15 +308,18 @@
         await attachments.save(editing.id);
         editing = (await api('/'+editing.id,{method:'PATCH',body:JSON.stringify({version:editing.version,prompt})})).item;
       }
-      editor.close();await load();window.dispatchEvent(new Event('hfl:actions-updated'));
-    }
-    catch(err){error('followup-save-error',err.message);}
-    finally{attachments.root.inert=false;busy=false;save.disabled=false;save.textContent='Save';}
-  });
+      window.HflEditorLocation('actionable',editing.id);
+      document.getElementById('followup-state-label').hidden=false;
+      document.getElementById('followup-editor-title').textContent='Edit action';
+      form.querySelector('[type=submit]').textContent='Save now';
+      await load(); window.dispatchEvent(new Event('hfl:actions-updated'));
+  }
+  form.addEventListener('submit',async e=>{e.preventDefault();try{await editorState.flush();}catch(err){error('followup-save-error',err.message);}});
   window.hflActions = {card, openEditor, load};
   timelineApi('/markers').then(data=>{markerDays=data.days;paintMarkers();}).catch(()=>{});
   window.addEventListener('hfl:timeline-close',()=>{clearTimeout(pollTimer);++sequence;});
   const params=new URLSearchParams(location.search);
+  if(params.get('edit') && params.get('edit_kind') === 'actionable') api('/'+encodeURIComponent(params.get('edit'))).then(data=>openEditor(data.item)).catch(e=>error('agenda-error',e.message));
   if(params.has('source_entry') && params.has('source_path')){
     timelineApi('/source?'+new URLSearchParams({path:params.get('source_path'),entry_id:params.get('source_entry')})).then(data=>{openEditor();source=data;showEvidence();form.elements.title.value=data.title.slice(0,200);form.elements.body.focus();const url=new URL(location.href);url.searchParams.delete('source_path');url.searchParams.delete('source_entry');history.replaceState(null,'',url);}).catch(e=>error('agenda-error',e.message));
   }

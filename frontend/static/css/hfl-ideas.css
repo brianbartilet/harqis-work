@@ -281,3 +281,39 @@
 .board-guide-routes>div:first-child{padding-top:0}
 .board-guide-routes>div:last-child{padding-bottom:0}
 @media(max-width:560px){.board-guide-definitions{grid-template-columns:1fr}.board-guide .board-guide-flow{grid-template-columns:1fr;gap:24px}.board-guide-flow li+li::before{content:'↓';left:18px;top:-25px}.board-guide-routes>div{grid-template-columns:1fr;gap:0}}
+
+/* Keep navigation available while browsing long board lists. */
+.board-toolbar { position:sticky; top:0; z-index:4; background:#0b1322; padding:8px 0; }
+.graph-controls { display:flex; flex-wrap:wrap; gap:6px; padding:12px 0; border-bottom:1px solid #334155; }
+.graph-controls h2 { flex-basis:100%; }
+.idea-checklist-header { flex-wrap:wrap; }
+.idea-checklist-header input { flex:1; min-width:120px; }
+.idea-checklist-header button { flex:0 0 30px; }
+.checklist-item-actions { flex:0 0 auto; flex-wrap:wrap; opacity:.8; pointer-events:auto; }
+.checklist-item-actions select { width:160px; }
+.editor-save-status { color:#7dd3fc; font-size:.8rem; margin-right:auto; }
+.agenda-dialog.editor-close-question { padding:24px; max-width:540px; }
+.editor-close-question h2 { font-size:1.2rem; margin-bottom:12px; }
+
+/* Compact checklist controls and opaque sticky navigation. */
+.checklist-tools { display:flex; align-items:center; gap:16px; margin:10px 0; }
+.idea-checklist .checklist-tools select { width:150px; flex:0 0 150px; margin:0; }
+.checklist-tools .checklist-progress { flex:1; min-width:0; margin:0; }
+.idea-checklist .checklist-cover-toggle { padding:10px 0 4px 8px; margin:0; }
+.kg-boards .board-toolbar { top:-14px; margin:-14px -14px 8px; padding:14px; background:#0c1728; isolation:isolate; }
+.editor-close-question > p { margin:0; padding:8px 0 16px; line-height:1.6; }
+.editor-close-question .agenda-dialog-footer { padding:12px 0 0; gap:12px; flex-wrap:wrap; }
+.agenda-dialog.checklist-move-dialog { padding:24px; width:min(480px,calc(100vw - 40px)); }
+.checklist-move-dialog h2 { margin:0 0 12px; }
+.checklist-move-dialog p { margin:0 0 16px; overflow-wrap:anywhere; }
+.checklist-move-dialog select { width:100%; margin-bottom:20px; }
+.checklist-move-dialog > button { display:block; margin-left:auto; }
+.board-picker-cards { display:grid; gap:12px; margin-top:16px; }
+.board-picker-card { border:1px solid var(--board-color); border-left:4px solid var(--board-color); border-radius:10px; background:#122035; padding:16px; }
+.board-picker-card h3 { margin:0 0 8px; font-size:1rem; }
+.board-picker-card p { margin:8px 0; line-height:1.5; overflow-wrap:anywhere; }
+.board-picker-actions { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:12px; }
+.board-picker-actions a { color:#7dd3fc; }
+
+.board-picker-create-link { margin-right:auto; color:#7dd3fc; font-size:.85rem; text-decoration:underline; text-underline-offset:3px; line-height:1.5; }
+.board-picker-create-link:hover { color:#e0f2fe; }

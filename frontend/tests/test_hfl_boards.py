@@ -393,13 +393,15 @@ def test_board_edits_work_while_save_is_slow_and_retry(ideas, authenticated_clie
             expect(page.locator('.idea-map-status')).to_have_text('Saved')
             assert len(ideas.maps()[0]['drafts']) == 2
             assert len(ideas.maps()[0]['edges']) == 2
-            for kind in ['Idea', 'Actionable']:
+            for kind in ['Idea', 'Action']:
                 page.get_by_role('menuitem',name='Create linked '+kind,exact=True).click()
                 dialog.locator('[name=title]').fill('Linked '+kind)
-                if kind == 'Actionable':
+                if kind == 'Action':
                     dialog.locator('.action-details > summary').click()
                     dialog.get_by_label('Expected outcome').fill('Validate this thought')
-                dialog.get_by_role('button',name='Save',exact=True).click()
+                dialog.get_by_role('button',name='Create',exact=True).click()
+                expect(dialog.locator('.editor-save-status')).to_have_text('Saved')
+                dialog.get_by_role('button',name='Close',exact=True).click()
                 page.wait_for_timeout(250)
                 if dialog.count():
                     assert not dialog.locator('.idea-error').inner_text(), dialog.inner_text()

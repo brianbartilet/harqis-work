@@ -3,7 +3,7 @@
 {% block head %}<link rel="stylesheet" href="{{ static_asset('css/hfl-timeline.css') }}"><link rel="stylesheet" href="{{ static_asset('css/knowledge-graph.css') }}">{% endblock %}
 {% block content %}
 <main class="kg-shell" data-view-owner="{{ user }}">
-  <header class="activity-modal-heading"><h1>Activity Graph</h1><button type="button" data-activity-close>Close</button></header>
+  <header class="activity-modal-heading"><h1>Activity Graph</h1><button type="button" data-activity-close>Back to corpus</button></header>
   <div class="kg-toolbar kg-main-toolbar">
     <label>Find a node<input id="kg-search" type="search" placeholder="Search entries or entities" autocomplete="off"></label>
     <div class="kg-detail-control"><select id="kg-density" aria-label="Graph detail"><option value="100">Overview</option><option value="500">Expanded</option><option value="1000">Dense</option><option value="0">All matching nodes</option></select><details class="kg-detail-help"><summary aria-label="About graph detail">i</summary><p>Overview: up to 100 nodes.<br>Expanded: up to 500 nodes.<br>Dense: up to 1,000 nodes.<br>All: every matching node and connection.<br>A node is an entry, entity, source or date. Filters may return fewer nodes.</p></details></div>

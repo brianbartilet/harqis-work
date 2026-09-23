@@ -129,6 +129,7 @@ window.HflObjectDescription = (item = {}) => {
   async function openEditor(kind, item = {}, parent = null, conversion = null) {
     const label = kind === 'actionable' ? 'action' : kind;
     const d = dialog(conversion ? 'Create action from idea' : item.id ? 'Edit ' + label : 'New ' + label);
+    let state;
     let current = item.id ? item : null, source = item.source || null, files, checklists, save;
     const requestId = crypto.randomUUID(), editingBoard = maps.current?.id;
     try {
@@ -165,14 +166,14 @@ window.HflObjectDescription = (item = {}) => {
         checklistHeader.append(checklistSection.querySelector('h3'), checklistToolbar);
         checklistRoot = el('div'); checklistSection.append(checklistHeader, checklistRoot);
       }
-      let savedState;
       const formState = () => JSON.stringify({fields: Object.fromEntries(new FormData(d.form)), checklists: checklists?.value});
-      const canConvert = () => !!current && savedState !== undefined && !files?.changed && formState() === savedState;
+      const canConvert = () => !!current && !state?.dirty && !state?.pending;
       checklists = new HflChecklists(checklistRoot, kind === 'idea' ? {
         links: item.item_actions || [], openAction, addButtonRoot: checklistToolbar,
         canConvert,
+        addToBoard: async (list,task) => { try { await state.flush(); await addToBoard(kind,current,list,task); } catch(e) { d.error.textContent=e.message; } },
         convert: (listId, itemId) => { if (canConvert()) { d.node.close(); convert(current.id, listId, itemId); } },
-      } : {addButtonRoot: checklistToolbar}); checklists.set(item.checklists);
+      } : {addButtonRoot: checklistToolbar, addToBoard: async (list,task) => { try { await state.flush(); await addToBoard(kind,current,list,task); } catch(e) { d.error.textContent=e.message; } }}); checklists.set(kind === 'actionable' ? window.HflAgentInstructions(item.checklists) : item.checklists);
       d.form.querySelectorAll('textarea[name=body]').forEach(markdownEditor);
       const attachmentsSection = d.body.querySelector('[data-object-attachments]');
       const copiedFiles = [];
@@ -183,12 +184,12 @@ window.HflObjectDescription = (item = {}) => {
         }
       }
       files = attachmentEditor(attachmentsSection, kind === 'idea' ? 'idea' : 'actionable', current?.id);
-      savedState = formState(); checklists.updateConversion();
+      checklists.updateConversion();
       for (const event of ['input', 'change', 'click']) d.form.addEventListener(event, () => queueMicrotask(() => checklists.updateConversion()));
-      save = el('button', 'Save'); save.type = 'submit'; d.footer.append(save);
-      d.form.onsubmit = async event => {
-        event.preventDefault(); save.disabled = true; d.error.textContent = ''; d.body.inert = true;
-        try {
+      save = el('button', current ? 'Save now' : 'Create'); save.type = 'submit'; d.footer.append(save);
+      let linked = !!current;
+      const persistEditor = async () => {
+          d.error.textContent = '';
           files.validate();
           const values = Object.fromEntries(new FormData(d.form)); values.checklists = checklists.value;
           values.description = '';
@@ -210,6 +211,7 @@ window.HflObjectDescription = (item = {}) => {
           }
           const nodeId = (kind === 'idea' ? 'idea:' : 'action:') + current.id;
           maps.cacheNode({...current,id:nodeId,object_id:current.id,label:current.title,kind:kind === 'idea' ? 'ideas' : 'actions'});
+          if (!linked) {
           if(parent?.kind==='drafts') {
             if(maps.current?.id!==editingBoard)throw Error('Return to the original board to finish linking this saved object.');
             await maps.persist({members:[...new Set([...maps.current.members,nodeId])],edges:[...maps.current.edges.filter(e=>!(e.source===parent.id&&e.target===nodeId)),{source:parent.id,target:nodeId,relation:'related-to'}]});
@@ -217,12 +219,23 @@ window.HflObjectDescription = (item = {}) => {
             if(parent)await api('/links','POST',{source:parent.id,target:nodeId,relation:parent.kind==='daily'?'source-date':'related-to'});
             await maps.addMembers([nodeId,...(parent?[parent.id]:[])]);
           }
+          linked = true;
+          }
           // Conversion also creates shared relationships and updates the source idea.
           if (conversion) await maps.flush();
-          d.node.close(); changed(null, false, !!conversion);
-        } catch (error) { d.error.textContent = error.message + (current ? ' The object is saved; retry to finish remaining changes.' : ''); }
-        finally { save.disabled = false; d.body.inert = false; }
+          save.textContent='Save now';
+          if(kind==='actionable')d.form.querySelector('[name=status]').closest('label').hidden=false;
+          window.HflEditorLocation(kind,current.id); changed(null, false, !!conversion);
       };
+      state=window.HflBindEditor(d.node,d.form,{
+        snapshot:()=>JSON.stringify({form:formState(),files:files.pending.map(f=>[f.name,f.size,f.lastModified]),removed:[...files.removed]}),
+        exists:()=>!!current, valid:()=>d.form.checkValidity(), save:persistEditor,
+        lock:value=>{files.root.inert=value;save.disabled=value;},
+        settled:()=>checklists.updateConversion(),
+      });
+      if(current)window.HflEditorLocation(kind,current.id);
+      d.form.onsubmit=async event=>{event.preventDefault();try{await state.flush();checklists.updateConversion();}catch(e){d.error.textContent=e.message;}};
+      d.footer.append(button('Add to board',async()=>{try{await state.flush();await addToBoard(kind,current);}catch(e){d.error.textContent=e.message;}}));
     } catch (error) { d.error.textContent = error.message; }
   }
   async function editIdea(id) { try { const data = await api('/objects/' + id); await openEditor('idea', data.item); } catch (error) { const d = dialog('Idea unavailable'); d.error.textContent = error.message; } }
@@ -231,6 +244,83 @@ window.HflObjectDescription = (item = {}) => {
     const d = dialog('Preparing action draft');
     try { const data = await api('/objects/' + id + '/conversion?' + new URLSearchParams({checklist_id: checklistId, item_id: itemId})); d.node.close(); await openEditor('actionable', data.item, null, {...data, id}); }
     catch (error) { d.error.textContent = error.message; }
+  }
+  async function addToBoard(kind, item, list = null, task = null) {
+    const d = dialog('Add to board'); d.node.classList.add('board-picker');
+    d.footer.replaceChildren();
+    const status = el('p','Loading boards…'); d.body.append(status);
+    const sourceId=(kind==='idea'?'idea:':'action:')+item.id;
+    const thoughtId='draft:'+crypto.randomUUID();
+    const href=task?'/hfl-corpus/graph?'+new URLSearchParams({edit_kind:kind,edit:item.id,checklist:list.id,item:task.id}):'';
+    const hasItem=board=>task?(board.drafts||[]).some(t=>(t.body||'').includes('edit='+encodeURIComponent(item.id))&&(t.body||'').includes('item='+encodeURIComponent(task.id))):(board.members||[]).includes(sourceId);
+    const choices=el('div',undefined,'board-picker-cards');d.body.append(choices);
+    async function attach(board) {
+      const current=(await api('/maps/'+board.id)).item;
+      if(hasItem(current))return current;
+      const changes={version:current.version,members:[...new Set([...current.members,sourceId])]};
+      if(task){
+        changes.drafts=[...current.drafts,{id:thoughtId,title:task.text.slice(0,200),body:'Source checklist: '+list.title+'\n\n[Open source item]('+href+')\n\n'+task.text}];
+        changes.edges=[...current.edges,{source:sourceId,target:thoughtId,relation:'related-to'}];
+      }
+      return (await api('/maps/'+board.id,'PATCH',changes)).item;
+    }
+    function card(board) {
+      const row=el('section',undefined,'board-picker-card');row.style.setProperty('--board-color',board.color||'#f59e0b');
+      row.append(el('h3',board.name),el('p',board.purpose||'No description'));
+      const membership=el('p',hasItem(board)?'Already added to this board':'','board-hint');membership.setAttribute('role','status');
+      const add=button(board.name,async()=>{
+        add.disabled=true;d.error.textContent='';
+        try{await attach(board);membership.textContent='Already added to this board';status.textContent='Added to '+board.name;add.textContent='Added';changed();}
+        catch(e){d.error.textContent=e.message;add.disabled=false;}
+      });add.textContent=hasItem(board)?'Added':'Add to board';add.setAttribute('aria-label',board.name);add.disabled=hasItem(board);
+      const link=el('a','Open board');link.href='/hfl-corpus/graph?'+new URLSearchParams({board:board.id});
+      const controls=el('div',undefined,'board-picker-actions');controls.append(add,link);row.append(membership,controls);choices.append(row);
+    }
+    const createLink=el('a','Create a new board and add '+(task?'checklist item':kind==='idea'?'idea':'action'),'board-picker-create-link');
+    createLink.href='/hfl-corpus/graph';
+    createLink.onclick=event=>{
+      event.preventDefault();
+      const create=dialog('Create board and add');
+      const name=field(create.body,'name','Board name','','text',true,100);
+      const purpose=field(create.body,'purpose','Description','','textarea',true,3000);
+      const getColor=colorField(create.body,'Board color','#f59e0b');
+      const save=el('button','Create board and add');save.type='submit';create.footer.append(save);
+      const requestId=crypto.randomUUID();
+      create.form.onsubmit=async event=>{
+        event.preventDefault();save.disabled=true;
+        try{
+          const drafts=task?[{id:thoughtId,title:task.text.slice(0,200),body:'Source checklist: '+list.title+'\n\n[Open source item]('+href+')\n\n'+task.text}]:[];
+          const {item:board}=await api('/maps','POST',{request_id:requestId,name:name.value,purpose:purpose.value,color:getColor(),root:sourceId,members:[sourceId],drafts,edges:task?[{source:sourceId,target:thoughtId,relation:'related-to'}]:[],positions:{}});
+          card(board);status.textContent='Added to '+board.name;create.node.close();changed();
+        }catch(e){create.error.textContent=e.message;}finally{save.disabled=false;}
+      };
+    };
+    d.footer.prepend(createLink);
+    try {
+      const boards=(await api('/boards')).maps;
+      status.textContent=boards.length?'Choose a board':'No boards yet. Create a board to add this item.';
+      for(const board of boards)card(board);
+    }catch(e){status.textContent='';d.error.textContent=e.message;}
+  }
+  async function chooseIdeaForBoard() {
+    const d=dialog('Ideas');
+    const search=field(d.body,'','Find an idea','','search');
+    const choices=el('div',undefined,'idea-choices');d.body.append(choices);
+    try {
+      const items=(await api('/goal-options')).nodes.filter(n=>n.kind==='ideas');
+      const render=()=>{
+        choices.replaceChildren();
+        for(const item of items.filter(n=>n.label.toLowerCase().includes(search.value.toLowerCase()))) {
+          const row=el('section');row.append(el('p',item.label));
+          row.append(button('Edit idea',()=>{d.node.close();editIdea(item.id.slice(5));}),
+            button('Add to board',()=>addToBoard('idea',{id:item.id.slice(5),title:item.label})));
+          choices.append(row);
+        }
+        if(!choices.children.length)choices.append(el('p','No matching ideas.'));
+      };
+      search.oninput=render;render();
+    }catch(e){d.error.textContent=e.message;}
+    d.footer.append(button('Create idea',()=>{d.node.close();openEditor('idea');}));
   }
   async function chooseMapMembers() {
     const boardId = maps.current?.id; if (!boardId) return;
@@ -534,7 +624,9 @@ window.HflObjectDescription = (item = {}) => {
       const closeAdd=()=>{addOptions.hidden=true;addToggle.setAttribute('aria-expanded','false');};
       addOptions.append(button('Board',()=>{closeAdd();this.edit();}),button('Goal',()=>{closeAdd();editGoal();}));addMenu.append(addToggle,addOptions);addMenu.onkeydown=event=>{if(event.key==='Escape'){closeAdd();addToggle.focus();}};toolbar.append(addMenu);
       const guide=button('Board guide',openBoardGuide);guide.className='board-guide-trigger';guide.setAttribute('aria-haspopup','dialog');toolbar.append(guide);
-      this.root.append(this.objectList('boards'),this.objectList('goals'));
+      const controls=el('section',undefined,'graph-controls');controls.append(el('h2','Controls'));
+      controls.append(button('Filters',()=>document.getElementById('kg-open-filters').click()),button('Fit graph',()=>document.getElementById('kg-fit').click()),button('Reset layout',()=>document.getElementById('kg-reset').click()));
+      this.root.append(controls,this.objectList('boards'),this.objectList('goals'));
       if (!this.current) { this.root.append(this.status); return; }
       const board = this.current, section = el('section', undefined, 'board-controls');section.style.setProperty('--board-color',board.color||this.palette[0]||'#f59e0b'); section.append(el('h2', board.name), el('p', board.purpose, 'board-purpose'));
       const save=button('Save now',()=>this.saveNow());save.className='board-save-now';save.title='Save all pending board edits now';
@@ -746,7 +838,12 @@ window.HflObjectDescription = (item = {}) => {
     }
   };
   window.addEventListener('beforeunload',event=>{if([...maps.queues.values()].some(q=>q.dirty)){event.preventDefault();event.returnValue='';}});
-  window.HflIdeas = {openAction, openEditor, editIdea, convert, inspect, maps, api};
+  const editingParams = new URLSearchParams(location.search);
+  if(editingParams.has('edit')) {
+    if(editingParams.get('edit_kind')==='idea') editIdea(editingParams.get('edit'));
+    else if(!document.getElementById('followup-agenda')) openAction(editingParams.get('edit'));
+  }
+  window.HflIdeas = {chooseIdeaForBoard, addToBoard, openAction, openEditor, editIdea, convert, inspect, maps, api};
   document.addEventListener('click', async event => {
     document.querySelectorAll('.idea-add-menu').forEach(menu => {
       if (!menu.contains(event.target)) { menu.querySelector('.idea-add-options').hidden = true; menu.querySelector('.idea-add-toggle').setAttribute('aria-expanded', 'false'); }

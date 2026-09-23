@@ -1,0 +1,14 @@
+{% extends "modules/hfl_corpus/modal_base.html" %}
+{% block title %}HARQIS — Actions Board{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ static_asset('css/hfl-timeline.css') }}">
+<script src="{{ static_asset('vendor/sortablejs-1.15.2.min.js') }}"></script>
+{% endblock %}
+{% block content %}
+<main class="actions-page" data-actions-page>
+  {% set actions_page = true %}
+  {% include "modules/hfl_corpus/partials/followups_board.html" %}
+</main>
+<div hidden><div data-day-ideas></div><div data-day-actions></div><div data-activity-day-menu></div></div>
+{% include "modules/hfl_corpus/partials/timeline.html" %}
+{% endblock %}

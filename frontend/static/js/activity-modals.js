@@ -18,6 +18,13 @@
     else location.assign('/hfl-corpus' + (inherited ? '?' + inherited : ''));
   }
   function open(kind, context, extra = '', navigation = '') {
+    if(kind==='graph') {
+      const url=new URL('/hfl-corpus/graph',location.origin);
+      if(context)url.searchParams.set('context',context);
+      if(extra)url.searchParams.set('graph_filters',extra);
+      for(const [key,value] of new URLSearchParams(navigation))url.searchParams.set(key,value);
+      location.assign(url);return;
+    }
     const dialog = document.createElement('dialog'); dialog.className = 'activity-modal' + (kind === 'entities' ? ' activity-entities-drawer' : '');
     dialog.setAttribute('aria-label', kind === 'graph' ? 'Activity Graph' : 'Activity Corpus Entities');
     const loading = document.createElement('div'); loading.className = 'activity-modal-pending-close';
@@ -59,7 +66,7 @@
   });
   document.addEventListener('click',event=>{
     const link = event.target.closest('a[href]');
-    if(!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button) return;
+    if(event.defaultPrevented || !link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button) return;
     const url = new URL(link.href,location.href);
     if(url.origin !== location.origin || !['/hfl-corpus/graph','/hfl-corpus/entities'].includes(url.pathname)) return;
     if(link.id === 'kg-entities') return; // Graph supplies its applied filters.

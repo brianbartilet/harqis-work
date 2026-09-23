@@ -65,6 +65,7 @@ async def legacy(request: Request):
     return RedirectResponse('/hfl-corpus/graph' + ('?' + request.url.query if request.url.query else ''), 307)
 
 
+@router.get('/hfl-corpus/actions')
 @router.get('/hfl-corpus/graph')
 @router.get('/hfl-corpus/ideas')
 @router.get('/hfl-corpus/entities')
@@ -73,6 +74,8 @@ async def page(request: Request):
     if redirect:
         return redirect
     template = 'knowledge_graph.html' if request.url.path.endswith(('/graph', '/ideas')) else 'entities.html'
+    if request.url.path.endswith('/actions'):
+        template = 'actions_board.html'
     from modules.hfl_shares.security import make_csrf_token
     return templates.TemplateResponse(request, 'modules/hfl_corpus/' + template,
                                       page_context(request, user, 'hfl_corpus', memory_csrf=make_csrf_token(user)))

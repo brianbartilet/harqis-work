@@ -7,7 +7,7 @@
   const error = document.getElementById('followup-save-error');
   const evidence = document.getElementById('followup-evidence');
   const attachments = new window.HflInputAttachments(form.querySelector('[data-input-editor]'), 'actionable');
-  let savedAction = null;
+  let savedAction = null, editorState;
   let source = null, requestId = '', trigger = null, busy = false, sequence = 0;
   function showError(message = '') {
     error.textContent = message;
@@ -31,6 +31,7 @@
     const params = new URL(link.href).searchParams;
     form.reset(); source = null; requestId = crypto.randomUUID(); showError();
     attachments.reset(); savedAction = null;
+    window.hflActionChecklists.set(window.HflAgentInstructions([]));
     document.getElementById('followup-state-label').hidden = true;
     document.getElementById('followup-completion-label').hidden = true;
     evidence.hidden = false; evidence.textContent = 'Loading entry…';
@@ -46,22 +47,25 @@
       anchor.href = '/hfl-corpus/timeline/evidence?' + new URLSearchParams({path: data.path, entry_id: data.entry_id});
       anchor.target = '_blank'; anchor.rel = 'noopener'; evidence.append(anchor);
       form.elements.title.value = (data.title || '').slice(0, 200);
-      save.disabled = false;
+      editorState=window.HflBindEditor(dialog,form,{
+        snapshot:()=>JSON.stringify({fields:Object.fromEntries(new FormData(form)),checklists:window.hflActionChecklists.value,files:attachments.pending.map(f=>[f.name,f.size,f.lastModified]),removed:[...attachments.removed]}),
+        exists:()=>!!savedAction,valid:()=>form.checkValidity(),save:persistAction,
+        lock:value=>{busy=value;attachments.root.inert=value;save.disabled=value;},
+      });
+      save.textContent='Create';save.disabled = false;
       form.elements.body.focus({preventScroll: true});
     } catch (err) {
       if (ticket === sequence && dialog.open) { evidence.hidden = true; showError(err.message); }
     }
   });
   dialog.querySelectorAll('[data-agenda-close]').forEach(button => button.addEventListener('click', () => {
-    if (!busy) dialog.close();
+    dialog.close();
   }));
   dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
   dialog.addEventListener('close', () => { ++sequence; trigger?.focus({preventScroll: true}); });
-  form.addEventListener('submit', async event => {
-    event.preventDefault();
-    if (busy || !source) return;
-    busy = true; save.disabled = true; save.textContent = 'Saving…'; showError();
-    try {
+  async function persistAction() {
+      if(!source)throw Error('Entry has not loaded yet.');
+      showError();
       attachments.validate();
       attachments.root.inert = true;
       const values = Object.fromEntries(new FormData(form));
@@ -76,7 +80,6 @@
         await attachments.save(savedAction.id);
         savedAction = (await api('/items/' + savedAction.id, {method:'PATCH', body:JSON.stringify({version:savedAction.version,prompt})})).item;
       }
-      dialog.close();
       const entryTrigger = trigger;
       const header = entryTrigger.closest('.corpus-entry-header');
       if (header.nextElementSibling?.classList.contains('corpus-action-toast')) header.nextElementSibling.remove();
@@ -94,7 +97,6 @@
       });
       toast.append(message, dismiss);
       header.after(toast);
-    } catch (err) { showError(err.message); }
-    finally { attachments.root.inert = false; busy = false; save.disabled = false; save.textContent = 'Save'; }
-  });
+  }
+  form.addEventListener('submit',async event=>{event.preventDefault();try{await editorState.flush();dialog.close();}catch(error){showError(error.message);}});
 })();

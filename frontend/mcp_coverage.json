@@ -2325,6 +2325,13 @@
       "status": "deferred",
       "tools": [],
       "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/actions",
+      "status": "ui",
+      "tools": [],
+      "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
     }
   ]
 }
