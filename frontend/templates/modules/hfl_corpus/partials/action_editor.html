@@ -44,12 +44,13 @@
       <label id="followup-completion-label">Completion note<textarea name="completion_note" rows="2" maxlength="3000" placeholder="What happened? What was the result?"></textarea></label>
       <p id="followup-save-error" class="agenda-error" role="alert" hidden></p>
     </div>
-    <footer class="agenda-dialog-footer"><button type="button" data-agenda-close>Cancel</button><button type="submit" class="agenda-primary">Save</button></footer>
+    <footer class="agenda-dialog-footer"><button type="button" data-agenda-close>Close</button><button type="submit" class="agenda-primary">Save</button></footer>
   </form>
 </dialog>
 <script src="{{ static_asset('js/hfl-input-attachments.js') }}"></script>
 <link rel="stylesheet" href="{{ static_asset('css/hfl-ideas.css') }}">
 <script src="{{ static_asset('js/hfl-checklists.js') }}"></script>
+<script src="{{ static_asset('js/hfl-editor-state.js') }}"></script>
 <script src="{{ static_asset('js/hfl-board-state.js') }}" defer></script>
 <script src="{{ static_asset('js/hfl-ideas.js') }}" defer></script>
 <script>

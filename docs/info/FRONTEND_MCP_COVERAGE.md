@@ -17,8 +17,8 @@ Another **56 browser-facing routes** have canonical API equivalents, and **5
 fork routes** have shared-service equivalents in the Git MCP integration. Git
 operations execute on the MCP host, which may differ from the frontend host.
 
-The complete inventory contains **276 method/path routes**. Remaining surfaces
-are explicitly recorded: **63 deferred routes**, **29 UI/session routes**, and
+The complete inventory contains **277 method/path routes**. Remaining surfaces
+are explicitly recorded: **63 deferred routes**, **30 UI/session routes**, and
 **23 guest/worker protocol routes**. Some deferred routes have partial related
 tools (for example pin CRUD without all browser scheduling controls). These are
 not counted as exact equivalents. This PR does not claim every frontend feature
@@ -304,6 +304,7 @@ browser context. Source links point to the route definitions.
 | DELETE | [`/api/hfl/graph-views/{identity}`](../../frontend/modules/hfl_corpus/entities_api.py#L42) | covered | `delete_hfl_corpus_graph_view` |
 | GET | [`/knowledge`](../../frontend/modules/hfl_corpus/entities_api.py#L62) | ui | Presentation, redirect, authentication/session or host-desktop flow; browser-specific. |
 | GET | [`/knowledge/graph`](../../frontend/modules/hfl_corpus/entities_api.py#L63) | ui | Presentation, redirect, authentication/session or host-desktop flow; browser-specific. |
+| GET | [`/hfl-corpus/actions`](../../frontend/modules/hfl_corpus/entities_api.py#L68) | ui | Actions Board presentation; browser-specific. |
 | GET | [`/hfl-corpus/graph`](../../frontend/modules/hfl_corpus/entities_api.py#L68) | ui | Presentation, redirect, authentication/session or host-desktop flow; browser-specific. |
 | GET | [`/hfl-corpus/ideas`](../../frontend/modules/hfl_corpus/entities_api.py#L69) | ui | Presentation, redirect, authentication/session or host-desktop flow; browser-specific. |
 | GET | [`/hfl-corpus/entities`](../../frontend/modules/hfl_corpus/entities_api.py#L70) | alias | `list_hfl_corpus_entities` |

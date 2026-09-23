@@ -2,6 +2,8 @@
 (() => {
   const dialog = document.getElementById('followups-board');
   if (!dialog || !window.hflActions) return;
+  const page = !!document.querySelector('[data-actions-page]');
+  if(page)Object.defineProperty(dialog,'open',{value:true});
   const actions = window.hflActions;
   const $ = selector => dialog.querySelector(selector);
   const lanes = $('[data-board-lanes]'), all = $('[data-board-all]');
@@ -23,6 +25,11 @@
     const dynamic = document.querySelector('[data-dynamic-badge]')?.textContent || 'Dynamic OFF';
     const params=new URLSearchParams(location.search);
     const extra=['source','q','date_from','date_to'].filter(key=>params.get(key)).map(key=>({source:'Sources',q:'Search',date_from:'From',date_to:'To'}[key])+': '+params.get(key));
+    if(page){
+      const scoped=params.has('scope')||params.has('workspace');
+      $('[data-board-context]').textContent=all.checked?'All activity':[(scoped?'Workspace filters applied':extra.length?'Corpus filters':'All activity'),...extra].join(' · ');
+      return;
+    }
     $('[data-board-context]').textContent = (all.checked ? 'All activity · Current views: ' : 'Following views: ') + caption + ' · ' + dynamic + (!all.checked&&extra.length?' · '+extra.join(' · '):'');
   }
   async function request(path, options={}) {
@@ -119,16 +126,19 @@
     rendered='';await refresh(true);actions.load();
     if(failure){error.textContent=failure+' The board has been reloaded.';error.hidden=false;}
   }
-  function open(){dialog.showModal();context();refresh(true);clearInterval(timer);timer=setInterval(()=>{if(!document.hidden&&!document.querySelector('dialog[open]:not(#followups-board)')){refresh();actions.load();}},5000);}
-  document.querySelector('[data-followups-open]').onclick=()=>{document.querySelector('.corpus-tools').open=false;open();};
-  $('[data-board-close]').onclick=()=>dialog.close();
+  function open(){if(!page){location.assign('/hfl-corpus/actions'+location.search);return;}context();refresh(true);clearInterval(timer);timer=setInterval(()=>{if(!document.hidden&&!document.querySelector('dialog[open]:not(#followups-board)')){refresh();actions.load();}},5000);}
+  const opener=document.querySelector('[data-followups-open]');
+  if(opener)opener.onclick=event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();document.querySelector('.corpus-tools').open=false;open();};
+  $('[data-board-close]').onclick=()=>{if(page){const url=new URL(location.href);url.pathname='/hfl-corpus';url.searchParams.delete('edit');url.searchParams.delete('edit_kind');url.searchParams.delete('all');location.assign(url);}else dialog.close();};
   $('[data-board-create]').onclick=()=>actions.openEditor();
+  $('[data-board-ideas]').onclick=()=>window.HflIdeas.chooseIdeaForBoard();
   $('[data-board-refresh]').onclick=()=>refresh(true);
-  all.onclick=()=>{all.checked=!all.checked;refresh(true);};
+  all.checked=new URLSearchParams(location.search).get('all')==='1';
+  all.onclick=()=>{all.checked=!all.checked;const url=new URL(location.href);all.checked?url.searchParams.set('all','1'):url.searchParams.delete('all');history.replaceState(null,'',url);refresh(true);};
   const toolsMenu=document.querySelector('.corpus-tools');
-  toolsMenu.addEventListener('toggle',()=>{if(toolsMenu.open){const profile=document.querySelector('summary[aria-label="Profile menu"]')?.parentElement;if(profile)profile.open=false;}});
-  document.addEventListener('click',event=>{if(!toolsMenu.contains(event.target))toolsMenu.open=false;},{signal:listeners.signal});
-  toolsMenu.addEventListener('keydown',event=>{if(event.key==='Escape'){toolsMenu.open=false;toolsMenu.querySelector('summary').focus();}});
+  toolsMenu?.addEventListener('toggle',()=>{if(toolsMenu.open){const profile=document.querySelector('summary[aria-label="Profile menu"]')?.parentElement;if(profile)profile.open=false;}});
+  document.addEventListener('click',event=>{if(toolsMenu&&!toolsMenu.contains(event.target))toolsMenu.open=false;},{signal:listeners.signal});
+  toolsMenu?.addEventListener('keydown',event=>{if(event.key==='Escape'){toolsMenu.open=false;toolsMenu.querySelector('summary').focus();}});
   dialog.addEventListener('close',()=>{++sequence;pending=false;clearInterval(timer);});
   window.addEventListener('hfl:actions-updated',()=>refresh(true),{signal:listeners.signal});
   window.addEventListener('hfl:agent-updated',()=>refresh(),{signal:listeners.signal});
@@ -137,5 +147,6 @@
     try{if(dialog.open)sessionStorage.setItem('hfl:followups-restore',JSON.stringify({all:all.checked}));}catch(_){}
     disposed=true;++sequence;clearInterval(timer);listeners.abort();sorters.forEach(sorter=>sorter.destroy());
   },{signal:listeners.signal});
+  if(page)open();
   try{const restore=JSON.parse(sessionStorage.getItem('hfl:followups-restore')||'null');sessionStorage.removeItem('hfl:followups-restore');if(restore){all.checked=restore.all;requestAnimationFrame(open);}}catch(_){}
 })();

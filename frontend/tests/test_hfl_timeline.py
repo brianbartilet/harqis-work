@@ -88,6 +88,7 @@ def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_clie
             form.locator('[name="title"]').fill('Manual action')
             if offset < 1:
                 page.locator('#followup-editor [data-agenda-close]').first.click()
+                page.get_by_role('button',name='Discard unsaved changes').click()
                 assert agenda.list() == []
             else:
                 form.locator('.action-details > summary').click()
@@ -97,6 +98,8 @@ def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_clie
                 form.locator('[name="matrix_confidence"]').select_option('medium')
                 playwright.expect(form.locator('#matrix-help')).to_be_visible()
                 form.locator('[type="submit"]').click()
+                playwright.expect(form.locator('.editor-save-status')).to_have_text('Saved')
+                form.locator('[data-agenda-close]').first.click()
                 playwright.expect(page.locator('#followup-editor')).to_be_hidden()
         saved = agenda.list()
         assert len(saved) == 1
@@ -816,6 +819,8 @@ def test_unified_actions_matrix_editor_and_empty_message(agenda, authenticated_c
         form.locator('[name="matrix_confidence"]').select_option('high')
         form.locator('[name="matrix_reason"]').fill('Important deadline confirmed')
         form.locator('[type="submit"]').click()
+        playwright.expect(form.locator('.editor-save-status')).to_have_text('Saved')
+        form.locator('[data-agenda-close]').first.click()
         playwright.expect(page.locator('#followup-editor')).to_be_hidden()
         playwright.expect(cards.first.locator('.action-matrix')).to_contain_text('Q1 · high confidence')
         menu_box = page.locator('[data-activity-day-menu]').bounding_box()
@@ -957,6 +962,8 @@ def test_followups_board_filter_drag_refresh_and_editor(agenda, authenticated_cl
             card.get_by_role('button', name='Edit', exact=True).click()
             page.locator('#followup-form [name=status]').select_option('active')
             page.locator('#followup-form [type=submit]').click()
+            playwright.expect(page.locator('#followup-form .editor-save-status')).to_have_text('Saved')
+            page.locator('#followup-form [data-agenda-close]').first.click()
         else:
             drag_card(card,board.locator('[data-status=active].followups-lane'))
         playwright.expect(board.locator('[data-status=active].followups-lane [data-followup-id]')).to_have_count(1)
@@ -1008,9 +1015,8 @@ def test_followups_board_filter_drag_refresh_and_editor(agenda, authenticated_cl
         playwright.expect(lane.locator('[data-followup-id]').first).to_have_attribute('data-followup-id',second['id'])
         # A new page must recover the server order, not a DOM/local-storage order.
         page.reload()
-        page.locator('.corpus-tools > summary').click()
-        page.locator('[data-followups-open]').click()
-        board.locator('[data-board-all]').click()
+        assert '/hfl-corpus/actions' in page.url
+        playwright.expect(board.locator('[data-board-all]')).to_have_attribute('aria-checked', 'true')
         playwright.expect(lane.locator('[data-followup-id]').first).to_have_attribute('data-followup-id',second['id'])
         assert not errors
         browser.close()

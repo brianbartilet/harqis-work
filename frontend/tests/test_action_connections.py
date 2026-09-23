@@ -170,7 +170,7 @@ def test_connections_preview_both_cards_and_throwaway_lifecycle(ideas, authentic
           const originalFetch = window.fetch;
           let first = true;
           window.fetch = async (...args) => {
-            if (String(args[0]).endsWith('/connections') && first) {
+            if (location.pathname === '/hfl-corpus' && String(args[0]).endsWith('/connections') && first) {
               first = false;
               await new Promise(resolve => { window.releaseConnections = resolve; });
             }
@@ -209,7 +209,7 @@ def test_connections_preview_both_cards_and_throwaway_lifecycle(ideas, authentic
         day.locator('[data-activity-menu-actions]').click()
         trigger = day_card.get_by_role('button', name='Connections', exact=True)
         trigger.click()
-        assert day.locator('[data-followup-id="' + isolated['id'] + '"] .action-connections-button').count() == 0
+        assert day.locator('[data-followup-id="' + isolated['id'] + '"] .action-connections-button').count() == 1
         preview = page.locator('.action-connections-dialog')
         playwright.expect(preview.get_by_role('status')).to_have_text('Loading connections…')
         loading_box = preview.bounding_box()
@@ -250,15 +250,15 @@ def test_connections_preview_both_cards_and_throwaway_lifecycle(ideas, authentic
         preview.get_by_role('button', name='Close connections').click()
         page.keyboard.press('Escape')
         page.locator('.corpus-tools > summary').click()
-        page.get_by_role('button', name='Actions Board', exact=True).click()
+        page.get_by_role('link', name='Actions Board', exact=True).click()
         board = page.locator('#followups-board')
-        board.get_by_role('button', name='Connections', exact=True).click()
-        assert board.locator('[data-followup-id="' + isolated['id'] + '"] .action-connections-button').count() == 0
+        board.locator('[data-followup-id="' + action['id'] + '"]').get_by_role('button', name='Connections', exact=True).click()
+        assert board.locator('[data-followup-id="' + isolated['id'] + '"] .action-connections-button').count() == 1
         playwright.expect(preview.locator('canvas')).to_be_visible()
         preview.get_by_role('button', name='Close connections').click()
         playwright.expect(board).to_be_visible()
         connected_card = board.locator('[data-followup-id="' + action['id'] + '"]')
-        result_box = connected_card.get_by_role('button', name='Results', exact=True).bounding_box()
+        result_box = connected_card.get_by_role('button', name='Agents', exact=True).bounding_box()
         connection_box = connected_card.get_by_role('button', name='Connections', exact=True).bounding_box()
         assert abs(result_box['width'] - connection_box['width']) < 2
         assert connection_box['y'] >= result_box['y'] + result_box['height']
@@ -268,11 +268,11 @@ def test_connections_preview_both_cards_and_throwaway_lifecycle(ideas, authentic
         assert all(box['y'] + box['height'] <= result_box['y'] for box in management_boxes)
         page.screenshot(path=str(tmp_path / f'action-buttons-{width}.png'))
         mode['value'] = 'error'
-        board.get_by_role('button', name='Connections', exact=True).click()
+        board.locator('[data-followup-id="' + action['id'] + '"]').get_by_role('button', name='Connections', exact=True).click()
         playwright.expect(preview.get_by_role('alert')).to_contain_text('could not load')
         mode['value'] = 'empty'
         preview.get_by_role('button', name='Retry').click()
-        playwright.expect(preview).to_contain_text('No connections available.')
+        playwright.expect(preview).to_contain_text('No connections yet')
         preview.get_by_role('button', name='Close connections').click()
         assert requests == ['GET'] * 5
         assert not errors
@@ -321,9 +321,8 @@ def test_board_drag_and_checklist_refresh_keep_connections(ideas, authenticated_
           }).observe(document.querySelector('#followups-board'),{childList:true,subtree:true});
         }""",other['id'])
         card.locator('.checklist-card-cover input').check()
-        page.wait_for_function("window.availabilityWaiters.length > 0")
         playwright.expect(card.locator('.checklist-card-cover input')).to_be_checked()
-        # Include the board's five-second polling cycle with availability unresolved.
+        # Connections stay visible through the board's five-second polling cycle.
         page.wait_for_timeout(5200)
         assert page.evaluate('window.connectionGaps')==0
         assert other_card.evaluate('el=>el===window.untouchedCard')

@@ -1581,7 +1581,7 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "data-activity-menu-matches" in response.text
     assert "data-activity-menu-matches-panel" in response.text
     day_menu = response.text.split('data-activity-day-menu', 1)[1].split("</div>\n    </div>", 1)[0]
-    assert day_menu.index("Create entry") < day_menu.index("Show document")
+    assert day_menu.index("data-activity-menu-create>Entry") < day_menu.index("Show document")
     assert day_menu.index("Show document") < day_menu.index("Matching entries")
     assert "const hasDocument = !isFuture && Boolean(documentUrl)" in response.text
     assert "const canShowMatches = !isFuture" in response.text
@@ -3674,7 +3674,7 @@ def test_create_entry_dialog_uses_mobile_sheets_and_touch_friendly_controls(
     assert 'data-entry-location-toggle' in more_details
     assert ">Include location</span>" in more_details
     assert "Use your activity timeline first" in more_details
-    assert 'name="tags" value="#notes #manual-entry #thoughts"' in more_details
+    assert 'name="tags" value="#notes #manual-entry #thoughts #moments"' in more_details
     assert 'name="references"' in more_details
     assert "moreDetails.open = false" in response.text
     assert "navigator.geolocation.getCurrentPosition" in response.text
@@ -4290,7 +4290,7 @@ def test_manual_entry_enrichment_prefers_owntracks_and_appends_context(monkeypat
     assert result["location_source"] == "owntracks"
     assert result["location_label"] == "VivoCity, HarbourFront"
     assert result["added_tags"] == ["shopping", "reflection"]
-    assert "#notes #manual-entry #thoughts #shopping #reflection" == enriched.tags
+    assert "#notes #manual-entry #thoughts #moments #shopping #reflection" == enriched.tags
     assert "[VivoCity, HarbourFront](https://www.openstreetmap.org/search?" in enriched.references
     assert enriched.browser_latitude is None
     assert enriched.browser_longitude is None
@@ -4337,7 +4337,7 @@ def test_manual_entry_enrichment_failures_keep_manual_content(monkeypatch):
         CreateEntryRequest.model_validate(_create_entry_payload())
     )
 
-    assert enriched.tags == "#notes #manual-entry #thoughts"
+    assert enriched.tags == "#notes #manual-entry #thoughts #moments"
     assert enriched.references == _create_entry_payload()["references"]
     assert result["location_source"] == "unavailable"
     assert len(result["notices"]) == 2

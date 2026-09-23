@@ -48,10 +48,18 @@ function Preview({item}) {
     observer.observe(host.current);
     return () => observer.disconnect();
   }, [data]);
+  useEffect(() => {
+    const refresh = () => setAttempt(a => a + 1);
+    window.addEventListener('hfl:ideas-updated', refresh);
+    return () => window.removeEventListener('hfl:ideas-updated', refresh);
+  }, []);
   const fit = () => graph.current?.zoomToFit(250, 65, () => true);
   if (error) return <div className="connections-state" role="alert"><p>{error}</p><button onClick={() => setAttempt(a => a + 1)}>Retry</button></div>;
   if (!data) return <p className="connections-state" role="status">Loading connections…</p>;
-  if (!data.links.length) return <p className="connections-state" role="status">No connections available.</p>;
+  if (!data.links.length) return <div className="connections-state connections-empty" role="status">
+    <h3>No connections yet</h3>
+    <p>{item.kind === 'daily' ? 'Related activity will appear here when it is connected to this date.' : 'Add this action to a board to organize it alongside related ideas, thoughts, and actions.'}</p>
+  </div>;
   const relations = data.edges.filter(e => [e.source, e.target].includes(selected?.id));
   const label = id => data.nodes.find(n => n.id === identity(id))?.label || identity(id);
   return <>
@@ -125,7 +133,7 @@ function Preview({item}) {
       <aside className="connections-details" aria-label="Read-only orb details">
         {selected ? <><p className="connections-kind">{kindName(selected.kind)}</p><h3>{selected.label}</h3>
           {selected.status && <div className="agenda-card-meta"><span className="action-status connections-status" data-status={selected.status} aria-label={'Status: ' + statusLabel(selected.status)}>{statusLabel(selected.status)}</span></div>}{selected.date && <p>{selected.date}</p>}
-          {selected.boards.length > 0 && <div><h4>{selected.kind === 'drafts' ? 'Originating board' : 'Appears on boards'}</h4><ul>{selected.boards.map(b => <li key={b.id}>{b.name}</li>)}</ul></div>}
+          {selected.boards.length > 0 && <div><h4>{selected.kind === 'drafts' ? 'Originating board' : 'Appears on boards'}</h4><ul>{selected.boards.map(b => <li key={b.id}><a href={'/hfl-corpus/graph?' + new URLSearchParams({board:b.id})}>{b.name}</a></li>)}</ul></div>}
           {(selected.body || selected.description) && <div className="connections-body markdown-body" dangerouslySetInnerHTML={{__html:selected.body_html}}/>}
           {selected.checklists?.map((list, index) => <div key={list.id || index}><h4>{list.title || 'Checklist'}</h4><ul>{list.items.map((entry, i) => <li key={entry.id || i}>{entry.done ? '☑' : '☐'} {entry.text}</li>)}</ul></div>)}
           <h4>Connections</h4><ul className="connections-relations">{relations.map((edge, index) => <li key={index}>
@@ -147,7 +155,14 @@ window.HflActionConnections = {open(item, trigger) {
   const heading = document.createElement('h2'); heading.id = 'action-connections-title'; heading.textContent = 'Connections · ' + item.title;
   const close = document.createElement('button'); close.type = 'button'; close.textContent = 'Close'; close.setAttribute('aria-label', 'Close connections');
   close.onclick = () => dialog.close(); header.append(heading, close);
-  const content = document.createElement('div'); content.className = 'connections-content'; dialog.append(header, content); document.body.append(dialog);
+  if (item.kind !== 'daily') {
+    const toolbar = document.createElement('div'); toolbar.className = 'connections-actions';
+    const hint = document.createElement('p'); hint.textContent = 'Explore related activity and the boards this action belongs to.';
+    const add = document.createElement('button'); add.type = 'button'; add.textContent = 'Add to a board';
+    add.onclick = () => window.HflIdeas.addToBoard('actionable', item);
+    toolbar.append(hint, add); dialog.append(header, toolbar);
+  } else dialog.append(header);
+  const content = document.createElement('div'); content.className = 'connections-content'; dialog.append(content); document.body.append(dialog);
   const root = createRoot(content); activeDialog = dialog;
   dialog.addEventListener('close', () => {root.unmount(); dialog.remove(); if (activeDialog === dialog) activeDialog = null; if (trigger?.isConnected) trigger.focus();}, {once:true});
   dialog.showModal(); root.render(<Preview item={item}/>);

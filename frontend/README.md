@@ -448,13 +448,27 @@ Markdown list; source corpus files are never rewritten.
 
 ### Activity Graph views
 
-Graph opens from Activity Corpus in a fullscreen, closable modal. It inherits
-the active workspace union and applied corpus search, tags, sources, and dates.
-Filters inside the modal remain local. Reset returns to the inherited context;
-All activity temporarily removes that context. The toolbar's Entities button
-opens a second modal scoped to the graph's applied activity filters, with its
-own All activity switch. Closing Entities preserves the graph position and
-filters; closing Graph preserves the corpus page. Direct URLs remain supported.
+Graph opens from Activity Corpus as a dedicated page at `/hfl-corpus/graph`.
+It inherits the active workspace and corpus filters. The selected board is kept
+in the URL and the graph retains its view state across refreshes. Back to corpus
+returns to the inherited context. Entities still opens as a scoped dialog.
+The board sidebar keeps Explore Activity Graph, Add, and Board guide pinned while
+scrolling, with Filters, Fit graph, and Reset layout grouped under Controls.
+
+The Actions Board is a dedicated page at `/hfl-corpus/actions`. Its filters and
+opened saved action/idea survive refresh through URL state. Existing action and
+idea editors autosave after a short typing pause, serialize concurrent edits,
+and display save errors without overwriting newer server versions. New objects
+require Create. Closing with unsaved edits offers Save and close, Discard unsaved
+changes, or Keep editing; already saved edits cannot be discarded.
+
+Checklists support moving items between lists by dragging or the move icon,
+reordering whole lists, and one-time A–Z/Z–A sorting. Card covers show completed
+items last without changing editor order. New actions have an empty Agent
+Instructions checklist; existing actions receive it on their next edited save.
+Add to board links existing actions/ideas, or creates a board thought linked to
+a checklist item's source. The Actions Board's Ideas picker also exposes these
+commands. New manual corpus entries always include `#moments`.
 
 `/hfl-corpus/graph` supports Overview (100 nodes), Expanded (500), Dense
 (1,000), and All matching nodes. All mode uses `limit=0` on the graph API and

@@ -11,7 +11,7 @@ from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from starlette.datastructures import UploadFile
 
 from modules.hfl_corpus.corpus import format_hfl_markdown
@@ -36,13 +36,20 @@ class CreateEntryRequest(BaseModel):
     why_it_stayed: str = Field(default="", max_length=10_000)
     possible_use: str = Field(default="", max_length=5_000)
     source: str = Field(default="manual-entry", min_length=1, max_length=120)
-    tags: str = Field(default="", max_length=2_000)
+    tags: str = Field(default="", max_length=2_000, validate_default=True)
     references: str = Field(default="", max_length=20_000)
     attachment_names: list[str] = Field(default_factory=list, max_length=MAX_UPLOAD_FILES)
     include_location: bool = True
     browser_latitude: float | None = Field(default=None, ge=-90, le=90)
     browser_longitude: float | None = Field(default=None, ge=-180, le=180)
     browser_location_status: str = Field(default="", max_length=40)
+
+    @field_validator('tags')
+    @classmethod
+    def include_moments(cls, value: str) -> str:
+        # Normalize before forwarding to a canonical API as well as local writes.
+        tags = [tag for tag in _tags(value) if tag.casefold() != 'moments']
+        return ' '.join('#' + tag for tag in [*tags, 'moments'])
 
     def reference_items(self) -> tuple[str, ...]:
         return _references(self.references)
