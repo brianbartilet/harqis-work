@@ -122,6 +122,7 @@ _EXPLICIT_WRITE_TOOLS = frozenset({
     "download_orgo_file",
     "download_hfl_corpus_reference",
     "download_hfl_corpus_attachment",
+    "download_hfl_corpus_idea_attachment",
     "download_hfl_corpus_reference_media",
     "download_hfl_corpus_reference_thumbnail",
     "emulator_adb_shell",

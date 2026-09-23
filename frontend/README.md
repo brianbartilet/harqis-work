@@ -21,6 +21,14 @@ The frontend currently exposes eight modules:
 
 `/dashboard` remains as a compatibility redirect to `/home`.
 
+The `hfl_corpus` integration exposes all 100 canonical `/api/hfl` operations
+through the shared CLI/MCP adapter. See the [tool guide](../apps/hfl_corpus/README.md)
+and [endpoint coverage report](../docs/info/FRONTEND_MCP_COVERAGE.md).
+The reviewed [coverage manifest](mcp_coverage.json) includes browser aliases and
+deferred administration/session protocols. Run
+`python -m tools.frontend_coverage --check` when adding or changing routes; CI
+requires each endpoint to have a tool mapping or an explicit coverage decision.
+
 ## Requirements
 
 - Python 3.12+

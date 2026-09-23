@@ -1,24 +1,25 @@
 openapi: 3.1.0
 info:
   title: HARQIS HFL Activity Corpus API
+  summary: Capture and query Homework-for-Life entries, actions, categories, and date
+    pins.
+  description: Authenticated API for writing the canonical Markdown Activity Corpus
+    and its best-effort Elasticsearch projection, plus searching and retrieving entries.
+    Manage actions, Memory Signal categories, and date pins with bearer authentication.
+    New management API actions and pins have scheduled agent execution disabled.
   version: 1.0.0
-  description: >-
-    Authenticated API for writing the canonical Homework-for-Life Markdown corpus
-    and its best-effort Elasticsearch projection, then searching and retrieving it.
-    Manage actions, Memory Signal categories, and date pins. New management API
-    actions and pins have scheduled agent execution disabled.
 servers:
-  - url: http://localhost:8082
-    description: Standalone hfl-api daemon
+- url: http://localhost:8082
+  description: Standalone hfl-api daemon
 security:
-  - HTTPBearer: []
+- HTTPBearer: []
 tags:
-  - name: hfl-corpus-api
-    description: Canonical Activity Corpus operations
-  - name: operations
-    description: Service operations
-  - name: hfl-management
-    description: Actions, Memory Signal categories, and date pins
+- name: hfl-corpus-api
+  description: Canonical Activity Corpus operations
+- name: operations
+  description: Service operations
+- name: hfl-management
+  description: Actions, Memory Signal categories, and date pins
 paths:
   /api/hfl/{resource}/{source_id}/attachments:
     get:
@@ -106,8 +107,8 @@ paths:
       - hfl-corpus-api
       - hfl-management
       summary: Download Attachment
-      description: Download immutable input, including detached files retained for prior
-        runs.
+      description: Download immutable input, including detached files retained for
+        prior runs.
       operationId: download_attachment_api_hfl__resource___source_id__attachments__attachment_id__get
       security:
       - HTTPBearer: []
@@ -150,8 +151,8 @@ paths:
       - hfl-corpus-api
       - hfl-management
       summary: Detach Attachment
-      description: Remove an input from future runs; preserve files referenced by run
-        history.
+      description: Remove an input from future runs; preserve files referenced by
+        run history.
       operationId: detach_attachment_api_hfl__resource___source_id__attachments__attachment_id__delete
       security:
       - HTTPBearer: []
@@ -633,247 +634,510 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
   /health:
     get:
-      tags: [operations]
+      tags:
+      - operations
       summary: Service health
-      security: []
+      operationId: health_health_get
       responses:
         '200':
-          description: Service is running
+          description: Successful Response
           content:
             application/json:
               schema:
+                additionalProperties:
+                  type: string
                 type: object
-                properties:
-                  status: {type: string, const: ok}
-                  service: {type: string, const: hfl-api}
+                title: Response Health Health Get
+      security: []
   /api/hfl/entries:
     post:
-      tags: [hfl-corpus-api]
-      summary: Create a canonical HFL entry
-      description: >-
-        Writes the canonical Markdown entry and attempts an idempotent Elasticsearch
-        projection. A successful Markdown write can return indexed=false when ES is unavailable.
+      tags:
+      - hfl-corpus-api
+      summary: Hfl Api Create Entry
+      operationId: hfl_api_create_entry_api_hfl_entries_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateEntryRequest'
+        required: true
       responses:
         '200':
-          description: Entry persisted
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EntryResult'
-        '400': {$ref: '#/components/responses/BadRequest'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /api/hfl/entries/preview:
     post:
-      tags: [hfl-corpus-api]
-      summary: Preview and enrich an entry without saving it
+      tags:
+      - hfl-corpus-api
+      summary: Hfl Api Preview Entry
+      operationId: hfl_api_preview_entry_api_hfl_entries_preview_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateEntryRequest'
+        required: true
       responses:
         '200':
-          description: Rendered preview
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: object
-                required: [filename, markdown, html, payload, enrichment]
-                properties:
-                  filename: {type: string}
-                  markdown: {type: string}
-                  html: {type: string}
-                  payload: {$ref: '#/components/schemas/CreateEntryRequest'}
-                  enrichment: {type: object, additionalProperties: true}
-        '400': {$ref: '#/components/responses/BadRequest'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /api/hfl/entries/upload:
     post:
-      tags: [hfl-corpus-api]
-      summary: Create an entry with attachments
+      tags:
+      - hfl-corpus-api
+      summary: Hfl Api Upload Entry
+      operationId: hfl_api_upload_entry_api_hfl_entries_upload_post
       requestBody:
-        required: true
         content:
           multipart/form-data:
             schema:
-              type: object
-              required: [payload]
-              properties:
-                payload:
-                  type: string
-                  description: JSON-encoded CreateEntryRequest
-                files:
-                  type: array
-                  maxItems: 10
-                  items: {type: string, format: binary}
+              $ref: '#/components/schemas/Body_hfl_api_upload_entry_api_hfl_entries_upload_post'
+        required: true
       responses:
         '200':
-          description: Entry and attachments persisted
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EntryResult'
-        '400': {$ref: '#/components/responses/BadRequest'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /api/hfl/documents:
     get:
-      tags: [hfl-corpus-api]
-      summary: Search and paginate corpus documents
+      tags:
+      - hfl-corpus-api
+      summary: Hfl Api Documents
+      operationId: hfl_api_documents_api_hfl_documents_get
+      security:
+      - HTTPBearer: []
       parameters:
-        - {$ref: '#/components/parameters/Query'}
-        - {name: date_field, in: query, schema: {type: string, enum: [created, updated], default: created}}
-        - {name: date_from, in: query, schema: {type: string}}
-        - {name: date_to, in: query, schema: {type: string}}
-        - {name: sort, in: query, schema: {type: string, enum: [asc, desc], default: desc}}
-        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
-        - {name: page_size, in: query, schema: {type: integer, minimum: 1, default: 20}}
-        - {name: compact, in: query, schema: {type: boolean, default: false}}
-        - {name: source, in: query, schema: {type: string}}
-        - {$ref: '#/components/parameters/IncludeSecrets'}
-        - {$ref: '#/components/parameters/SecretTags'}
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Q
+      - name: date_field
+        in: query
+        required: false
+        schema:
+          type: string
+          default: created
+          title: Date Field
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Date To
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          default: desc
+          title: Sort
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 1
+          title: Page
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 20
+          title: Page Size
+      - name: compact
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Compact
+      - name: include_entries
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Entries
+      - name: source
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Source
+      - name: include_secrets
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Secrets
+      - name: secret_tags
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Secret Tags
+      - name: activity_year
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Activity Year
+      - name: activity_from_year
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Activity From Year
       responses:
         '200':
-          description: Corpus search result
+          description: Successful Response
           content:
             application/json:
-              schema: {type: object, additionalProperties: true}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/hfl/tree:
     get:
-      tags: [hfl-corpus-api]
-      summary: Return a shallow corpus directory tree
+      tags:
+      - hfl-corpus-api
+      summary: Hfl Api Tree
+      operationId: hfl_api_tree_api_hfl_tree_get
+      security:
+      - HTTPBearer: []
       parameters:
-        - {name: path, in: query, schema: {type: string, default: ''}}
-        - {$ref: '#/components/parameters/IncludeSecrets'}
-        - {$ref: '#/components/parameters/SecretTags'}
+      - name: path
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Path
+      - name: include_secrets
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Secrets
+      - name: secret_tags
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Secret Tags
       responses:
         '200':
-          description: Directory tree
+          description: Successful Response
           content:
             application/json:
-              schema: {type: object, additionalProperties: true}
-        '404': {$ref: '#/components/responses/NotFound'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/hfl/matches/{relative_path}:
     get:
-      tags: [hfl-corpus-api]
-      summary: Find matching entries within one document
+      tags:
+      - hfl-corpus-api
+      summary: Hfl Api Matches
+      operationId: hfl_api_matches_api_hfl_matches__relative_path__get
+      security:
+      - HTTPBearer: []
       parameters:
-        - {$ref: '#/components/parameters/RelativePath'}
-        - {$ref: '#/components/parameters/Query'}
-        - {name: source, in: query, schema: {type: string}}
-        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
-        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 20, default: 20}}
-        - {$ref: '#/components/parameters/IncludeSecrets'}
-        - {$ref: '#/components/parameters/SecretTags'}
+      - name: relative_path
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Relative Path
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Q
+      - name: source
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Source
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Offset
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 20
+          title: Limit
+      - name: include_secrets
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Secrets
+      - name: secret_tags
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Secret Tags
       responses:
         '200':
-          description: Matching entries
+          description: Successful Response
           content:
             application/json:
-              schema: {type: object, additionalProperties: true}
-        '404': {$ref: '#/components/responses/NotFound'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/hfl/document/{relative_path}:
     get:
-      tags: [hfl-corpus-api]
-      summary: Retrieve one corpus document
+      tags:
+      - hfl-corpus-api
+      summary: Hfl Api Document
+      operationId: hfl_api_document_api_hfl_document__relative_path__get
+      security:
+      - HTTPBearer: []
       parameters:
-        - {$ref: '#/components/parameters/RelativePath'}
-        - {$ref: '#/components/parameters/IncludeSecrets'}
-        - {$ref: '#/components/parameters/SecretTags'}
+      - name: relative_path
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Relative Path
+      - name: include_secrets
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Secrets
+      - name: secret_tags
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Secret Tags
       responses:
         '200':
-          description: Document, entries, and safe references
+          description: Successful Response
           content:
             application/json:
-              schema: {type: object, additionalProperties: true}
-        '404': {$ref: '#/components/responses/NotFound'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     post:
-      tags: [hfl-corpus-api]
-      summary: Replace a corpus Markdown document
-      description: Destructive. Validates and replaces the complete document text.
+      tags:
+      - hfl-corpus-api
+      summary: Hfl Api Update Document
+      operationId: hfl_api_update_document_api_hfl_document__relative_path__post
+      security:
+      - HTTPBearer: []
       parameters:
-        - {$ref: '#/components/parameters/RelativePath'}
+      - name: relative_path
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Relative Path
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [text]
-              properties:
-                text: {type: string}
+              $ref: '#/components/schemas/UpdateDocumentRequest'
       responses:
         '200':
-          description: Document updated
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  updated: {type: boolean}
-                  relative_path: {type: string}
-                  size: {type: integer}
-        '400': {$ref: '#/components/responses/BadRequest'}
-        '404': {$ref: '#/components/responses/NotFound'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/hfl/reference/{token}:
     get:
-      tags: [hfl-corpus-api]
-      summary: Download a referenced file
+      tags:
+      - hfl-corpus-api
+      summary: Hfl Api Reference
+      operationId: hfl_api_reference_api_hfl_reference__token__get
+      security:
+      - HTTPBearer: []
       parameters:
-        - {$ref: '#/components/parameters/ReferenceToken'}
-      responses:
-        '200': {$ref: '#/components/responses/BinaryFile'}
-        '404': {$ref: '#/components/responses/NotFound'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-  /api/hfl/reference/{token}/preview:
-    get:
-      tags: [hfl-corpus-api]
-      summary: Preview a safe text or Markdown reference
-      parameters:
-        - {$ref: '#/components/parameters/ReferenceToken'}
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Token
       responses:
         '200':
-          description: HTML preview
+          description: Successful Response
           content:
-            text/html:
-              schema: {type: string}
-        '204': {description: Media reference; use the media endpoint}
-        '404': {$ref: '#/components/responses/NotFound'}
-        '415': {description: Reference type cannot be previewed}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/reference/{token}/preview:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Hfl Api Reference Preview
+      operationId: hfl_api_reference_preview_api_hfl_reference__token__preview_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Token
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/hfl/reference/{token}/media:
     get:
-      tags: [hfl-corpus-api]
-      summary: Stream image or video reference content
+      tags:
+      - hfl-corpus-api
+      summary: Hfl Api Reference Media
+      operationId: hfl_api_reference_media_api_hfl_reference__token__media_get
+      security:
+      - HTTPBearer: []
       parameters:
-        - {$ref: '#/components/parameters/ReferenceToken'}
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Token
       responses:
-        '200': {$ref: '#/components/responses/BinaryFile'}
-        '404': {$ref: '#/components/responses/NotFound'}
-        '415': {description: Reference is not media}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/hfl/reference/{token}/thumbnail:
     get:
-      tags: [hfl-corpus-api]
-      summary: Download a generated media thumbnail
+      tags:
+      - hfl-corpus-api
+      summary: Hfl Api Reference Thumbnail
+      operationId: hfl_api_reference_thumbnail_api_hfl_reference__token__thumbnail_get
+      security:
+      - HTTPBearer: []
       parameters:
-        - {$ref: '#/components/parameters/ReferenceToken'}
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Token
       responses:
-        '200': {$ref: '#/components/responses/BinaryFile'}
-        '404': {$ref: '#/components/responses/NotFound'}
-        '415': {description: Thumbnail is unavailable}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/hfl/day-matches/{activity_day}:
     get:
       tags:
@@ -1033,6 +1297,20 @@ paths:
           type: integer
           default: 0
           title: Offset
+      - name: include_closed
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Closed
+      - name: recent_dismissed
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Recent Dismissed
       responses:
         '200':
           description: Successful Response
@@ -1226,12 +1504,1449 @@ paths:
               schema: {}
       security:
       - HTTPBearer: []
+  /api/hfl/timeline/items/order:
+    put:
+      tags:
+      - hfl-corpus-api
+      summary: Followup Board Order
+      operationId: followup_board_order_api_hfl_timeline_items_order_put
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /api/hfl/timeline/ideas/snapshot:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Snapshot
+      operationId: snapshot_api_hfl_timeline_ideas_snapshot_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /api/hfl/timeline/ideas/connection-availability:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Connection Availability
+      operationId: connection_availability_api_hfl_timeline_ideas_connection_availability_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /api/hfl/timeline/ideas/actions/{identity}/connections:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Action Connections
+      operationId: action_connections_api_hfl_timeline_ideas_actions__identity__connections_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/dates/{identity}/connections:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Date Connections
+      operationId: date_connections_api_hfl_timeline_ideas_dates__identity__connections_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/boards:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Boards
+      description: Board metadata and Goals never require a corpus scan.
+      operationId: boards_api_hfl_timeline_ideas_boards_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /api/hfl/timeline/ideas/boards/order:
+    put:
+      tags:
+      - hfl-corpus-api
+      summary: Reorder Boards
+      operationId: reorder_boards_api_hfl_timeline_ideas_boards_order_put
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /api/hfl/timeline/ideas/goals/order:
+    put:
+      tags:
+      - hfl-corpus-api
+      summary: Reorder Goals
+      operationId: reorder_goals_api_hfl_timeline_ideas_goals_order_put
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /api/hfl/timeline/ideas/goal-options:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Goal Options
+      operationId: goal_options_api_hfl_timeline_ideas_goal_options_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /api/hfl/timeline/ideas/maps/{identity}:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Get Board
+      operationId: get_board_api_hfl_timeline_ideas_maps__identity__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - hfl-corpus-api
+      summary: Save Map
+      operationId: save_map_api_hfl_timeline_ideas_maps__identity__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - hfl-corpus-api
+      summary: Delete Board
+      operationId: delete_board_api_hfl_timeline_ideas_maps__identity__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/maps/{identity}/graph:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Board Graph
+      operationId: board_graph_api_hfl_timeline_ideas_maps__identity__graph_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/maps/{identity}/attach-options:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Attach Options
+      operationId: attach_options_api_hfl_timeline_ideas_maps__identity__attach_options_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      - name: query
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Query
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/render:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Render Body
+      operationId: render_body_api_hfl_timeline_ideas_render_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /api/hfl/timeline/ideas/objects/{identity}:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Idea
+      operationId: idea_api_hfl_timeline_ideas_objects__identity__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - hfl-corpus-api
+      summary: Edit Idea
+      operationId: edit_idea_api_hfl_timeline_ideas_objects__identity__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/objects:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Create Idea
+      operationId: create_idea_api_hfl_timeline_ideas_objects_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /api/hfl/timeline/ideas/topics:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Create Topic
+      operationId: create_topic_api_hfl_timeline_ideas_topics_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /api/hfl/timeline/ideas/links:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Link
+      operationId: link_api_hfl_timeline_ideas_links_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+    delete:
+      tags:
+      - hfl-corpus-api
+      summary: Link
+      operationId: link_api_hfl_timeline_ideas_links_delete
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /api/hfl/timeline/ideas/maps:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Save Map
+      operationId: save_map_api_hfl_timeline_ideas_maps_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/maps/{identity}/promote:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Promote
+      operationId: promote_api_hfl_timeline_ideas_maps__identity__promote_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/goals/{identity}:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Get Goal
+      operationId: get_goal_api_hfl_timeline_ideas_goals__identity__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - hfl-corpus-api
+      summary: Save Goal
+      operationId: save_goal_api_hfl_timeline_ideas_goals__identity__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/maps/{identity}/promote-link:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Promote Connection
+      operationId: promote_connection_api_hfl_timeline_ideas_maps__identity__promote_link_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/maps/{identity}/connections:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Edit Board Connection
+      operationId: edit_board_connection_api_hfl_timeline_ideas_maps__identity__connections_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/goals:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Save Goal
+      operationId: save_goal_api_hfl_timeline_ideas_goals_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/objects/{identity}/conversion:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Conversion
+      operationId: conversion_api_hfl_timeline_ideas_objects__identity__conversion_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      - name: checklist_id
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Checklist Id
+      - name: item_id
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Item Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/objects/{identity}/convert:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Convert
+      operationId: convert_api_hfl_timeline_ideas_objects__identity__convert_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/objects/{identity}/attachments/{attachment_id}:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Attachments
+      operationId: attachments_api_hfl_timeline_ideas_objects__identity__attachments__attachment_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      - name: attachment_id
+        in: path
+        required: true
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Attachment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - hfl-corpus-api
+      summary: Detach
+      operationId: detach_api_hfl_timeline_ideas_objects__identity__attachments__attachment_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      - name: attachment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Attachment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/objects/{identity}/attachments:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Attachments
+      operationId: attachments_api_hfl_timeline_ideas_objects__identity__attachments_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      - name: attachment_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Attachment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Upload
+      operationId: upload_api_hfl_timeline_ideas_objects__identity__attachments_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_api_hfl_timeline_ideas_objects__identity__attachments_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/maps/{identity}/accept-proposal:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Accept Proposal
+      operationId: accept_proposal_api_hfl_timeline_ideas_maps__identity__accept_proposal_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/graph-views:
+    get:
+      summary: Saved Graph Views
+      operationId: saved_graph_views_api_hfl_graph_views_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+    post:
+      summary: Create Graph View
+      operationId: create_graph_view_api_hfl_graph_views_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ViewWrite'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/graph-views/{identity}:
+    put:
+      summary: Update Graph View
+      operationId: update_graph_view_api_hfl_graph_views__identity__put
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ViewWrite'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      summary: Delete Graph View
+      operationId: delete_graph_view_api_hfl_graph_views__identity__delete
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      - name: revision
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          title: Revision
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/graph-views/{identity}/select:
+    post:
+      summary: Select Graph View
+      operationId: select_graph_view_api_hfl_graph_views__identity__select_post
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/graph:
+    get:
+      summary: Graph
+      operationId: graph_api_hfl_entities_graph_get
+      parameters:
+      - name: source
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Source
+      - name: since
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Since
+      - name: until
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Until
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 1000
+          minimum: 0
+          default: 100
+          title: Limit
+      - name: query
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 200
+          default: ''
+          title: Query
+      - name: shared
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Shared
+      - name: sources
+        in: query
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+          default: []
+          title: Sources
+      - name: context
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Context
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities:
+    get:
+      summary: Index
+      operationId: index_api_hfl_entities_get
+      parameters:
+      - name: source
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Source
+      - name: since
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Since
+      - name: until
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Until
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 10000
+            minimum: 0
+          - type: 'null'
+          title: Limit
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Q
+      - name: kind
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Kind
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      - name: context
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Context
+      - name: graph_query
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Graph Query
+      - name: sources
+        in: query
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+          default: []
+          title: Sources
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/profile/{identity}:
+    post:
+      summary: Save Profile
+      operationId: save_profile_api_hfl_entities_profile__identity__post
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Profile'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/entry/{entry_id}:
+    get:
+      summary: Entry Preview
+      operationId: entry_preview_api_hfl_entities_entry__entry_id__get
+      parameters:
+      - name: entry_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Entry Id
+      - name: locator
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Locator
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/status:
+    get:
+      summary: Status
+      operationId: status_api_hfl_entities_status_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/hfl/entities/backfill:
+    post:
+      summary: Backfill
+      operationId: backfill_api_hfl_entities_backfill_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/hfl/entities/merge:
+    post:
+      summary: Merge
+      operationId: merge_api_hfl_entities_merge_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Merge'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/decisions/{decision_id}/undo:
+    post:
+      summary: Undo
+      operationId: undo_api_hfl_entities_decisions__decision_id__undo_post
+      parameters:
+      - name: decision_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Decision Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/export:
+    post:
+      summary: Export
+      operationId: export_api_hfl_entities_export_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/hfl/entities/merge-preview:
+    post:
+      summary: Preview
+      operationId: preview_api_hfl_entities_merge_preview_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergePreview'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/merges:
+    post:
+      summary: Submit
+      operationId: submit_api_hfl_entities_merges_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergeSubmit'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/merges/{identity}/unmerge:
+    post:
+      summary: Unmerge
+      operationId: unmerge_api_hfl_entities_merges__identity__unmerge_post
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Unmerge'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/operations/{request_id}:
+    get:
+      summary: Operation Status
+      operationId: operation_status_api_hfl_entities_operations__request_id__get
+      parameters:
+      - name: request_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Request Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/audit/{identity}:
+    get:
+      summary: History
+      operationId: history_api_hfl_entities_audit__identity__get
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/matching:
+    get:
+      summary: Matching Status
+      operationId: matching_status_api_hfl_entities_matching_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/hfl/entities/matching/scan:
+    post:
+      summary: Matching Scan
+      operationId: matching_scan_api_hfl_entities_matching_scan_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/hfl/entities/matching/suggestions/{identity}/dismiss:
+    post:
+      summary: Dismiss Match
+      operationId: dismiss_match_api_hfl_entities_matching_suggestions__identity__dismiss_post
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
-  securitySchemes:
-    HTTPBearer:
-      type: http
-      scheme: bearer
   schemas:
+    ActionSource:
+      properties:
+        path:
+          type: string
+          title: Path
+        entry_id:
+          type: string
+          title: Entry Id
+      additionalProperties: false
+      type: object
+      required:
+      - path
+      - entry_id
+      title: ActionSource
     Body_hfl_api_upload_entry_api_hfl_entries_upload_post:
       properties:
         payload:
@@ -1248,6 +2963,18 @@ components:
       required:
       - payload
       title: Body_hfl_api_upload_entry_api_hfl_entries_upload_post
+    Body_upload_api_hfl_timeline_ideas_objects__identity__attachments_post:
+      properties:
+        files:
+          items:
+            type: string
+            contentMediaType: application/octet-stream
+          type: array
+          title: Files
+      type: object
+      required:
+      - files
+      title: Body_upload_api_hfl_timeline_ideas_objects__identity__attachments_post
     Body_upload_attachments_api_hfl__resource___source_id__attachments_post:
       properties:
         files:
@@ -1260,93 +2987,8 @@ components:
       required:
       - files
       title: Body_upload_attachments_api_hfl__resource___source_id__attachments_post
-    UpdateDocumentRequest:
-      properties:
-        text:
-          type: string
-          maxLength: 5000000
-          title: Text
-        expected_updated_at:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Expected Updated At
-      type: object
-      required:
-      - text
-      title: UpdateDocumentRequest
-    HTTPValidationError:
-      properties:
-        detail:
-          items:
-            $ref: '#/components/schemas/ValidationError'
-          type: array
-          title: Detail
-      type: object
-      title: HTTPValidationError
-    ValidationError:
-      properties:
-        loc:
-          items:
-            anyOf:
-            - type: string
-            - type: integer
-          type: array
-          title: Location
-        msg:
-          type: string
-          title: Message
-        type:
-          type: string
-          title: Error Type
-        input:
-          title: Input
-        ctx:
-          type: object
-          title: Context
-      type: object
-      required:
-      - loc
-      - msg
-      - type
-      title: ValidationError
-    ActionSource:
-      properties:
-        path:
-          type: string
-          title: Path
-        entry_id:
-          type: string
-          title: Entry Id
-      additionalProperties: false
-      type: object
-      required:
-      - path
-      - entry_id
-      title: ActionSource
     CreateAction:
       properties:
-        matrix:
-          type: string
-          enum:
-          - ''
-          - Q1
-          - Q2
-          - Q3
-          - Q4
-          default: ''
-        matrix_confidence:
-          type: string
-          enum:
-          - ''
-          - high
-          - medium
-          - low
-          default: ''
-        matrix_reason:
-          type: string
-          maxLength: 3000
-          default: ''
         request_id:
           type: string
           format: uuid
@@ -1380,10 +3022,51 @@ components:
           maxLength: 6000
           title: Notes
           default: ''
+        description:
+          type: string
+          maxLength: 3000
+          title: Description
+          default: ''
+        body:
+          type: string
+          maxLength: 50000
+          title: Body
+          default: ''
+        checklists:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          maxItems: 20
+          title: Checklists
         source:
           anyOf:
           - $ref: '#/components/schemas/ActionSource'
           - type: 'null'
+        matrix:
+          type: string
+          enum:
+          - ''
+          - Q1
+          - Q2
+          - Q3
+          - Q4
+          title: Matrix
+          default: ''
+        matrix_confidence:
+          type: string
+          enum:
+          - ''
+          - high
+          - medium
+          - low
+          title: Matrix Confidence
+          default: ''
+        matrix_reason:
+          type: string
+          maxLength: 3000
+          title: Matrix Reason
+          default: ''
       additionalProperties: false
       type: object
       required:
@@ -1391,6 +3074,87 @@ components:
       - title
       - expected_outcome
       title: CreateAction
+    CreateEntryRequest:
+      properties:
+        date:
+          type: string
+          maxLength: 10
+          title: Date
+        time:
+          type: string
+          maxLength: 8
+          title: Time
+        moment:
+          type: string
+          maxLength: 500
+          title: Moment
+        what_happened:
+          type: string
+          maxLength: 20000
+          title: What Happened
+        why_it_stayed:
+          type: string
+          maxLength: 10000
+          title: Why It Stayed
+          default: ''
+        possible_use:
+          type: string
+          maxLength: 5000
+          title: Possible Use
+          default: ''
+        source:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Source
+          default: manual-entry
+        tags:
+          type: string
+          maxLength: 2000
+          title: Tags
+          default: ''
+        references:
+          type: string
+          maxLength: 20000
+          title: References
+          default: ''
+        attachment_names:
+          items:
+            type: string
+          type: array
+          maxItems: 50
+          title: Attachment Names
+        include_location:
+          type: boolean
+          title: Include Location
+          default: true
+        browser_latitude:
+          anyOf:
+          - type: number
+            maximum: 90.0
+            minimum: -90.0
+          - type: 'null'
+          title: Browser Latitude
+        browser_longitude:
+          anyOf:
+          - type: number
+            maximum: 180.0
+            minimum: -180.0
+          - type: 'null'
+          title: Browser Longitude
+        browser_location_status:
+          type: string
+          maxLength: 40
+          title: Browser Location Status
+          default: ''
+      type: object
+      required:
+      - date
+      - time
+      - moment
+      - what_happened
+      title: CreateEntryRequest
+      description: Browser/API payload for one manual HFL entry.
     CreatePin:
       properties:
         category_id:
@@ -1428,6 +3192,203 @@ components:
       - end_date
       - title
       title: CreatePin
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    Layout:
+      properties:
+        positions:
+          additionalProperties:
+            $ref: '#/components/schemas/Position'
+          type: object
+          title: Positions
+        center:
+          additionalProperties:
+            type: number
+          propertyNames:
+            enum:
+            - x
+            - y
+          type: object
+          title: Center
+        zoom:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Zoom
+          default: 1
+      type: object
+      title: Layout
+    Merge:
+      properties:
+        alias:
+          type: string
+          maxLength: 100
+          title: Alias
+        canonical:
+          type: string
+          maxLength: 100
+          title: Canonical
+        reason:
+          type: string
+          maxLength: 1000
+          minLength: 5
+          title: Reason
+      type: object
+      required:
+      - alias
+      - canonical
+      - reason
+      title: Merge
+    MergeFields:
+      properties:
+        categories:
+          items:
+            type: string
+          type: array
+          title: Categories
+        emails:
+          items:
+            type: string
+          type: array
+          title: Emails
+        phones:
+          items:
+            type: string
+          type: array
+          title: Phones
+        references:
+          items:
+            type: string
+          type: array
+          title: References
+        notes:
+          type: string
+          title: Notes
+          default: ''
+      additionalProperties: false
+      type: object
+      title: MergeFields
+    MergePreview:
+      properties:
+        entity_ids:
+          items:
+            type: string
+          type: array
+          maxItems: 10000
+          minItems: 2
+          title: Entity Ids
+        name:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Name
+        evidence:
+          type: string
+          maxLength: 10000
+          title: Evidence
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - entity_ids
+      - name
+      title: MergePreview
+    MergeSubmit:
+      properties:
+        entity_ids:
+          items:
+            type: string
+          type: array
+          maxItems: 10000
+          minItems: 2
+          title: Entity Ids
+        name:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Name
+        evidence:
+          type: string
+          maxLength: 10000
+          title: Evidence
+          default: ''
+        request_id:
+          type: string
+          format: uuid
+          title: Request Id
+        preview_token:
+          type: string
+          title: Preview Token
+        profile:
+          anyOf:
+          - $ref: '#/components/schemas/MergeFields'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - entity_ids
+      - name
+      - request_id
+      - preview_token
+      title: MergeSubmit
+    Position:
+      properties:
+        x:
+          type: number
+          title: X
+        y:
+          type: number
+          title: Y
+        pinned:
+          type: boolean
+          title: Pinned
+          default: false
+      type: object
+      required:
+      - x
+      - y
+      title: Position
+    Profile:
+      properties:
+        name:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Name
+        categories:
+          items:
+            type: string
+          type: array
+          title: Categories
+        emails:
+          items:
+            type: string
+          type: array
+          title: Emails
+        phones:
+          items:
+            type: string
+          type: array
+          title: Phones
+        references:
+          items:
+            type: string
+          type: array
+          title: References
+        notes:
+          type: string
+          title: Notes
+          default: ''
+      type: object
+      required:
+      - name
+      title: Profile
     SaveCategory:
       properties:
         name:
@@ -1450,40 +3411,30 @@ components:
       - name
       - color
       title: SaveCategory
+    Unmerge:
+      properties:
+        request_id:
+          type: string
+          format: uuid
+          title: Request Id
+        evidence:
+          type: string
+          maxLength: 10000
+          title: Evidence
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      title: Unmerge
     UpdateAction:
       properties:
-        matrix:
-          anyOf:
-          - type: string
-            enum:
-            - ''
-            - Q1
-            - Q2
-            - Q3
-            - Q4
-          - type: 'null'
-          default: null
-        matrix_confidence:
-          anyOf:
-          - type: string
-            enum:
-            - ''
-            - high
-            - medium
-            - low
-          - type: 'null'
-          default: null
-        matrix_reason:
-          anyOf:
-          - type: string
-            maxLength: 3000
-          - type: 'null'
-          default: null
         version:
           type: integer
           minimum: 1.0
           title: Version
-          description: Version returned by the latest read; stale versions return 409.
+          description: Version returned by the latest read; stale versions return
+            409.
         title:
           anyOf:
           - type: string
@@ -1520,6 +3471,27 @@ components:
             maxLength: 6000
           - type: 'null'
           title: Notes
+        description:
+          anyOf:
+          - type: string
+            maxLength: 3000
+          - type: 'null'
+          title: Description
+        body:
+          anyOf:
+          - type: string
+            maxLength: 50000
+          - type: 'null'
+          title: Body
+        checklists:
+          anyOf:
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
+            maxItems: 20
+          - type: 'null'
+          title: Checklists
         status:
           anyOf:
           - type: string
@@ -1538,6 +3510,33 @@ components:
             maxLength: 3000
           - type: 'null'
           title: Completion Note
+        matrix:
+          anyOf:
+          - type: string
+            enum:
+            - ''
+            - Q1
+            - Q2
+            - Q3
+            - Q4
+          - type: 'null'
+          title: Matrix
+        matrix_confidence:
+          anyOf:
+          - type: string
+            enum:
+            - ''
+            - high
+            - medium
+            - low
+          - type: 'null'
+          title: Matrix Confidence
+        matrix_reason:
+          anyOf:
+          - type: string
+            maxLength: 3000
+          - type: 'null'
+          title: Matrix Reason
       additionalProperties: false
       type: object
       required:
@@ -1566,6 +3565,21 @@ components:
       additionalProperties: false
       type: object
       title: UpdateCategory
+    UpdateDocumentRequest:
+      properties:
+        text:
+          type: string
+          maxLength: 5000000
+          title: Text
+        expected_updated_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Expected Updated At
+      type: object
+      required:
+      - text
+      title: UpdateDocumentRequest
     UpdatePin:
       properties:
         category_id:
@@ -1608,85 +3622,131 @@ components:
       additionalProperties: false
       type: object
       title: UpdatePin
-    CreateEntryRequest:
-      type: object
-      required: [date, time, moment, what_happened]
+    ValidationError:
       properties:
-        date: {type: string, format: date, maxLength: 10}
-        time: {type: string, maxLength: 8, examples: ['14:30']}
-        moment: {type: string, minLength: 1, maxLength: 500}
-        what_happened: {type: string, minLength: 1, maxLength: 20000}
-        why_it_stayed: {type: string, maxLength: 10000, default: ''}
-        possible_use: {type: string, maxLength: 5000, default: ''}
-        source: {type: string, minLength: 1, maxLength: 120, default: manual-entry}
-        tags: {type: string, maxLength: 2000, default: '', examples: ['#notes #manual-entry']}
-        references: {type: string, maxLength: 20000, default: ''}
-        attachment_names:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
           type: array
-          maxItems: 10
-          items: {type: string}
-          default: []
-        include_location: {type: boolean, default: true}
-        browser_latitude: {type: [number, 'null'], minimum: -90, maximum: 90}
-        browser_longitude: {type: [number, 'null'], minimum: -180, maximum: 180}
-        browser_location_status: {type: string, maxLength: 40, default: ''}
-    EntryResult:
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
       type: object
-      required: [entry_id, path, duplicate, indexed, delivery]
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    ViewState:
       properties:
-        entry_id: {type: string}
-        path: {type: string}
-        bytes_written: {type: integer}
-        duplicate: {type: boolean}
-        indexed:
+        density:
+          type: string
+          enum:
+          - '100'
+          - '500'
+          - '1000'
+          - '0'
+          title: Density
+          default: '100'
+        query:
+          type: string
+          maxLength: 200
+          title: Query
+          default: ''
+        sources:
+          items:
+            type: string
+          type: array
+          maxItems: 1000
+          title: Sources
+        since:
+          type: string
+          maxLength: 10
+          title: Since
+          default: ''
+        until:
+          type: string
+          maxLength: 10
+          title: Until
+          default: ''
+        rolling:
+          type: integer
+          maximum: 36500.0
+          minimum: 0.0
+          title: Rolling
+          default: 0
+        shared:
           type: boolean
-          description: Whether the best-effort Elasticsearch upsert succeeded.
-        doc_id: {type: [string, 'null']}
-        delivery: {type: string, enum: [persisted, forwarded, outbox]}
-        uploads:
+          title: Shared
+          default: true
+        group:
+          type: string
+          enum:
+          - relationships
+          - source
+          - date
+          title: Group
+          default: relationships
+        enabled:
+          items:
+            type: string
+            enum:
+            - entries
+            - sources
+            - daily
+            - people
+            - companies
+            - tools
+            - topics
+            - objects
+            - ideas
+            - actions
+            - goals
+            - boards
           type: array
-          items: {type: string}
-  parameters:
-    Query:
-      name: q
-      in: query
-      schema: {type: string, default: ''}
-    IncludeSecrets:
-      name: include_secrets
-      in: query
-      schema: {type: boolean, default: false}
-    SecretTags:
-      name: secret_tags
-      in: query
-      schema: {type: string, default: ''}
-    RelativePath:
-      name: relative_path
-      in: path
-      required: true
-      schema: {type: string}
-    ReferenceToken:
-      name: token
-      in: path
-      required: true
-      schema: {type: string}
-  responses:
-    BadRequest:
-      description: Invalid request
-      content:
-        application/json:
-          schema: {type: object, additionalProperties: true}
-    Unauthorized:
-      description: Missing or invalid bearer token
-      content:
-        application/json:
-          schema: {type: object, additionalProperties: true}
-    NotFound:
-      description: Corpus resource not found
-      content:
-        application/json:
-          schema: {type: object, additionalProperties: true}
-    BinaryFile:
-      description: Binary file content
-      content:
-        application/octet-stream:
-          schema: {type: string, format: binary}
+          title: Enabled
+        focus:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Focus
+        layout:
+          $ref: '#/components/schemas/Layout'
+      additionalProperties: false
+      type: object
+      title: ViewState
+    ViewWrite:
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          pattern: \S
+          title: Name
+        state:
+          $ref: '#/components/schemas/ViewState'
+        revision:
+          type: integer
+          minimum: 0.0
+          title: Revision
+          default: 0
+      type: object
+      required:
+      - name
+      - state
+      title: ViewWrite
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer

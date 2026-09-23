@@ -246,6 +246,12 @@ python -m tools schema trello create_trello_card
 
 The CLI and both MCP surfaces share `tools/catalog.py`; existing MCP names remain compatible.
 
+The `hfl_corpus` adapter covers all 100 canonical frontend API operations,
+including entities, timeline, ideas, maps and goals. The
+[frontend MCP coverage report](docs/info/FRONTEND_MCP_COVERAGE.md) maps all routes
+and identifies remaining session/protocol work. CI checks the reviewed endpoint
+manifest with `python -m tools.frontend_coverage --check`.
+
 ---
 
 ### Shared Prompt Library (`agents/prompts/`)

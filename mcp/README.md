@@ -300,52 +300,122 @@ Wraps xAI Grok via the OpenAI-compatible SDK (`https://api.x.ai/v1`). Requires v
 
 ### HFL Activity Corpus (`apps/hfl_corpus/mcp.py`)
 
-Authenticated client for the canonical Homework-for-Life Markdown corpus and
-its best-effort Elasticsearch projection. Requires `HFL_CORPUS_API_URL` and
-`HFL_CORPUS_API_TOKEN`. Create, upload, update, and download operations write
-remote or local state.
+100 typed tools cover the canonical frontend `/api/hfl` routes using
+`HFL_CORPUS_API_URL` and `HFL_CORPUS_API_TOKEN`. The same catalog powers the CLI
+and agent bridge. Existing tool names are retained. See the
+[app guide](../apps/hfl_corpus/README.md) for version checks, merge preview tokens,
+file transfer, scheduling boundaries and discovery commands, and the
+[frontend coverage report](../docs/info/FRONTEND_MCP_COVERAGE.md) for remaining
+session/protocol surfaces. Writes are marked below; file downloads write locally.
 
-| Tool | Args | Returns |
-|------|------|---------|
-| `create_hfl_corpus_entry` | entry date/time and HFL fields | Persistence result with `entry_id`, `indexed`, `doc_id`, and `delivery` |
-| `create_hfl_corpus_action` | `request_id` UUID, `title`, `expected_outcome`, optional dates/prompt/notes/source | `{item, duplicate}`; agents disabled (write) |
-| `upload_hfl_corpus_attachments` | `resource` actions/pins, `source_id`, `file_paths` | Input manifest, identical retries deduplicated (write) |
-| `list_hfl_corpus_attachments` | `resource`, `source_id` | Attached input files |
-| `download_hfl_corpus_attachment` | `resource`, `source_id`, `attachment_id`, `destination` | Local downloaded input (write) |
-| `delete_hfl_corpus_attachment` | `resource`, `source_id`, `attachment_id` | Manifest after detaching; prior run files retained (write) |
-| `list_hfl_corpus_actions` | `closed?`, `offset?` | Paginated actions and total |
-| `get_hfl_corpus_action` | `action_id` | Action and current version |
-| `update_hfl_corpus_action` | `action_id`, `version`, `changes` | Edited/completed/dismissed action (write) |
-| `get_hfl_corpus_action_history` | `action_id` | Immutable revisions |
-| `create_hfl_corpus_category` | `name`, `color`, `instructions?` | Category (write) |
-| `list_hfl_corpus_categories` | none | Active/archived categories and palette |
-| `get_hfl_corpus_category` | `category_id` | Category |
-| `update_hfl_corpus_category` | `category_id`, `changes` | Edited category (write) |
-| `archive_hfl_corpus_category` | `category_id` | Archived category, history retained (write) |
-| `create_hfl_corpus_pin` | `category_id`, `start_date`, `end_date`, `title`, `note?`, `prompt?` | Date pin; agents disabled (write) |
-| `list_hfl_corpus_pins` | `category_id?` | Active date pins |
-| `get_hfl_corpus_pin` | `pin_id` | Date pin |
-| `update_hfl_corpus_pin` | `pin_id`, `changes` | Edited pin (write) |
-| `delete_hfl_corpus_pin` | `pin_id` | Deletion result (destructive write) |
-| `preview_hfl_corpus_entry` | entry date/time and HFL fields | Rendered Markdown/HTML preview without persistence |
-| `upload_hfl_corpus_entry` | entry fields, `file_paths` | Persistence result plus uploaded reference paths |
-| `list_hfl_corpus_documents` | search, dates, paging, source, secret controls | Paginated corpus search payload |
-| `get_hfl_corpus_tree` | `path?`, secret controls | Shallow directory tree |
-| `list_hfl_corpus_matches` | `relative_path`, query/paging filters | Matching parsed entries |
-| `get_hfl_corpus_document` | `relative_path`, secret controls | Document text, parsed entries, and safe references |
-| `update_hfl_corpus_document` | `relative_path`, complete `text` | Update status (destructive) |
-| `get_hfl_corpus_reference_preview` | reference `token` | Safe HTML preview |
-| `download_hfl_corpus_reference` | `token`, `destination` | Local path, byte count, and content type |
-| `download_hfl_corpus_reference_media` | `token`, `destination` | Downloaded media metadata |
-| `download_hfl_corpus_reference_thumbnail` | `token`, `destination` | Downloaded thumbnail metadata |
+| Tool | Description |
+| --- | --- |
+| `upload_hfl_corpus_attachments` | Attach multiple supporting files to an action or pin (remote write). |
+| `list_hfl_corpus_attachments` | List supporting files attached to a task. |
+| `download_hfl_corpus_attachment` | Download an input attachment (writes a local file). |
+| `delete_hfl_corpus_attachment` | Detach an input from future runs (remote write). Prior run files are retained. |
+| `create_hfl_corpus_action` | Create an action (writes remote state), with scheduled agent execution disabled. |
+| `list_hfl_corpus_actions` | List actions, up to 500 per page. |
+| `get_hfl_corpus_action` | Read an action and its current version. |
+| `update_hfl_corpus_action` | Edit, complete, or dismiss an action (writes remote state). |
+| `get_hfl_corpus_action_history` | Read immutable action revisions. |
+| `create_hfl_corpus_category` | Create a Memory Signal category (writes remote state). |
+| `list_hfl_corpus_categories` | List active and archived Memory Signal categories and the color palette. |
+| `get_hfl_corpus_category` | Read a Memory Signal category, including an archived category. |
+| `update_hfl_corpus_category` | Edit a category (writes remote state). |
+| `archive_hfl_corpus_category` | Archive a category and hide its pins, retaining history (writes remote state). |
+| `create_hfl_corpus_pin` | Pin dates (writes remote state). A prompt does not enable agent execution. |
+| `list_hfl_corpus_pins` | List date pins in active categories. |
+| `get_hfl_corpus_pin` | Read a date pin in an active category. |
+| `update_hfl_corpus_pin` | Edit a date pin (writes remote state); preserves its agent setting. |
+| `delete_hfl_corpus_pin` | Delete a date pin (destructive remote write). |
+| `create_hfl_corpus_entry` | Create a durable HFL entry. This writes Markdown and attempts an ES upsert. |
+| `preview_hfl_corpus_entry` | Preview a rendered HFL entry without saving it. |
+| `upload_hfl_corpus_entry` | Create a durable HFL entry and upload attachments. This writes remote state. |
+| `list_hfl_corpus_documents` | Search and paginate canonical HFL documents. |
+| `get_hfl_corpus_tree` | Get a shallow directory tree from the canonical corpus. |
+| `list_hfl_corpus_matches` | List matching entries within one HFL Markdown document. |
+| `get_hfl_corpus_document` | Get one HFL document with parsed entries and safe references. |
+| `update_hfl_corpus_document` | Replace an HFL document. Destructive: overwrites canonical Markdown text. |
+| `get_hfl_corpus_reference_preview` | Get a safe HTML preview for a text or Markdown reference. |
+| `download_hfl_corpus_reference` | Download a reference to a local path. This writes a local file. |
+| `download_hfl_corpus_reference_media` | Download reference image/video content. This writes a local file. |
+| `download_hfl_corpus_reference_thumbnail` | Download a reference thumbnail. This writes a local file. |
+| `list_hfl_corpus_entities` | Search the entity directory with explicit pagination (limit 1–10000). |
+| `get_hfl_corpus_entity_graph` | Read the entity graph; limit is 0–1000, with 0 requesting all nodes. |
+| `get_hfl_corpus_entity_entry` | Read an entity-linked entry preview and its safe references. |
+| `get_hfl_corpus_entity_status` | Read entity enrichment state and legacy merge decisions. |
+| `update_hfl_corpus_entity_profile` | Replace entity profile fields; omitted lists are cleared. Destructive: writes remote state. |
+| `create_hfl_corpus_entity_backfill` | Request entity enrichment/backfill on the canonical host. Destructive: writes remote state. |
+| `create_hfl_corpus_entity_legacy_merge` | Legacy pair merge; prefer the preview-token bulk merge flow. Destructive: writes remote state. |
+| `update_hfl_corpus_entity_legacy_undo` | Undo a legacy pair-merge decision. Destructive: writes remote state. |
+| `create_hfl_corpus_entity_export` | Write the canonical host’s configured Obsidian export; requires HARQIS_OBSIDIAN_VAULT. Destructive: writes remote state. |
+| `analyze_hfl_corpus_entity_selection` | Preview a same-type entity merge and obtain a short-lived preview token. Read-only. |
+| `create_hfl_corpus_entity_merge` | Commit a reviewed entity merge; reuse the UUID and identical payload on retry. Destructive: writes remote state. |
+| `update_hfl_corpus_entity_unmerge` | Reverse a bulk merge, preserving audit history; UUID is required for idempotency. Destructive: writes remote state. |
+| `get_hfl_corpus_entity_operation` | Read a committed merge/unmerge result and audit delivery state. |
+| `get_hfl_corpus_entity_audit` | Read immutable entity merge/unmerge audit events. |
+| `get_hfl_corpus_entity_matching` | Read matching scan status and candidate suggestions. |
+| `create_hfl_corpus_entity_matching_scan` | Request a matching scan; this may schedule background work. Destructive: writes remote state. |
+| `update_hfl_corpus_entity_matching_dismiss` | Dismiss a matching suggestion. Destructive: writes remote state. |
+| `list_hfl_corpus_graph_views` | List saved graph views and the selected view. |
+| `create_hfl_corpus_graph_view` | Create and select a named graph view. Destructive: writes remote state. |
+| `update_hfl_corpus_graph_view` | Replace a saved graph view using its latest revision. Destructive: writes remote state. |
+| `update_hfl_corpus_graph_view_selection` | Select an existing saved graph view. Destructive: writes remote state. |
+| `delete_hfl_corpus_graph_view` | Delete a graph view with an optimistic revision check. Destructive: writes remote state. |
+| `get_hfl_corpus_timeline_source` | Validate and read the title/date of unprotected entry evidence. |
+| `get_hfl_corpus_timeline_evidence` | Return the validated evidence navigation link without following its redirect. |
+| `list_hfl_corpus_timeline_items` | List up to 500 scoped agenda items with board positions and due-state grouping. |
+| `update_hfl_corpus_timeline_order` | Reorder a status column with item version checks. Destructive: writes remote state. |
+| `create_hfl_corpus_timeline_item` | Create/adopt an agenda item. May configure agent execution if explicitly requested. Destructive: writes remote state. |
+| `update_hfl_corpus_timeline_item` | Update an agenda item using its latest version. Can alter scheduling; completion writes a receipt. Destructive: writes remote state. |
+| `get_hfl_corpus_timeline_item` | Read the current agenda item and version. |
+| `get_hfl_corpus_timeline_history` | Read immutable agenda revisions and rendered completion notes. |
+| `get_hfl_corpus_timeline_markers` | Read scoped action date markers and aggregate statuses. |
+| `get_hfl_corpus_timeline_period` | Read agenda items, suggestions, receipts and exploration state for 1–31 inclusive days. |
+| `update_hfl_corpus_timeline_suggestion_dismiss` | Dismiss an idea/suggestion. Destructive: writes remote state. |
+| `create_hfl_corpus_timeline_exploration` | Schedule AI exploration for 1–31 days ending today or earlier; may incur model usage. Destructive: writes remote state. |
+| `get_hfl_corpus_ideas_snapshot` | Read ideas, maps, links, goals and visible graph context. |
+| `get_hfl_corpus_connection_availability` | Read available object connection choices. |
+| `get_hfl_corpus_action_connections` | Read an action’s graph connections. |
+| `get_hfl_corpus_date_connections` | Read a date pin’s graph connections. |
+| `list_hfl_corpus_boards` | Read board metadata, goals and the color palette without scanning the corpus. |
+| `update_hfl_corpus_board_order` | Persist board ordering. Destructive: writes remote state. |
+| `update_hfl_corpus_goal_order` | Persist goal ordering. Destructive: writes remote state. |
+| `get_hfl_corpus_goal_options` | List visible ideas/actions that can be linked to goals. |
+| `get_hfl_corpus_map` | Read a mind map and current version. |
+| `get_hfl_corpus_map_graph` | Read the visible graph projection for map members. |
+| `list_hfl_corpus_map_attach_options` | Search attachable objects; returns 50 per page. |
+| `get_hfl_corpus_rendered_markdown` | Render up to 60000 characters of Markdown using the frontend renderer. Read-only. |
+| `get_hfl_corpus_idea` | Read an idea, version and rendered content. |
+| `create_hfl_corpus_idea` | Create an idea; reuse the request UUID for stable identity. Destructive: writes remote state. |
+| `update_hfl_corpus_idea` | Edit/dismiss/restore an idea using the latest version. Destructive: writes remote state. |
+| `create_hfl_corpus_topic` | Create a named graph topic and initial entity profile; URLs are not topic names. Destructive: writes remote state. |
+| `create_hfl_corpus_link` | Create a durable relation between visible graph nodes. Destructive: writes remote state. |
+| `delete_hfl_corpus_link` | Delete a durable relation between visible graph nodes. Destructive: writes remote state. |
+| `create_hfl_corpus_map` | Create a versioned mind map; UUID determines its stable identity. Destructive: writes remote state. |
+| `update_hfl_corpus_map` | Update map membership/content/layout with an optimistic version check. Destructive: writes remote state. |
+| `delete_hfl_corpus_map` | Delete a map using its latest version; shared objects remain independently owned. Destructive: writes remote state. |
+| `create_hfl_corpus_map_promotion` | Promote a map draft into a durable idea. Destructive: writes remote state. |
+| `get_hfl_corpus_goal` | Read a goal with its current version. |
+| `create_hfl_corpus_map_link_promotion` | Promote a map connection to a durable graph relation. Destructive: writes remote state. |
+| `update_hfl_corpus_map_connection` | Edit a board connection using its current board/edge revision. Destructive: writes remote state. |
+| `create_hfl_corpus_goal` | Create a durable goal with validated idea/action links. Destructive: writes remote state. |
+| `update_hfl_corpus_goal` | Update a goal with optimistic concurrency and validated milestone links. Destructive: writes remote state. |
+| `get_hfl_corpus_idea_conversion` | Preview conversion of an idea or checklist item into an action. |
+| `create_hfl_corpus_idea_conversion` | Convert an idea to an action, clone selected attachments, and mark it adopted. Agent execution remains disabled. Destructive: writes remote state. |
+| `list_hfl_corpus_idea_attachments` | List an idea’s supporting files. |
+| `download_hfl_corpus_idea_attachment` | Download a supporting file to a local path; replaces an existing destination. Destructive: writes a local file. |
+| `upload_hfl_corpus_idea_attachments` | Attach supporting files to an idea; at most 50 files of 500 MB each. Destructive: writes remote state. |
+| `delete_hfl_corpus_idea_attachment` | Detach a supporting file from an idea. Destructive: writes remote state. |
+| `create_hfl_corpus_map_proposal` | Accept a proposed thought into a map with at most five existing parents. Destructive: writes remote state. |
+| `list_hfl_corpus_day_matches` | Read matching entries across documents for one YYYY-MM-DD activity date; maximum 20 per page. |
 
-**Example prompts:**
+*"Find the entities matching this name and preview a same-type merge."*
 
-- *"Add this debugging lesson to HFL and tell me whether Elasticsearch indexed it."*
-- *"Search the Activity Corpus for entries tagged #workers from August 2026."*
-- *"Preview an HFL entry for this moment without saving it."*
+*"Create a mind map for this project and attach the supporting notes to its idea."*
 
----
+*"Show my agenda for this week, including version numbers before I edit it."*
 
 ### Perplexity (`apps/perplexity/mcp.py`)
 

@@ -320,9 +320,17 @@ def test_attachment_service_and_mcp_transport(management, monkeypatch, tmp_path)
     def service(config):
         instance = ApiServiceHflCorpusManagement(config, api_url='http://testserver', api_key='test-token')
         def request(method, path, **kwargs):
+            import requests
+            kwargs.pop('stream', None)
             response = client.request(method, '/api/hfl/' + path, **kwargs)
             response.raise_for_status()
-            return response
+            # Preserve the requests response protocol used by streaming downloads.
+            result = requests.Response()
+            result.status_code = response.status_code
+            result.headers.update(response.headers)
+            result._content = response.content
+            result._content_consumed = True
+            return result
         monkeypatch.setattr(instance, '_raw_request', request)
         return instance
     monkeypatch.setattr(adapter, 'ApiServiceHflCorpusManagement', service)
