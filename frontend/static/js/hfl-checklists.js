@@ -49,8 +49,8 @@ window.HflChecklists = class {
       const sorting = document.createElement('select'); sorting.setAttribute('aria-label', 'Sort ' + list.title);
       for (const [value, label] of [['','Sort items'],['asc','A–Z'],['desc','Z–A']]) { const option = document.createElement('option'); option.value = value; option.textContent = label; sorting.append(option); }
       sorting.onchange = () => { if (!sorting.value) return; const direction = sorting.value === 'asc' ? 1 : -1; list.items.sort((a,b) => direction * a.text.localeCompare(b.text, undefined, {sensitivity:'base'})); this.render(); };
-      const tools = document.createElement('div'); tools.className = 'checklist-tools'; tools.append(sorting, progress);
-      box.append(header, coverLabel, tools);
+      const tools = document.createElement('div'); tools.className = 'checklist-tools'; tools.append(coverLabel, sorting);
+      box.append(header, tools, progress);
       for (const [i, item] of list.items.entries()) {
         const row = document.createElement('div'); row.className = 'idea-check-row'; row.dataset.itemId = item.id;
         const check = document.createElement('input'); check.type = 'checkbox'; check.checked = item.done; check.setAttribute('aria-label', 'Complete ' + item.text);
