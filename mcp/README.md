@@ -697,7 +697,55 @@ profile authorization, and audit behavior.
 
 ### Restricting the app surface per node (`MCP_ENABLED_APPS`)
 
-By default every app in the shared `APP_CATALOG` is registered. For node-specific deployments
+`[harqis-server.env_vars]` in `machines.toml` includes `hfl_corpus` alongside
+`memory` (recall) and the host's other integrations. `machines.local.toml` can
+override this list; its value must also include `hfl_corpus` when deploying the
+canonical frontend tools. Direct `mcp/server.py` and `scripts/launch.py mcp`
+launches both load `apps.env` followed by machine-specific URLs and credentials
+before importing app configuration. An explicitly supplied client
+`MCP_ENABLED_APPS` filter takes precedence over the machine default.
+
+### Remote operations on the canonical instance
+
+There are two supported connection paths:
+
+1. Run MCP locally with `HFL_CORPUS_API_URL` pointing to the canonical frontend
+   or standalone HFL API and `HFL_CORPUS_API_TOKEN` available in private host
+   configuration. Tool requests, including authorized writes, go to that API.
+   Upload source files and download destinations are local to the MCP process.
+2. Run MCP on the server over SSH stdio. The SSH user needs access to the
+   checkout and its virtual environment; API credentials stay on the server.
+   Files referenced by tools are then paths on the server.
+
+Example generic MCP client configuration (replace the SSH destination and
+checkout path with your configured host):
+
+```json
+{
+  "mcpServers": {
+    "harqis-server-hfl": {
+      "command": "ssh",
+      "args": [
+        "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
+        "user@harqis-server",
+        "cd /absolute/path/to/harqis-work && MCP_ENABLED_APPS=hfl_corpus .venv/bin/python mcp/server.py"
+      ]
+    }
+  }
+}
+```
+
+This uses the existing SSH connection and stdio protocol; there is no MCP HTTP
+listener to deploy. The client must retain the environment needed by its SSH
+authentication (for example `SSH_AUTH_SOCK` when using an agent). First verify `tools/list` and a read such as
+`list_hfl_corpus_categories`. After deploying the expanded adapter, expect 100
+HFL tools. Reconnect existing clients after code or environment changes: a
+running MCP process retains its loaded configuration and registered tool list.
+
+### Per-client app filtering
+
+Without an app filter every app in the shared `APP_CATALOG` is registered. Machine configuration
+may supply a default filter, as `harqis-server` does. For node-specific deployments
 (e.g. a worker that should only expose Trello + Discord) set the comma-separated env var
 `MCP_ENABLED_APPS` to the case-insensitive labels you want to keep:
 
@@ -708,8 +756,8 @@ python mcp/server.py
 ```
 
 Values may use the catalog key or label (`trello`, `Discord`, `Knowledge / RAG`, etc.).
-Whitespace is trimmed; matching is case-insensitive. Unset or empty preserves the legacy
-"register everything" behavior.
+Whitespace is trimmed; matching is case-insensitive. An explicitly empty value registers
+everything; an unset value uses the machine default, or everything if no default exists.
 
 ---
 

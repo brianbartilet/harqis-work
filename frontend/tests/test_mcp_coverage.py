@@ -196,7 +196,12 @@ def test_every_new_service_uses_reviewed_http_contract(row, recording_api, tmp_p
 
 
 @pytest.fixture
-def canonical_api():
+def canonical_api(monkeypatch, tmp_path):
+    from modules.hfl_corpus import corpus
+    # Visibility checks need a real corpus, independent of host data or Docker logs.
+    corpus_root = tmp_path / 'corpus'
+    corpus_root.mkdir()
+    monkeypatch.setattr(corpus, 'resolve_corpus_root', lambda: corpus_root)
     from hfl_api import app
     # No lifespan: avoids corpus prewarming against a configured live directory.
     client = TestClient(app)

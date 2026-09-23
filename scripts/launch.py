@@ -33,6 +33,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Mapping
+from contextlib import redirect_stdout
 from pathlib import Path
 
 
@@ -356,10 +357,22 @@ def cmd_hfl_api(args: argparse.Namespace) -> None:
     _exec(_python(), str(REPO_ROOT / "frontend" / "hfl_api.py"))
 
 
-def cmd_mcp(args: argparse.Namespace) -> None:
+def setup_mcp_env() -> None:
+    """Load the machine API credentials/topology, retaining an explicit client filter."""
+    enabled_apps = os.environ.get("MCP_ENABLED_APPS")
     setup_env()
-    print("[launch] mcp server", flush=True)
-    _exec(_python(), str(REPO_ROOT / "mcp" / "server.py"))
+    if enabled_apps is not None:
+        os.environ["MCP_ENABLED_APPS"] = enabled_apps
+
+
+def cmd_mcp(args: argparse.Namespace) -> None:
+    # MCP owns stdout from the moment the client starts this command.
+    with redirect_stdout(sys.stderr):
+        setup_mcp_env()
+    print("[launch] mcp server", file=sys.stderr, flush=True)
+    # pythonw is appropriate for detached daemons, but MCP needs stdio pipes.
+    interpreter = str(REPO_ROOT / ".venv" / "Scripts" / "python.exe") if os.name == "nt" else _python()
+    _exec(interpreter, str(REPO_ROOT / "mcp" / "server.py"))
 
 
 def cmd_kanban(args: argparse.Namespace) -> None:
