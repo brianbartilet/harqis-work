@@ -296,10 +296,9 @@
 .editor-close-question h2 { font-size:1.2rem; margin-bottom:12px; }
 
 /* Compact checklist controls and opaque sticky navigation. */
-.checklist-tools { display:flex; align-items:center; gap:16px; margin:10px 0; }
+.checklist-tools { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:10px 0; }
 .idea-checklist .checklist-tools select { width:150px; flex:0 0 150px; margin:0; }
-.checklist-tools .checklist-progress { flex:1; min-width:0; margin:0; }
-.idea-checklist .checklist-cover-toggle { padding:10px 0 4px 8px; margin:0; }
+.idea-checklist .checklist-cover-toggle { padding:4px 0 4px 8px; margin:0; }
 .kg-boards .board-toolbar { top:-14px; margin:-14px -14px 8px; padding:14px; background:#0c1728; isolation:isolate; }
 .editor-close-question > p { margin:0; padding:8px 0 16px; line-height:1.6; }
 .editor-close-question .agenda-dialog-footer { padding:12px 0 0; gap:12px; flex-wrap:wrap; }
