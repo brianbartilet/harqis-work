@@ -2,12 +2,10 @@
   <a href="{{ module.route }}" {% if active_module == 'hfl_corpus' %}aria-current="page"{% endif %}>Activity</a>
   {% if corpus_entities_enabled %}
   <details class="activity-navigation-menu">
-    <summary aria-label="Activity navigation" title="Activity navigation">
-      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </summary>
+    <summary hidden>Activity navigation</summary>
     <nav class="activity-navigation-options" aria-label="Activity views">
-      <a href="/hfl-corpus/graph" {% if request.url.path == '/hfl-corpus/graph' %}aria-current="page"{% endif %}>Activity graph</a>
-      <a href="/hfl-corpus/actions{% if active_module == 'hfl_corpus' and request.url.query %}?{{ request.url.query }}{% endif %}" data-followups-open {% if request.url.path == '/hfl-corpus/actions' %}aria-current="page"{% endif %}>Actions board</a>
+      <a href="/hfl-corpus/graph" {% if request.url.path == '/hfl-corpus/graph' %}aria-current="page"{% endif %}>Activity Graph</a>
+      <a href="/hfl-corpus/actions{% if active_module == 'hfl_corpus' and request.url.query %}?{{ request.url.query }}{% endif %}" data-followups-open {% if request.url.path == '/hfl-corpus/actions' %}aria-current="page"{% endif %}>Actions Board</a>
     </nav>
   </details>
   {% endif %}

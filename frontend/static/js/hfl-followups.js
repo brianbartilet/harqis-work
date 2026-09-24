@@ -165,8 +165,9 @@
     if(failure){error.textContent=failure+' The board has been reloaded.';error.hidden=false;}
   }
   function open(){if(!page){location.assign('/hfl-corpus/actions'+location.search);return;}context();refresh(true);clearInterval(timer);timer=setInterval(()=>{if(!document.hidden&&!document.querySelector('dialog[open]:not(#followups-board)')){refresh();actions.load();}},5000);}
-  const opener=document.querySelector('[data-followups-open]');
-  if(opener)opener.onclick=event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();document.querySelector('.corpus-tools').open=false;open();};
+  document.querySelectorAll('[data-followups-open]').forEach(opener=>{
+    opener.onclick=event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();opener.closest('details')?.removeAttribute('open');open();};
+  });
   $('[data-board-close]').onclick=()=>{if(page){const url=new URL(location.href);url.pathname='/hfl-corpus';url.searchParams.delete('edit');url.searchParams.delete('edit_kind');url.searchParams.delete('all');location.assign(url);}else dialog.close();};
   const createMenu=$('[data-board-create-menu]');
   $('[data-board-create-action]').onclick=()=>{createMenu.open=false;actions.openEditor();};
@@ -174,7 +175,7 @@
   $('[data-board-refresh]').onclick=()=>refresh(true);
   document.addEventListener('click',event=>{if(!createMenu.contains(event.target))createMenu.open=false;},{signal:listeners.signal});
   createMenu.addEventListener('keydown',event=>{if(event.key==='Escape'){createMenu.open=false;createMenu.querySelector('summary').focus();}});
-  const workspaceFilter=node('details',null,'board-workspace-filter'),workspaceTitle=node('summary','Workspaces'),workspacePanel=node('div',null,'workspace-menu-panel');
+  const workspaceFilter=node('details',null,'board-workspace-filter'),workspaceTitle=node('summary','Workspace'),workspacePanel=node('div',null,'workspace-menu-panel');
   workspacePanel.append(node('p','Focus on'));workspaceFilter.append(workspaceTitle,workspacePanel);$('[data-board-context]').after(workspaceFilter);
   const params=new URLSearchParams(location.search),selectedWorkspaces=(params.get('views')||params.get('workspace')||params.get('workspace_ids')||'').split(',').filter(Boolean);
   all.checked=params.get('all')==='1';

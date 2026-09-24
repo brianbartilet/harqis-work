@@ -117,7 +117,7 @@
 .workspace-menu-panel select.workspace-select { height:40px; min-height:40px; margin:.375rem 0; }
 .workspace-menu-panel .workspace-menu-actions { margin-top:.5rem; }
 .workspace-menu-panel .workspace-menu-actions button,
-.workspace-menu-panel .workspace-share-actions button { min-height:40px; padding:.5rem; }
+.workspace-menu-panel .workspace-share-actions button { box-sizing:border-box; height:36px; min-height:36px; padding:.375rem .5rem; }
 .workspace-menu-panel .workspace-share-actions { margin-top:.75rem; }
 .workspace-menu-panel .workspace-help-button { min-width:36px; min-height:36px; }
 .workspace-menu-panel [data-workspace-status] { margin-top:.625rem; }
@@ -240,6 +240,7 @@
 .workspace-view-picker { position:relative; margin:.4rem 0; }
 .workspace-view-picker > summary { display:flex; align-items:center; min-height:40px; padding:.5rem 2rem .5rem .65rem; border:1px solid #475569; border-radius:.5rem; background:#020617; cursor:pointer; list-style:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2367e8f9' stroke-width='1.75'%3E%3Cpath d='m2.5 4.5 3.5 3 3.5-3'/%3E%3C/svg%3E"); background-position:right .85rem center; background-repeat:no-repeat; background-size:.8rem; }
 .workspace-view-picker > summary::-webkit-details-marker { display:none; }
+.workspace-menu-panel .workspace-view-picker > summary { box-sizing:border-box; height:36px; min-height:36px; padding-top:0; padding-bottom:0; }
 [data-view-picker-caption] { overflow-wrap:anywhere; }
 .workspace-view-options { margin-top:.35rem; padding:.35rem; background:#020617; border:1px solid #475569; border-radius:.5rem; }
 [data-view-choices] { max-height:35dvh; overflow:auto; }

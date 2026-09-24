@@ -30,37 +30,44 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
             page.goto('http://navigation.test/home')
             nav = page.locator('nav[aria-label="Primary navigation"]:visible')
             assert nav.get_by_role('link', name='Activity', exact=True).get_attribute('href') == '/hfl-corpus'
-            toggle = nav.locator('.activity-navigation-menu > summary')
+            toggle = nav.get_by_role('link', name='Activity', exact=True)
             menu = nav.locator('.activity-navigation-options')
+            nav.get_by_role('link', name='Activity', exact=True).hover()
+            playwright.expect(menu).to_be_visible()
+            menu.get_by_role('link', name='Actions Board').hover()
+            page.wait_for_timeout(350)
+            playwright.expect(menu).to_be_visible()
+            page.get_by_role('link', name='HARQIS home').hover()
+            playwright.expect(menu).not_to_be_visible()
             toggle.focus()
             toggle.press('ArrowDown')
             playwright.expect(menu).to_be_visible()
-            playwright.expect(menu.get_by_role('link', name='Activity graph')).to_be_focused()
-            assert menu.get_by_role('link', name='Actions board').get_attribute('href') == '/hfl-corpus/actions'
+            playwright.expect(menu.get_by_role('link', name='Activity Graph')).to_be_focused()
+            assert menu.get_by_role('link', name='Actions Board').get_attribute('href') == '/hfl-corpus/actions'
             bounds = menu.bounding_box()
             assert bounds['x'] >= 0 and bounds['x'] + bounds['width'] <= width
             # Detect clipping by the horizontally scrolling mobile navigation.
-            assert menu.get_by_role('link', name='Actions board').evaluate(
+            assert menu.get_by_role('link', name='Actions Board').evaluate(
                 '(el) => { const r = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }')
             page.screenshot(path=str(tmp_path / f'activity-navigation-{width}.png'))
-            menu.get_by_role('link', name='Activity graph').press('Escape')
+            menu.get_by_role('link', name='Activity Graph').press('Escape')
             playwright.expect(menu).not_to_be_visible()
             playwright.expect(toggle).to_be_focused()
-            toggle.click()
+            toggle.press('ArrowDown')
             playwright.expect(menu).to_be_visible()
             page.get_by_role('link', name='HARQIS home').click()
             playwright.expect(menu).not_to_be_visible()
             assert not errors
-            for label, destination in [('Activity graph', '/hfl-corpus/graph'), ('Actions board', '/hfl-corpus/actions')]:
+            for label, destination in [('Activity Graph', '/hfl-corpus/graph'), ('Actions Board', '/hfl-corpus/actions')]:
                 page.route('http://navigation.test' + destination + '**',
                            lambda route: route.fulfill(content_type='text/html', body='<h1>Destination</h1>'))
                 page.goto('http://navigation.test/hfl-corpus?source=notes&q=launch')
                 assert page.locator('.corpus-tools').count() == 0
-                toggle.click()
+                toggle.press('ArrowDown')
                 menu.get_by_role('link', name=label).click()
                 page.wait_for_url('**' + destination + '**')
                 query = parse_qs(urlsplit(page.url).query)
-                if label == 'Activity graph':
+                if label == 'Activity Graph':
                     query = parse_qs(query['context'][0])
                 assert query['source'] == ['notes']
                 assert query['q'] == ['launch']

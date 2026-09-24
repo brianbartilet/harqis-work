@@ -17,10 +17,18 @@ def test_module_shell_uses_versioned_self_hosted_assets(authenticated_client):
         assert external_origin not in response.text
 
     asset_urls = re.findall(
-        r'(?:href|src)="(/static/(?:css|vendor)/[^"?]+\?v=[0-9a-f]{12})"',
+        r'(?:href|src)="(/static/(?:css|vendor|js)/[^"?]+\?v=[0-9a-f]{12})"',
         response.text,
     )
-    assert len(asset_urls) == 4
+    asset_paths = {url.split('?')[0] for url in asset_urls}
+    assert {
+        '/static/css/app.min.css',
+        '/static/vendor/htmx-1.9.12.min.js',
+        '/static/vendor/alpinejs-3.14.1.min.js',
+        '/static/vendor/sortablejs-1.15.2.min.js',
+        '/static/css/activity-navigation.css',
+        '/static/js/activity-navigation.js',
+    } <= asset_paths
 
     for asset_url in asset_urls:
         asset_response = authenticated_client.get(asset_url)

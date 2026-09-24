@@ -214,10 +214,6 @@
       <button type="button" class="corpus-tool-item" onclick="window.dispatchEvent(new CustomEvent('hfl:create-idea'))">Idea</button>
     </div></details>
     {% if corpus_entities_enabled %}
-    <details class="corpus-tools"><summary class="corpus-header-link">View<svg class="tools-caret" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div>
-      <a href="/hfl-corpus/graph" class="corpus-tool-item">Activity Graph</a>
-      <a href="/hfl-corpus/actions{% if request.url.query %}?{{ request.url.query }}{% endif %}" data-followups-open class="corpus-tool-item">Actions Board</a>
-    </div></details>
     {% include "modules/hfl_corpus/partials/followups_board.html" %}
     {% endif %}
     {% include "modules/hfl_corpus/partials/workspace_views.html" %}

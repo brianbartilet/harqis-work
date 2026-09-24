@@ -4,6 +4,7 @@
   <title>{% block title %}Activity{% endblock %}</title>
   <link rel="stylesheet" href="{{ static_asset('css/app.min.css') }}">
   <link rel="stylesheet" href="{{ static_asset('css/activity-modals.css') }}">
+  <link rel="stylesheet" href="{{ static_asset('css/activity-header-sizing.css') }}">
   {% block head %}{% endblock %}
 </head><body class="activity-modal-page bg-slate-950 text-slate-100">
 {% if request.query_params.get('embed') != '1' and request.url.path.endswith('/entities') %}<dialog id="activity-standalone" class="activity-modal activity-modal-page {% block modal_class %}{% endblock %}">{% endif %}
