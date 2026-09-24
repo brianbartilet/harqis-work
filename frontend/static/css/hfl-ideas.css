@@ -303,12 +303,16 @@
 .kg-boards .board-toolbar { top:-14px; margin:-14px -14px 8px; padding:14px; background:#0c1728; isolation:isolate; }
 .editor-close-question > p { margin:0; padding:8px 0 16px; line-height:1.6; }
 .editor-close-question .agenda-dialog-footer { padding:12px 0 0; gap:12px; flex-wrap:wrap; }
-.agenda-dialog.checklist-move-dialog { padding:24px; width:min(480px,calc(100vw - 40px)); }
-.checklist-move-dialog h2 { margin:0 0 12px; }
-.checklist-move-dialog p { margin:0 0 16px; overflow-wrap:anywhere; }
-.checklist-move-dialog select { width:100%; margin-bottom:20px; padding:10px 12px; border:1px solid #475569; border-radius:8px; background:#020817; color:#e2e8f0; color-scheme:dark; }
+.agenda-dialog.checklist-move-dialog { box-sizing:border-box; padding:0; width:min(520px,calc(100vw - 32px)); max-height:90dvh; overflow:auto; }
+.checklist-move-dialog .agenda-dialog-header { padding:18px 20px; gap:16px; }
+.checklist-move-dialog h2 { margin:0; font-size:1.05rem; font-weight:650; }
+.checklist-move-body { padding:20px; }
+.checklist-move-dialog p { margin:0 0 18px; color:#94a3b8; font-size:.85rem; line-height:1.5; overflow-wrap:anywhere; }
+.checklist-move-body label { display:block; color:#94a3b8; font-size:.75rem; font-weight:600; }
+.checklist-move-dialog select { box-sizing:border-box; display:block; width:100%; min-width:0; margin:8px 0 0; padding:12px 40px 12px 14px; border:1px solid #475569; border-radius:8px; background:#020817 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2367e8f9' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 14px center; color:#e2e8f0; color-scheme:dark; appearance:none; font:inherit; font-size:.875rem; font-weight:400; text-overflow:ellipsis; }
 .checklist-move-dialog option { background:#0f172a; color:#e2e8f0; }
-.checklist-move-actions { display:flex; justify-content:flex-end; gap:8px; }
+.checklist-move-actions { display:flex; justify-content:flex-end; gap:10px; padding:16px 20px; border-top:1px solid #1e293b; }
+.checklist-move-actions button { min-width:88px; min-height:40px; margin:0; }
 .checklist-list-actions, .checklist-sort-actions { display:flex; align-items:center; gap:2px; flex:0 0 auto; }
 .idea-checklist-header .checklist-list-actions button, .checklist-sort-actions button { display:grid; place-items:center; flex:0 0 28px; width:28px; height:28px; min-height:0; margin:0; padding:5px; border:0; border-radius:50%; background:transparent; }
 .checklist-list-actions button:hover, .checklist-sort-actions button:hover { background:#334155; }

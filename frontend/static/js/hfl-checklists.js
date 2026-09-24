@@ -107,6 +107,10 @@ window.HflChecklists = class {
         const moveButton = this.iconButton('move', () => {
           const modal = document.createElement('dialog'); modal.className = 'agenda-dialog checklist-move-dialog';
           const heading = document.createElement('h2'); heading.textContent = 'Move checklist item';
+          heading.id = 'checklist-move-' + crypto.randomUUID(); modal.setAttribute('aria-labelledby', heading.id);
+          const header = document.createElement('header'); header.className = 'agenda-dialog-header';
+          header.append(heading, this.button('×', () => modal.close(), 'Close move checklist item'));
+          const body = document.createElement('div'); body.className = 'checklist-move-body';
           const mapping = document.createElement('p');
           mapping.textContent = 'From ' + list.title;
           const picker = document.createElement('select'); picker.setAttribute('aria-label', 'Move item to checklist');
@@ -114,8 +118,10 @@ window.HflChecklists = class {
           for (const target of this.value.filter(l => l !== list)) { const option = document.createElement('option'); option.value = target.id; option.textContent = 'to ' + target.title; picker.append(option); }
           const confirm = this.button('Confirm', () => { const target = this.value.find(l => l.id === picker.value && l !== list); if (!target) return; list.items = list.items.filter(x => x.id !== item.id); target.items.push(item); modal.close(); this.render(); });
           confirm.disabled = true; picker.onchange = () => { confirm.disabled = !picker.value; };
+          confirm.className = 'agenda-primary';
+          const destination = document.createElement('label'); destination.textContent = 'Destination checklist'; destination.append(picker);
           const footer = document.createElement('div'); footer.className = 'checklist-move-actions'; footer.append(confirm, this.button('Cancel', () => modal.close()));
-          modal.append(heading, mapping, picker, footer);
+          body.append(mapping, destination); modal.append(header, body, footer);
           modal.addEventListener('click', event => { const rect=modal.getBoundingClientRect(); if(event.target===modal && (event.clientX<rect.left || event.clientX>rect.right || event.clientY<rect.top || event.clientY>rect.bottom))modal.close(); });
           modal.addEventListener('close', () => modal.remove()); document.body.append(modal); modal.showModal(); picker.focus();
         }, 'Move item to another checklist'); moveButton.disabled = this.value.length < 2; actions.prepend(moveButton);
