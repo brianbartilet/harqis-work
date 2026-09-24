@@ -103,8 +103,11 @@
         const title=node('h3',item.title),management=node('div',null,'agenda-card-actions');
         const edit=node('button','Edit');edit.type='button';edit.onclick=()=>window.HflIdeas.editIdea(item.id);
         const dismiss=node('button','Dismiss');dismiss.type='button';dismiss.onclick=async()=>{dismiss.disabled=true;try{await window.HflIdeas.api('/objects/'+item.id,'PATCH',{version:item.version,status:'dismissed'});await refresh(true);}catch(e){error.textContent=e.message;error.hidden=false;dismiss.disabled=false;}};
-        const promote=node('button','Promote to an action','idea-promote-action');promote.type='button';promote.onclick=()=>window.HflIdeas.convert(item.id);
-        management.append(edit,dismiss);card.append(grip,clone,meta,title,management,promote);section.append(card);
+        const promote=node('button','Promote');promote.type='button';promote.onclick=()=>window.HflIdeas.convert(item.id);
+        management.append(edit,promote,dismiss);card.append(grip,clone,meta,title);
+        const description=window.HflObjectDescription(item)||item.recommendation||item.expected_outcome||'';
+        if(description.trim()){const body=node('div',description,'agenda-description idea-card-description markdown-body');card.append(body);window.HflChecklistMarkdown(body,description);}
+        card.append(management);section.append(card);
       }
       const overlay=node('div',null,'ideas-drawer-overlay'), backdrop=node('div',null,'ideas-drawer-backdrop');
       backdrop.onclick=()=>closeIdeasDrawer();

@@ -210,7 +210,7 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
         idea_card = page.locator('[data-idea-id="'+idea['id']+'"]')
         expect(idea_card.locator('.agenda-card-meta')).to_contain_text('Manual')
         expect(idea_card.get_by_role('button', name='Edit', exact=True)).to_be_visible()
-        expect(idea_card.get_by_role('button', name='Promote to an action')).to_be_visible()
+        expect(idea_card.get_by_role('button', name='Promote', exact=True)).to_be_visible()
         expect(page.locator('.ideas-drawer').get_by_role('button', name='New idea')).to_have_count(0)
         page.screenshot(path=str(tmp_path / ('ideas-drawer-' + str(width) + '.png')), full_page=True)
         idea_card.get_by_role('button', name='Dismiss', exact=True).click()

@@ -471,7 +471,7 @@ a checklist item's source. New manual corpus entries always include `#moments`.
 
 The bottom-left bulb opens an overlay drawer containing manual and generated
 ideas, excluding dismissed ideas. Click outside or press Escape to close it. Cards
-show their origin, Edit and Dismiss controls, and Promote to an action. The board's
+show their origin and description, with Edit, Promote, and Dismiss controls. The board's
 Create menu offers Entry, Action, and Idea. Actions and ideas can belong to several
 saved workspaces through a checkbox dropdown below supporting files. The board's
 rightmost Workspaces picker aggregates selected views, applies selections when
