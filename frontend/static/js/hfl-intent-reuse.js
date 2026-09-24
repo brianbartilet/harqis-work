@@ -25,7 +25,7 @@
   window.HflIntentFields = (form, item={}, kind='actionable') => {
     let root=form.querySelector('[data-intent-fields]');
     if(!root){root=element('section');root.dataset.intentFields='';}
-    form.querySelector('[data-object-attachments]').after(root);root.replaceChildren(element('p','Workspaces (optional)'));
+    form.querySelector('[data-object-attachments]').after(root);root.replaceChildren(element('p','Workspaces'));
     window.HflWorkspacePicker(root,{selected:item?.workspace_ids||[],empty:'No workspace',name:'workspace_ids'});
     let recurrence=form.querySelector('[data-recurrence-fields]');recurrence?.remove();
     if(kind!=='actionable')return;

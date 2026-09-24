@@ -91,6 +91,7 @@
 .idea-checklists-heading button { white-space:nowrap; }
 .object-checklists-section { border-top:1px solid #1e293b; margin:1.25rem 0; padding-top:1.25rem; }
 .idea-checklist { padding:0; border:0; margin:1rem 0 1.5rem; }
+.idea-checklist + .idea-checklist { border-top:1px solid #334155; border-radius:0; padding-top:1.5rem; }
 .idea-checklist-header input:not([type=checkbox]), .idea-dialog .agenda-form-body .idea-checklist-header input { background:transparent; border-color:transparent; font-weight:600; margin:0; padding:.4rem 0; }
 .idea-checklist-header input:focus { border-color:#475569; }
 .checklist-progress { display:flex; align-items:center; gap:.75rem; margin:.65rem 0; }
