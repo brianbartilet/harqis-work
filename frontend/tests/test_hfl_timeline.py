@@ -88,7 +88,7 @@ def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_clie
             form.locator('[name="title"]').fill('Manual action')
             if offset < 1:
                 page.locator('#followup-editor [data-agenda-close]').first.click()
-                page.get_by_role('button',name='Discard unsaved changes').click()
+                page.get_by_role('button',name='Discard').click()
                 assert agenda.list() == []
             else:
                 form.locator('.action-details > summary').click()
@@ -952,7 +952,10 @@ def test_followups_board_filter_drag_refresh_and_editor(agenda, authenticated_cl
             page.wait_for_timeout(350)
             page.mouse.up()
         playwright.expect(board.locator('[data-board-status]')).to_contain_text('0 actions')
-        board.locator('[data-board-all]').click()
+        board.locator('.board-workspace-filter > summary').click()
+        board.locator('.workspace-view-picker > summary').click()
+        board.get_by_role('button',name='All activity',exact=True).click()
+        board.locator('.board-workspace-filter > summary').click()
         playwright.expect(board.locator('[data-board-status]')).to_contain_text('1 action')
         card=board.locator('[data-followup-id]')
         playwright.expect(card.locator('.action-source')).to_have_text('manual-entry')
@@ -980,7 +983,7 @@ def test_followups_board_filter_drag_refresh_and_editor(agenda, authenticated_cl
         if width==1440:
             page.screenshot(path=str(tmp_path/'followups-board.png'))
             context_box=board.locator('[data-board-context]').bounding_box()
-            toggle_box=board.locator('[data-board-all]').bounding_box()
+            toggle_box=board.locator('.board-workspace-filter > summary').bounding_box()
             assert abs((context_box['y']+context_box['height']/2)-(toggle_box['y']+toggle_box['height']/2)) < 3
         current=agenda.get(item['id'])
         agenda.update(item['id'],{'version':current['version'],'status':'done','completion_note':'## Saved report\n\n| Release | Bugs |\n| --- | --- |\n| R1 | **12** |'},actor='agent:external')
@@ -1016,7 +1019,7 @@ def test_followups_board_filter_drag_refresh_and_editor(agenda, authenticated_cl
         # A new page must recover the server order, not a DOM/local-storage order.
         page.reload()
         assert '/hfl-corpus/actions' in page.url
-        playwright.expect(board.locator('[data-board-all]')).to_have_attribute('aria-checked', 'true')
+        playwright.expect(board.locator('[data-board-context]')).to_have_text('All activity')
         playwright.expect(lane.locator('[data-followup-id]').first).to_have_attribute('data-followup-id',second['id'])
         assert not errors
         browser.close()

@@ -140,7 +140,28 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
                 content=r.post_data_buffer, headers={'content-type': r.headers.get('content-type', 'application/json')})
             route.fulfill(status=response.status_code, body=response.content, headers={'content-type':response.headers.get('content-type', 'text/html')})
         page.route('https://reuse.test/**', respond)
+        page.route('https://reuse.test/hfl-corpus/workspace-views', lambda route: route.fulfill(json={'views': [
+            {'id':'work','name':'Work','color':'#f59e0b','state':{}},
+            {'id':'home','name':'Home','color':'#3b82f6','state':{}},
+        ]}))
         page.goto('https://reuse.test/hfl-corpus/actions')
+        expect(page.locator('[data-board-all]')).to_have_count(0)
+        page.locator('.board-workspace-filter > summary').click()
+        page.locator('.board-workspace-filter .workspace-view-picker > summary').click()
+        page.locator('.board-workspace-filter').get_by_label('Work', exact=True).check()
+        page.locator('.board-workspace-filter').get_by_label('Home', exact=True).check()
+        assert 'views=' not in page.url
+        page.locator('.board-workspace-filter .workspace-view-picker > summary').click()
+        expect(page.locator('[data-board-context]')).to_have_text('Work + Home')
+        page.locator('.board-workspace-filter .workspace-view-picker > summary').click()
+        page.locator('.board-workspace-filter').get_by_role('button', name='All activity', exact=True).click()
+        expect(page.locator('[data-board-context]')).to_have_text('All activity')
+        page.locator('.board-workspace-filter > summary').click()
+        page.locator('[data-board-create-menu] > summary').click()
+        expect(page.locator('[data-board-create-menu]').get_by_role('link', name='Entry')).to_be_visible()
+        expect(page.locator('[data-board-create-menu]').get_by_role('button', name='Idea', exact=True)).to_be_visible()
+        page.locator('[data-board-create-menu] > summary').click()
+
         lanes_before = page.locator('[data-board-lanes]').bounding_box()
         page.locator('.ideas-drawer-toggle').click()
         expect(page.locator('.ideas-drawer')).to_contain_text('Source idea')
@@ -157,6 +178,13 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
         page.locator('.ideas-drawer').get_by_role('button', name='Clone Source idea').click()
         modal = page.locator('dialog[open]').last
         expect(modal.get_by_label('Idea', exact=True)).to_have_value('Source idea (1)')
+        assert modal.locator('[data-object-attachments] + [data-intent-fields]').count() == 1
+        modal.locator('[data-intent-fields] summary').click()
+        modal.locator('[data-intent-fields]').get_by_label('Work', exact=True).check()
+        modal.locator('[data-intent-fields]').get_by_label('Home', exact=True).check()
+        modal.locator('[data-intent-fields] summary').click()
+        expect(modal.locator('[data-intent-fields] summary')).to_have_text('Work + Home')
+
         expect(modal.locator('.checklist-markdown')).to_contain_text('Choose a shelf')
         for revised in ('**Updated shelf**', '*Updated again*'):
             modal.locator('.checklist-markdown').click()
@@ -171,6 +199,7 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
         modal.get_by_role('button', name='Create', exact=True).click()
         expect(modal.get_by_role('button', name='Save now', exact=True)).to_be_visible()
         assert len(ideas.ideas()) == 2
+        assert next(i for i in ideas.ideas() if i['title']=='Source idea (1)')['workspace_ids'] == ['home','work']
         modal.get_by_role('button', name='Copy list', exact=True).click()
         picker = page.get_by_role('dialog', name='Copy list to action or idea')
         picker.get_by_role('searchbox').fill('Destination action')
@@ -178,15 +207,29 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
         expect(picker).to_have_count(0)
         assert len(ideas.followups.get(action['id'])['checklists']) == 1
         modal.get_by_role('button', name='Close', exact=True).click()
+        idea_card = page.locator('[data-idea-id="'+idea['id']+'"]')
+        expect(idea_card.locator('.agenda-card-meta')).to_contain_text('Manual')
+        expect(idea_card.get_by_role('button', name='Edit', exact=True)).to_be_visible()
+        expect(idea_card.get_by_role('button', name='Promote to an action')).to_be_visible()
+        expect(page.locator('.ideas-drawer').get_by_role('button', name='New idea')).to_have_count(0)
+        page.screenshot(path=str(tmp_path / ('ideas-drawer-' + str(width) + '.png')), full_page=True)
+        idea_card.get_by_role('button', name='Dismiss', exact=True).click()
+        expect(idea_card).to_have_count(0)
+        assert ideas.idea(idea['id'])['status'] == 'dismissed'
         page.get_by_role('button', name='Close ideas drawer', exact=True).click()
         page.locator('[data-followup-id="'+action['id']+'"]').get_by_role('button', name='Edit', exact=True).click()
         action_form = page.locator('#followup-form')
+        assert action_form.locator('[data-object-attachments] + [data-intent-fields]').count() == 1
+        action_form.locator('[data-intent-fields] summary').click()
+        action_form.locator('[data-intent-fields]').get_by_label('Home', exact=True).check()
+        action_form.locator('[data-intent-fields] summary').click()
         action_form.get_by_text('Action plan', exact=True).click()
         action_form.get_by_label('Repeat', exact=True).select_option('monthly')
         action_form.get_by_label('First planned date').fill('2099-01-31')
         action_form.get_by_role('button', name='Save now', exact=True).click()
         page.wait_for_function("() => !document.querySelector('#followup-form button[type=submit]').disabled")
         expect(action_form.get_by_label('Repeat', exact=True)).to_have_value('monthly')
+        assert ideas.followups.get(action['id'])['workspace_ids'] == ['home']
         action_form.evaluate("""form => {const transfer=new DataTransfer();transfer.items.add(new File(['image'], 'screenshot.png', {type:'image/png'}));form.dispatchEvent(new ClipboardEvent('paste',{clipboardData:transfer,bubbles:true}));}""")
         expect(action_form.locator('[data-input-list]')).to_contain_text('screenshot.png')
         page.screenshot(path=str(tmp_path / ('reuse-' + str(width) + '.png')), full_page=True)

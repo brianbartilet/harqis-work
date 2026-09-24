@@ -103,7 +103,7 @@ def test_conflict_retains_edits_and_close_offers_discard(editor_page):
     page.get_by_role('button', name='Keep editing').click()
     expect(form.locator('[name=title]')).to_have_value('Unsaved conflict')
     page.keyboard.press('Escape')
-    page.get_by_role('button', name='Discard unsaved changes').click()
+    page.get_by_role('button', name='Discard').click()
     expect(page.locator('#followup-editor')).not_to_be_visible()
     assert client.get(uri).json()['item']['title'] == 'Other session'
 
@@ -176,12 +176,13 @@ def test_drag_item_to_empty_list_and_guard_new_draft(editor_page, width):
     saved = client.get('/hfl-corpus/timeline/items/' + item['id']).json()['item']
     assert saved['checklists'][1]['items'][0]['id'] == 'a'
     form.get_by_role('button', name='Close follow-up editor').click()
-    page.get_by_role('button', name='Create action', exact=True).click()
+    page.locator('[data-board-create-menu] > summary').click()
+    page.locator('[data-board-create-action]').click()
     form.locator('[name=title]').fill('Uncreated draft')
     page.keyboard.press('Escape')
     page.get_by_role('button', name='Save and close').click()
     expect(page.locator('.editor-close-question [role=alert]')).to_contain_text('required fields')
-    page.get_by_role('button', name='Discard unsaved changes').click()
+    page.get_by_role('button', name='Discard').click()
     assert len(client.get('/hfl-corpus/timeline/items?include_closed=true').json()['items']) == 1
 
 

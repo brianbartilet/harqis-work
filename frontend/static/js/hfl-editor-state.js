@@ -74,7 +74,7 @@ if (typeof window !== 'undefined') {
       const footer = document.createElement('div'); footer.className = 'agenda-dialog-footer';
       const add = (label, fn) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.onclick = fn; footer.append(b); };
       add('Save and close', async () => { try { await controller.flush(); question.close(); close(); } catch (e) { error.textContent = e.message; } });
-      add('Discard unsaved changes', async () => {
+      add('Discard', async () => {
         // A request already sent cannot be undone. Wait for its result first.
         controller.stop();
         if (controller.pending) { try { await controller.pending; } catch (_) {} }

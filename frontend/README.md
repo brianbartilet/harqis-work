@@ -467,13 +467,15 @@ reordering whole lists, and one-time A–Z/Z–A sorting. Card covers show compl
 items last without changing editor order. New actions have an empty Agent
 Instructions checklist; existing actions receive it on their next edited save.
 Add to board links existing actions/ideas, or creates a board thought linked to
-a checklist item's source. The Actions Board's Ideas picker also exposes these
-commands. New manual corpus entries always include `#moments`.
+a checklist item's source. New manual corpus entries always include `#moments`.
 
-The left-edge Ideas button opens an additional lane containing manual and generated
-ideas. Dismissed ideas are optional; dragging an idea to an action column opens the
-conversion editor. Actions and ideas can belong to several saved workspaces; the
-board's Workspaces filter selects explicit assignments. Clone buttons open an
+The bottom-left bulb opens an overlay drawer containing manual and generated
+ideas, excluding dismissed ideas. Click outside or press Escape to close it. Cards
+show their origin, Edit and Dismiss controls, and Promote to an action. The board's
+Create menu offers Entry, Action, and Idea. Actions and ideas can belong to several
+saved workspaces through a checkbox dropdown below supporting files. The board's
+rightmost Workspaces picker aggregates selected views, applies selections when
+closed, and includes All activity; its adjacent caption names the selected views. Clone buttons open an
 independent draft with supporting files and reset checklists. Dates, recurrence,
 and previous relationships are omitted; a `copied-from` connection records its source.
 

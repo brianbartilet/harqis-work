@@ -72,7 +72,8 @@ def test_editors_save_multiple_attachments_without_running_early(authenticated_c
         page.route('**/*', route)
         page.goto('https://inputs.test/hfl-corpus/actions' if kind == 'actionable' else 'https://inputs.test/hfl-corpus')
         if kind == 'actionable':
-            page.locator('[data-board-create]').click()
+            page.locator('[data-board-create-menu] > summary').click()
+            page.locator('[data-board-create-action]').click()
             dialog = page.locator('#followup-editor')
             dialog.locator('[name="title"]').fill('Read supporting files')
             dialog.get_by_text('Action plan', exact=True).click()

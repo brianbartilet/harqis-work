@@ -2,21 +2,31 @@
 (() => {
   const element = (tag, text) => { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; return n; };
   const api = (...args) => window.HflIdeas.api(...args);
+  window.HflWorkspacePicker = (host, {selected=[], empty='All activity', name='', onapply=()=>{}, onload=()=>{}}={}) => {
+    host._disposeWorkspacePicker?.();
+    const picker=element('details');picker.className='workspace-view-picker intent-workspace-picker';
+    const summary=element('summary'),caption=element('span'),options=element('div'),choices=element('div');
+    summary.setAttribute('aria-label',name?'Workspaces':'Focus on');summary.append(caption);options.className='workspace-view-options';
+    const clear=element('button',empty);clear.type='button';options.append(clear,choices,element('p','Selections apply when you close this list.'));picker.append(summary,options);host.append(picker);
+    let ids=new Set(selected),applied=[...ids].sort().join(','),views=[];
+    const update=()=>{caption.textContent=views.filter(v=>ids.has(v.id)).map(v=>v.name).join(' + ')||([...ids].length?'Selected workspaces':empty);clear.setAttribute('aria-pressed',String(!ids.size));};
+    const render=()=>{choices.replaceChildren();for(const view of views){const label=element('label'),input=element('input'),dot=element('span');input.type='checkbox';input.value=view.id;input.checked=ids.has(view.id);dot.className='view-color-dot';dot.style.backgroundColor=view.color||'#94a3b8';label.append(input,dot,document.createTextNode(view.name));choices.append(label);input.onchange=()=>{input.checked?ids.add(view.id):ids.delete(view.id);update();};}update();};
+    const commit=()=>{const key=[...ids].sort().join(',');if(key===applied)return;applied=key;if(name){host.querySelectorAll('input[type=hidden]').forEach(n=>n.remove());for(const id of ids){const input=element('input');input.type='hidden';input.name=name;input.value=id;host.append(input);}host.dispatchEvent(new Event('change',{bubbles:true}));}onapply([...ids],views);};
+    for(const id of ids){if(name){const input=element('input');input.type='hidden';input.name=name;input.value=id;host.append(input);}}
+    clear.onclick=()=>{ids.clear();render();picker.open=false;applied=null;commit();};
+    picker.addEventListener('toggle',()=>{if(!picker.open)commit();});
+    picker.addEventListener('keydown',event=>{if(event.key==='Escape'){event.stopPropagation();picker.open=false;commit();summary.focus();}});
+    const controller=new AbortController();host._disposeWorkspacePicker=()=>controller.abort();document.addEventListener('click',event=>{if(!picker.isConnected){controller.abort();return;}if(!picker.contains(event.target)){picker.open=false;commit();}},{signal:controller.signal});
+    // Close/apply on submit too, so a pending checkbox selection is never lost.
+    host.closest('form')?.addEventListener('submit',commit,{capture:true,signal:controller.signal});
+    update();fetch('/hfl-corpus/workspace-views').then(async response=>{if(!response.ok)throw Error();return response.json();}).then(data=>{if(!picker.isConnected)return;views=data.views;for(const id of ids)if(!views.some(v=>v.id===id))views.push({id,name:'Unavailable workspace'});render();onload(views);}).catch(()=>{options.append(element('p','Workspaces unavailable. Reopen to retry.'));});
+    return {close:()=>{picker.open=false;commit();}};
+  };
   window.HflIntentFields = (form, item={}, kind='actionable') => {
     let root=form.querySelector('[data-intent-fields]');
-    if(!root){root=element('section');root.dataset.intentFields='';form.querySelector('[name=title]').closest('label').after(root);}
-    root.replaceChildren();
-    const label=element('label','Workspaces (optional)'), select=element('select');select.multiple=true;select.name='workspace_ids';select.size=4;select.setAttribute('aria-label','Workspaces');label.append(select);root.append(label);
-    const selected=new Set(item?.workspace_ids||[]);
-    for(const id of selected){const option=element('option',id);option.value=id;option.selected=true;select.append(option);}
-    const status=element('small','Loading workspaces…');root.append(status);
-    fetch('/hfl-corpus/workspace-views').then(async response=>{if(!response.ok)throw Error();return response.json();}).then(data=>{
-      if(!select.isConnected)return;
-      const current=new Set([...select.selectedOptions].map(o=>o.value));select.replaceChildren();
-      for(const view of data.views){const option=element('option',view.name);option.value=view.id;option.selected=current.has(view.id);select.append(option);current.delete(view.id);}
-      for(const id of current){const option=element('option','Unavailable workspace');option.value=id;option.selected=true;select.append(option);}
-      status.textContent='Select several with Ctrl / Command. Leave empty for no assignment.';
-    }).catch(()=>{status.textContent='Workspaces could not load. Existing assignments are preserved; reopen to retry.';});
+    if(!root){root=element('section');root.dataset.intentFields='';}
+    form.querySelector('[data-object-attachments]').after(root);root.replaceChildren(element('p','Workspaces (optional)'));
+    window.HflWorkspacePicker(root,{selected:item?.workspace_ids||[],empty:'No workspace',name:'workspace_ids'});
     let recurrence=form.querySelector('[data-recurrence-fields]');recurrence?.remove();
     if(kind!=='actionable')return;
     recurrence=element('section');recurrence.dataset.recurrenceFields='';

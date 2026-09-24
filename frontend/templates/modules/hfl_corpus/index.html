@@ -2140,6 +2140,7 @@
   };
 
   document.querySelector('[data-create-entry-open]')?.addEventListener('click', () => openCreate());
+  if(new URLSearchParams(location.search).get('create')==='entry'){openCreate();const url=new URL(location.href);url.searchParams.delete('create');history.replaceState(null,'',url);}
   document.addEventListener('hfl:create-entry-for-date', event => openCreate(event.detail?.date || ''));
   form.querySelectorAll('[data-entry-cancel]').forEach(button => button.addEventListener('click', requestCancel));
 

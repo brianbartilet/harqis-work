@@ -6,8 +6,8 @@
   if(page)Object.defineProperty(dialog,'open',{value:true});
   const actions = window.hflActions;
   const $ = selector => dialog.querySelector(selector);
-  const lanes = $('[data-board-lanes]'), all = $('[data-board-all]');
-  Object.defineProperty(all,'checked',{get(){return this.getAttribute('aria-checked')==='true';},set(value){this.setAttribute('aria-checked',String(!!value));}});
+  const lanes = $('[data-board-lanes]'), all = {checked:false};
+  let workspaceNames=[];
   const status = $('[data-board-status]'), error = $('[data-board-error]');
   const states = ['open','active','in_progress','incomplete','done','dismissed'];
   const label = value => value === 'in_progress' ? 'In Progress' : value[0].toUpperCase()+value.slice(1);
@@ -27,8 +27,8 @@
     const params=new URLSearchParams(location.search);
     const extra=['source','q','date_from','date_to'].filter(key=>params.get(key)).map(key=>({source:'Sources',q:'Search',date_from:'From',date_to:'To'}[key])+': '+params.get(key));
     if(page){
-      const scoped=params.has('scope')||params.has('workspace');
-      $('[data-board-context]').textContent=all.checked?'All activity':[(scoped?'Workspace filters applied':extra.length?'Corpus filters':'All activity'),...extra].join(' · ');
+      const scoped=params.has('scope')||params.has('workspace')||params.has('workspace_ids')||params.has('views');
+      $('[data-board-context]').textContent=all.checked?'All activity':[(scoped?(workspaceNames.join(' + ')||'Loading workspaces…'):extra.length?'Corpus filters':'All activity'),...extra].join(' · ');
       return;
     }
     $('[data-board-context]').textContent = (all.checked ? 'All activity · Current views: ' : 'Following views: ') + caption + ' · ' + dynamic + (!all.checked&&extra.length?' · '+extra.join(' · '):'');
@@ -94,11 +94,18 @@
     if(ideasOpen){
       const section=node('section',null,'followups-lane ideas-drawer');section.dataset.status='ideas';section.setAttribute('aria-label','Ideas');
       const header=node('div',null,'ideas-drawer-header');header.append(node('h3','Ideas · '+ideaRows.length));
-      const create=node('button','New idea');create.type='button';create.onclick=()=>window.HflIdeas.openEditor('idea');header.append(create);section.append(header);
-      for(const item of ideaRows){const card=node('article',null,'agenda-card');card.dataset.ideaId=item.id;const title=node('button',item.title);title.onclick=()=>window.HflIdeas.editIdea(item.id);
-        const grip=node('button','⠿','action-drag-handle');grip.setAttribute('aria-label','Drag idea '+item.title);
-        const clone=node('button','⧉','action-clone-handle');clone.setAttribute('aria-label','Clone '+item.title);clone.onclick=()=>window.HflIdeas.cloneObject('idea',item.id);
-        const convert=node('button','Create action');convert.onclick=()=>window.HflIdeas.convert(item.id);card.append(grip,clone,title,convert);section.append(card);}
+      section.append(header);
+      for(const item of ideaRows){
+        const card=node('article',null,'agenda-card idea-board-card');card.dataset.ideaId=item.id;
+        const grip=node('button','⠿','action-drag-handle');grip.type='button';grip.setAttribute('aria-label','Drag idea '+item.title);
+        const clone=node('button','⧉','action-clone-handle');clone.type='button';clone.setAttribute('aria-label','Clone '+item.title);clone.onclick=()=>window.HflIdeas.cloneObject('idea',item.id);
+        const meta=node('div',null,'agenda-card-meta');meta.append(node('span',item.status==='adopted'?'Has actions':'Idea'),node('span',item.origin==='manual'?'Manual':'Agent generated','action-source'));
+        const title=node('h3',item.title),management=node('div',null,'agenda-card-actions');
+        const edit=node('button','Edit');edit.type='button';edit.onclick=()=>window.HflIdeas.editIdea(item.id);
+        const dismiss=node('button','Dismiss');dismiss.type='button';dismiss.onclick=async()=>{dismiss.disabled=true;try{await window.HflIdeas.api('/objects/'+item.id,'PATCH',{version:item.version,status:'dismissed'});await refresh(true);}catch(e){error.textContent=e.message;error.hidden=false;dismiss.disabled=false;}};
+        const promote=node('button','Promote to an action','idea-promote-action');promote.type='button';promote.onclick=()=>window.HflIdeas.convert(item.id);
+        management.append(edit,dismiss);card.append(grip,clone,meta,title,management,promote);section.append(card);
+      }
       const overlay=node('div',null,'ideas-drawer-overlay'), backdrop=node('div',null,'ideas-drawer-backdrop');
       backdrop.onclick=()=>closeIdeasDrawer();
       const close=node('button','×','ideas-drawer-close');close.type='button';close.setAttribute('aria-label','Close ideas drawer');close.onclick=()=>closeIdeasDrawer();header.append(close);
@@ -150,27 +157,26 @@
   const opener=document.querySelector('[data-followups-open]');
   if(opener)opener.onclick=event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();document.querySelector('.corpus-tools').open=false;open();};
   $('[data-board-close]').onclick=()=>{if(page){const url=new URL(location.href);url.pathname='/hfl-corpus';url.searchParams.delete('edit');url.searchParams.delete('edit_kind');url.searchParams.delete('all');location.assign(url);}else dialog.close();};
-  $('[data-board-create]').onclick=()=>actions.openEditor();
+  const createMenu=$('[data-board-create-menu]');
+  $('[data-board-create-action]').onclick=()=>{createMenu.open=false;actions.openEditor();};
+  $('[data-board-create-idea]').onclick=()=>{createMenu.open=false;window.HflIdeas.openEditor('idea');};
   $('[data-board-refresh]').onclick=()=>refresh(true);
-  const workspaceFilter=node('div',null,'board-workspace-filter'), workspaceTitle=node('button','Workspaces'), workspaceChoices=node('div',null,'board-workspace-options');
-  workspaceTitle.type='button';workspaceTitle.setAttribute('aria-expanded','false');workspaceTitle.setAttribute('aria-controls','board-workspace-options');
-  workspaceChoices.id='board-workspace-options';workspaceChoices.hidden=true;workspaceChoices.setAttribute('role','group');workspaceChoices.setAttribute('aria-label','Filter by workspaces');
-  workspaceFilter.append(workspaceTitle,workspaceChoices);$('[data-board-context]').before(workspaceFilter);
-  const selectedWorkspaces=new Set((new URLSearchParams(location.search).get('workspace_ids')||'').split(',').filter(Boolean));
-  const workspaceCaption=()=>{workspaceTitle.textContent='Workspaces';};
-  const closeWorkspaces=()=>{workspaceChoices.hidden=true;workspaceTitle.setAttribute('aria-expanded','false');};
-  workspaceCaption();
-  workspaceTitle.onclick=()=>{workspaceChoices.hidden=!workspaceChoices.hidden;workspaceTitle.setAttribute('aria-expanded',String(!workspaceChoices.hidden));};
-  document.addEventListener('click',event=>{if(!workspaceFilter.contains(event.target))closeWorkspaces();},{signal:listeners.signal});
-  workspaceFilter.addEventListener('keydown',event=>{if(event.key==='Escape'){closeWorkspaces();workspaceTitle.focus();}});
-  fetch('/hfl-corpus/workspace-views').then(async response=>{if(!response.ok)throw Error();return response.json();}).then(data=>{
-    if(!data.views.length)workspaceChoices.append(node('p','No workspaces available'));
-    for(const view of data.views){const label=node('label'),choice=node('input');choice.type='checkbox';choice.value=view.id;choice.checked=selectedWorkspaces.has(view.id);label.append(choice,document.createTextNode(view.name));workspaceChoices.append(label);
-      choice.onchange=()=>{choice.checked?selectedWorkspaces.add(view.id):selectedWorkspaces.delete(view.id);workspaceCaption();const url=new URL(location.href);if(selectedWorkspaces.size)url.searchParams.set('workspace_ids',[...selectedWorkspaces].join(','));else url.searchParams.delete('workspace_ids');url.searchParams.delete('all');all.checked=false;history.replaceState(null,'',url);refresh(true);};
-    }
-  }).catch(()=>{workspaceTitle.textContent='Workspaces unavailable';});
-  all.checked=new URLSearchParams(location.search).get('all')==='1';
-  all.onclick=()=>{all.checked=!all.checked;const url=new URL(location.href);all.checked?url.searchParams.set('all','1'):url.searchParams.delete('all');history.replaceState(null,'',url);refresh(true);};
+  document.addEventListener('click',event=>{if(!createMenu.contains(event.target))createMenu.open=false;},{signal:listeners.signal});
+  createMenu.addEventListener('keydown',event=>{if(event.key==='Escape'){createMenu.open=false;createMenu.querySelector('summary').focus();}});
+  const workspaceFilter=node('details',null,'board-workspace-filter'),workspaceTitle=node('summary','Workspaces'),workspacePanel=node('div',null,'workspace-menu-panel');
+  workspacePanel.append(node('p','Focus on'));workspaceFilter.append(workspaceTitle,workspacePanel);$('[data-board-context]').after(workspaceFilter);
+  const params=new URLSearchParams(location.search),selectedWorkspaces=(params.get('views')||params.get('workspace')||params.get('workspace_ids')||'').split(',').filter(Boolean);
+  all.checked=params.get('all')==='1';
+  const picker=window.HflWorkspacePicker(workspacePanel,{selected:all.checked?[]:selectedWorkspaces,
+    onload:views=>{workspaceNames=views.filter(v=>selectedWorkspaces.includes(v.id)).map(v=>v.name);context();},
+    onapply:(ids,views)=>{
+      const url=new URL(location.href);url.search='';all.checked=!ids.length;
+      if(ids.length){url.searchParams.set('views',ids.join(','));url.searchParams.set('scope',JSON.stringify({any:views.filter(v=>ids.includes(v.id)).map(v=>v.state)}));}else url.searchParams.set('all','1');
+      workspaceNames=views.filter(v=>ids.includes(v.id)).map(v=>v.name);history.replaceState(null,'',url);refresh(true);
+    }});
+  workspaceFilter.addEventListener('toggle',()=>{if(!workspaceFilter.open)picker.close();});
+  document.addEventListener('click',event=>{if(!workspaceFilter.contains(event.target)){workspaceFilter.open=false;picker.close();}},{signal:listeners.signal});
+  workspaceFilter.addEventListener('keydown',event=>{if(event.key==='Escape'){workspaceFilter.open=false;picker.close();workspaceTitle.focus();}});
   const toolsMenu=document.querySelector('.corpus-tools');
   toolsMenu?.addEventListener('toggle',()=>{if(toolsMenu.open){const profile=document.querySelector('summary[aria-label="Profile menu"]')?.parentElement;if(profile)profile.open=false;}});
   document.addEventListener('click',event=>{if(toolsMenu&&!toolsMenu.contains(event.target))toolsMenu.open=false;},{signal:listeners.signal});

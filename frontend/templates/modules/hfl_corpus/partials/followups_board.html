@@ -1,8 +1,11 @@
 <{{ 'section' if actions_page else 'dialog' }} id="followups-board" class="agenda-dialog followups-board" aria-labelledby="followups-title">
   <header class="agenda-dialog-header"><h2 id="followups-title">Actions Board</h2><button type="button" data-board-close aria-label="Close Actions Board">{{ 'Back to corpus' if actions_page else 'Close' }}</button></header>
   <div class="followups-toolbar">
-    <button type="button" data-board-all role="switch" aria-checked="false" title="Show all activity in this board">All activity<span class="board-switch-track" aria-hidden="true"></span></button>
-    <button type="button" data-board-create>Create action</button>
+    <details data-board-create-menu class="board-create-menu"><summary>Create</summary><div class="board-create-options">
+      <a href="/hfl-corpus?create=entry">Entry</a>
+      <button type="button" data-board-create-action>Action</button>
+      <button type="button" data-board-create-idea>Idea</button>
+    </div></details>
     <button type="button" data-board-refresh>Refresh</button>
     <p data-board-status role="status" aria-live="polite"></p>
     <p data-board-context></p>
