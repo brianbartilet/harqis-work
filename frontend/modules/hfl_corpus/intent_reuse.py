@@ -33,14 +33,18 @@ def register(router):
         return key, fingerprint, json.loads(previous['payload']) if previous else None
 
     @router.get('/reuse/options')
-    def options(request: Request, query: str = ''):
+    def options(request: Request, query: str = '', page: int = 1):
         timeline.owner(request)
         if len(query) > 500:
             raise HTTPException(422, 'Use a search of at most 500 characters.')
+        if page < 1:
+            raise HTTPException(422, 'Choose a page greater than zero.')
         snapshot = api.permitted_snapshot()
-        rows = [{**{k: i.get(k) for k in ('id', 'title', 'version', 'updated_at')}, 'kind': kind} for collection, kind in [('actions', 'actionable'), ('ideas', 'idea')] for i in snapshot[collection]
-                if query.casefold() in (i['title'] + ' ' + i.get('body', '')).casefold()]
-        return {'items': sorted(rows, key=lambda i: i.get('updated_at', ''), reverse=True)[:100]}
+        rows = [{**{k: i.get(k) for k in ('id', 'title', 'version', 'updated_at')}, 'kind': kind,
+                 'description': i.get('description') or i.get('body') or i.get('recommendation') or i.get('expected_outcome') or ''}
+                for collection, kind in [('actions', 'actionable'), ('ideas', 'idea')] for i in snapshot[collection]]
+        rows = sorted((i for i in rows if query.casefold() in (i['title'] + ' ' + i['description']).casefold()), key=lambda i: i.get('updated_at') or '', reverse=True)
+        return {'items': rows[(page - 1) * 10:page * 10], 'total': len(rows), 'page': page}
 
     @router.get('/reuse/board-ideas')
     async def board_ideas(request: Request):

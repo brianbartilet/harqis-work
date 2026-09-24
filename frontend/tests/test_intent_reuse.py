@@ -6,6 +6,19 @@ import pytest
 from test_hfl_ideas import ideas, BASE, payload
 
 
+def test_copy_destinations_paginate_and_search_descriptions(ideas, authenticated_client):
+    for index in range(12):
+        ideas.save_idea(payload(title=f'Destination {index}', description=f'Details {index}'), 'owner')
+    first = authenticated_client.get(BASE + '/reuse/options').json()
+    second = authenticated_client.get(BASE + '/reuse/options?page=2').json()
+    assert first['total'] == second['total'] == 12
+    assert len(first['items']) == 10 and len(second['items']) == 2
+    assert not {item['id'] for item in first['items']} & {item['id'] for item in second['items']}
+    found = authenticated_client.get(BASE + '/reuse/options?query=Details%2011').json()
+    assert found['total'] == 1 and found['items'][0]['title'] == 'Destination 11'
+    assert authenticated_client.get(BASE + '/reuse/options?page=0').status_code == 422
+
+
 def test_copy_list_preserves_checks_and_is_retry_safe(ideas, authenticated_client):
     target = ideas.save_idea(payload(checklists=[]), 'owner')
     raw = dict(request_id=str(uuid4()), kind='idea', identity=target['id'], version=1, checklist=payload()['checklists'][0])
@@ -197,7 +210,8 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
 
         page.screenshot(path=str(tmp_path / ('clone-' + str(width) + '.png')), full_page=True)
         modal.get_by_role('button', name='Create', exact=True).click()
-        expect(modal.get_by_role('button', name='Save now', exact=True)).to_be_visible()
+        expect(modal.locator('.editor-save-status')).to_have_text('Saved')
+        expect(modal.get_by_role('button', name='Save now', exact=True)).to_have_count(0)
         assert len(ideas.ideas()) == 2
         assert next(i for i in ideas.ideas() if i['title']=='Source idea (1)')['workspace_ids'] == ['home','work']
         modal.get_by_role('button', name='Copy list', exact=True).click()
@@ -206,11 +220,15 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
         picker.get_by_role('button', name='Destination action · Action', exact=True).click()
         expect(picker).to_have_count(0)
         assert len(ideas.followups.get(action['id'])['checklists']) == 1
-        modal.get_by_role('button', name='Close', exact=True).click()
+        modal.get_by_role('button', name='Close editor', exact=True).click()
         idea_card = page.locator('[data-idea-id="'+idea['id']+'"]')
         expect(idea_card.locator('.agenda-card-meta')).to_contain_text('Manual')
         expect(idea_card.get_by_role('button', name='Edit', exact=True)).to_be_visible()
         expect(idea_card.get_by_role('button', name='Promote', exact=True)).to_be_visible()
+        idea_card.get_by_role('button', name='Add to board', exact=True).click()
+        board_picker = page.get_by_role('dialog', name='Add to board', exact=True)
+        expect(board_picker.get_by_text('Create a new board and add idea', exact=True)).to_be_visible()
+        board_picker.get_by_role('button', name='Close editor', exact=True).click()
         expect(page.locator('.ideas-drawer').get_by_role('button', name='New idea')).to_have_count(0)
         page.screenshot(path=str(tmp_path / ('ideas-drawer-' + str(width) + '.png')), full_page=True)
         idea_card.get_by_role('button', name='Dismiss', exact=True).click()
@@ -226,8 +244,8 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
         action_form.get_by_text('Action plan', exact=True).click()
         action_form.get_by_label('Repeat', exact=True).select_option('monthly')
         action_form.get_by_label('First planned date').fill('2099-01-31')
-        action_form.get_by_role('button', name='Save now', exact=True).click()
-        page.wait_for_function("() => !document.querySelector('#followup-form button[type=submit]').disabled")
+        expect(action_form.locator('.editor-save-status')).to_have_text('Saved')
+        expect(action_form.locator('button[type=submit]')).to_be_hidden()
         expect(action_form.get_by_label('Repeat', exact=True)).to_have_value('monthly')
         assert ideas.followups.get(action['id'])['workspace_ids'] == ['home']
         action_form.evaluate("""form => {const transfer=new DataTransfer();transfer.items.add(new File(['image'], 'screenshot.png', {type:'image/png'}));form.dispatchEvent(new ClipboardEvent('paste',{clipboardData:transfer,bubbles:true}));}""")

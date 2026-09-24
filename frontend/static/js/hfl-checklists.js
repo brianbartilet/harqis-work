@@ -12,6 +12,7 @@ window.HflChecklists = class {
   iconButton(icon, action, label) {
     const button = this.button('', action, label); button.title = label;
     const paths = {board: 'M3 3h18v18H3zM10 3v18M3 10h18', move: 'M4 12h16m-5-5 5 5-5 5', up: 'm6 15 6-6 6 6', down: 'm6 9 6 6 6-6', delete: 'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7', convert: 'm13 2-9 12h7l-1 8 10-12h-7l1-8Z', open: 'M14 3h7v7M21 3 10 14M10 3H3v18h18v-7'};
+    Object.assign(paths, {copy:'M8 8h13v13H8zM16 8V3H3v13h5', sortAsc:'M4 4v16m-3-3 3 3 3-3M11 5h4M11 10h7M11 15h10', sortDesc:'M4 20V4m-3 3 3-3 3 3M11 5h10M11 10h7M11 15h4'});
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
     const path = document.createElementNS(svg.namespaceURI, 'path'); path.setAttribute('d', paths[icon]);
@@ -38,7 +39,6 @@ window.HflChecklists = class {
       cover.onchange = () => { list.cover = cover.checked; this.notify(); }; coverLabel.append(cover, document.createTextNode('Checklist cover'));
       const header = document.createElement('div'); header.className = 'idea-checklist-header';
       header.append(title);
-      if (!this.options.singleList) header.append(this.iconButton('delete', () => { this.value.splice(index, 1); this.render(); }, 'Remove checklist'));
       const moveList = delta => { const next = index + delta; if (next < 0 || next >= this.value.length) return; [this.value[index], this.value[next]] = [this.value[next], this.value[index]]; this.render(); };
       const grip = this.button('⠿', () => {}, 'Drag checklist to reorder'); grip.draggable = true;
       grip.ondragstart = event => { event.dataTransfer.setData('application/x-hfl-checklist', list.id); event.dataTransfer.effectAllowed = 'move'; };
@@ -46,12 +46,14 @@ window.HflChecklists = class {
       box.ondrop = event => { const id = event.dataTransfer.getData('application/x-hfl-checklist'); const from = this.value.findIndex(l => l.id === id); if (from < 0 || id === list.id) return; event.preventDefault(); const [moved] = this.value.splice(from, 1); this.value.splice(this.value.indexOf(list), 0, moved); this.render(); };
       const up = this.iconButton('up', () => moveList(-1), 'Move checklist up'); up.disabled = index === 0;
       const down = this.iconButton('down', () => moveList(1), 'Move checklist down'); down.disabled = index === this.value.length - 1;
-      header.prepend(grip); header.append(up, down);
-      header.append(this.button('⧉', () => window.HflCopyList(structuredClone(list)), 'Copy list'));
-      if (this.options.addToBoard) header.append(this.iconButton('board', () => this.options.addToBoard(list, null), 'Add list to board'));
-      const sorting = document.createElement('select'); sorting.setAttribute('aria-label', 'Sort ' + list.title);
-      for (const [value, label] of [['','Sort items'],['asc','A–Z'],['desc','Z–A']]) { const option = document.createElement('option'); option.value = value; option.textContent = label; sorting.append(option); }
-      sorting.onchange = () => { if (!sorting.value) return; const direction = sorting.value === 'asc' ? 1 : -1; list.items.sort((a,b) => direction * a.text.localeCompare(b.text, undefined, {sensitivity:'base'})); this.render(); };
+      header.prepend(grip);
+      const listActions = document.createElement('div'); listActions.className = 'checklist-list-actions';
+      if (this.options.addToBoard) listActions.append(this.iconButton('board', () => this.options.addToBoard(list, null), 'Add list to board'));
+      listActions.append(this.iconButton('copy', () => window.HflCopyList(structuredClone(list)), 'Copy list'), up, down);
+      if (!this.options.singleList) listActions.append(this.iconButton('delete', () => { this.value.splice(index, 1); this.render(); }, 'Remove checklist'));
+      header.append(listActions);
+      const sorting = document.createElement('div'); sorting.className = 'checklist-sort-actions';
+      for (const [icon, direction, label] of [['sortAsc',1,'Sort items A–Z'],['sortDesc',-1,'Sort items Z–A']]) sorting.append(this.iconButton(icon, () => { list.items.sort((a,b) => direction * a.text.localeCompare(b.text, undefined, {sensitivity:'base'})); this.render(); }, label));
       const tools = document.createElement('div'); tools.className = 'checklist-tools'; tools.append(coverLabel, sorting);
       box.append(header, tools, progress);
       for (const [i, item] of list.items.entries()) {
@@ -106,13 +108,14 @@ window.HflChecklists = class {
           const modal = document.createElement('dialog'); modal.className = 'agenda-dialog checklist-move-dialog';
           const heading = document.createElement('h2'); heading.textContent = 'Move checklist item';
           const mapping = document.createElement('p');
-          const owner = this.root.closest('form')?.querySelector('[name="title"]')?.value || 'Action or Idea';
-          mapping.textContent = owner + ' > ' + list.title;
+          mapping.textContent = 'From ' + list.title;
           const picker = document.createElement('select'); picker.setAttribute('aria-label', 'Move item to checklist');
           const placeholder = document.createElement('option'); placeholder.textContent = 'Choose destination checklist'; placeholder.value = ''; picker.append(placeholder);
-          for (const target of this.value.filter(l => l !== list)) { const option = document.createElement('option'); option.value = target.id; option.textContent = owner + ' > ' + target.title; picker.append(option); }
-          picker.onchange = () => { const target = this.value.find(l => l.id === picker.value); if (!target) return; list.items = list.items.filter(x => x.id !== item.id); target.items.push(item); modal.close(); this.render(); };
-          modal.append(heading, mapping, picker, this.button('Cancel', () => modal.close()));
+          for (const target of this.value.filter(l => l !== list)) { const option = document.createElement('option'); option.value = target.id; option.textContent = 'to ' + target.title; picker.append(option); }
+          const confirm = this.button('Confirm', () => { const target = this.value.find(l => l.id === picker.value && l !== list); if (!target) return; list.items = list.items.filter(x => x.id !== item.id); target.items.push(item); modal.close(); this.render(); });
+          confirm.disabled = true; picker.onchange = () => { confirm.disabled = !picker.value; };
+          const footer = document.createElement('div'); footer.className = 'checklist-move-actions'; footer.append(confirm, this.button('Cancel', () => modal.close()));
+          modal.append(heading, mapping, picker, footer);
           modal.addEventListener('click', event => { const rect=modal.getBoundingClientRect(); if(event.target===modal && (event.clientX<rect.left || event.clientX>rect.right || event.clientY<rect.top || event.clientY>rect.bottom))modal.close(); });
           modal.addEventListener('close', () => modal.remove()); document.body.append(modal); modal.showModal(); picker.focus();
         }, 'Move item to another checklist'); moveButton.disabled = this.value.length < 2; actions.prepend(moveButton);
@@ -136,7 +139,7 @@ window.HflChecklists = class {
       add.className = 'checklist-add-item'; box.append(add);
       this.root.append(box);
     }
-    const addChecklist = this.button('Add', () => { this.value.push({id: crypto.randomUUID(), title: 'Checklist', cover: false, items: []}); this.render(); }, 'Add checklist');
+    const addChecklist = this.button('Add new checklist', () => { this.value.push({id: crypto.randomUUID(), title: 'Checklist', cover: false, items: []}); this.render(); }, 'Add new checklist');
     if (this.options.addButtonRoot) this.options.addButtonRoot.replaceChildren(addChecklist);
     else if (!this.options.singleList) this.root.append(addChecklist);
     this.updateConversion(); this.notify();

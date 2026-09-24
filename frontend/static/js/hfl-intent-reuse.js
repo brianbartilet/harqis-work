@@ -56,17 +56,26 @@
     markdownCache.get(text).then(data=>{if(root.textContent===text)root.innerHTML=data.html;}).catch(()=>{});
   };
   window.HflCopyList = checklist => {
-    const dialog=element('dialog');dialog.setAttribute('aria-label','Copy list to action or idea');dialog.className='agenda-dialog idea-dialog';
+    const dialog=element('dialog');dialog.setAttribute('aria-label','Copy list to action or idea');dialog.className='agenda-dialog idea-dialog intent-copy-dialog';
     const form=element('form'),body=element('div');body.className='agenda-form-body';
-    body.append(element('h2','Copy list to action or idea'));
+    const header=element('header');header.className='agenda-dialog-header';
+    const close=element('button','×');close.type='button';close.setAttribute('aria-label','Close copy list');close.onclick=()=>dialog.close();
+    header.append(element('h2','Copy list to action or idea'),close);
     const search=element('input');search.type='search';search.placeholder='Search actions and ideas';search.setAttribute('aria-label','Search actions and ideas');
-    const rows=element('div'),status=element('p'),close=element('button','Close');close.type='button';close.onclick=()=>dialog.close();
-    body.append(search,status,rows,close);form.append(body);dialog.append(form);document.body.append(dialog);dialog.showModal();search.focus();
-    let sequence=0,timer;const key=crypto.randomUUID();
-    async function load(){const ticket=++sequence;status.textContent='Loading…';try{
-      const data=await api('/reuse/options?'+new URLSearchParams({query:search.value}));if(ticket!==sequence||!dialog.open)return;rows.replaceChildren();status.textContent=data.items.length?'Recently updated first':'No matching actions or ideas';
-      for(const item of data.items){const b=element('button',item.title+' · '+(item.kind==='idea'?'Idea':'Action'));b.type='button';b.className='intent-copy-choice';b.onclick=async()=>{body.inert=true;try{await api('/reuse/copy-list','POST',{request_id:key,kind:item.kind,identity:item.id,version:item.version,checklist});window.dispatchEvent(new Event('hfl:actions-updated'));window.dispatchEvent(new CustomEvent('hfl:ideas-updated',{detail:{refreshShared:true}}));dialog.close();}catch(error){status.textContent=error.message;}finally{body.inert=false;}};rows.append(b);}
-    }catch(error){if(ticket===sequence)status.textContent=error.message;}}
-    search.oninput=()=>{clearTimeout(timer);timer=setTimeout(load,200);};form.onsubmit=event=>event.preventDefault();dialog.onclose=()=>{++sequence;clearTimeout(timer);dialog.remove();};load();
+    const rows=element('div'),status=element('p'),pagination=element('nav'),previous=element('button','Previous'),next=element('button','Next'),pageLabel=element('span');
+    rows.className='intent-copy-results';status.setAttribute('role','status');pagination.className='intent-copy-pagination';pagination.setAttribute('aria-label','Copy destinations pages');
+    previous.type=next.type='button';pagination.append(previous,pageLabel,next);
+    body.append(search,status,rows);form.append(header,body,pagination);dialog.append(form);document.body.append(dialog);dialog.showModal();search.focus();
+    let sequence=0,timer,page=1;const key=crypto.randomUUID();
+    previous.onclick=()=>{page--;load();};next.onclick=()=>{page++;load();};
+    async function load(){const ticket=++sequence;status.textContent='Loading…';previous.disabled=next.disabled=true;rows.replaceChildren();try{
+      const data=await api('/reuse/options?'+new URLSearchParams({query:search.value,page}));if(ticket!==sequence||!dialog.open)return;
+      const pages=Math.max(1,Math.ceil(data.total/10));if(page>pages){page=pages;load();return;}
+      status.textContent=data.total?'Recently updated first · '+data.total+' destinations':'No matching actions or ideas';pageLabel.textContent='Page '+page+' of '+pages;previous.disabled=page===1;next.disabled=page>=pages;
+      for(const item of data.items){const b=element('button');b.type='button';b.className='intent-copy-choice';b.setAttribute('aria-label',item.title+' · '+(item.kind==='idea'?'Idea':'Action'));
+        const title=element('strong',item.title),pill=element('span',item.kind==='idea'?'Idea':'Action'),description=element('span',item.description||'No description');pill.className='intent-copy-kind';description.className='intent-copy-description';b.append(title,pill,description);
+        b.onclick=async()=>{form.inert=true;try{await api('/reuse/copy-list','POST',{request_id:key,kind:item.kind,identity:item.id,version:item.version,checklist});window.dispatchEvent(new Event('hfl:actions-updated'));window.dispatchEvent(new CustomEvent('hfl:ideas-updated',{detail:{refreshShared:true}}));dialog.close();}catch(error){status.textContent=error.message;}finally{form.inert=false;}};rows.append(b);}
+    }catch(error){if(ticket===sequence&&dialog.open){status.textContent=error.message;const retry=element('button','Retry');retry.type='button';retry.onclick=load;rows.append(retry);}}}
+    search.oninput=()=>{++sequence;clearTimeout(timer);page=1;rows.replaceChildren();previous.disabled=next.disabled=true;timer=setTimeout(load,200);};form.onsubmit=event=>event.preventDefault();dialog.onclose=()=>{++sequence;clearTimeout(timer);dialog.remove();};load();
   };
 })();

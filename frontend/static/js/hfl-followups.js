@@ -108,10 +108,14 @@
         const edit=node('button','Edit');edit.type='button';edit.onclick=()=>window.HflIdeas.editIdea(item.id);
         const dismiss=node('button','Dismiss');dismiss.type='button';dismiss.onclick=async()=>{dismiss.disabled=true;try{await window.HflIdeas.api('/objects/'+item.id,'PATCH',{version:item.version,status:'dismissed'});await refresh(true);}catch(e){error.textContent=e.message;error.hidden=false;dismiss.disabled=false;}};
         const promote=node('button','Promote');promote.type='button';promote.onclick=()=>window.HflIdeas.convert(item.id);
-        management.append(edit,promote,dismiss);card.append(grip,clone,meta,title);
+        const board=node('button','Add to board');board.type='button';board.onclick=()=>window.HflIdeas.addToBoard('idea',item);
+        management.append(edit,promote,board,dismiss);card.append(grip,clone,meta,title);
         const description=window.HflObjectDescription(item)||item.recommendation||item.expected_outcome||'';
         if(description.trim()){const body=node('div',description,'agenda-description idea-card-description markdown-body');card.append(body);window.HflChecklistMarkdown(body,description);}
-        card.append(management);section.append(card);
+        const controls=node('div',null,'agenda-card-actions action-controls'),views=node('div',null,'action-view-controls');
+        management.className='action-management-controls';
+        const connections=node('button','Connections','action-connections-button');connections.type='button';connections.onclick=()=>window.HflActionConnections.open({...item,kind:'idea'},connections);
+        views.append(connections);controls.append(management,views);card.append(controls);section.append(card);
       }
       const overlay=node('div',null,'ideas-drawer-overlay'), backdrop=node('div',null,'ideas-drawer-backdrop');
       backdrop.onclick=()=>closeIdeasDrawer();

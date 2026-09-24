@@ -61,7 +61,8 @@
     });
     window.hflActionChecklists.options.addToBoard = async (list, task) => { try { await editorState.flush(); await window.HflIdeas.addToBoard('actionable',editing,list,task); } catch(e) { error('followup-save-error',e.message); } };
     window.hflActionChecklists.render();
-    form.querySelector('[type=submit]').textContent = item ? 'Save now' : 'Create';
+    form.querySelector('[type=submit]').textContent = 'Create';
+    form.querySelector('[type=submit]').hidden = !!item;
     if(item)window.HflEditorLocation('actionable',item.id);
     form.elements.title.focus({preventScroll:true});
   }
@@ -312,7 +313,7 @@
       window.HflEditorLocation('actionable',editing.id);
       document.getElementById('followup-state-label').hidden=false;
       document.getElementById('followup-editor-title').textContent='Edit action';
-      form.querySelector('[type=submit]').textContent='Save now';
+      form.querySelector('[type=submit]').hidden=true;
       await load(); window.dispatchEvent(new Event('hfl:actions-updated'));
   }
   form.addEventListener('submit',async e=>{e.preventDefault();try{await editorState.flush();}catch(err){error('followup-save-error',err.message);}});

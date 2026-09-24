@@ -117,6 +117,11 @@ def date_connections(request: Request, identity: str):
     return object_connections(request, identity, kind='daily')
 
 
+@router.get('/ideas/{identity}/connections')
+def idea_connections(request: Request, identity: str):
+    return object_connections(request, identity, kind='idea')
+
+
 def object_connections(request: Request, identity: str, *, kind: str):
     timeline.owner(request)
     from modules.hfl_corpus.entities import graph

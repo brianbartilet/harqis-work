@@ -24,7 +24,7 @@ function Preview({item}) {
     setData(null); setError(''); setSelected(null); fitted.current = false;
     (async () => {
       try {
-        const collection = item.kind === 'daily' ? 'dates' : 'actions';
+        const collection = item.kind === 'daily' ? 'dates' : item.kind === 'idea' ? 'ideas' : 'actions';
         const response = await fetch('/hfl-corpus/timeline/ideas/' + collection + '/' + encodeURIComponent(item.id) + '/connections',
           {cache:'no-store', signal:controller.signal});
         if (!response.ok) throw Error(response.status === 404 ? 'This object is unavailable or protected.' : 'Connections could not load. Please try again.');
@@ -58,13 +58,13 @@ function Preview({item}) {
   if (!data) return <p className="connections-state" role="status">Loading connections…</p>;
   if (!data.links.length) return <div className="connections-state connections-empty" role="status">
     <h3>No connections yet</h3>
-    <p>{item.kind === 'daily' ? 'Related activity will appear here when it is connected to this date.' : 'Add this action to a board to organize it alongside related ideas, thoughts, and actions.'}</p>
+    <p>{item.kind === 'daily' ? 'Related activity will appear here when it is connected to this date.' : `Add this ${item.kind === 'idea' ? 'idea' : 'action'} to a board to organize it alongside related ideas, thoughts, and actions.`}</p>
   </div>;
   const relations = data.edges.filter(e => [e.source, e.target].includes(selected?.id));
   const label = id => data.nodes.find(n => n.id === identity(id))?.label || identity(id);
   return <>
     <div className="connections-layout">
-      <div className="connections-canvas" ref={host} aria-label={item.kind === 'daily' ? 'Date connections graph' : 'Action connections graph'} tabIndex={0}
+      <div className="connections-canvas" ref={host} aria-label={item.kind === 'daily' ? 'Date connections graph' : item.kind === 'idea' ? 'Idea connections graph' : 'Action connections graph'} tabIndex={0}
         onKeyDown={event => {
           if (!['ArrowRight', 'ArrowLeft'].includes(event.key)) return;
           event.preventDefault();
@@ -157,9 +157,9 @@ window.HflActionConnections = {open(item, trigger) {
   close.onclick = () => dialog.close(); header.append(heading, close);
   if (item.kind !== 'daily') {
     const toolbar = document.createElement('div'); toolbar.className = 'connections-actions';
-    const hint = document.createElement('p'); hint.textContent = 'Explore related activity and the boards this action belongs to.';
+    const hint = document.createElement('p'); hint.textContent = `Explore related activity and the boards this ${item.kind === 'idea' ? 'idea' : 'action'} belongs to.`;
     const add = document.createElement('button'); add.type = 'button'; add.textContent = 'Add to a board';
-    add.onclick = () => window.HflIdeas.addToBoard('actionable', item);
+    add.onclick = () => window.HflIdeas.addToBoard(item.kind === 'idea' ? 'idea' : 'actionable', item);
     toolbar.append(hint, add); dialog.append(header, toolbar);
   } else dialog.append(header);
   const content = document.createElement('div'); content.className = 'connections-content'; dialog.append(content); document.body.append(dialog);

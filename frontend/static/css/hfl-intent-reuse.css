@@ -1,4 +1,15 @@
-.intent-copy-choice { display:block; width:100%; text-align:left; padding:.7rem; margin:.4rem 0; border:1px solid #475569; border-radius:.4rem; }
+.intent-copy-dialog { width:min(680px,calc(100vw - 24px)); max-height:90dvh; padding:0; }
+.intent-copy-dialog form { display:flex; flex-direction:column; max-height:90dvh; }
+.intent-copy-dialog .agenda-dialog-header { flex-shrink:0; }
+.intent-copy-dialog .agenda-form-body { overflow-y:auto; min-height:0; }
+.intent-copy-results { display:grid; gap:8px; }
+.intent-copy-dialog .intent-copy-choice { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:6px 12px; width:100%; text-align:left; padding:12px; margin:0; border:1px solid #334155; background:#101c2e; border-radius:10px; white-space:normal; }
+.intent-copy-choice strong { overflow-wrap:anywhere; }
+.intent-copy-kind { border-radius:5px; padding:3px 7px; font-size:.7rem; color:#a5e8fc; background:#123547; }
+.intent-copy-description { grid-column:1/-1; color:#94a3b8; font-size:.8rem; line-height:1.5; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
+.intent-copy-pagination { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px 20px; border-top:1px solid #334155; flex-shrink:0; }
+.intent-copy-pagination span { color:#94a3b8; font-size:.8rem; }
+.idea-board-card .agenda-card-actions.action-controls .action-management-controls > button { flex:1 0 auto; padding:.4rem .35rem; }
 .checklist-markdown { flex:1; min-width:0; padding:.4rem; cursor:text; overflow-wrap:anywhere; font-size:.85rem; }
 .checklist-markdown p,.checklist-card-cover p { margin:0; }
 .checklist-markdown a,.checklist-card-cover a { color:#7dd3fc; text-decoration:underline; }

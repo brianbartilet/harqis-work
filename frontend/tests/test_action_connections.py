@@ -38,6 +38,20 @@ def test_connections_include_board_thoughts_and_preserve_shared_identity(ideas, 
     assert ideas.snapshot() == before
 
 
+def test_idea_connections_include_shared_and_board_links(ideas, authenticated_client):
+    action, idea, boards = seed(ideas)
+    before = ideas.snapshot()
+    response = authenticated_client.get(BASE + '/ideas/' + idea['id'] + '/connections')
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data['root'] == 'idea:' + idea['id']
+    assert {data['root'], 'action:' + action['id']} <= {node['id'] for node in data['nodes']}
+    assert len([edge for edge in data['edges'] if edge['scope'] == 'board']) == len(boards)
+    assert any(edge['scope'] == 'shared' for edge in data['edges'])
+    assert ideas.snapshot() == before
+    assert authenticated_client.get(BASE + '/ideas/missing/connections').status_code == 404
+
+
 def test_connection_availability_shared_board_only_and_unrelated(ideas, authenticated_client):
     action, _, boards = seed(ideas)
     isolated = ideas.followups.create({'request_id': str(uuid4()), 'title': 'Unrelated', 'expected_outcome': 'None'}, actor='owner')[0]

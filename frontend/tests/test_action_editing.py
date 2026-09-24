@@ -66,7 +66,7 @@ def test_actions_page_autosave_refresh_sort_and_move(editor_page):
     expect(page.locator('#followup-editor')).to_be_visible()
     expect(form.locator('[name=title]')).to_have_value('Autosaved title')
     expect(form.get_by_role('textbox', name='Checklist name').last).to_have_value('Agent Instructions')
-    form.get_by_role('combobox', name='Sort First', exact=True).select_option('asc')
+    form.locator('[data-list-id=one]').get_by_role('button', name='Sort items A–Z', exact=True).click()
     expect(form.locator('.editor-save-status')).to_have_text('Saved')
     assert client.get(uri).json()['item']['checklists'][0]['items'][0]['id'] == 'a'
     row = form.locator('[data-item-id=a]')
@@ -76,6 +76,9 @@ def test_actions_page_autosave_refresh_sort_and_move(editor_page):
     expect(page.locator('#followup-editor')).to_be_visible()
     row.get_by_role('button', name='Move item to another checklist').click()
     page.get_by_role('combobox', name='Move item to checklist').select_option('two')
+    assert client.get(uri).json()['item']['checklists'][1]['items'] == []
+    expect(page.locator('.checklist-move-dialog')).to_be_visible()
+    page.locator('.checklist-move-dialog').get_by_role('button', name='Confirm', exact=True).click()
     expect(form.locator('.editor-save-status')).to_have_text('Saved')
     assert client.get(uri).json()['item']['checklists'][1]['items'][0]['id'] == 'a'
     form.locator('[data-list-id=two]').get_by_role('button', name='Move checklist up').click()
@@ -84,6 +87,30 @@ def test_actions_page_autosave_refresh_sort_and_move(editor_page):
     form.get_by_role('button', name='Close follow-up editor').click()
     expect(page.locator('#followup-editor')).not_to_be_visible()
     page.wait_for_function("!new URLSearchParams(location.search).has('edit')")
+
+
+@pytest.mark.parametrize('width', [390, 1280])
+def test_copy_list_dialog_pagination_and_search(editor_page, ideas, tmp_path, width):
+    from playwright.sync_api import expect
+    page, client = editor_page
+    page.set_viewport_size({'width': width, 'height': 900})
+    for index in range(12):
+        ideas.save_idea(payload(title=f'Copy target {index}', description=f'Unique description {index}'), 'owner')
+    page.goto('https://editing.test/hfl-corpus/actions')
+    page.evaluate("window.HflCopyList({id:'source',title:'Source',items:[]})")
+    picker = page.get_by_role('dialog', name='Copy list to action or idea')
+    expect(picker.locator('.intent-copy-choice')).to_have_count(10)
+    expect(picker.get_by_role('button', name='Previous', exact=True)).to_be_disabled()
+    page.screenshot(path=str(tmp_path / f'copy-list-{width}.png'))
+    picker.get_by_role('button', name='Next', exact=True).click()
+    expect(picker.locator('.intent-copy-choice')).to_have_count(2)
+    expect(picker.get_by_text('Page 2 of 2', exact=True)).to_be_visible()
+    picker.get_by_role('searchbox').fill('Unique description 11')
+    expect(picker.locator('.intent-copy-choice')).to_have_count(1)
+    expect(picker.get_by_text('Page 1 of 1', exact=True)).to_be_visible()
+    expect(picker.locator('.intent-copy-kind')).to_have_text('Idea')
+    picker.get_by_role('button', name='Close copy list').click()
+    expect(picker).to_have_count(0)
 
 
 def test_conflict_retains_edits_and_close_offers_discard(editor_page):

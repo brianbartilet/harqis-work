@@ -129,6 +129,7 @@ window.HflObjectDescription = (item = {}) => {
   async function openEditor(kind, item = {}, parent = null, conversion = null, clone = null) {
     const label = kind === 'actionable' ? 'action' : kind;
     const d = dialog(conversion ? 'Create action from idea' : item.id ? 'Edit ' + label : 'New ' + label);
+    if(kind==='idea')d.footer.replaceChildren();
     if(clone)d.node.classList.add('idea-copy-dialog');
     let state;
     let current = item.id ? item : null, source = item.source || null, files, checklists, save;
@@ -189,6 +190,7 @@ window.HflObjectDescription = (item = {}) => {
       checklists.updateConversion();
       for (const event of ['input', 'change', 'click']) d.form.addEventListener(event, () => queueMicrotask(() => checklists.updateConversion()));
       save = el('button', current ? 'Save now' : 'Create'); save.type = 'submit'; d.footer.append(save);
+      save.hidden = kind === 'idea' && !!current;
       let linked = !!current, copiedLoaded = false;
       const persistEditor = async () => {
           d.error.textContent = '';
@@ -229,6 +231,7 @@ window.HflObjectDescription = (item = {}) => {
           // Conversion also creates shared relationships and updates the source idea.
           if (conversion) await maps.flush();
           save.textContent='Save now';
+          if(kind==='idea')save.hidden=true;
           if(kind==='actionable')d.form.querySelector('[name=status]').closest('label').hidden=false;
           window.HflEditorLocation(kind,current.id); changed(null, false, !!conversion);
       };

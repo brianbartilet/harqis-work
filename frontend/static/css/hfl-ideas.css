@@ -305,8 +305,13 @@
 .agenda-dialog.checklist-move-dialog { padding:24px; width:min(480px,calc(100vw - 40px)); }
 .checklist-move-dialog h2 { margin:0 0 12px; }
 .checklist-move-dialog p { margin:0 0 16px; overflow-wrap:anywhere; }
-.checklist-move-dialog select { width:100%; margin-bottom:20px; }
-.checklist-move-dialog > button { display:block; margin-left:auto; }
+.checklist-move-dialog select { width:100%; margin-bottom:20px; padding:10px 12px; border:1px solid #475569; border-radius:8px; background:#020817; color:#e2e8f0; color-scheme:dark; }
+.checklist-move-dialog option { background:#0f172a; color:#e2e8f0; }
+.checklist-move-actions { display:flex; justify-content:flex-end; gap:8px; }
+.checklist-list-actions, .checklist-sort-actions { display:flex; align-items:center; gap:2px; flex:0 0 auto; }
+.idea-checklist-header .checklist-list-actions button, .checklist-sort-actions button { display:grid; place-items:center; flex:0 0 28px; width:28px; height:28px; min-height:0; margin:0; padding:5px; border:0; border-radius:50%; background:transparent; }
+.checklist-list-actions button:hover, .checklist-sort-actions button:hover { background:#334155; }
+.checklist-sort-actions svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
 .board-picker-cards { display:grid; gap:12px; margin-top:16px; }
 .board-picker-card { border:1px solid var(--board-color); border-left:4px solid var(--board-color); border-radius:10px; background:#122035; padding:16px; }
 .board-picker-card h3 { margin:0 0 8px; font-size:1rem; }
