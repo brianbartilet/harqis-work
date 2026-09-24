@@ -53,6 +53,7 @@
 .idea-copy-loading { display:grid; place-items:center; height:100%; min-height:8rem; color:#94a3b8; }
 
 .followups-toolbar [data-board-context] { margin-left:auto; text-align:right; }
+.followups-toolbar :is([data-board-context],[data-board-status]) { font-size:.7rem; font-weight:400; line-height:1.5; color:#94a3b8; }
 .board-workspace-filter > summary,.board-create-menu > summary { list-style:none; cursor:pointer; }
 .board-workspace-filter > summary::-webkit-details-marker,.board-create-menu > summary::-webkit-details-marker { display:none; }
 .board-workspace-filter .workspace-menu-panel { z-index:50; }
