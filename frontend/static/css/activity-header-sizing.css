@@ -1,0 +1,20 @@
+/* Keep header controls the same height as the corpus Search button. */
+:is(.corpus-header-shell .corpus-header-link,
+    .corpus-header-shell .corpus-secrets-control,
+    #followups-board .followups-toolbar .board-create-menu > summary,
+    #followups-board .followups-toolbar .board-workspace-filter > summary,
+    #followups-board [data-board-refresh],
+    #followups-board [data-board-close],
+    .kg-shell .activity-modal-heading [data-activity-close],
+    .kg-shell .kg-toolbar-actions > button,
+    .kg-shell .kg-toolbar-actions > .kg-animation-menu > button,
+    .kg-shell .kg-toolbar-actions > .kg-views-menu > button) {
+  box-sizing:border-box;
+  height:36px;
+  min-height:36px;
+  padding-top:0;
+  padding-bottom:0;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}

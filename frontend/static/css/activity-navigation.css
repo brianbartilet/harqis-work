@@ -1,0 +1,12 @@
+.activity-navigation { display:flex; align-items:center; flex-shrink:0; border-radius:.375rem; color:#94a3b8; font-size:.75rem; font-weight:500; white-space:nowrap; }
+.activity-navigation.is-active { background:rgba(23,37,84,.7); color:#93c5fd; box-shadow:0 0 0 1px rgba(30,64,175,.6); }
+.activity-navigation > a { padding:.375rem .75rem; border-radius:.375rem; }
+.activity-navigation-menu > summary { display:grid; place-items:center; min-height:28px; width:28px; border-left:1px solid #334155; border-radius:0 .375rem .375rem 0; cursor:pointer; list-style:none; }
+.activity-navigation-menu > summary::-webkit-details-marker { display:none; }
+.activity-navigation-menu[open] > summary svg { transform:rotate(180deg); }
+.activity-navigation > a:hover,.activity-navigation-menu > summary:hover { background:#1e293b; color:#bfdbfe; }
+.activity-navigation-options { position:fixed; z-index:90; width:180px; max-width:calc(100vw - 16px); padding:.5rem; border:1px solid #334155; border-radius:.65rem; background:#0f172a; color:#cbd5e1; box-shadow:0 16px 40px #02061780; }
+.activity-navigation-options a { display:block; padding:.65rem .75rem; border-radius:.375rem; }
+.activity-navigation-options a:hover,.activity-navigation-options a:focus-visible { background:#1e293b; color:#dbeafe; }
+.activity-navigation-options a[aria-current=page] { background:#172554; color:#93c5fd; }
+@media(max-width:767px) { .activity-navigation { background:#0f172a; } }
