@@ -141,12 +141,33 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
             route.fulfill(status=response.status_code, body=response.content, headers={'content-type':response.headers.get('content-type', 'text/html')})
         page.route('https://reuse.test/**', respond)
         page.goto('https://reuse.test/hfl-corpus/actions')
+        lanes_before = page.locator('[data-board-lanes]').bounding_box()
+        page.locator('.ideas-drawer-toggle').click()
+        expect(page.locator('.ideas-drawer')).to_contain_text('Source idea')
+        assert page.locator('[data-board-lanes]').bounding_box() == lanes_before
+        assert page.locator('[data-board-lanes] > .ideas-drawer').count() == 0
+        page.locator('.ideas-drawer-backdrop').click(position={'x': width - 5, 'y': 300})
+        expect(page.locator('.ideas-drawer')).to_have_count(0)
+        page.locator('.ideas-drawer-toggle').click()
+        expect(page.locator('.ideas-drawer')).to_be_visible()
+        page.keyboard.press('Escape')
+        expect(page.locator('.ideas-drawer')).to_have_count(0)
         page.locator('.ideas-drawer-toggle').click()
         expect(page.locator('.ideas-drawer')).to_contain_text('Source idea')
         page.locator('.ideas-drawer').get_by_role('button', name='Clone Source idea').click()
         modal = page.locator('dialog[open]').last
         expect(modal.get_by_label('Idea', exact=True)).to_have_value('Source idea (1)')
         expect(modal.locator('.checklist-markdown')).to_contain_text('Choose a shelf')
+        for revised in ('**Updated shelf**', '*Updated again*'):
+            modal.locator('.checklist-markdown').click()
+            checklist_input = modal.get_by_role('textbox', name='Checklist item', exact=True)
+            expect(checklist_input).to_be_focused()
+            checklist_input.fill(revised)
+            modal.get_by_role('heading').first.click()
+            expect(modal.locator('.checklist-markdown')).to_be_visible()
+            expect(checklist_input).to_be_hidden()
+
+        page.screenshot(path=str(tmp_path / ('clone-' + str(width) + '.png')), full_page=True)
         modal.get_by_role('button', name='Create', exact=True).click()
         expect(modal.get_by_role('button', name='Save now', exact=True)).to_be_visible()
         assert len(ideas.ideas()) == 2
@@ -157,6 +178,7 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
         expect(picker).to_have_count(0)
         assert len(ideas.followups.get(action['id'])['checklists']) == 1
         modal.get_by_role('button', name='Close', exact=True).click()
+        page.get_by_role('button', name='Close ideas drawer', exact=True).click()
         page.locator('[data-followup-id="'+action['id']+'"]').get_by_role('button', name='Edit', exact=True).click()
         action_form = page.locator('#followup-form')
         action_form.get_by_text('Action plan', exact=True).click()
@@ -168,5 +190,53 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
         action_form.evaluate("""form => {const transfer=new DataTransfer();transfer.items.add(new File(['image'], 'screenshot.png', {type:'image/png'}));form.dispatchEvent(new ClipboardEvent('paste',{clipboardData:transfer,bubbles:true}));}""")
         expect(action_form.locator('[data-input-list]')).to_contain_text('screenshot.png')
         page.screenshot(path=str(tmp_path / ('reuse-' + str(width) + '.png')), full_page=True)
+        assert not errors, errors
+        browser.close()
+
+
+def test_live_list_and_board_clipboard_browser(ideas, authenticated_client, tmp_path):
+    from urllib.parse import urlparse
+    from playwright.sync_api import sync_playwright, expect
+    idea = ideas.save_idea(payload(), 'owner')
+    list_id = 'list:idea:' + idea['id'] + ':list'
+    board = ideas.save_map(dict(request_id=str(uuid4()), name='Live lists', members=[list_id],
+                               drafts=[dict(id='draft:one', title='Independent thought', body='Notes')]))
+    with sync_playwright() as engine:
+        browser = engine.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page(viewport={'width': 1280, 'height': 1000})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        def respond(route):
+            r, url = route.request, urlparse(route.request.url)
+            response = authenticated_client.request(r.method, url.path + ('?' + url.query if url.query else ''), content=r.post_data_buffer,
+                headers={'content-type':r.headers.get('content-type', 'application/json')})
+            route.fulfill(status=response.status_code, body=response.content, headers={'content-type':response.headers.get('content-type', 'text/html')})
+        page.route('https://lists.test/**', respond)
+        page.goto('https://lists.test/hfl-corpus/graph?board=' + board['id'])
+        expect(page.locator('#kg-map-count')).to_contain_text('3 nodes')
+        node_list = page.locator('#kg-list')
+        node_list.get_by_role('button').filter(has_text='Independent thought').click()
+        page.keyboard.press('Control+c')
+        page.keyboard.press('Control+v')
+        expect(page.locator('#kg-map-count')).to_contain_text('4 nodes')
+        assert any(d['title'] == 'Independent thought (1)' for d in ideas.map(board['id'])['drafts'])
+        page.keyboard.press('Delete')
+        expect(page.locator('#kg-map-count')).to_contain_text('3 nodes')
+        page.get_by_role('menuitem', name='Clear selection', exact=True).click()
+        node_list.get_by_role('button').filter(has_text='Prepare').click()
+        page.get_by_role('menuitem', name='Edit live list', exact=True).click()
+        modal = page.locator('dialog[open]').last
+        modal.get_by_label('Checklist name').fill('Synced list')
+        modal.get_by_role('button', name='Save list', exact=True).click()
+        expect(page.locator('#kg-detail').get_by_role('heading', name='Synced list', exact=True)).to_be_visible()
+        assert ideas.idea(idea['id'])['checklists'][0]['title'] == 'Synced list'
+        page.locator('.board-controls').get_by_role('button', name='New list', exact=True).click()
+        modal = page.locator('dialog[open]').last
+        modal.get_by_label('Checklist name').fill('Standalone')
+        modal.get_by_role('button', name='Add item', exact=True).click()
+        modal.get_by_label('Checklist item', exact=True).fill('**Fresh thought**')
+        modal.get_by_role('button', name='Save list', exact=True).click()
+        expect(page.locator('#kg-map-count')).to_contain_text('5 nodes')
+        page.screenshot(path=str(tmp_path / 'live-list-board.png'), full_page=True)
         assert not errors, errors
         browser.close()

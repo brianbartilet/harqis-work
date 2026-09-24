@@ -41,6 +41,7 @@ class IdeasStore(BoardStoreMixin):
                 CREATE TABLE IF NOT EXISTS idea_maps (id TEXT PRIMARY KEY, version INTEGER NOT NULL, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS idea_item_actions (idea_id TEXT NOT NULL, checklist_id TEXT NOT NULL, item_id TEXT NOT NULL, action_id TEXT NOT NULL, PRIMARY KEY(idea_id,checklist_id,item_id,action_id));
                 CREATE TABLE IF NOT EXISTS idea_conversions (request_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS intent_lists (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
             ''')
             migrate_content(db, 'idea_edits')
 
@@ -80,8 +81,8 @@ class IdeasStore(BoardStoreMixin):
             raise KeyError(identity)
         return item
 
-    def save_idea(self, raw, actor, identity=None):
-        allowed = {'title', 'description', 'body', 'checklists', 'status', 'source', 'expected_outcome', 'matrix', 'matrix_confidence', 'matrix_reason', 'version', 'request_id', 'source_date'}
+    def save_idea(self, raw, actor, identity=None, connection=None):
+        allowed = {'title', 'description', 'body', 'checklists', 'status', 'source', 'expected_outcome', 'matrix', 'matrix_confidence', 'matrix_reason', 'version', 'request_id', 'source_date', 'workspace_ids'}
         if set(raw) - allowed:
             raise ValueError('Unsupported idea fields.')
         previous = self.idea(identity) if identity else {}
@@ -89,6 +90,8 @@ class IdeasStore(BoardStoreMixin):
         if not isinstance(item.get('title'), str) or not item['title'].strip() or len(item['title']) > 200:
             raise ValueError('An idea needs a title of at most 200 characters.')
         item.update(content_fields(item))
+        from workflows.hfl.intent_reuse import workspaces
+        item['workspace_ids'] = workspaces(item)
         from workflows.hfl.timeline_store import validate_matrix
         item.update(validate_matrix(item))
         if not isinstance(item.get('expected_outcome', ''), str) or len(item.get('expected_outcome', '')) > 3000:
@@ -104,8 +107,10 @@ class IdeasStore(BoardStoreMixin):
                     created_at=previous.get('created_at', isoformat()), updated_at=isoformat(),
                     status=item.get('status', 'suggested'), origin=previous.get('origin', 'manual' if not previous else 'generated'))
         item.pop('request_id', None)
-        with self.followups.connect() as db:
-            db.execute('BEGIN IMMEDIATE')
+        from contextlib import nullcontext
+        with (nullcontext(connection) if connection is not None else self.followups.connect()) as db:
+            if connection is None:
+                db.execute('BEGIN IMMEDIATE')
             found = db.execute('SELECT * FROM idea_edits WHERE id=?', (identity,)).fetchone()
             if not previous and found:
                 existing = json.loads(found['payload'])
@@ -165,8 +170,8 @@ class IdeasStore(BoardStoreMixin):
             db.execute('DELETE FROM board_order')
             db.executemany('INSERT INTO board_order VALUES (?,?)', [(identity, index) for index, identity in enumerate(identities)])
 
-    def save_map(self, raw, identity=None):
-        if set(raw) - {'name', 'members', 'positions', 'node_sizes', 'edge_widths', 'version', 'request_id', 'prompt', 'purpose', 'root', 'goal_id', 'drafts', 'edges', 'board_date', 'color'}:
+    def save_map(self, raw, identity=None, connection=None):
+        if set(raw) - {'name', 'members', 'positions', 'node_sizes', 'edge_widths', 'version', 'request_id', 'prompt', 'purpose', 'root', 'goal_id', 'drafts', 'edges', 'board_date', 'color', 'hidden_members'}:
             raise ValueError('Unsupported mind-map fields.')
         previous = self.map(identity) if identity else {}
         item = {**previous, **raw}
@@ -182,8 +187,17 @@ class IdeasStore(BoardStoreMixin):
         members = item.get('members', [])
         if not isinstance(members, list) or len(members) > 10000 or any(not isinstance(i, str) or len(i) > 200 for i in members):
             raise ValueError('Invalid map membership.')
-        board_ids = validate_board(item)
+        from workflows.hfl.intent_reuse import list_graph
+        list_nodes, _ = list_graph(self.snapshot()) if any(i.startswith('list:') for i in members) else ([], [])
+        extra_ids = {n['id'] for n in list_nodes if n.get('list_id') in members} - set(item.get('hidden_members', []))
+        if isinstance(item.get('edges', []), list):
+            item['edges'] = [e for e in item.get('edges', []) if not isinstance(e, dict) or any(not isinstance(e.get(k), str) for k in ('source', 'target')) or all(not e[k].startswith('thought:') or e[k] in extra_ids or e[k] in members for k in ('source', 'target'))]
+        if isinstance(item.get('root'), str) and item['root'].startswith('thought:') and item['root'] not in extra_ids and item['root'] not in members:
+            item['root'] = ''
+        board_ids = validate_board(item, extra_ids)
         positions = item.get('positions', {})
+        if isinstance(positions, dict):
+            positions = {k: v for k, v in positions.items() if not isinstance(k, str) or not k.startswith('thought:') or k in board_ids}
         if not isinstance(positions, dict) or len(positions) > 10000:
             raise ValueError('Invalid map positions.')
         for key, point in positions.items():
@@ -195,8 +209,10 @@ class IdeasStore(BoardStoreMixin):
         item.update(id=identity or 'map-' + str(uuid.UUID(raw['request_id'])), version=previous.get('version', 0) + 1,
                     members=list(dict.fromkeys(members)), positions=positions, prompt=prompt)
         item.pop('request_id', None)
-        with self.followups.connect() as db:
-            db.execute('BEGIN IMMEDIATE')
+        from contextlib import nullcontext
+        with (nullcontext(connection) if connection is not None else self.followups.connect()) as db:
+            if connection is None:
+                db.execute('BEGIN IMMEDIATE')
             found = db.execute('SELECT * FROM idea_maps WHERE id=?', (item['id'],)).fetchone()
             if previous and (not found or found['version'] != raw.get('version')):
                 raise FollowUpConflict('The map changed. Reload before saving.')
@@ -217,7 +233,8 @@ class IdeasStore(BoardStoreMixin):
         with self.followups.connect() as db:
             topics = [dict(row) for row in db.execute('SELECT * FROM idea_topics')]
             memories = [dict(row) for row in db.execute('SELECT entry_id,object_id,board_id,day FROM board_memories')]
-        return {'ideas': self.ideas(), 'actions': self.followups.list() + self.followups.list(closed=True), 'topics': topics, 'links': self.links(), 'maps': self.maps(), 'goals': self.goals(), 'memories': memories}
+            lists = [json.loads(row['payload']) for row in db.execute('SELECT payload FROM intent_lists')]
+        return {'ideas': self.ideas(), 'actions': self.followups.list() + self.followups.list(closed=True), 'topics': topics, 'links': self.links(), 'maps': self.maps(), 'goals': self.goals(), 'memories': memories, 'lists': lists}
 
 
 def local_day(timestamp):

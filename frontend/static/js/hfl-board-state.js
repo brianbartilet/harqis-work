@@ -1,3 +1,4 @@
+(() => {
 /* Board edits remain in memory until the canonical server acknowledges them. */
 class HflBoardSaveQueue {
   constructor(board, send, read, notify, delay = 500) {
@@ -64,3 +65,5 @@ class HflBoardSaveQueue {
 }
 if (typeof module !== 'undefined') module.exports = HflBoardSaveQueue;
 if (typeof window !== 'undefined') window.HflBoardSaveQueue = HflBoardSaveQueue;
+
+})();

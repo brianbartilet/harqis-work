@@ -198,6 +198,7 @@ def board_graph(request: Request, identity: str):
     shared = graph(limit=0)
     available = {n['id']: n for n in shared['nodes']}
     members = set(board['members'])
+    members.update(n['id'] for n in shared['nodes'] if n.get('list_id') in members and n['id'] not in board.get('hidden_members', []))
     return {'nodes': [available[i] for i in members if i in available],
             'edges': [e for e in shared['edges'] if e['source'] in members and e['target'] in members
                       and e['source'] in available and e['target'] in available], 'sources': []}
@@ -547,3 +548,6 @@ def save_proposal(identity, raw, actor):
 async def accept_proposal(request: Request, identity: str):
     actor = timeline.owner(request)
     return save_proposal(identity, await timeline.body(request), actor)
+
+from modules.hfl_corpus.intent_reuse import register as register_reuse
+register_reuse(router)

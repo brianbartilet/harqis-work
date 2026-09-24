@@ -160,7 +160,7 @@ def test_drag_item_to_empty_list_and_guard_new_draft(editor_page, width):
     item = create_action(client)
     page.goto('https://editing.test/hfl-corpus/actions?edit_kind=actionable&edit=' + item['id'])
     form = page.locator('#followup-form')
-    row = form.locator('[data-item-id=a] input[type=text]')
+    row = form.locator('[data-item-id=a] .checklist-markdown')
     row.scroll_into_view_if_needed()
     start = row.bounding_box()
     target = form.locator('[data-list-id=two] .checklist-add-item')

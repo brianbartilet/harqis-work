@@ -37,7 +37,8 @@ window.HflChecklists = class {
       const cover = document.createElement('input'); cover.type = 'checkbox'; cover.checked = !!list.cover;
       cover.onchange = () => { list.cover = cover.checked; this.notify(); }; coverLabel.append(cover, document.createTextNode('Checklist cover'));
       const header = document.createElement('div'); header.className = 'idea-checklist-header';
-      header.append(title, this.iconButton('delete', () => { this.value.splice(index, 1); this.render(); }, 'Remove checklist'));
+      header.append(title);
+      if (!this.options.singleList) header.append(this.iconButton('delete', () => { this.value.splice(index, 1); this.render(); }, 'Remove checklist'));
       const moveList = delta => { const next = index + delta; if (next < 0 || next >= this.value.length) return; [this.value[index], this.value[next]] = [this.value[next], this.value[index]]; this.render(); };
       const grip = this.button('⠿', () => {}, 'Drag checklist to reorder'); grip.draggable = true;
       grip.ondragstart = event => { event.dataTransfer.setData('application/x-hfl-checklist', list.id); event.dataTransfer.effectAllowed = 'move'; };
@@ -46,6 +47,8 @@ window.HflChecklists = class {
       const up = this.iconButton('up', () => moveList(-1), 'Move checklist up'); up.disabled = index === 0;
       const down = this.iconButton('down', () => moveList(1), 'Move checklist down'); down.disabled = index === this.value.length - 1;
       header.prepend(grip); header.append(up, down);
+      header.append(this.button('⧉', () => window.HflCopyList(structuredClone(list)), 'Copy list'));
+      if (this.options.addToBoard) header.append(this.iconButton('board', () => this.options.addToBoard(list, null), 'Add list to board'));
       const sorting = document.createElement('select'); sorting.setAttribute('aria-label', 'Sort ' + list.title);
       for (const [value, label] of [['','Sort items'],['asc','A–Z'],['desc','Z–A']]) { const option = document.createElement('option'); option.value = value; option.textContent = label; sorting.append(option); }
       sorting.onchange = () => { if (!sorting.value) return; const direction = sorting.value === 'asc' ? 1 : -1; list.items.sort((a,b) => direction * a.text.localeCompare(b.text, undefined, {sensitivity:'base'})); this.render(); };
@@ -66,7 +69,7 @@ window.HflChecklists = class {
         row.classList.toggle('is-complete', !!item.done);
         row.onkeydown = event => { if (event.target === row && ['ArrowUp', 'ArrowDown'].includes(event.key)) { event.preventDefault(); move(event.key === 'ArrowUp' ? -1 : 1); this.root.querySelector(`[data-item-id="${CSS.escape(item.id)}"]`)?.focus(); } };
         row.onpointerdown = event => {
-          if (event.button !== 0 || event.target.closest('button, select, input[type=checkbox]') || (event.target === text && document.activeElement === text)) return;
+          if (event.button !== 0 || event.target.closest('button, select, a, input[type=checkbox]') || (event.target === text && document.activeElement === text)) return;
           event.preventDefault(); this.root.setPointerCapture(event.pointerId);
           let dragging = false, destination = list;
           const startX = event.clientX, startY = event.clientY;
@@ -86,7 +89,7 @@ window.HflChecklists = class {
           const finish = end => {
             this.root.onpointermove = this.root.onpointerup = this.root.onpointercancel = this.root.onlostpointercapture = null;
             if (this.root.hasPointerCapture(event.pointerId)) this.root.releasePointerCapture(event.pointerId);
-            if (!dragging) { if (end.type === 'pointerup') text.focus(); return; }
+            if (!dragging) { if (end.type === 'pointerup') edit(); return; }
             if (end.type === 'pointerup') {
               list.items = list.items.filter(x => x.id !== item.id);
               const nextId = row.nextElementSibling?.dataset.itemId;
@@ -115,6 +118,12 @@ window.HflChecklists = class {
         }, 'Move item to another checklist'); moveButton.disabled = this.value.length < 2; actions.prepend(moveButton);
         if (this.options.addToBoard) actions.prepend(this.iconButton('board', () => this.options.addToBoard(list, item), 'Add checklist item to board'));
         row.append(check, text, actions);
+        const preview = document.createElement('div'); preview.className = 'checklist-markdown markdown-body'; preview.tabIndex = 0; preview.setAttribute('aria-label', 'Edit checklist item');
+        const show = () => { if (!text.value.trim()) return; preview.hidden=false; text.hidden=true; window.HflChecklistMarkdown?.(preview,text.value); };
+        const edit = () => { preview.hidden=true; text.hidden=false; text.focus(); };
+        preview.onclick = event => { if (!event.target.closest('a')) edit(); };
+        preview.onkeydown = event => { if (event.target===preview && ['Enter',' '].includes(event.key)) {event.preventDefault();edit();} };
+        text.onblur=show; text.after(preview); preview.hidden=true; show();
         if (this.options.convert) {
           const convert = this.iconButton('convert', () => { if (!this.options.canConvert || this.options.canConvert()) this.options.convert(list.id, item.id); }, 'Create action');
           convert.dataset.convertItem = item.id; actions.prepend(convert);
@@ -129,7 +138,7 @@ window.HflChecklists = class {
     }
     const addChecklist = this.button('Add', () => { this.value.push({id: crypto.randomUUID(), title: 'Checklist', cover: false, items: []}); this.render(); }, 'Add checklist');
     if (this.options.addButtonRoot) this.options.addButtonRoot.replaceChildren(addChecklist);
-    else this.root.append(addChecklist);
+    else if (!this.options.singleList) this.root.append(addChecklist);
     this.updateConversion(); this.notify();
   }
 };
@@ -148,7 +157,7 @@ window.HflChecklistCover = function(root, item, save, open) {
       const label = document.createElement('label'), check = document.createElement('input'); check.type = 'checkbox'; check.checked = task.done;
       check.onchange = async () => { section.inert = true; const lists = structuredClone(item.checklists); lists.find(l => l.id === list.id).items.find(i => i.id === task.id).done = check.checked;
         try { await save(lists); } catch (error) { check.checked = task.done; const message = document.createElement('p'); message.setAttribute('role', 'alert'); message.textContent = error.message; section.append(message); } finally { section.inert = false; }
-      }; label.append(check, document.createTextNode(task.text)); section.append(label);
+      }; const text=document.createElement('span'); window.HflChecklistMarkdown?.(text,task.text); if(!window.HflChecklistMarkdown)text.textContent=task.text; label.append(check,text); section.append(label);
     }
     root.append(section);
   }

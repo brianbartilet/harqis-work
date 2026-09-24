@@ -160,7 +160,7 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
                 assert panel['x'] >= 0 and panel['x'] + panel['width'] <= width
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
                 page.screenshot(path=str(tmp_path / f'workspace-{width}.png'), full_page=True)
-                assert page.locator('[data-workspace-menu] > summary').inner_text() == 'Views'
+                assert page.locator('[data-workspace-menu] > summary').inner_text() == 'Workspaces'
                 page.get_by_role('button', name='About saved views').click()
                 help_dialog = page.locator('#workspace-help')
                 assert help_dialog.is_visible()

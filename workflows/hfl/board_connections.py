@@ -40,7 +40,10 @@ class ConnectionStoreMixin:
             board = normalize_board(json.loads(row['payload']))
             if board['version'] != raw.get('version'):
                 raise FollowUpConflict('The board changed. Refresh before retrying.')
-            members = set(board['members']) | {d['id'] for d in board['drafts']}
+            from workflows.hfl.intent_reuse import list_graph
+            list_nodes, _ = list_graph(self.snapshot()) if any(i.startswith('list:') for i in board['members']) else ([], [])
+            extra_ids = {n['id'] for n in list_nodes if n.get('list_id') in board['members']} - set(board.get('hidden_members', []))
+            members = set(board['members']) | {d['id'] for d in board['drafts']} | extra_ids
             if any(e[k] not in members for e in (old, new) for k in ('source', 'target')):
                 raise ValueError('Connect members of this board.')
             local = next((e for e in board['edges'] if connection_key(e) == old_key), None)
@@ -99,7 +102,7 @@ class ConnectionStoreMixin:
                     width = board['edge_widths'].pop(old_key, None)
                     if operation == 'update' and width is not None:
                         board['edge_widths'][new_key] = width
-            validate_board(board)
+            validate_board(board, extra_ids)
             board['version'] += 1
             board['updated_at'] = isoformat()
             db.execute('UPDATE idea_maps SET version=?,payload=? WHERE id=?', (board['version'], json.dumps(board), identity))

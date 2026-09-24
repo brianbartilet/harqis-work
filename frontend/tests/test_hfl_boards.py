@@ -210,7 +210,7 @@ def test_board_sidebar_order_collapse_and_saved_lines_browser(ideas, authenticat
             sidebar=page.locator('.kg-boards')
             expect(sidebar.get_by_role('button',name='Explore Activity Graph')).to_be_visible()
             assert sidebar.locator('.board-controls button').all_text_contents()==[
-                'Add thought','Attach existing','Ask agent','Save now','Save layout','Settings','Delete']
+                'Copy selected','Paste','Delete selected','New list','Add thought','Attach existing','Ask agent','Save now','Save layout','Settings','Delete']
             width=sidebar.bounding_box()['width']
             sidebar.locator('[data-section=boards] > summary').click()
             expect(sidebar.locator('[data-section=boards] .board-list')).not_to_be_visible()
@@ -574,9 +574,12 @@ def test_attach_choices_paging_permissions_and_saved_members(ideas, authenticate
     first = authenticated_client.get(url+'/attach-options').json()
     second = authenticated_client.get(url+'/attach-options?offset=50').json()
     assert len(first['nodes']) == 50 and first['has_more']
-    assert not second['has_more']
     assert not {n['id'] for n in first['nodes']} & {n['id'] for n in second['nodes']}
     all_nodes = first['nodes'] + second['nodes']
+    page = second
+    while page['has_more']:
+        page = authenticated_client.get(url+'/attach-options?offset='+str(len(all_nodes))).json()
+        all_nodes.extend(page['nodes'])
     assert 'idea:'+hidden['id'] not in {n['id'] for n in all_nodes}
     assert all_nodes == sorted(all_nodes, key=lambda n:(n['updated_at'],n['id']), reverse=True)
     selected = first['nodes'][0]['id']

@@ -13,6 +13,8 @@ def register(router):
     from modules.hfl_corpus import ideas_api as api, timeline
 
     def get_object(kind, identity):
+        if not isinstance(kind, str) or not isinstance(identity, str):
+            raise HTTPException(422, 'Choose an action or idea.')
         collection = {'actionable': 'actions', 'idea': 'ideas'}.get(kind)
         if not collection:
             raise HTTPException(422, 'Choose an action or idea.')
@@ -22,7 +24,7 @@ def register(router):
         return item
 
     def receipt(db, raw, operation):
-        key = str(uuid.UUID(raw.get('request_id', '')))
+        key = str(uuid.UUID(str(raw.get('request_id', ''))))
         fingerprint = json.dumps([operation, raw], sort_keys=True)
         db.execute('CREATE TABLE IF NOT EXISTS intent_copy_requests (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, payload TEXT NOT NULL)')
         previous = db.execute('SELECT * FROM intent_copy_requests WHERE id=?', (key,)).fetchone()
@@ -33,10 +35,12 @@ def register(router):
     @router.get('/reuse/options')
     def options(request: Request, query: str = ''):
         timeline.owner(request)
+        if len(query) > 500:
+            raise HTTPException(422, 'Use a search of at most 500 characters.')
         snapshot = api.permitted_snapshot()
-        rows = [{**i, 'kind': kind} for collection, kind in [('actions', 'actionable'), ('ideas', 'idea')] for i in snapshot[collection]
+        rows = [{**{k: i.get(k) for k in ('id', 'title', 'version', 'updated_at')}, 'kind': kind} for collection, kind in [('actions', 'actionable'), ('ideas', 'idea')] for i in snapshot[collection]
                 if query.casefold() in (i['title'] + ' ' + i.get('body', '')).casefold()]
-        return {'items': sorted(rows, key=lambda i: i.get('updated_at', ''), reverse=True)}
+        return {'items': sorted(rows, key=lambda i: i.get('updated_at', ''), reverse=True)[:100]}
 
     @router.get('/reuse/board-ideas')
     async def board_ideas(request: Request):
@@ -54,7 +58,11 @@ def register(router):
         from modules.hfl_corpus.attachments import source_store
         fields = FIELDS if kind == 'actionable' else {'title', 'body', 'description', 'checklists', 'workspace_ids', 'expected_outcome', 'matrix', 'matrix_confidence', 'matrix_reason'}
         item = {k: copy.deepcopy(v) for k, v in source.items() if k in fields}
-        item.update(title=source['title'][:190] + ' (1)', checklists=copy_lists(source.get('checklists', []), reset=True))
+        titles = {i['title'] for i in api.permitted_snapshot()['actions' if kind == 'actionable' else 'ideas']}
+        suffix = 1
+        while source['title'][:185] + f' ({suffix})' in titles:
+            suffix += 1
+        item.update(title=source['title'][:185] + f' ({suffix})', checklists=copy_lists(source.get('checklists', []), reset=True))
         if kind == 'actionable':
             item.update(status='open', review_date='', due_date='', completion_note='', recurrence=None, agent_enabled=False)
         files, file_source = source_store(kind, identity)
@@ -65,6 +73,9 @@ def register(router):
         actor = timeline.owner(request)
         raw = await timeline.body(request)
         source = get_object(kind, identity)
+        allowed = FIELDS if kind == 'actionable' else {'title', 'body', 'description', 'checklists', 'workspace_ids', 'expected_outcome', 'matrix', 'matrix_confidence', 'matrix_reason', 'status'}
+        if not isinstance(raw.get('item'), dict) or set(raw['item']) - allowed:
+            raise HTTPException(422, 'Invalid clone fields.')
         canonical = api.store()
         from modules.hfl_corpus.attachments import source_store
         files, file_source = source_store(kind, identity)
@@ -79,7 +90,7 @@ def register(router):
                     raise FollowUpConflict('The source changed. Reopen the clone.')
                 values = {**raw.get('item', {}), 'request_id': key}
                 if kind == 'actionable':
-                    values.update(status='open', review_date='', due_date='', recurrence=None, completion_note='', agent_enabled=False)
+                    values.update(status='open', completion_note='', agent_enabled=False)
                     item, _ = canonical.followups.create(values, actor=actor, connection=db)
                 else:
                     values.update(status='suggested')
@@ -121,10 +132,12 @@ def register(router):
         actor = timeline.owner(request)
         raw = await timeline.body(request)
         canonical = api.store()
+        if not isinstance(raw.get('source_board'), str):
+            raise HTTPException(422, 'Choose a source board.')
         source = api.call(canonical.map, raw.get('source_board'))
         target = api.call(canonical.map, identity)
         selected = raw.get('selected')
-        if not isinstance(selected, list) or not 1 <= len(selected) <= 200 or any(not isinstance(i, str) for i in selected):
+        if not isinstance(selected, list) or not 1 <= len(selected) <= 200 or any(not isinstance(i, str) for i in selected) or len(set(selected)) != len(selected):
             raise HTTPException(422, 'Select 1–200 board objects.')
         snapshot = api.permitted_snapshot()
         lists = {i['id']: i for i in list_entities(snapshot)}
@@ -162,6 +175,13 @@ def register(router):
                         drafts.append(dict(id=new_id, title=name(original['title']), body=original.get('body', '')))
                     elif old_id in lists:
                         original = lists[old_id]
+                        if original.get('owner_kind'):
+                            owner = canonical.followups.get(original['owner_id']) if original['owner_kind'] == 'actionable' else canonical.idea(original['owner_id'])
+                            revision = owner['version']
+                        else:
+                            revision = json.loads(db.execute('SELECT payload FROM intent_lists WHERE id=?', (old_id,)).fetchone()['payload'])['version']
+                        if revision != original['version']:
+                            raise FollowUpConflict('A copied list changed. Copy again.')
                         checklist = copy_lists([original['checklist']])[0]
                         checklist['title'] = name(checklist['title'])
                         new_id = 'list:' + uuid.uuid4().hex
@@ -239,4 +259,3 @@ def register(router):
                 item = dict(id=identity, checklist=checklist, version=(old['version'] if old else 0) + 1, updated_at=isoformat())
                 db.execute('INSERT INTO intent_lists VALUES (?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload', (identity, json.dumps(item)))
         return {'item': require_list(identity)}
-

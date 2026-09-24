@@ -2016,6 +2016,20 @@
   };
 
   const selectedFiles = () => Array.from(fileInput.files || []);
+  const receiveMedia = event => {
+    if (savingEntry) return;
+    const files = [...((event.clipboardData || event.dataTransfer)?.files || [])];
+    if (!files.length) return;
+    event.preventDefault();
+    const transfer = new DataTransfer();
+    [...selectedFiles(), ...files].forEach(file => transfer.items.add(file));
+    fileInput.files = transfer.files;
+    fileInput.dispatchEvent(new Event('change', {bubbles:true}));
+  };
+  form.addEventListener('paste', receiveMedia);
+  form.addEventListener('drop', receiveMedia);
+  form.addEventListener('dragover', event => { if ([...(event.dataTransfer?.types || [])].includes('Files')) event.preventDefault(); });
+
   const payload = () => {
     const values = Object.fromEntries(new FormData(form).entries());
     delete values.attachments;

@@ -20,16 +20,19 @@ def normalize_board(item):
             'created_at': '', 'updated_at': '', 'board_date': '', 'color': PIN_COLORS[0], 'node_sizes': {}, 'edge_widths': {}, **item}
 
 
-def validate_board(item):
+def validate_board(item, extra_ids=()):
     item.setdefault('color', PIN_COLORS[0])
     if item['color'] not in PIN_COLORS:
         raise ValueError('Choose a color from the Memory Signal palette.')
     item['purpose'] = text(item.get('purpose', item['name']), 'board purpose', 3000, True)
+    hidden = item.setdefault('hidden_members', [])
+    if not isinstance(hidden, list) or len(hidden) > 10000 or any(not isinstance(i, str) or not i.startswith('thought:') for i in hidden):
+        raise ValueError('Invalid hidden list items.')
     drafts = item.setdefault('drafts', [])
     edges = item.setdefault('edges', [])
     if not isinstance(drafts, list) or len(drafts) > 500:
         raise ValueError('A board supports up to 500 draft thoughts.')
-    ids = set(item.get('members', []))
+    ids = set(item.get('members', [])) | set(extra_ids)
     for draft in drafts:
         if not isinstance(draft, dict) or set(draft) - {'id', 'title', 'body'}:
             raise ValueError('Invalid draft thought.')

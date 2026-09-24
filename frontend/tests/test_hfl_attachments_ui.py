@@ -70,15 +70,16 @@ def test_editors_save_multiple_attachments_without_running_early(authenticated_c
                 headers={'content-type': response.headers.get('content-type', 'text/html')})
 
         page.route('**/*', route)
-        page.goto('https://inputs.test/hfl-corpus')
-        page.locator(f'[data-activity-day="{date.today().isoformat()}"]').click()
+        page.goto('https://inputs.test/hfl-corpus/actions' if kind == 'actionable' else 'https://inputs.test/hfl-corpus')
         if kind == 'actionable':
-            page.locator('[data-activity-menu-create-action]').click()
+            page.locator('[data-board-create]').click()
             dialog = page.locator('#followup-editor')
             dialog.locator('[name="title"]').fill('Read supporting files')
+            dialog.get_by_text('Action plan', exact=True).click()
             dialog.locator('[name="expected_outcome"]').fill('A summary using both files')
             dialog.locator('[name="prompt"]').fill('Read the briefing and data')
         else:
+            page.locator(f'[data-activity-day="{date.today().isoformat()}"]').click()
             page.get_by_text('Pin dates', exact=True).click()
             page.locator(f'[data-activity-day="{date.today().isoformat()}"]').click()
             dialog = page.locator('[data-memory-dialog]')
@@ -96,6 +97,9 @@ def test_editors_save_multiple_attachments_without_running_early(authenticated_c
         assert widget.locator('.agent-input-row').count() == (2 if with_files else 0)
         assert widget.evaluate('(el) => el.scrollWidth <= el.clientWidth + 1')
         dialog.locator('[type="submit"]').click()
+        if kind == 'actionable':
+            playwright.expect(dialog.locator('.editor-save-status')).to_have_text('Saved')
+            dialog.get_by_role('button', name='Close', exact=True).click()
         playwright.expect(dialog).not_to_be_visible()
         item = actions.list()[0] if kind == 'actionable' else pins.snapshot()['ranges'][0]
         assert item['prompt'] == 'Read the briefing and data'

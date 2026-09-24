@@ -20,7 +20,7 @@
     let recurrence=form.querySelector('[data-recurrence-fields]');recurrence?.remove();
     if(kind!=='actionable')return;
     recurrence=element('section');recurrence.dataset.recurrenceFields='';
-    const add=(name,text,type,value)=>{const l=element('label',text),input=element(type==='select'?'select':'input');input.name=name;if(type!=='select')input.type=type;input.value=value??'';l.append(input);recurrence.append(l);return input;};
+    const add=(name,text,type,value)=>{const l=element('label',text),input=element(type==='select'?'select':'input');input.name=name;input.setAttribute('aria-label',text);if(type!=='select')input.type=type;input.value=value??'';l.append(input);recurrence.append(l);return input;};
     const frequency=add('repeat_frequency','Repeat','select','');
     for(const [value,text] of [['','Does not repeat'],['daily','Daily'],['weekly','Weekly'],['monthly','Monthly'],['yearly','Yearly']]){const option=element('option',text);option.value=value;frequency.append(option);}
     frequency.value=item?.recurrence?.frequency||'';
@@ -33,7 +33,7 @@
   };
   window.HflIntentValues = form => {
     const data=new FormData(form), result=Object.fromEntries(data);
-    result.workspace_ids=data.getAll('workspace_ids');
+    result.workspace_ids=data.getAll('workspace_ids').sort();
     if(form.querySelector('[data-recurrence-fields]'))result.recurrence=result.repeat_frequency?{frequency:result.repeat_frequency,interval:Number(result.repeat_interval),start:result.repeat_start,end:result.repeat_end||''}:null;
     for(const key of Object.keys(result))if(key.startsWith('repeat_'))delete result[key];
     return result;

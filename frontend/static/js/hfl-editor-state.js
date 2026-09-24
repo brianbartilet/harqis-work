@@ -82,7 +82,12 @@ if (typeof window !== 'undefined') {
       });
       add('Keep editing', () => question.close());
       question.append(title, message, error, footer); document.body.append(question);
-      question.addEventListener('close', () => { question.remove(); controller.paused=false; controller.changed(); }); question.showModal();
+      const closingQuestion = question;
+      question.addEventListener('close', () => {
+        closingQuestion.remove();
+        if (question === closingQuestion) question = null;
+        controller.paused = !!question?.open; controller.changed();
+      }); question.showModal();
     };
     dialog.addEventListener('cancel', e => { e.preventDefault(); dialog.close(); }, {signal: events.signal});
     let outside = false;

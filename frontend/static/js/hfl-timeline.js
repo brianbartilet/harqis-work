@@ -45,6 +45,7 @@
     form.reset();
     form.querySelectorAll('.action-triage').forEach(section => { section.open = false; });
     attachments.reset(item?.id);
+    window.HflIntentFields(form,item||{});
     for (const name of ['title', 'body', 'expected_outcome', 'notes', 'prompt', 'review_date', 'due_date', 'completion_note', 'matrix', 'matrix_confidence', 'matrix_reason']) form.elements[name].value = item?.[name] || '';
     form.elements.body.value = window.HflObjectDescription(item || {});
     window.hflActionChecklists?.set(window.HflAgentInstructions(item?.checklists));
@@ -53,7 +54,7 @@
     document.getElementById('followup-editor-title').textContent = item ? (desiredStatus === 'done' ? 'Complete action' : 'Edit action') : 'New action';
     showEvidence(); stateFields(); error('followup-save-error'); editor.showModal();
     editorState = window.HflBindEditor(editor, form, {
-      snapshot: () => JSON.stringify({fields:Object.fromEntries(new FormData(form)),checklists:window.hflActionChecklists.value,files:attachments.pending.map(f=>[f.name,f.size,f.lastModified]),removed:[...attachments.removed]}),
+      snapshot: () => JSON.stringify({fields:window.HflIntentValues(form),checklists:window.hflActionChecklists.value,files:attachments.pending.map(f=>[f.name,f.size,f.lastModified]),removed:[...attachments.removed]}),
       exists: () => !!editing, valid: () => form.checkValidity(),
       lock: value => { busy=value; attachments.root.inert=value; form.querySelector('[type=submit]').disabled=value; },
       save: saveEditor,
@@ -293,7 +294,7 @@
   form.elements.status.addEventListener('change',stateFields);
   async function saveEditor() {
     error('followup-save-error');
-    const payload=Object.fromEntries(new FormData(form));
+    const payload=window.HflIntentValues(form);
     payload.description = '';
     payload.checklists=window.hflActionChecklists?.value||[];
     if(editing)payload.version=editing.version;else{payload.request_id=requestId;payload.source=source;if(suggestionId)payload.suggestion_id=suggestionId;}

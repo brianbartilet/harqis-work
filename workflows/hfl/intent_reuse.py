@@ -18,7 +18,7 @@ def recurrence(raw):
         return None
     if not isinstance(rule, dict) or set(rule) - {'frequency', 'interval', 'start', 'end'}:
         raise ValueError('Invalid recurrence.')
-    if rule.get('frequency') not in {'daily', 'weekly', 'monthly', 'yearly'} or type(rule.get('interval')) is not int or not 1 <= rule['interval'] <= 365:
+    if not isinstance(rule.get('frequency'), str) or rule['frequency'] not in {'daily', 'weekly', 'monthly', 'yearly'} or type(rule.get('interval')) is not int or not 1 <= rule['interval'] <= 365:
         raise ValueError('Choose a recurrence frequency and interval from 1 to 365.')
     for key in ('start', 'end'):
         value = rule.get(key, '')
@@ -34,7 +34,11 @@ def recurrence(raw):
 def next_occurrence(rule, today):
     """Advance from the original anchor, retaining month-end and leap-day intent."""
     anchor = date.fromisoformat(rule['start'])
-    for n in range(1, 120000):
+    daily = rule['frequency'] in {'daily', 'weekly'}
+    stride = rule['interval'] * (7 if rule['frequency'] == 'weekly' else 12 if rule['frequency'] == 'yearly' else 1)
+    elapsed = (today - anchor).days if daily else (today.year - anchor.year) * 12 + today.month - anchor.month
+    first = max(1, elapsed // stride)
+    for n in range(first, first + 3):
         step = n * rule['interval']
         try:
             if rule['frequency'] in {'daily', 'weekly'}:
@@ -78,7 +82,8 @@ def list_graph(snapshot):
         identity, checklist = item['id'], item['checklist']
         nodes.append(dict(id=identity, object_id=identity, kind='lists', label=checklist['title'], **{k: v for k, v in item.items() if k != 'id'}))
         for task in checklist['items']:
-            thought = 'thought:' + uuid.uuid5(uuid.NAMESPACE_URL, identity + ':' + task['id']).hex
-            nodes.append(dict(id=thought, kind='thoughts', label=task['text'], body=task['text'], done=task['done'], list_id=identity, item_id=task['id']))
+            owner = item.get('owner_kind', '') + ':' + item.get('owner_id', '') if item.get('owner_kind') else identity
+            thought = 'thought:' + uuid.uuid5(uuid.NAMESPACE_URL, owner + ':' + task['id']).hex
+            nodes.append(dict(id=thought, kind='thoughts', label=task['text'], body=task['text'], done=task['done'], status='done' if task['done'] else 'open', list_id=identity, item_id=task['id']))
             edges.append(dict(source=identity, target=thought, relation='contains', method='list', evidence=''))
     return nodes, edges

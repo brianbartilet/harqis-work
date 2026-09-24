@@ -27,8 +27,14 @@ async def filter_actions(request, items, canonical, *, recent_dismissed=False):
     protected = corpus.normalize_secret_tags(corpus.get_profile_store().get().secret_tags)
     documents = {}
     result = []
+    assigned_filter = set(filter(None, request.query_params.get('workspace_ids', '').split(',')))
+    selected_views = set(filter(None, request.query_params.get('views', request.query_params.get('workspace', '')).split(',')))
     for original in items:
         item = dict(original)
+        assignments = set(item.get('workspace_ids', []))
+        if assigned_filter and not assignments.intersection(assigned_filter):
+            continue
+        explicitly_selected = bool(assignments.intersection(selected_views))
         if recent_dismissed and item['status'] == 'dismissed':
             history = sorted(canonical.history(item['id']), key=lambda row: row['item']['version'])
             dismissed_at, previous = None, None
@@ -67,7 +73,7 @@ async def filter_actions(request, items, canonical, *, recent_dismissed=False):
             item['sources'] = ['manual-entry']
             item['evidence_available'] = False
             document = SimpleNamespace(**{field: datetime.fromisoformat(item[field]) for field in ('created_at', 'updated_at')})
-            entry = SimpleNamespace(source='manual-entry', tags=(), text=item['title']+'\n'+item['expected_outcome'], header='', occurrence_date=None)
+            entry = SimpleNamespace(source='manual-entry', tags=(), text=item['title']+'\n'+item.get('expected_outcome', '')+'\n'+item.get('body', ''), header='', occurrence_date=None)
             # No entry exists, so entry-date constraints cannot be satisfied.
             states = [scope.all if scope.any else state, *scope.any]
             def manual_matches(value):
@@ -75,10 +81,10 @@ async def filter_actions(request, items, canonical, *, recent_dismissed=False):
                 if values.get('date_field') == 'entry' and (values.get('date_from') or values.get('date_to')):
                     return False
                 return predicate(values)(document, entry)
-            if not manual_matches(states[0]) or (scope.any and not any(manual_matches(value) for value in scope.any)):
+            if not manual_matches(states[0]) or (scope.any and not explicitly_selected and not any(manual_matches(value) for value in scope.any)):
                 continue
             result.append(item)
             continue
-        if narrowing(document, entry) and (not clauses or any(match(document, entry) for match in clauses)):
+        if narrowing(document, entry) and (explicitly_selected or not clauses or any(match(document, entry) for match in clauses)):
             result.append(item)
     return result

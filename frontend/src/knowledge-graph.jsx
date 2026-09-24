@@ -26,12 +26,12 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   $('info').addEventListener('mouseleave',()=>{infoPaused=false;});
   $('info').addEventListener('focus',()=>{infoPaused=true;});
   $('info').addEventListener('blur',()=>{infoPaused=false;});
-  const kindLabel = kind => ({companies:'organizations', drafts:'thoughts'}[kind] || kind.replaceAll('_', ' '));
-  const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3', ideas:'#f9ca74', actions:'#fb8ca6', goals:'#a7f3d0', drafts:'#c4b5fd', boards:'#93c5fd'};
+  const kindLabel = kind => ({companies:'organizations', drafts:'thoughts', thoughts:'list thoughts'}[kind] || kind.replaceAll('_', ' '));
+  const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3', ideas:'#f9ca74', actions:'#fb8ca6', goals:'#a7f3d0', drafts:'#c4b5fd', lists:'#5eead4', thoughts:'#c4b5fd', boards:'#93c5fd'};
   const color = kind => palette[kind] || '#e9c96c';
   window.HflGraphAppearance = {color, kindLabel};
   const defaultLabelKinds = new Set(['sources', 'people', 'tools', 'companies']);
-  let data = {nodes:[],edges:[]}, nodes = [], edges = [], selected = null, enabled = new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards']);
+  let data = {nodes:[],edges:[]}, nodes = [], edges = [], selected = null, enabled = new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts']);
   let exampleMode=new URLSearchParams(location.search).get('example')==='1';
   let requestVersion=0, requestController=null, backgroundController=null, appliedParams=null, graphSignature='', lastInteraction=0;
   const activePointers=new Set();
@@ -310,7 +310,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       if(!Number.isFinite(node.x)||!Number.isFinite(node.y)||!Number.isFinite(globalScale)||globalScale<=0)return;
       const visible=!activeId||node.id===activeId||near.has(node.id);
       const radius=node.radius/globalScale;
-      const ink=color(node.kind),emphasis=node.id===activeId||node.id===selectedId;
+      const ink=color(node.kind),emphasis=node.id===activeId||node.id===selectedId||window.HflIdeas?.maps.selection.has(node.id);
       ctx.save();ctx.globalAlpha=visible?(node.status==='dismissed'?.35:1):.075;
       // Thousands of per-entry gradients dominate mobile drawing time. Keep
       // detailed lighting for hubs and selected nodes, and compact activity dots.
@@ -387,7 +387,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       nodeCanvasObject={paintNode}
       nodePointerAreaPaint={(node,paint,ctx)=>{ctx.fillStyle=paint;ctx.beginPath();ctx.arc(node.x,node.y,(node.radius+4)/(ref.current?.zoom()||1),0,2*Math.PI);ctx.fill();}}
       linkColor={link=>color(board?link.source.kind:link.target.kind)+(connection===link?'ff':activeId?(isLinked(link)?'df':'07'):(data.nodes.length<=35?'70':'32'))}
-      linkDirectionalArrowLength={link=>board||link.direction==='none'?0:link.manual?4:['ideas','actions','goals','drafts','boards'].includes(link.source.kind)||['ideas','actions','goals','drafts','boards'].includes(link.target.kind)?4:0}
+      linkDirectionalArrowLength={link=>board||link.direction==='none'?0:link.manual?4:['ideas','actions','goals','drafts','boards','lists','thoughts'].includes(link.source.kind)||['ideas','actions','goals','drafts','boards','lists','thoughts'].includes(link.target.kind)?4:0}
       linkDirectionalArrowRelPos={0.8}
       linkWidth={link=>board?([.7,1,1.4,1.9,2.5][(board.edge_widths?.[edgeKey(link)]||2)-1]+(connection===link?.4:0)):isLinked(link)?2:data.nodes.length<=35?1.1:.65} linkCurvature={link=>board?boardCurvature(link,ref.current?.zoom()||1,curveOffsets.get(link)||0):.16}
       linkCanvasObjectMode={()=>'after'} linkCanvasObject={paintArrows} linkHoverPrecision={8}
@@ -397,7 +397,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       linkDirectionalParticleWidth={2} linkDirectionalParticleSpeed={.004}
       onZoom={()=>{if(activePointers.size)lastInteraction=Date.now();scheduleStateSave();}}
       onNodeHover={node=>{host.style.cursor=node?'pointer':'grab';clearTimeout(hoverTimer.current);if(node)setHoverId(node.id);else hoverTimer.current=setTimeout(()=>setHoverId(null),250);if(!touchViewport)highlight(node?.id||selected);}}
-      onNodeClick={node=>{if(connectFrom)finishConnection(node);else{setChosenEdge(null);setConnectionMessage('');select(node.id);}}} onBackgroundClick={()=>{if(!connectionBusy){select(null);setChosenEdge(null);setConnectFrom(null);setPreview(null);setConnectionMessage('');}}}
+      onNodeClick={(node,event)=>{if(board)window.HflIdeas.maps.selectNode(node.id,event.shiftKey||event.ctrlKey||event.metaKey);if(connectFrom)finishConnection(node);else{setChosenEdge(null);setConnectionMessage('');select(node.id);}}} onBackgroundClick={()=>{if(!connectionBusy){window.HflIdeas?.maps.selectNode(null);select(null);setChosenEdge(null);setConnectFrom(null);setPreview(null);setConnectionMessage('');}}}
       onNodeDrag={followDrag}
       onNodeDragEnd={node=>{draggedNode=null;node.manual=true;layoutTargets.set(node.id,{x:node.x,y:node.y,anchor:false});node.fx=node.x;node.fy=node.y;draw();if(window.HflIdeas?.maps.current)window.HflIdeas.maps.saveLayout();else graphApi.d3ReheatSimulation();}}
       warmupTicks={0} cooldownTicks={reducedMotion||(!draggedNode&&!dragNodes.size)?0:Infinity}
@@ -457,7 +457,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       const button=document.createElement('button'),dot=document.createElement('span'),name=document.createElement('span'),meta=document.createElement('small');
       dot.className='kg-dot';dot.style.background=color(n.kind);name.textContent=n.label;meta.textContent=n.visibleDegree+' links';button.title=n.label+' · '+kindLabel(n.kind);
       if(selected){const link=edges.find(e=>(e.source===selected&&e.target===n.id)||(e.target===selected&&e.source===n.id));if(link){const evidence=document.createElement('small');evidence.textContent=(link.relation||'linked')+' · '+(link.evidence||'');evidence.style.cssText='grid-column:2 / 4;white-space:normal;font-size:11px';button.append(evidence);button.title=link.evidence||n.label;}}
-      button.prepend(dot,name,meta);button.onclick=()=>select(n.id);$('list').append(button);
+      button.prepend(dot,name,meta);button.onclick=event=>{window.HflIdeas?.maps.selectNode(n.id,event.shiftKey||event.ctrlKey||event.metaKey);select(n.id);};$('list').append(button);
     });
     if(items.length>200){const note=document.createElement('p');note.textContent='Showing the first 200 neighbors. Search to narrow the graph.';$('list').append(note);}
   }
@@ -646,7 +646,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     for(const node of next.nodes)if(node.kind!=='drafts')window.HflIdeas?.maps.cacheNode(node);
     for(const edge of next.edges)if(!edge.local)window.HflIdeas?.maps.sharedEdges.set(JSON.stringify([edge.source,edge.target,edge.relation]),edge);
     const map=window.HflIdeas?.maps.current;
-    if(map){const members=new Set(map.members);const drafts=(map.drafts||[]).map(d=>({id:d.id,label:d.title,body:d.body,kind:'drafts',status:'board draft'}));next={...next,nodes:[...next.nodes.filter(n=>members.has(n.id)),...drafts],edges:[...next.edges.filter(e=>members.has(e.source)&&members.has(e.target)),...(map.edges||[]).map(e=>({...e,local:true,method:'board',evidence:'Board-only connection'}))]};next.total_nodes=next.nodes.length;next.truncated=false;}
+    if(map){const members=new Set(map.members);next.nodes.filter(n=>members.has(n.list_id)).forEach(n=>members.add(n.id));const drafts=(map.drafts||[]).map(d=>({id:d.id,label:d.title,body:d.body,kind:'drafts',status:'board draft'}));next={...next,nodes:[...next.nodes.filter(n=>members.has(n.id)),...drafts],edges:[...next.edges.filter(e=>members.has(e.source)&&members.has(e.target)),...(map.edges||[]).map(e=>({...e,local:true,method:'board',evidence:'Board-only connection'}))]};next.total_nodes=next.nodes.length;next.truncated=false;}
     data=next;
     const requestedSelection=new URL(location.href).searchParams.get('select');
     if(requestedSelection&&next.nodes.some(n=>n.id===requestedSelection)){
@@ -700,7 +700,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       appliedParams=null;
       try{
         let shared={nodes:board.members.map(id=>window.HflIdeas.maps.nodes.get(id)).filter(Boolean),edges:[...window.HflIdeas.maps.sharedEdges.values()],sources:[]};
-        if(force===true||shared.nodes.length!==board.members.length){
+        if(force===true||board.members.some(id=>id.startsWith('list:'))||shared.nodes.length!==board.members.length){
           shared=await window.HflIdeas.api('/maps/'+board.id+'/graph');
           if(version!==requestVersion||window.HflIdeas.maps.current?.id!==board.id)return;
           board.members.forEach(id=>window.HflIdeas.maps.nodes.delete(id));
@@ -729,8 +729,21 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   window.addEventListener('blur',()=>activePointers.clear());
   host.addEventListener('wheel',()=>{lastInteraction=Date.now();},{passive:true});
   let refreshDelay=3000,nextRefresh=0;
+  let liveBoardSignature='';
   async function refreshInBackground(){
-    if(window.HflIdeas?.maps.current||busy()||backgroundController||!appliedParams||Date.now()<nextRefresh)return;
+    const liveBoard=window.HflIdeas?.maps.current;
+    if(liveBoard){
+      if(!liveBoard.members.some(id=>id.startsWith('list:'))||busy()||backgroundController||Date.now()<nextRefresh)return;
+      const controller=new AbortController();backgroundController=controller;
+      try{
+        const next=await window.HflIdeas.api('/maps/'+liveBoard.id+'/graph');
+        const key=liveBoard.id+JSON.stringify(next);
+        if(window.HflIdeas.maps.current?.id===liveBoard.id&&!busy()&&key!==liveBoardSignature){configureData(next,true);liveBoardSignature=key;}
+      }catch(error){$('live').textContent='List updates unavailable · '+error.message;}
+      finally{backgroundController=null;nextRefresh=Date.now()+5000;}
+      return;
+    }
+    if(busy()||backgroundController||!appliedParams||Date.now()<nextRefresh)return;
     const started=Date.now(),controller=new AbortController(),version=requestVersion,key=viewKey();backgroundController=controller;
     const timeout=setTimeout(()=>controller.abort('timeout'),45000);
     try{
@@ -761,7 +774,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     $('search').value='';$('density').value='100';$('rolling').value='0';$('since').value='';$('until').value='';
     saveDetail();
     selectedSources.clear();sourceOptions(data.sources||[]);syncDates();$('shared').checked=false;
-    enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards']);selected=null;focusId=null;exampleMode?render():load();
+    enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts']);selected=null;focusId=null;exampleMode?render():load();
   };
 
 
@@ -802,7 +815,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       if(typeof value==='string'&&($(id).tagName!=='SELECT'||[...$(id).options].some(o=>o.value===value)))$(id).value=value;
     }
     $('shared').checked=pendingState.filters.shared===true;
-    enabled=new Set([...pendingState.enabled,'ideas','actions','goals','drafts','boards']);pendingState.sources.forEach(s=>selectedSources.add(s));
+    enabled=new Set([...pendingState.enabled,'ideas','actions','goals','drafts','boards','lists','thoughts']);pendingState.sources.forEach(s=>selectedSources.add(s));
     if(PRESETS[pendingState.preset])preset=pendingState.preset;
     if(Number.isFinite(pendingState.layoutSeed))layoutSeed=pendingState.layoutSeed;
     selected=typeof pendingState.selected==='string'?pendingState.selected:null;
@@ -817,8 +830,8 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       const point=window.HflIdeas.maps.current?(layoutTargets.get(n.id)||n):n;
       return [n.id,{x:point.x,y:point.y}];
     }));
-    window.addEventListener('hfl:ideas-updated',event=>{if(event.detail?.boardSwitch){pendingState=null;selected=null;enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards']);}if(event.detail?.selectId)selected=event.detail.selectId;
-      if(event.detail?.refreshShared){load(true);return;}
+    window.addEventListener('hfl:ideas-updated',event=>{if(event.detail?.boardSwitch){pendingState=null;selected=null;enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts']);}if(event.detail?.selectId)selected=event.detail.selectId;
+      if(event.detail?.refreshShared||window.HflIdeas.maps.current?.members.some(id=>id.startsWith('list:'))){load(true);return;}
       if(event.detail?.boardLocal&&!event.detail?.boardSwitch){
         const board=window.HflIdeas.maps.current;
         configureData({nodes:board.members.map(id=>window.HflIdeas.maps.nodes.get(id)).filter(Boolean),edges:[...window.HflIdeas.maps.sharedEdges.values()],sources:[]},true);

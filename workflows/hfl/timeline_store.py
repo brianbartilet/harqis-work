@@ -21,7 +21,7 @@ def store_path():
 
 
 STATES = {"open", "active", "in_progress", "incomplete", "done", "dismissed"}
-FIELDS = {"title", "expected_outcome", "notes", "prompt", "review_date", "due_date", "status", "completion_note", "agent_enabled", "matrix", "matrix_confidence", "matrix_reason", "description", "body", "checklists"}
+FIELDS = {"title", "expected_outcome", "notes", "prompt", "review_date", "due_date", "status", "completion_note", "agent_enabled", "matrix", "matrix_confidence", "matrix_reason", "description", "body", "checklists", "workspace_ids", "recurrence"}
 
 
 def validate_matrix(payload):
@@ -117,6 +117,9 @@ class FollowUpStore:
         from workflows.hfl.object_content import content_fields
         result.update(content_fields(result))
         result.update(validate_matrix(result))
+        from workflows.hfl.intent_reuse import workspaces, recurrence
+        result['workspace_ids'] = workspaces(result)
+        result['recurrence'] = recurrence(result)
         if type(result.get("agent_enabled", True)) is not bool:
             raise ValueError("agent_enabled must be a boolean.")
         for key, limit in {"title": 200, "expected_outcome": 3000, "notes": 6000, "prompt": 20000, "completion_note": 3000}.items():
@@ -171,6 +174,8 @@ class FollowUpStore:
                 original = json.loads(db.execute("SELECT payload FROM followup_history WHERE followup_id=? AND version=1", (existing["id"],)).fetchone()["payload"])
                 from workflows.hfl.object_content import content_fields
                 original.update(content_fields(original))
+                original.setdefault('workspace_ids', [])
+                original.setdefault('recurrence', None)
                 if any(original.get(k, True if k == "agent_enabled" else [] if k == 'checklists' else "") != item.get(k, True if k == "agent_enabled" else [] if k == 'checklists' else "") for k in FIELDS) or original.get("source") != source:
                     raise FollowUpConflict("This creation request was already used. Reload before creating another follow-up.")
                 return existing, True
@@ -190,11 +195,13 @@ class FollowUpStore:
             raise KeyError(followup_id)
         return json.loads(row["payload"])
 
-    def update(self, followup_id, raw, *, actor):
+    def update(self, followup_id, raw, *, actor, connection=None):
         if set(raw) - FIELDS - {"version"}:
             raise ValueError("Unsupported follow-up fields.")
-        with self.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
+        from contextlib import nullcontext
+        with (nullcontext(connection) if connection is not None else self.connect()) as db:
+            if connection is None:
+                db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT payload FROM followups WHERE id=?", (followup_id,)).fetchone()
             if not row:
                 raise KeyError(followup_id)
@@ -211,6 +218,19 @@ class FollowUpStore:
                        (followup_id, item["version"], actor, item["updated_at"], encoded))
             if item["status"] == "done" and old["status"] != "done":
                 db.execute("INSERT INTO timeline_receipts(followup_id,version,state) VALUES (?,?,'pending')", (followup_id,item["version"]))
+                if item.get('recurrence'):
+                    from zoneinfo import ZoneInfo
+                    from workflows.hfl.intent_reuse import next_occurrence, copy_lists
+                    request_id = str(uuid.uuid5(uuid.NAMESPACE_URL, 'hfl:recurrence:' + followup_id))
+                    if not db.execute('SELECT 1 FROM followups WHERE request_id=?', (request_id,)).fetchone():
+                        today = datetime.now(ZoneInfo(item.get('timezone', 'Asia/Singapore'))).date()
+                        planned = max(today, date.fromisoformat(item.get('due_date') or item['recurrence']['start']))
+                        next_date = next_occurrence(item['recurrence'], planned)
+                        if next_date:
+                            successor = {k: v for k, v in item.items() if k in FIELDS}
+                            successor.update(request_id=request_id, status='open', completion_note='', review_date='', due_date=next_date,
+                                             checklists=copy_lists(item['checklists'], reset=True), agent_enabled=False)
+                            self.create(successor, actor=actor, source=item.get('source'), connection=db)
         return item
 
     def list(self, *, closed=False):

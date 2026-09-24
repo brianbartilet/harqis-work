@@ -13,6 +13,18 @@ window.HflInputAttachments = class {
       this.pending.push(...this.input.files); this.input.value = ''; this.render();
     });
     this.reset();
+    const form = root.closest('form') || root;
+    const receive = event => {
+      if (this.root.inert || form.inert || this.loading || this.failure) return;
+      const transfer = event.clipboardData || event.dataTransfer;
+      const files = [...(transfer?.files || [])];
+      if (!files.length) return;
+      event.preventDefault(); event.stopPropagation();
+      this.pending.push(...files); this.render(); this.root.dispatchEvent(new Event('change', {bubbles:true}));
+    };
+    form.addEventListener('paste', receive);
+    form.addEventListener('drop', receive);
+    form.addEventListener('dragover', event => { if ([...(event.dataTransfer?.types || [])].includes('Files')) event.preventDefault(); });
   }
   url(id = this.id) { return '/hfl-corpus/agent-bridge/inputs/' + this.kind + '/' + encodeURIComponent(id); }
   async request(url, options = {}) {

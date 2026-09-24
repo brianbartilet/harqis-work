@@ -108,6 +108,19 @@ def test_connection_controls_browser(ideas, authenticated_client, width, tmp_pat
     with sync_playwright() as driver:
         browser = driver.chromium.launch(channel='chrome', headless=True)
         page = browser.new_page(viewport=dict(width=width, height=1000), has_touch=width==390)
+        # Use the actual rendered curve for hit testing, including zoom and DPR.
+        page.add_init_script("""(() => {
+            const proto=CanvasRenderingContext2D.prototype, move=proto.moveTo, curve=proto.quadraticCurveTo;
+            proto.moveTo=function(x,y){this.testStart=[x,y];return move.call(this,x,y);};
+            proto.quadraticCurveTo=function(cx,cy,x,y){
+                if(this.testStart&&this.canvas.closest('#kg-canvas')){
+                    const [sx,sy]=this.testStart, p=this.getTransform().transformPoint({x:sx/4+cx/2+x/4,y:sy/4+cy/2+y/4});
+                    const b=this.canvas.getBoundingClientRect();
+                    this.canvas.testCurvePoint={x:b.x+p.x*b.width/this.canvas.width,y:b.y+p.y*b.height/this.canvas.height};
+                }
+                return curve.call(this,cx,cy,x,y);
+            };
+        })();""")
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
         def route(intercept):
@@ -119,7 +132,8 @@ def test_connection_controls_browser(ideas, authenticated_client, width, tmp_pat
         page.goto('https://boards.test/hfl-corpus/ideas?board='+board['id'])
         expect(page.locator('#kg-map-count')).to_have_text('2 nodes · 0 links')
         canvas = page.locator('#kg-canvas canvas').first
-        page.wait_for_function("document.querySelector('#kg-canvas canvas')?.__zoom?.k > 0")
+        page.wait_for_function("document.querySelector('#kg-canvas canvas')?.testCurvePoint || document.querySelector('#kg-canvas canvas')?.__zoom?.k > 0")
+        page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
         def point(identity):
             return canvas.evaluate('(el,id)=>{const p=window.HflIdeas.maps.getPositions()[id],z=el.__zoom,b=el.getBoundingClientRect();return {x:b.x+z.x+p.x*z.k,y:b.y+z.y+p.y*z.k}}', identity)
         a, b = point(source_id), point(target_id)
@@ -149,7 +163,13 @@ def test_connection_controls_browser(ideas, authenticated_client, width, tmp_pat
         page.screenshot(path=str(tmp_path / 'connection-controls.png'))
         panel.get_by_role('button', name='Close', exact=True).click()
         a, b = point(source_id), point(target_id)
-        page.mouse.click((a['x']+b['x'])/2, (a['y']+b['y'])/2)
+        def click_line():
+            page.wait_for_function("document.querySelector('#kg-canvas canvas')?.testCurvePoint")
+            point = canvas.evaluate('el => el.testCurvePoint')
+            page.mouse.move(point['x'], point['y'])
+            page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+            page.mouse.click(point['x'], point['y'])
+        click_line()
         expect(panel).to_be_visible()
         panel.get_by_label('Connection arrows').select_option('none')
         expect(panel.get_by_label('Connection arrows')).to_have_value('none')
@@ -165,9 +185,16 @@ def test_connection_controls_browser(ideas, authenticated_client, width, tmp_pat
             assert saved['edges'] == []
             assert ideas.links()[0]['direction'] == 'none'
         assert list(saved['edge_widths'].values()) == [5]
+        page.wait_for_function("""() => {
+            const z=document.querySelector('#kg-canvas canvas').__zoom;
+            const key=JSON.stringify([z.k,z.x,z.y]);
+            if(window.settledZoom!==key){window.settledZoom=key;window.zoomChanged=performance.now();return false;}
+            return performance.now()-window.zoomChanged>200;
+        }""")
         a, b = point(source_id), point(target_id)
-        page.mouse.click((a['x']+b['x'])/2, (a['y']+b['y'])/2)
+        click_line()
         if width == 1280:
+            page.screenshot(path=str(tmp_path / 'shared-click.png'))
             expect(panel.locator('strong')).to_have_text('Shared connection')
             panel.get_by_label('Connection arrows').select_option('both')
             expect(panel.get_by_label('Connection arrows')).to_have_value('both')

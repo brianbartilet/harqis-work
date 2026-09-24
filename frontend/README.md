@@ -470,6 +470,33 @@ Add to board links existing actions/ideas, or creates a board thought linked to
 a checklist item's source. The Actions Board's Ideas picker also exposes these
 commands. New manual corpus entries always include `#moments`.
 
+The left-edge Ideas button opens an additional lane containing manual and generated
+ideas. Dismissed ideas are optional; dragging an idea to an action column opens the
+conversion editor. Actions and ideas can belong to several saved workspaces; the
+board's Workspaces filter selects explicit assignments. Clone buttons open an
+independent draft with supporting files and reset checklists. Dates, recurrence,
+and previous relationships are omitted; a `copied-from` connection records its source.
+
+Checklist text renders sanitized Markdown and switches to source text when clicked.
+Each list has a copy button with recent, searchable action/idea destinations; list
+copies preserve completion. Adding a whole list to a mindmap attaches a live List
+entity with connected Thought items. Edit live list updates the source checklist
+and its appearances on other boards. New list creates a standalone shared list.
+Board list content refreshes every five seconds while the view is idle.
+
+On boards, Shift/Ctrl/Command-click selects multiple nodes. Copy selected/Paste and
+Ctrl/Command+C/V copy thoughts, lists, actions, and ideas with numbered names and
+selected internal connections. Other shared entity types cannot be copied. Delete
+selected or Delete removes board membership (or local thoughts), preserving shared
+records. Text inputs retain their normal editing shortcuts. Action, idea, and entry
+forms also accept media files through clipboard paste or drag/drop.
+
+Action Plan supports completion-triggered daily, weekly, monthly, and yearly
+recurrence with an interval, first planned date, and optional end date. Completion
+creates one next future occurrence atomically, resets checklist completion, and
+preserves the completed record. Month-end dates clamp without losing the original
+anchor. Reopening and completing an occurrence again does not create a second successor.
+
 `/hfl-corpus/graph` supports Overview (100 nodes), Expanded (500), Dense
 (1,000), and All matching nodes. All mode uses `limit=0` on the graph API and
 includes every matching node and connection. Capped views prioritize source

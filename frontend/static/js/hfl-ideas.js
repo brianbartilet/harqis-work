@@ -126,9 +126,10 @@ window.HflObjectDescription = (item = {}) => {
     const params = new URL(preview.action_url, location.origin).searchParams;
     return request('/hfl-corpus/timeline/source?' + new URLSearchParams({path: params.get('source_path'), entry_id: params.get('source_entry')}));
   }
-  async function openEditor(kind, item = {}, parent = null, conversion = null) {
+  async function openEditor(kind, item = {}, parent = null, conversion = null, clone = null) {
     const label = kind === 'actionable' ? 'action' : kind;
     const d = dialog(conversion ? 'Create action from idea' : item.id ? 'Edit ' + label : 'New ' + label);
+    if(clone)d.node.classList.add('idea-copy-dialog');
     let state;
     let current = item.id ? item : null, source = item.source || null, files, checklists, save;
     const requestId = crypto.randomUUID(), editingBoard = maps.current?.id;
@@ -166,7 +167,8 @@ window.HflObjectDescription = (item = {}) => {
         checklistHeader.append(checklistSection.querySelector('h3'), checklistToolbar);
         checklistRoot = el('div'); checklistSection.append(checklistHeader, checklistRoot);
       }
-      const formState = () => JSON.stringify({fields: Object.fromEntries(new FormData(d.form)), checklists: checklists?.value});
+      window.HflIntentFields(d.form, item, kind);
+      const formState = () => JSON.stringify({fields: window.HflIntentValues(d.form), checklists: checklists?.value});
       const canConvert = () => !!current && !state?.dirty && !state?.pending;
       checklists = new HflChecklists(checklistRoot, kind === 'idea' ? {
         links: item.item_actions || [], openAction, addButtonRoot: checklistToolbar,
@@ -177,9 +179,9 @@ window.HflObjectDescription = (item = {}) => {
       d.form.querySelectorAll('textarea[name=body]').forEach(markdownEditor);
       const attachmentsSection = d.body.querySelector('[data-object-attachments]');
       const copiedFiles = [];
-      if (conversion) {
-        attachmentsSection.append(el('p', 'Copy supporting files. Changes to this action will remain independent of the idea.', 'idea-copy-files-note'));
-        for (const file of conversion.attachments) {
+      if (conversion || clone) {
+        attachmentsSection.append(el('p', 'Copy supporting files. The copied files remain independent of their source.', 'idea-copy-files-note'));
+        for (const file of (conversion || clone).attachments) {
           const label = el('label'), check = el('input'); check.type = 'checkbox'; check.checked = true; copiedFiles.push({check, id: file.id}); label.append(check, document.createTextNode(' ' + file.name)); attachmentsSection.append(label);
         }
       }
@@ -187,16 +189,18 @@ window.HflObjectDescription = (item = {}) => {
       checklists.updateConversion();
       for (const event of ['input', 'change', 'click']) d.form.addEventListener(event, () => queueMicrotask(() => checklists.updateConversion()));
       save = el('button', current ? 'Save now' : 'Create'); save.type = 'submit'; d.footer.append(save);
-      let linked = !!current;
+      let linked = !!current, copiedLoaded = false;
       const persistEditor = async () => {
           d.error.textContent = '';
           files.validate();
-          const values = Object.fromEntries(new FormData(d.form)); values.checklists = checklists.value;
+          const values = window.HflIntentValues(d.form); values.checklists = checklists.value;
           values.description = '';
           const prompt = values.prompt, filesChanged = files.changed;
           if (kind === 'actionable' && filesChanged) values.prompt = '';
           if (current) values.version = current.version;
-          if (kind === 'idea') {
+          if (clone && !current) {
+            current = (await api('/reuse/clone/'+kind+'/'+clone.id, 'POST', {request_id:requestId, source_version:clone.source_version, item:values, attachments:copiedFiles.filter(f=>f.check.checked).map(f=>f.id)})).item;
+          } else if (kind === 'idea') {
             if (!current) { values.request_id = requestId; values.source = source; if (parent?.kind === 'daily') values.source_date = parent.id.slice(6); }
             current = (await api('/objects' + (current ? '/' + current.id : ''), current ? 'PATCH' : 'POST', values)).item;
           } else if (conversion && !current) {
@@ -206,6 +210,7 @@ window.HflObjectDescription = (item = {}) => {
             current = (await request('/hfl-corpus/timeline/items' + (current ? '/' + current.id : ''), {method: current ? 'PATCH' : 'POST', body: JSON.stringify(values)})).item;
           }
           await files.save(current.id);
+          if ((clone || conversion) && !copiedLoaded) {copiedLoaded=true;copiedFiles.forEach(f=>f.check.closest('label').remove());attachmentsSection.querySelector('.idea-copy-files-note')?.remove();files.reset(current.id);}
           if (kind === 'actionable' && filesChanged && prompt) {
             current = (await request('/hfl-corpus/timeline/items/' + current.id, {method: 'PATCH', body: JSON.stringify({version: current.version, prompt})})).item;
           }
@@ -238,6 +243,26 @@ window.HflObjectDescription = (item = {}) => {
       d.footer.append(button('Add to board',async()=>{try{await state.flush();await addToBoard(kind,current);}catch(e){d.error.textContent=e.message;}}));
     } catch (error) { d.error.textContent = error.message; }
   }
+  async function cloneObject(kind, id) {
+    const d=dialog('Preparing copy');d.node.classList.add('idea-copy-dialog');
+    const status=el('p','Preparing your copy…','idea-copy-loading');status.setAttribute('role','status');d.body.append(status);
+    try {const data=await api('/reuse/clone/'+kind+'/'+id);if(!d.node.open)return;d.node.close();await openEditor(kind,data.item,null,null,{...data,id});}
+    catch(error){d.error.textContent=error.message;}
+  }
+  async function editList(identity=null) {
+    const d=dialog(identity?'Edit shared list':'New list');
+    try {
+      let current=identity?(await api('/lists/'+encodeURIComponent(identity))).item:null;
+      const root=el('div');d.body.append(root);
+      const editor=new HflChecklists(root,{singleList:true});editor.set([current?.checklist||{id:crypto.randomUUID(),title:'List',items:[],cover:false}]);
+      const save=el('button','Save list');save.type='submit';d.footer.append(save);const requestId=crypto.randomUUID();
+      d.form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{
+        if(editor.value.length!==1)throw Error('Keep one list in this editor. Create another list from the board.');
+        current=(await api('/lists'+(identity?'/'+encodeURIComponent(identity):''),identity?'PATCH':'POST',{request_id:requestId,version:current?.version,checklist:editor.value[0]})).item;
+        identity=current.id;await maps.addMembers([identity]);await maps.flush();d.node.close();changed(null,false,true);
+      }catch(error){d.error.textContent=error.message;}finally{save.disabled=false;}};
+    }catch(error){d.error.textContent=error.message;}
+  }
   async function editIdea(id) { try { const data = await api('/objects/' + id); await openEditor('idea', data.item); } catch (error) { const d = dialog('Idea unavailable'); d.error.textContent = error.message; } }
   async function openAction(id) { try { const {item} = await request('/hfl-corpus/timeline/items/' + id); await openEditor('actionable', item); } catch (error) { const d = dialog('Action unavailable'); d.error.textContent = error.message; } }
   async function convert(id, checklistId = '', itemId = '') {
@@ -249,7 +274,7 @@ window.HflObjectDescription = (item = {}) => {
     const d = dialog('Add to board'); d.node.classList.add('board-picker');
     d.footer.replaceChildren();
     const status = el('p','Loading boards…'); d.body.append(status);
-    const sourceId=(kind==='idea'?'idea:':'action:')+item.id;
+    const sourceId=kind==='list'?item.id:list&&!task?'list:'+kind+':'+item.id+':'+list.id:(kind==='idea'?'idea:':'action:')+item.id;
     const thoughtId='draft:'+crypto.randomUUID();
     const href=task?'/hfl-corpus/graph?'+new URLSearchParams({edit_kind:kind,edit:item.id,checklist:list.id,item:task.id}):'';
     const hasItem=board=>task?(board.drafts||[]).some(t=>(t.body||'').includes('edit='+encodeURIComponent(item.id))&&(t.body||'').includes('item='+encodeURIComponent(task.id))):(board.members||[]).includes(sourceId);
@@ -514,6 +539,9 @@ window.HflObjectDescription = (item = {}) => {
   }
   function inspect(node, root, edges) {
     if (!node) return;
+    if (maps.current) root.append(button(boardSelection.has(node.id)?'Deselect object':'Select for copy / delete',()=>{selectBoardNode(node.id,true);changed();}));
+    if (node.kind==='lists'||node.kind==='thoughts') root.append(button('Edit live list',()=>editList(node.list_id||node.id)));
+    if (['ideas','actions'].includes(node.kind)) root.append(button('Clone',()=>cloneObject(node.kind==='ideas'?'idea':'actionable',node.object_id)));
     if(['drafts','goals'].includes(node.kind)){
       const key=node.kind==='drafts'?maps.current.id+'/'+node.id:node.id;
       const memory=el('a','View memory history','idea-inspector-status');
@@ -573,7 +601,46 @@ window.HflObjectDescription = (item = {}) => {
       for (const link of links) { const row = el('p', (link.source === node.id ? link.target : link.source) + ' · ' + link.relation); row.append(button('Unlink', async () => { try { await api('/links', 'DELETE', {source: link.source, target: link.target, relation: link.relation});maps.sharedEdges.delete(JSON.stringify([link.source,link.target,link.relation])); row.remove(); changed(); } catch (error) { d.error.textContent = error.message; } })); d.body.append(row); }
     }));
   }
+  const boardSelection = new Set();
+  let boardClipboard = null, pasteRequest = null, boardCommands = Promise.resolve();
+  function runBoardCommand(command) {boardCommands=boardCommands.then(command).catch(error=>{maps.status.textContent=error.message;});return boardCommands;}
+  function selectBoardNode(id, extend=false) {
+    if(!extend)boardSelection.clear();
+    if(id){if(extend&&boardSelection.has(id))boardSelection.delete(id);else boardSelection.add(id);}
+  }
+  async function copyBoardSelection() {
+    if(!maps.current||!boardSelection.size)return;
+    await maps.flush();
+    const selected=[...boardSelection];
+    if(selected.some(id=>!['draft:','list:','thought:','action:','idea:'].some(prefix=>id.startsWith(prefix))))throw Error('Copy is unavailable for entries, goals, and other shared entities.');
+    boardClipboard={source_board:maps.current.id,source_version:maps.current.version,selected};pasteRequest=null;
+    maps.status.textContent=selected.length+' objects copied. Select a destination board and paste.';
+  }
+  async function pasteBoardSelection() {
+    if(!maps.current||!boardClipboard)return;
+    await maps.flush();
+    if(!pasteRequest)pasteRequest={...boardClipboard,version:maps.current.version,request_id:crypto.randomUUID(),target:maps.current.id};
+    if(pasteRequest.target!==maps.current.id)throw Error('Return to the destination board to retry this paste.');
+    const {target,...payload}=pasteRequest;
+    const result=await api('/maps/'+target+'/paste','POST',payload);
+    maps.queues.delete(target);await maps.reload();boardSelection.clear();Object.values(result.mapping).forEach(id=>boardSelection.add(id));pasteRequest=null;
+    if(boardClipboard.source_board===target)boardClipboard.source_version=result.item.version;
+    changed(null,false,true);
+  }
+  async function deleteBoardSelection() {
+    if(!maps.current||!boardSelection.size)return;
+    const board=maps.current, removed=new Set(boardSelection);
+    for(const node of maps.nodes.values())if(removed.has(node.list_id))removed.add(node.id);
+    await maps.persist({members:board.members.filter(id=>!removed.has(id)),drafts:board.drafts.filter(d=>!removed.has(d.id)),edges:board.edges.filter(e=>!removed.has(e.source)&&!removed.has(e.target)),positions:Object.fromEntries(Object.entries({...board.positions,...maps.getPositions()}).filter(([id])=>!removed.has(id))),root:removed.has(board.root)?'':board.root,goal_id:removed.has('goal:'+board.goal_id)?'':board.goal_id,hidden_members:[...new Set([...(board.hidden_members||[]),...[...removed].filter(id=>id.startsWith('thought:'))])]});
+    await maps.flush();boardSelection.clear();changed();
+  }
+  document.addEventListener('keydown',async event=>{
+    if(!maps.current||event.target.closest('input,textarea,select,[contenteditable=true]')||document.querySelector('dialog[open]'))return;
+    const command=(event.ctrlKey||event.metaKey)?({c:copyBoardSelection,v:pasteBoardSelection}[event.key.toLowerCase()]):event.key==='Delete'?deleteBoardSelection:null;
+    if(!command||event.repeat)return;event.preventDefault();await runBoardCommand(command);
+  });
   const maps = {
+    selection:boardSelection, selectNode:selectBoardNode,
     current: null, loaded: [], pendingPositions: null, getPositions: () => ({}),
     queues:new Map(),nodes:new Map(),sharedEdges:new Map(),goals:[],palette:[],listOpen:true,goalsOpen:false,ordering:false,
     cacheNode(node){this.nodes.set(node.id,node);},
@@ -608,7 +675,7 @@ window.HflObjectDescription = (item = {}) => {
       const search = document.getElementById('kg-search');
       if (!this.current && board) this.activityQuery = search.value;
       search.value = board ? '' : (this.activityQuery || '');
-      this.current = board; this.pendingPositions = board?.positions || {};
+      boardSelection.clear();this.current = board; this.pendingPositions = board?.positions || {};
       const url = new URL(location.href); url.searchParams.delete('map');
       if (board) url.searchParams.set('board', board.id); else url.searchParams.delete('board');
       history.replaceState(null, '', url); this.render(); changed(null, true);
@@ -633,7 +700,7 @@ window.HflObjectDescription = (item = {}) => {
       const layout=button('Save layout',()=>this.saveLayout());layout.title='Capture current node positions for autosave';
       const remove=button('Delete',()=>this.remove());remove.className='board-delete';
       const ask=button('Ask agent',()=>this.brainstorm());ask.className='board-ask-agent';
-      section.append(this.status,button('Add thought', () => editThought()), button('Attach existing', () => chooseMapMembers()),ask,save,layout,button('Settings', () => this.edit(board)),remove);
+      section.append(this.status,...[['Copy selected',copyBoardSelection],['Paste',pasteBoardSelection],['Delete selected',deleteBoardSelection]].map(([label,action])=>button(label,()=>runBoardCommand(action))),button('New list', () => editList()),button('Add thought', () => editThought()), button('Attach existing', () => chooseMapMembers()),ask,save,layout,button('Settings', () => this.edit(board)),remove);
       const pending=this.queues.get(board.id);
       if(pending?.error)section.append(button('Retry save',()=>this.saveNow()),button('Resolve unsaved changes',()=>this.resolveSave()));
       this.root.append(section);
@@ -713,6 +780,7 @@ window.HflObjectDescription = (item = {}) => {
     async persist(fields){if(this.current){this.queue().edit({positions:{...this.current.positions,...this.getPositions()},...fields});this.pendingPositions=this.current.positions;}},
     async addMembers(ids) { if (this.current) { await this.persist({members: [...new Set([...this.current.members, ...ids])], positions: {...this.current.positions, ...this.getPositions()}}); this.pendingPositions = this.current.positions; } },
     async removeMember(id) {
+      if(id.startsWith('thought:')||id.startsWith('list:')){selectBoardNode(id);try{await deleteBoardSelection();}catch(error){this.status.textContent=error.message;}return;}
       try { const board = this.current, positions = {...board.positions}; delete positions[id];
         await this.persist({members: board.members.filter(i => i !== id), drafts: board.drafts.filter(d => d.id !== id), edges: board.edges.filter(e => e.source !== id && e.target !== id), positions, root: board.root === id ? '' : board.root, goal_id: 'goal:' + board.goal_id === id ? '' : board.goal_id}); changed();
       } catch (error) { this.status.textContent = error.message; }
@@ -843,7 +911,7 @@ window.HflObjectDescription = (item = {}) => {
     if(editingParams.get('edit_kind')==='idea') editIdea(editingParams.get('edit'));
     else if(!document.getElementById('followup-agenda')) openAction(editingParams.get('edit'));
   }
-  window.HflIdeas = {chooseIdeaForBoard, addToBoard, openAction, openEditor, editIdea, convert, inspect, maps, api};
+  window.HflIdeas = {cloneObject, editList, chooseIdeaForBoard, addToBoard, openAction, openEditor, editIdea, convert, inspect, maps, api};
   document.addEventListener('click', async event => {
     document.querySelectorAll('.idea-add-menu').forEach(menu => {
       if (!menu.contains(event.target)) { menu.querySelector('.idea-add-options').hidden = true; menu.querySelector('.idea-add-toggle').setAttribute('aria-expanded', 'false'); }
