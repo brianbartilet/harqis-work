@@ -18,7 +18,7 @@
 .action-clone-handle { float:right; position:relative; margin-right:.35rem; min-height:32px; color:#94a3b8; padding:.2rem .4rem; border-radius:.3rem; }
 .action-clone-handle:hover { color:#e2e8f0; background:#334155; }
 .ideas-drawer-toggle { position:fixed; left:0; bottom:1rem; z-index:35; display:inline-flex; align-items:center; gap:.5rem; padding:.65rem .85rem; font-size:.85rem; border:1px solid #64748b; border-radius:0 .5rem .5rem 0; background:#1e293b; color:#94a3b8; }
-.ideas-drawer { border-left:3px solid #f9ca74; }
+.ideas-drawer-overlay .ideas-drawer { border:4px solid #f9ca74; }
 .ideas-drawer .agenda-card { position:relative; padding:.75rem; }
 
 [data-intent-fields] select[multiple] { min-height:6rem; background-image:none; padding:.4rem; }
@@ -59,9 +59,8 @@
 .board-workspace-filter .workspace-menu-panel > p { font-size:.8rem; font-weight:600; margin-bottom:.5rem; }
 .board-create-menu { position:relative; flex-shrink:0; }
 .board-create-menu > summary { display:flex; align-items:center; justify-content:center; gap:1rem; height:44px; box-sizing:border-box; padding:.5rem 1rem; border-radius:.5rem; background:#2563eb; color:white; font-size:.875rem; font-weight:600; }
-.board-create-menu > summary::after { content:''; width:.5rem; height:.5rem; border-right:1.5px solid #93c5fd; border-bottom:1.5px solid #93c5fd; transform:rotate(45deg) translateY(-2px); }
-.board-create-menu[open] > summary::after { transform:rotate(225deg) translate(-2px,-2px); }
-.board-create-menu > summary:hover { background:#3b82f6; }
+.board-create-menu > summary { padding-right:2.5rem; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2367e8f9' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m2.5 4.5 3.5 3 3.5-3'/%3E%3C/svg%3E"); background-position:right .85rem center; background-repeat:no-repeat; background-size:.8rem .8rem; }
+.board-create-menu > summary:hover { background-color:#3b82f6; }
 .board-create-options { position:absolute; top:calc(100% + .5rem); left:0; min-width:12rem; padding:.5rem; background:#0f172a; border:1px solid #334155; border-radius:.75rem; z-index:50; box-shadow:0 16px 40px #0008; }
 .followups-toolbar .board-create-options :is(a,button) { display:block; width:100%; padding:.6rem .75rem; margin:0; border:0; border-radius:.35rem; background:transparent; text-align:left; font-size:.875rem; color:#cbd5e1; }
 .board-create-options :is(a,button):hover { background:#1e293b; }
