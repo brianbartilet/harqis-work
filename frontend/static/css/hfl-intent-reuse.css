@@ -6,7 +6,7 @@
 .idea-check-row input[hidden],.checklist-markdown[hidden] { display:none; }
 .action-clone-handle { float:right; position:relative; margin-right:.35rem; min-height:32px; color:#94a3b8; padding:.2rem .4rem; border-radius:.3rem; }
 .action-clone-handle:hover { color:#e2e8f0; background:#334155; }
-.ideas-drawer-toggle { position:fixed; left:0; bottom:1rem; z-index:35; padding:.8rem .35rem; font-size:1.15rem; border:1px solid #64748b; border-radius:0 .5rem .5rem 0; background:#1e293b; color:#94a3b8; }
+.ideas-drawer-toggle { position:fixed; left:0; bottom:1rem; z-index:35; display:inline-flex; align-items:center; gap:.5rem; padding:.65rem .85rem; font-size:.85rem; border:1px solid #64748b; border-radius:0 .5rem .5rem 0; background:#1e293b; color:#94a3b8; }
 .ideas-drawer { border-left:3px solid #f9ca74; }
 .ideas-drawer .agenda-card { position:relative; padding:.75rem; }
 

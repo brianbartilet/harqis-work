@@ -100,6 +100,10 @@
         const grip=node('button','⠿','action-drag-handle');grip.type='button';grip.setAttribute('aria-label','Drag idea '+item.title);
         const clone=node('button','⧉','action-clone-handle');clone.type='button';clone.setAttribute('aria-label','Clone '+item.title);clone.onclick=()=>window.HflIdeas.cloneObject('idea',item.id);
         const meta=node('div',null,'agenda-card-meta');meta.append(node('span',item.status==='adopted'?'Has actions':'Idea'),node('span',item.origin==='manual'?'Manual':'Agent generated','action-source'));
+        if(item.origin!=='manual'){
+          meta.append(node('span',item.confidence?label(item.confidence)+' confidence':'Confidence unassessed','idea-confidence'));
+          if(item.analysis_status==='uncertain')meta.append(node('span','Uncertain','idea-analysis-status'));
+        }
         const title=node('h3',item.title),management=node('div',null,'agenda-card-actions');
         const edit=node('button','Edit');edit.type='button';edit.onclick=()=>window.HflIdeas.editIdea(item.id);
         const dismiss=node('button','Dismiss');dismiss.type='button';dismiss.onclick=async()=>{dismiss.disabled=true;try{await window.HflIdeas.api('/objects/'+item.id,'PATCH',{version:item.version,status:'dismissed'});await refresh(true);}catch(e){error.textContent=e.message;error.hidden=false;dismiss.disabled=false;}};
@@ -196,7 +200,7 @@
     ideasOpen=false;dialog.querySelector('.ideas-drawer-toggle')?.setAttribute('aria-expanded','false');render([...items.values()]);dialog.querySelector('.ideas-drawer-toggle')?.focus();
   }
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&ideasOpen&&!document.querySelector('dialog[open]')){event.preventDefault();closeIdeasDrawer();}},{signal:listeners.signal});
-  if(page){const toggle=node('button',null,'ideas-drawer-toggle');toggle.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M9 21h6M9 15c0-2-3-3-3-7a6 6 0 0 1 12 0c0 4-3 5-3 7z"/></svg>';toggle.setAttribute('aria-label','Toggle ideas drawer');toggle.title='Ideas';toggle.setAttribute('aria-expanded','false');toggle.onclick=()=>{if(ideasOpen){closeIdeasDrawer();return;}ideasOpen=true;toggle.setAttribute('aria-expanded','true');render([...items.values()]);refresh(true);};dialog.append(toggle);open();}
+  if(page){const toggle=node('button',null,'ideas-drawer-toggle');toggle.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M9 21h6M9 15c0-2-3-3-3-7a6 6 0 0 1 12 0c0 4-3 5-3 7z"/></svg>';toggle.append(node('span','Show ideas'));toggle.setAttribute('aria-label','Show ideas');toggle.title='Show ideas';toggle.setAttribute('aria-expanded','false');toggle.onclick=()=>{if(ideasOpen){closeIdeasDrawer();return;}ideasOpen=true;toggle.setAttribute('aria-expanded','true');render([...items.values()]);refresh(true);};dialog.append(toggle);open();}
   window.addEventListener('hfl:ideas-updated',()=>refresh(true),{signal:listeners.signal});
   try{const restore=JSON.parse(sessionStorage.getItem('hfl:followups-restore')||'null');sessionStorage.removeItem('hfl:followups-restore');if(restore){all.checked=restore.all;requestAnimationFrame(open);}}catch(_){}
 })();
