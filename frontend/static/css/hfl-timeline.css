@@ -317,13 +317,17 @@
 @media(max-width:639px){.connections-actions{align-items:stretch;flex-direction:column;gap:10px}.connections-actions button{width:100%}}
 
 /* Native action agent workspace */
-.agent-bridge-dialog { width:min(90rem,calc(100vw - 2rem)); max-height:94dvh; }
+.agent-bridge-dialog { width:calc(100vw - 2rem); max-width:calc(100vw - 2rem); max-height:94dvh; }
 .action-agent-workspace { display:flex; flex-direction:column; gap:.8rem; min-width:0; }
 .agent-terminal { height:55dvh; min-height:20rem; padding:.65rem; background:#080f1e; border:1px solid #334155; border-radius:.5rem; overflow:hidden; }
 .agent-terminal .xterm { height:100%; }
 .agent-terminal-controls { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; }
 .agent-terminal-controls button,.agent-terminal-controls select,.agent-details button { padding:.5rem .75rem; background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:.4rem; }
 .agent-terminal-controls a { color:#67e8f9; }
+.action-agent-workspace > .agent-terminal-controls { flex-wrap:nowrap; }
+.action-agent-workspace > .agent-terminal-controls > :is(button,a) { flex-shrink:0; white-space:nowrap; font-size:.8rem; }
+.action-agent-workspace > .agent-terminal-controls > select { flex:1 1 16rem; width:auto; min-width:10rem; margin:0; padding-right:2.25rem; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2394a3b8' stroke-width='1.5'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right .75rem center; background-size:.85rem; }
+@media(max-width:1100px) { .action-agent-workspace > .agent-terminal-controls { flex-wrap:wrap; } }
 .agent-terminal-status { color:#67e8f9; font-size:.85rem; }
 .agent-terminal-hint,.agent-details p { color:#94a3b8; font-size:.8rem; }
 .agent-details { border:1px solid #334155; padding:.7rem; border-radius:.5rem; }

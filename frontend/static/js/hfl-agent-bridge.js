@@ -135,14 +135,29 @@
     dialog.append(header, body);
     if (!dialog.open) dialog.showModal();
     async function refresh() {
-      const data = await api(path);
+      const [data, attachments] = await Promise.all([
+        api(path), kind === 'actionable' ? api('/inputs/actionable/' + encodeURIComponent(id)) : Promise.resolve({attachments:[]})
+      ]);
       if (ticket !== generation) return;
       cadence.value = data.subscription.cadence;
       runButton.disabled = ['done','dismissed'].includes(data.action_status) || data.runs.some(run => ['queued','running','review','accepting'].includes(run.state));
       runs.replaceChildren();
+      if (attachments.attachments.length) {
+        const files = element('section'); files.className = 'agent-output-files';
+        files.append(element('h3', 'Action files · ' + attachments.attachments.length));
+        for (const file of attachments.attachments) {
+          const row = element('p'); row.className = 'agent-output-file';
+          const name = element('span', file.name);
+          const link = element('a', 'Download');
+          link.href = '/hfl-corpus/agent-bridge/inputs/actionable/' + encodeURIComponent(id) + '/' + encodeURIComponent(file.id);
+          link.setAttribute('download', ''); link.setAttribute('aria-label', 'Download ' + file.name);
+          row.append(name, link); files.append(row);
+        }
+        runs.append(files);
+      }
       const outcomes=data.outcomes || [];
       if(data.outcomes_error){error.textContent=data.outcomes_error;error.hidden=false;}
-      if (!data.runs.length && !outcomes.length && !data.events.length && !data.outcomes_error) {
+      if (!attachments.attachments.length && !data.runs.length && !outcomes.length && !data.events.length && !data.outcomes_error) {
         const empty = element('section'); empty.className = 'agent-results-empty';
         empty.append(element('h3', 'No results yet'), element('p', 'Run the saved prompt to get started. Output, sources and files will appear here.'));
         runs.append(empty);

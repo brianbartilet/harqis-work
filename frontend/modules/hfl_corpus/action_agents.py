@@ -77,7 +77,7 @@ def sessions(source_id: str):
 def start_session(source_id: str, payload: dict):
     action = bridge.checked(bridge.action_call, 'GET', '/' + source_id)['item']
     settings = effective(source_id)
-    settings['initial_context'] = {k: action.get(k, '') for k in ('title','prompt','expected_outcome','description','notes','completion_note')}
+    settings['initial_context'] = {k: action.get(k, '') for k in ('title','status','prompt','expected_outcome','description','notes','completion_note')}
     previous = bridge.bridge_store().list('actionable:' + source_id, limit=1)
     if previous:
         settings['initial_context']['last_agent_result'] = previous[0]['result'].get('summary', '')

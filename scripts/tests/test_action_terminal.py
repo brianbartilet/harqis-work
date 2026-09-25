@@ -8,6 +8,27 @@ import pytest
 from scripts.agents.hfl.action_terminal import Workspace, Pty, git
 
 
+def test_idle_collection_retries_failed_upload_and_discovers_later_files(tmp_path):
+    from scripts.agents.hfl.action_terminal import TerminalWorker
+    from types import SimpleNamespace
+    attempts = []
+    def send(url, **kwargs):
+        attempts.append(kwargs['content'])
+        if len(attempts) == 1:
+            raise ConnectionError('Temporary outage')
+        return SimpleNamespace(raise_for_status=lambda: None)
+    worker = TerminalWorker(SimpleNamespace(client=SimpleNamespace(post=send)),
+        {'id':'test','token':'test','native_id':''}, None)
+    (tmp_path/'first.txt').write_text('first')
+    worker.collect_outputs(tmp_path)
+    assert worker.sent == {}
+    worker.collect_outputs(tmp_path)
+    (tmp_path/'later.txt').write_text('later')
+    worker.collect_outputs(tmp_path)
+    worker.collect_outputs(tmp_path)
+    assert attempts == [b'first', b'first', b'later']
+
+
 def test_worktree_preserves_committed_uncommitted_and_untracked_changes(tmp_path):
     repo = tmp_path / 'repo'
     repo.mkdir()

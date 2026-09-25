@@ -32,9 +32,11 @@
       try{const scope=JSON.parse(params.get('scope')||'{}');filtered=!!scope.any?.length||['q','source','date_from','date_to','rolling'].some(key=>scope.all?.[key]);}catch(_){filtered=true;}
       const workspaceLabel=workspaceNames.join(' + ')||(workspaceLoadState==='loading'?'Loading workspaces…':'Workspaces unavailable');
       $('[data-board-context]').textContent=all.checked?'All activity':[(ids.length?workspaceLabel:filtered||extra.length?'Corpus filters':'All activity'),...extra].join(' · ');
+      $('[data-board-context]').hidden = $('[data-board-context]').textContent === 'All activity';
       return;
     }
     $('[data-board-context]').textContent = (all.checked ? 'All activity · Current views: ' : 'Following views: ') + caption + ' · ' + dynamic + (!all.checked&&extra.length?' · '+extra.join(' · '):'');
+    $('[data-board-context]').hidden = false;
   }
   async function request(path, options={}) {
     const response=await fetch('/hfl-corpus/timeline/items'+path,{cache:'no-store',...options,headers:{'Content-Type':'application/json'}});

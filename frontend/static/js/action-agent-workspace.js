@@ -100,7 +100,7 @@
         if(session){
           const identity=session.id;
           const data=await api('/sessions/'+identity+'?after='+cursor);
-          if(disposed||session.id!==identity)return;
+          if(disposed||session?.id!==identity)return;
           session=data.session;
           for(const chunk of data.output){terminal.write(chunk.data);cursor=chunk.seq;}
           const labels={queued:'Waiting for a worker to connect…',starting:'Starting Hermes…',idle:'Ready for commands',waiting:'Worker capacity reached — waiting for an execution slot…',running:'Running — waiting for reply',expired:'Session expired — transcript archived',closed:'Session closed — transcript archived',failed:'Session stopped — transcript available'};
@@ -113,12 +113,12 @@
     }
     const observer=new ResizeObserver(()=>{
       if(!terminal||!fit||disposed)return;
-      fit.fit();if(session)api('/sessions/'+session.id,{cols:Math.max(10,Math.min(300,terminal.cols)),rows:Math.max(10,Math.min(300,terminal.rows))}).catch(()=>{});
+      fit.fit();terminal.resize(Math.max(10,Math.min(300,terminal.cols)),Math.max(10,Math.min(300,terminal.rows)));if(session)api('/sessions/'+session.id,{cols:terminal.cols,rows:terminal.rows}).catch(()=>{});
     });
     (async()=>{
       try{
         config=await api(source+'/configuration');if(disposed)return;showConfig();
-        terminal=new Terminal({cursorBlink:true,convertEol:false,scrollback:10000,fontSize:14,theme:{background:'#080f1e',foreground:'#e2e8f0'}});
+        terminal=new Terminal({cursorBlink:true,convertEol:false,scrollback:10000,fontSize:14,fontFamily:'Consolas, "Liberation Mono", Menlo, monospace',lineHeight:1.15,theme:{background:'#080f1e',foreground:'#e2e8f0'}});
         fit=new FitAddon.FitAddon();terminal.loadAddon(fit);terminal.open(viewport);fit.fit();observer.observe(viewport);
         terminal.onData(data=>{
           if(!session)return;const identity=session.id,key=crypto.randomUUID();

@@ -57,6 +57,8 @@ def chat(self, message, *args, **kwargs):
     finally:
         publish('idle', self)
 HermesCLI.__init__, HermesCLI.chat = initialize, chat
+# The action dialog already identifies the agent; omit the native welcome art.
+HermesCLI.show_banner = lambda self, *args, **kwargs: None
 main(toolsets=toolsets, model=selected_model, provider=selected_provider,
      max_turns=settings.get('agent_max_turns', 30),
      ignore_user_config=not trusted, ignore_rules=not trusted,
@@ -269,6 +271,9 @@ class TerminalWorker:
         env = dict(os.environ)
         env.pop('HFL_AGENT_BRIDGE_TOKEN', None)
         env.pop('HFL_AGENT_CAPABILITY_CHECK', None)
+        # Rich and shutil must read the live PTY dimensions, not inherited shell sizes.
+        env.pop('COLUMNS', None)
+        env.pop('LINES', None)
         context_path = root / 'context.json'
         context_path.write_text(json.dumps(settings.get('initial_context', {})), encoding='utf-8')
         runtime_settings = {key: value for key, value in settings.items() if key != 'initial_context'}
@@ -290,6 +295,7 @@ class TerminalWorker:
         dimensions = (self.session['rows'], self.session['cols'])
         pending = ''
         pending_key = uuid.uuid4().hex
+        last_file_scan = 0
         try:
             while terminal.alive():
                 chunk = terminal.read()
@@ -316,10 +322,12 @@ class TerminalWorker:
                         ran_turn = True
                     if self.state == 'idle':
                         turn_started = None
-                        for path in artifacts.iterdir():
-                            if re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,119}', path.name):
-                                self.upload(path)
                     previous_state = self.state
+                # Retry collection while idle, including files written after the
+                # state transition. A failed upload must not terminate the CLI.
+                if self.state == 'idle' and time.monotonic() - last_file_scan >= 3:
+                    last_file_scan = time.monotonic()
+                    self.collect_outputs(artifacts)
                 reply = self.call('/poll', state=self.state, native_id=self.native_id, after=self.after)
                 expiry = reply['expiry_minutes']
                 if reply['close']:
@@ -359,6 +367,14 @@ class TerminalWorker:
             self.call('/poll', state=exit_state, native_id=self.native_id, after=self.after)
             if archive:
                 workspace.cleanup()
+
+    def collect_outputs(self, artifacts):
+        for path in artifacts.iterdir():
+            if re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,119}', path.name):
+                try:
+                    self.upload(path)
+                except Exception as exc:
+                    logging.getLogger(__name__).warning('Terminal file upload will retry (%s): %s', type(exc).__name__, path.name)
 
 
 def watch_terminals(runner, stop):

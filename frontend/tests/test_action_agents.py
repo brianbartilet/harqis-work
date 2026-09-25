@@ -157,7 +157,7 @@ def test_expiry_settings_validation():
 def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
     from urllib.parse import urlparse
     playwright = pytest.importorskip('playwright.sync_api')
-    _, _, actions, _ = workspace
+    api, _, actions, _ = workspace
     item = create_action(actions)
     frontend = Path(__file__).resolve().parents[1]
     with playwright.sync_playwright() as p:
@@ -187,6 +187,19 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         page.get_by_role('button',name='Close',exact=True).click()
         page.get_by_role('button',name='New / reconnect',exact=True).click()
         page.get_by_text('Waiting for a worker to connect…').wait_for()
+        session = api.store().sessions(item['id'])[0]
+        claimed = api.store().claim_session(session['id'], 'test')
+        response = authenticated_client.post('/api/hfl-agent/terminals/'+session['id']+'/files/lorem-ipsum.txt',
+            content=b'Generated text', headers={**WORKER, 'X-Terminal-Lease':claimed['token']})
+        assert response.status_code == 200
+        page.get_by_role('button', name='Refresh', exact=True).click()
+        link = page.get_by_role('link', name='Download '+response.json()['name'], exact=True)
+        link.wait_for()
+        assert authenticated_client.get(urlparse(link.get_attribute('href')).path).content == b'Generated text'
+        assert page.get_by_text('No results yet', exact=True).count() == 0
+        controls = page.locator('.action-agent-workspace > .agent-terminal-controls')
+        tops = controls.locator('select, button').evaluate_all('(nodes)=>nodes.map(n=>Math.round(n.getBoundingClientRect().top))')
+        assert max(tops)-min(tops) <= 3
         page.screenshot(path=str(tmp_path/'actions-agent-desktop.png'))
         page.set_viewport_size({'width':390,'height':844})
         page.screenshot(path=str(tmp_path/'actions-agent-mobile.png'))
