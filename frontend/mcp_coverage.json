@@ -2332,6 +2332,308 @@
       "status": "ui",
       "tools": [],
       "reason": "Presentation, redirect, authentication/session or host-desktop flow; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl-agent/terminals",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Authenticated Hermes worker terminal transport, execution leases and artifact delivery; not an owner MCP operation."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl-agent/terminals/{identity}/inputs/{attachment_id}",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Authenticated Hermes worker terminal transport, execution leases and artifact delivery; not an owner MCP operation."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/ideas/{identity}/connections",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_idea_connections"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.get_idea_connections"
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/agent-bridge/actions/{source_id}/configuration",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner session-authenticated native terminal and configuration operation; a dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/agent-bridge/actions/{source_id}/sessions",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner session-authenticated native terminal and configuration operation; a dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/agent-bridge/sessions/{identity}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner session-authenticated native terminal and configuration operation; a dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/agent-bridge/sessions/{identity}/transcript",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner session-authenticated native terminal and configuration operation; a dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/ideas/{identity}/connections",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_idea_connections"
+      ],
+      "reason": "Browser alias of the canonical idea-connections endpoint."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl-agent/terminals/{identity}/claim",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Authenticated Hermes worker terminal transport, execution leases and artifact delivery; not an owner MCP operation."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl-agent/terminals/{identity}/files/{name}",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Authenticated Hermes worker terminal transport, execution leases and artifact delivery; not an owner MCP operation."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl-agent/terminals/{identity}/output",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Authenticated Hermes worker terminal transport, execution leases and artifact delivery; not an owner MCP operation."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl-agent/terminals/{identity}/poll",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Authenticated Hermes worker terminal transport, execution leases and artifact delivery; not an owner MCP operation."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/agent-bridge/actions/{source_id}/configuration",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner session-authenticated native terminal and configuration operation; a dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/agent-bridge/actions/{source_id}/sessions",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner session-authenticated native terminal and configuration operation; a dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/agent-bridge/presets",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner session-authenticated native terminal and configuration operation; a dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/agent-bridge/sessions/{identity}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner session-authenticated native terminal and configuration operation; a dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/agent-bridge/sessions/{identity}/forget",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner session-authenticated native terminal and configuration operation; a dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/agent-bridge/sessions/{identity}/input",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner session-authenticated native terminal and configuration operation; a dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/reuse/options",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_reuse_options"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.list_reuse_options"
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/reuse/options",
+      "status": "alias",
+      "tools": [
+        "list_hfl_corpus_reuse_options"
+      ],
+      "reason": "Browser alias of the canonical intent-reuse endpoint."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/reuse/board-ideas",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_board_ideas"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.list_board_ideas"
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/reuse/board-ideas",
+      "status": "alias",
+      "tools": [
+        "list_hfl_corpus_board_ideas"
+      ],
+      "reason": "Browser alias of the canonical intent-reuse endpoint."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/reuse/clone/{kind}/{identity}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_clone_draft"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.get_clone_draft"
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/reuse/clone/{kind}/{identity}",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_clone_draft"
+      ],
+      "reason": "Browser alias of the canonical intent-reuse endpoint."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/reuse/clone/{kind}/{identity}",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_clone"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.create_clone"
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/reuse/clone/{kind}/{identity}",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_clone"
+      ],
+      "reason": "Browser alias of the canonical intent-reuse endpoint."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/reuse/copy-list",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_list_copy"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.create_list_copy"
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/reuse/copy-list",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_list_copy"
+      ],
+      "reason": "Browser alias of the canonical intent-reuse endpoint."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/maps/{identity}/paste",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_map_paste"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.create_map_paste"
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/maps/{identity}/paste",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_map_paste"
+      ],
+      "reason": "Browser alias of the canonical intent-reuse endpoint."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/lists/{identity:path}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_list"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.get_list"
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/lists/{identity:path}",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_list"
+      ],
+      "reason": "Browser alias of the canonical intent-reuse endpoint."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/lists",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_list"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.create_list"
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/lists",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_list"
+      ],
+      "reason": "Browser alias of the canonical intent-reuse endpoint."
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/hfl/timeline/ideas/lists/{identity:path}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_list"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.update_list"
+    },
+    {
+      "method": "PATCH",
+      "path": "/hfl-corpus/timeline/ideas/lists/{identity:path}",
+      "status": "alias",
+      "tools": [
+        "update_hfl_corpus_list"
+      ],
+      "reason": "Browser alias of the canonical intent-reuse endpoint."
     }
   ]
 }

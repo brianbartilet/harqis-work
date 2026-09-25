@@ -1600,6 +1600,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/ideas/{identity}/connections:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Idea Connections
+      operationId: idea_connections_api_hfl_timeline_ideas_ideas__identity__connections_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/hfl/timeline/ideas/boards:
     get:
       tags:
@@ -2918,6 +2945,245 @@ paths:
         required: true
         schema:
           type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/reuse/options:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Options
+      operationId: options_api_hfl_timeline_ideas_reuse_options_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: query
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Query
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 1
+          title: Page
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/reuse/board-ideas:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Board Ideas
+      operationId: board_ideas_api_hfl_timeline_ideas_reuse_board_ideas_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /api/hfl/timeline/ideas/reuse/clone/{kind}/{identity}:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Clone Draft
+      operationId: clone_draft_api_hfl_timeline_ideas_reuse_clone__kind___identity__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Kind
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Clone
+      operationId: clone_api_hfl_timeline_ideas_reuse_clone__kind___identity__post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Kind
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/reuse/copy-list:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Copy List
+      operationId: copy_list_api_hfl_timeline_ideas_reuse_copy_list_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /api/hfl/timeline/ideas/maps/{identity}/paste:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Paste Board
+      operationId: paste_board_api_hfl_timeline_ideas_maps__identity__paste_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/lists/{identity}:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Get List
+      operationId: get_list_api_hfl_timeline_ideas_lists__identity__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - hfl-corpus-api
+      summary: Save List
+      operationId: save_list_api_hfl_timeline_ideas_lists__identity__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/lists:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Save List
+      operationId: save_list_api_hfl_timeline_ideas_lists_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Identity
       responses:
         '200':

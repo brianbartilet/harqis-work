@@ -557,5 +557,5 @@ async def accept_proposal(request: Request, identity: str):
     actor = timeline.owner(request)
     return save_proposal(identity, await timeline.body(request), actor)
 
-from modules.hfl_corpus.intent_reuse import register as register_reuse
-register_reuse(router)
+from modules.hfl_corpus.intent_reuse import router as reuse_router
+router.include_router(reuse_router)

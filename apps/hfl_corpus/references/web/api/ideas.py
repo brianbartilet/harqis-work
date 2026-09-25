@@ -32,10 +32,60 @@ class ApiServiceHflCorpusIdeas(ApiServiceHflCorpusExtended):
         """
         return self._json('GET', f'timeline/ideas/dates/{self._segment(identity)}/connections')
 
+    def get_idea_connections(self, identity: str) -> dict:
+        """Read an idea's graph connections.
+
+        Args:
+            identity: Resource ID returned by the corresponding list/get operation.
+        """
+        return self._json('GET', f'timeline/ideas/ideas/{self._segment(identity)}/connections')
+
     def list_boards(self) -> dict:
         """Read board metadata, goals and the color palette without scanning the corpus.
         """
         return self._json('GET', 'timeline/ideas/boards')
+
+    def list_reuse_options(self, query: str = '', page: int = 1) -> dict:
+        """Search actions and ideas available for independent copying."""
+        return self._json('GET', 'timeline/ideas/reuse/options', params=dict(query=query, page=page))
+
+    def list_board_ideas(self, dismissed: bool = False) -> dict:
+        """List visible ideas available to boards, optionally including dismissed ideas."""
+        return self._json('GET', 'timeline/ideas/reuse/board-ideas', params={'dismissed': '1' if dismissed else '0'})
+
+    def get_clone_draft(self, kind: str, identity: str) -> dict:
+        """Preview an independent action or idea copy without saving it."""
+        return self._json('GET', f'timeline/ideas/reuse/clone/{self._segment(kind)}/{self._segment(identity)}')
+
+    def create_clone(self, kind: str, identity: str, request_id: str, source_version: int,
+                     item: dict, attachments: list[str] | None = None) -> dict:
+        """Create a copy using a caller UUID and the source revision. Writes remote state."""
+        return self._json('POST', f'timeline/ideas/reuse/clone/{self._segment(kind)}/{self._segment(identity)}',
+                          payload=dict(request_id=request_id, source_version=source_version, item=item, attachments=attachments or []))
+
+    def create_list_copy(self, kind: str, identity: str, request_id: str, version: int, checklist: dict) -> dict:
+        """Copy a checklist into an action or idea at the expected revision. Writes remote state."""
+        return self._json('POST', 'timeline/ideas/reuse/copy-list',
+                          payload=dict(kind=kind, identity=identity, request_id=request_id, version=version, checklist=checklist))
+
+    def create_map_paste(self, identity: str, request_id: str, version: int, source_board: str,
+                         source_version: int, selected: list[str]) -> dict:
+        """Paste selected objects between versioned boards. Writes remote state."""
+        return self._json('POST', f'timeline/ideas/maps/{self._segment(identity)}/paste',
+                          payload=dict(request_id=request_id, version=version, source_board=source_board,
+                                       source_version=source_version, selected=selected))
+
+    def get_list(self, identity: str) -> dict:
+        """Read a standalone or owner-linked checklist entity."""
+        return self._json('GET', f'timeline/ideas/lists/{self._segment(identity)}')
+
+    def create_list(self, request_id: str, checklist: dict) -> dict:
+        """Create a standalone checklist with a caller-generated UUID. Writes remote state."""
+        return self._json('POST', 'timeline/ideas/lists', payload=dict(request_id=request_id, checklist=checklist))
+
+    def update_list(self, identity: str, version: int, checklist: dict) -> dict:
+        """Update a standalone or owner-linked checklist at its expected revision. Writes remote state."""
+        return self._json('PATCH', f'timeline/ideas/lists/{self._segment(identity)}', payload=dict(version=version, checklist=checklist))
 
     def update_board_order(self, ids: list[str]) -> dict:
         """Persist board ordering. Destructive: writes remote state.

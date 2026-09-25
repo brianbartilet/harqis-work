@@ -1173,6 +1173,19 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         return output
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def get_hfl_corpus_idea_connections(identity: str) -> dict:
+        """Read an idea's graph connections.
+
+        Args:
+            identity: Resource ID returned by the corresponding list/get operation.
+        """
+        logger.info("Tool called: get_hfl_corpus_idea_connections")
+        result = ApiServiceHflCorpusIdeas(CONFIG).get_idea_connections(identity=identity)
+        output = _dict_result(result)
+        logger.info("get_hfl_corpus_idea_connections done")
+        return output
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
     def list_hfl_corpus_boards() -> dict:
         """Read board metadata, goals and the color palette without scanning the corpus.
         """
@@ -1644,3 +1657,66 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         output = _dict_result(result)
         logger.info("list_hfl_corpus_day_matches done")
         return output
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def list_hfl_corpus_reuse_options(query: str='', page: int=1) -> dict:
+        """Search actions and ideas available for independent copying."""
+        logger.info("Tool called: list_hfl_corpus_reuse_options")
+        result = ApiServiceHflCorpusIdeas(CONFIG).list_reuse_options(query=query, page=page)
+        return _dict_result(result)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def list_hfl_corpus_board_ideas(dismissed: bool=False) -> dict:
+        """List visible ideas available to boards, optionally including dismissed ideas."""
+        logger.info("Tool called: list_hfl_corpus_board_ideas")
+        result = ApiServiceHflCorpusIdeas(CONFIG).list_board_ideas(dismissed=dismissed)
+        return _dict_result(result)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def get_hfl_corpus_clone_draft(kind: str, identity: str) -> dict:
+        """Preview an independent action or idea copy without saving it."""
+        logger.info("Tool called: get_hfl_corpus_clone_draft")
+        result = ApiServiceHflCorpusIdeas(CONFIG).get_clone_draft(kind=kind, identity=identity)
+        return _dict_result(result)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_clone(kind: str, identity: str, request_id: str, source_version: int, item: dict, attachments: list[str] | None=None) -> dict:
+        """Create a copy using a caller UUID and the source revision. Writes remote state."""
+        logger.info("Tool called: create_hfl_corpus_clone")
+        result = ApiServiceHflCorpusIdeas(CONFIG).create_clone(kind=kind, identity=identity, request_id=request_id, source_version=source_version, item=item, attachments=attachments)
+        return _dict_result(result)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_list_copy(kind: str, identity: str, request_id: str, version: int, checklist: dict) -> dict:
+        """Copy a checklist into an action or idea at the expected revision. Writes remote state."""
+        logger.info("Tool called: create_hfl_corpus_list_copy")
+        result = ApiServiceHflCorpusIdeas(CONFIG).create_list_copy(kind=kind, identity=identity, request_id=request_id, version=version, checklist=checklist)
+        return _dict_result(result)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_map_paste(identity: str, request_id: str, version: int, source_board: str, source_version: int, selected: list[str]) -> dict:
+        """Paste selected objects between versioned boards. Writes remote state."""
+        logger.info("Tool called: create_hfl_corpus_map_paste")
+        result = ApiServiceHflCorpusIdeas(CONFIG).create_map_paste(identity=identity, request_id=request_id, version=version, source_board=source_board, source_version=source_version, selected=selected)
+        return _dict_result(result)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def get_hfl_corpus_list(identity: str) -> dict:
+        """Read a standalone or owner-linked checklist entity."""
+        logger.info("Tool called: get_hfl_corpus_list")
+        result = ApiServiceHflCorpusIdeas(CONFIG).get_list(identity=identity)
+        return _dict_result(result)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_list(request_id: str, checklist: dict) -> dict:
+        """Create a standalone checklist with a caller-generated UUID. Writes remote state."""
+        logger.info("Tool called: create_hfl_corpus_list")
+        result = ApiServiceHflCorpusIdeas(CONFIG).create_list(request_id=request_id, checklist=checklist)
+        return _dict_result(result)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_list(identity: str, version: int, checklist: dict) -> dict:
+        """Update a standalone or owner-linked checklist at its expected revision. Writes remote state."""
+        logger.info("Tool called: update_hfl_corpus_list")
+        result = ApiServiceHflCorpusIdeas(CONFIG).update_list(identity=identity, version=version, checklist=checklist)
+        return _dict_result(result)

@@ -78,6 +78,14 @@ def test_every_frontend_route_has_a_reviewed_contract():
     assert result['ok'], result['errors']
 
 
+def test_reuse_routes_preserve_authenticated_canonical_proxy():
+    from modules.hfl_corpus.intent_reuse import router
+    from modules.hfl_corpus.timeline import TimelineRoute
+
+    assert len(router.routes) == 9
+    assert all(isinstance(route, TimelineRoute) for route in router.routes)
+
+
 def test_static_inventory_matches_runtime_and_standalone_is_complete():
     from main import app as frontend
     from hfl_api import app as standalone
@@ -177,7 +185,7 @@ def test_every_new_service_uses_reviewed_http_contract(row, recording_api, tmp_p
     assert method_sent == row['method']
     expected = row['path']
     for key in path_fields:
-        expected = expected.replace('{'+key+'}', str(values[key]))
+        expected = re.sub(r'\{' + re.escape(key) + r'(?::[^}]+)?\}', lambda _: str(values[key]), expected)
     assert unquote(urlsplit(path).path) == expected
     assert headers['Authorization'] == 'Bearer frontend-test-hfl-api-token'
     if 'file_paths' in values:

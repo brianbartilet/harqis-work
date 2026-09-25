@@ -99,7 +99,7 @@ expose plain HTTP only over a private network such as Tailscale, or add TLS.
 | `ApiServiceHflCorpusEntities` | `list_entities`, `get_entity_graph`, `get_entity_entry`, `get_entity_status`, `update_entity_profile`, `create_entity_backfill`, `create_entity_legacy_merge`, `update_entity_legacy_undo`, `create_entity_export`, `analyze_entity_selection`, `create_entity_merge`, `update_entity_unmerge`, `get_entity_operation`, `get_entity_audit`, `get_entity_matching`, `create_entity_matching_scan`, `update_entity_matching_dismiss` | Canonical entities operations |
 | `ApiServiceHflCorpusGraphViews` | `list_graph_views`, `create_graph_view`, `update_graph_view`, `update_graph_view_selection`, `delete_graph_view` | Canonical graph views operations |
 | `ApiServiceHflCorpusTimeline` | `get_timeline_source`, `get_timeline_evidence`, `list_timeline_items`, `update_timeline_order`, `create_timeline_item`, `update_timeline_item`, `get_timeline_item`, `get_timeline_history`, `get_timeline_markers`, `get_timeline_period`, `update_timeline_suggestion_dismiss`, `create_timeline_exploration` | Canonical timeline operations |
-| `ApiServiceHflCorpusIdeas` | `get_ideas_snapshot`, `get_connection_availability`, `get_action_connections`, `get_date_connections`, `list_boards`, `update_board_order`, `update_goal_order`, `get_goal_options`, `get_map`, `get_map_graph`, `list_map_attach_options`, `get_rendered_markdown`, `get_idea`, `create_idea`, `update_idea`, `create_topic`, `create_link`, `delete_link`, `create_map`, `update_map`, `delete_map`, `create_map_promotion`, `get_goal`, `create_map_link_promotion`, `update_map_connection`, `create_goal`, `update_goal`, `get_idea_conversion`, `create_idea_conversion`, `list_idea_attachments`, `download_idea_attachment`, `upload_idea_attachments`, `delete_idea_attachment`, `create_map_proposal` | Canonical ideas operations |
+| `ApiServiceHflCorpusIdeas` | `get_ideas_snapshot`, `get_connection_availability`, `get_action_connections`, `get_date_connections`, `get_idea_connections`, `list_reuse_options`, `list_board_ideas`, `get_clone_draft`, `create_clone`, `create_list_copy`, `create_map_paste`, `get_list`, `create_list`, `update_list`, `list_boards`, `update_board_order`, `update_goal_order`, `get_goal_options`, `get_map`, `get_map_graph`, `list_map_attach_options`, `get_rendered_markdown`, `get_idea`, `create_idea`, `update_idea`, `create_topic`, `create_link`, `delete_link`, `create_map`, `update_map`, `delete_map`, `create_map_promotion`, `get_goal`, `create_map_link_promotion`, `update_map_connection`, `create_goal`, `update_goal`, `get_idea_conversion`, `create_idea_conversion`, `list_idea_attachments`, `download_idea_attachment`, `upload_idea_attachments`, `delete_idea_attachment`, `create_map_proposal` | Canonical ideas operations |
 
 `create_entry` writes Markdown first and then attempts an idempotent Elasticsearch
 upsert. Inspect `indexed` and `doc_id`; the request can succeed with
@@ -107,7 +107,7 @@ upsert. Inspect `indexed` and `doc_id`; the request can succeed with
 
 ## MCP Tools
 
-The existing `hfl_corpus` catalog entry now exposes **100 tools**, covering every
+The existing `hfl_corpus` catalog entry now exposes **110 tools**, covering every
 canonical `/api/hfl` method/path in the frontend. CLI, standalone MCP and the
 Kanban bridge consume the same adapter; existing tool names remain compatible.
 No new credential is required. Configure the canonical host in
@@ -213,6 +213,7 @@ routes; deploy that API revision before using newly exposed graph-view tools.
 | `get_hfl_corpus_connection_availability` | Read available object connection choices. |
 | `get_hfl_corpus_action_connections` | Read an action’s graph connections. |
 | `get_hfl_corpus_date_connections` | Read a date pin’s graph connections. |
+| `get_hfl_corpus_idea_connections` | Read an idea’s graph connections. |
 | `list_hfl_corpus_boards` | Read board metadata, goals and the color palette without scanning the corpus. |
 | `update_hfl_corpus_board_order` | Persist board ordering. Destructive: writes remote state. |
 | `update_hfl_corpus_goal_order` | Persist goal ordering. Destructive: writes remote state. |
@@ -403,3 +404,15 @@ they mutate the canonical corpus.
 - Markdown remains authoritative; Elasticsearch is an additive, best-effort
   projection that can be reconciled later.
 - Reference download tools write caller-selected local paths.
+
+### Intent reuse tools
+
+- `list_hfl_corpus_reuse_options`: Search actions and ideas available for independent copying.
+- `list_hfl_corpus_board_ideas`: List visible ideas available to boards, optionally including dismissed ideas.
+- `get_hfl_corpus_clone_draft`: Preview an independent action or idea copy without saving it.
+- `create_hfl_corpus_clone`: Create a copy using a caller UUID and the source revision. Writes remote state.
+- `create_hfl_corpus_list_copy`: Copy a checklist into an action or idea at the expected revision. Writes remote state.
+- `create_hfl_corpus_map_paste`: Paste selected objects between versioned boards. Writes remote state.
+- `get_hfl_corpus_list`: Read a standalone or owner-linked checklist entity.
+- `create_hfl_corpus_list`: Create a standalone checklist with a caller-generated UUID. Writes remote state.
+- `update_hfl_corpus_list`: Update a standalone or owner-linked checklist at its expected revision. Writes remote state.
