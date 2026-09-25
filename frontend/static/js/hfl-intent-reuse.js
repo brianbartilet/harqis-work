@@ -2,7 +2,7 @@
 (() => {
   const element = (tag, text) => { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; return n; };
   const api = (...args) => window.HflIdeas.api(...args);
-  window.HflWorkspacePicker = (host, {selected=[], empty='All activity', name='', onapply=()=>{}, onload=()=>{}}={}) => {
+  window.HflWorkspacePicker = (host, {selected=[], empty='All activity', name='', onapply=()=>{}, onload=()=>{}, onerror=()=>{}}={}) => {
     host._disposeWorkspacePicker?.();
     const picker=element('details');picker.className='workspace-view-picker intent-workspace-picker';
     const summary=element('summary'),caption=element('span'),options=element('div'),choices=element('div');
@@ -19,7 +19,7 @@
     const controller=new AbortController();host._disposeWorkspacePicker=()=>controller.abort();document.addEventListener('click',event=>{if(!picker.isConnected){controller.abort();return;}if(!picker.contains(event.target)){picker.open=false;commit();}},{signal:controller.signal});
     // Close/apply on submit too, so a pending checkbox selection is never lost.
     host.closest('form')?.addEventListener('submit',commit,{capture:true,signal:controller.signal});
-    update();fetch('/hfl-corpus/workspace-views').then(async response=>{if(!response.ok)throw Error();return response.json();}).then(data=>{if(!picker.isConnected)return;views=data.views;for(const id of ids)if(!views.some(v=>v.id===id))views.push({id,name:'Unavailable workspace'});render();onload(views);}).catch(()=>{options.append(element('p','Workspaces unavailable. Reopen to retry.'));});
+    update();fetch('/hfl-corpus/workspace-views').then(async response=>{if(!response.ok)throw Error();return response.json();}).then(data=>{if(!picker.isConnected)return;views=data.views;for(const id of ids)if(!views.some(v=>v.id===id))views.push({id,name:'Unavailable workspace'});render();onload(views);}).catch(()=>{options.append(element('p','Workspaces unavailable. Reopen to retry.'));onerror();});
     return {close:()=>{picker.open=false;commit();}};
   };
   window.HflIntentFields = (form, item={}, kind='actionable') => {

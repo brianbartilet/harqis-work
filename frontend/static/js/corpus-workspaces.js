@@ -3,6 +3,8 @@
   const menu = document.querySelector('[data-workspace-menu]');
   if (!form || !menu) return;
   const $ = selector => document.querySelector(selector);
+  const kanban=!!document.querySelector('[data-actions-page]');
+  const workspacePath=kanban?'/hfl-corpus/actions':'/hfl-corpus';
   const createMenu = document.querySelector('.corpus-create-menu');
   if (createMenu) {
     const headerMenus = [...document.querySelectorAll('.corpus-navigation-actions > details')];
@@ -45,7 +47,7 @@
   let views = viewData.views;
   let preferences = viewData.preferences;
   const initialParams = new URLSearchParams(location.search);
-  let activeIds = (initialParams.get('views') || form.elements.workspace.value || '').split(',').filter(Boolean);
+  let activeIds = (initialParams.get('views') || initialParams.get('workspace_ids') || form.elements.workspace.value || '').split(',').filter(Boolean);
   const aggregateScope = JSON.parse(form.elements.scope?.value || '{"any":[]}');
   let dynamicOn = initialParams.get('dynamic') === '1' && preferences.dynamic;
   let editTarget = null;
@@ -162,6 +164,7 @@
     const modified = normalized(snapshot()) !== normalized(aggregateScope.any.length ? {} : current?.state || {});
     badge.textContent = modified ? 'Modified' : current || applied.length ? 'Saved' : 'Default';
     badge.dataset.state = modified ? 'modified' : current || applied.length ? 'saved' : 'default';
+    if(kanban)window.dispatchEvent(new CustomEvent('hfl:workspace-context',{detail:{names:activeIds.map(id=>views.find(view=>view.id===id)?.name||'Unavailable workspace')}}));
   }
   form.addEventListener('input', updateViewContext);
   form.addEventListener('change', updateViewContext);
@@ -169,7 +172,7 @@
     const selected = views.find(view => view.id === activeIds[0]);
     const resetUrl = dynamicOn || activeIds.length > 1
       ? combinedUrl(viewData, activeIds, dynamicOn)
-      : selected ? viewUrl(selected) : '/hfl-corpus?reset=1';
+      : selected ? viewUrl(selected) : workspacePath+'?reset=1';
     document.querySelectorAll('[data-workspace-reset]').forEach(link => { link.href = resetUrl; });
     updateViewContext();
     updateDynamicAvailability();
@@ -208,7 +211,7 @@
     return result;
   }
   function viewUrl(view) {
-    return '/hfl-corpus?' + new URLSearchParams({...view.state, workspace:view.id});
+    return workspacePath+'?' + new URLSearchParams({...view.state, workspace:view.id});
   }
   const viewLoading = $('[data-view-loading]');
   let viewLoadingTimer;
@@ -276,7 +279,7 @@
           dialog.close();
           const updated = await request();
           await loadCombined(updated, dynamicOn ? updated.active : activeIds.filter(id => id !== removed), dynamicOn);
-        } else location.assign('/hfl-corpus?reset=1');
+        } else location.assign(workspacePath+'?reset=1');
         return;
       }
       const existing = action === 'new' ? null : editTarget || current;
@@ -291,7 +294,8 @@
       const url = new URL(location.href); url.searchParams.set('workspace', view.id); history.replaceState(null, '', url);
       status.textContent = `Saved: ${view.name}`;
       dialog.close(); menu.open = true;
-      if (action === 'new' && aggregateScope.any.length) { await loadCombined(viewData, [view.id], false); }
+      if(kanban){await loadCombined(viewData, action==='new'?[view.id]:activeIds, dynamicOn);}
+      else if (action === 'new' && aggregateScope.any.length) { await loadCombined(viewData, [view.id], false); }
       else if (editTarget && aggregateScope.any.length && activeIds.includes(view.id)) {
         const updated = await request();
         await loadCombined(updated, activeIds, dynamicOn, true);
@@ -438,7 +442,7 @@
       }
       return state;
     });
-    return '/hfl-corpus?' + new URLSearchParams({views:ids.join(','), dynamic:dynamic ? '1' : '0', scope:JSON.stringify({any:clauses})});
+    return workspacePath+'?' + new URLSearchParams({views:ids.join(','), dynamic:dynamic ? '1' : '0', scope:JSON.stringify({any:clauses})});
   }
   let transitioning = false;
   async function loadCombined(data, ids, dynamic, automatic = false, explicitUrl = null) {
@@ -453,6 +457,7 @@
     const slow = setTimeout(() => { $('#view-loading-detail').textContent = 'Still searching. Larger views can take a little longer.'; }, 8000);
     try {
       const target = new URL(explicitUrl || combinedUrl(data, ids, dynamic), location.origin);
+      if(kanban)target.pathname=workspacePath;
       if (automatic && new URL(location.href).searchParams.has('activity_year')) target.searchParams.set('activity_year', new URL(location.href).searchParams.get('activity_year'));
       const url = target.pathname + target.search;
       const response = await fetch(url, {signal:controller.signal, cache:'no-store'});

@@ -524,7 +524,7 @@ def test_module_registry_has_fixed_primary_navigation():
     assert manifesto is not None
     assert manifesto.route == "/manifesto"
     assert module_by_key("hfl_corpus").route == "/hfl-corpus"
-    assert module_by_key("sharing").label == "Share Corpus"
+    assert module_by_key("sharing").label == "Share"
     assert "manifesto" not in {module.key for module in PRIMARY_MODULES}
     assert "home" not in {module.key for module in PRIMARY_MODULES}
 

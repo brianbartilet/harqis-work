@@ -3,6 +3,7 @@
 {% block title %}HARQIS — Activity Kanban{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ static_asset('css/hfl-timeline.css') }}">
+<link rel="stylesheet" href="{{ static_asset('css/corpus-workspaces.css') }}">
 {% endblock %}
 {% block content %}
 <main class="actions-page" data-actions-page>
@@ -11,4 +12,7 @@
 </main>
 <div hidden><div data-day-ideas></div><div data-day-actions></div><div data-activity-day-menu></div></div>
 {% include "modules/hfl_corpus/partials/timeline.html" %}
+{% include "modules/hfl_corpus/partials/kanban_workspace_state.html" %}
+<script defer src="{{ static_asset('js/corpus-workspaces.js') }}"></script>
+<script defer src="{{ static_asset('js/view-visualizer.js') }}"></script>
 {% endblock %}

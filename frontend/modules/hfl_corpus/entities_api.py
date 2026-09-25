@@ -77,8 +77,19 @@ async def page(request: Request):
     if request.url.path.endswith('/actions'):
         template = 'actions_board.html'
     from modules.hfl_shares.security import make_csrf_token
+    workspace_context = {}
+    if template == 'actions_board.html':
+        from modules.hfl_corpus import workspace_views
+        from modules.hfl_corpus.view_scope import parse_scope
+        saved = await run_in_threadpool(workspace_views.listing)
+        try:
+            state = workspace_views.WorkspaceState.model_validate({key: value for key, value in request.query_params.items() if key in workspace_views.WorkspaceState.model_fields})
+            scope = parse_scope(request.query_params.get('scope'))
+        except ValueError:
+            raise HTTPException(422, 'Invalid workspace filters.') from None
+        workspace_context = dict(saved_workspaces=saved, workspace_state=state.model_dump(), workspace_scope=scope.model_dump())
     return templates.TemplateResponse(request, 'modules/hfl_corpus/' + template,
-                                      page_context(request, user, 'hfl_corpus', memory_csrf=make_csrf_token(user)))
+                                      page_context(request, user, 'hfl_corpus', memory_csrf=make_csrf_token(user), **workspace_context))
 
 
 @router.get('/api/hfl/entities/graph')

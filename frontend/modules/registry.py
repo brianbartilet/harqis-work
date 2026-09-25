@@ -31,7 +31,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
     ),
     ModuleDefinition(
         key="sharing",
-        label="Share Corpus",
+        label="Share",
         route="/sharing",
         description="Recipes stay live while every generated snapshot freezes a fresh view.",
         detail="Shape Activity Corpus sources, tags, and filters into temporary portals with expiring guest access.",

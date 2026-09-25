@@ -7,7 +7,7 @@
   const actions = window.hflActions;
   const $ = selector => dialog.querySelector(selector);
   const lanes = $('[data-board-lanes]'), all = {checked:false};
-  let workspaceNames=[];
+  let workspaceNames=[], workspaceLoadState='loading';
   const status = $('[data-board-status]'), error = $('[data-board-error]');
   const states = ['open','active','in_progress','incomplete','done','dismissed'];
   const label = value => value === 'in_progress' ? 'In Progress' : value[0].toUpperCase()+value.slice(1);
@@ -27,8 +27,11 @@
     const params=new URLSearchParams(location.search);
     const extra=['source','q','date_from','date_to'].filter(key=>params.get(key)).map(key=>({source:'Sources',q:'Search',date_from:'From',date_to:'To'}[key])+': '+params.get(key));
     if(page){
-      const scoped=params.has('scope')||params.has('workspace')||params.has('workspace_ids')||params.has('views');
-      $('[data-board-context]').textContent=all.checked?'All activity':[(scoped?(workspaceNames.join(' + ')||'Loading workspaces…'):extra.length?'Corpus filters':'All activity'),...extra].join(' · ');
+      const ids=(params.get('views')||params.get('workspace')||params.get('workspace_ids')||'').split(',').filter(Boolean);
+      let filtered=false;
+      try{const scope=JSON.parse(params.get('scope')||'{}');filtered=!!scope.any?.length||['q','source','date_from','date_to','rolling'].some(key=>scope.all?.[key]);}catch(_){filtered=true;}
+      const workspaceLabel=workspaceNames.join(' + ')||(workspaceLoadState==='loading'?'Loading workspaces…':'Workspaces unavailable');
+      $('[data-board-context]').textContent=all.checked?'All activity':[(ids.length?workspaceLabel:filtered||extra.length?'Corpus filters':'All activity'),...extra].join(' · ');
       return;
     }
     $('[data-board-context]').textContent = (all.checked ? 'All activity · Current views: ' : 'Following views: ') + caption + ' · ' + dynamic + (!all.checked&&extra.length?' · '+extra.join(' · '):'');
@@ -176,12 +179,19 @@
   $('[data-board-refresh]').onclick=()=>refresh(true);
   document.addEventListener('click',event=>{if(!createMenu.contains(event.target))createMenu.open=false;},{signal:listeners.signal});
   createMenu.addEventListener('keydown',event=>{if(event.key==='Escape'){createMenu.open=false;createMenu.querySelector('summary').focus();}});
+  all.checked=new URLSearchParams(location.search).get('all')==='1';
+  if(document.querySelector('[data-workspace-menu]')){
+    const data=JSON.parse(document.querySelector('[data-workspace-data]').textContent),params=new URLSearchParams(location.search),ids=(params.get('views')||params.get('workspace')||params.get('workspace_ids')||'').split(',').filter(Boolean);
+    workspaceNames=ids.map(id=>data.views.find(view=>view.id===id)?.name||'Unavailable workspace');workspaceLoadState='loaded';
+    window.addEventListener('hfl:workspace-context',event=>{workspaceNames=event.detail.names;all.checked=false;context();},{signal:listeners.signal});
+  }else{
   const workspaceFilter=node('details',null,'board-workspace-filter'),workspaceTitle=node('summary','Workspace'),workspacePanel=node('div',null,'workspace-menu-panel');
   workspacePanel.append(node('p','Focus on'));workspaceFilter.append(workspaceTitle,workspacePanel);$('[data-board-context]').after(workspaceFilter);
   const params=new URLSearchParams(location.search),selectedWorkspaces=(params.get('views')||params.get('workspace')||params.get('workspace_ids')||'').split(',').filter(Boolean);
   all.checked=params.get('all')==='1';
   const picker=window.HflWorkspacePicker(workspacePanel,{selected:all.checked?[]:selectedWorkspaces,
-    onload:views=>{workspaceNames=views.filter(v=>selectedWorkspaces.includes(v.id)).map(v=>v.name);context();},
+    onload:views=>{workspaceLoadState='loaded';const current=new URLSearchParams(location.search),ids=(current.get('views')||current.get('workspace')||current.get('workspace_ids')||'').split(',').filter(Boolean);workspaceNames=views.filter(v=>ids.includes(v.id)).map(v=>v.name);context();},
+    onerror:()=>{workspaceLoadState='error';context();},
     onapply:(ids,views)=>{
       const url=new URL(location.href);url.search='';all.checked=!ids.length;
       if(ids.length){url.searchParams.set('views',ids.join(','));url.searchParams.set('scope',JSON.stringify({any:views.filter(v=>ids.includes(v.id)).map(v=>v.state)}));}else url.searchParams.set('all','1');
@@ -190,6 +200,7 @@
   workspaceFilter.addEventListener('toggle',()=>{if(!workspaceFilter.open)picker.close();});
   document.addEventListener('click',event=>{if(!workspaceFilter.contains(event.target)){workspaceFilter.open=false;picker.close();}},{signal:listeners.signal});
   workspaceFilter.addEventListener('keydown',event=>{if(event.key==='Escape'){workspaceFilter.open=false;picker.close();workspaceTitle.focus();}});
+  }
   const toolsMenu=document.querySelector('.corpus-tools');
   toolsMenu?.addEventListener('toggle',()=>{if(toolsMenu.open){const profile=document.querySelector('summary[aria-label="Profile menu"]')?.parentElement;if(profile)profile.open=false;}});
   document.addEventListener('click',event=>{if(toolsMenu&&!toolsMenu.contains(event.target))toolsMenu.open=false;},{signal:listeners.signal});
