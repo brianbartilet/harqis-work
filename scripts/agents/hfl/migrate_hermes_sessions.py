@@ -25,6 +25,9 @@ DEFAULT_SOURCES = ("cli", "telegram")
 
 _INTERNAL_USER_PREFIXES = (
     "[async delegation batch complete",
+    "[background process",
+    "[important: background process",
+    "[background task",
     "[context compaction",
     "[system:",
     "[your active task list",
@@ -194,9 +197,7 @@ def migrate_pairs(
     if dry_run:
         return summary
     if processor is None:
-        from workflows.hfl.tasks.ingest_agent_sessions import process_agent_session_event
-
-        processor = process_agent_session_event
+        raise RuntimeError("Unsafe legacy migration is read-only; use the bounded collector recovery path")
     results = []
     for payload in pairs:
         try:
@@ -227,9 +228,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", type=Path)
     args = parser.parse_args(argv)
     if not args.dry_run:
-        from scripts.launch import setup_env
-
-        setup_env()
+        parser.error("Legacy migration writes are disabled. Use collect_hermes_sessions.py and the reviewed bounded recovery procedure in docs/info/HFL-HERMES-CONTINUOUS-CAPTURE.md")
     all_pairs = collect_session_pairs(
         args.database,
         since=args.since,

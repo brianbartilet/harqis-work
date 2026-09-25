@@ -56,7 +56,6 @@ def pairs(database):
     (None, "Fix parser", {'finish_reason': 'incomplete'}),
     (None, "Fix parser", {'finish_reason': None}),
     (None, "Fix parser", {'active': 0}),
-    (None, "Fix parser", {'compacted': 1}),
 ])
 def test_excludes_non_user_facing_or_unfinished_turns(database, session_update, prompt, answer_fields):
     if session_update:
@@ -99,7 +98,7 @@ def test_bounded_batch_skips_duplicates_and_revisits_late_closed_session(databas
         db.execute("INSERT INTO sessions VALUES ('late', 'telegram', NULL, NULL, 'default')")
     message(database, 7, 'user', 'Late request', session_id='late')
     message(database, 8, 'assistant', 'Late answer', session_id='late', finish_reason=None)
-    assert run_collection(database, limit=1)['spooled'] == 0
+    assert run_collection(database, limit=1)['spooled'] == 1  # pending observation
     with sqlite3.connect(database) as db:
         db.execute("UPDATE messages SET finish_reason='stop' WHERE id=8")
         db.execute("UPDATE sessions SET ended_at=? WHERE id='late'", (NOW.timestamp(),))

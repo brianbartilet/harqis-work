@@ -19,6 +19,7 @@ import re
 import socket
 import sys
 import traceback
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -141,20 +142,82 @@ def normalize_event(raw: dict[str, Any], *, surface: str | None = None) -> dict[
         "tags": [sanitize_text(tag, limit=100).lstrip("#") for tag in raw.get("tags", []) if sanitize_text(tag, limit=100)],
         "machine": _clean_id(raw.get("machine") or socket.gethostname(), "unknown"),
         "ingest": raw.get("ingest") if isinstance(raw.get("ingest"), dict) else {},
+        **{key: _clean_id(raw[key], "") for key in ("related_event_id", "outcome_message_id", "capture_state", "observation_id") if raw.get(key)},
     }
 
 
-def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
+@contextlib.contextmanager
+def event_lock(path: Path):
+    """Persistent FD-bound lock shared by capture, migration and ingest writers.
+
+    No hard links or stale-lock deletion: works on local ExFAT as well as APFS.
+    Every writer of the artifact must hold this lock for its whole transaction.
+    """
+    path = path.resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(f".tmp-{os.getpid()}")
-    temporary.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.replace(temporary, path)
+    with path.with_suffix('.lock').open('a+b') as lock:
+        if os.name == 'nt':
+            import msvcrt
+            if lock.tell() == 0:
+                lock.write(b'\0')
+                lock.flush()
+            lock.seek(0)
+            msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if os.name == 'nt':
+                lock.seek(0)
+                msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
+    """Publish complete JSON. Caller holds event_lock for shared artifacts."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix='.' + path.name, suffix='.tmp', dir=path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            json.dump(payload, stream, indent=2, ensure_ascii=False)
+            stream.write('\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def existing_event(path: Path, event: dict[str, Any]) -> dict[str, Any] | None:
+    """Validate a retained winner without changing it, including its receipt."""
+    if not path.exists():
+        return None
+    existing = json.loads(path.read_text(encoding='utf-8'))
+    identity = ('schema_version', 'event_id', 'surface', 'session_id', 'prompt_id', 'original_prompt')
+    if (not isinstance(existing, dict)
+            or any(existing.get(key) != event[key] for key in identity)
+            or not isinstance(existing.get('ingest'), dict)):
+        raise ValueError('Malformed existing event')
+    return existing
+
+
+def create_event_artifact(path: Path, event: dict[str, Any]) -> bool:
+    """Create-if-absent under the common lock; readers never see partial JSON."""
+    with event_lock(path):
+        if existing_event(path, event) is not None:
+            return False
+        _atomic_json(path, event)
+        return True
 
 
 def write_event(event: dict[str, Any]) -> Path:
     day = datetime.fromisoformat(event["timestamp"]).strftime("%Y-%m-%d")
     path = audit_root() / "events" / day / f"{event['event_id']}.json"
-    _atomic_json(path, event)
+    create_event_artifact(path, event)
     return path
 
 

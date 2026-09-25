@@ -224,6 +224,16 @@ def test_strips_appended_active_task_list_from_real_prompt(tmp_path):
     assert pairs[0]["original_prompt"] == "Resume and publish the PR"
 
 
+def test_legacy_migration_cannot_write_live_data():
+    import pytest
+    from scripts.agents.hfl.migrate_hermes_sessions import main
+    with pytest.raises(RuntimeError, match='legacy'):
+        migrate_pairs([{'event_id': 'synthetic'}], dry_run=False)
+    with pytest.raises(SystemExit) as stopped:
+        main(['--database', '/nonexistent'])
+    assert stopped.value.code == 2
+
+
 def test_dry_run_never_processes_and_execution_reports_results():
     pairs = [
         {"event_id": "agent-one"},

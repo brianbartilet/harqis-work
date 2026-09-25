@@ -18,7 +18,7 @@ DEFAULT_DB = Path.home() / '.hermes' / 'state.db'
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.agents.hfl.capture_session_event import audit_root, normalize_event, write_event
+from scripts.agents.hfl.capture_session_event import audit_root, normalize_event, write_event, _atomic_json
 from scripts.agents.hfl.migrate_hermes_sessions import (
     _is_internal_context, _strip_appended_internal_context, _user_message_kind,
 )
@@ -42,7 +42,72 @@ def _final_answer(row):
 
 
 def iter_completed_pairs(database: Path, *, since: datetime, until: datetime):
-    """Stream finalized turns from a read-only, consistent SQLite snapshot."""
+    """Visible final messages, not a claim that the logical task completed."""
+    for kind, event in _iter_records(database, since=since, until=until):
+        if kind == 'event':
+            yield event
+
+
+def _prompt_event(prompt):
+    return normalize_event({
+        'surface': 'hermes', 'session_id': prompt['session_id'],
+        'prompt_id': str(prompt['id']),
+        'timestamp': datetime.fromtimestamp(prompt['timestamp']).astimezone().isoformat(),
+        'original_prompt': prompt['content'], 'result_status': 'unknown',
+        'tags': [f"hermes-{prompt['source']}"],
+    })
+
+
+def _inventory(pending, since, *, interrupted=False):
+    for prompt in pending:
+        if max(prompt['timestamp'], prompt.get('observed_at', 0)) < since.timestamp():
+            continue
+        event = _prompt_event(prompt)
+        event['capture_state'] = ('answered' if prompt.get('answered') else
+                                  'interrupted' if interrupted else 'pending')
+        event['observation_id'] = str(prompt.get('last_message_id', prompt['id']))
+        yield 'inventory', event
+
+
+def _original_rows(rows):
+    """Suppress ordered replay copies from Hermes microsecond insertion batches.
+
+    Hermes has no persisted source-row ID for compaction copies. Require both
+    batch timing and an ordered match to earlier archived rows, never text-only
+    deduplication: separate real retries retain their own original IDs.
+    """
+    from itertools import groupby
+    for _, session_rows in groupby(rows, key=lambda row: row['session_id']):
+        history = []
+        batch = []
+        def flush():
+            matches = []
+            cursor = 0
+            for index, row in enumerate(batch):
+                for pos in range(cursor, len(history)):
+                    old = history[pos]
+                    if (old['compacted'] and old['role'] == row['role']
+                            and old['content'] == row['content']):
+                        matches.append(index)
+                        cursor = pos + 1
+                        break
+            replay = len(matches) >= 2 or (matches and any(
+                'CONTEXT COMPACTION' in (r['content'] or '') for r in batch))
+            excluded = set(matches) if replay else set()
+            originals = [row for i, row in enumerate(batch) if i not in excluded]
+            history.extend(originals)
+            return originals
+        for row in session_rows:
+            if batch and not 0 <= row['timestamp'] - batch[-1]['timestamp'] < 0.0001:
+                yield from flush()
+                batch = []
+            batch.append(row)
+        if batch:
+            yield from flush()
+
+
+def _iter_records(database: Path, *, since: datetime, until: datetime):
+    """Scan full available history of touched sessions in one read-only snapshot."""
     with closing(sqlite3.connect(Path(database).resolve().as_uri() + "?mode=ro", uri=True)) as db:
         db.row_factory = sqlite3.Row
         rows = db.execute("""
@@ -50,31 +115,55 @@ def iter_completed_pairs(database: Path, *, since: datetime, until: datetime):
             WHERE s.source IN ('cli', 'telegram')
                 AND s.parent_session_id IS NULL
                 AND COALESCE(s.profile_name, 'default') IN ('', 'default')
-                AND m.timestamp >= ? AND m.timestamp <= ?
+                AND m.timestamp <= ?
+                AND EXISTS (SELECT 1 FROM messages recent WHERE recent.session_id=s.id
+                            AND recent.timestamp >= ? AND recent.timestamp <= ?)
             ORDER BY m.session_id, m.id
-        """, (since.timestamp(), until.timestamp()))
-        pending = None
+        """, (until.timestamp(), since.timestamp(), until.timestamp()))
+        pending = []
         session = None
-        for row in rows:
+        for row in _original_rows(rows):
             if session != row['session_id']:
-                pending = None
+                yield from _inventory(pending, since)
+                pending = []
                 session = row['session_id']
-            if not row['active'] or row['compacted']:
+            if not row['active'] and not row['compacted']:
                 continue
             if row['role'] == 'user':
                 content = _strip_appended_internal_context(row['content'] or '').strip()
-                pending = dict(row) if content and not content.startswith('/') and _user_message_kind(content) == 'prompt' else None
-                if pending is not None:
-                    pending['content'] = content
-            elif pending is not None and row['role'] == 'assistant' and (answer := _final_answer(row)):
-                yield normalize_event({
-                    'surface': 'hermes', 'session_id': session,
-                    'prompt_id': str(pending['id']),
-                    'timestamp': datetime.fromtimestamp(pending['timestamp']).astimezone().isoformat(),
-                    'original_prompt': pending['content'], 'assistant_outcome': answer,
-                    'result_status': 'unknown', 'tags': [f"hermes-{row['source']}"],
-                })
-                pending = None
+                if content.casefold().rstrip('.!?') in {'stop', '/stop', 'cancel', '/cancel', 'nevermind', 'never mind'}:
+                    for prompt in pending:
+                        prompt.update(observed_at=row['timestamp'], last_message_id=row['id'])
+                    yield from _inventory(pending, since, interrupted=True)
+                    pending = []
+                elif content and not content.startswith('/') and _user_message_kind(content) == 'prompt':
+                    if pending and (pending[0].get('answered') or pending[0].get('started')):
+                        if not pending[0].get('answered'):
+                            for prompt in pending:
+                                prompt.update(observed_at=row['timestamp'], last_message_id=row['id'])
+                        yield from _inventory(pending, since, interrupted=not pending[0].get('answered'))
+                        pending = []
+                    pending.append({**dict(row), 'content': content})
+            elif pending and row['role'] == 'assistant' and (answer := _final_answer(row)):
+                for prompt in pending:
+                    event = normalize_event({
+                        'surface': 'hermes', 'session_id': session,
+                        'prompt_id': str(prompt['id']),
+                        'timestamp': datetime.fromtimestamp(prompt['timestamp']).astimezone().isoformat(),
+                        'original_prompt': prompt['content'], 'assistant_outcome': answer,
+                        'result_status': 'unknown', 'tags': [f"hermes-{row['source']}"],
+                    })
+                    if prompt.get('answered'):
+                        event['related_event_id'] = event['event_id']
+                        event['event_id'] += f"-answer-{row['id']}"
+                    event['outcome_message_id'] = str(row['id'])
+                    if row['timestamp'] >= since.timestamp() or prompt['timestamp'] >= since.timestamp():
+                        yield 'event', event
+                    prompt.update(answered=True, observed_at=row['timestamp'], last_message_id=row['id'])
+            elif pending and row['role'] == 'assistant':
+                for prompt in pending:
+                    prompt.update(started=True, observed_at=row['timestamp'], last_message_id=row['id'])
+        yield from _inventory(pending, since)
 
 
 def collect(database: Path, *, since: datetime, until: datetime, limit: int = 100, dry_run: bool = False):
@@ -99,10 +188,44 @@ def _collector_lock():
 
 
 def _spool(database, *, since, until, limit, dry_run):
-    summary = {'spooled': 0, 'duplicates': 0, 'eligible': 0, 'dry_run': dry_run, 'batch_full': False}
-    for event in iter_completed_pairs(database, since=since, until=until):
+    summary = {'spooled': 0, 'duplicates': 0, 'eligible': 0, 'dry_run': dry_run, 'batch_full': False,
+               'inventory_written': 0, 'inventory_eligible': 0, 'unanswered': 0,
+               'pending_hfl_visibility': True}
+    for kind, event in _iter_records(database, since=since, until=until):
         day = datetime.fromisoformat(event['timestamp']).strftime('%Y-%m-%d')
+        if kind == 'inventory':
+            summary['unanswered'] += event['capture_state'] != 'answered'
+            path = audit_root() / 'prompt-inventory' / day / (
+                f"{event['event_id']}-{event['capture_state']}-{event['observation_id']}.json")
+            if not path.exists():
+                summary['inventory_eligible'] += 1
+                if not dry_run:
+                    _atomic_json(path, event)
+                    summary['inventory_written'] += 1
+            if event['capture_state'] == 'answered':
+                continue
+            event['result_status'] = event['capture_state']
+            event['tags'].append('prompt-observation')
         path = audit_root() / 'events' / day / f"{event['event_id']}.json"
+        if path.exists():
+            retained = json.loads(path.read_text(encoding='utf-8'))
+            identity = ('schema_version', 'event_id', 'surface', 'session_id', 'prompt_id', 'original_prompt')
+            if (not isinstance(retained, dict)
+                    or any(retained.get(key) != event[key] for key in identity)
+                    or not isinstance(retained.get('ingest'), dict)
+                    or not isinstance(retained.get('assistant_outcome'), str)):
+                raise ValueError('Malformed existing event')
+            if kind == 'inventory' and retained['assistant_outcome'].strip():
+                summary['duplicates'] += 1
+                continue
+            if (retained.get('assistant_outcome', '') != event['assistant_outcome']
+                    or retained.get('result_status') in {'pending', 'interrupted'}
+                    and event['result_status'] != retained.get('result_status')):
+                event['related_event_id'] = event['event_id']
+                suffix = (f"answer-{event['outcome_message_id']}" if event.get('outcome_message_id')
+                          else f"state-{event['result_status']}-{event['observation_id']}")
+                event['event_id'] += '-' + suffix
+                path = path.with_name(event['event_id'] + '.json')
         if path.exists():
             existing = json.loads(path.read_text(encoding='utf-8'))
             identity = ('schema_version', 'event_id', 'surface', 'session_id', 'prompt_id', 'original_prompt')
@@ -110,17 +233,20 @@ def _spool(database, *, since, until, limit, dry_run):
                     or any(existing.get(key) != event[key] for key in identity)
                     or not isinstance(existing.get('ingest'), dict)
                     or not isinstance(existing.get('assistant_outcome'), str)
-                    or not existing['assistant_outcome'].strip()):
+                    or (not existing['assistant_outcome'].strip()
+                        and existing.get('result_status') not in {'pending', 'interrupted'})):
                 raise ValueError('Malformed existing event')
             summary['duplicates'] += 1
         else:
+            if summary['eligible'] >= limit:
+                summary['batch_full'] = True
+                continue
             summary['eligible'] += 1
             if not dry_run:
                 write_event(event)
                 summary['spooled'] += 1
             if summary['eligible'] >= limit:
                 summary['batch_full'] = True
-                break
     return summary
 
 

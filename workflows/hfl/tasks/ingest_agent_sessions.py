@@ -22,7 +22,7 @@ from core.utilities.logging.custom_logger import create_logger
 from apps.antropic.config import get_config as get_anthropic_config
 from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
 from scripts.agents.hfl.capture_session_event import (
-    audit_root,
+    audit_root, event_lock, existing_event, _atomic_json,
     normalize_event,
     sanitize_text,
 )
@@ -209,13 +209,6 @@ def format_agent_session_happened(distilled: dict[str, Any]) -> str:
     return f"### Request\n{request}\n\n### Outcome\n{outcome}"
 
 
-def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(f".tmp-{os.getpid()}")
-    temporary.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.replace(temporary, path)
-
-
 def _artifact_path(event: dict[str, Any]) -> Path:
     day = datetime.fromisoformat(event["timestamp"]).strftime("%Y-%m-%d")
     return audit_root() / "events" / day / f"{event['event_id']}.json"
@@ -224,6 +217,8 @@ def _artifact_path(event: dict[str, Any]) -> Path:
 def _fallback_distillation(event: dict[str, Any]) -> dict[str, Any]:
     corrected = " ".join(event["original_prompt"].split())
     outcome = _summarize_outcome(event["assistant_outcome"])
+    if not event["assistant_outcome"] and event.get("result_status") in {"pending", "interrupted"}:
+        outcome = "Capture observation: No final assistant response was recorded at capture time. Status: " + event["result_status"] + "."
     return {
         "corrected_prompt": corrected,
         "request_summary": _brief_request(corrected, outcome),
@@ -240,7 +235,7 @@ def distill_agent_session_event(
     model: str = _DEFAULT_HAIKU, cfg_id: str = "ANTHROPIC", max_tokens: int = 900,
 ) -> dict[str, Any]:
     fallback = _fallback_distillation(event)
-    if not synthesize:
+    if not synthesize or (not event["assistant_outcome"] and event.get("result_status") in {"pending", "interrupted"}):
         return fallback
     model_input = json.dumps({
         "surface": event["surface"],
@@ -281,12 +276,26 @@ def distill_agent_session_event(
 
 def collect_agent_session_events(
     *, since: date, until: date, limit: int = 500, processed_only: bool = False,
-    pending_only: bool = False,
+    pending_only: bool = False, include_historical_hermes: bool = False,
 ) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     root = audit_root() / "events"
+    days = []
     current = since
-    while current <= until and len(events) < max(1, limit):
+    while current <= until:
+        days.append(current)
+        current += timedelta(days=1)
+    if pending_only and include_historical_hermes and root.exists():
+        for folder in sorted(root.iterdir()):
+            try:
+                historical_day = date.fromisoformat(folder.name)
+            except ValueError:
+                continue
+            if folder.is_dir() and historical_day < since:
+                days.append(historical_day)
+    for current in days:
+        if len(events) >= max(1, limit):
+            break
         for path in sorted((root / current.isoformat()).glob("*.json")) if (root / current.isoformat()).exists() else ():
             if path.name.startswith("._"):
                 continue
@@ -294,7 +303,11 @@ def collect_agent_session_events(
                 item = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, UnicodeDecodeError, json.JSONDecodeError):
                 continue
-            ingest = item.get("ingest") if isinstance(item.get("ingest"), dict) else {}
+            if not isinstance(item, dict) or (current < since and item.get("surface") != "hermes"):
+                continue
+            ingest = item.get("ingest")
+            if not isinstance(ingest, dict):
+                ingest = {}
             if processed_only and ingest.get("delivery") not in {"persisted", "forwarded", "outbox"}:
                 continue
             if pending_only and ingest.get("entry_id"):
@@ -303,13 +316,14 @@ def collect_agent_session_events(
             events.append(item)
             if len(events) >= limit:
                 break
-        current += timedelta(days=1)
     events.sort(key=lambda item: item.get("timestamp", ""))
     return events
 
 
 def _event_references(event: dict[str, Any], artifact_path: Path) -> tuple[str, ...]:
     refs = [str(artifact_path)]
+    if event.get("related_event_id"):
+        refs.append(event["related_event_id"])
     refs.extend(
         str(item["value"])
         for item in event.get("artifacts", [])
@@ -325,9 +339,24 @@ def process_agent_session_event(
     model: str = _DEFAULT_HAIKU, cfg_id: str = "ANTHROPIC",
 ) -> dict[str, Any]:
     event = normalize_event(payload)
-    if not event["original_prompt"] or not event["assistant_outcome"]:
+    if not event["original_prompt"] or (not event["assistant_outcome"] and not (
+            event.get("result_status") in {"pending", "interrupted"}
+            and "prompt-observation" in event.get("tags", []))):
         return {"skipped": "missing prompt or outcome", "entries_written": 0}
     path = _artifact_path(event)
+    with event_lock(path):
+        retained = existing_event(path, event)
+        if retained is not None:
+            receipt = retained['ingest']
+            if receipt.get('entry_id') and receipt.get('delivery') in {'persisted', 'forwarded', 'outbox'}:
+                return {'entries_written': 0, 'event_id': event['event_id'],
+                        'artifact': str(path), **receipt}
+            event = retained
+        return _process_agent_session_event_locked(
+            event, path, source_artifact=source_artifact, synthesize=synthesize, model=model, cfg_id=cfg_id)
+
+
+def _process_agent_session_event_locked(event, path, *, source_artifact, synthesize, model, cfg_id):
     distilled = distill_agent_session_event(event, synthesize=synthesize, model=model, cfg_id=cfg_id)
     event.update({
         "corrected_prompt": distilled["corrected_prompt"],
@@ -386,7 +415,7 @@ def ingest_agent_session_events(
     # Apply the retry budget after checkpoint filtering, not before it.
     events = collect_agent_session_events(
         since=until - timedelta(days=max(0, window_days - 1)), until=until,
-        limit=max_events, pending_only=True,
+        limit=max_events, pending_only=True, include_historical_hermes=True,
     )
     pending = events
     if not pending:

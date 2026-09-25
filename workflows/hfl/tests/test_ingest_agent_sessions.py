@@ -478,6 +478,56 @@ def test_failed_replay_clears_inherited_success_checkpoint(monkeypatch, tmp_path
     assert checkpoint["ingest"]["entry_id"] == "recovered-entry"
 
 
+def test_ingest_replay_preserves_local_acknowledged_artifact(monkeypatch, tmp_path):
+    monkeypatch.setattr(audit, 'audit_root', lambda: tmp_path)
+    monkeypatch.setattr(capture, 'audit_root', lambda: tmp_path)
+    event = capture.normalize_event(dict(surface='hermes', session_id='s', prompt_id='p',
+                                        original_prompt='Fix parser', assistant_outcome='Fixed'))
+    event['ingest'] = {'entry_id': 'ack', 'delivery': 'persisted'}
+    path = capture.write_event(event)
+    before = path.read_bytes()
+    monkeypatch.setattr(audit, 'submit_hfl_entry', lambda *a, **kw: pytest.fail('must not replay acknowledged event'))
+    result = audit.process_agent_session_event({**event, 'ingest': {}}, synthesize=False)
+    assert result['entries_written'] == 0
+    assert path.read_bytes() == before
+
+
+def test_retained_ingester_can_recover_old_hermes_pending_only(monkeypatch, tmp_path):
+    monkeypatch.setattr(audit, 'audit_root', lambda: tmp_path)
+    for surface in ('hermes', 'codex'):
+        event = capture.normalize_event(dict(surface=surface, session_id='old', prompt_id='p',
+            timestamp='2026-08-01T10:00:00+08:00', original_prompt='Historical request',
+            assistant_outcome='Late answer'))
+        path = tmp_path / 'events' / '2026-08-01' / (event['event_id'] + '.json')
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(event))
+    result = audit.collect_agent_session_events(since=date(2026, 9, 25), until=date(2026, 9, 25),
+        pending_only=True, include_historical_hermes=True)
+    assert len(result) == 1
+    assert result[0]['surface'] == 'hermes'
+
+
+@pytest.mark.parametrize('status', ['pending', 'interrupted'])
+def test_unanswered_observation_persists_without_model(monkeypatch, tmp_path, status):
+    monkeypatch.setattr(audit, 'audit_root', lambda: tmp_path)
+    monkeypatch.setattr(capture, 'audit_root', lambda: tmp_path)
+    event = capture.normalize_event(dict(surface='hermes', session_id='s', prompt_id='p',
+        original_prompt='Check capture', assistant_outcome='', result_status=status,
+        related_event_id='agent-original', tags=['prompt-observation']))
+    saved = []
+    monkeypatch.setattr(audit, 'submit_hfl_entry', lambda entry, **kw: (
+        saved.append(entry) or {'entry_id': 'ack', 'delivery': 'persisted'}))
+    monkeypatch.setattr(audit, 'BaseApiServiceAnthropic', lambda *a, **kw: pytest.fail('no model for observation'))
+    result = audit.process_agent_session_event(event)
+    assert result['entries_written'] == 1
+    assert status in saved[0].tags
+    assert 'No final assistant response' in saved[0].what_happened
+    assert 'agent-original' in saved[0].references
+    stored = json.loads(Path(result['artifact']).read_text())
+    assert stored['assistant_outcome'] == ''
+    assert stored['related_event_id'] == 'agent-original'
+
+
 @pytest.mark.skip(reason="Manual only - live hooks, broker, Anthropic, corpus, and Elasticsearch")
 def test_full_pipeline_live():
     raise AssertionError("run through a configured surface hook")
