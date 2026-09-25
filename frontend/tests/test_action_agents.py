@@ -238,6 +238,16 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         assert page.get_by_text('No results yet', exact=True).count() == 0
         toolbar=page.get_by_role('region',name='Session controls')
         assert toolbar.get_by_role('combobox', name='Agent session').count() == 1
+        assert toolbar.get_by_role('combobox',name='Agent session').bounding_box()['width'] <= 220
+        playwright.expect(toolbar.get_by_role('button',name='New session',exact=True)).to_be_visible()
+        assert sidebar.locator('.agent-details').get_by_role('link',name='Agent default settings').get_attribute('target') == '_blank'
+        assert sidebar.locator('.agent-results-footer').count() == 0
+        playwright.expect(sidebar.get_by_role('heading',name='Attachments · 1')).to_be_visible()
+        row=sidebar.locator('.agent-output-file')
+        assert row.evaluate('(e)=>getComputedStyle(e).display') == 'grid'
+        view_box=row.get_by_role('button').bounding_box()
+        download_box=row.get_by_role('link').bounding_box()
+        assert 0 <= download_box['x']-view_box['x']-view_box['width'] < 8
         page.get_by_role('button',name='View '+response.json()['name'],exact=True).click()
         playwright.expect(page.locator('.agent-input-preview pre')).to_have_text('Generated text')
         page.locator('.agent-input-preview').get_by_role('button',name='Close',exact=True).click()

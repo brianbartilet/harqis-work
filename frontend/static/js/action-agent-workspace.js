@@ -44,7 +44,9 @@
     }
     const configureRow=el('div',undefined,'agent-configure-row');details.append(configureRow);
     button('Configure agent', configure, configureRow);
-    button('New / reconnect', async()=>attach(await api(source+'/sessions',{})));
+    const defaults=el('a','Agent default settings');defaults.href='/settings';defaults.target='_blank';defaults.rel='noopener noreferrer';
+    defaults.title='Open App Settings in a new tab to change shared agent defaults';configureRow.append(defaults);
+    button('New session', async()=>attach(await api(source+'/sessions',{})));
     button('Save session', async()=>{if(!session)throw new Error('Start a session first.');await api('/sessions/'+session.id,{saved:true});await refreshList();});
     button('Restore selected',async()=>{const id=sessions.value;if(!id)throw new Error('Select a session.');const selected=sessionList.find(s=>s.id===id);if(['queued','starting','idle','waiting','running'].includes(selected.state))attach(selected);else attach(await api(source+'/sessions',{restore:id}));});
     button('Remove from history',async()=>{if(!session)return;if(!window.confirm('Remove this session from history? Attached files remain on the action.'))return;await api('/sessions/'+session.id+'/forget',{});session=null;cursor=0;terminal.reset();download.hidden=true;const data=await refreshList();if(data.sessions.length)attach(data.sessions[0]);else showEmpty();});

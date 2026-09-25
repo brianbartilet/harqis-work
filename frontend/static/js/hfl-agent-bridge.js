@@ -107,7 +107,7 @@
       helpBody.append(element('strong','Working with this action'));
       for(const text of ['Start a session, then click inside the terminal to type. Press Enter to send; use /help for Hermes commands.',
         'If the session disconnects or expires, restore it to continue. Its old transcript is read-only.',
-        'Session controls are above the terminal. Run now executes the card’s Initial prompt. Generated files are in the left panel (Action details on mobile).',
+        'Session controls are above the terminal. Run initial prompt executes the card’s saved instructions. Generated files are in the left panel (Action details on mobile).',
         'Closing this dialog leaves the session running. End session stops it.'])helpBody.append(element('p',text));
       help.append(helpToggle,helpBody);utilities.append(headerStatus,help);header.insertBefore(utilities,close);
       information = element('aside'); information.className = 'agent-sidebar'; information.id = 'action-agent-sidebar';
@@ -139,7 +139,7 @@
       button.onclick = async () => { button.disabled = true; error.textContent = ''; error.hidden = true; try { await fn(); } catch (e) { error.textContent = e.message; error.hidden = false; button.disabled = false; } finally { if (button !== runButton) button.disabled = false; } };
       return button;
     }
-    const runButton = button('Run now', async () => {
+    const runButton = button(workspaceLayout ? 'Run initial prompt' : 'Run now', async () => {
       await api(path + '/run', {request_key: requestKey, auto_complete: true});
       requestKey = crypto.randomUUID(); await refresh();
     });
@@ -152,12 +152,12 @@
     if (kind === 'pin') controls.append(saveSchedule);
     controls.append(runButton, button('Refresh', () => refresh()));
     if (kind === 'pin') information.append(cadenceLabel);
-    if (workspaceLayout) information.append(element('h3', 'Initial prompt & results'));
+    if (workspaceLayout) information.append(element('h3', 'Initial prompt runs'));
     information.append(controls, error, runs);
     const footer = element('footer'); footer.className = 'agent-results-footer';
-    footer.append(element('p', kind === 'actionable' ? 'Follow-up chat is available on completed actions. Reopen to run the Initial prompt again.' : 'Scheduled runs use the hour set on this pin.'));
-    const settings = element('a', 'Agent settings'); settings.href = '/settings'; footer.append(settings);
-    information.append(footer);
+    if (kind === 'pin') footer.append(element('p', 'Scheduled runs use the hour set on this pin.'));
+    const settings = element('a', 'Agent settings'); settings.href = '/settings'; settings.target = '_blank'; settings.rel = 'noopener noreferrer'; footer.append(settings);
+    if (!workspaceLayout) information.append(footer);
     dialog.append(header, body);
     if (!dialog.open) dialog.showModal();
     async function refresh() {
@@ -170,7 +170,7 @@
       runs.replaceChildren();
       if (attachments.attachments.length) {
         const files = element('section'); files.className = 'agent-output-files';
-        files.append(element('h3', 'Action files · ' + attachments.attachments.length));
+        files.append(element('h3', 'Attachments · ' + attachments.attachments.length));
         for (const file of attachments.attachments) {
           const row = element('p'); row.className = 'agent-output-file';
           const name = element('span', file.name);
