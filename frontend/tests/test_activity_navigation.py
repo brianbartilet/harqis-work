@@ -63,6 +63,13 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
                 header = page.locator('body > header')
                 playwright.expect(header.get_by_role('link', name='HARQIS home')).to_be_visible()
                 bounds = header.bounding_box()
+                logo = header.get_by_role('link', name='HARQIS home').bounding_box()
+                signout = header.get_by_role('link', name='Sign out').bounding_box()
+                assert logo['x'] == (24 if width >= 1280 else 16)
+                assert width - signout['x'] - signout['width'] == pytest.approx(24 if width >= 1280 else 16, abs=1)
+                if width >= 1280:
+                    navigation = header.locator('nav[aria-label="Primary navigation"]:visible').bounding_box()
+                    assert navigation['x'] + navigation['width'] / 2 == pytest.approx(width / 2, abs=1)
                 content = page.locator(workspace).bounding_box()
                 assert bounds['y'] == 0
                 assert content['y'] >= bounds['height']

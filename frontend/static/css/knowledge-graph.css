@@ -199,7 +199,8 @@
 .kg-shell .kg-orb-actions-menu button:hover,.kg-shell .kg-orb-actions-menu button:focus-visible{background:#25415b;border-color:#527a99}
 .kg-shell .kg-orb-actions-menu .kg-orb-remove{color:#fda4af}
 @supports selector(::-webkit-scrollbar){.kg-orb-actions-menu{scrollbar-width:auto;scrollbar-color:auto}.kg-orb-actions-menu::-webkit-scrollbar{width:6px}.kg-orb-actions-menu::-webkit-scrollbar-track{background:#122034}.kg-orb-actions-menu::-webkit-scrollbar-thumb{background:#475569;border-radius:8px}.kg-orb-actions-menu::-webkit-scrollbar-button:single-button,.kg-orb-actions-menu::-webkit-scrollbar-button{display:none;height:0;width:0}}
-@media(min-width:761px){.kg-main-toolbar>label:first-child{width:450px;max-width:100%;min-width:0}.kg-main-toolbar>label:first-child input[type=search]{width:100%;box-sizing:border-box}}
+.kg-main-toolbar #kg-search{height:36px;min-height:36px;padding:0 12px;box-sizing:border-box}
+@media(min-width:761px){.kg-main-toolbar>label:first-child{width:280px;max-width:100%;min-width:0}.kg-main-toolbar>label:first-child input[type=search]{width:100%;box-sizing:border-box}}
 
 .kg-connectors{position:absolute;z-index:17;width:0;height:0}
 .kg-shell .kg-connector{position:absolute;display:grid;place-items:center;transform:translate(-50%,-50%);width:18px;height:18px;min-width:0;min-height:0;padding:0;border:0;background:transparent;touch-action:none;border-radius:50%;cursor:crosshair}

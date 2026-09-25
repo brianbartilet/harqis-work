@@ -185,12 +185,13 @@
   <link rel="stylesheet" href="{{ static_asset('css/activity-header-sizing.css') }}">
   <script defer src="{{ static_asset('js/activity-navigation.js') }}"></script>
   {% block head %}{% endblock %}
+  <link rel="stylesheet" href="{{ static_asset('css/activity-modals.css') }}">
 </head>
 <body class="h-full bg-slate-950 text-slate-100 antialiased {% block body_class %}{% endblock %}"
       x-data="{ customize: false, workflowTab: '{{ default_workflow | default('') }}' }">
   {% if user %}
   <header class="sticky top-0 z-20 border-b border-slate-800 bg-slate-950/95 backdrop-blur" style="z-index:80">
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex items-center justify-between h-14">
+    <div class="site-header-inner mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex items-center justify-between h-14">
       <a href="/home" aria-label="HARQIS home"
          class="flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400">
         <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-600/20 ring-1 ring-blue-500/30">
@@ -270,7 +271,6 @@
     // Global HTMX config
     htmx.config.defaultSwapStyle = 'outerHTML';
   </script>
-<link rel="stylesheet" href="{{ static_asset('css/activity-modals.css') }}">
 <script src="{{ static_asset('js/activity-modals.js') }}"></script>
 </body>
 </html>

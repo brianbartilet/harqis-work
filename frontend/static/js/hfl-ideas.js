@@ -732,7 +732,7 @@ window.HflObjectDescription = (item = {}) => {
       const caption=document.getElementById('kg-map-title');if(caption)caption.textContent=this.current?.name||'EXPLORE ACTIVITY CONSTELLATION';
       this.root.replaceChildren(); document.querySelector('.kg-shell')?.classList.toggle('has-board', !!this.current); document.getElementById('kg-search').placeholder = this.current ? 'Search this board' : 'Search entries or entities';
       const toolbar=el('div',undefined,'board-toolbar');toolbar.setAttribute('role','group');toolbar.setAttribute('aria-label','Board navigation and tools');this.root.append(toolbar);
-      const all = button('Explore Activity Graph', () => this.selectBoard(null)); all.className='board-explore';all.setAttribute('aria-pressed', String(!this.current)); toolbar.append(all);
+      const all = button('Explore Activity Graph', () => this.selectBoard(null)); all.className='board-explore';all.disabled=!this.current;all.setAttribute('aria-pressed', String(!this.current)); toolbar.append(all);
       const addMenu=el('div',undefined,'idea-add-menu board-add-menu'),addOptions=el('div',undefined,'idea-add-options');addOptions.hidden=true;addOptions.id='board-add-options';
       const addToggle=button('Add',()=>{addOptions.hidden=!addOptions.hidden;addToggle.setAttribute('aria-expanded',String(!addOptions.hidden));});addToggle.className='idea-add-toggle';addToggle.setAttribute('aria-expanded','false');addToggle.setAttribute('aria-controls',addOptions.id);
       const closeAdd=()=>{addOptions.hidden=true;addToggle.setAttribute('aria-expanded','false');};

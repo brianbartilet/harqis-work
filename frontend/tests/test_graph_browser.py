@@ -24,8 +24,24 @@ def test_timeline_centered_on_load_and_resize(authenticated_client, monkeypatch,
                 route.fulfill(status=response.status_code, body=response.content,
                               headers={k:v for k,v in response.headers.items() if k.lower() not in {'content-encoding','content-length'}})
             page.route('http://graph.test/**', route_request)
+            pending = []
+            page.route('http://graph.test/api/hfl/entities/graph?**', lambda route: pending.append(route))
             page.goto('http://graph.test/hfl-corpus/graph')
+            page.wait_for_function("document.querySelector('#kg-status').textContent.includes('Loading')")
+            assert page.locator('head link[href*="activity-modals.css"]').count() == 1
+            playwright.expect(page.locator('#kg-loading')).to_be_visible()
+            playwright.expect(page.locator('#kg-workspace')).not_to_be_visible()
+            shell = page.locator('.kg-shell').bounding_box()
+            header = page.locator('body > header').bounding_box()
+            assert header['y'] == 0
+            assert shell['x'] == 0 and shell['width'] == width
+            assert shell['y'] >= header['height']
+            assert shell['y'] + shell['height'] <= height + 1
+            page.unroute('http://graph.test/api/hfl/entities/graph?**')
+            for route in pending:
+                route_request(route)
             page.wait_for_selector('#kg-workspace:not([inert])')
+            assert page.locator('.kg-shell').bounding_box() == shell
             for phase in ['load', 'reload', 'resize']:
                 if phase == 'reload':
                     # A previously panned viewport must not push the Timeline offscreen on load.
