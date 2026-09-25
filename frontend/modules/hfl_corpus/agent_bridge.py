@@ -93,14 +93,29 @@ def source_snapshot(kind, source_id):
         raise ValueError('Save task instructions before running an agent.')
     try:
         source['attachments'] = input_manifest(kind, source_id)['attachments']
+        if kind == 'actionable':
+            # Generated outputs are carried by continuation artifacts, not new
+            # owner instructions. Attaching them must not invalidate that run.
+            with bridge_store().connect() as db:
+                generated = {row['run_id'][:8] + '-' + row['name'] for row in db.execute(
+                    'SELECT a.run_id,a.name FROM agent_artifacts a JOIN agent_requests r ON r.id=a.run_id WHERE r.source_key=?',
+                    ('actionable:' + source_id,))}
+            source['attachments'] = [file for file in source['attachments'] if file['name'] not in generated]
     except HTTPException as exc:
         raise ValueError('Supporting files could not be loaded: ' + str(exc.detail)) from None
     runtime = PROMPT_PATH.read_text(encoding='utf-8')
     return {'source_key': f'{kind}:{source_id}', 'kind': kind, 'source_id': source_id,
             'source': source, 'category_guidance': guidance, 'policy': POLICY,
-            'execution_settings': read_settings(),
+            'execution_settings': action_execution_settings(kind, source_id),
             'runtime_prompt': runtime, 'prompt_path': 'workflows/hfl/prompts/agent_bridge.md', 'prompt_hash': digest(runtime),
             'instruction_hash': digest({'source': {k: v for k, v in source.items() if k not in {'version', 'status', 'updated_at'}}, 'guidance': guidance, 'runtime': runtime})}
+
+
+def action_execution_settings(kind, source_id):
+    if kind == 'actionable':
+        from modules.hfl_corpus.action_agents import effective
+        return effective(source_id)
+    return read_settings()
 
 
 def enqueue(kind, source_id, request_key, actor, auto_complete=True):
@@ -536,6 +551,9 @@ async def upload_artifact(run_id: str, name: str, request: Request, agent=Depend
             temporary.write_bytes(content)
             temporary.replace(path)
         db.execute('INSERT OR IGNORE INTO agent_artifacts VALUES (?,?,?,?)', (run_id, name, content_hash, len(content)))
+    if run['snapshot']['kind'] == 'actionable':
+        from modules.hfl_corpus.action_agents import attach_output
+        await attach_output(run['snapshot']['source_id'], run_id[:8] + '-' + name, bytes(content))
     return {'name': name, 'url': f'/hfl-corpus/agent-bridge/artifacts/{run_id}/{quote(name)}'}
 
 
@@ -736,9 +754,12 @@ def retry_delivery():
 
 
 @worker_router.post('/runs/{run_id}/claim')
-def claim(run_id: str, agent=Depends(worker_auth)):
+def claim(run_id: str, payload: dict = None, agent=Depends(worker_auth)):
     store = bridge_store()
     run = checked(store.get, run_id)
+    host = run['snapshot'].get('execution_settings', {}).get('agent_host')
+    if host and (payload or {}).get('host') != host:
+        raise HTTPException(409, 'This request belongs to another worker host.')
     if run['state'] != 'queued':
         raise HTTPException(409, 'This request is no longer queued.')
     try:
@@ -751,7 +772,7 @@ def claim(run_id: str, agent=Depends(worker_auth)):
     if current['instruction_hash'] != run['snapshot']['instruction_hash'] or (current['kind'] == 'actionable' and current['source']['version'] != (run['expected_version'] or run['snapshot']['source']['version'])):
         checked(store.owner_transition, run_id, 'cancelled', 'bridge', 'Source changed before execution; request a new run.')
         raise HTTPException(409, 'Instructions changed; request a new run.')
-    run = checked(store.claim, run_id, agent)
+    run = checked(store.claim, run_id, agent, concurrency=read_settings()['agent_concurrency'])
     try:
         apply_action(run, 'in_progress')
     except (ValueError, KeyError, httpx.HTTPError):

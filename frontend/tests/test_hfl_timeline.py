@@ -992,7 +992,7 @@ def test_followups_board_filter_drag_refresh_and_editor(agenda, authenticated_cl
         playwright.expect(results.locator('.markdown-body table')).to_have_count(1)
         playwright.expect(results).to_contain_text('Saved action outcome')
         playwright.expect(results.get_by_role('button',name='Run now')).to_be_disabled()
-        results.get_by_role('button',name='Close agent results').click()
+        results.get_by_role('button',name='Close Actions agent').click()
         board.get_by_role('button',name='History',exact=True).click()
         playwright.expect(page.locator('#followup-history .markdown-body table')).to_have_count(1)
         page.locator('#followup-history-close').click()

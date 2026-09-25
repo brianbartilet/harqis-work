@@ -128,12 +128,21 @@ class AgentBridgeStore:
             self.event(db, run_id, 'queued', 'queued', actor, {'summary': 'Execution requested', 'instruction_hash': snapshot['instruction_hash']})
         return self.get(run_id)
 
-    def claim(self, run_id, agent):
+    def claim(self, run_id, agent, concurrency=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            if concurrency is not None:
+                used = db.execute("SELECT count(*) FROM agent_requests WHERE state='running'").fetchone()[0]
+                if db.execute("SELECT 1 FROM sqlite_master WHERE name='action_agent_sessions'").fetchone():
+                    used += db.execute("SELECT count(*) FROM action_agent_sessions WHERE state='running'").fetchone()[0]
+                if used >= concurrency:
+                    raise BridgeConflict('Worker capacity reached; waiting for an execution slot.')
             row = db.execute('SELECT * FROM agent_requests WHERE id=?', (run_id,)).fetchone()
             if not row or row['state'] != 'queued':
                 raise BridgeConflict('This request is no longer queued.')
+            if concurrency is not None and row['source_key'].startswith('actionable:') and db.execute("SELECT 1 FROM sqlite_master WHERE name='action_agent_sessions'").fetchone():
+                if db.execute("SELECT 1 FROM action_agent_sessions WHERE source_id=? AND state IN ('waiting','running')", (row['source_key'].split(':', 1)[1],)).fetchone():
+                    raise BridgeConflict('The action already has an interactive turn waiting or running.')
             token = uuid.uuid4().hex
             until = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
             db.execute("UPDATE agent_requests SET state='running',agent=?,lease_token=?,lease_until=?,updated_at=? WHERE id=?", (agent, token, until, now(), run_id))

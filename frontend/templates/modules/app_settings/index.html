@@ -41,8 +41,20 @@
     </label>
     <label class="block">Maximum agent turns
       <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="number" name="agent_max_turns" value="{{ values.agent_max_turns }}">
-      <span class="mt-2 block text-sm text-slate-400">Maximum 200 turns. The worker executes one task at a time.</span>
+      <span class="mt-2 block text-sm text-slate-400">Maximum 200 turns. Execution slots are shared by automatic tasks and interactive turns.</span>
     </label>
+
+    <label class="block">Concurrent agent executions
+      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="number" name="agent_concurrency" min="1" max="32" value="{{ values.agent_concurrency }}">
+      <span class="mt-2 block text-sm text-slate-400">Shared by automatic runs and native terminal turns. Idle sessions do not use a slot. Start with 2 on the 10-core, 16 GiB server; tune against measured memory usage.</span>
+    </label>
+    <label class="block">Session inactivity expiry (minutes)
+      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="number" name="agent_session_expiry_minutes" min="1" max="10080" value="{{ values.agent_session_expiry_minutes }}">
+      <span class="mt-2 block text-sm text-slate-400">Default 60 minutes. Idle native terminals close and archive their output. Active turns are not expired. Saved context remains retrievable.</span>
+    </label>
+    {% for key, label in [('agent_repository','Default repository (blank uses the worker checkout)'), ('agent_base_branch','Base branch (blank uses the working checkout HEAD)'), ('agent_host','Worker hostname (blank uses any available worker)')] %}
+    <label class="block">{{ label }}<input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" name="{{ key }}" value="{{ values[key] }}"></label>
+    {% endfor %}
 
     <label class="block">Actions polling minutes
       <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="number" name="actions_polling_minutes" min="1" max="1440" required value="{{ values.actions_polling_minutes }}">

@@ -9,7 +9,9 @@ from config import get_settings
 DEFAULTS = {'actions_polling_minutes': 30, 'pin_backfill_days': 7,
             'agent_mode': 'trusted', 'hermes_profile': '', 'agent_toolsets': '',
             'agent_model': '', 'agent_provider': '', 'agent_default_recipient': '',
-            'agent_timeout_seconds': 1200, 'agent_max_turns': 30}
+            'agent_timeout_seconds': 1200, 'agent_max_turns': 30,
+            'agent_concurrency': 2, 'agent_session_expiry_minutes': 60,
+            'agent_repository': '', 'agent_base_branch': '', 'agent_host': ''}
 
 
 def connection():
@@ -25,15 +27,16 @@ def read_settings():
         return {**DEFAULTS, **{key: json.loads(value) for key, value in db.execute('SELECT key,value FROM app_settings') if key in DEFAULTS}}
 
 
-def save_settings(values):
-    clean = read_settings()
+def validate_settings(values, base=None):
+    clean = dict(DEFAULTS if base is None else base)
     for key, maximum in [('actions_polling_minutes', 1440), ('pin_backfill_days', 31),
-                         ('agent_timeout_seconds', 7200), ('agent_max_turns', 200)]:
+                         ('agent_timeout_seconds', 7200), ('agent_max_turns', 200),
+                         ('agent_concurrency', 32), ('agent_session_expiry_minutes', 10080)]:
         raw = values.get(key, clean[key])
         if isinstance(raw, bool) or str(raw) != str(int(raw)) or not 1 <= int(raw) <= maximum:
             raise ValueError(f'{key.replace("_", " ").capitalize()} must be between 1 and {maximum}.')
         clean[key] = int(raw)
-    for key in ('agent_mode', 'hermes_profile', 'agent_toolsets', 'agent_model', 'agent_provider', 'agent_default_recipient'):
+    for key in ('agent_mode', 'hermes_profile', 'agent_toolsets', 'agent_model', 'agent_provider', 'agent_default_recipient', 'agent_repository', 'agent_base_branch', 'agent_host'):
         value = str(values.get(key, clean[key])).strip()
         if len(value) > 300 or any(ord(c) < 32 for c in value):
             raise ValueError(f'Invalid {key}.')
@@ -44,6 +47,11 @@ def save_settings(values):
         raise ValueError('Use a Hermes profile name, not a path.')
     if clean['agent_default_recipient'] and not re.fullmatch(r'[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+', clean['agent_default_recipient']):
         raise ValueError('Enter one default recipient email address.')
+    return clean
+
+
+def save_settings(values):
+    clean = validate_settings(values, read_settings())
     with connection() as db:
         db.executemany('INSERT INTO app_settings VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', [(key, json.dumps(value)) for key, value in clean.items()])
     return clean

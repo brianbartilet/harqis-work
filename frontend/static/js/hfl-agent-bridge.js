@@ -17,6 +17,8 @@
   dialog.setAttribute('aria-labelledby', 'agent-bridge-title');
   document.body.append(dialog);
   let generation = 0;
+  let disposeWorkspace = () => {};
+  let resultsTimer;
   function outputCard(payload) {
     const output = element('div'); output.className = 'agent-output';
     const report = element('div'); report.className = 'markdown-body';
@@ -77,12 +79,14 @@
     return card;
   }
   async function open(kind, id, title) {
+    disposeWorkspace();
+    clearTimeout(resultsTimer);
     const ticket = ++generation;
     dialog.replaceChildren();
     const header = element('header'); header.className = 'agenda-dialog-header';
-    const heading = element('h2', 'Agent results'); heading.id = 'agent-bridge-title';
+    const heading = element('h2', kind === 'actionable' ? 'Actions agent' : 'Agent results'); heading.id = 'agent-bridge-title';
     heading.tabIndex = -1; heading.setAttribute('autofocus', '');
-    const close = element('button'); close.type = 'button'; close.className = 'agent-results-close'; close.setAttribute('aria-label', 'Close agent results'); close.title = 'Close (Esc)'; close.onclick = () => dialog.close();
+    const close = element('button'); close.type = 'button'; close.className = 'agent-results-close'; close.setAttribute('aria-label', kind === 'actionable' ? 'Close Actions agent' : 'Close agent results'); close.title = 'Close (Esc)'; close.onclick = () => dialog.close();
     const closeIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     closeIcon.setAttribute('viewBox', '0 0 24 24'); closeIcon.setAttribute('aria-hidden', 'true'); closeIcon.setAttribute('focusable', 'false');
     const closePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -92,6 +96,7 @@
     const task = element('section'); task.className = 'agent-results-task';
     task.append(element('span', kind === 'actionable' ? 'ACTION' : 'PINNED PERIOD'), element('h3', title));
     body.append(task);
+    if (kind === 'actionable' && window.actionAgentWorkspace) disposeWorkspace = window.actionAgentWorkspace.mount(body, id);
     const error = element('p'); error.className = 'agenda-error'; error.setAttribute('role', 'alert'); error.hidden = true;
     const cadenceLabel = element('label', 'Automatic runs');
     const cadence = element('select');
@@ -124,7 +129,7 @@
     if (kind === 'pin') body.append(cadenceLabel);
     body.append(controls, error, runs);
     const footer = element('footer'); footer.className = 'agent-results-footer';
-    footer.append(element('p', kind === 'actionable' ? 'To repeat a completed action, change its status to Open.' : 'Scheduled runs use the hour set on this pin.'));
+    footer.append(element('p', kind === 'actionable' ? 'Follow-up chat is available on completed actions. Reopen to run the Initial prompt again.' : 'Scheduled runs use the hour set on this pin.'));
     const settings = element('a', 'Agent settings'); settings.href = '/settings'; footer.append(settings);
     body.append(footer);
     dialog.append(header, body);
@@ -228,8 +233,13 @@
         data.events.forEach(event => history.append(eventCard(event))); runs.append(history);
       }
     }
-    try { await refresh(); } catch (e) { error.textContent = e.message; error.hidden = false; }
+    async function pollResults() {
+      if(ticket !== generation || !dialog.open)return;
+      try { if(!runs.contains(document.activeElement))await refresh(); } catch(e) {error.textContent=e.message;error.hidden=false;}
+      if(ticket === generation)resultsTimer=setTimeout(pollResults,3000);
+    }
+    await pollResults();
   }
-  dialog.addEventListener('close', () => { ++generation; window.dispatchEvent(new Event('hfl:agent-updated')); });
+  dialog.addEventListener('close', () => { disposeWorkspace(); clearTimeout(resultsTimer); ++generation; window.dispatchEvent(new Event('hfl:agent-updated')); });
   window.hflAgentBridge = {open, events: async (kind, id) => (await api(sourcePath(kind,id))).events, eventCard};
 })();

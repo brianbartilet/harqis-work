@@ -103,7 +103,7 @@ may be used for the task, but must not be printed or published. Shell access is
 local in both modes: these controls are not an OS sandbox or enforceable tool
 isolation. Runtime/scheduler changes require explicit task instructions and a
 rollback record. Retrieved content cannot authorize unrelated work. The worker
-remains sequential; no spending limit is enforced by the bridge. Configure provider
+uses shared configurable execution capacity; no spending limit is enforced by the bridge. Configure provider
 budgets separately when available.
 
 Results show profile, mode, selected model/provider and configured MCP names.
@@ -310,3 +310,67 @@ Owner session/CSRF APIs live under `/hfl-corpus/agent-bridge`; worker-token APIs
 under `/api/hfl-agent` expose settings, queue, sweep, deliver, claim, events and artifact
 upload. Worker credentials do not grant owner profile or corpus access. Lease
 tokens appear only in claim responses, never owner history.
+
+
+## Actions agent workspace
+
+Actions -> Agents opens the native Hermes CLI in a larger dialog. `/help` lists
+commands supported by the installed Hermes version. Native approval prompts and
+interrupts stay in the terminal. The former Prompt field is **Initial prompt**;
+automatic pickup and completion remain intact. **New / reconnect** opens an
+interactive conversation without executing that prompt again. It supplies the
+initial instructions, last result, and downloaded supporting files as context.
+Completed actions allow follow-up conversations without reopening them.
+
+**Agent details** starts collapsed. **Configure agent** opens a separate dialog:
+App Settings defaults -> named preset -> checked card overrides. Unchecked settings
+follow subsequent default/preset changes. Runs and sessions snapshot settings when
+created. Permissions are Hermes trusted/restricted tool modes, not an OS sandbox.
+Native commands may change session runtime configuration. Credentials stay on the
+worker. Only Hermes is implemented; choosing a provider/model does not switch to
+another agent runtime such as native Codex.
+
+**Concurrent agent executions** defaults to 2 (1-32). Automatic runs and interactive
+turns acquire capacity under the same SQLite transaction lock; idle native
+terminals release their slots. Waiting terminals show queue feedback. Each worker
+also limits resident terminals to 16 to bound idle process overhead. A selected
+worker hostname pins execution to that host. Restored native sessions remain on
+their original worker, where Hermes stores their context.
+
+The inspected server has 10 physical CPU cores and 16 GiB RAM, with 60% reported
+memory free at inspection. Five existing Hermes processes used approximately
+10, 10, 31, 150 and 43 MiB RSS. These are resident sizes, not a peak workload
+benchmark. Start at 2 simultaneous executions, then tune against memory pressure,
+active coding/build workloads, and provider rate limits.
+
+**Session inactivity expiry (minutes)** in App Settings defaults to 60 (1-10080)
+and applies to connected workers on their next heartbeat. Active turns are
+protected from inactivity expiry; execution timeout still applies. Closing the
+dialog only detaches its viewer. **End session** stops execution and archives
+output. **Save session** marks persistent context for retrieval. **Restore selected**
+resumes the native Hermes session ID when available. **Remove from history**
+removes the bridge transcript/context reference after closure; it does not erase
+attached outputs or the worker's own Hermes database.
+
+Output files placed in the supplied output directory attach to the action, with
+session/run and content identifiers distinguishing versions. Files are independent
+of session expiry. Current output limit: 20 MiB per file. Normal closure/expiry
+attaches a portable terminal transcript; completed conversation turns also produce
+`conversation.md`. Native terminal replay preserves ANSI output in SQLite. A
+worker failure retains local files for recovery; stale execution slots release
+after 90 seconds. The UI shows recovery errors.
+
+Actions use the configured repository (or the worker checkout when blank) in an isolated `actions-agent/<execution-id>`
+worktree based on its current HEAD (or configured base branch). Cleanup first
+creates and uploads `repository-changes.zip`: base commit, committed patch series,
+uncommitted binary diff, and nonignored untracked files. The branch remains for
+recovery. No automatic merge/push occurs. Failed archive/upload leaves the worktree
+in place to prevent data loss. Repository terminals end and archive when an action
+closes, or after a follow-up turn on an already closed action.
+
+Run `agent_bridge_runner.py --watch` for interactive sessions; `--once` consumes
+automatic runs only. macOS/Linux use system PTYs; Windows uses `pywinpty` from
+requirements. xterm.js 5.5.0 and its fit addon 0.10.0 are vendored with MIT licenses.
+The browser uses authenticated cursor-based incremental terminal polling with
+CSRF-protected input; no worker token reaches the browser. Install dependencies
+and restart both frontend and worker after deployment.

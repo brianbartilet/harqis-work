@@ -6,7 +6,7 @@
       <h3 class="object-section-heading">Details</h3>
       <label>Action<input name="title" required maxlength="200" placeholder="Check Essential Space sync feasibility"></label>
       <label>Markdown description<textarea name="body" maxlength="60000" rows="5"></textarea></label>
-      <label>Prompt<textarea name="prompt" rows="5" maxlength="20000" placeholder="Write instructions for an LLM. Plain text or Markdown is supported."></textarea><small>Saved instructions for later use. Nothing runs when you save.</small></label>
+      <label>Initial prompt<textarea name="prompt" rows="5" maxlength="20000" placeholder="Write instructions for an LLM. Plain text or Markdown is supported."></textarea><small>Open actions with saved instructions are picked up automatically using their configured agent.</small></label>
       <div data-object-attachments>
       {% include "modules/hfl_corpus/partials/input_attachments.html" %}
       </div>

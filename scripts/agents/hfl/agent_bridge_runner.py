@@ -22,11 +22,15 @@ import sys
 import tempfile
 import time
 import uuid
+import threading
+import socket
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlparse
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+REPLAY_LOCK = threading.Lock()
 
 # Fixed program; private prompts travel on stdin, never in process arguments.
 HERMES_PROGRAM = """
@@ -239,11 +243,18 @@ def restore_prior_artifacts(client, run):
 def run_hermes(run, heartbeat, *, timeout=1200):
     command, root = hermes_command()
     snapshot = run['snapshot']
-    settings = snapshot.get('execution_settings', {'agent_mode': 'restricted'})
+    settings = dict(snapshot.get('execution_settings', {'agent_mode': 'restricted'}))
+    if snapshot.get('kind') == 'actionable':
+        settings['agent_repository'] = settings.get('agent_repository') or str(REPO_ROOT)
     timeout = settings.get('agent_timeout_seconds', timeout)
+    from scripts.agents.hfl.action_terminal import Workspace
+    checkout = Workspace(spool_root() / 'repositories' / run['id'], run['id'], settings)
     workspace = spool_root() / 'workspaces' / run['id']
     workspace.mkdir(parents=True, exist_ok=True)
     prompt = execution_prompt(run, workspace)
+    if checkout.repo:
+        prompt += ('\n\nRepository policy: edit only the isolated checkout at ' + str(checkout.path)
+                   + '. Do not edit the primary checkout. For another repository, ask the owner to configure it before editing. Do not merge or push without explicit instructions.')
     environment = {key: value for key, value in os.environ.items() if key in {
         'PATH', 'PATHEXT', 'SYSTEMROOT', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'TMPDIR', 'HOME', 'USERPROFILE',
         'APPDATA', 'LOCALAPPDATA', 'COMSPEC', 'LANG', 'HERMES_HOME', 'HERMES_PROFILE',
@@ -259,11 +270,11 @@ def run_hermes(run, heartbeat, *, timeout=1200):
     environment['PYTHONIOENCODING'] = 'utf-8'
     environment['PYTHONUTF8'] = '1'
     environment['HFL_AGENT_HERMES_ROOT'] = str(root)
-    environment['TERMINAL_CWD'] = str(workspace.resolve())
+    environment['TERMINAL_CWD'] = str(checkout.path if checkout.repo else workspace.resolve())
     environment['TERMINAL_ENV'] = 'local'
     started = time.monotonic()
     with tempfile.TemporaryFile(mode='w+', encoding='utf-8') as output:
-        process = subprocess.Popen(command, cwd=workspace, env=environment, stdin=subprocess.PIPE, stdout=output, stderr=output,
+        process = subprocess.Popen(command, cwd=checkout.path if checkout.repo else workspace, env=environment, stdin=subprocess.PIPE, stdout=output, stderr=output,
                                    text=True, encoding='utf-8', start_new_session=os.name != 'nt', creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         try:
             process.stdin.write(prompt)
@@ -300,6 +311,8 @@ def run_hermes(run, heartbeat, *, timeout=1200):
             result['runtime'] = runtime
             sessions = re.findall(r'^session_id:\s*([A-Za-z0-9_-]+)', text, flags=re.MULTILINE)
             result['session_id'] = sessions[-1] if sessions else ''
+            if checkout.repo:
+                result.setdefault('artifacts', []).append('repository-changes.zip')
             return result
         finally:
             if process.poll() is None:
@@ -308,6 +321,8 @@ def run_hermes(run, heartbeat, *, timeout=1200):
                 else:
                     os.killpg(process.pid, signal.SIGKILL)
                 process.wait(timeout=10)
+            if checkout.repo:
+                checkout.preserve(workspace)
 
 
 def spool_root():
@@ -371,11 +386,12 @@ def upload_artifacts(client, run, result):
 
 def consume(client, *, limit=10):
     import httpx
-    replay_results(client)
+    with REPLAY_LOCK:
+        replay_results(client)
     runs = client.call('queue')['runs']
     for queued in runs[:limit]:
         try:
-            run = client.call('runs/' + queued['id'] + '/claim', {})
+            run = client.call('runs/' + queued['id'] + '/claim', {'host': socket.gethostname()})
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code in {404, 409}:
                 continue
@@ -386,8 +402,25 @@ def consume(client, *, limit=10):
             restore_prior_artifacts(client, run)
             result = run_hermes(run, lambda: client.event(run, 'heartbeat', 'heartbeat', {}))
             upload_artifacts(client, run, result)
+            if run['snapshot'].get('kind') == 'actionable' or run['snapshot'].get('execution_settings', {}).get('agent_repository'):
+                from scripts.agents.hfl.action_terminal import Workspace
+                workspace_settings = dict(run['snapshot'].get('execution_settings', {}))
+                workspace_settings['agent_repository'] = workspace_settings.get('agent_repository') or str(REPO_ROOT)
+                checkout = Workspace(spool_root() / 'repositories' / run['id'], run['id'], workspace_settings)
+                checkout.cleanup()
         except Exception as exc:
             result = {'state': 'failed', 'blocked_reason': 'integration', 'summary': f'Execution did not finish ({type(exc).__name__}). Inspect the local worker before retrying.', 'complete': False, 'evidence': []}
+            archive = spool_root() / 'workspaces' / run['id'] / 'repository-changes.zip'
+            if archive.exists():
+                try:
+                    result['artifacts'] = [archive.name]
+                    upload_artifacts(client, run, result)
+                    from scripts.agents.hfl.action_terminal import Workspace
+                    workspace_settings = dict(run['snapshot'].get('execution_settings', {}))
+                    workspace_settings['agent_repository'] = workspace_settings.get('agent_repository') or str(REPO_ROOT)
+                    Workspace(spool_root() / 'repositories' / run['id'], run['id'], workspace_settings).cleanup()
+                except Exception:
+                    result['summary'] += ' The recovery archive and worktree remain on the worker because attachment or cleanup failed.'
         result.setdefault('model', os.environ.get('HFL_AGENT_MODEL', 'Hermes provider default'))
         receipt = {'run': {'id': run['id'], 'lease_token': run['lease_token']}, 'result': result, 'delivered': False}
         path = spool_root() / (run['id'] + '.json')
@@ -416,6 +449,7 @@ def main():
         smoke()
         return
     client = BridgeClient()
+    stop = threading.Event()
     try:
         if args.capabilities:
             settings = client.call('settings')
@@ -434,6 +468,26 @@ def main():
             client.call('sweep', {})
         if args.dispatch:
             return
+        if args.watch:
+            from scripts.agents.hfl.action_terminal import watch_terminals
+            threading.Thread(target=watch_terminals, args=(sys.modules[__name__], stop), daemon=True).start()
+            def consume_one():
+                connection = BridgeClient()
+                try:
+                    consume(connection, limit=1)
+                finally:
+                    connection.client.close()
+            with ThreadPoolExecutor(max_workers=32) as pool:
+                pending = set()
+                while True:
+                    pending = {job for job in pending if not job.done()}
+                    try:
+                        capacity = client.call('settings')['agent_concurrency']
+                        if len(pending) < capacity:
+                            pending.add(pool.submit(consume_one))
+                    except Exception as exc:
+                        print('Bridge worker unavailable: ' + type(exc).__name__, file=sys.stderr)
+                    time.sleep(2)
         while True:
             try:
                 consume(client)
@@ -445,6 +499,7 @@ def main():
                 break
             time.sleep(15)
     finally:
+        stop.set()
         client.client.close()
 
 
