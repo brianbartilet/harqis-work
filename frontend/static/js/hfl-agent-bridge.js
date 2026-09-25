@@ -133,6 +133,8 @@
     const task = element('section'); task.className = 'agent-results-task';
     task.append(element('span', kind === 'actionable' ? 'ACTION' : 'PINNED PERIOD'), element('h3', title));
     information.append(task);
+    const attachmentArea=element('div');attachmentArea.className='agent-attachments-area';
+    if (workspaceLayout) information.append(attachmentArea);
     if (workspaceLayout) disposeWorkspace = window.actionAgentWorkspace.mount(body, id, information, task, headerStatus);
     const error = element('p'); error.className = 'agenda-error'; error.setAttribute('role', 'alert'); error.hidden = true;
     const cadenceLabel = element('label', 'Automatic runs');
@@ -164,12 +166,11 @@
     if (kind === 'pin') controls.append(saveSchedule);
     controls.append(runButton, button('Refresh', () => refresh()));
     if (kind === 'pin') information.append(cadenceLabel);
-    const attachmentArea=element('div');attachmentArea.className='agent-attachments-area';
     const promptEmpty=element('p','The initial prompt field is empty. Use Edit to add instructions before running it.');promptEmpty.className='agent-initial-prompt-empty';promptEmpty.hidden=true;
     if (workspaceLayout) {
       const initialRuns=element('section');initialRuns.className='agent-initial-prompt-runs';initialRuns.setAttribute('aria-label','Initial prompt runs');
       initialRuns.append(element('h3','Initial prompt runs'),promptEmpty,controls,error,runs);
-      information.append(attachmentArea,initialRuns);
+      information.append(initialRuns);
     } else information.append(controls,error,runs);
     const footer = element('footer'); footer.className = 'agent-results-footer';
     if (kind === 'pin') footer.append(element('p', 'Scheduled runs use the hour set on this pin.'));
