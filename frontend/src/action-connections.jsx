@@ -8,7 +8,7 @@ const colors = {actions:'#fb8ca6', ideas:'#f9ca74', drafts:'#c4b5fd', boards:'#9
 const kindName = kind => ({actions:'Action', ideas:'Idea', drafts:'Thought', boards:'Board',
   goals:'Goal', entries:'Entry', daily:'Date', companies:'Organization'}[kind] || kind);
 const identity = node => typeof node === 'object' ? node.id : node;
-const statusLabel = status => status.replace(/[_-]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
+const statusLabel = status => ({open:'Ready',suggested:'Available'}[status] || status.replace(/[_-]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase()));
 const tooltip = text => {const span = document.createElement('span'); span.textContent = text; return span;};
 let activeDialog;
 

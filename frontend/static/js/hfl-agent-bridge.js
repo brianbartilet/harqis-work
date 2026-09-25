@@ -125,7 +125,7 @@
     const error = element('p'); error.className = 'agenda-error'; error.setAttribute('role', 'alert'); error.hidden = true;
     const cadenceLabel = element('label', 'Automatic runs');
     const cadence = element('select');
-    for (const [value, label] of [['off','On demand only'],['daily',kind === 'pin' ? 'Daily during this period' : 'Daily while open'], ...(kind === 'pin' ? [['after_period','Once after this period']] : [])]) {
+    for (const [value, label] of [['off','On demand only'],['daily',kind === 'pin' ? 'Daily during this period' : 'Daily while ready'], ...(kind === 'pin' ? [['after_period','Once after this period']] : [])]) {
       const option = element('option', label); option.value = value; cadence.append(option);
     }
     cadenceLabel.append(cadence);
@@ -220,7 +220,7 @@
           label.htmlFor = input.id;
           input.placeholder = integrationBlocked ? 'Describe the fix or add instructions for the retry.' : 'Answer the question or clarify what the agent should do next.';
           if (run.result.question) form.append(element('p', run.result.question));
-          form.append(label, input, element('small', 'Continues with previous results and files. You do not need to edit the task or set it to Open.'));
+          form.append(label, input, element('small', 'Continues with previous results and files. You do not need to edit the task or set it to Ready.'));
           const feedback = element('p'); feedback.setAttribute('role', 'alert'); feedback.hidden = true;
           input.addEventListener('input', () => { feedback.hidden = true; });
           const submit = element('button', integrationBlocked ? 'Retry after fix' : 'Answer and continue'); submit.type = 'submit';

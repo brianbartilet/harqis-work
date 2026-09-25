@@ -630,7 +630,7 @@ def source_view(kind: str, source_id: str):
 @owner_router.post('/sources/{kind}/{source_id}/configure')
 def configure(kind: str, source_id: str, payload: dict):
     if kind == 'actionable':
-        raise HTTPException(400, 'Action discovery is configured in App Settings. Use Open to request another attempt.')
+        raise HTTPException(400, 'Action discovery is configured in App Settings. Set the action to Ready to request another attempt.')
     if payload.get('cadence') != 'off':
         checked(source_snapshot, kind, source_id)
     if kind not in {'actionable', 'pin'}:

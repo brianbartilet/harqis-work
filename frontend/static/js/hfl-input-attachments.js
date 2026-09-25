@@ -76,7 +76,16 @@ window.HflInputAttachments = class {
       let content;
       if(['png','jpg','jpeg','gif','webp'].includes(suffix)){content=document.createElement('img');content.alt=file.name;content.src=objectUrl(blob);try{await content.decode();}catch(_){throw Error('This image could not be previewed. Try downloading it instead.');}}
       else if(['mp4','webm','mp3','wav','ogg'].includes(suffix)){content=document.createElement(['mp4','webm'].includes(suffix)?'video':'audio');content.controls=true;content.src=objectUrl(blob);}
-      else if(suffix==='pdf'||(saved&&['md','markdown'].includes(suffix))){content=document.createElement('iframe');content.title=file.name;if(suffix!=='pdf')content.setAttribute('sandbox','');content.src=objectUrl(blob);}
+      else if(saved&&['md','markdown'].includes(suffix)){
+        content=document.createElement('iframe');content.title=file.name;content.className='agent-markdown-preview';content.setAttribute('sandbox','');
+        // The preview endpoint sanitizes Markdown. Decode explicitly before embedding
+        // so blob navigation cannot guess a legacy encoding for Unicode punctuation.
+        const html=await blob.text();
+        content.srcdoc='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src &apos;none&apos;; style-src &apos;unsafe-inline&apos;"><style>'+
+          ':root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;padding:clamp(16px,4vw,36px);background:#0b1220;color:#e2e8f0;font:14px/1.7 system-ui,sans-serif;overflow-wrap:anywhere}main{max-width:80ch;margin:auto}h1,h2,h3,h4{line-height:1.3;color:#f1f5f9;margin:1.6em 0 .65em}h1{font-size:1.7rem}h2{font-size:1.3rem}main>:first-child{margin-top:0}a{color:#67e8f9}p,ul,ol{margin:.8em 0}li{margin:.3em 0}pre{padding:1rem;background:#111c2e;border:1px solid #334155;border-radius:8px;overflow:auto;white-space:pre}code{font-family:Consolas,monospace;font-size:.9em;background:#111c2e;padding:.1em .25em}pre code{padding:0}blockquote{margin:1em 0;padding:.2em 1em;border-left:3px solid #38bdf8;color:#94a3b8}table{display:block;max-width:100%;overflow:auto;border-collapse:collapse}td,th{padding:.5em .8em;border:1px solid #334155;text-align:left}th{background:#111c2e}img{max-width:100%}hr{border:0;border-top:1px solid #334155;margin:1.5em 0}'+
+          '</style></head><body><main>'+html+'</main></body></html>';
+      }
+      else if(suffix==='pdf'){content=document.createElement('iframe');content.title=file.name;content.src=objectUrl(blob);}
       else if(['txt','csv','tsv','json','log','md','markdown'].includes(suffix)||(saved&&suffix==='docx')){if(blob.size>2*1024*1024)throw Error('This document is too large to preview. Download it instead.');content=document.createElement('pre');content.textContent=await blob.text();}
       else throw Error(saved?'Preview is unavailable for this file type. Download it instead.':'Save this document first to preview it.');
       if(!cancelled)body.replaceChildren(content);

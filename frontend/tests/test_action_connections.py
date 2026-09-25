@@ -230,8 +230,8 @@ def test_connections_preview_both_cards_and_throwaway_lifecycle(ideas, authentic
         page.evaluate('window.releaseConnections()')
         playwright.expect(preview.locator('canvas')).to_be_visible()
         loaded_box = preview.bounding_box()
-        playwright.expect(preview.locator('.connections-status')).to_have_text('Open')
-        playwright.expect(preview.locator('.connections-status')).to_have_attribute('aria-label', 'Status: Open')
+        playwright.expect(preview.locator('.connections-status')).to_have_text('Ready')
+        playwright.expect(preview.locator('.connections-status')).to_have_attribute('aria-label', 'Status: Ready')
         for dimension in ('x', 'y', 'width', 'height'):
             assert abs(loaded_box[dimension] - loading_box[dimension]) < 2
         assert preview.locator('select').count() == 0
@@ -263,8 +263,7 @@ def test_connections_preview_both_cards_and_throwaway_lifecycle(ideas, authentic
         playwright.expect(preview.locator('.connections-details > h3')).to_have_text(action['title'])
         preview.get_by_role('button', name='Close connections').click()
         page.keyboard.press('Escape')
-        page.locator('.corpus-tools > summary').click()
-        page.get_by_role('link', name='Activity Kanban', exact=True).click()
+        page.goto('https://connections.test/hfl-corpus/actions')
         board = page.locator('#followups-board')
         board.locator('[data-followup-id="' + action['id'] + '"]').get_by_role('button', name='Connections', exact=True).click()
         assert board.locator('[data-followup-id="' + isolated['id'] + '"] .action-connections-button').count() == 1
@@ -321,8 +320,7 @@ def test_board_drag_and_checklist_refresh_keep_connections(ideas, authenticated_
               await new Promise(resolve=>window.availabilityWaiters.push(resolve));
             return fetchOriginal(...args);
           };""")
-        page.goto('https://connections.test/hfl-corpus')
-        page.locator('.corpus-tools > summary').click(); page.locator('[data-followups-open]').click()
+        page.goto('https://connections.test/hfl-corpus/actions')
         board=page.locator('#followups-board'); lane=board.locator('.followups-lane[data-status=open]')
         card=lane.locator(f'[data-followup-id="{action["id"]}"]')
         other_card=lane.locator(f'[data-followup-id="{other["id"]}"]')

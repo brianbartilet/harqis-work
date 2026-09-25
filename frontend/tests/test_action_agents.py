@@ -181,8 +181,10 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
     playwright = pytest.importorskip('playwright.sync_api')
     api, _, actions, _ = workspace
     item = create_action(actions)
-    actions.update(item['id'], {'version':item['version'], 'notes':'**Review checklist**\n\n'+'\n'.join('- Check item '+str(i) for i in range(20))}, actor='owner')
+    actions.update(item['id'], {'version':item['version'], 'checklists':[{'id':'test-list','title':'Tasks','cover':False,'items':[{'id':'test-task','text':'Verify sidebar','done':False}]}], 'notes':'**Review checklist**\n\n'+'\n'.join('- Check item '+str(i) for i in range(20))}, actor='owner')
     frontend = Path(__file__).resolve().parents[1]
+    from jinja2 import Environment, FileSystemLoader
+    editor_markup=Environment(loader=FileSystemLoader(frontend/'templates')).get_template('modules/hfl_corpus/partials/action_editor.html').render(memory_csrf=owner_headers()['X-CSRF-Token'],static_asset=lambda name:name).split('<script')[0]
     with playwright.sync_playwright() as p:
         browser = p.chromium.launch(channel='chrome',headless=True)
         page = browser.new_page(viewport={'width':1440,'height':1000})
@@ -194,7 +196,7 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
             if parsed.path.endswith('/input'):
                 input_requests.append(json.loads(r.request.post_data)['data'])
             if parsed.path=='/':
-                r.fulfill(content_type='text/html',body='<html><body style="background:#080f1e;color:white;font-family:Arial,sans-serif"><script type="application/json" data-memory-csrf>'+json.dumps(owner_headers()['X-CSRF-Token'])+'</script></body></html>')
+                r.fulfill(content_type='text/html',body='<html><body style="background:#080f1e;color:white;font-family:Arial,sans-serif">'+editor_markup+'<script type="application/json" data-memory-csrf>'+json.dumps(owner_headers()['X-CSRF-Token'])+'</script></body></html>')
             else:
                 response=authenticated_client.request(r.request.method,parsed.path+('?' + parsed.query if parsed.query else ''),content=r.request.post_data,headers={k:v for k,v in r.request.headers.items() if k.lower() in {'content-type','x-csrf-token'}})
                 r.fulfill(status=response.status_code,content_type=response.headers.get('content-type','application/json'),body=response.content)
@@ -202,7 +204,7 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         page.goto('https://workspace.test/')
         for name in ('css/hfl-timeline.css','vendor/xterm-5.5.0.css'):
             page.add_style_tag(path=str(frontend/'static'/name))
-        for name in ('vendor/xterm-5.5.0.js','vendor/xterm-addon-fit-0.10.0.js','js/hfl-input-attachments.js','js/action-agent-workspace.js','js/hfl-agent-bridge.js'):
+        for name in ('vendor/xterm-5.5.0.js','vendor/xterm-addon-fit-0.10.0.js','js/hfl-input-attachments.js','js/hfl-checklists.js','js/hfl-intent-reuse.js','js/hfl-editor-state.js','js/hfl-board-state.js','js/hfl-ideas.js','js/action-agent-workspace.js','js/hfl-agent-bridge.js'):
             page.add_script_tag(path=str(frontend/'static'/name))
         page.evaluate('(item)=>window.hflAgentBridge.open("actionable",item.id,item.title)',item)
         page.get_by_role('heading',name='Ready to work on this action?').wait_for()
@@ -217,7 +219,14 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         playwright.expect(sidebar.locator('.markdown-body strong')).to_have_text('Review checklist')
         assert sidebar.locator('.markdown-body li').count() == 20
         assert sidebar.locator('.agent-action-summary').inner_text().find(item['prompt']) >= 0
-        assert sidebar.locator('.agent-results-task input, .agent-results-task textarea').count() == 0
+        assert sidebar.locator('.agent-results-task input:not([type=checkbox]), .agent-results-task textarea').count() == 0
+        checkbox=sidebar.get_by_role('checkbox',name='Verify sidebar')
+        checkbox.check()
+        playwright.expect(sidebar.get_by_role('heading',name='Tasks · 1/1')).to_be_visible()
+        saved=authenticated_client.get('/hfl-corpus/timeline/items/'+item['id']).json()['item']
+        assert saved['checklists'][0]['items'][0]['done'] is True
+        checkbox.uncheck()
+        playwright.expect(sidebar.get_by_role('heading',name='Tasks · 0/1')).to_be_visible()
         assert not page.locator('.agent-details').evaluate('(e)=>e.open')
         page.get_by_text('Agent details',exact=True).click()
         page.get_by_role('button',name='Configure agent',exact=True).click()
@@ -251,6 +260,19 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         page.get_by_role('button',name='View '+response.json()['name'],exact=True).click()
         playwright.expect(page.locator('.agent-input-preview pre')).to_have_text('Generated text')
         page.locator('.agent-input-preview').get_by_role('button',name='Close',exact=True).click()
+        markdown='# You\n\n“Unicode” — isn’t broken.\n\n## Hermes\n\n- First item\n- Second item\n\n```python\nprint("hello")\n```\n\n<script>window.previewUnsafe=true</script>'
+        upload=authenticated_client.post('/hfl-corpus/agent-bridge/inputs/actionable/'+item['id'],headers=owner_headers(),files=[('files',('conversation.md',markdown.encode('utf-8'),'text/markdown'))])
+        assert upload.status_code==200
+        page.get_by_role('button',name='Refresh',exact=True).click()
+        page.get_by_role('button',name='View conversation.md',exact=True).click()
+        preview=page.frame_locator('.agent-markdown-preview')
+        playwright.expect(preview.get_by_role('heading',name='Hermes',exact=True)).to_be_visible()
+        playwright.expect(preview.locator('main')).to_contain_text('“Unicode” — isn’t broken.')
+        assert preview.locator('li').count()==2
+        assert preview.locator('script').count()==0
+        assert preview.locator('body').evaluate('(el)=>getComputedStyle(el).backgroundColor')=='rgb(11, 18, 32)'
+        page.screenshot(path=str(tmp_path/'actions-markdown-preview.png'))
+        page.locator('.agent-input-preview').get_by_role('button',name='Close',exact=True).click()
         terminal = page.get_by_label('Native Hermes terminal')
         before = terminal.bounding_box()
         assert .24 < sidebar.bounding_box()['width']/page.locator('.action-agent-dialog').bounding_box()['width'] < .30
@@ -269,6 +291,24 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
             page.wait_for_timeout(50)
         assert ''.join(input_requests) == typed
         assert len(input_requests) < len(typed)
+        current=authenticated_client.get('/hfl-corpus/timeline/items/'+item['id']).json()['item']
+        response=authenticated_client.patch('/hfl-corpus/timeline/items/'+item['id'],json={'version':current['version'],'expected_outcome':'Changed in another tab'},headers=owner_headers())
+        assert response.status_code==200
+        checkbox.check()
+        playwright.expect(page.locator('.action-agent-workspace .agenda-error')).to_be_visible()
+        playwright.expect(checkbox).not_to_be_checked()
+        playwright.expect(sidebar.locator('.agent-action-summary')).to_contain_text('Changed in another tab')
+        checkbox.check()
+        playwright.expect(sidebar.get_by_role('heading',name='Tasks · 1/1')).to_be_visible()
+        selected=toolbar.get_by_role('combobox',name='Agent session').input_value()
+        sidebar.get_by_role('button',name='Edit action',exact=True).click()
+        editor=page.get_by_role('dialog',name='Edit action',exact=True)
+        editor.locator('[name=title]').fill('Updated action title')
+        editor.get_by_role('button',name='Save now',exact=True).click()
+        playwright.expect(sidebar.get_by_role('heading',name='Updated action title',exact=True)).to_have_count(1)
+        editor.get_by_role('button',name='Close editor',exact=True).click()
+        playwright.expect(editor).not_to_be_visible()
+        assert toolbar.get_by_role('combobox',name='Agent session').input_value()==selected
         api.store().heartbeat_session(session['id'],claimed['token'],'failed','restorable-native',2)
         notice=page.get_by_role('region',name='Session connection')
         playwright.expect(notice).to_contain_text('This transcript is read-only.')

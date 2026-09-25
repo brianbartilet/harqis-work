@@ -39,7 +39,7 @@ def effective(source_id):
 def configuration(source_id: str):
     action = bridge.checked(bridge.action_call, 'GET', '/' + source_id)['item']
     configs = store().configs()
-    return {'action': {key: action.get(key, '') for key in ('title','status','prompt','expected_outcome','description','notes','completion_note','due_date')},
+    return {'action': {key: action.get(key, '') for key in ('title','status','prompt','expected_outcome','description','notes','completion_note','due_date','version','checklists')},
             'action_html': {key: str(bridge.render_markdown(action.get(key) or '')) for key in ('prompt','expected_outcome','description','notes','completion_note')},
             'effective': effective(source_id), 'defaults': read_settings(),
             'card': configs.get('card:' + source_id, {'preset': '', 'overrides': {}}),

@@ -161,7 +161,7 @@ window.HflObjectDescription = (item = {}) => {
         field(details, 'title', 'Idea', item.title, 'text', true, 200);
         field(details, 'body', 'Markdown description', window.HflObjectDescription(item), 'textarea', false, 60000);
         const attachments = el('div'); attachments.dataset.objectAttachments = ''; details.append(attachments);
-        if (current) selectField(details, 'status', 'Status', [['suggested', 'Available / restored'], ['adopted', 'Has actions'], ['dismissed', 'Dismissed']], item.status);
+        if (current) selectField(details, 'status', 'Status', [['suggested', 'Available'], ['adopted', 'Has actions'], ['dismissed', 'Dismissed']], item.status);
         const checklistSection = section('Checklists');
         const checklistHeader = el('div', undefined, 'idea-checklists-heading');
         checklistToolbar = el('div');
@@ -588,7 +588,7 @@ window.HflObjectDescription = (item = {}) => {
     if (node.status) {
       const status = String(node.status).toLowerCase().replaceAll('_', ' ').replaceAll('-', ' ');
       const row = el('p', undefined, 'idea-inspector-status idea-inspector-status-row');
-      const pill = el('span', status.replace(/\b\w/g, letter => letter.toUpperCase()), 'idea-status-pill');
+      const pill = el('span', (node.kind==='actions' && status==='open' ? 'Ready' : node.kind==='ideas' && status==='suggested' ? 'Available' : status.replace(/\b\w/g, letter => letter.toUpperCase())), 'idea-status-pill');
       pill.dataset.status = status.replaceAll(' ', '-');
       row.append(el('span', 'Status'), pill);root.append(row);
     }

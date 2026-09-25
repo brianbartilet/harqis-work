@@ -818,7 +818,6 @@ def test_unified_actions_matrix_editor_and_empty_message(agenda, authenticated_c
         form.locator('[name="matrix"]').select_option('Q1')
         form.locator('[name="matrix_confidence"]').select_option('high')
         form.locator('[name="matrix_reason"]').fill('Important deadline confirmed')
-        form.locator('[type="submit"]').click()
         playwright.expect(form.locator('.editor-save-status')).to_have_text('Saved')
         form.locator('[data-agenda-close]').first.click()
         playwright.expect(page.locator('#followup-editor')).to_be_hidden()

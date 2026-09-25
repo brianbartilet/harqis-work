@@ -114,17 +114,51 @@
       if (summary && config.action) {
         const action=config.action;
         summary.replaceChildren(el('span','ACTION'),el('h3',action.title));
+        const edit=button('Edit',async()=>{
+          if(!window.HflIdeas?.openAction)throw Error('The action editor is unavailable. Reload the page and try again.');
+          await window.HflIdeas.openAction(sourceId);
+        },summary);edit.className='agent-action-edit';edit.setAttribute('aria-label','Edit action');
         const values=el('dl',undefined,'agent-action-summary');
         for(const [key,label] of [['status','Status'],['due_date','Due'],['description','Description'],['prompt','Initial prompt'],['expected_outcome','Expected outcome'],['notes','Notes'],['completion_note','Outcome']]) {
           const value=action[key];
           if(!value && key!=='prompt')continue;
-          const content=el('dd',key==='status'?value.replaceAll('_',' '):(value||'No initial prompt saved.'));
+          const content=el('dd',key==='status'?(value==='open'?'Ready':value.replaceAll('_',' ')):(value||'No initial prompt saved.'));
           if(value && config.action_html?.[key]){content.className='markdown-body';content.innerHTML=config.action_html[key];}
           values.append(el('dt',label),content);
         }
         summary.append(values);
+        const lists=el('div',undefined,'agent-action-checklists');
+        for(const list of action.checklists||[]){
+          const section=el('section');
+          section.append(el('h4',list.title+' · '+list.items.filter(item=>item.done).length+'/'+list.items.length));
+          for(const item of list.items){
+            const label=el('label'),check=el('input'),text=el('span',item.text);
+            check.type='checkbox';check.checked=item.done;
+            check.onchange=async()=>{
+              lists.inert=true;error.hidden=true;
+              const checklists=structuredClone(action.checklists);
+              checklists.find(value=>value.id===list.id).items.find(value=>value.id===item.id).done=check.checked;
+              try{
+                const csrf=JSON.parse(document.querySelector('[data-memory-csrf]')?.textContent||'""');
+                const response=await fetch('/hfl-corpus/timeline/items/'+encodeURIComponent(sourceId),{method:'PATCH',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({version:action.version,checklists})});
+                const data=await response.json();
+                if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Could not save checklist. Reload and try again.');
+                await refreshAction();window.dispatchEvent(new Event('hfl:actions-updated'));
+              }catch(e){check.checked=item.done;await refreshAction().catch(()=>{});error.textContent=e.message;error.hidden=false;}
+              finally{lists.inert=false;}
+            };
+            label.append(check,text);section.append(label);
+          }
+          lists.append(section);
+        }
+        summary.append(lists);
       }
     }
+    async function refreshAction(){const updated=await api(source+'/configuration');if(!disposed){config=updated;showConfig();}}
+    const actionChanged=()=>{refreshAction().catch(e=>{if(!disposed){error.textContent=e.message;error.hidden=false;}});};
+    const editorClosed=event=>{if(event.target!==container.closest('dialog'))actionChanged();};
+    window.addEventListener('hfl:actions-updated',actionChanged);
+    document.addEventListener('close',editorClosed,true);
     async function configure() {
       config=await api(source+'/configuration');
       const dialog=el('dialog',undefined,'agenda-dialog agent-config-dialog');
@@ -215,7 +249,7 @@
         await poll();
       }catch(e){error.textContent=e.message;error.hidden=false;status.textContent='Workspace could not be loaded.';}
     })();
-    return ()=>{disposed=true;clearTimeout(polling);clearTimeout(inputTimer);void flushInput();observer.disconnect();terminal?.dispose();};
+    return ()=>{disposed=true;window.removeEventListener('hfl:actions-updated',actionChanged);document.removeEventListener('close',editorClosed,true);clearTimeout(polling);clearTimeout(inputTimer);void flushInput();observer.disconnect();terminal?.dispose();};
   }
   window.actionAgentWorkspace={mount};
 })();
