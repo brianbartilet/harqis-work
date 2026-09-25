@@ -1,8 +1,8 @@
-{% extends "modules/hfl_corpus/modal_base.html" %}
-{% block title %}HARQIS — Actions Board{% endblock %}
+{% extends "base.html" %}
+{% block body_class %}activity-modal-page activity-workspace-page{% endblock %}
+{% block title %}HARQIS — Activity Kanban{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ static_asset('css/hfl-timeline.css') }}">
-<script src="{{ static_asset('vendor/sortablejs-1.15.2.min.js') }}"></script>
 {% endblock %}
 {% block content %}
 <main class="actions-page" data-actions-page>

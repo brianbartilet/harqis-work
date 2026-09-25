@@ -5,7 +5,7 @@
     <summary hidden>Activity navigation</summary>
     <nav class="activity-navigation-options" aria-label="Activity views">
       <a href="/hfl-corpus/graph" {% if request.url.path == '/hfl-corpus/graph' %}aria-current="page"{% endif %}>Activity Graph</a>
-      <a href="/hfl-corpus/actions{% if active_module == 'hfl_corpus' and request.url.query %}?{{ request.url.query }}{% endif %}" data-followups-open {% if request.url.path == '/hfl-corpus/actions' %}aria-current="page"{% endif %}>Actions Board</a>
+      <a href="/hfl-corpus/actions{% if active_module == 'hfl_corpus' and request.url.query %}?{{ request.url.query }}{% endif %}" data-followups-open {% if request.url.path == '/hfl-corpus/actions' %}aria-current="page"{% endif %}>Activity Kanban</a>
     </nav>
   </details>
   {% endif %}

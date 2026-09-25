@@ -455,7 +455,7 @@ returns to the inherited context. Entities still opens as a scoped dialog.
 The board sidebar keeps Explore Activity Graph, Add, and Board guide pinned while
 scrolling, with Filters, Fit graph, and Reset layout grouped under Controls.
 
-The Actions Board is a dedicated page at `/hfl-corpus/actions`. Its filters and
+The Activity Kanban is a dedicated page at `/hfl-corpus/actions`. Its filters and
 opened saved action/idea survive refresh through URL state. Existing action and
 idea editors autosave after a short typing pause, serialize concurrent edits,
 and display save errors without overwriting newer server versions. New objects

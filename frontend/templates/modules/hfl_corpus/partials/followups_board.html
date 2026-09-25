@@ -1,5 +1,7 @@
 <{{ 'section' if actions_page else 'dialog' }} id="followups-board" class="agenda-dialog followups-board" aria-labelledby="followups-title">
-  <header class="agenda-dialog-header"><h2 id="followups-title">Actions Board</h2><button type="button" data-board-close aria-label="Close Actions Board">{{ 'Back to corpus' if actions_page else 'Close' }}</button></header>
+  {% if actions_page %}<h1 id="followups-title" class="sr-only">Activity Kanban</h1>{% else %}
+  <header class="agenda-dialog-header"><h2 id="followups-title">Activity Kanban</h2><button type="button" data-board-close aria-label="Close Activity Kanban">Close</button></header>
+  {% endif %}
   <div class="followups-toolbar">
     <details data-board-create-menu class="board-create-menu"><summary>Create</summary><div class="board-create-options">
       <a href="/hfl-corpus?create=entry">Entry</a>

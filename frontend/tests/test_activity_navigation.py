@@ -7,7 +7,7 @@ import pytest
 @pytest.mark.parametrize('width', [1440, 390])
 def test_activity_navigation_keyboard_and_destinations(authenticated_client, monkeypatch, tmp_path, width):
     from modules.hfl_corpus import router
-    monkeypatch.setattr(router.corpus_index, 'documents', lambda: ())
+    monkeypatch.setattr(router.corpus_index, 'documents', lambda **kwargs: ())
     playwright = pytest.importorskip('playwright.sync_api')
     with playwright.sync_playwright() as engine:
         options = {'headless': True}
@@ -34,7 +34,7 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
             menu = nav.locator('.activity-navigation-options')
             nav.get_by_role('link', name='Activity', exact=True).hover()
             playwright.expect(menu).to_be_visible()
-            menu.get_by_role('link', name='Actions Board').hover()
+            menu.get_by_role('link', name='Activity Kanban').hover()
             page.wait_for_timeout(350)
             playwright.expect(menu).to_be_visible()
             page.get_by_role('link', name='HARQIS home').hover()
@@ -43,11 +43,11 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
             toggle.press('ArrowDown')
             playwright.expect(menu).to_be_visible()
             playwright.expect(menu.get_by_role('link', name='Activity Graph')).to_be_focused()
-            assert menu.get_by_role('link', name='Actions Board').get_attribute('href') == '/hfl-corpus/actions'
+            assert menu.get_by_role('link', name='Activity Kanban').get_attribute('href') == '/hfl-corpus/actions'
             bounds = menu.bounding_box()
             assert bounds['x'] >= 0 and bounds['x'] + bounds['width'] <= width
             # Detect clipping by the horizontally scrolling mobile navigation.
-            assert menu.get_by_role('link', name='Actions Board').evaluate(
+            assert menu.get_by_role('link', name='Activity Kanban').evaluate(
                 '(el) => { const r = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }')
             page.screenshot(path=str(tmp_path / f'activity-navigation-{width}.png'))
             menu.get_by_role('link', name='Activity Graph').press('Escape')
@@ -58,7 +58,20 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
             page.get_by_role('link', name='HARQIS home').click()
             playwright.expect(menu).not_to_be_visible()
             assert not errors
-            for label, destination in [('Activity Graph', '/hfl-corpus/graph'), ('Actions Board', '/hfl-corpus/actions')]:
+            for destination, workspace in [('/hfl-corpus/graph', '.kg-shell'), ('/hfl-corpus/actions', '.actions-page')]:
+                page.goto('http://navigation.test' + destination)
+                header = page.locator('body > header')
+                playwright.expect(header.get_by_role('link', name='HARQIS home')).to_be_visible()
+                bounds = header.bounding_box()
+                content = page.locator(workspace).bounding_box()
+                assert bounds['y'] == 0
+                assert content['y'] >= bounds['height']
+                assert content['y'] + content['height'] <= 901
+                page.evaluate('window.scrollTo(0, 1000)')
+                assert header.bounding_box()['y'] == 0
+                assert page.locator('[data-board-close], .kg-shell > .activity-modal-heading').count() == 0
+                page.screenshot(path=str(tmp_path / f'{destination.rsplit("/", 1)[-1]}-header-{width}.png'))
+            for label, destination in [('Activity Graph', '/hfl-corpus/graph'), ('Activity Kanban', '/hfl-corpus/actions')]:
                 page.route('http://navigation.test' + destination + '**',
                            lambda route: route.fulfill(content_type='text/html', body='<h1>Destination</h1>'))
                 page.goto('http://navigation.test/hfl-corpus?source=notes&q=launch')

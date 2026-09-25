@@ -169,7 +169,7 @@
   document.querySelectorAll('[data-followups-open]').forEach(opener=>{
     opener.onclick=event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();opener.closest('details')?.removeAttribute('open');open();};
   });
-  $('[data-board-close]').onclick=()=>{if(page){const url=new URL(location.href);url.pathname='/hfl-corpus';url.searchParams.delete('edit');url.searchParams.delete('edit_kind');url.searchParams.delete('all');location.assign(url);}else dialog.close();};
+  $('[data-board-close]')?.addEventListener('click',()=>dialog.close());
   const createMenu=$('[data-board-create-menu]');
   $('[data-board-create-action]').onclick=()=>{createMenu.open=false;actions.openEditor();};
   $('[data-board-create-idea]').onclick=()=>{createMenu.open=false;window.HflIdeas.openEditor('idea');};

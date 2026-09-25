@@ -264,7 +264,7 @@ def test_connections_preview_both_cards_and_throwaway_lifecycle(ideas, authentic
         preview.get_by_role('button', name='Close connections').click()
         page.keyboard.press('Escape')
         page.locator('.corpus-tools > summary').click()
-        page.get_by_role('link', name='Actions Board', exact=True).click()
+        page.get_by_role('link', name='Activity Kanban', exact=True).click()
         board = page.locator('#followups-board')
         board.locator('[data-followup-id="' + action['id'] + '"]').get_by_role('button', name='Connections', exact=True).click()
         assert board.locator('[data-followup-id="' + isolated['id'] + '"] .action-connections-button').count() == 1

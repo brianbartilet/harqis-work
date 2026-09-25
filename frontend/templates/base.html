@@ -186,7 +186,7 @@
   <script defer src="{{ static_asset('js/activity-navigation.js') }}"></script>
   {% block head %}{% endblock %}
 </head>
-<body class="h-full bg-slate-950 text-slate-100 antialiased"
+<body class="h-full bg-slate-950 text-slate-100 antialiased {% block body_class %}{% endblock %}"
       x-data="{ customize: false, workflowTab: '{{ default_workflow | default('') }}' }">
   {% if user %}
   <header class="sticky top-0 z-20 border-b border-slate-800 bg-slate-950/95 backdrop-blur" style="z-index:80">
