@@ -94,7 +94,8 @@
     if (sidebar) {
       const section = el('section', undefined, 'agent-session-section');
       section.setAttribute('aria-label','Session controls');
-      section.append(controls,status,error);
+      controls.append(status);
+      section.append(controls,error);
       sidebar.append(details);
       root.setAttribute('aria-label','Agent session');
       const stage=el('div',undefined,'agent-terminal-stage');stage.append(sessionNotice,viewport,empty);

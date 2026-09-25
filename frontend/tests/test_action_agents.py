@@ -244,7 +244,8 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         link = page.get_by_role('link', name='Download '+response.json()['name'], exact=True)
         link.wait_for()
         assert authenticated_client.get(urlparse(link.get_attribute('href')).path).content == b'Generated text'
-        assert page.get_by_text('No results yet', exact=True).count() == 0
+        playwright.expect(page.get_by_text('No results yet', exact=True)).to_be_visible()
+        assert sidebar.locator('.agent-attachments-area').evaluate('(e)=>e.nextElementSibling.classList.contains("agent-initial-prompt-runs")')
         toolbar=page.get_by_role('region',name='Session controls')
         assert toolbar.get_by_role('combobox', name='Agent session').count() == 1
         assert toolbar.get_by_role('combobox',name='Agent session').bounding_box()['width'] <= 220
@@ -292,6 +293,14 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         assert ''.join(input_requests) == typed
         assert len(input_requests) < len(typed)
         current=authenticated_client.get('/hfl-corpus/timeline/items/'+item['id']).json()['item']
+        assert authenticated_client.patch('/hfl-corpus/timeline/items/'+item['id'],json={'version':current['version'],'prompt':''},headers=owner_headers()).status_code==200
+        page.get_by_role('button',name='Refresh',exact=True).click()
+        playwright.expect(page.locator('.agent-initial-prompt-empty')).to_contain_text('The initial prompt field is empty.')
+        playwright.expect(page.get_by_role('button',name='Run initial prompt',exact=True)).to_be_disabled()
+        playwright.expect(page.get_by_text('No results yet',exact=True)).to_be_visible()
+        page.locator('.agent-initial-prompt-runs').scroll_into_view_if_needed()
+        page.screenshot(path=str(tmp_path/'actions-initial-prompt-empty.png'))
+        current=authenticated_client.get('/hfl-corpus/timeline/items/'+item['id']).json()['item']
         response=authenticated_client.patch('/hfl-corpus/timeline/items/'+item['id'],json={'version':current['version'],'expected_outcome':'Changed in another tab'},headers=owner_headers())
         assert response.status_code==200
         checkbox.check()
@@ -328,5 +337,39 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         page.get_by_role('button', name='Action details', exact=True).click()
         playwright.expect(sidebar).not_to_be_visible()
         page.screenshot(path=str(tmp_path/'actions-agent-mobile.png'))
+        for width in (390, 768, 1440, 1920):
+            page.set_viewport_size({'width':width,'height':1000})
+            assert page.locator('.agent-session-section').evaluate('''section => {
+              const status=section.querySelector('.agent-terminal-status'), original=status.textContent;
+              const messages=['Loading last session…','Loading session…','Waiting for a worker to connect…','Starting Hermes…','Ready for commands',
+                'Worker capacity reached — waiting for an execution slot… 100/100 executions active.',
+                'Running — waiting for reply','Session expired — transcript archived','Session closed — transcript archived',
+                'Session stopped — transcript available','Reconnecting…','Workspace could not be loaded.',
+                'Error: '+ 'LongUnbrokenWorkerError'.repeat(100)];
+              const fits=messages.every(message=>{
+                status.textContent=message;
+                return status.scrollWidth<=status.clientWidth+1 && section.scrollWidth<=section.clientWidth+1
+                  && status.getBoundingClientRect().height<=96;
+              });
+              status.textContent=original;
+              return fits;
+            }''')
+        agent_dialog=page.locator('.action-agent-dialog')
+        agent_dialog.get_by_role('heading',name='Agent actions session',exact=True).click()
+        playwright.expect(agent_dialog).to_be_visible()
+        # Selecting text from inside the dialog into the backdrop must not dismiss it.
+        heading=agent_dialog.get_by_role('heading',name='Agent actions session',exact=True).bounding_box()
+        page.mouse.move(heading['x']+5,heading['y']+5)
+        page.mouse.down()
+        page.mouse.move(2,2)
+        page.mouse.up()
+        playwright.expect(agent_dialog).to_be_visible()
+        agent_dialog.evaluate('(dialog)=>dialog.addEventListener("close",()=>{window.agentDialogClosed=true;},{once:true})')
+        page.mouse.click(2,2)
+        playwright.expect(agent_dialog).not_to_be_visible()
+        page.wait_for_function('window.agentDialogClosed===true')
+        assert api.store().sessions(item['id'])[0]['state'] == restored['state']
+        page.evaluate('(item)=>window.hflAgentBridge.open("actionable",item.id,item.title)',item)
+        playwright.expect(page.get_by_role('combobox',name='Agent session')).to_have_value(restored['id'])
         assert not errors
         browser.close()

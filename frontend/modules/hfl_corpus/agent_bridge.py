@@ -605,12 +605,14 @@ def source_view(kind: str, source_id: str):
         run['result']['output_html'] = str(render_markdown(run['result'].get('summary', '')))
     for event in events:
         event['payload']['output_html'] = str(render_markdown(event['payload'].get('summary', '')))
-    outcomes, outcomes_error, action_status = [], '', None
+    outcomes, outcomes_error, action_status, has_initial_prompt = [], '', None, None
     if kind == 'actionable':
         try:
             rows = action_call('GET', '/' + source_id + '/history')['history']
             if rows:
-                action_status = max(rows, key=lambda row: row['item']['version'])['item']['status']
+                current = max(rows, key=lambda row: row['item']['version'])['item']
+                action_status = current['status']
+                has_initial_prompt = bool(current.get('prompt', '').strip())
             seen = {run['result'].get('summary', '').strip() for run in runs}
             for row in sorted(rows, key=lambda row: row['item']['version'], reverse=True):
                 summary = row['item'].get('completion_note', '').strip()
@@ -623,7 +625,7 @@ def source_view(kind: str, source_id: str):
         except (KeyError, httpx.HTTPError):
             outcomes_error = 'Saved action outcomes could not be loaded. Retry shortly.'
     return {'runs': runs, 'events': events,
-            'outcomes': outcomes, 'outcomes_error': outcomes_error, 'action_status': action_status,
+            'outcomes': outcomes, 'outcomes_error': outcomes_error, 'action_status': action_status, 'has_initial_prompt': has_initial_prompt,
             'subscription': next((sub for sub in store.subscriptions() if sub['source_key'] == key), {'cadence': 'daily' if kind == 'actionable' or any(str(p['id']) == source_id and p.get('agent_enabled') for p in get_memory_pin_store().snapshot()['ranges']) else 'off', 'auto_complete': True})}
 
 

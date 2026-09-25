@@ -181,6 +181,11 @@
 .agent-results-task > span { display:block; margin-bottom:.5rem; font-size:.65rem; font-weight:700; letter-spacing:.12em; color:#94a3b8; }
 .agent-results-task h3 { margin:0; font-size:1.05rem; font-weight:600; line-height:1.5; color:#e2e8f0; overflow-wrap:anywhere; }
 .agent-results-controls { margin:0; gap:.6rem; }
+.agent-initial-prompt-runs { margin-top:.5rem; padding-top:1rem; border-top:1px solid #334155; }
+.agent-initial-prompt-runs > h3 { margin:0 0 .75rem; font-size:.85rem; color:#cbd5e1; }
+.agent-initial-prompt-empty { margin:0 0 .85rem; color:#94a3b8; font-size:.8rem; line-height:1.6; }
+.agent-initial-prompt-runs .agent-results-controls { margin:0 0 1rem; }
+.agent-attachments-area:empty { display:none; }
 .agent-results-controls button { min-height:40px; padding:.55rem 1rem; font-size:.8rem; }
 .agent-results-controls .agent-results-primary { color:#ecfeff; background:#0e7490; border-color:#0891b2; font-weight:600; }
 .agent-results-controls .agent-results-primary:hover:not(:disabled) { background:#155e75; border-color:#67e8f9; }
@@ -329,6 +334,7 @@
 .agent-sidebar .agent-results-task { position:relative; }
 .agent-sidebar .agent-results-task > h3 { padding-right:3.8rem; }
 .agent-action-edit { position:absolute; right:0; top:1.3rem; padding:.4rem .65rem; background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:.4rem; }
+.agent-action-checklists:not(:empty) { padding-bottom:1.25rem; border-bottom:1px solid #334155; }
 .agent-action-checklists section { margin-top:1rem; }
 .agent-action-checklists h4 { margin:0 0 .6rem; font-size:.8rem; color:#cbd5e1; }
 .agent-action-checklists label { display:flex; align-items:flex-start; gap:.6rem; margin:.5rem 0; font-size:.8rem; line-height:1.5; overflow-wrap:anywhere; }
@@ -363,7 +369,7 @@
 .agent-session-section .agent-terminal-controls { display:flex; flex-wrap:wrap; gap:.4rem; }
 .agent-session-section .agent-terminal-controls select { width:auto; flex:1 1 15rem; margin:0; font-size:.75rem; }
 .agent-session-section .agent-terminal-controls :is(button,a) { font-size:.75rem; white-space:nowrap; }
-.agent-session-section .agent-terminal-status { margin:.5rem 0 0; font-size:.75rem; }
+.agent-session-section .agent-terminal-status { flex:1 1 12rem; min-width:0; max-width:100%; max-height:6rem; box-sizing:border-box; overflow:auto; overflow-wrap:anywhere; white-space:normal; margin:0; padding:.25rem 0 .25rem .5rem; font-size:.75rem; line-height:1.5; }
 .agent-terminal-stage { position:relative; display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; gap:.5rem; overflow:hidden; }
 .agent-sidebar .agent-results-empty { padding:1rem .65rem; }
 .agent-sidebar .agent-results-empty p { font-size:.75rem; }

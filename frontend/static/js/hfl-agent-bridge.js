@@ -16,6 +16,18 @@
   const dialog = element('dialog'); dialog.className = 'agenda-dialog agent-bridge-dialog';
   dialog.setAttribute('aria-labelledby', 'agent-bridge-title');
   document.body.append(dialog);
+  let backdropPress = false;
+  const onBackdrop = event => {
+    const bounds = dialog.getBoundingClientRect();
+    return event.target === dialog && (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom);
+  };
+  dialog.addEventListener('pointerdown', event => { backdropPress = event.button === 0 && onBackdrop(event); });
+  dialog.addEventListener('pointercancel', () => { backdropPress = false; });
+  dialog.addEventListener('click', event => {
+    const dismiss = backdropPress && onBackdrop(event);
+    backdropPress = false;
+    if (dismiss && dialog.classList.contains('action-agent-dialog')) dialog.close();
+  });
   let generation = 0;
   let disposeWorkspace = () => {};
   let resultsTimer;
@@ -152,8 +164,13 @@
     if (kind === 'pin') controls.append(saveSchedule);
     controls.append(runButton, button('Refresh', () => refresh()));
     if (kind === 'pin') information.append(cadenceLabel);
-    if (workspaceLayout) information.append(element('h3', 'Initial prompt runs'));
-    information.append(controls, error, runs);
+    const attachmentArea=element('div');attachmentArea.className='agent-attachments-area';
+    const promptEmpty=element('p','The initial prompt field is empty. Use Edit to add instructions before running it.');promptEmpty.className='agent-initial-prompt-empty';promptEmpty.hidden=true;
+    if (workspaceLayout) {
+      const initialRuns=element('section');initialRuns.className='agent-initial-prompt-runs';initialRuns.setAttribute('aria-label','Initial prompt runs');
+      initialRuns.append(element('h3','Initial prompt runs'),promptEmpty,controls,error,runs);
+      information.append(attachmentArea,initialRuns);
+    } else information.append(controls,error,runs);
     const footer = element('footer'); footer.className = 'agent-results-footer';
     if (kind === 'pin') footer.append(element('p', 'Scheduled runs use the hour set on this pin.'));
     const settings = element('a', 'Agent settings'); settings.href = '/settings'; settings.target = '_blank'; settings.rel = 'noopener noreferrer'; footer.append(settings);
@@ -166,8 +183,10 @@
       ]);
       if (ticket !== generation) return;
       cadence.value = data.subscription.cadence;
-      runButton.disabled = ['done','dismissed'].includes(data.action_status) || data.runs.some(run => ['queued','running','review','accepting'].includes(run.state));
+      promptEmpty.hidden = data.has_initial_prompt !== false;
+      runButton.disabled = (kind==='actionable' && data.has_initial_prompt!==true) || ['done','dismissed'].includes(data.action_status) || data.runs.some(run => ['queued','running','review','accepting'].includes(run.state));
       runs.replaceChildren();
+      attachmentArea.replaceChildren();
       if (attachments.attachments.length) {
         const files = element('section'); files.className = 'agent-output-files';
         files.append(element('h3', 'Attachments · ' + attachments.attachments.length));
@@ -182,11 +201,11 @@
           link.setAttribute('download', ''); link.setAttribute('aria-label', 'Download ' + file.name);
           row.append(name, view, link); files.append(row);
         }
-        runs.append(files);
+        (workspaceLayout ? attachmentArea : runs).append(files);
       }
       const outcomes=data.outcomes || [];
       if(data.outcomes_error){error.textContent=data.outcomes_error;error.hidden=false;}
-      if (!attachments.attachments.length && !data.runs.length && !outcomes.length && !data.events.length && !data.outcomes_error) {
+      if ((workspaceLayout || !attachments.attachments.length) && !data.runs.length && !outcomes.length && !data.events.length && !data.outcomes_error) {
         const empty = element('section'); empty.className = 'agent-results-empty';
         empty.append(element('h3', 'No results yet'), element('p', 'Run the saved prompt to get started. Output, sources and files will appear here.'));
         runs.append(empty);
