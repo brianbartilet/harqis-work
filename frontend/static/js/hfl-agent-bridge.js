@@ -83,6 +83,9 @@
     clearTimeout(resultsTimer);
     const ticket = ++generation;
     dialog.replaceChildren();
+    const workspaceLayout = kind === 'actionable' && !!window.actionAgentWorkspace;
+    dialog.classList.toggle('action-agent-dialog', workspaceLayout);
+    dialog.classList.remove('agent-sidebar-open');
     const header = element('header'); header.className = 'agenda-dialog-header';
     const heading = element('h2', kind === 'actionable' ? 'Actions agent' : 'Agent results'); heading.id = 'agent-bridge-title';
     heading.tabIndex = -1; heading.setAttribute('autofocus', '');
@@ -93,10 +96,20 @@
     closePath.setAttribute('d', 'M6 6l12 12M18 6L6 18'); closeIcon.append(closePath); close.append(closeIcon);
     header.append(heading, close);
     const body = element('div'); body.className = 'agenda-form-body agent-results-body';
+    let information = body;
+    if (workspaceLayout) {
+      information = element('aside'); information.className = 'agent-sidebar'; information.id = 'action-agent-sidebar';
+      information.setAttribute('aria-label', 'Action information and controls');
+      const toggle = element('button', 'Action details'); toggle.type = 'button'; toggle.className = 'agent-sidebar-toggle';
+      toggle.setAttribute('aria-controls', information.id); toggle.setAttribute('aria-expanded', 'false');
+      toggle.onclick = () => toggle.setAttribute('aria-expanded', String(dialog.classList.toggle('agent-sidebar-open')));
+      header.insertBefore(toggle, close);
+      body.append(information);
+    }
     const task = element('section'); task.className = 'agent-results-task';
     task.append(element('span', kind === 'actionable' ? 'ACTION' : 'PINNED PERIOD'), element('h3', title));
-    body.append(task);
-    if (kind === 'actionable' && window.actionAgentWorkspace) disposeWorkspace = window.actionAgentWorkspace.mount(body, id);
+    information.append(task);
+    if (workspaceLayout) disposeWorkspace = window.actionAgentWorkspace.mount(body, id, information, task);
     const error = element('p'); error.className = 'agenda-error'; error.setAttribute('role', 'alert'); error.hidden = true;
     const cadenceLabel = element('label', 'Automatic runs');
     const cadence = element('select');
@@ -126,12 +139,13 @@
     });
     if (kind === 'pin') controls.append(saveSchedule);
     controls.append(runButton, button('Refresh', () => refresh()));
-    if (kind === 'pin') body.append(cadenceLabel);
-    body.append(controls, error, runs);
+    if (kind === 'pin') information.append(cadenceLabel);
+    if (workspaceLayout) information.append(element('h3', 'Initial prompt & results'));
+    information.append(controls, error, runs);
     const footer = element('footer'); footer.className = 'agent-results-footer';
     footer.append(element('p', kind === 'actionable' ? 'Follow-up chat is available on completed actions. Reopen to run the Initial prompt again.' : 'Scheduled runs use the hour set on this pin.'));
     const settings = element('a', 'Agent settings'); settings.href = '/settings'; footer.append(settings);
-    body.append(footer);
+    information.append(footer);
     dialog.append(header, body);
     if (!dialog.open) dialog.showModal();
     async function refresh() {

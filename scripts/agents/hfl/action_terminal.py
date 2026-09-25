@@ -137,13 +137,13 @@ class Pty:
     def read(self):
         import select
         if self.windows:
-            if not select.select([self.process.fileobj], [], [], .1)[0]:
+            if not select.select([self.process.fileobj], [], [], .02)[0]:
                 return ''
             try:
                 return self.process.read(16384)
             except EOFError:
                 return ''
-        if select.select([self.master], [], [], .1)[0]:
+        if select.select([self.master], [], [], .02)[0]:
             try:
                 return self.decoder.decode(os.read(self.master, 16384))
             except OSError:
@@ -286,6 +286,9 @@ class TerminalWorker:
         transcript = root / 'transcript.txt'
         last_input = time.monotonic()
         last_poll = 0
+        last_heartbeat = 0
+        heartbeat_state = None
+        action_closed = False
         previous_state = 'starting'
         turn_started = None
         ran_turn = False
@@ -304,7 +307,8 @@ class TerminalWorker:
                     with transcript.open('a', encoding='utf-8') as stream:
                         stream.write(chunk)
                     pending += chunk
-                if time.monotonic() - last_poll < .3:
+                interval = .05 if pending or time.monotonic() - last_input < 3 else .25
+                if time.monotonic() - last_poll < interval:
                     continue
                 last_poll = time.monotonic()
                 if pending:
@@ -328,17 +332,22 @@ class TerminalWorker:
                 if self.state == 'idle' and time.monotonic() - last_file_scan >= 3:
                     last_file_scan = time.monotonic()
                     self.collect_outputs(artifacts)
-                reply = self.call('/poll', state=self.state, native_id=self.native_id, after=self.after)
-                expiry = reply['expiry_minutes']
+                full_poll = self.state != heartbeat_state or time.monotonic() - last_heartbeat >= (.3 if self.state == 'waiting' else 2)
+                reply = self.call('/poll', state=self.state, native_id=self.native_id, after=self.after, io_only=not full_poll)
+                if full_poll:
+                    last_heartbeat = time.monotonic()
+                    heartbeat_state = self.state
+                    expiry = reply['expiry_minutes']
+                    action_closed = reply['action_closed']
                 if reply['close']:
                     break
-                if workspace.repo and reply['action_closed'] and (previous_closed is False or (ran_turn and self.state == 'idle')):
+                if workspace.repo and action_closed and (previous_closed is False or (ran_turn and self.state == 'idle')):
                     break
-                previous_closed = reply['action_closed']
+                previous_closed = action_closed
                 if turn_started and time.monotonic() - turn_started > settings.get('agent_timeout_seconds', 1200):
                     exit_state = 'failed'
                     break
-                if self.state == 'waiting' and reply['granted']:
+                if self.state == 'waiting' and reply.get('granted'):
                     control.with_suffix('.permit').touch()
                 if dimensions != (reply['rows'], reply['cols']):
                     dimensions = (reply['rows'], reply['cols'])

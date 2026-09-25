@@ -145,6 +145,28 @@ def test_stale_worker_releases_capacity(workspace):
     assert db.heartbeat_session(s['id'],c['token'],'running','native',1)['close']
 
 
+def test_fast_terminal_poll_preserves_lease_cursor_and_close(workspace, authenticated_client, monkeypatch):
+    api, module, actions, _ = workspace
+    db = api.store()
+    s = db.start_session(create_action(actions)['id'], {}, 'test')
+    claimed = db.claim_session(s['id'], 'test')
+    db.io(s['id'], 'in', 'one', 'hello')
+    def unexpected(*args, **kwargs):
+        raise AssertionError('Fast input delivery must not query the action service')
+    monkeypatch.setattr(module, 'action_call', unexpected)
+    path = '/api/hfl-agent/terminals/'+s['id']+'/poll'
+    payload = {'token':claimed['token'], 'io_only':True, 'after':0}
+    reply = post(authenticated_client, path, payload, True).json()
+    assert [event['data'] for event in reply['input']] == ['hello']
+    assert not reply['close']
+    assert 'granted' not in reply
+    payload['after'] = reply['input'][-1]['seq']
+    assert post(authenticated_client, path, payload, True).json()['input'] == []
+    assert post(authenticated_client, path, {**payload, 'token':'bad'}, True).status_code == 409
+    db.edit_session(s['id'], closed=True)
+    assert post(authenticated_client, path, payload, True).json()['close']
+
+
 def test_expiry_settings_validation():
     from modules.app_settings.store import validate_settings
     assert validate_settings({})['agent_session_expiry_minutes'] == 60
@@ -164,11 +186,14 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         browser = p.chromium.launch(channel='chrome',headless=True)
         page = browser.new_page(viewport={'width':1440,'height':1000})
         errors=[]
+        input_requests=[]
         page.on('pageerror',lambda e:errors.append(str(e)))
         def route(r):
             parsed=urlparse(r.request.url)
+            if parsed.path.endswith('/input'):
+                input_requests.append(json.loads(r.request.post_data)['data'])
             if parsed.path=='/':
-                r.fulfill(content_type='text/html',body='<html><body style="background:#080f1e;color:white"><script type="application/json" data-memory-csrf>'+json.dumps(owner_headers()['X-CSRF-Token'])+'</script></body></html>')
+                r.fulfill(content_type='text/html',body='<html><body style="background:#080f1e;color:white;font-family:Arial,sans-serif"><script type="application/json" data-memory-csrf>'+json.dumps(owner_headers()['X-CSRF-Token'])+'</script></body></html>')
             else:
                 response=authenticated_client.request(r.request.method,parsed.path+('?' + parsed.query if parsed.query else ''),content=r.request.post_data,headers={k:v for k,v in r.request.headers.items() if k.lower() in {'content-type','x-csrf-token'}})
                 r.fulfill(status=response.status_code,content_type='application/json',body=response.content)
@@ -179,7 +204,10 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         for name in ('vendor/xterm-5.5.0.js','vendor/xterm-addon-fit-0.10.0.js','js/action-agent-workspace.js','js/hfl-agent-bridge.js'):
             page.add_script_tag(path=str(frontend/'static'/name))
         page.evaluate('(item)=>window.hflAgentBridge.open("actionable",item.id,item.title)',item)
-        page.get_by_text('Start a native Hermes session, or run the Initial prompt below.').wait_for()
+        page.get_by_text('Start a native Hermes session, or use Run now for the Initial prompt.').wait_for()
+        sidebar = page.get_by_role('complementary', name='Action information and controls')
+        assert sidebar.locator('.agent-action-summary').inner_text().find(item['prompt']) >= 0
+        assert sidebar.locator('.agent-results-task input, .agent-results-task textarea').count() == 0
         assert not page.locator('.agent-details').evaluate('(e)=>e.open')
         page.get_by_text('Agent details',exact=True).click()
         page.get_by_role('button',name='Configure agent',exact=True).click()
@@ -197,11 +225,33 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         link.wait_for()
         assert authenticated_client.get(urlparse(link.get_attribute('href')).path).content == b'Generated text'
         assert page.get_by_text('No results yet', exact=True).count() == 0
-        controls = page.locator('.action-agent-workspace > .agent-terminal-controls')
-        tops = controls.locator('select, button').evaluate_all('(nodes)=>nodes.map(n=>Math.round(n.getBoundingClientRect().top))')
-        assert max(tops)-min(tops) <= 3
+        assert sidebar.get_by_role('combobox', name='Agent session').count() == 1
+        terminal = page.get_by_label('Native Hermes terminal')
+        before = terminal.bounding_box()
+        assert .18 < sidebar.bounding_box()['width']/page.locator('.action-agent-dialog').bounding_box()['width'] < .25
+        sidebar.evaluate('(el)=>{el.scrollTop=el.scrollHeight;}')
+        assert sidebar.evaluate('(el)=>el.scrollTop') > 0
+        assert terminal.bounding_box() == before
+        assert page.locator('.action-agent-dialog').evaluate('(el)=>el.scrollHeight<=el.clientHeight+1')
+        page.get_by_text('Starting Hermes…', exact=True).wait_for()
+        page.locator('.xterm-helper-textarea').focus()
+        typed = 'typing should preserve every character in order'
+        page.keyboard.type(typed)
+        import time
+        deadline = time.monotonic()+5
+        while ''.join(input_requests) != typed and time.monotonic()<deadline:
+            page.wait_for_timeout(50)
+        assert ''.join(input_requests) == typed
+        assert len(input_requests) < len(typed)
+        sidebar.evaluate('(el)=>{el.scrollTop=0;}')
         page.screenshot(path=str(tmp_path/'actions-agent-desktop.png'))
         page.set_viewport_size({'width':390,'height':844})
+        playwright.expect(sidebar).not_to_be_visible()
+        assert terminal.bounding_box()['width'] > 300
+        page.get_by_role('button', name='Action details', exact=True).click()
+        playwright.expect(sidebar).to_be_visible()
+        page.get_by_role('button', name='Action details', exact=True).click()
+        playwright.expect(sidebar).not_to_be_visible()
         page.screenshot(path=str(tmp_path/'actions-agent-mobile.png'))
         assert not errors
         browser.close()

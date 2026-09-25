@@ -37,9 +37,10 @@ def effective(source_id):
 
 @owner.get('/actions/{source_id}/configuration')
 def configuration(source_id: str):
-    bridge.checked(bridge.action_call, 'GET', '/' + source_id)
+    action = bridge.checked(bridge.action_call, 'GET', '/' + source_id)['item']
     configs = store().configs()
-    return {'effective': effective(source_id), 'defaults': read_settings(),
+    return {'action': {key: action.get(key, '') for key in ('title','status','prompt','expected_outcome','description','notes','completion_note','due_date')},
+            'effective': effective(source_id), 'defaults': read_settings(),
             'card': configs.get('card:' + source_id, {'preset': '', 'overrides': {}}),
             'presets': {key[7:]: value for key, value in configs.items() if key.startswith('preset:')}}
 
@@ -156,6 +157,11 @@ def terminal_attachment(identity: str, attachment_id: str, request: Request):
 @worker.post('/terminals/{identity}/poll')
 def terminal_poll(identity: str, payload: dict):
     db = store()
+    if payload.get('io_only') is True:
+        session = bridge.checked(db.verify, identity, payload.get('token'))
+        return {'input': db.read_io(identity, 'in', max(0, int(payload.get('after', 0)))),
+                'cols': session['cols'], 'rows': session['rows'],
+                'close': bool(session['closed']) or session['state'] in {'closed','expired','failed'}}
     control = bridge.checked(db.heartbeat_session, identity, payload.get('token'), payload.get('state'), str(payload.get('native_id', '')), read_settings()['agent_concurrency'])
     control['input'] = db.read_io(identity, 'in', max(0, int(payload.get('after', 0))))
     control['expiry_minutes'] = read_settings()['agent_session_expiry_minutes']
