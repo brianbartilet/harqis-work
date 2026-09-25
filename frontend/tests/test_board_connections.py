@@ -164,7 +164,17 @@ def test_connection_controls_browser(ideas, authenticated_client, width, tmp_pat
         panel.get_by_role('button', name='Close', exact=True).click()
         a, b = point(source_id), point(target_id)
         def click_line():
+            clear = page.get_by_role('menuitem', name='Clear selection', exact=True)
+            if clear.count():
+                clear.click()
             page.wait_for_function("document.querySelector('#kg-canvas canvas')?.testCurvePoint")
+            page.wait_for_function("""() => {
+                const canvas=document.querySelector('#kg-canvas canvas');
+                const key=JSON.stringify([canvas.__zoom,canvas.testCurvePoint]);
+                if(window.lineTestPoint!==key){window.lineTestPoint=key;window.lineTestChanged=performance.now();return false;}
+                // force-graph refreshes its hit-test canvas on an 800ms throttle.
+                return performance.now()-window.lineTestChanged>900;
+            }""")
             point = canvas.evaluate('el => el.testCurvePoint')
             page.mouse.move(point['x'], point['y'])
             page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')

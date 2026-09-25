@@ -210,7 +210,7 @@ def test_board_sidebar_order_collapse_and_saved_lines_browser(ideas, authenticat
             sidebar=page.locator('.kg-boards')
             expect(sidebar.get_by_role('button',name='Explore Activity Graph')).to_be_visible()
             assert sidebar.locator('.board-controls button').all_text_contents()==[
-                'Copy selected','Paste','Delete selected','New list','Add thought','Attach existing','Ask agent','Save now','Save layout','Settings','Delete']
+                'Add to board','Add thought','Add new idea','Add new action','Add new list','Attach existing','Ask agent','Save now','Save layout','Settings','Delete']
             width=sidebar.bounding_box()['width']
             sidebar.locator('[data-section=boards] > summary').click()
             expect(sidebar.locator('[data-section=boards] .board-list')).not_to_be_visible()
@@ -257,6 +257,7 @@ def test_board_sidebar_order_collapse_and_saved_lines_browser(ideas, authenticat
             sidebar.locator('[data-section=goals] > summary').click()
             page.wait_for_function('window.boardLineStrokes>0')
             page.evaluate('window.boardLineStrokes=0')
+            sidebar.get_by_role('button',name='Add to board',exact=True).click()
             sidebar.get_by_role('button',name='Add thought',exact=True).click()
             page.get_by_label('Thought',exact=True).fill('After save')
             page.get_by_role('button',name='Save thought',exact=True).click()
@@ -369,6 +370,7 @@ def test_board_edits_work_while_save_is_slow_and_retry(ideas, authenticated_clie
             dialog.get_by_role('button',name='Save board',exact=True).click()
             expect(page.locator('#kg-map-count')).to_contain_text('1 nodes')
             hold = True
+            page.locator('.board-controls').get_by_role('button',name='Add to board',exact=True).click()
             page.locator('.board-controls').get_by_role('button',name='Add thought',exact=True).click()
             dialog.get_by_label('Thought',exact=True).fill('Second thought')
             dialog.get_by_role('button',name='Save thought',exact=True).click()
@@ -399,9 +401,9 @@ def test_board_edits_work_while_save_is_slow_and_retry(ideas, authenticated_clie
                 if kind == 'Action':
                     dialog.locator('.action-details > summary').click()
                     dialog.get_by_label('Expected outcome').fill('Validate this thought')
-                dialog.get_by_role('button',name='Create',exact=True).click()
+                dialog.get_by_role('button',name='Add to current board',exact=True).click()
                 expect(dialog.locator('.editor-save-status')).to_have_text('Saved')
-                dialog.get_by_role('button',name='Close',exact=True).click()
+                dialog.get_by_role('button',name='Close editor',exact=True).click()
                 page.wait_for_timeout(250)
                 if dialog.count():
                     assert not dialog.locator('.idea-error').inner_text(), dialog.inner_text()
@@ -592,6 +594,12 @@ def test_attach_choices_paging_permissions_and_saved_members(ideas, authenticate
     assert [n['label'] for n in matches['nodes']] == ['Choice 02']
     assert authenticated_client.patch(url,json={'version':2,'members':[selected,'idea:'+hidden['id']]}).status_code == 404
     assert authenticated_client.get(url+'/attach-options?offset=-1').status_code == 422
+    filtered = authenticated_client.get(url+'/attach-options?kinds=ideas').json()
+    assert filtered['nodes'] and all(n['kind'] == 'ideas' for n in filtered['nodes'])
+    assert 'ideas' in filtered['kinds']
+    assert authenticated_client.patch(url,json={'version':2,'members':[]}).status_code == 200
+    restored = authenticated_client.get(url+'/attach-options?query='+first['nodes'][0]['label']).json()
+    assert selected in {n['id'] for n in restored['nodes']}
 
 
 def test_attach_picker_loading_retry_and_paging_browser(ideas, authenticated_client, tmp_path):
@@ -768,5 +776,77 @@ def test_delete_board_feedback_failure_and_activity_transition_browser(ideas, au
             graphs.pop().fulfill(json={'nodes':[],'edges':[],'sources':[]})
             expect(status).to_have_text('Board deleted · All activity')
             expect(page.locator('#kg-workspace')).not_to_have_attribute('inert','')
+        finally:
+            browser.close()
+
+
+def test_reattach_list_restores_hidden_children(ideas):
+    from workflows.hfl.intent_reuse import list_graph
+    idea = ideas.save_idea(payload(), 'owner')
+    list_id = 'list:idea:' + idea['id'] + ':list'
+    nodes, _ = list_graph(ideas.snapshot())
+    child = next(n['id'] for n in nodes if n.get('list_id') == list_id)
+    board = ideas.save_map(board_payload(members=[list_id]))
+    board = ideas.save_map({'version':board['version'], 'members':[], 'hidden_members':[child]}, board['id'])
+    board = ideas.save_map({'version':board['version'], 'members':[list_id]}, board['id'])
+    assert child not in board['hidden_members']
+
+
+def test_board_clone_destinations_and_idea_menu_browser(ideas, authenticated_client, tmp_path):
+    from urllib.parse import urlparse
+    from playwright.sync_api import sync_playwright, expect
+    idea = ideas.save_idea(payload(title='Original idea'), 'owner')
+    board = ideas.save_map(board_payload(members=['idea:'+idea['id']],edges=[{'source':'draft:seed','target':'idea:'+idea['id'],'relation':'related-to'}]))
+    other = ideas.save_map(board_payload(name='Other board'))
+    with sync_playwright() as engine:
+        browser = engine.chromium.launch(channel='chrome', headless=True)
+        try:
+            page = browser.new_page(viewport={'width':1440,'height':1000})
+            errors=[]
+            page.on('pageerror',lambda error:errors.append(str(error)))
+            def respond(route):
+                r=route.request;u=urlparse(r.url)
+                response=authenticated_client.request(r.method,u.path+('?' + u.query if u.query else ''),content=r.post_data_buffer,headers={'content-type':'application/json'})
+                route.fulfill(status=response.status_code,body=response.content,headers={'content-type':response.headers.get('content-type','text/html')})
+            page.route('https://board-flow.test/**',respond)
+            page.goto('https://board-flow.test/hfl-corpus/graph?board='+board['id'])
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            page.locator('#kg-list').get_by_role('button').filter(has_text='Original idea').click()
+            menu=page.get_by_role('menu',name='Orb actions')
+            for label in ('Edit idea','Dismiss idea','Promote to action','Create connected action','Clone idea'):
+                expect(menu.get_by_role('menuitem',name=label,exact=True)).to_be_visible()
+            assert menu.get_by_role('group',name='Board',exact=True).get_by_role('menuitem').all_text_contents()[-1]=='Remove from board'
+            menu.get_by_role('menuitem',name='Board connections',exact=True).click()
+            connections=page.get_by_role('dialog',name='Board connections',exact=True)
+            expect(connections.locator('.board-connection-heading')).to_have_text('Packing')
+            page.screenshot(path=str(tmp_path/'board-connections.png'))
+            connections.get_by_role('button',name='Close editor',exact=True).click()
+            menu.get_by_role('menuitem',name='Clone idea',exact=True).click()
+            editor=page.get_by_role('dialog',name='New idea',exact=True)
+            expect(editor.get_by_role('button',name='Add to current board',exact=True)).to_be_visible()
+            editor.get_by_role('button',name='Add to another board',exact=True).click()
+            picker=page.get_by_role('dialog',name='Add to board',exact=True)
+            expect(picker.get_by_role('button',name='Other board',exact=True)).to_be_visible()
+            assert picker.get_by_role('button',name=board['name'],exact=True).count()==0
+            copy=next(i for i in ideas.ideas() if i['title']=='Original idea (1)')
+            assert 'idea:'+copy['id'] not in ideas.map(board['id'])['members']
+            picker.get_by_role('button',name='Other board',exact=True).click()
+            expect(picker.get_by_text('Added to Other board',exact=True)).to_be_visible()
+            assert 'idea:'+copy['id'] in ideas.map(other['id'])['members']
+            picker.get_by_role('button',name='Close editor',exact=True).click()
+            editor.get_by_role('button',name='Close editor',exact=True).click()
+            page.locator('.board-controls').get_by_role('button',name='Attach existing',exact=True).click()
+            picker=page.get_by_role('dialog',name='Attach existing context')
+            expect(picker.get_by_role('button',name='All',exact=True)).to_have_attribute('aria-pressed','true')
+            picker.locator('.idea-type-filters').get_by_role('button',name='ideas',exact=True).click()
+            expect(picker.locator('.idea-type-filters').get_by_role('button',name='ideas',exact=True)).to_have_attribute('aria-pressed','true')
+            page.screenshot(path=str(tmp_path/'board-attach-filters.png'))
+            picker.get_by_role('button',name='Close editor',exact=True).click()
+            menu.get_by_role('menuitem',name='Clone idea',exact=True).click()
+            editor.get_by_role('button',name='Add to current board',exact=True).click()
+            expect(editor.locator('.editor-save-status')).to_have_text('Saved')
+            copy=next(i for i in ideas.ideas() if i['title']=='Original idea (2)')
+            assert 'idea:'+copy['id'] in ideas.map(board['id'])['members']
+            assert not errors
         finally:
             browser.close()

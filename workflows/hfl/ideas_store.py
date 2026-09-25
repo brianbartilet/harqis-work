@@ -189,6 +189,10 @@ class IdeasStore(BoardStoreMixin):
             raise ValueError('Invalid map membership.')
         from workflows.hfl.intent_reuse import list_graph
         list_nodes, _ = list_graph(self.snapshot()) if any(i.startswith('list:') for i in members) else ([], [])
+        added_members = set(members) - set(previous.get('members', []))
+        restored = added_members | {n['id'] for n in list_nodes if n.get('list_id') in added_members}
+        if isinstance(item.get('hidden_members'), list):
+            item['hidden_members'] = [i for i in item['hidden_members'] if i not in restored]
         extra_ids = {n['id'] for n in list_nodes if n.get('list_id') in members} - set(item.get('hidden_members', []))
         if isinstance(item.get('edges', []), list):
             item['edges'] = [e for e in item.get('edges', []) if not isinstance(e, dict) or any(not isinstance(e.get(k), str) for k in ('source', 'target')) or all(not e[k].startswith('thought:') or e[k] in extra_ids or e[k] in members for k in ('source', 'target'))]

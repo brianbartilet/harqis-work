@@ -95,7 +95,8 @@
       const section=node('section',null,'followups-lane ideas-drawer');section.dataset.status='ideas';section.setAttribute('aria-label','Ideas');
       const header=node('div',null,'ideas-drawer-header');header.append(node('h3','Ideas · '+ideaRows.length));
       section.append(header);
-      for(const item of ideaRows){
+      const newestIdeas=[...ideaRows].sort((a,b)=>(Date.parse(b.created_at)||0)-(Date.parse(a.created_at)||0));
+      for(const item of newestIdeas){
         const card=node('article',null,'agenda-card idea-board-card');card.dataset.ideaId=item.id;
         const grip=node('button','⠿','action-drag-handle');grip.type='button';grip.setAttribute('aria-label','Drag idea '+item.title);
         const clone=node('button','⧉','action-clone-handle');clone.type='button';clone.setAttribute('aria-label','Clone '+item.title);clone.onclick=()=>window.HflIdeas.cloneObject('idea',item.id);

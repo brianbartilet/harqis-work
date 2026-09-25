@@ -275,6 +275,27 @@ def test_live_list_and_board_clipboard_browser(ideas, authenticated_client, tmp_
         page.route('https://lists.test/**', respond)
         page.goto('https://lists.test/hfl-corpus/graph?board=' + board['id'])
         expect(page.locator('#kg-map-count')).to_contain_text('3 nodes')
+        canvas = page.locator('#kg-canvas canvas').first
+        page.wait_for_function("document.querySelector('#kg-canvas canvas')?.__zoom?.k > 0")
+        page.wait_for_function("""() => {
+            const z=document.querySelector('#kg-canvas canvas').__zoom,key=JSON.stringify(z);
+            if(window.dragTestZoom!==key){window.dragTestZoom=key;window.dragTestChanged=performance.now();return false;}
+            return performance.now()-window.dragTestChanged>250;
+        }""")
+        before = page.evaluate('window.HflIdeas.maps.getPositions()')
+        child_id = next(n['id'] for n in page.evaluate('[...window.HflIdeas.maps.nodes.values()]') if n.get('list_id') == list_id)
+        point = canvas.evaluate('''(el,id) => {const p=window.HflIdeas.maps.getPositions()[id],z=el.__zoom,b=el.getBoundingClientRect();return {x:b.x+z.x+p.x*z.k,y:b.y+z.y+p.y*z.k};}''', list_id)
+        page.mouse.move(point['x'], point['y'])
+        expect(page.get_by_role('button',name='Increase orb size')).to_be_visible()
+        page.mouse.down()
+        page.mouse.move(point['x']+35, point['y']+50, steps=12)
+        page.mouse.up()
+        page.evaluate('window.HflIdeas.maps.flush()')
+        after = page.evaluate('window.HflIdeas.maps.getPositions()')
+        for axis in ('x', 'y'):
+            assert after[child_id][axis]-before[child_id][axis] == pytest.approx(after[list_id][axis]-before[list_id][axis], abs=1)
+        assert after[list_id] != before[list_id]
+        assert after['draft:one'] == before['draft:one']
         node_list = page.locator('#kg-list')
         node_list.get_by_role('button').filter(has_text='Independent thought').click()
         page.keyboard.press('Control+c')
@@ -291,7 +312,8 @@ def test_live_list_and_board_clipboard_browser(ideas, authenticated_client, tmp_
         modal.get_by_role('button', name='Save list', exact=True).click()
         expect(page.locator('#kg-detail').get_by_role('heading', name='Synced list', exact=True)).to_be_visible()
         assert ideas.idea(idea['id'])['checklists'][0]['title'] == 'Synced list'
-        page.locator('.board-controls').get_by_role('button', name='New list', exact=True).click()
+        page.locator('.board-controls').get_by_role('button', name='Add to board', exact=True).click()
+        page.locator('.board-controls').get_by_role('button', name='Add new list', exact=True).click()
         modal = page.locator('dialog[open]').last
         modal.get_by_label('Checklist name').fill('Standalone')
         modal.get_by_role('button', name='Add item', exact=True).click()

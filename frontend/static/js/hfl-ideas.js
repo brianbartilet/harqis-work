@@ -189,9 +189,9 @@ window.HflObjectDescription = (item = {}) => {
       files = attachmentEditor(attachmentsSection, kind === 'idea' ? 'idea' : 'actionable', current?.id);
       checklists.updateConversion();
       for (const event of ['input', 'change', 'click']) d.form.addEventListener(event, () => queueMicrotask(() => checklists.updateConversion()));
-      save = el('button', current ? 'Save now' : 'Create'); save.type = 'submit'; d.footer.append(save);
+      save = el('button', current ? 'Save now' : editingBoard ? 'Add to current board' : 'Create'); save.type = 'submit'; d.footer.append(save);
       save.hidden = kind === 'idea' && !!current;
-      let linked = !!current, copiedLoaded = false;
+      let linked = !!current, copiedLoaded = false, attachToCurrent = true;
       const persistEditor = async () => {
           d.error.textContent = '';
           files.validate();
@@ -219,12 +219,15 @@ window.HflObjectDescription = (item = {}) => {
           const nodeId = (kind === 'idea' ? 'idea:' : 'action:') + current.id;
           maps.cacheNode({...current,id:nodeId,object_id:current.id,label:current.title,kind:kind === 'idea' ? 'ideas' : 'actions'});
           if (!linked) {
-          if(parent?.kind==='drafts') {
+          if(attachToCurrent && parent?.kind==='drafts') {
             if(maps.current?.id!==editingBoard)throw Error('Return to the original board to finish linking this saved object.');
             await maps.persist({members:[...new Set([...maps.current.members,nodeId])],edges:[...maps.current.edges.filter(e=>!(e.source===parent.id&&e.target===nodeId)),{source:parent.id,target:nodeId,relation:'related-to'}]});
           } else {
-            if(parent)await api('/links','POST',{source:parent.id,target:nodeId,relation:parent.kind==='daily'?'source-date':'related-to'});
-            await maps.addMembers([nodeId,...(parent?[parent.id]:[])]);
+            if(parent && parent.kind!=='drafts')await api('/links','POST',{source:parent.id,target:nodeId,relation:parent.kind==='daily'?'source-date':'related-to'});
+            if(attachToCurrent){
+              if(editingBoard && maps.current?.id!==editingBoard)throw Error('Return to the original board to finish adding this object.');
+              await maps.addMembers([nodeId,...(parent?[parent.id]:[])]);
+            }
           }
           linked = true;
           }
@@ -243,7 +246,8 @@ window.HflObjectDescription = (item = {}) => {
       });
       if(current)window.HflEditorLocation(kind,current.id);
       d.form.onsubmit=async event=>{event.preventDefault();try{await state.flush();checklists.updateConversion();}catch(e){d.error.textContent=e.message;}};
-      d.footer.append(button('Add to board',async()=>{try{await state.flush();await addToBoard(kind,current);}catch(e){d.error.textContent=e.message;}}));
+      const otherBoard=button(editingBoard?'Add to another board':'Add to board',async()=>{otherBoard.disabled=true;try{attachToCurrent=false;await state.flush();await addToBoard(kind,current,null,null,editingBoard);}catch(e){d.error.textContent=e.message;}finally{attachToCurrent=true;otherBoard.disabled=false;}});
+      d.footer.append(otherBoard);
     } catch (error) { d.error.textContent = error.message; }
   }
   async function cloneObject(kind, id) {
@@ -273,7 +277,7 @@ window.HflObjectDescription = (item = {}) => {
     try { const data = await api('/objects/' + id + '/conversion?' + new URLSearchParams({checklist_id: checklistId, item_id: itemId})); d.node.close(); await openEditor('actionable', data.item, null, {...data, id}); }
     catch (error) { d.error.textContent = error.message; }
   }
-  async function addToBoard(kind, item, list = null, task = null) {
+  async function addToBoard(kind, item, list = null, task = null, excludeBoard = null) {
     const d = dialog('Add to board'); d.node.classList.add('board-picker');
     d.footer.replaceChildren();
     const status = el('p','Loading boards…'); d.body.append(status);
@@ -283,6 +287,7 @@ window.HflObjectDescription = (item = {}) => {
     const hasItem=board=>task?(board.drafts||[]).some(t=>(t.body||'').includes('edit='+encodeURIComponent(item.id))&&(t.body||'').includes('item='+encodeURIComponent(task.id))):(board.members||[]).includes(sourceId);
     const choices=el('div',undefined,'board-picker-cards');d.body.append(choices);
     async function attach(board) {
+      if(maps.current?.id===board.id)await maps.flush();
       const current=(await api('/maps/'+board.id)).item;
       if(hasItem(current))return current;
       const changes={version:current.version,members:[...new Set([...current.members,sourceId])]};
@@ -290,15 +295,18 @@ window.HflObjectDescription = (item = {}) => {
         changes.drafts=[...current.drafts,{id:thoughtId,title:task.text.slice(0,200),body:'Source checklist: '+list.title+'\n\n[Open source item]('+href+')\n\n'+task.text}];
         changes.edges=[...current.edges,{source:sourceId,target:thoughtId,relation:'related-to'}];
       }
-      return (await api('/maps/'+board.id,'PATCH',changes)).item;
+      const saved=(await api('/maps/'+board.id,'PATCH',changes)).item;
+      if(maps.current?.id===board.id){maps.queues.delete(board.id);await maps.reload();}
+      return saved;
     }
     function card(board) {
+      if(board.id===excludeBoard)return;
       const row=el('section',undefined,'board-picker-card');row.style.setProperty('--board-color',board.color||'#f59e0b');
       row.append(el('h3',board.name),el('p',board.purpose||'No description'));
       const membership=el('p',hasItem(board)?'Already added to this board':'','board-hint');membership.setAttribute('role','status');
       const add=button(board.name,async()=>{
-        add.disabled=true;d.error.textContent='';
-        try{await attach(board);membership.textContent='Already added to this board';status.textContent='Added to '+board.name;add.textContent='Added';changed();}
+        add.disabled=true;d.error.textContent='';status.textContent='Adding to '+board.name+'…';add.textContent='Adding…';
+        try{await attach(board);membership.textContent='Already added to this board';status.textContent='Added to '+board.name;add.textContent='Added';changed(null,false,true);}
         catch(e){d.error.textContent=e.message;add.disabled=false;}
       });add.textContent=hasItem(board)?'Added':'Add to board';add.setAttribute('aria-label',board.name);add.disabled=hasItem(board);
       const link=el('a','Open board');link.href='/hfl-corpus/graph?'+new URLSearchParams({board:board.id});
@@ -355,8 +363,10 @@ window.HflObjectDescription = (item = {}) => {
     const d = dialog('Attach existing context');
     d.node.classList.add('idea-attach-dialog');
     const search = field(d.body, '', 'Search', '', 'search'), list = el('div', undefined, 'idea-choices');
+    const filters=el('div',undefined,'idea-type-filters');filters.setAttribute('aria-label','Filter by entity type');
+    const selectedKinds=new Set();
     const status = el('div', '', 'idea-picker-status'), pages = el('div', undefined, 'idea-picker-pages');
-    status.setAttribute('role', 'status'); d.body.append(status, list, pages);
+    status.setAttribute('role', 'status'); d.body.append(filters,status, list, pages);
     d.form.onsubmit = event => event.preventDefault();
     let offset = 0, timer, controller, generation = 0;
     const cancel = () => { generation++; controller?.abort(); clearTimeout(timer); };
@@ -370,18 +380,27 @@ window.HflObjectDescription = (item = {}) => {
     async function load() {
       cancel(); const current = generation; controller = new AbortController(); loading();
       try {
-        const data = await request(base + '/maps/' + boardId + '/attach-options?' + new URLSearchParams({query:search.value.trim(),offset}),
+        await maps.flush();
+        const data = await request(base + '/maps/' + boardId + '/attach-options?' + new URLSearchParams({query:search.value.trim(),offset,kinds:[...selectedKinds].join(',')}),
           {signal:AbortSignal.any([controller.signal, AbortSignal.timeout(45000)])});
         if (current !== generation || !d.node.open) return;
+        filters.replaceChildren();
+        for(const kind of ['',...(data.kinds||[])]){
+          const pill=button(kind?(window.HflGraphAppearance?.kindLabel(kind)||kind):'All',()=>{if(kind){selectedKinds.has(kind)?selectedKinds.delete(kind):selectedKinds.add(kind);}else selectedKinds.clear();offset=0;load();});
+          pill.setAttribute('aria-pressed',String(kind?selectedKinds.has(kind):!selectedKinds.size));
+          if(kind){const dot=el('span',undefined,'idea-attach-dot');dot.style.background=window.HflGraphAppearance?.color(kind)||'#94a3b8';pill.prepend(dot);}filters.append(pill);
+        }
         list.replaceChildren();list.scrollTop=0;
         status.textContent = data.total ? 'Most recently updated · ' + (offset + 1) + '–' + Math.min(offset + 50, data.total) + ' of ' + data.total : '';
         data.nodes.filter(n => !maps.current?.members.includes(n.id)).forEach(n => {
           const kind = window.HflGraphAppearance?.kindLabel(n.kind) || n.kind.replaceAll('_', ' ');
           const choice = button('', async () => {
+            if(choice.disabled)return;choice.disabled=true;list.inert=true;status.textContent='Attaching '+n.label+'…';d.node.setAttribute('aria-busy','true');
             try {
               if (maps.current?.id !== boardId) throw Error('Return to this board before attaching.');
-              maps.cacheNode(n); await maps.addMembers([n.id]); d.node.close(); changed();
+              maps.cacheNode(n); await maps.addMembers([n.id]); await maps.flush(); d.node.close(); changed(null,false,true);
             } catch (error) { d.error.textContent = error.message; }
+            finally{choice.disabled=false;list.inert=false;d.node.removeAttribute('aria-busy');}
           });
           choice.className='idea-attach-choice';choice.title=n.label;choice.setAttribute('aria-label',n.label+' · '+kind);
           const label=el('span',n.label,'idea-attach-title'),entity=el('span',kind,'idea-attach-entity'),dot=el('span',undefined,'idea-attach-dot');
@@ -544,7 +563,12 @@ window.HflObjectDescription = (item = {}) => {
     if (!node) return;
     if (maps.current) root.append(button(boardSelection.has(node.id)?'Deselect object':'Select for copy / delete',()=>{selectBoardNode(node.id,true);changed();}));
     if (node.kind==='lists'||node.kind==='thoughts') root.append(button('Edit live list',()=>editList(node.list_id||node.id)));
-    if (['ideas','actions'].includes(node.kind)) root.append(button('Clone',()=>cloneObject(node.kind==='ideas'?'idea':'actionable',node.object_id)));
+    if (['ideas','actions'].includes(node.kind)) root.append(button(node.kind==='ideas'?'Clone idea':'Clone action',()=>cloneObject(node.kind==='ideas'?'idea':'actionable',node.object_id)));
+    if(maps.current&&['lists','thoughts','drafts'].includes(node.kind))root.append(button(node.kind==='lists'?'Clone list':'Clone thought',()=>runBoardCommand(async()=>{
+      await maps.flush();maps.status.textContent='Cloning '+node.label+'…';
+      const result=await api('/maps/'+maps.current.id+'/paste','POST',{source_board:maps.current.id,source_version:maps.current.version,selected:[node.id],version:maps.current.version,request_id:crypto.randomUUID()});
+      maps.queues.delete(maps.current.id);await maps.reload();changed(Object.values(result.mapping)[0],false,true);
+    })));
     if(['drafts','goals'].includes(node.kind)){
       const key=node.kind==='drafts'?maps.current.id+'/'+node.id:node.id;
       const memory=el('a','View memory history','idea-inspector-status');
@@ -568,8 +592,13 @@ window.HflObjectDescription = (item = {}) => {
       pill.dataset.status = status.replaceAll(' ', '-');
       row.append(el('span', 'Status'), pill);root.append(row);
     }
-    if (node.kind === 'ideas') root.append(button('Edit idea / checklists', () => editIdea(node.object_id)), button('Create action', () => convert(node.object_id)));
-    if (node.kind === 'actions') root.append(button('Edit action / status', async () => { try { const {item} = await request('/hfl-corpus/timeline/items/' + node.object_id); openEditor('actionable', item); } catch (error) { const d = dialog('Action unavailable'); d.error.textContent = error.message; } }));
+    if (node.kind === 'ideas') root.append(button('Edit idea', () => editIdea(node.object_id)), button('Promote to action', () => convert(node.object_id)),button('Create connected action',()=>openEditor('actionable',{},node)),button(node.status==='dismissed'?'Restore idea':'Dismiss idea',async()=>{
+      try{const {item}=await api('/objects/'+node.object_id);await api('/objects/'+node.object_id,'PATCH',{version:item.version,status:item.status==='dismissed'?'suggested':'dismissed'});changed(null,false,true);}catch(error){maps.status.textContent=error.message;}
+    }));
+    if (node.kind === 'actions') root.append(button('Edit action', async () => { try { const {item} = await request('/hfl-corpus/timeline/items/' + node.object_id); openEditor('actionable', item); } catch (error) { const d = dialog('Action unavailable'); d.error.textContent = error.message; } }));
+    if(node.kind==='actions')root.append(button(node.status==='dismissed'?'Restore action':'Dismiss action',async()=>{
+      try{const {item}=await request('/hfl-corpus/timeline/items/'+node.object_id);await request('/hfl-corpus/timeline/items/'+node.object_id,{method:'PATCH',body:JSON.stringify({version:item.version,status:item.status==='dismissed'?'open':'dismissed'})});changed(null,false,true);}catch(error){maps.status.textContent=error.message;}
+    }));
     if (!maps.current && ['entries', 'daily', 'topics', 'tools', 'ideas', 'actions', 'goals'].includes(node.kind)) {
       const menu = el('div', undefined, 'idea-add-menu'), panel = el('div', undefined, 'idea-add-options');
       panel.id = 'idea-add-' + crypto.randomUUID(); panel.hidden = true; panel.setAttribute('role', 'menu'); panel.setAttribute('aria-label', 'Add object');
@@ -595,8 +624,21 @@ window.HflObjectDescription = (item = {}) => {
     if (maps.current) root.append(button('Remove from board', () => maps.removeMember(node.id)));
     const local = edges.filter(e => e.local && (e.source === node.id || e.target === node.id));
     if (local.length) root.append(button('Board connections', () => {
-      const d = dialog('Board connections');
-      for (const edge of local) { const row = el('p', edge.relation + ' · ' + (maps.nodeLabels?.[edge.source === node.id ? edge.target : edge.source] || (edge.source === node.id ? edge.target : edge.source))); row.append(button('Remove connection', async () => { try { await maps.persist({edges: maps.current.edges.filter(e => !(e.source === edge.source && e.target === edge.target && e.relation === edge.relation))}); row.remove(); changed(); } catch (error) { d.error.textContent = error.message; } })); if (!edge.source.startsWith('draft:') && !edge.target.startsWith('draft:')) row.append(button('Promote shared connection', async () => { try { await maps.flush(); await api('/maps/' + maps.current.id + '/promote-link', 'POST', {version:maps.current.version,edge:{source:edge.source,target:edge.target,relation:edge.relation}}); maps.sharedEdges.set(JSON.stringify([edge.source,edge.target,edge.relation]),{source:edge.source,target:edge.target,relation:edge.relation,manual:true}); await maps.reload(); row.remove(); changed(); } catch (error) { d.error.textContent = error.message; } })); d.body.append(row); }
+      const d = dialog('Board connections');d.node.classList.add('board-connections-dialog');
+      d.body.append(el('p','Connections from '+node.label+'. Sharing makes a connection available in the Activity Graph.','board-hint'));
+      const rows=el('div',undefined,'board-connection-list');d.body.append(rows);
+      const empty=()=>{if(!rows.children.length)rows.append(el('p','No board-only connections remain.','board-hint'));};
+      for(const edge of local){
+        const other=edge.source===node.id?edge.target:edge.source,otherNode=maps.nodes.get(other);
+        const row=el('section',undefined,'board-connection-card'),heading=el('div',undefined,'board-connection-heading');
+        const dot=el('span',undefined,'idea-attach-dot');dot.style.background=window.HflGraphAppearance?.color(otherNode?.kind)||'#94a3b8';
+        heading.append(dot,el('strong',maps.nodeLabels?.[other]||otherNode?.label||'Unavailable object'));
+        row.append(heading,el('p',(edge.relation||'related-to').replaceAll('-',' ')+' · '+(edge.source===node.id?'Outgoing':'Incoming'),'board-hint'));
+        const controls=el('div',undefined,'board-connection-actions'),status=el('p','','board-hint');status.setAttribute('role','status');
+        const perform=async task=>{controls.inert=true;status.textContent='Saving connection…';try{await task();row.remove();empty();changed();}catch(error){d.error.textContent=error.message;status.textContent='Could not save. Try again.';}finally{controls.inert=false;}};
+        if(!edge.source.startsWith('draft:')&&!edge.target.startsWith('draft:'))controls.append(button('Share with Activity Graph',()=>perform(()=>maps.promoteConnection(edge))));
+        const remove=button('Remove connection',()=>perform(async()=>{await maps.persist({edges:maps.current.edges.filter(e=>!(e.source===edge.source&&e.target===edge.target&&e.relation===edge.relation))});await maps.flush();}));remove.className='board-connection-remove';controls.append(remove);row.append(controls,status);rows.append(row);
+      }
     }));
     const links = edges.filter(e => e.manual && (e.source === node.id || e.target === node.id));
     if (links.length) root.append(button('Manage links', () => {
@@ -613,6 +655,7 @@ window.HflObjectDescription = (item = {}) => {
   }
   async function copyBoardSelection() {
     if(!maps.current||!boardSelection.size)return;
+    maps.status.textContent='Copying selected objects…';
     await maps.flush();
     const selected=[...boardSelection];
     if(selected.some(id=>!['draft:','list:','thought:','action:','idea:'].some(prefix=>id.startsWith(prefix))))throw Error('Copy is unavailable for entries, goals, and other shared entities.');
@@ -622,6 +665,7 @@ window.HflObjectDescription = (item = {}) => {
   async function pasteBoardSelection() {
     if(!maps.current||!boardClipboard)return;
     await maps.flush();
+    maps.status.textContent='Adding copied objects and their connections…';
     if(!pasteRequest)pasteRequest={...boardClipboard,version:maps.current.version,request_id:crypto.randomUUID(),target:maps.current.id};
     if(pasteRequest.target!==maps.current.id)throw Error('Return to the destination board to retry this paste.');
     const {target,...payload}=pasteRequest;
@@ -694,16 +738,18 @@ window.HflObjectDescription = (item = {}) => {
       const closeAdd=()=>{addOptions.hidden=true;addToggle.setAttribute('aria-expanded','false');};
       addOptions.append(button('Board',()=>{closeAdd();this.edit();}),button('Goal',()=>{closeAdd();editGoal();}));addMenu.append(addToggle,addOptions);addMenu.onkeydown=event=>{if(event.key==='Escape'){closeAdd();addToggle.focus();}};toolbar.append(addMenu);
       const guide=button('Board guide',openBoardGuide);guide.className='board-guide-trigger';guide.setAttribute('aria-haspopup','dialog');toolbar.append(guide);
-      const controls=el('section',undefined,'graph-controls');controls.append(el('h2','Controls'));
-      controls.append(button('Filters',()=>document.getElementById('kg-open-filters').click()),button('Fit graph',()=>document.getElementById('kg-fit').click()),button('Reset layout',()=>document.getElementById('kg-reset').click()));
-      this.root.append(controls,this.objectList('boards'),this.objectList('goals'));
+      this.root.append(this.objectList('boards'),this.objectList('goals'));
       if (!this.current) { this.root.append(this.status); return; }
       const board = this.current, section = el('section', undefined, 'board-controls');section.style.setProperty('--board-color',board.color||this.palette[0]||'#f59e0b'); section.append(el('h2', board.name), el('p', board.purpose, 'board-purpose'));
       const save=button('Save now',()=>this.saveNow());save.className='board-save-now';save.title='Save all pending board edits now';
       const layout=button('Save layout',()=>this.saveLayout());layout.title='Capture current node positions for autosave';
       const remove=button('Delete',()=>this.remove());remove.className='board-delete';
       const ask=button('Ask agent',()=>this.brainstorm());ask.className='board-ask-agent';
-      section.append(this.status,...[['Copy selected',copyBoardSelection],['Paste',pasteBoardSelection],['Delete selected',deleteBoardSelection]].map(([label,action])=>button(label,()=>runBoardCommand(action))),button('New list', () => editList()),button('Add thought', () => editThought()), button('Attach existing', () => chooseMapMembers()),ask,save,layout,button('Settings', () => this.edit(board)),remove);
+      const createMenu=el('div',undefined,'idea-add-menu board-create-menu'),createOptions=el('div',undefined,'idea-add-options');createOptions.hidden=true;createOptions.id='board-create-options';
+      const createToggle=button('Add to board',()=>{createOptions.hidden=!createOptions.hidden;createToggle.setAttribute('aria-expanded',String(!createOptions.hidden));});createToggle.className='idea-add-toggle';createToggle.setAttribute('aria-expanded','false');createToggle.setAttribute('aria-controls',createOptions.id);
+      for(const [label,action] of [['Add thought',()=>editThought()],['Add new idea',()=>openEditor('idea')],['Add new action',()=>openEditor('actionable')],['Add new list',()=>editList()]])createOptions.append(button(label,()=>{createOptions.hidden=true;createToggle.setAttribute('aria-expanded','false');action();}));
+      createMenu.append(createToggle,createOptions);createMenu.onkeydown=event=>{if(event.key==='Escape'){createOptions.hidden=true;createToggle.setAttribute('aria-expanded','false');createToggle.focus();}};
+      section.append(this.status,createMenu,button('Attach existing', () => chooseMapMembers()),ask,save,layout,button('Settings', () => this.edit(board)),remove);
       const pending=this.queues.get(board.id);
       if(pending?.error)section.append(button('Retry save',()=>this.saveNow()),button('Resolve unsaved changes',()=>this.resolveSave()));
       this.root.append(section);
@@ -781,7 +827,10 @@ window.HflObjectDescription = (item = {}) => {
     },
     async refreshConnections(){await this.reload();changed(null,false,true);},
     async persist(fields){if(this.current){this.queue().edit({positions:{...this.current.positions,...this.getPositions()},...fields});this.pendingPositions=this.current.positions;}},
-    async addMembers(ids) { if (this.current) { await this.persist({members: [...new Set([...this.current.members, ...ids])], positions: {...this.current.positions, ...this.getPositions()}}); this.pendingPositions = this.current.positions; } },
+    async addMembers(ids) { if (this.current) {
+      const restored=new Set(ids);for(const node of this.nodes.values())if(ids.includes(node.list_id))restored.add(node.id);
+      await this.persist({members: [...new Set([...this.current.members, ...ids])],hidden_members:(this.current.hidden_members||[]).filter(id=>!restored.has(id)), positions: {...this.current.positions, ...this.getPositions()}});await this.flush();this.pendingPositions = this.current.positions;
+    } },
     async removeMember(id) {
       if(id.startsWith('thought:')||id.startsWith('list:')){selectBoardNode(id);try{await deleteBoardSelection();}catch(error){this.status.textContent=error.message;}return;}
       try { const board = this.current, positions = {...board.positions}; delete positions[id];

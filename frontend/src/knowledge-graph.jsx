@@ -89,7 +89,19 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       for(const n of nodes)layoutTargets.set(n.id,{...layoutTargets.get(n.id),x:n.x,y:n.y});
     }
     draggedNode=node;
-    if(window.HflIdeas?.maps.current){node.manual=true;node.fx=node.x;node.fy=node.y;lastInteraction=Date.now();return;}
+    if(window.HflIdeas?.maps.current){
+      node.manual=true;node.fx=node.x;node.fy=node.y;
+      const previous=layoutTargets.get(node.id)||{x:node.x-delta.x,y:node.y-delta.y};
+      const movement={x:node.x-previous.x,y:node.y-previous.y};
+      if(node.kind==='lists')for(const child of nodes.filter(n=>n.list_id===node.id)){
+        const origin=layoutTargets.get(child.id)||child;
+        child.x=origin.x+movement.x;child.y=origin.y+movement.y;child.fx=child.x;child.fy=child.y;child.manual=true;
+        layoutTargets.set(child.id,{...layoutTargets.get(child.id),x:child.x,y:child.y});
+        boardLayoutPositions[child.id]={x:child.x,y:child.y};
+      }
+      layoutTargets.set(node.id,{...previous,x:node.x,y:node.y});
+      lastInteraction=Date.now();return;
+    }
     if(starting){releaseDragNeighbors(node,nodes,edges,dragNodes,{x:node.x-delta.x,y:node.y-delta.y});configureDragForces(graphApi,true);draw();}
     lastInteraction=Date.now();
   }
@@ -536,9 +548,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       // Reuse the inspector's commands so board permissions and workflows stay identical.
       nodeActions=[...$('detail').querySelectorAll(':scope > button')].map(button=>{
         const label=button.textContent;
-        const group=/^(Edit|Promote|Create action)/.test(label)?'Edit & develop':/^(Create|Add|Connect)/.test(label)?'Add & connect':/^(Remove|Use as|Board connections)/.test(label)?'Board':'View';
+        const group=/^(Edit|Promote|Dismiss|Restore)/.test(label)?'Edit & develop':/^(Create|Add|Connect)/.test(label)?'Add & connect':/^(Clone|Remove|Use as|Board connections)/.test(label)?'Board':'View';
         button.remove();return {label,group,button};
       });
+      nodeActions.sort((a,b)=>Number(a.label==='Remove from board')-Number(b.label==='Remove from board'));
       draw();
     }
     const items=n?nodes.filter(node=>near.has(node.id)):preset==='mindmap'?nodes:nodes.filter(node=>node.kind===(preset==='timeline'?'daily':preset));
@@ -697,6 +710,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     if(exampleMode){setLoading(false);configureData(exampleGraph());window.HflIdeas?.maps.finishDeletionTransition();return;}
     const board=window.HflIdeas?.maps.current;
     if(board){
+      loading=true;$('reload').disabled=true;
+      const progress=window.HflIdeas.maps.status;
+      progress.textContent='Updating board and loading connected items…';progress.setAttribute('aria-busy','true');
+      showInfo('status','Updating board and loading connected items…',true);
       appliedParams=null;
       try{
         let shared={nodes:board.members.map(id=>window.HflIdeas.maps.nodes.get(id)).filter(Boolean),edges:[...window.HflIdeas.maps.sharedEdges.values()],sources:[]};
@@ -706,8 +723,9 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
           board.members.forEach(id=>window.HflIdeas.maps.nodes.delete(id));
           for(const [key,edge] of window.HflIdeas.maps.sharedEdges)if(board.members.includes(edge.source)&&board.members.includes(edge.target))window.HflIdeas.maps.sharedEdges.delete(key);
         }
-        configureData(shared,force===true);setLoading(false);
-      }catch(error){setLoading(false);showInfo('status',error.message,true);}
+        setLoading(false);configureData(shared,force===true);progress.textContent='Board ready · '+data.nodes.length+' nodes';
+      }catch(error){setLoading(false);showInfo('status',error.message,true);progress.textContent=error.message;}
+      finally{progress.removeAttribute('aria-busy');}
       return;
     }
     requestController=new AbortController(); setLoading(true);showInfo('status','Loading your graph…',true);

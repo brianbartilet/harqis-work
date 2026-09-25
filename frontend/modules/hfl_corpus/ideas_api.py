@@ -210,18 +210,21 @@ def board_graph(request: Request, identity: str):
 
 
 @router.get('/maps/{identity}/attach-options')
-def attach_options(request: Request, identity: str, query: str = '', offset: int = 0):
+def attach_options(request: Request, identity: str, query: str = '', offset: int = 0, kinds: str = ''):
     timeline.owner(request)
     board = call(store().map, identity)
     if offset < 0 or len(query) > 500:
         raise HTTPException(422, 'Invalid search or page.')
     from modules.hfl_corpus.board_choices import catalogue as attachment_catalogue
     excluded = set(board['members']) | {'board:' + identity}
-    matching = [n for n in attachment_catalogue().values() if n['id'] not in excluded
+    available = [n for n in attachment_catalogue().values() if n['id'] not in excluded]
+    available_kinds = sorted({n['kind'] for n in available})
+    selected_kinds = set(filter(None, kinds.split(',')))
+    matching = [n for n in available if (not selected_kinds or n['kind'] in selected_kinds)
                 and query.casefold() in (n['label'] + ' ' + n['kind']).casefold()]
     matching.sort(key=lambda n: (n['updated_at'], n['id']), reverse=True)
     return {'nodes': matching[offset:offset + 50], 'total': len(matching),
-            'has_more': offset + 50 < len(matching)}
+            'has_more': offset + 50 < len(matching), 'kinds': available_kinds}
 
 
 @router.post('/render')
