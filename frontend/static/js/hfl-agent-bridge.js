@@ -87,9 +87,9 @@
     dialog.classList.toggle('action-agent-dialog', workspaceLayout);
     dialog.classList.remove('agent-sidebar-open');
     const header = element('header'); header.className = 'agenda-dialog-header';
-    const heading = element('h2', kind === 'actionable' ? 'Actions agent' : 'Agent results'); heading.id = 'agent-bridge-title';
+    const heading = element('h2', kind === 'actionable' ? 'Agent actions session' : 'Agent results'); heading.id = 'agent-bridge-title';
     heading.tabIndex = -1; heading.setAttribute('autofocus', '');
-    const close = element('button'); close.type = 'button'; close.className = 'agent-results-close'; close.setAttribute('aria-label', kind === 'actionable' ? 'Close Actions agent' : 'Close agent results'); close.title = 'Close (Esc)'; close.onclick = () => dialog.close();
+    const close = element('button'); close.type = 'button'; close.className = 'agent-results-close'; close.setAttribute('aria-label', kind === 'actionable' ? 'Close Agent actions session' : 'Close agent results'); close.title = 'Close (Esc)'; close.onclick = () => dialog.close();
     const closeIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     closeIcon.setAttribute('viewBox', '0 0 24 24'); closeIcon.setAttribute('aria-hidden', 'true'); closeIcon.setAttribute('focusable', 'false');
     const closePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -102,12 +102,12 @@
       const utilities=element('div');utilities.className='agent-header-utilities';
       headerStatus=element('span','Loading session…');headerStatus.className='agent-header-status';headerStatus.setAttribute('role','status');
       const help=element('details');help.className='agent-header-help';
-      const helpToggle=element('summary','Help');helpToggle.setAttribute('aria-label','Actions agent help');
+      const helpToggle=element('summary','?');helpToggle.setAttribute('aria-label','Actions agent help');helpToggle.title='Session help';
       const helpBody=element('div');helpBody.className='agent-header-help-body';
       helpBody.append(element('strong','Working with this action'));
       for(const text of ['Start a session, then click inside the terminal to type. Press Enter to send; use /help for Hermes commands.',
         'If the session disconnects or expires, restore it to continue. Its old transcript is read-only.',
-        'Run now executes the card’s Initial prompt. Session controls and generated files are in the left panel (Action details on mobile).',
+        'Session controls are above the terminal. Run now executes the card’s Initial prompt. Generated files are in the left panel (Action details on mobile).',
         'Closing this dialog leaves the session running. End session stops it.'])helpBody.append(element('p',text));
       help.append(helpToggle,helpBody);utilities.append(headerStatus,help);header.insertBefore(utilities,close);
       information = element('aside'); information.className = 'agent-sidebar'; information.id = 'action-agent-sidebar';
@@ -174,10 +174,13 @@
         for (const file of attachments.attachments) {
           const row = element('p'); row.className = 'agent-output-file';
           const name = element('span', file.name);
+          name.title=file.name;
+          const view=element('button','View');view.type='button';view.setAttribute('aria-label','View '+file.name);
+          view.onclick=()=>window.HflInputAttachments.previewSaved('actionable',id,file);
           const link = element('a', 'Download');
           link.href = '/hfl-corpus/agent-bridge/inputs/actionable/' + encodeURIComponent(id) + '/' + encodeURIComponent(file.id);
           link.setAttribute('download', ''); link.setAttribute('aria-label', 'Download ' + file.name);
-          row.append(name, link); files.append(row);
+          row.append(name, view, link); files.append(row);
         }
         runs.append(files);
       }

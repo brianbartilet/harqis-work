@@ -181,6 +181,7 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
     playwright = pytest.importorskip('playwright.sync_api')
     api, _, actions, _ = workspace
     item = create_action(actions)
+    actions.update(item['id'], {'version':item['version'], 'notes':'**Review checklist**\n\n'+'\n'.join('- Check item '+str(i) for i in range(20))}, actor='owner')
     frontend = Path(__file__).resolve().parents[1]
     with playwright.sync_playwright() as p:
         browser = p.chromium.launch(channel='chrome',headless=True)
@@ -196,12 +197,12 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
                 r.fulfill(content_type='text/html',body='<html><body style="background:#080f1e;color:white;font-family:Arial,sans-serif"><script type="application/json" data-memory-csrf>'+json.dumps(owner_headers()['X-CSRF-Token'])+'</script></body></html>')
             else:
                 response=authenticated_client.request(r.request.method,parsed.path+('?' + parsed.query if parsed.query else ''),content=r.request.post_data,headers={k:v for k,v in r.request.headers.items() if k.lower() in {'content-type','x-csrf-token'}})
-                r.fulfill(status=response.status_code,content_type='application/json',body=response.content)
+                r.fulfill(status=response.status_code,content_type=response.headers.get('content-type','application/json'),body=response.content)
         page.route('https://workspace.test/**',route)
         page.goto('https://workspace.test/')
         for name in ('css/hfl-timeline.css','vendor/xterm-5.5.0.css'):
             page.add_style_tag(path=str(frontend/'static'/name))
-        for name in ('vendor/xterm-5.5.0.js','vendor/xterm-addon-fit-0.10.0.js','js/action-agent-workspace.js','js/hfl-agent-bridge.js'):
+        for name in ('vendor/xterm-5.5.0.js','vendor/xterm-addon-fit-0.10.0.js','js/hfl-input-attachments.js','js/action-agent-workspace.js','js/hfl-agent-bridge.js'):
             page.add_script_tag(path=str(frontend/'static'/name))
         page.evaluate('(item)=>window.hflAgentBridge.open("actionable",item.id,item.title)',item)
         page.get_by_role('heading',name='Ready to work on this action?').wait_for()
@@ -212,6 +213,9 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         playwright.expect(page.get_by_role('button',name='Start session',exact=True)).to_be_visible()
         page.screenshot(path=str(tmp_path/'actions-agent-empty.png'))
         sidebar = page.get_by_role('complementary', name='Action information and controls')
+        page.get_by_role('heading',name='Agent actions session',exact=True).wait_for()
+        playwright.expect(sidebar.locator('.markdown-body strong')).to_have_text('Review checklist')
+        assert sidebar.locator('.markdown-body li').count() == 20
         assert sidebar.locator('.agent-action-summary').inner_text().find(item['prompt']) >= 0
         assert sidebar.locator('.agent-results-task input, .agent-results-task textarea').count() == 0
         assert not page.locator('.agent-details').evaluate('(e)=>e.open')
@@ -232,7 +236,11 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         link.wait_for()
         assert authenticated_client.get(urlparse(link.get_attribute('href')).path).content == b'Generated text'
         assert page.get_by_text('No results yet', exact=True).count() == 0
-        assert sidebar.get_by_role('combobox', name='Agent session').count() == 1
+        toolbar=page.get_by_role('region',name='Session controls')
+        assert toolbar.get_by_role('combobox', name='Agent session').count() == 1
+        page.get_by_role('button',name='View '+response.json()['name'],exact=True).click()
+        playwright.expect(page.locator('.agent-input-preview pre')).to_have_text('Generated text')
+        page.locator('.agent-input-preview').get_by_role('button',name='Close',exact=True).click()
         terminal = page.get_by_label('Native Hermes terminal')
         before = terminal.bounding_box()
         assert .24 < sidebar.bounding_box()['width']/page.locator('.action-agent-dialog').bounding_box()['width'] < .30

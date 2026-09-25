@@ -1,5 +1,8 @@
 /* Shared staged attachment editor for actions and pinned dates. */
 window.HflInputAttachments = class {
+  static previewSaved(kind, id, file) {
+    return this.prototype.preview.call({url:()=>'/hfl-corpus/agent-bridge/inputs/'+encodeURIComponent(kind)+'/'+encodeURIComponent(id)}, file, true);
+  }
   constructor(root, kind) {
     this.root = root; this.kind = kind; this.sequence = 0;
     this.input = root.querySelector('[data-input-files]');

@@ -34,7 +34,7 @@
     const status = el('p','Loading last session…','agent-terminal-status'); status.setAttribute('role','status');
     const error = el('p','', 'agenda-error'); error.setAttribute('role','alert'); error.hidden = true;
     const details = el('details', undefined, 'agent-details'); details.append(el('summary','Agent details'));
-    const description = el('p'); details.append(description);
+    const description = el('dl',undefined,'agent-config-summary'); details.append(description);
     const controls = el('div', undefined, 'agent-terminal-controls');
     const sessions = el('select'); sessions.setAttribute('aria-label','Agent session'); controls.append(sessions);
     function button(label, fn, parent=controls) {
@@ -42,7 +42,8 @@
       node.onclick=async()=>{node.disabled=true;error.hidden=true;try{await fn();}catch(e){error.textContent=e.message;error.hidden=false;}finally{node.disabled=false;}};
       parent.append(node); return node;
     }
-    button('Configure agent', configure, details);
+    const configureRow=el('div',undefined,'agent-configure-row');details.append(configureRow);
+    button('Configure agent', configure, configureRow);
     button('New / reconnect', async()=>attach(await api(source+'/sessions',{})));
     button('Save session', async()=>{if(!session)throw new Error('Start a session first.');await api('/sessions/'+session.id,{saved:true});await refreshList();});
     button('Restore selected',async()=>{const id=sessions.value;if(!id)throw new Error('Select a session.');const selected=sessionList.find(s=>s.id===id);if(['queued','starting','idle','waiting','running'].includes(selected.state))attach(selected);else attach(await api(source+'/sessions',{restore:id}));});
@@ -90,10 +91,12 @@
     empty.append(emptyContent);
     if (sidebar) {
       const section = el('section', undefined, 'agent-session-section');
-      section.append(el('h3','Sessions'),controls,status,error);
-      sidebar.append(details,section);
+      section.setAttribute('aria-label','Session controls');
+      section.append(controls,status,error);
+      sidebar.append(details);
       root.setAttribute('aria-label','Agent session');
-      root.append(sessionNotice,viewport,empty,hint);
+      const stage=el('div',undefined,'agent-terminal-stage');stage.append(sessionNotice,viewport,empty);
+      root.append(section,stage,hint);
     } else root.append(details,controls,status,error,sessionNotice,viewport,empty,hint);
     function showEmpty(){
       if(headerStatus){headerStatus.textContent='No session · Start to begin';headerStatus.dataset.state='empty';}
@@ -104,7 +107,8 @@
     }
     function showConfig() {
       const s=config.effective;
-      description.textContent = 'Hermes · '+(config.card.preset || 'App Settings defaults')+' · '+(s.hermes_profile || 'Worker profile')+' · '+s.agent_mode+' permissions · '+(s.agent_repository || 'Worker checkout (isolated worktree)')+' · Idle expiry '+s.agent_session_expiry_minutes+' minutes';
+      description.replaceChildren();
+      for(const [label,value] of [['Agent','Hermes'],['Configuration',config.card.preset||'App Settings defaults'],['Profile',s.hermes_profile||'Worker profile'],['Permissions',s.agent_mode],['Workspace',s.agent_repository||'Isolated worktree'],['Idle expiry',s.agent_session_expiry_minutes+' minutes']])description.append(el('dt',label),el('dd',value));
       if (summary && config.action) {
         const action=config.action;
         summary.replaceChildren(el('span','ACTION'),el('h3',action.title));
@@ -112,7 +116,9 @@
         for(const [key,label] of [['status','Status'],['due_date','Due'],['description','Description'],['prompt','Initial prompt'],['expected_outcome','Expected outcome'],['notes','Notes'],['completion_note','Outcome']]) {
           const value=action[key];
           if(!value && key!=='prompt')continue;
-          values.append(el('dt',label),el('dd',key==='status'?value.replaceAll('_',' '):(value||'No initial prompt saved.')));
+          const content=el('dd',key==='status'?value.replaceAll('_',' '):(value||'No initial prompt saved.'));
+          if(value && config.action_html?.[key]){content.className='markdown-body';content.innerHTML=config.action_html[key];}
+          values.append(el('dt',label),content);
         }
         summary.append(values);
       }
