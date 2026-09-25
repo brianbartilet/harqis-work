@@ -1,0 +1,12 @@
+{# Filter state for the shared workspace controller; Kanban renders the results. #}
+<form id="corpus-search-form" action="/hfl-corpus/actions" hidden>
+  {% for key, value in workspace_state.items() %}<input type="hidden" name="{{ key }}" value="{{ value if value is not none else '' }}">{% endfor %}
+  <input type="hidden" name="workspace" value="{{ request.query_params.get('workspace', '') }}">
+  <input type="hidden" name="scope" value="{{ workspace_scope | tojson | forceescape }}">
+  <details data-workspace-sources><summary data-source-caption>All sources</summary><div class="workspace-source-options"><button type="button" data-sources-clear>All sources</button>
+    {% for source in workspace_state.source.split(',') if source %}<label><input type="checkbox" data-source-option value="{{ source }}" checked>{{ source }}</label>{% endfor %}
+  </div></details>
+  <button data-corpus-search><span class="workspace-spinner" hidden></span><span data-search-label>Search</span></button>
+  <span data-active-view-caption><span data-active-view-name></span></span><span data-dynamic-badge></span><span data-active-view-modified></span>
+</form>
+<script type="application/json" data-memory-csrf>{{ memory_csrf | tojson }}</script>
