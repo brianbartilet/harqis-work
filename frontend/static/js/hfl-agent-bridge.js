@@ -97,7 +97,19 @@
     header.append(heading, close);
     const body = element('div'); body.className = 'agenda-form-body agent-results-body';
     let information = body;
+    let headerStatus;
     if (workspaceLayout) {
+      const utilities=element('div');utilities.className='agent-header-utilities';
+      headerStatus=element('span','Loading session…');headerStatus.className='agent-header-status';headerStatus.setAttribute('role','status');
+      const help=element('details');help.className='agent-header-help';
+      const helpToggle=element('summary','Help');helpToggle.setAttribute('aria-label','Actions agent help');
+      const helpBody=element('div');helpBody.className='agent-header-help-body';
+      helpBody.append(element('strong','Working with this action'));
+      for(const text of ['Start a session, then click inside the terminal to type. Press Enter to send; use /help for Hermes commands.',
+        'If the session disconnects or expires, restore it to continue. Its old transcript is read-only.',
+        'Run now executes the card’s Initial prompt. Session controls and generated files are in the left panel (Action details on mobile).',
+        'Closing this dialog leaves the session running. End session stops it.'])helpBody.append(element('p',text));
+      help.append(helpToggle,helpBody);utilities.append(headerStatus,help);header.insertBefore(utilities,close);
       information = element('aside'); information.className = 'agent-sidebar'; information.id = 'action-agent-sidebar';
       information.setAttribute('aria-label', 'Action information and controls');
       const toggle = element('button', 'Action details'); toggle.type = 'button'; toggle.className = 'agent-sidebar-toggle';
@@ -109,7 +121,7 @@
     const task = element('section'); task.className = 'agent-results-task';
     task.append(element('span', kind === 'actionable' ? 'ACTION' : 'PINNED PERIOD'), element('h3', title));
     information.append(task);
-    if (workspaceLayout) disposeWorkspace = window.actionAgentWorkspace.mount(body, id, information, task);
+    if (workspaceLayout) disposeWorkspace = window.actionAgentWorkspace.mount(body, id, information, task, headerStatus);
     const error = element('p'); error.className = 'agenda-error'; error.setAttribute('role', 'alert'); error.hidden = true;
     const cadenceLabel = element('label', 'Automatic runs');
     const cadence = element('select');

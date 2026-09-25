@@ -18,7 +18,7 @@
     if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Agent request failed.');
     return data;
   }
-  function mount(container, sourceId, sidebar, summary) {
+  function mount(container, sourceId, sidebar, summary, headerStatus) {
     const source = '/actions/' + encodeURIComponent(sourceId);
     let disposed = false, session = null, cursor = 0, config, terminal, fit, polling, sessionList = [];
     let inputQueue = [], inputTimer, sendingInput = false, lastInputAt = 0;
@@ -46,18 +46,62 @@
     button('New / reconnect', async()=>attach(await api(source+'/sessions',{})));
     button('Save session', async()=>{if(!session)throw new Error('Start a session first.');await api('/sessions/'+session.id,{saved:true});await refreshList();});
     button('Restore selected',async()=>{const id=sessions.value;if(!id)throw new Error('Select a session.');const selected=sessionList.find(s=>s.id===id);if(['queued','starting','idle','waiting','running'].includes(selected.state))attach(selected);else attach(await api(source+'/sessions',{restore:id}));});
-    button('Remove from history',async()=>{if(!session)return;if(!window.confirm('Remove this session from history? Attached files remain on the action.'))return;await api('/sessions/'+session.id+'/forget',{});session=null;cursor=0;terminal.reset();download.hidden=true;await refreshList();});
+    button('Remove from history',async()=>{if(!session)return;if(!window.confirm('Remove this session from history? Attached files remain on the action.'))return;await api('/sessions/'+session.id+'/forget',{});session=null;cursor=0;terminal.reset();download.hidden=true;const data=await refreshList();if(data.sessions.length)attach(data.sessions[0]);else showEmpty();});
     button('End session',async()=>{if(session)await api('/sessions/'+session.id,{closed:true});});
     const download = el('a','Download transcript'); download.hidden=true; controls.append(download);
     const viewport = el('div',undefined,'agent-terminal'); viewport.setAttribute('aria-label','Native Hermes terminal');
+    const sessionNotice=el('section',undefined,'agent-session-notice');sessionNotice.hidden=true;
+    sessionNotice.setAttribute('aria-label','Session connection');
+    const noticeText=el('p');noticeText.setAttribute('role','status');sessionNotice.append(noticeText);
+    const resumeButton=button('Restore session',async()=>{
+      if(!session)return;
+      attach(await api(source+'/sessions',session.native_id?{restore:session.id}:{}));
+      terminal?.focus();
+    },sessionNotice);
+    function connectionState(item){
+      if(headerStatus){
+        headerStatus.textContent=({queued:'Waiting for worker',starting:'Connecting…',idle:'Ready to type',waiting:'Waiting for capacity',running:'Working…',failed:'Disconnected · Restore session',closed:'Closed · Read-only',expired:'Expired · Restore session'})[item.state]||item.state;
+        headerStatus.dataset.state=item.state;
+      }
+      const ended=['failed','closed','expired'].includes(item.state);
+      sessionNotice.hidden=!ended;
+      if(ended){
+        noticeText.textContent=(item.state==='failed'?'Session disconnected.':'Session '+item.state+'.')+' This transcript is read-only. '+(item.native_id?'Restore the session to continue typing.':'Start a new session to continue typing.');
+        resumeButton.textContent=item.native_id?'Restore session':'Start new session';
+      }
+      if(terminal){
+        terminal.options.disableStdin=!['starting','idle','waiting','running'].includes(item.state);
+        terminal.options.cursorBlink=!terminal.options.disableStdin;
+      }
+    }
     const hint = el('p','Native Hermes CLI · use /help for commands. Closing this dialog leaves execution running.','agent-terminal-hint');
+    const empty = el('section',undefined,'agent-session-empty'); empty.hidden=true;
+    const emptyContent=el('div');
+    const icon=el('span','>_','agent-session-empty-icon'); icon.setAttribute('aria-hidden','true');
+    emptyContent.append(icon,el('h3','Ready to work on this action?'),el('p','Start a session to ask questions, refine your instructions, or work through the next step with Hermes.'));
+    const emptyFeedback=el('p',''); emptyFeedback.setAttribute('role','status');
+    const startButton=button('Start session',async()=>{
+      emptyFeedback.textContent='Connecting to Hermes…';
+      try {attach(await api(source+'/sessions',{}));terminal?.focus();}
+      catch(e){emptyFeedback.textContent=e.message;throw e;}
+    },emptyContent);
+    startButton.classList.add('agenda-primary');
+    emptyContent.append(el('small','Your action details are included. You choose what happens next.'),emptyFeedback);
+    empty.append(emptyContent);
     if (sidebar) {
       const section = el('section', undefined, 'agent-session-section');
       section.append(el('h3','Sessions'),controls,status,error);
       sidebar.append(details,section);
       root.setAttribute('aria-label','Agent session');
-      root.append(viewport,hint);
-    } else root.append(details,controls,status,error,viewport,hint);
+      root.append(sessionNotice,viewport,empty,hint);
+    } else root.append(details,controls,status,error,sessionNotice,viewport,empty,hint);
+    function showEmpty(){
+      if(headerStatus){headerStatus.textContent='No session · Start to begin';headerStatus.dataset.state='empty';}
+      empty.hidden=false;root.classList.add('agent-session-is-empty');
+      sessionNotice.hidden=true;
+      status.textContent='No session started';emptyFeedback.textContent='';
+      if(terminal)terminal.options.disableStdin=true;
+    }
     function showConfig() {
       const s=config.effective;
       description.textContent = 'Hermes · '+(config.card.preset || 'App Settings defaults')+' · '+(s.hermes_profile || 'Worker profile')+' · '+s.agent_mode+' permissions · '+(s.agent_repository || 'Worker checkout (isolated worktree)')+' · Idle expiry '+s.agent_session_expiry_minutes+' minutes';
@@ -106,7 +150,9 @@
       dialog.append(header,form);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();
     }
     function attach(item){
+      empty.hidden=true;root.classList.remove('agent-session-is-empty');
       session=item;cursor=0;terminal?.reset();download.hidden=false;download.href='/hfl-corpus/agent-bridge/sessions/'+item.id+'/transcript';
+      connectionState(item);
       if(![...sessions.options].some(o=>o.value===item.id))sessions.append(new Option(new Date(item.created).toLocaleString()+' · '+item.state,item.id));
       sessions.value=item.id;status.textContent='Loading session…';
       if(terminal)api('/sessions/'+item.id,{cols:Math.max(10,Math.min(300,terminal.cols)),rows:Math.max(10,Math.min(300,terminal.rows))}).catch(()=>{});
@@ -132,10 +178,10 @@
           for(const chunk of data.output){terminal.write(chunk.data);cursor=chunk.seq;}
           const labels={queued:'Waiting for a worker to connect…',starting:'Starting Hermes…',idle:'Ready for commands',waiting:'Worker capacity reached — waiting for an execution slot…',running:'Running — waiting for reply',expired:'Session expired — transcript archived',closed:'Session closed — transcript archived',failed:'Session stopped — transcript available'};
           status.textContent=session.error||labels[session.state]||session.state;
-          terminal.options.disableStdin=!['starting','idle','waiting','running'].includes(session.state);
+          connectionState(session);
         }
         if(Date.now()-lastListRefresh>=4000){lastListRefresh=Date.now();const data=await refreshList();if(data&&session&&session.state==='waiting')status.textContent+=' '+data.busy+'/'+data.capacity+' executions active.';}
-      }catch(e){status.textContent='Reconnecting…';error.textContent=e.message;error.hidden=false;}
+      }catch(e){status.textContent='Reconnecting…';if(headerStatus){headerStatus.textContent='Reconnecting…';headerStatus.dataset.state='failed';}error.textContent=e.message;error.hidden=false;}
       finally{pollingBusy=false;if(!disposed)polling=setTimeout(poll,Date.now()-lastInputAt<3000||session?.state==='running'?75:400);}
     }
     const observer=new ResizeObserver(()=>{
@@ -157,7 +203,7 @@
         });
         sessions.onchange=()=>{const item=sessionList.find(s=>s.id===sessions.value);if(item)attach(item);};
         const data=await refreshList();if(disposed)return;
-        if(data.sessions.length)attach(data.sessions[0]);else status.textContent='Start a native Hermes session, or use Run now for the Initial prompt.';
+        if(data.sessions.length)attach(data.sessions[0]);else showEmpty();
         await poll();
       }catch(e){error.textContent=e.message;error.hidden=false;status.textContent='Workspace could not be loaded.';}
     })();

@@ -204,7 +204,13 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         for name in ('vendor/xterm-5.5.0.js','vendor/xterm-addon-fit-0.10.0.js','js/action-agent-workspace.js','js/hfl-agent-bridge.js'):
             page.add_script_tag(path=str(frontend/'static'/name))
         page.evaluate('(item)=>window.hflAgentBridge.open("actionable",item.id,item.title)',item)
-        page.get_by_text('Start a native Hermes session, or use Run now for the Initial prompt.').wait_for()
+        page.get_by_role('heading',name='Ready to work on this action?').wait_for()
+        playwright.expect(page.locator('.agent-header-status')).to_have_text('No session · Start to begin')
+        page.get_by_label('Actions agent help',exact=True).click()
+        playwright.expect(page.locator('.agent-header-help-body')).to_contain_text('click inside the terminal to type')
+        page.get_by_label('Actions agent help',exact=True).click()
+        playwright.expect(page.get_by_role('button',name='Start session',exact=True)).to_be_visible()
+        page.screenshot(path=str(tmp_path/'actions-agent-empty.png'))
         sidebar = page.get_by_role('complementary', name='Action information and controls')
         assert sidebar.locator('.agent-action-summary').inner_text().find(item['prompt']) >= 0
         assert sidebar.locator('.agent-results-task input, .agent-results-task textarea').count() == 0
@@ -213,7 +219,8 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         page.get_by_role('button',name='Configure agent',exact=True).click()
         page.get_by_role('heading',name='Configure action agent').wait_for()
         page.get_by_role('button',name='Close',exact=True).click()
-        page.get_by_role('button',name='New / reconnect',exact=True).click()
+        page.get_by_role('button',name='Start session',exact=True).click()
+        playwright.expect(page.locator('.agent-session-empty')).not_to_be_visible()
         page.get_by_text('Waiting for a worker to connect…').wait_for()
         session = api.store().sessions(item['id'])[0]
         claimed = api.store().claim_session(session['id'], 'test')
@@ -228,7 +235,8 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         assert sidebar.get_by_role('combobox', name='Agent session').count() == 1
         terminal = page.get_by_label('Native Hermes terminal')
         before = terminal.bounding_box()
-        assert .18 < sidebar.bounding_box()['width']/page.locator('.action-agent-dialog').bounding_box()['width'] < .25
+        assert .24 < sidebar.bounding_box()['width']/page.locator('.action-agent-dialog').bounding_box()['width'] < .30
+        assert page.locator('.action-agent-dialog').bounding_box()['width'] < 1440*.90
         sidebar.evaluate('(el)=>{el.scrollTop=el.scrollHeight;}')
         assert sidebar.evaluate('(el)=>el.scrollTop') > 0
         assert terminal.bounding_box() == before
@@ -243,6 +251,15 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
             page.wait_for_timeout(50)
         assert ''.join(input_requests) == typed
         assert len(input_requests) < len(typed)
+        api.store().heartbeat_session(session['id'],claimed['token'],'failed','restorable-native',2)
+        notice=page.get_by_role('region',name='Session connection')
+        playwright.expect(notice).to_contain_text('This transcript is read-only.')
+        playwright.expect(page.locator('.agent-header-status')).to_have_text('Disconnected · Restore session')
+        page.get_by_role('button',name='Restore session',exact=True).click()
+        playwright.expect(notice).not_to_be_visible()
+        restored=api.store().sessions(item['id'])[0]
+        assert restored['id'] != session['id']
+        assert restored['native_id'] == 'restorable-native'
         sidebar.evaluate('(el)=>{el.scrollTop=0;}')
         page.screenshot(path=str(tmp_path/'actions-agent-desktop.png'))
         page.set_viewport_size({'width':390,'height':844})
