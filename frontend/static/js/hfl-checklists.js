@@ -171,5 +171,3 @@ window.HflChecklistCover = function(root, item, save, open) {
     root.append(section);
   }
 };
-
-window.HflAgentInstructions = lists => { const value = structuredClone(lists || []); if (!value.some(l => l.title.trim().toLowerCase() === 'agent instructions')) value.push({id:crypto.randomUUID(),title:'Agent Instructions',cover:false,items:[]}); return value; };

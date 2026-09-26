@@ -215,7 +215,7 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         playwright.expect(page.get_by_role('button',name='Start session',exact=True)).to_be_visible()
         page.screenshot(path=str(tmp_path/'actions-agent-empty.png'))
         sidebar = page.get_by_role('complementary', name='Action information and controls')
-        page.get_by_role('heading',name='Agent actions session',exact=True).wait_for()
+        page.get_by_role('heading',name='Agent session',exact=True).wait_for()
         playwright.expect(sidebar.locator('.markdown-body strong')).to_have_text('Review checklist')
         assert sidebar.locator('.markdown-body li').count() == 20
         assert sidebar.locator('.agent-action-summary').inner_text().find(item['prompt']) >= 0
@@ -355,10 +355,10 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
               return fits;
             }''')
         agent_dialog=page.locator('.action-agent-dialog')
-        agent_dialog.get_by_role('heading',name='Agent actions session',exact=True).click()
+        agent_dialog.get_by_role('heading',name='Agent session',exact=True).click()
         playwright.expect(agent_dialog).to_be_visible()
         # Selecting text from inside the dialog into the backdrop must not dismiss it.
-        heading=agent_dialog.get_by_role('heading',name='Agent actions session',exact=True).bounding_box()
+        heading=agent_dialog.get_by_role('heading',name='Agent session',exact=True).bounding_box()
         page.mouse.move(heading['x']+5,heading['y']+5)
         page.mouse.down()
         page.mouse.move(2,2)

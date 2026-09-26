@@ -99,9 +99,9 @@
     dialog.classList.toggle('action-agent-dialog', workspaceLayout);
     dialog.classList.remove('agent-sidebar-open');
     const header = element('header'); header.className = 'agenda-dialog-header';
-    const heading = element('h2', kind === 'actionable' ? 'Agent actions session' : 'Agent results'); heading.id = 'agent-bridge-title';
+    const heading = element('h2', kind === 'actionable' ? 'Agent session' : 'Agent results'); heading.id = 'agent-bridge-title';
     heading.tabIndex = -1; heading.setAttribute('autofocus', '');
-    const close = element('button'); close.type = 'button'; close.className = 'agent-results-close'; close.setAttribute('aria-label', kind === 'actionable' ? 'Close Agent actions session' : 'Close agent results'); close.title = 'Close (Esc)'; close.onclick = () => dialog.close();
+    const close = element('button'); close.type = 'button'; close.className = 'agent-results-close'; close.setAttribute('aria-label', kind === 'actionable' ? 'Close Agent session' : 'Close agent results'); close.title = 'Close (Esc)'; close.onclick = () => dialog.close();
     const closeIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     closeIcon.setAttribute('viewBox', '0 0 24 24'); closeIcon.setAttribute('aria-hidden', 'true'); closeIcon.setAttribute('focusable', 'false');
     const closePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');

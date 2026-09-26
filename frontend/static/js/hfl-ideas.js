@@ -176,7 +176,7 @@ window.HflObjectDescription = (item = {}) => {
         canConvert,
         addToBoard: async (list,task) => { try { await state.flush(); await addToBoard(kind,current,list,task); } catch(e) { d.error.textContent=e.message; } },
         convert: (listId, itemId) => { if (canConvert()) { d.node.close(); convert(current.id, listId, itemId); } },
-      } : {addButtonRoot: checklistToolbar, addToBoard: async (list,task) => { try { await state.flush(); await addToBoard(kind,current,list,task); } catch(e) { d.error.textContent=e.message; } }}); checklists.set(kind === 'actionable' ? window.HflAgentInstructions(item.checklists) : item.checklists);
+      } : {addButtonRoot: checklistToolbar, addToBoard: async (list,task) => { try { await state.flush(); await addToBoard(kind,current,list,task); } catch(e) { d.error.textContent=e.message; } }}); checklists.set(item.checklists);
       d.form.querySelectorAll('textarea[name=body]').forEach(markdownEditor);
       const attachmentsSection = d.body.querySelector('[data-object-attachments]');
       const copiedFiles = [];

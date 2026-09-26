@@ -127,7 +127,8 @@ def test_actions_page_autosave_refresh_sort_and_move(editor_page):
     page.reload()
     expect(page.locator('#followup-editor')).to_be_visible()
     expect(form.locator('[name=title]')).to_have_value('Autosaved title')
-    expect(form.get_by_role('textbox', name='Checklist name').last).to_have_value('Agent Instructions')
+    expect(form.get_by_role('textbox', name='Checklist name')).to_have_count(2)
+    assert [checklist['title'] for checklist in client.get(uri).json()['item']['checklists']] == ['First', 'Second']
     form.locator('[data-list-id=one]').get_by_role('button', name='Sort items A–Z', exact=True).click()
     expect(form.locator('.editor-save-status')).to_have_text('Saved')
     assert client.get(uri).json()['item']['checklists'][0]['items'][0]['id'] == 'a'

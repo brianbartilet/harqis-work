@@ -31,7 +31,7 @@
     const params = new URL(link.href).searchParams;
     form.reset(); source = null; requestId = crypto.randomUUID(); showError();
     attachments.reset(); savedAction = null;
-    window.hflActionChecklists.set(window.HflAgentInstructions([]));
+    window.hflActionChecklists.set([]);
     document.getElementById('followup-state-label').hidden = true;
     document.getElementById('followup-completion-label').hidden = true;
     evidence.hidden = false; evidence.textContent = 'Loading entry…';
