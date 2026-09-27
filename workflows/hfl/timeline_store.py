@@ -155,7 +155,7 @@ class FollowUpStore:
         request_id = str(uuid.UUID(str(raw.get("request_id", ""))))
         item = self.validate({key: value for key, value in raw.items() if key in FIELDS})
         if item["status"] != "open":
-            raise ValueError("New follow-ups start Ready.")
+            raise ValueError("New follow-ups start In Review.")
         now = isoformat()
         item.update(id=f"followup-{uuid.uuid4().hex}", version=1, created_at=now,
                     updated_at=now, completed_at="", source=source, timezone="Asia/Singapore")

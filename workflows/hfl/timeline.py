@@ -95,36 +95,45 @@ def collect_related(rows, start, *, client=None):
     return history
 
 
-def synthesize(evidence, *, start, end):
+class TimelineModelError(ValueError):
+    """A safe diagnostic for an unusable model response (never includes evidence)."""
+
+
+def model_json(prompt, system, field):
+    """Retry incomplete JSON once, with a larger, bounded output allowance."""
     from apps.antropic.config import get_config
     from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
-    from workflows.hfl.prompts import load_prompt
     from workflows.hfl.tasks.ingest_git import _parse_model_json
     client = BaseApiServiceAnthropic(get_config("ANTHROPIC"))
-    response = client.send_message(prompt=json.dumps({"period":{"start":start,"end":end},"evidence":evidence}), system=load_prompt("timeline_suggestions"), model="claude-haiku-4-5-20251001", max_tokens=2200)
-    result = _parse_model_json(response.content[0].text)
-    if not isinstance(result, dict) or not isinstance(result.get("findings"),list):
-        raise ValueError("Suggestion analysis returned invalid JSON.")
-    return result
+    for budget in (4096, 8192):
+        response = client.send_message(prompt=prompt, system=system,
+            model="claude-haiku-4-5-20251001", max_tokens=budget)
+        if response.stop_reason == 'max_tokens':
+            reason = 'The model response reached its output limit.'
+            continue
+        text = '\n'.join(block.text for block in response.content if block.type == 'text')
+        result = _parse_model_json(text)
+        if isinstance(result, dict) and isinstance(result.get(field), list):
+            return result
+        reason = 'The model response was not valid structured JSON.'
+    raise TimelineModelError(reason + ' Both attempts failed; cached suggestions were preserved. Retry Explore.')
+
+
+def synthesize(evidence, *, start, end):
+    from workflows.hfl.prompts import load_prompt
+    return model_json(json.dumps({"period":{"start":start,"end":end},"evidence":evidence}),
+                      load_prompt("timeline_suggestions"), 'findings')
 
 
 def review_actions(candidates, snapshot, evidence):
-    from apps.antropic.config import get_config
-    from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
     from workflows.hfl.prompts import load_prompt
-    from workflows.hfl.tasks.ingest_git import _parse_model_json
     from workflows.hfl.tasks.activity_radar import redact_secrets
     actions=[{key:item.get(key) for key in ('id','title','expected_outcome','status','source')} for item in snapshot['actions']]
     dismissed=[{key:item.get(key) for key in ('id','title','expected_outcome','source')} for item in snapshot['dismissed_ideas']]
     payload=redact_secrets(json.dumps({'candidates':candidates,'existing_actions':actions,'dismissed_ideas':dismissed,'evidence':evidence},ensure_ascii=False))
     if len(payload)>250000:
         raise ValueError('Duplicate-check context exceeds the bounded review limit.')
-    client=BaseApiServiceAnthropic(get_config('ANTHROPIC'))
-    response=client.send_message(prompt=payload,system=load_prompt('timeline_action_review'),model='claude-haiku-4-5-20251001',max_tokens=3000)
-    result=_parse_model_json(response.content[0].text)
-    if not isinstance(result,dict) or not isinstance(result.get('decisions'),list):
-        raise ValueError('Automatic action review returned invalid JSON.')
-    return result['decisions']
+    return model_json(payload, load_prompt('timeline_action_review'), 'decisions')['decisions']
 
 
 def create_automatic_actions(start,end,canonical,evidence,*,review=review_actions,today=None):
@@ -190,7 +199,8 @@ def explore_period(start, end, *, run_id=None, store=None, collect=collect_perio
         canonical.finish_period(start,end,run_id,result)
         return {"state":"complete",**result}
     except Exception as exc:
-        canonical.finish_period(start,end,run_id,{"error":type(exc).__name__,"message":"Analysis did not finish. Previous cached suggestions are preserved; retry exploration."},state="failed")
+        message = str(exc) if isinstance(exc, TimelineModelError) else "Analysis did not finish. Previous cached suggestions are preserved; retry exploration."
+        canonical.finish_period(start,end,run_id,{"error":type(exc).__name__,"message":message},state="failed")
         raise
 
 

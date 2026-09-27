@@ -120,6 +120,8 @@ def action_execution_settings(kind, source_id):
 
 def enqueue(kind, source_id, request_key, actor, auto_complete=True):
     snapshot = source_snapshot(kind, source_id)
+    if kind == 'actionable' and actor == 'hermes-schedule' and snapshot['source']['status'] != 'active':
+        raise BridgeConflict('Only Ready actions can be picked up automatically.')
     snapshot['auto_complete'] = False if kind == 'mindmap' else auto_complete
     snapshot['context'] = evidence_context(snapshot)
     store = bridge_store()
@@ -127,7 +129,7 @@ def enqueue(kind, source_id, request_key, actor, auto_complete=True):
         retire_reopened(snapshot)
     run = store.enqueue(snapshot, request_key, actor)
     if run['state'] == 'queued':
-        apply_action(run, 'active')
+        apply_action(run, 'in_progress')
     return store.get(run['id'])
 
 
@@ -167,7 +169,7 @@ def evidence_context(snapshot):
 def retire_reopened(snapshot):
     """A new owner revision cannot inherit an old execution's authority."""
     source = snapshot['source']
-    if source.get('status') != 'open':
+    if source.get('status') not in {'open', 'active'}:
         return
     store = bridge_store()
     for run in store.list(snapshot['source_key']):
@@ -224,7 +226,7 @@ def sweep():
                 if offset >= page['total'] or not page['items']:
                     break
             for item in sorted(items, key=priority_key):
-                if item['status'] == 'open' and item.get('agent_enabled', True) and item.get('prompt', '').strip():
+                if item['status'] == 'active' and item.get('agent_enabled', True) and item.get('prompt', '').strip():
                     try:
                         run = enqueue('actionable', item['id'], f"actionable:{item['id']}:revision:{item['version']}", 'hermes-schedule')
                         results.append(run['id'])
@@ -278,7 +280,7 @@ def reconcile_runs():
         for run in store.list(state=state, limit=1000, oldest=True):
             try:
                 if state == 'queued':
-                    apply_action(run, 'active')
+                    apply_action(run, 'in_progress')
                 elif state in {'review', 'accepting'} and run['snapshot'].get('auto_complete'):
                     accept(run['id'], 'policy:' + POLICY)
                 elif state in {'failed', 'awaiting_input'} and not run['applied']:
@@ -737,7 +739,7 @@ def continue_attempt(run_id: str, payload: dict, user: str):
                    continuation={'parent_run_id': run_id, 'reply': reply, 'history': history, 'artifacts': list(artifacts.values())})
     run = checked(store.continue_run, run_id, current, payload.get('request_key'), user, reply)
     if run['state'] == 'queued':
-        checked(apply_action, run, 'active')
+        checked(apply_action, run, 'in_progress')
     return store.get(run['id'])
 
 

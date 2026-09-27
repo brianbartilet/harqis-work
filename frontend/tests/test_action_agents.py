@@ -446,3 +446,92 @@ def test_empty_poll_recovers_without_replacing_session(workspace, authenticated_
             assert api.store().session(session['id'])['state'] == 'starting'
         finally:
             browser.close()
+
+
+def test_terminal_image_scope_order_and_closed_session(workspace, authenticated_client):
+    api, bridge_module, actions, _ = workspace
+    item = create_action(actions)
+    other = create_action(actions)
+    db = api.store()
+    session = db.start_session(item['id'], {}, 'Images')
+    identity = session['id']
+    db.claim_session(identity, 'test')
+    root = '/hfl-corpus/agent-bridge'
+    def upload(source, name):
+        return authenticated_client.post(root+'/inputs/actionable/'+source, headers=owner_headers(),
+            files={'files': (name, b'image content', 'image/png')}).json()['attachments'][-1]
+    image = upload(item['id'], 'capture.png')
+    foreign = upload(other['id'], 'other.png')
+    document = upload(item['id'], 'notes.txt')
+    endpoint = root+'/sessions/'+identity+'/images'
+    assert post(authenticated_client, endpoint, {'key':'bad','attachment_id':foreign['id']}).status_code == 404
+    assert post(authenticated_client, endpoint, {'key':'bad','attachment_id':document['id']}).status_code == 400
+    db.io(identity, 'in', 'before', 'Review ')
+    for _ in range(2):
+        assert post(authenticated_client, endpoint, {'key':'image','attachment_id':image['id']}).status_code == 200
+    db.io(identity, 'in', 'after', ' please')
+    events = db.read_io(identity, 'in')
+    assert len(events) == 3
+    assert events[0]['data'] == 'Review '
+    assert events[1]['type'] == 'image'
+    assert json.loads(events[1]['data'])['id'] == image['id']
+    assert events[2]['data'] == ' please'
+    assert db.read_io(identity, 'in', events[1]['seq']) == [events[2]]
+    db.edit_session(identity, closed=True)
+    assert post(authenticated_client, endpoint, {'key':'late','attachment_id':image['id']}).status_code == 409
+
+
+def test_browser_terminal_paste_uploads_and_queues_image(workspace, authenticated_client):
+    from urllib.parse import urlsplit
+    api, bridge_module, actions, _ = workspace
+    item = create_action(actions)
+    session = api.store().start_session(item['id'], {}, 'Paste test')
+    api.store().claim_session(session['id'], 'test')
+    playwright = pytest.importorskip('playwright.sync_api')
+    frontend = Path(__file__).resolve().parents[1]
+    with playwright.sync_playwright() as engine:
+        browser = engine.chromium.launch(channel='chrome', headless=True)
+        try:
+            page = browser.new_page()
+            def route(r):
+                url = urlsplit(r.request.url)
+                if url.path == '/':
+                    r.fulfill(content_type='text/html', body='<div id="workspace"></div>')
+                else:
+                    headers = {**owner_headers(), 'Content-Type': r.request.headers.get('content-type', 'application/json')}
+                    response = authenticated_client.request(r.request.method, url.path + ('?' + url.query if url.query else ''), content=r.request.post_data_buffer, headers=headers)
+                    r.fulfill(status=response.status_code, content_type='application/json', body=response.content)
+            page.route('https://workspace.test/**', route)
+            page.goto('https://workspace.test/')
+            for name in ('vendor/xterm-5.5.0.js', 'vendor/xterm-addon-fit-0.10.0.js', 'js/action-agent-workspace.js'):
+                page.add_script_tag(path=str(frontend/'static'/name))
+            page.evaluate('(id)=>window.actionAgentWorkspace.mount(document.querySelector("#workspace"),id)', item['id'])
+            playwright.expect(page.get_by_role('combobox', name='Agent session')).to_have_value(session['id'])
+            prevented = page.evaluate("""() => {
+                const data=new DataTransfer();
+                data.items.add(new File([new Uint8Array([137,80,78,71])],'screenshot.png',{type:'image/png'}));
+                data.setData('text/plain','DO NOT INSERT THIS');
+                const event=new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true});
+                document.querySelector('.xterm-helper-textarea').dispatchEvent(event);
+                return event.defaultPrevented;
+            }""")
+            assert prevented
+            playwright.expect(page.get_by_text('Image attached; file reference queued. Add your instructions, then press Enter.', exact=True)).to_be_visible()
+            events = api.store().read_io(session['id'], 'in')
+            assert len(events) == 1 and events[0]['type'] == 'image'
+            manifest = bridge_module.input_manifest('actionable', item['id'])['attachments']
+            assert json.loads(events[0]['data'])['id'] == manifest[0]['id']
+            assert manifest[0]['size'] == 4
+            # Ordinary text paste continues through xterm unchanged.
+            page.evaluate("""() => {
+                const data=new DataTransfer();data.setData('text/plain','normal text');
+                document.querySelector('.xterm-helper-textarea').dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));
+            }""")
+            page.wait_for_timeout(150)
+            assert api.store().read_io(session['id'], 'in')[-1]['data'] == 'normal text'
+            notice = page.get_by_role('region', name='Paste notification')
+            playwright.expect(notice).to_contain_text('Text pasted into the terminal.')
+            playwright.expect(notice).to_be_hidden(timeout=7000)
+
+        finally:
+            browser.close()

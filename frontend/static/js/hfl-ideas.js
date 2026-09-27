@@ -588,7 +588,7 @@ window.HflObjectDescription = (item = {}) => {
     if (node.status) {
       const status = String(node.status).toLowerCase().replaceAll('_', ' ').replaceAll('-', ' ');
       const row = el('p', undefined, 'idea-inspector-status idea-inspector-status-row');
-      const pill = el('span', (node.kind==='actions' && status==='open' ? 'Ready' : node.kind==='ideas' && status==='suggested' ? 'Available' : status.replace(/\b\w/g, letter => letter.toUpperCase())), 'idea-status-pill');
+      const pill = el('span', (node.kind==='actions' && status==='open' ? 'In Review' : node.kind==='actions' && status==='active' ? 'Ready' : node.kind==='ideas' && status==='suggested' ? 'Available' : status.replace(/\b\w/g, letter => letter.toUpperCase())), 'idea-status-pill');
       pill.dataset.status = status.replaceAll(' ', '-');
       row.append(el('span', 'Status'), pill);root.append(row);
     }

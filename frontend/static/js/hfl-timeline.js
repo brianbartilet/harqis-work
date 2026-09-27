@@ -93,7 +93,7 @@
       combined.sort((a,b)=>(Date.parse(b.time)||0)-(Date.parse(a.time)||0)); list.replaceChildren(...combined.map(row=>row.el));
     } catch(e) { list.append(node('p','Agent history unavailable: '+e.message,'agenda-error')); }
   }
-  const statusLabel = value => ({open:'Ready',in_progress:'In Progress',waiting:'In Progress'}[value] || value[0].toUpperCase()+value.slice(1));
+  const statusLabel = value => ({open:'In Review',active:'Ready',in_progress:'In Progress',waiting:'In Progress'}[value] || value[0].toUpperCase()+value.slice(1));
   window.addEventListener('hfl:agent-updated',()=>load());
   const priority = item => [({done:1,dismissed:2}[item.status]||0),({Q1:0,Q2:1,Q3:2,Q4:3}[item.matrix]??4),[item.due_date,item.review_date].filter(Boolean).sort()[0]||'9999',item.due_date||'9999',item.created_at||'',item.id].join('|');
   function card(item) {
@@ -136,7 +136,7 @@
     management.append(button('Edit',()=>openEditor(item)));
     if(!['done','dismissed'].includes(item.status)){
       management.append(button('Dismiss',e=>patch(item,{status:'dismissed'},e.currentTarget)),button('Done',e=>patch(item,{status:'done'},e.currentTarget)));
-    } if(item.status !== 'open') management.append(button('Set ready',e=>patch(item,{status:'open'},e.currentTarget)));
+    } if(item.status !== 'open') management.append(button('Set in review',e=>patch(item,{status:'open'},e.currentTarget)));
     management.append(button('History',()=>showHistory(item)));
     const resultsButton = button('Agents',()=>window.hflAgentBridge.open('actionable',item.id,item.title));
     resultsButton.className = 'action-results-button';
@@ -209,7 +209,7 @@
     const available = items ? items.length > 0 : days.some(marker => marker.planned.length || marker.actions.length);
     indicator.hidden = !available;
     indicator.dataset.timelineStatus = status;
-    const label = 'Actions available · ' + ({open:'Active',in_progress:'In progress',incomplete:'Incomplete',done:'Done',dismissed:'Dismissed or historical'}[status]);
+    const label = 'Actions available · ' + ({open:'In review / Ready',in_progress:'In progress',incomplete:'Incomplete',done:'Done',dismissed:'Dismissed or historical'}[status]);
     indicator.setAttribute('aria-label', label);
     indicator.title = label;
   }
@@ -221,7 +221,7 @@
       if(markers?.dot_status)day.dataset.timelineStatus=markers.dot_status;else delete day.dataset.timelineStatus;
       day.toggleAttribute('data-timeline-action', Boolean(markers?.actions.length));
       if(!day.dataset.timelineLabel)day.dataset.timelineLabel=day.getAttribute('aria-label')||day.dataset.activityDay;
-      const suffix=markers ? `; ${markers.planned.length} scheduled${markers.dot_status ? ' · '+({open:'Active',in_progress:'In progress',incomplete:'Incomplete',done:'All done'}[markers.dot_status]) : ''}, ${markers.actions.length} linked actions` : '';
+      const suffix=markers ? `; ${markers.planned.length} scheduled${markers.dot_status ? ' · '+({open:'In review / Ready',in_progress:'In progress',incomplete:'Incomplete',done:'All done'}[markers.dot_status]) : ''}, ${markers.actions.length} linked actions` : '';
       day.setAttribute('aria-label',day.dataset.timelineLabel+suffix);day.title=day.dataset.timelineLabel+suffix;
     });
   }

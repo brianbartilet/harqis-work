@@ -435,3 +435,5 @@
 .agent-config-field input[type=checkbox] { width:auto; }
 .agent-config-field input:disabled,.agent-config-field select:disabled { opacity:.5; }
 @media(max-width:640px) { .agent-config-field { grid-template-columns:1.2rem 1fr; } .agent-config-field :last-child { grid-column:2; } .agent-terminal { height:50dvh; } }
+
+.agent-paste-notice[hidden] { display:none; }

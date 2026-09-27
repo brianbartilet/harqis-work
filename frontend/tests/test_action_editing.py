@@ -316,7 +316,7 @@ def test_connections_is_always_available_and_adds_board(editor_page, ideas):
     assert 'action:' + action['id'] in ideas.map(board['id'])['members']
 
 
-def test_ready_and_available_status_labels_preserve_api_values(editor_page, ideas):
+def test_review_ready_and_available_status_labels_preserve_api_values(editor_page, ideas):
     from playwright.sync_api import expect
     page, client = editor_page
     item = create_action(client)
@@ -324,13 +324,18 @@ def test_ready_and_available_status_labels_preserve_api_values(editor_page, idea
     assert client.patch(uri, json={'version':item['version'],'status':'active'}).status_code == 200
     idea = ideas.save_idea(payload(), 'owner')
     page.goto('https://editing.test/hfl-corpus/actions')
-    page.get_by_role('button', name='Set ready', exact=True).click()
+    lanes = page.locator('.followups-lane')
+    expect(lanes.nth(0)).to_have_attribute('data-status', 'open')
+    expect(lanes.nth(1)).to_have_attribute('data-status', 'active')
+    expect(lanes.nth(1).locator(':scope > h3')).to_contain_text('Ready')
+    expect(lanes.nth(1).locator('.action-status')).to_have_text('Ready')
+    page.get_by_role('button', name='Set in review', exact=True).click()
     ready = page.locator('.followups-lane[data-status=open]')
-    expect(ready.locator('.action-status')).to_have_text('Ready')
-    expect(ready.locator(':scope > h3')).to_contain_text('Ready')
+    expect(ready.locator('.action-status')).to_have_text('In Review')
+    expect(ready.locator(':scope > h3')).to_contain_text('In Review')
     assert client.get(uri).json()['item']['status'] == 'open'
     ready.get_by_role('button',name='Edit',exact=True).click()
-    expect(page.locator('#followup-form [name=status] option:checked')).to_have_text('Ready')
+    expect(page.locator('#followup-form [name=status] option:checked')).to_have_text('In Review')
     page.get_by_role('button',name='Close follow-up editor',exact=True).click()
     page.evaluate('(id)=>window.HflIdeas.editIdea(id)',idea['id'])
     editor=page.get_by_role('dialog',name='Edit idea',exact=True)

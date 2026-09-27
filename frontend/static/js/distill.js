@@ -32,7 +32,7 @@
     for (const item of items.slice(0, 6)) {
       const link = document.createElement('a'); link.className = 'distill-action';
       link.href = '/hfl-corpus/actions?' + new URLSearchParams({edit_kind: 'actionable', edit: item.id});
-      const status = {open:'Active', active:'Active', in_progress:'In progress', incomplete:'Incomplete', done:'Done'}[item.status] || item.status;
+      const status = {open:'In Review', active:'Ready', in_progress:'In progress', incomplete:'Incomplete', done:'Done'}[item.status] || item.status;
       const badge = element('span', status); badge.className = 'distill-action-status'; badge.dataset.status = item.status;
       link.append(badge, element('strong', item.title));
       if (item.expected_outcome || item.body) link.append(element('p', item.expected_outcome || item.body));

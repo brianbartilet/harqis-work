@@ -11,8 +11,8 @@
   async function api(path, payload) {
     const csrf = JSON.parse(document.querySelector('[data-memory-csrf]')?.textContent || '""');
     const response = await fetch('/hfl-corpus/agent-bridge' + path, {
-      method: payload === undefined ? 'GET' : 'POST', headers: {'Content-Type':'application/json','X-CSRF-Token':csrf},
-      ...(payload === undefined ? {} : {body:JSON.stringify(payload)})
+      method: payload === undefined ? 'GET' : 'POST', headers: {...(payload instanceof FormData ? {} : {'Content-Type':'application/json'}),'X-CSRF-Token':csrf},
+      ...(payload === undefined ? {} : {body:payload instanceof FormData ? payload : JSON.stringify(payload)})
     });
     const text = await response.text();
     let data;
@@ -31,8 +31,25 @@
       if(sendingInput || !inputQueue.length)return;
       sendingInput=true;
       const item=inputQueue.shift();
-      try { await api('/sessions/'+item.identity+'/input',{data:item.data,key:item.key}); }
-      catch(e) {error.textContent='Input was not delivered: '+e.message;error.hidden=false;}
+      try {
+        if(item.files){
+          for(const file of item.files){
+            const body=new FormData();
+            const extension=({'image/png':'png','image/jpeg':'jpg','image/webp':'webp','image/gif':'gif'})[file.type];
+            if(!extension)throw new Error('Paste a PNG, JPEG, WebP or GIF image.');
+            const name='pasted-'+crypto.randomUUID()+'.'+extension;
+            body.append('files',file,name);
+            const uploaded=await api('/inputs/actionable/'+encodeURIComponent(sourceId),body);
+            const attachment=uploaded.attachments.find(file=>file.name===name);
+            if(!attachment)throw new Error('The uploaded image was not returned.');
+            window.dispatchEvent(new CustomEvent('hfl:actions-updated'));
+            if(disposed || session?.id!==item.identity)throw new Error('Image saved on the action. Return to the original session to use it.');
+            await api('/sessions/'+item.identity+'/images',{attachment_id:attachment.id,key:crypto.randomUUID()});
+          }
+          showPasteNotice('Image attached; file reference queued. Add your instructions, then press Enter.');
+        } else await api('/sessions/'+item.identity+'/input',{data:item.data,key:item.key});
+      }
+      catch(e) {error.textContent='Input was not delivered: '+e.message;error.hidden=false;if(item.files)showPasteNotice('Image paste did not complete. See the error above.');}
       finally {sendingInput=false;if(inputQueue.length)void flushInput();}
     }
     const root = el('section', undefined, 'action-agent-workspace'); container.append(root);
@@ -58,6 +75,33 @@
     button('End session',async()=>{if(session)await api('/sessions/'+session.id,{closed:true});});
     const download = el('a','Download transcript'); download.hidden=true; controls.append(download);
     const viewport = el('div',undefined,'agent-terminal'); viewport.setAttribute('aria-label','Native Hermes terminal');
+    let pasteNoticeTimer;
+    const pasteNotice=el('section',undefined,'agent-session-notice agent-paste-notice');pasteNotice.hidden=true;
+    pasteNotice.setAttribute('aria-label','Paste notification');
+    const pasteStatus=el('p','');pasteStatus.setAttribute('role','status');pasteStatus.setAttribute('aria-live','polite');
+    pasteNotice.append(pasteStatus);
+    function dismissPasteNotice(){clearTimeout(pasteNoticeTimer);pasteNotice.hidden=true;}
+    button('Dismiss',dismissPasteNotice,pasteNotice);
+    function showPasteNotice(message, duration=5000){
+      if(disposed)return;
+      clearTimeout(pasteNoticeTimer);pasteStatus.textContent=message;pasteNotice.hidden=false;
+      if(duration)pasteNoticeTimer=setTimeout(dismissPasteNotice,duration);
+    }
+    viewport.addEventListener('paste',event=>{
+      const files=Array.from(event.clipboardData?.items||[]).filter(item=>item.kind==='file' && item.type.startsWith('image/')).map(item=>item.getAsFile()).filter(Boolean);
+      if(!files.length){
+        if(event.clipboardData?.getData('text/plain') && session && !terminal?.options.disableStdin)
+          showPasteNotice('Text pasted into the terminal.');
+        return;
+      }
+      event.preventDefault();event.stopImmediatePropagation();
+      if(!session || !['starting','idle','waiting','running'].includes(session.state) || session.closed){
+        error.textContent='Start or restore a connected session before pasting an image.';error.hidden=false;return;
+      }
+      showPasteNotice('Uploading image to this action…',0);
+      inputQueue.push({identity:session.id,files});
+      void flushInput();
+    },true);
     const sessionNotice=el('section',undefined,'agent-session-notice');sessionNotice.hidden=true;
     sessionNotice.setAttribute('aria-label','Session connection');
     const noticeText=el('p');noticeText.setAttribute('role','status');sessionNotice.append(noticeText);
@@ -82,7 +126,7 @@
         terminal.options.cursorBlink=!terminal.options.disableStdin;
       }
     }
-    const hint = el('p','Native Hermes CLI · use /help for commands. Closing this dialog leaves execution running.','agent-terminal-hint');
+    const hint = el('p','Native Hermes CLI · paste images into the terminal to attach them; press Enter when your prompt is ready. Use /help for commands. Closing this dialog leaves execution running.','agent-terminal-hint');
     const empty = el('section',undefined,'agent-session-empty'); empty.hidden=true;
     const emptyContent=el('div');
     const icon=el('span','>_','agent-session-empty-icon'); icon.setAttribute('aria-hidden','true');
@@ -103,9 +147,9 @@
       section.append(controls,error);
       sidebar.append(details);
       root.setAttribute('aria-label','Agent session');
-      const stage=el('div',undefined,'agent-terminal-stage');stage.append(sessionNotice,viewport,empty);
+      const stage=el('div',undefined,'agent-terminal-stage');stage.append(sessionNotice,pasteNotice,viewport,empty);
       root.append(section,stage,hint);
-    } else root.append(details,controls,status,error,sessionNotice,viewport,empty,hint);
+    } else root.append(details,controls,status,error,sessionNotice,pasteNotice,viewport,empty,hint);
     function showEmpty(){
       if(headerStatus){headerStatus.textContent='No session · Start to begin';headerStatus.dataset.state='empty';}
       empty.hidden=false;root.classList.add('agent-session-is-empty');
@@ -128,7 +172,7 @@
         for(const [key,label] of [['status','Status'],['due_date','Due'],['description','Description'],['prompt','Initial prompt'],['expected_outcome','Expected outcome'],['notes','Notes'],['completion_note','Outcome']]) {
           const value=action[key];
           if(!value && key!=='prompt')continue;
-          const content=el('dd',key==='status'?(value==='open'?'Ready':value.replaceAll('_',' ')):(value||'No initial prompt saved.'));
+          const content=el('dd',key==='status'?(value==='open'?'In Review':value==='active'?'Ready':value.replaceAll('_',' ')):(value||'No initial prompt saved.'));
           if(value && config.action_html?.[key]){content.className='markdown-body';content.innerHTML=config.action_html[key];}
           values.append(el('dt',label),content);
         }
@@ -247,7 +291,7 @@
           if(!session)return;lastInputAt=Date.now();
           if(!pollingBusy){clearTimeout(polling);polling=setTimeout(poll,0);}
           const pending=inputQueue.at(-1);
-          if(pending?.identity===session.id && pending.data.length+data.length<=65536)pending.data+=data;
+          if(pending?.identity===session.id && !pending.files && pending.data.length+data.length<=65536)pending.data+=data;
           else inputQueue.push({identity:session.id,key:crypto.randomUUID(),data});
           clearTimeout(inputTimer);inputTimer=setTimeout(flushInput,16);
         });
@@ -257,7 +301,7 @@
         await poll();
       }catch(e){error.textContent=e.message;error.hidden=false;status.textContent='Workspace could not be loaded.';}
     })();
-    return ()=>{disposed=true;window.removeEventListener('hfl:actions-updated',actionChanged);document.removeEventListener('close',editorClosed,true);clearTimeout(polling);clearTimeout(inputTimer);void flushInput();observer.disconnect();terminal?.dispose();};
+    return ()=>{disposed=true;clearTimeout(pasteNoticeTimer);window.removeEventListener('hfl:actions-updated',actionChanged);document.removeEventListener('close',editorClosed,true);clearTimeout(polling);clearTimeout(inputTimer);void flushInput();observer.disconnect();terminal?.dispose();};
   }
   window.actionAgentWorkspace={mount};
 })();

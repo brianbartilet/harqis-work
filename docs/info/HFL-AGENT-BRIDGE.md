@@ -12,15 +12,16 @@ Open **App Settings** from the avatar menu (alongside **Profile**), or visit
 in Profile; credentials stay on the host, while optional model/provider overrides
 are available in App Settings.
 
-All **Open** actionables with nonblank prompts are discovered automatically.
+New actionables start **In Review**, where prompts can be drafted without automatic pickup.
+**Ready** actionables with nonblank prompts and agent execution enabled are discovered automatically.
 The **prompt is the main instruction and completion criterion**. Title, expected
 outcome, notes and linked activity supply supporting context. Review and due dates
-do not limit discovery. Blank prompts stay Open.
+do not limit discovery. Blank prompts are not executed.
 
-The lifecycle is **Open → Active → In Progress → Done**. Active means queued;
-In Progress means claimed by a worker. Failed, blocked or partial work becomes
+The lifecycle is **In Review → Ready → In Progress → Done**.
+In Progress includes queued and running executions. Failed, blocked or partial work becomes
 **Incomplete**, shown in red with precedence over other calendar status dots.
-Moving an action back to Open requests a fresh attempt on the next discovery
+Moving an action back to Ready requests a fresh attempt on the next discovery
 pass. Old attempts retain their history and cannot overwrite the new revision.
 **Run now** queues an immediate attempt. Closed actions must first be reopened.
 
@@ -38,7 +39,7 @@ The latest stopped attempt offers a continuation form directly in **Agent result
   choose **Retry after fix**. You can add a note explaining what changed.
 - Older results without a blocker category offer both controls.
 
-There is no need to edit the original prompt or set the action back to Open.
+There is no need to edit the original prompt or set the action back to Ready.
 Continuation queues a fresh Hermes session linked to the stopped attempt. It carries
 the original task and occurrence date, previous results, owner replies and up to 30
 saved artifacts. Files are fetched using the active worker lease and verified by

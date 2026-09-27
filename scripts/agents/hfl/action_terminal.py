@@ -211,6 +211,47 @@ class TerminalWorker:
         response.raise_for_status()
         self.sent[path.name] = digest
 
+    def download_input(self, item, inputs):
+        download_heartbeat = time.monotonic()
+        if not re.fullmatch(r'[a-f0-9]{32}(?:\.[a-z0-9]{1,12})?', item['filename']):
+            raise ValueError('Invalid supporting filename.')
+        path = inputs / item['filename']
+        if path.is_symlink():
+            raise ValueError('Supporting file cannot be a symlink.')
+        import hashlib
+        digest = hashlib.sha256()
+        size = 0
+        with self.client.client.stream('GET', self.prefix + '/inputs/' + item['id'], headers={'X-Terminal-Lease': self.token}) as response:
+            response.raise_for_status()
+            with path.open('wb') as target:
+                for chunk in response.iter_bytes():
+                    if time.monotonic() - download_heartbeat > 10:
+                        reply = self.call('/poll', state=self.state, native_id=self.native_id, after=self.after)
+                        if reply['close']:
+                            raise RuntimeError('Session closed while downloading supporting files.')
+                        download_heartbeat = time.monotonic()
+                    size += len(chunk)
+                    if size > 500 * 1024 * 1024:
+                        raise ValueError('Supporting file exceeds limit.')
+                    digest.update(chunk)
+                    target.write(chunk)
+        if size != item['size'] or digest.hexdigest() != item['digest']:
+            raise ValueError('Supporting file changed during download.')
+        return path.resolve()
+
+    def deliver_input(self, event, terminal, inputs):
+        if event.get('type') == 'image':
+            try:
+                path = self.download_input(json.loads(event['data']), inputs)
+                # Literal, single-line reference: never submit the user's prompt.
+                terminal.write(' ' + json.dumps(path.as_posix(), ensure_ascii=True) + ' ')
+            except Exception:
+                logging.exception('Could not deliver pasted image to terminal %s', self.identity)
+                self.call('/output', key='image-error-' + str(event['seq']),
+                          data='\r\nImage could not be loaded. It remains attached to the action; paste it again to retry.\r\n')
+        else:
+            terminal.write(event['data'])
+
     def run(self):
         command, hermes_root = self.runner.hermes_command()
         root = self.runner.spool_root() / 'terminals' / self.identity
@@ -224,32 +265,8 @@ class TerminalWorker:
         inputs = root / 'inputs'
         inputs.mkdir(exist_ok=True)
         manifest = []
-        download_heartbeat = time.monotonic()
         for item in self.session.get('attachments', []):
-            if not re.fullmatch(r'[a-f0-9]{32}(?:\.[a-z0-9]{1,12})?', item['filename']):
-                raise ValueError('Invalid supporting filename.')
-            path = inputs / item['filename']
-            if path.is_symlink():
-                raise ValueError('Supporting file cannot be a symlink.')
-            import hashlib
-            digest = hashlib.sha256()
-            size = 0
-            with self.client.client.stream('GET', self.prefix + '/inputs/' + item['id'], headers={'X-Terminal-Lease': self.token}) as response:
-                response.raise_for_status()
-                with path.open('wb') as target:
-                    for chunk in response.iter_bytes():
-                        if time.monotonic() - download_heartbeat > 10:
-                            reply = self.call('/poll', state='starting', native_id=self.native_id, after=self.after)
-                            if reply['close']:
-                                raise RuntimeError('Session closed while downloading supporting files.')
-                            download_heartbeat = time.monotonic()
-                        size += len(chunk)
-                        if size > 500 * 1024 * 1024:
-                            raise ValueError('Supporting file exceeds limit.')
-                        digest.update(chunk)
-                        target.write(chunk)
-            if size != item['size'] or digest.hexdigest() != item['digest']:
-                raise ValueError('Supporting file changed during download.')
+            path = self.download_input(item, inputs)
             manifest.append({'name': item['name'], 'path': str(path)})
         settings.setdefault('initial_context', {})['supporting_files'] = manifest
         workspace = Workspace(root, self.identity, settings)
@@ -353,7 +370,7 @@ class TerminalWorker:
                     dimensions = (reply['rows'], reply['cols'])
                     terminal.resize(*dimensions)
                 for event in reply['input']:
-                    terminal.write(event['data'])
+                    self.deliver_input(event, terminal, inputs)
                     self.after = event['seq']
                     last_input = time.monotonic()
                 if self.state == 'idle' and time.monotonic() - last_input >= expiry * 60:

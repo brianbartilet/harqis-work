@@ -1,6 +1,8 @@
 """Authenticated action terminal transport. Workers own processes; browsers only attach."""
 import hashlib
 import io
+import json
+from pathlib import Path
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
@@ -113,6 +115,20 @@ def terminal_edit(identity: str, payload: dict):
 @owner.post('/sessions/{identity}/input')
 def terminal_input(identity: str, payload: dict):
     bridge.checked(store().io, identity, 'in', payload.get('key'), payload.get('data'))
+    return {'ok': True}
+
+
+@owner.post('/sessions/{identity}/images')
+def terminal_image(identity: str, payload: dict):
+    db = store()
+    session = bridge.checked(db.session, identity)
+    attachments = bridge.checked(bridge.input_manifest, 'actionable', session['source_id'])['attachments']
+    attachment = next((item for item in attachments if item['id'] == payload.get('attachment_id')), None)
+    if attachment is None:
+        raise HTTPException(404, 'Image is not attached to this action.')
+    if Path(attachment['filename']).suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp', '.gif'}:
+        raise HTTPException(400, 'Choose a PNG, JPEG, WebP or GIF image.')
+    bridge.checked(db.io, identity, 'image', payload.get('key'), json.dumps(attachment))
     return {'ok': True}
 
 

@@ -67,17 +67,18 @@ def test_settings_persist_validate_and_require_owner_csrf(bridge, authenticated_
 def test_polling_skips_blank_prompts_and_reopen_creates_fresh_attempt(bridge, authenticated_client):
     module, store, actions = bridge
     blank = create_action(actions)
-    actions.update(blank['id'], {'version': 1, 'prompt': '  '}, actor='owner')
+    actions.update(blank['id'], {'version': 1, 'prompt': '  ', 'status': 'active'}, actor='owner')
     item = create_action(actions)
+    actions.update(item['id'], {'version': 1, 'status': 'active'}, actor='owner')
     ids = module.sweep()['runs']
     assert len(ids) == 1
-    assert actions.get(blank['id'])['status'] == 'open'
-    assert actions.get(item['id'])['status'] == 'active'
+    assert actions.get(blank['id'])['status'] == 'active'
+    assert actions.get(item['id'])['status'] == 'in_progress'
     first = authenticated_client.post(f'/api/hfl-agent/runs/{ids[0]}/claim', headers=WORKER, json={}).json()
     event(authenticated_client, first, 'failed', {'summary': 'Download failed.'})
     assert actions.get(item['id'])['status'] == 'incomplete'
     current = actions.get(item['id'])
-    actions.update(item['id'], {'version': current['version'], 'status': 'open'}, actor='owner')
+    actions.update(item['id'], {'version': current['version'], 'status': 'active'}, actor='owner')
     assert module.sweep()['runs'] == []  # Configured cadence is durable across ticks.
     with store.connect() as db:
         db.execute("DELETE FROM agent_dispatch_state WHERE key='actions-poll'")
@@ -85,7 +86,7 @@ def test_polling_skips_blank_prompts_and_reopen_creates_fresh_attempt(bridge, au
     assert second != first['id']
     assert len(store.list('actionable:' + item['id'])) == 2
     assert event(authenticated_client, first, 'progress', {'summary': 'Late result'}).status_code == 409
-    assert actions.get(item['id'])['status'] == 'active'
+    assert actions.get(item['id'])['status'] == 'in_progress'
 
 
 def test_external_action_opt_out_survives_edits_and_scheduler_ticks(bridge):
@@ -93,9 +94,9 @@ def test_external_action_opt_out_survives_edits_and_scheduler_ticks(bridge):
     item = actions.create({'request_id': str(uuid4()), 'title': 'Save intent',
                            'expected_outcome': 'Review later', 'prompt': 'A complete prompt',
                            'agent_enabled': False}, actor='owner-api')[0]
-    actions.update(item['id'], {'version': 1, 'notes': 'Edited'}, actor='owner')
+    actions.update(item['id'], {'version': 1, 'notes': 'Edited', 'status': 'active'}, actor='owner')
     assert module.sweep()['runs'] == []
-    assert actions.get(item['id'])['status'] == 'open'
+    assert actions.get(item['id'])['status'] == 'active'
     assert actions.get(item['id'])['agent_enabled'] is False
 
 
@@ -126,12 +127,13 @@ def test_unavailable_inputs_prevent_dispatch_without_stopping_sweep(bridge, monk
     from fastapi import HTTPException
     module, store, actions = bridge
     item = create_action(actions)
+    actions.update(item['id'], {'version': 1, 'status': 'active'}, actor='owner')
     def unavailable(*args):
         raise HTTPException(502, 'Canonical attachment service unavailable.')
     monkeypatch.setattr(module, 'input_manifest', unavailable)
     result = module.sweep()
     assert result['runs'] == []
-    assert actions.get(item['id'])['status'] == 'open'
+    assert actions.get(item['id'])['status'] == 'active'
 
 
 def test_owner_attachment_proxy_uses_canonical_bearer_and_preserves_bytes(bridge, authenticated_client, monkeypatch):
@@ -162,7 +164,7 @@ def test_reopened_running_attempt_cannot_complete_new_revision(bridge, authentic
     item = create_action(actions)
     first = start(authenticated_client, item, auto=True)
     current = actions.get(item['id'])
-    actions.update(item['id'], {'version': current['version'], 'status': 'open'}, actor='owner')
+    actions.update(item['id'], {'version': current['version'], 'status': 'active'}, actor='owner')
     second = module.enqueue('actionable', item['id'], 'reopened', 'owner')
     assert second['id'] != first['id']
     assert store.get(first['id'])['state'] == 'cancelled'
@@ -329,7 +331,7 @@ def test_agent_run_updates_status_records_events_and_requires_acceptance(bridge,
     accepted = authenticated_client.post(f"/hfl-corpus/agent-bridge/runs/{run['id']}/accept", headers=owner_headers(), json={})
     assert accepted.status_code == 200, accepted.text
     assert actions.get(item['id'])['status'] == 'done'
-    assert len(actions.history(item['id'])) == 4
+    assert len(actions.history(item['id'])) == 3
     assert [row['kind'] for row in store.events('actionable:' + item['id'])] == ['succeeded', 'accepted', 'succeeded', 'plan', 'running', 'queued']
     assert event(authenticated_client, run, 'succeeded', RESULT).status_code == 200
     assert event(authenticated_client, run, 'succeeded', {**RESULT, 'summary': 'Changed'}).status_code == 409
@@ -340,7 +342,7 @@ def test_concurrent_claim_and_owner_edit_cannot_be_overwritten(bridge, authentic
     item = create_action(actions)
     run = start(authenticated_client, item, auto=True)
     assert authenticated_client.post(f"/api/hfl-agent/runs/{run['id']}/claim", headers=WORKER, json={}).status_code == 409
-    actions.update(item['id'], {'version': 3, 'prompt': 'A different task'}, actor='owner')
+    actions.update(item['id'], {'version': actions.get(item['id'])['version'], 'prompt': 'A different task'}, actor='owner')
     event(authenticated_client, run, 'plan', {'summary': 'Plan'})
     assert event(authenticated_client, run, 'succeeded', RESULT).json()['state'] == 'review'
     assert actions.get(item['id'])['prompt'] == 'A different task'
@@ -374,9 +376,18 @@ def test_auth_and_csrf_do_not_expose_worker_authority(bridge, authenticated_clie
     assert authenticated_client.post(path, headers=WORKER, json={'request_key': 'a'}).status_code == 401
 
 
-def test_automatic_open_discovery_and_duplicate_requests(bridge):
+def test_review_drafts_wait_for_ready_and_discovery_is_deduplicated(bridge):
     module, store, actions = bridge
     item = create_action(actions)
+    assert module.sweep()['runs'] == []
+    item = actions.update(item['id'], {'version': item['version'], 'prompt': 'Fully drafted instructions'}, actor='owner')
+    with store.connect() as db:
+        db.execute("DELETE FROM agent_dispatch_state WHERE key='actions-poll'")
+    assert module.sweep()['runs'] == []
+    assert actions.get(item['id'])['status'] == 'open'
+    actions.update(item['id'], {'version': item['version'], 'status': 'active'}, actor='owner')
+    with store.connect() as db:
+        db.execute("DELETE FROM agent_dispatch_state WHERE key='actions-poll'")
     first = module.sweep()['runs']
     assert len(first) == 1
     assert module.sweep()['runs'] == []
@@ -411,7 +422,22 @@ def test_stale_instructions_cancel_before_claim(bridge, authenticated_client):
     response = authenticated_client.post(f"/api/hfl-agent/runs/{run['id']}/claim", headers=WORKER, json={})
     assert response.status_code == 409
     assert store.get(run['id'])['state'] == 'cancelled'
-    assert actions.get(item['id'])['status'] == 'active'
+    assert actions.get(item['id'])['status'] == 'in_progress'
+
+
+def test_returning_to_review_prevents_queued_worker_pickup(bridge, authenticated_client):
+    module, store, actions = bridge
+    item = create_action(actions)
+    item = actions.update(item['id'], {'version': item['version'], 'status': 'active'}, actor='owner')
+    run = module.enqueue('actionable', item['id'], 'ready-request', 'hermes-schedule')
+    current = actions.get(item['id'])
+    actions.update(item['id'], {'version': current['version'], 'status': 'open'}, actor='owner')
+    response = authenticated_client.post(f"/api/hfl-agent/runs/{run['id']}/claim", headers=WORKER, json={})
+    assert response.status_code == 409
+    assert store.get(run['id'])['state'] == 'cancelled'
+    assert actions.get(item['id'])['status'] == 'open'
+    with pytest.raises(ValueError, match='Only Ready'):
+        module.enqueue('actionable', item['id'], 'stale-sweep', 'hermes-schedule')
 
 
 def test_after_period_schedule_runs_once_and_ignores_future_pins(bridge):
@@ -656,7 +682,7 @@ def test_continue_preserves_context_files_and_operation_scope(bridge, authentica
     assert second['snapshot']['operation_scope'] == first['request_key']
     assert second['snapshot']['continuation']['history'][0]['result'] == stopped
     assert second['snapshot']['continuation']['artifacts'][0]['name'] == 'report.md'
-    assert actions.get(item['id'])['status'] == 'active'
+    assert actions.get(item['id'])['status'] == 'in_progress'
     assert store.get(first['id'])['state'] == 'cancelled'
     assert authenticated_client.post(path, headers=owner_headers(), json=payload).json()['id'] == second['id']
     assert authenticated_client.post(path, headers=owner_headers(), json={**payload, 'reply': 'Different'}).status_code == 409
@@ -710,7 +736,7 @@ def test_sweep_queues_important_actions_before_less_important_urgency(bridge):
     module, store, actions = bridge
     for matrix in ('Q3', 'Q2', 'Q1', 'Q4'):
         item = create_action(actions)
-        actions.update(item['id'], {'version':1, 'matrix':matrix}, actor='owner')
+        actions.update(item['id'], {'version':1, 'matrix':matrix, 'status':'active'}, actor='owner')
     runs = module.sweep()['runs']
     assert [store.get(run)['snapshot']['source']['matrix'] for run in runs] == ['Q1','Q2','Q3','Q4']
 

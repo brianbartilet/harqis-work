@@ -94,21 +94,22 @@ class ActionAgentStore(AgentBridgeStore):
             db.execute('UPDATE action_agent_sessions SET ' + ','.join(k + '=?' for k in fields) + ' WHERE id=?', (*fields.values(), identity))
 
     def io(self, identity, direction, key, data):
-        if direction not in {'in', 'out'} or not isinstance(data, str) or len(data) > 65536 or not isinstance(key, str) or not 1 <= len(key) <= 100:
+        if direction not in {'in', 'out', 'image'} or not isinstance(data, str) or len(data) > 65536 or not isinstance(key, str) or not 1 <= len(key) <= 100:
             raise ValueError('Invalid terminal data.')
         with self.connect() as db:
             row = db.execute('SELECT state,closed FROM action_agent_sessions WHERE id=?', (identity,)).fetchone()
             if not row:
                 raise KeyError(identity)
-            if direction == 'in' and (row['closed'] or row['state'] not in {'starting','idle','waiting','running'}):
+            if direction in {'in', 'image'} and (row['closed'] or row['state'] not in {'starting','idle','waiting','running'}):
                 raise BridgeConflict('Wait for the terminal to connect before typing.')
             db.execute('INSERT OR IGNORE INTO action_agent_io(session,direction,request_key,data) VALUES (?,?,?,?)', (identity, direction, key, data))
-            if direction == 'in':
+            if direction in {'in', 'image'}:
                 db.execute('UPDATE action_agent_sessions SET activity=? WHERE id=?', (now(), identity))
 
     def read_io(self, identity, direction, after=0):
         with self.connect() as db:
-            return [dict(row) for row in db.execute('SELECT seq,data FROM action_agent_io WHERE session=? AND direction=? AND seq>? ORDER BY seq LIMIT 100', (identity, direction, after))]
+            rows = db.execute('SELECT seq,data,direction FROM action_agent_io WHERE session=? AND direction IN (?,?) AND seq>? ORDER BY seq LIMIT 100', (identity, direction, 'image' if direction == 'in' else direction, after))
+            return [{'seq': row['seq'], 'data': row['data'], **({'type': 'image'} if row['direction'] == 'image' else {})} for row in rows]
 
     def transcript(self, identity):
         self.session(identity)

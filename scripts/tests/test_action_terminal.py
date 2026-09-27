@@ -155,3 +155,35 @@ def test_terminal_transport_retries_bounded_and_respects_lease(monkeypatch, path
         with pytest.raises(httpx.HTTPStatusError):
             bridge.call(path, {'token': 'lease'})
     assert len(calls) == expected
+
+
+def test_pasted_image_download_and_prompt_reference(tmp_path):
+    import hashlib
+    import json
+    import httpx
+    from types import SimpleNamespace
+    from scripts.agents.hfl.action_terminal import TerminalWorker
+    content = b'clipboard image'
+    calls = []
+    def request(req):
+        assert req.headers['X-Terminal-Lease'] == 'lease'
+        assert req.url.path == '/terminals/session/inputs/image'
+        return httpx.Response(200, content=content)
+    client = httpx.Client(base_url='https://worker.test/', transport=httpx.MockTransport(request))
+    worker = TerminalWorker(SimpleNamespace(client=client), {'id':'session','token':'lease','native_id':''}, None)
+    worker.call = lambda *args, **kwargs: calls.append((args, kwargs))
+    writes = []
+    terminal = SimpleNamespace(write=writes.append)
+    image = {'id':'image','filename':'a'*32+'.png','size':len(content),'digest':hashlib.sha256(content).hexdigest()}
+    worker.deliver_input({'seq':1,'type':'image','data':json.dumps(image)}, terminal, tmp_path)
+    assert (tmp_path/image['filename']).read_bytes() == content
+    assert writes == [' ' + json.dumps((tmp_path/image['filename']).resolve().as_posix()) + ' ']
+    assert '\r' not in writes[0] and '\n' not in writes[0]
+    worker.deliver_input({'seq':2,'data':'review it'}, terminal, tmp_path)
+    assert writes[-1] == 'review it'
+    image['digest'] = 'wrong'
+    worker.deliver_input({'seq':3,'type':'image','data':json.dumps(image)}, terminal, tmp_path)
+    assert len(writes) == 2
+    assert calls[-1][0] == ('/output',)
+    assert 'could not be loaded' in calls[-1][1]['data']
+    client.close()

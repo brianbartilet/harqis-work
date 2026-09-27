@@ -10,7 +10,7 @@
   let workspaceNames=[], workspaceLoadState='loading';
   const status = $('[data-board-status]'), error = $('[data-board-error]');
   const states = ['open','active','in_progress','incomplete','done','dismissed'];
-  const label = value => value === 'open' ? 'Ready' : value === 'in_progress' ? 'In Progress' : value[0].toUpperCase()+value.slice(1);
+  const label = value => value === 'open' ? 'In Review' : value === 'active' ? 'Ready' : value === 'in_progress' ? 'In Progress' : value[0].toUpperCase()+value.slice(1);
   const listeners = new AbortController();
   let sequence = 0, pending = false, moving = false, dragging = null, disposed = false;
   let items = new Map(), rendered = '', timer, sorters = [];

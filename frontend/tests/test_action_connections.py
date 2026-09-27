@@ -230,8 +230,8 @@ def test_connections_preview_both_cards_and_throwaway_lifecycle(ideas, authentic
         page.evaluate('window.releaseConnections()')
         playwright.expect(preview.locator('canvas')).to_be_visible()
         loaded_box = preview.bounding_box()
-        playwright.expect(preview.locator('.connections-status')).to_have_text('Ready')
-        playwright.expect(preview.locator('.connections-status')).to_have_attribute('aria-label', 'Status: Ready')
+        playwright.expect(preview.locator('.connections-status')).to_have_text('In Review')
+        playwright.expect(preview.locator('.connections-status')).to_have_attribute('aria-label', 'Status: In Review')
         for dimension in ('x', 'y', 'width', 'height'):
             assert abs(loaded_box[dimension] - loading_box[dimension]) < 2
         assert preview.locator('select').count() == 0

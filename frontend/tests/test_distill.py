@@ -108,7 +108,7 @@ def test_distill_navigation_actions_and_retry(agenda, authenticated_client, monk
         page.wait_for_url('**/hfl-corpus?q=weekly+capture')
         page.locator('[data-activity-day][data-today="true"]').click()
         playwright.expect(page.locator('[data-activity-day-menu]')).to_be_visible()
-        assert '>Active<' in page.locator('.activity-indicator-legend').inner_html()
+        assert '>In review / Ready<' in page.locator('.activity-indicator-legend').inner_html()
         fail[0] = True
         page.goto('https://distill.test/distill')
         playwright.expect(page.locator('[data-distill-error]')).to_be_visible()
@@ -153,4 +153,4 @@ def test_distill_signal_all_activity_and_auth(authenticated_client, monkeypatch,
     assert landing.status_code == (200 if saved_selection == 'none' else 303)
     corpus_response = authenticated_client.get('/hfl-corpus?views=&scope=&dynamic=0')
     assert 'activity-indicator-legend' in corpus_response.text
-    assert '>Active</span>' in corpus_response.text
+    assert '>In review / Ready</span>' in corpus_response.text
