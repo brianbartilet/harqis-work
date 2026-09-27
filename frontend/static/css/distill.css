@@ -34,3 +34,4 @@
 .distill-work>header>a,.distill-graph-open{margin-right:7px}
 
 .distill-graph-guides a{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:9px 13px;border:1px solid #334155;border-radius:8px;background:#14263a;font-weight:600;line-height:18px}.distill-graph-guides a:hover{background:#243e54;border-color:#38bdf8}
+.distill-corpus>header{display:flex;justify-content:space-between;align-items:center;gap:16px}@media(max-width:760px){.distill-corpus>header{align-items:flex-start}}
