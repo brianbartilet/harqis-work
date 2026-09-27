@@ -57,6 +57,7 @@ window.HflChecklists = class {
       const tools = document.createElement('div'); tools.className = 'checklist-tools'; tools.append(coverLabel, sorting);
       box.append(header, tools, progress);
       for (const [i, item] of list.items.entries()) {
+        if (item.done && this.options.hideTicked?.()) continue;
         const row = document.createElement('div'); row.className = 'idea-check-row'; row.dataset.itemId = item.id;
         const check = document.createElement('input'); check.type = 'checkbox'; check.checked = item.done; check.setAttribute('aria-label', 'Complete ' + item.text);
         check.onchange = () => { item.done = check.checked; this.render(); };
@@ -154,7 +155,8 @@ window.HflChecklists = class {
 (() => {
   const form = document.getElementById('followup-form');
   if (form?.querySelector('[data-action-checklists]')) {
-    window.hflActionChecklists = new HflChecklists(form.querySelector('[data-action-checklists]'), {addButtonRoot: form.querySelector('[data-checklist-toolbar]')});
+    window.hflActionChecklists = new HflChecklists(form.querySelector('[data-action-checklists]'), {addButtonRoot: form.querySelector('[data-checklist-toolbar]'), hideTicked: () => form.elements.hide_ticked.checked});
+    form.elements.hide_ticked.addEventListener('change', () => window.hflActionChecklists.render());
     form.addEventListener('reset', () => window.hflActionChecklists.set([]));
   }
 })();
@@ -163,6 +165,7 @@ window.HflChecklistCover = function(root, item, save, open) {
     const section = document.createElement('section'); section.className = 'checklist-card-cover';
     const heading = document.createElement('p'); heading.textContent = `${list.title} · ${list.items.filter(i => i.done).length}/${list.items.length}`; section.append(heading);
     for (const task of [...list.items].sort((a,b) => Number(a.done) - Number(b.done))) {
+      if (item.hide_ticked && task.done) continue;
       const label = document.createElement('label'), check = document.createElement('input'); check.type = 'checkbox'; check.checked = task.done;
       check.onchange = async () => { section.inert = true; const lists = structuredClone(item.checklists); lists.find(l => l.id === list.id).items.find(i => i.id === task.id).done = check.checked;
         try { await save(lists); } catch (error) { check.checked = task.done; const message = document.createElement('p'); message.setAttribute('role', 'alert'); message.textContent = error.message; section.append(message); } finally { section.inert = false; }

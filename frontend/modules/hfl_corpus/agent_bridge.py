@@ -464,7 +464,30 @@ def input_download(kind, source_id, attachment_id, view=False):
 
 @owner_router.get('/inputs/{kind}/{source_id}')
 def owner_inputs(kind: str, source_id: str):
-    return input_manifest(kind, source_id)
+    return grouped_inputs(kind, source_id, input_manifest(kind, source_id))
+
+
+def grouped_inputs(kind, source_id, result):
+    if kind != 'actionable':
+        return result
+    # Resolve existing files from recorded provenance, never filename guesses.
+    from modules.hfl_corpus.action_agents import store as session_store
+    origins = {}
+    with session_store().connect() as db:
+        # Forgotten sessions retain immutable file records. Match both full
+        # stored filename and content digest so those outputs stay classified.
+        for row in db.execute('SELECT f.session,f.name,f.digest FROM action_agent_files f LEFT JOIN action_agent_sessions s ON s.id=f.session WHERE s.source_id=? OR s.id IS NULL', (source_id,)):
+            name = row['session'][:8] + '-' + row['digest'][:8] + '-' + row['name']
+            origins[(name, row['digest'])] = row['name']
+        for row in db.execute('SELECT a.run_id,a.name,a.digest FROM agent_artifacts a JOIN agent_requests r ON r.id=a.run_id WHERE r.source_key=?', ('actionable:' + source_id,)):
+            origins[(row['run_id'][:8] + '-' + row['name'], row['digest'])] = row['name']
+    execution_files = {'conversation.md', 'session-transcript.txt', 'repository-changes.zip'}
+    files = []
+    for file in result['attachments']:
+        original = origins.get((file['name'], file.get('digest')))
+        group = 'uploaded' if original is None else ('execution' if original in execution_files else 'generated')
+        files.append({**file, 'group': group})
+    return {**result, 'attachments': files}
 
 
 @owner_router.post('/inputs/{kind}/{source_id}')
@@ -472,14 +495,15 @@ async def owner_upload_inputs(kind: str, source_id: str, files: list[UploadFile]
     from modules.hfl_corpus.attachments import source_store, require_source
     if remote_inputs(kind):
         try:
-            return (await asyncio.to_thread(input_remote, 'POST', source_id, kind=kind,
-                    files=[('files', (f.filename, f.file, 'application/octet-stream')) for f in files])).json()
+            response = await asyncio.to_thread(input_remote, 'POST', source_id, kind=kind,
+                    files=[('files', (f.filename, f.file, 'application/octet-stream')) for f in files])
+            return grouped_inputs(kind, source_id, response.json())
         finally:
             for upload in files:
                 await upload.close()
     require_source(kind, source_id)
     store, source = source_store(kind, source_id)
-    return {'attachments': await store.upload(source, files)}
+    return grouped_inputs(kind, source_id, {'attachments': await store.upload(source, files)})
 
 
 @owner_router.get('/inputs/{kind}/{source_id}/{attachment_id}')
@@ -491,11 +515,11 @@ def owner_download_input(kind: str, source_id: str, attachment_id: str, view: bo
 def owner_detach_input(kind: str, source_id: str, attachment_id: str):
     from modules.hfl_corpus.attachments import source_store, require_source
     if remote_inputs(kind):
-        return input_remote('DELETE', source_id, attachment_id, kind=kind).json()
+        return grouped_inputs(kind, source_id, input_remote('DELETE', source_id, attachment_id, kind=kind).json())
     require_source(kind, source_id)
     store, source = source_store(kind, source_id)
     store.detach(source, attachment_id)
-    return {'attachments': store.list(source)}
+    return grouped_inputs(kind, source_id, {'attachments': store.list(source)})
 
 
 @worker_router.get('/runs/{run_id}/inputs/{attachment_id}')

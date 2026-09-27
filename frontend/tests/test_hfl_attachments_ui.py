@@ -43,6 +43,7 @@ def test_editors_save_multiple_attachments_without_running_early(authenticated_c
     from workflows.hfl.timeline_store import FollowUpStore
     playwright = pytest.importorskip('playwright.sync_api')
     monkeypatch.setenv('HFL_TIMELINE_LOCAL_PREVIEW', '1')
+    monkeypatch.setenv('HFL_AGENT_BRIDGE_STORE_PATH', str(tmp_path / 'bridge.sqlite3'))
     actions = FollowUpStore(tmp_path / 'actions.sqlite3')
     monkeypatch.setattr(timeline, 'store', lambda: actions)
     monkeypatch.setattr(router.corpus_index, 'documents', lambda: ())
@@ -108,6 +109,46 @@ def test_editors_save_multiple_attachments_without_running_early(authenticated_c
         assert [f['name'] for f in store.list(source)] == (['brief.md', 'data.csv'] if with_files else [])
         assert not errors
         assert not [call for call in calls if call[2] >= 400]
+        browser.close()
+
+
+@pytest.mark.parametrize('width', [390, 1100])
+def test_attachment_groups_preserve_controls_and_pending_files(tmp_path, width):
+    import json
+    from web import templates
+    playwright = pytest.importorskip('playwright.sync_api')
+    frontend = Path(__file__).resolve().parents[1]
+    markup = templates.env.get_template('modules/hfl_corpus/partials/input_attachments.html').render(memory_csrf='test')
+    editor = (frontend / 'templates/modules/hfl_corpus/partials/action_editor.html').read_text(encoding='utf-8')
+    styles = editor.split('<style>')[1].split('</style>')[0]
+    files = [
+        {'id': 'brief', 'name': 'brief.md', 'size': 123, 'group': 'uploaded'},
+        {'id': 'report', 'name': 'b914f730-869a1886-report.md', 'size': 1024, 'group': 'generated'},
+        {'id': 'transcript', 'name': 'b914f730-2d98f8f4-conversation.md', 'size': 2048, 'group': 'execution'},
+    ]
+    with playwright.sync_playwright() as driver:
+        browser = driver.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page(viewport={'width': width, 'height': 850})
+        page.route('https://inputs.test/**', lambda route: route.fulfill(content_type='application/json', body=json.dumps({'attachments': files})))
+        page.set_content('<base href="https://inputs.test/"><style>body{background:#0b1220;color:#e2e8f0;font-family:Arial;max-width:580px;margin:24px auto;padding:12px}*{box-sizing:border-box}' + styles + '</style>' + markup)
+        page.add_style_tag(path=str(frontend / 'static/css/hfl-timeline.css'))
+        page.add_script_tag(path=str(frontend / 'static/js/hfl-input-attachments.js'))
+        page.evaluate("window.editor=new HflInputAttachments(document.querySelector('[data-input-editor]'),'actionable');editor.reset('test')")
+        playwright.expect(page.locator('[data-file-group=uploaded] summary')).to_have_text('Uploaded attachments · 1')
+        playwright.expect(page.locator('[data-file-group=generated] summary')).to_have_text('Generated outputs · 1')
+        execution = page.locator('[data-file-group=execution]')
+        playwright.expect(execution.locator('summary')).to_have_text('Agent execution artifacts · 1')
+        assert not execution.evaluate('(el)=>el.open')
+        execution.locator('summary').click()
+        playwright.expect(execution.get_by_role('button', name='Preview ' + files[2]['name'], exact=True)).to_be_visible()
+        page.locator('[data-input-files]').set_input_files({'name': 'new.txt', 'mimeType': 'text/plain', 'buffer': b'New'})
+        playwright.expect(page.locator('[data-file-group=uploaded] summary')).to_have_text('Uploaded attachments · 2')
+        assert execution.evaluate('(el)=>el.open')
+        page.get_by_role('button', name='Remove new.txt', exact=True).click()
+        playwright.expect(page.locator('[data-file-group=uploaded] summary')).to_have_text('Uploaded attachments · 1')
+        assert not page.evaluate('editor.changed')
+        assert page.locator('[data-input-editor]').evaluate('(el)=>el.scrollWidth<=el.clientWidth+1')
+        page.screenshot(path=str(tmp_path / ('attachment-groups-' + str(width) + '.png')))
         browser.close()
 
 

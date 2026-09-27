@@ -21,7 +21,7 @@ def store_path():
 
 
 STATES = {"open", "active", "in_progress", "incomplete", "done", "dismissed"}
-FIELDS = {"title", "expected_outcome", "notes", "prompt", "review_date", "due_date", "status", "completion_note", "agent_enabled", "matrix", "matrix_confidence", "matrix_reason", "description", "body", "checklists", "workspace_ids", "recurrence"}
+FIELDS = {"title", "expected_outcome", "notes", "prompt", "review_date", "due_date", "status", "completion_note", "agent_enabled", "matrix", "matrix_confidence", "matrix_reason", "description", "body", "checklists", "hide_ticked", "workspace_ids", "recurrence"}
 
 
 def validate_matrix(payload):
@@ -122,6 +122,9 @@ class FollowUpStore:
         result['recurrence'] = recurrence(result)
         if type(result.get("agent_enabled", True)) is not bool:
             raise ValueError("agent_enabled must be a boolean.")
+        if type(result.get('hide_ticked', False)) is not bool:
+            raise ValueError('hide_ticked must be a boolean.')
+        result.setdefault('hide_ticked', False)
         for key, limit in {"title": 200, "expected_outcome": 3000, "notes": 6000, "prompt": 20000, "completion_note": 3000}.items():
             value = result.get(key, "")
             if not isinstance(value, str) or len(value if key == "prompt" else value.strip()) > limit:
@@ -176,6 +179,7 @@ class FollowUpStore:
                 original.update(content_fields(original))
                 original.setdefault('workspace_ids', [])
                 original.setdefault('recurrence', None)
+                original.setdefault('hide_ticked', False)
                 if any(original.get(k, True if k == "agent_enabled" else [] if k == 'checklists' else "") != item.get(k, True if k == "agent_enabled" else [] if k == 'checklists' else "") for k in FIELDS) or original.get("source") != source:
                     raise FollowUpConflict("This creation request was already used. Reload before creating another follow-up.")
                 return existing, True

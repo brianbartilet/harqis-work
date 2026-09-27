@@ -43,6 +43,8 @@ window.HflInputAttachments = class {
   reset(id = null) {
     const ticket = ++this.sequence;
     this.id = id; this.saved = []; this.pending = []; this.removed = new Set(); this.failure = ''; this.loading = !!id;
+    this.groupOpen = {uploaded: true, generated: true, execution: false};
+    this.list.replaceChildren();
     this.input.value = ''; this.render();
     if (id) this.request(this.url()).then(data => {
       if (ticket === this.sequence) { this.saved = data.attachments; this.loading = false; this.render(); }
@@ -102,8 +104,16 @@ window.HflInputAttachments = class {
       throw new Error('Use up to 50 attachments, 500 MB each and 25,000 MB total.');
   }
   render() {
+    this.list.querySelectorAll('[data-file-group]').forEach(group => { this.groupOpen[group.dataset.fileGroup] = group.open; });
     this.list.replaceChildren();
-    const add = (file, saved, index) => {
+    const groups = [
+      ['uploaded', 'Uploaded attachments', 'Files you add to this card.'],
+      ['generated', 'Generated outputs', 'Deliverables created by agents.'],
+      ['execution', 'Agent execution artifacts', 'Conversations, transcripts, and repository changes.']
+    ];
+    const entries = this.saved.filter(file => !this.removed.has(file.id)).map(file => ({file, saved: true, group: file.group || 'uploaded'}));
+    this.pending.forEach((file, index) => entries.push({file, saved: false, index, group: 'uploaded'}));
+    const add = (container, {file, saved, index}) => {
       const row = document.createElement('div'); row.className = 'agent-input-row';
       const label = document.createElement(saved ? 'a' : 'span');
       label.textContent = file.name + ' · ' + Math.max(1, Math.ceil(file.size / 1024)) + ' KB' + (saved ? '' : ' · Pending');
@@ -113,10 +123,17 @@ window.HflInputAttachments = class {
       remove.onclick = () => { if (saved) this.removed.add(file.id); else this.pending.splice(index, 1); this.render(); };
       const preview=document.createElement('button');preview.type='button';preview.textContent='Preview';preview.setAttribute('aria-label','Preview '+file.name);preview.onclick=()=>this.preview(file,saved);
       const controls=document.createElement('div');controls.className='agent-input-controls';controls.append(preview,remove);
-      row.append(label, controls); this.list.append(row);
+      row.append(label, controls); container.append(row);
     };
-    this.saved.filter(file => !this.removed.has(file.id)).forEach(file => add(file, true));
-    this.pending.forEach((file, index) => add(file, false, index));
+    for (const [key, title, help] of groups) {
+      const files = entries.filter(entry => entry.group === key);
+      const group = document.createElement('details'); group.className = 'agent-input-group'; group.dataset.fileGroup = key; group.open = this.groupOpen[key];
+      const summary = document.createElement('summary'); summary.textContent = title + ' · ' + files.length;
+      const description = document.createElement('small'); description.textContent = help;
+      group.append(summary, description);
+      if (!files.length) { const empty = document.createElement('small'); empty.textContent = 'No files yet.'; group.append(empty); }
+      files.forEach(entry => add(group, entry)); this.list.append(group);
+    }
     this.error.textContent = this.failure ? 'Couldn’t load saved files.' : (this.loading ? 'Loading files…' : '');
     this.error.hidden = !this.error.textContent;
     this.root.querySelector('[data-input-status]').hidden = !this.error.textContent;

@@ -83,6 +83,7 @@ class CreateAction(Command):
     description: str = Field(default='', max_length=3000)
     body: str = Field(default='', max_length=50000)
     checklists: list[dict] = Field(default_factory=list, max_length=20)
+    hide_ticked: bool = Field(default=False, strict=True)
     source: ActionSource | None = None
     matrix: Literal['', 'Q1', 'Q2', 'Q3', 'Q4'] = ''
     matrix_confidence: Literal['', 'high', 'medium', 'low'] = ''
@@ -100,6 +101,7 @@ class UpdateAction(Command):
     description: str | None = Field(default=None, max_length=3000)
     body: str | None = Field(default=None, max_length=50000)
     checklists: list[dict] | None = Field(default=None, max_length=20)
+    hide_ticked: bool | None = Field(default=None, strict=True)
     status: Literal["open", "active", "in_progress", "incomplete", "done", "dismissed"] | None = None
     completion_note: str | None = Field(default=None, max_length=3000)
     matrix: Literal['', 'Q1', 'Q2', 'Q3', 'Q4'] | None = None

@@ -3305,6 +3305,10 @@ components:
           type: array
           maxItems: 20
           title: Checklists
+        hide_ticked:
+          type: boolean
+          title: Hide Ticked
+          default: false
         source:
           anyOf:
           - $ref: '#/components/schemas/ActionSource'
@@ -3758,6 +3762,11 @@ components:
             maxItems: 20
           - type: 'null'
           title: Checklists
+        hide_ticked:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Hide Ticked
         status:
           anyOf:
           - type: string

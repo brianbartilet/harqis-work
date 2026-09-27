@@ -118,9 +118,31 @@ def test_generated_files_versioned_and_survive_session_removal(workspace, authen
     from modules.hfl_corpus.attachments import source_store
     attachments, source = source_store('actionable',item['id'])
     assert len(attachments.list(source)) == 2
+    owner_url = '/hfl-corpus/agent-bridge/inputs/actionable/' + item['id']
+    assert {f['group'] for f in authenticated_client.get(owner_url).json()['attachments']} == {'generated'}
     db.heartbeat_session(s['id'],claimed['token'],'closed','native',1)
     db.forget(s['id'])
     assert len(attachments.list(source)) == 2
+    assert {f['group'] for f in authenticated_client.get(owner_url).json()['attachments']} == {'generated'}
+
+
+def test_attachment_groups_use_recorded_origin(workspace, authenticated_client):
+    api, _, actions, _ = workspace
+    item = create_action(actions)
+    session = api.store().start_session(item['id'], {}, 'test')
+    claimed = api.store().claim_session(session['id'], 'test')
+    headers = {**WORKER, 'X-Terminal-Lease': claimed['token']}
+    for name in ('conversation.md', 'session-transcript.txt', 'repository-changes.zip', 'report.md'):
+        response = authenticated_client.post('/api/hfl-agent/terminals/' + session['id'] + '/files/' + name,
+                                             content=b'generated', headers=headers)
+        assert response.status_code == 200
+    url = '/hfl-corpus/agent-bridge/inputs/actionable/' + item['id']
+    response = authenticated_client.post(url, headers=owner_headers(), files=[('files', ('conversation.md', b'user upload'))])
+    files = response.json()['attachments']
+    assert [f['group'] for f in files] == ['execution', 'execution', 'execution', 'generated', 'uploaded']
+    # Removing an uploaded file preserves classification of the remaining files.
+    response = authenticated_client.delete(url + '/' + files[-1]['id'], headers=owner_headers())
+    assert [f['group'] for f in response.json()['attachments']] == ['execution', 'execution', 'execution', 'generated']
 
 
 def test_transport_requires_owner_csrf_and_worker_lease(workspace, authenticated_client):

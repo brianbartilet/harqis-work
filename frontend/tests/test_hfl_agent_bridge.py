@@ -107,6 +107,8 @@ def test_run_inputs_are_lease_scoped_and_survive_detachment(bridge, authenticate
     uploaded = authenticated_client.post(url, headers=owner_headers(), files=[('files', ('brief.md', b'Brief')), ('files', ('data.csv', b'a,b'))])
     assert uploaded.status_code == 200, uploaded.text
     rows = uploaded.json()['attachments']
+    assert all(row['group'] == 'uploaded' for row in rows)
+    rows = [{k: v for k, v in row.items() if k != 'group'} for row in rows]
     run = start(authenticated_client, item)
     assert run['snapshot']['source']['attachments'] == rows
     download = f"/api/hfl-agent/runs/{run['id']}/inputs/{rows[0]['id']}"
@@ -229,6 +231,8 @@ def test_artifacts_require_lease_and_owner_and_render_safe_markdown(bridge, auth
     headers = {**WORKER, 'X-Execution-Lease': run['lease_token']}
     uploaded = authenticated_client.post(path, headers=headers, content=b'# Report\n\n[Docs](https://example.org)\n<script>alert(1)</script>')
     assert uploaded.status_code == 200, uploaded.text
+    files = authenticated_client.get('/hfl-corpus/agent-bridge/inputs/actionable/' + item['id']).json()['attachments']
+    assert files[0]['group'] == 'generated'
     assert authenticated_client.post(path, headers=headers, content=b'Changed').status_code == 409
     url = uploaded.json()['url']
     preview = authenticated_client.get(url + '?view=true')

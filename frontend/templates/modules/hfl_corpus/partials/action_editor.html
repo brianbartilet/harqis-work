@@ -11,7 +11,7 @@
       {% include "modules/hfl_corpus/partials/input_attachments.html" %}
       </div>
       <section class="object-checklists-section">
-        <div class="idea-checklists-heading"><h3>Checklists</h3><div data-checklist-toolbar></div></div>
+        <div class="idea-checklists-heading"><h3>Checklists</h3><div class="action-checklist-controls"><label class="checklist-cover-toggle"><input type="checkbox" name="hide_ticked">Hide ticked</label><div data-checklist-toolbar></div></div></div>
         <div data-action-checklists></div>
       </section>
       <details class="action-details action-triage">
@@ -93,6 +93,12 @@
   .agent-input-picker button:hover { background:#334155; }
   .agent-input-picker button:focus-visible { outline:2px solid #38bdf8; outline-offset:3px; }
   .agent-input-row { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.5rem 0; }
+  .action-checklist-controls { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:.75rem; }
+  .action-checklist-controls .checklist-cover-toggle { display:flex; align-items:center; gap:.4rem; margin:0; white-space:nowrap; }
+  .action-checklist-controls input[type=checkbox] { width:auto; margin:0; }
+  .agent-input-group { border-top:1px solid #334155; margin-top:.75rem; padding-top:.75rem; }
+  .agent-input-group summary { cursor:pointer; color:#e2e8f0; font-weight:600; padding:.25rem 0; }
+  .agent-input-group summary:focus-visible { outline:2px solid #67e8f9; outline-offset:4px; border-radius:.2rem; }
   .agent-input-row :is(a,span) { overflow-wrap:anywhere; min-width:0; }
   .agent-input-row button { flex-shrink:0; padding:.35rem .6rem; border-radius:.4rem; background:#1e293b; color:#cbd5e1; }
   .agent-input-heading { display:block; margin-bottom:.35rem; color:#94a3b8; font-size:.68rem; font-weight:650; }

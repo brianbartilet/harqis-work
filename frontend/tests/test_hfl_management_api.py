@@ -49,11 +49,12 @@ def test_every_management_route_requires_bearer(management, method, path, payloa
 
 def test_action_retry_edits_conflicts_and_completion(management):
     client, store = management
-    raw = action(prompt="Keep as intent", due_date=date.today().isoformat())
+    raw = action(prompt="Keep as intent", due_date=date.today().isoformat(), hide_ticked=True)
     first = client.post("/api/hfl/actions", json=raw)
     assert first.status_code == 201
     item = first.json()["item"]
     assert item["agent_enabled"] is False
+    assert item['hide_ticked'] is True
     replay = client.post("/api/hfl/actions", json=raw)
     assert replay.status_code == 200 and replay.json()["duplicate"]
     assert replay.json()["item"]["id"] == item["id"]
@@ -62,10 +63,11 @@ def test_action_retry_edits_conflicts_and_completion(management):
     assert client.get(url).json()["item"] == item
     assert client.get("/api/hfl/actions").json()["total"] == 1
     assert client.get("/api/hfl/actions?offset=1").json()["items"] == []
-    edit = client.patch(url, json={"version": 1, "notes": "Notes", "due_date": ""})
+    edit = client.patch(url, json={"version": 1, "notes": "Notes", "due_date": "", "hide_ticked": False})
     assert edit.status_code == 200
     assert edit.json()["item"]["prompt"] == raw["prompt"]
     assert edit.json()["item"]["due_date"] == ""
+    assert edit.json()['item']['hide_ticked'] is False
     assert client.patch(url, json={"version": 1, "status": "done"}).status_code == 409
     done = client.patch(url, json={"version": 2, "status": "done", "completion_note": "Reviewed"})
     assert done.status_code == 200
@@ -81,6 +83,7 @@ def test_action_retry_edits_conflicts_and_completion(management):
 @pytest.mark.parametrize("fields", [
     {"agent_enabled": True}, {"title": "  "}, {"request_id": "bad"},
     {"due_date": "2026-02-30"}, {"expected_outcome": ""},
+    {"hide_ticked": "true"},
 ])
 def test_action_validation(management, fields):
     client, store = management

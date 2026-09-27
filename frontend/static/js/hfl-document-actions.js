@@ -70,6 +70,7 @@
       attachments.root.inert = true;
       const values = Object.fromEntries(new FormData(form));
       values.checklists = window.hflActionChecklists?.value || [];
+      values.hide_ticked = form.elements.hide_ticked.checked;
       const prompt = values.prompt, changed = attachments.changed;
       if (changed) values.prompt = '';
       const payload = savedAction ? {...values, version: savedAction.version} : {...values, source, request_id: requestId};

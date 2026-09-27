@@ -210,7 +210,7 @@ def test_stale_edit_cannot_overwrite_completion(agenda, authenticated_client):
     assert len(agenda.history(item["id"])) == 2
 
 
-@pytest.mark.parametrize("extra", [{"title": " "}, {"expected_outcome": ""}, {"review_date": "2026-02-30"}, {"due_date": "tomorrow"}, {"status": "done"}, {"execute": "arbitrary.task"}])
+@pytest.mark.parametrize("extra", [{"title": " "}, {"expected_outcome": ""}, {"review_date": "2026-02-30"}, {"due_date": "tomorrow"}, {"status": "done"}, {"execute": "arbitrary.task"}, {"hide_ticked": "true"}])
 def test_invalid_creation_writes_nothing(agenda, authenticated_client, extra):
     assert authenticated_client.post("/hfl-corpus/timeline/items", json=payload(**extra)).status_code == 400
     assert agenda.list() == []
@@ -1020,6 +1020,58 @@ def test_followups_board_filter_drag_refresh_and_editor(agenda, authenticated_cl
         assert '/hfl-corpus/actions' in page.url
         playwright.expect(board.locator('[data-board-context]')).to_have_text('All activity')
         playwright.expect(lane.locator('[data-followup-id]').first).to_have_attribute('data-followup-id',second['id'])
+        assert not errors
+        browser.close()
+
+
+@pytest.mark.parametrize('width', [390, 1440])
+def test_hide_ticked_roundtrip_editor_and_board(agenda, authenticated_client, monkeypatch, tmp_path, width):
+    from urllib.parse import urlparse
+    from modules.hfl_corpus import router
+    playwright = pytest.importorskip('playwright.sync_api')
+    monkeypatch.setenv('HFL_AGENT_BRIDGE_STORE_PATH', str(tmp_path / 'bridge.sqlite3'))
+    monkeypatch.setattr(router.corpus_index, 'documents', lambda: ())
+    lists = [{'id': str(i), 'title': 'Checklist ' + str(i), 'cover': True, 'items': [
+        {'id': str(i) + '-open', 'text': 'Open task ' + str(i), 'done': False},
+        {'id': str(i) + '-done', 'text': 'Done task ' + str(i), 'done': True}]} for i in range(2)]
+    item = agenda.create(payload(checklists=lists), actor='test')[0]
+    with playwright.sync_playwright() as driver:
+        browser = driver.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page(viewport={'width': width, 'height': 1000})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        def route(r):
+            url = urlparse(r.request.url)
+            response = authenticated_client.request(r.request.method, url.path + ('?' + url.query if url.query else ''),
+                content=r.request.post_data_buffer, headers={k: v for k, v in r.request.headers.items() if k.lower() in {'content-type', 'x-csrf-token'}})
+            r.fulfill(status=response.status_code, body=response.content, content_type=response.headers.get('content-type', 'text/html'))
+        page.route('https://checklists.test/**', route)
+        page.goto('https://checklists.test/hfl-corpus/actions')
+        card = page.locator('[data-followup-id="' + item['id'] + '"]')
+        playwright.expect(card.locator('.checklist-card-cover input')).to_have_count(4)
+        card.get_by_role('button', name='Edit', exact=True).click()
+        editor = page.locator('#followup-editor')
+        playwright.expect(editor.locator('.idea-check-row')).to_have_count(4)
+        editor.get_by_role('checkbox', name='Hide ticked', exact=True).check()
+        playwright.expect(editor.locator('.idea-check-row')).to_have_count(2)
+        playwright.expect(editor.locator('.editor-save-status')).to_have_text('Saved')
+        assert agenda.get(item['id'])['hide_ticked'] is True
+        assert agenda.get(item['id'])['checklists'] == lists
+        editor.locator('.idea-checklists-heading').screenshot(path=str(tmp_path / 'hide-ticked-toolbar.png'))
+        editor.locator('[data-agenda-close]').first.click()
+        playwright.expect(card.locator('.checklist-card-cover input')).to_have_count(2)
+        card.locator('.checklist-card-cover input').first.check()
+        playwright.expect(card.locator('.checklist-card-cover input')).to_have_count(1)
+        page.reload()
+        playwright.expect(card.locator('.checklist-card-cover input')).to_have_count(1)
+        card.get_by_role('button', name='Edit', exact=True).click()
+        playwright.expect(editor.get_by_role('checkbox', name='Hide ticked', exact=True)).to_be_checked()
+        playwright.expect(editor.locator('.idea-check-row')).to_have_count(1)
+        editor.get_by_role('checkbox', name='Hide ticked', exact=True).uncheck()
+        playwright.expect(editor.locator('.idea-check-row')).to_have_count(4)
+        playwright.expect(editor.locator('.editor-save-status')).to_have_text('Saved')
+        editor.locator('[data-agenda-close]').first.click()
+        playwright.expect(card.locator('.checklist-card-cover input')).to_have_count(4)
         assert not errors
         browser.close()
 

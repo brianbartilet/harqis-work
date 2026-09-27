@@ -43,6 +43,7 @@
   };
   window.HflIntentValues = form => {
     const data=new FormData(form), result=Object.fromEntries(data);
+    if (form.elements.hide_ticked) result.hide_ticked = form.elements.hide_ticked.checked;
     result.workspace_ids=data.getAll('workspace_ids').sort();
     if(form.querySelector('[data-recurrence-fields]'))result.recurrence=result.repeat_frequency?{frequency:result.repeat_frequency,interval:Number(result.repeat_interval),start:result.repeat_start,end:result.repeat_end||''}:null;
     for(const key of Object.keys(result))if(key.startsWith('repeat_'))delete result[key];

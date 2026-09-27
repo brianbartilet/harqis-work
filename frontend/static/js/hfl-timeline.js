@@ -48,6 +48,7 @@
     window.HflIntentFields(form,item||{});
     for (const name of ['title', 'body', 'expected_outcome', 'notes', 'prompt', 'review_date', 'due_date', 'completion_note', 'matrix', 'matrix_confidence', 'matrix_reason']) form.elements[name].value = item?.[name] || '';
     form.elements.body.value = window.HflObjectDescription(item || {});
+    form.elements.hide_ticked.checked = !!item?.hide_ticked;
     window.hflActionChecklists?.set(item?.checklists || []);
     form.elements.status.value = desiredStatus || item?.status || 'open';
     document.getElementById('followup-state-label').hidden = !item;
