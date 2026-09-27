@@ -99,19 +99,34 @@ def test_distill_navigation_actions_and_retry(agenda, authenticated_client, monk
         browser.close()
 
 
-def test_distill_signal_all_activity_and_auth(authenticated_client, monkeypatch):
+@pytest.mark.parametrize('saved_selection', ['none', 'preferences', 'last_used'])
+def test_distill_signal_all_activity_and_auth(authenticated_client, monkeypatch, saved_selection):
     from modules.hfl_corpus import router
     monkeypatch.setattr(router.corpus_index, 'documents', lambda **kwargs: ())
+    snapshot = router.workspace_views.listing()
+    snapshot['preferences'] = {**snapshot['preferences'], 'revision': 0, 'dynamic': False}
+    snapshot['last_used'] = None
+    if saved_selection == 'preferences':
+        snapshot['preferences'].update(revision=1, dynamic=True)
+    elif saved_selection == 'last_used':
+        snapshot['last_used'] = 'saved-test'
+        snapshot['views'] = [{'id': 'saved-test', 'state': {'q': 'restricted'}, 'name': 'Saved test'}]
+    monkeypatch.setattr(router.workspace_views, 'listing', lambda: snapshot)
     original = router.hfl_corpus_page
     seen = []
     async def corpus(request):
         seen.append(str(request.query_params))
-        return await original(request)
+        result = await original(request)
+        assert result.context['scope'] == ''
+        assert result.context['dynamic_view'] is False
+        return result
     monkeypatch.setattr(router, 'hfl_corpus_page', corpus)
     response = authenticated_client.get('/distill?scope=filtered&q=hidden&show_secrets=true')
     assert response.status_code == 200
     assert 'data-readonly="true"' in response.text
-    assert seen == ['']
-    corpus_response = authenticated_client.get('/hfl-corpus')
+    assert seen == ['views=&scope=&dynamic=0']
+    landing = authenticated_client.get('/hfl-corpus', follow_redirects=False)
+    assert landing.status_code == (200 if saved_selection == 'none' else 303)
+    corpus_response = authenticated_client.get('/hfl-corpus?views=&scope=&dynamic=0')
     assert 'activity-indicator-legend' in corpus_response.text
     assert '>Active</span>' in corpus_response.text

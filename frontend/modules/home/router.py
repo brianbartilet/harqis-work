@@ -17,7 +17,8 @@ async def distill(request: Request):
         return redirect
     from modules.hfl_corpus.router import hfl_corpus_page
 
-    clean_request = Request({**request.scope, 'query_string': b''})
+    # Explicit All activity bypasses Corpus's saved-view landing redirects.
+    clean_request = Request({**request.scope, 'query_string': b'views=&scope=&dynamic=0'})
     corpus = await hfl_corpus_page(clean_request)
     context = {**corpus.context, 'activity_readonly': True}
     return templates.TemplateResponse(request, 'modules/distill/index.html', context)
