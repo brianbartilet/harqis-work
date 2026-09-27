@@ -1,0 +1,9 @@
+<div class="activity-navigation{% if active_module == 'second_brain' %} is-active{% endif %}">
+  <button type="button" aria-haspopup="true" aria-expanded="false">Express</button>
+  <details class="activity-navigation-menu">
+    <summary hidden>Express navigation</summary>
+    <nav class="activity-navigation-options" aria-label="Express tools">
+      <a href="{{ module.route }}" {% if active_module == 'second_brain' %}aria-current="page"{% endif %}>{{ module.label }}</a>
+    </nav>
+  </details>
+</div>

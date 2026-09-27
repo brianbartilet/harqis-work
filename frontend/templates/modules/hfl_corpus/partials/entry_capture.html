@@ -1,0 +1,159 @@
+<dialog data-create-entry-dialog aria-labelledby="create-entry-title"
+        class="m-0 h-[100dvh] max-h-none w-screen max-w-none overflow-hidden rounded-none border-0 bg-slate-950 p-0 text-slate-100 shadow-2xl shadow-black/70 backdrop:bg-black/75 sm:m-auto sm:h-auto sm:max-h-[90dvh] sm:w-[min(44rem,calc(100%-2rem))] sm:rounded-2xl sm:border sm:border-sky-800/70">
+  <form data-create-entry-form class="flex h-full max-h-none flex-col overflow-hidden sm:block sm:h-auto sm:max-h-[90dvh] sm:overflow-y-auto sm:p-6">
+    <p data-entry-saved role="status" hidden class="m-4 rounded-lg bg-emerald-950 p-3 text-sm text-emerald-200 sm:mx-0"></p>
+    <div data-entry-dialog-header
+         class="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-slate-800 bg-slate-950 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] sm:static sm:border-0 sm:p-0">
+      <div>
+        <p class="text-xs uppercase tracking-[0.2em] text-sky-400">Catch it before it wanders</p>
+        <h2 id="create-entry-title" class="mt-1 text-xl font-semibold text-white">Create entry</h2>
+      </div>
+      <button type="button" data-entry-cancel aria-label="Close create-entry dialog"
+              class="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-2xl text-slate-500 hover:bg-slate-900 hover:text-white sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1 sm:text-xl">×</button>
+    </div>
+
+    <div data-entry-form-body
+         class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 [scroll-padding-bottom:8rem] sm:overflow-visible sm:p-0">
+      <div data-entry-error role="alert" hidden
+           class="mb-4 rounded-lg border border-rose-800/70 bg-rose-950/50 px-3 py-2 text-sm text-rose-200 sm:mt-4"></div>
+
+      <div class="grid grid-cols-2 gap-3 sm:mt-5 sm:gap-4">
+        <label class="min-w-0 entry-form-label">Date <span class="text-rose-400">*</span>
+          <input type="date" name="date" required max="{{ today_iso }}"
+                 class="mt-1.5 block min-h-11 w-full min-w-0 rounded-lg bg-slate-900 px-2 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-sky-500 [color-scheme:dark] sm:px-3 sm:text-sm">
+        </label>
+        <label class="min-w-0 entry-form-label">Time <span class="text-rose-400">*</span>
+          <input type="time" name="time" required
+                 class="mt-1.5 block min-h-11 w-full min-w-0 rounded-lg bg-slate-900 px-2 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-sky-500 [color-scheme:dark] sm:px-3 sm:text-sm">
+        </label>
+      </div>
+
+      <div class="mt-4 grid gap-4">
+        <label class="block entry-form-label">Moment <span class="text-rose-400">*</span>
+          <input type="text" name="moment" required maxlength="500" placeholder="description"
+                 class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-sky-500 sm:text-sm">
+        </label>
+        <label class="block entry-form-label">What happened <span class="text-rose-400">*</span>
+          <textarea name="what_happened" required rows="3" placeholder="enter details"
+                    class="mt-1.5 block w-full resize-y rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-sky-500 sm:text-sm"></textarea>
+        </label>
+        <details data-entry-more-details class="group rounded-xl border border-slate-800 bg-slate-900/40">
+          <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-3 py-2 entry-form-label hover:bg-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden">
+            <span>Add more details</span>
+            <svg aria-hidden="true" viewBox="0 0 20 20"
+                 class="h-4 w-4 shrink-0 text-sky-400 transition group-open:rotate-180"
+                 fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m5 7.5 5 5 5-5"></path>
+            </svg>
+          </summary>
+          <div class="grid gap-4 border-t border-slate-800 px-3 pb-3 pt-4">
+            <label class="block entry-form-label">Source
+              <select name="source"
+                      class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-sky-500 sm:text-sm">
+                {% for option in entry_source_options %}
+                <option value="{{ option }}" {% if option == 'manual-entry' %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+              </select>
+              <span class="mt-1 block entry-form-help">Override how this entry is attributed in the corpus.</span>
+            </label>
+            <label class="block entry-form-label">Why it stayed
+              <textarea name="why_it_stayed" rows="2"
+                        class="mt-1.5 block w-full resize-y rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-sky-500 sm:text-sm">just writing down notes or thoughts</textarea>
+            </label>
+            <label class="block entry-form-label">Possible use
+              <input type="text" name="possible_use" placeholder="brainstorming"
+                     class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-sky-500 sm:text-sm">
+            </label>
+            <label class="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-sky-900/70 bg-sky-950/25 px-3 py-3 transition hover:border-sky-700/70">
+              <span class="min-w-0">
+                <span class="block entry-form-label">Include location</span>
+                <span class="mt-0.5 block entry-form-help">Use your activity timeline first, then this device if needed.</span>
+              </span>
+              <span class="relative inline-flex shrink-0 items-center">
+                <input type="checkbox" name="include_location" checked data-entry-location-toggle class="peer sr-only">
+                <span aria-hidden="true" class="h-6 w-11 rounded-full bg-slate-700 ring-1 ring-slate-600 transition peer-checked:bg-sky-600 peer-focus-visible:ring-2 peer-focus-visible:ring-sky-400 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-slate-900"></span>
+                <span aria-hidden="true" class="absolute left-1 h-4 w-4 rounded-full bg-white shadow-sm transition peer-checked:translate-x-5"></span>
+              </span>
+            </label>
+            <label class="block entry-form-label">Tags
+              <input type="text" name="tags" value="#notes #manual-entry #thoughts #moments"
+                     class="mt-1.5 block min-h-11 w-full rounded-lg bg-slate-900 px-3 py-2 text-base text-white ring-1 ring-slate-700 focus:outline-none focus:ring-sky-500 sm:text-sm">
+            </label>
+            <label class="block entry-form-label">References
+              <textarea name="references" rows="4" placeholder="One reference per line"
+                        class="mt-1.5 block w-full resize-y rounded-lg bg-slate-900 px-3 py-2 font-mono text-base text-white ring-1 ring-slate-700 placeholder:text-slate-600 focus:outline-none focus:ring-sky-500 sm:text-sm"></textarea>
+              <span class="mt-1 block entry-form-help">Each nonblank line becomes one Markdown list item.</span>
+            </label>
+            <div>
+              <span class="memory-dialog-label entry-form-label">Files</span>
+              <div class="agent-inputs">
+                <small class="entry-form-help">Up to 50 files, 500 MB each and 25,000 MB combined. Files upload only after confirmation.</small>
+                <div class="agent-input-picker"><button type="button" data-entry-choose-files>Choose files</button></div>
+                <input type="file" name="attachments" multiple aria-label="Files" hidden>
+                <ul data-entry-file-list hidden class="space-y-1 text-xs text-slate-400"></ul>
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div data-entry-dialog-actions
+         class="sticky bottom-0 z-10 flex shrink-0 flex-col gap-2 border-t border-slate-800 bg-slate-950 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:static sm:mt-6 sm:flex-row sm:justify-end sm:gap-3 sm:p-0 sm:pt-4">
+      <button type="button" data-entry-cancel
+              class="order-2 min-h-11 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm text-slate-300 ring-1 ring-slate-700 hover:text-white sm:order-1 sm:min-h-0 sm:w-auto">Cancel</button>
+      <button type="submit" data-entry-review
+              class="order-1 min-h-11 w-full rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:cursor-wait disabled:opacity-60 sm:order-2 sm:min-h-0 sm:w-auto">Review and save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog data-entry-review-dialog aria-labelledby="entry-review-title"
+        class="m-0 h-[100dvh] max-h-none w-screen max-w-none overflow-hidden rounded-none border-0 bg-slate-950 p-0 text-slate-100 shadow-2xl shadow-black/70 backdrop:bg-black/75 sm:m-auto sm:h-auto sm:max-h-[90dvh] sm:w-[min(46rem,calc(100%-2rem))] sm:rounded-2xl sm:border sm:border-sky-800/70">
+  <div class="flex h-full max-h-none flex-col overflow-hidden sm:h-auto sm:max-h-[90dvh]">
+    <div data-entry-review-header
+         class="sticky top-0 z-10 shrink-0 border-b border-slate-800 bg-slate-950 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] sm:static sm:border-0 sm:px-6 sm:pb-0 sm:pt-6">
+      <p class="text-xs uppercase tracking-[0.2em] text-sky-400">Confirm save</p>
+      <h2 id="entry-review-title" class="mt-1 text-xl font-semibold text-white">Review entry</h2>
+      <p class="mt-2 text-sm text-slate-400">This entry will be written to <strong data-entry-preview-filename class="break-all text-sky-300"></strong>.</p>
+    </div>
+    <div data-entry-enrichment-summary hidden role="status" aria-live="polite"
+         class="mx-4 mt-4 shrink-0 rounded-xl border border-sky-900/70 bg-sky-950/25 px-3 py-2.5 text-xs text-slate-300 sm:mx-6">
+      <p class="font-semibold uppercase tracking-[0.14em] text-sky-300">Context added</p>
+      <ul data-entry-enrichment-items class="mt-1.5 space-y-1"></ul>
+    </div>
+    <div data-entry-preview class="markdown-body min-h-0 flex-1 overflow-y-auto overscroll-contain bg-slate-900/70 px-4 py-4 text-sm text-slate-300 sm:m-6 sm:mt-4 sm:max-h-[55dvh] sm:rounded-xl sm:border sm:border-slate-800 sm:p-4"></div>
+    <div data-entry-upload-progress hidden
+         class="mx-4 mt-4 mb-4 shrink-0 rounded-xl border border-sky-800/70 bg-sky-950/40 p-4 sm:mx-6">
+      <div class="flex items-center justify-between gap-3 text-sm">
+        <span data-entry-upload-status class="text-sky-200">Preparing upload…</span>
+        <span data-entry-upload-percent class="font-mono text-sky-300">0%</span>
+      </div>
+      <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
+        <div data-entry-upload-bar class="h-full w-0 rounded-full bg-sky-500 transition-[width]"></div>
+      </div>
+    </div>
+    <div data-entry-review-actions
+         class="sticky bottom-0 z-10 flex shrink-0 flex-col gap-2 border-t border-slate-800 bg-slate-950 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:static sm:mx-6 sm:mb-6 sm:flex-row sm:justify-end sm:gap-3 sm:p-0 sm:pt-4">
+      <button type="button" data-entry-review-back
+              class="order-2 min-h-11 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm text-slate-300 ring-1 ring-slate-700 hover:text-white sm:order-1 sm:min-h-0 sm:w-auto">Back</button>
+      <button type="button" data-entry-confirm
+              class="order-1 min-h-11 w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-wait disabled:opacity-60 sm:order-2 sm:min-h-0 sm:w-auto">Confirm save</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog data-entry-discard-dialog aria-labelledby="entry-discard-title"
+        class="m-auto w-[min(28rem,calc(100%-2rem))] rounded-2xl border border-amber-800/70 bg-slate-950 p-0 text-slate-100 shadow-2xl shadow-black/70 backdrop:bg-black/75">
+  <div class="p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6">
+    <h2 id="entry-discard-title" class="text-lg font-semibold text-white">Discard this entry?</h2>
+    <p class="mt-2 text-sm text-slate-400">Your changes have not been saved.</p>
+    <div class="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end sm:gap-3">
+      <button type="button" data-entry-keep
+              class="order-2 min-h-11 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm text-slate-300 ring-1 ring-slate-700 hover:text-white sm:order-1 sm:min-h-0 sm:w-auto">Keep editing</button>
+      <button type="button" data-entry-discard
+              class="order-1 min-h-11 w-full rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500 sm:order-2 sm:min-h-0 sm:w-auto">Discard</button>
+    </div>
+  </div>
+</dialog>
+
