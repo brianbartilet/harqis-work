@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Distill — HARQIS{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ static_asset('css/distill.css') }}">
+<main class="distill" data-distill>
+  <section class="distill-intro" aria-labelledby="distill-title">
+    <div><p class="distill-eyebrow">Distill / Your working memory</p>
+      <h1 id="distill-title">Turn what happened<br>into <em>what happens next.</em></h1>
+      <p class="distill-lead">Keep the evidence. Find what matters. Give it somewhere to go.</p>
+    </div>
+    <a class="distill-capture" href="/hfl-corpus?create=entry"><span aria-hidden="true">＋</span><span>Capture a moment<small>One line is enough.</small></span></a>
+  </section>
+
+  <form class="distill-search" action="/hfl-corpus" method="get" role="search" aria-label="Search your activity">
+    <label for="distill-query">What do you want to return to?</label>
+    <div><input id="distill-query" name="q" type="search" placeholder="A decision, a project, a moment…" required><button type="submit">Search corpus <span aria-hidden="true">↗︎</span></button></div>
+  </form>
+
+  <section class="distill-path" aria-label="From evidence to action">
+    <a class="distill-door" href="/hfl-corpus"><span class="distill-eyebrow">Evidence</span><h2>Review your activity <span aria-hidden="true">↗︎</span></h2><p>Return to moments, decisions, and source material. Start with what actually happened.</p><span class="distill-destination">Activity Corpus</span></a>
+    {% if corpus_entities_enabled %}<a class="distill-door" href="/hfl-corpus/graph"><span class="distill-eyebrow">Understanding</span><h2>Connect your ideas <span aria-hidden="true">↗︎</span></h2><p>Explore people, projects, and recurring themes. Bring related evidence into a board.</p><span class="distill-destination">Activity Graph</span></a>{% else %}<div class="distill-door"><span class="distill-eyebrow">Understanding</span><h2>Connect your ideas</h2><p>Activity Graph is not enabled on this host. Explore related entries in the corpus.</p><a class="distill-destination" href="/hfl-corpus">Explore the corpus ↗︎</a></div>{% endif %}
+    <a class="distill-door" href="/hfl-corpus/actions"><span class="distill-eyebrow">Outcome</span><h2>Move work forward <span aria-hidden="true">↗︎</span></h2><p>Name the result you want. Track the next step, work with an agent, and keep the outcome.</p><span class="distill-destination">Activity Kanban</span></a>
+  </section>
+
+  <section class="distill-work" aria-labelledby="distill-work-title">
+    <header><div><p class="distill-eyebrow">Put first things first</p><h2 id="distill-work-title">Continue with intention</h2><p>Choose an outcome worth moving forward.</p></div><a href="/hfl-corpus/actions">Open Kanban <span aria-hidden="true">↗︎</span></a></header>
+    <div class="distill-work-columns">
+      <section aria-labelledby="distill-recent-title"><h3 id="distill-recent-title">Pick up where you left off</h3><p class="distill-hint">Your most recently updated open actions.</p><div data-distill-recent aria-live="polite" aria-busy="true"><p class="distill-empty">Loading your actions…</p></div></section>
+      <section aria-labelledby="distill-important-title"><h3 id="distill-important-title">Make room for important work</h3><p class="distill-hint">Q2 actions: important, without the urgency.</p><div data-distill-important aria-live="polite" aria-busy="true"><p class="distill-empty">Loading important work…</p></div></section>
+    </div>
+    <p data-distill-error role="status" hidden>Actions could not be loaded. <button type="button" data-distill-retry>Try again</button> or <a href="/hfl-corpus/actions">open Kanban</a>.</p>
+  </section>
+
+  <section class="distill-loop" aria-labelledby="distill-loop-title">
+    <header><p class="distill-eyebrow">The practice behind Distill</p><h2 id="distill-loop-title">Let knowledge become useful.</h2><p>Every capture needs a path to an outcome. Start wherever you are; return with what you learned.</p></header>
+    <ol>
+      <li><span>01 / Capture</span><p>Save a moment and its source.</p><a href="/hfl-corpus?create=entry">Write one line ↗︎</a></li>
+      <li><span>02 / Organize</span><p>Give it a place you can find again.</p><a href="/hfl-corpus">Review your corpus ↗︎</a></li>
+      <li><span>03 / Distill</span><p>Find the insight you can reuse.</p><a href="{{ '/hfl-corpus/graph' if corpus_entities_enabled else '/hfl-corpus' }}">Explore connections ↗︎</a></li>
+      <li><span>04 / Express</span><p>Make a decision, a plan, or a useful output.</p><a href="/hfl-corpus/actions">Choose your next action ↗︎</a></li>
+    </ol>
+    <footer><p><strong>Close the loop.</strong> After the work, capture the result and what you would do differently.</p><a href="/manifesto">Read the manifesto ↗︎</a></footer>
+  </section>
+</main>
+<script src="{{ static_asset('js/distill.js') }}"></script>
+{% endblock %}
