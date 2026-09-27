@@ -53,6 +53,13 @@
     },
     {
       "method": "GET",
+      "path": "/distill",
+      "status": "ui",
+      "tools": [],
+      "reason": "Owner-facing HTML landing page for reviewing ideas and actions; underlying data operations use the existing canonical HFL tools."
+    },
+    {
+      "method": "GET",
       "path": "/open-path",
       "status": "ui",
       "tools": [],
@@ -2463,6 +2470,13 @@
       "status": "deferred",
       "tools": [],
       "reason": "Owner session-authenticated native terminal and configuration operation; a dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/agent-bridge/sessions/{identity}/images",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner session-authenticated image input to a native terminal; shares the terminal input transport's deferred machine-facing service/auth contract."
     },
     {
       "method": "GET",
