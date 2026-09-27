@@ -1477,32 +1477,37 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
         "date_from=2026-08-24&date_to=2026-08-24"
     )
 
+    page_source = response.text
+    for asset in ('/static/css/activity-heatmap.css', '/static/js/activity-heatmap.js'):
+        asset_response = authenticated_client.get(asset)
+        assert asset_response.status_code == 200
+        page_source += asset_response.text
     assert response.status_code == 200
-    assert "data-activity-panel" in response.text
-    assert 'class="corpus-header-shell mb-4 shrink-0"' in response.text
-    assert 'class="corpus-page-header page-header"' in response.text
-    assert ".corpus-page-header .page-header-title { margin-top:.5rem; }" in response.text
-    assert ".corpus-page-header .page-header-description { margin-top:.375rem; }" in response.text
-    corpus_header = response.text.split('class="corpus-header-shell', 1)[1].split(
+    assert "data-activity-panel" in page_source
+    assert 'class="corpus-header-shell mb-4 shrink-0"' in page_source
+    assert 'class="corpus-page-header page-header"' in page_source
+    assert ".corpus-page-header .page-header-title { margin-top:.5rem; }" in page_source
+    assert ".corpus-page-header .page-header-description { margin-top:.375rem; }" in page_source
+    corpus_header = page_source.split('class="corpus-header-shell', 1)[1].split(
         "</div>\n  </div>", 1
     )[0]
     assert "corpus-secrets-control" in corpus_header
     assert "corpus-create-menu" in corpus_header
-    assert ".corpus-page-header,.corpus-header-actions { display:contents; }" in response.text
-    assert 'data-activity-toggle aria-expanded="true"' in response.text
-    assert "data-activity-body" in response.text
-    assert 'data-activity-year aria-label="Activity year"' in response.text
+    assert ".corpus-page-header,.corpus-header-actions { display:contents; }" in page_source
+    assert 'data-activity-toggle aria-expanded="true"' in page_source
+    assert "data-activity-body" in page_source
+    assert 'data-activity-year aria-label="Activity year"' in page_source
     from bs4 import BeautifulSoup
-    activity_header_actions = str(BeautifulSoup(response.text, "html.parser").select_one('[data-activity-header-actions]'))
+    activity_header_actions = str(BeautifulSoup(page_source, "html.parser").select_one('[data-activity-header-actions]'))
     assert 'data-activity-year aria-label="Activity year"' not in activity_header_actions
     assert "data-activity-toggle" in activity_header_actions
-    assert 'data-activity-year-list role="listbox"' in response.text
-    assert 'data-activity-year-trigger aria-haspopup="listbox" aria-expanded="false"' in response.text
-    assert 'data-activity-year-trigger-value>2026</span>' in response.text
-    assert 'activity-year-controls[data-year-menu-open="true"] .activity-year-list' in response.text
-    assert "setYearMenuOpen" in response.text
-    assert 'data-activity-year-option="2026"' in response.text
-    activity_body = response.text.split("data-activity-body", 1)[1].split(
+    assert 'data-activity-year-list role="listbox"' in page_source
+    assert 'data-activity-year-trigger aria-haspopup="listbox" aria-expanded="false"' in page_source
+    assert 'data-activity-year-trigger-value>2026</span>' in page_source
+    assert 'activity-year-controls[data-year-menu-open="true"] .activity-year-list' in page_source
+    assert "setYearMenuOpen" in page_source
+    assert 'data-activity-year-option="2026"' in page_source
+    activity_body = page_source.split("data-activity-body", 1)[1].split(
         "data-activity-day-menu", 1
     )[0]
     assert "data-activity-year" in activity_body
@@ -1513,114 +1518,114 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     )[0]
     assert "Year" in year_header
     assert "data-activity-today>Today</button>" in year_header
-    assert "corpus-select-shell" not in response.text
-    assert "corpus-select-caret" not in response.text
-    assert 'class="activity-year-select corpus-select block"' in response.text
-    assert response.text.count('class="corpus-select mt-1.5 block w-full') == 2
-    assert "background-position:right .85rem center" in response.text
-    assert "grid-template-columns:4.75rem minmax(0,1fr) 13rem" in response.text
-    assert '<option value="2026" selected>2026</option>' in response.text
-    assert '<option value="2025"' in response.text
-    assert 200 < response.text.count('data-activity-day="') <= 366
-    assert 'data-activity-year-segment="2026"' in response.text
-    assert 'style="--activity-weeks:53" data-activity-year-segment="2026"' in response.text
-    assert "overflow-clip-margin:6px" in response.text
-    assert "calendarWeekCount" in response.text
-    assert "Math.floor((last - first) / 604800000) + 1" in response.text
-    assert "Math.round((last - first) / 604800000) + 1" not in response.text
-    assert "segment.style.setProperty('--activity-weeks', weekIndex)" in response.text
-    assert "activity-year-segment::before" not in response.text
-    assert "activity-year-marker" not in response.text
-    assert "data-activity-previous-year" in response.text
-    assert "data-activity-next-year" in response.text
-    assert "activity-coachmark-anchor-next" in response.text
-    assert "const updateYearCoachmarks = value =>" in response.text
-    assert "nextYearCoachmark.textContent = hasNext ? nextValue : ''" in response.text
-    assert "nextYearCoachmark.hidden = !hasNext" in response.text
-    assert "new IntersectionObserver" in response.text
-    assert "hydrateYear(segment)" in response.text
-    assert 'data-activity-day="2026-08-24"' in response.text
-    future_cell = response.text.split(
+    assert "corpus-select-shell" not in page_source
+    assert "corpus-select-caret" not in page_source
+    assert 'class="activity-year-select corpus-select block"' in page_source
+    assert page_source.count('class="corpus-select mt-1.5 block w-full') == 2
+    assert "background-position:right .85rem center" in page_source
+    assert "grid-template-columns:4.75rem minmax(0,1fr) 13rem" in page_source
+    assert '<option value="2026" selected>2026</option>' in page_source
+    assert '<option value="2025"' in page_source
+    assert 200 < page_source.count('data-activity-day="') <= 366
+    assert 'data-activity-year-segment="2026"' in page_source
+    assert 'style="--activity-weeks:53" data-activity-year-segment="2026"' in page_source
+    assert "overflow-clip-margin:6px" in page_source
+    assert "calendarWeekCount" in page_source
+    assert "Math.floor((last - first) / 604800000) + 1" in page_source
+    assert "Math.round((last - first) / 604800000) + 1" not in page_source
+    assert "segment.style.setProperty('--activity-weeks', weekIndex)" in page_source
+    assert "activity-year-segment::before" not in page_source
+    assert "activity-year-marker" not in page_source
+    assert "data-activity-previous-year" in page_source
+    assert "data-activity-next-year" in page_source
+    assert "activity-coachmark-anchor-next" in page_source
+    assert "const updateYearCoachmarks = value =>" in page_source
+    assert "nextYearCoachmark.textContent = hasNext ? nextValue : ''" in page_source
+    assert "nextYearCoachmark.hidden = !hasNext" in page_source
+    assert "new IntersectionObserver" in page_source
+    assert "hydrateYear(segment)" in page_source
+    assert 'data-activity-day="2026-08-24"' in page_source
+    future_cell = page_source.split(
         'data-activity-day="2026-12-31"', 1
     )[1].split(">", 1)[0]
     assert "Future date" in future_cell
     assert 'data-future="true"' in future_cell
     assert "disabled" not in future_cell
-    assert 'background:rgba(30,41,59,.58); opacity:.52' in response.text
-    assert 'border-color:rgba(71,85,105,.82); opacity:.7' in response.text
-    assert "Week 35 · 2 entries" in response.text
-    selected_cell = response.text.split(
+    assert 'background:rgba(30,41,59,.58); opacity:.52' in page_source
+    assert 'border-color:rgba(71,85,105,.82); opacity:.7' in page_source
+    assert "Week 35 · 2 entries" in page_source
+    selected_cell = page_source.split(
         'data-activity-day="2026-08-24"', 1
     )[1].split(">", 1)[0]
     assert 'aria-pressed="true"' in selected_cell
-    assert '<option value="entry" selected>Entry date</option>' in response.text
-    result_cards = response.text.split("data-corpus-results-scroll", 1)[1]
+    assert '<option value="entry" selected>Entry date</option>' in page_source
+    result_cards = page_source.split("data-corpus-results-scroll", 1)[1]
     assert "2026-08-24.md" in result_cards
     assert "other.md" not in result_cards
-    assert "ArrowDown: 1" in response.text
-    assert "ArrowRight: 7" in response.text
-    assert "<span>Tue</span>" in response.text
-    assert "<span>Sun</span>" in response.text
-    assert "scroll-snap-type:x proximity" in response.text
-    assert "target.scrollIntoView({" in response.text
-    assert "inline:'center'" in response.text
-    assert "overflow-anchor:none" in response.text
-    assert "const scrollToDate = async (value, {behavior='', focus=true}={})" in response.text
-    assert "rootMargin:'0px 100%'" in response.text
-    assert 'data-activity-loaded="true"' in response.text
-    assert "const yearLoads = new Map()" in response.text
-    assert "yearLoads.has(selectedYear)" in response.text
-    assert "`/hfl-corpus/activity-year/${selectedYear}`" in response.text
-    assert "hydrateYear(segment, {animate:true})" in response.text
-    assert "delay:weekIndex * 11" in response.text
-    assert "prefers-reduced-motion: reduce" in response.text
-    assert "data-activity-day-menu" in response.text
-    assert "data-activity-menu-create" in response.text
-    assert "data-activity-menu-pin" in response.text
-    assert "data-activity-menu-document" in response.text
-    assert "data-activity-menu-matches" in response.text
-    assert "data-activity-menu-matches-panel" in response.text
-    day_menu = response.text.split('data-activity-day-menu', 1)[1].split("</div>\n    </div>", 1)[0]
+    assert "ArrowDown: 1" in page_source
+    assert "ArrowRight: 7" in page_source
+    assert "<span>Tue</span>" in page_source
+    assert "<span>Sun</span>" in page_source
+    assert "scroll-snap-type:x proximity" in page_source
+    assert "target.scrollIntoView({" in page_source
+    assert "inline:'center'" in page_source
+    assert "overflow-anchor:none" in page_source
+    assert "const scrollToDate = async (value, {behavior='', focus=true}={})" in page_source
+    assert "rootMargin:'0px 100%'" in page_source
+    assert 'data-activity-loaded="true"' in page_source
+    assert "const yearLoads = new Map()" in page_source
+    assert "yearLoads.has(selectedYear)" in page_source
+    assert "`/hfl-corpus/activity-year/${selectedYear}`" in page_source
+    assert "hydrateYear(segment, {animate:true})" in page_source
+    assert "delay:weekIndex * 11" in page_source
+    assert "prefers-reduced-motion: reduce" in page_source
+    assert "data-activity-day-menu" in page_source
+    assert "data-activity-menu-create" in page_source
+    assert "data-activity-menu-pin" in page_source
+    assert "data-activity-menu-document" in page_source
+    assert "data-activity-menu-matches" in page_source
+    assert "data-activity-menu-matches-panel" in page_source
+    day_menu = page_source.split('data-activity-day-menu', 1)[1].split("</div>\n    </div>", 1)[0]
     assert day_menu.index("data-activity-menu-create>Entry") < day_menu.index("Show document")
     assert day_menu.index("Show document") < day_menu.index("Matching entries")
-    assert "const hasDocument = !isFuture && Boolean(documentUrl)" in response.text
-    assert "const canShowMatches = !isFuture" in response.text
-    assert "showDocument.setAttribute('aria-disabled', String(!hasDocument))" in response.text
-    assert "matchingEntries.disabled = !canShowMatches" in response.text
-    assert "selectDaySection('actions')" in response.text
-    assert "resetMatchingEntries()" in response.text
-    assert "matchingContent.dataset.loaded === 'true'" in response.text
-    assert "window.htmx?.process(matchingContent)" in response.text
-    assert "openDayMenu(button)" in response.text
-    assert "createEntry.disabled = isFuture" in response.text
-    assert "hfl:create-entry-for-date" in response.text
-    assert 'data-document-url="http://testserver/hfl-corpus/document/2026-08-24.md"' in response.text
+    assert "const hasDocument = !isFuture && Boolean(documentUrl)" in page_source
+    assert "const canShowMatches = !isFuture" in page_source
+    assert "showDocument.setAttribute('aria-disabled', String(!hasDocument))" in page_source
+    assert "matchingEntries.disabled = !canShowMatches" in page_source
+    assert "selectDaySection('actions')" in page_source
+    assert "resetMatchingEntries()" in page_source
+    assert "matchingContent.dataset.loaded === 'true'" in page_source
+    assert "window.htmx?.process(matchingContent)" in page_source
+    assert "openDayMenu(button)" in page_source
+    assert "createEntry.disabled = isFuture" in page_source
+    assert "hfl:create-entry-for-date" in page_source
+    assert 'data-document-url="http://testserver/hfl-corpus/document/2026-08-24.md"' in page_source
     assert (
         'data-matches-url="http://testserver/hfl-corpus/day-matches/2026-08-24?'
         in selected_cell
     )
     assert "q=%23work" in selected_cell
-    assert "form.elements.time.value = selectedDate ? ''" in response.text
-    assert "successUrl.searchParams.set('date_from', savedActivityDate)" in response.text
-    assert "const centerDateForYear = value =>" in response.text
-    assert "if (value === timelineData.end.slice(0, 4)) return timelineData.end" in response.text
-    assert "const midpoint = `${value}-07-01`" in response.text
-    assert "if (midpoint < timelineData.start) return timelineData.start" in response.text
-    assert "if (midpoint > timelineData.calendar_end) return timelineData.calendar_end" in response.text
-    assert "await scrollToDate(centerDateForYear(value), {focus:false})" in response.text
-    assert "const yearAtViewportCenter = () =>" in response.text
-    assert "const distance = center < rect.left ? rect.left - center : center > rect.right ? center - rect.right : 0" in response.text
-    assert "const value = yearAtViewportCenter()?.dataset.activityYearSegment" in response.text
-    assert "segment.offsetLeft + segment.offsetWidth / 2" not in response.text
-    assert "scrollbar-width:none" in response.text
-    assert ".activity-grid { display:flex; width:max-content; align-items:stretch; gap:var(--activity-cell); }" in response.text
-    assert '<div class="activity-chart-column">' in response.text
-    assert '<div class="activity-legend"' in response.text
-    assert ".activity-chart-column { order:1; }" in response.text
-    assert ".activity-chart-shell { justify-content:flex-start; }" in response.text
-    assert "enableDragScroll(scroll, 'x'" in response.text
-    assert "enableWheelScroll(scroll)" in response.text
-    wheel_handler = response.text.split("const enableWheelScroll =", 1)[1].split(
+    assert "form.elements.time.value = selectedDate ? ''" in page_source
+    assert "successUrl.searchParams.set('date_from', savedActivityDate)" in page_source
+    assert "const centerDateForYear = value =>" in page_source
+    assert "if (value === timelineData.end.slice(0, 4)) return timelineData.end" in page_source
+    assert "const midpoint = `${value}-07-01`" in page_source
+    assert "if (midpoint < timelineData.start) return timelineData.start" in page_source
+    assert "if (midpoint > timelineData.calendar_end) return timelineData.calendar_end" in page_source
+    assert "await scrollToDate(centerDateForYear(value), {focus:false})" in page_source
+    assert "const yearAtViewportCenter = () =>" in page_source
+    assert "const distance = center < rect.left ? rect.left - center : center > rect.right ? center - rect.right : 0" in page_source
+    assert "const value = yearAtViewportCenter()?.dataset.activityYearSegment" in page_source
+    assert "segment.offsetLeft + segment.offsetWidth / 2" not in page_source
+    assert "scrollbar-width:none" in page_source
+    assert ".activity-grid { display:flex; width:max-content; align-items:stretch; gap:var(--activity-cell); }" in page_source
+    assert '<div class="activity-chart-column">' in page_source
+    assert '<div class="activity-legend"' in page_source
+    assert ".activity-chart-column { order:1; }" in page_source
+    assert ".activity-chart-shell { justify-content:flex-start; }" in page_source
+    assert "enableDragScroll(scroll, 'x'" in page_source
+    assert "enableWheelScroll(scroll)" in page_source
+    wheel_handler = page_source.split("const enableWheelScroll =", 1)[1].split(
         "const isoWeek =", 1
     )[0]
     assert "element.addEventListener('wheel'" in wheel_handler
@@ -1628,32 +1633,32 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     assert "element.scrollLeft > 0" in wheel_handler
     assert "element.scrollLeft < maxScroll" in wheel_handler
     assert "{passive:false}" in wheel_handler
-    assert "enableDragScroll(pinList, 'y')" in response.text
-    assert "const formatPinnedEnd = range =>" in response.text
-    assert "return `ENDS ${day} ${month} ${value.getFullYear()}`" in response.text
-    assert "const rangeDuration = range =>" in response.text
-    assert "rangeDuration(a) - rangeDuration(b)" in response.text
-    assert "b.updated_at.localeCompare(a.updated_at)" in response.text
-    assert "b.end_date.localeCompare(a.end_date)" in response.text
-    assert "b.start_date.localeCompare(a.start_date)" in response.text
-    assert response.text.count("Number(b.id) - Number(a.id)") == 2
-    assert "details.open = true" not in response.text
-    pinned_header = response.text.split('class="activity-pin-controls"', 1)[1].split(
+    assert "enableDragScroll(pinList, 'y')" in page_source
+    assert "const formatPinnedEnd = range =>" in page_source
+    assert "return `ENDS ${day} ${month} ${value.getFullYear()}`" in page_source
+    assert "const rangeDuration = range =>" in page_source
+    assert "rangeDuration(a) - rangeDuration(b)" in page_source
+    assert "b.updated_at.localeCompare(a.updated_at)" in page_source
+    assert "b.end_date.localeCompare(a.end_date)" in page_source
+    assert "b.start_date.localeCompare(a.start_date)" in page_source
+    assert page_source.count("Number(b.id) - Number(a.id)") == 2
+    assert "details.open = true" not in page_source
+    pinned_header = page_source.split('class="activity-pin-controls"', 1)[1].split(
         'data-activity-pin-list', 1
     )[0]
     assert "Pinned" in pinned_header
     assert "data-activity-today>Today</button>" in pinned_header
-    assert response.text.count("data-activity-today>Today</button>") == 2
-    assert "const todayShortcuts = Array.from" in response.text
-    assert "void scrollToDate(timelineData.end)" in response.text
-    assert "closeDayMenu();" in response.text
-    assert "if (focus) target.focus({preventScroll:true})" in response.text
-    assert "button.addEventListener('click', () => scrollToDate(midpoint(range)))" in response.text
-    assert "editRange.addEventListener('click', () => openMemoryDialog({range}))" in response.text
-    assert "[data-memory-range-save] { border:1px solid #fbbf24" in response.text
-    assert "memory-dialog-select-caret" in response.text
-    assert ".memory-dialog-select { appearance:none; padding-right:2.5rem; }" in response.text
-    drag_handler = response.text.split("const enableDragScroll =", 1)[1].split(
+    assert page_source.count("data-activity-today>Today</button>") == 2
+    assert "const todayShortcuts = Array.from" in page_source
+    assert "void scrollToDate(timelineData.end)" in page_source
+    assert "closeDayMenu();" in page_source
+    assert "if (focus) target.focus({preventScroll:true})" in page_source
+    assert "button.addEventListener('click', () => scrollToDate(midpoint(range)))" in page_source
+    assert "editRange.addEventListener('click', () => openMemoryDialog({range}))" in page_source
+    assert "[data-memory-range-save] { border:1px solid #fbbf24" in page_source
+    assert "memory-dialog-select-caret" in page_source
+    assert ".memory-dialog-select { appearance:none; padding-right:2.5rem; }" in page_source
+    drag_handler = page_source.split("const enableDragScroll =", 1)[1].split(
         "const isoWeek =", 1
     )[0]
     pointer_down, pointer_move = drag_handler.split(
@@ -1661,27 +1666,27 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     )
     assert "setPointerCapture" not in pointer_down
     assert "setPointerCapture" in pointer_move
-    assert "Create a category first" in response.text
-    assert "memoryRefs.categorySelect.disabled = !memoryState.categories.length" in response.text
-    assert "memoryRefs.start.max = timelineData.calendar_end" in response.text
-    assert "memoryRefs.end.max = timelineData.calendar_end" in response.text
-    assert ">Edit category</button>" in response.text
-    assert "Create or edit a category" not in response.text
-    assert "Select a day to recall or create a memory" not in response.text
-    assert '.activity-day[data-pinned="true"] { border-color:var(--pin-color); box-shadow:none; }' in response.text
-    assert '.activity-day[data-pinned="true"]::after' not in response.text
-    pinned_style = response.text.split('.activity-day[data-pinned="true"] {', 1)[1].split('}', 1)[0]
+    assert "Create a category first" in page_source
+    assert "memoryRefs.categorySelect.disabled = !memoryState.categories.length" in page_source
+    assert "memoryRefs.start.max = timelineData.calendar_end" in page_source
+    assert "memoryRefs.end.max = timelineData.calendar_end" in page_source
+    assert ">Edit category</button>" in page_source
+    assert "Create or edit a category" not in page_source
+    assert "Select a day to recall or create a memory" not in page_source
+    assert '.activity-day[data-pinned="true"] { border-color:var(--pin-color); box-shadow:none; }' in page_source
+    assert '.activity-day[data-pinned="true"]::after' not in page_source
+    pinned_style = page_source.split('.activity-day[data-pinned="true"] {', 1)[1].split('}', 1)[0]
     assert "background:" not in pinned_style
-    assert "const centerSelectedYear = () =>" in response.text
-    assert "yearList.scrollTop + selectedRect.top - listRect.top" in response.text
-    assert "await scrollToDate(timelineData.end, {behavior:'auto', focus:false})" in response.text
-    assert "window.addEventListener('pageshow', () => {" in response.text
-    assert "void centerSelectedDay();" in response.text
-    assert "window.requestAnimationFrame(() => {\n        window.requestAnimationFrame" in response.text
-    assert "hfl-corpus:activity-expanded" in response.text
-    assert "writeActivityState(nextExpanded)" in response.text
-    assert "Activity rhythm" not in response.text
-    assert "data-result-tags" in response.text
+    assert "const centerSelectedYear = () =>" in page_source
+    assert "yearList.scrollTop + selectedRect.top - listRect.top" in page_source
+    assert "await scrollToDate(timelineData.end, {behavior:'auto', focus:false})" in page_source
+    assert "window.addEventListener('pageshow', () => {" in page_source
+    assert "void centerSelectedDay();" in page_source
+    assert "window.requestAnimationFrame(() => {\n        window.requestAnimationFrame" in page_source
+    assert "hfl-corpus:activity-expanded" in page_source
+    assert "writeActivityState(nextExpanded)" in page_source
+    assert "Activity rhythm" not in page_source
+    assert "data-result-tags" in page_source
 
 
 def test_memory_pins_persist_categories_ranges_and_notes(authenticated_client):

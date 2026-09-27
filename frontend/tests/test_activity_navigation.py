@@ -29,10 +29,10 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
             page.route('http://navigation.test/**', respond)
             page.goto('http://navigation.test/home')
             nav = page.locator('nav[aria-label="Primary navigation"]:visible')
-            assert nav.get_by_role('link', name='Activity', exact=True).get_attribute('href') == '/hfl-corpus'
-            toggle = nav.get_by_role('link', name='Activity', exact=True)
+            assert nav.get_by_role('link', name='Distill', exact=True).get_attribute('href') == '/distill'
+            toggle = nav.get_by_role('link', name='Distill', exact=True)
             menu = nav.locator('.activity-navigation-options')
-            nav.get_by_role('link', name='Activity', exact=True).hover()
+            nav.get_by_role('link', name='Distill', exact=True).hover()
             playwright.expect(menu).to_be_visible()
             menu.get_by_role('link', name='Activity Kanban').hover()
             page.wait_for_timeout(350)
@@ -42,7 +42,8 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
             toggle.focus()
             toggle.press('ArrowDown')
             playwright.expect(menu).to_be_visible()
-            playwright.expect(menu.get_by_role('link', name='Activity Graph')).to_be_focused()
+            playwright.expect(menu.get_by_role('link', name='Activity Corpus')).to_be_focused()
+            assert menu.get_by_role('link', name='Activity Corpus').get_attribute('href') == '/hfl-corpus'
             assert menu.get_by_role('link', name='Activity Kanban').get_attribute('href') == '/hfl-corpus/actions'
             bounds = menu.bounding_box()
             assert bounds['x'] >= 0 and bounds['x'] + bounds['width'] <= width
@@ -100,4 +101,4 @@ def test_activity_navigation_feature_disabled(authenticated_client, monkeypatch)
     response = authenticated_client.get('/home')
     assert response.status_code == 200
     assert 'class="activity-navigation-menu"' not in response.text
-    assert '>Activity</a>' in response.text
+    assert '>Distill</a>' in response.text

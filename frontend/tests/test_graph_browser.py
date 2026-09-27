@@ -350,3 +350,41 @@ def test_filter_drawer_persists_all_controls(authenticated_client, monkeypatch, 
             assert not page.locator('#kg-types input[data-kind="tools"]').is_checked()
             assert not errors,errors
         finally:browser.close()
+
+
+@pytest.mark.parametrize('width', [390, 1440])
+def test_readonly_timeline_overview(authenticated_client, monkeypatch, tmp_path, width):
+    from modules.hfl_corpus import entities
+    from urllib.parse import urlsplit, parse_qs
+    playwright = pytest.importorskip('playwright.sync_api')
+    monkeypatch.setattr(entities, 'graph', lambda *args: {'nodes': [
+        {'id': 'daily:2026-09-01', 'kind': 'daily', 'label': '2026-09-01'},
+        {'id': 'daily:2026-09-02', 'kind': 'daily', 'label': '2026-09-02'},
+    ], 'edges': [], 'total_nodes': 2, 'sources': []})
+    with playwright.sync_playwright() as engine:
+        browser = engine.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page(viewport={'width': width, 'height': 460})
+        errors, mutations, queries = [], [], []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        def respond(route):
+            request = route.request
+            url = urlsplit(request.url)
+            if request.method not in ('GET', 'HEAD'): mutations.append(url.path)
+            if url.path == '/api/hfl/entities/graph': queries.append(parse_qs(url.query))
+            response = authenticated_client.get(url.path + ('?' + url.query if url.query else ''))
+            route.fulfill(status=response.status_code, body=response.content, content_type=response.headers.get('content-type','text/html'))
+        page.route('https://graph.test/**', respond)
+        page.goto('https://graph.test/hfl-corpus/graph?embed=1&readonly=1')
+        page.wait_for_selector('#kg-workspace:not([inert])')
+        playwright.expect(page.locator('#kg-canvas')).to_have_attribute('data-preset', 'timeline')
+        assert page.locator('#kg-density').input_value() == '100'
+        assert queries and queries[0]['limit'] == ['100']
+        playwright.expect(page.locator('.kg-main-toolbar')).to_be_hidden()
+        assert page.locator('#followup-editor').count() == 0
+        page.locator('#kg-canvas canvas').click(position={'x': width/2, 'y': 180})
+        page.locator('#kg-in').click()
+        page.locator('#kg-fit').click()
+        assert page.locator('dialog[open]').count() == 0
+        assert not mutations and not errors
+        page.screenshot(path=str(tmp_path / f'graph-readonly-{width}.png'))
+        browser.close()

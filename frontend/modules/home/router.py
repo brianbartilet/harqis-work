@@ -10,6 +10,19 @@ from web import page_context, require_user, templates
 router = APIRouter()
 
 
+@router.get('/distill', response_class=HTMLResponse)
+async def distill(request: Request):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    from modules.hfl_corpus.router import hfl_corpus_page
+
+    clean_request = Request({**request.scope, 'query_string': b''})
+    corpus = await hfl_corpus_page(clean_request)
+    context = {**corpus.context, 'activity_readonly': True}
+    return templates.TemplateResponse(request, 'modules/distill/index.html', context)
+
+
 @router.get("/home", response_class=HTMLResponse)
 async def home(request: Request):
     user, redirect = require_user(request)

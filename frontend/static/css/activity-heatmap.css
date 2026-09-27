@@ -178,3 +178,11 @@
   .corpus-header-link:hover{background:#3b82f6}.corpus-header-link:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
   @media(max-width:639px){.corpus-header-shell .corpus-navigation-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.corpus-navigation-actions>*{min-width:0;grid-column:auto;grid-row:auto}.corpus-navigation-actions .workspace-menu{grid-column:2;grid-row:2}.corpus-navigation-actions .workspace-menu>summary{width:100%}.corpus-navigation-actions .workspace-menu-panel{width:18rem;max-width:calc(100vw - 2rem)}.corpus-navigation-actions .corpus-create-entry,.corpus-header-link{padding:.5rem .65rem}}
   @media(min-width:640px){.corpus-navigation-actions{margin-top:0}.corpus-header-actions{flex-wrap:wrap;justify-content:flex-end}.corpus-page-header{min-width:0}}
+
+.activity-indicator-legend{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:0;font-size:10px;color:#94a3b8}.activity-indicator-legend span{display:inline-flex;align-items:center;gap:5px}.activity-indicator-legend i{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--activity-dot)}
+.activity-indicator-legend [data-status="open"],.activity-day[data-timeline-status="open"]{--activity-dot:#fbbf24}.activity-indicator-legend [data-status="in_progress"],.activity-day[data-timeline-status="in_progress"]{--activity-dot:#60a5fa}.activity-indicator-legend [data-status="incomplete"],.activity-day[data-timeline-status="incomplete"]{--activity-dot:#ef4444}.activity-indicator-legend [data-status="done"],.activity-day[data-timeline-status="done"]{--activity-dot:#34d399}
+.activity-panel .activity-day[data-timeline-status]::after{content:"";position:absolute;width:4px;height:4px;border-radius:50%;background:var(--activity-dot);bottom:1px;right:1px;box-shadow:0 0 0 1px #111827}.activity-panel .activity-day[data-timeline-status]{opacity:1}
+
+[data-activity-panel][data-readonly="true"] .activity-day:hover{transform:none}[data-activity-panel][data-readonly="true"] .activity-day{cursor:grab}
+
+.activity-chart-legends{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;flex-wrap:wrap}.activity-indicator-label{color:#64748b}.activity-chart-legends .activity-indicator-legend{margin-left:auto;justify-content:flex-end}

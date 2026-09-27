@@ -523,7 +523,7 @@ def test_module_registry_has_fixed_primary_navigation():
     manifesto = module_by_key("manifesto")
     assert manifesto is not None
     assert manifesto.route == "/manifesto"
-    assert module_by_key("hfl_corpus").route == "/hfl-corpus"
+    assert module_by_key("hfl_corpus").route == "/distill"
     assert module_by_key("sharing").label == "Share"
     assert "manifesto" not in {module.key for module in PRIMARY_MODULES}
     assert "home" not in {module.key for module in PRIMARY_MODULES}
@@ -574,7 +574,7 @@ def test_home_renders_dedicated_manifesto_section_outside_platform_modules(
     assert "Workflows" in response.text
     assert "Apps" in response.text
     assert "Activity Corpus" in response.text
-    assert "based on Homework for Life" in response.text
+    assert "Turn lived activity into useful knowledge and deliberate action." in response.text
     assert 'aria-label="HARQIS home"' in response.text
     assert 'aria-label="Primary navigation"' in response.text
     assert 'aria-current="page"' not in response.text

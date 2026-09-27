@@ -68,7 +68,11 @@
             </div>
           </div>
         </div>
+        <div class="activity-chart-legends">
         <div class="activity-legend" aria-label="Activity intensity from less to more"><span>Less</span>{% for level in range(5) %}<span class="activity-legend-cell" data-level="{{ level }}"></span>{% endfor %}<span>More</span></div>
+          {% include 'modules/hfl_corpus/partials/activity_indicator_legend.html' %}
+        </div>
+        <p class="text-xs text-amber-300 mt-2" data-activity-indicators-error role="status" hidden>Action indicators could not be loaded.</p>
       </div>
       <aside class="activity-pin-controls" aria-label="Pinned memory categories">
         <div class="mb-1 flex items-center justify-between gap-2">
@@ -79,7 +83,6 @@
         {% if not activity_readonly %}<button type="button" class="activity-pin-add" data-memory-category-new>+ Category</button>{% endif %}
       </aside>
     </div>
-    {% include 'modules/hfl_corpus/partials/activity_indicator_legend.html' %}
     <div class="activity-day-menu" data-activity-day-menu data-matches-expanded="false" role="menu" aria-label="Day actions" hidden>
       <div class="activity-day-menu-header">
       <p class="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[.14em] text-cyan-400" data-activity-menu-date></p>

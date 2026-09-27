@@ -218,3 +218,7 @@
 .kg-shell .kg-connection-feedback button{margin-left:10px;padding:4px 8px;font-size:12px}
 
 .kg-line-size svg{display:block;margin:auto;width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+
+.kg-readonly.kg-shell{height:100dvh!important;min-height:0;padding:0!important;display:flex;flex-direction:column;gap:0}.kg-readonly .activity-modal-heading,.kg-readonly .kg-main-toolbar,.kg-readonly .kg-boards,.kg-readonly .kg-inspector,.kg-readonly .kg-help,.kg-readonly #kg-live,.kg-readonly #kg-preset-notice{display:none!important}.kg-readonly .kg-stage{flex:1;min-height:0}.kg-readonly .kg-workspace{height:100%;grid-template-columns:minmax(0,1fr)!important}.kg-readonly .kg-map{height:100%;min-height:0}.kg-preview-heading{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px 16px;font-size:11px;color:#94a3b8;border-bottom:1px solid #1e3a5f}.kg-readonly .kg-map-caption{pointer-events:none}
+
+.kg-readonly .kg-stage{margin:16px;min-height:0}.kg-readonly .kg-preview-heading{flex-shrink:0}

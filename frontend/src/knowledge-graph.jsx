@@ -11,6 +11,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
 (() => {
   'use strict';
   const $ = id => document.getElementById('kg-' + id);
+  const readOnly = document.querySelector('.kg-shell').dataset.readonly === 'true';
   let infoUrgent=true,infoPaused=false;
   function showInfo(channel,text,urgent=false) {
     $(channel).textContent=text;
@@ -52,7 +53,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   function saveDetail(){try {localStorage.setItem(detailKey,$('density').value);} catch {}}
   try {
     const detail=localStorage.getItem(detailKey);
-    if(['100','500','1000','0'].includes(detail))$('density').value=detail;
+    if(!readOnly&&['100','500','1000','0'].includes(detail))$('density').value=detail;
   } catch {}
   function savedAnimation(){
     try {const mode=localStorage.getItem(animationKey);return !reducedMotion&&['off','breathing','ripple','drift'].includes(mode)?mode:'off';}
@@ -64,9 +65,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   let draggedNode=null, dragNodes=new Set();
   const stateKey='hfl:graph:state:v1:'+JSON.stringify([document.querySelector('.kg-shell').dataset.viewOwner,new URLSearchParams(location.search).get('context')||'',exampleMode]);
   let pendingState=null,stateReady=false,stateTimer;
-  try {pendingState=readGraphState(localStorage,stateKey);} catch {}
+  try {if(!readOnly)pendingState=readGraphState(localStorage,stateKey);} catch {}
   if(pendingState?.preset==='mindmap')pendingState={...pendingState,preset:'timeline',positions:{},viewport:null,selected:null,focusId:null};
   function saveGraphState(){
+    if(readOnly)return;
     if(!stateReady||loading||!graphApi||window.HflIdeas?.maps.current)return;
     const filters=Object.fromEntries(['search','density','rolling','since','until'].map(id=>[id,$(id).value]));
     filters.shared=$('shared').checked;
@@ -344,7 +346,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       ctx.restore();
     }
     return <><ForceGraph2D ref={ref} width={size.width} height={size.height}
-      graphData={data} enableNodeDrag={!connectFrom&&!connectionBusy&&(!!board||!touchViewport)} enablePanInteraction={!connectFrom&&!connectionBusy} enableZoomInteraction={!connectFrom&&!connectionBusy} backgroundColor="rgba(0,0,0,0)" nodeLabel={()=>''}
+      graphData={data} enableNodeDrag={!readOnly&&!connectFrom&&!connectionBusy&&(!!board||!touchViewport)} enablePanInteraction={!connectFrom&&!connectionBusy} enableZoomInteraction={!connectFrom&&!connectionBusy} backgroundColor="rgba(0,0,0,0)" nodeLabel={()=>''}
       onRenderFramePost={(ctx,scale)=>{
         if(!ref.current||!Number.isFinite(scale)||scale<=0)return;
         const origin=ref.current.screen2GraphCoords(0,0);
@@ -403,13 +405,13 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       linkDirectionalArrowRelPos={0.8}
       linkWidth={link=>board?([.7,1,1.4,1.9,2.5][(board.edge_widths?.[edgeKey(link)]||2)-1]+(connection===link?.4:0)):isLinked(link)?2:data.nodes.length<=35?1.1:.65} linkCurvature={link=>board?boardCurvature(link,ref.current?.zoom()||1,curveOffsets.get(link)||0):.16}
       linkCanvasObjectMode={()=>'after'} linkCanvasObject={paintArrows} linkHoverPrecision={8}
-      onLinkClick={link=>{if(!board||connectFrom||connectionBusy)return;select(null);setChosenEdge((link.local?'local:':'shared:')+edgeKey(link));setConnectionMessage('');}}
+      onLinkClick={link=>{if(readOnly)return;if(!board||connectFrom||connectionBusy)return;select(null);setChosenEdge((link.local?'local:':'shared:')+edgeKey(link));setConnectionMessage('');}}
       linkLineDash={link=>link.local?[4,3]:null}
       linkDirectionalParticles={0}
       linkDirectionalParticleWidth={2} linkDirectionalParticleSpeed={.004}
       onZoom={()=>{if(activePointers.size)lastInteraction=Date.now();scheduleStateSave();}}
       onNodeHover={node=>{host.style.cursor=node?'pointer':'grab';clearTimeout(hoverTimer.current);if(node)setHoverId(node.id);else hoverTimer.current=setTimeout(()=>setHoverId(null),250);if(!touchViewport)highlight(node?.id||selected);}}
-      onNodeClick={(node,event)=>{if(board)window.HflIdeas.maps.selectNode(node.id,event.shiftKey||event.ctrlKey||event.metaKey);if(connectFrom)finishConnection(node);else{setChosenEdge(null);setConnectionMessage('');select(node.id);}}} onBackgroundClick={()=>{if(!connectionBusy){window.HflIdeas?.maps.selectNode(null);select(null);setChosenEdge(null);setConnectFrom(null);setPreview(null);setConnectionMessage('');}}}
+      onNodeClick={(node,event)=>{if(readOnly)return;if(board)window.HflIdeas.maps.selectNode(node.id,event.shiftKey||event.ctrlKey||event.metaKey);if(connectFrom)finishConnection(node);else{setChosenEdge(null);setConnectionMessage('');select(node.id);}}} onBackgroundClick={()=>{if(!connectionBusy){window.HflIdeas?.maps.selectNode(null);select(null);setChosenEdge(null);setConnectFrom(null);setPreview(null);setConnectionMessage('');}}}
       onNodeDrag={followDrag}
       onNodeDragEnd={node=>{draggedNode=null;node.manual=true;layoutTargets.set(node.id,{x:node.x,y:node.y,anchor:false});node.fx=node.x;node.fy=node.y;draw();if(window.HflIdeas?.maps.current)window.HflIdeas.maps.saveLayout();else graphApi.d3ReheatSimulation();}}
       warmupTicks={0} cooldownTicks={reducedMotion||(!draggedNode&&!dragNodes.size)?0:Infinity}
@@ -530,6 +532,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   $('entry-dialog').addEventListener('close',()=>{entryController?.abort();$('entry-body').replaceChildren();});
   $('entry-dialog').addEventListener('click',event=>{const b=$('entry-dialog').getBoundingClientRect();if(event.target===$('entry-dialog')&&(event.clientX<b.left||event.clientX>b.right||event.clientY<b.top||event.clientY>b.bottom))$('entry-dialog').close();});
   function select(id) {
+    if(readOnly){selected=null;draw();return;}
     nodeActions=[];
     selected=id;const n=nodes.find(n=>n.id===id),near=connected(id);
     highlight(id);
@@ -662,7 +665,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     if(map){const members=new Set(map.members);next.nodes.filter(n=>members.has(n.list_id)).forEach(n=>members.add(n.id));const drafts=(map.drafts||[]).map(d=>({id:d.id,label:d.title,body:d.body,kind:'drafts',status:'board draft'}));next={...next,nodes:[...next.nodes.filter(n=>members.has(n.id)),...drafts],edges:[...next.edges.filter(e=>members.has(e.source)&&members.has(e.target)),...(map.edges||[]).map(e=>({...e,local:true,method:'board',evidence:'Board-only connection'}))]};next.total_nodes=next.nodes.length;next.truncated=false;}
     data=next;
     const requestedSelection=new URL(location.href).searchParams.get('select');
-    if(requestedSelection&&next.nodes.some(n=>n.id===requestedSelection)){
+    if(!readOnly&&requestedSelection&&next.nodes.some(n=>n.id===requestedSelection)){
       selected=requestedSelection;focusId=null;$('search').value='';enabled.add(next.nodes.find(n=>n.id===selected).kind);
       const url=new URL(location.href);url.searchParams.delete('select');history.replaceState(null,'',url);
     }
@@ -841,7 +844,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     window.activityModals?.setAll(pendingState.all);syncDates();sourceOptions([]);
   }
   showMode();
-  setAnimation(!reducedMotion&&['off','breathing','ripple','drift'].includes(pendingState?.animationMode)?pendingState.animationMode:savedAnimation(),false);
+  setAnimation(readOnly?'off':!reducedMotion&&['off','breathing','ripple','drift'].includes(pendingState?.animationMode)?pendingState.animationMode:savedAnimation(),false);
   requestAnimationFrame(animate);
   if(window.HflIdeas){
     window.HflIdeas.maps.getPositions=()=>Object.fromEntries(nodes.map(n=>{

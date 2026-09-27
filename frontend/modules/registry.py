@@ -24,10 +24,10 @@ MODULES: tuple[ModuleDefinition, ...] = (
     ),
     ModuleDefinition(
         key="hfl_corpus",
-        label="Activity Corpus",
-        route="/hfl-corpus",
-        description="The searchable HARQIS activity corpus, based on Homework for Life.",
-        detail="Browse captured moments, time capsules, logs, tags, and the source artifacts referenced by each entry.",
+        label="Distill",
+        route="/distill",
+        description="Turn lived activity into useful knowledge and deliberate action.",
+        detail="Review the Activity Corpus, connect ideas in the Graph, and move work forward in Kanban.",
     ),
     ModuleDefinition(
         key="sharing",
