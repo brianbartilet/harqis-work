@@ -207,14 +207,15 @@ async def followup_update(request: Request, followup_id: str, background_tasks: 
             raise HTTPException(400, 'Invalid agent attribution.')
         user = agent_actor
     try:
-        item = store().update(followup_id, raw, actor=user)
+        item = await asyncio.to_thread(store().update, followup_id, raw, actor=user)
     except KeyError:
         raise HTTPException(404, "Follow-up not found.") from None
     except FollowUpConflict as exc:
         raise HTTPException(409, str(exc)) from None
     except (ValueError, TypeError) as exc:
         raise HTTPException(400, str(exc)) from None
-    if any(r['followup_id'] == item['id'] and r['version'] == item['version'] for r in store().receipts(pending_only=True)):
+    receipts = await asyncio.to_thread(store().receipts, pending_only=True)
+    if any(r['followup_id'] == item['id'] and r['version'] == item['version'] for r in receipts):
         background_tasks.add_task(write_completion, item['id'], item['version'], store=store())
     return {"item": item}
 

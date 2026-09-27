@@ -14,7 +14,12 @@
       method: payload === undefined ? 'GET' : 'POST', headers: {'Content-Type':'application/json','X-CSRF-Token':csrf},
       ...(payload === undefined ? {} : {body:JSON.stringify(payload)})
     });
-    const data = await response.json();
+    const text = await response.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch (_) {
+      throw new Error(`The agent service returned an empty or invalid response (HTTP ${response.status}). Reconnecting; your transcript is retained.`);
+    }
     if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Agent request failed.');
     return data;
   }
@@ -208,7 +213,7 @@
       sessions.value=selected||session?.id||'';
       return data;
     }
-    let lastListRefresh=0, pollingBusy=false;
+    let lastListRefresh=0, pollingBusy=false, pollingError='', pollFailures=0;
     async function poll(){
       if(disposed||pollingBusy)return;
       pollingBusy=true;
@@ -224,8 +229,10 @@
           connectionState(session);
         }
         if(Date.now()-lastListRefresh>=4000){lastListRefresh=Date.now();const data=await refreshList();if(data&&session&&session.state==='waiting')status.textContent+=' '+data.busy+'/'+data.capacity+' executions active.';}
-      }catch(e){status.textContent='Reconnecting…';if(headerStatus){headerStatus.textContent='Reconnecting…';headerStatus.dataset.state='failed';}error.textContent=e.message;error.hidden=false;}
-      finally{pollingBusy=false;if(!disposed)polling=setTimeout(poll,Date.now()-lastInputAt<3000||session?.state==='running'?75:400);}
+        if(pollingError && error.textContent===pollingError)error.hidden=true;
+        pollingError='';pollFailures=0;
+      }catch(e){pollFailures++;status.textContent='Reconnecting…';if(headerStatus){headerStatus.textContent='Reconnecting…';headerStatus.dataset.state='failed';}pollingError=e.message;error.textContent=pollingError;error.hidden=false;}
+      finally{pollingBusy=false;if(!disposed)polling=setTimeout(poll,pollFailures?Math.min(1000*2**Math.min(pollFailures-1,4),10000):(Date.now()-lastInputAt<3000||session?.state==='running'?75:400));}
     }
     const observer=new ResizeObserver(()=>{
       if(!terminal||!fit||disposed)return;

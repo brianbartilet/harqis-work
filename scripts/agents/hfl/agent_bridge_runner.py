@@ -166,9 +166,23 @@ class BridgeClient:
         self.client = httpx.Client(base_url=base + '/api/hfl-agent/', headers={'Authorization': 'Bearer ' + token}, timeout=45, follow_redirects=False, trust_env=False)
 
     def call(self, path, payload=None):
-        response = self.client.get(path) if payload is None else self.client.post(path, json=payload)
-        response.raise_for_status()
-        return response.json()
+        import httpx
+        # Only replay idempotent terminal polling and keyed output delivery.
+        retryable = path.startswith('terminals/') and (
+            path.endswith('/poll') or (path.endswith('/output') and payload and payload.get('key')))
+        attempts = 4 if retryable else 1
+        for attempt in range(attempts):
+            try:
+                options = {'timeout': 5} if retryable else {}
+                response = self.client.get(path, **options) if payload is None else self.client.post(path, json=payload, **options)
+                response.raise_for_status()
+                return response.json()
+            except (httpx.TransportError, httpx.HTTPStatusError, ValueError) as exc:
+                if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code not in {502, 503, 504}:
+                    raise
+                if attempt + 1 == attempts:
+                    raise
+                time.sleep(2 ** attempt)
 
     def event(self, run, key, kind, payload):
         return self.call('runs/' + run['id'] + '/events', {'lease_token': run['lease_token'], 'event_key': key, 'kind': kind, 'payload': payload})

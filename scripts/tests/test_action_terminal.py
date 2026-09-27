@@ -117,3 +117,41 @@ def test_idle_expiry_archives_but_does_not_expire_active_turn(tmp_path, monkeypa
     worker.run()
     assert worker.states[-1]==expected
     assert 'session-transcript.txt' in worker.files
+
+@pytest.mark.parametrize('failure', ['connect', 'gateway', 'empty'])
+def test_terminal_transport_retries_same_key(monkeypatch, failure):
+    import httpx
+    from scripts.agents.hfl.agent_bridge_runner import BridgeClient
+    from scripts.agents.hfl import agent_bridge_runner
+    calls = []
+    def handle(request):
+        calls.append(request.content)
+        if len(calls) == 1:
+            if failure == 'connect':
+                raise httpx.ConnectError('offline', request=request)
+            return httpx.Response(503 if failure == 'gateway' else 200)
+        return httpx.Response(200, json={'ok': True})
+    monkeypatch.setattr(agent_bridge_runner.time, 'sleep', lambda _: None)
+    bridge = BridgeClient.__new__(BridgeClient)
+    with httpx.Client(base_url='http://test/', transport=httpx.MockTransport(handle)) as client:
+        bridge.client = client
+        assert bridge.call('terminals/test/output', {'key': 'same-key', 'data': 'hello'}) == {'ok': True}
+    assert len(calls) == 2 and calls[0] == calls[1]
+
+
+@pytest.mark.parametrize('path,status,expected', [('terminals/test/poll', 503, 4), ('terminals/test/poll', 409, 1), ('terminals/test/claim', 503, 1)])
+def test_terminal_transport_retries_bounded_and_respects_lease(monkeypatch, path, status, expected):
+    import httpx
+    from scripts.agents.hfl.agent_bridge_runner import BridgeClient
+    from scripts.agents.hfl import agent_bridge_runner
+    calls = []
+    def handle(request):
+        calls.append(request)
+        return httpx.Response(status)
+    monkeypatch.setattr(agent_bridge_runner.time, 'sleep', lambda _: None)
+    bridge = BridgeClient.__new__(BridgeClient)
+    with httpx.Client(base_url='http://test/', transport=httpx.MockTransport(handle)) as client:
+        bridge.client = client
+        with pytest.raises(httpx.HTTPStatusError):
+            bridge.call(path, {'token': 'lease'})
+    assert len(calls) == expected

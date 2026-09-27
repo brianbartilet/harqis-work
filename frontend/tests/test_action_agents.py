@@ -395,3 +395,54 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         playwright.expect(page.get_by_role('combobox',name='Agent session')).to_have_value(restored['id'])
         assert not errors
         browser.close()
+
+
+def test_other_card_update_does_not_expire_healthy_terminal(workspace, authenticated_client):
+    api, _, actions, _ = workspace
+    first, other = create_action(actions), create_action(actions)
+    db = api.store()
+    session = db.start_session(first['id'], {}, 'First')
+    claimed = db.claim_session(session['id'], 'worker')
+    db.heartbeat_session(session['id'], claimed['token'], 'idle', 'native', 2)
+    actions.update(other['id'], {'version': other['version'], 'title': 'Changed elsewhere'}, actor='owner')
+    response = authenticated_client.get('/hfl-corpus/agent-bridge/actions/' + other['id'] + '/sessions')
+    assert response.status_code == 200
+    assert db.session(session['id'])['state'] == 'idle'
+    assert not db.heartbeat_session(session['id'], claimed['token'], 'idle', 'native', 2)['close']
+
+
+def test_empty_poll_recovers_without_replacing_session(workspace, authenticated_client):
+    from urllib.parse import urlsplit
+    api, _, actions, _ = workspace
+    item = create_action(actions)
+    session = api.store().start_session(item['id'], {}, 'Test')
+    api.store().claim_session(session['id'], 'test')
+    playwright = pytest.importorskip('playwright.sync_api')
+    frontend = Path(__file__).resolve().parents[1]
+    outage = [True]
+    with playwright.sync_playwright() as engine:
+        browser = engine.chromium.launch(channel='chrome', headless=True)
+        try:
+            page = browser.new_page()
+            def route(r):
+                url = urlsplit(r.request.url)
+                if url.path == '/':
+                    r.fulfill(content_type='text/html', body='<div id="workspace"></div>')
+                elif url.query.startswith('after=') and outage[0]:
+                    outage[0] = False
+                    r.fulfill(status=502, body='')
+                else:
+                    response = authenticated_client.request(r.request.method, url.path + ('?' + url.query if url.query else ''), content=r.request.post_data, headers=owner_headers())
+                    r.fulfill(status=response.status_code, content_type='application/json', body=response.content)
+            page.route('https://workspace.test/**', route)
+            page.goto('https://workspace.test/')
+            for name in ('vendor/xterm-5.5.0.js', 'vendor/xterm-addon-fit-0.10.0.js', 'js/action-agent-workspace.js'):
+                page.add_script_tag(path=str(frontend/'static'/name))
+            page.evaluate('(id)=>window.actionAgentWorkspace.mount(document.querySelector("#workspace"),id)', item['id'])
+            error = page.locator('.agenda-error')
+            playwright.expect(error).to_contain_text('empty or invalid response (HTTP 502)')
+            playwright.expect(error).to_be_hidden(timeout=10000)
+            assert page.get_by_role('combobox', name='Agent session').input_value() == session['id']
+            assert api.store().session(session['id'])['state'] == 'starting'
+        finally:
+            browser.close()
