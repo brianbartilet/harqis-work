@@ -1,8 +1,8 @@
 .activity-navigation { display:flex; align-items:center; flex-shrink:0; border-radius:.375rem; color:#94a3b8; font-size:.75rem; font-weight:500; white-space:nowrap; }
 .activity-navigation.is-active { background:rgba(23,37,84,.7); color:#93c5fd; box-shadow:0 0 0 1px rgba(30,64,175,.6); }
-.activity-navigation > a { padding:.375rem .75rem; border-radius:.375rem; }
+.activity-navigation > a,.activity-navigation > button { padding:.375rem .75rem; border-radius:.375rem; }
 .activity-navigation-menu > summary { display:none; }
-.activity-navigation > a:hover { background:#1e293b; color:#bfdbfe; }
+.activity-navigation > a:hover,.activity-navigation > button:hover { background:#1e293b; color:#bfdbfe; }
 .activity-navigation-options { position:fixed; z-index:90; width:180px; max-width:calc(100vw - 16px); padding:.5rem; border:1px solid #334155; border-radius:.65rem; background:#0f172a; color:#cbd5e1; box-shadow:0 16px 40px #02061780; }
 .activity-navigation-options a { display:block; padding:.65rem .75rem; border-radius:.375rem; }
 .activity-navigation-options a:hover,.activity-navigation-options a:focus-visible { background:#1e293b; color:#dbeafe; }

@@ -10,7 +10,7 @@
   }
   for (const menu of menus) {
     const tab = menu.closest('.activity-navigation');
-    const toggle = tab.querySelector(':scope > a');
+    const toggle = tab.querySelector(':scope > a, :scope > button');
     toggle.setAttribute('aria-haspopup', 'true');
     const hover = matchMedia('(hover: hover) and (pointer: fine)');
     let closeTimer;
@@ -27,6 +27,11 @@
     // Keep the menu open when crossing the gap below the tab.
     menu.querySelector('.activity-navigation-options').addEventListener('pointerenter', () => clearTimeout(closeTimer));
     toggle.addEventListener('click', event => {
+      if (toggle.tagName === 'BUTTON') {
+        menu.open = true;
+        position(menu);
+        return;
+      }
       if (!hover.matches && !menu.open && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
         event.preventDefault();
         menu.open = true;

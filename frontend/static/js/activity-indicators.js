@@ -1,6 +1,6 @@
 /* Shared, read-only action status overlays for every Memory Signal view. */
 (() => {
-  const panel = document.querySelector('[data-activity-panel]');
+  let panel = document.querySelector('[data-activity-panel]');
   if (!panel) return;
   let actions = {};
   const labels = {open:'Active',in_progress:'In progress',incomplete:'Incomplete',done:'Done'};
@@ -32,9 +32,16 @@
     panel.querySelector('[data-activity-indicators-error]').hidden = result.every(value => value.status === 'fulfilled');
     paint();
   }
-  new MutationObserver(records => {
+  const observer = new MutationObserver(records => {
     if (records.some(record => record.addedNodes.length)) paint();
-  }).observe(panel.querySelector('[data-activity-grid]'), {childList:true, subtree:true});
+  });
+  observer.observe(panel.querySelector('[data-activity-grid]'), {childList:true, subtree:true});
+  window.addEventListener('hfl:activity-refreshed', () => {
+    observer.disconnect();
+    panel = document.querySelector('[data-activity-panel]');
+    observer.observe(panel.querySelector('[data-activity-grid]'), {childList:true, subtree:true});
+    load();
+  });
   window.addEventListener('hfl:actions-updated', load);
   load();
 })();

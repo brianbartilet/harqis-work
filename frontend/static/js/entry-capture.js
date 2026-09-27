@@ -137,6 +137,7 @@
   };
   const openCreate = (selectedDate = '') => {
     if (savingEntry) return;
+    form.querySelector('[data-entry-saved]').hidden = true;
     form.reset();
     moreDetails.open = false;
     localDateAndTime(selectedDate);
@@ -218,6 +219,7 @@
   form.addEventListener('submit', async event => {
     event.preventDefault();
     if (savingEntry || reviewButton.disabled) return;
+    form.querySelector('[data-entry-saved]').hidden = true;
     if (!form.checkValidity()) {
       const invalid = form.querySelector(':invalid');
       revealField(invalid);

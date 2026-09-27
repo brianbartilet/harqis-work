@@ -208,7 +208,11 @@
         {% for module in modules | default([]) %}
         {% if module.key == "hfl_corpus" %}
         {% include "partials/activity_navigation.html" %}
-        {% else %}
+        {% elif module.key == "second_brain" %}
+        {% include "partials/express_navigation.html" %}
+        {% elif module.key == "workflows" %}
+        {% include "partials/build_navigation.html" %}
+        {% elif module.key not in ['applications', 'git_forks', 'sharing'] %}
         <a href="{{ module.route }}"
            {% if active_module == module.key %}aria-current="page"{% endif %}
            class="rounded-md px-3 py-1.5 text-xs font-medium transition
@@ -251,7 +255,11 @@
       {% for module in modules | default([]) %}
       {% if module.key == "hfl_corpus" %}
       {% include "partials/activity_navigation.html" %}
-      {% else %}
+      {% elif module.key == "second_brain" %}
+      {% include "partials/express_navigation.html" %}
+      {% elif module.key == "workflows" %}
+      {% include "partials/build_navigation.html" %}
+      {% elif module.key not in ['applications', 'git_forks', 'sharing'] %}
       <a href="{{ module.route }}"
          {% if active_module == module.key %}aria-current="page"{% endif %}
          class="whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium

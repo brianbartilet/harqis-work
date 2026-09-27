@@ -3,6 +3,7 @@
 {% block head %}
 <link rel="stylesheet" href="{{ static_asset('css/corpus-workspaces.css') }}">
 <link rel="stylesheet" href="{{ static_asset('css/activity-heatmap.css') }}">
+<link rel="stylesheet" href="{{ static_asset('css/hfl-timeline.css') }}">
 {% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{{ static_asset('css/distill.css') }}">
@@ -28,10 +29,10 @@
 
 
 
-  {% include 'modules/hfl_corpus/partials/activity_heatmap.html' %}
+  <div data-distill-heatmap>{% include 'modules/hfl_corpus/partials/activity_heatmap.html' %}</div>
 
   <div class="distill-tools">
-    <a class="distill-capture" href="/hfl-corpus?create=entry"><span aria-hidden="true">＋</span><span>Capture a moment<small>One line is enough.</small></span></a>
+    <button type="button" class="distill-capture" data-create-entry-open aria-haspopup="dialog"><span aria-hidden="true">＋</span><span>Capture a moment<small>One line is enough.</small></span></button>
   <form class="distill-search" action="/hfl-corpus" method="get" role="search" aria-label="Search your activity">
     <label class="sr-only" for="distill-query">Search for activity entries</label>
     <div><input id="distill-query" name="q" type="search" placeholder="A decision, a project, a moment…" required><button type="submit">Search Corpus <span aria-hidden="true">↗︎</span></button></div>
@@ -57,6 +58,8 @@
     {% else %}<p class="distill-empty">Activity Graph is not enabled on this host.</p>{% endif %}
   </section>
 </main>
+{% include 'modules/hfl_corpus/partials/entry_capture.html' %}
+<script src="{{ static_asset('js/entry-capture.js') }}"></script>
 <script src="{{ static_asset('js/distill.js') }}"></script>
 <script src="{{ static_asset('js/activity-heatmap.js') }}"></script>
 <script src="{{ static_asset('js/activity-indicators.js') }}"></script>

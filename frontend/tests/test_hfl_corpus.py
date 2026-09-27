@@ -1478,7 +1478,7 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     )
 
     page_source = response.text
-    for asset in ('/static/css/activity-heatmap.css', '/static/js/activity-heatmap.js'):
+    for asset in ('/static/css/activity-heatmap.css', '/static/js/activity-heatmap.js', '/static/js/entry-capture.js'):
         asset_response = authenticated_client.get(asset)
         assert asset_response.status_code == 200
         page_source += asset_response.text
@@ -3562,29 +3562,30 @@ def test_corpus_index_renders_create_review_and_discard_dialogs(
 
     response = authenticated_client.get("/hfl-corpus?created=true")
 
+    page_source = response.text + authenticated_client.get('/static/js/entry-capture.js').text + authenticated_client.get('/static/css/activity-heatmap.css').text
     assert response.status_code == 200
-    assert "Create entry" in response.text
-    assert "Catch it before it wanders" in response.text
-    assert 'data-create-entry-dialog' in response.text
-    assert 'name="date"' in response.text
-    assert f'name="date" required max="{date.today().isoformat()}"' in response.text
-    assert 'name="time"' in response.text
-    assert 'name="moment"' in response.text
-    assert 'name="moment" required maxlength="500" placeholder="description"' in response.text
-    assert 'name="what_happened" required rows="3" placeholder="enter details"' in response.text
-    assert "enter moment details" not in response.text
-    assert "just writing down notes or thoughts" in response.text
-    assert 'placeholder="brainstorming"' in response.text
-    assert "#notes #manual-entry #thoughts" in response.text
-    assert 'data-entry-review-dialog' in response.text
-    assert 'data-entry-discard-dialog' in response.text
-    assert 'type="file" name="attachments" multiple' in response.text
-    assert "data-entry-file-list" in response.text
-    assert "data-entry-upload-progress" in response.text
-    assert "new XMLHttpRequest()" in response.text
-    assert "request.upload.addEventListener('progress'" in response.text
-    assert ">Review and save</button>" in response.text
-    assert "HFL entry created successfully." in response.text
+    assert "Create entry" in page_source
+    assert "Catch it before it wanders" in page_source
+    assert 'data-create-entry-dialog' in page_source
+    assert 'name="date"' in page_source
+    assert f'name="date" required max="{date.today().isoformat()}"' in page_source
+    assert 'name="time"' in page_source
+    assert 'name="moment"' in page_source
+    assert 'name="moment" required maxlength="500" placeholder="description"' in page_source
+    assert 'name="what_happened" required rows="3" placeholder="enter details"' in page_source
+    assert "enter moment details" not in page_source
+    assert "just writing down notes or thoughts" in page_source
+    assert 'placeholder="brainstorming"' in page_source
+    assert "#notes #manual-entry #thoughts" in page_source
+    assert 'data-entry-review-dialog' in page_source
+    assert 'data-entry-discard-dialog' in page_source
+    assert 'type="file" name="attachments" multiple' in page_source
+    assert "data-entry-file-list" in page_source
+    assert "data-entry-upload-progress" in page_source
+    assert "new XMLHttpRequest()" in page_source
+    assert "request.upload.addEventListener('progress'" in page_source
+    assert ">Review and save</button>" in page_source
+    assert "HFL entry created successfully." in page_source
 
 
 def test_manual_entry_rejects_future_dates():
@@ -3605,6 +3606,7 @@ def test_create_entry_dialog_uses_mobile_sheets_and_touch_friendly_controls(
     monkeypatch.setattr(hfl_routes.corpus_index, "documents", lambda: ())
 
     response = authenticated_client.get("/hfl-corpus")
+    page_source = response.text + authenticated_client.get('/static/js/entry-capture.js').text + authenticated_client.get('/static/css/activity-heatmap.css').text
 
     create_dialog = response.text.split(
         "<dialog data-create-entry-dialog", 1
@@ -3641,10 +3643,10 @@ def test_create_entry_dialog_uses_mobile_sheets_and_touch_friendly_controls(
     assert "sm:m-auto" in create_dialog
     assert "sm:h-auto" in create_dialog
     assert "sm:rounded-2xl" in create_dialog
-    assert "dialog[data-create-entry-dialog]" in response.text
-    assert "dialog[data-create-entry-dialog] > form" in response.text
-    assert "height: fit-content !important" in response.text
-    assert "@media (min-width: 640px)" in response.text
+    assert "dialog[data-create-entry-dialog]" in page_source
+    assert "dialog[data-create-entry-dialog] > form" in page_source
+    assert "height: fit-content !important" in page_source
+    assert "@media (min-width: 640px)" in page_source
     assert "flex h-full" in create_form
     assert "overflow-hidden" in create_form
     assert "sm:block" in create_form
@@ -3656,17 +3658,17 @@ def test_create_entry_dialog_uses_mobile_sheets_and_touch_friendly_controls(
     assert "safe-area-inset-bottom" in create_actions
     assert "sm:flex-row" in create_actions
     assert "grid-cols-2" in date_time_fields
-    assert "min-h-11" in response.text
-    assert "text-base" in response.text
-    assert "sm:text-sm" in response.text
+    assert "min-h-11" in page_source
+    assert "text-base" in page_source
+    assert "sm:text-sm" in page_source
     assert "h-[100dvh]" in review_dialog
     assert "w-screen" in review_dialog
     assert "overflow-hidden" in review_dialog
     assert "sticky bottom-0" in review_actions
     assert "sm:flex-row" in review_actions
-    assert "window.innerWidth >= 640" in response.text
-    assert "scrollIntoView({behavior: 'smooth', block: 'center'})" in response.text
-    assert "form.checkValidity()" in response.text
+    assert "window.innerWidth >= 640" in page_source
+    assert "scrollIntoView({behavior: 'smooth', block: 'center'})" in page_source
+    assert "form.checkValidity()" in page_source
     assert " open" not in more_details.split(">", 1)[0]
     assert ">Add more details</span>" in more_details
     assert 'stroke-width="2.5"' in more_details
@@ -3681,10 +3683,10 @@ def test_create_entry_dialog_uses_mobile_sheets_and_touch_friendly_controls(
     assert "Use your activity timeline first" in more_details
     assert 'name="tags" value="#notes #manual-entry #thoughts #moments"' in more_details
     assert 'name="references"' in more_details
-    assert "moreDetails.open = false" in response.text
-    assert "navigator.geolocation.getCurrentPosition" in response.text
-    assert "data-entry-enrichment-summary" in response.text
-    assert "Adding context…" in response.text
+    assert "moreDetails.open = false" in page_source
+    assert "navigator.geolocation.getCurrentPosition" in page_source
+    assert "data-entry-enrichment-summary" in page_source
+    assert "Adding context…" in page_source
 
 
 def test_compiled_css_contains_manual_entry_location_toggle_utilities():

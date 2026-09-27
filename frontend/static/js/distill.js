@@ -2,6 +2,27 @@
 (() => {
   const root = document.querySelector('[data-distill]');
   if (!root) return;
+  let refreshVersion = 0;
+  window.addEventListener('hfl:entry-saved', async () => {
+    const version = ++refreshVersion;
+    try {
+      const response = await fetch('/distill', {cache: 'no-store'});
+      if (!response.ok) throw Error('Activity refresh failed');
+      const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+      const updated = page.querySelector('[data-distill-heatmap]');
+      if (!updated) throw Error('Activity refresh failed');
+      if (version !== refreshVersion) return;
+      root.querySelector('[data-activity-panel]')?.activityAbortController?.abort();
+      root.querySelector('[data-distill-heatmap]').replaceWith(updated);
+      window.HflActivityHeatmap.init(updated.querySelector('[data-activity-panel]'));
+      window.dispatchEvent(new Event('hfl:activity-refreshed'));
+    } catch (_) {
+      if (version !== refreshVersion) return;
+      const saved = document.querySelector('[data-entry-saved]');
+      saved.textContent = 'Entry saved. Activity preview could not refresh; reload the page to update it. You can keep capturing.';
+      saved.hidden = false;
+    }
+  });
   const recent = root.querySelector('[data-distill-recent]');
   const error = root.querySelector('[data-distill-error]');
   const retry = root.querySelector('[data-distill-retry]');

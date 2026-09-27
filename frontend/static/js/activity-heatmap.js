@@ -1118,5 +1118,6 @@
     });
   };
 
+  window.HflActivityHeatmap = {init: initActivityPanel};
   initActivityPanel(document.querySelector('[data-activity-panel]'));
 })();

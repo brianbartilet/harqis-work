@@ -1,9 +1,13 @@
-<div class="activity-navigation{% if active_module == 'second_brain' %} is-active{% endif %}">
+<div class="activity-navigation{% if active_module in ['second_brain', 'sharing'] %} is-active{% endif %}">
   <button type="button" aria-haspopup="true" aria-expanded="false">Express</button>
   <details class="activity-navigation-menu">
     <summary hidden>Express navigation</summary>
     <nav class="activity-navigation-options" aria-label="Express tools">
-      <a href="{{ module.route }}" {% if active_module == 'second_brain' %}aria-current="page"{% endif %}>{{ module.label }}</a>
+      {% for key in ['sharing', 'second_brain'] %}
+      {% for child in modules | default([]) if child.key == key %}
+      <a href="{{ child.route }}" {% if active_module == child.key %}aria-current="page"{% endif %}>{{ 'Share Activity Corpus' if child.key == 'sharing' else child.label }}</a>
+      {% endfor %}
+      {% endfor %}
     </nav>
   </details>
 </div>

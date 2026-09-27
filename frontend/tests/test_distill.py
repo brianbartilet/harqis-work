@@ -43,7 +43,7 @@ def test_distill_navigation_actions_and_retry(agenda, authenticated_client, monk
         playwright.expect(page.locator('[data-distill-recent] a')).to_contain_text(item['title'])
         link = page.locator('[data-distill-recent] a')
         assert 'edit=' + item['id'] in link.get_attribute('href')
-        assert page.get_by_role('link', name='Capture a moment').get_attribute('href') == '/hfl-corpus?create=entry'
+        assert page.get_by_role('button', name='Capture a moment').get_attribute('data-create-entry-open') is not None
         assert page.locator('main').evaluate('(el)=>el.scrollWidth<=el.clientWidth+1')
         playwright.expect(page.locator('[data-activity-panel][data-readonly="true"]')).to_have_count(1)
         playwright.expect(page.locator('[data-activity-day][data-idea-count], [data-timeline-status="historical"]')).to_have_count(0)
@@ -74,6 +74,30 @@ def test_distill_navigation_actions_and_retry(agenda, authenticated_client, monk
         page.locator('[data-activity-toggle]').click()
         playwright.expect(page.locator('[data-activity-body]')).to_be_visible()
         page.screenshot(path=str(tmp_path / ('distill-' + str(width) + '.png')), full_page=True)
+        saves = []
+        def preview_entry(route):
+            values = route.request.post_data_json
+            route.fulfill(json={'payload': values, 'filename': 'entry.md', 'html': '<p>Review capture</p>'})
+        def save_entry(route):
+            saves.append(route.request.post_data_json)
+            route.fulfill(json={'ok': True})
+        page.route('https://distill.test/hfl-corpus/entries/preview', preview_entry)
+        page.route('https://distill.test/hfl-corpus/entries', save_entry)
+        page.get_by_role('button', name='Capture a moment').click()
+        form = page.locator('[data-create-entry-form]')
+        for index in range(2):
+            form.locator('[name=moment]').fill(f'Capture {index}')
+            form.locator('[name=what_happened]').fill('Captured on Distill')
+            form.locator('[data-entry-more-details]').evaluate('(el) => el.open = true')
+            form.locator('[name=include_location]').uncheck(force=True)
+            form.get_by_role('button', name='Review and save').click()
+            page.locator('[data-entry-confirm]').click()
+            playwright.expect(form.locator('[data-entry-saved]')).to_contain_text('Entry saved')
+            playwright.expect(form.locator('[name=moment]')).to_have_value('')
+            assert page.url == 'https://distill.test/distill'
+        assert [entry['moment'] for entry in saves] == ['Capture 0', 'Capture 1']
+        form.get_by_role('button', name='Cancel', exact=True).click()
+
         link.click()
         page.wait_for_load_state('networkidle')
         assert not page.locator('#agenda-error').inner_text(), page.locator('#agenda-error').inner_text()
