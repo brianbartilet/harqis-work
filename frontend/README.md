@@ -21,7 +21,7 @@ The frontend currently exposes eight modules:
 
 `/dashboard` remains as a compatibility redirect to `/home`.
 
-The `hfl_corpus` integration exposes all 100 canonical `/api/hfl` operations
+The `hfl_corpus` integration exposes all 110 canonical `/api/hfl` operations
 through the shared CLI/MCP adapter. See the [tool guide](../apps/hfl_corpus/README.md)
 and [endpoint coverage report](../docs/info/FRONTEND_MCP_COVERAGE.md).
 The reviewed [coverage manifest](mcp_coverage.json) includes browser aliases and

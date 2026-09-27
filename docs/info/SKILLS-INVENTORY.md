@@ -22,6 +22,7 @@ of truth.
 | `/clarify-feature` | Convert an enhancement request into an approved implementation spec before files change. |
 | `/choose-automation-runtime` | Classify automation as Celery, agent-orchestrated, or hybrid and record its ownership and controls. |
 | `/commit` | Review, stage, and create a Conventional Commit, with optional push and guarded host-sync chaining. |
+| `/create-action` | Save a standalone or entry-linked Activity Corpus action with optional dates, instructions, and supporting files, without scheduling execution. |
 | `/create-data-only-from-hud` | Add a host-safe data-only fallback twin for an existing Windows HUD task. |
 | `/create-new-fork-repository` | Produce a clean client/business fork baseline while preserving the platform skeleton. |
 | `/create-new-hud` | Scaffold a Rainmeter HUD task, configuration, imports, documentation, and optional queue wiring. |
@@ -41,6 +42,7 @@ of truth.
 | `/manage-second-brain` | Inspect, configure, validate, reconcile, and diagnose advisory Second Brain categories, operations, clients, and runtime health. |
 | `/manage-fork-fleet` | Discover, compare, test, deploy, and safely synchronize harqis-work forks through isolated worktrees and PRs. |
 | `/max-plan` | Perform a deep reasoning planning pass and persist the resulting plan. |
+| `/merge-entities` | Preview and perform same-type Activity Corpus entity merges, inspect audits, and reverse merges through the authenticated API. |
 | `/migrate-to-core` | Move reusable generic code from `harqis-work` into `harqis-core`. |
 | `/manifesto-audit` | Audit CODE/PARA flows and manifesto alignment with any LLM runtime; produce evidence-backed reports and authorized remediation. |
 | `/radar-sold-inventory` | Cross-reference sold TCG orders with inventory and radar data. |
@@ -55,7 +57,7 @@ of truth.
 | `/write-notes` | Save OCR-enriched HFL notes, list recent notes with document links, and safely update one note by GUID. |
 | `/zapier-mcp` | Search, enable, and wire Zapier MCP actions into workflows or direct agent use. |
 
-**Current canonical count: 38 skills.** The count is derived from directories
+**Current canonical count: 43 skills.** The count is derived from directories
 containing `.agents/skills/*/SKILL.md`; cache or generated directories do not
 count.
 

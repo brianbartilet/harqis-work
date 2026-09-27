@@ -300,7 +300,7 @@ Wraps xAI Grok via the OpenAI-compatible SDK (`https://api.x.ai/v1`). Requires v
 
 ### HFL Activity Corpus (`apps/hfl_corpus/mcp.py`)
 
-100 typed tools cover the canonical frontend `/api/hfl` routes using
+110 typed tools cover the canonical frontend `/api/hfl` routes using
 `HFL_CORPUS_API_URL` and `HFL_CORPUS_API_TOKEN`. The same catalog powers the CLI
 and agent bridge. Existing tool names are retained. See the
 [app guide](../apps/hfl_corpus/README.md) for version checks, merge preview tokens,
@@ -311,6 +311,16 @@ session/protocol surfaces. Writes are marked below; file downloads write locally
 | Tool | Description |
 | --- | --- |
 | `upload_hfl_corpus_attachments` | Attach multiple supporting files to an action or pin (remote write). |
+| `get_hfl_corpus_idea_connections` | Read an idea's graph connections. |
+| `list_hfl_corpus_reuse_options` | Search actions and ideas available for independent copying. |
+| `list_hfl_corpus_board_ideas` | List ideas available to boards, optionally including dismissed ideas. |
+| `get_hfl_corpus_clone_draft` | Preview an independent action or idea copy without saving it. |
+| `create_hfl_corpus_clone` | Create a copy using a caller UUID and source revision (remote write). |
+| `create_hfl_corpus_list_copy` | Copy a checklist into an action or idea at the expected revision (remote write). |
+| `create_hfl_corpus_map_paste` | Paste selected objects between versioned boards (remote write). |
+| `get_hfl_corpus_list` | Read a standalone or owner-linked checklist entity. |
+| `create_hfl_corpus_list` | Create a standalone checklist with a caller UUID (remote write). |
+| `update_hfl_corpus_list` | Update a checklist at its expected revision (remote write). |
 | `list_hfl_corpus_attachments` | List supporting files attached to a task. |
 | `download_hfl_corpus_attachment` | Download an input attachment (writes a local file). |
 | `delete_hfl_corpus_attachment` | Detach an input from future runs (remote write). Prior run files are retained. |
