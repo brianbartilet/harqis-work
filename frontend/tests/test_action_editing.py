@@ -110,6 +110,43 @@ def create_action(client):
     return response.json()['item']
 
 
+@pytest.mark.parametrize('editor', ['timeline', 'idea'])
+@pytest.mark.parametrize('existing', [False, True])
+def test_action_agent_settings(editor_page, monkeypatch, tmp_path, editor, existing):
+    from playwright.sync_api import expect
+    from modules.hfl_corpus import action_agents as agents
+    from modules.app_settings.store import DEFAULTS
+    from workflows.hfl.action_agent_store import ActionAgentStore
+    page, client = editor_page
+    settings = dict(DEFAULTS)
+    monkeypatch.setattr(agents, 'read_settings', lambda: dict(settings))
+    db = ActionAgentStore(tmp_path / 'agents.sqlite3')
+    monkeypatch.setattr(agents, 'store', lambda: db)
+    monkeypatch.setattr(agents.bridge, 'action_call', lambda method, path: client.get('/hfl-corpus/timeline/items' + path).json())
+    item = create_action(client) if existing else {}
+    if existing:
+        db.configure('card:' + item['id'], {'preset':'', 'overrides':{'hermes_profile':'Custom profile'}})
+    page.goto('https://editing.test/hfl-corpus/actions')
+    page.wait_for_function('window.hflActions && window.HflIdeas')
+    if editor == 'timeline':
+        page.evaluate('(item) => window.hflActions.openEditor(item)', item or None)
+        form = page.locator('#followup-form')
+    else:
+        page.evaluate('(item) => window.HflIdeas.openEditor("actionable", item)', item)
+        form = page.locator('.idea-dialog:visible form')
+    section = form.locator('[data-action-agent-settings]')
+    assert not section.evaluate('(e) => e.open')
+    assert section.evaluate('(e) => e.previousElementSibling.querySelector("[name=prompt]") !== null')
+    section.get_by_text('Agent settings', exact=True).click()
+    expect(section.locator('dl')).to_contain_text('Custom profile' if existing else 'Worker profile')
+    expect(section.get_by_role('link', name='Agent default settings')).to_have_attribute('href', '/settings')
+    expect(section.get_by_role('link', name='Agent default settings')).to_have_attribute('target', '_blank')
+    section.get_by_text('Agent settings', exact=True).click()
+    settings['agent_session_expiry_minutes'] = 75
+    section.get_by_text('Agent settings', exact=True).click()
+    expect(section.locator('dl')).to_contain_text('75 minutes')
+
+
 def test_actions_page_autosave_refresh_sort_and_move(editor_page):
     from playwright.sync_api import expect
     page, client = editor_page

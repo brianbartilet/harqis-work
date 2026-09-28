@@ -37,6 +37,12 @@ def effective(source_id):
     return {**read_settings(), **preset.get('overrides', {}), **card.get('overrides', {})}
 
 
+@owner.get('/configuration/defaults')
+def default_configuration():
+    settings = read_settings()
+    return {'effective': settings, 'card': {'preset': '', 'overrides': {}}}
+
+
 @owner.get('/actions/{source_id}/configuration')
 def configuration(source_id: str):
     action = bridge.checked(bridge.action_call, 'GET', '/' + source_id)['item']

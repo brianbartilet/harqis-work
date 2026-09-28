@@ -7,6 +7,15 @@
       <label>Action<input name="title" required maxlength="200" placeholder="Check Essential Space sync feasibility"></label>
       <label>Markdown description<textarea name="body" maxlength="60000" rows="5"></textarea></label>
       <label>Initial prompt<textarea name="prompt" rows="5" maxlength="20000" placeholder="Write instructions for an LLM. Plain text or Markdown is supported."></textarea><small>Use In Review to draft and refine instructions. Move to Ready when you want execution. Ready actions with saved instructions are picked up automatically using their configured agent.</small></label>
+      <details class="action-details action-triage" data-action-agent-settings>
+        <summary>Agent settings</summary>
+        <div class="action-triage-body">
+          <p data-agent-settings-status role="status">Loading agent settings…</p>
+          <dl class="agent-config-summary" data-agent-settings-summary></dl>
+          <p>Inherited settings follow future changes to App Settings. Action-specific overrides remain in effect.</p>
+          <div class="agent-configure-row"><a href="/settings" target="_blank" rel="noopener noreferrer" title="Open App Settings in a new tab to change shared agent defaults">Agent default settings</a></div>
+        </div>
+      </details>
       <div data-object-attachments>
       {% include "modules/hfl_corpus/partials/input_attachments.html" %}
       </div>
@@ -48,6 +57,7 @@
   </form>
 </dialog>
 <script src="{{ static_asset('js/hfl-input-attachments.js') }}"></script>
+<script src="{{ static_asset('js/hfl-action-agent-settings.js') }}"></script>
 <link rel="stylesheet" href="{{ static_asset('css/hfl-ideas.css') }}">
 <link rel="stylesheet" href="{{ static_asset('css/corpus-workspaces.css') }}">
 <link rel="stylesheet" href="{{ static_asset('css/hfl-intent-reuse.css') }}">

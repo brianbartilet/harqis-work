@@ -43,6 +43,7 @@
   function openEditor(item = null, desiredStatus = '') {
     suggestionId = null; editing = item; source = item?.source || null; requestId = crypto.randomUUID();
     form.reset();
+    window.HflActionAgentSettings(form, item?.id);
     form.querySelectorAll('.action-triage').forEach(section => { section.open = false; });
     attachments.reset(item?.id);
     window.HflIntentFields(form,item||{});
