@@ -50,7 +50,7 @@ class ApiServiceHflCorpusManagement(BaseApiServiceHflCorpus):
             self.request.add_query_strings(**query)
         return self.client.execute_request(self.request.build())
 
-    def create_action(self, request_id: str, title: str, expected_outcome: str,
+    def create_action(self, request_id: str, title: str, expected_outcome: str = "",
                       review_date: str = "", due_date: str = "", prompt: str = "",
                       notes: str = "", source: dict | None = None,
                       matrix: str = "", matrix_confidence: str = "", matrix_reason: str = "") -> dict:

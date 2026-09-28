@@ -130,8 +130,8 @@ class FollowUpStore:
             if not isinstance(value, str) or len(value if key == "prompt" else value.strip()) > limit:
                 raise ValueError(f"{key.replace('_', ' ')} must be text of at most {limit} characters")
             result[key] = value if key == "prompt" else value.strip()
-        if not result["title"] or not result["expected_outcome"]:
-            raise ValueError("A title and expected outcome are required.")
+        if not result["title"]:
+            raise ValueError("A title is required.")
         if result.get("status", "open") not in STATES:
             raise ValueError("Unknown follow-up status.")
         result.setdefault("status", "open")

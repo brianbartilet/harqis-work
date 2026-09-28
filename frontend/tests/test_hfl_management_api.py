@@ -82,7 +82,7 @@ def test_action_retry_edits_conflicts_and_completion(management):
 
 @pytest.mark.parametrize("fields", [
     {"agent_enabled": True}, {"title": "  "}, {"request_id": "bad"},
-    {"due_date": "2026-02-30"}, {"expected_outcome": ""},
+    {"due_date": "2026-02-30"}, {"expected_outcome": "x" * 3001},
     {"hide_ticked": "true"},
 ])
 def test_action_validation(management, fields):
@@ -359,3 +359,22 @@ def test_management_agents_can_create_and_reprioritize_actions(management):
     assert response.status_code == 200
     assert response.json()['item']['matrix'] == 'Q1'
     assert client.patch('/api/hfl/actions/'+item['id'], json={'version':2,'matrix':'Q5'}).status_code == 422
+
+
+@pytest.mark.parametrize("outcome", [None, "", "   "])
+def test_optional_expected_outcome_create_and_clear(management, outcome):
+    client, store = management
+    raw = {"request_id": str(uuid4()), "title": "Plan without an outcome"}
+    if outcome is not None:
+        raw["expected_outcome"] = outcome
+    response = client.post("/api/hfl/actions", json=raw)
+    assert response.status_code == 201, response.text
+    item = response.json()["item"]
+    assert item["expected_outcome"] == ""
+    url = "/api/hfl/actions/" + item["id"]
+    updated = client.patch(url, json={"version": item["version"], "expected_outcome": "A useful result"})
+    assert updated.status_code == 200, updated.text
+    item = updated.json()["item"]
+    cleared = client.patch(url, json={"version": item["version"], "expected_outcome": ""})
+    assert cleared.status_code == 200, cleared.text
+    assert store.get(item["id"])["expected_outcome"] == ""

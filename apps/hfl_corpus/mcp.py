@@ -84,7 +84,7 @@ def register_hfl_corpus_tools(mcp: FastMCP):
 
     @mcp.tool()
     def create_hfl_corpus_action(
-        request_id: str, title: str, expected_outcome: str,
+        request_id: str, title: str, expected_outcome: str = "",
         review_date: str = "", due_date: str = "", prompt: str = "",
         notes: str = "", source: Optional[dict] = None,
         matrix: str = "", matrix_confidence: str = "", matrix_reason: str = "",
@@ -94,7 +94,7 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         Args:
             request_id: Caller-generated UUID; reuse with identical fields on retry.
             title: Action title, at most 200 characters.
-            expected_outcome: Required outcome, at most 3,000 characters.
+            expected_outcome: Optional outcome, at most 3,000 characters.
             review_date: YYYY-MM-DD or empty for no review date.
             due_date: YYYY-MM-DD or empty for no deadline.
             prompt: Optional Markdown instructions, at most 20,000 characters.

@@ -3268,8 +3268,8 @@ components:
         expected_outcome:
           type: string
           maxLength: 3000
-          minLength: 1
           title: Expected Outcome
+          default: ''
         review_date:
           type: string
           title: Review Date
@@ -3342,7 +3342,6 @@ components:
       required:
       - request_id
       - title
-      - expected_outcome
       title: CreateAction
     CreateEntryRequest:
       properties:
@@ -3716,7 +3715,6 @@ components:
           anyOf:
           - type: string
             maxLength: 3000
-            minLength: 1
           - type: 'null'
           title: Expected Outcome
         review_date:

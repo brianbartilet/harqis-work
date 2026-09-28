@@ -209,7 +209,7 @@ def test_stale_edit_cannot_overwrite_completion(agenda, authenticated_client):
     assert len(agenda.history(item["id"])) == 2
 
 
-@pytest.mark.parametrize("extra", [{"title": " "}, {"expected_outcome": ""}, {"review_date": "2026-02-30"}, {"due_date": "tomorrow"}, {"status": "done"}, {"execute": "arbitrary.task"}, {"hide_ticked": "true"}])
+@pytest.mark.parametrize("extra", [{"title": " "}, {"expected_outcome": "x" * 3001}, {"review_date": "2026-02-30"}, {"due_date": "tomorrow"}, {"status": "done"}, {"execute": "arbitrary.task"}, {"hide_ticked": "true"}])
 def test_invalid_creation_writes_nothing(agenda, authenticated_client, extra):
     assert authenticated_client.post("/hfl-corpus/timeline/items", json=payload(**extra)).status_code == 400
     assert agenda.list() == []
@@ -1091,3 +1091,22 @@ def test_board_order_preserves_filtered_cards_and_rejects_stale_moves(agenda, au
     assert authenticated_client.put(url,json=order(rows)).status_code==409
     assert agenda.board_order()==positions
     assert authenticated_client.put(url,json=order([rows[2],rows[2]])).status_code==400
+
+
+@pytest.mark.parametrize("outcome", [None, "", "   "])
+def test_optional_expected_outcome_create_and_clear(agenda, authenticated_client, outcome):
+    client, store = authenticated_client, agenda
+    raw = {"request_id": str(uuid4()), "title": "Plan without an outcome"}
+    if outcome is not None:
+        raw["expected_outcome"] = outcome
+    response = client.post("/hfl-corpus/timeline/items", json=raw)
+    assert response.status_code == 201, response.text
+    item = response.json()["item"]
+    assert item["expected_outcome"] == ""
+    url = "/hfl-corpus/timeline/items/" + item["id"]
+    updated = client.patch(url, json={"version": item["version"], "expected_outcome": "A useful result"})
+    assert updated.status_code == 200, updated.text
+    item = updated.json()["item"]
+    cleared = client.patch(url, json={"version": item["version"], "expected_outcome": ""})
+    assert cleared.status_code == 200, cleared.text
+    assert store.get(item["id"])["expected_outcome"] == ""

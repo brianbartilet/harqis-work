@@ -75,7 +75,7 @@ class ActionSource(Command):
 class CreateAction(Command):
     request_id: UUID = Field(description="Caller-generated UUID. Reuse unchanged on retry.")
     title: str = Field(min_length=1, max_length=200)
-    expected_outcome: str = Field(min_length=1, max_length=3000)
+    expected_outcome: str = Field(default="", max_length=3000)
     review_date: str = ""
     due_date: str = ""
     prompt: str = Field(default="", max_length=20000)
@@ -93,7 +93,7 @@ class CreateAction(Command):
 class UpdateAction(Command):
     version: int = Field(ge=1, strict=True, description="Version returned by the latest read; stale versions return 409.")
     title: str | None = Field(default=None, min_length=1, max_length=200)
-    expected_outcome: str | None = Field(default=None, min_length=1, max_length=3000)
+    expected_outcome: str | None = Field(default=None, max_length=3000)
     review_date: str | None = None
     due_date: str | None = None
     prompt: str | None = Field(default=None, max_length=20000)
