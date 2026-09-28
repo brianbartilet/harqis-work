@@ -98,8 +98,7 @@ def test_day_menu_creates_action_due_on_selected_date(agenda, authenticated_clie
                 form.locator('[name="matrix_confidence"]').select_option('medium')
                 playwright.expect(form.locator('#matrix-help')).to_be_visible()
                 form.locator('[type="submit"]').click()
-                playwright.expect(form.locator('.editor-save-status')).to_have_text('Saved')
-                form.locator('[data-agenda-close]').first.click()
+                playwright.expect(page.locator('.editor-save-confirmation')).to_contain_text('Action saved.')
                 playwright.expect(page.locator('#followup-editor')).to_be_hidden()
         saved = agenda.list()
         assert len(saved) == 1

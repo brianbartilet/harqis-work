@@ -140,7 +140,7 @@ window.HflInputAttachments = class {
     this.retry.hidden = !this.failure;
     this.choose.disabled = this.input.disabled = this.loading || !!this.failure;
   }
-  async save(id) {
+  async save(id, report) {
     this.validate(); this.id = id;
     for (const attachmentId of [...this.removed]) {
       const data = await this.request(this.url() + '/' + attachmentId, {method: 'DELETE'});
@@ -148,8 +148,31 @@ window.HflInputAttachments = class {
     }
     if (this.pending.length) {
       const form = new FormData(); this.pending.forEach(file => form.append('files', file));
-      const data = await this.request(this.url(), {method: 'POST', body: form});
+      const data = report ? await new Promise((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open('POST', this.url());
+        request.setRequestHeader('X-CSRF-Token', this.root.dataset.csrf || JSON.parse(document.querySelector('[data-memory-csrf]')?.textContent || '""'));
+        report('Uploading files…', 0);
+        request.upload.addEventListener('progress', event => {
+          if (!event.lengthComputable) return;
+          const percent = Math.round(event.loaded / event.total * 100);
+          report(percent === 100 ? 'Saving uploaded files…' : `Uploading files… ${percent}%`, percent);
+        });
+        request.addEventListener('load', () => {
+          let result;
+          try { result = JSON.parse(request.responseText); }
+          catch (_) { reject(new Error('Could not read the upload response. Please retry.')); return; }
+          if (request.status < 200 || request.status >= 300) {
+            reject(new Error(typeof result.detail === 'string' ? result.detail : 'Could not save attachments.')); return;
+          }
+          resolve(result);
+        });
+        request.addEventListener('error', () => reject(new Error('The upload connection failed. Please retry.')));
+        request.addEventListener('abort', () => reject(new Error('The upload was interrupted. Please retry.')));
+        request.send(form);
+      }) : await this.request(this.url(), {method: 'POST', body: form});
       this.saved = data.attachments; this.pending = [];
+      report?.('Finishing save…');
     }
     this.render();
   }

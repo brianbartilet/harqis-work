@@ -373,8 +373,7 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         modal.locator('.action-details > summary').click()
         modal.get_by_label('Expected outcome').fill('A comfortable place to read')
         modal.get_by_role('button', name='Create', exact=True).click()
-        expect(modal.locator('.editor-save-status')).to_have_text('Saved')
-        modal.get_by_role('button', name='Close', exact=True).click()
+        expect(page.locator('.editor-save-confirmation')).to_contain_text('Action saved.')
         expect(modal).to_have_count(0)
         assert len(ideas.followups.list()) == 1
         expect(page.locator('#kg-map-count')).to_contain_text('2 nodes')
@@ -429,4 +428,79 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         page.goto('https://ideas.test/hfl-corpus/graph?map=' + ideas.maps()[0]['id'])
         expect(page.locator('#kg-map-count')).to_contain_text('4 nodes')
         assert not errors, errors
+        browser.close()
+
+@pytest.mark.parametrize('kind', ['actionable', 'idea', 'graph-action', 'conversion'])
+@pytest.mark.parametrize('with_files', [False, True])
+def test_creation_save_feedback_and_upload_retry(ideas, authenticated_client, kind, with_files):
+    from urllib.parse import urlparse
+    from playwright.sync_api import sync_playwright, expect
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page(viewport={'width': 390, 'height': 900})
+        uploads = []
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+
+        def route(intercept):
+            request = intercept.request
+            url = urlparse(request.url)
+            if request.method == 'POST' and '/agent-bridge/inputs/' in url.path:
+                uploads.append(intercept)
+                return
+            response = authenticated_client.request(request.method, url.path + ('?' + url.query if url.query else ''),
+                content=request.post_data_buffer, headers={k: v for k, v in request.headers.items() if k.lower() in {'content-type', 'x-csrf-token'}})
+            intercept.fulfill(status=response.status_code, body=response.content, content_type=response.headers.get('content-type', 'text/html'))
+
+        page.route('https://creation.test/**', route)
+        page.goto('https://creation.test/hfl-corpus')
+        if kind == 'conversion':
+            source = ideas.save_idea(payload(), 'owner')
+            page.evaluate('(id) => window.HflIdeas.convert(id)', source['id'])
+            dialog = page.locator('.idea-dialog')
+        elif kind == 'graph-action':
+            page.evaluate("window.HflIdeas.openEditor('actionable')")
+            dialog = page.locator('.idea-dialog')
+        elif kind == 'idea':
+            page.evaluate("window.dispatchEvent(new CustomEvent('hfl:create-idea'))")
+            dialog = page.locator('.idea-dialog')
+        else:
+            page.locator('[data-create-action-open]').evaluate('(button) => button.click()')
+            dialog = page.locator('#followup-editor')
+        dialog.locator('[name=title]').fill('Save feedback test')
+        if kind != 'idea':
+            dialog.locator('.action-details > summary').click()
+            dialog.locator('[name=expected_outcome]').fill('Verify creation feedback')
+        if with_files:
+            dialog.locator('[data-input-files]').set_input_files({'name': 'brief.txt', 'mimeType': 'text/plain', 'buffer': b'Reference'})
+        dialog.locator('[type=submit]').click()
+        if with_files:
+            expect(dialog.get_by_role('progressbar', name='File upload progress')).to_be_visible()
+            expect(dialog.locator('.editor-save-status')).to_contain_text('files')
+            expect(dialog.locator('[type=submit]')).to_be_disabled()
+            page.keyboard.press('Escape')
+            expect(dialog).to_be_visible()
+            expect(page.locator('.editor-close-question')).to_have_count(0)
+            page.wait_for_function("document.querySelector('form[aria-busy=true]') !== null")
+            assert len(uploads) == 1
+            uploads.pop().fulfill(status=503, json={'detail': 'Upload temporarily unavailable'})
+            expect(dialog.locator('.editor-save-status')).to_contain_text('Couldn’t save')
+            expect(dialog.locator('[name=title]')).to_have_value('Save feedback test')
+            expect(dialog.locator('[type=submit]')).to_be_enabled()
+            expect(dialog.locator('.agent-input-row')).to_contain_text('Pending')
+            assert len(ideas.ideas() if kind == 'idea' else ideas.followups.list()) == 1
+            dialog.locator('[type=submit]').click()
+            expect(dialog.get_by_role('progressbar', name='File upload progress')).to_be_visible()
+            page.wait_for_timeout(100)
+            assert len(uploads) == 1
+            pending = uploads.pop()
+            request = pending.request
+            response = authenticated_client.request('POST', urlparse(request.url).path, content=request.post_data_buffer,
+                headers={k: v for k, v in request.headers.items() if k.lower() in {'content-type', 'x-csrf-token'}})
+            assert response.status_code < 300, response.text
+            pending.fulfill(status=response.status_code, body=response.content, content_type='application/json')
+        expect(dialog).not_to_be_visible()
+        expect(page.locator('.editor-save-confirmation')).to_contain_text(('Idea' if kind == 'idea' else 'Action') + ' saved.')
+        assert len(ideas.ideas() if kind == 'idea' else ideas.followups.list()) == 1
+        assert not errors
         browser.close()

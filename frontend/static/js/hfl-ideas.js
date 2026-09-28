@@ -211,7 +211,7 @@ window.HflObjectDescription = (item = {}) => {
             if (!current) { values.request_id = requestId; values.source = source; values.agent_enabled = false; }
             current = (await request('/hfl-corpus/timeline/items' + (current ? '/' + current.id : ''), {method: current ? 'PATCH' : 'POST', body: JSON.stringify(values)})).item;
           }
-          await files.save(current.id);
+          await files.save(current.id, state.report);
           if ((clone || conversion) && !copiedLoaded) {copiedLoaded=true;copiedFiles.forEach(f=>f.check.closest('label').remove());attachmentsSection.querySelector('.idea-copy-files-note')?.remove();files.reset(current.id);}
           if (kind === 'actionable' && filesChanged && prompt) {
             current = (await request('/hfl-corpus/timeline/items/' + current.id, {method: 'PATCH', body: JSON.stringify({version: current.version, prompt})})).item;
@@ -239,13 +239,14 @@ window.HflObjectDescription = (item = {}) => {
           window.HflEditorLocation(kind,current.id); changed(null, false, !!conversion);
       };
       state=window.HflBindEditor(d.node,d.form,{
+        creationLabel: kind === 'idea' ? 'Idea' : 'Action',
         snapshot:()=>JSON.stringify({form:formState(),files:files.pending.map(f=>[f.name,f.size,f.lastModified]),removed:[...files.removed]}),
         exists:()=>!!current, valid:()=>d.form.checkValidity(), save:persistEditor,
         lock:value=>{files.root.inert=value;save.disabled=value;},
         settled:()=>checklists.updateConversion(),
       });
       if(current)window.HflEditorLocation(kind,current.id);
-      d.form.onsubmit=async event=>{event.preventDefault();try{await state.flush();checklists.updateConversion();}catch(e){d.error.textContent=e.message;}};
+      d.form.onsubmit=async event=>{event.preventDefault();try{await state.submit();checklists.updateConversion();}catch(e){d.error.textContent=e.message;}};
       const otherBoard=button(editingBoard?'Add to another board':'Add to board',async()=>{otherBoard.disabled=true;try{attachToCurrent=false;await state.flush();await addToBoard(kind,current,null,null,editingBoard);}catch(e){d.error.textContent=e.message;}finally{attachToCurrent=true;otherBoard.disabled=false;}});
       d.footer.append(otherBoard);
     } catch (error) { d.error.textContent = error.message; }

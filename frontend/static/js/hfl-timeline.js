@@ -55,6 +55,7 @@
     document.getElementById('followup-editor-title').textContent = item ? (desiredStatus === 'done' ? 'Complete action' : 'Edit action') : 'New action';
     showEvidence(); stateFields(); error('followup-save-error'); editor.showModal();
     editorState = window.HflBindEditor(editor, form, {
+      creationLabel: 'Action',
       snapshot: () => JSON.stringify({fields:window.HflIntentValues(form),checklists:window.hflActionChecklists.value,files:attachments.pending.map(f=>[f.name,f.size,f.lastModified]),removed:[...attachments.removed]}),
       exists: () => !!editing, valid: () => form.checkValidity(),
       lock: value => { busy=value; attachments.root.inert=value; form.querySelector('[type=submit]').disabled=value; },
@@ -309,7 +310,7 @@
       const saved = await api(editing?'/'+editing.id:'',{method:editing?'PATCH':'POST',body:JSON.stringify(payload)});
       editing = saved.item;
       if (changed) {
-        await attachments.save(editing.id);
+        await attachments.save(editing.id, editorState.report);
         editing = (await api('/'+editing.id,{method:'PATCH',body:JSON.stringify({version:editing.version,prompt})})).item;
       }
       window.HflEditorLocation('actionable',editing.id);
@@ -318,7 +319,7 @@
       form.querySelector('[type=submit]').hidden=true;
       await load(); window.dispatchEvent(new Event('hfl:actions-updated'));
   }
-  form.addEventListener('submit',async e=>{e.preventDefault();try{await editorState.flush();}catch(err){error('followup-save-error',err.message);}});
+  form.addEventListener('submit',async e=>{e.preventDefault();try{await editorState.submit();}catch(err){error('followup-save-error',err.message);}});
   window.hflActions = {card, openEditor, load};
   timelineApi('/markers').then(data=>{markerDays=data.days;paintMarkers();}).catch(()=>{});
   window.addEventListener('hfl:timeline-close',()=>{clearTimeout(pollTimer);++sequence;});

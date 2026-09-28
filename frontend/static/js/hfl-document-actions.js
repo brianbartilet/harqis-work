@@ -48,6 +48,8 @@
       anchor.target = '_blank'; anchor.rel = 'noopener'; evidence.append(anchor);
       form.elements.title.value = (data.title || '').slice(0, 200);
       editorState=window.HflBindEditor(dialog,form,{
+        creationLabel: 'Action',
+        confirmation: false, // The linked entry already shows its own saved confirmation.
         snapshot:()=>JSON.stringify({fields:Object.fromEntries(new FormData(form)),checklists:window.hflActionChecklists.value,files:attachments.pending.map(f=>[f.name,f.size,f.lastModified]),removed:[...attachments.removed]}),
         exists:()=>!!savedAction,valid:()=>form.checkValidity(),save:persistAction,
         lock:value=>{busy=value;attachments.root.inert=value;save.disabled=value;},
@@ -78,7 +80,7 @@
         method: savedAction ? 'PATCH' : 'POST', body: JSON.stringify(payload),
       })).item;
       if (changed) {
-        await attachments.save(savedAction.id);
+        await attachments.save(savedAction.id, editorState.report);
         savedAction = (await api('/items/' + savedAction.id, {method:'PATCH', body:JSON.stringify({version:savedAction.version,prompt})})).item;
       }
       const entryTrigger = trigger;
@@ -99,5 +101,5 @@
       toast.append(message, dismiss);
       header.after(toast);
   }
-  form.addEventListener('submit',async event=>{event.preventDefault();try{await editorState.flush();dialog.close();}catch(error){showError(error.message);}});
+  form.addEventListener('submit',async event=>{event.preventDefault();try{await editorState.submit();}catch(error){showError(error.message);}});
 })();

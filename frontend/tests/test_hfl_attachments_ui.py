@@ -100,8 +100,7 @@ def test_editors_save_multiple_attachments_without_running_early(authenticated_c
         assert widget.evaluate('(el) => el.scrollWidth <= el.clientWidth + 1')
         dialog.locator('[type="submit"]').click()
         if kind == 'actionable':
-            playwright.expect(dialog.locator('.editor-save-status')).to_have_text('Saved')
-            dialog.get_by_role('button', name='Close', exact=True).click()
+            playwright.expect(page.locator('.editor-save-confirmation')).to_contain_text('Action saved.')
         playwright.expect(dialog).not_to_be_visible()
         item = actions.list()[0] if kind == 'actionable' else pins.snapshot()['ranges'][0]
         assert item['prompt'] == 'Read the briefing and data'

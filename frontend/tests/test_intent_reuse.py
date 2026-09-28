@@ -210,8 +210,10 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
 
         page.screenshot(path=str(tmp_path / ('clone-' + str(width) + '.png')), full_page=True)
         modal.get_by_role('button', name='Create', exact=True).click()
-        expect(modal.locator('.editor-save-status')).to_have_text('Saved')
-        expect(modal.get_by_role('button', name='Save now', exact=True)).to_have_count(0)
+        expect(modal).to_have_count(0)
+        copy = next(i for i in ideas.ideas() if i['title']=='Source idea (1)')
+        page.evaluate('(id) => window.HflIdeas.editIdea(id)', copy['id'])
+        expect(modal).to_be_visible()
         assert len(ideas.ideas()) == 2
         assert next(i for i in ideas.ideas() if i['title']=='Source idea (1)')['workspace_ids'] == ['home','work']
         modal.get_by_role('button', name='Copy list', exact=True).click()
