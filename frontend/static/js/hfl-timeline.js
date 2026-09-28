@@ -209,7 +209,7 @@
     const available = items ? items.length > 0 : days.some(marker => marker.planned.length || marker.actions.length);
     indicator.hidden = !available;
     indicator.dataset.timelineStatus = status;
-    const label = 'Actions available · ' + ({open:'In review / Ready',in_progress:'In progress',incomplete:'Incomplete',done:'Done',dismissed:'Dismissed or historical'}[status]);
+    const label = 'Actions available · ' + ({open:'In Review / Ready',in_progress:'In Progress',incomplete:'Incomplete',done:'Done',dismissed:'Dismissed or historical'}[status]);
     indicator.setAttribute('aria-label', label);
     indicator.title = label;
   }
@@ -221,7 +221,7 @@
       if(markers?.dot_status)day.dataset.timelineStatus=markers.dot_status;else delete day.dataset.timelineStatus;
       day.toggleAttribute('data-timeline-action', Boolean(markers?.actions.length));
       if(!day.dataset.timelineLabel)day.dataset.timelineLabel=day.getAttribute('aria-label')||day.dataset.activityDay;
-      const suffix=markers ? `; ${markers.planned.length} scheduled${markers.dot_status ? ' · '+({open:'In review / Ready',in_progress:'In progress',incomplete:'Incomplete',done:'All done'}[markers.dot_status]) : ''}, ${markers.actions.length} linked actions` : '';
+      const suffix=markers ? `; ${markers.planned.length} scheduled${markers.dot_status ? ' · '+({open:'In Review / Ready',in_progress:'In Progress',incomplete:'Incomplete',done:'All done'}[markers.dot_status]) : ''}, ${markers.actions.length} linked actions` : '';
       day.setAttribute('aria-label',day.dataset.timelineLabel+suffix);day.title=day.dataset.timelineLabel+suffix;
     });
   }

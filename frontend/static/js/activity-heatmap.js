@@ -65,7 +65,7 @@
     const pinList = panel.querySelector('[data-activity-pin-list]');
     const todayShortcuts = Array.from(panel.querySelectorAll('[data-activity-today]'));
     const selectionStatus = panel.querySelector('[data-pin-selection-status]');
-    if (!scroll || !previousYearCoachmark || !nextYearCoachmark || !year || !toggle || !body || !menu || !menuDate || !createEntry || !pinDates || !showDocument || !matchingEntries || !matchingPanel || !matchingContent || !memoryDialog || !memoryForm || !pinList) return;
+    if (!scroll || !previousYearCoachmark || !nextYearCoachmark || !year || !body || !menu || !menuDate || !createEntry || !pinDates || !showDocument || !matchingEntries || !matchingPanel || !matchingContent || !memoryDialog || !memoryForm || !pinList) return;
     const activityController = new AbortController();
     panel.activityAbortController = activityController;
     const menuHeader = menu.querySelector('.activity-day-menu-header');
@@ -615,11 +615,11 @@
     };
 
     const setActivityExpanded = expanded => {
-      toggle.setAttribute('aria-expanded', String(expanded));
-      toggle.setAttribute('aria-label', `${expanded ? 'Hide' : 'Show'} activity heat map`);
+      toggle?.setAttribute('aria-expanded', String(expanded));
+      toggle?.setAttribute('aria-label', `${expanded ? 'Hide' : 'Show'} activity heat map`);
       body.hidden = !expanded;
     };
-    const storedActivityState = readActivityState();
+    const storedActivityState = toggle ? readActivityState() : 'true';
     if (storedActivityState !== null) {
       setActivityExpanded(storedActivityState === 'true');
     }
@@ -1105,7 +1105,7 @@
       centerSelectedYear();
       void centerSelectedDay();
     }, {signal: activityController.signal});
-    toggle.addEventListener('click', () => {
+    toggle?.addEventListener('click', () => {
       const expanded = toggle.getAttribute('aria-expanded') === 'true';
       closeDayMenu();
       const nextExpanded = !expanded;

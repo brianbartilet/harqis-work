@@ -38,6 +38,7 @@ def test_distill_navigation_actions_and_retry(agenda, authenticated_client, monk
             response = authenticated_client.get(url.path + ('?' + url.query if url.query else ''))
             route.fulfill(status=response.status_code, body=response.content, content_type=response.headers.get('content-type', 'text/html'))
         page.route('https://distill.test/**', respond)
+        page.add_init_script("sessionStorage.setItem('hfl-corpus:activity-expanded', 'false')")
         page.goto('https://distill.test/distill')
         playwright.expect(page.get_by_role('heading', level=1)).to_contain_text('what happens next')
         playwright.expect(page.locator('[data-distill-recent] a')).to_contain_text(item['title'])
@@ -69,9 +70,8 @@ def test_distill_navigation_actions_and_retry(agenda, authenticated_client, monk
         assert page.locator('dialog[open]').count() == 0
         assert not mutations
         assert page.locator('.activity-indicator-legend').inner_text().startswith('Actions')
-        page.locator('[data-activity-toggle]').click()
-        playwright.expect(page.locator('[data-activity-body]')).to_be_hidden()
-        page.locator('[data-activity-toggle]').click()
+        playwright.expect(page.locator('[data-activity-toggle]')).to_have_count(0)
+        assert page.evaluate("sessionStorage.getItem('hfl-corpus:activity-expanded')") == 'false'
         playwright.expect(page.locator('[data-activity-body]')).to_be_visible()
         page.screenshot(path=str(tmp_path / ('distill-' + str(width) + '.png')), full_page=True)
         saves = []
@@ -104,11 +104,13 @@ def test_distill_navigation_actions_and_retry(agenda, authenticated_client, monk
         playwright.expect(page.locator('#followup-editor')).to_be_visible()
         page.goto('https://distill.test/distill')
         page.get_by_role('searchbox').fill('weekly capture')
-        page.get_by_role('button', name='Search Corpus').click()
+        page.get_by_role('button', name='Search', exact=True).click()
         page.wait_for_url('**/hfl-corpus?q=weekly+capture')
+        playwright.expect(page.locator('[data-activity-body]')).to_be_hidden()
+        page.locator('[data-activity-toggle]').click()
         page.locator('[data-activity-day][data-today="true"]').click()
         playwright.expect(page.locator('[data-activity-day-menu]')).to_be_visible()
-        assert '>In review / Ready<' in page.locator('.activity-indicator-legend').inner_html()
+        assert '>In Review / Ready<' in page.locator('.activity-indicator-legend').inner_html()
         fail[0] = True
         page.goto('https://distill.test/distill')
         playwright.expect(page.locator('[data-distill-error]')).to_be_visible()
@@ -153,4 +155,4 @@ def test_distill_signal_all_activity_and_auth(authenticated_client, monkeypatch,
     assert landing.status_code == (200 if saved_selection == 'none' else 303)
     corpus_response = authenticated_client.get('/hfl-corpus?views=&scope=&dynamic=0')
     assert 'activity-indicator-legend' in corpus_response.text
-    assert '>In review / Ready</span>' in corpus_response.text
+    assert '>In Review / Ready</span>' in corpus_response.text

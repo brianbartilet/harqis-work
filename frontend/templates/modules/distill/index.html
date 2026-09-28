@@ -12,7 +12,7 @@
 
   <section class="distill-intro" aria-labelledby="distill-title">
     <div class="page-header"><p class="page-header-eyebrow">Distill / Your working memory</p>
-      <h1 id="distill-title" class="page-header-title">Turn what happened into what happens next.</h1>
+      <h1 id="distill-title" class="page-header-title">Turn what happened into what happens next...</h1>
       <p class="page-header-description">Keep the evidence. Find what matters. Give it somewhere to go.</p>
     </div>
   </section>
@@ -24,30 +24,30 @@
   </section>
 
   <section class="distill-corpus" aria-labelledby="distill-corpus-title">
-  <header><div><p class="distill-eyebrow">Keep the evidence</p><h2 id="distill-corpus-title">Activity Corpus</h2><p>Explore activity across all your sources, and add context with a manual capture.</p></div><a class="distill-graph-open" href="/hfl-corpus">Open Corpus <span aria-hidden="true">↗︎</span></a></header>
+  <header><div><p class="distill-eyebrow">Keep the evidence</p><h2 id="distill-corpus-title">Activity Corpus</h2><p>Explore activity across all your sources, and add context with a manual capture.</p></div><a class="distill-graph-open" href="/hfl-corpus">Open <span aria-hidden="true">↗︎</span></a></header>
 
 
 
 
-  <div data-distill-heatmap>{% include 'modules/hfl_corpus/partials/activity_heatmap.html' %}</div>
+  <div data-distill-heatmap>{% with activity_always_expanded=true, activity_hide_header_actions=true %}{% include 'modules/hfl_corpus/partials/activity_heatmap.html' %}{% endwith %}</div>
 
   <div class="distill-tools">
     <button type="button" class="distill-capture" data-create-entry-open aria-haspopup="dialog"><span aria-hidden="true">＋</span><span>Capture a moment<small>One line is enough.</small></span></button>
   <form class="distill-search" action="/hfl-corpus" method="get" role="search" aria-label="Search your activity">
     <label class="sr-only" for="distill-query">Search for activity entries</label>
-    <div><input id="distill-query" name="q" type="search" placeholder="A decision, a project, a moment…" required><button type="submit">Search Corpus <span aria-hidden="true">↗︎</span></button></div>
+    <div><input id="distill-query" name="q" type="search" placeholder="A decision, a project, a moment…" required><button type="submit">Search <span aria-hidden="true">↗︎</span></button></div>
   </form>
   </div>
   </section>
 
   <section class="distill-work" aria-labelledby="distill-work-title">
-    <header><div><p class="distill-eyebrow">Put first things first</p><h2 id="distill-work-title">Actions Kanban</h2><p>Recent activity across your action cards, including completed work.</p></div><a href="/hfl-corpus/actions">Open Kanban <span aria-hidden="true">↗︎</span></a></header>
+    <header><div><p class="distill-eyebrow">Put first things first</p><h2 id="distill-work-title">Actions Kanban</h2><p>Recent activity across your action cards, including completed work.</p></div><a href="/hfl-corpus/actions">Open <span aria-hidden="true">↗︎</span></a></header>
     <div class="distill-recent-cards" data-distill-recent aria-label="Recently updated actions" aria-live="polite" aria-busy="true"><p class="distill-empty">Loading recent actions…</p></div>
     <p data-distill-error role="status" hidden>Actions could not be loaded. <button type="button" data-distill-retry>Try again</button> or <a href="/hfl-corpus/actions">open Kanban</a>.</p>
   </section>
 
   <section class="distill-graph" aria-labelledby="distill-graph-title">
-    <header><div><p class="distill-eyebrow">Connect the context</p><h2 id="distill-graph-title">Activity Graph</h2><p>See how activity connects over time, then bring related evidence and ideas into focus.</p></div><a class="distill-graph-open" href="/hfl-corpus/graph">Open Graph <span aria-hidden="true">↗︎</span></a></header>
+    <header><div><p class="distill-eyebrow">Connect the context</p><h2 id="distill-graph-title">Activity Graph</h2><p>See how activity connects over time, then bring related evidence and ideas into focus.</p></div><a class="distill-graph-open" href="/hfl-corpus/graph">Open <span aria-hidden="true">↗︎</span></a></header>
     <div class="distill-graph-guides">
       <article><h3>Activity over time</h3><p>Follow dates, entries, people, and projects across your sources. This preview uses Timeline with Overview detail, showing up to 100 nodes.</p><a href="/hfl-corpus/graph">Explore the graph ↗︎</a></article>
       <article><h3>Boards</h3><p>Gather related entries, actions, and ideas around a project or question. Arrange connections in a saved board as your understanding develops.</p><a href="/hfl-corpus/ideas">Browse boards ↗︎</a></article>
