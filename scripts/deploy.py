@@ -361,7 +361,8 @@ echo '==> Service state before restart'
 "$python_bin" scripts/deploy.py --role host --status || true
 
 echo '==> Fast-forward checked-out branch'
-git pull --ff-only
+# This workflow owns the restart; do not race an asynchronous post-merge hook.
+git -c core.hooksPath=/dev/null pull --ff-only
 head_after_pull="$(git rev-parse HEAD)"
 echo "head_after_pull=$head_after_pull"
 echo 'changed_files:'
@@ -378,8 +379,8 @@ fi
 echo '==> Stop host stack'
 "$python_bin" scripts/deploy.py --role host --down
 
-echo '==> Start host stack in console mode'
-"$python_bin" scripts/deploy.py --role host --console
+echo '==> Start host stack (reuse registered supervisors)'
+"$python_bin" scripts/deploy.py --role host
 
 frontend_port="$("$python_bin" - <<'PY'
 from scripts.launch import setup_env
@@ -426,27 +427,13 @@ for service in rabbitmq redis elasticsearch; do
   fi
 done
 
-echo '==> Verify Celery workers and queues'
+echo '==> Verify exact local Celery worker and all configured queues'
 "$python_bin" - <<'PY'
-import json
-from scripts.launch import setup_env
-
-setup_env()
-from core.apps.sprout import SPROUT
-
-inspect = SPROUT.control.inspect(timeout=10)
-pings = inspect.ping() or {{}}
-queues = inspect.active_queues() or {{}}
-if not pings:
-    raise SystemExit("ERROR: no Celery workers responded to ping")
-summary = {{
-    "nodes": sorted(pings),
-    "queues": {{
-        worker: [item.get("alias") or item.get("name") for item in items]
-        for worker, items in queues.items()
-    }},
-}}
-print(json.dumps(summary, indent=2, sort_keys=True))
+from scripts.deploy import build_parser, load_env_into_os, load_machine_config, verify_worker_ready
+load_env_into_os()
+machine = load_machine_config(None)
+args = build_parser().parse_args(["--role", "host"])
+verify_worker_ready("worker", machine, args)
 PY
 
 echo '==> Verify service PIDs'
@@ -866,6 +853,27 @@ def build_service_cmd(service: str, machine: dict, args: argparse.Namespace) -> 
     return base
 
 
+def verify_worker_ready(service: str, machine: dict, args: argparse.Namespace) -> None:
+    """Bound bootstrap/import/broker stalls in an isolated launcher subprocess."""
+    if service not in ("worker", "capture-worker"):
+        return
+    worker_cmd = build_service_cmd(service, machine, args)
+    command = [python_exe(console=True), str(LAUNCH_PY), "worker-check"]
+    for flag in ("--queues", "--hostname"):
+        if flag in worker_cmd:
+            command += [flag, worker_cmd[worker_cmd.index(flag) + 1]]
+    env = os.environ.copy()
+    env.update(machine_env_vars(machine))
+    print(f"  Waiting for local {service} ping + configured queues...", flush=True)
+    try:
+        subprocess.run(command, cwd=REPO_ROOT, env=env, check=True, timeout=75)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError(
+            f"Local {service} readiness failed ({type(exc).__name__}); "
+            f"inspect {log_path(service)}. Deployment is NOT verified."
+        ) from None
+
+
 def start_service(service: str, machine: dict, args: argparse.Namespace) -> bool:
     """Spawn the daemon. Returns True on launch (or if already running)."""
     if _service_is_stdio(service):
@@ -875,8 +883,17 @@ def start_service(service: str, machine: dict, args: argparse.Namespace) -> bool
             "MCP clients launch it when needed."
         )
         return True
+    if _registered_launchd_path(service):
+        stop_service(service)
+        kill_stray_processes(_STATUS_NEEDLES.get(service, service), label=service)
+        pid_path(service).unlink(missing_ok=True)
+        if not getattr(args, "console", False):
+            _register_launchd(machine, args, [service])
+            verify_worker_ready(service, machine, args)
+            return True
     existing = read_pid(service)
     if existing:
+        verify_worker_ready(service, machine, args)
         print(f"  Already running: {service} (PID {existing})")
         return True
     cmd = build_service_cmd(service, machine, args)
@@ -896,6 +913,7 @@ def start_service(service: str, machine: dict, args: argparse.Namespace) -> bool
     if use_console:
         detail += "  [console]"
     target = "console window" if use_console else log_path(service)
+    verify_worker_ready(service, machine, args)
     print(f"  Started: {service} (PID {pid}){detail}  ->  {target}")
     # NOTE: PID tracked here is the launcher; Sprout's Django autoreloader
     # forks a child for the real celery process and the launcher PID may
@@ -905,6 +923,7 @@ def start_service(service: str, machine: dict, args: argparse.Namespace) -> bool
 
 
 def stop_service(service: str) -> None:
+    _unload_registered_launchd(service)
     pid = read_pid(service)
     if not pid:
         if _service_is_stdio(service):
@@ -1484,6 +1503,38 @@ def _plist_path(service: str) -> Path:
     return Path.home() / "Library" / "LaunchAgents" / f"{_service_label(service)}.plist"
 
 
+def _registered_launchd_path(service: str) -> Path | None:
+    """Only adopt registrations owned by this checkout and instance."""
+    if not IS_MAC or _service_is_stdio(service):
+        return None
+    path = _plist_path(service)
+    if not path.exists():
+        return None
+    with path.open("rb") as stream:
+        plist = plistlib.load(stream)
+    if (not isinstance(plist, dict)
+            or plist.get("Label") != _service_label(service)
+            or plist.get("WorkingDirectory") != str(REPO_ROOT)
+            or plist.get("ProgramArguments", [])[1:3] != [str(LAUNCH_PY), SERVICES[service]["cmd"][0]]):
+        raise RuntimeError(f"Refusing launchd registration not owned by this checkout: {path}")
+    return path
+
+
+def _unload_registered_launchd(service: str) -> None:
+    """Disable KeepAlive before PID/orphan cleanup; retain next-login registration."""
+    path = _registered_launchd_path(service)
+    if path is None:
+        return
+    label = _service_label(service)
+    result = subprocess.run(["launchctl", "list", label], capture_output=True, timeout=15)
+    if result.returncode == 0:
+        subprocess.run(["launchctl", "unload", str(path)], check=True, timeout=15)
+        result = subprocess.run(["launchctl", "list", label], capture_output=True, timeout=15)
+        if result.returncode == 0:
+            raise RuntimeError(f"launchd job still loaded after unload: {label}")
+        print(f"  Supervisor suspended: launchd {label}")
+
+
 def _remove_obsolete_launchd_jobs() -> None:
     """Remove retired launchd bootstrap jobs that target deleted repo scripts."""
     legacy = Path.home() / "Library" / "LaunchAgents" / f"{_service_label('deploy')}.plist"
@@ -1526,30 +1577,30 @@ def _register_launchd(machine, args, services, *, load: bool = True):
     """
     _remove_obsolete_launchd_jobs()
     for s in services:
+        if _service_is_stdio(s):
+            continue
+        _unload_registered_launchd(s)
         cmd = build_service_cmd(s, machine, args)
         label = _service_label(s)
-        plist = f"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>{label}</string>
-  <key>ProgramArguments</key><array>
-    {''.join(f'<string>{c}</string>' for c in cmd)}
-  </array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>{log_path(s)}</string>
-  <key>StandardErrorPath</key><string>{log_path(s)}</string>
-  <key>WorkingDirectory</key><string>{REPO_ROOT}</string>
-</dict></plist>
-"""
+        env = {key: os.environ[key] for key in (
+            "HARQIS_INSTANCE", "HARQIS_QUEUE_PREFIX", "WORKFLOW_CONCURRENCY"
+        ) if key in os.environ}
+        env.update(machine_env_vars(machine))
+        if s == "worker" and getattr(args, "concurrency", None) is not None:
+            env["WORKFLOW_CONCURRENCY"] = str(args.concurrency)
+        plist = {
+            "Label": label, "ProgramArguments": cmd,
+            "RunAtLoad": True, "KeepAlive": True,
+            "StandardOutPath": str(log_path(s)),
+            "StandardErrorPath": str(log_path(s)),
+            "WorkingDirectory": str(REPO_ROOT),
+            "EnvironmentVariables": env,
+        }
         path = _plist_path(s)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(plist)
-        # Always unload first so a prior plist doesn't keep a stale daemon
-        # alive in the background.
-        subprocess.run(["launchctl", "unload", str(path)], capture_output=True)
+        path.write_bytes(plistlib.dumps(plist))
         if load:
-            subprocess.run(["launchctl", "load", str(path)], check=False)
+            subprocess.run(["launchctl", "load", str(path)], check=True, timeout=15)
             print(f"  Registered + loaded launchd: {label}")
         else:
             print(f"  Registered launchd plist (not loaded — console mode): {label}")
@@ -2127,6 +2178,12 @@ def _main(args: argparse.Namespace, runtime_machine: dict) -> None:
     # Clean slate: kill any orphan celery/launcher processes from prior runs
     # before spawning new daemons (avoids piling up console windows on Windows).
     if not args.docker_only:
+        # Suspend selected launchd jobs before the orphan sweep; KeepAlive
+        # would otherwise race the sweep and spawn duplicates.
+        if IS_MAC:
+            for service in services:
+                if _registered_launchd_path(service):
+                    stop_service(service)
         kill_stray_celery()
         # The celery sweep only matches celery/launcher needles. The long-
         # running app daemons (frontend FastAPI, MCP server, Kanban
@@ -2171,6 +2228,8 @@ def _main(args: argparse.Namespace, runtime_machine: dict) -> None:
         return
 
     if register_started_immediately:
+        for service in services:
+            verify_worker_ready(service, machine, args)
         print("")
         print(f"Started {len(services)} service(s) via "
               f"{'launchd' if IS_MAC else 'systemd'} (background).")

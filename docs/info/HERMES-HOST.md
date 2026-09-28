@@ -429,6 +429,37 @@ Or, from any Claude Code session opened in the repo (OS-agnostic):
 
 The skill walks through every step, validates prerequisites before making changes, and surfaces a per-component log path on any failure. See `.agents/skills/deploy-harqis/SKILL.md` for the full reference.
 
+**macOS production ownership and worker readiness:**
+
+- Register an always-on host once with `python scripts/deploy.py --role host --register`.
+  Subsequent non-console deploys and targeted restarts reuse and refresh existing
+  launchd plists owned by this checkout/instance, even if the jobs were unloaded.
+  Unregistered services keep the existing detached behavior; deployment does not
+  silently register new services or the client-owned stdio MCP endpoint.
+- Stop, down, and restart unload owned launchd jobs **before** PID/orphan cleanup,
+  preventing `KeepAlive` from racing the replacement process. Plists are retained
+  for the next login; use `--unregister` to remove persistence. Registrations for
+  another checkout are rejected rather than overwritten.
+- `--console` remains an explicit debugging option: it suspends launchd and uses
+  Terminal-owned workers, **without restart supervision**. `--register --console`
+  writes persistence but does not activate it. Run a later non-console deploy to
+  restore supervisor ownership. A plist containing `KeepAlive` alone does not
+  prove its job is loaded.
+- Deploy/start/restart success for a worker requires its exact local Celery node
+  to answer `ping` and consume **all** configured queues. Remote workers cannot
+  satisfy this gate. Direct queues match by name; fanout queues match by their
+  configured exchange, not Kombu's generated `bcast.*` queue name. Queue prefixes
+  and the capture worker's explicit hostname are honored.
+- Checks use `scripts/launch.py worker-check --queues <configured-list>` in an
+  isolated, launcher-bootstrapped interpreter: up to 60 seconds of retries, with
+  a 75-second outer process deadline including imports/broker stalls. Failure
+  aborts deployment with a log pointer; already-started services are not rolled
+  back automatically. Readiness is point-in-time, not proof of future uptime.
+- The remote verified restart no longer requests console mode and uses the same
+  exact-worker check. Its single fast-forward disables Git hooks for that command
+  only, so an asynchronous post-merge restart cannot race the explicit lifecycle.
+  Linux/Windows supervisor selection is unchanged.
+
 ### 4.4 Daemon scripts
 
 Each daemon is launched via the cross-platform `python scripts/launch.py <service>` entry point, which handles env loading automatically and execs the right Python process.

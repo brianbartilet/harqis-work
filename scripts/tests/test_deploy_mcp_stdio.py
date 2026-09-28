@@ -29,8 +29,9 @@ def test_status_reports_mcp_as_stdio_on_demand_when_no_daemon(capsys, monkeypatc
     assert "stopped" not in mcp_line
 
 
-def test_start_service_skips_mcp_daemon_spawn(capsys, monkeypatch):
+def test_start_service_skips_mcp_daemon_spawn(capsys, monkeypatch, tmp_path):
     deploy = load_deploy_module()
+    monkeypatch.setattr(deploy, "pid_path", lambda service: tmp_path / f"{service}.pid")
 
     spawned = []
     monkeypatch.setattr(deploy, "read_pid", lambda service: None)
@@ -44,8 +45,10 @@ def test_start_service_skips_mcp_daemon_spawn(capsys, monkeypatch):
     assert "stdio/on-demand" in capsys.readouterr().out
 
 
-def test_restart_service_does_not_spawn_mcp_daemon(capsys, monkeypatch):
+def test_restart_service_does_not_spawn_mcp_daemon(capsys, monkeypatch, tmp_path):
     deploy = load_deploy_module()
+    monkeypatch.setattr(deploy, "pid_path", lambda service: tmp_path / f"{service}.pid")
+    monkeypatch.setattr(deploy, "_close_macos_terminal_windows", lambda services: None)
 
     spawned = []
     monkeypatch.setattr(deploy, "read_pid", lambda service: None)

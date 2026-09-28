@@ -225,6 +225,62 @@ def cmd_worker(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_worker_check(args: argparse.Namespace) -> None:
+    """Read-only deployment postflight, in the same bootstrap as the worker."""
+    setup_env()
+    if args.queues:
+        os.environ["WORKFLOW_QUEUE"] = args.queues.replace(" ", "")
+    from celery.utils.nodenames import default_nodename, host_format
+    from workflows.queues import qualify_queues
+    from core.apps.sprout import SPROUT
+
+    queues = qualify_queues(os.environ.get("WORKFLOW_QUEUE", "default")).split(",")
+    node = host_format(default_nodename(args.hostname))
+    wait_for_worker(SPROUT, node, queues)
+
+
+def wait_for_worker(app, node: str, queues: list[str], *, timeout: float = 60) -> None:
+    """Require this exact node's pong and every subscription, with bounded retry.
+
+    Kombu Broadcast queues have ephemeral names; their stable identity is the
+    configured fanout exchange, not the queue's alias or generated name.
+    """
+    expected = {}
+    for name in queues:
+        queue = app.amqp.queues[name]
+        expected[name] = queue.exchange.name if queue.exchange.type == "fanout" else None
+    if not expected:
+        raise RuntimeError("Worker readiness requires at least one configured queue")
+    deadline = time.monotonic() + timeout
+    detail = "no local ping"
+    while (remaining := deadline - time.monotonic()) > 0:
+        try:
+            inspect = app.control.inspect(destination=[node], timeout=min(2, remaining / 2))
+            pings = inspect.ping() or {}
+            active = (inspect.active_queues() or {}).get(node, [])
+            if pings.get(node, {}).get("ok") != "pong":
+                detail = "no local ping"
+            else:
+                names = {item.get("name") for item in active}
+                exchanges = {item["exchange"].get("name") for item in active
+                             if isinstance(item.get("exchange"), dict)
+                             and item["exchange"].get("type") == "fanout"}
+                missing = [name for name, exchange in expected.items()
+                           if (exchange not in exchanges if exchange else name not in names)]
+                if not missing:
+                    print(f"[health] worker={node} queues={','.join(queues)} verified", flush=True)
+                    return
+                detail = f"missing queues: {','.join(missing)}"
+        except Exception as exc:
+            # Broker URLs and credentials can occur in exception messages.
+            detail = f"inspection failed ({type(exc).__name__})"
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(2, remaining))
+    raise RuntimeError(f"Worker readiness failed for {node}: {detail}")
+
+
 def _beat_schedule_base() -> Path:
     """Return an instance-owned Beat state path when isolation is enabled."""
     if not os.environ.get("HARQIS_INSTANCE"):
@@ -496,6 +552,11 @@ def build_parser() -> argparse.ArgumentParser:
     w.add_argument("--concurrency", help="Celery concurrency override")
     w.add_argument("--hostname", help="Explicit Celery worker hostname")
     w.set_defaults(func=cmd_worker)
+
+    check = sub.add_parser("worker-check", help="Verify exact local worker ping and all queues (read-only)")
+    check.add_argument("--queues", required=True)
+    check.add_argument("--hostname", help="Same Celery hostname override as the worker")
+    check.set_defaults(func=cmd_worker_check)
 
     s = sub.add_parser("scheduler", help="Celery Beat scheduler")
     s.set_defaults(func=cmd_scheduler)
