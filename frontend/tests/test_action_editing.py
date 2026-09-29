@@ -433,7 +433,7 @@ def test_review_ready_and_available_status_labels_preserve_api_values(editor_pag
     expect(lanes.nth(1)).to_have_attribute('data-status', 'active')
     expect(lanes.nth(1).locator(':scope > h3')).to_contain_text('Ready')
     expect(lanes.nth(1).locator('.action-status')).to_have_text('Ready')
-    page.get_by_role('button', name='Set in review', exact=True).click()
+    page.get_by_role('button', name='In Review', exact=True).click()
     ready = page.locator('.followups-lane[data-status=open]')
     expect(ready.locator('.action-status')).to_have_text('In Review')
     expect(ready.locator(':scope > h3')).to_contain_text('In Review')

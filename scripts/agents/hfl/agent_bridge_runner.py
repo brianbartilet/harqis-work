@@ -32,6 +32,10 @@ from urllib.parse import urlparse
 REPO_ROOT = Path(__file__).resolve().parents[3]
 REPLAY_LOCK = threading.Lock()
 
+
+class InputAttachmentError(ValueError):
+    """A controlled validation message safe to show to the task owner."""
+
 # Fixed program; private prompts travel on stdin, never in process arguments.
 HERMES_PROGRAM = """
 import json, os, sys
@@ -201,14 +205,15 @@ def execution_prompt(run, workspace):
 
 def restore_input_attachments(client, run):
     """Materialize the immutable input manifest on this worker, checking every byte."""
+    from workflows.hfl.attachment_limits import MAX_FILES, MAX_FILE_BYTES, MAX_TOTAL_BYTES
     root = spool_root() / 'workspaces' / run['id'] / 'inputs'
     if root.is_symlink() or not root.resolve().is_relative_to((spool_root() / 'workspaces').resolve()):
         raise ValueError('Input directory cannot be a symlink.')
     root.mkdir(parents=True, exist_ok=True)
     total = 0
     attachments = run['snapshot']['source'].get('attachments', [])
-    if len(attachments) > 10:
-        raise ValueError('Too many input attachments.')
+    if len(attachments) > MAX_FILES:
+        raise InputAttachmentError(f'This task has {len(attachments)} input attachments; the limit is {MAX_FILES}.')
     for item in attachments:
         name = item['filename']
         if not re.fullmatch(r'[a-f0-9]{32}(?:\.[a-z0-9]{1,12})?', name) or not re.fullmatch('[a-f0-9]{32}', item['id']):
@@ -216,18 +221,28 @@ def restore_input_attachments(client, run):
         path = root / name
         if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
             raise ValueError('Input escapes the workspace.')
-        content = bytearray()
-        with client.client.stream('GET', 'runs/' + run['id'] + '/inputs/' + item['id'],
-                                 headers={'X-Execution-Lease': run['lease_token']}) as response:
-            response.raise_for_status()
-            for chunk in response.iter_bytes():
-                content.extend(chunk)
-                total += len(chunk)
-                if len(content) > 50 * 1024 * 1024 or total > 200 * 1024 * 1024:
-                    raise ValueError('Input attachment size limit exceeded.')
-        if len(content) != item['size'] or hashlib.sha256(content).hexdigest() != item['digest']:
-            raise ValueError('Input attachment integrity check failed.')
-        path.write_bytes(content)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=root, delete=False) as target:
+                temporary = Path(target.name)
+                size = 0
+                digest = hashlib.sha256()
+                with client.client.stream('GET', 'runs/' + run['id'] + '/inputs/' + item['id'],
+                                         headers={'X-Execution-Lease': run['lease_token']}) as response:
+                    response.raise_for_status()
+                    for chunk in response.iter_bytes(chunk_size=1024 * 1024):
+                        size += len(chunk)
+                        total += len(chunk)
+                        if size > MAX_FILE_BYTES or total > MAX_TOTAL_BYTES:
+                            raise InputAttachmentError('Input attachments allow 500 MB per file and 25,000 MB total.')
+                        digest.update(chunk)
+                        target.write(chunk)
+                if size != item['size'] or digest.hexdigest() != item['digest']:
+                    raise InputAttachmentError('Input attachment integrity check failed. Reattach the original file before retrying.')
+            temporary.replace(path)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
 
 def restore_prior_artifacts(client, run):
@@ -424,6 +439,8 @@ def consume(client, *, limit=10):
                 checkout.cleanup()
         except Exception as exc:
             result = {'state': 'failed', 'blocked_reason': 'integration', 'summary': f'Execution did not finish ({type(exc).__name__}). Inspect the local worker before retrying.', 'complete': False, 'evidence': []}
+            if isinstance(exc, InputAttachmentError):
+                result['summary'] = str(exc)
             archive = spool_root() / 'workspaces' / run['id'] / 'repository-changes.zip'
             if archive.exists():
                 try:
