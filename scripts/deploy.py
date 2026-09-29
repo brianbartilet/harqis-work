@@ -883,12 +883,12 @@ def start_service(service: str, machine: dict, args: argparse.Namespace) -> bool
             "MCP clients launch it when needed."
         )
         return True
-    if _registered_launchd_path(service):
+    if _registered_supervisor_path(service):
         stop_service(service)
         kill_stray_processes(_STATUS_NEEDLES.get(service, service), label=service)
         pid_path(service).unlink(missing_ok=True)
         if not getattr(args, "console", False):
-            _register_launchd(machine, args, [service])
+            register_services(machine, args, [service])
             verify_worker_ready(service, machine, args)
             return True
     existing = read_pid(service)
@@ -923,7 +923,7 @@ def start_service(service: str, machine: dict, args: argparse.Namespace) -> bool
 
 
 def stop_service(service: str) -> None:
-    _unload_registered_launchd(service)
+    _stop_registered_supervisor(service)
     pid = read_pid(service)
     if not pid:
         if _service_is_stdio(service):
@@ -1465,6 +1465,7 @@ def register_services(machine: dict, args: argparse.Namespace, services: list[st
     activate it now — start_service will spawn visible Terminal tabs and we
     don't want a background duplicate alongside them.
     """
+    services = [s for s in services if not _service_is_stdio(s)]
     activate = not getattr(args, "console", False)
     if IS_MAC:
         _register_launchd(machine, args, services, load=activate)
@@ -1621,23 +1622,87 @@ def _systemd_unit_path(service: str) -> Path:
     return Path.home() / ".config" / "systemd" / "user" / _systemd_unit_name(service)
 
 
+def _systemctl(*args: str):
+    """Manager failures must abort deployment before process cleanup."""
+    return subprocess.run(["systemctl", "--user", *args], check=True, timeout=30)
+
+
+def _systemd_quote(value: str, *, command: bool = False) -> str:
+    """systemd uses C-style quotes, %% specifiers, and ExecStart $ expansion."""
+    value = str(value).replace("%", "%%")
+    if command:
+        value = value.replace("$", "$$")
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t") + '"'
+
+
+def _registered_systemd_path(service: str) -> Path | None:
+    if not IS_LIN or _service_is_stdio(service):
+        return None
+    path = _systemd_unit_path(service)
+    if not path.exists():
+        return None
+    fields = {}
+    section = None
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if line.startswith("["):
+            section = line
+        elif section == "[Service]" and "=" in line:
+            key, value = line.split("=", 1)
+            if key in fields and key in ("ExecStart", "WorkingDirectory"):
+                raise RuntimeError(f"Refusing ambiguous systemd registration for this checkout: {path}")
+            fields[key] = value
+    try:
+        command = shlex.split(fields.get("ExecStart", ""))
+        expected = shlex.split(" ".join(_systemd_quote(arg, command=True) for arg in
+                                       (str(LAUNCH_PY), SERVICES[service]["cmd"][0])))
+    except ValueError:
+        command, expected = [], [None]
+    if (fields.get("WorkingDirectory") not in (str(REPO_ROOT), str(REPO_ROOT).replace("%", "%%"))
+            or command[1:3] not in (expected, [str(LAUNCH_PY), SERVICES[service]["cmd"][0]])):
+        raise RuntimeError(f"Refusing systemd registration not owned by this checkout: {path}")
+    return path
+
+
+def _registered_supervisor_path(service: str) -> Path | None:
+    return _registered_launchd_path(service) if IS_MAC else _registered_systemd_path(service)
+
+
+def _stop_registered_supervisor(service: str) -> None:
+    if IS_MAC:
+        _unload_registered_launchd(service)
+    elif _registered_systemd_path(service):
+        _systemctl("stop", _systemd_unit_name(service))
+
+
 def _register_systemd(machine, args, services, *, activate: bool = True):
-    """Write systemd user units. If `activate`, also `enable --now`. Pass
+    """Write systemd user units. If `activate`, enable then restart. Pass
     `activate=False` when start_service will spawn visible console tabs.
     """
     for s in services:
+        if _service_is_stdio(s):
+            continue
+        _stop_registered_supervisor(s)
         cmd = build_service_cmd(s, machine, args)
+        env = {key: os.environ[key] for key in (
+            "HARQIS_INSTANCE", "HARQIS_QUEUE_PREFIX", "WORKFLOW_CONCURRENCY"
+        ) if key in os.environ}
+        env.update(machine_env_vars(machine))
+        if s == "worker" and getattr(args, "concurrency", None) is not None:
+            env["WORKFLOW_CONCURRENCY"] = str(args.concurrency)
+        environment = "\n".join(f"Environment={_systemd_quote(f'{key}={value}')}" for key, value in env.items())
         unit = f"""[Unit]
 Description=harqis-work {s}
 After=network-online.target
 
 [Service]
-ExecStart={' '.join(cmd)}
-WorkingDirectory={REPO_ROOT}
+ExecStart={' '.join(_systemd_quote(arg, command=True) for arg in cmd)}
+WorkingDirectory={str(REPO_ROOT).replace('%', '%%')}
+{environment}
 Restart=always
 RestartSec=5
-StandardOutput=append:{log_path(s)}
-StandardError=append:{log_path(s)}
+StandardOutput=append:{str(log_path(s)).replace('%', '%%')}
+StandardError=append:{str(log_path(s)).replace('%', '%%')}
 
 [Install]
 WantedBy=default.target
@@ -1645,24 +1710,26 @@ WantedBy=default.target
         path = _systemd_unit_path(s)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(unit)
-        subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+        _systemctl("daemon-reload")
+        _systemctl("enable", path.name)
         if activate:
-            subprocess.run(["systemctl", "--user", "enable", "--now", path.name], check=False)
+            _systemctl("restart", path.name)
             print(f"  Registered + started systemd: {_systemd_unit_name(s)}")
         else:
-            subprocess.run(["systemctl", "--user", "enable", path.name], check=False)
             print(f"  Registered systemd (not started — console mode): {_systemd_unit_name(s)}")
 
 
 def _unregister_systemd(services):
     for s in services:
+        path = _registered_systemd_path(s)
+        if path is None:
+            continue
         unit = _systemd_unit_name(s)
-        subprocess.run(["systemctl", "--user", "disable", "--now", unit], capture_output=True)
-        path = _systemd_unit_path(s)
+        _systemctl("disable", "--now", unit)
         if path.exists():
             path.unlink()
             print(f"  Unregistered systemd: {_systemd_unit_name(s)}")
-    subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+    _systemctl("daemon-reload")
 
 
 # Windows: HKCU\...\Run registry keys (auto-launch at user logon, no admin)
@@ -1683,6 +1750,7 @@ def _register_scheduled_tasks(machine, args, services):
         value = " ".join(parts).replace("'", "''")
         name = _service_label(s)
         ps = (
+            "$ErrorActionPreference = 'Stop'; "
             f"Set-ItemProperty -Path '{_RUN_KEY}' "
             f"-Name '{name}' -Value '{value}' -Type String"
         )
@@ -1694,7 +1762,7 @@ def _register_scheduled_tasks(machine, args, services):
             print(f"  Registered Run key: {name} (auto-launch at logon)")
         else:
             err = (result.stderr or result.stdout or "(no error output)").strip()
-            print(f"  WARN: Run-key registration FAILED for {name}: {err.splitlines()[0]}")
+            raise RuntimeError(f"Run-key registration FAILED for {name}: {err.splitlines()[0]}")
 
 
 def _unregister_scheduled_tasks(services):
@@ -1790,15 +1858,20 @@ def _suspend_supervised_services(active: set[str] | None = None) -> set[str]:
                 active.add(service)
                 subprocess.run(["launchctl", "unload", str(path)], check=True)
         elif IS_LIN:
+            if not _registered_systemd_path(service):
+                continue
             unit = _systemd_unit_name(service)
             result = subprocess.run(
                 ["systemctl", "--user", "is-active", "--quiet", unit],
                 capture_output=True,
                 check=False,
+                timeout=30,
             )
             if result.returncode == 0:
                 active.add(service)
-                subprocess.run(["systemctl", "--user", "stop", unit], check=True)
+                _systemctl("stop", unit)
+            elif result.returncode not in (3, 4):
+                raise RuntimeError(f"Cannot inspect systemd unit: {unit}")
     return active
 
 
@@ -1817,10 +1890,8 @@ def _resume_supervised_services(services: set[str]) -> None:
         if IS_MAC:
             subprocess.run(["launchctl", "load", str(_plist_path(service))], check=True)
         elif IS_LIN:
-            subprocess.run(
-                ["systemctl", "--user", "start", _systemd_unit_name(service)],
-                check=True,
-            )
+            if _registered_systemd_path(service):
+                _systemctl("start", _systemd_unit_name(service))
 
 
 def _restore_service_snapshot(
@@ -2158,7 +2229,9 @@ def _main(args: argparse.Namespace, runtime_machine: dict) -> None:
         print(f"==> Tearing down machine={name} role={role}")
         for s in services:
             stop_service(s)
-        kill_stray_celery()
+        for s in services:
+            if s in ("worker", "capture-worker", "scheduler", "flower"):
+                kill_stray_processes(_STATUS_NEEDLES[s], label=s)
         emulator_down(machine)
         device_down(machine)
         if role == "host" and not args.docker_only and not single_instance:
@@ -2178,13 +2251,16 @@ def _main(args: argparse.Namespace, runtime_machine: dict) -> None:
     # Clean slate: kill any orphan celery/launcher processes from prior runs
     # before spawning new daemons (avoids piling up console windows on Windows).
     if not args.docker_only:
-        # Suspend selected launchd jobs before the orphan sweep; KeepAlive
+        # Suspend selected supervisor jobs before the orphan sweep; respawn
         # would otherwise race the sweep and spawn duplicates.
-        if IS_MAC:
+        if IS_MAC or IS_LIN:
             for service in services:
-                if _registered_launchd_path(service):
+                if _registered_supervisor_path(service):
                     stop_service(service)
-        kill_stray_celery()
+        for service in services:
+            if service in ("worker", "capture-worker", "scheduler", "flower"):
+                kill_stray_processes(_STATUS_NEEDLES[service], label=service)
+                pid_path(service).unlink(missing_ok=True)
         # The celery sweep only matches celery/launcher needles. The long-
         # running app daemons (frontend FastAPI, MCP server, Kanban
         # orchestrator) have separate command-line patterns — sweep them too
@@ -2209,7 +2285,7 @@ def _main(args: argparse.Namespace, runtime_machine: dict) -> None:
 
     # Did register_services already start the daemons? Yes when:
     #   - macOS launchd loaded the plist with RunAtLoad=true
-    #   - Linux systemd ran `enable --now`
+    #   - Linux systemd enabled then restarted the unit
     # Both are skipped in console mode (see `register_services`) precisely so
     # the fall-through `start_service` loop can open Terminal tabs without
     # spawning a background duplicate alongside them. Windows HKCU\Run never

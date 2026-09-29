@@ -458,7 +458,32 @@ The skill walks through every step, validates prerequisites before making change
 - The remote verified restart no longer requests console mode and uses the same
   exact-worker check. Its single fast-forward disables Git hooks for that command
   only, so an asynchronous post-merge restart cannot race the explicit lifecycle.
-  Linux/Windows supervisor selection is unchanged.
+  Linux uses the equivalent owned-systemd-unit lifecycle described below.
+
+**Cross-platform deployment contract:**
+
+- Worker readiness is shared across macOS, Linux, and native Windows: the exact
+  node must answer and advertise every configured subscription. Windows probes
+  use console `python.exe`, while background workers retain the existing
+  windowless process flags. Paths are passed as argv, not shell strings.
+- Linux non-console deployments reuse existing same-checkout `systemd --user`
+  units. Stop/restart suspends the unit before process cleanup; registration
+  reloads the manager and restarts the unit to apply new configuration. Manager
+  failures abort deployment rather than reporting success. New hosts still need
+  explicit `--register`; an available user manager and administrator-configured
+  user lingering are prerequisites for boot/logout-independent user services.
+- Native Windows keeps its existing non-admin HKCU Run-key registration.
+  This is **login startup, not Windows Service supervision**: it does not promise
+  startup before login or automatic crash recovery. This compatibility change
+  does not install a privileged service manager or migrate existing registry
+  entries. An unattended Windows server needs a separately configured supervisor
+  or a supervised Linux environment; do not treat a passing readiness check as
+  evidence of recovery after a later crash.
+- Client-owned stdio MCP is excluded from registration on every platform.
+- The independent `Deployment platforms` workflow runs deployment/launcher
+  contract tests on native Ubuntu, Windows, and macOS runners. Supervisor calls
+  remain mocked; these checks are not a live install/reboot/recovery certification.
+  This workflow is independent of frontend coverage checks.
 
 ### 4.4 Daemon scripts
 
