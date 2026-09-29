@@ -18,10 +18,11 @@
 .action-clone-handle { float:right; position:relative; margin-right:.35rem; min-height:32px; color:#94a3b8; padding:.2rem .4rem; border-radius:.3rem; }
 .action-clone-handle:hover { color:#e2e8f0; background:#334155; }
 /* Ideas is a board tool: keep it in flow so it never covers card actions. */
-.followups-board .ideas-drawer-toggle { display:inline-flex; align-items:center; justify-content:center; gap:.45rem; flex-shrink:0; box-sizing:border-box; min-height:44px; padding:.5rem .8rem; font-size:.875rem; line-height:1.25rem; font-weight:600; white-space:nowrap; border:1px solid #665333; border-radius:.5rem; background:#29251f; color:#f3dfb6; box-shadow:none; transition:background-color .15s,border-color .15s; }
-.followups-board .ideas-drawer-toggle svg { width:18px; height:18px; flex-shrink:0; color:#f9ca74; }
-.followups-board .ideas-drawer-toggle:hover,.followups-board .ideas-drawer-toggle[aria-expanded=true] { background:#393022; color:#fff0d2; border-color:#b58e4d; box-shadow:none; }
-.followups-board .ideas-drawer-toggle:focus-visible { outline:2px solid #f9ca74; outline-offset:3px; }
+.followups-board .ideas-drawer-toggle { display:inline-flex; align-items:center; justify-content:center; gap:.35rem; flex-shrink:0; box-sizing:border-box; min-height:44px; padding:.5rem .65rem; font-size:.875rem; line-height:1.25rem; font-weight:600; white-space:nowrap; border:1px solid #b58e4d; border-radius:.5rem; background:#2563eb; color:#fff; opacity:1; box-shadow:none; transition:background-color .15s; }
+.followups-board .ideas-drawer-toggle svg { width:18px; height:18px; flex-shrink:0; color:inherit; }
+.followups-board .ideas-drawer-toggle span { color:#fff; opacity:1; }
+.followups-board .ideas-drawer-toggle:hover,.followups-board .ideas-drawer-toggle[aria-expanded=true] { background:#3b82f6; color:#fff; box-shadow:none; }
+.followups-board .ideas-drawer-toggle:focus-visible { outline:2px solid #60a5fa; outline-offset:2px; }
 @media(prefers-reduced-motion:reduce) { .followups-board .ideas-drawer-toggle { transition:none; } }
 .ideas-drawer-overlay .ideas-drawer { border:1px solid #665333; border-left:3px solid #f9ca74; }
 .ideas-drawer .agenda-card { position:relative; padding:.75rem; }

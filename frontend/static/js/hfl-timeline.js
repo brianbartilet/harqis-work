@@ -63,6 +63,10 @@
       save: saveEditor,
     });
     window.hflActionChecklists.options.addToBoard = async (list, task) => { try { await editorState.flush(); await window.HflIdeas.addToBoard('actionable',editing,list,task); } catch(e) { error('followup-save-error',e.message); } };
+    window.hflActionChecklists.options.convert = async (listId, itemId) => {
+      try { await editorState.flush(); const parent = editing; editor.close(); await window.HflIdeas.createChecklistAction(parent, listId, itemId); }
+      catch(e) { error('followup-save-error',e.message); }
+    };
     window.hflActionChecklists.render();
     form.querySelector('[type=submit]').textContent = 'Create';
     form.querySelector('[type=submit]').hidden = !!item;
@@ -126,7 +130,7 @@
         window.dispatchEvent(new CustomEvent('hfl:action-saving',{detail:{saving:false}}));
         window.dispatchEvent(new Event('hfl:actions-updated'));
       }
-    }, () => openEditor(item));
+    }, () => openEditor(item), (list, task) => window.HflIdeas.createChecklistAction(item, list.id, task.id));
     const outcome=node('details');outcome.append(node('summary','Expected outcome'),node('p',item.expected_outcome,'agenda-card-outcome'));el.append(outcome);
     if(item.prompt){const details=node('details');details.append(node('summary','Initial prompt'),node('pre',item.prompt,'action-prompt'));el.append(details);}
     if(item.notes || item.completion_note){const details=node('details');details.append(node('summary','Notes & outcome'));if(item.notes)details.append(node('p',item.notes));if(item.completion_note)details.append(node('p','Outcome: '+item.completion_note));el.append(details);}

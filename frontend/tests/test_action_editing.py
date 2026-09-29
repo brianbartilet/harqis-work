@@ -110,6 +110,73 @@ def create_action(client):
     return response.json()['item']
 
 
+def test_checklist_action_is_atomic_and_retryable(ideas, authenticated_client):
+    client = authenticated_client
+    parent = create_action(client)
+    uri = '/hfl-corpus/timeline/items/' + parent['id']
+    raw = {'request_id': str(uuid4()), 'version': parent['version'], 'checklist_id': 'one', 'item_id': 'a',
+           'item': {'title': 'Alpha action', 'expected_outcome': 'Alpha'}}
+    stale = client.post(uri + '/checklist-action', json={**raw, 'version': 0})
+    assert stale.status_code == 409
+    assert len(ideas.followups.list()) == 1
+    assert not client.get(uri).json()['item']['checklists'][0]['items'][1]['done']
+    saved = client.post(uri + '/checklist-action', json=raw)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()['parent']['checklists'][0]['items'][1]['done']
+    assert not saved.json()['item']['agent_enabled']
+    retry = client.post(uri + '/checklist-action', json=raw)
+    assert retry.status_code == 200 and retry.json()['duplicate']
+    assert retry.json()['item']['id'] == saved.json()['item']['id']
+    assert len(ideas.followups.list()) == 2
+
+
+@pytest.mark.parametrize('entry', ['card', 'editor', 'shared-editor'])
+@pytest.mark.parametrize('width', [390, 1280])
+def test_create_action_from_checklist(editor_page, entry, width, tmp_path):
+    from playwright.sync_api import expect
+    page, client = editor_page
+    parent = create_action(client)
+    uri = '/hfl-corpus/timeline/items/' + parent['id']
+    text = 'Build a detailed checklist experience with long wrapping text and ' + 'unbroken' * 15
+    parent['checklists'][0]['items'][1]['text'] = text
+    parent = client.patch(uri, json={'version': parent['version'], 'checklists': parent['checklists']}).json()['item']
+    page.set_viewport_size({'width': width, 'height': 1000})
+    page.goto('https://editing.test/hfl-corpus/actions')
+    card = page.locator('.followups-lanes [data-followup-id="' + parent['id'] + '"]')
+    expect(card).to_be_visible()
+    row = card.locator('.checklist-card-row').first
+    expect(row.get_by_role('button', name='Create action from checklist item')).to_be_visible()
+    assert row.evaluate('(e) => e.scrollWidth <= e.clientWidth')
+    page.screenshot(path=str(tmp_path / f'checklist-card-{width}.png'))
+
+    def start():
+        if entry == 'card':
+            card.get_by_role('button', name='Create action from checklist item').first.click()
+        else:
+            if entry == 'editor':
+                card.get_by_role('button', name='Edit', exact=True).click()
+                source = page.locator('#followup-form [data-item-id=a]')
+            else:
+                page.evaluate('(item) => window.HflIdeas.openEditor("actionable", item)', parent)
+                source = page.locator('.idea-dialog [data-item-id=a]')
+            expect(source.get_by_role('button', name='Add checklist item to board')).to_be_visible()
+            assert source.evaluate('(e) => e.scrollWidth <= e.clientWidth')
+            page.screenshot(path=str(tmp_path / f'checklist-editor-{entry}-{width}.png'))
+            source.get_by_role('button', name='Create action', exact=True).click()
+
+    start()
+    draft = page.get_by_role('dialog', name='Create action from checklist item', exact=True)
+    expect(draft.locator('[name=title]')).to_have_value(text[:200])
+    draft.get_by_role('button', name='Close editor', exact=True).click()
+    assert not client.get(uri).json()['item']['checklists'][0]['items'][1]['done']
+    start()
+    draft.get_by_role('button', name='Create', exact=True).click()
+    expect(draft).not_to_be_visible()
+    assert client.get(uri).json()['item']['checklists'][0]['items'][1]['done']
+    expect(card.get_by_role('checkbox').first).to_be_checked()
+    expect(card.locator('.checklist-card-cover > p')).to_have_text('First · 2/2')
+
+
 @pytest.mark.parametrize('editor', ['timeline', 'idea'])
 @pytest.mark.parametrize('existing', [False, True])
 def test_action_agent_settings(editor_page, monkeypatch, tmp_path, editor, existing):
