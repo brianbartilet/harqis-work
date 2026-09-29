@@ -123,6 +123,7 @@
     }
     for(const sourceName of item.sources || [])meta.append(node('span',sourceName,'action-source'));
     el.append(meta,node('h3',item.title));
+    el.querySelector('h3').append(window.HflCopyIdButton('action',item.id));
     window.HflChecklistCover?.(el, item, async checklists => {
       window.dispatchEvent(new CustomEvent('hfl:action-saving',{detail:{saving:true}}));
       try { await api('/'+item.id, {method:'PATCH',body:JSON.stringify({version:item.version,checklists})}); await load(); }
@@ -268,6 +269,7 @@
       const el=node('article',null,'agenda-card agenda-idea-card');
       el.append(node('p',(item.category==='missed_commitments' ? 'Possibly missed' : (item.category||'manual idea').replaceAll('_',' '))+(item.confidence?' · '+item.confidence+' confidence':'')+((item.analysis_status||'uncertain')==='uncertain' ? ' · Uncertain' : ''),'agenda-eyebrow'),node('h3',item.title),node('p',item.body||item.description||item.recommendation||item.expected_outcome));
       if(item.matrix)el.append(node('p',item.matrix+' · '+(item.matrix_confidence||'unassessed')+' matrix confidence'+(item.matrix_reason?' — '+item.matrix_reason:''),'agenda-description'));
+      el.querySelector('h3').append(window.HflCopyIdButton('idea',item.id));
       const details=node('details');details.append(node('summary','Evidence & completion check'),node('p',item.observation||''),node('p',item.resolution_check));
       if(item.automatic_review?.reason)details.append(node('p','Automatic action review: '+item.automatic_review.reason));
       (item.evidence||[]).forEach(ref=>{const a=node('a',ref.date+' · '+ref.title);a.href=evidenceUrl(ref);a.target='_blank';a.rel='noopener';const p=node('p');p.append(a);details.append(p);});el.append(details);

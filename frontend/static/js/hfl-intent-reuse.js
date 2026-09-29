@@ -2,6 +2,27 @@
 (() => {
   const element = (tag, text) => { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; return n; };
   const api = (...args) => window.HflIdeas.api(...args);
+  window.HflCopyIdButton = (kind, id) => {
+    const button=element('button');button.type='button';button.className='intent-copy-id';
+    const label='Copy '+kind+' ID';button.title=label+': '+id;button.setAttribute('aria-label',label);
+    button.innerHTML='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-2 2M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l2-2"/></svg>';
+    const icon=button.innerHTML;let timer;
+    button.onclick=async event=>{
+      event.preventDefault();event.stopPropagation();
+      try {
+        try { await navigator.clipboard.writeText(String(id)); }
+        catch (_) {
+          const input=element('textarea');input.value=String(id);input.readOnly=true;
+          input.style.cssText='position:fixed;opacity:0;pointer-events:none';button.parentElement.append(input);
+          try { input.select();if(!document.execCommand('copy'))throw Error('Clipboard unavailable'); }
+          finally { input.remove();button.focus(); }
+        }
+        button.textContent='✓';button.title='Copied '+kind+' ID';button.setAttribute('aria-label','Copied '+kind+' ID');
+        clearTimeout(timer);timer=setTimeout(()=>{button.innerHTML=icon;button.title=label+': '+id;button.setAttribute('aria-label',label);},1800);
+      } catch (_) { window.prompt('Copy '+kind+' ID:',String(id)); }
+    };
+    return button;
+  };
   window.HflWorkspacePicker = (host, {selected=[], empty='All activity', name='', onapply=()=>{}, onload=()=>{}, onerror=()=>{}}={}) => {
     host._disposeWorkspacePicker?.();
     const picker=element('details');picker.className='workspace-view-picker intent-workspace-picker';

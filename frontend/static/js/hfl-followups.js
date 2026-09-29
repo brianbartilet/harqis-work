@@ -111,6 +111,7 @@
           if(item.analysis_status==='uncertain')meta.append(node('span','Uncertain','idea-analysis-status'));
         }
         const title=node('h3',item.title),management=node('div',null,'agenda-card-actions');
+        title.append(window.HflCopyIdButton('idea',item.id));
         const edit=node('button','Edit');edit.type='button';edit.onclick=()=>window.HflIdeas.editIdea(item.id);
         const dismiss=node('button','Dismiss');dismiss.type='button';dismiss.onclick=async()=>{dismiss.disabled=true;try{await window.HflIdeas.api('/objects/'+item.id,'PATCH',{version:item.version,status:'dismissed'});await refresh(true);}catch(e){error.textContent=e.message;error.hidden=false;dismiss.disabled=false;}};
         const promote=node('button','Promote');promote.type='button';promote.onclick=()=>window.HflIdeas.convert(item.id);
