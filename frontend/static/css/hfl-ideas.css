@@ -77,14 +77,6 @@
 .checklist-card-cover { border-top:1px solid #334155; padding-top:.6rem; margin-top:.8rem; font-size:.8rem; }
 .checklist-card-cover label { margin:.5rem 0; line-height:1.5; }
 .checklist-card-cover input { flex:0 0 16px; width:16px; accent-color:#3b82f6; }
-.checklist-card-row { display:flex; align-items:flex-start; gap:.25rem; }
-.checklist-card-row label { flex:1; min-width:0; }
-.checklist-card-row label > span { min-width:0; overflow-wrap:anywhere; }
-.checklist-card-row input { align-self:flex-start; margin-top:.25rem; }
-.checklist-card-cover .checklist-card-create { flex:0 0 28px; width:28px; height:28px; padding:6px; margin:.35rem 0 0; color:#94a3b8; background:transparent; border:0; border-radius:.3rem; }
-.checklist-card-create svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.5; }
-.checklist-card-cover .checklist-card-create:hover { color:#e2e8f0; background:#334155; }
-.checklist-card-create:focus-visible { outline:2px solid #7dd3fc; outline-offset:2px; }
 .idea-dialog .action-triage { border:1px solid #334155; padding:.75rem; border-radius:.65rem; margin-bottom:1rem; }
 .idea-dialog .action-triage > summary { cursor:pointer; font-size:.85rem; font-weight:600; }
 .idea-dialog .idea-error:not(:empty) { margin:0 1.25rem 1rem; }
@@ -113,9 +105,9 @@
 .idea-check-row input[type=text], .idea-dialog .agenda-form-body .idea-check-row input[type=text] { flex:1; min-width:0; background:transparent; border-color:transparent; padding:.4rem; cursor:grab; }
 .idea-check-row input[type=text]:focus { cursor:text; background:#020617; border-color:#475569; }
 .idea-check-row.is-complete input[type=text] { text-decoration:line-through; color:#94a3b8; }
-.checklist-item-actions { display:flex; gap:0; opacity:0; pointer-events:none; }
+.checklist-item-actions { display:flex; gap:2px; opacity:0; pointer-events:none; }
 .idea-check-row:hover .checklist-item-actions, .idea-check-row:focus-within .checklist-item-actions { opacity:1; pointer-events:auto; }
-.checklist-item-actions button { display:grid; place-items:center; width:24px; height:28px; min-width:24px; padding:4px; border:0; border-radius:5px; background:transparent; }
+.checklist-item-actions button { display:grid; place-items:center; width:28px; height:28px; padding:5px; border:0; border-radius:50%; background:transparent; }
 .checklist-item-actions button:hover { background:#334155; }
 .checklist-item-actions svg, .idea-checklist-header button svg { display:block; width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
 @media (hover:none) { .checklist-item-actions { opacity:1; pointer-events:auto; } }

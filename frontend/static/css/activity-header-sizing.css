@@ -21,7 +21,5 @@
 }
 
 #followups-board .followups-toolbar .ideas-drawer-toggle {
-  width:auto;
-  min-width:0;
-  flex:0 0 auto;
+  min-width:112px;
 }

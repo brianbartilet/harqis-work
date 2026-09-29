@@ -470,7 +470,7 @@ async def convert(request: Request, identity: str):
         if current['status'] == 'dismissed':
             raise HTTPException(409, 'Restore this idea before creating an action.')
         if checklist_id or item_id:
-            checklist_task(current, checklist_id, item_id)['done'] = True
+            checklist_task(current, checklist_id, item_id)
         action, _ = call(canonical.followups.create, {**fields, 'request_id': request_id, 'agent_enabled': False},
                          actor=actor, source=original.get('source'), connection=db)
         db.execute('INSERT INTO idea_conversions VALUES (?,?)', (request_id, fingerprint))

@@ -160,7 +160,7 @@ window.HflChecklists = class {
     form.addEventListener('reset', () => window.hflActionChecklists.set([]));
   }
 })();
-window.HflChecklistCover = function(root, item, save, open, createAction) {
+window.HflChecklistCover = function(root, item, save, open) {
   for (const list of (item.checklists || []).filter(list => list.cover)) {
     const section = document.createElement('section'); section.className = 'checklist-card-cover';
     const heading = document.createElement('p'); heading.textContent = `${list.title} · ${list.items.filter(i => i.done).length}/${list.items.length}`; section.append(heading);
@@ -169,18 +169,7 @@ window.HflChecklistCover = function(root, item, save, open, createAction) {
       const label = document.createElement('label'), check = document.createElement('input'); check.type = 'checkbox'; check.checked = task.done;
       check.onchange = async () => { section.inert = true; const lists = structuredClone(item.checklists); lists.find(l => l.id === list.id).items.find(i => i.id === task.id).done = check.checked;
         try { await save(lists); } catch (error) { check.checked = task.done; const message = document.createElement('p'); message.setAttribute('role', 'alert'); message.textContent = error.message; section.append(message); } finally { section.inert = false; }
-      }; const text=document.createElement('span'); window.HflChecklistMarkdown?.(text,task.text); if(!window.HflChecklistMarkdown)text.textContent=task.text; label.append(check,text);
-      const row = document.createElement('div'); row.className = 'checklist-card-row'; row.append(label);
-      if (createAction) {
-        const create = HflChecklists.prototype.iconButton.call(HflChecklists.prototype, 'convert', async event => {
-          event.stopPropagation(); create.disabled = true;
-          try { await createAction(list, task); }
-          catch (error) { const message = document.createElement('p'); message.setAttribute('role', 'alert'); message.textContent = error.message; section.append(message); }
-          finally { create.disabled = false; }
-        }, 'Create action from checklist item');
-        create.className = 'checklist-card-create'; row.append(create);
-      }
-      section.append(row);
+      }; const text=document.createElement('span'); window.HflChecklistMarkdown?.(text,task.text); if(!window.HflChecklistMarkdown)text.textContent=task.text; label.append(check,text); section.append(label);
     }
     root.append(section);
   }
