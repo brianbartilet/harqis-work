@@ -16,6 +16,7 @@
           <div class="agent-configure-row"><a href="/settings" target="_blank" rel="noopener noreferrer" title="Open App Settings in a new tab to change shared agent defaults">Agent default settings</a></div>
         </div>
       </details>
+      <label id="followup-state-label">Status<select name="status"><option value="open">In Review</option><option value="active">Ready</option><option value="in_progress">In Progress</option><option value="incomplete">Incomplete</option><option value="done">Done</option><option value="dismissed">Dismissed</option></select></label>
       <div data-object-attachments>
       {% include "modules/hfl_corpus/partials/input_attachments.html" %}
       </div>
@@ -31,7 +32,6 @@
       <label>Notes<textarea name="notes" rows="2" maxlength="6000" placeholder="Useful context or the next step"></textarea></label>
         </div>
       </details>
-      <label id="followup-state-label">Status<select name="status"><option value="open">In Review</option><option value="active">Ready</option><option value="in_progress">In Progress</option><option value="incomplete">Incomplete</option><option value="done">Done</option><option value="dismissed">Dismissed</option></select></label>
       <details class="action-triage">
         <summary>Triage and prioritization</summary>
         <div class="action-triage-body">
