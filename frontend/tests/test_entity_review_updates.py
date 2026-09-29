@@ -114,7 +114,7 @@ def test_full_suggestions_endpoint_covers_more_than_first_hundred(review_data, a
     assert len(authenticated_client.get('/api/hfl/entities/matching?all=true').json()['suggestions'])==113
 
 
-def test_review_browser_preserves_poll_state_filters_and_batches(review_data, authenticated_client):
+def test_review_browser_preserves_poll_state_filters_and_batches(review_data, authenticated_client, tmp_path):
     import re
     playwright=pytest.importorskip('playwright.sync_api')
     with playwright.sync_playwright() as engine:
@@ -127,10 +127,13 @@ def test_review_browser_preserves_poll_state_filters_and_batches(review_data, au
         browser=engine.chromium.launch(**options)
         try:
             page=browser.new_page(viewport={'width':1100,'height':1000})
+            page.clock.install()
             errors=[]
+            matching_requests=[]
             page.on('pageerror',lambda e:errors.append(str(e)))
             def route_request(route):
                 req=route.request
+                if '/matching?' in req.url: matching_requests.append(req.url)
                 response=authenticated_client.request(req.method,req.url.replace('https://entities.test',''),content=req.post_data_buffer,headers={'content-type':req.headers.get('content-type','application/json')})
                 route.fulfill(status=response.status_code,body=response.content,headers={k:v for k,v in response.headers.items() if k.lower() not in {'content-encoding','content-length'}})
             page.route('https://entities.test/**',route_request)
@@ -141,12 +144,12 @@ def test_review_browser_preserves_poll_state_filters_and_batches(review_data, au
             first=page.locator('.matching-suggestion').first
             first.locator('summary').click()
             first.locator('input').check()
-            page.clock.install()
             for _ in range(3):
                 page.clock.run_for(11000)
                 assert first.get_attribute('open') is not None
                 assert first.locator('input').is_checked()
                 assert page.locator('#matching-status details').get_attribute('open') is not None
+            assert len(matching_requests)>=4
             page.click('#suggestions-clear')
             page.locator('#filter-kind').get_by_role('button',name=re.compile('^Pets')).click()
             assert page.locator('.matching-suggestion').count()==1
@@ -160,6 +163,10 @@ def test_review_browser_preserves_poll_state_filters_and_batches(review_data, au
             page.wait_for_selector('#batch-confirm:not([disabled])')
             assert page.locator('.batch-group').count()==2
             assert len(entities.entity_index())==5
+            page.screenshot(path=str(tmp_path / 'batch-desktop.png'))
+            page.set_viewport_size({'width':390,'height':844})
+            assert page.locator('#batch-merge-dialog').evaluate('(el) => el.scrollWidth <= el.clientWidth')
+            page.screenshot(path=str(tmp_path / 'batch-mobile.png'))
             page.locator('[data-batch-field=name]').first.fill('Reviewed group')
             page.click('#batch-confirm')
             page.wait_for_selector('#batch-merge-dialog:not([open])',state='attached')
@@ -170,3 +177,47 @@ def test_review_browser_preserves_poll_state_filters_and_batches(review_data, au
             assert not errors
         finally:
             browser.close()
+
+
+def test_type_and_batch_endpoints_require_owner(review_data, authenticated_client):
+    from fastapi.testclient import TestClient
+    from main import app
+    with TestClient(app) as anonymous:
+        for path, body in [('/types', dict(name='Birds',color='#aabbcc',description='Named birds')),
+                           ('/create',dict(name='Fido',kind='pets')),('/type/a',{'kind':'pets'}),
+                           ('/merges/batch',{'groups':[payload(authenticated_client,['a','b'],'Alex')]}),
+                           ('/backfill?include_new_types=true',{})]:
+            assert anonymous.post('/api/hfl/entities'+path,json=body).status_code==401
+
+
+def test_extraction_uses_custom_vocabulary_and_rejects_unknown_types(review_data, monkeypatch):
+    from types import SimpleNamespace
+    from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
+    import apps.antropic.config as config
+    entity_types.create('Birds','#aabbcc','Named birds')
+    row=dict(id='bird-entry',text='Polly is a bird. Fido is a pet.',tags=[])
+    captured=[]
+    def send(self, **kwargs):
+        captured.append(kwargs['system'])
+        mentions=[dict(kind=kind,name=name,evidence=evidence) for kind,name,evidence in
+                  [('birds','Polly','Polly is a bird.'),('pets','Fido','Fido is a pet.'),('unknown','Polly','Polly is a bird.')]]
+        return SimpleNamespace(content=[SimpleNamespace(text=json.dumps({'entries':[{'id':row['id'],'mentions':mentions}]}))])
+    monkeypatch.setattr(config,'get_config',lambda name: {})
+    monkeypatch.setattr(BaseApiServiceAnthropic,'__init__',lambda self, config: None)
+    monkeypatch.setattr(BaseApiServiceAnthropic,'send_messages',send)
+    result=entities.extract_batch([row])
+    assert {m['kind'] for m in result[row['id']]}=={'birds','pets'}
+    assert 'Named birds' in captured[0]
+
+
+def test_dismiss_resolved_group_blocks_all_members_and_duplicate_suggestions(review_data, authenticated_client):
+    client=authenticated_client
+    client.post('/api/hfl/entities/merges',json=payload(client,['a','b'],'Alex'))
+    with get_store().connection() as db:
+        original=db.execute("SELECT * FROM entity_match_pairs WHERE id='bc'").fetchone()
+        db.execute("INSERT INTO entity_match_pairs(id,job_id,left_id,right_id,state,data) VALUES ('duplicate','test','b','c','suggested',?)",(original['data'],))
+    assert client.post('/api/hfl/entities/matching/suggestions/bc/dismiss').status_code==200
+    assert {s['id'] for s in entity_matching.status()['suggestions']}=={'pq'}
+    with get_store().connection() as db:
+        assert entity_matching.blocked(db,['a','c'])
+        assert entity_matching.blocked(db,['b','c'])

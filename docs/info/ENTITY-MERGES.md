@@ -1,5 +1,26 @@
 # Entity merges
 
+## Entity types
+
+**Manage types and add entities** creates types with a name, color and extraction
+description, or creates a named entity manually. Defaults include People, Organizations,
+Tools, Topics, Referenced objects and Pets. Open an entity to change its type or edit its
+profile. Custom types and Pets keep same-name mentions separate until identity matching
+or a reviewed merge establishes that they are the same entity.
+
+New types participate in future enrichment. Creating a type does not reprocess history.
+**Backfill history with current types** explicitly queues the existing bounded Celery
+extraction workflow with the current vocabulary. Existing evidence remains visible while
+backfill runs, and saved profiles are preserved. Repeating a completed backfill with the
+same vocabulary does not reprocess unchanged entries.
+
+Authenticated endpoints include `POST /api/hfl/entities/types` (`name`, `color`,
+`description`), `POST /api/hfl/entities/create` (`name`, `kind`, optional profile fields),
+`POST /api/hfl/entities/type/{id}` (`kind`), and
+`POST /api/hfl/entities/backfill?include_new_types=true`. The directory response includes
+its `types` registry. Types are stored with the local entity database shared by the API
+and workers; no new schedule or credential is required.
+
 ## Automatic matching
 
 Successful model enrichment durably records a matching job alongside the extracted
@@ -27,7 +48,21 @@ explicit manual merge remains possible.
 Uncertain or insufficiently corroborated matches appear as review suggestions. **Review
 suggested merge** opens the existing editable confirmation dialog; **Keep separate**
 dismisses and blocks the pair. Status lists processed outcomes and pending comparisons.
-Suggestions are shown in batches of 100; resolving them reveals the remaining suggestions.
+Pending counts are **candidate pairs**, not unique entities or corpus entries. An entity
+can occur in several pairs, so this count can exceed the entity count. New jobs reuse
+outstanding pairs instead of queueing the same unresolved pair again.
+
+The directory filters also apply to suggestions: either member must satisfy all active
+filters. Filtering covers the full review queue; **Show more suggestions** reveals another
+100 matching rows. Each row shows its colored entity-type pill. Polling retains expanded
+suggestions, job history, selections and directory profile drafts.
+
+Use the right-side checkboxes to stage reviewed suggestions, **Select visible** to select
+the displayed rows, and **Review selected merges** to open confirmation. Hidden selections
+are counted and included. Overlapping pairs become a single connected group in the modal;
+review the resulting names and editable combined profiles before **Confirm merges**.
+Independent groups can succeed or fail separately. Failed groups remain selected for retry;
+transport retries retain their request IDs and payloads to avoid duplicate merges.
 Audit-source entries are excluded from enrichment and matching evidence to avoid feedback.
 
 Runtime classification: **Celery**, with a bounded, schema-driven AI evaluator. The model
@@ -48,16 +83,16 @@ Additional authenticated endpoints:
 
 | Method and path | Behavior |
 | --- | --- |
-| `GET /api/hfl/entities/matching` | Job counts/states and uncertain suggestions. |
+| `GET /api/hfl/entities/matching` | Job counts/states and up to 100 uncertain suggestions; `?all=true` includes the full review queue and current member entities. |
 | `POST /api/hfl/entities/matching/scan` | Start or resume the one-time historical scan. |
 | `POST /api/hfl/entities/matching/suggestions/{id}/dismiss` | Keep the identities separate and block future automatic matching. |
 
 Suggestions can be accepted using the existing merge preview and submit endpoints with
-their `data.entity_ids`. Stale IDs require refreshing the directory before proceeding.
+their `data.entity_ids`. Suggestions resolve merged aliases to current IDs. Unavailable or
+retyped selections receive an actionable error instead of silently failing.
 
 The Activity Corpus Entities directory supports selecting entities across pages,
-searches and filters. Select a single type (People, Companies, Tools, Topics or
-Referenced objects), choose **Merge selected**, enter a name and optional evidence,
+searches and filters. Select a single built-in or custom type, choose **Merge selected**, enter a name and optional evidence,
 then **Review merge**, edit the combined categories, emails, phones, references or
 notes as needed, and **Confirm merge**. Reviewing again preserves those edits.
 **Select all matching** includes results
@@ -89,6 +124,7 @@ All paths below begin with `/api/hfl/entities`.
 | --- | --- |
 | `GET /?q=term&kind=people&offset=0&limit=50` | Search profiles and names. Returns `entities`, matching `total`, and full type `counts`. Omit `limit` or use zero to retrieve all matches. Source/date parameters remain available. |
 | `POST /merge-preview` | Validate members and compute combined fields and unique-entry count. Returns a signed preview token valid for 15 minutes. |
+| `POST /merges/batch` | Submit up to 100 disjoint groups, each with the normal merge payload, signed preview and request ID. Returns a result or error per group. |
 | `POST /merges` | Atomically create the named identity, aliases, audit event and operation receipt. |
 | `POST /merges/{entity_id}/unmerge` | Atomically restore immediate members of an active outer grouping. |
 | `GET /operations/{request_id}` | Retrieve a committed receipt and audit-delivery state. 404 means no committed receipt is currently visible, including while work may still be in flight. |
@@ -119,7 +155,8 @@ Mutations run in a database transaction off the web event loop. Keep the exact r
 body and request ID across transport retries. Reusing a request ID with different
 content returns 409; replaying the original returns its receipt. A stale/expired
 preview returns 409 with no partial merge. Re-preview after relevant entity changes.
-The preview checks the entity-store revision and recomputes visible supporting data.
+The preview verifies the selected entities and their supporting data; unrelated store
+changes do not invalidate a review. The final commit still checks its transactional revision.
 Mixed types, hidden/removed selections and nested reversals out of order are rejected.
 Selections may contain up to 10,000 IDs per operation; duplicates do not add members.
 

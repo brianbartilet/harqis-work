@@ -6,10 +6,15 @@
   const selectedEntities = new Set();
   let matchingItems = [], mergeBusy = false, mergePreview = null, mergeTarget = null, mergeRequest = '', submittedPayload = null;
   const selectedKinds = new Set(), selectedCategories = new Set(), selectedSources = new Set();
+  let suggestions = [], suggestionEntities = [], visibleSuggestions = [], suggestionLimit = 100, batchGroups = [], batchBusy = false;
+  const selectedSuggestions = new Set();
+  let suggestionEntityById = new Map(), entityById = new Map();
+  const suggestionNodes = new Map();
   const kinds = {people: 'People', companies: 'Organizations', tools: 'Tools', topics: 'Topics', objects: 'Referenced objects'};
   const kindColors = {people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', objects:'#e9c96c'};
   const sourceValue = entry => String(entry.source || '').trim();
   function pill(text) { const p = el('span', text); p.className = 'pill'; return p; }
+  function typePill(kind) { const node = pill(kinds[kind] || kind || 'Unavailable'); node.classList.add('entity-kind'); node.style.setProperty('--entity-color', kindColors[kind] || '#95a7c3'); return node; }
   function refreshFilters() {
     $('filter-kind').replaceChildren();
     for (const [value, title] of [['', 'All types'], ...Object.entries(kinds)]) {
@@ -43,8 +48,9 @@
     if ([...$(id).options].some(o => o.value === selected)) $(id).value = selected;
   }
   function facets() {
-    checks('filter-category', [['__none__', 'Uncategorized'], ...[...new Set(items.flatMap(e => e.categories))].sort().map(v => [v, v])], selectedCategories);
-    checks('filter-source', [...new Set(items.flatMap(e => e.entries.map(sourceValue)))].sort().map(v => [v, v || 'Unspecified source']), selectedSources);
+    const filterEntities = [...items, ...suggestionEntities];
+    checks('filter-category', [['__none__', 'Uncategorized'], ...[...new Set(filterEntities.flatMap(e => e.categories))].sort().map(v => [v, v])], selectedCategories);
+    checks('filter-source', [...new Set(filterEntities.flatMap(e => e.entries.map(sourceValue)))].sort().map(v => [v, v || 'Unspecified source']), selectedSources);
     refreshFilters();
   }
   function editor(entity) {
@@ -83,18 +89,21 @@
         const data = Object.fromEntries(Object.entries(fields).map(([key, input]) => [key, ['categories', 'emails', 'phones', 'references'].includes(key) ? input.value.split('\n').map(v => v.trim()).filter(Boolean) : input.value]));
         entity.profile = (await api('/profile/' + encodeURIComponent(entity.id), data)).profile;
         entity.label = entity.profile.name; entity.categories = entity.profile.categories;
+        for (const input of Object.values(fields)) input.defaultValue = input.value;
         facets(); render(); $('entity-status').textContent += ' Profile saved.';
       } catch (error) { feedback.textContent = error.message; } finally { button.disabled = false; }
     };
     details.append(form); return details;
   }
-  function render() {
+  function matchesFilters(e) {
     const q = $('entity-query').value.trim().toLowerCase(), contact = $('filter-contact').value;
-    const filtered = items.filter(e => {
-      const p = e.profile || {}, searchable = [e.label, kinds[e.kind] || e.kind, ...e.categories, ...(p.emails || []), ...(p.phones || []), ...(p.references || []), p.notes || ''].join(' ').toLowerCase();
-      return q.split(/\s+/).every(word => searchable.includes(word)) && (!selectedKinds.size || selectedKinds.has(e.kind)) && (!selectedCategories.size || [...selectedCategories].some(category => category === '__none__' ? !e.categories.length : e.categories.includes(category))) && (!selectedSources.size || e.entries.some(x => selectedSources.has(sourceValue(x)))) && (!contact || (contact === 'contact' ? p.emails?.length || p.phones?.length : contact === 'curated' ? e.profile : !e.profile));
-    });
-    filtered.sort((a, b) => $('sort').value === 'activity' ? b.entries.length - a.entries.length || a.label.localeCompare(b.label) : $('sort').value === 'recent' ? (b.entries[0]?.date || '').localeCompare(a.entries[0]?.date || '') || a.label.localeCompare(b.label) : $('sort').value === 'name-desc' ? b.label.localeCompare(a.label) : a.label.localeCompare(b.label));
+    const p = e.profile || {}, searchable = [e.label, kinds[e.kind] || e.kind, ...e.categories, ...(p.emails || []), ...(p.phones || []), ...(p.references || []), p.notes || ''].join(' ').toLowerCase();
+    return q.split(/\s+/).every(word => searchable.includes(word)) && (!selectedKinds.size || selectedKinds.has(e.kind)) && (!selectedCategories.size || [...selectedCategories].some(category => category === '__none__' ? !e.categories.length : e.categories.includes(category))) && (!selectedSources.size || e.entries.some(x => selectedSources.has(sourceValue(x)))) && (!contact || (contact === 'contact' ? p.emails?.length || p.phones?.length : contact === 'curated' ? e.profile : !e.profile));
+  }
+  function compareEntities(a, b) { return $('sort').value === 'activity' ? b.entries.length - a.entries.length || a.label.localeCompare(b.label) : $('sort').value === 'recent' ? (b.entries[0]?.date || '').localeCompare(a.entries[0]?.date || '') || a.label.localeCompare(b.label) : $('sort').value === 'name-desc' ? b.label.localeCompare(a.label) : a.label.localeCompare(b.label); }
+  function render() {
+    const filtered = items.filter(matchesFilters).sort(compareEntities);
+    renderSuggestions();
     matchingItems = filtered;
     const selectionKind = items.find(e => selectedEntities.has(e.id))?.kind;
     $('selection-count').textContent = `${selectedEntities.size} selected${selectionKind ? ' · ' + kinds[selectionKind] : ''}`;
@@ -102,10 +111,17 @@
     const pages = Math.max(1, Math.ceil(filtered.length / pageSize)); page = Math.max(0, Math.min(page, pages - 1));
     $('entity-status').textContent = `${filtered.length} matching entities · ${items.length} of ${total} loaded · ${pageSize} per page`;
     $('page-number').textContent = `Page ${page + 1} of ${pages}`; $('previous').disabled = page === 0; $('next').disabled = page + 1 >= pages;
+    const previousCards = new Map([...$('entity-list').children].map(node => [node.dataset.entityId, node]));
     $('entity-list').replaceChildren();
     if (!filtered.length) $('entity-list').append(el('p', 'No entities match. Clear a filter or try another search.'));
     for (const e of filtered.slice(page * pageSize, (page + 1) * pageSize)) {
-      const card = el('details'); card.className = 'entity-card';
+      const previous = previousCards.get(e.id), signature = JSON.stringify([e, kinds]);
+      const dirty = previous && [...previous.querySelectorAll('input:not([type=checkbox]),textarea')].some(input => input.value !== input.defaultValue);
+      if (previous && (previous.dataset.signature === signature || dirty)) {
+        const checkbox = previous.querySelector('.entity-select'); checkbox.checked = selectedEntities.has(e.id); checkbox.disabled = Boolean(selectionKind && selectionKind !== e.kind);
+        $('entity-list').append(previous); continue;
+      }
+      const card = el('details'); card.className = 'entity-card'; card.dataset.entityId = e.id; card.dataset.signature = signature;
       const summary = el('summary'), title = el('span'); title.className = 'entity-title-row';
       const checkbox = el('input'); checkbox.type = 'checkbox'; checkbox.className = 'entity-select';
       checkbox.checked = selectedEntities.has(e.id); checkbox.disabled = Boolean(selectionKind && selectionKind !== e.kind);
@@ -163,11 +179,16 @@
           }
           card.append(list);
         }
-        card.append(editor(e), el('h2', 'Supporting activity'));
+        const typeLabel = el('label', 'Entity type'), typeSelect = el('select'), typeSave = el('button', 'Change type'), typeFeedback = el('p');
+        for (const [value, title] of Object.entries(kinds)) { const option = el('option', title); option.value = value; typeSelect.append(option); }
+        typeSelect.value = e.kind; typeSave.type = 'button';
+        typeSave.onclick = async () => { typeSave.disabled = true; try { await api('/type/' + encodeURIComponent(e.id), {kind:typeSelect.value}); await load(); await matchingStatus(); } catch (err) { typeFeedback.textContent = err.message; } finally { typeSave.disabled = false; } };
+        typeLabel.append(typeSelect); card.append(typeLabel, typeSave, typeFeedback, editor(e), el('h2', 'Supporting activity'));
         if (!e.entries.length) card.append(el('p', 'No current supporting entries. Your saved profile remains available.'));
         for (const entry of e.entries) { const row = el('div'), link = el('a', entry.date.slice(0, 10) + ' · ' + entry.title); link.href = entry.href; link.target = '_blank'; link.rel = 'noopener noreferrer'; const meta = el('p', entry.source + ' · ' + entry.method); meta.className = 'entity-meta'; row.append(link, meta, el('blockquote', entry.evidence)); card.append(row); }
       });
       $('entity-list').append(card);
+      if (previous?.open) card.open = true;
     }
   }
   function setLoading(loading) {
@@ -202,7 +223,9 @@
       }
       const data = await api(params.size ? '?' + params : '');
       if(version !== loadVersion) return;
-      items = data.entities; total = data.total ?? items.length;
+      if (data.types) { for (const key of Object.keys(kinds)) { delete kinds[key]; delete kindColors[key]; } for (const type of data.types) { kinds[type.id] = type.name; kindColors[type.id] = type.color; } }
+      choices('create-entity-kind', Object.entries(kinds), 'Choose a type');
+      items = data.entities; entityById = new Map(items.map(e => [e.id, e])); total = data.total ?? items.length;
       const available = new Set(items.map(e => e.id));
       for (const id of selectedEntities) if (!available.has(id)) selectedEntities.delete(id);
       facets(); render();
@@ -228,57 +251,201 @@
   async function status() {
     const data = await api('/status'); showJob({job: data.job, enrichment: data.enrichment});
   }
-  let matchingTimer;
-  async function matchingStatus() {
+  let matchingTimer, matchingInFlight = null;
+  function matchingStatus() {
+    if (matchingInFlight) return matchingInFlight;
+    matchingInFlight = refreshMatching().finally(() => { matchingInFlight = null; });
+    return matchingInFlight;
+  }
+  async function refreshMatching() {
     clearTimeout(matchingTimer);
-    const data = await api('/matching');
-    const running = data.jobs.some(job => ['pending','running'].includes(job.state));
-    const status = $('matching-status'); status.replaceChildren();
-    if (!data.enabled) status.append(el('p', 'Automatic matching is disabled.'));
-    else if (!data.jobs.length) status.append(el('p', 'Ready. New enrichment will trigger matching. Scan existing entities to check earlier activity.'));
-    else {
+    try {
+      const data = await api('/matching?all=true');
+      suggestions = data.suggestions; suggestionEntities = data.entities || items; suggestionEntityById = new Map(suggestionEntities.map(e => [e.id, e]));
+      const available = new Set(suggestions.map(s => s.id));
+      for (const id of selectedSuggestions) if (!available.has(id)) selectedSuggestions.delete(id);
       const active = data.jobs.filter(job => ['pending','running'].includes(job.state)).length;
-      status.append(el('p', `${active ? active + ' matching jobs active' : 'No matching jobs active'} · Awaiting review: ${data.suggestions_total ?? data.suggestions.length}`));
-      const history = el('details'); history.append(el('summary', `Recent matching jobs (${data.jobs.length})`));
-      const jobs = el('div'); jobs.className = 'matching-jobs';
+      const status = $('matching-status');
+      let caption = status.querySelector(':scope > p'), history = status.querySelector('details');
+      if (!caption || !history) { status.replaceChildren(); caption = el('p'); history = el('details'); history.append(el('summary'), el('div')); history.lastChild.className = 'matching-jobs'; status.append(caption, history); }
+      caption.textContent = !data.enabled ? 'Automatic matching is disabled.' : `${active ? active + ' matching jobs active' : 'No matching jobs active'} · Awaiting review: ${data.suggestions_total ?? suggestions.length}`;
+      history.firstChild.textContent = `Recent matching jobs (${data.jobs.length})`;
+      const jobs = history.lastChild, scroll = jobs.scrollTop; jobs.replaceChildren();
       for (const job of data.jobs) {
         const counts = job.counts || {}, row = el('div'); row.className = 'matching-job';
-        row.append(el('strong', `${job.mode === 'history' ? 'Existing entities' : 'New enrichment'} · ${job.state}`), el('p', `${counts.merged || 0} merged · ${counts.suggested || 0} for review · ${counts.pending || 0} pending`));
-        if (job.error) row.append(el('p', job.error));
-        jobs.append(row);
+        row.append(el('strong', `${job.mode === 'history' ? 'Existing entities' : 'New enrichment'} · ${job.state}`), el('p', `${counts.merged || 0} merged · ${counts.suggested || 0} for review · ${counts.pending || 0} candidate pairs pending`));
+        if (job.error) row.append(el('p', job.error)); jobs.append(row);
       }
-      history.append(jobs); status.append(history);
-    }
-    $('matching-suggestions').replaceChildren();
-    for (const suggestion of data.suggestions) {
-      const row = el('details'); row.className = 'matching-suggestion'; row.append(el('summary', (suggestion.data.names || []).join(' ↔ ')));
-      row.append(el('p', suggestion.data.decision?.reason || suggestion.data.review_reason || 'Review supporting evidence before merging.'));
-      for (const fact of suggestion.data.decision?.facts || []) {
-        const evidence = el('div'); evidence.className = 'matching-evidence';
-        if (typeof fact === 'string') evidence.append(el('p', fact));
-        else if (fact && typeof fact === 'object') {
-          for (const [key, value] of Object.entries(fact)) {
-            evidence.append(el('strong', key === 'left_quote' ? suggestion.data.names?.[0] || 'First entity' : key === 'right_quote' ? suggestion.data.names?.[1] || 'Second entity' : key.replaceAll('_', ' ')), el(key.endsWith('quote') ? 'blockquote' : 'p', typeof value === 'string' ? value : JSON.stringify(value)));
-          }
-        }
-        row.append(evidence);
-      }
-      const review = el('button', 'Review suggested merge'), dismiss = el('button', 'Keep separate');
-      review.type = dismiss.type = 'button';
-      review.onclick = () => {
-        const ids = suggestion.data.entity_ids || [];
-        if (ids.some(id => !items.some(item => item.id === id))) { $('matching-status').textContent = 'These entities have changed. Refresh entities and matching progress.'; return; }
-        selectedEntities.clear(); ids.forEach(id => selectedEntities.add(id)); render(); openMerge();
-        $('merge-evidence').value = suggestion.data.decision?.reason || '';
-      };
-      dismiss.onclick = async () => { dismiss.disabled = true; dismiss.textContent = 'Saving…'; try { await api('/matching/suggestions/' + suggestion.id + '/dismiss', {}); await matchingStatus(); } catch (err) { $('matching-status').textContent = err.message; dismiss.disabled = false; dismiss.textContent = 'Keep separate'; } };
-      const actions = el('div'); actions.className = 'matching-actions'; actions.append(review, dismiss);
-      row.append(actions); $('matching-suggestions').append(row);
-    }
-    if (!data.suggestions.length) $('matching-suggestions').append(el('p', 'No uncertain matches awaiting review.'));
-    if (data.suggestions_total > data.suggestions.length) $('matching-suggestions').prepend(el('p', `Showing ${data.suggestions.length} of ${data.suggestions_total} suggestions. Review or dismiss these to see more.`));
-    if (running) matchingTimer = setTimeout(() => run(matchingStatus), 10000);
+      jobs.scrollTop = scroll;
+      facets(); renderSuggestions();
+      if (active) matchingTimer = setTimeout(() => run(matchingStatus), 10000);
+    } catch (err) { matchingTimer = setTimeout(() => run(matchingStatus), 10000); throw err; }
   }
+  function suggestionMembers(suggestion) {
+    return (suggestion.data.entity_ids || []).map(id => suggestionEntityById.get(id) || entityById.get(id)).filter(Boolean);
+  }
+  function renderSuggestions() {
+    const filtersActive = $('entity-query').value.trim() || selectedKinds.size || selectedCategories.size || selectedSources.size || $('filter-contact').value;
+    const filtered = suggestions.filter(s => suggestionMembers(s).some(matchesFilters) || (!filtersActive && !suggestionMembers(s).length));
+    filtered.sort((a, b) => { const first = s => suggestionMembers(s).filter(matchesFilters).sort(compareEntities)[0] || {label:(s.data.names || []).join(' '), entries:[]}; return compareEntities(first(a), first(b)); });
+    visibleSuggestions = filtered.slice(0, suggestionLimit);
+    const visible = new Set(visibleSuggestions.map(s => s.id));
+    const selectedHidden = [...selectedSuggestions].filter(id => !visible.has(id)).length;
+    $('suggestions-selection').textContent = `${selectedSuggestions.size} selected${selectedHidden ? ` · ${selectedHidden} hidden by filters or pagination` : ''}`;
+    $('suggestions-submit').disabled = !selectedSuggestions.size || batchBusy;
+    $('suggestions-count').textContent = `Showing ${visibleSuggestions.length} of ${filtered.length} matching suggestions · ${suggestions.length} awaiting review overall`;
+    $('suggestions-more').hidden = filtered.length <= suggestionLimit;
+    const container = $('matching-suggestions');
+    for (const suggestion of visibleSuggestions) {
+      const members = suggestionMembers(suggestion), names = members.length === (suggestion.data.entity_ids || []).length ? members.map(e => e.label) : suggestion.data.names || [];
+      const signature = JSON.stringify([suggestion.data, names, members.map(e => e.kind)]);
+      let row = suggestionNodes.get(suggestion.id);
+      if (!row || row.dataset.signature !== signature) {
+        const wasOpen = row?.open;
+        row = el('details'); row.className = 'matching-suggestion'; row.dataset.signature = signature;
+        const summary = el('summary'), title = el('span', names.join(' ↔ ')); title.className = 'matching-title';
+        summary.append(title);
+        for (const kind of new Set(members.map(e => e.kind))) summary.append(typePill(kind));
+        const check = el('input'); check.type = 'checkbox'; check.className = 'suggestion-select'; check.setAttribute('aria-label', 'Select merge ' + names.join(' and '));
+        check.onclick = event => event.stopPropagation();
+        check.onchange = () => { check.checked ? selectedSuggestions.add(suggestion.id) : selectedSuggestions.delete(suggestion.id); renderSuggestions(); };
+        summary.append(check); row.append(summary);
+        if (members.length !== (suggestion.data.entity_ids || []).length) row.append(el('p', 'Some entities are unavailable. You can keep this suggestion separate.'));
+        row.append(el('p', suggestion.data.decision?.reason || suggestion.data.review_reason || 'Review supporting evidence before merging.'));
+        for (const fact of suggestion.data.decision?.facts || []) {
+          const evidence = el('div'); evidence.className = 'matching-evidence';
+          if (typeof fact === 'string') evidence.append(el('p', fact));
+          else if (fact && typeof fact === 'object') for (const [key, value] of Object.entries(fact)) evidence.append(el('strong', key === 'left_quote' ? names[0] || 'First entity' : key === 'right_quote' ? names[1] || 'Second entity' : key.replaceAll('_', ' ')), el(key.endsWith('quote') ? 'blockquote' : 'p', typeof value === 'string' ? value : JSON.stringify(value)));
+          row.append(evidence);
+        }
+        const review = el('button', 'Review suggested merge'), dismiss = el('button', 'Keep separate'), feedback = el('p'); feedback.setAttribute('role', 'status');
+        review.type = dismiss.type = 'button';
+        review.onclick = async () => {
+          review.disabled = true;
+          try {
+            await matchingStatus();
+            const current = suggestions.find(s => s.id === suggestion.id);
+            if (!current) throw Error('This suggestion has already been resolved.');
+            const ids = current.data.entity_ids || [], currentMembers = suggestionMembers(current);
+            if (currentMembers.length !== ids.length || new Set(currentMembers.map(e => e.kind)).size !== 1) throw Error('These entities are unavailable or have different types. Refresh or keep them separate.');
+            selectedEntities.clear(); ids.forEach(id => selectedEntities.add(id)); render();
+            // The suggestion can be outside the directory activity scope. Preview reads current IDs on the server.
+            openMerge(null, currentMembers[0].label);
+            $('merge-evidence').value = current.data.decision?.reason || '';
+          } catch (err) { feedback.textContent = err.message; } finally { review.disabled = false; }
+        };
+        dismiss.onclick = async () => { dismiss.disabled = true; try { await api('/matching/suggestions/' + suggestion.id + '/dismiss', {}); selectedSuggestions.delete(suggestion.id); await matchingStatus(); } catch (err) { feedback.textContent = err.message; } finally { dismiss.disabled = false; } };
+        const actions = el('div'); actions.className = 'matching-actions'; actions.append(review, dismiss); row.append(actions, feedback);
+        row.open = Boolean(wasOpen); suggestionNodes.set(suggestion.id, row);
+      }
+      row.querySelector('.suggestion-select').checked = selectedSuggestions.has(suggestion.id);
+    }
+    // Leave unchanged nodes in place, preserving open details, focus and scroll positions.
+    const desired = visibleSuggestions.map(s => suggestionNodes.get(s.id));
+    for (const child of [...container.children]) if (!desired.includes(child)) child.remove();
+    desired.forEach((node, index) => { if (container.children[index] !== node) container.insertBefore(node, container.children[index] || null); });
+    if (!desired.length) container.append(el('p', suggestions.length ? 'No suggestions match the current filters.' : 'No uncertain matches awaiting review.'));
+    const allIds = new Set(suggestions.map(s => s.id));
+    for (const id of suggestionNodes.keys()) if (!allIds.has(id)) suggestionNodes.delete(id);
+  }
+  $('suggestions-select').onclick = () => { visibleSuggestions.forEach(s => selectedSuggestions.add(s.id)); renderSuggestions(); };
+  $('suggestions-clear').onclick = () => { selectedSuggestions.clear(); renderSuggestions(); };
+  $('suggestions-more').onclick = () => { suggestionLimit += 100; renderSuggestions(); };
+  function batchWaiting(busy) {
+    batchBusy = busy;
+    $('batch-close').disabled = busy; $('batch-confirm').disabled = busy || !batchGroups.some(g => !g.complete);
+    $('batch-groups').querySelectorAll('input,textarea').forEach(input => input.disabled = busy || Boolean(input.closest('.batch-group').dataset.submitted));
+  }
+  $('batch-close').onclick = () => { if (!batchBusy) $('batch-merge-dialog').close(); };
+  $('batch-merge-dialog').addEventListener('cancel', event => { if (batchBusy) event.preventDefault(); });
+  $('suggestions-submit').onclick = async () => {
+    $('suggestions-feedback').textContent = ''; $('suggestions-submit').disabled = true;
+    try {
+      await matchingStatus();
+      const chosen = suggestions.filter(s => selectedSuggestions.has(s.id));
+      if (!chosen.length) throw Error('The selected suggestions have already been resolved.');
+      const groups = [];
+      for (const suggestion of chosen) {
+        const ids = new Set(suggestion.data.entity_ids), matches = groups.filter(g => [...ids].some(id => g.ids.has(id)));
+        const group = {ids, suggestions:[suggestion.id]};
+        for (const match of matches) { match.ids.forEach(id => group.ids.add(id)); group.suggestions.push(...match.suggestions); groups.splice(groups.indexOf(match), 1); }
+        groups.push(group);
+      }
+      if (groups.length > 100) throw Error('Review at most 100 independent merge groups per batch.');
+      batchGroups = []; $('batch-groups').replaceChildren(); $('batch-feedback').textContent = 'Preparing current profiles…';
+      $('batch-merge-dialog').showModal(); batchWaiting(true);
+      for (const group of groups) {
+        const first = suggestionEntities.find(e => group.ids.has(e.id)) || items.find(e => group.ids.has(e.id));
+        const node = el('section'); node.className = 'batch-group';
+        const result = el('p'); result.setAttribute('role', 'status'); node.append(result); $('batch-groups').append(node);
+        try {
+          if (!first) throw Error('Selected entities are unavailable.');
+          const evidence = [...new Set(chosen.filter(s => group.suggestions.includes(s.id)).map(s => s.data.decision?.reason || 'Reviewed matching suggestion'))].join('\n').slice(0,10000);
+          const body = {entity_ids:[...group.ids], name:first.label, evidence};
+          const preview = await api('/merge-preview', body);
+          node.prepend(el('h3', `${kinds[preview.kind] || preview.kind} · ${preview.members.length} entities`), el('p', preview.members.map(m => m.label).join(' + ')));
+          const fields = {}, profileDetails = el('details'), profileGrid = el('div');
+          profileDetails.append(el('summary', 'Review combined profile')); profileGrid.className = 'profile-fields'; profileDetails.append(profileGrid);
+          for (const key of ['name','categories','emails','phones','references','notes']) {
+            const label = el('label', key === 'name' ? 'Resulting name' : key.charAt(0).toUpperCase() + key.slice(1));
+            const input = el(key === 'name' ? 'input' : 'textarea'); input.value = Array.isArray(preview.profile[key]) ? preview.profile[key].join('\n') : preview.profile[key] || '';
+            input.dataset.batchField = key;
+            if (key === 'name') { input.required = true; input.maxLength = 120; } else input.rows = key === 'notes' ? 4 : 2;
+            label.append(input); (key === 'name' ? node : profileGrid).append(label); if (key === 'notes') label.className = 'profile-wide'; fields[key] = input;
+          }
+          node.append(profileDetails);
+          batchGroups.push({...group, body, preview, fields, node, result, requestId:crypto.randomUUID()});
+        } catch (err) { result.textContent = err.message; }
+      }
+      $('batch-feedback').textContent = `${batchGroups.length} groups ready. Any unavailable groups above remain selected for later review.`;
+    } catch (err) { $('suggestions-feedback').textContent = err.message; }
+    finally { batchWaiting(false); renderSuggestions(); }
+  };
+  $('batch-merge-form').onsubmit = async event => {
+    event.preventDefault(); if (batchBusy) return;
+    batchWaiting(true); $('batch-feedback').textContent = 'Merging reviewed groups…';
+    try {
+      const ready = [];
+      for (const group of batchGroups.filter(g => !g.complete)) {
+        try {
+          if (!group.payload) {
+            const body = {...group.body, name:group.fields.name.value.trim()};
+            const fresh = await api('/merge-preview', body);
+            if (fresh.selection_hash !== group.preview.selection_hash) throw Error('An entity changed since review. Close this dialog and review the selection again.');
+            const profile = Object.fromEntries(Object.entries(group.fields).filter(([key]) => key !== 'name').map(([key, input]) => [key, key === 'notes' ? input.value : input.value.split('\n').map(v => v.trim()).filter(Boolean)]));
+            group.payload = {...body, profile, preview_token:fresh.preview_token, request_id:group.requestId};
+            group.node.dataset.submitted = 'true';
+          }
+          ready.push(group); group.result.textContent = 'Submitting…';
+        } catch (err) { group.result.textContent = err.message; }
+      }
+      if (ready.length) {
+        const response = await api('/merges/batch', {groups:ready.map(g => g.payload)});
+        for (const outcome of response.results) {
+          const group = ready.find(g => g.requestId === outcome.request_id);
+          if (outcome.error) group.result.textContent = outcome.error;
+          else { group.complete = true; group.result.textContent = 'Merged successfully.'; group.suggestions.forEach(id => selectedSuggestions.delete(id)); }
+        }
+      }
+      const completed = batchGroups.filter(g => g.complete).length;
+      $('batch-feedback').textContent = `${completed} of ${batchGroups.length} groups merged. Failed groups remain selected; retry or close and review again.`;
+      if (completed === batchGroups.length && completed) { $('batch-merge-dialog').close(); $('suggestions-feedback').textContent = `${completed} groups merged successfully.`; }
+      await load(); await matchingStatus();
+    } catch (err) { $('batch-feedback').textContent = err.message + ' Retry to recover the result safely.'; }
+    finally { batchWaiting(false); renderSuggestions(); }
+  };
+  for (const [id, path] of [['entity-type-form','/types'], ['entity-create-form','/create']]) {
+    $(id).onsubmit = async event => {
+      event.preventDefault(); const button = $(id).querySelector('button[type=submit]'); button.disabled = true;
+      try { await api(path, Object.fromEntries(new FormData($(id)))); $(id).reset(); await load(); $('type-feedback').textContent = id === 'entity-type-form' ? 'Type added. Future enrichment will use it; historical backfill is optional.' : 'Entity added. Open its profile to add details.'; }
+      catch (err) { $('type-feedback').textContent = err.message; } finally { button.disabled = false; }
+    };
+  }
+  $('types-backfill').onclick = async () => {
+    $('types-backfill').disabled = true;
+    try { const result = await api('/backfill?include_new_types=true', {}); showJob(result, 'backfill'); $('type-feedback').textContent = `Historical backfill ${result.state}. Check processing progress below.`; }
+    catch (err) { $('type-feedback').textContent = err.message; } finally { $('types-backfill').disabled = false; }
+  };
   $('matching-refresh').onclick = () => run(matchingStatus);
   $('matching-scan').onclick = async () => {
     const button = $('matching-scan'); button.disabled = true; button.textContent = 'Queuing scan…';
@@ -314,9 +481,9 @@
     $('merge-confirm').disabled = busy || (!mergeTarget && !mergePreview);
     $('entity-merge-form').setAttribute('aria-busy', String(busy));
   }
-  function openMerge(target = null) {
+  function openMerge(target = null, suggestedName = '') {
     mergeTarget = target; mergePreview = null; submittedPayload = null; mergeRequest = crypto.randomUUID();
-    $('merge-name').value = target?.label || items.find(e => selectedEntities.has(e.id))?.label || '';
+    $('merge-name').value = target?.label || suggestedName || items.find(e => selectedEntities.has(e.id))?.label || '';
     $('merge-name').required = !target; $('merge-name-label').hidden = Boolean(target); $('merge-evidence').value = '';
     $('merge-preview-content').replaceChildren(); $('merge-preview-content').hidden = true; $('merge-feedback').textContent = '';
     $('merge-review').hidden = Boolean(target);

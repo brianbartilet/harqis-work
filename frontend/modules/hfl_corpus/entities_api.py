@@ -109,10 +109,12 @@ async def index(request: Request, source: str = '', since: str = '', until: str 
     authorize(request)
     rows = await run_in_threadpool(entities.entity_index, source, since, until, context, graph_query, sources)
     rows.sort(key=lambda e: (e['label'].casefold(), e['id']))
-    counts = {k: sum(e['kind'] == k for e in rows) for k in entities.KINDS}
+    from workflows.hfl.entity_types import listing
+    types = listing()
+    counts = {t['id']: sum(e['kind'] == t['id'] for e in rows) for t in types}
     rows = [e for e in rows if (not kind or e['kind'] == kind) and
             all(word in str([e['label'], e.get('categories'), e.get('profile')]).casefold() for word in q.casefold().split())]
-    return {'entities': rows[offset:offset + limit] if limit else rows[offset:], 'total': len(rows), 'counts': counts}
+    return {'entities': rows[offset:offset + limit] if limit else rows[offset:], 'total': len(rows), 'counts': counts, 'types': types}
 
 
 class Profile(BaseModel):
@@ -122,6 +124,63 @@ class Profile(BaseModel):
     phones: list[str] = Field(default_factory=list)
     references: list[str] = Field(default_factory=list)
     notes: str = ''
+
+
+class TypedProfile(Profile):
+    kind: str
+
+
+class TypeWrite(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    color: str = Field(pattern=r'^#[0-9a-fA-F]{6}$')
+    description: str = Field(min_length=1, max_length=1000)
+
+
+@router.post('/api/hfl/entities/types')
+async def create_type(request: Request, payload: TypeWrite):
+    authorize(request)
+    from workflows.hfl.entity_types import create
+    try:
+        return await run_in_threadpool(create, payload.name, payload.color, payload.description)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+def validate_kind(kind):
+    from workflows.hfl.entity_types import listing
+    if kind not in {t['id'] for t in listing()}:
+        raise HTTPException(400, 'Choose an existing entity type.')
+
+
+@router.post('/api/hfl/entities/create')
+async def create_entity(request: Request, payload: TypedProfile):
+    from uuid import uuid4
+    actor = authorize(request)
+    validate_kind(payload.kind)
+    identity = 'manual-' + uuid4().hex
+    data = validated_profile(Profile(**payload.model_dump()))
+    await run_in_threadpool(get_store().save_profile, identity, payload.kind, data, actor)
+    return {'id': identity}
+
+
+class KindWrite(BaseModel):
+    kind: str
+
+
+@router.post('/api/hfl/entities/type/{identity}')
+async def change_type(request: Request, identity: str, payload: KindWrite):
+    actor = authorize(request)
+    validate_kind(payload.kind)
+    available = {e['id']: e for e in await run_in_threadpool(entities.entity_index)}
+    if identity not in available:
+        raise HTTPException(404, 'Entity unavailable; refresh the directory.')
+    entity = available[identity]
+    data = validated_profile(Profile(**(entity.get('profile') or {'name': entity['label']})))
+    try:
+        await run_in_threadpool(get_store().save_profile, identity, payload.kind, data, actor)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {'kind': payload.kind}
 
 
 def validated_profile(payload: Profile):
@@ -264,9 +323,12 @@ async def status(request: Request):
 
 
 @router.post('/api/hfl/entities/backfill')
-async def backfill(request: Request):
+async def backfill(request: Request, include_new_types: bool = False):
     authorize(request)
     from workflows.hfl.entity_events import request_enrichment
+    if include_new_types:
+        from workflows.hfl.entity_types import revision
+        get_store().state('entity-types-backfill', revision())
     return await run_in_threadpool(request_enrichment)
 
 

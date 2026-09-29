@@ -82,6 +82,7 @@ def build_preview(payload, current=None):
             raise ValueError('Entities changed during preview; try again')
     members = [dict(id=e['id'], label=e['label'], profile=e.get('profile')) for e in selected]
     return dict(name=name, kind=selected[0]['kind'], members=members, profile=profile,
+                selection_hash=digest(selected),
                 evidence=payload.evidence.strip(), revision=version,
                 unique_entries=len({x['id'] for e in selected for x in e['entries']}))
 
@@ -93,11 +94,16 @@ async def call(function, *args):
         raise HTTPException(409, str(exc)) from exc
 
 
+def preview_digest(result):
+    # Unrelated enrichment and merges must not invalidate a reviewed selection.
+    return digest({k: v for k, v in result.items() if k != 'revision'})
+
+
 @router.post('/merge-preview')
 async def preview(request: Request, payload: MergePreview):
     owner(request)
     result = await call(build_preview, payload)
-    result['preview_token'] = signer().dumps(digest(result))
+    result['preview_token'] = signer().dumps(preview_digest(result))
     return result
 
 
@@ -114,7 +120,7 @@ async def submit(request: Request, payload: MergeSubmit, background_tasks: Backg
     except BadSignature as exc:
         raise HTTPException(409, 'Preview expired or invalid; review a fresh preview') from exc
     result = await call(build_preview, payload)
-    if digest(result) != expected:
+    if preview_digest(result) != expected:
         raise HTTPException(409, 'Selection, fields or entity data changed; review a fresh preview')
     if payload.profile is not None:
         from modules.hfl_corpus.entities_api import Profile, validated_profile
@@ -156,10 +162,40 @@ async def history(request: Request, identity: str):
 
 
 @router.get('/matching')
-async def matching_status(request: Request):
+async def matching_status(request: Request, all: bool = False):
     owner(request)
     from workflows.hfl.entity_matching import status
-    return await run_in_threadpool(status)
+    result = await run_in_threadpool(status, None if all else 100)
+    if all:
+        current = await run_in_threadpool(entities.entity_index)
+        ids = {i for s in result['suggestions'] for i in s['data'].get('entity_ids', [])}
+        result['entities'] = [e for e in current if e['id'] in ids]
+    return result
+
+
+class BatchSubmit(BaseModel):
+    groups: list[MergeSubmit] = Field(min_length=1, max_length=100)
+
+
+@router.post('/merges/batch')
+async def submit_batch(request: Request, payload: BatchSubmit, background_tasks: BackgroundTasks):
+    owner(request)
+    seen = set()
+    for group in payload.groups:
+        if seen.intersection(group.entity_ids):
+            raise HTTPException(400, 'Combine overlapping selections into one group before submitting.')
+        seen.update(group.entity_ids)
+    results = []
+    for group in payload.groups:
+        try:
+            result = await submit(request, group, background_tasks)
+            results.append({'request_id': str(group.request_id), 'result': result})
+        except HTTPException as exc:
+            results.append({'request_id': str(group.request_id), 'error': exc.detail})
+        except Exception:
+            # A retry with the same request ID recovers a commit whose response was lost.
+            results.append({'request_id': str(group.request_id), 'error': 'Merge could not complete. Retry this group.'})
+    return {'results': results}
 
 
 @router.post('/matching/scan')

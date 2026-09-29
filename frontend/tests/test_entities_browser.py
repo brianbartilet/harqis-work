@@ -117,6 +117,7 @@ def test_bulk_selection_merge_and_unmerge(authenticated_client, monkeypatch, tmp
             page.locator('#matching-panel > summary').click()
             page.locator('#matching-suggestions details > summary').click()
             page.get_by_role('button',name='Review suggested merge',exact=True).click()
+            page.wait_for_selector('#entity-merge-dialog[open]')
             assert page.locator('#merge-evidence').input_value() == 'Possible shared identity; please review.'
             page.click('#merge-close')
             page.get_by_role('button',name='Keep separate',exact=True).click()

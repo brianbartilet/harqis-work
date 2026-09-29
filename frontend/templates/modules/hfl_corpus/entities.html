@@ -65,6 +65,15 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 .entity-shell .matching-evidence p{margin:8px 0}
 .entity-shell .matching-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid #334155}
 @media(max-width:460px){.entity-shell .profile-fields{grid-template-columns:1fr}}
+.entity-shell .matching-suggestion>summary{display:flex;align-items:center;gap:12px;list-style:none}
+.entity-shell .matching-suggestion>summary::before{content:'\25b8';flex-shrink:0}
+.entity-shell .matching-suggestion[open]>summary::before{content:'\25be'}
+.matching-title{flex:1;min-width:0;overflow-wrap:anywhere}
+.entity-shell .suggestion-select{width:20px;height:20px;min-height:20px;margin:0 0 0 auto;flex-shrink:0;accent-color:#38bdf8}
+.entity-shell .batch-group{border:1px solid #334155;border-radius:8px;margin:18px 0;padding:16px}
+.entity-shell .batch-group textarea{min-height:0}.entity-shell .batch-group .profile-fields{gap:12px}.entity-shell .batch-group input,.entity-shell .batch-group textarea{box-sizing:border-box;width:100%;margin-top:8px}
+.entity-shell #entity-type-manager form{margin:20px 0}
+.entity-shell #entity-type-manager input[type=color]{height:44px;width:80px}
 </style>{% endblock %}
 
 {% block content %}
@@ -76,6 +85,17 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 
 <p class="text-slate-400 entity-intro">People, organizations, tools, topics and referenced objects from your activity. Open an entity to review its evidence or edit its profile. Add references for websites, social media and files to any entity. Local file paths are displayed for copying.</p>
 
+<details class="entity-maintenance" id="entity-type-manager"><summary>Manage types and add entities</summary>
+  <form id="entity-type-form"><div class="profile-fields">
+    <label>Type name<input name="name" required maxlength="80" placeholder="For example, Vehicles"></label>
+    <label>Color<input name="color" type="color" value="#f9a8d4" required></label>
+    <label class="profile-wide">Extraction description<textarea name="description" required maxlength="1000" placeholder="Describe which named entities belong to this type"></textarea></label>
+  </div><button type="submit">Add entity type</button></form>
+  <p>New types are used for future enrichment. Use backfill to extract them from historical activity.</p>
+  <button id="types-backfill" type="button">Backfill history with current types</button>
+  <form id="entity-create-form"><div class="profile-fields"><label>Entity name<input name="name" required maxlength="120"></label><label>Type<select name="kind" id="create-entity-kind"></select></label></div><button type="submit">Add entity</button></form>
+  <p id="type-feedback" role="status"></p>
+</details>
 <fieldset id="entity-filters" disabled inert aria-busy="true">
 <label class="block my-4">Find an entity<input id="entity-query" class="block w-full p-3 bg-slate-900 border border-slate-600 rounded" type="search" placeholder="Search all names, emails, phone numbers, categories, references or notes"></label>
 
@@ -128,7 +148,10 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
   <p class="my-3 text-slate-400">Newly enriched entities are checked for same-type identity matches. Strong, corroborated matches merge automatically; uncertain matches appear here. Edited names and profiles are preserved. Unmerged or dismissed matches are excluded from automatic remerging.</p>
   <div class="processing-actions"><button id="matching-scan" type="button">Scan existing entities once / resume</button><button id="matching-refresh" type="button">Refresh matching progress</button></div>
   <div id="matching-status" role="status" aria-live="polite">Loading matching status…</div>
-  <div id="matching-suggestions"></div>
+  <div class="selection-buttons"><button id="suggestions-select" type="button">Select visible</button><button id="suggestions-clear" type="button">Clear selection</button><button id="suggestions-submit" type="button" disabled>Review selected merges</button></div>
+  <p id="suggestions-selection" role="status"></p><p id="suggestions-feedback" role="status"></p>
+  <p id="suggestions-count"></p><div id="matching-suggestions"></div>
+  <button id="suggestions-more" type="button" hidden>Show more suggestions</button>
 </details>
 
 <div id="entity-list" class="space-y-4" aria-busy="true"></div><nav class="pagination" aria-label="Directory pages"><button id="previous">Previous</button><span id="page-number"></span><button id="next">Next</button></nav>
@@ -145,6 +168,12 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
   <div id="merge-wait" role="status" hidden><span class="loading-spinner" aria-hidden="true"></span><span id="merge-wait-text">Preparing…</span></div>
   <footer><button id="merge-review" type="button">Review merge</button><button id="merge-confirm" type="submit" disabled>Confirm merge</button></footer>
 </form>
+</dialog>
+<dialog id="batch-merge-dialog" class="entity-merge-dialog" aria-labelledby="batch-merge-title">
+  <form id="batch-merge-form"><header><h2 id="batch-merge-title">Confirm selected merges</h2><button id="batch-close" type="button" aria-label="Close batch merge dialog">×</button></header>
+  <p>Review every resulting group, including selections hidden by filters. Overlapping pairs are combined. Nothing is merged until you confirm.</p>
+  <div id="batch-groups"></div><p id="batch-feedback" role="status"></p>
+  <footer><button id="batch-confirm" type="submit">Confirm merges</button></footer></form>
 </dialog>
 </main>
 
