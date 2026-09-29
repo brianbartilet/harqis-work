@@ -54,8 +54,10 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 .entity-shell .profile-editor>summary,.entity-shell .entity-audit>summary{line-height:1.6}
 .entity-shell .entity-kind{color:var(--entity-color,#95a7c3);background:color-mix(in srgb,var(--entity-color,#95a7c3) 12%,transparent);border-color:color-mix(in srgb,var(--entity-color,#95a7c3) 25%,transparent);white-space:nowrap}
 .entity-kind::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
-.entity-shell #matching-status{font-size:12px;line-height:1.7;margin:20px 0}
+.entity-shell #matching-status{font-size:12px;line-height:1.7;margin:20px 0;padding-left:8px}
 .entity-shell #matching-panel>p{font-size:12px;line-height:1.7}
+.entity-shell #processing-panel>p,.entity-shell #processing-panel>ol{font-size:12px;line-height:1.5;margin:10px 0}
+.entity-shell #processing-panel>ol>li+li{margin-top:6px}
 .entity-shell #suggestions-selection{padding:12px 8px 0}
 .entity-shell #suggestions-feedback,.entity-shell #suggestions-count{padding-left:8px}
 .entity-shell #suggestions-count{padding-bottom:8px}
@@ -71,9 +73,10 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 .entity-shell .matching-evidence p{margin:8px 0}
 .entity-shell .matching-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid #334155}
 @media(max-width:460px){.entity-shell .profile-fields{grid-template-columns:1fr}}
-.entity-shell .matching-suggestion>summary{display:flex;align-items:center;gap:12px;list-style:none}
-.entity-shell .matching-suggestion>summary::before{content:'\25b8';flex-shrink:0}
-.entity-shell .matching-suggestion[open]>summary::before{content:'\25be'}
+.entity-shell .matching-suggestion>summary{display:flex;align-items:center;gap:12px;list-style:none;position:relative;padding-left:22px}
+.entity-shell .matching-suggestion>summary::-webkit-details-marker{display:none}
+.entity-shell .matching-suggestion>summary::before,.entity-shell .entity-card>summary::before{content:'\25b8';position:absolute;left:0;top:50%;transform:translateY(-50%);width:10px;font-size:12px;line-height:20px;color:#bdcde0;text-align:center}
+.entity-shell .matching-suggestion[open]>summary::before,.entity-shell .entity-card[open]>summary::before{content:'\25be';transform:translateY(-50%)}
 .matching-title{flex:1;min-width:0;overflow-wrap:anywhere}
 .entity-shell .suggestion-select{width:20px;height:20px;min-height:20px;margin:0 0 0 auto;flex-shrink:0;accent-color:#38bdf8}
 .entity-shell .batch-group{border:1px solid #334155;border-radius:8px;margin:18px 0;padding:16px}
@@ -92,6 +95,9 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 .entity-shell .entity-card .entity-title-row{min-width:0}
 .entity-shell .entity-card .entity-detail-row{justify-content:flex-start;gap:8px;max-width:100%}
 .entity-shell .entity-card .entity-count{white-space:nowrap;margin-right:0}
+.entity-shell .entity-type-controls{display:flex;align-items:flex-end;gap:10px}
+.entity-shell .entity-type-controls>label{flex:1;min-width:0}
+.entity-shell .entity-type-controls>button{flex-shrink:0;min-height:44px;white-space:nowrap}
 </style>{% endblock %}
 
 {% block content %}
@@ -137,7 +143,7 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 
 
 <section id="entity-results" hidden>
-<details class="entity-maintenance"><summary>Processing and optional export</summary>
+<details class="entity-maintenance" id="processing-panel"><summary>Processing and optional export</summary>
 
 <p class="my-3 text-slate-400">Historical enrichment runs in bounded background batches. Explicit references are available even before extraction finishes.</p>
 <ol class="my-3 space-y-2 text-slate-400 list-decimal pl-5">

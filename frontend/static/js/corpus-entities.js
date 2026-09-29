@@ -184,7 +184,9 @@
         for (const [value, title] of Object.entries(kinds)) { const option = el('option', title); option.value = value; typeSelect.append(option); }
         typeSelect.value = e.kind; typeSave.type = 'button';
         typeSave.onclick = async () => { typeSave.disabled = true; try { await api('/type/' + encodeURIComponent(e.id), {kind:typeSelect.value}); await load(); await matchingStatus(); } catch (err) { typeFeedback.textContent = err.message; } finally { typeSave.disabled = false; } };
-        typeLabel.append(typeSelect); card.append(typeLabel, typeSave, typeFeedback, editor(e), el('h2', 'Supporting activity'));
+        const typeControls = el('div'); typeControls.className = 'entity-type-controls';
+        typeLabel.append(typeSelect); typeControls.append(typeLabel, typeSave);
+        card.append(typeControls, typeFeedback, editor(e), el('h2', 'Supporting activity'));
         if (!e.entries.length) card.append(el('p', 'No current supporting entries. Your saved profile remains available.'));
         for (const entry of e.entries) { const row = el('div'), link = el('a', entry.date.slice(0, 10) + ' · ' + entry.title); link.href = entry.href; link.target = '_blank'; link.rel = 'noopener noreferrer'; const meta = el('p', entry.source + ' · ' + entry.method); meta.className = 'entity-meta'; row.append(link, meta, el('blockquote', entry.evidence)); card.append(row); }
       });
