@@ -141,8 +141,9 @@
     actions.append(management,views);
     management.append(button('Edit',()=>openEditor(item)));
     if(!['done','dismissed'].includes(item.status)){
-      management.append(button('Dismiss',e=>patch(item,{status:'dismissed'},e.currentTarget)),button('Done',e=>patch(item,{status:'done'},e.currentTarget)));
-    } if(item.status !== 'open') management.append(button('In Review',e=>patch(item,{status:'open'},e.currentTarget)));
+      management.append(button('Dismiss',e=>patch(item,{status:'dismissed'},e.currentTarget)));
+      if(item.status !== 'incomplete') management.append(button('Done',e=>patch(item,{status:'done'},e.currentTarget)));
+    } if(!['open','in_progress','waiting'].includes(item.status)) management.append(button('In Review',e=>patch(item,{status:'open'},e.currentTarget)));
     management.append(button('History',()=>showHistory(item)));
     const resultsButton = button('Agents',()=>window.hflAgentBridge.open('actionable',item.id,item.title));
     resultsButton.className = 'action-results-button';
