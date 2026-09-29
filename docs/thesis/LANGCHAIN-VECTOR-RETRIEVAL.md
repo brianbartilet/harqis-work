@@ -14,6 +14,7 @@ Related designs:
 - [RAG workflow](RAG-WORKFLOW.md)
 - [Knowledge Radar phases 1 and 3](KNOWLEDGE-RADAR-PHASE1-3.md)
 - [Connected HFL knowledge](CONNECTED-HFL-KNOWLEDGE.md)
+- [Soup HFL model training](SOUP-HFL-MODEL-TRAINING.md) — proposed adaptation of summarization behavior, complementary to evidence retrieval
 
 ## Concepts
 
