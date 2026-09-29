@@ -99,10 +99,10 @@ class ApiServiceHflCorpusEntities(ApiServiceHflCorpusExtended):
         """
         return self._json('POST', f'entities/profile/{self._segment(identity)}', payload=dict(name=name, categories=categories or [], emails=emails or [], phones=phones or [], references=references or [], notes=notes))
 
-    def create_entity_backfill(self) -> dict:
+    def create_entity_backfill(self, include_new_types: bool = False) -> dict:
         """Request entity enrichment/backfill on the canonical host. Destructive: writes remote state.
         """
-        return self._json('POST', 'entities/backfill')
+        return self._json('POST', 'entities/backfill', params={'include_new_types': include_new_types})
 
     def create_entity_legacy_merge(self, alias: str, canonical: str, reason: str) -> dict:
         """Legacy pair merge; prefer the preview-token bulk merge flow. Destructive: writes remote state.
@@ -184,10 +184,10 @@ class ApiServiceHflCorpusEntities(ApiServiceHflCorpusExtended):
         """
         return self._json('GET', f'entities/audit/{self._segment(identity)}')
 
-    def get_entity_matching(self) -> dict:
+    def get_entity_matching(self, all: bool = False) -> dict:
         """Read matching scan status and candidate suggestions.
         """
-        return self._json('GET', 'entities/matching')
+        return self._json('GET', 'entities/matching', params={'all': all})
 
     def create_entity_matching_scan(self) -> dict:
         """Request a matching scan; this may schedule background work. Destructive: writes remote state.
@@ -201,3 +201,26 @@ class ApiServiceHflCorpusEntities(ApiServiceHflCorpusExtended):
             identity: Resource ID returned by the corresponding list/get operation.
         """
         return self._json('POST', f'entities/matching/suggestions/{self._segment(identity)}/dismiss')
+
+    def create_entity_type(self, name: str, color: str, description: str) -> dict:
+        """Create an entity type used by future extraction; historical backfill is explicit."""
+        return self._json('POST', 'entities/types', payload=dict(name=name, color=color, description=description))
+
+    def create_entity(self, name: str, kind: str, categories: list[str] | None = None,
+                      emails: list[str] | None = None, phones: list[str] | None = None,
+                      references: list[str] | None = None, notes: str = '') -> dict:
+        """Create a manual entity of a configured type with optional profile details."""
+        return self._json('POST', 'entities/create', payload=dict(name=name, kind=kind,
+            categories=categories or [], emails=emails or [], phones=phones or [], references=references or [], notes=notes))
+
+    def update_entity_type(self, identity: str, kind: str) -> dict:
+        """Change an existing entity to a configured type without discarding its profile."""
+        return self._json('POST', f'entities/type/{self._segment(identity)}', payload={'kind': kind})
+
+    def create_entity_merge_batch(self, groups: list[dict]) -> dict:
+        """Submit up to 100 reviewed, disjoint groups; each needs entity_ids, name,
+        request_id and preview_token from analyze_hfl_corpus_entity_selection.
+        Optional evidence and profile edits follow create_entity_merge. Reuse identical
+        group payloads and request IDs on retry; results report each success or failure.
+        """
+        return self._json('POST', 'entities/merges/batch', payload={'groups': groups})

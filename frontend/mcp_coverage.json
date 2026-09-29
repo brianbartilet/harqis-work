@@ -2648,6 +2648,53 @@
         "update_hfl_corpus_list"
       ],
       "reason": "Browser alias of the canonical intent-reuse endpoint."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/types",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_entity_type"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.create_entity_type"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/create",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_entity"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.create_entity"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/type/{identity}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_type"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_type"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/merges/batch",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_entity_merge_batch"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.create_entity_merge_batch"
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/agent-bridge/configuration/defaults",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner session-authenticated configuration defaults for the action editor; a dedicated machine-facing service/auth contract is deferred, as with action configuration."
     }
   ]
 }

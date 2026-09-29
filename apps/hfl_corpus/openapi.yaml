@@ -2734,12 +2734,26 @@ paths:
     post:
       summary: Backfill
       operationId: backfill_api_hfl_entities_backfill_post
+      parameters:
+      - name: include_new_types
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include New Types
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/hfl/entities/merge:
     post:
       summary: Merge
@@ -2919,12 +2933,26 @@ paths:
     get:
       summary: Matching Status
       operationId: matching_status_api_hfl_entities_matching_get
+      parameters:
+      - name: all
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: All
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/hfl/entities/matching/scan:
     post:
       summary: Matching Scan
@@ -3185,6 +3213,101 @@ paths:
           - type: string
           - type: 'null'
           title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/types:
+    post:
+      summary: Create Type
+      operationId: create_type_api_hfl_entities_types_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TypeWrite'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/create:
+    post:
+      summary: Create Entity
+      operationId: create_entity_api_hfl_entities_create_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TypedProfile'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/type/{identity}:
+    post:
+      summary: Change Type
+      operationId: change_type_api_hfl_entities_type__identity__post
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KindWrite'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/merges/batch:
+    post:
+      summary: Submit Batch
+      operationId: submit_batch_api_hfl_entities_merges_batch_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchSubmit'
+        required: true
       responses:
         '200':
           description: Successful Response
@@ -4019,6 +4142,89 @@ components:
       - name
       - state
       title: ViewWrite
+    TypeWrite:
+      properties:
+        name:
+          type: string
+          maxLength: 80
+          minLength: 1
+          title: Name
+        color:
+          type: string
+          pattern: ^#[0-9a-fA-F]{6}$
+          title: Color
+        description:
+          type: string
+          maxLength: 1000
+          minLength: 1
+          title: Description
+      type: object
+      required:
+      - name
+      - color
+      - description
+      title: TypeWrite
+    TypedProfile:
+      properties:
+        name:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Name
+        categories:
+          items:
+            type: string
+          type: array
+          title: Categories
+        emails:
+          items:
+            type: string
+          type: array
+          title: Emails
+        phones:
+          items:
+            type: string
+          type: array
+          title: Phones
+        references:
+          items:
+            type: string
+          type: array
+          title: References
+        notes:
+          type: string
+          title: Notes
+          default: ''
+        kind:
+          type: string
+          title: Kind
+      type: object
+      required:
+      - name
+      - kind
+      title: TypedProfile
+    KindWrite:
+      properties:
+        kind:
+          type: string
+          title: Kind
+      type: object
+      required:
+      - kind
+      title: KindWrite
+    BatchSubmit:
+      properties:
+        groups:
+          items:
+            $ref: '#/components/schemas/MergeSubmit'
+          type: array
+          maxItems: 100
+          minItems: 1
+          title: Groups
+      type: object
+      required:
+      - groups
+      title: BatchSubmit
   securitySchemes:
     HTTPBearer:
       type: http

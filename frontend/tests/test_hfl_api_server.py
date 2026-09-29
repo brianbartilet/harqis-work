@@ -62,3 +62,15 @@ def test_management_contract_matches_runtime_and_all_references_resolve():
                 check_refs(child)
 
     check_refs(contract)
+
+
+def test_entity_review_contract_matches_runtime():
+    from hfl_api import app
+    root = Path(__file__).resolve().parents[2]
+    contract = yaml.safe_load((root / 'apps/hfl_corpus/openapi.yaml').read_text(encoding='utf-8'))
+    live = app.openapi()
+    for suffix in ('types', 'create', 'type/{identity}', 'merges/batch', 'matching', 'backfill'):
+        path = '/api/hfl/entities/' + suffix
+        assert contract['paths'][path] == live['paths'][path]
+    for name in ('TypeWrite', 'TypedProfile', 'KindWrite', 'BatchSubmit', 'MergeSubmit'):
+        assert contract['components']['schemas'][name] == live['components']['schemas'][name]

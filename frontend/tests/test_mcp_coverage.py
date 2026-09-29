@@ -341,3 +341,20 @@ def test_redirect_does_not_forward_auth_or_replace_file(tmp_path):
             api.download_idea_attachment('idea', 'attachment', str(target))
         assert target.read_bytes() == b'keep'
     assert '/unexpected' not in requests_seen
+
+
+@pytest.mark.parametrize('method,kwargs,query,body', [
+    ('create_entity_backfill', {'include_new_types': True}, {'include_new_types': ['true']}, None),
+    ('get_entity_matching', {'all': True}, {'all': ['true']}, None),
+    ('create_entity_merge_batch', {'groups': [{'entity_ids': ['a','b'], 'name': 'Reviewed',
+        'request_id': '12345678-1234-5678-1234-567812345678', 'preview_token': 'signed-preview',
+        'profile': {'notes': 'Keep reviewed notes'}}]}, {}, 'groups'),
+])
+def test_entity_review_options_preserve_wire_contract(recording_api, method, kwargs, query, body):
+    origin, records = recording_api
+    client = service('apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities', origin)
+    getattr(client, method)(**kwargs)
+    _, path, _, raw = records[-1]
+    assert parse_qs(urlsplit(path).query) == query
+    if body:
+        assert json.loads(raw) == kwargs

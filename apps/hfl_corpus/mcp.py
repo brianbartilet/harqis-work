@@ -682,11 +682,11 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         return output
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
-    def create_hfl_corpus_entity_backfill() -> dict:
+    def create_hfl_corpus_entity_backfill(include_new_types: bool = False) -> dict:
         """Request entity enrichment/backfill on the canonical host. Destructive: writes remote state.
         """
         logger.info("Tool called: create_hfl_corpus_entity_backfill")
-        result = ApiServiceHflCorpusEntities(CONFIG).create_entity_backfill()
+        result = ApiServiceHflCorpusEntities(CONFIG).create_entity_backfill(include_new_types=include_new_types)
         output = _dict_result(result)
         logger.info("create_hfl_corpus_entity_backfill done")
         return output
@@ -811,11 +811,11 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         return output
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
-    def get_hfl_corpus_entity_matching() -> dict:
+    def get_hfl_corpus_entity_matching(all: bool = False) -> dict:
         """Read matching scan status and candidate suggestions.
         """
         logger.info("Tool called: get_hfl_corpus_entity_matching")
-        result = ApiServiceHflCorpusEntities(CONFIG).get_entity_matching()
+        result = ApiServiceHflCorpusEntities(CONFIG).get_entity_matching(all=all)
         output = _dict_result(result)
         logger.info("get_hfl_corpus_entity_matching done")
         return output
@@ -1720,3 +1720,30 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         logger.info("Tool called: update_hfl_corpus_list")
         result = ApiServiceHflCorpusIdeas(CONFIG).update_list(identity=identity, version=version, checklist=checklist)
         return _dict_result(result)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_entity_type(name: str, color: str, description: str) -> dict:
+        """Create a type with a name, hex color and extraction description. History is not reprocessed."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).create_entity_type(name=name, color=color, description=description))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_entity(name: str, kind: str, categories: list[str] | None = None,
+                                 emails: list[str] | None = None, phones: list[str] | None = None,
+                                 references: list[str] | None = None, notes: str = '') -> dict:
+        """Create a manual entity of a configured type with optional profile details."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).create_entity(name=name, kind=kind,
+            categories=categories, emails=emails, phones=phones, references=references, notes=notes))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_type(identity: str, kind: str) -> dict:
+        """Change an entity to a configured type, preserving its profile."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).update_entity_type(identity=identity, kind=kind))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_entity_merge_batch(groups: list[dict]) -> dict:
+        """Commit up to 100 disjoint groups after user review. Each group needs entity_ids,
+        name, request_id (UUID) and preview_token from analyze_hfl_corpus_entity_selection;
+        evidence and profile edits are optional. Reuse identical payloads and request IDs
+        on retry. Returns a result or error per group; partial success is possible.
+        """
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).create_entity_merge_batch(groups=groups))
