@@ -56,6 +56,9 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 .entity-kind::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
 .entity-shell #matching-status{font-size:12px;line-height:1.7;margin:20px 0}
 .entity-shell #matching-panel>p{font-size:12px;line-height:1.7}
+.entity-shell #suggestions-selection{padding:12px 8px 0}
+.entity-shell #suggestions-feedback,.entity-shell #suggestions-count{padding-left:8px}
+.entity-shell #suggestions-count{padding-bottom:8px}
 .entity-operation-progress{display:block;width:100%;height:8px;margin:12px 0;accent-color:#38bdf8}
 .entity-operation-progress[hidden]{display:none}
 .entity-shell .matching-jobs{max-height:220px;overflow:auto}
@@ -75,7 +78,15 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 .entity-shell .suggestion-select{width:20px;height:20px;min-height:20px;margin:0 0 0 auto;flex-shrink:0;accent-color:#38bdf8}
 .entity-shell .batch-group{border:1px solid #334155;border-radius:8px;margin:18px 0;padding:16px}
 .entity-shell .batch-group textarea{min-height:0}.entity-shell .batch-group .profile-fields{gap:12px}.entity-shell .batch-group input,.entity-shell .batch-group textarea{box-sizing:border-box;width:100%;margin-top:8px}
-.entity-shell #entity-type-manager form{margin:20px 0}
+.entity-shell #entity-type-manager form{margin:16px 0 0}
+.entity-shell #entity-type-manager .profile-fields{gap:12px 16px;margin:0 0 12px}
+.entity-shell #entity-type-manager #entity-type-form .profile-fields{grid-template-columns:minmax(0,1fr) 80px}
+.entity-shell #entity-type-manager textarea{min-height:64px}
+.entity-shell #entity-type-manager button{font-size:13px;line-height:20px}
+.entity-shell #entity-type-manager .type-backfill-hint{font-size:12px;line-height:1.6;color:#94a3b8;margin:16px 0 10px}
+.entity-shell #entity-type-manager #entity-create-form{border-top:1px solid #334155;padding-top:16px;margin-top:20px}
+.entity-shell #entity-type-manager #type-feedback{font-size:12px;line-height:1.6;margin:12px 0 0}
+.entity-shell #entity-type-manager #type-feedback:empty{display:none}
 .entity-shell #entity-type-manager input[type=color]{height:44px;width:80px}
 </style>{% endblock %}
 
@@ -94,7 +105,7 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
     <label>Color<input name="color" type="color" value="#f9a8d4" required></label>
     <label class="profile-wide">Extraction description<textarea name="description" required maxlength="1000" placeholder="Describe which named entities belong to this type"></textarea></label>
   </div><button type="submit">Add entity type</button></form>
-  <p>New types are used for future enrichment. Use backfill to extract them from historical activity.</p>
+  <p class="type-backfill-hint">New types are used for future enrichment. Use backfill to extract them from historical activity.</p>
   <button id="types-backfill" type="button">Backfill history with current types</button>
   <form id="entity-create-form"><div class="profile-fields"><label>Entity name<input name="name" required maxlength="120"></label><label>Type<select name="kind" id="create-entity-kind"></select></label></div><button type="submit">Add entity</button></form>
   <p id="type-feedback" role="status"></p>
@@ -122,11 +133,6 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 
 
 <section id="entity-results" hidden>
-<div class="entity-selection" role="region" aria-label="Merge entities">
-  <div><strong id="selection-count" role="status">0 selected</strong><p>Select entities of one type to combine their profiles and connections. Selections stay across pages and filters.</p></div>
-  <div class="selection-buttons"><button id="select-page" type="button">Select this page</button><button id="select-matching" type="button">Select all matching</button><button id="clear-selection" type="button">Clear selection</button><button id="merge-selected" type="button" disabled>Merge selected</button></div>
-  <p id="selection-feedback" role="status"></p>
-</div>
 <details class="entity-maintenance"><summary>Processing and optional export</summary>
 
 <p class="my-3 text-slate-400">Historical enrichment runs in bounded background batches. Explicit references are available even before extraction finishes.</p>
@@ -157,6 +163,12 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
   <p id="suggestions-count"></p><div id="matching-suggestions"></div>
   <button id="suggestions-more" type="button" hidden>Show more suggestions</button>
 </details>
+
+<div class="entity-selection" role="region" aria-label="Merge entities">
+  <div><strong id="selection-count" role="status">0 selected</strong><p>Select entities of one type to combine their profiles and connections. Selections stay across pages and filters.</p></div>
+  <div class="selection-buttons"><button id="select-page" type="button">Select this page</button><button id="select-matching" type="button">Select all matching</button><button id="clear-selection" type="button">Clear selection</button><button id="merge-selected" type="button" disabled>Merge selected</button></div>
+  <p id="selection-feedback" role="status"></p>
+</div>
 
 <div id="entity-list" class="space-y-4" aria-busy="true"></div><nav class="pagination" aria-label="Directory pages"><button id="previous">Previous</button><span id="page-number"></span><button id="next">Next</button></nav>
 
